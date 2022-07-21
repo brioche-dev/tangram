@@ -52,7 +52,7 @@ impl Runtime {
 	pub async fn repl(&self, code: String) -> Option<String> {
 		let (sender, receiver) = tokio::sync::oneshot::channel();
 		match self.sender.send(Message::Repl(ReplMessage {
-			code: code.to_owned(),
+			code: code.clone(),
 			sender,
 		})) {
 			Ok(_) => {},
@@ -134,13 +134,20 @@ async fn js_runtime_task(
 		};
 	}
 }
-
+#[allow(clippy::too_many_lines)]
 async fn handle_repl_message(
 	js_runtime: &mut deno_core::JsRuntime,
 	inspector_session: &mut deno_core::LocalInspectorSession,
 	context_id: u64,
 	message: ReplMessage,
 ) {
+	let code = message.code;
+	// Wrap the code in parens to make it a ExpressionStatement instead of a BlockStatement to match the behavior of other repls.
+	let wrapped_code = if code.trim_start().starts_with('{') && !code.trim_end().ends_with(';') {
+		format!("({})", &code)
+	} else {
+		code
+	};
 	// Evaluate the code.
 	let evaluate_response: cdp::EvaluateResponse = match futures::try_join!(
 		inspector_session.post_message(
@@ -148,7 +155,7 @@ async fn handle_repl_message(
 			Some(cdp::EvaluateArgs {
 				context_id: Some(context_id),
 				repl_mode: Some(true),
-				expression: message.code,
+				expression: wrapped_code,
 				object_group: None,
 				include_command_line_api: None,
 				silent: None,
@@ -171,18 +178,71 @@ async fn handle_repl_message(
 			return;
 		},
 	};
-	// TODO Check for an exception.
 	if let Some(value) = evaluate_response.result.value {
 		let output = serde_json::to_string_pretty(&value).unwrap();
 		message.sender.send(Some(output)).unwrap();
 		return;
 	}
-	if let Some(value) = evaluate_response
-		.result
-		.preview
-		.and_then(|preview| preview.description)
-	{
-		let output = serde_json::to_string_pretty(&value).unwrap();
+	if let Some(error) = evaluate_response.exception_details {
+		message
+			.sender
+			.send(Some(error.exception.unwrap().description.unwrap()))
+			.unwrap();
+		return;
+	}
+	let function = r#"
+		 function stringify(value) {
+			switch (typeof(value)) {
+				case "object":
+					if (value instanceof Error) {
+						return value.stack;
+					}
+					if (value instanceof Promise) {
+						return "Promise";
+					}
+					if (value instanceof Array) {
+						let object = "[ " + Object.values(value).map(value => stringify(value)).flat().join(", ") + " ]";
+						return object;
+					} else {
+						let object = "{ " + Object.entries(value).map(([key, value]) => `${key}: ${stringify(value)}`).join(", ") + " }";
+						return object;
+					}
+				case "function":
+					return `[Function: ${value.name || "(anonymous)"}]`;
+				case "undefined":
+					return "undefined";
+				default:
+					return JSON.stringify(value);
+			}
+		}
+	"#;
+	let call_function_on_response: cdp::CallFunctionOnResponse = match futures::try_join!(
+		inspector_session.post_message(
+			"Runtime.callFunctionOn",
+			Some(cdp::CallFunctionOnArgs {
+				function_declaration: function.to_string(),
+				object_id: None,
+				arguments: Some(vec![(&evaluate_response.result).into()]),
+				silent: None,
+				return_by_value: None,
+				generate_preview: None,
+				user_gesture: None,
+				await_promise: None,
+				execution_context_id: Some(context_id),
+				object_group: None,
+				throw_on_side_effect: None
+			}),
+		),
+		js_runtime.run_event_loop(false),
+	) {
+		Ok((response, _)) => serde_json::from_value(response).unwrap(),
+		Err(error) => {
+			message.sender.send(Some(error.to_string())).unwrap();
+			return;
+		},
+	};
+	if let Some(value) = call_function_on_response.result.value {
+		let output = value.as_str().unwrap().to_owned();
 		message.sender.send(Some(output)).unwrap();
 		return;
 	}
