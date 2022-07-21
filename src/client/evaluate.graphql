@@ -1,0 +1,3 @@
+query EvaluateQuery($expression: ExpressionJson!) {
+  evaluate(expression: $expression)
+}

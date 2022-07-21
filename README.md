@@ -136,8 +136,9 @@ export let shell = () => {
 		repo: "zig",
 		rev: "88d1258e08e668e620d5f8f4681315e555acbcd2",
 	});
-	let zigPatch = Tangram.fetch({
+	let zigPatch = std.fetch({
 		url: "https://github.com/ziglang/zig/pull/9771.patch",
+		hash: "c0bb3d56ee8f34fb82bd4d64375b565601c62d9c2a289991fc9f088758ad86f8",
 	});
 	return std.buildShell({
 		packages: [
