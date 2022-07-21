@@ -5,7 +5,7 @@ create table expressions (
 );
 
 create table artifacts (
-	artifact_hash blob primary key
+	artifact_hash blob primary key,
 	foreign key (artifact_hash) references objects (object_hash)
 );
 
