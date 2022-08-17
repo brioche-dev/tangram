@@ -1,198 +1,144 @@
+use self::repl::Repl;
 use crate::{
-	artifact::{Artifact, ArtifactHash},
-	id::Id,
-	object::ObjectHash,
+	repl::ReplId,
+	server::temp::{Temp, TempId},
+	util::path_exists,
 };
 use anyhow::{Context, Result};
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
-use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+	collections::BTreeMap,
+	convert::Infallible,
+	net::SocketAddr,
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 use tokio::{
 	fs,
 	sync::{Mutex, RwLock},
 };
 
-mod evaluate;
-pub mod graphql;
-mod migrations;
-mod repl;
+pub mod artifact;
+pub mod blob;
+pub mod db;
+pub mod evaluate;
+pub mod fragment;
+pub mod migrations;
+pub mod object;
+pub mod repl;
 pub mod runtime;
-
-pub enum Bind {
-	Unix(PathBuf),
-	Tcp(SocketAddr),
-}
+pub mod temp;
 
 pub struct Server {
-	/// This is the path where the server stores its data.
+	/// This is the path to the directory where the server stores its data.
 	path: PathBuf,
 
 	/// This file is held with an advisory lock to ensure only one server has access to the [`path`].
-	_lock_file: fs::File,
+	#[allow(dead_code)]
+	path_lock_file: fs::File,
 
-	/// This is the global build lock. Builds must acquire shared access. Garbage collection must acquire exclusive access.
-	lock: RwLock<()>,
+	/// This is the garbage collection lock. Any operation that accesses artifacts, objects, blobs, fragments, or temps must acquire shared access. Garbage collection must acquire exclusive access.
+	gc_lock: RwLock<()>,
 
-	_database_pool: sqlx::sqlite::SqlitePool,
+	/// This is the connection pool for the server's SQLite database.
+	database_connection_pool: deadpool_sqlite::Pool,
 
-	/// This tokio task pool is for running js tasks, which need to be local to a single thread.
+	/// This local pool handle is for running tasks that must be pinned to a single thread.
 	local_pool_handle: tokio_util::task::LocalPoolHandle,
 
-	/// This reqwest client is for performing HTTP requests when fetching.
+	/// This HTTP client is for performing HTTP requests when running fetch expressions.
 	http_client: reqwest::Client,
 
-	/// This is the schema for the graphql server.
-	schema: Arc<self::graphql::Schema>,
+	/// These are the active temps.
+	temps: Mutex<BTreeMap<TempId, Temp>>,
 
-	repls: Mutex<BTreeMap<Id, runtime::js::Runtime>>,
+	/// These are the active REPLs.
+	repls: Mutex<BTreeMap<ReplId, Repl>>,
+	// TODO Peers.
 }
 
 impl Server {
-	/// Get the server's path.
-	#[must_use]
-	pub fn path(&self) -> PathBuf {
-		self.path.clone()
-	}
-
-	// /// Get the path to the checkouts directory.
-	// #[must_use]
-	// fn database_path(&self) -> PathBuf {
-	// 	self.path.join("db.sqlite3")
-	// }
-
-	// /// Get the path to the checkouts directory.
-	// #[must_use]
-	// fn blobs_path(&self) -> PathBuf {
-	// 	self.path.join("blobs")
-	// }
-
-	// /// Get the path to the checkouts directory.
-	// #[must_use]
-	// fn checkouts_path(&self) -> PathBuf {
-	// 	self.path.join("checkouts")
-	// }
-
-	// /// Get the path to the fragments directory.
-	// #[must_use]
-	// fn fragments_path(&self) -> PathBuf {
-	// 	self.path.join("fragments")
-	// }
-
-	/// Get the path to the socket.
-	#[must_use]
-	fn socket_path(&self) -> PathBuf {
-		self.path.join("socket")
-	}
-
 	pub async fn new(path: impl Into<PathBuf>) -> Result<Arc<Server>> {
+		// Ensure the path exists.
 		let path = path.into();
 		fs::create_dir_all(&path).await?;
 
 		// Acquire a lock to the path.
-		let lock_path = path.join("lock");
-		let lock_file = Server::acquire_lock_file(&lock_path).await?;
+		let path_lock = Server::acquire_path_lock_file(&path).await?;
 
-		// Ensure the top levels directories exist.
-		let artifacts_path = path.join("artifacts");
-		fs::create_dir_all(&artifacts_path).await?;
-		let fragments_path = path.join("fragments");
-		fs::create_dir_all(&fragments_path).await?;
+		// Migrate the path.
+		Server::migrate(&path).await?;
 
-		// Remove the socket file if it exists.
-		let socket_path = path.join("socket");
-		let socket_path_exists = match tokio::fs::metadata(&socket_path).await {
-			Ok(_) => true,
-			Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-			Err(error) => return Err(error.into()),
-		};
-		if socket_path_exists {
-			tokio::fs::remove_file(&socket_path).await?;
+		// Remove any stale temps.
+		let temp_path = path.join("temps");
+		if path_exists(&temp_path).await? {
+			tokio::fs::remove_dir_all(&temp_path).await?;
+			tokio::fs::create_dir_all(&temp_path).await?;
 		}
 
 		// Create the database pool.
 		let database_path = path.join("db.sqlite3");
-		let database_connect_options = sqlx::sqlite::SqliteConnectOptions::new()
-			.filename(database_path)
-			.create_if_missing(true)
-			.foreign_keys(true)
-			.journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-			.shared_cache(true);
-		let database_pool = sqlx::sqlite::SqlitePoolOptions::new()
-			.connect_with(database_connect_options)
-			.await?;
-		if migrations::empty(&database_pool).await? {
-			// Run all migrations if the database is empty.
-			migrations::run(&database_pool).await?;
-		} else {
-			// If the database is not empty, verify that all migrations have already been run.
-			migrations::verify(&database_pool).await?;
-		}
+		let database_connection_pool =
+			tokio::task::block_in_place(|| Server::create_database_pool(database_path))?;
 
 		// Create the local task pool.
-		let local_pool_handle = tokio_util::task::LocalPoolHandle::new(num_cpus::get());
+		let available_parallelism = std::thread::available_parallelism()?.into();
+		let local_pool_handle = tokio_util::task::LocalPoolHandle::new(available_parallelism);
 
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
 
-		let schema = Arc::new(self::graphql::Schema::new(
-			self::graphql::Query,
-			self::graphql::Mutation,
-			juniper::EmptySubscription::new(),
-		));
-
+		// Create the server.
 		let server = Server {
 			path,
-			_lock_file: lock_file,
-			lock: RwLock::new(()),
-			_database_pool: database_pool,
+			path_lock_file: path_lock,
+			gc_lock: RwLock::new(()),
+			database_connection_pool,
 			local_pool_handle,
 			http_client,
-			schema,
 			repls: Mutex::new(BTreeMap::new()),
+			temps: Mutex::new(BTreeMap::new()),
 		};
+
+		// Remove the socket file if it exists.
+		let socket_path = server.path.join("socket");
+		if path_exists(&socket_path).await? {
+			tokio::fs::remove_file(&socket_path).await?;
+		}
+
 		let server = Arc::new(server);
 
 		Ok(server)
 	}
 
-	/// Acquire the lock to the root path.
+	/// Acquire the lock to the server path.
 	#[cfg(any(target_os = "linux", target_os = "macos"))]
-	async fn acquire_lock_file(lock_path: &std::path::Path) -> anyhow::Result<fs::File> {
+	async fn acquire_path_lock_file(path: &std::path::Path) -> anyhow::Result<fs::File> {
 		use nix::fcntl::{flock, FlockArg};
 		use std::os::unix::io::AsRawFd;
 		let lock_file = fs::OpenOptions::new()
 			.read(true)
 			.write(true)
 			.create(true)
-			.open(lock_path)
+			.open(path.join("lock"))
 			.await?;
-		flock(lock_file.as_raw_fd(), FlockArg::LockExclusiveNonblock).with_context(|| {
-			let lock_path = lock_path.display();
-			format!(
-				"Failed to acquire the lock file at {}. Is there a tangram server already running?",
-				lock_path,
-			)
-		})?;
+		flock(lock_file.as_raw_fd(), FlockArg::LockExclusiveNonblock).context(
+			"Failed to acquire the lock to the server path. Is there a tangram server already running?",
+		)?;
 		Ok(lock_file)
 	}
 
-	pub async fn create_artifact(
-		_object_hash: ObjectHash,
-		_dependencies: Vec<ArtifactHash>,
-	) -> Result<Artifact> {
-		todo!()
-	}
-
-	pub async fn create_artifact_from_reader<R>(&self, _reader: &mut R) -> Result<Artifact> {
-		todo!()
+	pub fn path(&self) -> &Path {
+		&self.path
 	}
 
 	pub async fn serve_unix(self: &Arc<Self>) -> Result<()> {
 		let server = Arc::clone(self);
-		let path = server.socket_path();
+		let path = self.path.join("socket");
 		hyper::Server::bind_unix(&path)
 			.map(|server| {
-				tracing::info!("🚀 serving at {}", path.display());
+				tracing::info!("🚀 Serving at {}.", path.display());
 				server
 			})?
 			.serve(hyper::service::make_service_fn(move |_| {
@@ -201,7 +147,7 @@ impl Server {
 					Ok::<_, Infallible>(hyper::service::service_fn(move |request| {
 						let server = Arc::clone(&server);
 						async move {
-							let response = server.handle(request).await;
+							let response = server.handle_request(request).await;
 							Ok::<_, Infallible>(response)
 						}
 					}))
@@ -215,7 +161,7 @@ impl Server {
 		let server = Arc::clone(self);
 		hyper::Server::try_bind(&addr)
 			.map(|server| {
-				tracing::info!("🚀 serving on {}", addr);
+				tracing::info!("🚀 Serving on {}.", addr);
 				server
 			})?
 			.serve(hyper::service::make_service_fn(move |_| {
@@ -224,7 +170,7 @@ impl Server {
 					Ok::<_, Infallible>(hyper::service::service_fn(move |request| {
 						let server = Arc::clone(&server);
 						async move {
-							let response = server.handle(request).await;
+							let response = server.handle_request(request).await;
 							Ok::<_, Infallible>(response)
 						}
 					}))
@@ -234,7 +180,7 @@ impl Server {
 		Ok(())
 	}
 
-	async fn handle(
+	async fn handle_request(
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> http::Response<hyper::Body> {
@@ -243,15 +189,23 @@ impl Server {
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
 		let response: Result<http::Response<hyper::Body>> =
 			match (method, path_components.as_slice()) {
-				(http::Method::GET, ["graphiql"]) => {
-					juniper_hyper::graphiql("/graphql", None).map(Ok).boxed()
+				// (http::Method::POST, ["blobs", _]) => {
+				// 	self.handle_create_blob_request(request).boxed()
+				// },
+				// (http::Method::GET, ["expressions", _]) => {
+				// 	self.handle_expression_request(request).boxed()
+				// },
+				(http::Method::POST, ["expressions", _, "evaluate"]) => {
+					self.handle_evaluate_expression_request(request).boxed()
 				},
-				(http::Method::GET | http::Method::POST, ["graphql"]) => {
-					let schema = Arc::clone(&self.schema);
-					let context = Arc::new(Arc::clone(self));
-					juniper_hyper::graphql(schema, context, request)
-						.map(Ok)
-						.boxed()
+				// (http::Method::POST, ["objects", _]) => {
+				// 	self.handle_create_object_request(request).boxed()
+				// },
+				(http::Method::POST, ["repls", ""]) => {
+					self.handle_create_repl_request(request).boxed()
+				},
+				(http::Method::POST, ["repls", _, "run"]) => {
+					self.handle_repl_run_request(request).boxed()
 				},
 				(_, _) => {
 					let response = http::Response::builder()
@@ -270,5 +224,74 @@ impl Server {
 				.body(hyper::Body::from("Internal server error."))
 				.unwrap()
 		})
+	}
+
+	// async fn handle_expression_request(
+	// 	self: &Arc<Self>,
+	// 	request: http::Request<hyper::Body>,
+	// ) -> Result<http::Response<hyper::Body>> {
+	// 	todo!()
+	// }
+
+	async fn handle_evaluate_expression_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		// Read the request.
+		let body = hyper::body::to_bytes(request).await?;
+		let expression = serde_json::from_slice(&body)?;
+
+		// Evaluate the expression.
+		let value = self.evaluate(expression).await?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&value)?;
+		let response = http::Response::builder()
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		Ok(response)
+	}
+
+	async fn handle_create_repl_request(
+		self: &Arc<Self>,
+		_request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		// Create a repl.
+		let value = self.create_repl().await?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&value)?;
+		let response = http::Response::builder()
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		Ok(response)
+	}
+
+	async fn handle_repl_run_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		// Read the request.
+		let body = hyper::body::to_bytes(request).await?;
+		let repl_run_request: self::repl::RunRequest = serde_json::from_slice(&body)?;
+
+		// Run the repl.
+		let output = self
+			.repl_run(&repl_run_request.repl_id, repl_run_request.code)
+			.await?;
+
+		// Create the response.
+		let output = match output {
+			Ok(output) => output,
+			Err(message) => Some(message),
+		};
+		let body = serde_json::to_vec(&output)?;
+		let response = http::Response::builder()
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		Ok(response)
 	}
 }

@@ -1,3 +1,5 @@
+#![allow(clippy::doc_markdown)]
+
 /// https://chromedevtools.github.io/devtools-protocol/tot/
 use deno_core::serde_json;
 use deno_core::serde_json::Value;

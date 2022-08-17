@@ -19,15 +19,15 @@ pub enum Dependency {
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct PathDependency {
-	name: Option<String>,
-	path: Utf8PathBuf,
+	pub name: Option<String>,
+	pub path: Utf8PathBuf,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct RegistryDependency {
-	registry: Option<Url>,
-	name: Option<String>,
-	version: VersionReq,
+	pub registry: Option<Url>,
+	pub name: Option<String>,
+	pub version: VersionReq,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]

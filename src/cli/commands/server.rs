@@ -3,14 +3,15 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use std::{
 	net::{IpAddr, SocketAddr},
+	path::PathBuf,
 	sync::Arc,
 };
 use tangram::server::Server;
 
 #[derive(Parser)]
 pub struct Args {
-	// #[clap(long)]
-	// path: Option<PathBuf>,
+	#[clap(long)]
+	path: Option<PathBuf>,
 	#[clap(long, default_value = "0.0.0.0")]
 	host: IpAddr,
 	#[clap(long, default_value = "8080")]

@@ -1,7 +1,10 @@
-use crate::expression::{self, Expression};
-use crate::server::Server;
+use crate::{
+	expression::{self, Expression},
+	server::Server,
+};
 use anyhow::Result;
 use async_recursion::async_recursion;
+use camino::Utf8PathBuf;
 use std::sync::Arc;
 
 impl Server {
@@ -9,9 +12,23 @@ impl Server {
 	#[async_recursion]
 	pub async fn evaluate_target(
 		self: &Arc<Self>,
-		_target: expression::Target,
+		target: expression::Target,
 	) -> Result<Expression> {
-		let _build_lock_guard = self.lock.read().await;
-		todo!()
+		let expression =
+			expression::Expression::Process(expression::Process::Js(expression::JsProcess {
+				lockfile: target.lockfile,
+				module: Box::new(expression::Expression::Path(expression::Path {
+					artifact: Box::new(expression::Expression::Artifact(target.package)),
+					path: Some(Utf8PathBuf::from("tangram.js")),
+				})),
+				export: target.name,
+				args: target.args,
+			}));
+
+		// TODO Check my cache.
+
+		// TODO Ask the peers.
+
+		Ok(expression)
 	}
 }

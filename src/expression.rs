@@ -1,8 +1,4 @@
-use crate::{
-	artifact::{Artifact, ArtifactHash},
-	hash::Hash,
-	lockfile::Lockfile,
-};
+use crate::{artifact::Artifact, hash::Hash, lockfile::Lockfile};
 use camino::Utf8PathBuf;
 use std::collections::BTreeMap;
 use url::Url;
@@ -32,7 +28,7 @@ pub enum Expression {
 #[serde(from = "PathSerde", into = "PathSerde")]
 pub struct Path {
 	pub artifact: Box<Expression>,
-	pub path: Option<String>,
+	pub path: Option<Utf8PathBuf>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -51,41 +47,54 @@ pub struct Fetch {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "system")]
 pub enum Process {
+	#[serde(rename = "amd64_linux")]
 	Amd64Linux(UnixProcess),
+	#[serde(rename = "amd64_macos")]
 	Amd64Macos(UnixProcess),
+	#[serde(rename = "arm64_linux")]
 	Arm64Linux(UnixProcess),
+	#[serde(rename = "arm64_macos")]
 	Arm64Macos(UnixProcess),
+	#[serde(rename = "js")]
 	Js(JsProcess),
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct UnixProcess {
+	pub cwd: Box<Expression>,
+	pub env: Box<Expression>,
 	pub command: Box<Expression>,
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	pub args: Vec<Expression>,
-	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-	pub env: BTreeMap<String, Expression>,
-	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pub cwd: Option<Box<Expression>>,
+	pub args: Box<Expression>,
+	pub outputs: Vec<Output>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Output {
+	name: String,
+	dependencies: Vec<OutputDependency>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct OutputDependency {
+	mount_path: Utf8PathBuf,
+	artifact: Box<Expression>,
+	path: Option<Utf8PathBuf>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct JsProcess {
-	pub package: Box<Expression>,
-	pub path: Utf8PathBuf,
 	pub lockfile: Lockfile,
 	pub module: Box<Expression>,
 	pub export: String,
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	pub args: Vec<Expression>,
+	pub args: Box<Expression>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Target {
-	pub artifact_hash: ArtifactHash,
-	pub lockfile: Option<Lockfile>,
-	pub export: String,
-	pub args: Vec<Expression>,
+	pub lockfile: Lockfile,
+	pub package: Artifact,
+	pub name: String,
+	pub args: Box<Expression>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -94,7 +103,7 @@ enum PathSerde {
 	#[serde(rename = "path")]
 	Path {
 		artifact: Box<Expression>,
-		path: Option<String>,
+		path: Option<Utf8PathBuf>,
 	},
 }
 

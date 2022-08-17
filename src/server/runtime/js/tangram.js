@@ -3,12 +3,24 @@ globalThis.console = {
 };
 
 globalThis.Tangram = {
+  createTarget: (f) => {
+    return f;
+  },
+
   evaluate: async (value) => {
     return await Deno.core.opAsync("op_tangram_evaluate", value);
   },
 
   fetch: (args) => {
     return Deno.core.opSync("op_tangram_fetch", args);
+  },
+
+  path: (artifact, path) => {
+    return Deno.core.opSync("op_tangram_path", artifact, path);
+  },
+
+  process: (args) => {
+    return Deno.core.opSync("op_tangram_process", args);
   },
 
   System: {

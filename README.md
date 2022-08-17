@@ -34,13 +34,13 @@ Create a `tangram.json` file at the root of your project and add some dependenci
 
 ```json
 {
-	"dependencies": {
-		"nodejs": "16.15.1",
-		"postgresql": "14.4",
-		"python": "3.10.4",
-		"libopenssl": "3.10.4",
-		"ripgrep": "13.0.0"
-	}
+  "dependencies": {
+    "nodejs": "16.15.1",
+    "postgresql": "14.4",
+    "python": "3.10.4",
+    "libopenssl": "3.10.4",
+    "ripgrep": "13.0.0"
+  }
 }
 ```
 
@@ -68,20 +68,20 @@ Use Tangram to build both your dependencies and your code. In this example, we b
 
 ```javascript
 export default {
-	dependencies: {
-		rust: "1.60",
-		openssl: "3.0.4",
-	},
+  dependencies: {
+    rust: "1.60",
+    openssl: "3.0.4",
+  },
 };
 
 export let build = () => {
-	let { rust, openssl } = Tangram.dependencies;
-	return rust.cargo({
-		source: Tangram.source,
-		nativeDependencies: {
-			"openssl-sys": [openssl()],
-		},
-	});
+  let { rust, openssl } = Tangram.dependencies;
+  return rust.cargo({
+    source: Tangram.source,
+    nativeDependencies: {
+      "openssl-sys": [openssl()],
+    },
+  });
 };
 ```
 
@@ -91,19 +91,19 @@ Add a `tangram.js` file to the root of your project and use the `std.buildContai
 
 ```javascript
 export default {
-	dependencies: {
-		python: "3.7",
-		std: "^1",
-	},
+  dependencies: {
+    python: "3.7",
+    std: "^1",
+  },
 };
 
 export let build = () => {
-	let { python, std } = Tangram.dependencies;
-	return std.buildContainerImage({
-		packages: [python()],
-		command: "python",
-		args: [Tangram.template`${Tangram.source}/main.py`],
-	});
+  let { python, std } = Tangram.dependencies;
+  return std.buildContainerImage({
+    packages: [python()],
+    command: "python",
+    args: [Tangram.template`${Tangram.source}/main.py`],
+  });
 };
 ```
 
@@ -123,31 +123,31 @@ Tangram packages come with a lot of options for customization. In this example, 
 
 ```js
 export default {
-	dependencies: {
-		std: "^1",
-		zig: "0.9.0",
-	},
+  dependencies: {
+    std: "^1",
+    zig: "0.9.0",
+  },
 };
 
 export let shell = () => {
-	let { std, zig } = Tangram.dependencies;
-	let zigSource = std.fetchFromGitHub({
-		owner: "ziglang",
-		repo: "zig",
-		rev: "88d1258e08e668e620d5f8f4681315e555acbcd2",
-	});
-	let zigPatch = std.fetch({
-		url: "https://github.com/ziglang/zig/pull/9771.patch",
-		hash: "c0bb3d56ee8f34fb82bd4d64375b565601c62d9c2a289991fc9f088758ad86f8",
-	});
-	return std.buildShell({
-		packages: [
-			zig({
-				source: zigSource,
-				patches: [zigPatch],
-			}),
-		],
-	});
+  let { std, zig } = Tangram.dependencies;
+  let zigSource = std.fetchFromGitHub({
+    owner: "ziglang",
+    repo: "zig",
+    rev: "88d1258e08e668e620d5f8f4681315e555acbcd2",
+  });
+  let zigPatch = std.fetch({
+    url: "https://github.com/ziglang/zig/pull/9771.patch",
+    hash: "c0bb3d56ee8f34fb82bd4d64375b565601c62d9c2a289991fc9f088758ad86f8",
+  });
+  return std.buildShell({
+    packages: [
+      zig({
+        source: zigSource,
+        patches: [zigPatch],
+      }),
+    ],
+  });
 };
 ```
 

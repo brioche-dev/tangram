@@ -1,12 +1,18 @@
-use crate::{hash::Hash, object::ObjectHash};
+use crate::object::ObjectHash;
+use derive_more::{Display, FromStr};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-#[allow(clippy::module_name_repetitions)]
-pub struct ArtifactHash(Hash);
-
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Display, Eq, FromStr, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(from = "ArtifactSerde", into = "ArtifactSerde")]
-pub struct Artifact(pub ObjectHash);
+pub struct Artifact {
+	pub(super) object_hash: ObjectHash,
+}
+
+impl Artifact {
+	#[must_use]
+	pub fn object_hash(&self) -> ObjectHash {
+		self.object_hash
+	}
+}
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "_tangram")]
@@ -17,26 +23,15 @@ enum ArtifactSerde {
 
 impl From<Artifact> for ArtifactSerde {
 	fn from(value: Artifact) -> ArtifactSerde {
-		ArtifactSerde::Artifact { hash: value.0 }
+		ArtifactSerde::Artifact {
+			hash: value.object_hash,
+		}
 	}
 }
 
 impl From<ArtifactSerde> for Artifact {
 	fn from(value: ArtifactSerde) -> Self {
 		let ArtifactSerde::Artifact { hash } = value;
-		Artifact(hash)
-	}
-}
-
-impl std::ops::Deref for ArtifactHash {
-	type Target = Hash;
-	fn deref(&self) -> &Self::Target {
-		&self.0
-	}
-}
-
-impl std::fmt::Display for ArtifactHash {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.0)
+		Artifact { object_hash: hash }
 	}
 }

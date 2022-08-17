@@ -18,7 +18,7 @@ pub struct Args {
 
 pub async fn run(args: Args) -> Result<()> {
 	// Create the API client.
-	let _client = tangram_api_client::Client::new(&args.uri);
+	let _client = tangram_api_client::Transport::new(&args.uri);
 
 	// Retrieve the credentials for the specified API.
 	let credentials = Credentials::read().await?;

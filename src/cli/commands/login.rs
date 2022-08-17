@@ -1,4 +1,4 @@
-use crate::credentials::{self, Credentials};
+use crate::credentials::{Credentials};
 use anyhow::{bail, Result};
 use clap::Parser;
 use std::time::{Duration, Instant};
@@ -16,7 +16,7 @@ pub struct Args {
 
 pub async fn run(args: Args) -> Result<()> {
 	// Create the API client.
-	let client = tangram_api_client::Client::new(&args.uri)?;
+	let client = tangram_api_client::Transport::new(&args.uri)?;
 
 	// Create a login.
 	let login = client.create_login().await?;
@@ -30,6 +30,7 @@ pub async fn run(args: Args) -> Result<()> {
 
 	// Poll.
 	let start_instant = Instant::now();
+	let poll_interval = Duration::from_secs(1);
 	let poll_duration = Duration::from_secs(300);
 	let token = loop {
 		if start_instant.elapsed() >= poll_duration {
@@ -39,10 +40,8 @@ pub async fn run(args: Args) -> Result<()> {
 		if let Some(token) = login.token {
 			break token;
 		}
-		tokio::time::sleep(Duration::from_secs(1)).await;
+		tokio::time::sleep(poll_interval).await;
 	};
-
-	eprintln!("You have successfully logged in.");
 
 	// Retrieve the user.
 	let user = client.get_current_user(token).await?;
@@ -55,6 +54,8 @@ pub async fn run(args: Args) -> Result<()> {
 		token: user.token,
 	});
 	credentials.write().await?;
+
+	eprintln!("You have successfully logged in.");
 
 	Ok(())
 }

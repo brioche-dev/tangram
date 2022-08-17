@@ -1,7 +1,8 @@
 use crate::artifact::Artifact;
+use camino::Utf8PathBuf;
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Value {
 	Null,
@@ -15,14 +16,14 @@ pub enum Value {
 	Map(BTreeMap<String, Value>),
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(from = "PathSerde", into = "PathSerde")]
 pub struct Path {
 	pub artifact: Artifact,
-	pub path: Option<String>,
+	pub path: Option<Utf8PathBuf>,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(from = "TemplateSerde", into = "TemplateSerde")]
 pub struct Template {
 	pub components: Vec<Value>,
@@ -34,7 +35,7 @@ enum PathSerde {
 	#[serde(rename = "path")]
 	Path {
 		artifact: Artifact,
-		path: Option<String>,
+		path: Option<Utf8PathBuf>,
 	},
 }
 

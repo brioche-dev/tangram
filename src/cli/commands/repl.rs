@@ -6,7 +6,7 @@ pub struct Args {}
 
 pub async fn run(_args: Args) -> Result<()> {
 	let client = crate::client::new().await?;
-	let repl = client.new_repl().await?;
+	let repl_id = client.create_repl().await?;
 	let mut readline = rustyline::Editor::<()>::new()?;
 
 	// This is the REPL loop.
@@ -27,9 +27,11 @@ pub async fn run(_args: Args) -> Result<()> {
 		};
 
 		// Run the code.
-		let output = client.repl_run(repl, code).await?;
-		if let Some(output) = output {
-			println!("{}", output);
+		let output = client.repl_run(repl_id, &code).await?;
+		match output {
+			Ok(Some(output)) => println!("{}", output),
+			Ok(None) => {},
+			Err(message) => println!("Error: {}", message),
 		}
 	}
 

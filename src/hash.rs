@@ -1,10 +1,11 @@
 use anyhow::Context;
 use digest::Digest;
-use futures::stream::StreamExt;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::AsyncWrite;
 
 #[derive(Default)]
-pub struct Hasher(sha2::Sha256);
+pub struct Hasher {
+	sha256: sha2::Sha256,
+}
 
 impl Hasher {
 	#[must_use]
@@ -13,12 +14,12 @@ impl Hasher {
 	}
 
 	pub fn update(&mut self, data: impl AsRef<[u8]>) {
-		self.0.update(data);
+		self.sha256.update(data);
 	}
 
 	#[must_use]
 	pub fn finalize(self) -> Hash {
-		Hash(self.0.finalize().into())
+		Hash(self.sha256.finalize().into())
 	}
 }
 
@@ -39,7 +40,7 @@ impl AsyncWrite for Hasher {
 		_cx: &mut std::task::Context<'_>,
 		buf: &[u8],
 	) -> std::task::Poll<Result<usize, std::io::Error>> {
-		self.0.update(&buf);
+		self.sha256.update(&buf);
 		std::task::Poll::Ready(Ok(buf.len()))
 	}
 	fn poll_flush(
@@ -129,25 +130,10 @@ impl rand::distributions::Distribution<Hash> for rand::distributions::Standard {
 	}
 }
 
-pub async fn len_and_hash_for_reader(
-	reader: impl AsyncRead + Unpin,
-) -> anyhow::Result<(u64, Hash)> {
-	let mut reader = tokio_util::io::ReaderStream::new(reader);
-	let mut hasher = Hasher::new();
-	let mut len: u64 = 0;
-	while let Some(chunk) = reader.next().await {
-		let chunk = chunk?;
-		hasher.update(&chunk);
-		let chunk_len: u64 = chunk.len().try_into().unwrap();
-		len += chunk_len;
-	}
-	let hash = hasher.finalize();
-	Ok((len, hash))
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+
 	#[test]
 	fn display_fromstr_roundtrip() {
 		let message = "Hello, World!";

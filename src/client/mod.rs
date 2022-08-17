@@ -1,17 +1,24 @@
-use crate::server::Server;
+use crate::{heuristics::FILESYSTEM_CONCURRENCY_LIMIT, server::Server};
 use anyhow::{bail, Result};
-use graphql_client::Response as GraphQLResponse;
 use hyperlocal::UnixClientExt;
 use std::{path::PathBuf, sync::Arc};
+use tokio::sync::Semaphore;
 use url::Url;
 
+mod artifact;
 mod checkin;
 mod checkin_package;
 mod checkout;
 mod evaluate;
+mod object_cache;
 mod repl;
 
-pub enum Client {
+pub struct Client {
+	transport: Transport,
+	file_system_semaphore: Arc<Semaphore>,
+}
+
+pub enum Transport {
 	InProcess {
 		server: Arc<Server>,
 	},
@@ -21,75 +28,134 @@ pub enum Client {
 	},
 	Tcp {
 		url: Url,
-		client: reqwest::Client,
+		client:
+			hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
 	},
 }
 
 impl Client {
-	pub async fn new_in_process(path: PathBuf) -> Result<Client> {
-		let server = Arc::new(Server::new(&path).await?);
-		tokio::spawn(async move { server.serve_unix().await.unwrap() });
-		let client = Client::new_unix(path).await?;
-		Ok(client)
+	#[must_use]
+	pub fn new_in_process(server: Arc<Server>) -> Client {
+		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
+		let transport = Transport::InProcess { server };
+		Client {
+			transport,
+			file_system_semaphore,
+		}
 	}
 
-	pub async fn new_unix(path: PathBuf) -> Result<Client> {
+	#[must_use]
+	pub fn new_unix(path: PathBuf) -> Client {
+		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
 		let client = hyper::Client::unix();
-		let client = Client::Unix { path, client };
-		Ok(client)
+		let transport = Transport::Unix { path, client };
+		Client {
+			transport,
+			file_system_semaphore,
+		}
 	}
 
-	pub async fn new_tcp(url: Url) -> Result<Client> {
-		let client = reqwest::Client::new();
-		let client = Client::Tcp { url, client };
-		Ok(client)
+	#[must_use]
+	pub fn new_tcp(url: Url) -> Client {
+		let client: hyper::Client<_, hyper::Body> = hyper::Client::builder().build(
+			hyper_rustls::HttpsConnectorBuilder::new()
+				.with_native_roots()
+				.https_or_http()
+				.enable_http1()
+				.build(),
+		);
+		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
+		let transport = Transport::Tcp { url, client };
+		Client {
+			transport,
+			file_system_semaphore,
+		}
 	}
 
-	async fn request<T>(&self, variables: T::Variables) -> Result<T::ResponseData>
+	async fn post_json<T, U>(&self, path: &str, body: &T) -> Result<U>
 	where
-		T: graphql_client::GraphQLQuery,
+		T: serde::Serialize,
+		U: serde::de::DeserializeOwned,
 	{
-		let query = T::build_query(variables);
-		let response = match self {
-			Client::InProcess { .. } => {
-				todo!()
+		let body = serde_json::to_string(&body)?;
+		let body = hyper::Body::from(body);
+		let response = match &self.transport {
+			Transport::InProcess { .. } => {
+				bail!("Cannot perform request with in process client.");
 			},
-			Client::Unix { path, client } => {
-				let path = path.join("socket");
-				let query = serde_json::to_string(&query)?;
-				let body = hyper::Body::from(query);
-				let uri = hyperlocal::Uri::new(path, "/graphql");
+			Transport::Unix {
+				path: unix_path,
+				client,
+				..
+			} => {
+				let uri = hyperlocal::Uri::new(unix_path, "/evaluate");
 				let request = http::Request::builder()
 					.method(http::Method::POST)
 					.header(http::header::CONTENT_TYPE, "application/json")
 					.uri(uri)
 					.body(body)
 					.unwrap();
-				let response = client.request(request).await?;
-				if !response.status().is_success() {
-					let status = response.status();
-					bail!("{}", status);
-				}
-				let body = hyper::body::to_bytes(response).await?;
-				let response: GraphQLResponse<T::ResponseData> = serde_json::from_slice(&body)?;
-				response
+				client.request(request).await?
 			},
-			Client::Tcp { url, client } => {
+			Transport::Tcp { url, client, .. } => {
 				let mut url = url.clone();
-				url.set_path("/graphql");
-				let response = client.post(url).json(&query).send().await?;
-				let response: GraphQLResponse<T::ResponseData> = response.json().await?;
-				response
+				url.set_path(path);
+				let request = http::Request::builder()
+					.method(http::Method::POST)
+					.header(http::header::CONTENT_TYPE, "application/json")
+					.uri(url.to_string())
+					.body(body)
+					.unwrap();
+				client.request(request).await?
 			},
 		};
-		if let Some(errors) = response.errors {
-			bail!("{errors:?}");
+		if !response.status().is_success() {
+			let status = response.status();
+			bail!("{}", status);
 		}
-		let data = if let Some(data) = response.data {
-			data
-		} else {
-			bail!("No data.");
+		let body = hyper::body::to_bytes(response.into_body()).await?;
+		let response = serde_json::from_slice(&body)?;
+		Ok(response)
+	}
+
+	async fn post<U>(&self, path: &str) -> Result<U>
+	where
+		U: serde::de::DeserializeOwned,
+	{
+		let response = match &self.transport {
+			Transport::InProcess { .. } => {
+				bail!("Cannot perform request with in process client.");
+			},
+			Transport::Unix {
+				path: unix_path,
+				client,
+				..
+			} => {
+				let uri = hyperlocal::Uri::new(unix_path, "/evaluate");
+				let request = http::Request::builder()
+					.method(http::Method::POST)
+					.uri(uri)
+					.body(hyper::Body::empty())
+					.unwrap();
+				client.request(request).await?
+			},
+			Transport::Tcp { url, client, .. } => {
+				let mut url = url.clone();
+				url.set_path(path);
+				let request = http::Request::builder()
+					.method(http::Method::POST)
+					.uri(url.to_string())
+					.body(hyper::Body::empty())
+					.unwrap();
+				client.request(request).await?
+			},
 		};
-		Ok(data)
+		if !response.status().is_success() {
+			let status = response.status();
+			bail!("{}", status);
+		}
+		let body = hyper::body::to_bytes(response.into_body()).await?;
+		let response = serde_json::from_slice(&body)?;
+		Ok(response)
 	}
 }

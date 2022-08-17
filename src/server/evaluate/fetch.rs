@@ -1,75 +1,186 @@
-use crate::server::Server;
-use anyhow::{bail, Result};
-use futures::TryStreamExt;
+use crate::{
+	artifact::Artifact,
+	expression::{self, Expression},
+	hash::Hasher,
+	server::Server,
+	value::Value,
+};
+use anyhow::{anyhow, bail, Result};
+use futures::{StreamExt, TryStreamExt};
 use std::{path::Path, sync::Arc};
+use tokio::io::AsyncWriteExt;
 
 impl Server {
-	pub async fn evaluate_fetch(
-		self: &Arc<Self>,
-		fetch: crate::expression::Fetch,
-	) -> Result<crate::value::Value> {
+	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: expression::Fetch) -> Result<Value> {
+		// Return a memoized value if one is available.
+		let fetch_expression = Expression::Fetch(fetch);
+		if let Some(value) = self
+			.get_memoized_value_for_expression(&fetch_expression)
+			.await?
+		{
+			return Ok(value);
+		}
+		let fetch = match fetch_expression {
+			Expression::Fetch(fetch) => fetch,
+			_ => unreachable!(),
+		};
+
+		// Create a temp.
+		let temp = self.create_temp().await?;
+		let temp_path = self.temp_path(&temp);
+
+		// Perform the request and get a reader for the body.
 		let response = self.http_client.get(fetch.url.clone()).send().await?;
 		let response = response.error_for_status()?;
-		let stream = response
+		let mut stream = response
 			.bytes_stream()
 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
-		let mut reader = tokio_util::io::StreamReader::new(stream);
-		let unpack = if fetch.unpack {
-			Unpack::for_path(fetch.url.path())
-		} else {
-			None
+
+		// Stream the body to the temp while computing its hash.
+		let mut hasher = Hasher::new();
+		let mut file = tokio::fs::File::create(&temp_path).await?;
+		let mut file_writer = tokio::io::BufWriter::new(&mut file);
+		while let Some(chunk) = stream.next().await {
+			let chunk = chunk?;
+			hasher.write_all(&chunk).await?;
+			file_writer.write_all(&chunk).await?;
+		}
+		let hash = hasher.finalize();
+		file_writer.flush().await?;
+
+		// Verify the hash.
+		match (fetch.hash, hash) {
+			(None, _) => bail!("Missing hash!\nReceived: {}\n", hash),
+			(Some(fetch_hash), hash) if fetch_hash != hash => {
+				bail!(
+					"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
+					hash,
+					fetch_hash,
+				);
+			},
+			_ => {},
 		};
-		todo!()
-		// let artifact = todo!();
-		// if let Some(hash) = fetch.hash {
-		// 	if hash != *artifact.0 {
-		// 		bail!(
-		// 			"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
-		// 			hash,
-		// 			artifact.0,
-		// 		);
-		// 	}
-		// } else {
-		// 	bail!("Missing hash!\nReceived: {}\n", artifact.0);
-		// }
-		// // TODO Handle unpacking.
-		// Ok(crate::value::Value::Artifact(artifact))
+
+		// Checkin the temp.
+		let artifact = self.checkin_temp(temp).await?;
+
+		// Unpack the artifact if requested.
+		let artifact = if fetch.unpack {
+			let archive_format =
+				ArchiveFormat::for_path(Path::new(fetch.url.path())).ok_or_else(|| {
+					anyhow!(r#"Could not determine archive format for "{}"."#, fetch.url)
+				})?;
+			self.unpack(artifact, archive_format).await?
+		} else {
+			artifact
+		};
+
+		// Create the value.
+		let value = Value::Artifact(artifact);
+
+		// Memoize the expression.
+		self.set_memoized_value_for_expression(&Expression::Fetch(fetch), &value)
+			.await?;
+
+		Ok(value)
+	}
+
+	async fn unpack(
+		self: &Arc<Self>,
+		artifact: Artifact,
+		archive_format: ArchiveFormat,
+	) -> Result<Artifact> {
+		// Checkout the archive.
+		let archive_fragment = self.create_fragment(&artifact).await?;
+		let archive_fragment_path = archive_fragment.path();
+
+		// Create a temp to unpack to.
+		let unpack_temp = self.create_temp().await?;
+		let unpack_temp_path = self.temp_path(&unpack_temp);
+
+		// Unpack in a blocking task.
+		tokio::task::spawn_blocking(move || -> Result<_> {
+			let archive_file = std::fs::File::open(archive_fragment_path)?;
+			let archive_reader = std::io::BufReader::new(archive_file);
+			match archive_format {
+				ArchiveFormat::Tar => {
+					let mut archive = tar::Archive::new(archive_reader);
+					archive.set_preserve_permissions(false);
+					archive.set_unpack_xattrs(false);
+					archive.unpack(&unpack_temp_path)?;
+				},
+				ArchiveFormat::TarBz2 => {
+					let mut archive =
+						tar::Archive::new(bzip2::read::BzDecoder::new(archive_reader));
+					archive.set_preserve_permissions(false);
+					archive.set_unpack_xattrs(false);
+					archive.unpack(&unpack_temp_path)?;
+				},
+				ArchiveFormat::TarGz => {
+					let mut archive =
+						tar::Archive::new(flate2::read::GzDecoder::new(archive_reader));
+					archive.set_preserve_permissions(false);
+					archive.set_unpack_xattrs(false);
+					archive.unpack(&unpack_temp_path)?;
+				},
+				ArchiveFormat::TarXz => {
+					let mut archive = tar::Archive::new(xz::read::XzDecoder::new(archive_reader));
+					archive.set_preserve_permissions(false);
+					archive.set_unpack_xattrs(false);
+					archive.unpack(&unpack_temp_path)?;
+				},
+				ArchiveFormat::TarZstd => {
+					let mut archive = tar::Archive::new(zstd::Decoder::new(archive_reader)?);
+					archive.set_preserve_permissions(false);
+					archive.set_unpack_xattrs(false);
+					archive.unpack(&unpack_temp_path)?;
+				},
+				ArchiveFormat::Zip => {
+					let mut zip = zip::ZipArchive::new(archive_reader)?;
+					zip.extract(&unpack_temp_path)?;
+				},
+			};
+			Ok(())
+		})
+		.await
+		.unwrap()?;
+
+		// Checkin the temp.
+		let artifact = self.checkin_temp(unpack_temp).await?;
+
+		Ok(artifact)
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-pub enum Unpack {
-	#[serde(rename = ".tar.bz2")]
+enum ArchiveFormat {
 	TarBz2,
-	#[serde(rename = ".tar.gz")]
 	TarGz,
-	#[serde(rename = ".tar.xz")]
 	TarXz,
-	#[serde(rename = "tar.zstd")]
 	TarZstd,
-	#[serde(rename = ".tar")]
 	Tar,
-	#[serde(rename = ".zip")]
 	Zip,
 }
 
-impl Unpack {
+impl ArchiveFormat {
 	#[allow(clippy::case_sensitive_file_extension_comparisons)]
-	pub fn for_path(path: impl AsRef<Path>) -> Option<Unpack> {
-		let path = path.as_ref().to_str().unwrap();
-		if path.ends_with(".tar.bz2") {
-			Some(Unpack::TarBz2)
-		} else if path.ends_with(".tar.gz") {
-			Some(Unpack::TarGz)
-		} else if path.ends_with(".tar.xz") {
-			Some(Unpack::TarXz)
-		} else if path.ends_with(".tar.zstd") {
-			Some(Unpack::TarZstd)
+	pub fn for_path(path: &Path) -> Option<ArchiveFormat> {
+		let path = path.to_str().unwrap();
+		if path.ends_with(".tar.bz2") || path.ends_with(".tbz2") {
+			Some(ArchiveFormat::TarBz2)
+		} else if path.ends_with(".tar.gz") || path.ends_with(".tgz") {
+			Some(ArchiveFormat::TarGz)
+		} else if path.ends_with(".tar.xz") || path.ends_with(".txz") {
+			Some(ArchiveFormat::TarXz)
+		} else if path.ends_with(".tar.zstd")
+			|| path.ends_with(".tzstd")
+			|| path.ends_with(".tar.zst")
+			|| path.ends_with(".tzst")
+		{
+			Some(ArchiveFormat::TarZstd)
 		} else if path.ends_with(".tar") {
-			Some(Unpack::Tar)
+			Some(ArchiveFormat::Tar)
 		} else if path.ends_with(".zip") {
-			Some(Unpack::Zip)
+			Some(ArchiveFormat::Zip)
 		} else {
 			None
 		}

@@ -23,12 +23,13 @@ anyhow = { version = "1.0", features = ["backtrace"] }
 async-recursion = "1.0"
 async-trait = "0.1.53"
 backtrace = "0.3"
+base64 = "0.13"
 bincode = "1.3.3"
 bytes = "1.1"
 bzip2 = "0.4"
 camino = { version = "1", features = ["serde1"] }
 clap = { version = "3", features = ["derive"] }
-deadpool-sqlite = { version = "0.4.0", features = ["rt_tokio_1", "serde"] }
+deadpool-sqlite = { version = "0.5.0", features = ["rt_tokio_1", "serde"] }
 deno_core = "0.136"
 derive_more = "0.99"
 digest = "0.10"
@@ -37,20 +38,18 @@ fatfs = "0.3.5"
 flate2 = "1.0"
 futures = "0.3"
 futures-util = "0.3"
-graphql_client = "0.11"
 hex = { version = "0.4", features = ["serde"] }
 http = "0.2"
 http-serde = "1.1"
 hyper = { version = "0.14.18", features = ["full"] }
+hyper-rustls = "0.23"
 hyperlocal = "0.8"
-indoc = "1.0"
+indexmap = "1"
+indoc = "1"
 insta = "1.14"
 itertools = "0.10"
-juniper = "0.15"
-juniper_hyper = "0.8"
 libc = "0.2"
 nix = { version = "0.24.1", default-features = false, features = ["fs", "mount", "sched"] }
-num_cpus = "1.0"
 oauth2 = "4.1.0"
 oci-spec = "0.5"
 octorust = "0.1.35"
@@ -59,6 +58,7 @@ pretty_assertions = "1.2"
 rand = "0.8"
 rayon = "1.0"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
+rusqlite = "0.28"
 rust-s3 = { version = "0.31", default-features = false, features = ["tokio-rustls-tls"] }
 rustyline = "10"
 scopeguard = "1.1.0"
@@ -71,7 +71,6 @@ serde_urlencoded = "0.7.1"
 serde_with = "1.13.0"
 serde_yaml = "0.8"
 sha2 = "0.10"
-sqlx = { version = "0.5", default-features = false, features = ["any", "chrono", "postgres", "runtime-tokio-rustls", "sqlite"] }
 tar = "0.4"
 tempfile = "3.3"
 thiserror = "1.0"

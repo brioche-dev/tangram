@@ -1,39 +1,29 @@
-use super::Client;
-use crate::repl::Repl;
-use crate::server::graphql::ReplJson;
+use super::{Client, Transport};
+use crate::{repl::ReplId, server::repl::RunRequest};
 use anyhow::Result;
-use graphql_client::GraphQLQuery;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-	schema_path = "./src/server/graphql/schema.graphql",
-	query_path = "./src/client/repl.graphql"
-)]
-struct ReplNewMutation;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-	schema_path = "./src/server/graphql/schema.graphql",
-	query_path = "./src/client/repl.graphql"
-)]
-struct ReplRunMutation;
 
 impl Client {
-	pub async fn new_repl(&self) -> Result<Repl> {
-		let repl = self
-			.request::<ReplNewMutation>(repl_new_mutation::Variables {})
-			.await?
-			.repl_new;
-		let repl = repl.try_into()?;
-		Ok(repl)
+	pub async fn create_repl(&self) -> Result<ReplId> {
+		if let Transport::InProcess { server, .. } = &self.transport {
+			server.create_repl().await
+		} else {
+			self.post("/repls/").await
+		}
 	}
 
-	pub async fn repl_run(&self, repl: Repl, code: String) -> Result<Option<String>> {
-		let repl = repl.try_into()?;
-		let output = self
-			.request::<ReplRunMutation>(repl_run_mutation::Variables { repl, code })
-			.await?
-			.repl_run;
-		Ok(output)
+	pub async fn repl_run(
+		&self,
+		repl_id: ReplId,
+		code: &str,
+	) -> Result<Result<Option<String>, String>> {
+		if let Transport::InProcess { server, .. } = &self.transport {
+			server.repl_run(&repl_id, code.to_string()).await
+		} else {
+			let request = RunRequest {
+				repl_id,
+				code: code.to_owned(),
+			};
+			self.post_json("/repl_run", &request).await
+		}
 	}
 }

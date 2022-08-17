@@ -1,27 +1,41 @@
+use self::module_loader::ModuleLoader;
 use crate::{
 	expression::{self, Expression},
 	hash::Hash,
 	server::Server,
 	value::Value,
 };
-use anyhow::Result;
+use anyhow::{anyhow, bail, Context, Result};
+use camino::Utf8PathBuf;
+use deno_core::{serde_v8, v8};
 use itertools::Itertools;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use url::Url;
 
 mod cdp;
+mod module_loader;
 
+#[derive(Debug)]
 pub struct Runtime {
-	sender: tokio::sync::mpsc::UnboundedSender<Message>,
+	sender: RequestSender,
 }
 
-enum Message {
-	Repl(ReplMessage),
+type RequestSender =
+	tokio::sync::mpsc::UnboundedSender<(Request, tokio::sync::oneshot::Sender<Response>)>;
+
+type RequestReceiver =
+	tokio::sync::mpsc::UnboundedReceiver<(Request, tokio::sync::oneshot::Sender<Response>)>;
+
+#[derive(Debug)]
+enum Request {
+	Repl { code: String },
+	Run { process: expression::JsProcess },
 }
 
-struct ReplMessage {
-	code: String,
-	sender: tokio::sync::oneshot::Sender<Option<String>>,
+#[derive(Debug)]
+enum Response {
+	Repl(Result<Option<String>, String>),
+	Run(Result<Expression>),
 }
 
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/snapshot"));
@@ -29,46 +43,66 @@ const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/snapshot"));
 /// This is the deno op state for the tangram deno extension.
 #[derive(Clone)]
 struct TangramOpState {
-	main_runtime_handle: tokio::runtime::Handle,
 	server: Arc<Server>,
+	main_runtime_handle: tokio::runtime::Handle,
 }
 
 impl Runtime {
+	#[must_use]
 	pub fn new(server: &Arc<Server>) -> Runtime {
-		let server = Arc::clone(&server);
+		// Get a handle to the current tokio runtime.
+		let main_runtime_handle = tokio::runtime::Handle::current();
 
-		// Create the channel to send messages to the task.
+		// Create a channel to send messages to the js task.
 		let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
-		// Create the js runtime task.
+		// Create the js task.
 		server.local_pool_handle.spawn_pinned({
-			let server = Arc::clone(&server);
-			move || js_runtime_task(server, receiver)
+			let server = Arc::clone(server);
+			move || js_runtime_task(server, main_runtime_handle, receiver)
 		});
 
 		Runtime { sender }
 	}
 
-	pub async fn repl(&self, code: String) -> Option<String> {
+	pub async fn repl(&self, code: String) -> Result<Result<Option<String>, String>> {
+		let request = Request::Repl { code: code.clone() };
+		let response = self.request(request).await?;
+		let response = match response {
+			Response::Repl(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+		Ok(response)
+	}
+
+	pub async fn run(&self, process: expression::JsProcess) -> Result<Result<Expression>> {
+		let request = Request::Run { process };
+		let response = self.request(request).await?;
+		let response = match response {
+			Response::Run(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+		Ok(response)
+	}
+
+	async fn request(&self, request: Request) -> Result<Response> {
 		let (sender, receiver) = tokio::sync::oneshot::channel();
-		match self.sender.send(Message::Repl(ReplMessage {
-			code: code.clone(),
-			sender,
-		})) {
+		match self.sender.send((request, sender)) {
 			Ok(_) => {},
-			Err(_) => return Some("Error: Failed to send the message to the js task.".to_owned()),
+			Err(_) => bail!("Failed to send a request to the js task.".to_owned()),
 		};
-		let output = match receiver.await {
-			Ok(output) => output,
-			Err(_) => return Some("Failed to receive a response from the js task.".to_owned()),
+		let response = match receiver.await {
+			Ok(response) => response,
+			Err(_) => bail!("Failed to receive a response from the js task.".to_owned()),
 		};
-		output
+		Ok(response)
 	}
 }
 
 async fn js_runtime_task(
 	server: Arc<Server>,
-	mut receiver: tokio::sync::mpsc::UnboundedReceiver<Message>,
+	main_runtime_handle: tokio::runtime::Handle,
+	mut receiver: RequestReceiver,
 ) {
 	// Build the tangram extension.
 	let tangram_extension = deno_core::Extension::builder()
@@ -76,14 +110,17 @@ async fn js_runtime_task(
 			op_tangram_console_log::decl(),
 			op_tangram_evaluate::decl(),
 			op_tangram_fetch::decl(),
+			op_tangram_path::decl(),
+			op_tangram_process::decl(),
 			op_tangram_template::decl(),
 		])
 		.state({
 			let server = Arc::clone(&server);
+			let main_runtime_handle = main_runtime_handle.clone();
 			move |state| {
 				state.put(TangramOpState {
-					main_runtime_handle: tokio::runtime::Handle::current().clone(),
 					server: Arc::clone(&server),
+					main_runtime_handle: main_runtime_handle.clone(),
 				});
 				Ok(())
 			}
@@ -92,7 +129,10 @@ async fn js_runtime_task(
 
 	// Create the js runtime.
 	let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
-		// module_loader: Some(Rc::new(ModuleLoader::new(Arc::clone(server)))),
+		module_loader: Some(Rc::new(ModuleLoader::new(
+			Arc::clone(&server),
+			main_runtime_handle.clone(),
+		))),
 		extensions: vec![tangram_extension],
 		startup_snapshot: Some(deno_core::Snapshot::Static(SNAPSHOT)),
 		..Default::default()
@@ -125,29 +165,38 @@ async fn js_runtime_task(
 	}
 
 	// Respond to each message on the receiver.
-	while let Some(message) = receiver.recv().await {
-		match message {
-			Message::Repl(message) => {
-				handle_repl_message(&mut js_runtime, &mut inspector_session, context_id, message)
-					.await;
+	while let Some((request, sender)) = receiver.recv().await {
+		match request {
+			Request::Repl { code } => {
+				let response =
+					handle_repl_request(&mut js_runtime, &mut inspector_session, context_id, code)
+						.await;
+				let response = Response::Repl(response);
+				sender.send(response).unwrap();
+			},
+			Request::Run { process } => {
+				let response = handle_run_request(&server, &mut js_runtime, process).await;
+				let response = Response::Run(response);
+				sender.send(response).unwrap();
 			},
 		};
 	}
 }
+
 #[allow(clippy::too_many_lines)]
-async fn handle_repl_message(
+async fn handle_repl_request(
 	js_runtime: &mut deno_core::JsRuntime,
 	inspector_session: &mut deno_core::LocalInspectorSession,
 	context_id: u64,
-	message: ReplMessage,
-) {
-	let code = message.code;
-	// Wrap the code in parens to make it a ExpressionStatement instead of a BlockStatement to match the behavior of other repls.
-	let wrapped_code = if code.trim_start().starts_with('{') && !code.trim_end().ends_with(';') {
-		format!("({})", &code)
+	code: String,
+) -> Result<Option<String>, String> {
+	// If the code begins with an open curly and does not end in a semicolon, wrap it in parens to make it an ExpressionStatement instead of a BlockStatement.
+	let code = if code.trim_start().starts_with('{') && !code.trim_end().ends_with(';') {
+		format!("({code})")
 	} else {
 		code
 	};
+
 	// Evaluate the code.
 	let evaluate_response: cdp::EvaluateResponse = match futures::try_join!(
 		inspector_session.post_message(
@@ -155,7 +204,7 @@ async fn handle_repl_message(
 			Some(cdp::EvaluateArgs {
 				context_id: Some(context_id),
 				repl_mode: Some(true),
-				expression: wrapped_code,
+				expression: code,
 				object_group: None,
 				include_command_line_api: None,
 				silent: None,
@@ -174,45 +223,45 @@ async fn handle_repl_message(
 	) {
 		Ok((response, _)) => serde_json::from_value(response).unwrap(),
 		Err(error) => {
-			message.sender.send(Some(error.to_string())).unwrap();
-			return;
+			return Err(error.to_string());
 		},
 	};
+
+	// If there was an error, return its description.
+	if let Some(exception_details) = evaluate_response.exception_details {
+		return Err(exception_details.exception.unwrap().description.unwrap());
+	}
+
+	// If the evaluation produced a value, return it.
 	if let Some(value) = evaluate_response.result.value {
 		let output = serde_json::to_string_pretty(&value).unwrap();
-		message.sender.send(Some(output)).unwrap();
-		return;
+		return Ok(Some(output));
 	}
-	if let Some(error) = evaluate_response.exception_details {
-		message
-			.sender
-			.send(Some(error.exception.unwrap().description.unwrap()))
-			.unwrap();
-		return;
-	}
+
+	// Otherwise, stringify the evaluation response's result.
 	let function = r#"
-		 function stringify(value) {
-			switch (typeof(value)) {
-				case "object":
+		function stringify(value) {
+			switch (typeof value) {
+				case "object": {
 					if (value instanceof Error) {
 						return value.stack;
-					}
-					if (value instanceof Promise) {
+					} else if (value instanceof Promise) {
 						return "Promise";
-					}
-					if (value instanceof Array) {
-						let object = "[ " + Object.values(value).map(value => stringify(value)).flat().join(", ") + " ]";
-						return object;
+					} else if (value instanceof Array) {
+						return `[ ${Object.values(value).map(value => stringify(value)).flat().join(", ")} ]`;
 					} else {
-						let object = "{ " + Object.entries(value).map(([key, value]) => `${key}: ${stringify(value)}`).join(", ") + " }";
-						return object;
+						return `{ ${Object.entries(value).map(([key, value]) => `${key}: ${stringify(value)}`).join(", ")} }`;
 					}
-				case "function":
+				}
+				case "function": {
 					return `[Function: ${value.name || "(anonymous)"}]`;
-				case "undefined":
+				}
+				case "undefined": {
 					return "undefined";
-				default:
+				}
+				default: {
 					return JSON.stringify(value);
+				}
 			}
 		}
 	"#;
@@ -237,24 +286,110 @@ async fn handle_repl_message(
 	) {
 		Ok((response, _)) => serde_json::from_value(response).unwrap(),
 		Err(error) => {
-			message.sender.send(Some(error.to_string())).unwrap();
-			return;
+			return Err(error.to_string());
 		},
 	};
-	if let Some(value) = call_function_on_response.result.value {
-		let output = value.as_str().unwrap().to_owned();
-		message.sender.send(Some(output)).unwrap();
-		return;
+
+	// If there was an error, return its description.
+	if let Some(exception_details) = call_function_on_response.exception_details {
+		return Err(exception_details.exception.unwrap().description.unwrap());
 	}
-	message.sender.send(None).unwrap();
+
+	// Retrieve the output.
+	let value = if let Some(value) = call_function_on_response.result.value {
+		value
+	} else {
+		return Err("An unexpected error occurred.".to_owned());
+	};
+
+	// Get the output as a string.
+	let output = value.as_str().unwrap().to_owned();
+
+	Ok(Some(output))
+}
+
+async fn handle_run_request(
+	server: &Arc<Server>,
+	js_runtime: &mut deno_core::JsRuntime,
+	process: expression::JsProcess,
+) -> Result<Expression> {
+	// Evaluate the module expression to get a path value.
+	let module = server.evaluate(*process.module).await?;
+	let module = match module {
+		Value::Path(module) => module,
+		_ => bail!("Module must be a path."),
+	};
+
+	let mut module_url = format!("fragment://{}", module.artifact.object_hash());
+	if let Some(path) = module.path {
+		module_url.push('/');
+		module_url.push_str(path.as_str());
+	}
+	let module_url = Url::parse(&module_url).unwrap();
+
+	// Load the module.
+	let module_id = js_runtime.load_side_module(&module_url, None).await?;
+	let evaluate_receiver = js_runtime.mod_evaluate(module_id);
+	js_runtime.run_event_loop(false).await?;
+	evaluate_receiver.await.unwrap()?;
+
+	// Retrieve the specified export from the module.
+	let module_namespace = js_runtime.get_module_namespace(module_id)?;
+	let mut scope = js_runtime.handle_scope();
+	let module_namespace = v8::Local::<v8::Object>::new(&mut scope, module_namespace);
+	let export_name = process.export;
+	let export_literal = v8::String::new(&mut scope, &export_name).unwrap();
+	let export: v8::Local<v8::Function> = module_namespace
+		.get(&mut scope, export_literal.into())
+		.ok_or_else(|| {
+			anyhow!(r#"Failed to get the export "{export_name}" from the module "{module_url}"."#)
+		})?
+		.try_into()
+		.with_context(|| {
+			anyhow!(
+				r#"The export "{export_name}" from the module "{module_url}" must be a function."#
+			)
+		})?;
+
+	// Create a scope to call the export.
+	let mut try_catch_scope = v8::TryCatch::new(&mut scope);
+	let undefined = v8::undefined(&mut try_catch_scope);
+
+	// Evaluate the args and move them to v8.
+	// let args = serde_v8::to_v8(&mut try_catch_scope, process.args)?;
+
+	// Call the specified export.
+	let value = export
+		.call(&mut try_catch_scope, undefined.into(), &[])
+		.unwrap();
+
+	// Move the return value to the global scope.
+	let value = v8::Global::new(&mut try_catch_scope, value);
+	drop(try_catch_scope);
+	drop(scope);
+
+	// Run the event loop to completion.
+	js_runtime.run_event_loop(false).await?;
+
+	// Retrieve the return value.
+	let mut scope = js_runtime.handle_scope();
+	let value = v8::Local::new(&mut scope, value);
+	let value = if value.is_promise() {
+		let promise: v8::Local<v8::Promise> = value.try_into().unwrap();
+		promise.result(&mut scope)
+	} else {
+		value
+	};
+	let value = serde_v8::from_v8(&mut scope, value)?;
+
+	Ok(value)
 }
 
 #[deno_core::op]
-#[allow(clippy::needless_pass_by_value)]
 #[allow(clippy::unnecessary_wraps)]
 fn op_tangram_console_log(args: Vec<serde_json::Value>) -> Result<(), deno_core::error::AnyError> {
 	let len = args.len();
-	for (i, arg) in args.iter().enumerate() {
+	for (i, arg) in args.into_iter().enumerate() {
 		print!("{arg}");
 		if i != len - 1 {
 			print!(" ");
@@ -265,16 +400,17 @@ fn op_tangram_console_log(args: Vec<serde_json::Value>) -> Result<(), deno_core:
 }
 
 #[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
 async fn op_tangram_evaluate(
 	state: Rc<RefCell<deno_core::OpState>>,
 	expression: Expression,
 ) -> Result<Value, deno_core::error::AnyError> {
-	let (main_runtime_handle, server) = {
+	let (server, main_runtime_handle) = {
 		let state = state.borrow();
 		let tangram_state = state.borrow::<TangramOpState>();
-		let main_runtime_handle = tangram_state.main_runtime_handle.clone();
 		let server = Arc::clone(&tangram_state.server);
-		(main_runtime_handle, server)
+		let main_runtime_handle = tangram_state.main_runtime_handle.clone();
+		(server, main_runtime_handle)
 	};
 	let task = async move {
 		let value = server.evaluate(expression).await?;
@@ -294,11 +430,31 @@ struct FetchArgs {
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
 fn op_tangram_fetch(args: FetchArgs) -> Result<Expression, deno_core::error::AnyError> {
-	Ok(Expression::Fetch(expression::Fetch {
+	Ok(Expression::Fetch(crate::expression::Fetch {
 		url: args.url,
 		hash: args.hash,
 		unpack: args.unpack,
 	}))
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_path(
+	artifact: Expression,
+	path: Option<Utf8PathBuf>,
+) -> Result<Expression, deno_core::error::AnyError> {
+	Ok(Expression::Path(expression::Path {
+		artifact: Box::new(artifact),
+		path,
+	}))
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_process(
+	process: expression::Process,
+) -> Result<Expression, deno_core::error::AnyError> {
+	Ok(Expression::Process(process))
 }
 
 #[derive(serde::Deserialize)]
@@ -316,6 +472,6 @@ fn op_tangram_template(args: TemplateArgs) -> Result<Expression, deno_core::erro
 		.map(Expression::String)
 		.interleave(args.placeholders)
 		.collect();
-	let template = expression::Template { components };
+	let template = crate::expression::Template { components };
 	Ok(Expression::Template(template))
 }

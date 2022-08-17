@@ -1,13 +1,11 @@
-use crate::artifact::ArtifactHash;
+use crate::object::ObjectHash;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Lockfile {
-	pub dependencies: BTreeMap<String, Entry>,
-}
+pub struct Lockfile(pub BTreeMap<String, Entry>);
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
-	pub artifact_hash: ArtifactHash,
-	pub dependencies: BTreeMap<String, Entry>,
+	pub package: ObjectHash,
+	pub dependencies: Lockfile,
 }

@@ -1,8 +1,4 @@
-use crate::{
-	expression,
-	server::Server,
-	value::{self, Value},
-};
+use crate::{expression, server::Server, value::Value};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -17,7 +13,7 @@ impl Server {
 			.into_iter()
 			.map(|component| self.evaluate(component));
 		let components = futures::future::try_join_all(components).await?;
-		let value = Value::Template(value::Template { components });
+		let value = Value::Template(crate::value::Template { components });
 		Ok(value)
 	}
 }

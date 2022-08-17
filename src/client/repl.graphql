@@ -1,7 +1,0 @@
-mutation ReplNewMutation {
-  replNew
-}
-
-mutation ReplRunMutation($repl: ReplJson!, $code: String!) {
-  replRun(repl: $repl, code: $code)
-}

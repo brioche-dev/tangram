@@ -1,13 +1,9 @@
-use crate::server::Server;
-use crate::value::Value;
+use crate::{expression, server::Server, value::Value};
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
 impl Server {
-	pub async fn evaluate_path(
-		self: &Arc<Self>,
-		path: crate::expression::Path,
-	) -> Result<crate::value::Value> {
+	pub async fn evaluate_path(self: &Arc<Self>, path: expression::Path) -> Result<Value> {
 		let value = self.evaluate(*path.artifact).await?;
 		let artifact = match value {
 			Value::Artifact(artifact) => artifact,
