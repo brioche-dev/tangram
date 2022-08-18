@@ -1,10 +1,14 @@
-use crate::artifact::Artifact;
-use crate::client::Client;
-use crate::lockfile::{self, Lockfile};
-use crate::manifest::Manifest;
+use crate::{
+	artifact::Artifact,
+	client::Client,
+	lockfile::{self, Lockfile},
+	manifest::Manifest,
+};
 use anyhow::{anyhow, Result};
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::path::{Path, PathBuf};
+use std::{
+	collections::{BTreeMap, HashMap, VecDeque},
+	path::{Path, PathBuf},
+};
 
 impl Client {
 	/// Checkin a package along with all its path dependencies.

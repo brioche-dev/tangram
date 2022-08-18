@@ -1,6 +1,6 @@
 use crate::{
 	hash::Hasher,
-	object::{BlobHash, Directory, File, Object, ObjectHash, Symlink},
+	object::{BlobHash, Dependency, Directory, File, Object, ObjectHash, Symlink},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
@@ -28,13 +28,13 @@ impl ObjectCache {
 			tracing::info!(r#"Filling the object cache for path "{path:?}""."#);
 
 			// Get the metadata for the path.
-			let file_system_permit = self.semaphore.acquire().await.unwrap();
+			let permit = self.semaphore.acquire().await.unwrap();
 			let metadata = match tokio::fs::symlink_metadata(path).await {
 				Ok(metadata) => metadata,
 				Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
 				Err(error) => return Err(error.into()),
 			};
-			drop(file_system_permit);
+			drop(permit);
 
 			// Call the appropriate function for the file system object the path points to.
 			if metadata.is_dir() {
@@ -42,7 +42,26 @@ impl ObjectCache {
 			} else if metadata.is_file() {
 				self.cache_object_for_file(path, &metadata).await?;
 			} else if metadata.is_symlink() {
-				self.cache_object_for_symlink(path, &metadata).await?;
+				// Read the "user.tangram_dependency" xattr.
+				let permit = self.semaphore.acquire().await?;
+				let dependency =
+					if let Some(dependency) = xattr::get(path, "user.tangram_dependency")? {
+						let dependency = serde_json::from_slice(&dependency)?;
+						Some(dependency)
+					} else {
+						None
+					};
+				drop(permit);
+
+				match dependency {
+					None => {
+						self.cache_object_for_symlink(path, &metadata).await?;
+					},
+					Some(dependency) => {
+						self.cache_object_for_dependency(path, &metadata, dependency)
+							.await?;
+					},
+				}
 			} else {
 				bail!("The path must point to a directory, file, or symlink.");
 			};
@@ -60,7 +79,7 @@ impl ObjectCache {
 		_metadata: &Metadata,
 	) -> Result<()> {
 		// Read the contents of the directory.
-		let file_system_permit = self.semaphore.acquire().await.unwrap();
+		let permit = self.semaphore.acquire().await.unwrap();
 		let mut read_dir = tokio::fs::read_dir(path)
 			.await
 			.context("Failed to read the directory.")?;
@@ -73,7 +92,7 @@ impl ObjectCache {
 				.to_owned();
 			entry_names.push(file_name);
 		}
-		drop(file_system_permit);
+		drop(permit);
 
 		// Recurse into the directory's entries.
 		let mut entries = BTreeMap::new();
@@ -98,12 +117,12 @@ impl ObjectCache {
 		metadata: &Metadata,
 	) -> Result<ObjectHash> {
 		// Compute the file's blob hash.
-		let file_system_permit = self.semaphore.acquire().await.unwrap();
+		let permit = self.semaphore.acquire().await.unwrap();
 		let mut file = tokio::fs::File::open(path).await?;
 		let mut hasher = Hasher::new();
 		tokio::io::copy(&mut file, &mut hasher).await?;
 		let blob_hash = BlobHash(hasher.finalize());
-		drop(file_system_permit);
+		drop(permit);
 
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
@@ -124,14 +143,28 @@ impl ObjectCache {
 		_metadata: &Metadata,
 	) -> Result<ObjectHash> {
 		// Read the symlink.
-		let file_system_permit = self.semaphore.acquire().await.unwrap();
+		let permit = self.semaphore.acquire().await.unwrap();
 		let target = tokio::fs::read_link(path).await?;
 		let target = Utf8PathBuf::from_path_buf(target)
 			.map_err(|_| anyhow!("Symlink content is not valid UTF-8."))?;
-		drop(file_system_permit);
+		drop(permit);
 
 		// Create the object and add it to the cache.
 		let object = Object::Symlink(Symlink { target });
+		let object_hash = object.hash();
+		self.cache.insert(path.to_owned(), (object_hash, object));
+
+		Ok(object_hash)
+	}
+
+	async fn cache_object_for_dependency(
+		&mut self,
+		path: &Path,
+		_metadata: &Metadata,
+		dependency: Dependency,
+	) -> Result<ObjectHash> {
+		// Create the object and add it to the cache.
+		let object = Object::Dependency(dependency);
 		let object_hash = object.hash();
 		self.cache.insert(path.to_owned(), (object_hash, object));
 

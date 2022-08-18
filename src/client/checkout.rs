@@ -2,18 +2,41 @@ use super::{object_cache::ObjectCache, Transport};
 use crate::{
 	artifact::Artifact,
 	client::Client,
-	object::{Directory, File, Object, ObjectHash, Symlink},
+	object::{Dependency, Directory, File, Object, ObjectHash, Symlink},
 	util::rmrf,
 };
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
-use std::{os::unix::prelude::PermissionsExt, path::Path, sync::Arc};
+use futures::Future;
+use std::{
+	os::unix::prelude::PermissionsExt,
+	path::{Path, PathBuf},
+	pin::Pin,
+	sync::Arc,
+};
+
+pub type ExternalPathForDependency =
+	dyn Sync + Fn(&Dependency) -> Pin<Box<dyn Send + Future<Output = Result<Option<PathBuf>>>>>;
 
 impl Client {
-	pub async fn checkout(&self, artifact: &Artifact, path: &Path) -> Result<()> {
+	pub async fn checkout(
+		&self,
+		artifact: &Artifact,
+		path: &Path,
+		external_path_for_dependency: Option<&'_ ExternalPathForDependency>,
+	) -> Result<()> {
+		// Create an object cache.
 		let mut object_cache = ObjectCache::new(Arc::clone(&self.file_system_semaphore));
-		self.checkout_path(&mut object_cache, artifact.object_hash, path)
-			.await?;
+
+		// Call the recursive checkout function on the root object.
+		self.checkout_path(
+			&mut object_cache,
+			artifact.object_hash,
+			path,
+			external_path_for_dependency,
+		)
+		.await?;
+
 		Ok(())
 	}
 
@@ -22,7 +45,9 @@ impl Client {
 		object_cache: &mut ObjectCache,
 		remote_object_hash: ObjectHash,
 		path: &Path,
+		external_path_for_dependency: Option<&'_ ExternalPathForDependency>,
 	) -> Result<()> {
+		// Get the object from the server.
 		let object = match &self.transport {
 			Transport::InProcess { server } => server.get_object(remote_object_hash).await?,
 			_ => unimplemented!(),
@@ -30,10 +55,16 @@ impl Client {
 		let object =
 			object.ok_or_else(|| anyhow!("Failed to find object {remote_object_hash}."))?;
 
+		// Call the appropriate function for the object's type.
 		match object {
 			Object::Directory(directory) => {
-				self.checkout_directory(object_cache, directory, path)
-					.await?;
+				self.checkout_directory(
+					object_cache,
+					directory,
+					path,
+					external_path_for_dependency,
+				)
+				.await?;
 			},
 			Object::File(file) => {
 				self.checkout_file(object_cache, file, path).await?;
@@ -41,7 +72,15 @@ impl Client {
 			Object::Symlink(symlink) => {
 				self.checkout_symlink(object_cache, symlink, path).await?;
 			},
-			Object::Dependency(_) => todo!(),
+			Object::Dependency(dependency) => {
+				self.checkout_dependency(
+					object_cache,
+					dependency,
+					path,
+					external_path_for_dependency,
+				)
+				.await?;
+			},
 		}
 
 		Ok(())
@@ -53,12 +92,15 @@ impl Client {
 		object_cache: &mut ObjectCache,
 		directory: Directory,
 		path: &Path,
+		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependency>,
 	) -> Result<()> {
+		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
 			// If the object is already checked out then return.
 			Some((_, Object::Directory(local_directory))) if local_directory == &directory => {
 				return Ok(());
 			},
+
 			// If there is already a directory then remove any entries in the local directory that are not present in the remote directory.
 			Some((_, Object::Directory(local_directory))) => {
 				for entry_name in local_directory.entries.keys() {
@@ -68,11 +110,13 @@ impl Client {
 					}
 				}
 			},
+
 			// If there is an existing file system object at the path and it is not a directory, then remove it, create a directory, and continue.
 			Some(_) => {
 				rmrf(path, None).await?;
 				tokio::fs::create_dir(path).await?;
 			},
+
 			// If there is no file system object at this path then create a directory.
 			None => {
 				tokio::fs::create_dir(path).await?;
@@ -82,8 +126,13 @@ impl Client {
 		// Recurse into the children.
 		for (entry_name, entry_object_hash) in directory.entries {
 			let entry_path = path.join(&entry_name);
-			self.checkout_path(object_cache, entry_object_hash, &entry_path)
-				.await?;
+			self.checkout_path(
+				object_cache,
+				entry_object_hash,
+				&entry_path,
+				external_path_for_dependency,
+			)
+			.await?;
 		}
 
 		Ok(())
@@ -95,15 +144,18 @@ impl Client {
 		file: File,
 		path: &Path,
 	) -> Result<()> {
+		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
 			// If the object is already checked out then return.
 			Some((_, Object::File(local_file))) if local_file == &file => {
 				return Ok(());
 			},
+
 			// If there is an existing file system object at the path then remove it and continue.
 			Some(_) => {
 				rmrf(path, None).await?;
 			},
+
 			// If there is no file system object at this path then continue.
 			None => {},
 		};
@@ -133,21 +185,83 @@ impl Client {
 		symlink: Symlink,
 		path: &Path,
 	) -> Result<()> {
+		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
 			// If the object is already checked out then return.
 			Some((_, Object::Symlink(local_symlink))) if local_symlink == &symlink => {
 				return Ok(());
 			},
+
 			// If there is an existing file system object at the path then remove it and continue.
 			Some(_) => {
 				rmrf(path, None).await?;
 			},
+
 			// If there is no file system object at this path then continue.
 			None => {},
 		};
 
 		// Create the symlink.
 		tokio::fs::symlink(symlink.target, path).await?;
+
+		Ok(())
+	}
+
+	#[async_recursion]
+	async fn checkout_dependency(
+		&self,
+		object_cache: &mut ObjectCache,
+		dependency: Dependency,
+		path: &Path,
+		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependency>,
+	) -> Result<()> {
+		// Handle an existing file system object at the path.
+		match object_cache.get(path).await? {
+			// If the object is already checked out then return.
+			Some((_, Object::Dependency(local_dependency))) if local_dependency == &dependency => {
+				return Ok(());
+			},
+
+			// If there is an existing file system object at the path then remove it and continue.
+			Some(_) => {
+				rmrf(path, None).await?;
+			},
+
+			// If there is no file system object at this path then continue.
+			None => {},
+		};
+
+		// Get the dependency path.
+		let dependency_path = if let Some(path_for_dependency) = external_path_for_dependency {
+			if let Some(path) = path_for_dependency(&dependency).await? {
+				Some(path)
+			} else {
+				None
+			}
+		} else {
+			None
+		};
+
+		// Checkout the dependency.
+		self.checkout(
+			&dependency.artifact,
+			dependency_path.as_deref().unwrap_or(path),
+			external_path_for_dependency,
+		)
+		.await?;
+
+		// If the dependency path is external, create a symlink.
+		if let Some(dependency_path) = dependency_path {
+			// Compute the target path.
+			let target = dependency_path;
+
+			// Create the symlink.
+			tokio::fs::symlink(target, path).await?;
+		}
+
+		// Set the user.tangram_dependency xattr.
+		let dependency = serde_json::to_vec(&Object::Dependency(dependency))?;
+		xattr::set(path, "user.tangram_dependency", &dependency)?;
 
 		Ok(())
 	}

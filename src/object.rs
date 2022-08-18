@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 pub struct ObjectHash(pub Hash);
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "_tangram")]
 pub enum Object {
 	/// A directory.
 	#[serde(rename = "directory")]
@@ -69,7 +69,6 @@ pub struct Symlink {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
 	pub artifact: Artifact,
-	pub path: Utf8PathBuf,
 }
 
 /// The hash of a Blob.

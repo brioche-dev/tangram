@@ -11,6 +11,7 @@ pub enum AddObjectOutcome {
 	Added(ObjectHash),
 	DirectoryMissingEntries(Vec<(String, ObjectHash)>),
 	FileMissingBlob(BlobHash),
+	DependencyMissing(ObjectHash),
 }
 
 impl Server {
@@ -22,17 +23,7 @@ impl Server {
 			Object::Directory(directory) => {
 				let mut missing_entries = Vec::new();
 				for (entry_name, object_hash) in &directory.entries {
-					let entry_present = self
-						.database_query_row(
-							r#"
-								select count(*) > 0 from objects where hash = $1
-							"#,
-							(object_hash.to_string(),),
-							|row| Ok(row.get::<_, bool>(0)?),
-						)
-						.await?
-						.unwrap();
-					if !entry_present {
+					if !self.object_exists(*object_hash).await? {
 						missing_entries.push((entry_name.clone(), *object_hash));
 					}
 				}
@@ -50,7 +41,16 @@ impl Server {
 				}
 			},
 
-			_ => {},
+			// If this object is a symlink, there is nothing to ensure.
+			Object::Symlink(_) => {},
+
+			// If this object is a dependency, ensure it is present.
+			Object::Dependency(dependency) => {
+				let object_hash = dependency.artifact.object_hash();
+				if !self.object_exists(object_hash).await? {
+					return Ok(AddObjectOutcome::DependencyMissing(object_hash));
+				}
+			},
 		}
 
 		// Serialize the object.
@@ -73,6 +73,20 @@ impl Server {
 		.await?;
 
 		Ok(AddObjectOutcome::Added(object_hash))
+	}
+
+	pub async fn object_exists(self: &Arc<Self>, object_hash: ObjectHash) -> Result<bool> {
+		let exists = self
+			.database_query_row(
+				r#"
+					select count(*) > 0 from objects where hash = $1
+				"#,
+				(object_hash.to_string(),),
+				|row| Ok(row.get::<_, bool>(0)?),
+			)
+			.await?
+			.unwrap();
+		Ok(exists)
 	}
 
 	pub async fn get_object(self: &Arc<Self>, object_hash: ObjectHash) -> Result<Option<Object>> {

@@ -21,6 +21,8 @@ use tokio::{
 
 pub mod artifact;
 pub mod blob;
+mod checkin;
+mod checkout;
 pub mod db;
 pub mod evaluate;
 pub mod fragment;
@@ -55,7 +57,6 @@ pub struct Server {
 
 	/// These are the active REPLs.
 	repls: Mutex<BTreeMap<ReplId, Repl>>,
-	// TODO Peers.
 }
 
 impl Server {

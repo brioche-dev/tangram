@@ -18,20 +18,20 @@ impl Artifact {
 #[serde(tag = "_tangram")]
 enum ArtifactSerde {
 	#[serde(rename = "artifact")]
-	Artifact { hash: ObjectHash },
+	Artifact { object_hash: ObjectHash },
 }
 
 impl From<Artifact> for ArtifactSerde {
 	fn from(value: Artifact) -> ArtifactSerde {
 		ArtifactSerde::Artifact {
-			hash: value.object_hash,
+			object_hash: value.object_hash,
 		}
 	}
 }
 
 impl From<ArtifactSerde> for Artifact {
 	fn from(value: ArtifactSerde) -> Self {
-		let ArtifactSerde::Artifact { hash } = value;
-		Artifact { object_hash: hash }
+		let ArtifactSerde::Artifact { object_hash } = value;
+		Artifact { object_hash }
 	}
 }

@@ -24,11 +24,6 @@ impl Server {
 				export: target.name,
 				args: target.args,
 			}));
-
-		// TODO Check my cache.
-
-		// TODO Ask the peers.
-
 		Ok(expression)
 	}
 }

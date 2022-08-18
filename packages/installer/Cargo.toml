@@ -1,0 +1,21 @@
+cargo-features = ["workspace-inheritance"]
+
+[package]
+name = "tangram_installer"
+
+edition = { workspace = true }
+license = "MIT"
+publish = false
+version = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+duct = { workspace = true }
+indoc = { workspace = true }
+tangram_core = { workspace = true }
+tangram_dirs = { workspace = true }
+tangram_io.workspace = true
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

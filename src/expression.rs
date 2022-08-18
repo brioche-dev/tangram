@@ -61,24 +61,16 @@ pub enum Process {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct UnixProcess {
-	pub cwd: Box<Expression>,
 	pub env: Box<Expression>,
+	pub cwd: Box<Expression>,
 	pub command: Box<Expression>,
 	pub args: Box<Expression>,
-	pub outputs: Vec<Output>,
+	pub outputs: BTreeMap<String, Output>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Output {
-	name: String,
-	dependencies: Vec<OutputDependency>,
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct OutputDependency {
-	mount_path: Utf8PathBuf,
-	artifact: Box<Expression>,
-	path: Option<Utf8PathBuf>,
+	pub dependencies: BTreeMap<Utf8PathBuf, Box<Expression>>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

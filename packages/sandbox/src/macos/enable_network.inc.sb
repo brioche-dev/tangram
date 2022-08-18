@@ -1,0 +1,15 @@
+;; Tangram sandbox network include
+;;
+;; If included in a build's sandbox policy, it will allow networking for that build.
+
+(allow network*)
+
+;; Allow read for network preference files
+(allow file-read*
+         (literal "/Library/Preferences/com.apple.networkd.plist")
+         (literal "/private/var/db/com.apple.networkextension.tracker-info")
+         (literal "/private/var/db/nsurlstoraged/dafsaData.bin"))
+(allow user-preference-read (preference-domain "com.apple.CFNetwork"))
+
+;; Note: we (allow mach*) in the prelude, all IPCs are allowed.
+;; Note: we (allow system-socket) in the prelude, all sockets are allowed.

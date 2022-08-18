@@ -1,0 +1,15 @@
+# Debian linux
+
+kernel = "Image"
+kernel_command_line = "console=hvc0 root=/dev/vda1"
+# no initrd needed for Debian
+
+guest_agent = "guest_agent"
+
+[network_adapter]
+kind = "nat"
+mac = "36:84:04:a3:91:82"
+
+[disk]
+image = "boot.raw"
+readonly = false

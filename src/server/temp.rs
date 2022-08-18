@@ -1,5 +1,11 @@
-use crate::{artifact::Artifact, client::Client, id::Id, server::Server};
-use anyhow::Result;
+use crate::{
+	artifact::Artifact,
+	id::Id,
+	object::{Dependency, Object},
+	server::Server,
+};
+use anyhow::{anyhow, Result};
+use camino::Utf8Path;
 use derive_more::Deref;
 use std::{path::PathBuf, sync::Arc};
 
@@ -9,7 +15,6 @@ pub struct TempId(pub Id);
 
 #[derive(Clone)]
 pub struct Temp {
-	pub client: Option<Arc<Client>>,
 	pub id: TempId,
 }
 
@@ -17,10 +22,7 @@ impl Server {
 	pub async fn create_temp(self: &Arc<Self>) -> Result<Temp> {
 		let id = Id::generate();
 		let temp_id = TempId(id);
-		let temp = Temp {
-			client: Some(Arc::new(Client::new_in_process(Arc::clone(self)))),
-			id: temp_id,
-		};
+		let temp = Temp { id: temp_id };
 		self.temps.lock().await.insert(temp_id, temp.clone());
 		Ok(temp)
 	}
@@ -30,28 +32,34 @@ impl Server {
 		self.path.join("temps").join(temp.id.to_string())
 	}
 
-	// pub(super) fn add_dependency(
-	// 	self: &Arc<Self>,
-	// 	temp: &Temp,
-	// 	path: Utf8PathBuf,
-	// 	dependency: Dependency,
-	// ) -> Result<()> {
-	// 	// TODO Create a symlink at `path` that points to `dependency` checked out to a fragment and set the appropriate xattr.
-	// 	todo!()
-	// }
+	pub async fn add_dependency(
+		self: &Arc<Self>,
+		temp: &Temp,
+		path: &Utf8Path,
+		dependency: Dependency,
+	) -> Result<()> {
+		// Create a fragment for the dependency.
+		let dependency_fragment = self.create_fragment(&dependency.artifact).await?;
+
+		// Create a symlink from `path` within `temp` to `dependency.path` within the `dependency_fragment`.
+		let symlink_path = self.temp_path(temp).join(path);
+		let symlink_target = dependency_fragment.path();
+		let symlink_parent_path = symlink_path
+			.parent()
+			.ok_or_else(|| anyhow!("Failed to get parent for symlink path."))?;
+		tokio::fs::create_dir_all(&symlink_parent_path).await?;
+		tokio::fs::symlink(&symlink_target, &symlink_path).await?;
+
+		// Set the user.tangram_dependency xattr.
+		let dependency = serde_json::to_vec(&Object::Dependency(dependency))?;
+		xattr::set(&symlink_path, "user.tangram_dependency", &dependency)?;
+
+		Ok(())
+	}
 
 	pub async fn checkin_temp(self: &Arc<Self>, temp: Temp) -> Result<Artifact> {
 		let path = self.temp_path(&temp);
-		let client = Client::new_in_process(Arc::clone(self));
-		let artifact = client.checkin(&path).await?;
+		let artifact = self.checkin(&path).await?;
 		Ok(artifact)
 	}
 }
-
-// impl Drop for Temp {
-// 	fn drop(&mut self) {
-// 		let client = self.client.take().unwrap();
-// 		let id = self.id;
-// 		tokio::task::spawn(client.remove_temp(id).ok());
-// 	}
-// }

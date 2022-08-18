@@ -6,9 +6,9 @@ use tokio::sync::Semaphore;
 use url::Url;
 
 mod artifact;
-mod checkin;
+pub mod checkin;
 mod checkin_package;
-mod checkout;
+pub mod checkout;
 mod evaluate;
 mod object_cache;
 mod repl;

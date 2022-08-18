@@ -3,7 +3,6 @@ use anyhow::{anyhow, Result};
 use tangram::{client::Client, server::Server};
 
 pub async fn new() -> Result<Client> {
-	// TODO Read the config to determine how to connect to a tangram server.
 	let path = home_dir()
 		.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
 		.join(".tangram");

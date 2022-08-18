@@ -1,6 +1,14 @@
-use crate::{expression, server::runtime, server::Server, value::Value};
+use crate::{
+	artifact::Artifact,
+	expression,
+	object::Dependency,
+	server::runtime,
+	server::{temp::Temp, Server},
+	value::Value,
+};
 use anyhow::{bail, Result};
-use std::sync::Arc;
+use futures::future::try_join_all;
+use std::{collections::BTreeMap, sync::Arc};
 
 impl Server {
 	pub async fn evaluate_process(self: &Arc<Self>, process: expression::Process) -> Result<Value> {
@@ -17,6 +25,51 @@ impl Server {
 	) -> Result<Value> {
 		let crate::expression::UnixProcess { command, args, .. } = process;
 
+		// Evaluate the envs.
+		let envs = self.evaluate(*process.env).await?;
+		let envs = match envs {
+			Value::Map(envs) => envs,
+			_ => bail!(r#"Argument "envs" must evaluate to a map."#),
+		};
+		let mut envs: BTreeMap<String, String> = envs
+			.into_iter()
+			.map(|(key, value)| {
+				let value = match value {
+					Value::String(value) => value,
+					_ => bail!(r#"Value in "envs" must evaluate to a string."#),
+				};
+				Ok((key, value))
+			})
+			.collect::<Result<_>>()?;
+
+		// Create the temps for the outputs and add their dependencies.
+		let temps: BTreeMap<String, Temp> =
+			try_join_all(process.outputs.into_iter().map(|(name, output)| {
+				async {
+					let temp = self.create_temp().await?;
+					for (path, dependency) in output.dependencies {
+						let dependency = self.evaluate(*dependency).await?;
+						let dependency = match dependency {
+							Value::Artifact(artifact) => Dependency { artifact },
+							_ => bail!(r#"Dependency must evaluate to an artifact."#),
+						};
+						self.add_dependency(&temp, &path, dependency).await?;
+					}
+					Ok((name, temp))
+				}
+			}))
+			.await?
+			.into_iter()
+			.collect();
+
+		// Add the paths to the temps to the envs.
+		envs.extend(
+			temps
+				.iter()
+				.map(|(name, temp)| (name.clone(), self.temp_path(temp).display().to_string())),
+		);
+
+		// Evaluate the command.
 		let command = self.evaluate(*command).await?;
 		let command = match command {
 			Value::Path(path) => path,
@@ -30,6 +83,7 @@ impl Server {
 			command_path
 		};
 
+		// Evaluate the args.
 		let args = self.evaluate(*args).await?;
 		let args = match args {
 			Value::Array(array) => array,
@@ -45,11 +99,6 @@ impl Server {
 			})
 			.collect::<Result<_>>()?;
 
-		// Create the temp for the output.
-		let temp = self.create_temp().await?;
-		let temp_path = self.temp_path(&temp);
-		let envs = [("OUTPUT", temp_path)];
-
 		// Run the process.
 		let mut process = tokio::process::Command::new(command_path)
 			.envs(envs)
@@ -57,11 +106,29 @@ impl Server {
 			.spawn()?;
 		process.wait().await?;
 
-		// Checkin the temp.
-		let artifact = self.checkin_temp(temp).await?;
+		// Checkin the temps.
+		let artifacts: BTreeMap<String, Artifact> =
+			try_join_all(temps.into_iter().map(|(name, temp)| {
+				async {
+					let artifact = self.checkin_temp(temp).await?;
+					Ok::<_, anyhow::Error>((name, artifact))
+				}
+			}))
+			.await?
+			.into_iter()
+			.collect();
 
 		// Create the output value.
-		let value = Value::Artifact(artifact);
+		let value = if artifacts.len() == 1 {
+			Value::Artifact(artifacts.into_values().next().unwrap())
+		} else {
+			Value::Map(
+				artifacts
+					.into_iter()
+					.map(|(name, artifact)| (name, Value::Artifact(artifact)))
+					.collect(),
+			)
+		};
 
 		Ok(value)
 	}

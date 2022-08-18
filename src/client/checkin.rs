@@ -40,7 +40,7 @@ impl Client {
 			_ => unimplemented!(),
 		};
 
-		// Handle the outcome of the operation.
+		// Handle the outcome.
 		match outcome {
 			// If the object was added, we are done.
 			AddObjectOutcome::Added(_) => return Ok(()),
@@ -61,6 +61,18 @@ impl Client {
 					},
 					_ => unimplemented!(),
 				};
+			},
+
+			// If this object is a dependency that is missing, check it in.
+			AddObjectOutcome::DependencyMissing(_object_hash) => {
+				// Read the target from the path.
+				let permit = self.file_system_semaphore.acquire().await.unwrap();
+				let target = tokio::fs::read_link(path).await?;
+				drop(permit);
+
+				// Checkin the path pointed to by the symlink.
+				self.checkin_object_for_path(object_cache, &path.join(target))
+					.await?;
 			},
 		};
 
