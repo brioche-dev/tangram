@@ -46,7 +46,7 @@ impl Server {
 		let symlink_target = dependency_fragment.path();
 		let symlink_parent_path = symlink_path
 			.parent()
-			.ok_or_else(|| anyhow!("Failed to get parent for symlink path."))?;
+			.ok_or_else(|| anyhow!("Failed to get the parent for the symlink path."))?;
 		tokio::fs::create_dir_all(&symlink_parent_path).await?;
 		tokio::fs::symlink(&symlink_target, &symlink_path).await?;
 

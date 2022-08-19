@@ -28,32 +28,20 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		// Resolve the specifier relative to the referrer.
 		let specifier = deno_core::resolve_import(specifier, referrer)?;
 
-		// Ensure the specifier has the scheme "fragment" or "tangram".
-		ensure!(
-			matches!(specifier.scheme(), "fragment" | "tangram"),
-			r#"URL "{specifier}" has an invalid scheme."#,
-		);
+		let specifier = match specifier.scheme() {
+			"fragment" => specifier,
 
-		Ok(specifier)
-	}
+			// Resolve a specifier with scheme "tangram" to a specifier with scheme "fragment" by reading the referrer's lockfile.
+			"tangram" => {
+				futures::executor::block_on(async {
+					// Parse the referrer.
+					let referrer = if referrer == "." {
+						None
+					} else {
+						Some(Url::parse(referrer)?)
+					};
 
-	fn load(
-		&self,
-		module_specifier: &deno_core::ModuleSpecifier,
-		maybe_referrer: Option<deno_core::ModuleSpecifier>,
-		_is_dyn_import: bool,
-	) -> Pin<Box<deno_core::ModuleSourceFuture>> {
-		let server = Arc::clone(&self.server);
-		let main_runtime_handle = self.main_runtime_handle.clone();
-		let specifier = module_specifier.clone();
-		async move {
-			let original_specifier = specifier.clone();
-			let specifier = match specifier.scheme() {
-				"fragment" => specifier,
-
-				// Resolve a specifier with scheme "tangram" to a specifier with scheme "fragment" by reading the referrer's lockfile.
-				"tangram" => {
-					let referrer = maybe_referrer.ok_or_else(|| {
+					let referrer = referrer.ok_or_else(|| {
 						anyhow!(r#"A specifier with the scheme "tangram" must have a referrer."#)
 					})?;
 
@@ -64,13 +52,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
 					let referrer_artifact: Artifact = domain.parse()?;
 
 					// Create a fragment for the referrer's artifact.
-					let fragment = main_runtime_handle
-						.spawn({
-							let server = Arc::clone(&server);
-							async move { server.create_fragment(&referrer_artifact).await }
-						})
-						.await
-						.unwrap()?;
+					let fragment = self.server.create_fragment(&referrer_artifact).await?;
 					let fragment_path = fragment.path();
 
 					// Read the referrer's lockfile.
@@ -86,14 +68,34 @@ impl deno_core::ModuleLoader for ModuleLoader {
 					let url = format!("fragment://{}/tangram.js", entry.package);
 					let url = Url::parse(&url).unwrap();
 
-					url
-				},
-				_ => {
-					bail!(
-						r#"The specifier "{specifier}" must have the scheme "fragment" or "tangram"."#,
-					)
-				},
-			};
+					Ok::<_, anyhow::Error>(url)
+				})?
+			},
+			_ => {
+				bail!(
+					r#"The specifier "{specifier}" must have the scheme "fragment" or "tangram"."#,
+				)
+			},
+		};
+
+		Ok(specifier)
+	}
+
+	fn load(
+		&self,
+		module_specifier: &deno_core::ModuleSpecifier,
+		_maybe_referrer: Option<deno_core::ModuleSpecifier>,
+		_is_dyn_import: bool,
+	) -> Pin<Box<deno_core::ModuleSourceFuture>> {
+		let server = Arc::clone(&self.server);
+		let main_runtime_handle = self.main_runtime_handle.clone();
+		let specifier = module_specifier.clone();
+		async move {
+			// Ensure the specifier has the scheme "fragment".
+			ensure!(
+				specifier.scheme() == "fragment",
+				r#"The specifier "{specifier}" must have the scheme "fragment"."#,
+			);
 
 			// Get the package from the specifier.
 			let domain = specifier
@@ -137,7 +139,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
 			Ok(deno_core::ModuleSource {
 				code: code.into_bytes().into_boxed_slice(),
 				module_type,
-				module_url_specified: original_specifier.to_string(),
+				module_url_specified: specifier.to_string(),
 				module_url_found: specifier.to_string(),
 			})
 		}
