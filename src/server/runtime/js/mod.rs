@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use camino::Utf8PathBuf;
 use deno_core::{serde_v8, v8};
 use itertools::Itertools;
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, fmt::Write, rc::Rc, sync::Arc};
 use url::Url;
 
 mod cdp;
@@ -359,9 +359,14 @@ async fn handle_run_request(
 	// let args = serde_v8::to_v8(&mut try_catch_scope, process.args)?;
 
 	// Call the specified export.
-	let value = export
-		.call(&mut try_catch_scope, undefined.into(), &[])
-		.unwrap();
+	let value = export.call(&mut try_catch_scope, undefined.into(), &[]);
+	if try_catch_scope.has_caught() {
+		let exception = try_catch_scope.exception().unwrap();
+		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
+		let exception_string = exception_to_string(&mut scope, exception);
+		bail!("{}", exception_string);
+	}
+	let value = value.unwrap();
 
 	// Move the return value to the global scope.
 	let value = v8::Global::new(&mut try_catch_scope, value);
@@ -383,6 +388,47 @@ async fn handle_run_request(
 	let value = serde_v8::from_v8(&mut scope, value)?;
 
 	Ok(value)
+}
+
+/// Render an exception to a string. The string will include the exception's message and a stack trace with source maps applied.
+fn exception_to_string(scope: &mut v8::HandleScope, exception: v8::Local<v8::Value>) -> String {
+	let mut string = String::new();
+	let message = exception
+		.to_string(scope)
+		.unwrap()
+		.to_rust_string_lossy(scope);
+	writeln!(&mut string, "{}", message).unwrap();
+	let stack_trace = v8::Exception::get_stack_trace(scope, exception).unwrap();
+	for i in 0..stack_trace.get_frame_count() {
+		let stack_trace_frame = stack_trace.get_frame(scope, i).unwrap();
+		let source_url = Url::parse(
+			&stack_trace_frame
+				.get_script_name(scope)
+				.unwrap()
+				.to_rust_string_lossy(scope),
+		)
+		.unwrap();
+		let source_line = stack_trace_frame.get_line_number();
+		let source_column = stack_trace_frame.get_column();
+		// if let Some(source_map) = module_handle.source_map.as_ref() {
+		// 	let token = source_map
+		// 		.lookup_token((source_line - 1).into(), (source_column - 1).into())
+		// 		.unwrap();
+		// 	source_url = token.get_source().unwrap_or("<unknown>");
+		// 	source_line = token.get_src_line() + 1;
+		// 	source_column = token.get_src_col() + 1;
+		// }
+		write!(
+			&mut string,
+			"{}:{}:{}",
+			source_url, source_line, source_column,
+		)
+		.unwrap();
+		if i < stack_trace.get_frame_count() - 1 {
+			writeln!(&mut string).unwrap();
+		}
+	}
+	string
 }
 
 #[deno_core::op]
