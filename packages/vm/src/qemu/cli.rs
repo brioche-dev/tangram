@@ -40,7 +40,6 @@ pub struct Arg {
 	rest: BTreeMap<String, String>,
 }
 
-#[allow(clippy::tabs_in_doc_comments)]
 /// Represents a qemu argument.
 ///
 /// Note: the parameters are sorted by key.

@@ -13,7 +13,6 @@ clap = { workspace = true }
 derive_more = { workspace = true }
 nix = { workspace = true }
 scopeguard = { workspace = true }
-tangram_hash.workspace = true
 tempfile = { workspace = true }
 tokio = { workspace = true }
 

@@ -1,14 +1,14 @@
 use crate::{
 	artifact::Artifact,
 	expression,
+	id::Id,
 	object::Dependency,
-	server::runtime,
-	server::{temp::Temp, Server},
+	server::{runtime, temp::Temp, Server},
 	value::Value,
 };
 use anyhow::{bail, Result};
 use futures::future::try_join_all;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 impl Server {
 	pub async fn evaluate_process(self: &Arc<Self>, process: expression::Process) -> Result<Value> {
@@ -100,11 +100,39 @@ impl Server {
 			.collect::<Result<_>>()?;
 
 		// Run the process.
-		let mut process = tokio::process::Command::new(command_path)
-			.envs(envs)
-			.args(args)
-			.spawn()?;
-		process.wait().await?;
+		let mut process = tokio::process::Command::new(command_path);
+		process.envs(envs);
+		process.args(args);
+		#[cfg(linux)]
+		unsafe {
+			let root_path = std::env::temp_dir().join(Id::generate().to_string());
+			let ret = libc::mount(
+				std::ptr::null(),
+				root_path.join("proc").as_os_str().as_ptr(),
+				"proc".as_os_str(),
+				0,
+				std::ptr::null(),
+			);
+			assert!(ret == 0);
+
+			let ret = libc::mount(
+				std::ptr::null(),
+				root_path.join("proc").as_os_str().as_ptr(),
+				"proc".as_os_str(),
+				0,
+				std::ptr::null(),
+			);
+			assert!(ret == 0);
+
+			unsafe {
+				process.pre_exec(|| {
+					let ret = libc::chroot(root_path);
+					assert!(ret == 0);
+				})
+			};
+		};
+		let mut child = process.spawn()?;
+		child.wait().await?;
 
 		// Checkin the temps.
 		let artifacts: BTreeMap<String, Artifact> =
@@ -148,4 +176,17 @@ impl Server {
 
 		Ok(value)
 	}
+}
+
+struct Process {
+	mounts: Vec<Mount>,
+	network: bool,
+	env: BTreeMap<String, String>,
+	command: PathBuf,
+	args: Vec<String>,
+}
+
+struct Mount {
+	host_path: PathBuf,
+	guest_path: PathBuf,
 }

@@ -1,4 +1,3 @@
-#![allow(clippy::tabs_in_doc_comments)]
 //! macOS process sandboxing using `sandbox_init`.
 //!
 //! # Examples
