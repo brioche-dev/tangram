@@ -31,7 +31,7 @@ pub async fn run(_args: Args) -> Result<()> {
 		match output {
 			Ok(Some(output)) => println!("{}", output),
 			Ok(None) => {},
-			Err(message) => println!("Error: {}", message),
+			Err(message) => println!("{}", message),
 		}
 	}
 

@@ -6,6 +6,8 @@ license = "MIT"
 publish = false
 version = "0.0.0"
 
+exclude = ["test"]
+
 [lib]
 name = "tangram"
 path = "src/lib.rs"
@@ -58,7 +60,7 @@ pretty_assertions = "1.2"
 rand = "0.8"
 rayon = "1.0"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
-rusqlite = "0.28"
+rusqlite = { version = "0.28", features = ["bundled"] }
 rust-s3 = { version = "0.31", default-features = false, features = ["tokio-rustls-tls"] }
 rustyline = "10"
 scopeguard = "1.1.0"

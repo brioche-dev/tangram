@@ -25,8 +25,6 @@ impl ObjectCache {
 	pub async fn get(&mut self, path: &Path) -> Result<Option<&(ObjectHash, Object)>> {
 		// Fill the cache for this path if necessary.
 		if self.cache.get(path).is_none() {
-			tracing::info!(r#"Filling the object cache for path "{path:?}""."#);
-
 			// Get the metadata for the path.
 			let permit = self.semaphore.acquire().await.unwrap();
 			let metadata = match tokio::fs::symlink_metadata(path).await {

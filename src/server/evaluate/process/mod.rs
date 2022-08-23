@@ -1,21 +1,23 @@
 use crate::{
 	artifact::Artifact,
 	expression,
-	id::Id,
 	object::Dependency,
 	server::{runtime, temp::Temp, Server},
 	value::Value,
 };
 use anyhow::{bail, Result};
+use async_recursion::async_recursion;
 use futures::future::try_join_all;
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 impl Server {
 	pub async fn evaluate_process(self: &Arc<Self>, process: expression::Process) -> Result<Value> {
 		match process {
-			expression::Process::Arm64Macos(process) => self.evaluate_unix_process(process).await,
+			expression::Process::Amd64Linux(process)
+			| expression::Process::Amd64Macos(process)
+			| expression::Process::Arm64Linux(process)
+			| expression::Process::Arm64Macos(process) => self.evaluate_unix_process(process).await,
 			expression::Process::Js(process) => self.evaluate_js_process(process).await,
-			_ => unimplemented!(),
 		}
 	}
 
@@ -31,16 +33,13 @@ impl Server {
 			Value::Map(envs) => envs,
 			_ => bail!(r#"Argument "envs" must evaluate to a map."#),
 		};
-		let mut envs: BTreeMap<String, String> = envs
+		let mut envs: BTreeMap<String, String> =
+			futures::future::try_join_all(envs.into_iter().map(|(key, value)| {
+				async { Ok::<_, anyhow::Error>((key, self.resolve(value).await?)) }
+			}))
+			.await?
 			.into_iter()
-			.map(|(key, value)| {
-				let value = match value {
-					Value::String(value) => value,
-					_ => bail!(r#"Value in "envs" must evaluate to a string."#),
-				};
-				Ok((key, value))
-			})
-			.collect::<Result<_>>()?;
+			.collect();
 
 		// Create the temps for the outputs and add their dependencies.
 		let temps: BTreeMap<String, Temp> =
@@ -89,48 +88,13 @@ impl Server {
 			Value::Array(array) => array,
 			_ => bail!("Args must be an array."),
 		};
-		let args: Vec<String> = args
-			.into_iter()
-			.map(|arg| {
-				match arg {
-					Value::String(string) => Ok(string),
-					_ => bail!("Arg must be a string"),
-				}
-			})
-			.collect::<Result<_>>()?;
+		let args: Vec<String> =
+			futures::future::try_join_all(args.into_iter().map(|value| self.resolve(value)))
+				.await?;
 
-		// Run the process.
 		let mut process = tokio::process::Command::new(command_path);
 		process.envs(envs);
 		process.args(args);
-		#[cfg(linux)]
-		unsafe {
-			let root_path = std::env::temp_dir().join(Id::generate().to_string());
-			let ret = libc::mount(
-				std::ptr::null(),
-				root_path.join("proc").as_os_str().as_ptr(),
-				"proc".as_os_str(),
-				0,
-				std::ptr::null(),
-			);
-			assert!(ret == 0);
-
-			let ret = libc::mount(
-				std::ptr::null(),
-				root_path.join("proc").as_os_str().as_ptr(),
-				"proc".as_os_str(),
-				0,
-				std::ptr::null(),
-			);
-			assert!(ret == 0);
-
-			unsafe {
-				process.pre_exec(|| {
-					let ret = libc::chroot(root_path);
-					assert!(ret == 0);
-				})
-			};
-		};
 		let mut child = process.spawn()?;
 		child.wait().await?;
 
@@ -176,17 +140,34 @@ impl Server {
 
 		Ok(value)
 	}
-}
 
-struct Process {
-	mounts: Vec<Mount>,
-	network: bool,
-	env: BTreeMap<String, String>,
-	command: PathBuf,
-	args: Vec<String>,
-}
-
-struct Mount {
-	host_path: PathBuf,
-	guest_path: PathBuf,
+	#[async_recursion]
+	async fn resolve(self: &Arc<Self>, value: Value) -> Result<String> {
+		match value {
+			Value::String(string) => Ok(string),
+			Value::Template(template) => {
+				let components = try_join_all(
+					template
+						.components
+						.into_iter()
+						.map(|value| self.resolve(value)),
+				)
+				.await?;
+				let string = components.join("");
+				Ok(string)
+			},
+			Value::Path(path) => {
+				let fragment = self.create_fragment(&path.artifact).await?;
+				let fragment_path = fragment.path().to_owned();
+				let fragment_path = if let Some(path) = path.path {
+					fragment_path.join(path)
+				} else {
+					fragment_path
+				};
+				let fragment_path_string = fragment_path.to_str().unwrap().to_owned();
+				Ok(fragment_path_string)
+			},
+			_ => bail!("Value to resolve must be a string, template, or path."),
+		}
+	}
 }
