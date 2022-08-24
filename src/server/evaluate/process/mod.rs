@@ -1,7 +1,6 @@
 use crate::{
 	artifact::Artifact,
 	expression,
-	object::Dependency,
 	server::{runtime, temp::Temp, Server},
 	value::Value,
 };
@@ -9,6 +8,9 @@ use anyhow::{bail, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{collections::BTreeMap, sync::Arc};
+
+// #[cfg(target_os = "linux")]
+// mod linux;
 
 impl Server {
 	pub async fn evaluate_process(self: &Arc<Self>, process: expression::Process) -> Result<Value> {
@@ -27,6 +29,26 @@ impl Server {
 	) -> Result<Value> {
 		let crate::expression::UnixProcess { command, args, .. } = process;
 
+		// Create the temps for the outputs and add their dependencies.
+		let temps: BTreeMap<String, Temp> =
+			try_join_all(process.outputs.into_iter().map(|(name, output)| {
+				async {
+					let mut temp = self.create_temp().await?;
+					for (path, dependency) in output.dependencies {
+						let dependency = self.evaluate(*dependency).await?;
+						let artifact = match dependency {
+							Value::Artifact(artifact) => artifact,
+							_ => bail!(r#"Dependency must evaluate to an artifact."#),
+						};
+						self.add_dependency(&mut temp, &path, artifact).await?;
+					}
+					Ok((name, temp))
+				}
+			}))
+			.await?
+			.into_iter()
+			.collect();
+
 		// Evaluate the envs.
 		let envs = self.evaluate(*process.env).await?;
 		let envs = match envs {
@@ -36,26 +58,6 @@ impl Server {
 		let mut envs: BTreeMap<String, String> =
 			futures::future::try_join_all(envs.into_iter().map(|(key, value)| {
 				async { Ok::<_, anyhow::Error>((key, self.resolve(value).await?)) }
-			}))
-			.await?
-			.into_iter()
-			.collect();
-
-		// Create the temps for the outputs and add their dependencies.
-		let temps: BTreeMap<String, Temp> =
-			try_join_all(process.outputs.into_iter().map(|(name, output)| {
-				async {
-					let temp = self.create_temp().await?;
-					for (path, dependency) in output.dependencies {
-						let dependency = self.evaluate(*dependency).await?;
-						let dependency = match dependency {
-							Value::Artifact(artifact) => Dependency { artifact },
-							_ => bail!(r#"Dependency must evaluate to an artifact."#),
-						};
-						self.add_dependency(&temp, &path, dependency).await?;
-					}
-					Ok((name, temp))
-				}
 			}))
 			.await?
 			.into_iter()
@@ -92,6 +94,9 @@ impl Server {
 			futures::future::try_join_all(args.into_iter().map(|value| self.resolve(value)))
 				.await?;
 
+		// Run the process.
+		// #[cfg(target_os = "linux")]
+		// unsafe { self.run_linux_process(envs, args, &command_fragment, &command_path) };
 		let mut process = tokio::process::Command::new(command_path);
 		process.envs(envs);
 		process.args(args);

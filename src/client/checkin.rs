@@ -11,7 +11,7 @@ use std::{path::Path, sync::Arc};
 
 impl Client {
 	pub async fn checkin(&self, path: &Path) -> Result<Artifact> {
-		let mut object_cache = ObjectCache::new(Arc::clone(&self.file_system_semaphore));
+		let mut object_cache = ObjectCache::new(path, Arc::clone(&self.file_system_semaphore));
 		self.checkin_object_for_path(&mut object_cache, path)
 			.await?;
 		let (object_hash, _) = object_cache.cache.get(path).unwrap();
@@ -25,7 +25,7 @@ impl Client {
 		object_cache: &mut ObjectCache,
 		path: &Path,
 	) -> Result<()> {
-		tracing::info!(r#"Checking in object at path "{path:?}"."#);
+		tracing::trace!(r#"Checking in object at path "{path:?}"."#);
 
 		// Retrieve the object hash and object for the path or compute them if necessary.
 		let (_, object) = object_cache
@@ -94,7 +94,7 @@ impl Client {
 		path: &Path,
 		blob_hash: BlobHash,
 	) -> Result<BlobHash> {
-		tracing::info!(r#"Copying file at path "{path:?}"."#);
+		tracing::trace!(r#"Copying file at path "{path:?}"."#);
 
 		// Create a temp.
 		let temp = server.create_temp().await?;

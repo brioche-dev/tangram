@@ -1,9 +1,4 @@
-use crate::{
-	artifact::Artifact,
-	id::Id,
-	object::{Dependency, Object},
-	server::Server,
-};
+use crate::{artifact::Artifact, id::Id, server::Server};
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use derive_more::Deref;
@@ -34,12 +29,12 @@ impl Server {
 
 	pub async fn add_dependency(
 		self: &Arc<Self>,
-		temp: &Temp,
+		temp: &mut Temp,
 		path: &Utf8Path,
-		dependency: Dependency,
+		artifact: Artifact,
 	) -> Result<()> {
 		// Create a fragment for the dependency.
-		let dependency_fragment = self.create_fragment(&dependency.artifact).await?;
+		let dependency_fragment = self.create_fragment(&artifact).await?;
 
 		// Create a symlink from `path` within `temp` to `dependency.path` within the `dependency_fragment`.
 		let symlink_path = self.temp_path(temp).join(path);
@@ -49,10 +44,6 @@ impl Server {
 			.ok_or_else(|| anyhow!("Failed to get the parent for the symlink path."))?;
 		tokio::fs::create_dir_all(&symlink_parent_path).await?;
 		tokio::fs::symlink(&symlink_target, &symlink_path).await?;
-
-		// Set the user.tangram_dependency xattr.
-		let dependency = serde_json::to_vec(&Object::Dependency(dependency))?;
-		xattr::set(&symlink_path, "user.tangram_dependency", &dependency)?;
 
 		Ok(())
 	}

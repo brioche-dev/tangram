@@ -15,7 +15,7 @@ use std::{
 	sync::Arc,
 };
 
-pub type ExternalPathForDependency =
+pub type ExternalPathForDependencyFn =
 	dyn Sync + Fn(&Dependency) -> Pin<Box<dyn Send + Future<Output = Result<Option<PathBuf>>>>>;
 
 impl Client {
@@ -23,10 +23,10 @@ impl Client {
 		&self,
 		artifact: &Artifact,
 		path: &Path,
-		external_path_for_dependency: Option<&'_ ExternalPathForDependency>,
+		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
 	) -> Result<()> {
 		// Create an object cache.
-		let mut object_cache = ObjectCache::new(Arc::clone(&self.file_system_semaphore));
+		let mut object_cache = ObjectCache::new(path, Arc::clone(&self.file_system_semaphore));
 
 		// Call the recursive checkout function on the root object.
 		self.checkout_path(
@@ -45,7 +45,7 @@ impl Client {
 		object_cache: &mut ObjectCache,
 		remote_object_hash: ObjectHash,
 		path: &Path,
-		external_path_for_dependency: Option<&'_ ExternalPathForDependency>,
+		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
 	) -> Result<()> {
 		// Get the object from the server.
 		let object = match &self.transport {
@@ -92,7 +92,7 @@ impl Client {
 		object_cache: &mut ObjectCache,
 		directory: Directory,
 		path: &Path,
-		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependency>,
+		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependencyFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
@@ -213,7 +213,7 @@ impl Client {
 		object_cache: &mut ObjectCache,
 		dependency: Dependency,
 		path: &Path,
-		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependency>,
+		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependencyFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
@@ -258,10 +258,6 @@ impl Client {
 			// Create the symlink.
 			tokio::fs::symlink(target, path).await?;
 		}
-
-		// Set the user.tangram_dependency xattr.
-		let dependency = serde_json::to_vec(&Object::Dependency(dependency))?;
-		xattr::set(path, "user.tangram_dependency", &dependency)?;
 
 		Ok(())
 	}

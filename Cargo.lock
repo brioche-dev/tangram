@@ -2923,7 +2923,6 @@ dependencies = [
  "users",
  "walkdir",
  "webbrowser",
- "xattr",
  "xz",
  "zip",
  "zstd",

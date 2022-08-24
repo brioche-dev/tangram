@@ -1,4 +1,5 @@
 use crate::{
+	artifact::Artifact,
 	hash::Hasher,
 	object::{BlobHash, Dependency, Directory, File, Object, ObjectHash, Symlink},
 };
@@ -12,14 +13,20 @@ use std::{
 };
 
 pub struct ObjectCache {
+	pub root_path: PathBuf,
 	pub semaphore: Arc<tokio::sync::Semaphore>,
 	pub cache: IndexMap<PathBuf, (ObjectHash, Object)>,
 }
 
 impl ObjectCache {
-	pub fn new(semaphore: Arc<tokio::sync::Semaphore>) -> ObjectCache {
+	pub fn new(root_path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> ObjectCache {
+		let root_path = root_path.to_owned();
 		let cache = IndexMap::new();
-		ObjectCache { semaphore, cache }
+		ObjectCache {
+			root_path,
+			semaphore,
+			cache,
+		}
 	}
 
 	pub async fn get(&mut self, path: &Path) -> Result<Option<&(ObjectHash, Object)>> {
@@ -40,26 +47,7 @@ impl ObjectCache {
 			} else if metadata.is_file() {
 				self.cache_object_for_file(path, &metadata).await?;
 			} else if metadata.is_symlink() {
-				// Read the "user.tangram_dependency" xattr.
-				let permit = self.semaphore.acquire().await?;
-				let dependency =
-					if let Some(dependency) = xattr::get(path, "user.tangram_dependency")? {
-						let dependency = serde_json::from_slice(&dependency)?;
-						Some(dependency)
-					} else {
-						None
-					};
-				drop(permit);
-
-				match dependency {
-					None => {
-						self.cache_object_for_symlink(path, &metadata).await?;
-					},
-					Some(dependency) => {
-						self.cache_object_for_dependency(path, &metadata, dependency)
-							.await?;
-					},
-				}
+				self.cache_object_for_symlink(path, &metadata).await?;
 			} else {
 				bail!("The path must point to a directory, file, or symlink.");
 			};
@@ -147,24 +135,29 @@ impl ObjectCache {
 			.map_err(|_| anyhow!("Symlink content is not valid UTF-8."))?;
 		drop(permit);
 
-		// Create the object and add it to the cache.
-		let object = Object::Symlink(Symlink { target });
-		let object_hash = object.hash();
-		self.cache.insert(path.to_owned(), (object_hash, object));
+		// Determine if the symlink is a dependency by checking if the target points outside the root path.
+		let canonicalized_target = tokio::fs::canonicalize(self.root_path.join(&target)).await?;
+		let is_dependency = !canonicalized_target.starts_with(&self.root_path);
 
-		Ok(object_hash)
-	}
-
-	async fn cache_object_for_dependency(
-		&mut self,
-		path: &Path,
-		_metadata: &Metadata,
-		dependency: Dependency,
-	) -> Result<ObjectHash> {
 		// Create the object and add it to the cache.
-		let object = Object::Dependency(dependency);
-		let object_hash = object.hash();
-		self.cache.insert(path.to_owned(), (object_hash, object));
+		let object_hash = if !is_dependency {
+			let object = Object::Symlink(Symlink { target });
+			let object_hash = object.hash();
+			self.cache.insert(path.to_owned(), (object_hash, object));
+			object_hash
+		} else {
+			// Parse the artifact from the target.
+			let artifact: Artifact = target
+				.components()
+				.last()
+				.ok_or_else(|| anyhow!("Invalid symlink."))?
+				.as_str()
+				.parse()?;
+			let object = Object::Dependency(Dependency { artifact });
+			let object_hash = object.hash();
+			self.cache.insert(path.to_owned(), (object_hash, object));
+			object_hash
+		};
 
 		Ok(object_hash)
 	}
