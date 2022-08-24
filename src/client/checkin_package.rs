@@ -74,7 +74,10 @@ impl Client {
 				let dependency_artifact = artifact_for_package_path
 					.get(&dependency_path)
 					.ok_or_else(|| {
-						anyhow!(r#"Failed to get the artifact for path "{dependency_path:?}"."#)
+						anyhow!(
+							r#"Failed to get the artifact for path "{}"."#,
+							dependency_path.display(),
+						)
 					})?
 					.clone();
 

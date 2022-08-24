@@ -34,10 +34,8 @@ pub enum Transport {
 }
 
 impl Client {
-	#[must_use]
-	pub fn new_in_process(server: Arc<Server>) -> Client {
+	pub fn new(transport: Transport) -> Client {
 		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
-		let transport = Transport::InProcess { server };
 		Client {
 			transport,
 			file_system_semaphore,
@@ -45,14 +43,16 @@ impl Client {
 	}
 
 	#[must_use]
+	pub fn new_in_process(server: Arc<Server>) -> Client {
+		let transport = Transport::InProcess { server };
+		Client::new(transport)
+	}
+
+	#[must_use]
 	pub fn new_unix(path: PathBuf) -> Client {
-		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
 		let client = hyper::Client::unix();
 		let transport = Transport::Unix { path, client };
-		Client {
-			transport,
-			file_system_semaphore,
-		}
+		Client::new(transport)
 	}
 
 	#[must_use]

@@ -42,7 +42,7 @@ impl Client {
 
 	async fn checkout_path(
 		&self,
-		object_cache: &mut ObjectCache,
+		object_cache: &ObjectCache,
 		remote_object_hash: ObjectHash,
 		path: &Path,
 		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
@@ -89,7 +89,7 @@ impl Client {
 	#[async_recursion]
 	async fn checkout_directory(
 		&self,
-		object_cache: &mut ObjectCache,
+		object_cache: &ObjectCache,
 		directory: Directory,
 		path: &Path,
 		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependencyFn>,
@@ -97,18 +97,23 @@ impl Client {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
 			// If the object is already checked out then return.
-			Some((_, Object::Directory(local_directory))) if local_directory == &directory => {
+			Some((_, Object::Directory(local_directory))) if local_directory == directory => {
 				return Ok(());
 			},
 
 			// If there is already a directory then remove any entries in the local directory that are not present in the remote directory.
 			Some((_, Object::Directory(local_directory))) => {
-				for entry_name in local_directory.entries.keys() {
-					if !directory.entries.contains_key(entry_name) {
-						let entry_path = path.join(&entry_name);
-						rmrf(&entry_path, None).await?;
+				futures::future::try_join_all(local_directory.entries.keys().map(|entry_name| {
+					let directory = &directory;
+					async move {
+						if !directory.entries.contains_key(entry_name) {
+							let entry_path = path.join(entry_name);
+							rmrf(&entry_path, None).await?;
+						}
+						Ok::<_, anyhow::Error>(())
 					}
-				}
+				}))
+				.await?;
 			},
 
 			// If there is an existing file system object at the path and it is not a directory, then remove it, create a directory, and continue.
@@ -124,30 +129,36 @@ impl Client {
 		};
 
 		// Recurse into the children.
-		for (entry_name, entry_object_hash) in directory.entries {
-			let entry_path = path.join(&entry_name);
-			self.checkout_path(
-				object_cache,
-				entry_object_hash,
-				&entry_path,
-				external_path_for_dependency,
-			)
-			.await?;
-		}
+		futures::future::try_join_all(directory.entries.into_iter().map(
+			|(entry_name, entry_object_hash)| {
+				async move {
+					let entry_path = path.join(&entry_name);
+					self.checkout_path(
+						object_cache,
+						entry_object_hash,
+						&entry_path,
+						external_path_for_dependency,
+					)
+					.await?;
+					Ok::<_, anyhow::Error>(())
+				}
+			},
+		))
+		.await?;
 
 		Ok(())
 	}
 
 	async fn checkout_file(
 		&self,
-		object_cache: &mut ObjectCache,
+		object_cache: &ObjectCache,
 		file: File,
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
 			// If the object is already checked out then return.
-			Some((_, Object::File(local_file))) if local_file == &file => {
+			Some((_, Object::File(local_file))) if local_file == file => {
 				return Ok(());
 			},
 
@@ -181,14 +192,14 @@ impl Client {
 
 	async fn checkout_symlink(
 		&self,
-		object_cache: &mut ObjectCache,
+		object_cache: &ObjectCache,
 		symlink: Symlink,
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
 			// If the object is already checked out then return.
-			Some((_, Object::Symlink(local_symlink))) if local_symlink == &symlink => {
+			Some((_, Object::Symlink(local_symlink))) if local_symlink == symlink => {
 				return Ok(());
 			},
 
@@ -210,7 +221,7 @@ impl Client {
 	#[async_recursion]
 	async fn checkout_dependency(
 		&self,
-		object_cache: &mut ObjectCache,
+		object_cache: &ObjectCache,
 		dependency: Dependency,
 		path: &Path,
 		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependencyFn>,
@@ -218,7 +229,7 @@ impl Client {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
 			// If the object is already checked out then return.
-			Some((_, Object::Dependency(local_dependency))) if local_dependency == &dependency => {
+			Some((_, Object::Dependency(local_dependency))) if local_dependency == dependency => {
 				return Ok(());
 			},
 

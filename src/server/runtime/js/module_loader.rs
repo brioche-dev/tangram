@@ -128,11 +128,15 @@ impl deno_core::ModuleLoader for ModuleLoader {
 				Some("json") => deno_core::ModuleType::Json,
 				Some(extension) => {
 					bail!(
-						r#"Cannot load module with extension "{extension}" at path "{module_path:?}"."#
+						r#"Cannot load module with extension "{extension}" at path "{}"."#,
+						module_path.display(),
 					);
 				},
 				None => {
-					bail!(r#"Cannot load module without extension at path "{module_path:?}"."#);
+					bail!(
+						r#"Cannot load module without extension at path "{}"."#,
+						module_path.display(),
+					);
 				},
 			};
 

@@ -102,7 +102,13 @@ strip = true
 [profile.dev.package.bzip2]
 opt-level = 3
 
+[profile.dev.package.digest]
+opt-level = 3
+
 [profile.dev.package.flate2]
+opt-level = 3
+
+[profile.dev.package.sha2]
 opt-level = 3
 
 [profile.dev.package.tar]

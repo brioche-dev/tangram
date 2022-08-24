@@ -2,6 +2,7 @@ use crate::{
 	artifact::Artifact,
 	expression::{self, Expression},
 	hash::Hasher,
+	object::{BlobHash, File, Object},
 	server::Server,
 	value::Value,
 };
@@ -25,44 +26,61 @@ impl Server {
 			_ => unreachable!(),
 		};
 
-		// Create a temp.
-		let temp = self.create_temp().await?;
-		let temp_path = self.temp_path(&temp);
+		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
-		// Perform the request and get a reader for the body.
-		let response = self.http_client.get(fetch.url.clone()).send().await?;
-		let response = response.error_for_status()?;
-		let mut stream = response
-			.bytes_stream()
-			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
+		// Download the contents of the URL if they have not been downloaded yet.
+		let artifact = if let Some(hash) = fetch.hash && self.get_blob(BlobHash(hash)).await?.is_some() {
+			let object = Object::File(File {
+				blob_hash: BlobHash(hash),
+				executable: false,
+			});
+			let artifact = Artifact {
+				object_hash: object.hash(),
+			};
+			artifact
+		} else {
+			// Create a temp.
+			let temp = self.create_temp().await?;
+			let temp_path = self.temp_path(&temp);
 
-		// Stream the body to the temp while computing its hash.
-		let mut hasher = Hasher::new();
-		let mut file = tokio::fs::File::create(&temp_path).await?;
-		let mut file_writer = tokio::io::BufWriter::new(&mut file);
-		while let Some(chunk) = stream.next().await {
-			let chunk = chunk?;
-			hasher.write_all(&chunk).await?;
-			file_writer.write_all(&chunk).await?;
-		}
-		let hash = hasher.finalize();
-		file_writer.flush().await?;
+			// Perform the request and get a reader for the body.
+			let response = self.http_client.get(fetch.url.clone()).send().await?;
+			let response = response.error_for_status()?;
+			let mut stream = response
+				.bytes_stream()
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
 
-		// Verify the hash.
-		match (fetch.hash, hash) {
-			(None, _) => bail!("Missing hash!\nReceived: {}\n", hash),
-			(Some(fetch_hash), hash) if fetch_hash != hash => {
-				bail!(
-					"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
-					hash,
-					fetch_hash,
-				);
-			},
-			_ => {},
+			// Stream the body to the temp while computing its hash.
+			let mut hasher = Hasher::new();
+			let mut file = tokio::fs::File::create(&temp_path).await?;
+			let mut file_writer = tokio::io::BufWriter::new(&mut file);
+			while let Some(chunk) = stream.next().await {
+				let chunk = chunk?;
+				hasher.write_all(&chunk).await?;
+				file_writer.write_all(&chunk).await?;
+			}
+			let hash = hasher.finalize();
+			file_writer.flush().await?;
+
+			// Verify the hash.
+			match (fetch.hash, hash) {
+				(None, _) => bail!("Missing hash!\nReceived: {}\n", hash),
+				(Some(fetch_hash), hash) if fetch_hash != hash => {
+					bail!(
+						"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
+						hash,
+						fetch_hash,
+					);
+				},
+				_ => {},
+			};
+
+			// Checkin the temp.
+			let artifact = self.checkin_temp(temp).await?;
+			artifact
 		};
 
-		// Checkin the temp.
-		let artifact = self.checkin_temp(temp).await?;
+		tracing::trace!(r#"Fetched "{}" to artifact "{}"."#, fetch.url, artifact);
 
 		// Unpack the artifact if requested.
 		let artifact = if fetch.unpack {
@@ -70,7 +88,14 @@ impl Server {
 				ArchiveFormat::for_path(Path::new(fetch.url.path())).ok_or_else(|| {
 					anyhow!(r#"Could not determine archive format for "{}"."#, fetch.url)
 				})?;
-			self.unpack(artifact, archive_format).await?
+			tracing::trace!(r#"Unpacking contents of URL "{}"."#, fetch.url);
+			let artifact = self.unpack(artifact, archive_format).await?;
+			tracing::trace!(
+				r#"Unpacked contents of URL "{}" to artifact "{}"."#,
+				fetch.url,
+				artifact
+			);
+			artifact
 		} else {
 			artifact
 		};

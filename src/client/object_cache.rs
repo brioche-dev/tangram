@@ -8,20 +8,23 @@ use async_recursion::async_recursion;
 use camino::Utf8PathBuf;
 use indexmap::IndexMap;
 use std::{
-	collections::BTreeMap, fs::Metadata, os::unix::prelude::PermissionsExt, path::Path,
-	path::PathBuf, sync::Arc,
+	fs::Metadata,
+	os::unix::prelude::PermissionsExt,
+	path::Path,
+	path::PathBuf,
+	sync::{Arc, RwLock},
 };
 
 pub struct ObjectCache {
-	pub root_path: PathBuf,
-	pub semaphore: Arc<tokio::sync::Semaphore>,
-	pub cache: IndexMap<PathBuf, (ObjectHash, Object)>,
+	root_path: PathBuf,
+	semaphore: Arc<tokio::sync::Semaphore>,
+	cache: RwLock<IndexMap<PathBuf, (ObjectHash, Object)>>,
 }
 
 impl ObjectCache {
 	pub fn new(root_path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> ObjectCache {
 		let root_path = root_path.to_owned();
-		let cache = IndexMap::new();
+		let cache = RwLock::new(IndexMap::new());
 		ObjectCache {
 			root_path,
 			semaphore,
@@ -29,15 +32,24 @@ impl ObjectCache {
 		}
 	}
 
-	pub async fn get(&mut self, path: &Path) -> Result<Option<&(ObjectHash, Object)>> {
+	pub async fn get(&self, path: &Path) -> Result<Option<(ObjectHash, Object)>> {
 		// Fill the cache for this path if necessary.
-		if self.cache.get(path).is_none() {
+		if self.cache.read().unwrap().get(path).is_none() {
+			tracing::trace!(
+				r#"Object cache filling cache for path "{}"."#,
+				path.display()
+			);
+
 			// Get the metadata for the path.
 			let permit = self.semaphore.acquire().await.unwrap();
 			let metadata = match tokio::fs::symlink_metadata(path).await {
 				Ok(metadata) => metadata,
-				Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-				Err(error) => return Err(error.into()),
+				Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+					return Ok(None);
+				},
+				Err(error) => {
+					return Err(error.into());
+				},
 			};
 			drop(permit);
 
@@ -54,16 +66,12 @@ impl ObjectCache {
 		}
 
 		// Retrieve and return the entry.
-		let entry = self.cache.get(path).unwrap();
+		let entry = self.cache.read().unwrap().get(path).unwrap().clone();
 		Ok(Some(entry))
 	}
 
 	#[async_recursion]
-	async fn cache_object_for_directory(
-		&mut self,
-		path: &Path,
-		_metadata: &Metadata,
-	) -> Result<()> {
+	async fn cache_object_for_directory(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
 		// Read the contents of the directory.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut read_dir = tokio::fs::read_dir(path)
@@ -78,36 +86,40 @@ impl ObjectCache {
 				.to_owned();
 			entry_names.push(file_name);
 		}
+		drop(read_dir);
 		drop(permit);
 
 		// Recurse into the directory's entries.
-		let mut entries = BTreeMap::new();
-		for entry_name in entry_names {
-			let entry_path = path.join(&entry_name);
-			self.get(&entry_path).await?;
-			let (object_hash, _) = self.cache.get(&entry_path).unwrap();
-			entries.insert(entry_name, *object_hash);
-		}
+		let entries = futures::future::try_join_all(entry_names.into_iter().map(|entry_name| {
+			async {
+				let entry_path = path.join(&entry_name);
+				self.get(&entry_path).await?;
+				let (object_hash, _) = self.cache.read().unwrap().get(&entry_path).unwrap().clone();
+				Ok::<_, anyhow::Error>((entry_name, object_hash))
+			}
+		}))
+		.await?
+		.into_iter()
+		.collect();
 
-		// Create the object.
 		let object = Object::Directory(Directory { entries });
 		let object_hash = object.hash();
-		self.cache.insert(path.to_owned(), (object_hash, object));
+		self.cache
+			.write()
+			.unwrap()
+			.insert(path.to_owned(), (object_hash, object));
 
 		Ok(())
 	}
 
-	async fn cache_object_for_file(
-		&mut self,
-		path: &Path,
-		metadata: &Metadata,
-	) -> Result<ObjectHash> {
+	async fn cache_object_for_file(&self, path: &Path, metadata: &Metadata) -> Result<ObjectHash> {
 		// Compute the file's blob hash.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut file = tokio::fs::File::open(path).await?;
 		let mut hasher = Hasher::new();
 		tokio::io::copy(&mut file, &mut hasher).await?;
 		let blob_hash = BlobHash(hasher.finalize());
+		drop(file);
 		drop(permit);
 
 		// Determine if the file is executable.
@@ -118,13 +130,16 @@ impl ObjectCache {
 			executable,
 		});
 		let object_hash = object.hash();
-		self.cache.insert(path.to_owned(), (object_hash, object));
+		self.cache
+			.write()
+			.unwrap()
+			.insert(path.to_owned(), (object_hash, object));
 
 		Ok(object_hash)
 	}
 
 	async fn cache_object_for_symlink(
-		&mut self,
+		&self,
 		path: &Path,
 		_metadata: &Metadata,
 	) -> Result<ObjectHash> {
@@ -136,15 +151,15 @@ impl ObjectCache {
 		drop(permit);
 
 		// Determine if the symlink is a dependency by checking if the target points outside the root path.
-		let canonicalized_target = tokio::fs::canonicalize(self.root_path.join(&target)).await?;
+		// let path_relative_to_root_path = path.strip_prefix(self.root_path).ok_or_else(|| anyhow!("Path must be a descendent of the root path."))?;
+		let permit = self.semaphore.acquire().await.unwrap();
+		let canonicalized_target =
+			tokio::fs::canonicalize(path.parent().unwrap().join(&target)).await?;
 		let is_dependency = !canonicalized_target.starts_with(&self.root_path);
+		drop(permit);
 
-		// Create the object and add it to the cache.
-		let object_hash = if !is_dependency {
-			let object = Object::Symlink(Symlink { target });
-			let object_hash = object.hash();
-			self.cache.insert(path.to_owned(), (object_hash, object));
-			object_hash
+		let object = if !is_dependency {
+			Object::Symlink(Symlink { target })
 		} else {
 			// Parse the artifact from the target.
 			let artifact: Artifact = target
@@ -153,11 +168,14 @@ impl ObjectCache {
 				.ok_or_else(|| anyhow!("Invalid symlink."))?
 				.as_str()
 				.parse()?;
-			let object = Object::Dependency(Dependency { artifact });
-			let object_hash = object.hash();
-			self.cache.insert(path.to_owned(), (object_hash, object));
-			object_hash
+			Object::Dependency(Dependency { artifact })
 		};
+
+		let object_hash = object.hash();
+		self.cache
+			.write()
+			.unwrap()
+			.insert(path.to_owned(), (object_hash, object));
 
 		Ok(object_hash)
 	}

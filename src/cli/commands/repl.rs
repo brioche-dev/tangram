@@ -21,7 +21,7 @@ pub async fn run(_args: Args) -> Result<()> {
 				break;
 			},
 			Err(error) => {
-				println!("{:?}", error);
+				println!("{error:?}");
 				continue;
 			},
 		};
