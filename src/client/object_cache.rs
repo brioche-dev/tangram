@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
 use camino::Utf8PathBuf;
-use indexmap::IndexMap;
+use fnv::FnvHashMap;
 use std::{
 	fs::Metadata,
 	os::unix::prelude::PermissionsExt,
@@ -18,13 +18,13 @@ use std::{
 pub struct ObjectCache {
 	root_path: PathBuf,
 	semaphore: Arc<tokio::sync::Semaphore>,
-	cache: RwLock<IndexMap<PathBuf, (ObjectHash, Object)>>,
+	cache: RwLock<FnvHashMap<PathBuf, (ObjectHash, Object)>>,
 }
 
 impl ObjectCache {
 	pub fn new(root_path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> ObjectCache {
 		let root_path = root_path.to_owned();
-		let cache = RwLock::new(IndexMap::new());
+		let cache = RwLock::new(FnvHashMap::default());
 		ObjectCache {
 			root_path,
 			semaphore,
@@ -151,7 +151,6 @@ impl ObjectCache {
 		drop(permit);
 
 		// Determine if the symlink is a dependency by checking if the target points outside the root path.
-		// let path_relative_to_root_path = path.strip_prefix(self.root_path).ok_or_else(|| anyhow!("Path must be a descendent of the root path."))?;
 		let permit = self.semaphore.acquire().await.unwrap();
 		let canonicalized_target =
 			tokio::fs::canonicalize(path.parent().unwrap().join(&target)).await?;
