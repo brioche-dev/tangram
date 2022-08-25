@@ -9,7 +9,7 @@ use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{collections::BTreeMap, sync::Arc};
 
-// #[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 mod linux;
 
 impl Server {
@@ -95,13 +95,17 @@ impl Server {
 				.await?;
 
 		// Run the process.
-		// #[cfg(target_os = "linux")]
+		#[cfg(target_os = "linux")]
 		unsafe { self.run_linux_process(envs, &command_path, args) }.await?;
-		// let mut process = tokio::process::Command::new(command_path);
-		// process.envs(envs);
-		// process.args(args);
-		// let mut child = process.spawn()?;
-		// child.wait().await?;
+		#[cfg(target_os = "macos")]
+		{
+			let mut process = tokio::process::Command::new(command_path);
+			process.env_clear();
+			process.envs(envs);
+			process.args(args);
+			let mut child = process.spawn()?;
+			child.wait().await?;
+		}
 
 		// Checkin the temps.
 		let artifacts: BTreeMap<String, Artifact> =
