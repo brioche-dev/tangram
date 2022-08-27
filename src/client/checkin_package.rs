@@ -12,7 +12,7 @@ use std::{
 
 impl Client {
 	/// Checkin a package along with all its path dependencies.
-	pub async fn checkin_package(&self, path: &Path) -> Result<Artifact> {
+	pub async fn checkin_package(&self, path: &Path, locked: bool) -> Result<Artifact> {
 		let path = tokio::fs::canonicalize(path).await?;
 
 		// Collect all path dependencies in topological order.
@@ -57,42 +57,46 @@ impl Client {
 			let manifest = tokio::fs::read(&manifest_path).await?;
 			let manifest: Manifest = serde_json::from_slice(&manifest)?;
 
-			// Create the lockfile.
-			let mut lockfile = Lockfile(BTreeMap::new());
-			for (dependency_name, dependency) in manifest.dependencies.iter().flatten() {
-				// Retrieve the path dependency.
-				let dependency = match dependency {
-					crate::manifest::Dependency::PathDependency(dependency) => dependency,
-					crate::manifest::Dependency::RegistryDependency(_) => continue,
-				};
+			// Create or update the lockfile for this package if this checkin is not locked.
+			if !locked {
+				let mut lockfile = Lockfile(BTreeMap::new());
+				for (dependency_name, dependency) in manifest.dependencies.iter().flatten() {
+					// Retrieve the path dependency.
+					let dependency = match dependency {
+						crate::manifest::Dependency::PathDependency(dependency) => dependency,
+						crate::manifest::Dependency::RegistryDependency(_) => continue,
+					};
 
-				// Get the absolute path to the dependency.
-				let dependency_path = package_path.join(&dependency.path);
-				let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
+					// Get the absolute path to the dependency.
+					let dependency_path = package_path.join(&dependency.path);
+					let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
 
-				// Get the artifact for the dependency.
-				let dependency_artifact = artifact_for_package_path
-					.get(&dependency_path)
-					.ok_or_else(|| {
-						anyhow!(
-							r#"Failed to get the artifact for path "{}"."#,
-							dependency_path.display(),
-						)
-					})?
-					.clone();
+					// Get the artifact for the dependency.
+					let dependency_artifact = artifact_for_package_path
+						.get(&dependency_path)
+						.ok_or_else(|| {
+							anyhow!(
+								r#"Failed to get the artifact for path "{}"."#,
+								dependency_path.display(),
+							)
+						})?
+						.clone();
 
-				// Add a lockfile entry for the dependency.
-				let entry = lockfile::Entry {
-					package: dependency_artifact.object_hash,
-					dependencies: Lockfile(BTreeMap::new()),
-				};
-				lockfile.0.insert(dependency_name.to_owned(), entry);
+					// Add a lockfile entry for the dependency.
+					let entry = lockfile::Entry {
+						package: dependency_artifact.object_hash,
+						dependencies: Lockfile(BTreeMap::new()),
+					};
+					lockfile.0.insert(dependency_name.to_owned(), entry);
+				}
+
+				// Write the lockfile.
+				let lockfile = serde_json::to_vec_pretty(&lockfile)?;
+				let lockfile_path = package_path.join("tangram.lock");
+				tokio::fs::write(lockfile_path, lockfile).await?;
+			} else {
+				// TODO Ensure the package has a valid lockfile.
 			}
-
-			// Write the lockfile.
-			let lockfile = serde_json::to_vec_pretty(&lockfile)?;
-			let lockfile_path = package_path.join("tangram.lock");
-			tokio::fs::write(lockfile_path, lockfile).await?;
 
 			// Check in the package.
 			let artifact = self.checkin(&package_path).await?;

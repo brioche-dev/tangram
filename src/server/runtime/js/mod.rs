@@ -1,7 +1,9 @@
-use self::module_loader::ModuleLoader;
+use self::module_loader::{ModuleLoader, TANGRAM_MODULE_SCHEME};
 use crate::{
+	artifact::Artifact,
 	expression::{self, Expression},
 	hash::Hash,
+	lockfile::Lockfile,
 	server::Server,
 	value::Value,
 };
@@ -112,6 +114,7 @@ async fn js_runtime_task(
 			op_tangram_fetch::decl(),
 			op_tangram_path::decl(),
 			op_tangram_process::decl(),
+			op_tangram_target::decl(),
 			op_tangram_template::decl(),
 		])
 		.state({
@@ -320,7 +323,10 @@ async fn handle_run_request(
 		_ => bail!("Module must be a path."),
 	};
 
-	let mut module_url = format!("fragment://{}", module.artifact.object_hash());
+	let mut module_url = format!(
+		"{TANGRAM_MODULE_SCHEME}://{}",
+		module.artifact.object_hash()
+	);
 	if let Some(path) = module.path {
 		module_url.push('/');
 		module_url.push_str(path.as_str());
@@ -501,6 +507,25 @@ fn op_tangram_process(
 	process: expression::Process,
 ) -> Result<Expression, deno_core::error::AnyError> {
 	Ok(Expression::Process(process))
+}
+
+#[derive(serde::Deserialize)]
+struct TargetArgs {
+	lockfile: Lockfile,
+	package: Artifact,
+	name: String,
+	args: Option<Box<Expression>>,
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_target(args: TargetArgs) -> Result<Expression, deno_core::error::AnyError> {
+	Ok(Expression::Target(crate::expression::Target {
+		lockfile: args.lockfile,
+		package: args.package,
+		name: args.name,
+		args: args.args.unwrap_or(Box::new(Expression::Null)),
+	}))
 }
 
 #[derive(serde::Deserialize)]

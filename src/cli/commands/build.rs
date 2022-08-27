@@ -8,6 +8,8 @@ pub struct Args {
 	package: PathBuf,
 	#[clap(long, default_value = "build")]
 	name: String,
+	#[clap(long, takes_value = false)]
+	locked: bool,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -15,7 +17,7 @@ pub async fn run(args: Args) -> Result<()> {
 	let client = crate::client::new().await?;
 
 	// Checkin the package.
-	let package = client.checkin_package(&args.package).await?;
+	let package = client.checkin_package(&args.package, args.locked).await?;
 
 	// Evaluate the target.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {

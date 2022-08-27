@@ -1,4 +1,5 @@
 use crate::object::ObjectHash;
+use anyhow::Result;
 use derive_more::{Display, FromStr};
 
 #[derive(Clone, Debug, Display, Eq, FromStr, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -8,6 +9,10 @@ pub struct Artifact {
 }
 
 impl Artifact {
+	pub async fn with_hash(_object_hash: ObjectHash) -> Result<Option<Artifact>> {
+		todo!()
+	}
+
 	#[must_use]
 	pub fn object_hash(&self) -> ObjectHash {
 		self.object_hash

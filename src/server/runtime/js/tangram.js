@@ -3,10 +3,6 @@ globalThis.console = {
 };
 
 globalThis.Tangram = {
-  createTarget: (f) => {
-    return f;
-  },
-
   evaluate: async (value) => {
     return await Deno.core.opAsync("op_tangram_evaluate", value);
   },
@@ -28,6 +24,10 @@ globalThis.Tangram = {
     Amd64Macos: "amd64_macos",
     Arm64Linux: "arm64_linux",
     Arm64Macos: "arm64_macos",
+  },
+
+  target: (args) => {
+    return Deno.core.opSync("op_tangram_target", args);
   },
 
   template: (strings, ...placeholders) => {
