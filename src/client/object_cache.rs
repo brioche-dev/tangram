@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
-use camino::Utf8PathBuf;
+use camino::{Utf8Component, Utf8PathBuf};
 use fnv::FnvHashMap;
 use std::{
 	fs::Metadata,
@@ -147,15 +147,17 @@ impl ObjectCache {
 		let permit = self.semaphore.acquire().await.unwrap();
 		let target = tokio::fs::read_link(path).await?;
 		let target = Utf8PathBuf::from_path_buf(target)
-			.map_err(|_| anyhow!("Symlink content is not valid UTF-8."))?;
+			.map_err(|_| anyhow!("Symlink target is not a valid UTF-8 path."))?;
 		drop(permit);
 
-		// Determine if the symlink is a dependency by checking if the target points outside the root path.
-		let permit = self.semaphore.acquire().await.unwrap();
-		let canonicalized_target =
-			tokio::fs::canonicalize(path.parent().unwrap().join(&target)).await?;
-		let is_dependency = !canonicalized_target.starts_with(&self.root_path);
-		drop(permit);
+		// Determine if the symlink is a dependency by checking if the target has enough leading parent dir components to escape the root path.
+		let path_in_root = path.strip_prefix(&self.root_path).unwrap();
+		let path_depth_in_root = path_in_root.components().count();
+		let target_leading_double_dot_count = target
+			.components()
+			.take_while(|component| matches!(component, Utf8Component::ParentDir))
+			.count();
+		let is_dependency = target_leading_double_dot_count >= path_depth_in_root - 1;
 
 		let object = if !is_dependency {
 			Object::Symlink(Symlink { target })
