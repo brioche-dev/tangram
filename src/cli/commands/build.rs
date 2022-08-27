@@ -24,7 +24,7 @@ pub async fn run(args: Args) -> Result<()> {
 		lockfile: tangram::lockfile::Lockfile(BTreeMap::new()),
 		package,
 		name: args.name,
-		args: Box::new(tangram::expression::Expression::Array(vec![])),
+		args: vec![],
 	});
 	let value = client.evaluate(expression).await?;
 

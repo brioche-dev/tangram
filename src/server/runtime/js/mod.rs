@@ -362,10 +362,17 @@ async fn handle_run_request(
 	let undefined = v8::undefined(&mut try_catch_scope);
 
 	// Evaluate the args and move them to v8.
-	// let args = serde_v8::to_v8(&mut try_catch_scope, process.args)?;
+	let args = process
+		.args
+		.into_iter()
+		.map(|arg| {
+			let arg = serde_v8::to_v8(&mut try_catch_scope, arg)?;
+			Ok(arg)
+		})
+		.collect::<Result<Vec<_>>>()?;
 
 	// Call the specified export.
-	let value = export.call(&mut try_catch_scope, undefined.into(), &[]);
+	let value = export.call(&mut try_catch_scope, undefined.into(), &args);
 	if try_catch_scope.has_caught() {
 		let exception = try_catch_scope.exception().unwrap();
 		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
@@ -514,7 +521,8 @@ struct TargetArgs {
 	lockfile: Lockfile,
 	package: Artifact,
 	name: String,
-	args: Option<Box<Expression>>,
+	#[serde(default)]
+	args: Vec<Box<Expression>>,
 }
 
 #[deno_core::op]
@@ -524,7 +532,7 @@ fn op_tangram_target(args: TargetArgs) -> Result<Expression, deno_core::error::A
 		lockfile: args.lockfile,
 		package: args.package,
 		name: args.name,
-		args: args.args.unwrap_or(Box::new(Expression::Null)),
+		args: args.args,
 	}))
 }
 

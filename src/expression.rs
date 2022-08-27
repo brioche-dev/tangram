@@ -79,7 +79,7 @@ pub struct JsProcess {
 	pub lockfile: Lockfile,
 	pub module: Box<Expression>,
 	pub export: String,
-	pub args: Box<Expression>,
+	pub args: Vec<Box<Expression>>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -87,7 +87,7 @@ pub struct Target {
 	pub lockfile: Lockfile,
 	pub package: Artifact,
 	pub name: String,
-	pub args: Box<Expression>,
+	pub args: Vec<Box<Expression>>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

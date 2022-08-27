@@ -1,6 +1,9 @@
-use crate::{artifact::Artifact, lockfile::Lockfile, manifest::Manifest, server::Server};
+use crate::{
+	artifact::Artifact, hash::Hash, lockfile::Lockfile, manifest::Manifest, server::Server,
+};
 use anyhow::{anyhow, bail, ensure, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use fnv::FnvHashMap;
 use futures::FutureExt;
 use indoc::formatdoc;
 use std::{pin::Pin, sync::Arc};
@@ -13,6 +16,7 @@ pub const TANGRAM_TARGET_PROXY_SCHEME: &str = "tangram-target-proxy";
 pub struct ModuleLoader {
 	server: Arc<Server>,
 	main_runtime_handle: tokio::runtime::Handle,
+	lockfiles: FnvHashMap<Hash, Lockfile>,
 }
 
 impl ModuleLoader {
@@ -20,6 +24,7 @@ impl ModuleLoader {
 		ModuleLoader {
 			server,
 			main_runtime_handle,
+			lockfiles: FnvHashMap::default(),
 		}
 	}
 }
@@ -42,12 +47,12 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		};
 
 		let specifier = match specifier.scheme() {
-			// Resolve a specifier with tangram scheme.
+			// Resolve a specifier with the tangram scheme.
 			TANGRAM_SCHEME => {
 				futures::executor::block_on(self.resolve_tangram(specifier, referrer))?
 			},
 
-			// Resolve a specifier with the tangram scheme.
+			// Resolve a specifier with the tangram module scheme.
 			TANGRAM_MODULE_SCHEME => {
 				futures::executor::block_on(self.resolve_tangram_module(specifier, referrer))?
 			},
@@ -122,6 +127,7 @@ impl ModuleLoader {
 		let referrer_lockfile = tokio::fs::read(&referrer_lockfile_path).await?;
 		let referrer_lockfile: Lockfile = serde_json::from_slice(&referrer_lockfile)?;
 
+		// Get the specifier package name and sub path.
 		let specifier_path = Utf8Path::new(specifier.path());
 		let specifier_package_name = specifier_path.components().next().unwrap().as_str();
 		let specifier_sub_path = if specifier_path.components().count() > 1 {
@@ -129,6 +135,8 @@ impl ModuleLoader {
 		} else {
 			None
 		};
+
+		// Retrieve the specifier's entry in the referrer's lockfile.
 		let lockfile_entry = referrer_lockfile
 			.0
 			.get(specifier_package_name)
@@ -136,7 +144,7 @@ impl ModuleLoader {
 		let specifier_package = lockfile_entry.package;
 
 		let url = if let Some(specifier_sub_path) = specifier_sub_path {
-			format!("{TANGRAM_MODULE_SCHEME}://{specifier_package}/{specifier_sub_path}",)
+			format!("{TANGRAM_MODULE_SCHEME}://{specifier_package}/{specifier_sub_path}")
 		} else {
 			format!("{TANGRAM_TARGET_PROXY_SCHEME}://{specifier_package}")
 		};
@@ -171,18 +179,19 @@ impl ModuleLoader {
 		let specifier_artifact_json = serde_json::to_string(&specifier_artifact)?;
 
 		// Create a fragment for the specifier's package.
-		let fragment = server.create_fragment(&specifier_artifact).await?;
-		let fragment_path = fragment.path();
+		let specifier_fragment = server.create_fragment(&specifier_artifact).await?;
+		let specifier_fragment_path = specifier_fragment.path();
 
-		let manifest = tokio::fs::read(&fragment_path.join("tangram.json")).await?;
-		let manifest: Manifest = serde_json::from_slice(&manifest)?;
+		let specifier_manifest =
+			tokio::fs::read(&specifier_fragment_path.join("tangram.json")).await?;
+		let specifier_manifest: Manifest = serde_json::from_slice(&specifier_manifest)?;
 
 		let mut code = String::new();
 
-		for target_name in manifest.targets {
+		for target_name in specifier_manifest.targets {
 			code.push_str(&formatdoc!(
 				r#"
-					export let {target_name} = (args) => {{
+					export let {target_name} = (...args) => {{
 						return Tangram.target({{
 							lockfile: {{}},
 							package: {specifier_artifact_json},
