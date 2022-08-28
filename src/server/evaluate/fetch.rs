@@ -34,10 +34,9 @@ impl Server {
 				blob_hash: BlobHash(hash),
 				executable: false,
 			});
-			let artifact = Artifact {
+			Artifact {
 				object_hash: object.hash(),
-			};
-			artifact
+			}
 		} else {
 			// Create a temp.
 			let temp = self.create_temp().await?;
@@ -76,8 +75,7 @@ impl Server {
 			};
 
 			// Checkin the temp.
-			let artifact = self.checkin_temp(temp).await?;
-			artifact
+			self.checkin_temp(temp).await?
 		};
 
 		tracing::trace!(r#"Fetched "{}" to artifact "{}"."#, fetch.url, artifact);

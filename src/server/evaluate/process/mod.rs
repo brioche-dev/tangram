@@ -167,7 +167,7 @@ impl Server {
 			},
 			Value::Path(path) => {
 				let fragment = self.create_fragment(&path.artifact).await?;
-				let fragment_path = fragment.path().to_owned();
+				let fragment_path = fragment.path();
 				let fragment_path = if let Some(path) = path.path {
 					fragment_path.join(path)
 				} else {

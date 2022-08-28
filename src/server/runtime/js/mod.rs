@@ -19,6 +19,7 @@ mod module_loader;
 
 #[derive(Debug)]
 pub struct Runtime {
+	task: tokio::task::JoinHandle<()>,
 	sender: RequestSender,
 }
 
@@ -59,20 +60,21 @@ impl Runtime {
 		let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
 		// Create the js task.
-		server.local_pool_handle.spawn_pinned({
+		let task = server.local_pool_handle.spawn_pinned({
 			let server = Arc::clone(server);
 			move || js_runtime_task(server, main_runtime_handle, receiver)
 		});
 
-		Runtime { sender }
+		Runtime { task, sender }
 	}
 
 	pub async fn repl(&self, code: String) -> Result<Result<Option<String>, String>> {
 		let request = Request::Repl { code: code.clone() };
 		let response = self.request(request).await?;
-		let response = match response {
-			Response::Repl(response) => response,
-			_ => bail!("Unexpected response type."),
+		let response = if let Response::Repl(response) = response {
+			response
+		} else {
+			bail!("Unexpected response type.")
 		};
 		Ok(response)
 	}
@@ -80,24 +82,37 @@ impl Runtime {
 	pub async fn run(&self, process: expression::JsProcess) -> Result<Result<Expression>> {
 		let request = Request::Run { process };
 		let response = self.request(request).await?;
-		let response = match response {
-			Response::Run(response) => response,
-			_ => bail!("Unexpected response type."),
+		let response = if let Response::Run(response) = response {
+			response
+		} else {
+			bail!("Unexpected response type.")
 		};
 		Ok(response)
 	}
 
 	async fn request(&self, request: Request) -> Result<Response> {
+		// Create a channel to send the request and receive the response.
 		let (sender, receiver) = tokio::sync::oneshot::channel();
+
+		// Send the request.
 		match self.sender.send((request, sender)) {
 			Ok(_) => {},
-			Err(_) => bail!("Failed to send a request to the js task.".to_owned()),
+			Err(_) => bail!("Failed to send a request to the js task."),
 		};
+
+		// Handle an error receiving the response.
 		let response = match receiver.await {
 			Ok(response) => response,
-			Err(_) => bail!("Failed to receive a response from the js task.".to_owned()),
+			Err(_) => bail!("Failed to receive a response from the js task."),
 		};
+
 		Ok(response)
+	}
+}
+
+impl Drop for Runtime {
+	fn drop(&mut self) {
+		self.task.abort();
 	}
 }
 
@@ -130,12 +145,15 @@ async fn js_runtime_task(
 		})
 		.build();
 
+	// Create the module loader.
+	let module_loader = Rc::new(ModuleLoader::new(
+		Arc::clone(&server),
+		main_runtime_handle.clone(),
+	));
+
 	// Create the js runtime.
 	let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
-		module_loader: Some(Rc::new(ModuleLoader::new(
-			Arc::clone(&server),
-			main_runtime_handle.clone(),
-		))),
+		module_loader: Some(Rc::clone(&module_loader) as Rc<dyn deno_core::ModuleLoader>),
 		extensions: vec![tangram_extension],
 		startup_snapshot: Some(deno_core::Snapshot::Static(SNAPSHOT)),
 		..Default::default()
@@ -170,6 +188,7 @@ async fn js_runtime_task(
 	// Respond to each message on the receiver.
 	while let Some((request, sender)) = receiver.recv().await {
 		match request {
+			// Handle a repl request.
 			Request::Repl { code } => {
 				let response =
 					handle_repl_request(&mut js_runtime, &mut inspector_session, context_id, code)
@@ -177,8 +196,11 @@ async fn js_runtime_task(
 				let response = Response::Repl(response);
 				sender.send(response).unwrap();
 			},
+
+			// Handle a run request.
 			Request::Run { process } => {
-				let response = handle_run_request(&server, &mut js_runtime, process).await;
+				let response =
+					handle_run_request(&mut js_runtime, &module_loader, &server, process).await;
 				let response = Response::Run(response);
 				sender.send(response).unwrap();
 			},
@@ -312,25 +334,40 @@ async fn handle_repl_request(
 }
 
 async fn handle_run_request(
-	server: &Arc<Server>,
 	js_runtime: &mut deno_core::JsRuntime,
+	module_loader: &ModuleLoader,
+	server: &Arc<Server>,
 	process: expression::JsProcess,
 ) -> Result<Expression> {
 	// Evaluate the module expression to get a path value.
-	let module = server.evaluate(*process.module).await?;
+	let module = server
+		.evaluate(*process.module)
+		.await
+		.with_context(|| anyhow!("Failed to evaluate module expression."))?;
 	let module = match module {
 		Value::Path(module) => module,
 		_ => bail!("Module must be a path."),
 	};
 
+	// Create the module URL.
 	let mut module_url = format!(
 		"{TANGRAM_MODULE_SCHEME}://{}",
-		module.artifact.object_hash()
+		module.artifact.object_hash(),
 	);
+
+	// Add the module path if necessary.
 	if let Some(path) = module.path {
 		module_url.push('/');
 		module_url.push_str(path.as_str());
 	}
+
+	// Add the lockfile if necessary.
+	if let Some(lockfile) = process.lockfile {
+		let lockfile_hash = module_loader.add_lockfile(lockfile);
+		module_url.push_str(&format!("?lockfile_hash={lockfile_hash}"));
+	}
+
+	// Parse the module URL.
 	let module_url = Url::parse(&module_url).unwrap();
 
 	// Load the module.
@@ -518,11 +555,11 @@ fn op_tangram_process(
 
 #[derive(serde::Deserialize)]
 struct TargetArgs {
-	lockfile: Lockfile,
+	lockfile: Option<Lockfile>,
 	package: Artifact,
 	name: String,
 	#[serde(default)]
-	args: Vec<Box<Expression>>,
+	args: Vec<Expression>,
 }
 
 #[deno_core::op]

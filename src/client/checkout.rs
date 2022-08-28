@@ -26,11 +26,11 @@ impl Client {
 		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
 	) -> Result<()> {
 		// Create an object cache.
-		let mut object_cache = ObjectCache::new(path, Arc::clone(&self.file_system_semaphore));
+		let object_cache = ObjectCache::new(path, Arc::clone(&self.file_system_semaphore));
 
 		// Call the recursive checkout function on the root object.
 		self.checkout_path(
-			&mut object_cache,
+			&object_cache,
 			artifact.object_hash,
 			path,
 			external_path_for_dependency,
@@ -244,11 +244,7 @@ impl Client {
 
 		// Get the dependency path.
 		let dependency_path = if let Some(path_for_dependency) = external_path_for_dependency {
-			if let Some(path) = path_for_dependency(&dependency).await? {
-				Some(path)
-			} else {
-				None
-			}
+			path_for_dependency(&dependency).await?
 		} else {
 			None
 		};

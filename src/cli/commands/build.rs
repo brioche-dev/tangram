@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use std::{collections::BTreeMap, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct Args {
@@ -21,7 +21,7 @@ pub async fn run(args: Args) -> Result<()> {
 
 	// Evaluate the target.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
-		lockfile: tangram::lockfile::Lockfile(BTreeMap::new()),
+		lockfile: None,
 		package,
 		name: args.name,
 		args: vec![],

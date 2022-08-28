@@ -9,8 +9,10 @@ pub struct Artifact {
 }
 
 impl Artifact {
-	pub async fn with_hash(_object_hash: ObjectHash) -> Result<Option<Artifact>> {
-		todo!()
+	#[allow(clippy::unused_async)]
+	pub async fn with_hash(object_hash: ObjectHash) -> Result<Option<Artifact>> {
+		// TODO Retrieve a lease.
+		Ok(Some(Artifact { object_hash }))
 	}
 
 	#[must_use]

@@ -157,9 +157,9 @@ impl ObjectCache {
 			.components()
 			.take_while(|component| matches!(component, Utf8Component::ParentDir))
 			.count();
-		let is_dependency = target_leading_double_dot_count >= path_depth_in_root - 1;
+		let is_symlink = target_leading_double_dot_count < path_depth_in_root - 1;
 
-		let object = if !is_dependency {
+		let object = if is_symlink {
 			Object::Symlink(Symlink { target })
 		} else {
 			// Parse the artifact from the target.

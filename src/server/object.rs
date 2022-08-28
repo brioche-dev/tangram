@@ -72,8 +72,6 @@ impl Server {
 		)
 		.await?;
 
-		// TODO Add to the references table.
-
 		Ok(AddObjectOutcome::Added(object_hash))
 	}
 

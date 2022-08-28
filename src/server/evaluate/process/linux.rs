@@ -99,7 +99,6 @@ impl Server {
 			let parent_parent_mount_path =
 				parent_child_root_path.join(child_parent_mount_path.strip_prefix("/").unwrap());
 			std::fs::create_dir_all(&parent_parent_mount_path).unwrap();
-			assert!(ret == 0);
 
 			// Mount the server path.
 			let parent_source_path = &server_path;

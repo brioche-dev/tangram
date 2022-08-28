@@ -34,6 +34,7 @@ pub enum Transport {
 }
 
 impl Client {
+	#[must_use]
 	pub fn new(transport: Transport) -> Client {
 		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
 		Client {
