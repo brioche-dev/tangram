@@ -55,11 +55,17 @@ impl ObjectCache {
 
 			// Call the appropriate function for the file system object the path points to.
 			if metadata.is_dir() {
-				self.cache_object_for_directory(path, &metadata).await?;
+				self.cache_object_for_directory(path, &metadata)
+					.await
+					.with_context(|| format!("Failed to cache dir: {}", path.display()))?;
 			} else if metadata.is_file() {
-				self.cache_object_for_file(path, &metadata).await?;
+				self.cache_object_for_file(path, &metadata)
+					.await
+					.with_context(|| format!("Failed to cache file: {}", path.display()))?;
 			} else if metadata.is_symlink() {
-				self.cache_object_for_symlink(path, &metadata).await?;
+				self.cache_object_for_symlink(path, &metadata)
+					.await
+					.with_context(|| format!("Failed to cache symlink: {}", path.display()))?;
 			} else {
 				bail!("The path must point to a directory, file, or symlink.");
 			};
@@ -151,25 +157,86 @@ impl ObjectCache {
 		drop(permit);
 
 		// Determine if the symlink is a dependency by checking if the target has enough leading parent dir components to escape the root path.
-		let path_in_root = path.strip_prefix(&self.root_path).unwrap();
-		let path_depth_in_root = path_in_root.components().count();
-		let target_leading_double_dot_count = target
-			.components()
-			.take_while(|component| matches!(component, Utf8Component::ParentDir))
-			.count();
-		let is_symlink = target_leading_double_dot_count < path_depth_in_root - 1;
+		let path_in_root: Utf8PathBuf =
+			Utf8PathBuf::try_from(path.strip_prefix(&self.root_path).unwrap().to_owned())
+				.context("Path to symlink inside artifact was not valid UTF-8")?;
 
-		let object = if is_symlink {
-			Object::Symlink(Symlink { target })
-		} else {
-			// Parse the artifact from the target.
-			let artifact: Artifact = target
+		// Make sure path_in_root is always fully resolved. Otherwise, counting its components is
+		// meaningless.
+		debug_assert!(
+			path_in_root
 				.components()
-				.last()
-				.ok_or_else(|| anyhow!("Invalid symlink."))?
-				.as_str()
-				.parse()?;
-			Object::Dependency(Dependency { artifact })
+				.all(|c| matches!(c, Utf8Component::Normal(_))),
+			"path_in_root must be fully resolved (all non-normal components removed)"
+		);
+
+		// Compute the depth of the symlink, relative to the root path:
+		//   Positive numbers mean the target is inside the artifact
+		//   Negative numbers mean the target is outside the artifact
+		//   Zero means the target *is* the artifact
+		let mut target_depth: i32 = (path_in_root.components().count() as i32) - 1; // don't count the filename of the symlink
+
+		// If `target_depth` ever becomes negative while resolving the path, the symlink escapes
+		// the artifact. If set to `true`, this is never set back to `false`.
+		let mut target_escapes_artifact = false;
+
+		// Iterate through components, calculating the target depth
+		for component in target.components() {
+			match component {
+				// Normal directories (e.g. "some_dir") increase depth
+				Utf8Component::Normal(_) => target_depth += 1,
+
+				// Parent directories (e.g. "..") decrease depth
+				Utf8Component::ParentDir => target_depth -= 1,
+
+				// for `.` components, depth is unchanged. For instance: `././././././.` is the same dir.
+				Utf8Component::CurDir => {},
+
+				// You can't reference the root dir.
+				Utf8Component::RootDir => {
+					bail!("Root directory referenced in symlink target: {target}")
+				},
+
+				// You can't reference a Windows drive letter.
+				Utf8Component::Prefix(_) => {
+					bail!("Windows path prefixes are not supported in symlinks.")
+				},
+			}
+
+			// If the symlink ever references something outside the root path, it escapes.
+			if target_depth < 0 {
+				target_escapes_artifact = true;
+			}
+		}
+
+		// Based on the target depth and whether the symlink escapes, decide if it's an internal symlink or a
+		// dependency.
+		let object = match (target_escapes_artifact, target_depth) {
+			// Anything that doesn't escape is an internal symlink.
+			(false, _) => Object::Symlink(Symlink { target }),
+
+			// Anything that escapes, and has a zero depth, points to some other artifact.
+			(true, 0) => {
+				// Parse the artifact from the target.
+				let artifact: Artifact = target
+					.components()
+					.last()
+					.ok_or_else(|| anyhow!("Invalid symlink."))?
+					.as_str()
+					.parse()
+					.with_context(|| {
+						format!("Failed to parse dependency symlink target: {target}")
+					})?;
+				Object::Dependency(Dependency { artifact })
+			},
+
+			// Symlinks that point to something outside of the sibling artifacts are invalid.
+			(true, d) if d > 0 => {
+				bail!("Symlink traverses into sibling artifact (can only reference root): {target}")
+			},
+			(true, _) /* here, d < 0 */ => {
+				bail!("Symlink path traverses outside sibling artifacts: {target}");
+			},
 		};
 
 		let object_hash = object.hash();
