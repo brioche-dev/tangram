@@ -4,7 +4,7 @@ use crate::{
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use std::{
 	collections::{BTreeMap, HashMap, VecDeque},
 	path::{Path, PathBuf},
@@ -25,8 +25,15 @@ impl Client {
 
 			// Read the manifest.
 			let manifest_path = package_path.join("tangram.json");
-			let manifest = tokio::fs::read(&manifest_path).await?;
-			let manifest: Manifest = serde_json::from_slice(&manifest)?;
+			let manifest = tokio::fs::read(&manifest_path)
+				.await
+				.context("Failed to read package manifest")?;
+			let manifest: Manifest = serde_json::from_slice(&manifest).with_context(|| {
+				format!(
+					"Failed to parse package manifest: {}",
+					manifest_path.display()
+				)
+			})?;
 
 			// Add the package's path dependencies to the queue.
 			if let Some(dependencies) = manifest.dependencies {
@@ -34,7 +41,14 @@ impl Client {
 					match dependency {
 						crate::manifest::Dependency::PathDependency(dependency) => {
 							let dependency_path = package_path.join(&dependency.path);
-							let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
+							let dependency_path = tokio::fs::canonicalize(&dependency_path)
+								.await
+								.with_context(|| {
+								format!(
+									"Failed to canonicalize dependency path: {}",
+									dependency_path.display()
+								)
+							})?;
 							queue.push_back(dependency_path);
 						},
 						crate::manifest::Dependency::RegistryDependency(_) => continue,

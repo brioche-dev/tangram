@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -17,7 +17,10 @@ pub async fn run(args: Args) -> Result<()> {
 	let client = crate::client::new().await?;
 
 	// Checkin the package.
-	let package = client.checkin_package(&args.package, args.locked).await?;
+	let package = client
+		.checkin_package(&args.package, args.locked)
+		.await
+		.context("Failed to check in package")?;
 
 	// Evaluate the target.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
