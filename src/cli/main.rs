@@ -33,11 +33,12 @@ enum Subcommand {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-	// Enable backtraces in debug mode.
-	if cfg!(debug_assertions) {
+	// Enable backtraces by default in debug mode.
+	if cfg!(debug_assertions) && std::env::var_os("RUST_BACKTRACE").is_none() {
 		std::env::set_var("RUST_BACKTRACE", "1");
 	}
 	setup_tracing();
+
 	let args = Args::parse();
 	match args.subcommand {
 		Subcommand::Build(args) => commands::build::run(args).boxed(),
