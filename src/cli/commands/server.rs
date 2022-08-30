@@ -1,4 +1,4 @@
-use crate::dirs::home_dir;
+use crate::dirs::home_directory_path;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use std::{
@@ -20,7 +20,7 @@ pub struct Args {
 
 pub async fn run(args: Args) -> Result<()> {
 	// Get the server path.
-	let path = home_dir()
+	let path = home_directory_path()
 		.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
 		.join(".tangram");
 

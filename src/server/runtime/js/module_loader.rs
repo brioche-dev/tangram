@@ -142,10 +142,9 @@ async fn resolve_tangram(
 	let referrer_package_hash: ObjectHash = domain
 		.parse()
 		.with_context(|| "Failed to parse referrer domain.")?;
-	let referrer_package = Artifact::with_hash(referrer_package_hash)
-		.await
-		.with_context(|| "Failed to retrieve referrer artifact.")?
-		.ok_or_else(|| anyhow!("Failed to find referrer package."))?;
+	let referrer_package = Artifact {
+		object_hash: referrer_package_hash,
+	};
 
 	// Get the lockfile hash from the referrer.
 	let referrer_lockfile_hash = if let Some(referrer_lockfile_hash) =

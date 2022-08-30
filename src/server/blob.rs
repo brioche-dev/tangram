@@ -69,3 +69,12 @@ impl Handle {
 		&self.path
 	}
 }
+
+impl Server {
+	pub(super) async fn handle_create_blob_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		todo!()
+	}
+}

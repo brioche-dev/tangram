@@ -1,12 +1,20 @@
-use crate::dirs::home_dir;
-use anyhow::{anyhow, Result};
+use crate::config::{self, Config};
+use anyhow::Result;
 use tangram::{client::Client, server::Server};
 
 pub async fn new() -> Result<Client> {
-	let path = home_dir()
-		.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
-		.join(".tangram");
-	let server = Server::new(&path).await?;
-	let client = Client::new_in_process(server);
+	// Read the config.
+	let config = Config::read().await?;
+
+	// Create the client.
+	let client = match config.transport {
+		config::Transport::InProcess { path } => {
+			let server = Server::new(&path).await?;
+			Client::new_in_process(server)
+		},
+		config::Transport::Unix { path } => Client::new_unix(path),
+		config::Transport::Tcp { url } => Client::new_tcp(url),
+	};
+
 	Ok(client)
 }

@@ -1,32 +1,15 @@
-use crate::{artifact::Artifact, object::Dependency, server::Server, util::path_exists};
+use crate::{
+	artifact::Artifact, fragment::Fragment, object::Dependency, server::Server, util::path_exists,
+};
 use anyhow::Result;
 use async_recursion::async_recursion;
 use futures::FutureExt;
-use std::{path::PathBuf, sync::Arc};
-
-pub struct Fragment {
-	server: Arc<Server>,
-	artifact: Artifact,
-}
-
-impl Fragment {
-	#[must_use]
-	pub fn artifact(&self) -> &Artifact {
-		&self.artifact
-	}
-
-	#[must_use]
-	pub fn path(&self) -> PathBuf {
-		self.server
-			.path
-			.join("fragments")
-			.join(self.artifact().to_string())
-	}
-}
+use std::sync::Arc;
 
 impl Server {
 	#[async_recursion]
-	pub(super) async fn create_fragment(self: &Arc<Self>, artifact: &Artifact) -> Result<Fragment> {
+	#[must_use]
+	pub async fn create_fragment(self: &Arc<Self>, artifact: &Artifact) -> Result<Fragment> {
 		// Get the path to the fragment.
 		let fragment_path = self.path.join("fragments").join(artifact.to_string());
 

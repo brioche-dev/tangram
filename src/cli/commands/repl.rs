@@ -11,7 +11,7 @@ pub async fn run(_args: Args) -> Result<()> {
 
 	// This is the REPL loop.
 	loop {
-		// Read a line of code.
+		// R: Read a line of code.
 		let code = match readline.readline("> ") {
 			Ok(code) => code,
 			Err(rustyline::error::ReadlineError::Interrupted) => {
@@ -26,13 +26,25 @@ pub async fn run(_args: Args) -> Result<()> {
 			},
 		};
 
-		// Run the code.
-		let output = client.repl_run(repl_id, &code).await?;
+		// E: Evaluate the code.
+		let output = client.repl_run(repl_id, code).await?;
+
+		// P: Print the output.
 		match output {
-			Ok(Some(output)) => println!("{}", output),
-			Ok(None) => {},
-			Err(message) => println!("{}", message),
+			tangram::server::repl::Output::Success {
+				message: Some(output),
+			} => {
+				println!("{}", output);
+			},
+
+			tangram::server::repl::Output::Success { message: None } => {},
+
+			tangram::server::repl::Output::Error { message } => {
+				println!("{}", message);
+			},
 		}
+
+		// L: Loop!
 	}
 
 	Ok(())

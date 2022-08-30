@@ -27,10 +27,10 @@ impl Client {
 			let manifest_path = package_path.join("tangram.json");
 			let manifest = tokio::fs::read(&manifest_path)
 				.await
-				.context("Failed to read package manifest")?;
+				.context("Failed to read the package manifest.")?;
 			let manifest: Manifest = serde_json::from_slice(&manifest).with_context(|| {
 				format!(
-					"Failed to parse package manifest: {}",
+					r#"Failed to parse the package manifest at path "{}"."#,
 					manifest_path.display()
 				)
 			})?;
@@ -45,7 +45,7 @@ impl Client {
 								.await
 								.with_context(|| {
 								format!(
-									"Failed to canonicalize dependency path: {}",
+									r#"Failed to canonicalize the dependency at path "{}"."#,
 									dependency_path.display()
 								)
 							})?;

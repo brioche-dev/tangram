@@ -6,14 +6,12 @@ license = "MIT"
 publish = false
 version = "0.0.0"
 
-exclude = ["test"]
-
 [lib]
 name = "tangram"
 path = "src/lib.rs"
 
 [[bin]]
-name = "tangram"
+name = "tg"
 path = "src/cli/main.rs"
 
 [build-dependencies]

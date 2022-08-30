@@ -9,6 +9,7 @@ use tracing_subscriber::prelude::*;
 
 mod client;
 mod commands;
+mod config;
 mod dirs;
 
 #[derive(Parser)]
@@ -34,7 +35,11 @@ enum Subcommand {
 #[tokio::main]
 async fn main() -> Result<()> {
 	// Enable backtraces by default in debug mode.
-	if cfg!(debug_assertions) && std::env::var_os("RUST_BACKTRACE").is_none() {
+	if cfg!(debug_assertions)
+		&& matches!(
+			std::env::var("RUST_BACKTRACE"),
+			Err(std::env::VarError::NotPresent)
+		) {
 		std::env::set_var("RUST_BACKTRACE", "1");
 	}
 	setup_tracing();

@@ -1,30 +1,28 @@
-use crate::{artifact::Artifact, id::Id, server::Server};
+use crate::{
+	artifact::Artifact,
+	id::Id,
+	server::Server,
+	temp::{Temp, TempId},
+};
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
-use derive_more::Deref;
 use std::{path::PathBuf, sync::Arc};
-
-#[allow(clippy::module_name_repetitions)]
-#[derive(Deref, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TempId(pub Id);
-
-#[derive(Clone)]
-pub struct Temp {
-	pub id: TempId,
-}
 
 impl Server {
 	pub async fn create_temp(self: &Arc<Self>) -> Result<Temp> {
 		let id = Id::generate();
 		let temp_id = TempId(id);
-		let temp = Temp { id: temp_id };
+		let temp = Temp {
+			id: temp_id,
+			server: Arc::clone(self),
+		};
 		self.temps.lock().await.insert(temp_id, temp.clone());
 		Ok(temp)
 	}
 
 	#[must_use]
 	pub fn temp_path(self: &Arc<Self>, temp: &Temp) -> PathBuf {
-		self.path.join("temps").join(temp.id.to_string())
+		self.path.join("temps").join(temp.id().to_string())
 	}
 
 	pub async fn add_dependency(
@@ -52,5 +50,10 @@ impl Server {
 		let path = self.temp_path(&temp);
 		let artifact = self.checkin(&path).await?;
 		Ok(artifact)
+	}
+
+	pub async fn drop_temp(self: &Arc<Self>, temp_id: TempId) -> Result<()> {
+		self.temps.lock().await.remove(&temp_id);
+		Ok(())
 	}
 }

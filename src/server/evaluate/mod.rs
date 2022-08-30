@@ -15,9 +15,6 @@ impl Server {
 	#[async_recursion]
 	#[must_use]
 	pub async fn evaluate(self: &Arc<Self>, expression: Expression) -> Result<Value> {
-		// Acquire the gc lock.
-		let _gc_lock_guard = self.gc_lock.read().await;
-
 		// Recursively evaluate the expression.
 		let value = match expression {
 			Expression::Null => Value::Null,
@@ -99,5 +96,36 @@ impl Server {
 		)
 		.await?;
 		Ok(())
+	}
+}
+
+impl Server {
+	pub(super) async fn handle_get_expression_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		todo!()
+	}
+}
+
+impl Server {
+	pub(super) async fn handle_evaluate_expression_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		// Read the request.
+		let body = hyper::body::to_bytes(request).await?;
+		let expression = serde_json::from_slice(&body)?;
+
+		// Evaluate the expression.
+		let value = self.evaluate(expression).await?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&value)?;
+		let response = http::Response::builder()
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		Ok(response)
 	}
 }

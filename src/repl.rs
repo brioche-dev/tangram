@@ -1,19 +1,20 @@
 use crate::id::Id;
-use derive_more::{Deref, Display};
+use derive_more::{Deref, Display, FromStr};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(
-	Display,
-	Deref,
 	Clone,
 	Copy,
 	Debug,
-	Hash,
-	PartialEq,
+	Deref,
+	Display,
 	Eq,
-	PartialOrd,
+	FromStr,
+	Hash,
 	Ord,
-	serde::Serialize,
+	PartialEq,
+	PartialOrd,
 	serde::Deserialize,
+	serde::Serialize,
 )]
 pub struct ReplId(pub Id);

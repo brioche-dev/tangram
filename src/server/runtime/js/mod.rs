@@ -4,7 +4,7 @@ use crate::{
 	expression::{self, Expression},
 	hash::Hash,
 	lockfile::Lockfile,
-	server::Server,
+	server::{repl::Output, Server},
 	value::Value,
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -37,7 +37,7 @@ enum Request {
 
 #[derive(Debug)]
 enum Response {
-	Repl(Result<Option<String>, String>),
+	Repl(Output),
 	Run(Result<Expression>),
 }
 
@@ -68,8 +68,8 @@ impl Runtime {
 		Runtime { task, sender }
 	}
 
-	pub async fn repl(&self, code: String) -> Result<Result<Option<String>, String>> {
-		let request = Request::Repl { code: code.clone() };
+	pub async fn repl(&self, code: String) -> Result<Output> {
+		let request = Request::Repl { code };
 		let response = self.request(request).await?;
 		let response = if let Response::Repl(response) = response {
 			response
@@ -214,7 +214,7 @@ async fn handle_repl_request(
 	inspector_session: &mut deno_core::LocalInspectorSession,
 	context_id: u64,
 	code: String,
-) -> Result<Option<String>, String> {
+) -> Output {
 	// If the code begins with an open curly and does not end in a semicolon, wrap it in parens to make it an ExpressionStatement instead of a BlockStatement.
 	let code = if code.trim_start().starts_with('{') && !code.trim_end().ends_with(';') {
 		format!("({code})")
@@ -248,19 +248,25 @@ async fn handle_repl_request(
 	) {
 		Ok((response, _)) => serde_json::from_value(response).unwrap(),
 		Err(error) => {
-			return Err(error.to_string());
+			return Output::Error {
+				message: error.to_string(),
+			};
 		},
 	};
 
 	// If there was an error, return its description.
 	if let Some(exception_details) = evaluate_response.exception_details {
-		return Err(exception_details.exception.unwrap().description.unwrap());
+		return Output::Error {
+			message: exception_details.exception.unwrap().description.unwrap(),
+		};
 	}
 
 	// If the evaluation produced a value, return it.
 	if let Some(value) = evaluate_response.result.value {
 		let output = serde_json::to_string_pretty(&value).unwrap();
-		return Ok(Some(output));
+		return Output::Success {
+			message: Some(output),
+		};
 	}
 
 	// Otherwise, stringify the evaluation response's result.
@@ -311,26 +317,34 @@ async fn handle_repl_request(
 	) {
 		Ok((response, _)) => serde_json::from_value(response).unwrap(),
 		Err(error) => {
-			return Err(error.to_string());
+			return Output::Error {
+				message: error.to_string(),
+			};
 		},
 	};
 
 	// If there was an error, return its description.
 	if let Some(exception_details) = call_function_on_response.exception_details {
-		return Err(exception_details.exception.unwrap().description.unwrap());
+		return Output::Error {
+			message: exception_details.exception.unwrap().description.unwrap(),
+		};
 	}
 
 	// Retrieve the output.
 	let value = if let Some(value) = call_function_on_response.result.value {
 		value
 	} else {
-		return Err("An unexpected error occurred.".to_owned());
+		return Output::Error {
+			message: "An unexpected error occurred.".to_owned(),
+		};
 	};
 
 	// Get the output as a string.
 	let output = value.as_str().unwrap().to_owned();
 
-	Ok(Some(output))
+	Output::Success {
+		message: Some(output),
+	}
 }
 
 async fn handle_run_request(

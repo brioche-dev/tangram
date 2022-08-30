@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 #[must_use]
-pub fn _global_config_dir() -> Option<PathBuf> {
+pub fn global_config_directory_path() -> Option<PathBuf> {
 	if cfg!(target_os = "linux") {
 		Some(PathBuf::from("/etc"))
 	} else if cfg!(target_os = "macos") {
@@ -12,7 +12,7 @@ pub fn _global_config_dir() -> Option<PathBuf> {
 }
 
 #[must_use]
-pub fn _global_data_dir() -> Option<PathBuf> {
+pub fn global_data_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
 		Some(PathBuf::from("/opt"))
 	} else {
@@ -21,25 +21,25 @@ pub fn _global_data_dir() -> Option<PathBuf> {
 }
 
 #[must_use]
-pub fn _user_config_dir() -> Option<PathBuf> {
+pub fn user_config_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
-		Some(home_dir()?.join(".config"))
+		Some(home_directory_path()?.join(".config"))
 	} else {
 		None
 	}
 }
 
 #[must_use]
-pub fn _user_data_dir() -> Option<PathBuf> {
+pub fn user_data_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
-		Some(home_dir()?.join(".local").join("share"))
+		Some(home_directory_path()?.join(".local").join("share"))
 	} else {
 		None
 	}
 }
 
 #[must_use]
-pub fn home_dir() -> Option<PathBuf> {
+pub fn home_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
 		match std::env::var("HOME") {
 			Err(_) => None,

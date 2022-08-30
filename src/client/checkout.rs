@@ -49,8 +49,9 @@ impl Client {
 	) -> Result<()> {
 		// Get the object from the server.
 		let object = match &self.transport {
-			Transport::InProcess { server } => server.get_object(remote_object_hash).await?,
-			_ => unimplemented!(),
+			Transport::InProcess(server) => server.get_object(remote_object_hash).await?,
+			Transport::Unix(_) => todo!(),
+			Transport::Tcp(_) => todo!(),
 		};
 		let object =
 			object.ok_or_else(|| anyhow!("Failed to find object {remote_object_hash}."))?;
@@ -173,10 +174,11 @@ impl Client {
 
 		// Write the file to the path.
 		match &self.transport {
-			Transport::InProcess { server } => {
+			Transport::InProcess(server) => {
 				tokio::fs::copy(&server.blob_path(file.blob_hash), &path).await?;
 			},
-			_ => unimplemented!(),
+			Transport::Unix(_) => todo!(),
+			Transport::Tcp(_) => todo!(),
 		};
 
 		// Make the file executable if necessary.
@@ -260,6 +262,7 @@ impl Client {
 		// If the dependency path is external, create a symlink.
 		if let Some(dependency_path) = dependency_path {
 			// Compute the target path.
+			// TODO Make this a relative path.
 			let target = dependency_path;
 
 			// Create the symlink.

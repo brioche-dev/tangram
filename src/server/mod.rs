@@ -1,7 +1,7 @@
 use self::repl::Repl;
 use crate::{
 	repl::ReplId,
-	server::temp::{Temp, TempId},
+	temp::{Temp, TempId},
 	util::path_exists,
 };
 use anyhow::{Context, Result};
@@ -14,16 +14,14 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
-use tokio::{
-	fs,
-	sync::{Mutex, RwLock},
-};
+use tokio::sync::Mutex;
 
 pub mod artifact;
 pub mod blob;
 mod checkin;
 mod checkout;
 pub mod db;
+mod error;
 pub mod evaluate;
 pub mod fragment;
 pub mod migrations;
@@ -38,10 +36,7 @@ pub struct Server {
 
 	/// This file is held with an advisory lock to ensure only one server has access to the [`path`].
 	#[allow(dead_code)]
-	path_lock_file: fs::File,
-
-	/// This is the garbage collection lock. Any operation that accesses artifacts, objects, blobs, fragments, or temps must acquire shared access. Garbage collection must acquire exclusive access.
-	gc_lock: RwLock<()>,
+	path_lock_file: tokio::fs::File,
 
 	/// This is the connection pool for the server's SQLite database.
 	database_connection_pool: deadpool_sqlite::Pool,
@@ -52,31 +47,26 @@ pub struct Server {
 	/// This HTTP client is for performing HTTP requests when running fetch expressions.
 	http_client: reqwest::Client,
 
-	/// These are the active temps.
-	temps: Mutex<BTreeMap<TempId, Temp>>,
+	/// These are the leased artifacts.
 
-	/// These are the active REPLs.
+	/// These are the leased REPLs.
 	repls: Mutex<BTreeMap<ReplId, Repl>>,
+
+	/// These are the leased temps.
+	temps: Mutex<BTreeMap<TempId, Temp>>,
 }
 
 impl Server {
 	pub async fn new(path: impl Into<PathBuf>) -> Result<Arc<Server>> {
 		// Ensure the path exists.
 		let path = path.into();
-		fs::create_dir_all(&path).await?;
+		tokio::fs::create_dir_all(&path).await?;
 
 		// Acquire a lock to the path.
 		let path_lock = Server::acquire_path_lock_file(&path).await?;
 
 		// Migrate the path.
 		Server::migrate(&path).await?;
-
-		// Remove any stale temps.
-		let temp_path = path.join("temps");
-		if path_exists(&temp_path).await? {
-			tokio::fs::remove_dir_all(&temp_path).await?;
-			tokio::fs::create_dir_all(&temp_path).await?;
-		}
 
 		// Create the database pool.
 		let database_path = path.join("db.sqlite3");
@@ -94,7 +84,6 @@ impl Server {
 		let server = Server {
 			path,
 			path_lock_file: path_lock,
-			gc_lock: RwLock::new(()),
 			database_connection_pool,
 			local_pool_handle,
 			http_client,
@@ -115,10 +104,10 @@ impl Server {
 
 	/// Acquire the lock to the server path.
 	#[cfg(any(target_os = "linux", target_os = "macos"))]
-	async fn acquire_path_lock_file(path: &std::path::Path) -> anyhow::Result<fs::File> {
+	async fn acquire_path_lock_file(path: &std::path::Path) -> anyhow::Result<tokio::fs::File> {
 		use nix::fcntl::{flock, FlockArg};
 		use std::os::unix::io::AsRawFd;
-		let lock_file = fs::OpenOptions::new()
+		let lock_file = tokio::fs::OpenOptions::new()
 			.read(true)
 			.write(true)
 			.create(true)
@@ -190,18 +179,18 @@ impl Server {
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
 		let response: Result<http::Response<hyper::Body>> =
 			match (method, path_components.as_slice()) {
-				// (http::Method::POST, ["blobs", _]) => {
-				// 	self.handle_create_blob_request(request).boxed()
-				// },
-				// (http::Method::GET, ["expressions", _]) => {
-				// 	self.handle_expression_request(request).boxed()
-				// },
+				(http::Method::POST, ["blobs", _]) => {
+					self.handle_create_blob_request(request).boxed()
+				},
+				(http::Method::GET, ["expressions", _]) => {
+					self.handle_get_expression_request(request).boxed()
+				},
 				(http::Method::POST, ["expressions", _, "evaluate"]) => {
 					self.handle_evaluate_expression_request(request).boxed()
 				},
-				// (http::Method::POST, ["objects", _]) => {
-				// 	self.handle_create_object_request(request).boxed()
-				// },
+				(http::Method::POST, ["objects", _]) => {
+					self.handle_create_object_request(request).boxed()
+				},
 				(http::Method::POST, ["repls", ""]) => {
 					self.handle_create_repl_request(request).boxed()
 				},
@@ -225,74 +214,5 @@ impl Server {
 				.body(hyper::Body::from("Internal server error."))
 				.unwrap()
 		})
-	}
-
-	// async fn handle_expression_request(
-	// 	self: &Arc<Self>,
-	// 	request: http::Request<hyper::Body>,
-	// ) -> Result<http::Response<hyper::Body>> {
-	// 	todo!()
-	// }
-
-	async fn handle_evaluate_expression_request(
-		self: &Arc<Self>,
-		request: http::Request<hyper::Body>,
-	) -> Result<http::Response<hyper::Body>> {
-		// Read the request.
-		let body = hyper::body::to_bytes(request).await?;
-		let expression = serde_json::from_slice(&body)?;
-
-		// Evaluate the expression.
-		let value = self.evaluate(expression).await?;
-
-		// Create the response.
-		let body = serde_json::to_vec(&value)?;
-		let response = http::Response::builder()
-			.body(hyper::Body::from(body))
-			.unwrap();
-
-		Ok(response)
-	}
-
-	async fn handle_create_repl_request(
-		self: &Arc<Self>,
-		_request: http::Request<hyper::Body>,
-	) -> Result<http::Response<hyper::Body>> {
-		// Create a repl.
-		let value = self.create_repl().await?;
-
-		// Create the response.
-		let body = serde_json::to_vec(&value)?;
-		let response = http::Response::builder()
-			.body(hyper::Body::from(body))
-			.unwrap();
-
-		Ok(response)
-	}
-
-	async fn handle_repl_run_request(
-		self: &Arc<Self>,
-		request: http::Request<hyper::Body>,
-	) -> Result<http::Response<hyper::Body>> {
-		// Read the request.
-		let body = hyper::body::to_bytes(request).await?;
-		let repl_run_request: self::repl::RunRequest = serde_json::from_slice(&body)?;
-
-		// Run the repl.
-		let output = self
-			.repl_run(&repl_run_request.repl_id, repl_run_request.code)
-			.await?;
-
-		// Create the response.
-		let output = match output {
-			Ok(output) => output,
-			Err(message) => Some(message),
-		};
-		let body = serde_json::to_vec(&output)?;
-		let response = http::Response::builder()
-			.body(hyper::Body::from(body))
-			.unwrap();
-
-		Ok(response)
 	}
 }
