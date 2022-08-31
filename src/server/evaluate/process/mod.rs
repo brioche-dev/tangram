@@ -1,15 +1,10 @@
-use crate::{
-	artifact::Artifact,
-	expression,
-	server::{runtime, Server},
-	temp::Temp,
-	value::Value,
-};
-use anyhow::{bail, Result};
+use crate::{artifact::Artifact, expression, server::Server, temp::Temp, value::Value};
+use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{collections::BTreeMap, sync::Arc};
 
+mod js;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -81,7 +76,7 @@ impl Server {
 		};
 		let command_fragment = self.create_fragment(&command.artifact).await?;
 		let command_path = command_fragment.path();
-		let command_path = if let Some(path) = &command.path {
+		let command = if let Some(path) = &command.path {
 			command_path.join(path)
 		} else {
 			command_path
@@ -99,18 +94,16 @@ impl Server {
 
 		// Run the process.
 
-		// #[cfg(target_os = "linux")]
-		// self.run_linux_process(envs, &command_path, args).await?;
+		#[cfg(target_os = "linux")]
+		dbg!(self
+			.run_linux_process(envs, command, args)
+			.await
+			.context("Failed to run the process.")?);
 
-		// #[cfg(target_os = "macos")]
-		// self.run_macos_process(envs, &command_path, args).await?;
-
-		let mut process = tokio::process::Command::new(command_path);
-		process.env_clear();
-		process.envs(envs);
-		process.args(args);
-		let mut child = process.spawn()?;
-		child.wait().await?;
+		#[cfg(target_os = "macos")]
+		self.run_macos_process(envs, command, args)
+			.await
+			.context("Failed to run the process.")?;
 
 		// Checkin the temps.
 		let artifacts: BTreeMap<String, Artifact> =
@@ -135,22 +128,6 @@ impl Server {
 					.collect(),
 			)
 		};
-
-		Ok(value)
-	}
-
-	pub async fn evaluate_js_process(
-		self: &Arc<Self>,
-		process: expression::JsProcess,
-	) -> Result<Value> {
-		// Create a JS runtime.
-		let runtime = runtime::js::Runtime::new(self);
-
-		// Run the process.
-		let expression = runtime.run(process).await??;
-
-		// Evaluate the resulting expression.
-		let value = self.evaluate(expression).await?;
 
 		Ok(value)
 	}
@@ -181,7 +158,7 @@ impl Server {
 				let fragment_path_string = fragment_path.to_str().unwrap().to_owned();
 				Ok(fragment_path_string)
 			},
-			_ => bail!("Value to resolve must be a string, template, or path."),
+			_ => bail!("The value to resolve must be a string, template, or path."),
 		}
 	}
 }

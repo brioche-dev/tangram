@@ -1,5 +1,6 @@
 use crate::server::Server;
-use anyhow::Result;
+use anyhow::{anyhow, bail, Context, Result};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use libc::*;
 use std::{
 	collections::BTreeMap,
@@ -8,218 +9,242 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 impl Server {
 	pub(super) async fn run_linux_process(
 		self: &Arc<Self>,
 		envs: BTreeMap<String, String>,
-		command: &Path,
+		command: PathBuf,
 		args: Vec<String>,
 	) -> Result<()> {
+		let server_path = self.path().to_owned();
+
+		// Create a temp for the chroot.
+		let temp = self
+			.create_temp()
+			.await
+			.context("Failed to create a temp for the chroot.")?;
+		let parent_child_root_path = self.temp_path(&temp);
+		tokio::fs::create_dir(&parent_child_root_path)
+			.await
+			.context("Failed to create the chroot directory.")?;
+
+		// Create a socket pair so the parent and child can communicate to set up the sandbox.
+		let (mut parent_socket, child_socket) =
+			tokio::net::UnixStream::pair().context("Failed to create socket pair.")?;
+		let mut child_socket = child_socket
+			.into_std()
+			.context("Failed to convert the child socket to std.")?;
+		child_socket.set_nonblocking(false);
+
+		// Create the process.
+		let mut process = tokio::process::Command::new(command);
+
+		// Set the envs.
+		process.env_clear();
+		process.envs(envs);
+
+		// Set the args.
+		process.args(args);
+
+		// Set up the sandbox.
 		unsafe {
-			let server_path = self.path().to_owned();
-
-			// Create a temp for the chroot.
-			let temp = self.create_temp().await?;
-			let parent_child_root_path = self.temp_path(&temp);
-			tokio::fs::create_dir(&parent_child_root_path).await?;
-
-			// Create a socket pair so the child can communicate with the parent.
-			let mut sockets = [0i32; 2];
-			let ret = socketpair(AF_LOCAL, SOCK_SEQPACKET, 0, sockets.as_mut_ptr());
-			assert!(ret == 0);
-			let [parent_socket, child_socket] = sockets;
-
-			let mut process = tokio::process::Command::new(command);
-			process.env_clear();
-			process.envs(envs);
-			process.args(args);
 			process.pre_exec(move || {
-				// Unshare the user namespace.
-				let ret = unshare(CLONE_NEWUSER);
-				assert!(ret == 0);
+				pre_exec(&mut child_socket, &parent_child_root_path, &server_path)
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+			})
+		};
 
-				// Send the message to the parent process that the UID and GID maps are ready to be set.
-				let pid = getpid();
-				let message = pid.to_le_bytes();
-				let ret = write(
-					child_socket,
-					message.as_ptr() as *const c_void,
-					message.len(),
-				);
-				assert!(ret != -1);
+		// Spawn the process.
+		let spawn_task = tokio::task::spawn_blocking(move || {
+			let mut child = process.spawn().context("Failed to spawn the process.")?;
+			Ok::<_, anyhow::Error>(child)
+		});
 
-				// Wait for the message from the parent process that the UID and GID maps have been set.
-				let mut message = [0u8; 1];
-				let ret = read(
-					child_socket,
-					message.as_mut_ptr() as *mut c_void,
-					message.len(),
-				);
-				assert!(ret != -1);
+		// Wait for the message from the child process that the UID and GID maps are ready to be set.
+		let pid: pid_t = parent_socket
+			.read_i32()
+			.await
+			.context("Failed to read from the parent socket.")?;
 
-				// Set the UID and GID.
-				let uid = 0;
-				let gid = 0;
-				let ret = setresuid(uid, uid, uid);
-				assert!(ret == 0);
-				let ret = setresgid(gid, gid, gid);
-				assert!(ret == 0);
+		// Write the UID map.
+		let uid_map_path = PathBuf::from(format!("/proc/{pid}/uid_map"));
+		let uid = unsafe { getuid() };
+		let uid_map = format!("0 {uid} 1\n");
+		tokio::fs::write(&uid_map_path, &uid_map).await.context("Failed to write the UID map file.")?;
 
-				// Unshare the mount namespace.
-				let ret = unshare(CLONE_NEWNS);
-				assert!(ret == 0);
+		// Disable setgroups.
+		let setgroups_path = PathBuf::from(format!("/proc/{pid}/setgroups"));
+		let setgroups = "deny";
+		tokio::fs::write(&setgroups_path, &setgroups).await.context("Failed to write the setgroups file.")?;
 
-				// Ensure the parent child root path does not have shared propogation.
-				let child_root_path = PathBuf::from("/");
-				let child_root_path_c_string =
-					CString::new(child_root_path.as_os_str().as_bytes()).unwrap();
-				let ret = mount(
-					std::ptr::null(),
-					child_root_path_c_string.as_ptr(),
-					std::ptr::null(),
-					MS_REC | MS_PRIVATE,
-					std::ptr::null(),
-				);
-				assert!(ret == 0);
+		// Write the GID map.
+		let gid_map_path = PathBuf::from(format!("/proc/{pid}/gid_map"));
+		let gid = unsafe { getgid() };
+		let gid_map = format!("0 {gid} 1\n");
+		tokio::fs::write(&gid_map_path, &gid_map).await.context("Failed to write the GID map file.")?;
 
-				// Ensure the parent child root path is a mount point.
-				let parent_child_root_path_c_string =
-					CString::new(parent_child_root_path.as_os_str().as_bytes()).unwrap();
-				let ret = mount(
-					parent_child_root_path_c_string.as_ptr(),
-					parent_child_root_path_c_string.as_ptr(),
-					std::ptr::null(),
-					MS_BIND,
-					std::ptr::null(),
-				);
-				assert!(ret == 0);
+		// Send the message to the child process that the UID and GID maps have been set.
+		parent_socket.write_u8(0).await.context(
+			"Failed to notify the child process that the UID and GID maps have been set.",
+		)?;
 
-				// Create the parent mount path.
-				let child_parent_mount_path = PathBuf::from("/parent");
-				let parent_parent_mount_path =
-					parent_child_root_path.join(child_parent_mount_path.strip_prefix("/").unwrap());
-				std::fs::create_dir_all(&parent_parent_mount_path).unwrap();
+		// Wait for the sandbox parent task to complete.
+		let mut child = spawn_task
+			.await
+			.unwrap()
+			.context("The spawn task failed.")?;
 
-				// Mount the server path.
-				let parent_source_path = &server_path;
-				let parent_source_path_c_string =
-					CString::new(parent_source_path.as_os_str().as_bytes()).unwrap();
-				let parent_target_path =
-					parent_child_root_path.join(parent_source_path.strip_prefix("/").unwrap());
-				std::fs::create_dir_all(&parent_target_path).unwrap();
-				let parent_target_c_string =
-					CString::new(parent_target_path.as_os_str().as_bytes()).unwrap();
-				let ret = mount(
-					parent_source_path_c_string.as_ptr(),
-					parent_target_c_string.as_ptr(),
-					std::ptr::null(),
-					MS_BIND,
-					std::ptr::null(),
-				);
-				assert!(ret == 0);
+		// Wait for the child process to exit.
+		child
+			.wait()
+			.await
+			.context("Failed to wait for the process to exit.")?;
 
-				// Pivot the root.
-				let parent_child_root_path_c_string =
-					CString::new(parent_child_root_path.as_os_str().as_bytes()).unwrap();
-				let parent_parent_mount_path_c_string =
-					CString::new(parent_parent_mount_path.as_os_str().as_bytes()).unwrap();
-				let ret = syscall(
-					SYS_pivot_root,
-					parent_child_root_path_c_string.as_ptr(),
-					parent_parent_mount_path_c_string.as_ptr(),
-				);
-				assert!(ret == 0);
-
-				// Change the current directory to the child root path.
-				let child_root_path = PathBuf::from("/");
-				let child_root_path_c_string =
-					CString::new(child_root_path.as_os_str().as_bytes()).unwrap();
-				let ret = chdir(child_root_path_c_string.as_ptr());
-				assert!(ret == 0);
-
-				// Unmount the parent's root.
-				let child_parent_mount_path_c_string =
-					CString::new(child_parent_mount_path.as_os_str().as_bytes()).unwrap();
-				let ret = umount2(child_parent_mount_path_c_string.as_ptr(), MNT_DETACH);
-				assert!(ret == 0);
-
-				// Remove the mountpoint for the parent's root.
-				let ret = rmdir(child_parent_mount_path_c_string.as_ptr());
-				assert!(ret == 0);
-
-				Ok(())
-			});
-
-			// Spawn the child process.
-			let spawn = tokio::task::spawn_blocking(move || {
-				let child = process.spawn()?;
-				Ok::<tokio::process::Child, anyhow::Error>(child)
-			});
-
-			// Wait for the message from the child process that the UID and GID maps are ready to be set.
-			let mut message = [0u8; 4];
-			let ret = read(
-				parent_socket,
-				message.as_mut_ptr() as *mut c_void,
-				message.len(),
-			);
-			assert!(ret != -1);
-			let pid = pid_t::from_le_bytes(message);
-
-			// Write the UID map.
-			let uid_map_path = PathBuf::from(format!("/proc/{pid}/uid_map"));
-			let uid_map_path_c_string = CString::new(uid_map_path.as_os_str().as_bytes()).unwrap();
-			let uid_map_fd = open(uid_map_path_c_string.as_ptr(), O_WRONLY);
-			assert!(uid_map_fd != -1);
-			let uid = getuid();
-			let uid_map = format!("0 {} 1\n", uid);
-			let ret = write(uid_map_fd, uid_map.as_ptr() as *const c_void, uid_map.len());
-			assert_eq!(ret, uid_map.len() as isize);
-			let ret = close(uid_map_fd);
-			assert!(ret == 0);
-
-			// Disable setgroups.
-			let setgroups_path = PathBuf::from(format!("/proc/{pid}/setgroups"));
-			let setgroups_path_c_string = CString::new(setgroups_path.as_os_str().as_bytes()).unwrap();
-			let setgroups_fd = open(setgroups_path_c_string.as_ptr(), O_WRONLY);
-			assert!(setgroups_fd != -1);
-			let setgroups = "deny";
-			let ret = write(
-				setgroups_fd,
-				setgroups.as_ptr() as *const c_void,
-				setgroups.len(),
-			);
-			assert_eq!(ret, setgroups.len() as isize);
-			let ret = close(setgroups_fd);
-			assert!(ret == 0);
-
-			// Write the GID map.
-			let gid_map_path = PathBuf::from(format!("/proc/{pid}/gid_map"));
-			let gid_map_path_c_string = CString::new(gid_map_path.as_os_str().as_bytes()).unwrap();
-			let gid_map_fd = open(gid_map_path_c_string.as_ptr(), O_WRONLY);
-			assert!(gid_map_fd != -1);
-			let gid = getgid();
-			let gid_map = format!("0 {} 1\n", gid);
-			let ret = write(gid_map_fd, gid_map.as_ptr() as *const c_void, gid_map.len());
-			assert_eq!(ret, gid_map.len() as isize);
-			let ret = close(gid_map_fd);
-			assert!(ret == 0);
-
-			// Send the message to the child process that the UID and GID maps have been set.
-			let message = [0u8; 1];
-			let ret = write(
-				parent_socket,
-				message.as_ptr() as *const c_void,
-				message.len(),
-			);
-			assert!(ret != -1);
-
-			// Wait for the child process to exit.
-			let mut child = spawn.await.unwrap()?;
-			child.wait().await?;
-
-			Ok(())
-		}
+		Ok(())
 	}
+}
+
+fn pre_exec(
+	child_socket: &mut std::os::unix::net::UnixStream,
+	parent_child_root_path: &Path,
+	server_path: &Path,
+) -> Result<()> {
+	// Unshare the user namespace.
+	let ret = unsafe { unshare(CLONE_NEWUSER) };
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error())
+			.context("Failed to unshare the user namepsace."));
+	}
+
+	// Send the message to the parent process that the UID and GID maps are ready to be set.
+	let pid = unsafe { getpid() };
+	child_socket.write_i32::<BigEndian>(pid).context("Failed to send the message to the parent process that the UID and GID maps are ready to be set.")?;
+
+	// Wait for the message from the parent process that the UID and GID maps have been set.
+	child_socket.read_u8().context("Failed to receive the message from the parent process that the UID and GID maps have been set.")?;
+
+	// Set the UID and GID.
+	let uid = 0;
+	let ret = unsafe { setresuid(uid, uid, uid) };
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to set the uid."));
+	}
+	let gid = 0;
+	let ret = unsafe { setresgid(gid, gid, gid) };
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to set the gid."));
+	}
+
+	// Unshare the mount namespace.
+	let ret = unsafe { unshare(CLONE_NEWNS) };
+	if ret != 0 {
+		bail!(
+			anyhow!(std::io::Error::last_os_error()).context("Failed to unshare mount namespace.")
+		);
+	}
+
+	// Ensure the parent child root path does not have shared propagation.
+	let child_root_path = PathBuf::from("/");
+	let child_root_path_c_string = CString::new(child_root_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			std::ptr::null(),
+			child_root_path_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_REC | MS_PRIVATE,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error())
+			.context("Failed to ensure the new root does not have shared propagation."));
+	}
+
+	// Ensure the parent child root path is a mount point.
+	let parent_child_root_path_c_string =
+		CString::new(parent_child_root_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			parent_child_root_path_c_string.as_ptr(),
+			parent_child_root_path_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error())
+			.context("Failed to ensure the new root is a mount point."));
+	}
+
+	// Create the parent mount path.
+	let child_parent_mount_path = PathBuf::from("/parent");
+	let parent_parent_mount_path =
+		parent_child_root_path.join(child_parent_mount_path.strip_prefix("/").unwrap());
+	std::fs::create_dir_all(&parent_parent_mount_path).unwrap();
+
+	// Mount the server path.
+	let parent_source_path = &server_path;
+	let parent_source_path_c_string =
+		CString::new(parent_source_path.as_os_str().as_bytes()).unwrap();
+	let parent_target_path =
+		parent_child_root_path.join(parent_source_path.strip_prefix("/").unwrap());
+	std::fs::create_dir_all(&parent_target_path).unwrap();
+	let parent_target_c_string = CString::new(parent_target_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			parent_source_path_c_string.as_ptr(),
+			parent_target_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to mount the server path."));
+	}
+
+	// Pivot the root.
+	let parent_child_root_path_c_string =
+		CString::new(parent_child_root_path.as_os_str().as_bytes()).unwrap();
+	let parent_parent_mount_path_c_string =
+		CString::new(parent_parent_mount_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		syscall(
+			SYS_pivot_root,
+			parent_child_root_path_c_string.as_ptr(),
+			parent_parent_mount_path_c_string.as_ptr(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to pivot the root."));
+	}
+
+	// Change the current directory to the child root path.
+	let child_root_path = PathBuf::from("/");
+	let child_root_path_c_string = CString::new(child_root_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe { chdir(child_root_path_c_string.as_ptr()) };
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to chdir."));
+	}
+
+	// Unmount the parent's root.
+	let child_parent_mount_path_c_string =
+		CString::new(child_parent_mount_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe { umount2(child_parent_mount_path_c_string.as_ptr(), MNT_DETACH) };
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error())
+			.context("Failed to unmount the parent's root."));
+	}
+
+	// Remove the mountpoint for the parent's root.
+	let ret = unsafe { rmdir(child_parent_mount_path_c_string.as_ptr()) };
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error())
+			.context("Failed to remove the mountpoint for the parent's root."));
+	}
+
+	Ok(())
 }

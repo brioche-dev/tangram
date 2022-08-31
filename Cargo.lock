@@ -2859,6 +2859,7 @@ dependencies = [
  "backtrace",
  "base64 0.13.0",
  "bincode",
+ "byteorder",
  "bytes",
  "bzip2",
  "camino",

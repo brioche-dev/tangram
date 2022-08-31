@@ -1,11 +1,11 @@
 use crate::server::Server;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use indoc::formatdoc;
 use std::{
 	collections::BTreeMap,
 	ffi::{CStr, CString},
 	os::unix::prelude::OsStrExt,
-	path::Path,
+	path::{Path, PathBuf},
 	sync::Arc,
 };
 
@@ -13,7 +13,7 @@ impl Server {
 	pub(super) async fn run_macos_process(
 		self: &Arc<Self>,
 		envs: BTreeMap<String, String>,
-		command: &Path,
+		command: PathBuf,
 		args: Vec<String>,
 	) -> Result<()> {
 		let server_path = self.path().to_owned();
@@ -31,22 +31,25 @@ impl Server {
 		// Set up the sandbox.
 		unsafe {
 			process.pre_exec(move || {
-				sandbox(&server_path)
-					.map_err(|error| tokio::io::Error::new(tokio::io::ErrorKind::Other, error))
+				pre_exec(&server_path)
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
 
 		// Spawn the process.
-		let mut child = process.spawn()?;
+		let mut child = process.spawn().context("Failed to spawn the process.")?;
 
 		// Wait for the process to exit.
-		child.wait().await?;
+		child
+			.wait()
+			.await
+			.context("Failed to wait for the process to exit.")?;
 
 		Ok(())
 	}
 }
 
-fn sandbox(server_path: &Path) -> Result<()> {
+fn pre_exec(server_path: &Path) -> Result<()> {
 	let mut profile = String::new();
 
 	// Add the default policy.
