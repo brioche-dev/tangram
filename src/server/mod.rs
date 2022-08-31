@@ -182,6 +182,7 @@ impl Server {
 				(http::Method::POST, ["artifacts", _]) => {
 					self.handle_create_artifact_request(request).boxed()
 				},
+				(http::Method::GET, ["blobs", _]) => self.handle_get_blob_request(request).boxed(),
 				(http::Method::POST, ["blobs", _]) => {
 					self.handle_create_blob_request(request).boxed()
 				},
@@ -190,6 +191,9 @@ impl Server {
 				},
 				(http::Method::POST, ["expressions", _, "evaluate"]) => {
 					self.handle_evaluate_expression_request(request).boxed()
+				},
+				(http::Method::GET, ["objects", _]) => {
+					self.handle_get_object_request(request).boxed()
 				},
 				(http::Method::POST, ["objects", _]) => {
 					self.handle_create_object_request(request).boxed()

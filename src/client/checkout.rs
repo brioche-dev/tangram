@@ -8,12 +8,14 @@ use crate::{
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use futures::Future;
+use futures::TryStreamExt;
 use std::{
 	os::unix::prelude::PermissionsExt,
 	path::{Path, PathBuf},
 	pin::Pin,
 	sync::Arc,
 };
+use tokio_util::io::StreamReader;
 
 pub type ExternalPathForDependencyFn =
 	dyn Sync + Fn(&Dependency) -> Pin<Box<dyn Send + Future<Output = Result<Option<PathBuf>>>>>;
@@ -51,7 +53,10 @@ impl Client {
 		let object = match &self.transport {
 			Transport::InProcess(server) => server.get_object(remote_object_hash).await?,
 			Transport::Unix(_) => todo!(),
-			Transport::Tcp(_) => todo!(),
+			Transport::Tcp(transport) => {
+				let path = format!("/objects/{remote_object_hash}");
+				transport.get_json(&path).await?
+			},
 		};
 		let object =
 			object.ok_or_else(|| anyhow!(r#"Failed to find object "{remote_object_hash}"."#))?;
@@ -178,7 +183,23 @@ impl Client {
 				tokio::fs::copy(&server.blob_path(file.blob_hash), &path).await?;
 			},
 			Transport::Unix(_) => todo!(),
-			Transport::Tcp(_) => todo!(),
+			Transport::Tcp(transport) => {
+				let blob_hash = file.blob_hash;
+				let request_path = format!("/blobs/{blob_hash}");
+
+				let mut response = transport
+					.get(&request_path)
+					.await?
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
+
+				// Create an async reader from the body.
+				let mut body = StreamReader::new(&mut response);
+
+				// Create the file to write to.
+				let mut file = tokio::fs::File::create(&path).await?;
+
+				tokio::io::copy(&mut body, &mut file).await?;
+			},
 		};
 
 		// Make the file executable if necessary.

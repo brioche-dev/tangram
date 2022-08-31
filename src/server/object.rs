@@ -160,3 +160,34 @@ impl Server {
 		Ok(response)
 	}
 }
+
+impl Server {
+	pub(super) async fn handle_get_object_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let object_hash = if let ["objects", object_hash] = path_components.as_slice() {
+			object_hash
+		} else {
+			bail!("Unexpected path.");
+		};
+		let object_hash = match object_hash.parse() {
+			Ok(object_hash) => object_hash,
+			Err(_) => return Ok(bad_request()),
+		};
+
+		// Get the object.
+		let object = self.get_object(object_hash).await?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&object).context("Failed to serialize the response body.")?;
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		Ok(response)
+	}
+}

@@ -21,6 +21,17 @@ impl Unix {
 		Unix { path, client }
 	}
 
+	pub async fn get(&self, path: &str) -> Result<hyper::Body> {
+		todo!()
+	}
+
+	pub async fn get_json<U>(&self, path: &str) -> Result<U>
+	where
+		U: serde::de::DeserializeOwned,
+	{
+		todo!()
+	}
+
 	pub async fn post(&self, path: &str, body: hyper::Body) -> Result<hyper::Body> {
 		let uri = hyperlocal::Uri::new(&self.path, path);
 		todo!()
@@ -50,6 +61,84 @@ impl Tcp {
 				.build(),
 		);
 		Tcp { url, client }
+	}
+
+	pub async fn get(&self, path: &str) -> Result<hyper::Body> {
+		// Set the URL path.
+		let mut url = self.url.clone();
+		url.set_path(path);
+
+		// Create the request.
+		let request = http::Request::builder()
+			.method(http::Method::GET)
+			.uri(url.to_string())
+			.body(hyper::Body::empty())
+			.unwrap();
+
+		// Send the request.
+		let response = self
+			.client
+			.request(request)
+			.await
+			.context("Failed to send the request.")?;
+
+		// Handle a non-success status.
+		if !response.status().is_success() {
+			let status = response.status();
+			let body = hyper::body::to_bytes(response.into_body())
+				.await
+				.context("Failed to read response body.")?;
+			let body = String::from_utf8(body.to_vec())
+				.context("Failed to read response body as string.")?;
+			bail!("{}\n{}", status, body);
+		}
+
+		Ok(response.into_body())
+	}
+
+	pub async fn get_json<U>(&self, path: &str) -> Result<U>
+	where
+		U: serde::de::DeserializeOwned,
+	{
+		// Set the URL path.
+		let mut url = self.url.clone();
+		url.set_path(path);
+
+		// Create the request.
+		let request = http::Request::builder()
+			.method(http::Method::GET)
+			.uri(url.to_string())
+			.body(hyper::Body::empty())
+			.unwrap();
+
+		// Send the request.
+		let response = self
+			.client
+			.request(request)
+			.await
+			.context("Failed to send the request.")?;
+
+		// Handle a non-success status.
+		if !response.status().is_success() {
+			let status = response.status();
+			let body = hyper::body::to_bytes(response.into_body())
+				.await
+				.context("Failed to read response body.")?;
+			let body = String::from_utf8(body.to_vec())
+				.context("Failed to read response body as string.")?;
+			bail!("{}\n{}", status, body);
+		}
+
+		// Read the response body.
+		let body = hyper::body::to_bytes(response.into_body())
+			.await
+			.context("Failed to read response body.")?;
+
+		// Deserialize the response body.
+		let response =
+			serde_json::from_slice(&body).context("Failed to deserialize the response body.")?;
+
+		Ok(response)
 	}
 
 	pub async fn post(&self, path: &str, body: hyper::Body) -> Result<hyper::Body> {

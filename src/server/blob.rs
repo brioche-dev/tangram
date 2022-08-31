@@ -1,4 +1,4 @@
-use super::{error::bad_request, Server};
+use super::{error::bad_request, error::not_found, Server};
 use crate::{hash::Hasher, object::BlobHash, util::path_exists};
 use anyhow::{bail, Context, Result};
 use futures::TryStreamExt;
@@ -110,6 +110,47 @@ impl Server {
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(hyper::Body::from(response))
+			.unwrap();
+
+		Ok(response)
+	}
+
+	pub(super) async fn handle_get_blob_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let blob_hash = if let ["blobs", blob_hash] = path_components.as_slice() {
+			blob_hash
+		} else {
+			bail!("Unexpected path.")
+		};
+		let blob_hash: BlobHash = match blob_hash.parse() {
+			Ok(client_blob_hash) => client_blob_hash,
+			Err(_) => return Ok(bad_request()),
+		};
+
+		// Get the blob.
+		let handle = match self.get_blob(blob_hash).await? {
+			Some(handle) => handle,
+			None => return Ok(not_found()),
+		};
+
+		// Create the stream for the file.
+		let file = tokio::fs::File::open(&handle.path).await.with_context(|| {
+			format!(
+				r#"Failed to open file at path "{}"."#,
+				&handle.path.display()
+			)
+		})?;
+		let stream = tokio_util::io::ReaderStream::new(file);
+		let response = hyper::Body::wrap_stream(stream);
+
+		// Create the response.
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(response)
 			.unwrap();
 
 		Ok(response)
