@@ -26,6 +26,8 @@ pub mod evaluate;
 pub mod fragment;
 pub mod migrations;
 pub mod object;
+mod package_versions;
+mod packages;
 pub mod repl;
 pub mod runtime;
 pub mod temp;
@@ -197,6 +199,18 @@ impl Server {
 				},
 				(http::Method::POST, ["objects", _]) => {
 					self.handle_create_object_request(request).boxed()
+				},
+				(http::Method::GET, ["packages", _]) => {
+					self.handle_get_package_request(request).boxed()
+				},
+				(http::Method::POST, ["packages", _]) => {
+					self.handle_create_package_request(request).boxed()
+				},
+				(http::Method::GET, ["packages", _, "versions", _]) => {
+					self.handle_get_package_version_request(request).boxed()
+				},
+				(http::Method::POST, ["packages", _, "versions", _]) => {
+					self.handle_create_package_version_request(request).boxed()
 				},
 				(http::Method::POST, ["repls", ""]) => {
 					self.handle_create_repl_request(request).boxed()

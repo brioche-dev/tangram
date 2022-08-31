@@ -1,5 +1,5 @@
 use super::Server;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::{path::PathBuf, sync::Arc};
 
 impl Server {
@@ -119,6 +119,40 @@ impl Server {
 			let maybe_row = rows.next().context("Failed to fetch a row.")?;
 			let result: Option<T> = maybe_row.map(f).transpose()?;
 			Ok(result)
+		})
+	}
+
+	pub(super) async fn database_query_rows<T, P, F>(
+		self: &Arc<Self>,
+		sql: &str,
+		params: P,
+		mut f: F,
+	) -> Result<Vec<T>>
+	where
+		P: rusqlite::Params,
+		F: FnMut(&rusqlite::Row<'_>) -> Result<T>,
+	{
+		let database_connection_object = self
+			.database_connection_pool
+			.get()
+			.await
+			.context("Failed to retrieve a database connection.")?;
+		tokio::task::block_in_place(move || -> Result<_> {
+			let database_connection = database_connection_object.lock().unwrap();
+			let mut statement = database_connection
+				.prepare_cached(sql)
+				.context("Failed to prepare the query.")?;
+			let rows = statement
+				.query(params)
+				.context("Failed to execute the query.")?;
+			let rows = rows.mapped(|row: &rusqlite::Row<'_>| {
+				f(row).map_err(|_| rusqlite::Error::InvalidQuery)
+			});
+			let result: Result<Vec<T>> = rows
+				.into_iter()
+				.map(|row| row.map_err(|_| anyhow!("Error")))
+				.collect();
+			result
 		})
 	}
 }

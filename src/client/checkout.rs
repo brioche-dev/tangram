@@ -198,6 +198,7 @@ impl Client {
 				// Create the file to write to.
 				let mut file = tokio::fs::File::create(&path).await?;
 
+				// Read the bytes from the body into the file.
 				tokio::io::copy(&mut body, &mut file).await?;
 			},
 		};

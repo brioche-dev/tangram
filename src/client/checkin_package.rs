@@ -51,7 +51,9 @@ impl Client {
 							})?;
 							queue.push_back(dependency_path);
 						},
-						crate::manifest::Dependency::RegistryDependency(_) => continue,
+						crate::manifest::Dependency::RegistryDependency(_) => {
+							todo!()
+						},
 					}
 				}
 			}

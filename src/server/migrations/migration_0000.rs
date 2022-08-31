@@ -20,13 +20,14 @@ const SQL: &str = r#"
 	);
 
 	create table packages (
-		id blob primary key,
-		name text
+		name text primary key
 	);
 
 	create table package_versions (
-		package_id blob,
-		artifact blob primary key
+		name text,
+		version text,
+		artifact blob,
+		primary key (name, version)
 	);
 "#;
 
