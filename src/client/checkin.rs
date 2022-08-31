@@ -106,11 +106,11 @@ impl Client {
 		}
 	}
 
-	pub async fn add_blob(&self, path: &Path, blob_hash: BlobHash) -> Result<BlobHash> {
+	pub async fn add_blob(&self, blob_path: &Path, blob_hash: BlobHash) -> Result<BlobHash> {
 		match &self.transport {
 			// Copy the file into the server's path.
 			Transport::InProcess(server) => {
-				tracing::trace!(r#"Copying file at path "{}"."#, path.display());
+				tracing::trace!(r#"Copying file at path "{}"."#, blob_path.display());
 
 				// Create a temp.
 				let temp = server.create_temp().await?;
@@ -118,7 +118,7 @@ impl Client {
 
 				// Copy the file to the temp.
 				let permit = self.file_system_semaphore.acquire().await.unwrap();
-				tokio::fs::copy(&path, &temp_path).await?;
+				tokio::fs::copy(&blob_path, &temp_path).await?;
 				drop(permit);
 
 				// Move the temp file to the server's blobs directory.
@@ -134,8 +134,12 @@ impl Client {
 				todo!()
 			},
 
-			Transport::Tcp(_transport) => {
-				todo!()
+			Transport::Tcp(transport) => {
+				let contents = tokio::fs::read(blob_path).await?;
+				let path = format!("/blobs/{blob_hash}");
+
+				let _outcome = transport.post(&path, contents.into()).await?;
+				Ok(blob_hash)
 			},
 		}
 	}

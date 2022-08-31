@@ -1,6 +1,6 @@
-use super::Server;
+use super::{error::bad_request, Server};
 use crate::{hash::Hasher, object::BlobHash, util::path_exists};
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
@@ -75,6 +75,35 @@ impl Server {
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
-		todo!()
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let client_blob_hash = if let ["blobs", blob_hash] = path_components.as_slice() {
+			blob_hash
+		} else {
+			bail!("Unexpected path.")
+		};
+		let client_blob_hash = match client_blob_hash.parse() {
+			Ok(client_blob_hash) => client_blob_hash,
+			Err(_) => return Ok(bad_request()),
+		};
+
+		// Read and deserialize the request body.
+		let body = hyper::body::to_bytes(request.into_body())
+			.await
+			.context("Failed to read the request body.")?;
+
+		let bytes: &[u8] = &body;
+		let server_blob_hash = self.add_blob_from_reader(bytes).await?;
+		if server_blob_hash != client_blob_hash {
+			bail!("The blob hash is not correct for the given bytes.");
+		}
+
+		// Create the response.
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(hyper::Body::empty())
+			.unwrap();
+
+		Ok(response)
 	}
 }
