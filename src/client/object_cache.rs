@@ -58,19 +58,19 @@ impl ObjectCache {
 				self.cache_object_for_directory(path, &metadata)
 					.await
 					.with_context(|| {
-						anyhow!(r#"Failed to cache directory at path "{}"."#, path.display())
+						format!(r#"Failed to cache directory at path "{}"."#, path.display())
 					})?;
 			} else if metadata.is_file() {
 				self.cache_object_for_file(path, &metadata)
 					.await
 					.with_context(|| {
-						anyhow!(r#"Failed to cache file at path "{}"."#, path.display())
+						format!(r#"Failed to cache file at path "{}"."#, path.display())
 					})?;
 			} else if metadata.is_symlink() {
 				self.cache_object_for_symlink(path, &metadata)
 					.await
 					.with_context(|| {
-						anyhow!(r#"Failed to cache directory at path "{}"."#, path.display())
+						format!(r#"Failed to cache directory at path "{}"."#, path.display())
 					})?;
 			} else {
 				bail!("The path must point to a directory, file, or symlink.");

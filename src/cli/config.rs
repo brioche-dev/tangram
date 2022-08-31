@@ -43,7 +43,7 @@ impl Config {
 			let global_config = tokio::fs::read(&global_config_path)
 				.await
 				.with_context(|| {
-					anyhow!(
+					format!(
 						r#"Failed to read the global configuration from "{}"."#,
 						global_config_path.display()
 					)
@@ -61,7 +61,7 @@ impl Config {
 			.join("config.json");
 		let user_config: Option<Partial> = if path_exists(&user_config_path).await? {
 			let user_config = tokio::fs::read(&user_config_path).await.with_context(|| {
-				anyhow!(
+				format!(
 					r#"Failed to read the user configuration from "{}"."#,
 					user_config_path.display()
 				)

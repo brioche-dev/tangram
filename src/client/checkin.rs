@@ -3,9 +3,9 @@ use crate::{
 	artifact::Artifact,
 	client::{Client, Transport},
 	object::{BlobHash, Object, ObjectHash},
-	server::object::AddObjectOutcome,
+	server::{self, object::AddObjectOutcome},
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
 use std::{path::Path, sync::Arc};
 
@@ -106,11 +106,11 @@ impl Client {
 		}
 	}
 
-	pub async fn add_blob(&self, blob_path: &Path, blob_hash: BlobHash) -> Result<BlobHash> {
+	pub async fn add_blob(&self, path: &Path, hash: BlobHash) -> Result<BlobHash> {
 		match &self.transport {
 			// Copy the file into the server's path.
 			Transport::InProcess(server) => {
-				tracing::trace!(r#"Copying file at path "{}"."#, blob_path.display());
+				tracing::trace!(r#"Copying file at path "{}"."#, path.display());
 
 				// Create a temp.
 				let temp = server.create_temp().await?;
@@ -118,16 +118,16 @@ impl Client {
 
 				// Copy the file to the temp.
 				let permit = self.file_system_semaphore.acquire().await.unwrap();
-				tokio::fs::copy(&blob_path, &temp_path).await?;
+				tokio::fs::copy(&path, &temp_path).await?;
 				drop(permit);
 
 				// Move the temp file to the server's blobs directory.
 				let permit = self.file_system_semaphore.acquire().await.unwrap();
-				let blob_path = server.blob_path(blob_hash);
+				let blob_path = server.blob_path(hash);
 				tokio::fs::rename(&temp_path, &blob_path).await?;
 				drop(permit);
 
-				Ok(blob_hash)
+				Ok(hash)
 			},
 
 			Transport::Unix(_transport) => {
@@ -135,12 +135,24 @@ impl Client {
 			},
 
 			Transport::Tcp(transport) => {
-				let contents = tokio::fs::read(blob_path).await?;
-				let path = format!("/blobs/{blob_hash}");
+				// Create a stream for the file.
+				let file = tokio::fs::File::open(&path).await.with_context(|| {
+					format!(r#"Failed to open file at path "{}"."#, path.display())
+				})?;
+				let stream = tokio_util::io::ReaderStream::new(file);
+				let request = hyper::Body::wrap_stream(stream);
 
-				let _blob_hash = transport.post(&path, contents.into()).await?;
+				// Perform the request.
+				let response = transport.post(&format!("/blobs/{hash}"), request).await?;
 
-				Ok(blob_hash)
+				// Deserialize the response.
+				let response = hyper::body::to_bytes(response)
+					.await
+					.context("Failed to read the response.")?;
+				let response: server::blob::CreateResponse = serde_json::from_slice(&response)
+					.context("Failed to deserialize the response.")?;
+
+				Ok(response.blob_hash)
 			},
 		}
 	}

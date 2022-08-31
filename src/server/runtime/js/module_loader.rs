@@ -268,12 +268,12 @@ async fn load_tangram_module(
 	let specifier_path = Utf8Path::new(specifier.path());
 	let specifier_path = specifier_path
 		.strip_prefix("/")
-		.with_context(|| anyhow!("The specifier must have a leading slash."))?;
+		.with_context(|| "The specifier must have a leading slash.")?;
 
 	// Read the module's code.
 	let module_path = fragment_path.join(specifier_path);
 	let code = tokio::fs::read(&module_path).await.with_context(|| {
-		anyhow!(
+		format!(
 			r#"Failed to read file at path "{}"."#,
 			module_path.display(),
 		)

@@ -1,6 +1,7 @@
 use super::{error::bad_request, Server};
 use crate::{hash::Hasher, object::BlobHash, util::path_exists};
 use anyhow::{bail, Context, Result};
+use futures::TryStreamExt;
 use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
@@ -70,6 +71,11 @@ impl Handle {
 	}
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CreateResponse {
+	pub blob_hash: BlobHash,
+}
+
 impl Server {
 	pub(super) async fn handle_create_blob_request(
 		self: &Arc<Self>,
@@ -77,31 +83,33 @@ impl Server {
 	) -> Result<http::Response<hyper::Body>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let client_blob_hash = if let ["blobs", blob_hash] = path_components.as_slice() {
+		let blob_hash = if let ["blobs", blob_hash] = path_components.as_slice() {
 			blob_hash
 		} else {
 			bail!("Unexpected path.")
 		};
-		let client_blob_hash = match client_blob_hash.parse() {
+		let _blob_hash: BlobHash = match blob_hash.parse() {
 			Ok(client_blob_hash) => client_blob_hash,
 			Err(_) => return Ok(bad_request()),
 		};
 
-		// Read and deserialize the request body.
-		let body = hyper::body::to_bytes(request.into_body())
-			.await
-			.context("Failed to read the request body.")?;
+		// Create an async reader from the body.
+		let body = tokio_util::io::StreamReader::new(
+			request
+				.into_body()
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error)),
+		);
 
-		let bytes: &[u8] = &body;
-		let server_blob_hash = self.add_blob_from_reader(bytes).await?;
-		if server_blob_hash != client_blob_hash {
-			bail!("The blob hash is not correct for the given bytes.");
-		}
+		// Add the blob.
+		let blob_hash = self.add_blob_from_reader(body).await?;
 
 		// Create the response.
+		let response = CreateResponse { blob_hash };
+		let response =
+			serde_json::to_vec(&response).context("Failed to serialize the response.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
-			.body(hyper::Body::empty())
+			.body(hyper::Body::from(response))
 			.unwrap();
 
 		Ok(response)

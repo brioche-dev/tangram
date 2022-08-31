@@ -15,11 +15,6 @@ pub struct Unix {
 	client: hyper::Client<hyperlocal::UnixConnector, hyper::Body>,
 }
 
-pub struct Tcp {
-	url: Url,
-	client: hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
-}
-
 impl Unix {
 	pub fn new(path: PathBuf) -> Unix {
 		let client = hyper::Client::unix();
@@ -38,6 +33,11 @@ impl Unix {
 	{
 		todo!()
 	}
+}
+
+pub struct Tcp {
+	url: Url,
+	client: hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
 }
 
 impl Tcp {

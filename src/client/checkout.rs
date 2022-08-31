@@ -54,7 +54,7 @@ impl Client {
 			Transport::Tcp(_) => todo!(),
 		};
 		let object =
-			object.ok_or_else(|| anyhow!("Failed to find object {remote_object_hash}."))?;
+			object.ok_or_else(|| anyhow!(r#"Failed to find object "{remote_object_hash}"."#))?;
 
 		// Call the appropriate function for the object's type.
 		match object {

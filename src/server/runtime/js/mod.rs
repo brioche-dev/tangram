@@ -357,10 +357,10 @@ async fn handle_run_request(
 	let module = server
 		.evaluate(*process.module)
 		.await
-		.with_context(|| anyhow!("Failed to evaluate module expression."))?;
+		.with_context(|| "Failed to evaluate the module expression.")?;
 	let module = match module {
 		Value::Path(module) => module,
-		_ => bail!("Module must be a path."),
+		_ => bail!("The module must be a path."),
 	};
 
 	// Create the module URL.
@@ -403,7 +403,7 @@ async fn handle_run_request(
 		})?
 		.try_into()
 		.with_context(|| {
-			anyhow!(
+			format!(
 				r#"The export "{export_name}" from the module "{module_url}" must be a function."#
 			)
 		})?;
