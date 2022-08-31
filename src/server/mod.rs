@@ -179,6 +179,9 @@ impl Server {
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
 		let response: Result<http::Response<hyper::Body>> =
 			match (method, path_components.as_slice()) {
+				(http::Method::POST, ["artifacts", _]) => {
+					self.handle_create_artifact_request(request).boxed()
+				},
 				(http::Method::POST, ["blobs", _]) => {
 					self.handle_create_blob_request(request).boxed()
 				},

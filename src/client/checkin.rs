@@ -138,7 +138,8 @@ impl Client {
 				let contents = tokio::fs::read(blob_path).await?;
 				let path = format!("/blobs/{blob_hash}");
 
-				let _outcome = transport.post(&path, contents.into()).await?;
+				let _blob_hash = transport.post(&path, contents.into()).await?;
+
 				Ok(blob_hash)
 			},
 		}
