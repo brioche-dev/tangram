@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use tangram::expression::Expression;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -10,6 +11,7 @@ pub struct Args {
 	name: String,
 	#[clap(long, takes_value = false)]
 	locked: bool,
+	args: Vec<String>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -24,12 +26,15 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to check in the package.")?;
 
+	// Process the args
+	let arguments = args.args.iter().map(|arg| Expression::String(arg.clone())).collect::<Vec<_>>();
+
 	// Evaluate the target.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
 		lockfile: None,
 		package,
 		name: args.name,
-		args: vec![],
+		args: arguments,
 	});
 	let value = client
 		.evaluate(expression)
