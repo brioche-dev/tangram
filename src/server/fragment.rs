@@ -21,14 +21,6 @@ impl Server {
 			return Ok(fragment);
 		}
 
-		// Get the path to the fragment.
-		let fragment_path = self.path.join("fragments").join(artifact.to_string());
-
-		// Check if there is an existing fragment.
-		if path_exists(&fragment_path).await? {
-			return Ok(Fragment { artifact });
-		}
-
 		// Lock on the receivers so that only one checkout per artifact can occur simultaneously.
 		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
 
@@ -39,6 +31,14 @@ impl Server {
 		let checkout_task = tokio::task::spawn({
 			let server = Arc::clone(self);
 			async move {
+				// Get the path to the fragment.
+				let fragment_path = server.path().join("fragments").join(artifact.to_string());
+
+				// Check if there is an existing fragment.
+				if path_exists(&fragment_path).await? {
+					return Ok(Fragment { artifact });
+				}
+
 				// Create the path for dependency callback.
 				let path_for_dependency = {
 					let server = Arc::clone(&server);
