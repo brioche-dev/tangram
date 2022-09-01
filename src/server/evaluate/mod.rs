@@ -1,4 +1,4 @@
-use super::error::bad_request;
+use super::error::{bad_request, not_found};
 use crate::{expression::Expression, hash::Hash, server::Server, value::Value};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
@@ -132,6 +132,12 @@ impl Server {
 		let value = self
 			.get_memoized_value_for_expression_hash(&expression_hash)
 			.await?;
+
+		// If the value is None, return a 404
+		let value = match value {
+			Some(value) => value,
+			None => return Ok(not_found()),
+		};
 
 		// Create the response.
 		let body = serde_json::to_vec(&value).context("Failed to serialize the response body.")?;
