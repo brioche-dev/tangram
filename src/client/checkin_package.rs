@@ -5,6 +5,7 @@ use crate::{
 	manifest::Manifest,
 };
 use anyhow::{anyhow, Context, Result};
+use semver::Version;
 use std::{
 	collections::{BTreeMap, HashMap, VecDeque},
 	path::{Path, PathBuf},
@@ -80,31 +81,48 @@ impl Client {
 				let mut dependencies = BTreeMap::new();
 				for (dependency_name, dependency) in manifest.dependencies.iter().flatten() {
 					// Retrieve the path dependency.
-					let dependency = match dependency {
-						crate::manifest::Dependency::PathDependency(dependency) => dependency,
-						crate::manifest::Dependency::RegistryDependency(_) => continue,
+					let entry = match dependency {
+						crate::manifest::Dependency::PathDependency(dependency) => {
+							// Get the absolute path to the dependency.
+							let dependency_path = package_path.join(&dependency.path);
+							let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
+
+							// Get the artifact for the dependency.
+							let dependency_artifact = cache
+								.get(&dependency_path)
+								.ok_or_else(|| {
+									anyhow!(
+										r#"Failed to get the artifact for path "{}"."#,
+										dependency_path.display(),
+									)
+								})?
+								.clone();
+
+							// Create the lockfile Entry.
+							lockfile::Dependency {
+								hash: dependency_artifact.object_hash,
+								dependencies: None,
+							}
+						},
+						crate::manifest::Dependency::RegistryDependency(dependency) => {
+							// TODO: Implement actual version resolution.
+							let version = dependency.version.comparators.first().unwrap();
+							let version = Version::new(
+								version.major,
+								version.minor.unwrap_or(0),
+								version.patch.unwrap_or(0),
+							);
+							// Get the artifact hash from the registry.
+							let artifact = self.get_package(dependency_name, &version).await?;
+							// Create the lockfile Entry.
+							lockfile::Dependency {
+								hash: artifact.object_hash,
+								dependencies: None,
+							}
+						},
 					};
-
-					// Get the absolute path to the dependency.
-					let dependency_path = package_path.join(&dependency.path);
-					let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
-
-					// Get the artifact for the dependency.
-					let dependency_artifact = cache
-						.get(&dependency_path)
-						.ok_or_else(|| {
-							anyhow!(
-								r#"Failed to get the artifact for path "{}"."#,
-								dependency_path.display(),
-							)
-						})?
-						.clone();
 
 					// Add the dependency.
-					let entry = lockfile::Dependency {
-						hash: dependency_artifact.object_hash,
-						dependencies: None,
-					};
 					dependencies.insert(dependency_name.clone(), entry);
 				}
 

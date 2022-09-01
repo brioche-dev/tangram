@@ -10,6 +10,7 @@ mod checkin_package;
 pub mod checkout;
 mod evaluate;
 mod object_cache;
+mod package;
 mod repl;
 mod transport;
 

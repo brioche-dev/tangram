@@ -1,5 +1,6 @@
+use super::error::bad_request;
 use crate::{expression::Expression, hash::Hash, server::Server, value::Value};
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::TryFutureExt;
 use std::sync::Arc;
@@ -56,6 +57,17 @@ impl Server {
 		let expression_json = serde_json::to_vec(&expression)?;
 		let expression_hash = Hash::new(&expression_json);
 		let value = self
+			.get_memoized_value_for_expression_hash(&expression_hash)
+			.await?;
+		Ok(value)
+	}
+
+	/// Retrieve the memoized value from a previous evaluation of an expression, if one exists, given an expression hash.
+	pub(super) async fn get_memoized_value_for_expression_hash(
+		self: &Arc<Self>,
+		expression_hash: &Hash,
+	) -> Result<Option<Value>> {
+		let value = self
 			.database_query_row(
 				r#"
 					select value
@@ -104,7 +116,31 @@ impl Server {
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
-		todo!()
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let expression_hash = if let &["expressions", expression_hash] = path_components.as_slice()
+		{
+			expression_hash
+		} else {
+			bail!("Unexpected path.");
+		};
+		let expression_hash = match expression_hash.parse() {
+			Ok(expression_hash) => expression_hash,
+			Err(_) => return Ok(bad_request()),
+		};
+
+		let value = self
+			.get_memoized_value_for_expression_hash(&expression_hash)
+			.await?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&value).context("Failed to serialize the response body.")?;
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		Ok(response)
 	}
 }
 
