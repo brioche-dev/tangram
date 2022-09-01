@@ -5,7 +5,6 @@ use crate::{
 	manifest::Manifest,
 };
 use anyhow::{anyhow, Context, Result};
-use semver::Version;
 use std::{
 	collections::{BTreeMap, HashMap, VecDeque},
 	path::{Path, PathBuf},
@@ -105,15 +104,10 @@ impl Client {
 							}
 						},
 						crate::manifest::Dependency::RegistryDependency(dependency) => {
-							// TODO: Implement actual version resolution.
-							let version = dependency.version.comparators.first().unwrap();
-							let version = Version::new(
-								version.major,
-								version.minor.unwrap_or(0),
-								version.patch.unwrap_or(0),
-							);
 							// Get the artifact hash from the registry.
-							let artifact = self.get_package(dependency_name, &version).await?;
+							let artifact = self
+								.get_package(dependency_name, &dependency.version)
+								.await?;
 							// Create the lockfile Entry.
 							lockfile::Dependency {
 								hash: artifact.object_hash,

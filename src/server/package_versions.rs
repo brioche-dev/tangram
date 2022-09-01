@@ -1,7 +1,6 @@
 use super::Server;
 use crate::artifact::Artifact;
 use anyhow::{bail, Context, Result};
-use semver::Version;
 use std::sync::Arc;
 
 impl Server {
@@ -9,7 +8,7 @@ impl Server {
 	pub async fn get_package_version(
 		self: &Arc<Self>,
 		package_name: &str,
-		package_version: &Version,
+		package_version: &str,
 	) -> Result<Artifact> {
 		// Retrieve the artifact from the database.
 		let artifact = self
@@ -83,13 +82,9 @@ impl Server {
 			bail!("Unexpected path.");
 		};
 
-		let package_version: Version = package_version
-			.parse()
-			.with_context(|| "Failed to deserialize the package version.")?;
-
 		// Get the artifact.
 		let artifact = self
-			.get_package_version(package_name, &package_version)
+			.get_package_version(package_name, package_version)
 			.await?;
 
 		// Create the response.

@@ -1,12 +1,11 @@
 use camino::Utf8PathBuf;
-use semver::{Version, VersionReq};
 use std::collections::BTreeMap;
 use url::Url;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Manifest {
 	pub name: String,
-	pub version: Version,
+	pub version: String,
 	pub targets: Vec<String>,
 	pub dependencies: Option<BTreeMap<String, Dependency>>,
 }
@@ -28,13 +27,13 @@ pub struct PathDependency {
 pub struct RegistryDependency {
 	pub registry: Option<Url>,
 	pub name: Option<String>,
-	pub version: VersionReq,
+	pub version: String,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum DependencySerde {
-	VersionReq(VersionReq),
+	VersionReq(String),
 	Path(PathDependency),
 	Registry(RegistryDependency),
 }
