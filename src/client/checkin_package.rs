@@ -14,7 +14,6 @@ impl Client {
 	/// Checkin a package along with all its path dependencies.
 	pub async fn checkin_package(&self, path: &Path, locked: bool) -> Result<Artifact> {
 		let path = tokio::fs::canonicalize(path).await?;
-		println!("Checking in {}", path.display());
 
 		// Collect all path dependencies in topological order.
 		let mut queue: VecDeque<PathBuf> = VecDeque::from(vec![path.clone()]);

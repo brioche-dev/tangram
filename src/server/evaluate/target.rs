@@ -14,7 +14,6 @@ impl Server {
 		self: &Arc<Self>,
 		target: expression::Target,
 	) -> Result<Expression> {
-		println!("Evaluating target {target:?}");
 		let expression =
 			expression::Expression::Process(expression::Process::Js(expression::JsProcess {
 				lockfile: target.lockfile,

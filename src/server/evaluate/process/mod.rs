@@ -30,7 +30,6 @@ impl Server {
 		self: &Arc<Self>,
 		process: expression::UnixProcess,
 	) -> Result<Value> {
-		println!("Evaluating process {process:?}");
 		let crate::expression::UnixProcess { command, args, .. } = process;
 
 		// Create the temps for the outputs and add their dependencies.
@@ -153,7 +152,6 @@ impl Server {
 				Ok(string)
 			},
 			Value::Path(path) => {
-				println!("Resolving path {path:?}");
 				let fragment = self.create_fragment(path.artifact).await?;
 				let fragment_path = self.fragment_path(&fragment);
 				let fragment_path = if let Some(path) = path.path {
