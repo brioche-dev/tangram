@@ -26,8 +26,9 @@ const SQL: &str = r#"
 	create table package_versions (
 		name text,
 		version text,
-		artifact blob,
-		primary key (name, version)
+		artifact_hash blob,
+		primary key (name, version),
+		foreign key (artifact_hash) references artifacts (object_hash)
 	);
 "#;
 

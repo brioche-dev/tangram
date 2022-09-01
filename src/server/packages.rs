@@ -17,20 +17,22 @@ impl Server {
 				r#"
 					select
 						version,
-						artifact
+						artifact_hash
 					from package_versions
 					where
 						name = $1
 				"#,
 				(package_name,),
-				|row| Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?)),
+				|row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
 			)
 			.await?
 			.into_iter()
-			.map(|(version, artifact)| {
-				let artifact = serde_json::from_slice(&artifact)
-					.context("Failed to deserialize artifact.")
+			.map(|(version, object_hash)| {
+				let object_hash = object_hash
+					.parse()
+					.with_context(|| "Failed to parse object hash.")
 					.unwrap();
+				let artifact = Artifact { object_hash };
 				PackageVersion { version, artifact }
 			})
 			.collect();

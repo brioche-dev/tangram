@@ -10,12 +10,12 @@ impl Server {
 		package_name: &str,
 		package_version: &str,
 	) -> Result<Artifact> {
-		// Retrieve the artifact from the database.
-		let artifact = self
+		// Retrieve the artifact hash from the database.
+		let object_hash = self
 			.database_query_row(
 				r#"
 					select
-						artifact
+						artifact_hash
 					from package_versions
 					where
 						name = $1
@@ -23,14 +23,14 @@ impl Server {
 						version = $2
 				"#,
 				(package_name, package_version.to_string()),
-				|row| Ok(row.get::<_, Vec<u8>>(0)?),
+				|row| Ok(row.get::<_, String>(0)?),
 			)
 			.await?
 			.unwrap();
 
-		// Deserialize.
-		let artifact =
-			serde_json::from_slice(&artifact).context("Failed to deserialize the artifact.")?;
+		// Construct the artifact.
+		let object_hash = object_hash.parse().unwrap();
+		let artifact = Artifact { object_hash };
 
 		Ok(artifact)
 	}
@@ -42,9 +42,6 @@ impl Server {
 		package_version: &str,
 		artifact: Artifact,
 	) -> Result<Artifact> {
-		// Serialize the artifact.
-		let artifact_data = serde_json::to_vec(&artifact)?;
-
 		// Create a new package version.
 		self.database_execute(
 			r#"
@@ -58,7 +55,11 @@ impl Server {
 					$3
 				)
 			"#,
-			(package_name, package_version, artifact_data),
+			(
+				package_name,
+				package_version,
+				artifact.object_hash.to_string(),
+			),
 		)
 		.await?;
 
