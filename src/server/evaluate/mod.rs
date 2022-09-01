@@ -98,7 +98,7 @@ impl Server {
 		let value_json = serde_json::to_vec(&value)?;
 		self.database_execute(
 			r#"
-				insert into expressions (
+				replace into expressions (
 					hash, data, value
 				) values (
 					$1, $2, $3

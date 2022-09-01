@@ -95,10 +95,9 @@ impl Server {
 		// Run the process.
 
 		#[cfg(target_os = "linux")]
-		dbg!(self
-			.run_linux_process(envs, command, args)
+		self.run_linux_process(envs, command, args)
 			.await
-			.context("Failed to run the process.")?);
+			.context("Failed to run the process.")?;
 
 		#[cfg(target_os = "macos")]
 		self.run_macos_process(envs, command, args)
