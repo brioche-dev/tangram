@@ -32,11 +32,11 @@ impl Server {
 		artifact: Artifact,
 	) -> Result<()> {
 		// Create a fragment for the dependency.
-		let dependency_fragment = self.create_fragment(&artifact).await?;
+		let dependency_fragment = self.create_fragment(artifact).await?;
 
 		// Create a symlink from `path` within `temp` to `dependency.path` within the `dependency_fragment`.
 		let symlink_path = self.temp_path(temp).join(path);
-		let symlink_target = dependency_fragment.path();
+		let symlink_target = self.fragment_path(&dependency_fragment);
 		let symlink_parent_path = symlink_path
 			.parent()
 			.ok_or_else(|| anyhow!("Failed to get the parent for the symlink path."))?;

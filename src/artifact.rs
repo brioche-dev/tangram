@@ -1,7 +1,9 @@
 use crate::object::ObjectHash;
 use derive_more::{Display, FromStr};
 
-#[derive(Clone, Debug, Display, Eq, FromStr, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(
+	Clone, Copy, Debug, Display, Eq, FromStr, Hash, PartialEq, serde::Deserialize, serde::Serialize,
+)]
 #[serde(from = "ArtifactSerde", into = "ArtifactSerde")]
 pub struct Artifact {
 	pub(super) object_hash: ObjectHash,

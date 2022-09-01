@@ -23,7 +23,7 @@ pub async fn run(args: Args) -> Result<()> {
 	};
 
 	// Perform the checkout.
-	client.checkout(&args.artifact, &path, None).await?;
+	client.checkout(args.artifact, &path, None).await?;
 
 	Ok(())
 }

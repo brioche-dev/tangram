@@ -114,8 +114,8 @@ impl Server {
 		archive_format: ArchiveFormat,
 	) -> Result<Artifact> {
 		// Checkout the archive.
-		let archive_fragment = self.create_fragment(&artifact).await?;
-		let archive_fragment_path = archive_fragment.path();
+		let archive_fragment = self.create_fragment(artifact).await?;
+		let archive_fragment_path = self.fragment_path(&archive_fragment);
 
 		// Create a temp to unpack to.
 		let unpack_temp = self.create_temp().await?;

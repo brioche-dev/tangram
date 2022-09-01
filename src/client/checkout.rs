@@ -23,7 +23,7 @@ pub type ExternalPathForDependencyFn =
 impl Client {
 	pub async fn checkout(
 		&self,
-		artifact: &Artifact,
+		artifact: Artifact,
 		path: &Path,
 		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
 	) -> Result<()> {
@@ -275,7 +275,7 @@ impl Client {
 
 		// Checkout the dependency.
 		self.checkout(
-			&dependency.artifact,
+			dependency.artifact,
 			dependency_path.as_deref().unwrap_or(path),
 			external_path_for_dependency,
 		)

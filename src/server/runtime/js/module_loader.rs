@@ -175,8 +175,8 @@ async fn resolve_tangram(
 		referrer_lockfile
 	} else {
 		// Create a fragment for the referrer's package.
-		let referrer_fragment = server.create_fragment(&referrer_package).await?;
-		let referrer_fragment_path = referrer_fragment.path();
+		let referrer_fragment = server.create_fragment(referrer_package).await?;
+		let referrer_fragment_path = server.fragment_path(&referrer_fragment);
 
 		// Read the referrer's lockfile.
 		let referrer_lockfile_path = referrer_fragment_path.join("tangram.lock");
@@ -261,8 +261,8 @@ async fn load_tangram_module(
 	let specifier_artifact: Artifact = domain.parse()?;
 
 	// Create a fragment for the specifier's package.
-	let fragment = server.create_fragment(&specifier_artifact).await?;
-	let fragment_path = fragment.path();
+	let fragment = server.create_fragment(specifier_artifact).await?;
+	let fragment_path = server.fragment_path(&fragment);
 
 	// Get the path from the specifier.
 	let specifier_path = Utf8Path::new(specifier.path());
@@ -316,8 +316,8 @@ async fn load_tangram_target_proxy(
 	let package: Artifact = domain.parse()?;
 
 	// Create a fragment for the specifier's package.
-	let fragment = server.create_fragment(&package).await?;
-	let fragment_path = fragment.path();
+	let fragment = server.create_fragment(package).await?;
+	let fragment_path = server.fragment_path(&fragment);
 
 	// Read the specifier's manifest.
 	let manifest = tokio::fs::read(&fragment_path.join("tangram.json")).await?;

@@ -1,10 +1,13 @@
 use self::repl::Repl;
 use crate::{
+	artifact::Artifact,
+	fragment::Fragment,
 	repl::ReplId,
 	temp::{Temp, TempId},
 	util::path_exists,
 };
 use anyhow::{Context, Result};
+use fnv::{FnvHashMap, FnvHashSet};
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
 use std::{
@@ -56,6 +59,9 @@ pub struct Server {
 
 	/// These are the leased temps.
 	temps: Mutex<BTreeMap<TempId, Temp>>,
+
+	fragment_checkout_task_receivers:
+		Mutex<FnvHashMap<Artifact, tokio::sync::broadcast::Receiver<Fragment>>>,
 }
 
 impl Server {
@@ -91,6 +97,7 @@ impl Server {
 			http_client,
 			repls: Mutex::new(BTreeMap::new()),
 			temps: Mutex::new(BTreeMap::new()),
+			fragment_checkout_task_receivers: Mutex::new(FnvHashMap::default()),
 		};
 
 		// Remove the socket file if it exists.

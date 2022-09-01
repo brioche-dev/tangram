@@ -74,8 +74,8 @@ impl Server {
 			Value::Path(path) => path,
 			_ => bail!("Command must be a path."),
 		};
-		let command_fragment = self.create_fragment(&command.artifact).await?;
-		let command_path = command_fragment.path();
+		let command_fragment = self.create_fragment(command.artifact).await?;
+		let command_path = self.fragment_path(&command_fragment);
 		let command = if let Some(path) = &command.path {
 			command_path.join(path)
 		} else {
@@ -147,8 +147,8 @@ impl Server {
 				Ok(string)
 			},
 			Value::Path(path) => {
-				let fragment = self.create_fragment(&path.artifact).await?;
-				let fragment_path = fragment.path();
+				let fragment = self.create_fragment(path.artifact).await?;
+				let fragment_path = self.fragment_path(&fragment);
 				let fragment_path = if let Some(path) = path.path {
 					fragment_path.join(path)
 				} else {

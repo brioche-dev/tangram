@@ -9,7 +9,7 @@ use std::{path::Path, sync::Arc};
 impl Server {
 	pub(super) async fn checkout(
 		self: &Arc<Self>,
-		artifact: &Artifact,
+		artifact: Artifact,
 		path: &Path,
 		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
 	) -> Result<()> {
