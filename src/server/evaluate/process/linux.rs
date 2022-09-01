@@ -72,18 +72,24 @@ impl Server {
 		let uid_map_path = PathBuf::from(format!("/proc/{pid}/uid_map"));
 		let uid = unsafe { getuid() };
 		let uid_map = format!("0 {uid} 1\n");
-		tokio::fs::write(&uid_map_path, &uid_map).await.context("Failed to write the UID map file.")?;
+		tokio::fs::write(&uid_map_path, &uid_map)
+			.await
+			.context("Failed to write the UID map file.")?;
 
 		// Disable setgroups.
 		let setgroups_path = PathBuf::from(format!("/proc/{pid}/setgroups"));
 		let setgroups = "deny";
-		tokio::fs::write(&setgroups_path, &setgroups).await.context("Failed to write the setgroups file.")?;
+		tokio::fs::write(&setgroups_path, &setgroups)
+			.await
+			.context("Failed to write the setgroups file.")?;
 
 		// Write the GID map.
 		let gid_map_path = PathBuf::from(format!("/proc/{pid}/gid_map"));
 		let gid = unsafe { getgid() };
 		let gid_map = format!("0 {gid} 1\n");
-		tokio::fs::write(&gid_map_path, &gid_map).await.context("Failed to write the GID map file.")?;
+		tokio::fs::write(&gid_map_path, &gid_map)
+			.await
+			.context("Failed to write the GID map file.")?;
 
 		// Send the message to the child process that the UID and GID maps have been set.
 		parent_socket.write_u8(0).await.context(

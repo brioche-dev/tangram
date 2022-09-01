@@ -32,6 +32,7 @@ impl Server {
 		artifact: Artifact,
 	) -> Result<()> {
 		// Create a fragment for the dependency.
+		// println!("add_dependency creating fragment {}");
 		let dependency_fragment = self.create_fragment(artifact).await?;
 
 		// Create a symlink from `path` within `temp` to `dependency.path` within the `dependency_fragment`.

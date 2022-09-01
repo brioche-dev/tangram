@@ -259,9 +259,11 @@ async fn load_tangram_module(
 		.domain()
 		.ok_or_else(|| anyhow!("The specifier must have a domain."))?;
 	let specifier_artifact: Artifact = domain.parse()?;
+	println!("Parsed artifact {specifier_artifact} from specifier {specifier}");
 
 	// Create a fragment for the specifier's package.
 	let fragment = server.create_fragment(specifier_artifact).await?;
+	println!("Created fragment {fragment:?}");
 	let fragment_path = server.fragment_path(&fragment);
 
 	// Get the path from the specifier.

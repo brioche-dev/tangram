@@ -17,13 +17,16 @@ impl Server {
 			.await
 			.get(&artifact)
 		{
+			println!("Waiting for previously initiated process for artifact {artifact}");
 			let fragment = receiver.resubscribe().recv().await?;
 			return Ok(fragment);
 		}
-
+		println!(
+			"No previously initiated create_fragment found for artifact {artifact}.  Creating..."
+		);
 		// Lock on the receivers so that only one checkout per artifact can occur simultaneously.
 		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
-
+		dbg!(&receivers);
 		// Create the broadcast channel.
 		let (sender, receiver) = tokio::sync::broadcast::channel::<Fragment>(1);
 
@@ -32,7 +35,8 @@ impl Server {
 			let server = Arc::clone(self);
 			async move {
 				// Get the path to the fragment.
-				let fragment_path = server.path().join("fragments").join(artifact.to_string());
+				let fragment_path =
+					dbg!(server.path().join("fragments").join(artifact.to_string()));
 
 				// Check if there is an existing fragment.
 				if path_exists(&fragment_path).await? {
@@ -46,6 +50,7 @@ impl Server {
 						let server = Arc::clone(&server);
 						let dependency = dependency.clone();
 						async move {
+							println!("Creating dependency fragment {}", dependency.artifact);
 							let dependency_fragment =
 								server.create_fragment(dependency.artifact).await?;
 							let dependency_fragment_path =
@@ -58,7 +63,7 @@ impl Server {
 
 				// Perform the checkout.
 				server
-					.checkout(artifact, &fragment_path, Some(&path_for_dependency))
+					.checkout(dbg!(artifact), &fragment_path, Some(&path_for_dependency))
 					.await?;
 
 				// Create the fragment.
@@ -69,6 +74,7 @@ impl Server {
 		});
 
 		receivers.insert(artifact, receiver);
+		dbg!(&receivers);
 
 		// Drop the lock to allow other tasks to run concurrently.
 		drop(receivers);
@@ -81,13 +87,14 @@ impl Server {
 
 		// Lock the receivers to send the result and remove this task.
 		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
-
+		println!("Created fragment {fragment:?}.  Notifying receivers...");
 		// Send the fragment to any receivers.
-		sender.send(fragment).unwrap();
+		dbg!(sender.send(fragment).unwrap());
+		drop(sender);
 
 		// Remove this task's receiver.
 		receivers.remove(&artifact);
-
+		dbg!(&receivers);
 		drop(receivers);
 
 		Ok(fragment)
