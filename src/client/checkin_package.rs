@@ -127,7 +127,7 @@ impl Client {
 
 			// Check in the package.
 			let artifact = self.checkin(&package_path).await?;
-			cache.insert(package_path, artifact.clone());
+			cache.insert(package_path, artifact);
 			root_package_artifact = Some(artifact);
 		}
 

@@ -24,6 +24,6 @@ impl Server {
 				export: target.name,
 				args: target.args,
 			}));
-		Ok(dbg!(expression))
+		Ok(expression)
 	}
 }
