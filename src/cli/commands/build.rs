@@ -1,16 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
-use tangram::{
-	artifact::Artifact,
-	expression,
-	hash::Hash,
-	object::ObjectHash,
-	server::{fragment::Fragment, Server},
-};
-use tracing::Instrument;
 
 #[derive(Parser)]
 pub struct Args {
