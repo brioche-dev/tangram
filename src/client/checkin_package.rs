@@ -88,15 +88,13 @@ impl Client {
 							let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
 
 							// Get the artifact for the dependency.
-							let dependency_artifact = cache
-								.get(&dependency_path)
-								.ok_or_else(|| {
+							let dependency_artifact =
+								cache.get(&dependency_path).ok_or_else(|| {
 									anyhow!(
 										r#"Failed to get the artifact for path "{}"."#,
 										dependency_path.display(),
 									)
-								})?
-								.clone();
+								})?;
 
 							// Create the lockfile Entry.
 							lockfile::Dependency {

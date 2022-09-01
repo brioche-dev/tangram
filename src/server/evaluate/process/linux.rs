@@ -36,7 +36,7 @@ impl Server {
 		let mut child_socket = child_socket
 			.into_std()
 			.context("Failed to convert the child socket to std.")?;
-		child_socket.set_nonblocking(false);
+		child_socket.set_nonblocking(false).context("Failed to make the child socket non blocking.")?;
 
 		// Create the process.
 		let mut process = tokio::process::Command::new(command);

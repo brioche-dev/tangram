@@ -10,6 +10,16 @@ pub enum Transport {
 	Tcp(Tcp),
 }
 
+// impl Transport {
+// 	pub fn as_local(&self) -> &Arc<Server> {
+// 		todo!()
+// 	}
+
+// 	pub fn as_remote(&self) -> &Remote {
+// 		todo!()
+// 	}
+// }
+
 pub struct Unix {
 	path: PathBuf,
 	client: hyper::Client<hyperlocal::UnixConnector, hyper::Body>,

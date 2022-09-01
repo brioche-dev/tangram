@@ -1,13 +1,15 @@
 use self::repl::Repl;
 use crate::{
 	artifact::Artifact,
-	fragment::Fragment,
 	repl::ReplId,
-	temp::{Temp, TempId},
+	server::{
+		fragment::Fragment,
+		temp::{Temp, TempId},
+	},
 	util::path_exists,
 };
 use anyhow::{Context, Result};
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashMap;
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
 use std::{

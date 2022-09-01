@@ -1,32 +1,44 @@
-use crate::{
-	artifact::Artifact, fragment::Fragment, object::Dependency, server::Server, util::path_exists,
-};
+use crate::{artifact::Artifact, object::Dependency, server::Server, util::path_exists};
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use futures::FutureExt;
 use std::{path::PathBuf, sync::Arc};
+
+#[derive(Clone, Copy, Debug)]
+pub struct Fragment {
+	pub(crate) artifact: Artifact,
+}
+
+impl Fragment {
+	#[must_use]
+	pub fn artifact(&self) -> &Artifact {
+		&self.artifact
+	}
+}
 
 impl Server {
 	#[async_recursion]
 	#[must_use]
 	pub async fn create_fragment(self: &Arc<Self>, artifact: Artifact) -> Result<Fragment> {
 		// Check if there is an ongoing checkout.
-		if let Some(receiver) = self
+		let receiver = self
 			.fragment_checkout_task_receivers
 			.lock()
 			.await
 			.get(&artifact)
-		{
-			println!("Waiting for previously initiated process for artifact {artifact}");
-			let fragment = receiver.resubscribe().recv().await?;
+			.map(tokio::sync::broadcast::Receiver::resubscribe);
+		if let Some(mut receiver) = receiver {
+			tracing::info!("There is an ongoing checkout.");
+			let fragment = receiver.recv().await?;
+			tracing::info!("Ongoing checkout complete.");
 			return Ok(fragment);
 		}
-		println!(
-			"No previously initiated create_fragment found for artifact {artifact}.  Creating..."
-		);
+
 		// Lock on the receivers so that only one checkout per artifact can occur simultaneously.
+		tracing::info!("Attempting to lock recievers.");
 		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
-		dbg!(&receivers);
+		tracing::info!("Locked recievers.");
+
 		// Create the broadcast channel.
 		let (sender, receiver) = tokio::sync::broadcast::channel::<Fragment>(1);
 
@@ -35,8 +47,7 @@ impl Server {
 			let server = Arc::clone(self);
 			async move {
 				// Get the path to the fragment.
-				let fragment_path =
-					dbg!(server.path().join("fragments").join(artifact.to_string()));
+				let fragment_path = server.path().join("fragments").join(artifact.to_string());
 
 				// Check if there is an existing fragment.
 				if path_exists(&fragment_path).await? {
@@ -50,7 +61,6 @@ impl Server {
 						let server = Arc::clone(&server);
 						let dependency = dependency.clone();
 						async move {
-							println!("Creating dependency fragment {}", dependency.artifact);
 							let dependency_fragment =
 								server.create_fragment(dependency.artifact).await?;
 							let dependency_fragment_path =
@@ -62,8 +72,9 @@ impl Server {
 				};
 
 				// Perform the checkout.
+				tracing::info!("Performing the checkout.");
 				server
-					.checkout(dbg!(artifact), &fragment_path, Some(&path_for_dependency))
+					.checkout(artifact, &fragment_path, Some(&path_for_dependency))
 					.await?;
 
 				// Create the fragment.
@@ -73,8 +84,8 @@ impl Server {
 			}
 		});
 
+		// Add the receiver.
 		receivers.insert(artifact, receiver);
-		dbg!(&receivers);
 
 		// Drop the lock to allow other tasks to run concurrently.
 		drop(receivers);
@@ -85,16 +96,15 @@ impl Server {
 			.unwrap()
 			.context("The checkout task returned an error.")?;
 
-		// Lock the receivers to send the result and remove this task.
+		// Lock the receivers to send the fragment and remove the receiver.
 		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
-		println!("Created fragment {fragment:?}.  Notifying receivers...");
+
 		// Send the fragment to any receivers.
-		dbg!(sender.send(fragment).unwrap());
-		drop(sender);
+		sender.send(fragment).unwrap();
 
 		// Remove this task's receiver.
 		receivers.remove(&artifact);
-		dbg!(&receivers);
+
 		drop(receivers);
 
 		Ok(fragment)

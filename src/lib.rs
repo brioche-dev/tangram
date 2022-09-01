@@ -5,7 +5,6 @@
 pub mod artifact;
 pub mod client;
 pub mod expression;
-pub mod fragment;
 pub mod hash;
 mod heuristics;
 pub mod id;
@@ -15,6 +14,5 @@ pub mod object;
 pub mod repl;
 pub mod server;
 pub mod system;
-pub mod temp;
 mod util;
 pub mod value;

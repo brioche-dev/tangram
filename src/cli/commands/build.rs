@@ -4,9 +4,13 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use tangram::{
-	artifact::Artifact, expression, fragment::Fragment, hash::Hash, object::ObjectHash,
-	server::Server,
+	artifact::Artifact,
+	expression,
+	hash::Hash,
+	object::ObjectHash,
+	server::{fragment::Fragment, Server},
 };
+use tracing::Instrument;
 
 #[derive(Parser)]
 pub struct Args {
@@ -19,16 +23,34 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Create the client.
-	// let client = crate::client::new().await?;
+	let server = Server::new("~/.tangram").await.unwrap();
+	let artifact = "e0ffdaba1c860ddf38989595db41b0a6cbfcec59050d4bee1864b7377c61aa71"
+		.parse()
+		.unwrap();
+
+	tokio::try_join!(
+		server
+			.create_fragment(artifact)
+			.instrument(tracing::info_span!("A")),
+		server
+			.create_fragment(artifact)
+			.instrument(tracing::info_span!("B")),
+		server
+			.create_fragment(artifact)
+			.instrument(tracing::info_span!("C")),
+	)
+	.unwrap();
+
+	// // Create the client.
+	// let client = crate::client::new()
+	// 	.await
+	// 	.context("Failed to create the client.")?;
 
 	// // Checkin the package.
 	// let package = client
 	// 	.checkin_package(&args.package, args.locked)
 	// 	.await
-	// 	.context("Failed to check in package")?;
-
-	// 	println!("Checked in package to artifact {package}");
+	// 	.context("Failed to check in the package.")?;
 
 	// // Evaluate the target.
 	// let expression = tangram::expression::Expression::Target(tangram::expression::Target {
@@ -37,20 +59,14 @@ pub async fn run(args: Args) -> Result<()> {
 	// 	name: args.name,
 	// 	args: vec![],
 	// });
-	// let value = client.evaluate(expression).await?;
+	// let value = client
+	// 	.evaluate(expression)
+	// 	.await
+	// 	.context("Failed to evaluate the target expression.")?;
 
 	// // Print the value.
-	// let value = serde_json::to_string_pretty(&value)?;
+	// let value = serde_json::to_string_pretty(&value).context("Failed to serialize the value.")?;
 	// println!("{value}");
-
-	let server = Server::new("~/.tangram").await.unwrap();
-	let artifact = "49b145f34deedbfd295e175abaa5674a8ba354f65e518e11cd9fd580d8bf2a9a".parse().unwrap();
-
-	tokio::try_join!(
-		server.create_fragment(artifact),
-		server.create_fragment(artifact),
-		server.create_fragment(artifact)
-	).unwrap();
 
 	Ok(())
 }
