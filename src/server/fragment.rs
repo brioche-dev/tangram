@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use futures::FutureExt;
 use std::{path::PathBuf, sync::Arc};
-use tracing::Instrument;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Fragment {
@@ -21,48 +20,37 @@ impl Server {
 	#[async_recursion]
 	#[must_use]
 	pub async fn create_fragment(self: &Arc<Self>, artifact: Artifact) -> Result<Fragment> {
-		// Check if there is an ongoing checkout.
-		tracing::info!("Creating fragment for {artifact}");
-
-		// Get the path to the fragment.
-		let fragment_path = self.path().join("fragments").join(artifact.to_string());
-
-		// Check if there is an existing fragment.
-		if path_exists(&fragment_path).await? {
-			tracing::info!("Fragment already materialized.");
-			return Ok(Fragment { artifact });
-		}
-
-		let receivers = self.fragment_checkout_task_receivers.lock().await;
-		let receiver = receivers
-			.get(&artifact)
-			.map(tokio::sync::broadcast::Receiver::resubscribe);
-		drop(receivers);
-		if let Some(mut receiver) = receiver {
-			tracing::info!("There is an ongoing checkout.");
+		// If there is an ongoing checkout, wait for it and return.
+		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
+		if let Some(receiver) = receivers.get(&artifact) {
+			let mut receiver = receiver.resubscribe();
+			drop(receivers);
+			tracing::info!("Waiting on receiver.");
 			let fragment = receiver.recv().await?;
-			tracing::info!("Ongoing checkout complete.");
+			tracing::info!("Got it!");
 			return Ok(fragment);
 		}
 
-		// Create the broadcast channel.
+		// Otherwise, create a new broadcast channel and add its receiver.
+		tracing::info!("I am the checker outer.");
 		let (sender, receiver) = tokio::sync::broadcast::channel::<Fragment>(1);
-
-		// Lock on the receivers so that only one checkout per artifact can occur simultaneously.
-		tracing::info!("Attempting to lock receivers for insertion.");
-		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
-		tracing::info!("Locked receivers.");
-		// Add the receiver.
 		receivers.insert(artifact, receiver);
-		// Drop the lock to allow other tasks to run concurrently.
 		drop(receivers);
-		tracing::info!("Unlocked receivers.");
 
 		// Create the checkout task.
-		let checkout_task = {
+		let checkout_task = tokio::task::spawn({
 			let server = Arc::clone(self);
 			async move {
-				// Create the path for dependency callback.
+				tracing::info!("Performing the checkout!");
+				// Get the path to the fragment.
+				let fragment_path = server.path().join("fragments").join(artifact.to_string());
+
+				// Check if there is an existing fragment.
+				if path_exists(&fragment_path).await? {
+					return Ok(Fragment { artifact });
+				}
+
+				// Create the callback to create dependency fragments.
 				let path_for_dependency = {
 					let server = Arc::clone(&server);
 					move |dependency: &Dependency| {
@@ -80,37 +68,29 @@ impl Server {
 				};
 
 				// Perform the checkout.
-				tracing::info!("Performing the checkout.");
 				server
 					.checkout(artifact, &fragment_path, Some(&path_for_dependency))
 					.await?;
-				tracing::info!("Checkout complete.");
 
 				// Create the fragment.
 				let fragment = Fragment { artifact };
 
+				tracing::info!("Done!");
 				Ok::<_, anyhow::Error>(fragment)
 			}
-		};
+		});
 
 		// Wait for the task to complete.
-		let checkout_handle = tokio::task::spawn(checkout_task);
-		let fragment = checkout_handle
+		let fragment = checkout_task
 			.await
 			.unwrap()
 			.context("The checkout task returned an error.")?;
 
-		// Send the fragment to any receivers.
-		sender.send(fragment).unwrap();
-
 		// Lock the receivers to send the fragment and remove the receiver.
-		tracing::info!("Attempting to lock receivers for removal.");
 		let mut receivers = self.fragment_checkout_task_receivers.lock().await;
-		tracing::info!("Locked receivers.");
-		// Remove this task's receiver.
+		sender.send(fragment).unwrap();
 		receivers.remove(&artifact);
 		drop(receivers);
-		tracing::info!("Unlocked receivers.");
 
 		Ok(fragment)
 	}
