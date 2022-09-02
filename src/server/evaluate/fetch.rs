@@ -28,15 +28,26 @@ impl Server {
 
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
-		// Download the contents of the URL if they have not been downloaded yet.
-		let artifact = if let Some(hash) = fetch.hash && self.get_blob(BlobHash(hash)).await?.is_some() {
-			let object = Object::File(File {
-				blob_hash: BlobHash(hash),
-				executable: false,
-			});
-			Artifact {
-				object_hash: object.hash(),
+		// Retrieve the artifact if it has been downloaded.
+		let artifact = if let Some(hash) = fetch.hash {
+			if self.get_blob(BlobHash(hash)).await?.is_some() {
+				let object = Object::File(File {
+					blob_hash: BlobHash(hash),
+					executable: false,
+				});
+				Some(Artifact {
+					object_hash: object.hash(),
+				})
+			} else {
+				None
 			}
+		} else {
+			None
+		};
+
+		// Download the the URL if it has not been downloaded yet.
+		let artifact = if let Some(artifact) = artifact {
+			artifact
 		} else {
 			// Create a temp.
 			let temp = self.create_temp().await?;
@@ -159,8 +170,9 @@ impl Server {
 					archive.unpack(&unpack_temp_path)?;
 				},
 				ArchiveFormat::Zip => {
-					let mut zip = zip::ZipArchive::new(archive_reader)?;
-					zip.extract(&unpack_temp_path)?;
+					todo!()
+					// let mut zip = zip::ZipArchive::new(archive_reader)?;
+					// zip.extract(&unpack_temp_path)?;
 				},
 			};
 			Ok(())

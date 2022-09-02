@@ -18,6 +18,28 @@ impl Server {
 		command: PathBuf,
 		args: Vec<String>,
 	) -> Result<()> {
+		let server_path = self.path().to_owned();
+
+		// Create a temp for the chroot.
+		let temp = self
+			.create_temp()
+			.await
+			.context("Failed to create a temp for the chroot.")?;
+		let parent_child_root_path = self.temp_path(&temp);
+		tokio::fs::create_dir(&parent_child_root_path)
+			.await
+			.context("Failed to create the chroot directory.")?;
+
+		// Create a socket pair so the parent and child can communicate to set up the sandbox.
+		let (mut parent_socket, child_socket) =
+			tokio::net::UnixStream::pair().context("Failed to create socket pair.")?;
+		let mut child_socket = child_socket
+			.into_std()
+			.context("Failed to convert the child socket to std.")?;
+		child_socket
+			.set_nonblocking(false)
+			.context("Failed to make the child socket non blocking.")?;
+
 		// Create the process.
 		let mut process = tokio::process::Command::new(command);
 
@@ -27,99 +49,66 @@ impl Server {
 
 		// Set the args.
 		process.args(args);
-		process.output().await?;
 
-		// let server_path = self.path().to_owned();
+		// Set up the sandbox.
+		unsafe {
+			process.pre_exec(move || {
+				pre_exec(&mut child_socket, &parent_child_root_path, &server_path)
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+			})
+		};
 
-		// // Create a temp for the chroot.
-		// let temp = self
-		// 	.create_temp()
-		// 	.await
-		// 	.context("Failed to create a temp for the chroot.")?;
-		// let parent_child_root_path = self.temp_path(&temp);
-		// tokio::fs::create_dir(&parent_child_root_path)
-		// 	.await
-		// 	.context("Failed to create the chroot directory.")?;
+		// Spawn the process.
+		let spawn_task = tokio::task::spawn_blocking(move || {
+			let mut child = process.spawn().context("Failed to spawn the process.")?;
+			Ok::<_, anyhow::Error>(child)
+		});
 
-		// // Create a socket pair so the parent and child can communicate to set up the sandbox.
-		// let (mut parent_socket, child_socket) =
-		// 	tokio::net::UnixStream::pair().context("Failed to create socket pair.")?;
-		// let mut child_socket = child_socket
-		// 	.into_std()
-		// 	.context("Failed to convert the child socket to std.")?;
-		// child_socket
-		// 	.set_nonblocking(false)
-		// 	.context("Failed to make the child socket non blocking.")?;
+		// Wait for the message from the child process that the UID and GID maps are ready to be set.
+		let pid: pid_t = parent_socket
+			.read_i32()
+			.await
+			.context("Failed to read from the parent socket.")?;
 
-		// // Create the process.
-		// let mut process = tokio::process::Command::new(command);
+		// Write the UID map.
+		let uid_map_path = PathBuf::from(format!("/proc/{pid}/uid_map"));
+		let uid = unsafe { getuid() };
+		let uid_map = format!("0 {uid} 1\n");
+		tokio::fs::write(&uid_map_path, &uid_map)
+			.await
+			.context("Failed to write the UID map file.")?;
 
-		// // Set the envs.
-		// process.env_clear();
-		// process.envs(envs);
+		// Disable setgroups.
+		let setgroups_path = PathBuf::from(format!("/proc/{pid}/setgroups"));
+		let setgroups = "deny";
+		tokio::fs::write(&setgroups_path, &setgroups)
+			.await
+			.context("Failed to write the setgroups file.")?;
 
-		// // Set the args.
-		// process.args(args);
+		// Write the GID map.
+		let gid_map_path = PathBuf::from(format!("/proc/{pid}/gid_map"));
+		let gid = unsafe { getgid() };
+		let gid_map = format!("0 {gid} 1\n");
+		tokio::fs::write(&gid_map_path, &gid_map)
+			.await
+			.context("Failed to write the GID map file.")?;
 
-		// // Set up the sandbox.
-		// unsafe {
-		// 	process.pre_exec(move || {
-		// 		pre_exec(&mut child_socket, &parent_child_root_path, &server_path)
-		// 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
-		// 	})
-		// };
+		// Send the message to the child process that the UID and GID maps have been set.
+		parent_socket.write_u8(0).await.context(
+			"Failed to notify the child process that the UID and GID maps have been set.",
+		)?;
 
-		// // Spawn the process.
-		// let spawn_task = tokio::task::spawn_blocking(move || {
-		// 	let mut child = process.spawn().context("Failed to spawn the process.")?;
-		// 	Ok::<_, anyhow::Error>(child)
-		// });
+		// Wait for the sandbox parent task to complete.
+		let mut child = spawn_task
+			.await
+			.unwrap()
+			.context("The spawn task failed.")?;
 
-		// // Wait for the message from the child process that the UID and GID maps are ready to be set.
-		// let pid: pid_t = parent_socket
-		// 	.read_i32()
-		// 	.await
-		// 	.context("Failed to read from the parent socket.")?;
-
-		// // Write the UID map.
-		// let uid_map_path = PathBuf::from(format!("/proc/{pid}/uid_map"));
-		// let uid = unsafe { getuid() };
-		// let uid_map = format!("0 {uid} 1\n");
-		// tokio::fs::write(&uid_map_path, &uid_map)
-		// 	.await
-		// 	.context("Failed to write the UID map file.")?;
-
-		// // Disable setgroups.
-		// let setgroups_path = PathBuf::from(format!("/proc/{pid}/setgroups"));
-		// let setgroups = "deny";
-		// tokio::fs::write(&setgroups_path, &setgroups)
-		// 	.await
-		// 	.context("Failed to write the setgroups file.")?;
-
-		// // Write the GID map.
-		// let gid_map_path = PathBuf::from(format!("/proc/{pid}/gid_map"));
-		// let gid = unsafe { getgid() };
-		// let gid_map = format!("0 {gid} 1\n");
-		// tokio::fs::write(&gid_map_path, &gid_map)
-		// 	.await
-		// 	.context("Failed to write the GID map file.")?;
-
-		// // Send the message to the child process that the UID and GID maps have been set.
-		// parent_socket.write_u8(0).await.context(
-		// 	"Failed to notify the child process that the UID and GID maps have been set.",
-		// )?;
-
-		// // Wait for the sandbox parent task to complete.
-		// let mut child = spawn_task
-		// 	.await
-		// 	.unwrap()
-		// 	.context("The spawn task failed.")?;
-
-		// // Wait for the child process to exit.
-		// child
-		// 	.wait()
-		// 	.await
-		// 	.context("Failed to wait for the process to exit.")?;
+		// Wait for the child process to exit.
+		child
+			.wait()
+			.await
+			.context("Failed to wait for the process to exit.")?;
 
 		Ok(())
 	}

@@ -2,13 +2,10 @@ use self::repl::Repl;
 use crate::{
 	artifact::Artifact,
 	repl::ReplId,
-	server::{
-		fragment::Fragment,
-		temp::{Temp, TempId},
-	},
+	server::temp::{Temp, TempId},
 	util::path_exists,
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use fnv::FnvHashMap;
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
@@ -62,8 +59,7 @@ pub struct Server {
 	/// These are the leased temps.
 	temps: Mutex<BTreeMap<TempId, Temp>>,
 
-	fragment_checkout_task_receivers:
-		Mutex<FnvHashMap<Artifact, tokio::sync::broadcast::Receiver<Fragment>>>,
+	fragment_checkout_mutexes: std::sync::RwLock<FnvHashMap<Artifact, Arc<Mutex<()>>>>,
 }
 
 impl Server {
@@ -99,7 +95,7 @@ impl Server {
 			http_client,
 			repls: Mutex::new(BTreeMap::new()),
 			temps: Mutex::new(BTreeMap::new()),
-			fragment_checkout_task_receivers: Mutex::new(FnvHashMap::default()),
+			fragment_checkout_mutexes: std::sync::RwLock::new(FnvHashMap::default()),
 		};
 
 		// Remove the socket file if it exists.
@@ -116,7 +112,8 @@ impl Server {
 	/// Acquire the lock to the server path.
 	#[cfg(any(target_os = "linux", target_os = "macos"))]
 	async fn acquire_path_lock_file(path: &std::path::Path) -> anyhow::Result<tokio::fs::File> {
-		use nix::fcntl::{flock, FlockArg};
+		use anyhow::{anyhow, bail};
+		use libc::{flock, LOCK_EX, LOCK_NB};
 		use std::os::unix::io::AsRawFd;
 		let lock_file = tokio::fs::OpenOptions::new()
 			.read(true)
@@ -124,9 +121,10 @@ impl Server {
 			.create(true)
 			.open(path.join("lock"))
 			.await?;
-		flock(lock_file.as_raw_fd(), FlockArg::LockExclusiveNonblock).context(
-			"Failed to acquire the lock to the server path. Is there a tangram server already running?",
-		)?;
+		let ret = unsafe { flock(lock_file.as_raw_fd(), LOCK_EX | LOCK_NB) };
+		if ret != 0 {
+			bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to acquire the lock to the server path. Is there a tangram server already running?"));
+		}
 		Ok(lock_file)
 	}
 

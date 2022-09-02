@@ -4,7 +4,7 @@ use crate::{
 	server::{temp::Temp, Server},
 	value::Value,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{collections::BTreeMap, sync::Arc};
@@ -34,19 +34,17 @@ impl Server {
 
 		// Create the temps for the outputs and add their dependencies.
 		let temps: BTreeMap<String, Temp> =
-			try_join_all(process.outputs.into_iter().map(|(name, output)| {
-				async {
-					let mut temp = self.create_temp().await?;
-					for (path, dependency) in output.dependencies {
-						let dependency = self.evaluate(*dependency).await?;
-						let artifact = match dependency {
-							Value::Artifact(artifact) => artifact,
-							_ => bail!(r#"Dependency must evaluate to an artifact."#),
-						};
-						self.add_dependency(&mut temp, &path, artifact).await?;
-					}
-					Ok((name, temp))
+			try_join_all(process.outputs.into_iter().map(|(name, output)| async {
+				let mut temp = self.create_temp().await?;
+				for (path, dependency) in output.dependencies {
+					let dependency = self.evaluate(*dependency).await?;
+					let artifact = match dependency {
+						Value::Artifact(artifact) => artifact,
+						_ => bail!(r#"Dependency must evaluate to an artifact."#),
+					};
+					self.add_dependency(&mut temp, &path, artifact).await?;
 				}
+				Ok((name, temp))
 			}))
 			.await?
 			.into_iter()
@@ -59,8 +57,8 @@ impl Server {
 			_ => bail!(r#"Argument "envs" must evaluate to a map."#),
 		};
 		let mut envs: BTreeMap<String, String> =
-			futures::future::try_join_all(envs.into_iter().map(|(key, value)| {
-				async { Ok::<_, anyhow::Error>((key, self.resolve(value).await?)) }
+			futures::future::try_join_all(envs.into_iter().map(|(key, value)| async {
+				Ok::<_, anyhow::Error>((key, self.resolve(value).await?))
 			}))
 			.await?
 			.into_iter()
@@ -104,18 +102,23 @@ impl Server {
 			.await
 			.context("Failed to run the process.")?;
 
-		#[cfg(target_os = "macos")]
-		self.run_macos_process(envs, command, args)
-			.await
-			.context("Failed to run the process.")?;
+		// #[cfg(target_os = "macos")]
+		// self.run_macos_process(envs, command, args)
+		// 	.await
+		// 	.context("Failed to run the process.")?;
+
+		let mut process = tokio::process::Command::new(command);
+		process.env_clear();
+		process.envs(envs);
+		process.args(args);
+		let mut child = process.spawn()?;
+		child.wait().await?;
 
 		// Checkin the temps.
 		let artifacts: BTreeMap<String, Artifact> =
-			try_join_all(temps.into_iter().map(|(name, temp)| {
-				async {
-					let artifact = self.checkin_temp(temp).await?;
-					Ok::<_, anyhow::Error>((name, artifact))
-				}
+			try_join_all(temps.into_iter().map(|(name, temp)| async {
+				let artifact = self.checkin_temp(temp).await?;
+				Ok::<_, anyhow::Error>((name, artifact))
 			}))
 			.await?
 			.into_iter()
