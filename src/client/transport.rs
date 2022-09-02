@@ -57,8 +57,9 @@ impl Unix {
 }
 
 pub struct Tcp {
-	url: Url,
-	client: hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
+	pub url: Url,
+	pub client:
+		hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
 }
 
 impl Tcp {

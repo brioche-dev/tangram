@@ -1,5 +1,5 @@
 use super::{Client, Transport};
-use crate::{expression::Expression, value::Value};
+use crate::{expression::Expression, hash::Hash, value::Value};
 use anyhow::Result;
 
 impl Client {
@@ -10,11 +10,25 @@ impl Client {
 				Ok(value)
 			},
 			Transport::Unix(transport) => {
-				let value = transport.post_json("/evaluate", &expression).await?;
+				let expression_json = serde_json::to_vec(&expression)?;
+				let expression_hash = Hash::new(&expression_json);
+				let value = transport
+					.post_json(
+						&format!("/epxressions/{expression_hash}/evaluate"),
+						&expression,
+					)
+					.await?;
 				Ok(value)
 			},
 			Transport::Tcp(transport) => {
-				let value = transport.post_json("/evaluate", &expression).await?;
+				let expression_json = serde_json::to_vec(&expression)?;
+				let expression_hash = Hash::new(&expression_json);
+				let value = transport
+					.post_json(
+						&format!("/expressions/{expression_hash}/evaluate"),
+						&expression,
+					)
+					.await?;
 				Ok(value)
 			},
 		}

@@ -1,6 +1,6 @@
-use super::Server;
+use super::{error::not_found, Server};
 use crate::artifact::Artifact;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use std::sync::Arc;
 
 impl Server {
@@ -9,9 +9,9 @@ impl Server {
 		self: &Arc<Self>,
 		package_name: &str,
 		package_version: &str,
-	) -> Result<Artifact> {
+	) -> Result<Option<Artifact>> {
 		// Retrieve the artifact hash from the database.
-		let object_hash = self
+		let maybe_object_hash = self
 			.database_query_row(
 				r#"
 					select
@@ -25,12 +25,12 @@ impl Server {
 				(package_name, package_version.to_string()),
 				|row| Ok(row.get::<_, String>(0)?),
 			)
-			.await?
-			.unwrap();
+			.await?;
 
 		// Construct the artifact.
-		let object_hash = object_hash.parse().unwrap();
-		let artifact = Artifact { object_hash };
+		let artifact = maybe_object_hash
+			.map(|object_hash| object_hash.parse().unwrap())
+			.map(|object_hash| Artifact { object_hash });
 
 		Ok(artifact)
 	}
@@ -42,13 +42,32 @@ impl Server {
 		package_version: &str,
 		artifact: Artifact,
 	) -> Result<Artifact> {
-		// Create a new package version.
+		// TODO combine into single transaction.
+		let _create_package_result = self.create_package(package_name).await;
+
+		// Check if the package version already exists.
+		let package_version_exists = self
+			.database_query_row(
+				r#"
+					select count(*) > 0 from package_versions where name = $1 and version = $2
+				"#,
+				(package_name, package_version),
+				|row| Ok(row.get::<_, bool>(0)?),
+			)
+			.await?
+			.unwrap();
+
+		if package_version_exists {
+			return Err(anyhow!(format!("Package with name '{package_name}', and version '{package_version}' already exists.")));
+		}
+
+		// Create a new package version for the given artifact hash.
 		self.database_execute(
 			r#"
-				replace into package_versions (
+				insert into package_versions (
 					name,
 					version,
-					artifact
+					artifact_hash
 				) values (
 					$1,
 					$2,
@@ -89,12 +108,17 @@ impl Server {
 			.await?;
 
 		// Create the response.
-		let body =
-			serde_json::to_vec(&artifact).context("Failed to serialize the response body.")?;
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(hyper::Body::from(body))
-			.unwrap();
+		let response = match artifact {
+			Some(artifact) => {
+				let body = serde_json::to_vec(&artifact)
+					.context("Failed to serialize the response body.")?;
+				http::Response::builder()
+					.status(http::StatusCode::OK)
+					.body(hyper::Body::from(body))
+					.unwrap()
+			},
+			None => not_found(),
+		};
 
 		Ok(response)
 	}
@@ -122,15 +146,28 @@ impl Server {
 			serde_json::from_slice(&body).context("Failed to deserialize the request body.")?;
 
 		// Create the new package version.
-		self.create_package_version(package_name.as_str(), package_version.as_str(), artifact)
-			.await?;
+		let create_package_version_result = self
+			.create_package_version(package_name.as_str(), package_version.as_str(), artifact)
+			.await;
 
 		// Create the response.
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(hyper::Body::empty())
-			.unwrap();
-
-		Ok(response)
+		match create_package_version_result {
+			Ok(artifact) => {
+				let body = serde_json::to_vec(&artifact)
+					.context("Failed to deserialize the request body.")?;
+				let response = http::Response::builder()
+					.status(http::StatusCode::OK)
+					.body(hyper::Body::from(body))
+					.unwrap();
+				Ok(response)
+			},
+			Err(err) => {
+				let response = http::Response::builder()
+					.status(http::StatusCode::BAD_REQUEST)
+					.body(hyper::Body::from(err.to_string()))
+					.unwrap();
+				Ok(response)
+			},
+		}
 	}
 }

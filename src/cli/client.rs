@@ -9,7 +9,7 @@ pub async fn new() -> Result<Client> {
 	// Create the client.
 	let client = match config.transport {
 		config::Transport::InProcess { path } => {
-			let server = Server::new(&path).await?;
+			let server = Server::new(&path, config.peers).await?;
 			Client::new_in_process(server)
 		},
 		config::Transport::Unix { path } => Client::new_unix(path),

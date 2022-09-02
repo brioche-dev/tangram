@@ -14,6 +14,7 @@ async fn path_exists(path: &Path) -> Result<bool> {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Config {
 	pub transport: Transport,
+	pub peers: Vec<Url>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -30,6 +31,7 @@ pub enum Transport {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Partial {
 	transport: Option<Transport>,
+	peers: Option<Vec<Url>>,
 }
 
 impl Config {
@@ -90,8 +92,21 @@ impl Config {
 			}
 		};
 
+		// Get the peers.
+		let global_peers = global_config
+			.as_ref()
+			.and_then(|config| config.peers.clone());
+		let user_peers = user_config.as_ref().and_then(|config| config.peers.clone());
+		let peers = if let Some(peers) = user_peers.or(global_peers) {
+			peers
+		} else {
+			let piper = "http://100.124.28.36:8080".parse()?;
+			let default_peers = vec![piper];
+			default_peers
+		};
+
 		// Create the config.
-		let config = Config { transport };
+		let config = Config { transport, peers };
 
 		Ok(config)
 	}

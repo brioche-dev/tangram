@@ -145,6 +145,7 @@ impl Server {
 			let rows = statement
 				.query(params)
 				.context("Failed to execute the query.")?;
+			// TODO this is ugly clean me.
 			let rows = rows.mapped(|row: &rusqlite::Row<'_>| {
 				f(row).map_err(|_| rusqlite::Error::InvalidQuery)
 			});

@@ -1,10 +1,10 @@
-use super::error::{bad_request, not_found};
-use crate::{expression::Expression, hash::Hash, server::Server, value::Value};
-use anyhow::{bail, Context, Result};
+use crate::{expression::Expression, server::Server, value::Value};
+use anyhow::Result;
 use async_recursion::async_recursion;
 use futures::TryFutureExt;
 use std::sync::Arc;
 
+mod expression;
 mod fetch;
 mod path;
 mod process;
@@ -25,12 +25,31 @@ impl Server {
 			Expression::Artifact(artifact) => Value::Artifact(artifact),
 			Expression::Path(path) => self.evaluate_path(path).await?,
 			Expression::Template(template) => self.evaluate_template(template).await?,
-			Expression::Fetch(fetch) => self.evaluate_fetch(fetch).await?,
-			Expression::Process(process) => self.evaluate_process(process).await?,
-			Expression::Target(target) => {
-				let expression = self.evaluate_target(target).await?;
-				self.evaluate(expression).await?
+			Expression::Fetch(fetch) => {
+				// Return a memoized value if one is available.
+				let fetch_expression = Expression::Fetch(fetch);
+				if let Some(value) = self
+					.get_memoized_value_for_expression(&fetch_expression)
+					.await?
+				{
+					return Ok(value);
+				}
+
+				let fetch = match fetch_expression {
+					Expression::Fetch(fetch) => fetch,
+					_ => unreachable!(),
+				};
+				// Evaluate.
+				let value = self.evaluate_fetch(&fetch).await?;
+
+				// Memoize the value.
+				self.set_memoized_value_for_expression(&Expression::Fetch(fetch), &value)
+					.await?;
+
+				value
 			},
+			Expression::Process(process) => self.evaluate_process(process).await?,
+			Expression::Target(target) => self.evaluate_target(target).await?,
 			Expression::Array(value) => {
 				let values = value.into_iter().map(|value| self.evaluate(value));
 				let array = futures::future::try_join_all(values).await?;
@@ -47,106 +66,6 @@ impl Server {
 		};
 
 		Ok(value)
-	}
-
-	/// Retrieve the memoized value from a previous evaluation of an expression, if one exists.
-	pub(super) async fn get_memoized_value_for_expression(
-		self: &Arc<Self>,
-		expression: &Expression,
-	) -> Result<Option<Value>> {
-		let expression_json = serde_json::to_vec(&expression)?;
-		let expression_hash = Hash::new(&expression_json);
-		let value = self
-			.get_memoized_value_for_expression_hash(&expression_hash)
-			.await?;
-		Ok(value)
-	}
-
-	/// Retrieve the memoized value from a previous evaluation of an expression, if one exists, given an expression hash.
-	pub(super) async fn get_memoized_value_for_expression_hash(
-		self: &Arc<Self>,
-		expression_hash: &Hash,
-	) -> Result<Option<Value>> {
-		let value = self
-			.database_query_row(
-				r#"
-					select value
-					from expressions
-					where hash = $1
-				"#,
-				(expression_hash.to_string(),),
-				|row| Ok(row.get::<_, Vec<u8>>(0)?),
-			)
-			.await?;
-		let value = if let Some(value) = value {
-			let value = serde_json::from_slice(&value)?;
-			Some(value)
-		} else {
-			None
-		};
-		Ok(value)
-	}
-
-	/// Memoize the value from the evaluation of an expression.
-	pub(super) async fn set_memoized_value_for_expression(
-		self: &Arc<Self>,
-		expression: &Expression,
-		value: &Value,
-	) -> Result<()> {
-		let expression_json = serde_json::to_vec(&expression)?;
-		let expression_hash = Hash::new(&expression_json);
-		let value_json = serde_json::to_vec(&value)?;
-		self.database_execute(
-			r#"
-				replace into expressions (
-					hash, data, value
-				) values (
-					$1, $2, $3
-				)
-			"#,
-			(expression_hash.to_string(), expression_json, value_json),
-		)
-		.await?;
-		Ok(())
-	}
-}
-
-impl Server {
-	pub(super) async fn handle_get_expression_request(
-		self: &Arc<Self>,
-		request: http::Request<hyper::Body>,
-	) -> Result<http::Response<hyper::Body>> {
-		// Read the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let expression_hash = if let &["expressions", expression_hash] = path_components.as_slice()
-		{
-			expression_hash
-		} else {
-			bail!("Unexpected path.");
-		};
-		let expression_hash = match expression_hash.parse() {
-			Ok(expression_hash) => expression_hash,
-			Err(_) => return Ok(bad_request()),
-		};
-
-		let value = self
-			.get_memoized_value_for_expression_hash(&expression_hash)
-			.await?;
-
-		// If the value is None, return a 404
-		let value = match value {
-			Some(value) => value,
-			None => return Ok(not_found()),
-		};
-
-		// Create the response.
-		let body = serde_json::to_vec(&value).context("Failed to serialize the response body.")?;
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(hyper::Body::from(body))
-			.unwrap();
-
-		Ok(response)
 	}
 }
 

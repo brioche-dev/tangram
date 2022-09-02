@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::dirs::home_directory_path;
 use anyhow::{anyhow, Result};
 use clap::Parser;
@@ -19,13 +20,16 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
+	// Read the config.
+	let config = Config::read().await?;
+
 	// Get the server path.
 	let path = home_directory_path()
 		.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
 		.join(".tangram");
 
 	// Create the server.
-	let server = Arc::new(Server::new(path).await?);
+	let server = Arc::new(Server::new(path, config.peers).await?);
 
 	// Serve!
 	let addr = SocketAddr::new(args.host, args.port);

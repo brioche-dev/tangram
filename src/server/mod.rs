@@ -1,6 +1,7 @@
 use self::repl::Repl;
 use crate::{
 	artifact::Artifact,
+	client::Client,
 	repl::ReplId,
 	server::temp::{Temp, TempId},
 	util::path_exists,
@@ -17,6 +18,7 @@ use std::{
 	sync::Arc,
 };
 use tokio::sync::Mutex;
+use url::Url;
 
 pub mod artifact;
 pub mod blob;
@@ -28,8 +30,8 @@ pub mod evaluate;
 pub mod fragment;
 pub mod migrations;
 pub mod object;
+mod package;
 mod package_versions;
-mod packages;
 pub mod repl;
 pub mod runtime;
 pub mod temp;
@@ -60,10 +62,13 @@ pub struct Server {
 	temps: Mutex<BTreeMap<TempId, Temp>>,
 
 	fragment_checkout_mutexes: std::sync::RwLock<FnvHashMap<Artifact, Arc<Mutex<()>>>>,
+
+	/// These are the peers.
+	peers: Vec<Client>,
 }
 
 impl Server {
-	pub async fn new(path: impl Into<PathBuf>) -> Result<Arc<Server>> {
+	pub async fn new(path: impl Into<PathBuf>, peers: Vec<Url>) -> Result<Arc<Server>> {
 		// Ensure the path exists.
 		let path = path.into();
 		tokio::fs::create_dir_all(&path).await?;
@@ -86,6 +91,9 @@ impl Server {
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
 
+		// // Create the peer Clients.
+		let peers = peers.into_iter().map(Client::new_tcp).collect();
+
 		// Create the server.
 		let server = Server {
 			path,
@@ -96,6 +104,7 @@ impl Server {
 			repls: Mutex::new(BTreeMap::new()),
 			temps: Mutex::new(BTreeMap::new()),
 			fragment_checkout_mutexes: std::sync::RwLock::new(FnvHashMap::default()),
+			peers,
 		};
 
 		// Remove the socket file if it exists.
@@ -206,6 +215,9 @@ impl Server {
 				},
 				(http::Method::POST, ["objects", _]) => {
 					self.handle_create_object_request(request).boxed()
+				},
+				(http::Method::GET, ["packages"]) => {
+					self.handle_get_packages_request(request).boxed()
 				},
 				(http::Method::GET, ["packages", _]) => {
 					self.handle_get_package_request(request).boxed()

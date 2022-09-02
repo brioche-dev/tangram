@@ -1,33 +1,33 @@
-use crate::credentials::Credentials;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use url::Url;
 
 #[derive(Parser)]
 pub struct Args {
-	#[clap(
-		long,
-		help = "The URI of the API to publish to. Defaults to https://api.tangram.dev.",
-		default_value = "https://api.tangram.dev"
-	)]
-	url: Url,
-	#[clap(long, default_value = ".")]
-	package: PathBuf,
+	// #[clap(
+	// 	long,
+	// 	help = "The URI of the API to publish to. Defaults to https://api.tangram.dev.",
+	// 	default_value = "https://api.tangram.dev"
+	// )]
+	// url: Url,
+	package: Option<PathBuf>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Create the API client.
-	let _client = tangram_api_client::Transport::new(&args.uri);
+	// Create the client.
+	let client = crate::client::new().await?;
 
-	// Retrieve the credentials for the specified API.
-	let credentials = Credentials::read().await?;
-	let _credentials_entry = credentials.get(&args.uri).unwrap();
+	// Get the path.
+	let package = if let Some(path) = args.package {
+		path
+	} else {
+		std::env::current_dir().context("Failed to determine the current directory.")?
+	};
 
-	// Publish!
-	// client
-	// 	.publish_package(args.package, credentials_entry.token)
-	// 	.await?;
+	// Publish the package.
+	let artifact = client.publish_package(&package).await?;
+
+	println!("{artifact}");
 
 	Ok(())
 }

@@ -51,9 +51,7 @@ impl Client {
 							})?;
 							queue.push_back(dependency_path);
 						},
-						crate::manifest::Dependency::RegistryDependency(_) => {
-							todo!()
-						},
+						crate::manifest::Dependency::RegistryDependency(_) => continue,
 					}
 				}
 			}
@@ -103,9 +101,17 @@ impl Client {
 						},
 						crate::manifest::Dependency::RegistryDependency(dependency) => {
 							// Get the artifact hash from the registry.
+							let dependency_version = &dependency.version;
 							let artifact = self
 								.get_package(dependency_name, &dependency.version)
 								.await?;
+							let artifact = if let Some(artifact) = artifact {
+								artifact
+							} else {
+								return Err(anyhow!(format!(
+									r#"Package with name {dependency_name} and version {dependency_version} is not in the package registry"#
+								)));
+							};
 							// Create the lockfile Entry.
 							lockfile::Dependency {
 								hash: artifact.object_hash,

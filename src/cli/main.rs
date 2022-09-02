@@ -28,6 +28,7 @@ enum Subcommand {
 	Checkin(commands::checkin::Args),
 	Checkout(commands::checkout::Args),
 	Fetch(commands::fetch::Args),
+	Publish(commands::publish::Args),
 	Repl(commands::repl::Args),
 	Server(commands::server::Args),
 }
@@ -49,6 +50,7 @@ async fn main() -> Result<()> {
 		Subcommand::Build(args) => commands::build::run(args).boxed(),
 		Subcommand::Checkin(args) => commands::checkin::run(args).boxed(),
 		Subcommand::Checkout(args) => commands::checkout::run(args).boxed(),
+		Subcommand::Publish(args) => commands::publish::run(args).boxed(),
 		Subcommand::Fetch(args) => commands::fetch::run(args).boxed(),
 		Subcommand::Repl(args) => commands::repl::run(args).boxed(),
 		Subcommand::Server(args) => commands::server::run(args).boxed(),

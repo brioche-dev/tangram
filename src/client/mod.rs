@@ -9,6 +9,7 @@ pub mod checkin;
 mod checkin_package;
 pub mod checkout;
 mod evaluate;
+mod expression;
 mod object_cache;
 mod package;
 mod repl;

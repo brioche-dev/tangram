@@ -1,6 +1,6 @@
 use crate::{
 	artifact::Artifact,
-	expression::{self, Expression},
+	expression::{self},
 	hash::Hasher,
 	object::{BlobHash, File, Object},
 	server::Server,
@@ -12,20 +12,7 @@ use std::{path::Path, sync::Arc};
 use tokio::io::AsyncWriteExt;
 
 impl Server {
-	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: expression::Fetch) -> Result<Value> {
-		// Return a memoized value if one is available.
-		let fetch_expression = Expression::Fetch(fetch);
-		if let Some(value) = self
-			.get_memoized_value_for_expression(&fetch_expression)
-			.await?
-		{
-			return Ok(value);
-		}
-		let fetch = match fetch_expression {
-			Expression::Fetch(fetch) => fetch,
-			_ => unreachable!(),
-		};
-
+	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: &expression::Fetch) -> Result<Value> {
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
 		// Retrieve the artifact if it has been downloaded.
@@ -111,10 +98,6 @@ impl Server {
 
 		// Create the value.
 		let value = Value::Artifact(artifact);
-
-		// Memoize the expression.
-		self.set_memoized_value_for_expression(&Expression::Fetch(fetch), &value)
-			.await?;
 
 		Ok(value)
 	}

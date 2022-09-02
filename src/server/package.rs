@@ -1,16 +1,36 @@
 use super::Server;
 use crate::artifact::Artifact;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use std::sync::Arc;
 
 #[derive(serde::Serialize)]
+#[allow(clippy::module_name_repetitions)]
 pub struct PackageVersion {
 	version: String,
 	artifact: Artifact,
 }
 
 impl Server {
-	async fn get_package(self: &Arc<Self>, package_name: &str) -> Result<Vec<PackageVersion>> {
+	pub async fn get_packages(self: &Arc<Self>) -> Result<Vec<String>> {
+		// Retrieve the package versions.
+		let versions = self
+			.database_query_rows(
+				r#"
+					select
+					name
+						from packages
+				"#,
+				(),
+				|row| Ok(row.get::<_, String>(0)?),
+			)
+			.await?
+			.into_iter()
+			.collect();
+
+		Ok(versions)
+	}
+
+	pub async fn get_package(self: &Arc<Self>, package_name: &str) -> Result<Vec<PackageVersion>> {
 		// Retrieve the package versions.
 		let versions = self
 			.database_query_rows(
@@ -41,10 +61,29 @@ impl Server {
 	}
 
 	// Create a new package.
-	async fn create_package(self: &Arc<Self>, package_name: &str) -> Result<()> {
+	pub async fn create_package(self: &Arc<Self>, package_name: &str) -> Result<()> {
+		// TODO combine into single transaction.
+		// Check if a package with this name already exists.
+		let package_exists = self
+			.database_query_row(
+				r#"
+					select count(*) > 0 from packages where name = $1
+				"#,
+				(package_name,),
+				|row| Ok(row.get::<_, bool>(0)?),
+			)
+			.await?
+			.unwrap();
+
+		if package_exists {
+			return Err(anyhow!(format!(
+				"Package with name '{package_name}' already exists."
+			)));
+		}
+
 		self.database_execute(
 			r#"
-				replace into packages (
+				insert into packages (
 					name
 				) values (
 					$1
@@ -64,6 +103,23 @@ pub struct GetPackageResponse {
 }
 
 impl Server {
+	// Retrieve the packages name list.
+	pub async fn handle_get_packages_request(
+		self: &Arc<Self>,
+		_request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		// Get the package versions.
+		let versions = self.get_packages().await?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&versions).context("Failed to serialize the response.")?;
+		let response = http::Response::builder()
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		Ok(response)
+	}
+
 	// Retrieve the package versions for the given package name.
 	pub async fn handle_get_package_request(
 		self: &Arc<Self>,
@@ -106,14 +162,23 @@ impl Server {
 		};
 
 		// Create the package.
-		self.create_package(package_name).await?;
+		let create_package_result = self.create_package(package_name).await;
 
 		// Create the response.
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(hyper::Body::empty())
-			.unwrap();
-
+		let response = match create_package_result {
+			Ok(_) => {
+				http::Response::builder()
+					.status(http::StatusCode::OK)
+					.body(hyper::Body::empty())
+					.unwrap()
+			},
+			Err(err) => {
+				http::Response::builder()
+					.status(http::StatusCode::BAD_REQUEST)
+					.body(hyper::Body::from(err.to_string()))
+					.unwrap()
+			},
+		};
 		Ok(response)
 	}
 }
