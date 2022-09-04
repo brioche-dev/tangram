@@ -53,10 +53,8 @@ impl Client {
 			},
 			crate::client::transport::Transport::Unix(_) => todo!(),
 			crate::client::transport::Transport::Tcp(transport) => {
-				// Create the package version.
-				// TODO this could error if there is already a package with that name and version combo.
 				let path = format!("/packages/{name}/versions/{version}");
-				let artifact: Artifact = transport.post_json(&path, &artifact).await?;
+				let artifact = transport.post_json(&path, &artifact).await?;
 				Ok(artifact)
 			},
 		}

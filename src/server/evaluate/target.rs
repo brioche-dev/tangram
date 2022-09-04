@@ -30,7 +30,7 @@ impl Server {
 			expression::Expression::Process(expression::Process::Js(expression::JsProcess {
 				lockfile: target.lockfile.clone(),
 				module: Box::new(expression::Expression::Path(expression::Path {
-					artifact: Box::new(expression::Expression::Artifact(target.package.clone())),
+					artifact: Box::new(expression::Expression::Artifact(target.package)),
 					path: Some(Utf8PathBuf::from("tangram.js")),
 				})),
 				export: target.name.clone(),

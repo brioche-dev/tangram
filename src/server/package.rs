@@ -1,6 +1,6 @@
 use super::Server;
 use crate::artifact::Artifact;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
 #[derive(serde::Serialize)]
@@ -21,7 +21,7 @@ impl Server {
 						from packages
 				"#,
 				(),
-				|row| Ok(row.get::<_, String>(0)?),
+				|row| row.get::<_, String>(0),
 			)
 			.await?
 			.into_iter()
@@ -62,36 +62,52 @@ impl Server {
 
 	// Create a new package.
 	pub async fn create_package(self: &Arc<Self>, package_name: &str) -> Result<()> {
-		// TODO combine into single transaction.
-		// Check if a package with this name already exists.
-		let package_exists = self
-			.database_query_row(
-				r#"
+		// Create the database connection.
+		let database_connection_object = self
+			.database_connection_pool
+			.get()
+			.await
+			.context("Failed to retrieve a database connection.")?;
+
+		tokio::task::block_in_place(move || -> Result<()> {
+			// Create a database transaction.
+			let mut database_connection = database_connection_object.lock().unwrap();
+			let txn = database_connection.transaction()?;
+
+			// Check if the package already exists.
+			let sql = r#"
 					select count(*) > 0 from packages where name = $1
-				"#,
-				(package_name,),
-				|row| Ok(row.get::<_, bool>(0)?),
-			)
-			.await?
-			.unwrap();
+				"#;
+			let mut statement = txn
+				.prepare_cached(sql)
+				.context("Failed to prepare the query.")?;
+			let package_exists = statement
+				.query_row((package_name,), |row| row.get::<_, bool>(0))
+				.context("Failed to execute the query.")?;
 
-		if package_exists {
-			return Err(anyhow!(format!(
-				"Package with name '{package_name}' already exists."
-			)));
-		}
+			drop(statement);
 
-		self.database_execute(
-			r#"
-				insert into packages (
-					name
-				) values (
-					$1
-				)
-			"#,
-			(package_name,),
-		)
-		.await?;
+			if !package_exists {
+				// Create the package.
+				let sql = r#"
+					insert into packages (
+						name
+					) values (
+						$1
+					)
+				"#;
+				let mut statement = txn
+					.prepare_cached(sql)
+					.context("Failed to prepare the query.")?;
+				statement
+					.execute((package_name,))
+					.context("Failed to execute the query.")?;
+			}
+
+			txn.commit()?;
+
+			Ok(())
+		})?;
 
 		Ok(())
 	}
@@ -166,18 +182,14 @@ impl Server {
 
 		// Create the response.
 		let response = match create_package_result {
-			Ok(_) => {
-				http::Response::builder()
-					.status(http::StatusCode::OK)
-					.body(hyper::Body::empty())
-					.unwrap()
-			},
-			Err(err) => {
-				http::Response::builder()
-					.status(http::StatusCode::BAD_REQUEST)
-					.body(hyper::Body::from(err.to_string()))
-					.unwrap()
-			},
+			Ok(_) => http::Response::builder()
+				.status(http::StatusCode::OK)
+				.body(hyper::Body::empty())
+				.unwrap(),
+			Err(err) => http::Response::builder()
+				.status(http::StatusCode::BAD_REQUEST)
+				.body(hyper::Body::from(err.to_string()))
+				.unwrap(),
 		};
 		Ok(response)
 	}

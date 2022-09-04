@@ -248,10 +248,10 @@ impl Server {
 			}
 			.await;
 		response.unwrap_or_else(|error| {
-			tracing::error!(%error, backtrace = %error.backtrace());
+			tracing::error!(?error, backtrace = %error.backtrace());
 			http::Response::builder()
 				.status(http::StatusCode::INTERNAL_SERVER_ERROR)
-				.body(hyper::Body::from("Internal server error."))
+				.body(hyper::Body::from(format!("{:?}", error)))
 				.unwrap()
 		})
 	}

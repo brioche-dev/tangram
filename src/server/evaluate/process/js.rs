@@ -14,7 +14,6 @@ impl Server {
 		// Create a JS runtime.
 		let runtime = runtime::js::Runtime::new(self);
 		// Run the process.
-		// TODO: forward the actual JS runtime error to the user.
 		let expression = runtime
 			.run(process)
 			.await

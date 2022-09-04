@@ -1,6 +1,7 @@
 use super::{error::not_found, Server};
 use crate::artifact::Artifact;
 use anyhow::{anyhow, bail, Context, Result};
+use rusqlite::Row;
 use std::sync::Arc;
 
 impl Server {
@@ -42,28 +43,68 @@ impl Server {
 		package_version: &str,
 		artifact: Artifact,
 	) -> Result<Artifact> {
-		// TODO combine into single transaction.
-		let _create_package_result = self.create_package(package_name).await;
+		let database_connection_object = self
+			.database_connection_pool
+			.get()
+			.await
+			.context("Failed to retrieve a database connection.")?;
 
-		// Check if the package version already exists.
-		let package_version_exists = self
-			.database_query_row(
-				r#"
+		tokio::task::block_in_place(move || -> Result<()> {
+			// Create a database transaction.
+			let mut database_connection = database_connection_object.lock().unwrap();
+			let txn = database_connection.transaction()?;
+
+			// Check if the package already exists.
+			let sql = r#"
+					select count(*) > 0 from packages where name = $1
+				"#;
+			let mut statement = txn
+				.prepare_cached(sql)
+				.context("Failed to prepare the query.")?;
+			let package_exists = statement
+				.query_row((package_name,), |row: &Row| row.get::<_, bool>(0))
+				.context("Failed to execute the query.")?;
+
+			drop(statement);
+
+			if !package_exists {
+				// Create the package.
+				let sql = r#"
+					insert into packages (
+						name
+					) values (
+						$1
+					)
+				"#;
+				let mut statement = txn
+					.prepare_cached(sql)
+					.context("Failed to prepare the query.")?;
+				statement
+					.execute((package_name,))
+					.context("Failed to execute the query.")?;
+			}
+
+			// Check if the package version already exists.
+			let sql = r#"
 					select count(*) > 0 from package_versions where name = $1 and version = $2
-				"#,
-				(package_name, package_version),
-				|row| Ok(row.get::<_, bool>(0)?),
-			)
-			.await?
-			.unwrap();
+				"#;
+			let mut statement = txn
+				.prepare_cached(sql)
+				.context("Failed to prepare the query.")?;
+			let package_version_exists = statement
+				.query_row((package_name, package_version), |row: &Row| {
+					row.get::<_, bool>(0)
+				})
+				.context("Failed to execute the query.")?;
 
-		if package_version_exists {
-			return Err(anyhow!(format!("Package with name '{package_name}', and version '{package_version}' already exists.")));
-		}
+			drop(statement);
 
-		// Create a new package version for the given artifact hash.
-		self.database_execute(
-			r#"
+			if package_version_exists {
+				return Err(anyhow!(format!("Package with name '{package_name}', and version '{package_version}' already exists.")));
+			}
+
+			// Create a new package version for the given artifact hash.
+			let sql = r#"
 				insert into package_versions (
 					name,
 					version,
@@ -73,14 +114,24 @@ impl Server {
 					$2,
 					$3
 				)
-			"#,
-			(
-				package_name,
-				package_version,
-				artifact.object_hash.to_string(),
-			),
-		)
-		.await?;
+			"#;
+			let mut statement = txn
+				.prepare_cached(sql)
+				.context("Failed to prepare the query.")?;
+			statement
+				.execute((
+					package_name,
+					package_version,
+					artifact.object_hash.to_string(),
+				))
+				.context("Failed to execute the query.")?;
+
+			drop(statement);
+
+			txn.commit()?;
+
+			Ok(())
+		})?;
 
 		Ok(artifact)
 	}

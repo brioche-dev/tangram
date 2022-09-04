@@ -1,5 +1,5 @@
 use super::Server;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use std::{path::PathBuf, sync::Arc};
 
 impl Server {
@@ -126,11 +126,11 @@ impl Server {
 		self: &Arc<Self>,
 		sql: &str,
 		params: P,
-		mut f: F,
+		f: F,
 	) -> Result<Vec<T>>
 	where
 		P: rusqlite::Params,
-		F: FnMut(&rusqlite::Row<'_>) -> Result<T>,
+		F: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
 	{
 		let database_connection_object = self
 			.database_connection_pool
@@ -143,17 +143,10 @@ impl Server {
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;
 			let rows = statement
-				.query(params)
-				.context("Failed to execute the query.")?;
-			// TODO this is ugly clean me.
-			let rows = rows.mapped(|row: &rusqlite::Row<'_>| {
-				f(row).map_err(|_| rusqlite::Error::InvalidQuery)
-			});
-			let result: Result<Vec<T>> = rows
-				.into_iter()
-				.map(|row| row.map_err(|_| anyhow!("Error")))
-				.collect();
-			result
+				.query_map(params, f)
+				.context("Failed to execute the query.")?
+				.collect::<rusqlite::Result<Vec<_>>>()?;
+			Ok(rows)
 		})
 	}
 }
