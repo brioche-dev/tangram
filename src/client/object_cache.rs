@@ -70,7 +70,7 @@ impl ObjectCache {
 				self.cache_object_for_symlink(path, &metadata)
 					.await
 					.with_context(|| {
-						format!(r#"Failed to cache directory at path "{}"."#, path.display())
+						format!(r#"Failed to cache symlink at path "{}"."#, path.display())
 					})?;
 			} else {
 				bail!("The path must point to a directory, file, or symlink.");
@@ -158,7 +158,9 @@ impl ObjectCache {
 	) -> Result<ObjectHash> {
 		// Read the symlink.
 		let permit = self.semaphore.acquire().await.unwrap();
-		let target = tokio::fs::read_link(path).await?;
+		let target = tokio::fs::read_link(path)
+			.await
+			.with_context(|| format!(r#"Failed to read symlink at path "{}"."#, path.display()))?;
 		let target = Utf8PathBuf::from_path_buf(target)
 			.map_err(|_| anyhow!("Symlink target is not a valid UTF-8 path."))?;
 		drop(permit);
@@ -170,7 +172,7 @@ impl ObjectCache {
 			.components()
 			.take_while(|component| matches!(component, Utf8Component::ParentDir))
 			.count();
-		let is_symlink = target_leading_double_dot_count < path_depth_in_root - 1;
+		let is_symlink = target_leading_double_dot_count < path_depth_in_root;
 
 		// Create the object and add it to the cache.
 		let object = if is_symlink {
@@ -182,7 +184,8 @@ impl ObjectCache {
 				.last()
 				.ok_or_else(|| anyhow!("Invalid symlink."))?
 				.as_str()
-				.parse()?;
+				.parse()
+				.context("Failed to parse last path component as artifact.")?;
 			Object::Dependency(Dependency { artifact })
 		};
 		let object_hash = object.hash();
