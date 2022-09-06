@@ -84,7 +84,9 @@ impl Server {
 				Ok(()) => {},
 
 				// If the error is ENOTEMPTY or EEXIST then we can ignore it because there is already a fragment present.
-				Err(_) if errno() == Errno(libc::ENOTEMPTY) || errno() == Errno(libc::EEXIST) => {},
+				Err(error)
+					if error.raw_os_error() == Some(libc::ENOTEMPTY)
+						|| error.raw_os_error() == Some(libc::EEXIST) => {},
 
 				Err(error) => {
 					return Err(anyhow::Error::from(error)
