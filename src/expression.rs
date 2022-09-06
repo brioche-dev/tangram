@@ -141,3 +141,10 @@ impl From<TemplateSerde> for Template {
 		Template { components }
 	}
 }
+
+impl Expression {
+	#[must_use]
+	pub fn hash(&self) -> Hash {
+		Hash::new(serde_json::to_vec(self).unwrap())
+	}
+}

@@ -1,11 +1,12 @@
-use crate::{artifact::Artifact, client::Client, manifest::Manifest};
+use super::{transport::InProcessOrHttp, Client};
+use crate::{artifact::Artifact, manifest::Manifest};
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
 impl Client {
 	pub async fn search(&self, name: &str) -> Result<Vec<String>> {
-		match &self.transport {
-			crate::client::transport::Transport::InProcess(server) => {
+		match self.transport.as_in_process_or_http() {
+			InProcessOrHttp::InProcess(server) => {
 				let packages = server
 					.get_packages(Some(name))
 					.await?
@@ -14,12 +15,10 @@ impl Client {
 					.collect();
 				Ok(packages)
 			},
-			crate::client::transport::Transport::Unix(_) => todo!(),
-			crate::client::transport::Transport::Tcp(transport) => {
-				let path = "/packages";
-				// Set the URL path.
-				let mut url = transport.url.clone();
-				url.set_path(path);
+			InProcessOrHttp::Http(http) => {
+				// Build the URL.
+				let mut url = http.base_url().clone();
+				url.set_path("/packages");
 				url.set_query(Some(&format!("name={name}")));
 
 				// Create the request.
@@ -30,8 +29,7 @@ impl Client {
 					.unwrap();
 
 				// Send the request.
-				let response = transport
-					.client
+				let response = http
 					.request(request)
 					.await
 					.context("Failed to send the request.")?;

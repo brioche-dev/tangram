@@ -3,18 +3,15 @@ use anyhow::{Context, Result};
 
 impl Client {
 	pub async fn garbage_collect(&self) -> Result<()> {
-		match &self.transport {
-			crate::client::transport::Transport::InProcess(server) => {
+		match &self.transport.as_in_process_or_http() {
+			super::transport::InProcessOrHttp::InProcess(server) => {
 				server
 					.garbage_collect()
 					.await
 					.context("Failed to garbage collect.")?;
 				Ok(())
 			},
-			crate::client::transport::Transport::Unix(_) => todo!(),
-			crate::client::transport::Transport::Tcp(_) => {
-				todo!()
-			},
+			super::transport::InProcessOrHttp::Http(_) => todo!(),
 		}
 	}
 }

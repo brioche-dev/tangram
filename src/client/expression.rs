@@ -1,5 +1,5 @@
-use super::{Client, Transport};
-use crate::{expression::Expression, hash::Hash, value::Value};
+use super::{transport::InProcessOrHttp, Client};
+use crate::{expression::Expression, value::Value};
 use anyhow::{Context, Result};
 
 impl Client {
@@ -7,21 +7,18 @@ impl Client {
 		&self,
 		expression: &Expression,
 	) -> Result<Option<Value>> {
-		match &self.transport {
-			Transport::InProcess(server) => {
+		match self.transport.as_in_process_or_http() {
+			InProcessOrHttp::InProcess(server) => {
 				let value = server.get_memoized_value_for_expression(expression).await?;
 				Ok(value)
 			},
 
-			Transport::Unix(_) => {
-				todo!()
-			},
+			InProcessOrHttp::Http(http) => {
+				// Compute the expression hash.
+				let expression_hash = expression.hash();
 
-			Transport::Tcp(transport) => {
-				let expression_json = serde_json::to_vec(&expression)?;
-				let expression_hash = Hash::new(&expression_json);
-				// Set the URL path.
-				let mut url = transport.url.clone();
+				// Build the URL.
+				let mut url = http.base_url();
 				url.set_path(&format!("/expressions/{expression_hash}"));
 
 				// Create the request.
@@ -32,8 +29,7 @@ impl Client {
 					.unwrap();
 
 				// Send the request.
-				let response = transport
-					.client
+				let response = http
 					.request(request)
 					.await
 					.context("Failed to send the request.")?;
