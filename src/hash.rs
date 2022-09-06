@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use anyhow::Context;
 use digest::Digest;
 use tokio::io::AsyncWrite;
@@ -85,13 +87,14 @@ impl TryFrom<&[u8]> for Hash {
 	type Error = anyhow::Error;
 
 	fn try_from(slice: &[u8]) -> anyhow::Result<Hash> {
-		let data: [u8; 32] = slice.try_into().with_context(|| {
+		let data = slice.try_into().with_context(|| {
 			format!(
-				"could not create Hash from {}-byte slice (expected 32)",
-				slice.len()
+				"Could not create hash from slice with length {}.",
+				slice.len(),
 			)
 		})?;
-		Ok(Hash(data))
+		let hash = Hash(data);
+		Ok(hash)
 	}
 }
 
@@ -127,6 +130,27 @@ impl std::str::FromStr for Hash {
 impl rand::distributions::Distribution<Hash> for rand::distributions::Standard {
 	fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Hash {
 		Hash(rng.gen())
+	}
+}
+
+pub type BuildHasher = std::hash::BuildHasherDefault<HashHasher>;
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Default)]
+pub struct HashHasher {
+	bytes: Option<[u8; 8]>,
+}
+
+impl std::hash::Hasher for HashHasher {
+	fn write(&mut self, bytes: &[u8]) {
+		assert!(bytes.len() == 32);
+		let bytes = &bytes[0..8];
+		assert!(self.bytes.is_none());
+		self.bytes = Some(bytes.try_into().unwrap());
+	}
+
+	fn finish(&self) -> u64 {
+		u64::from_le_bytes(self.bytes.unwrap())
 	}
 }
 

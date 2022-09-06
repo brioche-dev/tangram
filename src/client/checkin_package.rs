@@ -5,6 +5,7 @@ use crate::{
 	manifest::Manifest,
 };
 use anyhow::{anyhow, Context, Result};
+use fnv::FnvBuildHasher;
 use std::{
 	collections::{BTreeMap, HashMap, VecDeque},
 	path::{Path, PathBuf},
@@ -18,7 +19,7 @@ impl Client {
 		// Collect all path dependencies in topological order.
 		let mut queue: VecDeque<PathBuf> = VecDeque::from(vec![path.clone()]);
 		let mut package_paths: Vec<PathBuf> = Vec::new();
-		let mut cache: HashMap<PathBuf, Artifact> = HashMap::new();
+		let mut cache: HashMap<PathBuf, Artifact, FnvBuildHasher> = HashMap::default();
 		while let Some(package_path) = queue.pop_front() {
 			// Add the path to the list of package paths.
 			package_paths.push(package_path.clone());

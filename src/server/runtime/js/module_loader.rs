@@ -1,13 +1,17 @@
 use crate::{
-	artifact::Artifact, hash::Hash, lockfile::Lockfile, manifest::Manifest, object::ObjectHash,
+	artifact::Artifact,
+	hash::{self, Hash},
+	lockfile::Lockfile,
+	manifest::Manifest,
+	object::ObjectHash,
 	server::Server,
 };
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use fnv::FnvHashMap;
 use futures::FutureExt;
 use indoc::writedoc;
 use std::{
+	collections::HashMap,
 	fmt::Write,
 	pin::Pin,
 	sync::{Arc, Mutex},
@@ -21,7 +25,7 @@ pub const TANGRAM_TARGET_PROXY_SCHEME: &str = "tangram-target-proxy";
 pub struct ModuleLoader {
 	server: Arc<Server>,
 	main_runtime_handle: tokio::runtime::Handle,
-	lockfile_cache: Arc<Mutex<FnvHashMap<Hash, Lockfile>>>,
+	lockfile_cache: Arc<Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>>,
 }
 
 impl ModuleLoader {
@@ -30,7 +34,7 @@ impl ModuleLoader {
 		ModuleLoader {
 			server,
 			main_runtime_handle,
-			lockfile_cache: Arc::new(Mutex::new(FnvHashMap::default())),
+			lockfile_cache: Arc::new(Mutex::new(HashMap::default())),
 		}
 	}
 
@@ -119,7 +123,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
 #[allow(clippy::unused_async)]
 async fn resolve_tangram(
 	server: Arc<Server>,
-	lockfile_cache: Arc<Mutex<FnvHashMap<Hash, Lockfile>>>,
+	lockfile_cache: Arc<Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>>,
 	specifier: deno_core::ModuleSpecifier,
 	referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSpecifier> {
@@ -296,7 +300,7 @@ async fn load_tangram_module(
 
 async fn load_tangram_target_proxy(
 	server: Arc<Server>,
-	lockfile_cache: Arc<Mutex<FnvHashMap<Hash, Lockfile>>>,
+	lockfile_cache: Arc<Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>>,
 	specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSource> {

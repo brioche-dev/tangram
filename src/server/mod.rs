@@ -9,7 +9,7 @@ use async_recursion::async_recursion;
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
 use std::{
-	collections::BTreeMap,
+	collections::HashMap,
 	convert::Infallible,
 	net::SocketAddr,
 	path::{Path, PathBuf},
@@ -53,7 +53,7 @@ pub struct Server {
 	http_client: reqwest::Client,
 
 	/// These are the active REPLs.
-	repls: Mutex<BTreeMap<ReplId, Repl>>,
+	repls: Mutex<HashMap<ReplId, Repl>>,
 
 	/// These are the peers.
 	peers: Vec<Client>,
@@ -100,7 +100,7 @@ impl Server {
 			database_connection_pool,
 			local_pool_handle,
 			http_client,
-			repls: Mutex::new(BTreeMap::new()),
+			repls: Mutex::new(HashMap::new()),
 			peers,
 		};
 

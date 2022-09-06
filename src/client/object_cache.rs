@@ -6,8 +6,9 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
 use camino::{Utf8Component, Utf8PathBuf};
-use fnv::FnvHashMap;
+use fnv::FnvBuildHasher;
 use std::{
+	collections::HashMap,
 	fs::Metadata,
 	os::unix::prelude::PermissionsExt,
 	path::Path,
@@ -18,13 +19,13 @@ use std::{
 pub struct ObjectCache {
 	root_path: PathBuf,
 	semaphore: Arc<tokio::sync::Semaphore>,
-	cache: RwLock<FnvHashMap<PathBuf, (ObjectHash, Object)>>,
+	cache: RwLock<HashMap<PathBuf, (ObjectHash, Object), FnvBuildHasher>>,
 }
 
 impl ObjectCache {
 	pub fn new(root_path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> ObjectCache {
 		let root_path = root_path.to_owned();
-		let cache = RwLock::new(FnvHashMap::default());
+		let cache = RwLock::new(HashMap::default());
 		ObjectCache {
 			root_path,
 			semaphore,
