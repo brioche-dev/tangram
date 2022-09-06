@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{artifact::Artifact, package::PackageSearchResultItem};
+use crate::{artifact::Artifact, package::SearchResultItem};
 use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
@@ -14,7 +14,7 @@ impl Server {
 	pub async fn get_packages(
 		self: &Arc<Self>,
 		name: Option<&str>,
-	) -> Result<Vec<PackageSearchResultItem>> {
+	) -> Result<Vec<SearchResultItem>> {
 		// Retrieve packages that match this query.
 		let packages = if let Some(name) = name {
 			self.database_query_rows(
@@ -29,7 +29,7 @@ impl Server {
 			)
 			.await?
 			.into_iter()
-			.map(|name| PackageSearchResultItem { name })
+			.map(|name| SearchResultItem { name })
 			.collect()
 		} else {
 			self.database_query_rows(
@@ -43,7 +43,7 @@ impl Server {
 			)
 			.await?
 			.into_iter()
-			.map(|name| PackageSearchResultItem { name })
+			.map(|name| SearchResultItem { name })
 			.collect()
 		};
 

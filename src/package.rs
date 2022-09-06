@@ -1,4 +1,4 @@
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct PackageSearchResultItem {
+pub struct SearchResultItem {
 	pub name: String,
 }

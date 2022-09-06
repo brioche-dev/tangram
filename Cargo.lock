@@ -2601,7 +2601,6 @@ dependencies = [
  "derive_more",
  "digest",
  "duct",
- "errno",
  "fatfs",
  "flate2",
  "fnv",

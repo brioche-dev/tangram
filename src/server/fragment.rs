@@ -1,7 +1,6 @@
 use crate::{artifact::Artifact, object::Dependency, server::Server, util::path_exists};
 use anyhow::{anyhow, Context, Result};
 use async_recursion::async_recursion;
-use errno::{errno, Errno};
 use futures::FutureExt;
 use std::{
 	path::{Path, PathBuf},

@@ -18,13 +18,13 @@ impl Server {
 			.run(process)
 			.await
 			.context("Failed to run the JS process.")?
-			.context("The JS process did not run successfully.")?;
+			.context("The JS process did not complete successfully.")?;
 
 		// Evaluate the resulting expression.
 		let value = self
 			.evaluate(expression)
 			.await
-			.context("Failed to evaluate expression returned by JS process.")?;
+			.context("Failed to evaluate the expression returned by the JS process.")?;
 
 		Ok(value)
 	}
