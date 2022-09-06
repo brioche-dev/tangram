@@ -6,8 +6,9 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use fnv::FnvHashMap;
 use futures::FutureExt;
-use indoc::formatdoc;
+use indoc::writedoc;
 use std::{
+	fmt::Write,
 	pin::Pin,
 	sync::{Arc, Mutex},
 };
@@ -63,14 +64,12 @@ impl deno_core::ModuleLoader for ModuleLoader {
 
 		let specifier = match specifier.scheme() {
 			// Resolve a specifier with the tangram scheme.
-			TANGRAM_SCHEME => {
-				futures::executor::block_on(resolve_tangram(
-					server,
-					lockfile_cache,
-					specifier,
-					referrer,
-				))?
-			},
+			TANGRAM_SCHEME => futures::executor::block_on(resolve_tangram(
+				server,
+				lockfile_cache,
+				specifier,
+				referrer,
+			))?,
 
 			// Resolve a specifier with the tangram module scheme.
 			TANGRAM_MODULE_SCHEME => {
@@ -142,9 +141,7 @@ async fn resolve_tangram(
 	let referrer_package_hash: ObjectHash = domain
 		.parse()
 		.with_context(|| "Failed to parse referrer domain.")?;
-	let referrer_package = Artifact {
-		object_hash: referrer_package_hash,
-	};
+	let referrer_package = Artifact::new(referrer_package_hash);
 
 	// Get the lockfile hash from the referrer.
 	let referrer_lockfile_hash = if let Some(referrer_lockfile_hash) =
@@ -228,7 +225,7 @@ async fn resolve_tangram(
 		format!("{TANGRAM_TARGET_PROXY_SCHEME}://{specifier_package}")
 	};
 	if let Some(specifier_lockfile_hash) = specifier_lockfile_hash {
-		url.push_str(&format!("?lockfile_hash={specifier_lockfile_hash}"));
+		write!(url, "?lockfile_hash={specifier_lockfile_hash}").unwrap();
 	}
 	let url = Url::parse(&url).unwrap();
 
@@ -361,14 +358,17 @@ async fn load_tangram_target_proxy(
 	let mut code = String::new();
 	let lockfile_json = serde_json::to_string(&lockfile)?;
 	let package_json = serde_json::to_string(&package)?;
-	code.push_str(&formatdoc!(
+	writedoc!(
+		code,
 		r#"
 			let lockfile = {lockfile_json};
 		"#
-	));
+	)
+	.unwrap();
 	code.push('\n');
 	for target_name in manifest.targets {
-		code.push_str(&formatdoc!(
+		writedoc!(
+			code,
 			r#"
 				export let {target_name} = (...args) => {{
 					return Tangram.target({{
@@ -379,7 +379,8 @@ async fn load_tangram_target_proxy(
 					}});
 				}}
 			"#,
-		));
+		)
+		.unwrap();
 		code.push('\n');
 	}
 

@@ -17,7 +17,7 @@ impl Server {
 			(object_hash.to_string(),),
 		)
 		.await?;
-		let artifact = Artifact { object_hash };
+		let artifact = Artifact::new(object_hash);
 		Ok(artifact)
 	}
 }

@@ -7,10 +7,10 @@ use clap::Parser;
 use futures::FutureExt;
 use tracing_subscriber::prelude::*;
 
-mod client;
 mod commands;
 mod config;
 mod dirs;
+mod util;
 
 #[derive(Parser)]
 #[clap(
@@ -28,6 +28,7 @@ enum Subcommand {
 	Checkin(commands::checkin::Args),
 	Checkout(commands::checkout::Args),
 	Fetch(commands::fetch::Args),
+	Gc(commands::gc::Args),
 	Publish(commands::publish::Args),
 	Repl(commands::repl::Args),
 	Server(commands::server::Args),
@@ -52,6 +53,7 @@ async fn main() -> Result<()> {
 		Subcommand::Checkout(args) => commands::checkout::run(args).boxed(),
 		Subcommand::Publish(args) => commands::publish::run(args).boxed(),
 		Subcommand::Fetch(args) => commands::fetch::run(args).boxed(),
+		Subcommand::Gc(args) => commands::gc::run(args).boxed(),
 		Subcommand::Repl(args) => commands::repl::run(args).boxed(),
 		Subcommand::Server(args) => commands::server::run(args).boxed(),
 	}

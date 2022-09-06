@@ -1,23 +1,25 @@
+use crate::config::Config;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tangram::expression::Expression;
-use tracing::Instrument;
+use tangram::client::Client;
 
 #[derive(Parser)]
 pub struct Args {
-	#[clap(long, default_value = ".")]
-	package: PathBuf,
-	#[clap(long, default_value = "build")]
-	name: String,
 	#[clap(long, takes_value = false)]
 	locked: bool,
-	args: Vec<String>,
+	#[clap(default_value = ".")]
+	package: PathBuf,
+	#[clap(default_value = "build")]
+	name: String,
 }
 
 pub async fn run(args: Args) -> Result<()> {
+	// Read the config.
+	let config = Config::read().await.context("Failed to read the config.")?;
+
 	// Create the client.
-	let client = crate::client::new()
+	let client = Client::new_with_config(config.client)
 		.await
 		.context("Failed to create the client.")?;
 
@@ -27,20 +29,15 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to check in the package.")?;
 
-	// Process the args
-	let arguments = args
-		.args
-		.into_iter()
-		.map(Expression::String)
-		.collect::<Vec<_>>();
-
-	// Evaluate the target.
+	// Create the expression.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
 		lockfile: None,
 		package,
 		name: args.name,
-		args: arguments,
+		args: vec![],
 	});
+
+	// Evaluate the expression.
 	let value = client
 		.evaluate(expression)
 		.await

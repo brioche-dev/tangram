@@ -1,12 +1,12 @@
 use crate::{artifact::Artifact, object::Dependency, server::Server, util::path_exists};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use futures::FutureExt;
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Fragment {
-	pub(crate) artifact: Artifact,
+	artifact: Artifact,
 }
 
 impl Fragment {
@@ -20,21 +20,18 @@ impl Server {
 	#[async_recursion]
 	#[must_use]
 	pub async fn create_fragment(self: &Arc<Self>, artifact: Artifact) -> Result<Fragment> {
-		// Acquire a lock to checkout a fragment for this artifact.
-		let mutex = Arc::clone(
-			self.fragment_checkout_mutexes
-				.write()
-				.unwrap()
-				.entry(artifact)
-				.or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
-		);
-		let lock = mutex.lock().await;
-
-		// Check if there is an existing fragment and check one out if necessary.
+		// Get the fragment path.
 		let fragment_path = self.path().join("fragments").join(artifact.to_string());
-		let fragment = if path_exists(&fragment_path).await? {
-			Fragment { artifact }
-		} else {
+
+		// Perform the checkout if necessary.
+		if !path_exists(&fragment_path).await? {
+			// Create a temp to check out the artifact to.
+			let temp = self
+				.create_temp()
+				.await
+				.context("Failed to create the temp.")?;
+			let temp_path = self.temp_path(&temp);
+
 			// Create the callback to create dependency fragments.
 			let path_for_dependency = {
 				let server = Arc::clone(self);
@@ -52,25 +49,17 @@ impl Server {
 			};
 
 			// Perform the checkout.
-			self.checkout(artifact, &fragment_path, Some(&path_for_dependency))
-				.await?;
+			self.checkout(artifact, &temp_path, Some(&path_for_dependency))
+				.await
+				.context("Failed to perform the checkout.")?;
 
-			Fragment { artifact }
-		};
-
-		// Drop the lock.
-		drop(lock);
-
-		// Remove the lock if it is no longer in use.
-		let mut mutexes = self.fragment_checkout_mutexes.write().unwrap();
-		if let Some(mutex) = mutexes.get(&artifact) {
-			if mutex.try_lock().is_ok() {
-				mutexes.remove(&artifact);
-			}
+			// Move the checkout to the fragments path.
+			tokio::fs::rename(&temp_path, &fragment_path)
+				.await
+				.context("Failed to move the checkout to the fragment path.")?;
 		}
-		drop(mutexes);
 
-		Ok(fragment)
+		Ok(Fragment { artifact })
 	}
 
 	#[must_use]

@@ -1,13 +1,11 @@
-use self::repl::Repl;
+use self::{config::Config, repl::Repl};
 use crate::{
-	artifact::Artifact,
-	client::Client,
+	client::{self, Client},
 	repl::ReplId,
-	server::temp::{Temp, TempId},
 	util::path_exists,
 };
 use anyhow::Result;
-use fnv::FnvHashMap;
+use async_recursion::async_recursion;
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
 use std::{
@@ -18,16 +16,17 @@ use std::{
 	sync::Arc,
 };
 use tokio::sync::Mutex;
-use url::Url;
 
 pub mod artifact;
 pub mod blob;
 mod checkin;
 mod checkout;
+pub mod config;
 pub mod db;
 mod error;
 pub mod evaluate;
 pub mod fragment;
+mod gc;
 pub mod migrations;
 pub mod object;
 mod package;
@@ -53,24 +52,19 @@ pub struct Server {
 	/// This HTTP client is for performing HTTP requests when running fetch expressions.
 	http_client: reqwest::Client,
 
-	/// These are the leased artifacts.
-
-	/// These are the leased REPLs.
+	/// These are the active REPLs.
 	repls: Mutex<BTreeMap<ReplId, Repl>>,
-
-	/// These are the leased temps.
-	temps: Mutex<BTreeMap<TempId, Temp>>,
-
-	fragment_checkout_mutexes: std::sync::RwLock<FnvHashMap<Artifact, Arc<Mutex<()>>>>,
 
 	/// These are the peers.
 	peers: Vec<Client>,
 }
 
 impl Server {
-	pub async fn new(path: impl Into<PathBuf>, peers: Vec<Url>) -> Result<Arc<Server>> {
+	#[async_recursion]
+	#[must_use]
+	pub async fn new(config: Config) -> Result<Arc<Server>> {
 		// Ensure the path exists.
-		let path = path.into();
+		let path = config.path;
 		tokio::fs::create_dir_all(&path).await?;
 
 		// Acquire a lock to the path.
@@ -92,7 +86,12 @@ impl Server {
 		let http_client = reqwest::Client::new();
 
 		// // Create the peer Clients.
-		let peers = peers.into_iter().map(Client::new_tcp).collect();
+		let peers = futures::future::try_join_all(config.peers.into_iter().map(|url| {
+			Client::new_with_config(client::config::Config {
+				transport: client::config::Transport::Tcp { url },
+			})
+		}))
+		.await?;
 
 		// Create the server.
 		let server = Server {
@@ -102,8 +101,6 @@ impl Server {
 			local_pool_handle,
 			http_client,
 			repls: Mutex::new(BTreeMap::new()),
-			temps: Mutex::new(BTreeMap::new()),
-			fragment_checkout_mutexes: std::sync::RwLock::new(FnvHashMap::default()),
 			peers,
 		};
 
@@ -124,11 +121,12 @@ impl Server {
 		use anyhow::{anyhow, bail};
 		use libc::{flock, LOCK_EX, LOCK_NB};
 		use std::os::unix::io::AsRawFd;
+		let lock_path = path.join("lock");
 		let lock_file = tokio::fs::OpenOptions::new()
 			.read(true)
 			.write(true)
 			.create(true)
-			.open(path.join("lock"))
+			.open(lock_path)
 			.await?;
 		let ret = unsafe { flock(lock_file.as_raw_fd(), LOCK_EX | LOCK_NB) };
 		if ret != 0 {

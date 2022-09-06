@@ -1,6 +1,8 @@
+use crate::config::Config;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
+use tangram::client::Client;
 
 #[derive(Parser)]
 pub struct Args {
@@ -8,8 +10,13 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
+	// Read the config.
+	let config = Config::read().await.context("Failed to read the config.")?;
+
 	// Create the client.
-	let client = crate::client::new().await?;
+	let client = Client::new_with_config(config.client)
+		.await
+		.context("Failed to create the client.")?;
 
 	// Get the path.
 	let path = if let Some(path) = args.path {

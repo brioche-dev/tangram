@@ -1,9 +1,10 @@
 use crate::server::Server;
 use anyhow::{bail, Context, Result};
-use indoc::formatdoc;
+use indoc::writedoc;
 use std::{
 	collections::BTreeMap,
 	ffi::{CStr, CString},
+	fmt::Write,
 	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
 	sync::Arc,
@@ -53,7 +54,8 @@ fn pre_exec(server_path: &Path) -> Result<()> {
 	let mut profile = String::new();
 
 	// Add the default policy.
-	profile.push_str(&formatdoc!(
+	writedoc!(
+		profile,
 		r#"
 			(version 1)
 			(deny default)
@@ -100,10 +102,11 @@ fn pre_exec(server_path: &Path) -> Result<()> {
 			(allow file-read-metadata file-test-existence
 				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime"))
 		"#
-	));
+	).unwrap();
 
 	// Allow network access.
-	profile.push_str(&formatdoc!(
+	writedoc!(
+		profile,
 		r#"
 			;; Allow network access.
 			(allow network*)
@@ -119,16 +122,19 @@ fn pre_exec(server_path: &Path) -> Result<()> {
 
 			;; (allow system-socket) is included in the prelude, so all sockets are allowed.
 		"#
-	));
+	)
+	.unwrap();
 
 	// Allow access to the tangram server path.
-	profile.push_str(&formatdoc!(
+	writedoc!(
+		profile,
 		r#"
 			(allow process-exec* file* (subpath {0}))
 			(allow file-read-metadata (path-ancestors {0}))
 		"#,
 		escape(server_path.as_os_str().as_bytes())
-	));
+	)
+	.unwrap();
 
 	// Call `sandbox_init`.
 	let profile = CString::new(profile).unwrap();
@@ -187,7 +193,7 @@ fn escape(bytes: impl AsRef<[u8]>) -> String {
 				output.push(byte.into());
 			},
 			byte => {
-				output.push_str(&format!("\\x{:02X}", byte));
+				write!(output, "\\x{byte:02X}").unwrap();
 			},
 		}
 	}

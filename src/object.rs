@@ -1,22 +1,12 @@
 use crate::{artifact::Artifact, hash::Hash};
 use camino::Utf8PathBuf;
-use derive_more::{Deref, Display, FromStr};
+use derive_more::{Display, FromStr};
 use std::collections::BTreeMap;
 
 /// The hash of an [`Object`].
 #[allow(clippy::module_name_repetitions)]
 #[derive(
-	Clone,
-	Copy,
-	Debug,
-	Deref,
-	Display,
-	Eq,
-	FromStr,
-	Hash,
-	PartialEq,
-	serde::Deserialize,
-	serde::Serialize,
+	Clone, Copy, Debug, Display, Eq, FromStr, Hash, PartialEq, serde::Deserialize, serde::Serialize,
 )]
 pub struct ObjectHash(pub Hash);
 
@@ -41,7 +31,8 @@ pub enum Object {
 }
 
 impl Object {
-	pub(crate) fn hash(&self) -> ObjectHash {
+	#[must_use]
+	pub fn hash(&self) -> ObjectHash {
 		ObjectHash(Hash::new(serde_json::to_vec(self).unwrap()))
 	}
 }
@@ -73,17 +64,7 @@ pub struct Dependency {
 
 /// The hash of a Blob.
 #[derive(
-	Clone,
-	Copy,
-	Debug,
-	Deref,
-	Display,
-	Eq,
-	FromStr,
-	Hash,
-	PartialEq,
-	serde::Deserialize,
-	serde::Serialize,
+	Clone, Copy, Debug, Display, Eq, FromStr, Hash, PartialEq, serde::Deserialize, serde::Serialize,
 )]
 pub struct BlobHash(pub Hash);
 

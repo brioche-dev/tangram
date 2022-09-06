@@ -4,15 +4,14 @@ use std::path::Path;
 
 impl Client {
 	pub async fn get_package(&self, name: &str, version: &str) -> Result<Option<Artifact>> {
-		match &self.transport {
-			crate::client::transport::Transport::InProcess(server) => {
+		match self.transport.as_in_process_or_http() {
+			super::transport::InProcessOrHttp::InProcess(server) => {
 				let artifact = server.get_package_version(name, version).await?;
 				Ok(artifact)
 			},
-			crate::client::transport::Transport::Unix(_) => todo!(),
-			crate::client::transport::Transport::Tcp(transport) => {
+			super::transport::InProcessOrHttp::Http(http) => {
 				let path = format!("/packages/{name}/versions/{version}");
-				let artifact = transport.get_json(&path).await?;
+				let artifact = http.get_json(&path).await?;
 				Ok(artifact)
 			},
 		}
@@ -44,17 +43,17 @@ impl Client {
 		let version = manifest.version;
 		let artifact = package;
 
-		match &self.transport {
-			crate::client::transport::Transport::InProcess(server) => {
+		// Create the package version.
+		match self.transport.as_in_process_or_http() {
+			super::transport::InProcessOrHttp::InProcess(server) => {
 				let artifact = server
 					.create_package_version(&name, &version, artifact)
 					.await?;
 				Ok(artifact)
 			},
-			crate::client::transport::Transport::Unix(_) => todo!(),
-			crate::client::transport::Transport::Tcp(transport) => {
+			super::transport::InProcessOrHttp::Http(http) => {
 				let path = format!("/packages/{name}/versions/{version}");
-				let artifact = transport.post_json(&path, &artifact).await?;
+				let artifact = http.post_json(&path, &artifact).await?;
 				Ok(artifact)
 			},
 		}

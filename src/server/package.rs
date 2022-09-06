@@ -52,7 +52,7 @@ impl Server {
 					.parse()
 					.with_context(|| "Failed to parse object hash.")
 					.unwrap();
-				let artifact = Artifact { object_hash };
+				let artifact = Artifact::new(object_hash);
 				PackageVersion { version, artifact }
 			})
 			.collect();

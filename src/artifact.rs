@@ -6,10 +6,15 @@ use derive_more::{Display, FromStr};
 )]
 #[serde(from = "ArtifactSerde", into = "ArtifactSerde")]
 pub struct Artifact {
-	pub(super) object_hash: ObjectHash,
+	object_hash: ObjectHash,
 }
 
 impl Artifact {
+	#[must_use]
+	pub fn new(object_hash: ObjectHash) -> Artifact {
+		Artifact { object_hash }
+	}
+
 	#[must_use]
 	pub fn object_hash(&self) -> ObjectHash {
 		self.object_hash

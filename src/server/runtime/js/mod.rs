@@ -4,6 +4,7 @@ use crate::{
 	expression::{self, Expression},
 	hash::Hash,
 	lockfile::Lockfile,
+	object::ObjectHash,
 	server::{repl::Output, Server},
 	value::Value,
 };
@@ -124,6 +125,7 @@ async fn js_runtime_task(
 	// Build the tangram extension.
 	let tangram_extension = deno_core::Extension::builder()
 		.ops(vec![
+			op_tangram_artifact::decl(),
 			op_tangram_console_log::decl(),
 			op_tangram_evaluate::decl(),
 			op_tangram_fetch::decl(),
@@ -378,7 +380,7 @@ async fn handle_run_request(
 	// Add the lockfile if necessary.
 	if let Some(lockfile) = process.lockfile {
 		let lockfile_hash = module_loader.add_lockfile(lockfile);
-		module_url.push_str(&format!("?lockfile_hash={lockfile_hash}"));
+		write!(module_url, "?lockfile_hash={lockfile_hash}").unwrap();
 	}
 
 	// Parse the module URL.
@@ -482,17 +484,18 @@ fn exception_to_string(scope: &mut v8::HandleScope, exception: v8::Local<v8::Val
 		// 	source_line = token.get_src_line() + 1;
 		// 	source_column = token.get_src_col() + 1;
 		// }
-		write!(
-			&mut string,
-			"{}:{}:{}",
-			source_url, source_line, source_column,
-		)
-		.unwrap();
+		write!(string, "{source_url}:{source_line}:{source_column}").unwrap();
 		if i < stack_trace.get_frame_count() - 1 {
 			writeln!(&mut string).unwrap();
 		}
 	}
 	string
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_artifact(object_hash: ObjectHash) -> Result<Artifact, deno_core::error::AnyError> {
+	Ok(Artifact::new(object_hash))
 }
 
 #[deno_core::op]

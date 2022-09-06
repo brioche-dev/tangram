@@ -12,7 +12,7 @@ pub fn global_config_directory_path() -> Option<PathBuf> {
 }
 
 #[must_use]
-pub fn global_data_directory_path() -> Option<PathBuf> {
+pub fn _global_data_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
 		Some(PathBuf::from("/opt"))
 	} else {
@@ -43,8 +43,8 @@ pub fn home_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
 		match std::env::var("HOME") {
 			Err(_) => None,
-			Ok(path) if path.is_empty() => None,
-			Ok(path) => Some(PathBuf::from(path)),
+			Ok(value) if value.is_empty() => None,
+			Ok(value) => Some(PathBuf::from(value)),
 		}
 	} else {
 		None

@@ -13,11 +13,14 @@ impl Server {
 		path: &Path,
 		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
 	) -> Result<()> {
-		// Create a client to this server to perform the checkin.
-		let client = Client::new_in_process(Arc::clone(self));
+		// Create a client for this server to perform the checkin.
+		let client = Client::new_for_server(self);
+
+		// Perform the checkout.
 		client
 			.checkout(artifact, path, external_path_for_dependency)
 			.await?;
+
 		Ok(())
 	}
 }

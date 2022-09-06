@@ -1,12 +1,11 @@
 use crate::id::Id;
-use derive_more::{Deref, Display, FromStr};
+use derive_more::{Display, FromStr};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(
 	Clone,
 	Copy,
 	Debug,
-	Deref,
 	Display,
 	Eq,
 	FromStr,

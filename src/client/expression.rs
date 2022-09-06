@@ -12,9 +12,11 @@ impl Client {
 				let value = server.get_memoized_value_for_expression(expression).await?;
 				Ok(value)
 			},
+
 			Transport::Unix(_) => {
 				todo!()
 			},
+
 			Transport::Tcp(transport) => {
 				let expression_json = serde_json::to_vec(&expression)?;
 				let expression_hash = Hash::new(&expression_json);
@@ -36,6 +38,7 @@ impl Client {
 					.await
 					.context("Failed to send the request.")?;
 
+				// If the server returns a 404, there is no memoized value for the expression.
 				if response.status() == http::StatusCode::NOT_FOUND {
 					return Ok(None);
 				}

@@ -4,7 +4,7 @@ use crate::{
 	server::{temp::Temp, Server},
 	value::Value,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{collections::BTreeMap, sync::Arc};
@@ -102,17 +102,17 @@ impl Server {
 			.await
 			.context("Failed to run the process.")?;
 
-		// #[cfg(target_os = "macos")]
-		// self.run_macos_process(envs, command, args)
-		// 	.await
-		// 	.context("Failed to run the process.")?;
+		#[cfg(target_os = "macos")]
+		self.run_macos_process(envs, command, args)
+			.await
+			.context("Failed to run the process.")?;
 
-		let mut process = tokio::process::Command::new(command);
-		process.env_clear();
-		process.envs(envs);
-		process.args(args);
-		let mut child = process.spawn()?;
-		child.wait().await?;
+		// let mut process = tokio::process::Command::new(command);
+		// process.env_clear();
+		// process.envs(envs);
+		// process.args(args);
+		// let mut child = process.spawn()?;
+		// child.wait().await?;
 
 		// Checkin the temps.
 		let artifacts: BTreeMap<String, Artifact> =

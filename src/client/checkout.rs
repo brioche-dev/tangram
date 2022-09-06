@@ -33,7 +33,7 @@ impl Client {
 		// Call the recursive checkout function on the root object.
 		self.checkout_path(
 			&object_cache,
-			artifact.object_hash,
+			artifact.object_hash(),
 			path,
 			external_path_for_dependency,
 		)
@@ -50,12 +50,13 @@ impl Client {
 		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
 	) -> Result<()> {
 		// Get the object from the server.
-		let object = match &self.transport {
-			Transport::InProcess(server) => server.get_object(remote_object_hash).await?,
-			Transport::Unix(_) => todo!(),
-			Transport::Tcp(transport) => {
+		let object = match self.transport.as_in_process_or_http() {
+			super::transport::InProcessOrHttp::InProcess(server) => {
+				server.get_object(remote_object_hash).await?
+			},
+			super::transport::InProcessOrHttp::Http(http) => {
 				let path = format!("/objects/{remote_object_hash}");
-				transport.get_json(&path).await?
+				http.get_json(&path).await?
 			},
 		};
 		let object =
@@ -136,18 +137,16 @@ impl Client {
 
 		// Recurse into the children.
 		futures::future::try_join_all(directory.entries.into_iter().map(
-			|(entry_name, entry_object_hash)| {
-				async move {
-					let entry_path = path.join(&entry_name);
-					self.checkout_path(
-						object_cache,
-						entry_object_hash,
-						&entry_path,
-						external_path_for_dependency,
-					)
-					.await?;
-					Ok::<_, anyhow::Error>(())
-				}
+			|(entry_name, entry_object_hash)| async move {
+				let entry_path = path.join(&entry_name);
+				self.checkout_path(
+					object_cache,
+					entry_object_hash,
+					&entry_path,
+					external_path_for_dependency,
+				)
+				.await?;
+				Ok::<_, anyhow::Error>(())
 			},
 		))
 		.await?;
@@ -177,31 +176,40 @@ impl Client {
 			None => {},
 		};
 
-		// Write the file to the path.
-		match &self.transport {
-			Transport::InProcess(server) => {
-				tokio::fs::copy(&server.blob_path(file.blob_hash), &path).await?;
-			},
-			Transport::Unix(_) => todo!(),
-			Transport::Tcp(transport) => {
-				let blob_hash = file.blob_hash;
-				let request_path = format!("/blobs/{blob_hash}");
-
-				let mut response = transport
-					.get(&request_path)
-					.await?
-					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
-
-				// Create an async reader from the body.
-				let mut body = StreamReader::new(&mut response);
-
-				// Create the file to write to.
-				let mut file = tokio::fs::File::create(&path).await?;
-
-				// Read the bytes from the body into the file.
-				tokio::io::copy(&mut body, &mut file).await?;
-			},
+		// Get the server path if it is local.
+		let local_server_path = match &self.transport {
+			Transport::InProcess(server) => Some(server.path()),
+			Transport::Unix(unix) => Some(unix.path.as_ref()),
+			Transport::Tcp(_) => None,
 		};
+
+		if let Some(local_server_path) = local_server_path {
+			// If the server is local, copy the file.
+			let local_server_blob_path = local_server_path
+				.join("blobs")
+				.join(file.blob_hash.to_string());
+			tokio::fs::copy(&local_server_blob_path, &path).await?;
+		} else if let Some(http) = self.transport.as_http() {
+			// Otherwise, if the server is remote, retrieve the blob and write it to the path.
+			let blob_hash = file.blob_hash;
+			let request_path = format!("/blobs/{blob_hash}");
+
+			let mut response = http
+				.get(&request_path)
+				.await?
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
+
+			// Create an async reader from the body.
+			let mut body = StreamReader::new(&mut response);
+
+			// Create the file to write to.
+			let mut file = tokio::fs::File::create(&path).await?;
+
+			// Read the bytes from the body into the file.
+			tokio::io::copy(&mut body, &mut file).await?;
+		} else {
+			unreachable!()
+		}
 
 		// Make the file executable if necessary.
 		if file.executable {

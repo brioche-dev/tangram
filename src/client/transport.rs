@@ -10,19 +10,43 @@ pub enum Transport {
 	Tcp(Tcp),
 }
 
-// impl Transport {
-// 	pub fn as_local(&self) -> &Arc<Server> {
-// 		todo!()
-// 	}
-
-// 	pub fn as_remote(&self) -> &Remote {
-// 		todo!()
-// 	}
-// }
-
 pub struct Unix {
-	path: PathBuf,
-	client: hyper::Client<hyperlocal::UnixConnector, hyper::Body>,
+	pub path: PathBuf,
+	pub client: hyper::Client<hyperlocal::UnixConnector, hyper::Body>,
+}
+
+pub struct Tcp {
+	pub url: Url,
+	pub client:
+		hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
+}
+
+pub enum Http<'a> {
+	Unix(&'a Unix),
+	Tcp(&'a Tcp),
+}
+
+pub enum InProcessOrHttp<'a> {
+	InProcess(&'a Arc<Server>),
+	Http(Http<'a>),
+}
+
+impl Transport {
+	pub fn as_http(&self) -> Option<Http<'_>> {
+		match self {
+			Transport::InProcess(_) => None,
+			Transport::Unix(unix) => Some(Http::Unix(unix)),
+			Transport::Tcp(tcp) => Some(Http::Tcp(tcp)),
+		}
+	}
+
+	pub fn as_in_process_or_http(&self) -> InProcessOrHttp<'_> {
+		match self {
+			Transport::InProcess(server) => InProcessOrHttp::InProcess(server),
+			Transport::Unix(unix) => InProcessOrHttp::Http(Http::Unix(unix)),
+			Transport::Tcp(tcp) => InProcessOrHttp::Http(Http::Tcp(tcp)),
+		}
+	}
 }
 
 impl Unix {
@@ -30,36 +54,6 @@ impl Unix {
 		let client = hyper::Client::unix();
 		Unix { path, client }
 	}
-
-	pub async fn get(&self, path: &str) -> Result<hyper::Body> {
-		todo!()
-	}
-
-	pub async fn get_json<U>(&self, path: &str) -> Result<U>
-	where
-		U: serde::de::DeserializeOwned,
-	{
-		todo!()
-	}
-
-	pub async fn post(&self, path: &str, body: hyper::Body) -> Result<hyper::Body> {
-		let uri = hyperlocal::Uri::new(&self.path, path);
-		todo!()
-	}
-
-	pub async fn post_json<T, U>(&self, path: &str, body: &T) -> Result<U>
-	where
-		T: serde::Serialize,
-		U: serde::de::DeserializeOwned,
-	{
-		todo!()
-	}
-}
-
-pub struct Tcp {
-	pub url: Url,
-	pub client:
-		hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
 }
 
 impl Tcp {
@@ -73,25 +67,45 @@ impl Tcp {
 		);
 		Tcp { url, client }
 	}
+}
 
+impl<'a> Http<'a> {
 	pub async fn get(&self, path: &str) -> Result<hyper::Body> {
-		// Set the URL path.
-		let mut url = self.url.clone();
-		url.set_path(path);
+		// Build the URI.
+		let uri = match self {
+			Http::Unix(unix) => {
+				let uri: hyper::Uri = hyperlocal::Uri::new(&unix.path, path).into();
+				let mut uri = uri.to_string();
+				uri.push_str(path);
+				uri
+			},
+			Http::Tcp(tcp) => {
+				let mut url = tcp.url.clone();
+				url.set_path(path);
+				url.to_string()
+			},
+		};
 
 		// Create the request.
 		let request = http::Request::builder()
 			.method(http::Method::GET)
-			.uri(url.to_string())
+			.uri(uri)
 			.body(hyper::Body::empty())
 			.unwrap();
 
 		// Send the request.
-		let response = self
-			.client
-			.request(request)
-			.await
-			.context("Failed to send the request.")?;
+		let response = match self {
+			Http::Unix(unix) => unix
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+			Http::Tcp(tcp) => tcp
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+		};
 
 		// Handle a non-success status.
 		if !response.status().is_success() {
@@ -111,23 +125,41 @@ impl Tcp {
 	where
 		U: serde::de::DeserializeOwned,
 	{
-		// Set the URL path.
-		let mut url = self.url.clone();
-		url.set_path(path);
+		// Build the URI.
+		let uri = match self {
+			Http::Unix(unix) => {
+				let uri: hyper::Uri = hyperlocal::Uri::new(&unix.path, path).into();
+				let mut uri = uri.to_string();
+				uri.push_str(path);
+				uri
+			},
+			Http::Tcp(tcp) => {
+				let mut url = tcp.url.clone();
+				url.set_path(path);
+				url.to_string()
+			},
+		};
 
 		// Create the request.
 		let request = http::Request::builder()
 			.method(http::Method::GET)
-			.uri(url.to_string())
+			.uri(uri)
 			.body(hyper::Body::empty())
 			.unwrap();
 
 		// Send the request.
-		let response = self
-			.client
-			.request(request)
-			.await
-			.context("Failed to send the request.")?;
+		let response = match self {
+			Http::Unix(unix) => unix
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+			Http::Tcp(tcp) => tcp
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+		};
 
 		// Handle a non-success status.
 		if !response.status().is_success() {
@@ -153,23 +185,41 @@ impl Tcp {
 	}
 
 	pub async fn post(&self, path: &str, body: hyper::Body) -> Result<hyper::Body> {
-		// Set the URL path.
-		let mut url = self.url.clone();
-		url.set_path(path);
+		// Build the URI.
+		let uri = match self {
+			Http::Unix(unix) => {
+				let uri: hyper::Uri = hyperlocal::Uri::new(&unix.path, path).into();
+				let mut uri = uri.to_string();
+				uri.push_str(path);
+				uri
+			},
+			Http::Tcp(tcp) => {
+				let mut url = tcp.url.clone();
+				url.set_path(path);
+				url.to_string()
+			},
+		};
 
 		// Create the request.
 		let request = http::Request::builder()
 			.method(http::Method::POST)
-			.uri(url.to_string())
+			.uri(uri)
 			.body(body)
 			.unwrap();
 
 		// Send the request.
-		let response = self
-			.client
-			.request(request)
-			.await
-			.context("Failed to send the request.")?;
+		let response = match self {
+			Http::Unix(unix) => unix
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+			Http::Tcp(tcp) => tcp
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+		};
 
 		// Handle a non-success status.
 		if !response.status().is_success() {
@@ -190,9 +240,20 @@ impl Tcp {
 		T: serde::Serialize,
 		U: serde::de::DeserializeOwned,
 	{
-		// Set the URL path.
-		let mut url = self.url.clone();
-		url.set_path(path);
+		// Build the URI.
+		let uri = match self {
+			Http::Unix(unix) => {
+				let uri: hyper::Uri = hyperlocal::Uri::new(&unix.path, path).into();
+				let mut uri = uri.to_string();
+				uri.push_str(path);
+				uri
+			},
+			Http::Tcp(tcp) => {
+				let mut url = tcp.url.clone();
+				url.set_path(path);
+				url.to_string()
+			},
+		};
 
 		// Serialize the body.
 		let body = serde_json::to_string(&body).context("Failed to serialize the request body.")?;
@@ -200,17 +261,24 @@ impl Tcp {
 		// Create the request.
 		let request = http::Request::builder()
 			.method(http::Method::POST)
-			.uri(url.to_string())
+			.uri(uri)
 			.header(http::header::CONTENT_TYPE, "application/json")
 			.body(hyper::Body::from(body))
 			.unwrap();
 
 		// Send the request.
-		let response = self
-			.client
-			.request(request)
-			.await
-			.context("Failed to send the request.")?;
+		let response = match self {
+			Http::Unix(unix) => unix
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+			Http::Tcp(tcp) => tcp
+				.client
+				.request(request)
+				.await
+				.context("Failed to send the request.")?,
+		};
 
 		// Handle a non-success status.
 		if !response.status().is_success() {

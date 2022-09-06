@@ -20,7 +20,7 @@ impl Server {
 					from package_versions
 					where
 						name = $1
-					and
+						and
 						version = $2
 				"#,
 				(package_name, package_version.to_string()),
@@ -29,9 +29,8 @@ impl Server {
 			.await?;
 
 		// Construct the artifact.
-		let artifact = maybe_object_hash
-			.map(|object_hash| object_hash.parse().unwrap())
-			.map(|object_hash| Artifact { object_hash });
+		let artifact =
+			maybe_object_hash.map(|object_hash| Artifact::new(object_hash.parse().unwrap()));
 
 		Ok(artifact)
 	}
@@ -122,7 +121,7 @@ impl Server {
 				.execute((
 					package_name,
 					package_version,
-					artifact.object_hash.to_string(),
+					artifact.object_hash().to_string(),
 				))
 				.context("Failed to execute the query.")?;
 

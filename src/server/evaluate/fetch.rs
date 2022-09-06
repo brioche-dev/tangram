@@ -22,9 +22,7 @@ impl Server {
 					blob_hash: BlobHash(hash),
 					executable: false,
 				});
-				Some(Artifact {
-					object_hash: object.hash(),
-				})
+				Some(Artifact::new(object.hash()))
 			} else {
 				None
 			}
@@ -153,9 +151,8 @@ impl Server {
 					archive.unpack(&unpack_temp_path)?;
 				},
 				ArchiveFormat::Zip => {
-					todo!()
-					// let mut zip = zip::ZipArchive::new(archive_reader)?;
-					// zip.extract(&unpack_temp_path)?;
+					let mut zip = zip::ZipArchive::new(archive_reader)?;
+					zip.extract(&unpack_temp_path)?;
 				},
 			};
 			Ok(())

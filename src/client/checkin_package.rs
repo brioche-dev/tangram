@@ -95,7 +95,7 @@ impl Client {
 
 							// Create the lockfile Entry.
 							lockfile::Dependency {
-								hash: dependency_artifact.object_hash,
+								hash: dependency_artifact.object_hash(),
 								dependencies: None,
 							}
 						},
@@ -114,7 +114,7 @@ impl Client {
 							};
 							// Create the lockfile Entry.
 							lockfile::Dependency {
-								hash: artifact.object_hash,
+								hash: artifact.object_hash(),
 								dependencies: None,
 							}
 						},
