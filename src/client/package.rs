@@ -1,8 +1,65 @@
 use crate::{artifact::Artifact, client::Client, manifest::Manifest};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use std::path::Path;
 
 impl Client {
+	pub async fn search(&self, name: &str) -> Result<Vec<String>> {
+		match &self.transport {
+			crate::client::transport::Transport::InProcess(server) => {
+				let packages = server
+					.get_packages(Some(name))
+					.await?
+					.into_iter()
+					.map(|search_result| search_result.name)
+					.collect();
+				Ok(packages)
+			},
+			crate::client::transport::Transport::Unix(_) => todo!(),
+			crate::client::transport::Transport::Tcp(transport) => {
+				let path = "/packages";
+				// Set the URL path.
+				let mut url = transport.url.clone();
+				url.set_path(path);
+				url.set_query(Some(&format!("name={name}")));
+
+				// Create the request.
+				let request = http::Request::builder()
+					.method(http::Method::GET)
+					.uri(url.to_string())
+					.body(hyper::Body::empty())
+					.unwrap();
+
+				// Send the request.
+				let response = transport
+					.client
+					.request(request)
+					.await
+					.context("Failed to send the request.")?;
+
+				// Handle a non-success status.
+				if !response.status().is_success() {
+					let status = response.status();
+					let body = hyper::body::to_bytes(response.into_body())
+						.await
+						.context("Failed to read response body.")?;
+					let body = String::from_utf8(body.to_vec())
+						.context("Failed to read response body as string.")?;
+					bail!("{}\n{}", status, body);
+				}
+
+				// Read the response body.
+				let body = hyper::body::to_bytes(response.into_body())
+					.await
+					.context("Failed to read response body.")?;
+
+				// Deserialize the response body.
+				let response = serde_json::from_slice(&body)
+					.context("Failed to deserialize the response body.")?;
+
+				Ok(response)
+			},
+		}
+	}
 	pub async fn get_package(&self, name: &str, version: &str) -> Result<Option<Artifact>> {
 		match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {

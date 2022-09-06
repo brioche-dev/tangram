@@ -11,6 +11,7 @@ pub mod id;
 pub mod lockfile;
 pub mod manifest;
 pub mod object;
+pub mod package;
 pub mod repl;
 pub mod server;
 pub mod system;

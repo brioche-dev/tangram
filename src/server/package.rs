@@ -1,5 +1,5 @@
 use super::Server;
-use crate::artifact::Artifact;
+use crate::{artifact::Artifact, package::PackageSearchResultItem};
 use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
@@ -11,10 +11,28 @@ pub struct PackageVersion {
 }
 
 impl Server {
-	pub async fn get_packages(self: &Arc<Self>) -> Result<Vec<String>> {
-		// Retrieve the package versions.
-		let versions = self
-			.database_query_rows(
+	pub async fn get_packages(
+		self: &Arc<Self>,
+		name: Option<&str>,
+	) -> Result<Vec<PackageSearchResultItem>> {
+		// Retrieve packages that match this query.
+		let packages = if let Some(name) = name {
+			self.database_query_rows(
+				r#"
+					select
+					name
+						from packages
+					where name like $1
+				"#,
+				(format!("%{name}%"),),
+				|row| row.get::<_, String>(0),
+			)
+			.await?
+			.into_iter()
+			.map(|name| PackageSearchResultItem { name })
+			.collect()
+		} else {
+			self.database_query_rows(
 				r#"
 					select
 					name
@@ -25,9 +43,11 @@ impl Server {
 			)
 			.await?
 			.into_iter()
-			.collect();
+			.map(|name| PackageSearchResultItem { name })
+			.collect()
+		};
 
-		Ok(versions)
+		Ok(packages)
 	}
 
 	pub async fn get_package(self: &Arc<Self>, package_name: &str) -> Result<Vec<PackageVersion>> {
@@ -122,13 +142,28 @@ impl Server {
 	// Retrieve the packages name list.
 	pub async fn handle_get_packages_request(
 		self: &Arc<Self>,
-		_request: http::Request<hyper::Body>,
+		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
 		// Get the package versions.
-		let versions = self.get_packages().await?;
+		#[derive(serde::Deserialize, Default)]
+		struct SearchParams {
+			name: Option<String>,
+		}
+		let search_params: Option<SearchParams> = if let Some(query) = request.uri().query() {
+			Some(serde_urlencoded::from_str(query)?)
+		} else {
+			None
+		};
+		let packages = self
+			.get_packages(
+				search_params
+					.and_then(|search_params| search_params.name)
+					.as_deref(),
+			)
+			.await?;
 
 		// Create the response.
-		let body = serde_json::to_vec(&versions).context("Failed to serialize the response.")?;
+		let body = serde_json::to_vec(&packages).context("Failed to serialize the response.")?;
 		let response = http::Response::builder()
 			.body(hyper::Body::from(body))
 			.unwrap();

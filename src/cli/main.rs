@@ -32,6 +32,7 @@ enum Subcommand {
 	Publish(commands::publish::Args),
 	Repl(commands::repl::Args),
 	Server(commands::server::Args),
+	Search(commands::search::Args),
 }
 
 #[tokio::main]
@@ -56,6 +57,7 @@ async fn main() -> Result<()> {
 		Subcommand::Gc(args) => commands::gc::run(args).boxed(),
 		Subcommand::Repl(args) => commands::repl::run(args).boxed(),
 		Subcommand::Server(args) => commands::server::run(args).boxed(),
+		Subcommand::Search(args) => commands::search::run(args).boxed(),
 	}
 	.await?;
 	Ok(())

@@ -5,4 +5,5 @@ pub mod fetch;
 pub mod gc;
 pub mod publish;
 pub mod repl;
+pub mod search;
 pub mod server;
