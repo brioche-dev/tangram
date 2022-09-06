@@ -9,23 +9,18 @@ use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use futures::Future;
 use futures::TryStreamExt;
-use std::{
-	os::unix::prelude::PermissionsExt,
-	path::{Path, PathBuf},
-	pin::Pin,
-	sync::Arc,
-};
+use std::{os::unix::prelude::PermissionsExt, path::Path, pin::Pin, sync::Arc};
 use tokio_util::io::StreamReader;
 
-pub type ExternalPathForDependencyFn =
-	dyn Sync + Fn(&Dependency) -> Pin<Box<dyn Send + Future<Output = Result<Option<PathBuf>>>>>;
+pub type DependencyHandlerFn =
+	dyn Sync + Fn(&Dependency, &Path) -> Pin<Box<dyn Send + Future<Output = Result<()>>>>;
 
 impl Client {
 	pub async fn checkout(
 		&self,
 		artifact: Artifact,
 		path: &Path,
-		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
+		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Create an object cache.
 		let object_cache = ObjectCache::new(path, Arc::clone(&self.file_system_semaphore));
@@ -35,7 +30,7 @@ impl Client {
 			&object_cache,
 			artifact.object_hash(),
 			path,
-			external_path_for_dependency,
+			dependency_handler,
 		)
 		.await?;
 
@@ -47,7 +42,7 @@ impl Client {
 		object_cache: &ObjectCache,
 		remote_object_hash: ObjectHash,
 		path: &Path,
-		external_path_for_dependency: Option<&'_ ExternalPathForDependencyFn>,
+		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Get the object from the server.
 		let object = match self.transport.as_in_process_or_http() {
@@ -65,13 +60,8 @@ impl Client {
 		// Call the appropriate function for the object's type.
 		match object {
 			Object::Directory(directory) => {
-				self.checkout_directory(
-					object_cache,
-					directory,
-					path,
-					external_path_for_dependency,
-				)
-				.await?;
+				self.checkout_directory(object_cache, directory, path, dependency_handler)
+					.await?;
 			},
 			Object::File(file) => {
 				self.checkout_file(object_cache, file, path).await?;
@@ -80,13 +70,8 @@ impl Client {
 				self.checkout_symlink(object_cache, symlink, path).await?;
 			},
 			Object::Dependency(dependency) => {
-				self.checkout_dependency(
-					object_cache,
-					dependency,
-					path,
-					external_path_for_dependency,
-				)
-				.await?;
+				self.checkout_dependency(object_cache, dependency, path, dependency_handler)
+					.await?;
 			},
 		}
 
@@ -99,7 +84,7 @@ impl Client {
 		object_cache: &ObjectCache,
 		directory: Directory,
 		path: &Path,
-		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependencyFn>,
+		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
@@ -143,7 +128,7 @@ impl Client {
 					object_cache,
 					entry_object_hash,
 					&entry_path,
-					external_path_for_dependency,
+					dependency_handler,
 				)
 				.await?;
 				Ok::<_, anyhow::Error>(())
@@ -256,7 +241,7 @@ impl Client {
 		object_cache: &ObjectCache,
 		dependency: Dependency,
 		path: &Path,
-		external_path_for_dependency: Option<&'async_recursion ExternalPathForDependencyFn>,
+		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
 		match object_cache.get(path).await? {
@@ -274,29 +259,12 @@ impl Client {
 			None => {},
 		};
 
-		// Get the dependency path.
-		let dependency_path = if let Some(path_for_dependency) = external_path_for_dependency {
-			path_for_dependency(&dependency).await?
+		if let Some(dependency_handler) = dependency_handler {
+			// If there is a dependency handler, call it.
+			dependency_handler(&dependency, path).await?;
 		} else {
-			None
-		};
-
-		// Checkout the dependency.
-		self.checkout(
-			dependency.artifact,
-			dependency_path.as_deref().unwrap_or(path),
-			external_path_for_dependency,
-		)
-		.await?;
-
-		// If the dependency path is external, create a symlink.
-		if let Some(dependency_path) = dependency_path {
-			// Compute the target path.
-			// TODO Make this a relative path.
-			let target = dependency_path;
-
-			// Create the symlink.
-			tokio::fs::symlink(target, path).await?;
+			// Otherwise, checkout the dependency to the path.
+			self.checkout(dependency.artifact, path, None).await?;
 		}
 
 		Ok(())

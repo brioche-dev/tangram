@@ -1,8 +1,11 @@
 use crate::{artifact::Artifact, object::Dependency, server::Server, util::path_exists};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use async_recursion::async_recursion;
 use futures::FutureExt;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Fragment {
@@ -33,23 +36,45 @@ impl Server {
 			let temp_path = self.temp_path(&temp);
 
 			// Create the callback to create dependency fragments.
-			let path_for_dependency = {
+			let dependency_handler = {
 				let server = Arc::clone(self);
-				move |dependency: &Dependency| {
+				move |dependency: &Dependency, path: &Path| {
 					let server = Arc::clone(&server);
 					let dependency = dependency.clone();
+					let path = path.to_owned();
 					async move {
-						let dependency_fragment =
-							server.create_fragment(dependency.artifact).await?;
+						// Checkout the dependency to a fragment.
+						let dependency_fragment = server
+							.create_fragment(dependency.artifact)
+							.await
+							.context("Failed to checkout the dependency to a fragment.")?;
+
+						// Get the dependency fragment's path.
 						let dependency_fragment_path = server.fragment_path(&dependency_fragment);
-						Ok(Some(dependency_fragment_path))
+
+						// Compute the symlink target.
+						let parent_path = path
+							.parent()
+							.ok_or_else(|| anyhow!("Expected the path to have a parent."))?;
+						let dependency_path =
+							pathdiff::diff_paths(dependency_fragment_path, parent_path)
+								.ok_or_else(|| {
+									anyhow!("Could not resolve the symlink target relative to the path.")
+								})?;
+
+						// Create the symlink.
+						tokio::fs::symlink(dependency_path, path)
+							.await
+							.context("Failed to write the symlink for the dependency.")?;
+
+						Ok(())
 					}
 					.boxed()
 				}
 			};
 
 			// Perform the checkout.
-			self.checkout(artifact, &temp_path, Some(&path_for_dependency))
+			self.checkout(artifact, &temp_path, Some(&dependency_handler))
 				.await
 				.context("Failed to perform the checkout.")?;
 
