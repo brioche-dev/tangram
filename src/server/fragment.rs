@@ -1,6 +1,7 @@
 use crate::{artifact::Artifact, object::Dependency, server::Server, util::path_exists};
 use anyhow::{anyhow, Context, Result};
 use async_recursion::async_recursion;
+use errno::{errno, Errno};
 use futures::FutureExt;
 use std::{
 	path::{Path, PathBuf},
@@ -79,9 +80,17 @@ impl Server {
 				.context("Failed to perform the checkout.")?;
 
 			// Move the checkout to the fragments path.
-			tokio::fs::rename(&temp_path, &fragment_path)
-				.await
-				.context("Failed to move the checkout to the fragment path.")?;
+			match tokio::fs::rename(&temp_path, &fragment_path).await {
+				Ok(()) => {},
+
+				// If the error is ENOTEMPTY or EEXIST then we can ignore it because there is already a fragment present.
+				Err(_) if errno() == Errno(libc::ENOTEMPTY) || errno() == Errno(libc::EEXIST) => {},
+
+				Err(error) => {
+					return Err(anyhow::Error::from(error)
+						.context("Failed to move the checkout to the fragment path."));
+				},
+			};
 		}
 
 		Ok(Fragment { artifact })
