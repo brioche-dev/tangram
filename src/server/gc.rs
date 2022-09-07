@@ -1,13 +1,13 @@
+use super::Server;
 use crate::{
 	artifact::Artifact,
+	hash::BuildHasher,
 	object::{BlobHash, Object, ObjectHash},
 	util::rmrf,
 };
-
-use super::Server;
 use anyhow::{Context, Result};
-use fnv::FnvHashSet;
 use rusqlite::Transaction;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 impl Server {
@@ -23,7 +23,7 @@ impl Server {
 			.context("Failed to retrieve a database connection.")?;
 
 		let marked_blob_hashes =
-			tokio::task::block_in_place(move || -> Result<FnvHashSet<BlobHash>> {
+			tokio::task::block_in_place(move || -> Result<HashSet<BlobHash, BuildHasher>> {
 				// Create a database transaction.
 				let mut database_connection = database_connection_object.lock().unwrap();
 				let txn = database_connection.transaction()?;
@@ -38,8 +38,8 @@ impl Server {
 					let object = get_object(&txn, object_hash)?;
 					queue.push(object);
 				}
-				let mut marked_object_hashes = FnvHashSet::default();
-				let mut marked_blob_hashes = FnvHashSet::default();
+				let mut marked_object_hashes: HashSet<ObjectHash, BuildHasher> = HashSet::default();
+				let mut marked_blob_hashes: HashSet<BlobHash, BuildHasher> = HashSet::default();
 				while let Some(object) = queue.pop() {
 					let object_hash = object.hash();
 					match object {
