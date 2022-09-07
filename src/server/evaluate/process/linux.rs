@@ -79,7 +79,6 @@ impl Server {
 			process.pre_exec(move || {
 				pre_exec(&mut child_socket, &parent_child_root_path, &server_path).map_err(
 					|error| {
-						dbg!(&error, &error.backtrace());
 						std::io::Error::new(std::io::ErrorKind::Other, error)
 					},
 				)

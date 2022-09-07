@@ -526,10 +526,7 @@ async fn op_tangram_evaluate(
 		(server, main_runtime_handle)
 	};
 	let task = async move {
-		let value = server.evaluate(expression).await.map_err(|error| {
-			dbg!(&error, &error.backtrace());
-			error
-		})?;
+		let value = server.evaluate(expression).await?;
 		Ok::<_, anyhow::Error>(value)
 	};
 	let value = main_runtime_handle.spawn(task).await.unwrap()?;
