@@ -39,18 +39,18 @@ impl Server {
 			.await
 			.context("Failed to create the chroot directory.")?;
 
-		// Create a symlink from /bin/sh in the chroot to a fragment with toybox.
-		let toybox_artifact = self
-			.toybox_artifact(system)
+		// Create a symlink from /bin/sh in the chroot to a fragment with statically-linked bash.
+		let bash_artifact = self
+			.bash_artifact(system)
 			.await
-			.context("Failed to evaluate the toybox artifact.")?;
-		let toybox_fragment = self
-			.create_fragment(toybox_artifact)
+			.context("Failed to evaluate the bash artifact.")?;
+		let bash_fragment = self
+			.create_fragment(bash_artifact)
 			.await
-			.context("Failed to create the toybox fragment.")?;
+			.context("Failed to create the bash fragment.")?;
 		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
 		tokio::fs::symlink(
-			self.fragment_path(&toybox_fragment).join("bin/toybox"),
+			self.fragment_path(&bash_fragment).join("bin/bash"),
 			parent_child_root_path.join("bin/sh"),
 		)
 		.await?;
@@ -59,7 +59,7 @@ impl Server {
 		let child_dev_path = parent_child_root_path.join("dev");
 		tokio::fs::create_dir(&child_dev_path).await?;
 
-		// Create <chroot>/dev/null
+		// Create <chroot>/dev/null.
 		let child_dev_null_path = child_dev_path.join("null");
 		let child_dev_null_path_c_string =
 			CString::new(child_dev_null_path.as_os_str().as_bytes()).unwrap();
@@ -76,8 +76,6 @@ impl Server {
 			bail!(anyhow!(std::io::Error::last_os_error())
 				.context("Failed to create sandbox /dev/null"));
 		}
-
-		// Bind mount /proc
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -166,16 +164,16 @@ impl Server {
 		Ok(())
 	}
 
-	async fn toybox_artifact(self: &Arc<Self>, system: System) -> Result<Artifact> {
+	async fn bash_artifact(self: &Arc<Self>, system: System) -> Result<Artifact> {
 		// Get the URL and hash for the system.
 		let (url, hash) = match system {
 			System::Amd64Linux => (
-				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_x86_64.tar.zstd",
-				"9889888bb7cd2ee1ec1136ca7314c1fc5fb09cb2553ad269b9a43a193ee19aad",
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_x86_64_20220907.tar.zstd",
+				"3aaf04b218920d9ab4cf36bb41e1be8ffd182a0b217ee1bb4cc0496ffe34e166",
 			),
 			System::Arm64Linux => (
-				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_aarch64.tar.zstd",
-				"53e51ebf85949ab6735e4df9b31c2ad51e16f05b66f55610dcd1c6afbf2c2a66",
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_aarch64_20220907.tar.zstd",
+				"689a8fb03b86ea69c9f40ba5cf580282c2bb80ad08d3dfeae44fc64c83258511",
 			),
 			_ => bail!(r#"Unexpected system "{}"."#, system),
 		};
