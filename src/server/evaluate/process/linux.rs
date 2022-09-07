@@ -7,7 +7,6 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use camino::Utf8Path;
 use libc::*;
 use std::{
 	collections::BTreeMap,
@@ -29,7 +28,7 @@ impl Server {
 		let server_path = self.path().to_owned();
 
 		// Create a temp for the chroot.
-		let mut temp = self
+		let temp = self
 			.create_temp()
 			.await
 			.context("Failed to create a temp for the chroot.")?;
@@ -50,7 +49,7 @@ impl Server {
 			.context("Failed to create the toybox fragment.")?;
 		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
 		tokio::fs::symlink(
-			self.fragment_path(&toybox_fragment).join("toybox"),
+			self.fragment_path(&toybox_fragment).join("bin/toybox"),
 			parent_child_root_path.join("bin/sh"),
 		)
 		.await?;
@@ -150,12 +149,12 @@ impl Server {
 		// Get the URL and hash for the system.
 		let (url, hash) = match system {
 			System::Amd64Linux => (
-				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_x86_64.tar.gz",
-				"128d2fe70c4de5f8bd78c504ef9fa93bfb1a541b9db1707fb33e3ee811853a84",
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_x86_64.tar.zstd",
+				"9889888bb7cd2ee1ec1136ca7314c1fc5fb09cb2553ad269b9a43a193ee19aad",
 			),
 			System::Arm64Linux => (
-				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_aarch64.tar.gz",
-				"065b1d9a39d0c621b305cd96eff504c2bb24d1fe76856cd0c8bfe7516ddc0abb",
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_aarch64.tar.zstd",
+				"53e51ebf85949ab6735e4df9b31c2ad51e16f05b66f55610dcd1c6afbf2c2a66",
 			),
 			_ => bail!(r#"Unexpected system "{}"."#, system),
 		};
