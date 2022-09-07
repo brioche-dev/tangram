@@ -23,25 +23,43 @@ pub const TANGRAM_MODULE_SCHEME: &str = "tangram-module";
 pub const TANGRAM_TARGET_PROXY_SCHEME: &str = "tangram-target-proxy";
 
 pub struct ModuleLoader {
-	server: Arc<Server>,
-	main_runtime_handle: tokio::runtime::Handle,
-	lockfile_cache: Arc<Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>>,
+	state: Arc<State>,
+}
+
+struct State {
+	pub server: Arc<Server>,
+	pub main_runtime_handle: tokio::runtime::Handle,
+	pub modules: Mutex<HashMap<Url, Module, fnv::FnvBuildHasher>>,
+	pub lockfile_cache: Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>,
+}
+
+struct Module {
+	source: String,
+	transpiled_source: deno_ast::TranspiledSource,
 }
 
 impl ModuleLoader {
 	/// Create a new module loader.
 	pub fn new(server: Arc<Server>, main_runtime_handle: tokio::runtime::Handle) -> ModuleLoader {
-		ModuleLoader {
+		let state = State {
 			server,
 			main_runtime_handle,
-			lockfile_cache: Arc::new(Mutex::new(HashMap::default())),
+			modules: Mutex::new(HashMap::default()),
+			lockfile_cache: Mutex::new(HashMap::default()),
+		};
+		ModuleLoader {
+			state: Arc::new(state),
 		}
 	}
 
 	/// Add a lockfile to the module loader's lockfile cache.
 	pub fn add_lockfile(&self, lockfile: Lockfile) -> Hash {
 		let hash = Hash::new(serde_json::to_vec(&lockfile).unwrap());
-		self.lockfile_cache.lock().unwrap().insert(hash, lockfile);
+		self.state
+			.lockfile_cache
+			.lock()
+			.unwrap()
+			.insert(hash, lockfile);
 		hash
 	}
 }
@@ -53,8 +71,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		referrer: &str,
 		_is_main: bool,
 	) -> Result<deno_core::ModuleSpecifier> {
-		let server = Arc::clone(&self.server);
-		let lockfile_cache = Arc::clone(&self.lockfile_cache);
+		let state = Arc::clone(&self.state);
 
 		// Resolve the specifier relative to the referrer.
 		let specifier = deno_core::resolve_import(specifier, referrer)?;
@@ -68,16 +85,13 @@ impl deno_core::ModuleLoader for ModuleLoader {
 
 		let specifier = match specifier.scheme() {
 			// Resolve a specifier with the tangram scheme.
-			TANGRAM_SCHEME => futures::executor::block_on(resolve_tangram(
-				server,
-				lockfile_cache,
-				specifier,
-				referrer,
-			))?,
+			TANGRAM_SCHEME => {
+				futures::executor::block_on(resolve_tangram(&state, specifier, referrer))?
+			},
 
 			// Resolve a specifier with the tangram module scheme.
 			TANGRAM_MODULE_SCHEME => {
-				futures::executor::block_on(resolve_tangram_module(specifier, referrer))?
+				futures::executor::block_on(resolve_tangram_module(&state, specifier, referrer))?
 			},
 
 			_ => {
@@ -94,20 +108,19 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		maybe_referrer: Option<deno_core::ModuleSpecifier>,
 		_is_dyn_import: bool,
 	) -> Pin<Box<deno_core::ModuleSourceFuture>> {
-		let server = Arc::clone(&self.server);
-		let main_runtime_handle = self.main_runtime_handle.clone();
-		let lockfile_cache = Arc::clone(&self.lockfile_cache);
+		let state = Arc::clone(&self.state);
 		let referrer = maybe_referrer;
 		let specifier = module_specifier.clone();
-		main_runtime_handle
+		self.state
+			.main_runtime_handle
 			.spawn(async move {
 				match specifier.scheme() {
 					// Load a module with the tangram module scheme.
-					TANGRAM_MODULE_SCHEME => load_tangram_module(server, specifier, referrer).await,
+					TANGRAM_MODULE_SCHEME => load_tangram_module(&state, specifier, referrer).await,
 
 					// Load a module with the tangram target proxy scheme.
 					TANGRAM_TARGET_PROXY_SCHEME => {
-						load_tangram_target_proxy(server, lockfile_cache, specifier, referrer).await
+						load_tangram_target_proxy(&state, specifier, referrer).await
 					},
 
 					_ => {
@@ -122,8 +135,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
 
 #[allow(clippy::unused_async)]
 async fn resolve_tangram(
-	server: Arc<Server>,
-	lockfile_cache: Arc<Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>>,
+	state: &State,
 	specifier: deno_core::ModuleSpecifier,
 	referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSpecifier> {
@@ -166,7 +178,7 @@ async fn resolve_tangram(
 
 	// Retrieve the referrer's lockfile from the cache or from the package.
 	let referrer_lockfile = if let Some(referrer_lockfile_hash) = referrer_lockfile_hash {
-		let lockfile_cache = lockfile_cache.lock().unwrap();
+		let lockfile_cache = state.lockfile_cache.lock().unwrap();
 		let referrer_lockfile: Lockfile = lockfile_cache
 			.get(&referrer_lockfile_hash)
 			.ok_or_else(|| {
@@ -176,8 +188,8 @@ async fn resolve_tangram(
 		referrer_lockfile
 	} else {
 		// Create a fragment for the referrer's package.
-		let referrer_fragment = server.create_fragment(referrer_package).await?;
-		let referrer_fragment_path = server.fragment_path(&referrer_fragment);
+		let referrer_fragment = state.server.create_fragment(referrer_package).await?;
+		let referrer_fragment_path = state.server.fragment_path(&referrer_fragment);
 
 		// Read the referrer's lockfile.
 		let referrer_lockfile_path = referrer_fragment_path.join("tangram.lock");
@@ -213,7 +225,8 @@ async fn resolve_tangram(
 	let specifier_lockfile_hash = if let Some(specifier_lockfile) = specifier_lockfile {
 		let specifier_lockfile_json = serde_json::to_string(&specifier_lockfile)?;
 		let specifier_lockfile_hash = Hash::new(&specifier_lockfile_json);
-		lockfile_cache
+		state
+			.lockfile_cache
 			.lock()
 			.unwrap()
 			.insert(specifier_lockfile_hash, specifier_lockfile);
@@ -238,6 +251,7 @@ async fn resolve_tangram(
 
 #[allow(clippy::unused_async)]
 async fn resolve_tangram_module(
+	_state: &State,
 	specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSpecifier> {
@@ -245,7 +259,7 @@ async fn resolve_tangram_module(
 }
 
 async fn load_tangram_module(
-	server: Arc<Server>,
+	state: &State,
 	specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSource> {
@@ -262,8 +276,8 @@ async fn load_tangram_module(
 	let specifier_artifact: Artifact = domain.parse()?;
 
 	// Create a fragment for the specifier's package.
-	let fragment = server.create_fragment(specifier_artifact).await?;
-	let fragment_path = server.fragment_path(&fragment);
+	let fragment = state.server.create_fragment(specifier_artifact).await?;
+	let fragment_path = state.server.fragment_path(&fragment);
 
 	// Get the path from the specifier.
 	let specifier_path = Utf8Path::new(specifier.path());
@@ -271,19 +285,59 @@ async fn load_tangram_module(
 		.strip_prefix("/")
 		.with_context(|| "The specifier must have a leading slash.")?;
 
-	// Read the module's code.
+	// Read the module's source.
 	let module_path = fragment_path.join(specifier_path);
-	let code = tokio::fs::read(&module_path).await.with_context(|| {
+	let source = tokio::fs::read(&module_path).await.with_context(|| {
 		format!(
 			r#"Failed to read file at path "{}"."#,
 			module_path.display(),
 		)
 	})?;
-	let code = String::from_utf8(code)?;
+	let source = String::from_utf8(source)?;
+
+	// Transpile the code if necessary.
+	let code = if specifier_path.extension() == Some("ts") {
+		// Parse the code.
+		let parsed_source = deno_ast::parse_module(deno_ast::ParseParams {
+			specifier: specifier.to_string(),
+			text_info: deno_ast::SourceTextInfo::new(source.clone().into()),
+			media_type: deno_ast::MediaType::TypeScript,
+			capture_tokens: true,
+			scope_analysis: true,
+			maybe_syntax: None,
+		})
+		.with_context(|| format!(r#"Failed to parse the module with URL "{specifier}"."#))?;
+
+		// Transpile the code.
+		let transpiled_source = parsed_source
+			.transpile(&deno_ast::EmitOptions {
+				inline_source_map: false,
+				..Default::default()
+			})
+			.with_context(|| {
+				format!(r#"Failed to transpile the module with URL "{specifier}"."#)
+			})?;
+		let code = transpiled_source.text.clone();
+
+		// Insert into the modules map.
+		let module = Module {
+			source,
+			transpiled_source,
+		};
+		state
+			.modules
+			.lock()
+			.unwrap()
+			.insert(specifier.clone(), module);
+
+		code
+	} else {
+		source
+	};
 
 	// Determine the module type.
 	let module_type = match specifier_path.extension() {
-		Some("js") => deno_core::ModuleType::JavaScript,
+		Some("js" | "ts") => deno_core::ModuleType::JavaScript,
 		Some("json") => deno_core::ModuleType::Json,
 		_ => {
 			bail!(r#"Cannot load module at path "{}"."#, module_path.display());
@@ -299,8 +353,7 @@ async fn load_tangram_module(
 }
 
 async fn load_tangram_target_proxy(
-	server: Arc<Server>,
-	lockfile_cache: Arc<Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>>,
+	state: &State,
 	specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSource> {
@@ -317,8 +370,8 @@ async fn load_tangram_target_proxy(
 	let package: Artifact = domain.parse()?;
 
 	// Create a fragment for the specifier's package.
-	let fragment = server.create_fragment(package).await?;
-	let fragment_path = server.fragment_path(&fragment);
+	let fragment = state.server.create_fragment(package).await?;
+	let fragment_path = state.server.fragment_path(&fragment);
 
 	// Read the specifier's manifest.
 	let manifest = tokio::fs::read(&fragment_path.join("tangram.json")).await?;
@@ -343,7 +396,8 @@ async fn load_tangram_target_proxy(
 
 	// Get the lockfile.
 	let lockfile: Option<Lockfile> = if let Some(lockfile_hash) = lockfile_hash {
-		let lockfile = lockfile_cache
+		let lockfile = state
+			.lockfile_cache
 			.lock()
 			.unwrap()
 			.get(&lockfile_hash)
@@ -394,4 +448,40 @@ async fn load_tangram_target_proxy(
 		module_url_specified: specifier.to_string(),
 		module_url_found: specifier.to_string(),
 	})
+}
+
+impl deno_core::SourceMapGetter for ModuleLoader {
+	fn get_source_map(&self, file_name: &str) -> Option<Vec<u8>> {
+		// Lock the modules.
+		let modules = self.state.modules.lock().unwrap();
+
+		// Parse the file name.
+		let specifier = Url::parse(file_name).ok()?;
+
+		// Retrieve the module.
+		let module = modules.get(&specifier)?;
+
+		// Retrieve the source map.
+		let source_map = module.transpiled_source.source_map.as_ref()?;
+
+		Some(source_map.clone().into_bytes())
+	}
+
+	fn get_source_line(&self, file_name: &str, line_number: usize) -> Option<String> {
+		// Lock the modules.
+		let modules = self.state.modules.lock().unwrap();
+
+		// Parse the file name.
+		let specifier = Url::parse(file_name).ok()?;
+
+		// Retrieve the transpiled source.
+		let module = modules.get(&specifier)?;
+
+		// Retrieve the line.
+		module
+			.source
+			.split('\n')
+			.nth(line_number)
+			.map(ToOwned::to_owned)
+	}
 }

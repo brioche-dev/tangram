@@ -63,8 +63,8 @@ impl Server {
 				(Some(fetch_hash), hash) if fetch_hash != hash => {
 					bail!(
 						"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
-						hash,
 						fetch_hash,
+						hash,
 					);
 				},
 				_ => {},

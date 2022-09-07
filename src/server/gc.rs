@@ -1,7 +1,7 @@
 use super::Server;
 use crate::{
 	artifact::Artifact,
-	hash::BuildHasher,
+	hash,
 	object::{BlobHash, Object, ObjectHash},
 	util::rmrf,
 };
@@ -22,8 +22,8 @@ impl Server {
 			.await
 			.context("Failed to retrieve a database connection.")?;
 
-		let marked_blob_hashes =
-			tokio::task::block_in_place(move || -> Result<HashSet<BlobHash, BuildHasher>> {
+		let marked_blob_hashes = tokio::task::block_in_place(
+			move || -> Result<HashSet<BlobHash, hash::BuildHasher>> {
 				// Create a database transaction.
 				let mut database_connection = database_connection_object.lock().unwrap();
 				let txn = database_connection.transaction()?;
@@ -38,8 +38,10 @@ impl Server {
 					let object = get_object(&txn, object_hash)?;
 					queue.push(object);
 				}
-				let mut marked_object_hashes: HashSet<ObjectHash, BuildHasher> = HashSet::default();
-				let mut marked_blob_hashes: HashSet<BlobHash, BuildHasher> = HashSet::default();
+				let mut marked_object_hashes: HashSet<ObjectHash, hash::BuildHasher> =
+					HashSet::default();
+				let mut marked_blob_hashes: HashSet<BlobHash, hash::BuildHasher> =
+					HashSet::default();
 				while let Some(object) = queue.pop() {
 					let object_hash = object.hash();
 					match object {
@@ -86,7 +88,8 @@ impl Server {
 				}
 
 				Ok(marked_blob_hashes)
-			})?;
+			},
+		)?;
 
 		// Go through the blobs dir, if the blob hash is not in the marked blob hash set, delete it.
 		let mut read_dir = tokio::fs::read_dir(self.blobs_dir())

@@ -18,7 +18,7 @@ impl Server {
 			.run(process)
 			.await
 			.context("Failed to run the JS process.")?
-			.context("The JS process did not complete successfully.")?;
+			.context("The JS process did not exit successfully.")?;
 
 		// Evaluate the resulting expression.
 		let value = self

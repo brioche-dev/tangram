@@ -12,7 +12,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use camino::Utf8PathBuf;
 use deno_core::{serde_v8, v8};
 use itertools::Itertools;
-use std::{cell::RefCell, fmt::Write, rc::Rc, sync::Arc};
+use std::{cell::RefCell, convert::TryInto, fmt::Write, rc::Rc, sync::Arc};
 use url::Url;
 
 mod cdp;
@@ -46,7 +46,7 @@ const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/snapshot"));
 
 /// This is the deno op state for the tangram deno extension.
 #[derive(Clone)]
-struct TangramOpState {
+struct OpState {
 	server: Arc<Server>,
 	main_runtime_handle: tokio::runtime::Handle,
 }
@@ -138,7 +138,7 @@ async fn js_runtime_task(
 			let server = Arc::clone(&server);
 			let main_runtime_handle = main_runtime_handle.clone();
 			move |state| {
-				state.put(TangramOpState {
+				state.put(OpState {
 					server: Arc::clone(&server),
 					main_runtime_handle: main_runtime_handle.clone(),
 				});
@@ -155,6 +155,9 @@ async fn js_runtime_task(
 
 	// Create the js runtime.
 	let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
+		source_map_getter: Some(
+			Box::new(Rc::clone(&module_loader)) as Box<dyn deno_core::SourceMapGetter>
+		),
 		module_loader: Some(Rc::clone(&module_loader) as Rc<dyn deno_core::ModuleLoader>),
 		extensions: vec![tangram_extension],
 		startup_snapshot: Some(deno_core::Snapshot::Static(SNAPSHOT)),
@@ -426,12 +429,16 @@ async fn handle_run_request(
 
 	// Call the specified export.
 	let value = export.call(&mut try_catch_scope, undefined.into(), &args);
+
+	// If an exception was caught, return an error with an error message.
 	if try_catch_scope.has_caught() {
 		let exception = try_catch_scope.exception().unwrap();
 		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
-		let exception_string = exception_to_string(&mut scope, exception);
-		bail!("{}", exception_string);
+		let error = deno_core::error::JsError::from_v8_exception(&mut scope, exception);
+		bail!(error);
 	}
+
+	// If there was no caught exception then retrieve the return value.
 	let value = value.unwrap();
 
 	// Move the return value to the global scope.
@@ -454,42 +461,6 @@ async fn handle_run_request(
 	let value = serde_v8::from_v8(&mut scope, value)?;
 
 	Ok(value)
-}
-
-/// Render an exception to a string. The string will include the exception's message and a stack trace with source maps applied.
-fn exception_to_string(scope: &mut v8::HandleScope, exception: v8::Local<v8::Value>) -> String {
-	let mut string = String::new();
-	let message = exception
-		.to_string(scope)
-		.unwrap()
-		.to_rust_string_lossy(scope);
-	writeln!(&mut string, "{}", message).unwrap();
-	let stack_trace = v8::Exception::get_stack_trace(scope, exception).unwrap();
-	for i in 0..stack_trace.get_frame_count() {
-		let stack_trace_frame = stack_trace.get_frame(scope, i).unwrap();
-		let source_url = Url::parse(
-			&stack_trace_frame
-				.get_script_name(scope)
-				.unwrap()
-				.to_rust_string_lossy(scope),
-		)
-		.unwrap();
-		let source_line = stack_trace_frame.get_line_number();
-		let source_column = stack_trace_frame.get_column();
-		// if let Some(source_map) = module_handle.source_map.as_ref() {
-		// 	let token = source_map
-		// 		.lookup_token((source_line - 1).into(), (source_column - 1).into())
-		// 		.unwrap();
-		// 	source_url = token.get_source().unwrap_or("<unknown>");
-		// 	source_line = token.get_src_line() + 1;
-		// 	source_column = token.get_src_col() + 1;
-		// }
-		write!(string, "{source_url}:{source_line}:{source_column}").unwrap();
-		if i < stack_trace.get_frame_count() - 1 {
-			writeln!(&mut string).unwrap();
-		}
-	}
-	string
 }
 
 #[deno_core::op]
@@ -520,7 +491,7 @@ async fn op_tangram_evaluate(
 ) -> Result<Value, deno_core::error::AnyError> {
 	let (server, main_runtime_handle) = {
 		let state = state.borrow();
-		let tangram_state = state.borrow::<TangramOpState>();
+		let tangram_state = state.borrow::<OpState>();
 		let server = Arc::clone(&tangram_state.server);
 		let main_runtime_handle = tangram_state.main_runtime_handle.clone();
 		(server, main_runtime_handle)

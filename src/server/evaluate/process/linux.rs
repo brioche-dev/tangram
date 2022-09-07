@@ -169,11 +169,11 @@ impl Server {
 		let (url, hash) = match system {
 			System::Amd64Linux => (
 				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_x86_64_20220907.tar.zstd",
-				"3aaf04b218920d9ab4cf36bb41e1be8ffd182a0b217ee1bb4cc0496ffe34e166",
+				"d81feb117184f1260dee13ccade1892e924b56f8280620fe1e91ab8ea546c853",
 			),
 			System::Arm64Linux => (
 				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_aarch64_20220907.tar.zstd",
-				"689a8fb03b86ea69c9f40ba5cf580282c2bb80ad08d3dfeae44fc64c83258511",
+				"1eef7627df44f6f2708a9ca7340f501dfabfa4e4f58c4d95b12ba8290719dbda",
 			),
 			_ => bail!(r#"Unexpected system "{}"."#, system),
 		};
