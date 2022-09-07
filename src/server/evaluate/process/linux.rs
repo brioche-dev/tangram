@@ -77,6 +77,10 @@ impl Server {
 				.context("Failed to create sandbox /dev/null"));
 		}
 
+		// Create <chroot>/tmp
+		let child_tmp_path = parent_child_root_path.join("tmp");
+		tokio::fs::create_dir(&child_tmp_path).await?;
+
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
 			tokio::net::UnixStream::pair().context("Failed to create socket pair.")?;
