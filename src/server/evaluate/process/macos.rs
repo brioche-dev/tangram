@@ -1,4 +1,4 @@
-use crate::server::Server;
+use crate::{server::Server, system::System};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
 use std::{
@@ -13,6 +13,7 @@ use std::{
 impl Server {
 	pub(super) async fn run_macos_process(
 		self: &Arc<Self>,
+		_system: System,
 		envs: BTreeMap<String, String>,
 		command: PathBuf,
 		args: Vec<String>,
@@ -41,10 +42,14 @@ impl Server {
 		let mut child = process.spawn().context("Failed to spawn the process.")?;
 
 		// Wait for the process to exit.
-		child
+		let status = child
 			.wait()
 			.await
 			.context("Failed to wait for the process to exit.")?;
+
+		if !status.success() {
+			bail!("The process did not exit successfully.");
+		}
 
 		Ok(())
 	}

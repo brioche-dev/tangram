@@ -1,6 +1,13 @@
-use crate::server::Server;
+use crate::{
+	artifact::Artifact,
+	expression::{self, Expression},
+	server::Server,
+	system::System,
+	value::Value,
+};
 use anyhow::{anyhow, bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use camino::Utf8Path;
 use libc::*;
 use std::{
 	collections::BTreeMap,
@@ -14,6 +21,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 impl Server {
 	pub(super) async fn run_linux_process(
 		self: &Arc<Self>,
+		system: System,
 		envs: BTreeMap<String, String>,
 		command: PathBuf,
 		args: Vec<String>,
@@ -21,14 +29,31 @@ impl Server {
 		let server_path = self.path().to_owned();
 
 		// Create a temp for the chroot.
-		let temp = self
+		let mut temp = self
 			.create_temp()
 			.await
 			.context("Failed to create a temp for the chroot.")?;
+
+		// Create the chroot directory.
 		let parent_child_root_path = self.temp_path(&temp);
 		tokio::fs::create_dir(&parent_child_root_path)
 			.await
 			.context("Failed to create the chroot directory.")?;
+
+		// Create a symlink from /bin/sh in the chroot to a fragment with toybox.
+		let toybox_artifact = self
+			.toybox_artifact(system)
+			.await
+			.context("Failed to evaluate the toybox artifact.")?;
+		let toybox_fragment = self.create_fragment(toybox_artifact)
+			.await
+			.context("Failed to create the toybox fragment.")?;
+		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
+		tokio::fs::symlink(
+			self.fragment_path(&toybox_fragment).join("toybox"),
+			parent_child_root_path.join("bin/sh"),
+		)
+		.await?;
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -38,7 +63,7 @@ impl Server {
 			.context("Failed to convert the child socket to std.")?;
 		child_socket
 			.set_nonblocking(false)
-			.context("Failed to make the child socket non blocking.")?;
+			.context("Failed to make the child socket nonblocking.")?;
 
 		// Create the process.
 		let mut process = tokio::process::Command::new(command);
@@ -53,14 +78,18 @@ impl Server {
 		// Set up the sandbox.
 		unsafe {
 			process.pre_exec(move || {
-				pre_exec(&mut child_socket, &parent_child_root_path, &server_path)
-					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+				pre_exec(&mut child_socket, &parent_child_root_path, &server_path).map_err(
+					|error| {
+						dbg!(&error, &error.backtrace());
+						std::io::Error::new(std::io::ErrorKind::Other, error)
+					},
+				)
 			})
 		};
 
 		// Spawn the process.
 		let spawn_task = tokio::task::spawn_blocking(move || {
-			let mut child = process.spawn().context("Failed to spawn the process.")?;
+			let child = process.spawn().context("Failed to spawn the process.")?;
 			Ok::<_, anyhow::Error>(child)
 		});
 
@@ -105,12 +134,51 @@ impl Server {
 			.context("The spawn task failed.")?;
 
 		// Wait for the child process to exit.
-		child
+		let status = child
 			.wait()
 			.await
 			.context("Failed to wait for the process to exit.")?;
 
+		if !status.success() {
+			bail!("The process did not exit successfully.");
+		}
+
 		Ok(())
+	}
+
+	async fn toybox_artifact(self: &Arc<Self>, system: System) -> Result<Artifact> {
+		// Get the URL and hash for the system.
+		let (url, hash) = match system {
+			System::Amd64Linux => (
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_x86_64.tar.gz",
+				"128d2fe70c4de5f8bd78c504ef9fa93bfb1a541b9db1707fb33e3ee811853a84",
+			),
+			System::Arm64Linux => (
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/toybox_aarch64.tar.gz",
+				"065b1d9a39d0c621b305cd96eff504c2bb24d1fe76856cd0c8bfe7516ddc0abb",
+			),
+			_ => bail!(r#"Unexpected system "{}"."#, system),
+		};
+
+		// Create the expression.
+		let expression = Expression::Fetch(expression::Fetch {
+			url: url.parse().unwrap(),
+			hash: Some(hash.parse().unwrap()),
+			unpack: true,
+		});
+
+		// Evaluate the expression.
+		let value = self
+			.evaluate(expression)
+			.await
+			.context("Failed to evaluate the expression.")?;
+
+		let artifact = match value {
+			Value::Artifact(artifact) => artifact,
+			_ => bail!("Expected the value to be an artifact."),
+		};
+
+		Ok(artifact)
 	}
 }
 

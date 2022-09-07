@@ -61,10 +61,12 @@ pub enum Process {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct UnixProcess {
+	#[serde(default = "default_map")]
 	pub env: Box<Expression>,
-	pub cwd: Box<Expression>,
 	pub command: Box<Expression>,
+	#[serde(default = "default_array")]
 	pub args: Box<Expression>,
+	#[serde(default = "default_outputs")]
 	pub outputs: BTreeMap<String, Output>,
 }
 
@@ -147,4 +149,22 @@ impl Expression {
 	pub fn hash(&self) -> Hash {
 		Hash::new(serde_json::to_vec(self).unwrap())
 	}
+}
+
+fn default_array() -> Box<Expression> {
+	Box::new(Expression::Array(Vec::default()))
+}
+
+fn default_map() -> Box<Expression> {
+	Box::new(Expression::Map(BTreeMap::default()))
+}
+
+fn default_outputs() -> BTreeMap<String, Output> {
+	[(
+		"out".into(),
+		Output {
+			dependencies: BTreeMap::default(),
+		},
+	)]
+	.into()
 }

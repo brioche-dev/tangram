@@ -2,11 +2,12 @@ use crate::{
 	artifact::Artifact,
 	expression,
 	server::{temp::Temp, Server},
+	system::System,
 	value::Value,
 };
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
-use futures::future::try_join_all;
+use futures::{future::try_join_all, FutureExt};
 use std::{collections::BTreeMap, sync::Arc};
 
 mod js;
@@ -18,16 +19,26 @@ mod macos;
 impl Server {
 	pub async fn evaluate_process(self: &Arc<Self>, process: expression::Process) -> Result<Value> {
 		match process {
-			expression::Process::Amd64Linux(process)
-			| expression::Process::Amd64Macos(process)
-			| expression::Process::Arm64Linux(process)
-			| expression::Process::Arm64Macos(process) => self.evaluate_unix_process(process).await,
-			expression::Process::Js(process) => self.evaluate_js_process(process).await,
+			expression::Process::Amd64Linux(process) => self
+				.evaluate_unix_process(System::Amd64Linux, process)
+				.boxed(),
+			expression::Process::Amd64Macos(process) => self
+				.evaluate_unix_process(System::Amd64Macos, process)
+				.boxed(),
+			expression::Process::Arm64Linux(process) => self
+				.evaluate_unix_process(System::Arm64Linux, process)
+				.boxed(),
+			expression::Process::Arm64Macos(process) => self
+				.evaluate_unix_process(System::Arm64Macos, process)
+				.boxed(),
+			expression::Process::Js(process) => self.evaluate_js_process(process).boxed(),
 		}
+		.await
 	}
 
 	pub async fn evaluate_unix_process(
 		self: &Arc<Self>,
+		system: System,
 		process: expression::UnixProcess,
 	) -> Result<Value> {
 		let crate::expression::UnixProcess { command, args, .. } = process;
@@ -98,21 +109,14 @@ impl Server {
 		// Run the process.
 
 		#[cfg(target_os = "linux")]
-		self.run_linux_process(envs, command, args)
+		self.run_linux_process(system, envs, command, args)
 			.await
 			.context("Failed to run the process.")?;
 
 		#[cfg(target_os = "macos")]
-		self.run_macos_process(envs, command, args)
+		self.run_macos_process(system, envs, command, args)
 			.await
 			.context("Failed to run the process.")?;
-
-		// let mut process = tokio::process::Command::new(command);
-		// process.env_clear();
-		// process.envs(envs);
-		// process.args(args);
-		// let mut child = process.spawn()?;
-		// child.wait().await?;
 
 		// Checkin the temps.
 		let artifacts: BTreeMap<String, Artifact> =
