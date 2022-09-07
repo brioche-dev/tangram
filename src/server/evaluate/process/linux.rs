@@ -44,7 +44,8 @@ impl Server {
 			.toybox_artifact(system)
 			.await
 			.context("Failed to evaluate the toybox artifact.")?;
-		let toybox_fragment = self.create_fragment(toybox_artifact)
+		let toybox_fragment = self
+			.create_fragment(toybox_artifact)
 			.await
 			.context("Failed to create the toybox fragment.")?;
 		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
@@ -53,6 +54,30 @@ impl Server {
 			parent_child_root_path.join("bin/sh"),
 		)
 		.await?;
+
+		// Create <chroot>/dev.
+		let child_dev_path = parent_child_root_path.join("dev");
+		tokio::fs::create_dir(&child_dev_path).await?;
+
+		// Create <chroot>/dev/null
+		let child_dev_null_path = child_dev_path.join("null");
+		let child_dev_null_path_c_string =
+			CString::new(child_dev_null_path.as_os_str().as_bytes()).unwrap();
+		let dev_null_mode = 0o666 as mode_t;
+		let dev_null_dev = makedev(1, 3);
+		let ret = unsafe {
+			mknod(
+				child_dev_null_path_c_string.as_ptr(),
+				dev_null_mode,
+				dev_null_dev,
+			)
+		};
+		if ret != 0 {
+			bail!(anyhow!(std::io::Error::last_os_error())
+				.context("Failed to create sandbox /dev/null"));
+		}
+
+		// Bind mount /proc
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -77,11 +102,8 @@ impl Server {
 		// Set up the sandbox.
 		unsafe {
 			process.pre_exec(move || {
-				pre_exec(&mut child_socket, &parent_child_root_path, &server_path).map_err(
-					|error| {
-						std::io::Error::new(std::io::ErrorKind::Other, error)
-					},
-				)
+				pre_exec(&mut child_socket, &parent_child_root_path, &server_path)
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
 
@@ -321,4 +343,12 @@ fn pre_exec(
 	}
 
 	Ok(())
+}
+
+/// <https://docs.rs/nix/0.25.0/src/nix/sys/stat.rs.html#200>
+const fn makedev(major: u64, minor: u64) -> dev_t {
+	((major & 0xffff_f000) << 32)
+		| ((major & 0x0000_0fff) << 8)
+		| ((minor & 0xffff_ff00) << 12)
+		| (minor & 0x0000_00ff)
 }
