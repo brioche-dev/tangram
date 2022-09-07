@@ -14,6 +14,8 @@ pub struct Args {
 	)]
 	url: Url,
 	package: Option<PathBuf>,
+	#[clap(long, takes_value = false)]
+	locked: bool,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -34,7 +36,7 @@ pub async fn run(args: Args) -> Result<()> {
 
 	// Publish the package.
 	let artifact = client
-		.publish_package(&package)
+		.publish_package(&package, args.locked)
 		.await
 		.context("Failed to publish the package.")?;
 

@@ -72,10 +72,7 @@ impl Client {
 		}
 	}
 
-	pub async fn publish_package(&self, package_path: &Path) -> Result<Artifact> {
-		// TODO.
-		let locked = false;
-
+	pub async fn publish_package(&self, package_path: &Path, locked: bool) -> Result<Artifact> {
 		// Checkin the package.
 		let package = self
 			.checkin_package(package_path, locked)

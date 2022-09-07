@@ -54,6 +54,11 @@ impl Server {
 	}
 
 	#[must_use]
+	pub fn blobs_dir(self: &Arc<Self>) -> PathBuf {
+		self.path.join("blobs")
+	}
+
+	#[must_use]
 	pub fn blob_path(self: &Arc<Self>, blob_hash: BlobHash) -> PathBuf {
 		self.path.join("blobs").join(blob_hash.to_string())
 	}

@@ -15,7 +15,7 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 pub mod artifact;
 pub mod blob;
@@ -42,6 +42,9 @@ pub struct Server {
 	/// This file is held with an advisory lock to ensure only one server has access to the [`path`].
 	#[allow(dead_code)]
 	path_lock_file: tokio::fs::File,
+
+	// This is the garbage collection lock. It must be read acquired for any operation that accesses object, blobs, fragments, or temps.
+	gc_lock: RwLock<()>,
 
 	/// This is the connection pool for the server's SQLite database.
 	database_connection_pool: deadpool_sqlite::Pool,
@@ -73,6 +76,8 @@ impl Server {
 		// Migrate the path.
 		Server::migrate(&path).await?;
 
+		let gc_lock = RwLock::new(());
+
 		// Create the database pool.
 		let database_path = path.join("db.sqlite3");
 		let database_connection_pool =
@@ -97,6 +102,7 @@ impl Server {
 		let server = Server {
 			path,
 			path_lock_file: path_lock,
+			gc_lock,
 			database_connection_pool,
 			local_pool_handle,
 			http_client,

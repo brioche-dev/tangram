@@ -30,6 +30,11 @@ const SQL: &str = r#"
 		primary key (name, version),
 		foreign key (artifact_hash) references artifacts (object_hash)
 	);
+
+	create table roots (
+		artifact_hash blob,
+		foreign key (artifact_hash) references artifacts (object_hash)
+	);
 "#;
 
 pub struct Migration;
