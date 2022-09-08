@@ -14,6 +14,7 @@ pub mod object;
 pub mod package;
 pub mod repl;
 pub mod server;
+pub mod specifier;
 pub mod system;
 mod util;
 pub mod value;
