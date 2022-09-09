@@ -31,6 +31,7 @@ enum Subcommand {
 	Gc(commands::gc::Args),
 	Publish(commands::publish::Args),
 	Repl(commands::repl::Args),
+	Run(commands::run::Args),
 	Server(commands::server::Args),
 	Search(commands::search::Args),
 }
@@ -56,6 +57,7 @@ async fn main() -> Result<()> {
 		Subcommand::Fetch(args) => commands::fetch::run(args).boxed(),
 		Subcommand::Gc(args) => commands::gc::run(args).boxed(),
 		Subcommand::Repl(args) => commands::repl::run(args).boxed(),
+		Subcommand::Run(args) => commands::run::run(args).boxed(),
 		Subcommand::Server(args) => commands::server::run(args).boxed(),
 		Subcommand::Search(args) => commands::search::run(args).boxed(),
 	}

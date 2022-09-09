@@ -58,6 +58,8 @@ impl Client {
 			},
 		}
 	}
+
+	// Retrieve the package with the given name and version.
 	pub async fn get_package(&self, name: &str, version: &str) -> Result<Option<Artifact>> {
 		match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {

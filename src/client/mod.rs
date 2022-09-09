@@ -1,4 +1,7 @@
-use self::{config::Config, transport::Transport};
+use self::{
+	config::Config,
+	transport::{InProcessOrHttp, Transport},
+};
 use crate::{heuristics::FILESYSTEM_CONCURRENCY_LIMIT, server::Server};
 use anyhow::Result;
 use async_recursion::async_recursion;
@@ -53,6 +56,14 @@ impl Client {
 		Client {
 			transport,
 			file_system_semaphore,
+		}
+	}
+
+	#[must_use]
+	pub fn as_in_process(&self) -> Option<&Arc<Server>> {
+		match self.transport.as_in_process_or_http() {
+			InProcessOrHttp::InProcess(server) => Some(server),
+			InProcessOrHttp::Http(_) => None,
 		}
 	}
 }

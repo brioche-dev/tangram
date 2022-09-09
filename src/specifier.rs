@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 
 #[derive(Debug, PartialEq, Eq)]
-enum Specifier {
+pub enum Specifier {
 	Path(PathSpecifier),
 	Registry(RegistrySpecifier),
 	// Github(GithubSpecifier),
@@ -12,17 +12,17 @@ enum Specifier {
 // A path to a folder on the file system where there is a tangram.json defining a Tangram package. A path must contain a "." so it can be disambiguated from a registry dependency.
 // ./path/to/package
 #[derive(Debug, PartialEq, Eq)]
-struct PathSpecifier {
-	path: PathBuf,
+pub struct PathSpecifier {
+	pub path: PathBuf,
 }
 
 // The name of a Tangram package in configured registry.
 // package_name (implicitly package_name@*)
 // package_name@version
 #[derive(Debug, PartialEq, Eq)]
-struct RegistrySpecifier {
-	package_name: String,
-	version: Option<String>,
+pub struct RegistrySpecifier {
+	pub package_name: String,
+	pub version: Option<String>,
 }
 
 impl std::str::FromStr for Specifier {
