@@ -3,6 +3,7 @@
 #![allow(clippy::missing_panics_doc)]
 
 pub mod artifact;
+pub mod blob;
 pub mod client;
 pub mod expression;
 pub mod hash;

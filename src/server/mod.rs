@@ -1,7 +1,7 @@
 use self::{config::Config, repl::Repl};
 use crate::{
 	client::{self, Client},
-	repl::ReplId,
+	repl::Id,
 	util::path_exists,
 };
 use anyhow::Result;
@@ -56,7 +56,7 @@ pub struct Server {
 	http_client: reqwest::Client,
 
 	/// These are the active REPLs.
-	repls: Mutex<HashMap<ReplId, Repl>>,
+	repls: Mutex<HashMap<Id, Repl>>,
 
 	/// These are the peers.
 	peers: Vec<Client>,

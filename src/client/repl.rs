@@ -1,9 +1,9 @@
 use super::Client;
-use crate::{repl::ReplId, server};
+use crate::{repl, server};
 use anyhow::{Context, Result};
 
 impl Client {
-	pub async fn create_repl(&self) -> Result<ReplId> {
+	pub async fn create_repl(&self) -> Result<repl::Id> {
 		match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {
 				let id = server.create_repl().await?;
@@ -21,7 +21,7 @@ impl Client {
 		}
 	}
 
-	pub async fn repl_run(&self, repl_id: ReplId, code: String) -> Result<server::repl::Output> {
+	pub async fn repl_run(&self, repl_id: repl::Id, code: String) -> Result<server::repl::Output> {
 		match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {
 				let output = server.repl_run(repl_id, code).await?;

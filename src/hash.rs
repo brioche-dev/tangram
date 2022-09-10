@@ -133,15 +133,14 @@ impl rand::distributions::Distribution<Hash> for rand::distributions::Standard {
 	}
 }
 
-pub type BuildHasher = std::hash::BuildHasherDefault<HashHasher>;
+pub type BuildHasher = std::hash::BuildHasherDefault<StdHasher>;
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Default)]
-pub struct HashHasher {
+pub struct StdHasher {
 	bytes: Option<[u8; 8]>,
 }
 
-impl std::hash::Hasher for HashHasher {
+impl std::hash::Hasher for StdHasher {
 	fn write(&mut self, bytes: &[u8]) {
 		assert!(bytes.len() == 32);
 		let bytes = &bytes[0..8];

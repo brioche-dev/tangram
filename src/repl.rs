@@ -1,7 +1,6 @@
-use crate::id::Id;
+use crate::id;
 use derive_more::{Display, FromStr};
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(
 	Clone,
 	Copy,
@@ -16,4 +15,4 @@ use derive_more::{Display, FromStr};
 	serde::Deserialize,
 	serde::Serialize,
 )]
-pub struct ReplId(pub Id);
+pub struct Id(pub id::Id);

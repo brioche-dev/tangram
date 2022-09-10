@@ -1,7 +1,8 @@
 use crate::{
 	artifact::Artifact,
+	blob,
 	hash::Hasher,
-	object::{BlobHash, Dependency, Directory, File, Object, ObjectHash, Symlink},
+	object::{self, Dependency, Directory, File, Object, Symlink},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
@@ -19,7 +20,7 @@ use std::{
 pub struct ObjectCache {
 	root_path: PathBuf,
 	semaphore: Arc<tokio::sync::Semaphore>,
-	cache: RwLock<HashMap<PathBuf, (ObjectHash, Object), FnvBuildHasher>>,
+	cache: RwLock<HashMap<PathBuf, (object::Hash, Object), FnvBuildHasher>>,
 }
 
 impl ObjectCache {
@@ -33,7 +34,7 @@ impl ObjectCache {
 		}
 	}
 
-	pub async fn get(&self, path: &Path) -> Result<Option<(ObjectHash, Object)>> {
+	pub async fn get(&self, path: &Path) -> Result<Option<(object::Hash, Object)>> {
 		// Fill the cache for this path if necessary.
 		if self.cache.read().unwrap().get(path).is_none() {
 			tracing::trace!(
@@ -125,13 +126,17 @@ impl ObjectCache {
 		Ok(())
 	}
 
-	async fn cache_object_for_file(&self, path: &Path, metadata: &Metadata) -> Result<ObjectHash> {
+	async fn cache_object_for_file(
+		&self,
+		path: &Path,
+		metadata: &Metadata,
+	) -> Result<object::Hash> {
 		// Compute the file's blob hash.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut file = tokio::fs::File::open(path).await?;
 		let mut hasher = Hasher::new();
 		tokio::io::copy(&mut file, &mut hasher).await?;
-		let blob_hash = BlobHash(hasher.finalize());
+		let blob_hash = blob::Hash(hasher.finalize());
 		drop(file);
 		drop(permit);
 
@@ -156,7 +161,7 @@ impl ObjectCache {
 		&self,
 		path: &Path,
 		_metadata: &Metadata,
-	) -> Result<ObjectHash> {
+	) -> Result<object::Hash> {
 		// Read the symlink.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let target = tokio::fs::read_link(path)

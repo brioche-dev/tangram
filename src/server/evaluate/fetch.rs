@@ -1,8 +1,9 @@
 use crate::{
 	artifact::Artifact,
+	blob,
 	expression::{self, Expression},
 	hash::Hasher,
-	object::{BlobHash, File, Object},
+	object::{File, Object},
 	server::Server,
 };
 use anyhow::{anyhow, bail, Result};
@@ -16,9 +17,9 @@ impl Server {
 
 		// Retrieve the artifact if it has been downloaded.
 		let artifact = if let Some(hash) = fetch.hash {
-			if self.get_blob(BlobHash(hash)).await?.is_some() {
+			if self.get_blob(blob::Hash(hash)).await?.is_some() {
 				let object = Object::File(File {
-					blob_hash: BlobHash(hash),
+					blob_hash: blob::Hash(hash),
 					executable: false,
 				});
 				Some(Artifact::new(object.hash()))

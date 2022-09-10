@@ -2,7 +2,7 @@ use super::{object_cache::ObjectCache, Transport};
 use crate::{
 	artifact::Artifact,
 	client::Client,
-	object::{Dependency, Directory, File, Object, ObjectHash, Symlink},
+	object::{self, Dependency, Directory, File, Object, Symlink},
 	util::rmrf,
 };
 use anyhow::{anyhow, Result};
@@ -40,7 +40,7 @@ impl Client {
 	async fn checkout_path(
 		&self,
 		object_cache: &ObjectCache,
-		remote_object_hash: ObjectHash,
+		remote_object_hash: object::Hash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {

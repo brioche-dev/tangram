@@ -1,9 +1,10 @@
 use super::object_cache::ObjectCache;
 use crate::{
 	artifact::Artifact,
+	blob,
 	client::{Client, Transport},
 	id::Id,
-	object::{BlobHash, Object, ObjectHash},
+	object::{self, Object},
 	server::{self, object::AddObjectOutcome},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -86,7 +87,7 @@ impl Client {
 
 	pub async fn add_object(
 		&self,
-		object_hash: ObjectHash,
+		object_hash: object::Hash,
 		object: &Object,
 	) -> Result<AddObjectOutcome> {
 		match self.transport.as_in_process_or_http() {
@@ -102,7 +103,7 @@ impl Client {
 		}
 	}
 
-	pub async fn add_blob(&self, path: &Path, hash: BlobHash) -> Result<BlobHash> {
+	pub async fn add_blob(&self, path: &Path, hash: blob::Hash) -> Result<blob::Hash> {
 		// Get the server path if it is local.
 		let local_server_path = match &self.transport {
 			Transport::InProcess(server) => Some(server.path()),

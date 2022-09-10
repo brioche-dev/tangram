@@ -4,7 +4,7 @@ use crate::{
 	expression::{self, Expression},
 	hash::Hash,
 	lockfile::Lockfile,
-	object::ObjectHash,
+	object,
 	server::{repl::Output, Server},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -470,7 +470,7 @@ async fn handle_run_request(
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-fn op_tangram_artifact(object_hash: ObjectHash) -> Result<Artifact, deno_core::error::AnyError> {
+fn op_tangram_artifact(object_hash: object::Hash) -> Result<Artifact, deno_core::error::AnyError> {
 	Ok(Artifact::new(object_hash))
 }
 

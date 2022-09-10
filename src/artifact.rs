@@ -1,4 +1,4 @@
-use crate::object::ObjectHash;
+use crate::object;
 use derive_more::{Display, FromStr};
 
 #[derive(
@@ -6,17 +6,17 @@ use derive_more::{Display, FromStr};
 )]
 #[serde(from = "ArtifactSerde", into = "ArtifactSerde")]
 pub struct Artifact {
-	object_hash: ObjectHash,
+	object_hash: object::Hash,
 }
 
 impl Artifact {
 	#[must_use]
-	pub fn new(object_hash: ObjectHash) -> Artifact {
+	pub fn new(object_hash: object::Hash) -> Artifact {
 		Artifact { object_hash }
 	}
 
 	#[must_use]
-	pub fn object_hash(&self) -> ObjectHash {
+	pub fn object_hash(&self) -> object::Hash {
 		self.object_hash
 	}
 }
@@ -25,7 +25,7 @@ impl Artifact {
 #[serde(tag = "_tangram")]
 enum ArtifactSerde {
 	#[serde(rename = "artifact")]
-	Artifact { object_hash: ObjectHash },
+	Artifact { object_hash: object::Hash },
 }
 
 impl From<Artifact> for ArtifactSerde {

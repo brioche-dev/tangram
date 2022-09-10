@@ -3,7 +3,7 @@ use crate::{
 	hash::{self, Hash},
 	lockfile::Lockfile,
 	manifest::Manifest,
-	object::ObjectHash,
+	object,
 	server::Server,
 };
 use anyhow::{anyhow, bail, ensure, Context, Result};
@@ -154,7 +154,7 @@ async fn resolve_tangram(
 	let domain = referrer
 		.domain()
 		.ok_or_else(|| anyhow!("Failed to get domain from the referrer."))?;
-	let referrer_package_hash: ObjectHash = domain
+	let referrer_package_hash: object::Hash = domain
 		.parse()
 		.with_context(|| "Failed to parse referrer domain.")?;
 	let referrer_package = Artifact::new(referrer_package_hash);

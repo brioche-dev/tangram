@@ -1,28 +1,28 @@
-use crate::{artifact::Artifact, id::Id, server::Server};
+use crate::{artifact::Artifact, id, server::Server};
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use std::{path::PathBuf, sync::Arc};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TempId(pub Id);
+pub struct Id(pub id::Id);
 
 #[derive(Clone)]
 pub struct Temp {
-	id: TempId,
+	id: Id,
 }
 
 impl Temp {
 	#[must_use]
-	pub fn id(&self) -> TempId {
+	pub fn id(&self) -> Id {
 		self.id
 	}
 }
 
 impl Server {
 	pub async fn create_temp(self: &Arc<Self>) -> Result<Temp> {
-		let id = Id::generate();
-		let temp_id = TempId(id);
+		let id = id::Id::generate();
+		let temp_id = Id(id);
 		let temp = Temp { id: temp_id };
 		Ok(temp)
 	}

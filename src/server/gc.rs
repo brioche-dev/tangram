@@ -1,8 +1,8 @@
 use super::Server;
 use crate::{
 	artifact::Artifact,
-	hash,
-	object::{BlobHash, Object, ObjectHash},
+	blob, hash,
+	object::{self, Object},
 };
 use anyhow::{anyhow, Context, Result};
 use std::{
@@ -17,8 +17,8 @@ impl Server {
 		let gc_lock = self.gc_lock.write().await;
 
 		// Create hash sets to track the marked objects and blobs.
-		let mut marked_object_hashes: HashSet<ObjectHash, hash::BuildHasher> = HashSet::default();
-		let mut marked_blob_hashes: HashSet<BlobHash, hash::BuildHasher> = HashSet::default();
+		let mut marked_object_hashes: HashSet<object::Hash, hash::BuildHasher> = HashSet::default();
+		let mut marked_blob_hashes: HashSet<blob::Hash, hash::BuildHasher> = HashSet::default();
 
 		self.database_transaction(|txn| {
 			// Mark the objects and blobs.
@@ -54,8 +54,8 @@ impl Server {
 
 	fn mark(
 		txn: &rusqlite::Transaction,
-		marked_object_hashes: &mut HashSet<ObjectHash, hash::BuildHasher>,
-		marked_blob_hashes: &mut HashSet<BlobHash, hash::BuildHasher>,
+		marked_object_hashes: &mut HashSet<object::Hash, hash::BuildHasher>,
+		marked_blob_hashes: &mut HashSet<blob::Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Get the roots.
 		let sql = r#"
@@ -130,7 +130,7 @@ impl Server {
 
 	fn sweep_objects(
 		txn: &rusqlite::Transaction,
-		marked_object_hashes: &HashSet<ObjectHash, hash::BuildHasher>,
+		marked_object_hashes: &HashSet<object::Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Get all of the objects.
 		let sql = r#"
@@ -164,14 +164,14 @@ impl Server {
 	async fn sweep_blobs(
 		self: &Arc<Self>,
 		blobs_path: &Path,
-		marked_blob_hashes: &HashSet<BlobHash, hash::BuildHasher>,
+		marked_blob_hashes: &HashSet<blob::Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Read the files in the blobs directory and delete each file that is not marked.
 		let mut read_dir = tokio::fs::read_dir(blobs_path)
 			.await
 			.context("Failed to read the directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
-			let blob_hash: BlobHash = entry
+			let blob_hash: blob::Hash = entry
 				.file_name()
 				.to_str()
 				.context("Failed to parse the file name as a string.")?

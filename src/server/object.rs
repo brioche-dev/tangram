@@ -1,6 +1,7 @@
 use super::{error::bad_request, Server};
 use crate::{
-	object::{BlobHash, Object, ObjectHash},
+	blob,
+	object::{self, Object},
 	util::path_exists,
 };
 use anyhow::{bail, Context, Result};
@@ -9,17 +10,25 @@ use std::sync::Arc;
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum AddObjectOutcome {
-	Added { object_hash: ObjectHash },
-	DirectoryMissingEntries { entries: Vec<(String, ObjectHash)> },
-	FileMissingBlob { blob_hash: BlobHash },
-	DependencyMissing { object_hash: ObjectHash },
+	Added {
+		object_hash: object::Hash,
+	},
+	DirectoryMissingEntries {
+		entries: Vec<(String, object::Hash)>,
+	},
+	FileMissingBlob {
+		blob_hash: blob::Hash,
+	},
+	DependencyMissing {
+		object_hash: object::Hash,
+	},
 }
 
 impl Server {
 	// Add an object to the server after ensuring the server has all its references.
 	pub async fn add_object(
 		self: &Arc<Self>,
-		object_hash: ObjectHash,
+		object_hash: object::Hash,
 		object: &Object,
 	) -> Result<AddObjectOutcome> {
 		// Before adding this object, we need to ensure the server has all its references.
@@ -100,7 +109,7 @@ impl Server {
 
 	pub fn object_exists_with_transaction(
 		txn: &rusqlite::Transaction<'_>,
-		object_hash: ObjectHash,
+		object_hash: object::Hash,
 	) -> Result<bool> {
 		let sql = r#"
 			select count(*) > 0 from objects where hash = $1
@@ -119,7 +128,7 @@ impl Server {
 
 	pub fn get_object_with_transaction(
 		txn: &rusqlite::Transaction,
-		object_hash: ObjectHash,
+		object_hash: object::Hash,
 	) -> Result<Option<Object>> {
 		let sql = r#"
 			select
@@ -144,14 +153,14 @@ impl Server {
 		Ok(maybe_object)
 	}
 
-	pub async fn get_object(self: &Arc<Self>, object_hash: ObjectHash) -> Result<Option<Object>> {
+	pub async fn get_object(self: &Arc<Self>, object_hash: object::Hash) -> Result<Option<Object>> {
 		self.database_transaction(|txn| Self::get_object_with_transaction(txn, object_hash))
 			.await
 	}
 
 	pub fn delete_object_with_transaction(
 		txn: &rusqlite::Transaction,
-		object_hash: ObjectHash,
+		object_hash: object::Hash,
 	) -> Result<()> {
 		let sql = r#"
 			delete from objects where hash = $1

@@ -1,6 +1,6 @@
 use crate::{
-	expression::{Expression, ExpressionHash},
-	hash::Hash,
+	expression::{self, Expression},
+	hash,
 	server::{
 		error::{bad_request, not_found},
 		Server,
@@ -48,7 +48,7 @@ impl Server {
 	/// Retrieve the memoized output from a previous evaluation of an expression, if one exists, given an expression hash.
 	pub async fn get_memoized_value_for_expression_hash(
 		self: &Arc<Self>,
-		expression_hash: &ExpressionHash,
+		expression_hash: &expression::Hash,
 	) -> Result<Option<Expression>> {
 		let value = self
 			.database_transaction(|txn| {
@@ -88,7 +88,7 @@ impl Server {
 		output: &Expression,
 	) -> Result<()> {
 		let expression_json = serde_json::to_vec(&input)?;
-		let expression_hash = Hash::new(&expression_json);
+		let expression_hash = hash::Hash::new(&expression_json);
 		let output_json = serde_json::to_vec(&output)?;
 		self.database_transaction(|txn| {
 			txn.execute(

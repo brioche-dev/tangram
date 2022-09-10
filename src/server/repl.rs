@@ -5,7 +5,7 @@ use super::{
 		js::{self},
 	},
 };
-use crate::{id::Id, repl::ReplId, server::Server};
+use crate::{id::Id, repl, server::Server};
 use anyhow::{anyhow, bail, Context, Result};
 use std::sync::Arc;
 
@@ -23,16 +23,16 @@ pub enum Output {
 }
 
 impl Server {
-	pub async fn create_repl(self: &Arc<Self>) -> Result<ReplId> {
+	pub async fn create_repl(self: &Arc<Self>) -> Result<repl::Id> {
 		let id = Id::generate();
-		let repl_id = ReplId(id);
+		let repl_id = repl::Id(id);
 		let runtime = js::Runtime::new(self);
 		let repl = Repl { runtime };
 		self.repls.lock().await.insert(repl_id, repl);
 		Ok(repl_id)
 	}
 
-	pub async fn repl_run(self: &Arc<Self>, repl_id: ReplId, code: String) -> Result<Output> {
+	pub async fn repl_run(self: &Arc<Self>, repl_id: repl::Id, code: String) -> Result<Output> {
 		let repls = self.repls.lock().await;
 		let repl = repls
 			.get(&repl_id)
@@ -44,7 +44,7 @@ impl Server {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CreateResponse {
-	pub id: ReplId,
+	pub id: repl::Id,
 }
 
 impl Server {
@@ -88,7 +88,7 @@ impl Server {
 		} else {
 			bail!("Unexpected path.");
 		};
-		let repl_id: ReplId = match repl_id.parse() {
+		let repl_id: repl::Id = match repl_id.parse() {
 			Ok(repl_id) => repl_id,
 			Err(_) => return Ok(bad_request()),
 		};

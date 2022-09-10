@@ -1,11 +1,11 @@
 use super::{error::bad_request, Server};
-use crate::{artifact::Artifact, object::ObjectHash};
+use crate::{artifact::Artifact, object};
 use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
 impl Server {
 	// Create an artifact.
-	pub async fn create_artifact(self: &Arc<Self>, object_hash: ObjectHash) -> Result<Artifact> {
+	pub async fn create_artifact(self: &Arc<Self>, object_hash: object::Hash) -> Result<Artifact> {
 		self.database_transaction(|txn| {
 			txn.execute(
 				r#"

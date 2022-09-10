@@ -4,8 +4,7 @@ use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
 #[derive(serde::Serialize)]
-#[allow(clippy::module_name_repetitions)]
-pub struct PackageVersion {
+pub struct Version {
 	version: String,
 	artifact: Artifact,
 }
@@ -68,7 +67,7 @@ impl Server {
 		Ok(packages)
 	}
 
-	pub async fn get_package(self: &Arc<Self>, package_name: &str) -> Result<Vec<PackageVersion>> {
+	pub async fn get_package(self: &Arc<Self>, package_name: &str) -> Result<Vec<Version>> {
 		// Retrieve the package versions.
 		let versions = self
 			.database_transaction(|txn| {
@@ -93,7 +92,7 @@ impl Server {
 							.parse()
 							.with_context(|| "Failed to parse the object hash.")?;
 						let artifact = Artifact::new(object_hash);
-						let package_version = PackageVersion { version, artifact };
+						let package_version = Version { version, artifact };
 						Ok(package_version)
 					})
 					.collect::<Result<_>>()?;
@@ -151,7 +150,7 @@ impl Server {
 
 #[derive(serde::Serialize)]
 pub struct GetPackageResponse {
-	versions: Vec<PackageVersion>,
+	versions: Vec<Version>,
 }
 
 impl Server {

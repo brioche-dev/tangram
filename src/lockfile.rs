@@ -1,4 +1,4 @@
-use crate::object::ObjectHash;
+use crate::object;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -15,7 +15,7 @@ pub struct V1 {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
-	pub hash: ObjectHash,
+	pub hash: object::Hash,
 	pub dependencies: Option<BTreeMap<String, Dependency>>,
 }
 

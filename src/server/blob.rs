@@ -1,5 +1,5 @@
 use super::{error::bad_request, error::not_found, Server};
-use crate::{hash::Hasher, object::BlobHash, util::path_exists};
+use crate::{blob, hash::Hasher, util::path_exists};
 use anyhow::{bail, Context, Result};
 use futures::TryStreamExt;
 use std::{
@@ -13,7 +13,7 @@ impl Server {
 	pub async fn add_blob_from_reader(
 		self: &Arc<Self>,
 		reader: impl AsyncRead + Unpin,
-	) -> Result<BlobHash> {
+	) -> Result<blob::Hash> {
 		// Create a temp file to read the blob into.
 		let temp = self.create_temp().await?;
 		let temp_path = self.temp_path(&temp);
@@ -28,7 +28,7 @@ impl Server {
 			temp_file.write_all(&chunk).await?;
 		}
 		let hash = hasher.finalize();
-		let blob_hash = BlobHash(hash);
+		let blob_hash = blob::Hash(hash);
 		temp_file.sync_all().await?;
 		drop(temp_file);
 
@@ -39,7 +39,7 @@ impl Server {
 		Ok(blob_hash)
 	}
 
-	pub async fn get_blob(self: &Arc<Self>, blob_hash: BlobHash) -> Result<Option<Handle>> {
+	pub async fn get_blob(self: &Arc<Self>, blob_hash: blob::Hash) -> Result<Option<Handle>> {
 		let blob_path = self.blob_path(blob_hash);
 
 		// Check if the blob exists.
@@ -59,13 +59,13 @@ impl Server {
 	}
 
 	#[must_use]
-	pub fn blob_path(self: &Arc<Self>, blob_hash: BlobHash) -> PathBuf {
+	pub fn blob_path(self: &Arc<Self>, blob_hash: blob::Hash) -> PathBuf {
 		self.path.join("blobs").join(blob_hash.to_string())
 	}
 }
 
 pub struct Handle {
-	_blob_hash: BlobHash,
+	_blob_hash: blob::Hash,
 	path: PathBuf,
 }
 
@@ -78,7 +78,7 @@ impl Handle {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CreateResponse {
-	pub blob_hash: BlobHash,
+	pub blob_hash: blob::Hash,
 }
 
 impl Server {
@@ -93,7 +93,7 @@ impl Server {
 		} else {
 			bail!("Unexpected path.")
 		};
-		let _blob_hash: BlobHash = match blob_hash.parse() {
+		let _blob_hash: blob::Hash = match blob_hash.parse() {
 			Ok(client_blob_hash) => client_blob_hash,
 			Err(_) => return Ok(bad_request()),
 		};
@@ -131,7 +131,7 @@ impl Server {
 		} else {
 			bail!("Unexpected path.")
 		};
-		let blob_hash: BlobHash = match blob_hash.parse() {
+		let blob_hash: blob::Hash = match blob_hash.parse() {
 			Ok(client_blob_hash) => client_blob_hash,
 			Err(_) => return Ok(bad_request()),
 		};

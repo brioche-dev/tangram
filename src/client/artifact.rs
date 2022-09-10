@@ -1,9 +1,9 @@
 use super::Client;
-use crate::{artifact::Artifact, object::ObjectHash};
+use crate::{artifact::Artifact, object};
 use anyhow::Result;
 
 impl Client {
-	pub async fn create_artifact(&self, object_hash: ObjectHash) -> Result<Artifact> {
+	pub async fn create_artifact(&self, object_hash: object::Hash) -> Result<Artifact> {
 		match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {
 				let artifact = server.create_artifact(object_hash).await?;
