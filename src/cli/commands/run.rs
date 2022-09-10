@@ -1,8 +1,11 @@
+use std::path::PathBuf;
+
 use crate::config::Config;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use tangram::{
 	client::Client,
+	manifest::Manifest,
 	specifier::{PathSpecifier, RegistrySpecifier, Specifier},
 };
 
@@ -10,14 +13,14 @@ use tangram::{
 #[clap(trailing_var_arg = true)]
 pub struct Args {
 	#[clap(long)]
-	executable_path: Option<String>,
+	pub executable_path: Option<PathBuf>,
 	#[clap(long, takes_value = false)]
-	locked: bool,
+	pub locked: bool,
 	#[clap(long, default_value = "build")]
-	name: String,
+	pub name: String,
 	#[clap(default_value = ".")]
-	package: String,
-	trailing_args: Vec<String>,
+	pub package: String,
+	pub trailing_args: Vec<String>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -65,11 +68,43 @@ pub async fn run(args: Args) -> Result<()> {
 		},
 	};
 
+	// Check that the client is connected to an in-process server.
+	let server = match client.as_in_process() {
+		Some(server) => server,
+		None => {
+			bail!("Client must be connected to an 'In Process' Server in order to run.")
+		},
+	};
+
+	// Create a fragment for the package.
+	let package_fragment = server.create_fragment(package).await?;
+
+	// Get the path to the fragment.
+	let package_path = server.fragment_path(&package_fragment);
+
+	// Materialize the package to read the manifest.
+	let manifest_path = package_path.join("tangram.json");
+	let manifest = tokio::fs::read(&manifest_path)
+		.await
+		.context("Failed to read the package manifest.")?;
+	let manifest: Manifest = serde_json::from_slice(&manifest).with_context(|| {
+		format!(
+			r#"Failed to parse the package manifest at path "{}"."#,
+			manifest_path.display()
+		)
+	})?;
+
+	let executable_subpath = if let Some(executable_subpath) = args.executable_path {
+		executable_subpath
+	} else {
+		PathBuf::from("bin").join(manifest.name)
+	};
+
 	// Create the expression.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
 		lockfile: None,
 		package,
-		name: args.name.clone(),
+		name: args.name,
 		args: vec![],
 	});
 
@@ -86,14 +121,6 @@ pub async fn run(args: Args) -> Result<()> {
 		),
 	};
 
-	// Check that the client is connected to an in-process server.
-	let server = match client.as_in_process() {
-		Some(server) => server,
-		None => {
-			bail!("Client must be connected to an 'In Process' Server in order to run.")
-		},
-	};
-
 	// Create a fragment for the artifact.
 	let fragment = server.create_fragment(artifact).await?;
 
@@ -101,11 +128,7 @@ pub async fn run(args: Args) -> Result<()> {
 	let path = server.fragment_path(&fragment);
 
 	// Get the path to the executable.
-	let executable_path = if let Some(executable_path) = args.executable_path {
-		path.join(executable_path)
-	} else {
-		path.join("bin").join(&args.name)
-	};
+	let executable_path = path.join(executable_subpath);
 
 	// Run the process!
 	let mut child = tokio::process::Command::new(&executable_path)

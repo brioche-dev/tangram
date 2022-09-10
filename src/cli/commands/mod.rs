@@ -8,3 +8,4 @@ pub mod repl;
 pub mod run;
 pub mod search;
 pub mod server;
+pub mod shell;
