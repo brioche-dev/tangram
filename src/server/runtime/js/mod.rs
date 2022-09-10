@@ -6,7 +6,6 @@ use crate::{
 	lockfile::Lockfile,
 	object::ObjectHash,
 	server::{repl::Output, Server},
-	value::Value,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use camino::Utf8PathBuf;
@@ -80,8 +79,10 @@ impl Runtime {
 		Ok(response)
 	}
 
-	pub async fn run(&self, process: expression::JsProcess) -> Result<Result<Expression>> {
-		let request = Request::Run { process };
+	pub async fn run(&self, process: &expression::JsProcess) -> Result<Result<Expression>> {
+		let request = Request::Run {
+			process: process.clone(),
+		};
 		let response = self.request(request).await?;
 		let response = if let Response::Run(response) = response {
 			response
@@ -336,8 +337,8 @@ async fn handle_repl_request(
 	}
 
 	// Retrieve the output.
-	let value = if let Some(value) = call_function_on_response.result.value {
-		value
+	let output = if let Some(output) = call_function_on_response.result.value {
+		output
 	} else {
 		return Output::Error {
 			message: "An unexpected error occurred.".to_owned(),
@@ -345,7 +346,7 @@ async fn handle_repl_request(
 	};
 
 	// Get the output as a string.
-	let output = value.as_str().unwrap().to_owned();
+	let output = output.as_str().unwrap().to_owned();
 
 	Output::Success {
 		message: Some(output),
@@ -360,18 +361,22 @@ async fn handle_run_request(
 ) -> Result<Expression> {
 	// Evaluate the module expression to get a path value.
 	let module = server
-		.evaluate(*process.module)
+		.evaluate(&process.module)
 		.await
 		.with_context(|| "Failed to evaluate the module expression.")?;
 	let module = match module {
-		Value::Path(module) => module,
+		Expression::Path(module) => module,
 		_ => bail!("The module must be a path."),
 	};
 
 	// Create the module URL.
+	let module_artifact = match *module.artifact {
+		Expression::Artifact(artifact) => artifact,
+		_ => bail!("Module artifact must be an artifact."),
+	};
 	let mut module_url = format!(
 		"{TANGRAM_MODULE_SCHEME}://{}",
-		module.artifact.object_hash(),
+		module_artifact.object_hash(),
 	);
 
 	// Add the module path if necessary.
@@ -428,7 +433,7 @@ async fn handle_run_request(
 		.collect::<Result<Vec<_>>>()?;
 
 	// Call the specified export.
-	let value = export.call(&mut try_catch_scope, undefined.into(), &args);
+	let output = export.call(&mut try_catch_scope, undefined.into(), &args);
 
 	// If an exception was caught, return an error with an error message.
 	if try_catch_scope.has_caught() {
@@ -439,10 +444,10 @@ async fn handle_run_request(
 	}
 
 	// If there was no caught exception then retrieve the return value.
-	let value = value.unwrap();
+	let output = output.unwrap();
 
 	// Move the return value to the global scope.
-	let value = v8::Global::new(&mut try_catch_scope, value);
+	let output = v8::Global::new(&mut try_catch_scope, output);
 	drop(try_catch_scope);
 	drop(scope);
 
@@ -451,16 +456,16 @@ async fn handle_run_request(
 
 	// Retrieve the return value.
 	let mut scope = js_runtime.handle_scope();
-	let value = v8::Local::new(&mut scope, value);
-	let value = if value.is_promise() {
-		let promise: v8::Local<v8::Promise> = value.try_into().unwrap();
+	let output = v8::Local::new(&mut scope, output);
+	let output = if output.is_promise() {
+		let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
 		promise.result(&mut scope)
 	} else {
-		value
+		output
 	};
-	let value = serde_v8::from_v8(&mut scope, value)?;
+	let output = serde_v8::from_v8(&mut scope, output)?;
 
-	Ok(value)
+	Ok(output)
 }
 
 #[deno_core::op]
@@ -488,7 +493,7 @@ fn op_tangram_console_log(args: Vec<serde_json::Value>) -> Result<(), deno_core:
 async fn op_tangram_evaluate(
 	state: Rc<RefCell<deno_core::OpState>>,
 	expression: Expression,
-) -> Result<Value, deno_core::error::AnyError> {
+) -> Result<Expression, deno_core::error::AnyError> {
 	let (server, main_runtime_handle) = {
 		let state = state.borrow();
 		let tangram_state = state.borrow::<OpState>();
@@ -497,11 +502,11 @@ async fn op_tangram_evaluate(
 		(server, main_runtime_handle)
 	};
 	let task = async move {
-		let value = server.evaluate(expression).await?;
-		Ok::<_, anyhow::Error>(value)
+		let output = server.evaluate(&expression).await?;
+		Ok::<_, anyhow::Error>(output)
 	};
-	let value = main_runtime_handle.spawn(task).await.unwrap()?;
-	Ok(value)
+	let output = main_runtime_handle.spawn(task).await.unwrap()?;
+	Ok(output)
 }
 
 #[derive(serde::Deserialize)]

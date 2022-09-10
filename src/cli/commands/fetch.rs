@@ -29,14 +29,15 @@ pub async fn run(args: Args) -> Result<()> {
 	});
 
 	// Evaluate the expression.
-	let value = client
-		.evaluate(expression)
+	let output = client
+		.evaluate(&expression)
 		.await
 		.context("Failed to evaluate the expression.")?;
 
-	// Print the value.
-	let value = serde_json::to_string_pretty(&value).context("Failed to serialize the value.")?;
-	println!("{value}");
+	// Print the output.
+	let output_json =
+		serde_json::to_string_pretty(&output).context("Failed to serialize the value.")?;
+	println!("{output_json}");
 
 	Ok(())
 }

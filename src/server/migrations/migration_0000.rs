@@ -14,15 +14,18 @@ const SQL: &str = r#"
 	);
 
 	create table evaluations (
-		input_hash blob primary key,
-		input blob not null,
+		expression_hash blob primary key,
+		expression blob not null,
 		output_hash blob not null,
 		output blob not null
 	);
 
-	create table subexpressions (
-		input_hash blob primary key,
-		output_hash blob not null,
+	create table subevalutions (
+		parent_expression_hash blob not null,
+		child_expression_hash blob not null,
+		foreign key (parent_expression_hash) references evaluations (expression_hash),
+		foreign key (child_expression_hash) references evaluations (expression_hash),
+		primary key (parent_expression_hash, child_expression_hash)
 	);
 
 	create table packages (
@@ -30,17 +33,17 @@ const SQL: &str = r#"
 	);
 
 	create table package_versions (
-		name text,
-		version text,
-		artifact_hash blob,
+		name text not null,
+		version text not null,
+		artifact_hash blob not null,
 		foreign key (artifact_hash) references artifacts (object_hash),
 		primary key (name, version)
 	);
 
 	create table roots (
 		expression_hash blob primary key,
-		fragment bool,
-		foreign key (expression_hash) references expressions (hash)
+		fragment bool not null,
+		foreign key (expression_hash) references evaluations (expression_hash)
 	);
 "#;
 
@@ -49,7 +52,7 @@ pub struct Migration;
 #[async_trait]
 impl super::Migration for Migration {
 	async fn run(&self, path: &Path) -> Result<()> {
-		// Create the database and create the objects, artifacts, and expressions tables.
+		// Create the database and create the initial set of tables.
 		tokio::task::block_in_place(move || -> Result<_> {
 			let database_connection = rusqlite::Connection::open(path.join("db.sqlite3"))?;
 			database_connection.execute_batch(SQL)?;

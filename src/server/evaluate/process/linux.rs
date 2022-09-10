@@ -190,12 +190,12 @@ impl Server {
 		});
 
 		// Evaluate the expression.
-		let value = self
+		let output = self
 			.evaluate(expression)
 			.await
 			.context("Failed to evaluate the expression.")?;
 
-		let artifact = match value {
+		let artifact = match output {
 			Value::Artifact(artifact) => artifact,
 			_ => bail!("Expected the value to be an artifact."),
 		};

@@ -1,39 +1,37 @@
 use crate::{
-	expression::Expression,
+	expression::{Expression, ExpressionHash},
 	hash::Hash,
 	server::{
 		error::{bad_request, not_found},
 		Server,
 	},
-	value::Value,
 };
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use std::sync::Arc;
 
 impl Server {
-	/// Retrieve the memoized value from a previous evaluation of an expression, if one exists.
+	/// Retrieve the memoized output from a previous evaluation of an expression, if one exists.
 	#[async_recursion]
 	#[must_use]
-	pub async fn get_memoized_value_for_expression(
+	pub async fn get_memoized_evaluation(
 		self: &Arc<Self>,
-		expression: &Expression,
-	) -> Result<Option<Value>> {
-		let expression_json = serde_json::to_vec(&expression)?;
-		let expression_hash = Hash::new(&expression_json);
+		input: &Expression,
+	) -> Result<Option<Expression>> {
+		let input_hash = input.hash();
 
-		// Check if we have memoized the expression.
-		let value = self
-			.get_memoized_value_for_expression_hash(&expression_hash)
+		// Check if we have memoized a previous evaluation of the expression.
+		let output = self
+			.get_memoized_value_for_expression_hash(&input_hash)
 			.await?;
 
-		if value.is_some() {
-			return Ok(value);
+		if output.is_some() {
+			return Ok(output);
 		}
 
 		// Otherwise, check if any of our peers have memoized the expression.
 		for client in &self.peers {
-			let result = client.get_memoized_value_for_expression(expression).await;
+			let result = client.get_memoized_evaluation(input).await;
 			match result {
 				Ok(value) => {
 					if value.is_some() {
@@ -47,11 +45,11 @@ impl Server {
 		Ok(None)
 	}
 
-	/// Retrieve the memoized value from a previous evaluation of an expression, if one exists, given an expression hash.
+	/// Retrieve the memoized output from a previous evaluation of an expression, if one exists, given an expression hash.
 	pub async fn get_memoized_value_for_expression_hash(
 		self: &Arc<Self>,
-		expression_hash: &Hash,
-	) -> Result<Option<Value>> {
+		expression_hash: &ExpressionHash,
+	) -> Result<Option<Expression>> {
 		let value = self
 			.database_transaction(|txn| {
 				let sql = r#"
@@ -84,29 +82,28 @@ impl Server {
 	}
 
 	/// Memoize the value from the evaluation of an expression.
-	pub async fn set_memoized_value_for_expression(
+	pub async fn set_memoized_evaluation(
 		self: &Arc<Self>,
-		expression: &Expression,
-		value: &Value,
+		input: &Expression,
+		output: &Expression,
 	) -> Result<()> {
-		let expression_json = serde_json::to_vec(&expression)?;
+		let expression_json = serde_json::to_vec(&input)?;
 		let expression_hash = Hash::new(&expression_json);
-		let value_json = serde_json::to_vec(&value)?;
+		let output_json = serde_json::to_vec(&output)?;
 		self.database_transaction(|txn| {
 			txn.execute(
 				r#"
-					replace into expressions (
-						hash, data, value
+					replace into evaluations (
+						input_hash, input, output_hash, output
 					) values (
-						$1, $2, $3
+						$1, $2, $3, $4
 					)
 				"#,
-				(expression_hash.to_string(), expression_json, value_json),
+				(expression_hash.to_string(), expression_json, output_json),
 			)?;
 			Ok(())
 		})
 		.await?;
-		// TODO replace into the subexpressions table.
 		Ok(())
 	}
 }

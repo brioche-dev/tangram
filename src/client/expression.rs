@@ -1,16 +1,16 @@
 use super::{transport::InProcessOrHttp, Client};
-use crate::{expression::Expression, value::Value};
+use crate::expression::Expression;
 use anyhow::{Context, Result};
 
 impl Client {
-	pub async fn get_memoized_value_for_expression(
+	pub async fn get_memoized_evaluation(
 		&self,
 		expression: &Expression,
-	) -> Result<Option<Value>> {
+	) -> Result<Option<Expression>> {
 		match self.transport.as_in_process_or_http() {
 			InProcessOrHttp::InProcess(server) => {
-				let value = server.get_memoized_value_for_expression(expression).await?;
-				Ok(value)
+				let output = server.get_memoized_evaluation(expression).await?;
+				Ok(output)
 			},
 
 			InProcessOrHttp::Http(http) => {
@@ -45,10 +45,10 @@ impl Client {
 					.context("Failed to read response body.")?;
 
 				// Deserialize the response body.
-				let value = serde_json::from_slice(&body)
+				let output = serde_json::from_slice(&body)
 					.context("Failed to deserialize the response body.")?;
 
-				Ok(value)
+				Ok(output)
 			},
 		}
 	}

@@ -1,12 +1,11 @@
-use std::path::PathBuf;
-
 use crate::config::Config;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
+use std::path::PathBuf;
 use tangram::{
 	client::Client,
 	manifest::Manifest,
-	specifier::{PathSpecifier, RegistrySpecifier, Specifier},
+	specifier::{self, Specifier},
 };
 
 #[derive(Parser, Debug)]
@@ -38,33 +37,28 @@ pub async fn run(args: Args) -> Result<()> {
 		.parse()
 		.context("Failed to parse the package specifier.")?;
 
-	// Evaluate and checkout the resulting artifact.
+	// Get the package artifact.
 	let package = match package_specifier {
-		Specifier::Path(PathSpecifier { path }) => {
+		Specifier::Path(specifier::Path { path }) => {
 			// Checkin the package.
 			client
 				.checkin_package(&path, args.locked)
 				.await
 				.context("Failed to check in the package.")?
 		},
-		Specifier::Registry(RegistrySpecifier {
+		Specifier::Registry(specifier::Registry {
 			package_name,
 			version,
 		}) => {
-			// TODO get rid of this requirement once we figure out the kv store.
-			let version = version.ok_or_else(|| anyhow!("For now you must pass a version."))?;
 			// Get the package from the registry.
+			let version = version.ok_or_else(|| anyhow!("A version is required."))?;
 			client
 				.get_package(&package_name, &version)
 				.await
 				.with_context(|| {
-					format!("Failed to get the package with name {package_name} from the registry.")
+					format!(r#"Failed to get the package "{package_name}" from the registry."#)
 				})?
-				.ok_or_else(|| {
-					anyhow!(format!(
-						"Failed to get the package with name {package_name}."
-					))
-				})?
+				.ok_or_else(|| anyhow!(r#"Failed to get the package "{package_name}"."#))?
 		},
 	};
 
@@ -109,16 +103,22 @@ pub async fn run(args: Args) -> Result<()> {
 	});
 
 	// Evaluate the expression.
-	let value = client
-		.evaluate(expression)
+	let output = client
+		.evaluate(&expression)
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
-	let artifact = match value {
-		tangram::value::Value::Artifact(artifact) => artifact,
-		_ => bail!(
-			"Failed to run. The provided target must evaluate to an artifact in order to be run."
-		),
+	let artifact = match output {
+		tangram::expression::Expression::Artifact(artifact) => artifact,
+		_ => bail!("The target must evaluate to an artifact."),
+	};
+
+	// Check that the client is connected to an in-process server.
+	let server = match client.as_in_process() {
+		Some(server) => server,
+		None => {
+			bail!("The client must use the in process transport.");
+		},
 	};
 
 	// Create a fragment for the artifact.

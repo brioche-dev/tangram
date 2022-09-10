@@ -1,11 +1,14 @@
 use crate::{artifact::Artifact, hash::Hash, lockfile::Lockfile};
 use camino::Utf8PathBuf;
+use derive_more::{Display, FromStr};
 use std::collections::BTreeMap;
 use url::Url;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::module_name_repetitions)]
-pub struct ExpressionHash(Hash);
+#[derive(
+	Clone, Copy, Debug, Display, Eq, FromStr, Hash, PartialEq, serde::Deserialize, serde::Serialize,
+)]
+pub struct ExpressionHash(pub Hash);
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
@@ -146,8 +149,8 @@ impl From<TemplateSerde> for Template {
 
 impl Expression {
 	#[must_use]
-	pub fn hash(&self) -> Hash {
-		Hash::new(serde_json::to_vec(self).unwrap())
+	pub fn hash(&self) -> ExpressionHash {
+		ExpressionHash(Hash::new(serde_json::to_vec(self).unwrap()))
 	}
 }
 

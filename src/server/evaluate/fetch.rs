@@ -1,10 +1,9 @@
 use crate::{
 	artifact::Artifact,
-	expression::{self},
+	expression::{self, Expression},
 	hash::Hasher,
 	object::{BlobHash, File, Object},
 	server::Server,
-	value::Value,
 };
 use anyhow::{anyhow, bail, Result};
 use futures::{StreamExt, TryStreamExt};
@@ -12,7 +11,7 @@ use std::{path::Path, sync::Arc};
 use tokio::io::AsyncWriteExt;
 
 impl Server {
-	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: &expression::Fetch) -> Result<Value> {
+	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: &expression::Fetch) -> Result<Expression> {
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
 		// Retrieve the artifact if it has been downloaded.
@@ -94,10 +93,10 @@ impl Server {
 			artifact
 		};
 
-		// Create the value.
-		let value = Value::Artifact(artifact);
+		// Create the output.
+		let output = Expression::Artifact(artifact);
 
-		Ok(value)
+		Ok(output)
 	}
 
 	async fn unpack(
