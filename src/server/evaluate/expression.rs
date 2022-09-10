@@ -54,11 +54,11 @@ impl Server {
 			.database_transaction(|txn| {
 				let sql = r#"
 					select
-						value
+						output
 					from
-						expressions
+						evaluations
 					where
-						hash = $1
+						expression_hash = $1
 				"#;
 				let params = (expression_hash.to_string(),);
 				let mut statement = txn
@@ -94,7 +94,7 @@ impl Server {
 			txn.execute(
 				r#"
 					replace into evaluations (
-						input_hash, input, output_hash, output
+						expression_hash, expression, output_hash, output
 					) values (
 						$1, $2, $3, $4
 					)
