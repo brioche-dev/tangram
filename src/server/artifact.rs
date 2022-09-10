@@ -6,20 +6,25 @@ use std::sync::Arc;
 impl Server {
 	// Create an artifact.
 	pub async fn create_artifact(self: &Arc<Self>, object_hash: ObjectHash) -> Result<Artifact> {
-		self.database_execute(
-			r#"
-				replace into artifacts (
-					object_hash
-				) values (
-					$1
-				)
-			"#,
-			(object_hash.to_string(),),
-		)
+		self.database_transaction(|txn| {
+			txn.execute(
+				r#"
+					replace into artifacts (
+						object_hash
+					) values (
+						$1
+					)
+				"#,
+				(object_hash.to_string(),),
+			)?;
+			Ok(())
+		})
 		.await?;
 		let artifact = Artifact::new(object_hash);
 		Ok(artifact)
 	}
+
+	// Delete an artifact.
 }
 
 impl Server {

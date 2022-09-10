@@ -28,8 +28,16 @@ impl Server {
 			Object::Directory(directory) => {
 				let mut missing_entries = Vec::new();
 				for (entry_name, object_hash) in &directory.entries {
-					if !self.object_exists(*object_hash).await? {
-						missing_entries.push((entry_name.clone(), *object_hash));
+					let object_hash = *object_hash;
+					let object_exists = self
+						.database_transaction(|txn| {
+							let object_exists =
+								Self::object_exists_with_transaction(txn, object_hash)?;
+							Ok(object_exists)
+						})
+						.await?;
+					if !object_exists {
+						missing_entries.push((entry_name.clone(), object_hash));
 					}
 				}
 				if !missing_entries.is_empty() {
@@ -56,7 +64,13 @@ impl Server {
 			// If this object is a dependency, ensure it is present.
 			Object::Dependency(dependency) => {
 				let object_hash = dependency.artifact.object_hash();
-				if !self.object_exists(object_hash).await? {
+				let object_exists = self
+					.database_transaction(|txn| {
+						let object_exists = Self::object_exists_with_transaction(txn, object_hash)?;
+						Ok(object_exists)
+					})
+					.await?;
+				if !object_exists {
 					return Ok(AddObjectOutcome::DependencyMissing { object_hash });
 				}
 			},
@@ -66,55 +80,90 @@ impl Server {
 		let object_data = serde_json::to_vec(&object)?;
 
 		// Add the object to the database.
-		self.database_execute(
-			r#"
-				replace into objects (
-					hash, data
-				) values (
-					$1, $2
-				)
-			"#,
-			(object_hash.to_string(), object_data),
-		)
+		self.database_transaction(|txn| {
+			txn.execute(
+				r#"
+					replace into objects (
+						hash, data
+					) values (
+						$1, $2
+					)
+				"#,
+				(object_hash.to_string(), object_data),
+			)?;
+			Ok(())
+		})
 		.await?;
 
 		Ok(AddObjectOutcome::Added { object_hash })
 	}
 
-	pub async fn object_exists(self: &Arc<Self>, object_hash: ObjectHash) -> Result<bool> {
-		let exists = self
-			.database_query_row(
-				r#"
-					select count(*) > 0 from objects where hash = $1
-				"#,
-				(object_hash.to_string(),),
-				|row| Ok(row.get::<_, bool>(0)?),
-			)
-			.await?
-			.unwrap();
+	pub fn object_exists_with_transaction(
+		txn: &rusqlite::Transaction<'_>,
+		object_hash: ObjectHash,
+	) -> Result<bool> {
+		let sql = r#"
+			select count(*) > 0 from objects where hash = $1
+		"#;
+		let params = (object_hash.to_string(),);
+		let exists = txn
+			.prepare_cached(sql)
+			.context("Failed to prepare the query.")?
+			.query(params)
+			.context("Failed to execute the query.")?
+			.and_then(|row| row.get::<_, bool>(0))
+			.next()
+			.unwrap()?;
 		Ok(exists)
 	}
 
+	pub fn get_object_with_transaction(
+		txn: &rusqlite::Transaction,
+		object_hash: ObjectHash,
+	) -> Result<Option<Object>> {
+		let sql = r#"
+			select
+				data
+			from objects
+			where
+				hash = $1
+		"#;
+		let params = (object_hash.to_string(),);
+		let mut statement = txn
+			.prepare_cached(sql)
+			.context("Failed to prepare the query.")?;
+		let maybe_object = statement
+			.query(params)?
+			.and_then(|row| {
+				let object_data = row.get::<_, Vec<u8>>(0)?;
+				let object = serde_json::from_slice(&object_data)?;
+				Ok::<_, anyhow::Error>(object)
+			})
+			.next()
+			.transpose()?;
+		Ok(maybe_object)
+	}
+
 	pub async fn get_object(self: &Arc<Self>, object_hash: ObjectHash) -> Result<Option<Object>> {
-		let object_data = self
-			.database_query_row(
-				"
-					select
-						data
-					from objects
-					where hash = $1;
-				",
-				(object_hash.to_string(),),
-				|row| Ok(row.get::<_, Vec<u8>>(0)?),
-			)
-			.await?;
-		let object = if let Some(object_data) = object_data {
-			let object = serde_json::from_slice(&object_data)?;
-			Some(object)
-		} else {
-			None
-		};
-		Ok(object)
+		self.database_transaction(|txn| Self::get_object_with_transaction(txn, object_hash))
+			.await
+	}
+
+	pub fn delete_object_with_transaction(
+		txn: &rusqlite::Transaction,
+		object_hash: ObjectHash,
+	) -> Result<()> {
+		let sql = r#"
+			delete from objects where hash = $1
+		"#;
+		let params = (object_hash.to_string(),);
+		let mut statement = txn
+			.prepare_cached(sql)
+			.context("Failed to prepare the query.")?;
+		statement
+			.execute(params)
+			.context("Failed to execute the query.")?;
+		Ok(())
 	}
 }
 
@@ -147,7 +196,10 @@ impl Server {
 			serde_json::from_slice(&body).context("Failed to deserialize the request body.")?;
 
 		// Add the object.
-		let outcome = self.add_object(object_hash, &object).await?;
+		let outcome = self
+			.add_object(object_hash, &object)
+			.await
+			.context("Failed to get the object.")?;
 
 		// Create the response.
 		let body =
@@ -179,7 +231,13 @@ impl Server {
 		};
 
 		// Get the object.
-		let object = self.get_object(object_hash).await?;
+		let object = self
+			.database_transaction(|txn| {
+				let object = Self::get_object_with_transaction(txn, object_hash)
+					.context("Failed to get the object.")?;
+				Ok(object)
+			})
+			.await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&object).context("Failed to serialize the response body.")?;

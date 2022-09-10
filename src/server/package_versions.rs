@@ -1,7 +1,6 @@
 use super::{error::not_found, Server};
 use crate::artifact::Artifact;
 use anyhow::{anyhow, bail, Context, Result};
-use rusqlite::Row;
 use std::sync::Arc;
 
 impl Server {
@@ -13,8 +12,8 @@ impl Server {
 	) -> Result<Option<Artifact>> {
 		// Retrieve the artifact hash from the database.
 		let maybe_object_hash = self
-			.database_query_row(
-				r#"
+			.database_transaction(|txn| {
+				let sql = r#"
 					select
 						artifact_hash
 					from package_versions
@@ -22,10 +21,18 @@ impl Server {
 						name = $1
 						and
 						version = $2
-				"#,
-				(package_name, package_version.to_string()),
-				|row| Ok(row.get::<_, String>(0)?),
-			)
+				"#;
+				let params = (package_name, package_version.to_string());
+				let mut statement = txn
+					.prepare_cached(sql)
+					.context("Failed to prepare the query.")?;
+				let maybe_object_hash = statement
+					.query(params)?
+					.and_then(|row| row.get::<_, String>(0))
+					.next()
+					.transpose()?;
+				Ok(maybe_object_hash)
+			})
 			.await?;
 
 		// Construct the artifact.
@@ -42,32 +49,24 @@ impl Server {
 		package_version: &str,
 		artifact: Artifact,
 	) -> Result<Artifact> {
-		let database_connection_object = self
-			.database_connection_pool
-			.get()
-			.await
-			.context("Failed to retrieve a database connection.")?;
-
-		tokio::task::block_in_place(move || -> Result<()> {
-			// Create a database transaction.
-			let mut database_connection = database_connection_object.lock().unwrap();
-			let txn = database_connection.transaction()?;
-
+		self.database_transaction(|txn| {
 			// Check if the package already exists.
 			let sql = r#"
-					select count(*) > 0 from packages where name = $1
-				"#;
+				select count(*) > 0 from packages where name = $1
+			"#;
+			let params = (package_name,);
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;
 			let package_exists = statement
-				.query_row((package_name,), |row: &Row| row.get::<_, bool>(0))
-				.context("Failed to execute the query.")?;
+				.query(params)?
+				.and_then(|row| row.get::<_, bool>(0))
+				.next()
+				.transpose()?
+				.unwrap();
 
-			drop(statement);
-
+			// Create the package if it does not exist.
 			if !package_exists {
-				// Create the package.
 				let sql = r#"
 					insert into packages (
 						name
@@ -75,62 +74,61 @@ impl Server {
 						$1
 					)
 				"#;
+				let params = (package_name,);
 				let mut statement = txn
 					.prepare_cached(sql)
 					.context("Failed to prepare the query.")?;
 				statement
-					.execute((package_name,))
+					.execute(params)
 					.context("Failed to execute the query.")?;
 			}
 
 			// Check if the package version already exists.
 			let sql = r#"
-					select count(*) > 0 from package_versions where name = $1 and version = $2
-				"#;
+				select count(*) > 0 from package_versions where name = $1 and version = $2
+			"#;
+			let params = (package_name, package_version);
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;
 			let package_version_exists = statement
-				.query_row((package_name, package_version), |row: &Row| {
-					row.get::<_, bool>(0)
-				})
-				.context("Failed to execute the query.")?;
-
-			drop(statement);
+				.query(params)
+				.context("Failed to execute the query.")?
+				.and_then(|row| row.get::<_, bool>(0))
+				.next()
+				.transpose()?
+				.unwrap();
 
 			if package_version_exists {
-				return Err(anyhow!(format!("Package with name '{package_name}', and version '{package_version}' already exists.")));
+				return Err(anyhow!(format!(
+					r#"The package with name "{package_name}" and version "{package_version}" already exists."#
+				)));
 			}
 
-			// Create a new package version for the given artifact hash.
+			// Create the new package version.
 			let sql = r#"
 				insert into package_versions (
-					name,
-					version,
-					artifact_hash
+					name, version, artifact_hash
 				) values (
-					$1,
-					$2,
-					$3
+					$1, $2, $3
 				)
 			"#;
+			let params = (
+				package_name,
+				package_version,
+				artifact.object_hash().to_string(),
+			);
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;
 			statement
-				.execute((
-					package_name,
-					package_version,
-					artifact.object_hash().to_string(),
-				))
+				.execute(params)
 				.context("Failed to execute the query.")?;
-
 			drop(statement);
 
-			txn.commit()?;
-
 			Ok(())
-		})?;
+		})
+		.await?;
 
 		Ok(artifact)
 	}
@@ -196,28 +194,16 @@ impl Server {
 			serde_json::from_slice(&body).context("Failed to deserialize the request body.")?;
 
 		// Create the new package version.
-		let create_package_version_result = self
-			.create_package_version(package_name.as_str(), package_version.as_str(), artifact)
-			.await;
+		self.create_package_version(package_name.as_str(), package_version.as_str(), artifact)
+			.await?;
 
 		// Create the response.
-		match create_package_version_result {
-			Ok(artifact) => {
-				let body = serde_json::to_vec(&artifact)
-					.context("Failed to deserialize the request body.")?;
-				let response = http::Response::builder()
-					.status(http::StatusCode::OK)
-					.body(hyper::Body::from(body))
-					.unwrap();
-				Ok(response)
-			},
-			Err(err) => {
-				let response = http::Response::builder()
-					.status(http::StatusCode::BAD_REQUEST)
-					.body(hyper::Body::from(err.to_string()))
-					.unwrap();
-				Ok(response)
-			},
-		}
+		let body =
+			serde_json::to_vec(&artifact).context("Failed to serialize the response body.")?;
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(hyper::Body::from(body))
+			.unwrap();
+		Ok(response)
 	}
 }

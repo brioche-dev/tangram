@@ -28,7 +28,7 @@ impl Server {
 	}
 
 	#[must_use]
-	pub fn temps_dir(self: &Arc<Self>) -> PathBuf {
+	pub fn temps_path(self: &Arc<Self>) -> PathBuf {
 		self.path.join("temps")
 	}
 

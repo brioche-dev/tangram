@@ -13,10 +13,16 @@ const SQL: &str = r#"
 		foreign key (object_hash) references objects (hash)
 	);
 
-	create table expressions (
-		hash blob primary key,
-		data blob not null,
-		value blob not null
+	create table evaluations (
+		input_hash blob primary key,
+		input blob not null,
+		output_hash blob not null,
+		output blob not null
+	);
+
+	create table subexpressions (
+		input_hash blob primary key,
+		output_hash blob not null,
 	);
 
 	create table packages (
@@ -27,13 +33,14 @@ const SQL: &str = r#"
 		name text,
 		version text,
 		artifact_hash blob,
-		primary key (name, version),
-		foreign key (artifact_hash) references artifacts (object_hash)
+		foreign key (artifact_hash) references artifacts (object_hash),
+		primary key (name, version)
 	);
 
 	create table roots (
-		artifact_hash blob,
-		foreign key (artifact_hash) references artifacts (object_hash)
+		expression_hash blob primary key,
+		fragment bool,
+		foreign key (expression_hash) references expressions (hash)
 	);
 "#;
 

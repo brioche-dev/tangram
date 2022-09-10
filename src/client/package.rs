@@ -8,7 +8,7 @@ impl Client {
 		match self.transport.as_in_process_or_http() {
 			InProcessOrHttp::InProcess(server) => {
 				let packages = server
-					.get_packages(Some(name))
+					.search_packages(name)
 					.await?
 					.into_iter()
 					.map(|search_result| search_result.name)

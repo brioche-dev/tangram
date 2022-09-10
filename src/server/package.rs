@@ -11,101 +11,117 @@ pub struct PackageVersion {
 }
 
 impl Server {
-	pub async fn get_packages(
-		self: &Arc<Self>,
-		name: Option<&str>,
-	) -> Result<Vec<SearchResultItem>> {
+	pub async fn search_packages(self: &Arc<Self>, name: &str) -> Result<Vec<SearchResultItem>> {
 		// Retrieve packages that match this query.
-		let packages = if let Some(name) = name {
-			self.database_query_rows(
-				r#"
+		let packages = self
+			.database_transaction(|txn| {
+				let sql = r#"
 					select
-					name
-						from packages
-					where name like $1
-				"#,
-				(format!("%{name}%"),),
-				|row| row.get::<_, String>(0),
-			)
-			.await?
-			.into_iter()
-			.map(|name| SearchResultItem { name })
-			.collect()
-		} else {
-			self.database_query_rows(
-				r#"
-					select
-					name
-						from packages
-				"#,
-				(),
-				|row| row.get::<_, String>(0),
-			)
-			.await?
-			.into_iter()
-			.map(|name| SearchResultItem { name })
-			.collect()
-		};
+						name
+					from packages
+					where
+						name like $1
+				"#;
+				let params = (format!("%{name}%"),);
+				let mut statement = txn
+					.prepare_cached(sql)
+					.context("Failed to prepare the query.")?;
+				let items = statement
+					.query(params)
+					.context("Failed to exeucte the query.")?
+					.and_then(|row| {
+						let name = row.get::<_, String>(0)?;
+						let item = SearchResultItem { name };
+						Ok(item)
+					})
+					.collect::<Result<_>>()?;
+				Ok(items)
+			})
+			.await?;
+		Ok(packages)
+	}
 
+	pub async fn get_packages(self: &Arc<Self>) -> Result<Vec<SearchResultItem>> {
+		// Retrieve packages that match this query.
+		let packages = self
+			.database_transaction(|txn| {
+				let sql = r#"
+					select
+						name
+					from packages
+				"#;
+				let mut statement = txn
+					.prepare_cached(sql)
+					.context("Failed to prepare the query.")?;
+				let items = statement
+					.query(())
+					.context("Failed to execute the query.")?
+					.and_then(|row| {
+						let name = row.get::<_, String>(0)?;
+						let item = SearchResultItem { name };
+						Ok(item)
+					})
+					.collect::<Result<_>>()?;
+				Ok(items)
+			})
+			.await?;
 		Ok(packages)
 	}
 
 	pub async fn get_package(self: &Arc<Self>, package_name: &str) -> Result<Vec<PackageVersion>> {
 		// Retrieve the package versions.
 		let versions = self
-			.database_query_rows(
-				r#"
+			.database_transaction(|txn| {
+				let sql = r#"
 					select
 						version,
 						artifact_hash
 					from package_versions
 					where
 						name = $1
-				"#,
-				(package_name,),
-				|row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-			)
-			.await?
-			.into_iter()
-			.map(|(version, object_hash)| {
-				let object_hash = object_hash
-					.parse()
-					.with_context(|| "Failed to parse object hash.")
-					.unwrap();
-				let artifact = Artifact::new(object_hash);
-				PackageVersion { version, artifact }
+				"#;
+				let params = (package_name,);
+				let mut statement = txn
+					.prepare_cached(sql)
+					.context("Failed to prepare the query.")?;
+				let versions = statement
+					.query(params)?
+					.and_then(|row| {
+						let version = row.get::<_, String>(0)?;
+						let object_hash = row.get::<_, String>(1)?;
+						let object_hash = object_hash
+							.parse()
+							.with_context(|| "Failed to parse the object hash.")?;
+						let artifact = Artifact::new(object_hash);
+						let package_version = PackageVersion { version, artifact };
+						Ok(package_version)
+					})
+					.collect::<Result<_>>()?;
+				Ok(versions)
 			})
-			.collect();
+			.await?;
 
 		Ok(versions)
 	}
 
 	// Create a new package.
 	pub async fn create_package(self: &Arc<Self>, package_name: &str) -> Result<()> {
-		// Create the database connection.
-		let database_connection_object = self
-			.database_connection_pool
-			.get()
-			.await
-			.context("Failed to retrieve a database connection.")?;
-
-		tokio::task::block_in_place(move || -> Result<()> {
-			// Create a database transaction.
-			let mut database_connection = database_connection_object.lock().unwrap();
-			let txn = database_connection.transaction()?;
-
+		self.database_transaction(|txn| {
 			// Check if the package already exists.
 			let sql = r#"
-					select count(*) > 0 from packages where name = $1
-				"#;
+				select count(*) > 0 from packages where name = $1
+			"#;
+			let params = (package_name,);
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;
 			let package_exists = statement
-				.query_row((package_name,), |row| row.get::<_, bool>(0))
-				.context("Failed to execute the query.")?;
-
-			drop(statement);
+				.query(params)
+				.context("Failed to execute the query.")?
+				.and_then(|row| row.get::<_, bool>(0))
+				.next()
+				.transpose()?
+				.unwrap();
 
 			if !package_exists {
 				// Create the package.
@@ -116,18 +132,18 @@ impl Server {
 						$1
 					)
 				"#;
+				let params = (package_name,);
 				let mut statement = txn
 					.prepare_cached(sql)
 					.context("Failed to prepare the query.")?;
 				statement
-					.execute((package_name,))
+					.execute(params)
 					.context("Failed to execute the query.")?;
 			}
 
-			txn.commit()?;
-
 			Ok(())
-		})?;
+		})
+		.await?;
 
 		Ok(())
 	}
@@ -144,7 +160,7 @@ impl Server {
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
-		// Get the package versions.
+		// Read the search params.
 		#[derive(serde::Deserialize, Default)]
 		struct SearchParams {
 			name: Option<String>,
@@ -154,13 +170,15 @@ impl Server {
 		} else {
 			None
 		};
-		let packages = self
-			.get_packages(
-				search_params
-					.and_then(|search_params| search_params.name)
-					.as_deref(),
-			)
-			.await?;
+
+		let packages = if let Some(name) = search_params
+			.as_ref()
+			.and_then(|search_params| search_params.name.as_deref())
+		{
+			self.search_packages(name).await?
+		} else {
+			self.get_packages().await?
+		};
 
 		// Create the response.
 		let body = serde_json::to_vec(&packages).context("Failed to serialize the response.")?;
@@ -170,7 +188,9 @@ impl Server {
 
 		Ok(response)
 	}
+}
 
+impl Server {
 	// Retrieve the package versions for the given package name.
 	pub async fn handle_get_package_request(
 		self: &Arc<Self>,
@@ -213,19 +233,13 @@ impl Server {
 		};
 
 		// Create the package.
-		let create_package_result = self.create_package(package_name).await;
+		self.create_package(package_name).await?;
 
-		// Create the response.
-		let response = match create_package_result {
-			Ok(_) => http::Response::builder()
-				.status(http::StatusCode::OK)
-				.body(hyper::Body::empty())
-				.unwrap(),
-			Err(err) => http::Response::builder()
-				.status(http::StatusCode::BAD_REQUEST)
-				.body(hyper::Body::from(err.to_string()))
-				.unwrap(),
-		};
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(hyper::Body::empty())
+			.unwrap();
+
 		Ok(response)
 	}
 }

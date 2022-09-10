@@ -54,7 +54,7 @@ impl Server {
 	}
 
 	#[must_use]
-	pub fn blobs_dir(self: &Arc<Self>) -> PathBuf {
+	pub fn blobs_path(self: &Arc<Self>) -> PathBuf {
 		self.path.join("blobs")
 	}
 

@@ -76,77 +76,22 @@ impl Server {
 		.context("Failed to create the database pool.")
 	}
 
-	pub(super) async fn database_execute(
+	/// Call a closure with a database transaction.
+	pub(super) async fn database_transaction<'a, T>(
 		self: &Arc<Self>,
-		sql: &str,
-		params: impl rusqlite::Params,
-	) -> Result<()> {
+		f: impl FnOnce(&rusqlite::Transaction) -> Result<T>,
+	) -> Result<T> {
 		let database_connection_object = self
 			.database_connection_pool
 			.get()
 			.await
 			.context("Failed to retrieve a database connection.")?;
-		tokio::task::block_in_place(move || -> Result<_> {
-			let database_connection = database_connection_object.lock().unwrap();
-			database_connection.execute(sql, params)?;
-			Ok(())
-		})
-	}
-
-	pub(super) async fn database_query_row<T, P, F>(
-		self: &Arc<Self>,
-		sql: &str,
-		params: P,
-		f: F,
-	) -> Result<Option<T>>
-	where
-		P: rusqlite::Params,
-		F: FnOnce(&rusqlite::Row<'_>) -> Result<T>,
-	{
-		let database_connection_object = self
-			.database_connection_pool
-			.get()
-			.await
-			.context("Failed to retrieve a database connection.")?;
-		tokio::task::block_in_place(move || -> Result<_> {
-			let database_connection = database_connection_object.lock().unwrap();
-			let mut statement = database_connection
-				.prepare_cached(sql)
-				.context("Failed to prepare the query.")?;
-			let mut rows = statement
-				.query(params)
-				.context("Failed to execute the query.")?;
-			let maybe_row = rows.next().context("Failed to fetch a row.")?;
-			let result: Option<T> = maybe_row.map(f).transpose()?;
-			Ok(result)
-		})
-	}
-
-	pub(super) async fn database_query_rows<T, P, F>(
-		self: &Arc<Self>,
-		sql: &str,
-		params: P,
-		f: F,
-	) -> Result<Vec<T>>
-	where
-		P: rusqlite::Params,
-		F: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
-	{
-		let database_connection_object = self
-			.database_connection_pool
-			.get()
-			.await
-			.context("Failed to retrieve a database connection.")?;
-		tokio::task::block_in_place(move || -> Result<_> {
-			let database_connection = database_connection_object.lock().unwrap();
-			let mut statement = database_connection
-				.prepare_cached(sql)
-				.context("Failed to prepare the query.")?;
-			let rows = statement
-				.query_map(params, f)
-				.context("Failed to execute the query.")?
-				.collect::<rusqlite::Result<Vec<_>>>()?;
-			Ok(rows)
-		})
+		let mut database_connection = database_connection_object.lock().unwrap();
+		let txn = database_connection
+			.transaction()
+			.context("Failed to start the transaction.")?;
+		let output = f(&txn)?;
+		txn.commit().context("Failed to commit the transaction.")?;
+		Ok(output)
 	}
 }

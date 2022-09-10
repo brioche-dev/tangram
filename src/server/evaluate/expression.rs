@@ -53,15 +53,26 @@ impl Server {
 		expression_hash: &Hash,
 	) -> Result<Option<Value>> {
 		let value = self
-			.database_query_row(
-				r#"
-					select value
-					from expressions
-					where hash = $1
-				"#,
-				(expression_hash.to_string(),),
-				|row| Ok(row.get::<_, Vec<u8>>(0)?),
-			)
+			.database_transaction(|txn| {
+				let sql = r#"
+					select
+						value
+					from
+						expressions
+					where
+						hash = $1
+				"#;
+				let params = (expression_hash.to_string(),);
+				let mut statement = txn
+					.prepare_cached(sql)
+					.context("Failed to prepare the query.")?;
+				let expression: Option<Vec<u8>> = statement
+					.query(params)?
+					.and_then(|row| row.get::<_, Vec<u8>>(0))
+					.next()
+					.transpose()?;
+				Ok(expression)
+			})
 			.await?;
 		let value = if let Some(value) = value {
 			let value = serde_json::from_slice(&value)?;
@@ -81,17 +92,21 @@ impl Server {
 		let expression_json = serde_json::to_vec(&expression)?;
 		let expression_hash = Hash::new(&expression_json);
 		let value_json = serde_json::to_vec(&value)?;
-		self.database_execute(
-			r#"
-				replace into expressions (
-					hash, data, value
-				) values (
-					$1, $2, $3
-				)
-			"#,
-			(expression_hash.to_string(), expression_json, value_json),
-		)
+		self.database_transaction(|txn| {
+			txn.execute(
+				r#"
+					replace into expressions (
+						hash, data, value
+					) values (
+						$1, $2, $3
+					)
+				"#,
+				(expression_hash.to_string(), expression_json, value_json),
+			)?;
+			Ok(())
+		})
 		.await?;
+		// TODO replace into the subexpressions table.
 		Ok(())
 	}
 }
