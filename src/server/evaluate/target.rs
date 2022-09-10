@@ -37,7 +37,7 @@ impl Server {
 				lockfile: target.lockfile.clone(),
 				module: Box::new(expression::Expression::Path(expression::Path {
 					artifact: Box::new(expression::Expression::Artifact(target.package)),
-					path,
+					path: path.map(Into::into),
 				})),
 				export: target.name.clone(),
 				args: target.args.clone(),

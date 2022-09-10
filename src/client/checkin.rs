@@ -9,6 +9,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
+use futures::future::try_join_all;
 use std::{path::Path, sync::Arc};
 
 impl Client {
@@ -50,7 +51,7 @@ impl Client {
 
 			// If this object is a directory and there were missing entries, recurse to add them.
 			AddObjectOutcome::DirectoryMissingEntries { entries } => {
-				futures::future::try_join_all(entries.into_iter().map(|(entry_name, _)| async {
+				try_join_all(entries.into_iter().map(|(entry_name, _)| async {
 					let path = path.join(entry_name);
 					self.checkin_object_for_path(object_cache, &path).await?;
 					Ok::<_, anyhow::Error>(())

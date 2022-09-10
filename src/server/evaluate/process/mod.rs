@@ -68,8 +68,8 @@ impl Server {
 			_ => bail!(r#"Argument "envs" must evaluate to a map."#),
 		};
 		let mut envs: BTreeMap<String, String> =
-			futures::future::try_join_all(envs.into_iter().map(|(key, value)| async {
-				Ok::<_, anyhow::Error>((key, self.resolve(value).await?))
+			try_join_all(envs.iter().map(|(key, value)| async move {
+				Ok::<_, anyhow::Error>((key.as_ref().to_owned(), self.resolve(value).await?))
 			}))
 			.await?
 			.into_iter()
@@ -95,7 +95,7 @@ impl Server {
 		let command_fragment = self.create_fragment(command_artifact).await?;
 		let command_path = self.fragment_path(&command_fragment);
 		let command = if let Some(path) = &command.path {
-			command_path.join(path)
+			command_path.join(path.as_ref())
 		} else {
 			command_path
 		};
@@ -106,9 +106,7 @@ impl Server {
 			Expression::Array(array) => array,
 			_ => bail!("Args must be an array."),
 		};
-		let args: Vec<String> =
-			futures::future::try_join_all(args.into_iter().map(|value| self.resolve(value)))
-				.await?;
+		let args: Vec<String> = try_join_all(args.iter().map(|value| self.resolve(value))).await?;
 
 		// Run the process.
 
@@ -139,7 +137,7 @@ impl Server {
 			Expression::Map(
 				artifacts
 					.into_iter()
-					.map(|(name, artifact)| (name, Expression::Artifact(artifact)))
+					.map(|(name, artifact)| (name.into(), Expression::Artifact(artifact)))
 					.collect(),
 			)
 		};
@@ -148,17 +146,13 @@ impl Server {
 	}
 
 	#[async_recursion]
-	async fn resolve(self: &Arc<Self>, expression: Expression) -> Result<String> {
+	async fn resolve(self: &Arc<Self>, expression: &Expression) -> Result<String> {
 		match expression {
-			Expression::String(string) => Ok(string),
+			Expression::String(string) => Ok(string.as_ref().to_owned()),
 			Expression::Template(template) => {
-				let components = try_join_all(
-					template
-						.components
-						.into_iter()
-						.map(|value| self.resolve(value)),
-				)
-				.await?;
+				let components =
+					try_join_all(template.components.iter().map(|value| self.resolve(value)))
+						.await?;
 				let string = components.join("");
 				Ok(string)
 			},
@@ -169,8 +163,8 @@ impl Server {
 				};
 				let fragment = self.create_fragment(path_artifact).await?;
 				let fragment_path = self.fragment_path(&fragment);
-				let fragment_path = if let Some(path) = path.path {
-					fragment_path.join(path)
+				let fragment_path = if let Some(path) = &path.path {
+					fragment_path.join(path.as_ref())
 				} else {
 					fragment_path
 				};

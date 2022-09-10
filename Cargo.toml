@@ -65,7 +65,7 @@ rust-s3 = { version = "0.32", default-features = false, features = ["tokio-rustl
 rustyline = "10"
 scopeguard = "1.1"
 semver = { version = "1", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["rc", "derive"] }
 serde-error = "0.1.2"
 serde_ini = "0.2"
 serde_json = "1"

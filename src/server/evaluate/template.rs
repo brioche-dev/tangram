@@ -3,6 +3,7 @@ use crate::{
 	server::Server,
 };
 use anyhow::Result;
+use futures::future::try_join_all;
 use std::sync::Arc;
 
 impl Server {
@@ -15,7 +16,7 @@ impl Server {
 			.components
 			.iter()
 			.map(|component| self.evaluate(component));
-		let components = futures::future::try_join_all(components).await?;
+		let components = try_join_all(components).await?;
 		let output = Expression::Template(crate::expression::Template { components });
 		Ok(output)
 	}

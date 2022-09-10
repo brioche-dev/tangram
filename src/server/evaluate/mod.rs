@@ -1,7 +1,7 @@
 use crate::{expression::Expression, server::Server};
 use anyhow::Result;
 use async_recursion::async_recursion;
-use futures::TryFutureExt;
+use futures::{future::try_join_all, TryFutureExt};
 use std::sync::Arc;
 
 mod expression;
@@ -16,12 +16,11 @@ impl Server {
 	#[async_recursion]
 	#[must_use]
 	pub async fn evaluate(self: &Arc<Self>, expression: &Expression) -> Result<Expression> {
-		// Recursively evaluate the expression.
 		match expression {
 			Expression::Null => Ok(Expression::Null),
 			Expression::Bool(value) => Ok(Expression::Bool(*value)),
 			Expression::Number(value) => Ok(Expression::Number(*value)),
-			Expression::String(value) => Ok(Expression::String(value.clone())),
+			Expression::String(value) => Ok(Expression::String(Arc::clone(value))),
 			Expression::Artifact(artifact) => Ok(Expression::Artifact(*artifact)),
 			Expression::Path(path) => {
 				let output = self.evaluate_path(path).await?;
@@ -45,7 +44,7 @@ impl Server {
 			},
 			Expression::Array(array) => {
 				let outputs = array.iter().map(|expression| self.evaluate(expression));
-				let outputs = futures::future::try_join_all(outputs).await?;
+				let outputs = try_join_all(outputs).await?;
 				let output = Expression::Array(outputs);
 				Ok(output)
 			},
@@ -54,10 +53,7 @@ impl Server {
 					self.evaluate(expression)
 						.map_ok(|value| (key.clone(), value))
 				});
-				let outputs = futures::future::try_join_all(outputs)
-					.await?
-					.into_iter()
-					.collect();
+				let outputs = try_join_all(outputs).await?.into_iter().collect();
 				let output = Expression::Map(outputs);
 				Ok(output)
 			},

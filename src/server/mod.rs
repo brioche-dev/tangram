@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::Result;
 use async_recursion::async_recursion;
+use futures::future::try_join_all;
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
 use std::{
@@ -91,7 +92,7 @@ impl Server {
 		let http_client = reqwest::Client::new();
 
 		// // Create the peer Clients.
-		let peers = futures::future::try_join_all(config.peers.into_iter().map(|url| {
+		let peers = try_join_all(config.peers.into_iter().map(|url| {
 			Client::new_with_config(client::config::Config {
 				transport: client::config::Transport::Tcp { url },
 			})

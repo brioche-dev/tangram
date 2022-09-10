@@ -1,7 +1,7 @@
 use crate::{artifact::Artifact, hash, lockfile::Lockfile};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use derive_more::{Display, FromStr};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 use url::Url;
 
 #[derive(
@@ -15,7 +15,7 @@ pub enum Expression {
 	Null,
 	Bool(bool),
 	Number(f64),
-	String(String),
+	String(Arc<str>),
 	Artifact(Artifact),
 	Path(Path),
 	Template(Template),
@@ -23,14 +23,14 @@ pub enum Expression {
 	Process(Process),
 	Target(Target),
 	Array(Vec<Expression>),
-	Map(BTreeMap<String, Expression>),
+	Map(BTreeMap<Arc<str>, Expression>),
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(from = "PathSerde", into = "PathSerde")]
 pub struct Path {
 	pub artifact: Box<Expression>,
-	pub path: Option<Utf8PathBuf>,
+	pub path: Option<Arc<Utf8Path>>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -108,7 +108,7 @@ impl From<Path> for PathSerde {
 	fn from(value: Path) -> PathSerde {
 		PathSerde::Path {
 			artifact: value.artifact,
-			path: value.path,
+			path: value.path.map(|path| path.as_ref().to_owned()),
 		}
 	}
 }
@@ -118,7 +118,10 @@ impl From<PathSerde> for Path {
 		let (artifact, path) = match value {
 			PathSerde::Path { artifact, path } => (artifact, path),
 		};
-		Path { artifact, path }
+		Path {
+			artifact,
+			path: path.map(Into::into),
+		}
 	}
 }
 

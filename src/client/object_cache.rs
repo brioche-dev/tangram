@@ -8,6 +8,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
 use camino::{Utf8Component, Utf8PathBuf};
 use fnv::FnvBuildHasher;
+use futures::future::try_join_all;
 use std::{
 	collections::HashMap,
 	fs::Metadata,
@@ -104,16 +105,15 @@ impl ObjectCache {
 		drop(permit);
 
 		// Recurse into the directory's entries.
-		let entries =
-			futures::future::try_join_all(entry_names.into_iter().map(|entry_name| async {
-				let entry_path = path.join(&entry_name);
-				self.get(&entry_path).await?;
-				let (object_hash, _) = self.cache.read().unwrap().get(&entry_path).unwrap().clone();
-				Ok::<_, anyhow::Error>((entry_name, object_hash))
-			}))
-			.await?
-			.into_iter()
-			.collect();
+		let entries = try_join_all(entry_names.into_iter().map(|entry_name| async {
+			let entry_path = path.join(&entry_name);
+			self.get(&entry_path).await?;
+			let (object_hash, _) = self.cache.read().unwrap().get(&entry_path).unwrap().clone();
+			Ok::<_, anyhow::Error>((entry_name, object_hash))
+		}))
+		.await?
+		.into_iter()
+		.collect();
 
 		// Create the object and add it to the cache.
 		let object = Object::Directory(Directory { entries });

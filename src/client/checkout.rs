@@ -7,8 +7,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
-use futures::Future;
-use futures::TryStreamExt;
+use futures::{future::try_join_all, Future, TryStreamExt};
 use std::{os::unix::prelude::PermissionsExt, path::Path, pin::Pin, sync::Arc};
 use tokio_util::io::StreamReader;
 
@@ -95,7 +94,7 @@ impl Client {
 
 			// If there is already a directory then remove any entries in the local directory that are not present in the remote directory.
 			Some((_, Object::Directory(local_directory))) => {
-				futures::future::try_join_all(local_directory.entries.keys().map(|entry_name| {
+				try_join_all(local_directory.entries.keys().map(|entry_name| {
 					let directory = &directory;
 					async move {
 						if !directory.entries.contains_key(entry_name) {
@@ -121,7 +120,7 @@ impl Client {
 		};
 
 		// Recurse into the children.
-		futures::future::try_join_all(directory.entries.into_iter().map(
+		try_join_all(directory.entries.into_iter().map(
 			|(entry_name, entry_object_hash)| async move {
 				let entry_path = path.join(&entry_name);
 				self.checkout_path(

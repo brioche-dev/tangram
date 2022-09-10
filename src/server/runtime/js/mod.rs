@@ -534,7 +534,7 @@ fn op_tangram_path(
 ) -> Result<Expression, deno_core::error::AnyError> {
 	Ok(Expression::Path(expression::Path {
 		artifact: Box::new(artifact),
-		path,
+		path: path.map(Into::into),
 	}))
 }
 
@@ -578,7 +578,7 @@ fn op_tangram_template(args: TemplateArgs) -> Result<Expression, deno_core::erro
 	let components = args
 		.strings
 		.into_iter()
-		.map(Expression::String)
+		.map(|string| Expression::String(string.into()))
 		.interleave(args.placeholders)
 		.collect();
 	let template = crate::expression::Template { components };
