@@ -1,11 +1,13 @@
 use super::{error::bad_request, Server};
 use crate::{
+	artifact::Artifact,
 	blob,
-	object::{self, Object},
+	object::{self, Dependency, Directory, File, Object, Symlink},
 	util::path_exists,
 };
 use anyhow::{bail, Context, Result};
-use std::sync::Arc;
+use camino::Utf8PathBuf;
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
@@ -22,6 +24,63 @@ pub enum AddObjectOutcome {
 	DependencyMissing {
 		object_hash: object::Hash,
 	},
+}
+
+impl Server {
+	pub async fn add_directory(
+		self: &Arc<Self>,
+		entries: BTreeMap<String, object::Hash>,
+	) -> Result<object::Hash> {
+		let object = Object::Directory(Directory { entries });
+		let object_hash = match self.add_object(object.hash(), &object).await? {
+			AddObjectOutcome::Added { object_hash } => object_hash,
+			AddObjectOutcome::DirectoryMissingEntries { .. } => {
+				bail!("Failed to create the directory object because there are missing entries.");
+			},
+			_ => unreachable!(),
+		};
+		Ok(object_hash)
+	}
+
+	pub async fn add_file(
+		self: &Arc<Self>,
+		blob_hash: blob::Hash,
+		executable: bool,
+	) -> Result<object::Hash> {
+		let object = Object::File(File {
+			blob_hash,
+			executable,
+		});
+		let object_hash = match self.add_object(object.hash(), &object).await? {
+			AddObjectOutcome::Added { object_hash } => object_hash,
+			AddObjectOutcome::FileMissingBlob { .. } => {
+				bail!("Failed to create the file object because the blob is missing.");
+			},
+			_ => unreachable!(),
+		};
+		Ok(object_hash)
+	}
+
+	pub async fn add_symlink(self: &Arc<Self>, target: Utf8PathBuf) -> Result<object::Hash> {
+		let object = Object::Symlink(Symlink { target });
+		let object_hash = match self.add_object(object.hash(), &object).await? {
+			AddObjectOutcome::Added { object_hash } => object_hash,
+			_ => unreachable!(),
+		};
+		Ok(object_hash)
+	}
+
+	pub async fn add_dependency(self: &Arc<Self>, artifact: Artifact) -> Result<object::Hash> {
+		let object = Object::Dependency(Dependency { artifact });
+		let object_hash = match self.add_object(object.hash(), &object).await? {
+			AddObjectOutcome::Added { object_hash } => object_hash,
+			AddObjectOutcome::DependencyMissing { .. } => {
+				bail!("Failed to create the dependency because the artifact is missing.");
+			},
+			_ => unreachable!(),
+		};
+		Ok(object_hash)
+	}
 }
 
 impl Server {
@@ -90,16 +149,15 @@ impl Server {
 
 		// Add the object to the database.
 		self.database_transaction(|txn| {
-			txn.execute(
-				r#"
-					replace into objects (
-						hash, data
-					) values (
-						$1, $2
-					)
-				"#,
-				(object_hash.to_string(), object_data),
-			)?;
+			let sql = r#"
+				replace into objects (
+					hash, data
+				) values (
+					$1, $2
+				)
+			"#;
+			let params = (object_hash.to_string(), object_data);
+			txn.execute(sql, params)?;
 			Ok(())
 		})
 		.await?;
@@ -112,7 +170,12 @@ impl Server {
 		object_hash: object::Hash,
 	) -> Result<bool> {
 		let sql = r#"
-			select count(*) > 0 from objects where hash = $1
+			select
+				count(*) > 0
+			from
+				objects
+			where
+				hash = $1
 		"#;
 		let params = (object_hash.to_string(),);
 		let exists = txn
@@ -133,7 +196,8 @@ impl Server {
 		let sql = r#"
 			select
 				data
-			from objects
+			from
+				objects
 			where
 				hash = $1
 		"#;
@@ -142,7 +206,8 @@ impl Server {
 			.prepare_cached(sql)
 			.context("Failed to prepare the query.")?;
 		let maybe_object = statement
-			.query(params)?
+			.query(params)
+			.context("Failed to execute the query.")?
 			.and_then(|row| {
 				let object_data = row.get::<_, Vec<u8>>(0)?;
 				let object = serde_json::from_slice(&object_data)?;

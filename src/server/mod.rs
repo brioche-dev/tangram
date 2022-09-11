@@ -26,6 +26,7 @@ pub mod config;
 pub mod db;
 mod error;
 pub mod evaluate;
+mod expression;
 pub mod fragment;
 mod gc;
 pub mod migrations;

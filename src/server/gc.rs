@@ -59,7 +59,10 @@ impl Server {
 	) -> Result<()> {
 		// Get the roots.
 		let sql = r#"
-			select artifact_hash from roots
+			select
+				artifact_hash
+			from
+				roots
 		"#;
 		let mut statement = txn
 			.prepare_cached(sql)
@@ -134,7 +137,10 @@ impl Server {
 	) -> Result<()> {
 		// Get all of the objects.
 		let sql = r#"
-			select object_hash from objects
+			select
+				object_hash
+			from
+				objects
 		"#;
 		let mut statement = txn
 			.prepare_cached(sql)

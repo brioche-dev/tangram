@@ -3,16 +3,40 @@ globalThis.console = {
 };
 
 globalThis.Tangram = {
+  createArtifact: async (object_hash) => {
+    object_hash = await object_hash;
+    return await Deno.core.opAsync("op_tangram_create_artifact", object_hash);
+  },
+
   artifact: (object_hash) => {
     return Deno.core.opSync("op_tangram_artifact", object_hash);
   },
 
-  evaluate: async (value) => {
-    return await Deno.core.opAsync("op_tangram_evaluate", value);
+  dependency: async (artifact) => {
+    return await Deno.core.opAsync("op_tangram_dependency", artifact);
+  },
+
+  directory: async (entries) => {
+    entries = Object.fromEntries(
+      await Promise.all(
+        Object.entries(entries).map(([key, value]) =>
+          Promise.resolve(value).then((value) => [key, value])
+        )
+      )
+    );
+    return await Deno.core.opAsync("op_tangram_directory", entries);
+  },
+
+  evaluate: async (expression) => {
+    return await Deno.core.opAsync("op_tangram_evaluate", expression);
   },
 
   fetch: (args) => {
     return Deno.core.opSync("op_tangram_fetch", args);
+  },
+
+  file: async (blob, options) => {
+    return await Deno.core.opAsync("op_tangram_file", blob, options);
   },
 
   path: (artifact, path) => {
@@ -21,6 +45,10 @@ globalThis.Tangram = {
 
   process: (args) => {
     return Deno.core.opSync("op_tangram_process", args);
+  },
+
+  symlink: async (target) => {
+    return await Deno.core.opAsync("op_tangram_symlink", target);
   },
 
   System: {

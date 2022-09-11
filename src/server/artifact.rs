@@ -7,16 +7,15 @@ impl Server {
 	// Create an artifact.
 	pub async fn create_artifact(self: &Arc<Self>, object_hash: object::Hash) -> Result<Artifact> {
 		self.database_transaction(|txn| {
-			txn.execute(
-				r#"
-					replace into artifacts (
-						object_hash
-					) values (
-						$1
-					)
-				"#,
-				(object_hash.to_string(),),
-			)?;
+			let sql = r#"
+				replace into artifacts (
+					object_hash
+				) values (
+					$1
+				)
+			"#;
+			let params = (object_hash.to_string(),);
+			txn.execute(sql, params)?;
 			Ok(())
 		})
 		.await?;

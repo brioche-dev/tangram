@@ -14,6 +14,7 @@ impl Server {
 	pub async fn evaluate_target(
 		self: &Arc<Self>,
 		target: &expression::Target,
+		root_expression_hash: expression::Hash,
 	) -> Result<Expression> {
 		// Create a fragment for the package.
 		let package_fragment = self
@@ -44,7 +45,7 @@ impl Server {
 			}));
 
 		// Evaluate the expression.
-		let output = self.evaluate(&expression).await?;
+		let output = self.evaluate(&expression, root_expression_hash).await?;
 
 		Ok(output)
 	}

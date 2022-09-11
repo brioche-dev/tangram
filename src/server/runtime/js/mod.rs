@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use camino::Utf8PathBuf;
 use deno_core::{serde_v8, v8};
 use itertools::Itertools;
-use std::{cell::RefCell, convert::TryInto, fmt::Write, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::BTreeMap, convert::TryInto, fmt::Write, rc::Rc, sync::Arc};
 use url::Url;
 
 mod cdp;
@@ -80,6 +80,7 @@ impl Runtime {
 	}
 
 	pub async fn run(&self, process: &expression::JsProcess) -> Result<Result<Expression>> {
+		// TODO Evaluate the module expression.
 		let request = Request::Run {
 			process: process.clone(),
 		};
@@ -128,10 +129,15 @@ async fn js_runtime_task(
 		.ops(vec![
 			op_tangram_artifact::decl(),
 			op_tangram_console_log::decl(),
+			op_tangram_create_artifact::decl(),
+			op_tangram_dependency::decl(),
+			op_tangram_directory::decl(),
 			op_tangram_evaluate::decl(),
 			op_tangram_fetch::decl(),
+			op_tangram_file::decl(),
 			op_tangram_path::decl(),
 			op_tangram_process::decl(),
+			op_tangram_symlink::decl(),
 			op_tangram_target::decl(),
 			op_tangram_template::decl(),
 		])
@@ -139,10 +145,10 @@ async fn js_runtime_task(
 			let server = Arc::clone(&server);
 			let main_runtime_handle = main_runtime_handle.clone();
 			move |state| {
-				state.put(OpState {
+				state.put(Arc::new(OpState {
 					server: Arc::clone(&server),
 					main_runtime_handle: main_runtime_handle.clone(),
-				});
+				}));
 				Ok(())
 			}
 		})
@@ -205,8 +211,7 @@ async fn js_runtime_task(
 
 			// Handle a run request.
 			Request::Run { process } => {
-				let response =
-					handle_run_request(&mut js_runtime, &module_loader, &server, process).await;
+				let response = handle_run_request(&mut js_runtime, &module_loader, process).await;
 				let response = Response::Run(response);
 				sender.send(response).unwrap();
 			},
@@ -356,24 +361,21 @@ async fn handle_repl_request(
 async fn handle_run_request(
 	js_runtime: &mut deno_core::JsRuntime,
 	module_loader: &ModuleLoader,
-	server: &Arc<Server>,
 	process: expression::JsProcess,
 ) -> Result<Expression> {
-	// Evaluate the module expression to get a path value.
-	let module = server
-		.evaluate(&process.module)
-		.await
-		.with_context(|| "Failed to evaluate the module expression.")?;
-	let module = match module {
+	// Get the path expression for the module.
+	let module = match *process.module {
 		Expression::Path(module) => module,
 		_ => bail!("The module must be a path."),
 	};
 
-	// Create the module URL.
+	// Get the module's artifact.
 	let module_artifact = match *module.artifact {
 		Expression::Artifact(artifact) => artifact,
 		_ => bail!("Module artifact must be an artifact."),
 	};
+
+	// Create the module URL.
 	let mut module_url = format!(
 		"{TANGRAM_MODULE_SCHEME}://{}",
 		module_artifact.object_hash(),
@@ -490,22 +492,101 @@ fn op_tangram_console_log(args: Vec<serde_json::Value>) -> Result<(), deno_core:
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_create_artifact(
+	state: Rc<RefCell<deno_core::OpState>>,
+	object_hash: object::Hash,
+) -> Result<Artifact, deno_core::error::AnyError> {
+	let state = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
+	};
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let server = Arc::clone(&state.server);
+			async move {
+				let output = server.create_artifact(object_hash).await?;
+				Ok::<_, anyhow::Error>(output)
+			}
+		})
+		.await
+		.unwrap()?;
+	Ok(output)
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_dependency(
+	state: Rc<RefCell<deno_core::OpState>>,
+	artifact: Artifact,
+) -> Result<object::Hash, deno_core::error::AnyError> {
+	let state = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
+	};
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let server = Arc::clone(&state.server);
+			async move {
+				let output = server.add_dependency(artifact).await?;
+				Ok::<_, anyhow::Error>(output)
+			}
+		})
+		.await
+		.unwrap()?;
+	Ok(output)
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_directory(
+	state: Rc<RefCell<deno_core::OpState>>,
+	entries: BTreeMap<String, object::Hash>,
+) -> Result<object::Hash, deno_core::error::AnyError> {
+	let state = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
+	};
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let server = Arc::clone(&state.server);
+			async move {
+				let output = server.add_directory(entries).await?;
+				Ok::<_, anyhow::Error>(output)
+			}
+		})
+		.await
+		.unwrap()?;
+	Ok(output)
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
 async fn op_tangram_evaluate(
 	state: Rc<RefCell<deno_core::OpState>>,
 	expression: Expression,
 ) -> Result<Expression, deno_core::error::AnyError> {
-	let (server, main_runtime_handle) = {
+	let state = {
 		let state = state.borrow();
-		let tangram_state = state.borrow::<OpState>();
-		let server = Arc::clone(&tangram_state.server);
-		let main_runtime_handle = tangram_state.main_runtime_handle.clone();
-		(server, main_runtime_handle)
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
 	};
-	let task = async move {
-		let output = server.evaluate(&expression).await?;
-		Ok::<_, anyhow::Error>(output)
-	};
-	let output = main_runtime_handle.spawn(task).await.unwrap()?;
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let server = Arc::clone(&state.server);
+			async move {
+				let output = server.evaluate(&expression, expression.hash()).await?;
+				Ok::<_, anyhow::Error>(output)
+			}
+		})
+		.await
+		.unwrap()?;
 	Ok(output)
 }
 
@@ -526,6 +607,46 @@ fn op_tangram_fetch(args: FetchArgs) -> Result<Expression, deno_core::error::Any
 	}))
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum FileBlob {
+	String(String),
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FileOptions {
+	executable: Option<bool>,
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_file(
+	state: Rc<RefCell<deno_core::OpState>>,
+	blob: FileBlob,
+	_options: Option<FileOptions>,
+) -> Result<object::Hash, deno_core::error::AnyError> {
+	let state = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
+	};
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let server = Arc::clone(&state.server);
+			async move {
+				let blob = match blob {
+					FileBlob::String(string) => server.add_blob(string.as_bytes()).await?,
+				};
+				let output = server.add_file(blob, false).await?;
+				Ok::<_, anyhow::Error>(output)
+			}
+		})
+		.await
+		.unwrap()?;
+	Ok(output)
+}
+
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
 fn op_tangram_path(
@@ -544,6 +665,31 @@ fn op_tangram_process(
 	process: expression::Process,
 ) -> Result<Expression, deno_core::error::AnyError> {
 	Ok(Expression::Process(process))
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_symlink(
+	state: Rc<RefCell<deno_core::OpState>>,
+	target: Utf8PathBuf,
+) -> Result<object::Hash, deno_core::error::AnyError> {
+	let state = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
+	};
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let server = Arc::clone(&state.server);
+			async move {
+				let output = server.add_symlink(target).await?;
+				Ok::<_, anyhow::Error>(output)
+			}
+		})
+		.await
+		.unwrap()?;
+	Ok(output)
 }
 
 #[derive(serde::Deserialize)]

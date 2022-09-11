@@ -9,6 +9,7 @@ impl Server {
 	pub async fn evaluate_js_process(
 		self: &Arc<Self>,
 		process: &expression::JsProcess,
+		root_expression_hash: expression::Hash,
 	) -> Result<Expression> {
 		// Create a JS runtime.
 		let runtime = runtime::js::Runtime::new(self);
@@ -22,7 +23,7 @@ impl Server {
 
 		// Evaluate the expression.
 		let output = self
-			.evaluate(&expression)
+			.evaluate(&expression, root_expression_hash)
 			.await
 			.context("Failed to evaluate the expression returned by the JS process.")?;
 

@@ -75,7 +75,7 @@ pub struct UnixProcess {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Output {
 	#[serde(default)]
-	pub dependencies: BTreeMap<Utf8PathBuf, Box<Expression>>,
+	pub dependencies: BTreeMap<Utf8PathBuf, Expression>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

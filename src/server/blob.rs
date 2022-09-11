@@ -10,10 +10,7 @@ use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
 
 impl Server {
-	pub async fn add_blob_from_reader(
-		self: &Arc<Self>,
-		reader: impl AsyncRead + Unpin,
-	) -> Result<blob::Hash> {
+	pub async fn add_blob(self: &Arc<Self>, reader: impl AsyncRead + Unpin) -> Result<blob::Hash> {
 		// Create a temp file to read the blob into.
 		let temp = self.create_temp().await?;
 		let temp_path = self.temp_path(&temp);
@@ -106,7 +103,7 @@ impl Server {
 		);
 
 		// Add the blob.
-		let blob_hash = self.add_blob_from_reader(body).await?;
+		let blob_hash = self.add_blob(body).await?;
 
 		// Create the response.
 		let response = CreateResponse { blob_hash };

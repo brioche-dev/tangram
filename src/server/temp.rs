@@ -37,7 +37,7 @@ impl Server {
 		self.path.join("temps").join(temp.id().0.to_string())
 	}
 
-	pub async fn add_dependency(
+	pub async fn temp_add_dependency(
 		self: &Arc<Self>,
 		temp: &mut Temp,
 		path: &Utf8Path,

@@ -15,7 +15,7 @@ impl Server {
 	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: &expression::Fetch) -> Result<Expression> {
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
-		// Retrieve the artifact if it has been downloaded.
+		// Retrieve an existing blob that matches the hash if one is available.
 		let artifact = if let Some(hash) = fetch.hash {
 			if self.get_blob(blob::Hash(hash)).await?.is_some() {
 				let object = Object::File(File {
@@ -30,7 +30,7 @@ impl Server {
 			None
 		};
 
-		// Download the the URL if it has not been downloaded yet.
+		// Download the contents of the URL if necessary.
 		let artifact = if let Some(artifact) = artifact {
 			artifact
 		} else {
@@ -82,10 +82,10 @@ impl Server {
 				ArchiveFormat::for_path(Path::new(fetch.url.path())).ok_or_else(|| {
 					anyhow!(r#"Could not determine archive format for "{}"."#, fetch.url)
 				})?;
-			tracing::trace!(r#"Unpacking contents of URL "{}"."#, fetch.url);
+			tracing::trace!(r#"Unpacking the contents of URL "{}"."#, fetch.url);
 			let artifact = self.unpack(artifact, archive_format).await?;
 			tracing::trace!(
-				r#"Unpacked contents of URL "{}" to artifact "{}"."#,
+				r#"Unpacked the contents of URL "{}" to artifact "{}"."#,
 				fetch.url,
 				artifact
 			);

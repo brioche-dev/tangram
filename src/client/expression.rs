@@ -1,22 +1,19 @@
 use super::{transport::InProcessOrHttp, Client};
-use crate::expression::Expression;
+use crate::expression::{self, Expression};
 use anyhow::{Context, Result};
 
 impl Client {
 	pub async fn get_memoized_evaluation(
 		&self,
-		expression: &Expression,
+		expression_hash: expression::Hash,
 	) -> Result<Option<Expression>> {
 		match self.transport.as_in_process_or_http() {
 			InProcessOrHttp::InProcess(server) => {
-				let output = server.get_memoized_evaluation(expression).await?;
+				let output = server.get_memoized_evaluation(expression_hash).await?;
 				Ok(output)
 			},
 
 			InProcessOrHttp::Http(http) => {
-				// Compute the expression hash.
-				let expression_hash = expression.hash();
-
 				// Build the URL.
 				let mut url = http.base_url();
 				url.set_path(&format!("/expressions/{expression_hash}"));
@@ -34,7 +31,7 @@ impl Client {
 					.await
 					.context("Failed to send the request.")?;
 
-				// If the server returns a 404, there is no memoized value for the expression.
+				// If the server returns a 404, there is no memoized evaluation of the expression.
 				if response.status() == http::StatusCode::NOT_FOUND {
 					return Ok(None);
 				}

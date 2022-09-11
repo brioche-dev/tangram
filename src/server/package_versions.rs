@@ -16,18 +16,18 @@ impl Server {
 				let sql = r#"
 					select
 						artifact_hash
-					from package_versions
+					from
+						package_versions
 					where
-						name = $1
-						and
-						version = $2
+						name = $1 and version = $2
 				"#;
 				let params = (package_name, package_version.to_string());
 				let mut statement = txn
 					.prepare_cached(sql)
 					.context("Failed to prepare the query.")?;
 				let maybe_object_hash = statement
-					.query(params)?
+					.query(params)
+					.context("Failed to execute the query.")?
 					.and_then(|row| row.get::<_, String>(0))
 					.next()
 					.transpose()?;
@@ -52,14 +52,20 @@ impl Server {
 		self.database_transaction(|txn| {
 			// Check if the package already exists.
 			let sql = r#"
-				select count(*) > 0 from packages where name = $1
+				select
+					count(*) > 0
+				from
+					packages
+				where
+					name = $1
 			"#;
 			let params = (package_name,);
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;
 			let package_exists = statement
-				.query(params)?
+				.query(params)
+				.context("Failed to execute the query.")?
 				.and_then(|row| row.get::<_, bool>(0))
 				.next()
 				.transpose()?
@@ -85,7 +91,12 @@ impl Server {
 
 			// Check if the package version already exists.
 			let sql = r#"
-				select count(*) > 0 from package_versions where name = $1 and version = $2
+				select
+					count(*) > 0
+				from
+					package_versions
+				where
+					name = $1 and version = $2
 			"#;
 			let params = (package_name, package_version);
 			let mut statement = txn

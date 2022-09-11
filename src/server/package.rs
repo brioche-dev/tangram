@@ -17,7 +17,8 @@ impl Server {
 				let sql = r#"
 					select
 						name
-					from packages
+					from
+						packages
 					where
 						name like $1
 				"#;
@@ -47,7 +48,8 @@ impl Server {
 				let sql = r#"
 					select
 						name
-					from packages
+					from
+						packages
 				"#;
 				let mut statement = txn
 					.prepare_cached(sql)
@@ -75,7 +77,8 @@ impl Server {
 					select
 						version,
 						artifact_hash
-					from package_versions
+					from
+						package_versions
 					where
 						name = $1
 				"#;
@@ -84,7 +87,8 @@ impl Server {
 					.prepare_cached(sql)
 					.context("Failed to prepare the query.")?;
 				let versions = statement
-					.query(params)?
+					.query(params)
+					.context("Failed to execute the query.")?
 					.and_then(|row| {
 						let version = row.get::<_, String>(0)?;
 						let object_hash = row.get::<_, String>(1)?;
@@ -108,7 +112,12 @@ impl Server {
 		self.database_transaction(|txn| {
 			// Check if the package already exists.
 			let sql = r#"
-				select count(*) > 0 from packages where name = $1
+				select
+					count(*) > 0
+				from
+					packages
+				where
+					name = $1
 			"#;
 			let params = (package_name,);
 			let mut statement = txn
