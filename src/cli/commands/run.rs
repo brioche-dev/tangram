@@ -15,10 +15,10 @@ pub struct Args {
 	pub executable_path: Option<PathBuf>,
 	#[clap(long, takes_value = false)]
 	pub locked: bool,
-	#[clap(long, default_value = "build")]
-	pub name: String,
+	#[clap(long)]
+	pub target: Option<String>,
 	#[clap(default_value = ".")]
-	pub package: String,
+	pub specifier: Specifier,
 	pub trailing_args: Vec<String>,
 }
 
@@ -31,14 +31,8 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to create the client.")?;
 
-	// Parse the package specifier.
-	let package_specifier: Specifier = args
-		.package
-		.parse()
-		.context("Failed to parse the package specifier.")?;
-
 	// Get the package artifact.
-	let package = match package_specifier {
+	let package = match args.specifier {
 		Specifier::Path(specifier::Path { path }) => {
 			// Checkin the package.
 			client
@@ -88,17 +82,19 @@ pub async fn run(args: Args) -> Result<()> {
 		)
 	})?;
 
-	let executable_subpath = if let Some(executable_subpath) = args.executable_path {
-		executable_subpath
-	} else {
-		PathBuf::from("bin").join(manifest.name)
-	};
+	// Get the executable path.
+	let executable_path = args
+		.executable_path
+		.unwrap_or_else(|| PathBuf::from("bin").join(manifest.name));
+
+	// Get the target name.
+	let name = args.target.unwrap_or_else(|| "build".to_owned());
 
 	// Create the expression.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
 		lockfile: None,
 		package,
-		name: args.name,
+		name,
 		args: vec![],
 	});
 
@@ -108,6 +104,7 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
+	// Retrieve the artifact from the output.
 	let artifact = match output {
 		tangram::expression::Expression::Artifact(artifact) => artifact,
 		_ => bail!("The target must evaluate to an artifact."),
@@ -128,7 +125,7 @@ pub async fn run(args: Args) -> Result<()> {
 	let path = server.fragment_path(&fragment);
 
 	// Get the path to the executable.
-	let executable_path = path.join(executable_subpath);
+	let executable_path = path.join(executable_path);
 
 	// Run the process!
 	let mut child = tokio::process::Command::new(&executable_path)

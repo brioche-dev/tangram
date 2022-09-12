@@ -22,6 +22,7 @@ impl Server {
 		expression: &Expression,
 		root_expression_hash: expression::Hash,
 	) -> Result<Expression> {
+		let _guard = self.lock.lock_shared().await?;
 		match expression {
 			Expression::Null => Ok(Expression::Null),
 			Expression::Bool(value) => Ok(Expression::Bool(*value)),

@@ -13,8 +13,8 @@ use std::{
 
 impl Server {
 	pub async fn garbage_collect(self: &Arc<Self>) -> Result<()> {
-		// Acquire a write guard to the garbage collection lock.
-		let gc_lock = self.gc_lock.write().await;
+		// Acquire an exclusive lock to the path.
+		let _path_lock_guard = self.lock.lock_exclusive().await?;
 
 		// Create hash sets to track the marked objects and blobs.
 		let mut marked_object_hashes: HashSet<object::Hash, hash::BuildHasher> = HashSet::default();
@@ -45,9 +45,6 @@ impl Server {
 		tokio::fs::create_dir_all(&self.temps_path())
 			.await
 			.context("Failed to recreate the temps directory.")?;
-
-		// Drop the write guard to the garbage collection lock.
-		drop(gc_lock);
 
 		Ok(())
 	}

@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
 impl Server {
-	// Create an artifact.
+	/// Create an artifact.
 	pub async fn create_artifact(self: &Arc<Self>, object_hash: object::Hash) -> Result<Artifact> {
 		self.database_transaction(|txn| {
 			let sql = r#"
@@ -22,8 +22,6 @@ impl Server {
 		let artifact = Artifact::new(object_hash);
 		Ok(artifact)
 	}
-
-	// Delete an artifact.
 }
 
 impl Server {

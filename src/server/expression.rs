@@ -74,6 +74,7 @@ impl Server {
 		self: &Arc<Self>,
 		expression_hash: &expression::Hash,
 	) -> Result<Option<Expression>> {
+		// Retrieve a previous evaluation of the expression from the database.
 		let output = self
 			.database_transaction(|txn| {
 				let sql = r#"
@@ -98,12 +99,15 @@ impl Server {
 				Ok(expression)
 			})
 			.await?;
-		let output = if let Some(value) = output {
-			let output = serde_json::from_slice(&value)?;
+
+		// Deserialize the expression.
+		let output = if let Some(output) = output {
+			let output = serde_json::from_slice(&output)?;
 			Some(output)
 		} else {
 			None
 		};
+
 		Ok(output)
 	}
 }
@@ -126,6 +130,7 @@ impl Server {
 			Err(_) => return Ok(bad_request()),
 		};
 
+		// Get a memoized output from a previous evaluation of the expression.
 		let output = self.get_memoized_evaluation(expression_hash).await?;
 
 		// If the output is None, return a 404

@@ -1,4 +1,4 @@
-use self::{config::Config, repl::Repl};
+use self::{config::Config, lock::Lock, repl::Repl};
 use crate::{
 	client::{self, Client},
 	repl::Id,
@@ -16,7 +16,6 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
-use tokio::sync::{Mutex, RwLock};
 
 pub mod artifact;
 pub mod blob;
@@ -29,6 +28,7 @@ pub mod evaluate;
 mod expression;
 pub mod fragment;
 mod gc;
+mod lock;
 pub mod migrations;
 pub mod object;
 mod package;
@@ -41,12 +41,8 @@ pub struct Server {
 	/// This is the path to the directory where the server stores its data.
 	path: PathBuf,
 
-	/// This file is held with an advisory lock to ensure only one server has access to the [`path`].
-	#[allow(dead_code)]
-	path_lock_file: tokio::fs::File,
-
-	// This is the garbage collection lock. It must be read acquired for any operation that accesses object, blobs, fragments, or temps.
-	gc_lock: RwLock<()>,
+	/// We use a file with an advisory lock to ensure exclusive and non-exclusive access to the server path as necessary.
+	lock: Lock,
 
 	/// This is the connection pool for the server's SQLite database.
 	database_connection_pool: deadpool_sqlite::Pool,
@@ -58,7 +54,7 @@ pub struct Server {
 	http_client: reqwest::Client,
 
 	/// These are the active REPLs.
-	repls: Mutex<HashMap<Id, Repl>>,
+	repls: tokio::sync::Mutex<HashMap<Id, Repl>>,
 
 	/// These are the peers.
 	peers: Vec<Client>,
@@ -72,13 +68,12 @@ impl Server {
 		let path = config.path;
 		tokio::fs::create_dir_all(&path).await?;
 
-		// Acquire a lock to the path.
-		let path_lock = Server::acquire_path_lock_file(&path).await?;
+		// Create the lock.
+		let lock_path = path.join("lock");
+		let lock = Lock::new(lock_path).await?;
 
 		// Migrate the path.
 		Server::migrate(&path).await?;
-
-		let gc_lock = RwLock::new(());
 
 		// Create the database pool.
 		let database_path = path.join("db.sqlite3");
@@ -100,15 +95,17 @@ impl Server {
 		}))
 		.await?;
 
+		// Create the repls.
+		let repls = tokio::sync::Mutex::new(HashMap::new());
+
 		// Create the server.
 		let server = Server {
 			path,
-			path_lock_file: path_lock,
-			gc_lock,
+			lock,
 			database_connection_pool,
 			local_pool_handle,
 			http_client,
-			repls: Mutex::new(HashMap::new()),
+			repls,
 			peers,
 		};
 
@@ -118,35 +115,18 @@ impl Server {
 			tokio::fs::remove_file(&socket_path).await?;
 		}
 
+		// Wrap the server in an Arc.
 		let server = Arc::new(server);
 
 		Ok(server)
 	}
 
-	/// Acquire the lock to the server path.
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
-	async fn acquire_path_lock_file(path: &std::path::Path) -> anyhow::Result<tokio::fs::File> {
-		use anyhow::{anyhow, bail};
-		use libc::{flock, LOCK_EX, LOCK_NB};
-		use std::os::unix::io::AsRawFd;
-		let lock_path = path.join("lock");
-		let lock_file = tokio::fs::OpenOptions::new()
-			.read(true)
-			.write(true)
-			.create(true)
-			.open(lock_path)
-			.await?;
-		let ret = unsafe { flock(lock_file.as_raw_fd(), LOCK_EX | LOCK_NB) };
-		if ret != 0 {
-			bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to acquire the lock to the server path. Is there a tangram server already running?"));
-		}
-		Ok(lock_file)
-	}
-
 	pub fn path(&self) -> &Path {
 		&self.path
 	}
+}
 
+impl Server {
 	pub async fn serve_unix(self: &Arc<Self>) -> Result<()> {
 		let server = Arc::clone(self);
 		let path = self.path.join("socket");
