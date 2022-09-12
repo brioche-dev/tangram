@@ -3,7 +3,6 @@ use crate::{
 	expression::{self, Expression},
 	server::Server,
 	system::System,
-	value::Value,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -24,6 +23,7 @@ impl Server {
 		envs: BTreeMap<String, String>,
 		command: PathBuf,
 		args: Vec<String>,
+		root_expression_hash: expression::Hash,
 	) -> Result<()> {
 		let server_path = self.path().to_owned();
 
@@ -41,7 +41,7 @@ impl Server {
 
 		// Create a symlink from /bin/sh in the chroot to a fragment with statically-linked bash.
 		let bash_artifact = self
-			.bash_artifact(system)
+			.bash_artifact(system, root_expression_hash)
 			.await
 			.context("Failed to evaluate the bash artifact.")?;
 		let bash_fragment = self
@@ -168,7 +168,11 @@ impl Server {
 		Ok(())
 	}
 
-	async fn bash_artifact(self: &Arc<Self>, system: System) -> Result<Artifact> {
+	async fn bash_artifact(
+		self: &Arc<Self>,
+		system: System,
+		root_expression_hash: expression::Hash,
+	) -> Result<Artifact> {
 		// Get the URL and hash for the system.
 		let (url, hash) = match system {
 			System::Amd64Linux => (
@@ -191,12 +195,12 @@ impl Server {
 
 		// Evaluate the expression.
 		let output = self
-			.evaluate(expression)
+			.evaluate(&expression, root_expression_hash)
 			.await
 			.context("Failed to evaluate the expression.")?;
 
 		let artifact = match output {
-			Value::Artifact(artifact) => artifact,
+			Expression::Artifact(artifact) => artifact,
 			_ => bail!("Expected the value to be an artifact."),
 		};
 

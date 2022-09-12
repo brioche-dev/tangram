@@ -144,7 +144,7 @@ impl Server {
 		// Run the process.
 
 		#[cfg(target_os = "linux")]
-		self.run_linux_process(system, envs, command, args)
+		self.run_linux_process(system, envs, command, args, root_expression_hash)
 			.await
 			.context("Failed to run the process.")?;
 
