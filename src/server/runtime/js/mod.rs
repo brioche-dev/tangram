@@ -129,7 +129,6 @@ async fn js_runtime_task(
 		.ops(vec![
 			op_tangram_artifact::decl(),
 			op_tangram_console_log::decl(),
-			op_tangram_create_artifact::decl(),
 			op_tangram_dependency::decl(),
 			op_tangram_directory::decl(),
 			op_tangram_evaluate::decl(),
@@ -488,31 +487,6 @@ fn op_tangram_console_log(args: Vec<serde_json::Value>) -> Result<(), deno_core:
 	}
 	println!();
 	Ok(())
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_create_artifact(
-	state: Rc<RefCell<deno_core::OpState>>,
-	object_hash: object::Hash,
-) -> Result<Artifact, deno_core::error::AnyError> {
-	let state = {
-		let state = state.borrow();
-		let state = state.borrow::<Arc<OpState>>();
-		Arc::clone(state)
-	};
-	let output = state
-		.main_runtime_handle
-		.spawn({
-			let server = Arc::clone(&state.server);
-			async move {
-				let output = server.create_artifact(object_hash).await?;
-				Ok::<_, anyhow::Error>(output)
-			}
-		})
-		.await
-		.unwrap()?;
-	Ok(output)
 }
 
 #[deno_core::op]

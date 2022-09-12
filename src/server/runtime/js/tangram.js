@@ -3,11 +3,6 @@ globalThis.console = {
 };
 
 globalThis.Tangram = {
-  createArtifact: async (object_hash) => {
-    object_hash = await object_hash;
-    return await Deno.core.opAsync("op_tangram_create_artifact", object_hash);
-  },
-
   artifact: (object_hash) => {
     return Deno.core.opSync("op_tangram_artifact", object_hash);
   },

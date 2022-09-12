@@ -8,24 +8,11 @@ const SQL: &str = r#"
 		data blob not null
 	);
 
-	create table artifacts (
-		object_hash blob primary key,
-		foreign key (object_hash) references objects (hash)
-	);
-
 	create table evaluations (
 		expression_hash blob primary key,
 		expression blob not null,
 		output_hash blob not null,
 		output blob not null
-	);
-
-	create table subevalutions (
-		parent_expression_hash blob not null,
-		child_expression_hash blob not null,
-		foreign key (parent_expression_hash) references evaluations (expression_hash),
-		foreign key (child_expression_hash) references evaluations (expression_hash),
-		primary key (parent_expression_hash, child_expression_hash)
 	);
 
 	create table packages (

@@ -23,10 +23,7 @@ impl Client {
 		// Retrieve the object for the path.
 		let (object_hash, _) = object_cache.get(path).await?.unwrap();
 
-		// Create an artifact for the root object.
-		let artifact = self.create_artifact(object_hash).await?;
-
-		Ok(artifact)
+		Ok(Artifact::new(object_hash))
 	}
 
 	#[async_recursion]
