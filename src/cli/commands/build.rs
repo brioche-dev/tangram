@@ -10,7 +10,7 @@ pub struct Args {
 	locked: bool,
 	#[clap(default_value = ".")]
 	package: PathBuf,
-	#[clap(default_value = "build")]
+	#[clap(default_value = "default")]
 	name: String,
 }
 

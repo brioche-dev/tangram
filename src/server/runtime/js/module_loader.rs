@@ -425,10 +425,15 @@ async fn load_tangram_target_proxy(
 	.unwrap();
 	code.push('\n');
 	for target_name in manifest.targets {
+		if target_name == "default" {
+			writedoc!(code, r#"export default "#).unwrap();
+		} else {
+			writedoc!(code, r#"export let {target_name} = "#).unwrap();
+		}
 		writedoc!(
 			code,
 			r#"
-				export let {target_name} = (...args) => {{
+				(...args) => {{
 					return Tangram.target({{
 						lockfile,
 						package: {package_json},

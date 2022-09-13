@@ -88,7 +88,7 @@ pub async fn run(args: Args) -> Result<()> {
 		.unwrap_or_else(|| PathBuf::from("bin").join(manifest.name));
 
 	// Get the target name.
-	let name = args.target.unwrap_or_else(|| "build".to_owned());
+	let name = args.target.unwrap_or_else(|| "default".to_owned());
 
 	// Create the expression.
 	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
