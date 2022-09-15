@@ -21,25 +21,23 @@ mod macos;
 impl Server {
 	pub async fn evaluate_process(
 		self: &Arc<Self>,
+		hash: Hash,
 		process: &expression::Process,
-		parent_hash: Hash,
 	) -> Result<Hash> {
 		match process {
 			expression::Process::Amd64Linux(process) => self
-				.evaluate_unix_process(System::Amd64Linux, process, parent_hash)
+				.evaluate_unix_process(System::Amd64Linux, hash, process)
 				.boxed(),
 			expression::Process::Amd64Macos(process) => self
-				.evaluate_unix_process(System::Amd64Macos, process, parent_hash)
+				.evaluate_unix_process(System::Amd64Macos, hash, process)
 				.boxed(),
 			expression::Process::Arm64Linux(process) => self
-				.evaluate_unix_process(System::Arm64Linux, process, parent_hash)
+				.evaluate_unix_process(System::Arm64Linux, hash, process)
 				.boxed(),
 			expression::Process::Arm64Macos(process) => self
-				.evaluate_unix_process(System::Arm64Macos, process, parent_hash)
+				.evaluate_unix_process(System::Arm64Macos, hash, process)
 				.boxed(),
-			expression::Process::Js(process) => {
-				self.evaluate_js_process(process, parent_hash).boxed()
-			},
+			expression::Process::Js(process) => self.evaluate_js_process(hash, process).boxed(),
 		}
 		.await
 	}
@@ -48,14 +46,14 @@ impl Server {
 	pub async fn evaluate_unix_process(
 		self: &Arc<Self>,
 		system: System,
+		hash: Hash,
 		process: &expression::UnixProcess,
-		parent_hash: Hash,
 	) -> Result<Hash> {
 		// Evaluate the envs, command, and args.
 		let (envs, command, args) = try_join3(
-			self.evaluate(process.env, parent_hash),
-			self.evaluate(process.command, parent_hash),
-			self.evaluate(process.args, parent_hash),
+			self.evaluate(process.env, hash),
+			self.evaluate(process.command, hash),
+			self.evaluate(process.args, hash),
 		)
 		.await?;
 
@@ -64,7 +62,7 @@ impl Server {
 			try_join_all(process.outputs.iter().map(|(key, output)| async {
 				let dependencies =
 					try_join_all(output.dependencies.iter().map(|(path, dependency)| async {
-						let dependency = self.evaluate(*dependency, parent_hash).await?;
+						let dependency = self.evaluate(*dependency, hash).await?;
 						Ok::<_, anyhow::Error>((path.clone(), dependency))
 					}))
 					.await?
@@ -152,7 +150,7 @@ impl Server {
 		// Run the process.
 
 		#[cfg(target_os = "linux")]
-		self.run_linux_process(system, envs, command, args, parent_hash)
+		self.run_linux_process(system, envs, command, args, hash)
 			.await
 			.context("Failed to run the process.")?;
 

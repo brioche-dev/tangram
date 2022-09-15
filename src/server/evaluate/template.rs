@@ -11,14 +11,14 @@ impl Server {
 	/// Evaluate a template expression.
 	pub async fn evaluate_template(
 		self: &Arc<Self>,
+		hash: Hash,
 		template: &expression::Template,
-		parent_hash: Hash,
 	) -> Result<Hash> {
 		let components = template
 			.components
 			.iter()
 			.copied()
-			.map(|component| self.evaluate(component, parent_hash));
+			.map(|component| self.evaluate(component, hash));
 		let components = try_join_all(components).await?;
 		let output = Expression::Template(crate::expression::Template { components });
 		let output_hash = self.add_expression(&output).await?;

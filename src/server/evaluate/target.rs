@@ -9,8 +9,8 @@ impl Server {
 	#[async_recursion]
 	pub async fn evaluate_target(
 		self: &Arc<Self>,
+		hash: Hash,
 		target: &expression::Target,
-		parent_hash: Hash,
 	) -> Result<Hash> {
 		// Create a fragment for the package.
 		let package_fragment = self
@@ -50,7 +50,7 @@ impl Server {
 			.await?;
 
 		// Evaluate the expression.
-		let output = self.evaluate(expression, parent_hash).await?;
+		let output = self.evaluate(expression, hash).await?;
 
 		Ok(output)
 	}

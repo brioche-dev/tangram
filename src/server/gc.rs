@@ -203,7 +203,7 @@ impl Server {
 		txn: &rusqlite::Transaction,
 		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
 	) -> Result<()> {
-		// Get all expressions.
+		// Get an iterator over all expressions.
 		let sql = r#"
 			select
 				hash
@@ -222,7 +222,7 @@ impl Server {
 				Ok::<_, anyhow::Error>(hash)
 			});
 
-		// Go through each expression and delete it.
+		// Delete all expressions that are not marked.
 		for hash in hashes {
 			let hash = hash?;
 			if !marked_hashes.contains(&hash) {
@@ -238,17 +238,17 @@ impl Server {
 		blobs_path: &Path,
 		marked_blob_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
 	) -> Result<()> {
-		// Read the files in the blobs directory and delete each file that is not marked.
+		// Delete all blobs that are not not marked.
 		let mut read_dir = tokio::fs::read_dir(blobs_path)
 			.await
-			.context("Failed to read the directory.")?;
+			.context("Failed to read the blobs directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
 			let blob_hash: Hash = entry
 				.file_name()
 				.to_str()
 				.context("Failed to parse the file name as a string.")?
 				.parse()
-				.context("Failed to parse the entry in the blobs directory as a blob hash.")?;
+				.context("Failed to parse the entry in the blobs directory as a hash.")?;
 			if !marked_blob_hashes.contains(&blob_hash) {
 				tokio::fs::remove_file(&entry.path())
 					.await

@@ -39,21 +39,20 @@ impl Server {
 			| Expression::File(_)
 			| Expression::Symlink(_)
 			| Expression::Dependency(_) => hash,
-			Expression::Path(path) => self.evaluate_path(path, parent_hash).await?,
-			Expression::Template(template) => self.evaluate_template(template, parent_hash).await?,
+			Expression::Path(path) => self.evaluate_path(hash, path).await?,
+			Expression::Template(template) => self.evaluate_template(hash, template).await?,
 			Expression::Fetch(fetch) => self.evaluate_fetch(fetch).await?,
-			Expression::Process(process) => self.evaluate_process(process, parent_hash).await?,
-			Expression::Target(target) => self.evaluate_target(target, parent_hash).await?,
+			Expression::Process(process) => self.evaluate_process(hash, process).await?,
+			Expression::Target(target) => self.evaluate_target(hash, target).await?,
 			Expression::Array(array) => {
 				let output_hashes =
-					try_join_all(array.iter().map(|hash| self.evaluate(*hash, parent_hash)))
-						.await?;
+					try_join_all(array.iter().map(|item| self.evaluate(hash, *item))).await?;
 				self.add_expression(&Expression::Array(output_hashes))
 					.await?
 			},
 			Expression::Map(map) => {
-				let outputs = try_join_all(map.iter().map(|(key, hash)| {
-					self.evaluate(*hash, parent_hash)
+				let outputs = try_join_all(map.iter().map(|(key, value)| {
+					self.evaluate(*value, hash)
 						.map_ok(|value| (Arc::clone(key), value))
 				}))
 				.await?

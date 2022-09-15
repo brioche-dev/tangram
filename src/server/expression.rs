@@ -483,33 +483,32 @@ impl Server {
 		Ok(())
 	}
 
-	// pub fn get_evaluations_with_transaction<'a>(
-	// 	txn: &'a rusqlite::Transaction<'a>,
-	// 	hash: Hash,
-	// ) -> Result<(
-	// 	rusqlite::CachedStatement<'a>,
-	// 	impl 'a + Iterator<Item = Result<Hash>>,
-	// )> {
-	// 	let sql = r#"
-	// 		select
-	// 			child_hash
-	// 		from
-	// 			evaluations
-	// 		where
-	// 			parent_hash = $1
-	// 	"#;
-	// 	let mut statement = txn
-	// 		.prepare_cached(sql)
-	// 		.context("Failed to prepare the query.")?;
-	// 	let evaluations = statement
-	// 		.query_and_then((), |row| {
-	// 			let hash = row.get::<_, String>(0)?;
-	// 			let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
-	// 			Ok::<_, anyhow::Error>(hash)
-	// 		})
-	// 		.context("Failed to execute the query.")?;
-	// 	Ok((statement, evaluations))
-	// }
+	pub fn get_evaluations_with_transaction<'a>(
+		txn: &'a rusqlite::Transaction<'a>,
+		hash: Hash,
+	) -> Result<Vec<Hash>> {
+		let sql = r#"
+			select
+				child_hash
+			from
+				evaluations
+			where
+				parent_hash = $1
+		"#;
+		let params = (hash.to_string(),);
+		let mut statement = txn
+			.prepare_cached(sql)
+			.context("Failed to prepare the query.")?;
+		let evaluations = statement
+			.query_and_then(params, |row| {
+				let hash = row.get::<_, String>(0)?;
+				let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
+				Ok::<_, anyhow::Error>(hash)
+			})
+			.context("Failed to execute the query.")?
+			.collect::<Result<_>>()?;
+		Ok(evaluations)
+	}
 }
 
 pub type AddExpressionRequest = Expression;
