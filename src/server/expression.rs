@@ -2,7 +2,10 @@ use super::{error::bad_request, Server};
 use crate::{expression::Expression, hash::Hash, util::path_exists};
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
-use futures::future::{select_ok, FutureExt};
+use futures::{
+	future::{select_ok, FutureExt},
+	stream::TryStreamExt,
+};
 use std::sync::Arc;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -30,6 +33,7 @@ impl Server {
 		expression: &Expression,
 	) -> Result<AddExpressionOutcome> {
 		// Before adding this expression, we need to ensure the server has all its references.
+		let mut missing = Vec::new();
 		match expression {
 			// If this expression is a directory, ensure all its entries are present.
 			Expression::Directory(directory) => {
@@ -95,17 +99,25 @@ impl Server {
 
 			// If this expression is a template, ensure the components are present.
 			Expression::Template(template) => {
-				let mut missing = Vec::new();
-				for hash in &template.components {
-					let hash = *hash;
-					let exists = self.expression_exists(hash).await?;
-					if !exists {
-						missing.push(hash);
-					}
-				}
-				if !missing.is_empty() {
-					return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
-				}
+				missing.extend(
+					futures::stream::iter(
+						template
+							.components
+							.iter()
+							.copied()
+							.map(Ok::<_, anyhow::Error>),
+					)
+					.try_filter_map(|hash| async move {
+						let exists = self.expression_exists(hash).await?;
+						if exists {
+							Ok(None)
+						} else {
+							Ok(Some(hash))
+						}
+					})
+					.try_collect::<Vec<Hash>>()
+					.await?,
+				);
 			},
 
 			// If this expression is fetch, there is nothing to ensure.
@@ -121,36 +133,44 @@ impl Server {
 					let hash = process.command;
 					let exists = self.expression_exists(hash).await?;
 					if !exists {
-						return Ok(AddExpressionOutcome::MissingExpressions { hashes: vec![hash] });
+						missing.push(hash);
 					}
 
 					// Ensure the args expression is present.
 					let hash = process.args;
 					let exists = self.expression_exists(hash).await?;
 					if !exists {
-						return Ok(AddExpressionOutcome::MissingExpressions { hashes: vec![hash] });
+						missing.push(hash);
 					}
 
 					// Ensure the env expression is present.
 					let hash = process.env;
 					let exists = self.expression_exists(hash).await?;
 					if !exists {
-						return Ok(AddExpressionOutcome::MissingExpressions { hashes: vec![hash] });
+						missing.push(hash);
 					}
 
 					// Ensure the outputs expressions are present.
-					let mut missing = Vec::new();
-					for output in process.outputs.values() {
-						for hash in output.dependencies.values().copied() {
+					missing.extend(
+						futures::stream::iter(
+							process
+								.outputs
+								.values()
+								.flat_map(|output| output.dependencies.values())
+								.copied()
+								.map(Ok::<_, anyhow::Error>),
+						)
+						.try_filter_map(|hash| async move {
 							let exists = self.expression_exists(hash).await?;
-							if !exists {
-								missing.push(hash);
+							if exists {
+								Ok(None)
+							} else {
+								Ok(Some(hash))
 							}
-						}
-					}
-					if !missing.is_empty() {
-						return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
-					}
+						})
+						.try_collect::<Vec<Hash>>()
+						.await?,
+					);
 				},
 
 				crate::expression::Process::Js(process) => {
@@ -158,72 +178,91 @@ impl Server {
 					let hash = process.module;
 					let exists = self.expression_exists(hash).await?;
 					if !exists {
-						return Ok(AddExpressionOutcome::MissingExpressions { hashes: vec![hash] });
+						missing.push(hash);
 					}
 
 					// Ensure all of the args are present.
-					let mut missing = Vec::new();
-					for hash in process.args.iter().copied() {
-						let exists = self.expression_exists(hash).await?;
-						if !exists {
-							missing.push(hash);
-						}
-					}
-					if !missing.is_empty() {
-						return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
-					}
+					missing.extend(
+						futures::stream::iter(
+							process.args.iter().copied().map(Ok::<_, anyhow::Error>),
+						)
+						.try_filter_map(|hash| async move {
+							let exists = self.expression_exists(hash).await?;
+							if exists {
+								Ok(None)
+							} else {
+								Ok(Some(hash))
+							}
+						})
+						.try_collect::<Vec<Hash>>()
+						.await?,
+					);
 				},
 			},
 
 			// If this expression is a target, ensure its children are present.
 			Expression::Target(target) => {
 				// Ensure all of the args are present.
-				let mut missing = Vec::new();
-				for hash in target.args.iter().copied() {
-					let exists = self.expression_exists(hash).await?;
-					if !exists {
-						missing.push(hash);
-					}
-				}
-				if !missing.is_empty() {
-					return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
-				}
+				missing.extend(
+					futures::stream::iter(target.args.iter().copied().map(Ok::<_, anyhow::Error>))
+						.try_filter_map(|hash| async move {
+							let exists = self.expression_exists(hash).await?;
+							if exists {
+								Ok(None)
+							} else {
+								Ok(Some(hash))
+							}
+						})
+						.try_collect::<Vec<Hash>>()
+						.await?,
+				);
 
 				// Ensure the package is present.
 				let hash = target.package.hash;
 				let exists = self.expression_exists(hash).await?;
 				if !exists {
-					return Ok(AddExpressionOutcome::MissingExpressions { hashes: vec![hash] });
+					missing.push(hash);
 				}
 			},
 
 			// If this expression is an array, ensure the values are present.
 			Expression::Array(array) => {
-				let mut missing = Vec::new();
-				for hash in array.iter().copied() {
-					let exists = self.expression_exists(hash).await?;
-					if !exists {
-						missing.push(hash);
-					}
-				}
-				if !missing.is_empty() {
-					return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
-				}
+				missing.extend(
+					futures::stream::iter(array.iter().copied().map(Ok::<_, anyhow::Error>))
+						.try_filter_map(|hash| async move {
+							let exists = self.expression_exists(hash).await?;
+							if exists {
+								Ok(None)
+							} else {
+								Ok(Some(hash))
+							}
+						})
+						.try_collect::<Vec<Hash>>()
+						.await?,
+				);
 			},
 
 			// If this expression is a map, ensure the values are present.
 			Expression::Map(map) => {
-				let mut missing = Vec::new();
-				for hash in map.values().copied() {
-					let exists = self.expression_exists(hash).await?;
-					if !exists {
-						missing.push(hash);
-					}
-				}
-				if !missing.is_empty() {
-					return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
-				}
+				missing.extend(
+					futures::stream::iter(map.values().copied().map(Ok::<_, anyhow::Error>))
+						.try_filter_map(|hash| async move {
+							let exists = self.expression_exists(hash).await?;
+							if exists {
+								Ok(None)
+							} else {
+								Ok(Some(hash))
+							}
+						})
+						.try_collect::<Vec<Hash>>()
+						.await?,
+				);
 			},
+		}
+
+		// If there are any missing expressions, return.
+		if !missing.is_empty() {
+			return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
 		}
 
 		// Serialize the expression.
