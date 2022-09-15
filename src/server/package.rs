@@ -162,7 +162,7 @@ pub struct GetPackageResponse {
 
 impl Server {
 	// Retrieve the packages name list.
-	pub async fn handle_get_packages_request(
+	pub(super) async fn handle_get_packages_request(
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
@@ -198,7 +198,7 @@ impl Server {
 
 impl Server {
 	// Retrieve the package versions for the given package name.
-	pub async fn handle_get_package_request(
+	pub(super) async fn handle_get_package_request(
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
@@ -226,7 +226,7 @@ impl Server {
 
 impl Server {
 	// Create a package with the given name.
-	pub async fn handle_create_package_request(
+	pub(super) async fn handle_create_package_request(
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {

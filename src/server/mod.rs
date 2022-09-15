@@ -129,7 +129,7 @@ impl Server {
 					Ok::<_, Infallible>(hyper::service::service_fn(move |request| {
 						let server = Arc::clone(&server);
 						async move {
-							let response = server.handle_request(request).await;
+							let response = server.handle_request_wrapper(request).await;
 							Ok::<_, Infallible>(response)
 						}
 					}))
@@ -152,7 +152,7 @@ impl Server {
 					Ok::<_, Infallible>(hyper::service::service_fn(move |request| {
 						let server = Arc::clone(&server);
 						async move {
-							let response = server.handle_request(request).await;
+							let response = server.handle_request_wrapper(request).await;
 							Ok::<_, Infallible>(response)
 						}
 					}))
@@ -162,59 +162,71 @@ impl Server {
 		Ok(())
 	}
 
-	async fn handle_request(
+	pub async fn handle_request_wrapper(
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> http::Response<hyper::Body> {
+		match self.handle_request(request).await {
+			Ok(Some(response)) => response,
+			Ok(None) => http::Response::builder()
+				.status(http::StatusCode::NOT_FOUND)
+				.body(hyper::Body::from("Not found."))
+				.unwrap(),
+			Err(error) => {
+				tracing::error!(?error, backtrace = %error.backtrace());
+				http::Response::builder()
+					.status(http::StatusCode::INTERNAL_SERVER_ERROR)
+					.body(hyper::Body::from(format!("{:?}", error)))
+					.unwrap()
+			},
+		}
+	}
+
+	pub async fn handle_request(
+		self: &Arc<Self>,
+		request: http::Request<hyper::Body>,
+	) -> Result<Option<http::Response<hyper::Body>>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
-		let response: Result<http::Response<hyper::Body>> =
-			match (method, path_components.as_slice()) {
-				(http::Method::GET, ["blobs", _]) => self.handle_get_blob_request(request).boxed(),
-				(http::Method::POST, ["blobs", _]) => {
-					self.handle_create_blob_request(request).boxed()
-				},
-				(http::Method::GET, ["expressions", _]) => {
-					self.handle_get_expression_request(request).boxed()
-				},
-				(http::Method::POST, ["expressions", _]) => {
-					self.handle_create_expression_request(request).boxed()
-				},
-				(http::Method::POST, ["expressions", _, "evaluate"]) => {
-					self.handle_evaluate_expression_request(request).boxed()
-				},
-				// (http::Method::GET, ["packages"]) => {
-				// 	self.handle_get_packages_request(request).boxed()
-				// },
-				// (http::Method::GET, ["packages", _]) => {
-				// 	self.handle_get_package_request(request).boxed()
-				// },
-				// (http::Method::POST, ["packages", _]) => {
-				// 	self.handle_create_package_request(request).boxed()
-				// },
-				// (http::Method::GET, ["packages", _, "versions", _]) => {
-				// 	self.handle_get_package_version_request(request).boxed()
-				// },
-				// (http::Method::POST, ["packages", _, "versions", _]) => {
-				// 	self.handle_create_package_version_request(request).boxed()
-				// },
-				(_, _) => {
-					let response = http::Response::builder()
-						.status(http::StatusCode::NOT_FOUND)
-						.body(hyper::Body::from("Not found."))
-						.unwrap();
-					let response = Ok(response);
-					std::future::ready(response).boxed()
-				},
-			}
-			.await;
-		response.unwrap_or_else(|error| {
-			tracing::error!(?error, backtrace = %error.backtrace());
-			http::Response::builder()
-				.status(http::StatusCode::INTERNAL_SERVER_ERROR)
-				.body(hyper::Body::from(format!("{:?}", error)))
-				.unwrap()
-		})
+		let response = match (method, path_components.as_slice()) {
+			(http::Method::GET, ["blobs", _]) => {
+				Some(self.handle_get_blob_request(request).boxed())
+			},
+			(http::Method::POST, ["blobs", _]) => {
+				Some(self.handle_create_blob_request(request).boxed())
+			},
+			(http::Method::GET, ["expressions", _]) => {
+				Some(self.handle_get_expression_request(request).boxed())
+			},
+			(http::Method::POST, ["expressions", _]) => {
+				Some(self.handle_create_expression_request(request).boxed())
+			},
+			(http::Method::POST, ["expressions", _, "evaluate"]) => {
+				Some(self.handle_evaluate_expression_request(request).boxed())
+			},
+			(http::Method::GET, ["packages"]) => {
+				Some(self.handle_get_packages_request(request).boxed())
+			},
+			(http::Method::GET, ["packages", _]) => {
+				Some(self.handle_get_package_request(request).boxed())
+			},
+			(http::Method::POST, ["packages", _]) => {
+				Some(self.handle_create_package_request(request).boxed())
+			},
+			(http::Method::GET, ["packages", _, "versions", _]) => {
+				Some(self.handle_get_package_version_request(request).boxed())
+			},
+			(http::Method::POST, ["packages", _, "versions", _]) => {
+				Some(self.handle_create_package_version_request(request).boxed())
+			},
+			(_, _) => None,
+		};
+		let response = if let Some(response) = response {
+			Some(response.await?)
+		} else {
+			None
+		};
+		Ok(response)
 	}
 }
