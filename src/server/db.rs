@@ -54,21 +54,21 @@ impl Server {
 
 			Ok(())
 		}))
-		.post_recycle(deadpool_sqlite::Hook::sync_fn(|conn, _metrics| {
-			let error_handler = |error: rusqlite::Error| {
-				deadpool_sqlite::HookError::Abort(deadpool_sqlite::HookErrorCause::Backend(error))
-			};
+		.post_recycle(deadpool_sqlite::Hook::sync_fn(|_conn, _metrics| {
+			// let error_handler = |error: rusqlite::Error| {
+			// 	deadpool_sqlite::HookError::Abort(deadpool_sqlite::HookErrorCause::Backend(error))
+			// };
 
-			// Lock the connection so we can use it synchronously.
-			let conn = conn.lock().map_err(|_| {
-				deadpool_sqlite::HookError::Abort(deadpool_sqlite::HookErrorCause::Message(
-					"Failed to acquire the database connection lock.".to_owned(),
-				))
-			})?;
+			// // Lock the connection so we can use it synchronously.
+			// let conn = conn.lock().map_err(|_| {
+			// 	deadpool_sqlite::HookError::Abort(deadpool_sqlite::HookErrorCause::Message(
+			// 		"Failed to acquire the database connection lock.".to_owned(),
+			// 	))
+			// })?;
 
-			// Keep the database optimized. We set `analysis_limit` in the `post_create` hook, so this should be fast. See <https://www.sqlite.org/pragma.html#pragma_optimize>.
-			conn.execute("PRAGMA optimize;", [])
-				.map_err(error_handler)?;
+			// // Keep the database optimized. We set `analysis_limit` in the `post_create` hook, so this should be fast. See <https://www.sqlite.org/pragma.html#pragma_optimize>.
+			// conn.execute("PRAGMA optimize;", [])
+			// 	.map_err(error_handler)?;
 
 			Ok(())
 		}))

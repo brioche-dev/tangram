@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{artifact::Artifact, client::Client};
+use crate::{client::Client, expression::Artifact};
 use anyhow::Result;
 use std::{path::Path, sync::Arc};
 

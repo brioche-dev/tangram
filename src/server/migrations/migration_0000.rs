@@ -3,16 +3,25 @@ use async_trait::async_trait;
 use std::path::Path;
 
 const SQL: &str = r#"
-	create table objects (
+	create table expressions (
 		hash blob primary key,
-		data blob not null
+		data blob not null,
+		output_hash blob,
+		foreign key (output_hash) references expressions (hash)
 	);
 
 	create table evaluations (
-		expression_hash blob primary key,
-		expression blob not null,
-		output_hash blob not null,
-		output blob not null
+		parent_hash blob not null,
+		child_hash blob not null,
+		foreign key (parent_hash) references expressions (hash),
+		foreign key (child_hash) references expressions (hash),
+		primary key (parent_hash, child_hash)
+	);
+
+	create table roots (
+		hash blob primary key,
+		fragment bool not null,
+		foreign key (hash) references expressions (hash)
 	);
 
 	create table packages (
@@ -22,15 +31,9 @@ const SQL: &str = r#"
 	create table package_versions (
 		name text not null,
 		version text not null,
-		artifact_hash blob not null,
-		foreign key (artifact_hash) references artifacts (object_hash),
+		hash blob not null,
+		foreign key (hash) references expressions (hash),
 		primary key (name, version)
-	);
-
-	create table roots (
-		expression_hash blob primary key,
-		fragment bool not null,
-		foreign key (expression_hash) references evaluations (expression_hash)
 	);
 "#;
 

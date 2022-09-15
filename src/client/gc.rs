@@ -1,5 +1,5 @@
 use crate::client::Client;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 impl Client {
 	pub async fn garbage_collect(&self) -> Result<()> {
@@ -11,7 +11,9 @@ impl Client {
 					.context("Failed to garbage collect.")?;
 				Ok(())
 			},
-			super::transport::InProcessOrHttp::Http(_) => todo!(),
+			super::transport::InProcessOrHttp::Http(_) => {
+				bail!("Cannot garbage collect a remote server.");
+			},
 		}
 	}
 }

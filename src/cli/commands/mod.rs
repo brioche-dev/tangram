@@ -4,7 +4,6 @@ pub mod checkout;
 pub mod fetch;
 pub mod gc;
 pub mod publish;
-pub mod repl;
 pub mod run;
 pub mod search;
 pub mod server;

@@ -1,11 +1,10 @@
-use super::object_cache::ObjectCache;
+use super::cache::Cache;
 use crate::{
-	artifact::Artifact,
-	blob,
 	client::{Client, Transport},
+	expression::Artifact,
+	hash::Hash,
 	id::Id,
-	object::{self, Object},
-	server::{self, object::AddObjectOutcome},
+	server::{self, expression::AddExpressionOutcome},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
@@ -14,94 +13,77 @@ use std::{path::Path, sync::Arc};
 
 impl Client {
 	pub async fn checkin(&self, path: &Path) -> Result<Artifact> {
-		// Create an object cache.
-		let object_cache = ObjectCache::new(path, Arc::clone(&self.file_system_semaphore));
+		// Create a cache.
+		let cache = Cache::new(path, Arc::clone(&self.file_system_semaphore));
 
-		// Checkin the object for the path.
-		self.checkin_object_for_path(&object_cache, path).await?;
+		// Checkin the expression for the path.
+		self.checkin_path(&cache, path).await?;
 
-		// Retrieve the object for the path.
-		let (object_hash, _) = object_cache.get(path).await?.unwrap();
+		// Retrieve the expression for the path.
+		let (hash, _) = cache.get(path).await?.unwrap();
 
-		Ok(Artifact::new(object_hash))
+		Ok(Artifact { hash })
 	}
 
 	#[async_recursion]
-	async fn checkin_object_for_path(&self, object_cache: &ObjectCache, path: &Path) -> Result<()> {
-		tracing::trace!(r#"Checking in object at path "{}"."#, path.display());
+	async fn checkin_path(&self, cache: &Cache, path: &Path) -> Result<()> {
+		tracing::trace!(r#"Checking in expression at path "{}"."#, path.display());
 
-		// Retrieve the object hash and object for the path, computing them if necessary.
-		let (object_hash, object) = object_cache.get(path).await?.ok_or_else(|| {
+		// Retrieve the expression hash and expression for the path, computing them if necessary.
+		let (_, expression) = cache.get(path).await?.ok_or_else(|| {
 			anyhow!(
 				r#"No file system object found at path "{}"."#,
 				path.display(),
 			)
 		})?;
 
-		// Attempt to add the object.
-		let outcome = self.add_object(object_hash, &object).await?;
+		// Attempt to add the expression.
+		let outcome = self.try_add_expression(&expression).await?;
 
 		// Handle the outcome.
 		match outcome {
-			// If the object was added, we are done.
-			AddObjectOutcome::Added { .. } => return Ok(()),
+			// If the expression was added, we are done.
+			AddExpressionOutcome::Added { .. } => return Ok(()),
 
-			// If this object is a directory and there were missing entries, recurse to add them.
-			AddObjectOutcome::DirectoryMissingEntries { entries } => {
+			// If this expression is a directory and there were missing entries, recurse to add them.
+			AddExpressionOutcome::DirectoryMissingEntries { entries } => {
 				try_join_all(entries.into_iter().map(|(entry_name, _)| async {
 					let path = path.join(entry_name);
-					self.checkin_object_for_path(object_cache, &path).await?;
+					self.checkin_path(cache, &path).await?;
 					Ok::<_, anyhow::Error>(())
 				}))
 				.await?;
 			},
 
-			// If this object is a file and the blob is missing, add it.
-			AddObjectOutcome::FileMissingBlob { blob_hash } => {
+			// If this expression is a file and the blob is missing, add it.
+			AddExpressionOutcome::FileMissingBlob { blob_hash } => {
 				self.add_blob(path, blob_hash).await?;
 			},
 
-			// If this object is a dependency that is missing, check it in.
-			AddObjectOutcome::DependencyMissing { .. } => {
+			// If this expression is a dependency that is missing, check it in.
+			AddExpressionOutcome::DependencyMissing { .. } => {
 				// Read the target from the path.
 				let permit = self.file_system_semaphore.acquire().await.unwrap();
 				let target = tokio::fs::read_link(path).await?;
 				drop(permit);
 
 				// Checkin the path pointed to by the symlink.
-				self.checkin_object_for_path(object_cache, &path.join(target))
-					.await?;
+				self.checkin_path(cache, &path.join(target)).await?;
 			},
+
+			AddExpressionOutcome::MissingExpressions { .. } => unreachable!(),
 		};
 
-		// Attempt to add the object again. At this point, there should not be any missing entries or a missing blob.
-		let outcome = self.add_object(object_hash, &object).await?;
-		if !matches!(outcome, AddObjectOutcome::Added { .. }) {
+		// Attempt to add the expression again. At this point, there should not be any missing entries or a missing blob.
+		let outcome = self.try_add_expression(&expression).await?;
+		if !matches!(outcome, AddExpressionOutcome::Added { .. }) {
 			bail!("An unexpected error occurred.");
 		}
 
 		Ok(())
 	}
 
-	pub async fn add_object(
-		&self,
-		object_hash: object::Hash,
-		object: &Object,
-	) -> Result<AddObjectOutcome> {
-		match self.transport.as_in_process_or_http() {
-			super::transport::InProcessOrHttp::InProcess(server) => {
-				let outcome = server.add_object(object_hash, object).await?;
-				Ok(outcome)
-			},
-			super::transport::InProcessOrHttp::Http(http) => {
-				let path = format!("/objects/{object_hash}");
-				let outcome = http.post_json(&path, object).await?;
-				Ok(outcome)
-			},
-		}
-	}
-
-	pub async fn add_blob(&self, path: &Path, hash: blob::Hash) -> Result<blob::Hash> {
+	pub async fn add_blob(&self, path: &Path, hash: Hash) -> Result<Hash> {
 		// Get the server path if it is local.
 		let local_server_path = match &self.transport {
 			Transport::InProcess(server) => Some(server.path()),

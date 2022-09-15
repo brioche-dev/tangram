@@ -1,7 +1,7 @@
 use super::Server;
 use crate::{
-	artifact::Artifact,
 	client::{checkout::DependencyHandlerFn, Client},
+	expression::Artifact,
 };
 use anyhow::Result;
 use std::{path::Path, sync::Arc};

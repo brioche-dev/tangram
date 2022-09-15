@@ -29,21 +29,26 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to check in the package.")?;
 
-	// Create the expression.
-	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
-		lockfile: None,
-		package,
-		name: args.name,
-		args: vec![],
-	});
+	// Add the expression.
+	let expression = client
+		.add_expression(&tangram::expression::Expression::Target(
+			tangram::expression::Target {
+				lockfile: None,
+				package,
+				name: args.name,
+				args: vec![],
+			},
+		))
+		.await?;
 
 	// Evaluate the expression.
-	let output = client
-		.evaluate(&expression)
+	let output_hash = client
+		.evaluate(expression)
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
-	// Print the result.
+	// Print the output.
+	let output = client.get_expression(output_hash).await?;
 	let output_json =
 		serde_json::to_string_pretty(&output).context("Failed to serialize the expression.")?;
 	println!("{output_json}");

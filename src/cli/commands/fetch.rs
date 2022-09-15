@@ -22,19 +22,24 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to create the client.")?;
 
 	// Create the expression.
-	let expression = tangram::expression::Expression::Fetch(tangram::expression::Fetch {
-		url: args.url,
-		unpack: args.unpack,
-		hash: None,
-	});
+	let expression = client
+		.add_expression(&tangram::expression::Expression::Fetch(
+			tangram::expression::Fetch {
+				url: args.url,
+				unpack: args.unpack,
+				hash: None,
+			},
+		))
+		.await?;
 
 	// Evaluate the expression.
-	let output = client
-		.evaluate(&expression)
+	let output_hash = client
+		.evaluate(expression)
 		.await
 		.context("Failed to evaluate the expression.")?;
 
 	// Print the output.
+	let output = client.get_expression(output_hash).await?;
 	let output_json =
 		serde_json::to_string_pretty(&output).context("Failed to serialize the value.")?;
 	println!("{output_json}");

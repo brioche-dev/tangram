@@ -1,4 +1,4 @@
-use crate::{artifact::Artifact, id, server::Server};
+use crate::{expression::Artifact, id, server::Server};
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use std::{path::PathBuf, sync::Arc};

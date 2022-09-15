@@ -1,10 +1,9 @@
 use super::Server;
 use crate::{
-	artifact::Artifact,
-	blob, hash,
-	object::{self, Object},
+	expression::Expression,
+	hash::{self, Hash},
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use std::{
 	collections::{HashSet, VecDeque},
 	path::Path,
@@ -16,18 +15,18 @@ impl Server {
 		// Acquire an exclusive lock to the path.
 		let _path_lock_guard = self.lock.lock_exclusive().await?;
 
-		// Create hash sets to track the marked objects and blobs.
-		let mut marked_object_hashes: HashSet<object::Hash, hash::BuildHasher> = HashSet::default();
-		let mut marked_blob_hashes: HashSet<blob::Hash, hash::BuildHasher> = HashSet::default();
+		// Create hash sets to track the marked expressions and blobs.
+		let mut marked_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
+		let mut marked_blob_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
 
 		self.database_transaction(|txn| {
-			// Mark the objects and blobs.
-			Self::mark(txn, &mut marked_object_hashes, &mut marked_blob_hashes)
-				.context("Failed to mark the objects and blobs.")?;
+			// Mark the expressions and blobs.
+			Self::mark(txn, &mut marked_hashes, &mut marked_blob_hashes)
+				.context("Failed to mark the expressions and blobs.")?;
 
-			// Sweep the objects.
-			Self::sweep_objects(txn, &marked_object_hashes)
-				.context("Failed to sweep the objects.")?;
+			// Sweep the expressions.
+			Self::sweep_expressions(txn, &marked_hashes)
+				.context("Failed to sweep the expressions.")?;
 
 			Ok(())
 		})
@@ -49,15 +48,16 @@ impl Server {
 		Ok(())
 	}
 
+	#[allow(clippy::too_many_lines)]
 	fn mark(
 		txn: &rusqlite::Transaction,
-		marked_object_hashes: &mut HashSet<object::Hash, hash::BuildHasher>,
-		marked_blob_hashes: &mut HashSet<blob::Hash, hash::BuildHasher>,
+		marked_hashes: &mut HashSet<Hash, hash::BuildHasher>,
+		marked_blob_hashes: &mut HashSet<Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Get the roots.
 		let sql = r#"
 			select
-				artifact_hash
+				hash
 			from
 				roots
 		"#;
@@ -69,58 +69,120 @@ impl Server {
 			.context("Failed to execute the query.")?
 			.and_then(|row| {
 				let hash = row.get::<_, String>(0)?;
-				let object_hash = hash
-					.parse()
-					.with_context(|| "Failed to parse the object hash.")?;
-				let artifact = Artifact::new(object_hash);
-				Ok::<_, anyhow::Error>(artifact)
+				let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
+				Ok::<_, anyhow::Error>(hash)
 			});
 
-		// Traverse the transitive dependencies of the roots and add each hash to the marked object hashes and marked blob hashes.
-		let mut queue: VecDeque<Object> = VecDeque::new();
+		// Traverse the transitive dependencies of the roots and add each hash to the marked expression hashes and marked blob hashes.
+		let mut queue: VecDeque<Hash> = VecDeque::new();
 		for root in roots {
 			let root = root?;
-			let object_hash = root.object_hash();
-			let object = Self::get_object_with_transaction(txn, object_hash)?
-				.ok_or_else(|| anyhow!(r#"Failed to find object with hash "{}"."#, object_hash))?;
-			queue.push_back(object);
+			queue.push_back(root);
 		}
-		while let Some(object) = queue.pop_front() {
-			let object_hash = object.hash();
+		while let Some(hash) = queue.pop_front() {
+			// Mark this expression.
+			marked_hashes.insert(hash);
 
-			// Mark this object.
-			marked_object_hashes.insert(object_hash);
+			// TODO Add this expression's output to the queue.
 
-			match object {
-				// If the object is a file, mark its blob.
-				Object::File(file) => {
+			// Add this expression's evaluations to the queue.
+			let sql = r#"
+				select
+					child_hash
+				from
+					evaluations
+				where
+					parent_hash = $1
+			"#;
+			let mut statement = txn
+				.prepare_cached(sql)
+				.context("Failed to prepare the query.")?;
+			let evaluations = statement
+				.query(())
+				.context("Failed to execute the query.")?
+				.and_then(|row| {
+					let hash = row.get::<_, String>(0)?;
+					let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
+					Ok::<_, anyhow::Error>(hash)
+				});
+			for hash in evaluations {
+				let hash = hash?;
+				queue.push_back(hash);
+			}
+
+			// Get the expression.
+			let expression = Self::get_expression_with_transaction(txn, hash)?;
+
+			// Add the expression's children to the queue.
+			match expression {
+				Expression::Null
+				| Expression::Bool(_)
+				| Expression::Number(_)
+				| Expression::String(_)
+				| Expression::Artifact(_)
+				| Expression::Fetch(_)
+				| Expression::Symlink(_) => continue,
+
+				// If the expression is a file, mark its blob.
+				Expression::File(file) => {
 					marked_blob_hashes.insert(file.blob_hash);
 				},
 
-				// If the object is a directory, add its entries to the queue.
-				Object::Directory(directory) => {
-					for (_, object_hash) in directory.entries {
-						let object = Self::get_object_with_transaction(txn, object_hash)?
-							.ok_or_else(|| {
-								anyhow!(r#"Failed to find object with hash "{}"."#, object_hash)
-							})?;
-						queue.push_back(object);
+				// If the expression is a directory, add its entries to the queue.
+				Expression::Directory(directory) => {
+					for (_, hash) in directory.entries {
+						queue.push_back(hash);
 					}
 				},
 
-				// There is nothing to do for a symlink.
-				Object::Symlink(_) => {
-					continue;
+				// If the expression is a dependency, add the dependent expression to the queue.
+				Expression::Dependency(dependency) => {
+					let hash = dependency.artifact.hash;
+					queue.push_back(hash);
 				},
 
-				// If the object is a dependency, add the depended upon object to the queue.
-				Object::Dependency(dependency) => {
-					let object_hash = dependency.artifact.object_hash();
-					let object =
-						Self::get_object_with_transaction(txn, object_hash)?.ok_or_else(|| {
-							anyhow!(r#"Failed to find object with hash "{}"."#, object_hash)
-						})?;
-					queue.push_back(object);
+				Expression::Path(path) => {
+					let hash = path.artifact;
+					queue.push_back(hash);
+				},
+
+				Expression::Template(template) => {
+					queue.extend(template.components);
+				},
+
+				Expression::Process(process) => match process {
+					crate::expression::Process::Amd64Linux(process)
+					| crate::expression::Process::Amd64Macos(process)
+					| crate::expression::Process::Arm64Linux(process)
+					| crate::expression::Process::Arm64Macos(process) => {
+						queue.push_back(process.env);
+						queue.push_back(process.command);
+						queue.push_back(process.args);
+						for (_, output) in process.outputs {
+							for (_, dependency) in output.dependencies {
+								queue.push_back(dependency);
+							}
+						}
+					},
+					crate::expression::Process::Js(process) => {
+						queue.push_back(process.module);
+						queue.extend(process.args);
+					},
+				},
+
+				Expression::Target(target) => {
+					queue.push_back(target.package.hash);
+					queue.extend(target.args);
+				},
+
+				Expression::Array(array) => {
+					queue.extend(array);
+				},
+
+				Expression::Map(map) => {
+					for (_, value) in map {
+						queue.push_back(value);
+					}
 				},
 			}
 		}
@@ -128,36 +190,34 @@ impl Server {
 		Ok(())
 	}
 
-	fn sweep_objects(
+	fn sweep_expressions(
 		txn: &rusqlite::Transaction,
-		marked_object_hashes: &HashSet<object::Hash, hash::BuildHasher>,
+		marked_hashes: &HashSet<Hash, hash::BuildHasher>,
 	) -> Result<()> {
-		// Get all of the objects.
+		// Get all expressions.
 		let sql = r#"
 			select
-				object_hash
+				hash
 			from
-				objects
+				expressions
 		"#;
 		let mut statement = txn
 			.prepare_cached(sql)
 			.context("Failed to prepare the query.")?;
-		let object_hashes = statement
+		let hashes = statement
 			.query(())
 			.context("Failed to execute the query.")?
 			.and_then(|row| {
 				let hash = row.get::<_, String>(0)?;
-				let hash = hash
-					.parse()
-					.with_context(|| "Failed to parse object hash.")?;
+				let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
 				Ok::<_, anyhow::Error>(hash)
 			});
 
-		// Go through each object and delete it.
-		for object_hash in object_hashes {
-			let object_hash = object_hash?;
-			if !marked_object_hashes.contains(&object_hash) {
-				Self::delete_object_with_transaction(txn, object_hash)?;
+		// Go through each expression and delete it.
+		for hash in hashes {
+			let hash = hash?;
+			if !marked_hashes.contains(&hash) {
+				Self::delete_expression_with_transaction(txn, hash)?;
 			}
 		}
 
@@ -167,14 +227,14 @@ impl Server {
 	async fn sweep_blobs(
 		self: &Arc<Self>,
 		blobs_path: &Path,
-		marked_blob_hashes: &HashSet<blob::Hash, hash::BuildHasher>,
+		marked_blob_hashes: &HashSet<Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Read the files in the blobs directory and delete each file that is not marked.
 		let mut read_dir = tokio::fs::read_dir(blobs_path)
 			.await
 			.context("Failed to read the directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
-			let blob_hash: blob::Hash = entry
+			let blob_hash: Hash = entry
 				.file_name()
 				.to_str()
 				.context("Failed to parse the file name as a string.")?

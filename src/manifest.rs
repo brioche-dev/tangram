@@ -6,6 +6,7 @@ use url::Url;
 pub struct Manifest {
 	pub name: String,
 	pub version: String,
+	#[serde(default)]
 	pub targets: Vec<String>,
 	pub dependencies: Option<BTreeMap<String, Dependency>>,
 }

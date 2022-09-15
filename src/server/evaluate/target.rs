@@ -1,8 +1,4 @@
-use crate::{
-	expression::{self, Expression},
-	server::Server,
-	util::path_exists,
-};
+use crate::{expression, hash::Hash, server::Server, util::path_exists};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use camino::Utf8PathBuf;
@@ -14,8 +10,8 @@ impl Server {
 	pub async fn evaluate_target(
 		self: &Arc<Self>,
 		target: &expression::Target,
-		root_expression_hash: expression::Hash,
-	) -> Result<Expression> {
+		parent_hash: Hash,
+	) -> Result<Hash> {
 		// Create a fragment for the package.
 		let package_fragment = self
 			.create_fragment(target.package)
@@ -32,20 +28,29 @@ impl Server {
 			bail!("The package does not contain a tangram.js or tangram.ts.");
 		};
 
-		// Create the JS process expression.
-		let expression =
-			expression::Expression::Process(expression::Process::Js(expression::JsProcess {
-				lockfile: target.lockfile.clone(),
-				module: Box::new(expression::Expression::Path(expression::Path {
-					artifact: Box::new(expression::Expression::Artifact(target.package)),
-					path: path.map(Into::into),
-				})),
-				export: target.name.clone(),
-				args: target.args.clone(),
-			}));
+		// Add the expressions.
+		let hash = self
+			.add_expression(&expression::Expression::Artifact(target.package))
+			.await?;
+		let module_hash = self
+			.add_expression(&expression::Expression::Path(expression::Path {
+				artifact: hash,
+				path: path.map(Into::into),
+			}))
+			.await?;
+		let expression = self
+			.add_expression(&expression::Expression::Process(expression::Process::Js(
+				expression::JsProcess {
+					lockfile: target.lockfile.clone(),
+					module: module_hash,
+					export: target.name.clone(),
+					args: target.args.clone(),
+				},
+			)))
+			.await?;
 
 		// Evaluate the expression.
-		let output = self.evaluate(&expression, root_expression_hash).await?;
+		let output = self.evaluate(expression, parent_hash).await?;
 
 		Ok(output)
 	}

@@ -1,17 +1,19 @@
 use self::module_loader::{ModuleLoader, TANGRAM_MODULE_SCHEME};
 use crate::{
-	artifact::Artifact,
-	expression::{self, Expression},
+	expression::{self, Artifact, Dependency, Directory, Expression, File, Symlink},
 	hash::Hash,
 	lockfile::Lockfile,
-	object,
-	server::{repl::Output, Server},
+	server::Server,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use camino::Utf8PathBuf;
 use deno_core::{serde_v8, v8};
+use futures::future::try_join_all;
 use itertools::Itertools;
-use std::{cell::RefCell, collections::BTreeMap, convert::TryInto, fmt::Write, rc::Rc, sync::Arc};
+use std::{
+	cell::RefCell, collections::BTreeMap, convert::TryInto, fmt::Write, future::Future, rc::Rc,
+	sync::Arc,
+};
 use url::Url;
 
 mod cdp;
@@ -37,8 +39,17 @@ enum Request {
 
 #[derive(Debug)]
 enum Response {
-	Repl(Output),
-	Run(Result<Expression>),
+	Repl(ReplOutput),
+	Run(Result<Hash>),
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
+pub enum ReplOutput {
+	#[serde(rename = "success")]
+	Success { message: Option<String> },
+	#[serde(rename = "error")]
+	Error { message: String },
 }
 
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/snapshot"));
@@ -68,7 +79,7 @@ impl Runtime {
 		Runtime { task, sender }
 	}
 
-	pub async fn repl(&self, code: String) -> Result<Output> {
+	pub async fn repl(&self, code: String) -> Result<ReplOutput> {
 		let request = Request::Repl { code };
 		let response = self.request(request).await?;
 		let response = if let Response::Repl(response) = response {
@@ -79,7 +90,7 @@ impl Runtime {
 		Ok(response)
 	}
 
-	pub async fn run(&self, process: &expression::JsProcess) -> Result<Result<Expression>> {
+	pub async fn run(&self, process: &expression::JsProcess) -> Result<Result<Hash>> {
 		// TODO Evaluate the module expression.
 		let request = Request::Run {
 			process: process.clone(),
@@ -127,18 +138,27 @@ async fn js_runtime_task(
 	// Build the tangram extension.
 	let tangram_extension = deno_core::Extension::builder()
 		.ops(vec![
+			// Expression ops.
+			op_tangram_null::decl(),
+			op_tangram_bool::decl(),
+			op_tangram_number::decl(),
+			op_tangram_string::decl(),
 			op_tangram_artifact::decl(),
-			op_tangram_console_log::decl(),
-			op_tangram_dependency::decl(),
 			op_tangram_directory::decl(),
-			op_tangram_evaluate::decl(),
-			op_tangram_fetch::decl(),
 			op_tangram_file::decl(),
-			op_tangram_path::decl(),
-			op_tangram_process::decl(),
 			op_tangram_symlink::decl(),
-			op_tangram_target::decl(),
+			op_tangram_dependency::decl(),
+			op_tangram_path::decl(),
 			op_tangram_template::decl(),
+			op_tangram_fetch::decl(),
+			op_tangram_process::decl(),
+			op_tangram_target::decl(),
+			op_tangram_array::decl(),
+			op_tangram_map::decl(),
+			// Other ops.
+			op_tangram_blob::decl(),
+			op_tangram_console_log::decl(),
+			op_tangram_evaluate::decl(),
 		])
 		.state({
 			let server = Arc::clone(&server);
@@ -210,7 +230,8 @@ async fn js_runtime_task(
 
 			// Handle a run request.
 			Request::Run { process } => {
-				let response = handle_run_request(&mut js_runtime, &module_loader, process).await;
+				let response =
+					handle_run_request(&mut js_runtime, &module_loader, &server, &process).await;
 				let response = Response::Run(response);
 				sender.send(response).unwrap();
 			},
@@ -224,7 +245,7 @@ async fn handle_repl_request(
 	inspector_session: &mut deno_core::LocalInspectorSession,
 	context_id: u64,
 	code: String,
-) -> Output {
+) -> ReplOutput {
 	// If the code begins with an open curly and does not end in a semicolon, wrap it in parens to make it an ExpressionStatement instead of a BlockStatement.
 	let code = if code.trim_start().starts_with('{') && !code.trim_end().ends_with(';') {
 		format!("({code})")
@@ -258,7 +279,7 @@ async fn handle_repl_request(
 	) {
 		Ok((response, _)) => serde_json::from_value(response).unwrap(),
 		Err(error) => {
-			return Output::Error {
+			return ReplOutput::Error {
 				message: error.to_string(),
 			};
 		},
@@ -266,7 +287,7 @@ async fn handle_repl_request(
 
 	// If there was an error, return its description.
 	if let Some(exception_details) = evaluate_response.exception_details {
-		return Output::Error {
+		return ReplOutput::Error {
 			message: exception_details.exception.unwrap().description.unwrap(),
 		};
 	}
@@ -274,7 +295,7 @@ async fn handle_repl_request(
 	// If the evaluation produced a value, return it.
 	if let Some(value) = evaluate_response.result.value {
 		let output = serde_json::to_string_pretty(&value).unwrap();
-		return Output::Success {
+		return ReplOutput::Success {
 			message: Some(output),
 		};
 	}
@@ -327,7 +348,7 @@ async fn handle_repl_request(
 	) {
 		Ok((response, _)) => serde_json::from_value(response).unwrap(),
 		Err(error) => {
-			return Output::Error {
+			return ReplOutput::Error {
 				message: error.to_string(),
 			};
 		},
@@ -335,7 +356,7 @@ async fn handle_repl_request(
 
 	// If there was an error, return its description.
 	if let Some(exception_details) = call_function_on_response.exception_details {
-		return Output::Error {
+		return ReplOutput::Error {
 			message: exception_details.exception.unwrap().description.unwrap(),
 		};
 	}
@@ -344,7 +365,7 @@ async fn handle_repl_request(
 	let output = if let Some(output) = call_function_on_response.result.value {
 		output
 	} else {
-		return Output::Error {
+		return ReplOutput::Error {
 			message: "An unexpected error occurred.".to_owned(),
 		};
 	};
@@ -352,7 +373,7 @@ async fn handle_repl_request(
 	// Get the output as a string.
 	let output = output.as_str().unwrap().to_owned();
 
-	Output::Success {
+	ReplOutput::Success {
 		message: Some(output),
 	}
 }
@@ -360,25 +381,23 @@ async fn handle_repl_request(
 async fn handle_run_request(
 	js_runtime: &mut deno_core::JsRuntime,
 	module_loader: &ModuleLoader,
-	process: expression::JsProcess,
-) -> Result<Expression> {
+	server: &Arc<Server>,
+	process: &expression::JsProcess,
+) -> Result<Hash> {
 	// Get the path expression for the module.
-	let module = match *process.module {
+	let module = match server.try_get_expression(process.module).await?.unwrap() {
 		Expression::Path(module) => module,
 		_ => bail!("The module must be a path."),
 	};
 
 	// Get the module's artifact.
-	let module_artifact = match *module.artifact {
+	let module_artifact = match server.try_get_expression(module.artifact).await?.unwrap() {
 		Expression::Artifact(artifact) => artifact,
 		_ => bail!("Module artifact must be an artifact."),
 	};
 
 	// Create the module URL.
-	let mut module_url = format!(
-		"{TANGRAM_MODULE_SCHEME}://{}",
-		module_artifact.object_hash(),
-	);
+	let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", module_artifact.hash);
 
 	// Add the module path if necessary.
 	if let Some(path) = module.path {
@@ -387,8 +406,8 @@ async fn handle_run_request(
 	}
 
 	// Add the lockfile if necessary.
-	if let Some(lockfile) = process.lockfile {
-		let lockfile_hash = module_loader.add_lockfile(lockfile);
+	if let Some(lockfile) = process.lockfile.as_ref() {
+		let lockfile_hash = module_loader.add_lockfile(lockfile.clone());
 		write!(module_url, "?lockfile_hash={lockfile_hash}").unwrap();
 	}
 
@@ -405,7 +424,7 @@ async fn handle_run_request(
 	let module_namespace = js_runtime.get_module_namespace(module_id)?;
 	let mut scope = js_runtime.handle_scope();
 	let module_namespace = v8::Local::<v8::Object>::new(&mut scope, module_namespace);
-	let export_name = process.export;
+	let export_name = process.export.clone();
 	let export_literal = v8::String::new(&mut scope, &export_name).unwrap();
 	let export: v8::Local<v8::Function> = module_namespace
 		.get(&mut scope, export_literal.into())
@@ -426,7 +445,7 @@ async fn handle_run_request(
 	// Evaluate the args and move them to v8.
 	let args = process
 		.args
-		.into_iter()
+		.iter()
 		.map(|arg| {
 			let arg = serde_v8::to_v8(&mut try_catch_scope, arg)?;
 			Ok(arg)
@@ -471,114 +490,79 @@ async fn handle_run_request(
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-fn op_tangram_artifact(object_hash: object::Hash) -> Result<Artifact, deno_core::error::AnyError> {
-	Ok(Artifact::new(object_hash))
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-fn op_tangram_console_log(args: Vec<serde_json::Value>) -> Result<(), deno_core::error::AnyError> {
-	let len = args.len();
-	for (i, arg) in args.into_iter().enumerate() {
-		print!("{arg}");
-		if i != len - 1 {
-			print!(" ");
-		}
-	}
-	println!();
-	Ok(())
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_dependency(
+async fn op_tangram_null(
 	state: Rc<RefCell<deno_core::OpState>>,
-	artifact: Artifact,
-) -> Result<object::Hash, deno_core::error::AnyError> {
-	let state = {
-		let state = state.borrow();
-		let state = state.borrow::<Arc<OpState>>();
-		Arc::clone(state)
-	};
-	let output = state
-		.main_runtime_handle
-		.spawn({
-			let server = Arc::clone(&state.server);
-			async move {
-				let output = server.add_dependency(artifact).await?;
-				Ok::<_, anyhow::Error>(output)
-			}
-		})
-		.await
-		.unwrap()?;
-	Ok(output)
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server.add_expression(&Expression::Null).await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_bool(
+	state: Rc<RefCell<deno_core::OpState>>,
+	value: bool,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server.add_expression(&Expression::Bool(value)).await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_number(
+	state: Rc<RefCell<deno_core::OpState>>,
+	value: f64,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server.add_expression(&Expression::Number(value)).await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_string(
+	state: Rc<RefCell<deno_core::OpState>>,
+	value: String,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server
+			.add_expression(&Expression::String(value.into()))
+			.await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_artifact(
+	state: Rc<RefCell<deno_core::OpState>>,
+	hash: Hash,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server
+			.add_expression(&Expression::Artifact(Artifact { hash }))
+			.await
+	})
+	.await
 }
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
 async fn op_tangram_directory(
 	state: Rc<RefCell<deno_core::OpState>>,
-	entries: BTreeMap<String, object::Hash>,
-) -> Result<object::Hash, deno_core::error::AnyError> {
-	let state = {
-		let state = state.borrow();
-		let state = state.borrow::<Arc<OpState>>();
-		Arc::clone(state)
-	};
-	let output = state
-		.main_runtime_handle
-		.spawn({
-			let server = Arc::clone(&state.server);
-			async move {
-				let output = server.add_directory(entries).await?;
-				Ok::<_, anyhow::Error>(output)
-			}
-		})
-		.await
-		.unwrap()?;
-	Ok(output)
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_evaluate(
-	state: Rc<RefCell<deno_core::OpState>>,
-	expression: Expression,
-) -> Result<Expression, deno_core::error::AnyError> {
-	let state = {
-		let state = state.borrow();
-		let state = state.borrow::<Arc<OpState>>();
-		Arc::clone(state)
-	};
-	let output = state
-		.main_runtime_handle
-		.spawn({
-			let server = Arc::clone(&state.server);
-			async move {
-				let output = server.evaluate(&expression, expression.hash()).await?;
-				Ok::<_, anyhow::Error>(output)
-			}
-		})
-		.await
-		.unwrap()?;
-	Ok(output)
-}
-
-#[derive(serde::Deserialize)]
-struct FetchArgs {
-	url: Url,
-	hash: Option<Hash>,
-	unpack: bool,
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-fn op_tangram_fetch(args: FetchArgs) -> Result<Expression, deno_core::error::AnyError> {
-	Ok(Expression::Fetch(crate::expression::Fetch {
-		url: args.url,
-		hash: args.hash,
-		unpack: args.unpack,
-	}))
+	entries: BTreeMap<String, Hash>,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server
+			.add_expression(&Expression::Directory(Directory { entries }))
+			.await
+	})
+	.await
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -597,48 +581,24 @@ struct FileOptions {
 async fn op_tangram_file(
 	state: Rc<RefCell<deno_core::OpState>>,
 	blob: FileBlob,
-	_options: Option<FileOptions>,
-) -> Result<object::Hash, deno_core::error::AnyError> {
-	let state = {
-		let state = state.borrow();
-		let state = state.borrow::<Arc<OpState>>();
-		Arc::clone(state)
-	};
-	let output = state
-		.main_runtime_handle
-		.spawn({
-			let server = Arc::clone(&state.server);
-			async move {
-				let blob = match blob {
-					FileBlob::String(string) => server.add_blob(string.as_bytes()).await?,
-				};
-				let output = server.add_file(blob, false).await?;
-				Ok::<_, anyhow::Error>(output)
-			}
-		})
-		.await
-		.unwrap()?;
-	Ok(output)
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-fn op_tangram_path(
-	artifact: Expression,
-	path: Option<Utf8PathBuf>,
-) -> Result<Expression, deno_core::error::AnyError> {
-	Ok(Expression::Path(expression::Path {
-		artifact: Box::new(artifact),
-		path: path.map(Into::into),
-	}))
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-fn op_tangram_process(
-	process: expression::Process,
-) -> Result<Expression, deno_core::error::AnyError> {
-	Ok(Expression::Process(process))
+	options: Option<FileOptions>,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		let blob_hash = match blob {
+			FileBlob::String(string) => server.add_blob(string.as_bytes()).await?,
+		};
+		let executable = options
+			.and_then(|options| options.executable)
+			.unwrap_or(false);
+		let output = server
+			.add_expression(&Expression::File(File {
+				blob_hash,
+				executable,
+			}))
+			.await?;
+		Ok(output)
+	})
+	.await
 }
 
 #[deno_core::op]
@@ -646,24 +606,113 @@ fn op_tangram_process(
 async fn op_tangram_symlink(
 	state: Rc<RefCell<deno_core::OpState>>,
 	target: Utf8PathBuf,
-) -> Result<object::Hash, deno_core::error::AnyError> {
-	let state = {
-		let state = state.borrow();
-		let state = state.borrow::<Arc<OpState>>();
-		Arc::clone(state)
-	};
-	let output = state
-		.main_runtime_handle
-		.spawn({
-			let server = Arc::clone(&state.server);
-			async move {
-				let output = server.add_symlink(target).await?;
-				Ok::<_, anyhow::Error>(output)
-			}
-		})
-		.await
-		.unwrap()?;
-	Ok(output)
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server
+			.add_expression(&Expression::Symlink(Symlink { target }))
+			.await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_dependency(
+	state: Rc<RefCell<deno_core::OpState>>,
+	artifact: Artifact,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server
+			.add_expression(&Expression::Dependency(Dependency { artifact }))
+			.await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_path(
+	state: Rc<RefCell<deno_core::OpState>>,
+	artifact: Hash,
+	path: Option<Utf8PathBuf>,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server
+			.add_expression(&Expression::Path(expression::Path {
+				artifact,
+				path: path.map(Into::into),
+			}))
+			.await
+	})
+	.await
+}
+
+#[derive(serde::Deserialize)]
+struct TemplateArgs {
+	strings: Vec<String>,
+	placeholders: Vec<Hash>,
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_template(
+	state: Rc<RefCell<deno_core::OpState>>,
+	args: TemplateArgs,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		let components = try_join_all(args.strings.into_iter().map(|string| async {
+			server
+				.add_expression(&Expression::String(string.into()))
+				.await
+		}))
+		.await?
+		.into_iter()
+		.interleave(args.placeholders)
+		.collect();
+		let template = crate::expression::Template { components };
+		let output = server
+			.add_expression(&Expression::Template(template))
+			.await?;
+		Ok(output)
+	})
+	.await
+}
+
+#[derive(serde::Deserialize)]
+struct FetchArgs {
+	url: Url,
+	hash: Option<Hash>,
+	unpack: bool,
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_fetch(
+	state: Rc<RefCell<deno_core::OpState>>,
+	args: FetchArgs,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, move |server| async move {
+		server
+			.add_expression(&Expression::Fetch(crate::expression::Fetch {
+				url: args.url,
+				hash: args.hash,
+				unpack: args.unpack,
+			}))
+			.await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_process(
+	state: Rc<RefCell<deno_core::OpState>>,
+	process: expression::Process,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, move |server| async move {
+		server.add_expression(&Expression::Process(process)).await
+	})
+	.await
 }
 
 #[derive(serde::Deserialize)]
@@ -672,35 +721,116 @@ struct TargetArgs {
 	package: Artifact,
 	name: String,
 	#[serde(default)]
-	args: Vec<Expression>,
+	args: Vec<Hash>,
 }
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-fn op_tangram_target(args: TargetArgs) -> Result<Expression, deno_core::error::AnyError> {
-	Ok(Expression::Target(crate::expression::Target {
-		lockfile: args.lockfile,
-		package: args.package,
-		name: args.name,
-		args: args.args,
-	}))
-}
-
-#[derive(serde::Deserialize)]
-struct TemplateArgs {
-	strings: Vec<String>,
-	placeholders: Vec<Expression>,
+async fn op_tangram_target(
+	state: Rc<RefCell<deno_core::OpState>>,
+	args: TargetArgs,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server
+			.add_expression(&Expression::Target(crate::expression::Target {
+				lockfile: args.lockfile,
+				package: args.package,
+				name: args.name,
+				args: args.args,
+			}))
+			.await
+	})
+	.await
 }
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-fn op_tangram_template(args: TemplateArgs) -> Result<Expression, deno_core::error::AnyError> {
-	let components = args
-		.strings
-		.into_iter()
-		.map(|string| Expression::String(string.into()))
-		.interleave(args.placeholders)
-		.collect();
-	let template = crate::expression::Template { components };
-	Ok(Expression::Template(template))
+async fn op_tangram_array(
+	state: Rc<RefCell<deno_core::OpState>>,
+	value: Vec<Hash>,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server.add_expression(&Expression::Array(value)).await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_map(
+	state: Rc<RefCell<deno_core::OpState>>,
+	value: BTreeMap<String, Hash>,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		let value = value
+			.into_iter()
+			.map(|(key, value)| (key.into(), value))
+			.collect();
+		server.add_expression(&Expression::Map(value)).await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_blob(
+	state: Rc<RefCell<deno_core::OpState>>,
+	value: String,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |server| async move {
+		server.add_blob(value.as_bytes()).await
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_console_log(args: Vec<serde_json::Value>) -> Result<(), deno_core::error::AnyError> {
+	let len = args.len();
+	for (i, arg) in args.into_iter().enumerate() {
+		print!("{arg}");
+		if i != len - 1 {
+			print!(" ");
+		}
+	}
+	println!();
+	Ok(())
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_evaluate(
+	state: Rc<RefCell<deno_core::OpState>>,
+	hash: Hash,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(
+		state,
+		|server| async move { server.evaluate(hash, hash).await },
+	)
+	.await
+}
+
+async fn op<T, F, Fut>(
+	state: Rc<RefCell<deno_core::OpState>>,
+	f: F,
+) -> Result<T, deno_core::error::AnyError>
+where
+	T: 'static + Send,
+	F: FnOnce(Arc<Server>) -> Fut,
+	Fut: 'static + Send + Future<Output = Result<T, deno_core::error::AnyError>>,
+{
+	let state = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
+	};
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let server = Arc::clone(&state.server);
+			f(server)
+		})
+		.await
+		.unwrap()?;
+	Ok(output)
 }

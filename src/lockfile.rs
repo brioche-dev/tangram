@@ -1,21 +1,21 @@
-use crate::object;
+use crate::hash::Hash;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "version")]
 pub enum Lockfile {
 	#[serde(rename = "1")]
 	V1(V1),
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct V1 {
 	pub dependencies: BTreeMap<String, Dependency>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
-	pub hash: object::Hash,
+	pub hash: Hash,
 	pub dependencies: Option<BTreeMap<String, Dependency>>,
 }
 

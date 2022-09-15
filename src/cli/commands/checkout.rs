@@ -2,11 +2,11 @@ use crate::config::Config;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tangram::{artifact::Artifact, client::Client};
+use tangram::{client::Client, expression::Artifact, hash::Hash};
 
 #[derive(Parser)]
 pub struct Args {
-	artifact: Artifact,
+	artifact: Hash,
 	path: Option<PathBuf>,
 }
 
@@ -29,8 +29,11 @@ pub async fn run(args: Args) -> Result<()> {
 	};
 
 	// Perform the checkout.
+	let artifact = Artifact {
+		hash: args.artifact,
+	};
 	client
-		.checkout(args.artifact, &path, None)
+		.checkout(artifact, &path, None)
 		.await
 		.context("Failed to perform the checkout.")?;
 

@@ -1,9 +1,6 @@
 use crate::{
-	artifact::Artifact,
-	blob,
-	expression::{self, Expression},
-	hash::Hasher,
-	object::{File, Object},
+	expression::{self, Artifact, Expression, File},
+	hash::{Hash, Hasher},
 	server::Server,
 };
 use anyhow::{anyhow, bail, Result};
@@ -12,17 +9,19 @@ use std::{path::Path, sync::Arc};
 use tokio::io::AsyncWriteExt;
 
 impl Server {
-	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: &expression::Fetch) -> Result<Expression> {
+	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: &expression::Fetch) -> Result<Hash> {
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
 		// Retrieve an existing blob that matches the hash if one is available.
 		let artifact = if let Some(hash) = fetch.hash {
-			if self.get_blob(blob::Hash(hash)).await?.is_some() {
-				let object = Object::File(File {
-					blob_hash: blob::Hash(hash),
+			if self.get_blob(hash).await?.is_some() {
+				let expression = Expression::File(File {
+					blob_hash: hash,
 					executable: false,
 				});
-				Some(Artifact::new(object.hash()))
+				Some(Artifact {
+					hash: expression.hash(),
+				})
 			} else {
 				None
 			}
@@ -96,8 +95,9 @@ impl Server {
 
 		// Create the output.
 		let output = Expression::Artifact(artifact);
+		let output_hash = self.add_expression(&output).await?;
 
-		Ok(output)
+		Ok(output_hash)
 	}
 
 	async fn unpack(

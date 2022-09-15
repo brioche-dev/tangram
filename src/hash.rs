@@ -1,63 +1,6 @@
-use std::convert::TryInto;
-
 use anyhow::Context;
 use digest::Digest;
 use tokio::io::AsyncWrite;
-
-#[derive(Default)]
-pub struct Hasher {
-	sha256: sha2::Sha256,
-}
-
-impl Hasher {
-	#[must_use]
-	pub fn new() -> Hasher {
-		Hasher::default()
-	}
-
-	pub fn update(&mut self, data: impl AsRef<[u8]>) {
-		self.sha256.update(data);
-	}
-
-	#[must_use]
-	pub fn finalize(self) -> Hash {
-		Hash(self.sha256.finalize().into())
-	}
-}
-
-impl std::io::Write for Hasher {
-	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-		self.update(buf);
-		Ok(buf.len())
-	}
-
-	fn flush(&mut self) -> std::io::Result<()> {
-		Ok(())
-	}
-}
-
-impl AsyncWrite for Hasher {
-	fn poll_write(
-		mut self: std::pin::Pin<&mut Self>,
-		_cx: &mut std::task::Context<'_>,
-		buf: &[u8],
-	) -> std::task::Poll<Result<usize, std::io::Error>> {
-		self.sha256.update(&buf);
-		std::task::Poll::Ready(Ok(buf.len()))
-	}
-	fn poll_flush(
-		self: std::pin::Pin<&mut Self>,
-		_cx: &mut std::task::Context<'_>,
-	) -> std::task::Poll<Result<(), std::io::Error>> {
-		std::task::Poll::Ready(Ok(()))
-	}
-	fn poll_shutdown(
-		self: std::pin::Pin<&mut Self>,
-		_cx: &mut std::task::Context<'_>,
-	) -> std::task::Poll<Result<(), std::io::Error>> {
-		std::task::Poll::Ready(Ok(()))
-	}
-}
 
 #[derive(
 	Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
@@ -130,6 +73,61 @@ impl std::str::FromStr for Hash {
 impl rand::distributions::Distribution<Hash> for rand::distributions::Standard {
 	fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Hash {
 		Hash(rng.gen())
+	}
+}
+
+#[derive(Default)]
+pub struct Hasher {
+	sha256: sha2::Sha256,
+}
+
+impl Hasher {
+	#[must_use]
+	pub fn new() -> Hasher {
+		Hasher::default()
+	}
+
+	pub fn update(&mut self, data: impl AsRef<[u8]>) {
+		self.sha256.update(data);
+	}
+
+	#[must_use]
+	pub fn finalize(self) -> Hash {
+		Hash(self.sha256.finalize().into())
+	}
+}
+
+impl std::io::Write for Hasher {
+	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+		self.update(buf);
+		Ok(buf.len())
+	}
+
+	fn flush(&mut self) -> std::io::Result<()> {
+		Ok(())
+	}
+}
+
+impl AsyncWrite for Hasher {
+	fn poll_write(
+		mut self: std::pin::Pin<&mut Self>,
+		_cx: &mut std::task::Context<'_>,
+		buf: &[u8],
+	) -> std::task::Poll<Result<usize, std::io::Error>> {
+		self.sha256.update(&buf);
+		std::task::Poll::Ready(Ok(buf.len()))
+	}
+	fn poll_flush(
+		self: std::pin::Pin<&mut Self>,
+		_cx: &mut std::task::Context<'_>,
+	) -> std::task::Poll<Result<(), std::io::Error>> {
+		std::task::Poll::Ready(Ok(()))
+	}
+	fn poll_shutdown(
+		self: std::pin::Pin<&mut Self>,
+		_cx: &mut std::task::Context<'_>,
+	) -> std::task::Poll<Result<(), std::io::Error>> {
+		std::task::Poll::Ready(Ok(()))
 	}
 }
 

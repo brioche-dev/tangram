@@ -1,6 +1,6 @@
 use crate::{
-	artifact::Artifact,
 	client::Client,
+	expression::Artifact,
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
 };
@@ -96,7 +96,7 @@ impl Client {
 
 							// Create the lockfile Entry.
 							lockfile::Dependency {
-								hash: dependency_artifact.object_hash(),
+								hash: dependency_artifact.hash,
 								dependencies: None,
 							}
 						},
@@ -115,7 +115,7 @@ impl Client {
 							};
 							// Create the lockfile Entry.
 							lockfile::Dependency {
-								hash: artifact.object_hash(),
+								hash: artifact.hash,
 								dependencies: None,
 							}
 						},

@@ -8,6 +8,7 @@ use async_recursion::async_recursion;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+mod cache;
 pub mod checkin;
 mod checkin_package;
 pub mod checkout;
@@ -15,9 +16,7 @@ pub mod config;
 mod evaluate;
 mod expression;
 mod gc;
-mod object_cache;
 mod package;
-mod repl;
 mod transport;
 
 pub struct Client {

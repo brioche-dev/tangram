@@ -1,6 +1,6 @@
 use crate::{
-	artifact::Artifact,
-	expression::{self, Expression},
+	expression::{self, Artifact, Expression},
+	hash::Hash,
 	server::Server,
 	system::System,
 };
@@ -23,7 +23,7 @@ impl Server {
 		envs: BTreeMap<String, String>,
 		command: PathBuf,
 		args: Vec<String>,
-		root_expression_hash: expression::Hash,
+		parent_hash: Hash,
 	) -> Result<()> {
 		let server_path = self.path().to_owned();
 
@@ -41,7 +41,7 @@ impl Server {
 
 		// Create a symlink from /bin/sh in the chroot to a fragment with statically-linked bash.
 		let bash_artifact = self
-			.bash_artifact(system, root_expression_hash)
+			.bash_artifact(system, parent_hash)
 			.await
 			.context("Failed to evaluate the bash artifact.")?;
 		let bash_fragment = self
@@ -171,7 +171,7 @@ impl Server {
 	async fn bash_artifact(
 		self: &Arc<Self>,
 		system: System,
-		root_expression_hash: expression::Hash,
+		parent_hash: Hash,
 	) -> Result<Artifact> {
 		// Get the URL and hash for the system.
 		let (url, hash) = match system {
@@ -187,17 +187,22 @@ impl Server {
 		};
 
 		// Create the expression.
-		let expression = Expression::Fetch(expression::Fetch {
-			url: url.parse().unwrap(),
-			hash: Some(hash.parse().unwrap()),
-			unpack: true,
-		});
+		let hash = self
+			.add_expression(&Expression::Fetch(expression::Fetch {
+				url: url.parse().unwrap(),
+				hash: Some(hash.parse().unwrap()),
+				unpack: true,
+			}))
+			.await
+			.context("Failed to add the bash expression.")?;
 
 		// Evaluate the expression.
-		let output = self
-			.evaluate(&expression, root_expression_hash)
+		let output_hash = self
+			.evaluate(hash, parent_hash)
 			.await
 			.context("Failed to evaluate the expression.")?;
+
+		let output = self.get_expression(output_hash).await?;
 
 		let artifact = match output {
 			Expression::Artifact(artifact) => artifact,

@@ -1,5 +1,5 @@
 use super::{error::not_found, Server};
-use crate::artifact::Artifact;
+use crate::expression::Artifact;
 use anyhow::{anyhow, bail, Context, Result};
 use std::sync::Arc;
 
@@ -11,11 +11,11 @@ impl Server {
 		package_version: &str,
 	) -> Result<Option<Artifact>> {
 		// Retrieve the artifact hash from the database.
-		let maybe_object_hash = self
+		let maybe_hash = self
 			.database_transaction(|txn| {
 				let sql = r#"
 					select
-						artifact_hash
+						hash
 					from
 						package_versions
 					where
@@ -25,19 +25,20 @@ impl Server {
 				let mut statement = txn
 					.prepare_cached(sql)
 					.context("Failed to prepare the query.")?;
-				let maybe_object_hash = statement
+				let maybe_hash = statement
 					.query(params)
 					.context("Failed to execute the query.")?
 					.and_then(|row| row.get::<_, String>(0))
 					.next()
 					.transpose()?;
-				Ok(maybe_object_hash)
+				Ok(maybe_hash)
 			})
 			.await?;
 
 		// Construct the artifact.
-		let artifact =
-			maybe_object_hash.map(|object_hash| Artifact::new(object_hash.parse().unwrap()));
+		let artifact = maybe_hash.map(|hash| Artifact {
+			hash: hash.parse().unwrap(),
+		});
 
 		Ok(artifact)
 	}
@@ -119,16 +120,12 @@ impl Server {
 			// Create the new package version.
 			let sql = r#"
 				insert into package_versions (
-					name, version, artifact_hash
+					name, version, hash
 				) values (
 					$1, $2, $3
 				)
 			"#;
-			let params = (
-				package_name,
-				package_version,
-				artifact.object_hash().to_string(),
-			);
+			let params = (package_name, package_version, artifact.hash.to_string());
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;

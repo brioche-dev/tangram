@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{artifact::Artifact, package::SearchResultItem};
+use crate::{expression::Artifact, package::SearchResultItem};
 use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
@@ -76,7 +76,7 @@ impl Server {
 				let sql = r#"
 					select
 						version,
-						artifact_hash
+						hash
 					from
 						package_versions
 					where
@@ -91,11 +91,9 @@ impl Server {
 					.context("Failed to execute the query.")?
 					.and_then(|row| {
 						let version = row.get::<_, String>(0)?;
-						let object_hash = row.get::<_, String>(1)?;
-						let object_hash = object_hash
-							.parse()
-							.with_context(|| "Failed to parse the object hash.")?;
-						let artifact = Artifact::new(object_hash);
+						let hash = row.get::<_, String>(1)?;
+						let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
+						let artifact = Artifact { hash };
 						let package_version = Version { version, artifact };
 						Ok(package_version)
 					})

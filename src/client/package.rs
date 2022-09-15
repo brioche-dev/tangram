@@ -1,5 +1,5 @@
 use super::{transport::InProcessOrHttp, Client};
-use crate::{artifact::Artifact, manifest::Manifest};
+use crate::{expression::Artifact, manifest::Manifest};
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 

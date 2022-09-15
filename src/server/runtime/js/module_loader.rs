@@ -1,9 +1,8 @@
 use crate::{
-	artifact::Artifact,
+	expression::Artifact,
 	hash::{self, Hash},
 	lockfile::Lockfile,
 	manifest::Manifest,
-	object,
 	server::Server,
 };
 use anyhow::{anyhow, bail, ensure, Context, Result};
@@ -154,10 +153,12 @@ async fn resolve_tangram(
 	let domain = referrer
 		.domain()
 		.ok_or_else(|| anyhow!("Failed to get domain from the referrer."))?;
-	let referrer_package_hash: object::Hash = domain
+	let referrer_package_hash: Hash = domain
 		.parse()
 		.with_context(|| "Failed to parse referrer domain.")?;
-	let referrer_package = Artifact::new(referrer_package_hash);
+	let referrer_package = Artifact {
+		hash: referrer_package_hash,
+	};
 
 	// Get the lockfile hash from the referrer.
 	let referrer_lockfile_hash = if let Some(referrer_lockfile_hash) =
@@ -207,6 +208,14 @@ async fn resolve_tangram(
 	} else {
 		None
 	};
+	let specifier_sub_path = if let Some(mut specifier_sub_path) = specifier_sub_path {
+		if !matches!(specifier_sub_path.extension(), Some("js" | "ts")) {
+			specifier_sub_path.set_extension("ts");
+		}
+		Some(specifier_sub_path)
+	} else {
+		None
+	};
 
 	// Retrieve the specifier's entry in the referrer's lockfile.
 	let lockfile_entry = referrer_lockfile
@@ -252,9 +261,18 @@ async fn resolve_tangram(
 #[allow(clippy::unused_async)]
 async fn resolve_tangram_module(
 	_state: &State,
-	specifier: deno_core::ModuleSpecifier,
+	mut specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSpecifier> {
+	// If the specifier does not end with a .js or .ts extension, add a .ts extension.
+	let path = specifier.path();
+	#[allow(clippy::case_sensitive_file_extension_comparisons)]
+	if !(path.ends_with(".js") || path.ends_with(".ts")) {
+		let mut path = path.to_owned();
+		path.push_str(".ts");
+		specifier.set_path(&path);
+	}
+
 	Ok(specifier)
 }
 
@@ -273,7 +291,8 @@ async fn load_tangram_module(
 	let domain = specifier
 		.domain()
 		.ok_or_else(|| anyhow!("The specifier must have a domain."))?;
-	let specifier_artifact: Artifact = domain.parse()?;
+	let hash: Hash = domain.parse()?;
+	let specifier_artifact: Artifact = Artifact { hash };
 
 	// Create a fragment for the specifier's package.
 	let fragment = state.server.create_fragment(specifier_artifact).await?;
@@ -367,10 +386,13 @@ async fn load_tangram_target_proxy(
 	let domain = specifier
 		.domain()
 		.ok_or_else(|| anyhow!("The specifier must have a domain."))?;
-	let package: Artifact = domain.parse()?;
+	let package_hash: Hash = domain.parse().context("Failed to parse the domain.")?;
 
 	// Create a fragment for the specifier's package.
-	let fragment = state.server.create_fragment(package).await?;
+	let fragment = state
+		.server
+		.create_fragment(Artifact { hash: package_hash })
+		.await?;
 	let fragment_path = state.server.fragment_path(&fragment);
 
 	// Read the specifier's manifest.
@@ -415,7 +437,7 @@ async fn load_tangram_target_proxy(
 	// Generate the code for the target proxy module.
 	let mut code = String::new();
 	let lockfile_json = serde_json::to_string(&lockfile)?;
-	let package_json = serde_json::to_string(&package)?;
+	let package_json = serde_json::to_string(&package_hash)?;
 	writedoc!(
 		code,
 		r#"

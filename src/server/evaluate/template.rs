@@ -1,5 +1,6 @@
 use crate::{
 	expression::{self, Expression},
+	hash::Hash,
 	server::Server,
 };
 use anyhow::Result;
@@ -11,14 +12,16 @@ impl Server {
 	pub async fn evaluate_template(
 		self: &Arc<Self>,
 		template: &expression::Template,
-		root_expression_hash: expression::Hash,
-	) -> Result<Expression> {
+		parent_hash: Hash,
+	) -> Result<Hash> {
 		let components = template
 			.components
 			.iter()
-			.map(|component| self.evaluate(component, root_expression_hash));
+			.copied()
+			.map(|component| self.evaluate(component, parent_hash));
 		let components = try_join_all(components).await?;
 		let output = Expression::Template(crate::expression::Template { components });
-		Ok(output)
+		let output_hash = self.add_expression(&output).await?;
+		Ok(output_hash)
 	}
 }

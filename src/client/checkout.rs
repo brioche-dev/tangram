@@ -1,8 +1,8 @@
-use super::{object_cache::ObjectCache, Transport};
+use super::{cache::Cache, Transport};
 use crate::{
-	artifact::Artifact,
 	client::Client,
-	object::{self, Dependency, Directory, File, Object, Symlink},
+	expression::{Artifact, Dependency, Directory, Expression, File, Symlink},
+	hash::Hash,
 	util::rmrf,
 };
 use anyhow::{anyhow, Result};
@@ -21,57 +21,53 @@ impl Client {
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
-		// Create an object cache.
-		let object_cache = ObjectCache::new(path, Arc::clone(&self.file_system_semaphore));
+		// Create a cache.
+		let cache = Cache::new(path, Arc::clone(&self.file_system_semaphore));
 
-		// Call the recursive checkout function on the root object.
-		self.checkout_path(
-			&object_cache,
-			artifact.object_hash(),
-			path,
-			dependency_handler,
-		)
-		.await?;
+		// Call the recursive checkout function on the root expression.
+		self.checkout_path(&cache, artifact.hash, path, dependency_handler)
+			.await?;
 
 		Ok(())
 	}
 
 	async fn checkout_path(
 		&self,
-		object_cache: &ObjectCache,
-		remote_object_hash: object::Hash,
+		cache: &Cache,
+		hash: Hash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
-		// Get the object from the server.
-		let object = match self.transport.as_in_process_or_http() {
+		// Get the expression from the server.
+		let expression = match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {
-				server.get_object(remote_object_hash).await?
+				server.try_get_expression(hash).await?
 			},
 			super::transport::InProcessOrHttp::Http(http) => {
-				let path = format!("/objects/{remote_object_hash}");
+				let path = format!("/expressions/{hash}");
 				http.get_json(&path).await?
 			},
 		};
-		let object =
-			object.ok_or_else(|| anyhow!(r#"Failed to find object "{remote_object_hash}"."#))?;
+		let expression =
+			expression.ok_or_else(|| anyhow!(r#"Failed to find expression "{hash}"."#))?;
 
-		// Call the appropriate function for the object's type.
-		match object {
-			Object::Directory(directory) => {
-				self.checkout_directory(object_cache, directory, path, dependency_handler)
+		// Call the appropriate function for the expression's type.
+		match expression {
+			Expression::Directory(directory) => {
+				self.checkout_directory(cache, directory, path, dependency_handler)
 					.await?;
 			},
-			Object::File(file) => {
-				self.checkout_file(object_cache, file, path).await?;
+			Expression::File(file) => {
+				self.checkout_file(cache, file, path).await?;
 			},
-			Object::Symlink(symlink) => {
-				self.checkout_symlink(object_cache, symlink, path).await?;
+			Expression::Symlink(symlink) => {
+				self.checkout_symlink(cache, symlink, path).await?;
 			},
-			Object::Dependency(dependency) => {
-				self.checkout_dependency(object_cache, dependency, path, dependency_handler)
+			Expression::Dependency(dependency) => {
+				self.checkout_dependency(cache, dependency, path, dependency_handler)
 					.await?;
 			},
+			_ => unreachable!(),
 		}
 
 		Ok(())
@@ -80,20 +76,20 @@ impl Client {
 	#[async_recursion]
 	async fn checkout_directory(
 		&self,
-		object_cache: &ObjectCache,
+		cache: &Cache,
 		directory: Directory,
 		path: &Path,
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match object_cache.get(path).await? {
-			// If the object is already checked out then return.
-			Some((_, Object::Directory(local_directory))) if local_directory == directory => {
+		match cache.get(path).await? {
+			// If the expression is already checked out then return.
+			Some((_, Expression::Directory(local_directory))) if local_directory == directory => {
 				return Ok(());
 			},
 
 			// If there is already a directory then remove any entries in the local directory that are not present in the remote directory.
-			Some((_, Object::Directory(local_directory))) => {
+			Some((_, Expression::Directory(local_directory))) => {
 				try_join_all(local_directory.entries.keys().map(|entry_name| {
 					let directory = &directory;
 					async move {
@@ -120,34 +116,27 @@ impl Client {
 		};
 
 		// Recurse into the children.
-		try_join_all(directory.entries.into_iter().map(
-			|(entry_name, entry_object_hash)| async move {
-				let entry_path = path.join(&entry_name);
-				self.checkout_path(
-					object_cache,
-					entry_object_hash,
-					&entry_path,
-					dependency_handler,
-				)
-				.await?;
-				Ok::<_, anyhow::Error>(())
-			},
-		))
+		try_join_all(
+			directory
+				.entries
+				.into_iter()
+				.map(|(entry_name, entry_hash)| async move {
+					let entry_path = path.join(&entry_name);
+					self.checkout_path(cache, entry_hash, &entry_path, dependency_handler)
+						.await?;
+					Ok::<_, anyhow::Error>(())
+				}),
+		)
 		.await?;
 
 		Ok(())
 	}
 
-	async fn checkout_file(
-		&self,
-		object_cache: &ObjectCache,
-		file: File,
-		path: &Path,
-	) -> Result<()> {
+	async fn checkout_file(&self, cache: &Cache, file: File, path: &Path) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match object_cache.get(path).await? {
-			// If the object is already checked out then return.
-			Some((_, Object::File(local_file))) if local_file == file => {
+		match cache.get(path).await? {
+			// If the expression is already checked out then return.
+			Some((_, Expression::File(local_file))) if local_file == file => {
 				return Ok(());
 			},
 
@@ -206,16 +195,11 @@ impl Client {
 		Ok(())
 	}
 
-	async fn checkout_symlink(
-		&self,
-		object_cache: &ObjectCache,
-		symlink: Symlink,
-		path: &Path,
-	) -> Result<()> {
+	async fn checkout_symlink(&self, cache: &Cache, symlink: Symlink, path: &Path) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match object_cache.get(path).await? {
-			// If the object is already checked out then return.
-			Some((_, Object::Symlink(local_symlink))) if local_symlink == symlink => {
+		match cache.get(path).await? {
+			// If the expression is already checked out then return.
+			Some((_, Expression::Symlink(local_symlink))) if local_symlink == symlink => {
 				return Ok(());
 			},
 
@@ -237,15 +221,17 @@ impl Client {
 	#[async_recursion]
 	async fn checkout_dependency(
 		&self,
-		object_cache: &ObjectCache,
+		cache: &Cache,
 		dependency: Dependency,
 		path: &Path,
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match object_cache.get(path).await? {
-			// If the object is already checked out then return.
-			Some((_, Object::Dependency(local_dependency))) if local_dependency == dependency => {
+		match cache.get(path).await? {
+			// If the expression is already checked out then return.
+			Some((_, Expression::Dependency(local_dependency)))
+				if local_dependency == dependency =>
+			{
 				return Ok(());
 			},
 

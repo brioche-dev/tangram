@@ -91,21 +91,25 @@ pub async fn run(args: Args) -> Result<()> {
 	let name = args.target.unwrap_or_else(|| "default".to_owned());
 
 	// Create the expression.
-	let expression = tangram::expression::Expression::Target(tangram::expression::Target {
-		lockfile: None,
-		package,
-		name,
-		args: vec![],
-	});
+	let input_hash = client
+		.add_expression(&tangram::expression::Expression::Target(
+			tangram::expression::Target {
+				lockfile: None,
+				package,
+				name,
+				args: vec![],
+			},
+		))
+		.await?;
 
 	// Evaluate the expression.
-	let output = client
-		.evaluate(&expression)
+	let output_hash = client
+		.evaluate(input_hash)
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
 	// Retrieve the artifact from the output.
-	let artifact = match output {
+	let artifact = match client.get_expression(output_hash).await? {
 		tangram::expression::Expression::Artifact(artifact) => artifact,
 		_ => bail!("The target must evaluate to an artifact."),
 	};

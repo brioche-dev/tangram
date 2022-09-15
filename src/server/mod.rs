@@ -1,7 +1,6 @@
-use self::{config::Config, lock::Lock, repl::Repl};
+use self::{config::Config, lock::Lock};
 use crate::{
 	client::{self, Client},
-	repl::Id,
 	util::path_exists,
 };
 use anyhow::Result;
@@ -10,7 +9,6 @@ use futures::future::try_join_all;
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
 use std::{
-	collections::HashMap,
 	convert::Infallible,
 	net::SocketAddr,
 	path::{Path, PathBuf},
@@ -24,15 +22,13 @@ pub mod config;
 pub mod db;
 mod error;
 pub mod evaluate;
-mod expression;
+pub mod expression;
 pub mod fragment;
 mod gc;
 mod lock;
 pub mod migrations;
-pub mod object;
 mod package;
 mod package_versions;
-pub mod repl;
 pub mod runtime;
 pub mod temp;
 
@@ -51,9 +47,6 @@ pub struct Server {
 
 	/// This HTTP client is for performing HTTP requests when running fetch expressions.
 	http_client: reqwest::Client,
-
-	/// These are the active REPLs.
-	repls: tokio::sync::Mutex<HashMap<Id, Repl>>,
 
 	/// These are the peers.
 	peers: Vec<Client>,
@@ -94,9 +87,6 @@ impl Server {
 		}))
 		.await?;
 
-		// Create the repls.
-		let repls = tokio::sync::Mutex::new(HashMap::new());
-
 		// Create the server.
 		let server = Server {
 			path,
@@ -104,7 +94,6 @@ impl Server {
 			database_connection_pool,
 			local_pool_handle,
 			http_client,
-			repls,
 			peers,
 		};
 
@@ -189,36 +178,27 @@ impl Server {
 				(http::Method::GET, ["expressions", _]) => {
 					self.handle_get_expression_request(request).boxed()
 				},
+				(http::Method::POST, ["expressions", _]) => {
+					self.handle_create_expression_request(request).boxed()
+				},
 				(http::Method::POST, ["expressions", _, "evaluate"]) => {
 					self.handle_evaluate_expression_request(request).boxed()
 				},
-				(http::Method::GET, ["objects", _]) => {
-					self.handle_get_object_request(request).boxed()
-				},
-				(http::Method::POST, ["objects", _]) => {
-					self.handle_create_object_request(request).boxed()
-				},
-				(http::Method::GET, ["packages"]) => {
-					self.handle_get_packages_request(request).boxed()
-				},
-				(http::Method::GET, ["packages", _]) => {
-					self.handle_get_package_request(request).boxed()
-				},
-				(http::Method::POST, ["packages", _]) => {
-					self.handle_create_package_request(request).boxed()
-				},
-				(http::Method::GET, ["packages", _, "versions", _]) => {
-					self.handle_get_package_version_request(request).boxed()
-				},
-				(http::Method::POST, ["packages", _, "versions", _]) => {
-					self.handle_create_package_version_request(request).boxed()
-				},
-				(http::Method::POST, ["repls", ""]) => {
-					self.handle_create_repl_request(request).boxed()
-				},
-				(http::Method::POST, ["repls", _, "run"]) => {
-					self.handle_repl_run_request(request).boxed()
-				},
+				// (http::Method::GET, ["packages"]) => {
+				// 	self.handle_get_packages_request(request).boxed()
+				// },
+				// (http::Method::GET, ["packages", _]) => {
+				// 	self.handle_get_package_request(request).boxed()
+				// },
+				// (http::Method::POST, ["packages", _]) => {
+				// 	self.handle_create_package_request(request).boxed()
+				// },
+				// (http::Method::GET, ["packages", _, "versions", _]) => {
+				// 	self.handle_get_package_version_request(request).boxed()
+				// },
+				// (http::Method::POST, ["packages", _, "versions", _]) => {
+				// 	self.handle_create_package_version_request(request).boxed()
+				// },
 				(_, _) => {
 					let response = http::Response::builder()
 						.status(http::StatusCode::NOT_FOUND)

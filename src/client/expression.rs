@@ -1,11 +1,50 @@
 use super::{transport::InProcessOrHttp, Client};
-use crate::expression::{self, Expression};
-use anyhow::{Context, Result};
+use crate::hash::Hash;
+use crate::{expression::Expression, server::expression::AddExpressionOutcome};
+use anyhow::{bail, Context, Result};
 
 impl Client {
+	pub async fn get_expression(&self, hash: Hash) -> Result<Expression> {
+		match self.transport.as_in_process_or_http() {
+			super::transport::InProcessOrHttp::InProcess(server) => {
+				let outcome = server.get_expression(hash).await?;
+				Ok(outcome)
+			},
+			super::transport::InProcessOrHttp::Http(http) => {
+				let path = format!("/expressions/{}", hash);
+				let outcome = http.get_json(&path).await?;
+				Ok(outcome)
+			},
+		}
+	}
+
+	pub async fn add_expression(&self, expression: &Expression) -> Result<Hash> {
+		match self.try_add_expression(expression).await? {
+			AddExpressionOutcome::Added { hash } => Ok(hash),
+			_ => bail!("Failed to add the expression."),
+		}
+	}
+
+	pub async fn try_add_expression(
+		&self,
+		expression: &Expression,
+	) -> Result<AddExpressionOutcome> {
+		match self.transport.as_in_process_or_http() {
+			super::transport::InProcessOrHttp::InProcess(server) => {
+				let outcome = server.try_add_expression(expression).await?;
+				Ok(outcome)
+			},
+			super::transport::InProcessOrHttp::Http(http) => {
+				let path = format!("/expressions/{}", expression.hash());
+				let outcome = http.post_json(&path, expression).await?;
+				Ok(outcome)
+			},
+		}
+	}
+
 	pub async fn get_memoized_evaluation(
 		&self,
-		expression_hash: expression::Hash,
+		expression_hash: Hash,
 	) -> Result<Option<Expression>> {
 		match self.transport.as_in_process_or_http() {
 			InProcessOrHttp::InProcess(server) => {

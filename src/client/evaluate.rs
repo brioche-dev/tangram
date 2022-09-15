@@ -1,26 +1,23 @@
 use super::Client;
-use crate::{
-	expression::{self, Expression},
-	hash,
-};
+use crate::hash::Hash;
 use anyhow::Result;
 
 impl Client {
-	pub async fn evaluate(&self, expression: &Expression) -> Result<Expression> {
-		let expression_json = serde_json::to_vec(expression)?;
-		let expression_hash = expression::Hash(hash::Hash::new(&expression_json));
+	pub async fn evaluate(&self, hash: Hash) -> Result<Hash> {
 		match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {
-				let output = server.evaluate(expression, expression_hash).await?;
+				let output = server.evaluate(hash, hash).await?;
 				Ok(output)
 			},
 			super::transport::InProcessOrHttp::Http(http) => {
-				let output = http
-					.post_json(
-						&format!("/expressions/{expression_hash}/evaluate"),
-						expression,
+				let body = http
+					.post(
+						&format!("/expressions/{hash}/evaluate"),
+						hyper::Body::empty(),
 					)
 					.await?;
+				let body = hyper::body::to_bytes(body).await?;
+				let output = String::from_utf8(body.to_vec())?.parse()?;
 				Ok(output)
 			},
 		}
