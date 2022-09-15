@@ -29,16 +29,16 @@ impl Server {
 		};
 
 		// Add the expressions.
-		let hash = self
+		let artifact_hash = self
 			.add_expression(&expression::Expression::Artifact(target.package))
 			.await?;
 		let module_hash = self
 			.add_expression(&expression::Expression::Path(expression::Path {
-				artifact: hash,
+				artifact: artifact_hash,
 				path: path.map(Into::into),
 			}))
 			.await?;
-		let expression = self
+		let expression_hash = self
 			.add_expression(&expression::Expression::Process(expression::Process::Js(
 				expression::JsProcess {
 					lockfile: target.lockfile.clone(),
@@ -50,7 +50,7 @@ impl Server {
 			.await?;
 
 		// Evaluate the expression.
-		let output = self.evaluate(expression, hash).await?;
+		let output = self.evaluate(expression_hash, hash).await?;
 
 		Ok(output)
 	}
