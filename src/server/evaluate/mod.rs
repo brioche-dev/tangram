@@ -18,9 +18,14 @@ impl Server {
 	pub async fn evaluate(self: &Arc<Self>, hash: Hash, parent_hash: Hash) -> Result<Hash> {
 		let _guard = self.lock.lock_shared().await?;
 
+		// Get the expression and the output hash if the expression was previously evaluated.
 		let (expression, output_hash) = self.get_expression_with_output(hash).await?;
 
 		if let Some(output_hash) = output_hash {
+			// Add the evaluation.
+			self.add_evaluation(parent_hash, hash).await?;
+
+			// Return the output hash.
 			return Ok(output_hash);
 		}
 

@@ -131,26 +131,6 @@ impl AsyncWrite for Hasher {
 	}
 }
 
-pub type BuildHasher = std::hash::BuildHasherDefault<StdHasher>;
-
-#[derive(Default)]
-pub struct StdHasher {
-	bytes: Option<[u8; 8]>,
-}
-
-impl std::hash::Hasher for StdHasher {
-	fn write(&mut self, bytes: &[u8]) {
-		assert!(bytes.len() == 32);
-		let bytes = &bytes[0..8];
-		assert!(self.bytes.is_none());
-		self.bytes = Some(bytes.try_into().unwrap());
-	}
-
-	fn finish(&self) -> u64 {
-		u64::from_le_bytes(self.bytes.unwrap())
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;

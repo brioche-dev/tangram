@@ -1,8 +1,5 @@
 use super::Server;
-use crate::{
-	expression::Expression,
-	hash::{self, Hash},
-};
+use crate::{expression::Expression, hash::Hash};
 use anyhow::{Context, Result};
 use std::{
 	collections::{HashSet, VecDeque},
@@ -16,8 +13,8 @@ impl Server {
 		let _path_lock_guard = self.lock.lock_exclusive().await?;
 
 		// Create hash sets to track the marked expressions and blobs.
-		let mut marked_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
-		let mut marked_blob_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
+		let mut marked_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
+		let mut marked_blob_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 
 		self.database_transaction(|txn| {
 			// Mark the expressions and blobs.
@@ -51,8 +48,8 @@ impl Server {
 	#[allow(clippy::too_many_lines)]
 	fn mark(
 		txn: &rusqlite::Transaction,
-		marked_hashes: &mut HashSet<Hash, hash::BuildHasher>,
-		marked_blob_hashes: &mut HashSet<Hash, hash::BuildHasher>,
+		marked_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
+		marked_blob_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 	) -> Result<()> {
 		// Get the roots.
 		let sql = r#"
@@ -80,10 +77,22 @@ impl Server {
 			queue.push_back(root);
 		}
 		while let Some(hash) = queue.pop_front() {
+			// If this expression has already been marked, continue to avoid an infinite loop.
+			if marked_hashes.contains(&hash) {
+				continue;
+			}
+
 			// Mark this expression.
 			marked_hashes.insert(hash);
 
-			// TODO Add this expression's output to the queue.
+			// Get the expression.
+			let (expression, output_hash) =
+				Self::get_expression_with_output_with_transaction(txn, hash)?;
+
+			// Add this expression's output, if it has one, to the queue.
+			if let Some(output_hash) = output_hash {
+				queue.push_back(output_hash);
+			}
 
 			// Add this expression's evaluations to the queue.
 			let sql = r#"
@@ -94,11 +103,12 @@ impl Server {
 				where
 					parent_hash = $1
 			"#;
+			let params = (hash.to_string(),);
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;
 			let evaluations = statement
-				.query(())
+				.query(params)
 				.context("Failed to execute the query.")?
 				.and_then(|row| {
 					let hash = row.get::<_, String>(0)?;
@@ -110,18 +120,18 @@ impl Server {
 				queue.push_back(hash);
 			}
 
-			// Get the expression.
-			let expression = Self::get_expression_with_transaction(txn, hash)?;
-
 			// Add the expression's children to the queue.
 			match expression {
 				Expression::Null
 				| Expression::Bool(_)
 				| Expression::Number(_)
 				| Expression::String(_)
-				| Expression::Artifact(_)
 				| Expression::Fetch(_)
-				| Expression::Symlink(_) => continue,
+				| Expression::Symlink(_) => {},
+
+				Expression::Artifact(artifact) => {
+					queue.push_back(artifact.hash);
+				},
 
 				// If the expression is a file, mark its blob.
 				Expression::File(file) => {
@@ -142,8 +152,7 @@ impl Server {
 				},
 
 				Expression::Path(path) => {
-					let hash = path.artifact;
-					queue.push_back(hash);
+					queue.push_back(path.artifact);
 				},
 
 				Expression::Template(template) => {
@@ -192,7 +201,7 @@ impl Server {
 
 	fn sweep_expressions(
 		txn: &rusqlite::Transaction,
-		marked_hashes: &HashSet<Hash, hash::BuildHasher>,
+		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
 	) -> Result<()> {
 		// Get all expressions.
 		let sql = r#"
@@ -227,7 +236,7 @@ impl Server {
 	async fn sweep_blobs(
 		self: &Arc<Self>,
 		blobs_path: &Path,
-		marked_blob_hashes: &HashSet<Hash, hash::BuildHasher>,
+		marked_blob_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
 	) -> Result<()> {
 		// Read the files in the blobs directory and delete each file that is not marked.
 		let mut read_dir = tokio::fs::read_dir(blobs_path)

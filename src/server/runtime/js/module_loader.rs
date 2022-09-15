@@ -1,9 +1,5 @@
 use crate::{
-	expression::Artifact,
-	hash::{self, Hash},
-	lockfile::Lockfile,
-	manifest::Manifest,
-	server::Server,
+	expression::Artifact, hash::Hash, lockfile::Lockfile, manifest::Manifest, server::Server,
 };
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -29,7 +25,7 @@ struct State {
 	pub server: Arc<Server>,
 	pub main_runtime_handle: tokio::runtime::Handle,
 	pub modules: Mutex<HashMap<Url, Module, fnv::FnvBuildHasher>>,
-	pub lockfile_cache: Mutex<HashMap<Hash, Lockfile, hash::BuildHasher>>,
+	pub lockfile_cache: Mutex<HashMap<Hash, Lockfile, fnv::FnvBuildHasher>>,
 }
 
 struct Module {

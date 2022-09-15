@@ -30,7 +30,7 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to check in the package.")?;
 
 	// Add the expression.
-	let expression = client
+	let expression_hash = client
 		.add_expression(&tangram::expression::Expression::Target(
 			tangram::expression::Target {
 				lockfile: None,
@@ -43,7 +43,7 @@ pub async fn run(args: Args) -> Result<()> {
 
 	// Evaluate the expression.
 	let output_hash = client
-		.evaluate(expression)
+		.evaluate(expression_hash)
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
@@ -51,7 +51,7 @@ pub async fn run(args: Args) -> Result<()> {
 	let output = client.get_expression(output_hash).await?;
 	let output_json =
 		serde_json::to_string_pretty(&output).context("Failed to serialize the expression.")?;
-	println!("{output_json}");
+	println!("{expression_hash} => {output_json}");
 
 	Ok(())
 }

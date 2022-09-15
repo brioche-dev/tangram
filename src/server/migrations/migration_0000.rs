@@ -6,22 +6,18 @@ const SQL: &str = r#"
 	create table expressions (
 		hash blob primary key,
 		data blob not null,
-		output_hash blob,
-		foreign key (output_hash) references expressions (hash)
+		output_hash blob
 	);
 
 	create table evaluations (
 		parent_hash blob not null,
 		child_hash blob not null,
-		foreign key (parent_hash) references expressions (hash),
-		foreign key (child_hash) references expressions (hash),
 		primary key (parent_hash, child_hash)
 	);
 
 	create table roots (
 		hash blob primary key,
-		fragment bool not null,
-		foreign key (hash) references expressions (hash)
+		fragment bool not null
 	);
 
 	create table packages (
@@ -32,7 +28,6 @@ const SQL: &str = r#"
 		name text not null,
 		version text not null,
 		hash blob not null,
-		foreign key (hash) references expressions (hash),
 		primary key (name, version)
 	);
 "#;
