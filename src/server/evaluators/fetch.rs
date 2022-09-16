@@ -1,5 +1,5 @@
 use crate::{
-	expression::{Artifact, Expression, File},
+	expression::{Artifact, Expression},
 	hash::{Hash, Hasher},
 	server::{Evaluator, Server},
 };
@@ -44,66 +44,44 @@ impl Evaluator for Fetch {
 		};
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
-		// Retrieve an existing blob that matches the hash if one is available.
-		let artifact = if let Some(hash) = fetch.hash {
-			if server.get_blob(hash).await?.is_some() {
-				let expression = Expression::File(File {
-					blob_hash: hash,
-					executable: false,
-				});
-				Some(Artifact {
-					hash: expression.hash(),
-				})
-			} else {
-				None
-			}
-		} else {
-			None
+		// Create a temp.
+		let temp = server.create_temp().await?;
+		let temp_path = server.temp_path(&temp);
+
+		// Perform the request and get a reader for the body.
+		let response = self.http_client.get(fetch.url.clone()).send().await?;
+		let response = response.error_for_status()?;
+		let mut stream = response
+			.bytes_stream()
+			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
+
+		// Stream the body to the temp while computing its hash.
+		let mut hasher = Hasher::new();
+		let mut file = tokio::fs::File::create(&temp_path).await?;
+		let mut file_writer = tokio::io::BufWriter::new(&mut file);
+		while let Some(chunk) = stream.next().await {
+			let chunk = chunk?;
+			hasher.write_all(&chunk).await?;
+			file_writer.write_all(&chunk).await?;
+		}
+		let hash = hasher.finalize();
+		file_writer.flush().await?;
+
+		// Verify the hash.
+		match (fetch.hash, hash) {
+			(None, _) => bail!("Missing hash!\nReceived: {}\n", hash),
+			(Some(fetch_hash), hash) if fetch_hash != hash => {
+				bail!(
+					"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
+					fetch_hash,
+					hash,
+				);
+			},
+			_ => {},
 		};
 
-		// Download the contents of the URL if necessary.
-		let artifact = if let Some(artifact) = artifact {
-			artifact
-		} else {
-			// Create a temp.
-			let temp = server.create_temp().await?;
-			let temp_path = server.temp_path(&temp);
-
-			// Perform the request and get a reader for the body.
-			let response = self.http_client.get(fetch.url.clone()).send().await?;
-			let response = response.error_for_status()?;
-			let mut stream = response
-				.bytes_stream()
-				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
-
-			// Stream the body to the temp while computing its hash.
-			let mut hasher = Hasher::new();
-			let mut file = tokio::fs::File::create(&temp_path).await?;
-			let mut file_writer = tokio::io::BufWriter::new(&mut file);
-			while let Some(chunk) = stream.next().await {
-				let chunk = chunk?;
-				hasher.write_all(&chunk).await?;
-				file_writer.write_all(&chunk).await?;
-			}
-			let hash = hasher.finalize();
-			file_writer.flush().await?;
-
-			// Verify the hash.
-			match (fetch.hash, hash) {
-				(None, _) => bail!("Missing hash!\nReceived: {}\n", hash),
-				(Some(fetch_hash), hash) if fetch_hash != hash => {
-					bail!(
-						"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
-						fetch_hash,
-						hash,
-					);
-				},
-				_ => {},
-			};
-
-			// Checkin the temp.
-			server.checkin_temp(temp).await?
-		};
+		// Checkin the temp.
+		let artifact = server.checkin_temp(temp).await?;
 
 		tracing::trace!(r#"Fetched "{}" to artifact "{}"."#, fetch.url, artifact);
 

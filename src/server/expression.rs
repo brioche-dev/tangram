@@ -520,18 +520,6 @@ impl Server {
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
-		// Read the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let hash = if let ["expressions", hash] = path_components.as_slice() {
-			hash
-		} else {
-			bail!("Unexpected path.");
-		};
-		let _hash: Hash = match hash.parse() {
-			Ok(hash) => hash,
-			Err(_) => return Ok(bad_request()),
-		};
-
 		// Read and deserialize the request body.
 		let body = hyper::body::to_bytes(request.into_body())
 			.await

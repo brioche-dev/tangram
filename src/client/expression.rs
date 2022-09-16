@@ -34,8 +34,7 @@ impl Client {
 				Ok(outcome)
 			},
 			super::transport::InProcessOrHttp::Http(http) => {
-				let path = format!("/expressions/{}", expression.hash());
-				let outcome = http.post_json(&path, expression).await?;
+				let outcome = http.post_json("/expressions/", expression).await?;
 				Ok(outcome)
 			},
 		}

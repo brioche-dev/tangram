@@ -37,7 +37,7 @@ impl Evaluator for Target {
 			return Ok(None);
 		};
 
-		// Add the expressions.
+		// Add the js process expression.
 		let artifact_hash = server
 			.add_expression(&expression::Expression::Artifact(target.package))
 			.await?;

@@ -22,7 +22,7 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to create the client.")?;
 
 	// Create the expression.
-	let expression = client
+	let hash = client
 		.add_expression(&tangram::expression::Expression::Fetch(
 			tangram::expression::Fetch {
 				url: args.url,
@@ -34,7 +34,7 @@ pub async fn run(args: Args) -> Result<()> {
 
 	// Evaluate the expression.
 	let output_hash = client
-		.evaluate(expression)
+		.evaluate(hash)
 		.await
 		.context("Failed to evaluate the expression.")?;
 
