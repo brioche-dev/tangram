@@ -2,9 +2,8 @@ use crate::{
 	expression::{self, Expression},
 	hash::Hash,
 	server::{Evaluator, Server},
-	util::path_exists,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use camino::Utf8PathBuf;
 use std::sync::Arc;
@@ -37,21 +36,6 @@ impl Evaluator for Target {
 		} else {
 			return Ok(None);
 		};
-		// Create a fragment for the package.
-		let package_fragment = server
-			.create_fragment(target.package)
-			.await
-			.context("Failed to create the package artifact.")?;
-		let package_fragment_path = server.fragment_path(&package_fragment);
-
-		// Check if the package contains a tangram.js or tangram.ts file.
-		let path = if path_exists(&package_fragment_path.join("tangram.js")).await? {
-			Some(Utf8PathBuf::from("tangram.js"))
-		} else if path_exists(&package_fragment_path.join("tangram.ts")).await? {
-			Some(Utf8PathBuf::from("tangram.ts"))
-		} else {
-			bail!("The package does not contain a tangram.js or tangram.ts.");
-		};
 
 		// Add the expressions.
 		let artifact_hash = server
@@ -60,7 +44,7 @@ impl Evaluator for Target {
 		let module_hash = server
 			.add_expression(&expression::Expression::Path(expression::Path {
 				artifact: artifact_hash,
-				path: path.map(Into::into),
+				path: Some(Utf8PathBuf::from("tangram.js").into()),
 			}))
 			.await?;
 		let expression_hash = server

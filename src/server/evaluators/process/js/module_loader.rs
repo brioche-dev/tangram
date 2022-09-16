@@ -1,5 +1,6 @@
 use crate::{
 	expression::Artifact, hash::Hash, lockfile::Lockfile, manifest::Manifest, server::Server,
+	util::path_exists,
 };
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -204,14 +205,6 @@ async fn resolve_tangram(
 	} else {
 		None
 	};
-	let specifier_sub_path = if let Some(mut specifier_sub_path) = specifier_sub_path {
-		if !matches!(specifier_sub_path.extension(), Some("js" | "ts")) {
-			specifier_sub_path.set_extension("ts");
-		}
-		Some(specifier_sub_path)
-	} else {
-		None
-	};
 
 	// Retrieve the specifier's entry in the referrer's lockfile.
 	let lockfile_entry = referrer_lockfile
@@ -257,18 +250,9 @@ async fn resolve_tangram(
 #[allow(clippy::unused_async)]
 async fn resolve_tangram_module(
 	_state: &State,
-	mut specifier: deno_core::ModuleSpecifier,
+	specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
 ) -> Result<deno_core::ModuleSpecifier> {
-	// If the specifier does not end with a .js or .ts extension, add a .ts extension.
-	let path = specifier.path();
-	#[allow(clippy::case_sensitive_file_extension_comparisons)]
-	if !(path.ends_with(".js") || path.ends_with(".ts")) {
-		let mut path = path.to_owned();
-		path.push_str(".ts");
-		specifier.set_path(&path);
-	}
-
 	Ok(specifier)
 }
 
@@ -300,8 +284,20 @@ async fn load_tangram_module(
 		.strip_prefix("/")
 		.with_context(|| "The specifier must have a leading slash.")?;
 
-	// Read the module's source.
+	// Get the module path.
 	let module_path = fragment_path.join(specifier_path);
+	let (module_path, is_typescript) = if path_exists(&module_path).await? {
+		(module_path, false)
+	} else if path_exists(&module_path.with_extension("ts")).await? {
+		(module_path.with_extension("ts"), true)
+	} else {
+		bail!(
+			r#"Failed to find a module at path "{}"."#,
+			module_path.display(),
+		);
+	};
+
+	// Read the module's source.
 	let source = tokio::fs::read(&module_path).await.with_context(|| {
 		format!(
 			r#"Failed to read file at path "{}"."#,
@@ -311,7 +307,7 @@ async fn load_tangram_module(
 	let source = String::from_utf8(source)?;
 
 	// Transpile the code if necessary.
-	let code = if specifier_path.extension() == Some("ts") {
+	let code = if is_typescript {
 		// Parse the code.
 		let parsed_source = deno_ast::parse_module(deno_ast::ParseParams {
 			specifier: specifier.to_string(),
@@ -352,7 +348,7 @@ async fn load_tangram_module(
 
 	// Determine the module type.
 	let module_type = match specifier_path.extension() {
-		Some("js" | "ts") => deno_core::ModuleType::JavaScript,
+		Some("js") => deno_core::ModuleType::JavaScript,
 		Some("json") => deno_core::ModuleType::Json,
 		_ => {
 			bail!(r#"Cannot load module at path "{}"."#, module_path.display());
