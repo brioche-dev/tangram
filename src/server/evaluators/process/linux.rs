@@ -1,3 +1,4 @@
+use super::Process;
 use crate::{
 	expression::{self, Artifact, Expression},
 	hash::Hash,
@@ -14,7 +15,6 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
-use super::Process;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 impl Process {
@@ -56,32 +56,6 @@ impl Process {
 			parent_child_root_path.join("bin/sh"),
 		)
 		.await?;
-
-		// Create <chroot>/dev.
-		let child_dev_path = parent_child_root_path.join("dev");
-		tokio::fs::create_dir(&child_dev_path).await?;
-
-		// Create <chroot>/dev/null.
-		let child_dev_null_path = child_dev_path.join("null");
-		let child_dev_null_path_c_string =
-			CString::new(child_dev_null_path.as_os_str().as_bytes()).unwrap();
-		let dev_null_mode = 0o666 as mode_t;
-		let dev_null_dev = makedev(1, 3);
-		let ret = unsafe {
-			mknod(
-				child_dev_null_path_c_string.as_ptr(),
-				dev_null_mode,
-				dev_null_dev,
-			)
-		};
-		if ret != 0 {
-			bail!(anyhow!(std::io::Error::last_os_error())
-				.context("Failed to create sandbox /dev/null"));
-		}
-
-		// Create <chroot>/tmp
-		let child_tmp_path = parent_child_root_path.join("tmp");
-		tokio::fs::create_dir(&child_tmp_path).await?;
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -316,6 +290,48 @@ fn pre_exec(
 		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to mount the server path."));
 	}
 
+	// Mount /proc
+	let parent_proc = PathBuf::from("/proc");
+	let child_proc_path = parent_child_root_path.join("proc");
+	std::fs::create_dir_all(&child_proc_path).unwrap();
+	let parent_proc_c_string = CString::new(parent_proc.as_os_str().as_bytes()).unwrap();
+	let child_proc_path_c_string = CString::new(child_proc_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			parent_proc_c_string.as_ptr(),
+			child_proc_path_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to bindmount /proc"));
+	}
+
+	// Mount /dev
+	let parent_dev = PathBuf::from("/dev");
+	let child_dev_path = parent_child_root_path.join("dev");
+	std::fs::create_dir_all(&child_dev_path).unwrap();
+	let parent_dev_c_string = CString::new(parent_dev.as_os_str().as_bytes()).unwrap();
+	let child_dev_path_c_string = CString::new(child_dev_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			parent_dev_c_string.as_ptr(),
+			child_dev_path_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND | MS_REC,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to bindmount /dev"));
+	}
+
+	// Create <chroot>/tmp
+	let child_tmp_path = parent_child_root_path.join("tmp");
+	std::fs::create_dir_all(&child_tmp_path)?;
+
 	// Pivot the root.
 	let parent_child_root_path_c_string =
 		CString::new(parent_child_root_path.as_os_str().as_bytes()).unwrap();
@@ -357,12 +373,4 @@ fn pre_exec(
 	}
 
 	Ok(())
-}
-
-/// <https://docs.rs/nix/0.25.0/src/nix/sys/stat.rs.html#200>
-const fn makedev(major: u64, minor: u64) -> dev_t {
-	((major & 0xffff_f000) << 32)
-		| ((major & 0x0000_0fff) << 8)
-		| ((minor & 0xffff_ff00) << 12)
-		| (minor & 0x0000_00ff)
 }
