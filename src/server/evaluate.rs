@@ -1,15 +1,8 @@
 use super::error::bad_request;
-use crate::{expression::Expression, hash::Hash, server::Server};
-use anyhow::{bail, Context, Result};
+use crate::{hash::Hash, server::Server};
+use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
-use futures::{future::try_join_all, TryFutureExt};
 use std::sync::Arc;
-
-mod fetch;
-mod path;
-mod process;
-mod target;
-mod template;
 
 impl Server {
 	/// Evaluate an [`Expression`].
@@ -21,6 +14,7 @@ impl Server {
 		// Get the expression and the output hash if the expression was previously evaluated.
 		let (expression, output_hash) = self.get_expression_with_output(hash).await?;
 
+		// If the expression was previously evaluated, return the output hash.
 		if let Some(output_hash) = output_hash {
 			// Add the evaluation.
 			self.add_evaluation(parent_hash, hash).await?;
@@ -29,39 +23,22 @@ impl Server {
 			return Ok(output_hash);
 		}
 
-		let output_hash = match &expression {
-			Expression::Null
-			| Expression::Bool(_)
-			| Expression::Number(_)
-			| Expression::String(_)
-			| Expression::Artifact(_)
-			| Expression::Directory(_)
-			| Expression::File(_)
-			| Expression::Symlink(_)
-			| Expression::Dependency(_) => hash,
-			Expression::Path(path) => self.evaluate_path(hash, path).await?,
-			Expression::Template(template) => self.evaluate_template(hash, template).await?,
-			Expression::Fetch(fetch) => self.evaluate_fetch(fetch).await?,
-			Expression::Process(process) => self.evaluate_process(hash, process).await?,
-			Expression::Target(target) => self.evaluate_target(hash, target).await?,
-			Expression::Array(array) => {
-				let output_hashes =
-					try_join_all(array.iter().map(|item| self.evaluate(hash, *item))).await?;
-				self.add_expression(&Expression::Array(output_hashes))
-					.await?
-			},
-			Expression::Map(map) => {
-				let outputs = try_join_all(map.iter().map(|(key, value)| {
-					self.evaluate(*value, hash)
-						.map_ok(|value| (Arc::clone(key), value))
-				}))
-				.await?
-				.into_iter()
-				.collect();
-				let output = Expression::Map(outputs);
-				self.add_expression(&output).await?
-			},
-		};
+		// Try each evaluator until one is found that can evaluate the expression.
+		let mut output_hash = None;
+		for evaluator in &self.evaluators {
+			output_hash = evaluator.evaluate(self, hash, &expression).await?;
+			if output_hash.is_some() {
+				break;
+			}
+		}
+
+		// If none of the evaluators can evaluate the expression, return an error.
+		let output_hash = output_hash.ok_or_else(|| {
+			anyhow!(
+				r#"There was no evaluator for the expression with hash "{}"."#,
+				hash
+			)
+		})?;
 
 		// Set the expression output.
 		self.set_expression_output(hash, output_hash).await?;

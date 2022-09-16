@@ -1,23 +1,48 @@
-use crate::{expression, hash::Hash, server::Server, util::path_exists};
+use crate::{
+	expression::{self, Expression},
+	hash::Hash,
+	server::{Evaluator, Server},
+	util::path_exists,
+};
 use anyhow::{bail, Context, Result};
-use async_recursion::async_recursion;
+use async_trait::async_trait;
 use camino::Utf8PathBuf;
 use std::sync::Arc;
 
-impl Server {
-	#[allow(clippy::must_use_candidate)]
-	#[async_recursion]
-	pub async fn evaluate_target(
-		self: &Arc<Self>,
+pub struct Target;
+
+impl Target {
+	#[must_use]
+	pub fn new() -> Target {
+		Target {}
+	}
+}
+
+impl Default for Target {
+	fn default() -> Self {
+		Target::new()
+	}
+}
+
+#[async_trait]
+impl Evaluator for Target {
+	async fn evaluate(
+		&self,
+		server: &Arc<Server>,
 		hash: Hash,
-		target: &expression::Target,
-	) -> Result<Hash> {
+		expression: &Expression,
+	) -> Result<Option<Hash>> {
+		let target = if let Expression::Target(target) = expression {
+			target
+		} else {
+			return Ok(None);
+		};
 		// Create a fragment for the package.
-		let package_fragment = self
+		let package_fragment = server
 			.create_fragment(target.package)
 			.await
 			.context("Failed to create the package artifact.")?;
-		let package_fragment_path = self.fragment_path(&package_fragment);
+		let package_fragment_path = server.fragment_path(&package_fragment);
 
 		// Check if the package contains a tangram.js or tangram.ts file.
 		let path = if path_exists(&package_fragment_path.join("tangram.js")).await? {
@@ -29,16 +54,16 @@ impl Server {
 		};
 
 		// Add the expressions.
-		let artifact_hash = self
+		let artifact_hash = server
 			.add_expression(&expression::Expression::Artifact(target.package))
 			.await?;
-		let module_hash = self
+		let module_hash = server
 			.add_expression(&expression::Expression::Path(expression::Path {
 				artifact: artifact_hash,
 				path: path.map(Into::into),
 			}))
 			.await?;
-		let expression_hash = self
+		let expression_hash = server
 			.add_expression(&expression::Expression::Process(expression::Process::Js(
 				expression::JsProcess {
 					lockfile: target.lockfile.clone(),
@@ -50,8 +75,8 @@ impl Server {
 			.await?;
 
 		// Evaluate the expression.
-		let output = self.evaluate(expression_hash, hash).await?;
+		let output = server.evaluate(expression_hash, hash).await?;
 
-		Ok(output)
+		Ok(Some(output))
 	}
 }

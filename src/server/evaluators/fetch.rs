@@ -1,20 +1,52 @@
 use crate::{
-	expression::{self, Artifact, Expression, File},
+	expression::{Artifact, Expression, File},
 	hash::{Hash, Hasher},
-	server::Server,
+	server::{Evaluator, Server},
 };
 use anyhow::{anyhow, bail, Result};
+use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 use std::{path::Path, sync::Arc};
 use tokio::io::AsyncWriteExt;
 
-impl Server {
-	pub async fn evaluate_fetch(self: &Arc<Self>, fetch: &expression::Fetch) -> Result<Hash> {
+pub struct Fetch {
+	/// This HTTP client is for performing HTTP requests when running fetch expressions.
+	http_client: reqwest::Client,
+}
+
+impl Fetch {
+	#[must_use]
+	pub fn new() -> Fetch {
+		// Create the HTTP client.
+		let http_client = reqwest::Client::new();
+		Fetch { http_client }
+	}
+}
+
+impl Default for Fetch {
+	fn default() -> Self {
+		Fetch::new()
+	}
+}
+
+#[async_trait]
+impl Evaluator for Fetch {
+	async fn evaluate(
+		&self,
+		server: &Arc<Server>,
+		_hash: Hash,
+		expression: &Expression,
+	) -> Result<Option<Hash>> {
+		let fetch = if let Expression::Fetch(fetch) = expression {
+			fetch
+		} else {
+			return Ok(None);
+		};
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
 		// Retrieve an existing blob that matches the hash if one is available.
 		let artifact = if let Some(hash) = fetch.hash {
-			if self.get_blob(hash).await?.is_some() {
+			if server.get_blob(hash).await?.is_some() {
 				let expression = Expression::File(File {
 					blob_hash: hash,
 					executable: false,
@@ -34,8 +66,8 @@ impl Server {
 			artifact
 		} else {
 			// Create a temp.
-			let temp = self.create_temp().await?;
-			let temp_path = self.temp_path(&temp);
+			let temp = server.create_temp().await?;
+			let temp_path = server.temp_path(&temp);
 
 			// Perform the request and get a reader for the body.
 			let response = self.http_client.get(fetch.url.clone()).send().await?;
@@ -70,7 +102,7 @@ impl Server {
 			};
 
 			// Checkin the temp.
-			self.checkin_temp(temp).await?
+			server.checkin_temp(temp).await?
 		};
 
 		tracing::trace!(r#"Fetched "{}" to artifact "{}"."#, fetch.url, artifact);
@@ -82,7 +114,7 @@ impl Server {
 					anyhow!(r#"Could not determine archive format for "{}"."#, fetch.url)
 				})?;
 			tracing::trace!(r#"Unpacking the contents of URL "{}"."#, fetch.url);
-			let artifact = self.unpack(artifact, archive_format).await?;
+			let artifact = self.unpack(server, artifact, archive_format).await?;
 			tracing::trace!(
 				r#"Unpacked the contents of URL "{}" to artifact "{}"."#,
 				fetch.url,
@@ -95,23 +127,26 @@ impl Server {
 
 		// Create the output.
 		let output = Expression::Artifact(artifact);
-		let output_hash = self.add_expression(&output).await?;
+		let output_hash = server.add_expression(&output).await?;
 
-		Ok(output_hash)
+		Ok(Some(output_hash))
 	}
+}
 
+impl Fetch {
 	async fn unpack(
-		self: &Arc<Self>,
+		&self,
+		server: &Arc<Server>,
 		artifact: Artifact,
 		archive_format: ArchiveFormat,
 	) -> Result<Artifact> {
 		// Checkout the archive.
-		let archive_fragment = self.create_fragment(artifact).await?;
-		let archive_fragment_path = self.fragment_path(&archive_fragment);
+		let archive_fragment = server.create_fragment(artifact).await?;
+		let archive_fragment_path = server.fragment_path(&archive_fragment);
 
 		// Create a temp to unpack to.
-		let unpack_temp = self.create_temp().await?;
-		let unpack_temp_path = self.temp_path(&unpack_temp);
+		let unpack_temp = server.create_temp().await?;
+		let unpack_temp_path = server.temp_path(&unpack_temp);
 
 		// Unpack in a blocking task.
 		tokio::task::spawn_blocking(move || -> Result<_> {
@@ -161,7 +196,7 @@ impl Server {
 		.unwrap()?;
 
 		// Checkin the temp.
-		let artifact = self.checkin_temp(unpack_temp).await?;
+		let artifact = server.checkin_temp(unpack_temp).await?;
 
 		Ok(artifact)
 	}

@@ -1,6 +1,5 @@
 use super::{transport::InProcessOrHttp, Client};
-use crate::hash::Hash;
-use crate::{expression::Expression, server::expression::AddExpressionOutcome};
+use crate::{expression::Expression, hash::Hash, server::expression::AddExpressionOutcome};
 use anyhow::{bail, Context, Result};
 
 impl Client {

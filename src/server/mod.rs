@@ -1,10 +1,13 @@
 use self::{config::Config, lock::Lock};
 use crate::{
 	client::{self, Client},
+	expression::Expression,
+	hash::Hash,
 	util::path_exists,
 };
 use anyhow::Result;
 use async_recursion::async_recursion;
+use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::FutureExt;
 use hyperlocal::UnixServerExt;
@@ -19,37 +22,44 @@ pub mod blob;
 mod checkin;
 mod checkout;
 pub mod config;
-pub mod db;
+mod db;
 mod error;
-pub mod evaluate;
+mod evaluate;
+mod evaluators;
 pub mod expression;
-pub mod fragment;
+mod fragment;
 mod gc;
 mod lock;
-pub mod migrations;
+mod migrations;
 mod package;
 mod package_versions;
-pub mod runtime;
-pub mod temp;
+mod temp;
 
 pub struct Server {
 	/// This is the path to the directory where the server stores its data.
 	path: PathBuf,
 
-	/// We use a file with an advisory lock to ensure exclusive and non-exclusive access to the server path as necessary.
+	/// This lock can be used to acquire exclusive and non-exclusive access to the server path as necessary.
 	lock: Lock,
 
 	/// This is the connection pool for the server's SQLite database.
 	database_connection_pool: deadpool_sqlite::Pool,
 
-	/// This local pool handle is for running tasks that must be pinned to a single thread.
-	local_pool_handle: tokio_util::task::LocalPoolHandle,
-
-	/// This HTTP client is for performing HTTP requests when running fetch expressions.
-	http_client: reqwest::Client,
-
-	/// These are the peers.
+	/// These are the server's peers.
 	peers: Vec<Client>,
+
+	/// These are the evaluators.
+	evaluators: Vec<Box<dyn Send + Sync + Evaluator>>,
+}
+
+#[async_trait]
+pub trait Evaluator {
+	async fn evaluate(
+		&self,
+		server: &Arc<Server>,
+		hash: Hash,
+		expression: &Expression,
+	) -> Result<Option<Hash>>;
 }
 
 impl Server {
@@ -72,14 +82,7 @@ impl Server {
 		let database_connection_pool =
 			tokio::task::block_in_place(|| Server::create_database_pool(database_path))?;
 
-		// Create the local task pool.
-		let available_parallelism = std::thread::available_parallelism()?.into();
-		let local_pool_handle = tokio_util::task::LocalPoolHandle::new(available_parallelism);
-
-		// Create the HTTP client.
-		let http_client = reqwest::Client::new();
-
-		// // Create the peer Clients.
+		// Create the peer clients.
 		let peers = try_join_all(config.peers.into_iter().map(|url| {
 			Client::new_with_config(client::config::Config {
 				transport: client::config::Transport::Tcp { url },
@@ -87,14 +90,25 @@ impl Server {
 		}))
 		.await?;
 
+		// Create the evaluators.
+		let evaluators: Vec<Box<dyn Send + Sync + Evaluator>> = vec![
+			Box::new(self::evaluators::array::Array::new()),
+			Box::new(self::evaluators::fetch::Fetch::new()),
+			Box::new(self::evaluators::map::Map::new()),
+			Box::new(self::evaluators::path::Path::new()),
+			Box::new(self::evaluators::primitive::Primitive::new()),
+			Box::new(self::evaluators::process::Process::new()),
+			Box::new(self::evaluators::target::Target::new()),
+			Box::new(self::evaluators::template::Template::new()),
+		];
+
 		// Create the server.
 		let server = Server {
 			path,
 			lock,
 			database_connection_pool,
-			local_pool_handle,
-			http_client,
 			peers,
+			evaluators,
 		};
 
 		// Remove the socket file if it exists.

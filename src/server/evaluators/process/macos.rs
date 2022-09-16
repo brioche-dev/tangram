@@ -1,3 +1,4 @@
+use super::Process;
 use crate::{server::Server, system::System};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
@@ -10,15 +11,16 @@ use std::{
 	sync::Arc,
 };
 
-impl Server {
+impl Process {
 	pub(super) async fn run_macos_process(
-		self: &Arc<Self>,
+		&self,
+		server: &Arc<Server>,
 		_system: System,
 		envs: BTreeMap<String, String>,
 		command: PathBuf,
 		args: Vec<String>,
 	) -> Result<()> {
-		let server_path = self.path().to_owned();
+		let server_path = server.path().to_owned();
 
 		// Create the process.
 		let mut process = tokio::process::Command::new(command);

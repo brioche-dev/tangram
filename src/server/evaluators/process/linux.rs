@@ -14,43 +14,45 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
+use super::Process;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-impl Server {
+impl Process {
 	pub(super) async fn run_linux_process(
-		self: &Arc<Self>,
+		&self,
+		server: &Arc<Server>,
 		system: System,
 		envs: BTreeMap<String, String>,
 		command: PathBuf,
 		args: Vec<String>,
 		parent_hash: Hash,
 	) -> Result<()> {
-		let server_path = self.path().to_owned();
+		let server_path = server.path().to_owned();
 
 		// Create a temp for the chroot.
-		let temp = self
+		let temp = server
 			.create_temp()
 			.await
 			.context("Failed to create a temp for the chroot.")?;
 
 		// Create the chroot directory.
-		let parent_child_root_path = self.temp_path(&temp);
+		let parent_child_root_path = server.temp_path(&temp);
 		tokio::fs::create_dir(&parent_child_root_path)
 			.await
 			.context("Failed to create the chroot directory.")?;
 
 		// Create a symlink from /bin/sh in the chroot to a fragment with statically-linked bash.
 		let bash_artifact = self
-			.bash_artifact(system, parent_hash)
+			.bash_artifact(server, system, parent_hash)
 			.await
 			.context("Failed to evaluate the bash artifact.")?;
-		let bash_fragment = self
+		let bash_fragment = server
 			.create_fragment(bash_artifact)
 			.await
 			.context("Failed to create the bash fragment.")?;
 		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
 		tokio::fs::symlink(
-			self.fragment_path(&bash_fragment).join("bin/bash"),
+			server.fragment_path(&bash_fragment).join("bin/bash"),
 			parent_child_root_path.join("bin/sh"),
 		)
 		.await?;
@@ -169,7 +171,8 @@ impl Server {
 	}
 
 	async fn bash_artifact(
-		self: &Arc<Self>,
+		&self,
+		server: &Arc<Server>,
 		system: System,
 		parent_hash: Hash,
 	) -> Result<Artifact> {
@@ -187,7 +190,7 @@ impl Server {
 		};
 
 		// Create the expression.
-		let hash = self
+		let hash = server
 			.add_expression(&Expression::Fetch(expression::Fetch {
 				url: url.parse().unwrap(),
 				hash: Some(hash.parse().unwrap()),
@@ -197,12 +200,12 @@ impl Server {
 			.context("Failed to add the bash expression.")?;
 
 		// Evaluate the expression.
-		let output_hash = self
+		let output_hash = server
 			.evaluate(hash, parent_hash)
 			.await
 			.context("Failed to evaluate the expression.")?;
 
-		let output = self.get_expression(output_hash).await?;
+		let output = server.get_expression(output_hash).await?;
 
 		let artifact = match output {
 			Expression::Artifact(artifact) => artifact,
