@@ -70,7 +70,7 @@ pub async fn run(args: Args) -> Result<()> {
 	// Get the path to the fragment.
 	let package_path = server.fragment_path(&package_fragment);
 
-	// Materialize the package to read the manifest.
+	// Read the package manifest.
 	let manifest_path = package_path.join("tangram.json");
 	let manifest = tokio::fs::read(&manifest_path)
 		.await
