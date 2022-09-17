@@ -179,8 +179,19 @@ impl Process {
 		let undefined = v8::undefined(&mut try_catch_scope);
 
 		// Evaluate the args and move them to v8.
-		let args = process
-			.args
+		let args = try_join_all(process.args.iter().map(|arg| {
+			let server = Arc::clone(&server);
+			async move {
+				let expression = server.get_expression(*arg).await?;
+				match expression {
+					Expression::String(s) => Ok::<_, anyhow::Error>(s),
+					_ => bail!(anyhow!("Args must evaluate to strings.")),
+				}
+			}
+		}))
+		.await?;
+
+		let args = args
 			.iter()
 			.map(|arg| {
 				let arg = serde_v8::to_v8(&mut try_catch_scope, arg)?;

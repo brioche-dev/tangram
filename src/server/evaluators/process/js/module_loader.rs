@@ -348,7 +348,7 @@ async fn load_tangram_module(
 
 	// Determine the module type.
 	let module_type = match specifier_path.extension() {
-		Some("js") => deno_core::ModuleType::JavaScript,
+		Some("js") | None => deno_core::ModuleType::JavaScript,
 		Some("json") => deno_core::ModuleType::Json,
 		_ => {
 			bail!(r#"Cannot load module at path "{}"."#, module_path.display());

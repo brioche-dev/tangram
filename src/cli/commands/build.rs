@@ -2,7 +2,7 @@ use crate::config::Config;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tangram::client::Client;
+use tangram::{client::Client, system::System};
 
 #[derive(Parser)]
 pub struct Args {
@@ -12,6 +12,8 @@ pub struct Args {
 	package: PathBuf,
 	#[clap(default_value = "default")]
 	name: String,
+	#[clap(long)]
+	system: Option<System>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -30,13 +32,24 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to check in the package.")?;
 
 	// Add the expression.
+	let args_hashes = match args.system {
+		Some(system) => {
+			let system_hash = client
+				.add_expression(&tangram::expression::Expression::make_string(
+					system.to_string(),
+				))
+				.await?;
+			vec![system_hash]
+		},
+		None => vec![],
+	};
 	let expression_hash = client
 		.add_expression(&tangram::expression::Expression::Target(
 			tangram::expression::Target {
 				lockfile: None,
 				package,
 				name: args.name,
-				args: vec![],
+				args: args_hashes,
 			},
 		))
 		.await?;

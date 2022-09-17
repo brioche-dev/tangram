@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 #[derive(
 	Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
@@ -40,5 +40,19 @@ impl std::fmt::Display for System {
 			System::Arm64Macos => "arm64_macos",
 		};
 		write!(f, "{system}")
+	}
+}
+
+impl std::str::FromStr for System {
+	type Err = anyhow::Error;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s {
+			"amd64_linux" => Ok(System::Amd64Linux),
+			"amd64_macos" => Ok(System::Amd64Macos),
+			"arm64_linux" => Ok(System::Arm64Linux),
+			"arm64_macos" => Ok(System::Arm64Macos),
+			"host" => Ok(System::host()?),
+			_ => Err(anyhow!("Unrecognized system {s}")),
+		}
 	}
 }

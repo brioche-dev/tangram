@@ -300,4 +300,8 @@ impl Expression {
 	pub fn hash(&self) -> Hash {
 		Hash::new(serde_json::to_vec(self).unwrap())
 	}
+	#[must_use]
+	pub fn make_string(s: impl AsRef<str>) -> Self {
+		Expression::String(Arc::from(s.as_ref()))
+	}
 }
