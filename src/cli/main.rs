@@ -28,12 +28,12 @@ enum Subcommand {
 	Checkin(commands::checkin::Args),
 	Checkout(commands::checkout::Args),
 	Fetch(commands::fetch::Args),
-	GeneratePackage(commands::generate_package::Args),
 	Gc(commands::gc::Args),
+	New(commands::new::Args),
 	Publish(commands::publish::Args),
 	Run(commands::run::Args),
-	Server(commands::server::Args),
 	Search(commands::search::Args),
+	Server(commands::server::Args),
 	Shell(commands::shell::Args),
 }
 
@@ -54,13 +54,13 @@ async fn main() -> Result<()> {
 		Subcommand::Build(args) => commands::build::run(args).boxed(),
 		Subcommand::Checkin(args) => commands::checkin::run(args).boxed(),
 		Subcommand::Checkout(args) => commands::checkout::run(args).boxed(),
-		Subcommand::Publish(args) => commands::publish::run(args).boxed(),
 		Subcommand::Fetch(args) => commands::fetch::run(args).boxed(),
-		Subcommand::GeneratePackage(args) => commands::generate_package::run(args).boxed(),
 		Subcommand::Gc(args) => commands::gc::run(args).boxed(),
+		Subcommand::New(args) => commands::new::run(args).boxed(),
+		Subcommand::Publish(args) => commands::publish::run(args).boxed(),
 		Subcommand::Run(args) => commands::run::run(args).boxed(),
-		Subcommand::Server(args) => commands::server::run(args).boxed(),
 		Subcommand::Search(args) => commands::search::run(args).boxed(),
+		Subcommand::Server(args) => commands::server::run(args).boxed(),
 		Subcommand::Shell(args) => commands::shell::run(args).boxed(),
 	}
 	.await?;
