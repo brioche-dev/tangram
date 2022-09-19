@@ -3,6 +3,7 @@ pub mod checkin;
 pub mod checkout;
 pub mod fetch;
 pub mod gc;
+pub mod generate_package;
 pub mod publish;
 pub mod run;
 pub mod search;
