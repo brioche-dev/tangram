@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 #[must_use]
-pub fn global_config_directory_path() -> Option<PathBuf> {
+pub fn _global_config_directory_path() -> Option<PathBuf> {
 	if cfg!(target_os = "linux") {
 		Some(PathBuf::from("/etc"))
 	} else if cfg!(target_os = "macos") {
@@ -21,7 +21,7 @@ pub fn _global_data_directory_path() -> Option<PathBuf> {
 }
 
 #[must_use]
-pub fn user_config_directory_path() -> Option<PathBuf> {
+pub fn _user_config_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
 		Some(home_directory_path()?.join(".config"))
 	} else {
@@ -30,7 +30,7 @@ pub fn user_config_directory_path() -> Option<PathBuf> {
 }
 
 #[must_use]
-pub fn user_data_directory_path() -> Option<PathBuf> {
+pub fn _user_data_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
 		Some(home_directory_path()?.join(".local").join("share"))
 	} else {
