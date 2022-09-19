@@ -20,6 +20,11 @@ pub async fn run(args: Args) -> Result<()> {
 		path.push(path_arg);
 	}
 
+	// Ensure the path exists.
+	tokio::fs::create_dir_all(&path)
+		.await
+		.with_context(|| format!(r#"Failed to create the directory at "{}"."#, path.display()))?;
+
 	// Get the package name and version.
 	let name = args.name;
 	let version = args.version;
@@ -79,7 +84,7 @@ pub async fn run(args: Args) -> Result<()> {
 
 	// Write the files.
 	for (path, contents) in files {
-		tokio::fs::write(path, contents).await?;
+		tokio::fs::write(&path, &contents).await?;
 	}
 
 	Ok(())
