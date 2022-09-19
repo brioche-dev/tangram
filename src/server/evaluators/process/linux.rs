@@ -332,12 +332,11 @@ fn pre_exec(
 	let child_tmp_path = parent_child_root_path.join("tmp");
 	std::fs::create_dir_all(&child_tmp_path)?;
 	let child_tmp_path_c_string = CString::new(child_tmp_path.as_os_str().as_bytes()).unwrap();
-	let none_c_string = CString::new("none").unwrap();
 	let tmpfs_c_string = CString::new("tmpfs").unwrap();
 	let ret = unsafe {
 		mount(
-			none_c_string.as_ptr(),
-			child_dev_path_c_string.as_ptr(),
+			tmpfs_c_string.as_ptr(),
+			child_tmp_path_c_string.as_ptr(),
 			tmpfs_c_string.as_ptr(),
 			0,
 			std::ptr::null(),
