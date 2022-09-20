@@ -1,3 +1,4 @@
+pub mod autoshell;
 pub mod build;
 pub mod checkin;
 pub mod checkout;

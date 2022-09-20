@@ -30,6 +30,11 @@ const SQL: &str = r#"
 		hash blob not null,
 		primary key (name, version)
 	);
+
+	create table autoshells (
+		path text not null,
+		primary key (path)
+	);
 "#;
 
 pub struct Migration;

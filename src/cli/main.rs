@@ -35,6 +35,7 @@ enum Subcommand {
 	Search(commands::search::Args),
 	Server(commands::server::Args),
 	Shell(commands::shell::Args),
+	Autoshell(commands::autoshell::Autoshell),
 }
 
 #[tokio::main]
@@ -62,6 +63,7 @@ async fn main() -> Result<()> {
 		Subcommand::Search(args) => commands::search::run(args).boxed(),
 		Subcommand::Server(args) => commands::server::run(args).boxed(),
 		Subcommand::Shell(args) => commands::shell::run(args).boxed(),
+		Subcommand::Autoshell(subcommand) => commands::autoshell::run(subcommand).boxed(),
 	}
 	.await?;
 	Ok(())

@@ -8,6 +8,7 @@ use async_recursion::async_recursion;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+mod autoshell;
 mod cache;
 pub mod checkin;
 mod checkin_package;
