@@ -1,6 +1,9 @@
 use super::transport::InProcessOrHttp;
-use crate::client::Client;
-use anyhow::{anyhow, bail, Context, Result};
+use crate::{
+	client::Client, server::autoshell::CreateAutoshellRequest,
+	server::autoshell::DeleteAutoshellRequest,
+};
+use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 impl Client {
@@ -12,7 +15,10 @@ impl Client {
 			},
 
 			InProcessOrHttp::Http(http) => {
-				http.post_json("/autoshells", &path).await?;
+				let body = CreateAutoshellRequest {
+					path: path.to_path_buf(),
+				};
+				http.post_json("/autoshells/", &body).await?;
 				Ok(())
 			},
 		}
@@ -26,17 +32,17 @@ impl Client {
 			},
 
 			InProcessOrHttp::Http(http) => {
-				let path = path.to_str().ok_or_else(|| anyhow!("Path must be utf-8"))?;
-				// Build the URL.
-				let mut url = http.base_url();
-				url.set_path(&format!("/autoshells/${path}"));
+				let request = DeleteAutoshellRequest {
+					path: path.to_path_buf(),
+				};
+				let request = serde_json::to_vec(&request)?;
 
 				// Create the request.
 				let request = http::Request::builder()
 					.method(http::Method::DELETE)
-					.uri(url.to_string())
+					.uri("/autoshells/")
 					.header(http::header::CONTENT_TYPE, "application/json")
-					.body(hyper::Body::empty())
+					.body(hyper::Body::from(request))
 					.unwrap();
 
 				// Send the request.
@@ -66,7 +72,7 @@ impl Client {
 			},
 
 			InProcessOrHttp::Http(http) => {
-				let paths = http.get_json("/autoshells").await?;
+				let paths = http.get_json("/autoshells/").await?;
 				Ok(paths)
 			},
 		}

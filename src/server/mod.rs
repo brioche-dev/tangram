@@ -205,13 +205,13 @@ impl Server {
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
 		let response = match (method, path_components.as_slice()) {
-			(http::Method::GET, ["autoshells"]) => {
+			(http::Method::GET, ["autoshells", ""]) => {
 				Some(self.handle_get_autoshells_request(request).boxed())
 			},
-			(http::Method::POST, ["autoshells"]) => {
+			(http::Method::POST, ["autoshells", ""]) => {
 				Some(self.handle_create_autoshell_request(request).boxed())
 			},
-			(http::Method::DELETE, ["autoshells", _]) => {
+			(http::Method::DELETE, ["autoshells", ""]) => {
 				Some(self.handle_delete_autoshell_request(request).boxed())
 			},
 			(http::Method::GET, ["blobs", _]) => {

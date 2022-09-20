@@ -1,9 +1,19 @@
 use super::Server;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CreateAutoshellRequest {
+	pub path: PathBuf,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct DeleteAutoshellRequest {
+	pub path: PathBuf,
+}
 
 impl Server {
 	pub async fn create_autoshell(self: &Arc<Self>, path: &Path) -> Result<()> {
@@ -86,11 +96,13 @@ impl Server {
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
-		// Parse the request body.
+		// Read the body.
 		let body = hyper::body::to_bytes(request.into_body())
 			.await
-			.context("Failed to read the request body.")?;
-		let path: PathBuf =
+			.context("Failed to read request body.")?;
+
+		// Deserialize the request body.
+		let CreateAutoshellRequest { path } =
 			serde_json::from_slice(&body).context("Failed to deserialize the request body.")?;
 
 		// Create the autoshell.
@@ -109,14 +121,14 @@ impl Server {
 		self: &Arc<Self>,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
-		// Read the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let path = if let &["autoshells", path] = path_components.as_slice() {
-			path
-		} else {
-			bail!("Unexpected path.");
-		};
-		let path: PathBuf = path.parse().context("Path must be utf-8")?;
+		// Read the body.
+		let body = hyper::body::to_bytes(request.into_body())
+			.await
+			.context("Failed to read request body.")?;
+
+		// Deserialize the request body.
+		let DeleteAutoshellRequest { path } =
+			serde_json::from_slice(&body).context("Failed to deserialize the request body.")?;
 
 		// Delete the autoshell.
 		self.delete_autoshell(&path).await?;
