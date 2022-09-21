@@ -112,11 +112,7 @@ impl Cache {
 
 		// Create the expression and add it to the cache.
 		let expression = Expression::Directory(Directory { entries });
-		let hash = expression.hash();
-		self.cache
-			.write()
-			.unwrap()
-			.insert(path.to_owned(), (hash, expression));
+		self.add_expression(path, expression);
 
 		Ok(())
 	}
@@ -139,11 +135,7 @@ impl Cache {
 			blob_hash,
 			executable,
 		});
-		let hash = expression.hash();
-		self.cache
-			.write()
-			.unwrap()
-			.insert(path.to_owned(), (hash, expression));
+		self.add_expression(path, expression);
 
 		Ok(())
 	}
@@ -181,12 +173,17 @@ impl Cache {
 				.context("Failed to parse the last path component as a hash.")?;
 			Expression::Dependency(Dependency { artifact: hash })
 		};
-		let hash = expression.hash();
+		self.add_expression(path, expression);
+
+		Ok(())
+	}
+
+	fn add_expression(&self, path: &Path, expression: Expression) {
+		let data = serde_json::to_vec(&expression).unwrap();
+		let hash = Hash::new(&data);
 		self.cache
 			.write()
 			.unwrap()
 			.insert(path.to_owned(), (hash, expression));
-
-		Ok(())
 	}
 }

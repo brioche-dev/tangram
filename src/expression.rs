@@ -137,10 +137,3 @@ pub struct Target {
 pub type Array = Vec<Hash>;
 
 pub type Map = BTreeMap<Arc<str>, Hash>;
-
-impl Expression {
-	#[must_use]
-	pub fn hash(&self) -> Hash {
-		Hash::new(serde_json::to_vec(self).unwrap())
-	}
-}
