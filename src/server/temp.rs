@@ -1,4 +1,4 @@
-use crate::{expression::Artifact, id, server::Server};
+use crate::{hash::Hash, id, server::Server};
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use std::{path::PathBuf, sync::Arc};
@@ -41,7 +41,7 @@ impl Server {
 		self: &Arc<Self>,
 		temp: &mut Temp,
 		path: &Utf8Path,
-		artifact: Artifact,
+		artifact: Hash,
 	) -> Result<()> {
 		// Create a fragment for the dependency.
 		let dependency_fragment = self.create_fragment(artifact).await?;
@@ -58,7 +58,7 @@ impl Server {
 		Ok(())
 	}
 
-	pub async fn checkin_temp(self: &Arc<Self>, temp: Temp) -> Result<Artifact> {
+	pub async fn checkin_temp(self: &Arc<Self>, temp: Temp) -> Result<Hash> {
 		let path = self.temp_path(&temp);
 		let artifact = self.checkin(&path).await?;
 		Ok(artifact)

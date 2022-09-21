@@ -1,7 +1,7 @@
 use super::Server;
 use crate::{
 	client::{checkout::DependencyHandlerFn, Client},
-	expression::Artifact,
+	hash::Hash,
 };
 use anyhow::Result;
 use std::{path::Path, sync::Arc};
@@ -9,7 +9,7 @@ use std::{path::Path, sync::Arc};
 impl Server {
 	pub(super) async fn checkout(
 		self: &Arc<Self>,
-		artifact: Artifact,
+		artifact: Hash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {

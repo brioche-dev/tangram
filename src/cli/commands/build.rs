@@ -35,8 +35,8 @@ pub async fn run(args: Args) -> Result<()> {
 	let args_hashes = match args.system {
 		Some(system) => {
 			let system_hash = client
-				.add_expression(&tangram::expression::Expression::make_string(
-					system.to_string(),
+				.add_expression(&tangram::expression::Expression::String(
+					system.to_string().into(),
 				))
 				.await?;
 			vec![system_hash]

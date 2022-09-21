@@ -1,6 +1,6 @@
 use super::Process;
 use crate::{
-	expression::{self, Artifact, Expression},
+	expression::{self, Expression},
 	hash::Hash,
 	server::Server,
 	system::System,
@@ -149,7 +149,7 @@ impl Process {
 		server: &Arc<Server>,
 		system: System,
 		parent_hash: Hash,
-	) -> Result<Artifact> {
+	) -> Result<Hash> {
 		// Get the URL and hash for the system.
 		let (url, hash) = match system {
 			System::Amd64Linux => (
@@ -179,14 +179,7 @@ impl Process {
 			.await
 			.context("Failed to evaluate the expression.")?;
 
-		let output = server.get_expression(output_hash).await?;
-
-		let artifact = match output {
-			Expression::Artifact(artifact) => artifact,
-			_ => bail!("Expected the value to be an artifact."),
-		};
-
-		Ok(artifact)
+		Ok(output_hash)
 	}
 }
 

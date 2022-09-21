@@ -5,7 +5,7 @@ use crate::{
 	hash::Hash,
 	util::rmrf,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use async_recursion::async_recursion;
 use futures::{future::try_join_all, Future, TryStreamExt};
 use std::{os::unix::prelude::PermissionsExt, path::Path, pin::Pin, sync::Arc};
@@ -17,15 +17,24 @@ pub type DependencyHandlerFn =
 impl Client {
 	pub async fn checkout(
 		&self,
-		artifact: Artifact,
+		artifact: Hash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
+		// Get the artifact expression.
+		let expression = self.get_expression(artifact).await?;
+
+		// Get the hash.
+		let hash = match expression {
+			Expression::Artifact(Artifact { hash }) => hash,
+			_ => bail!("Expected the expression to be an artifact."),
+		};
+
 		// Create a cache.
 		let cache = Cache::new(path, Arc::clone(&self.file_system_semaphore));
 
 		// Call the recursive checkout function on the root expression.
-		self.checkout_path(&cache, artifact.hash, path, dependency_handler)
+		self.checkout_path(&cache, hash, path, dependency_handler)
 			.await?;
 
 		Ok(())
@@ -38,18 +47,8 @@ impl Client {
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
-		// Get the expression from the server.
-		let expression = match self.transport.as_in_process_or_http() {
-			super::transport::InProcessOrHttp::InProcess(server) => {
-				server.try_get_expression(hash).await?
-			},
-			super::transport::InProcessOrHttp::Http(http) => {
-				let path = format!("/expressions/{hash}");
-				http.get_json(&path).await?
-			},
-		};
-		let expression =
-			expression.ok_or_else(|| anyhow!(r#"Failed to find expression "{hash}"."#))?;
+		// Get the expression.
+		let expression = self.get_expression(hash).await?;
 
 		// Call the appropriate function for the expression's type.
 		match expression {

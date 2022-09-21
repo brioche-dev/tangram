@@ -1,5 +1,5 @@
 use crate::{
-	expression::{Artifact, Dependency, Directory, Expression, File, Symlink},
+	expression::{Dependency, Directory, Expression, File, Symlink},
 	hash::{Hash, Hasher},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -121,7 +121,7 @@ impl Cache {
 		Ok(())
 	}
 
-	async fn cache_for_file(&self, path: &Path, metadata: &Metadata) -> Result<Hash> {
+	async fn cache_for_file(&self, path: &Path, metadata: &Metadata) -> Result<()> {
 		// Compute the file's blob hash.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut file = tokio::fs::File::open(path).await?;
@@ -145,10 +145,10 @@ impl Cache {
 			.unwrap()
 			.insert(path.to_owned(), (hash, expression));
 
-		Ok(hash)
+		Ok(())
 	}
 
-	async fn cache_for_symlink(&self, path: &Path, _metadata: &Metadata) -> Result<Hash> {
+	async fn cache_for_symlink(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
 		// Read the symlink.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let target = tokio::fs::read_link(path)
@@ -178,10 +178,8 @@ impl Cache {
 				.ok_or_else(|| anyhow!("Invalid symlink."))?
 				.as_str()
 				.parse()
-				.context("Failed to parse last path component as artifact.")?;
-			Expression::Dependency(Dependency {
-				artifact: Artifact { hash },
-			})
+				.context("Failed to parse the last path component as a hash.")?;
+			Expression::Dependency(Dependency { artifact: hash })
 		};
 		let hash = expression.hash();
 		self.cache
@@ -189,6 +187,6 @@ impl Cache {
 			.unwrap()
 			.insert(path.to_owned(), (hash, expression));
 
-		Ok(hash)
+		Ok(())
 	}
 }

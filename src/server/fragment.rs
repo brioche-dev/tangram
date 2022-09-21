@@ -1,8 +1,4 @@
-use crate::{
-	expression::{Artifact, Dependency},
-	server::Server,
-	util::path_exists,
-};
+use crate::{expression::Dependency, hash::Hash, server::Server, util::path_exists};
 use anyhow::{anyhow, Context, Result};
 use async_recursion::async_recursion;
 use futures::FutureExt;
@@ -13,25 +9,18 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct Fragment {
-	artifact: Artifact,
-}
-
-impl Fragment {
-	#[must_use]
-	pub fn artifact(&self) -> &Artifact {
-		&self.artifact
-	}
+	pub artifact_hash: Hash,
 }
 
 impl Server {
 	#[async_recursion]
 	#[must_use]
-	pub async fn create_fragment(self: &Arc<Self>, artifact: Artifact) -> Result<Fragment> {
+	pub async fn create_fragment(self: &Arc<Self>, artifact_hash: Hash) -> Result<Fragment> {
 		// Get the fragment path.
 		let fragment_path = self
 			.path()
 			.join("fragments")
-			.join(artifact.hash.to_string());
+			.join(artifact_hash.to_string());
 
 		// Perform the checkout if necessary.
 		if !path_exists(&fragment_path).await? {
@@ -81,7 +70,7 @@ impl Server {
 			};
 
 			// Perform the checkout.
-			self.checkout(artifact, &temp_path, Some(&dependency_handler))
+			self.checkout(artifact_hash, &temp_path, Some(&dependency_handler))
 				.await
 				.context("Failed to perform the checkout.")?;
 
@@ -101,13 +90,13 @@ impl Server {
 			};
 		}
 
-		Ok(Fragment { artifact })
+		Ok(Fragment { artifact_hash })
 	}
 
 	#[must_use]
 	pub fn fragment_path(self: &Arc<Self>, fragment: &Fragment) -> PathBuf {
 		self.path()
 			.join("fragments")
-			.join(fragment.artifact().hash.to_string())
+			.join(fragment.artifact_hash.to_string())
 	}
 }

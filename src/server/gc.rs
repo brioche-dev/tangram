@@ -147,8 +147,7 @@ impl Server {
 
 				// If the expression is a dependency, add the dependent expression to the queue.
 				Expression::Dependency(dependency) => {
-					let hash = dependency.artifact.hash;
-					queue.push_back(hash);
+					queue.push_back(dependency.artifact);
 				},
 
 				Expression::Path(path) => {
@@ -180,7 +179,7 @@ impl Server {
 				},
 
 				Expression::Target(target) => {
-					queue.push_back(target.package.hash);
+					queue.push_back(target.package);
 					queue.extend(target.args);
 				},
 

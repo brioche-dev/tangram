@@ -108,12 +108,6 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
-	// Retrieve the artifact from the output.
-	let artifact = match client.get_expression(output_hash).await? {
-		tangram::expression::Expression::Artifact(artifact) => artifact,
-		_ => bail!("The target must evaluate to an artifact."),
-	};
-
 	// Check that the client is connected to an in-process server.
 	let server = match client.as_in_process() {
 		Some(server) => server,
@@ -122,8 +116,8 @@ pub async fn run(args: Args) -> Result<()> {
 		},
 	};
 
-	// Create a fragment for the artifact.
-	let fragment = server.create_fragment(artifact).await?;
+	// Create a fragment for the output.
+	let fragment = server.create_fragment(output_hash).await?;
 
 	// Get the path to the fragment.
 	let path = server.fragment_path(&fragment);

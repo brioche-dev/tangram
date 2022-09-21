@@ -1,6 +1,6 @@
 use crate::{
 	client::Client,
-	expression::Artifact,
+	hash::Hash,
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
 };
@@ -13,13 +13,13 @@ use std::{
 
 impl Client {
 	/// Checkin a package along with all its path dependencies.
-	pub async fn checkin_package(&self, path: &Path, locked: bool) -> Result<Artifact> {
+	pub async fn checkin_package(&self, path: &Path, locked: bool) -> Result<Hash> {
 		let path = tokio::fs::canonicalize(path).await?;
 
 		// Collect all path dependencies in topological order.
 		let mut queue: VecDeque<PathBuf> = VecDeque::from(vec![path.clone()]);
 		let mut package_paths: Vec<PathBuf> = Vec::new();
-		let mut cache: HashMap<PathBuf, Artifact, FnvBuildHasher> = HashMap::default();
+		let mut cache: HashMap<PathBuf, Hash, FnvBuildHasher> = HashMap::default();
 		while let Some(package_path) = queue.pop_front() {
 			// Add the path to the list of package paths.
 			package_paths.push(package_path.clone());
@@ -86,8 +86,8 @@ impl Client {
 							let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
 
 							// Get the artifact for the dependency.
-							let dependency_artifact =
-								cache.get(&dependency_path).ok_or_else(|| {
+							let dependency_artifact_hash =
+								cache.get(&dependency_path).copied().ok_or_else(|| {
 									anyhow!(
 										r#"Failed to get the artifact for path "{}"."#,
 										dependency_path.display(),
@@ -96,7 +96,7 @@ impl Client {
 
 							// Create the lockfile Entry.
 							lockfile::Dependency {
-								hash: dependency_artifact.hash,
+								hash: dependency_artifact_hash,
 								dependencies: None,
 							}
 						},
@@ -115,7 +115,7 @@ impl Client {
 							};
 							// Create the lockfile Entry.
 							lockfile::Dependency {
-								hash: artifact.hash,
+								hash: artifact,
 								dependencies: None,
 							}
 						},

@@ -1,5 +1,5 @@
 use crate::{
-	expression::{Artifact, Expression},
+	expression::Expression,
 	hash::{Hash, Hasher},
 	server::{Evaluator, Server},
 };
@@ -103,11 +103,7 @@ impl Evaluator for Fetch {
 			artifact
 		};
 
-		// Create the output.
-		let output = Expression::Artifact(artifact);
-		let output_hash = server.add_expression(&output).await?;
-
-		Ok(Some(output_hash))
+		Ok(Some(artifact))
 	}
 }
 
@@ -115,9 +111,9 @@ impl Fetch {
 	async fn unpack(
 		&self,
 		server: &Arc<Server>,
-		artifact: Artifact,
+		artifact: Hash,
 		archive_format: ArchiveFormat,
-	) -> Result<Artifact> {
+	) -> Result<Hash> {
 		// Checkout the archive.
 		let archive_fragment = server.create_fragment(artifact).await?;
 		let archive_fragment_path = server.fragment_path(&archive_fragment);

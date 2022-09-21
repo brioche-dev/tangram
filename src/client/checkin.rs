@@ -1,7 +1,7 @@
 use super::cache::Cache;
 use crate::{
 	client::{Client, Transport},
-	expression::Artifact,
+	expression::{Artifact, Expression},
 	hash::Hash,
 	id::Id,
 	server::{self, expression::AddExpressionOutcome},
@@ -12,7 +12,7 @@ use futures::future::try_join_all;
 use std::{path::Path, sync::Arc};
 
 impl Client {
-	pub async fn checkin(&self, path: &Path) -> Result<Artifact> {
+	pub async fn checkin(&self, path: &Path) -> Result<Hash> {
 		// Create a cache.
 		let cache = Cache::new(path, Arc::clone(&self.file_system_semaphore));
 
@@ -22,7 +22,12 @@ impl Client {
 		// Retrieve the expression for the path.
 		let (hash, _) = cache.get(path).await?.unwrap();
 
-		Ok(Artifact { hash })
+		// Add the artifact expression.
+		let hash = self
+			.add_expression(&Expression::Artifact(Artifact { hash }))
+			.await?;
+
+		Ok(hash)
 	}
 
 	#[async_recursion]

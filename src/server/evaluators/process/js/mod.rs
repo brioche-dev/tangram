@@ -124,14 +124,8 @@ impl Process {
 			_ => bail!("The module must be a path."),
 		};
 
-		// Get the module's artifact.
-		let module_artifact = match server.try_get_expression(module.artifact).await?.unwrap() {
-			Expression::Artifact(artifact) => artifact,
-			_ => bail!("Module artifact must be an artifact."),
-		};
-
 		// Create the module URL.
-		let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", module_artifact.hash);
+		let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", module.artifact);
 
 		// Add the module path if necessary.
 		if let Some(path) = module.path {
@@ -364,7 +358,7 @@ async fn op_tangram_symlink(
 #[allow(clippy::unnecessary_wraps)]
 async fn op_tangram_dependency(
 	state: Rc<RefCell<deno_core::OpState>>,
-	artifact: Artifact,
+	artifact: Hash,
 ) -> Result<Hash, deno_core::error::AnyError> {
 	op(state, |server| async move {
 		server
@@ -463,7 +457,7 @@ async fn op_tangram_process(
 #[derive(serde::Deserialize)]
 struct TargetArgs {
 	lockfile: Option<Lockfile>,
-	package: Artifact,
+	package: Hash,
 	name: String,
 	#[serde(default)]
 	args: Vec<Hash>,

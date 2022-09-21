@@ -28,15 +28,14 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to create the client.")?;
 
 	// Get the path.
-	let package = if let Some(path) = args.package {
-		path
-	} else {
-		std::env::current_dir().context("Failed to determine the current directory.")?
-	};
+	let mut path = std::env::current_dir().context("Failed to determine the current directory.")?;
+	if let Some(path_arg) = args.package {
+		path.push(path_arg);
+	}
 
 	// Publish the package.
 	let artifact = client
-		.publish_package(&package, args.locked)
+		.publish_package(&path, args.locked)
 		.await
 		.context("Failed to publish the package.")?;
 

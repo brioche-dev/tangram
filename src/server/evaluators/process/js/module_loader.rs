@@ -1,6 +1,5 @@
 use crate::{
-	expression::Artifact, hash::Hash, lockfile::Lockfile, manifest::Manifest, server::Server,
-	util::path_exists,
+	hash::Hash, lockfile::Lockfile, manifest::Manifest, server::Server, util::path_exists,
 };
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -150,12 +149,9 @@ async fn resolve_tangram(
 	let domain = referrer
 		.domain()
 		.ok_or_else(|| anyhow!("Failed to get domain from the referrer."))?;
-	let referrer_package_hash: Hash = domain
+	let referrer_package: Hash = domain
 		.parse()
 		.with_context(|| "Failed to parse referrer domain.")?;
-	let referrer_package = Artifact {
-		hash: referrer_package_hash,
-	};
 
 	// Get the lockfile hash from the referrer.
 	let referrer_lockfile_hash = if let Some(referrer_lockfile_hash) =
@@ -271,11 +267,10 @@ async fn load_tangram_module(
 	let domain = specifier
 		.domain()
 		.ok_or_else(|| anyhow!("The specifier must have a domain."))?;
-	let hash: Hash = domain.parse()?;
-	let specifier_artifact: Artifact = Artifact { hash };
+	let specifier_hash: Hash = domain.parse()?;
 
 	// Create a fragment for the specifier's package.
-	let fragment = state.server.create_fragment(specifier_artifact).await?;
+	let fragment = state.server.create_fragment(specifier_hash).await?;
 	let fragment_path = state.server.fragment_path(&fragment);
 
 	// Get the path from the specifier.
@@ -381,10 +376,7 @@ async fn load_tangram_target_proxy(
 	let package_hash: Hash = domain.parse().context("Failed to parse the domain.")?;
 
 	// Create a fragment for the specifier's package.
-	let fragment = state
-		.server
-		.create_fragment(Artifact { hash: package_hash })
-		.await?;
+	let fragment = state.server.create_fragment(package_hash).await?;
 	let fragment_path = state.server.fragment_path(&fragment);
 
 	// Read the specifier's manifest.

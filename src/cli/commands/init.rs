@@ -13,7 +13,7 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Resolve the path.
+	// Get the path.
 	let mut path =
 		std::env::current_dir().context("Failed to get the current working directory.")?;
 	if let Some(path_arg) = args.path {

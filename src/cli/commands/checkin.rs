@@ -19,11 +19,10 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to create the client.")?;
 
 	// Get the path.
-	let path = if let Some(path) = args.path {
-		path
-	} else {
-		std::env::current_dir().context("Failed to determine the current directory.")?
-	};
+	let mut path = std::env::current_dir().context("Failed to determine the current directory.")?;
+	if let Some(path_arg) = args.path {
+		path.push(path_arg);
+	}
 
 	// Perform the checkin.
 	let artifact = client.checkin(&path).await?;

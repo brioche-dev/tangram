@@ -131,16 +131,11 @@ impl Process {
 			try_join_all(outputs.iter().map(|(name, output)| async {
 				let mut temp = server.create_temp().await?;
 				for (path, dependency) in &output.dependencies {
-					let dependency = server.get_expression(*dependency).await?;
-					let artifact = match dependency {
-						Expression::Artifact(artifact) => artifact,
-						_ => bail!(r#"Dependency must evaluate to an artifact."#),
-					};
 					server
-						.temp_add_dependency(&mut temp, path, artifact)
+						.temp_add_dependency(&mut temp, path, *dependency)
 						.await?;
 				}
-				Ok((name.clone(), temp))
+				Ok::<_, anyhow::Error>((name.clone(), temp))
 			}))
 			.await?
 			.into_iter()
@@ -156,17 +151,13 @@ impl Process {
 			Expression::Path(path) => path,
 			_ => bail!("Command must evaluate to a path."),
 		};
-		let command_artifact = match server.get_expression(command.artifact).await? {
-			Expression::Artifact(artifact) => artifact,
-			_ => bail!("Command artifact must evaluate to an artifact."),
-		};
 		let command_fragment = server
-			.create_fragment(command_artifact)
+			.create_fragment(command.artifact)
 			.await
 			.context("Failed to create the fragment for the command.")?;
 		let command_path = server.fragment_path(&command_fragment);
 		let command = if let Some(path) = &command.path {
-			command_path.join(path.as_ref())
+			command_path.join(path)
 		} else {
 			command_path
 		};
@@ -197,7 +188,7 @@ impl Process {
 			.context("Failed to run the process.")?;
 
 		// Checkin the temps.
-		let artifacts: BTreeMap<String, Artifact> =
+		let artifacts: BTreeMap<String, Hash> =
 			try_join_all(temps.into_iter().map(|(name, temp)| async {
 				let artifact = server.checkin_temp(temp).await?;
 				Ok::<_, anyhow::Error>((name, artifact))
@@ -208,21 +199,18 @@ impl Process {
 
 		// Create the output.
 		let output_hash = if artifacts.len() == 1 {
+			let hash = artifacts.into_values().next().unwrap();
 			server
-				.add_expression(&Expression::Artifact(
-					artifacts.into_values().next().unwrap(),
-				))
+				.add_expression(&Expression::Artifact(Artifact { hash }))
 				.await?
 		} else {
 			server
 				.add_expression(&Expression::Map(
-					try_join_all(artifacts.into_iter().map(|(name, artifact)| async move {
-						Ok::<_, anyhow::Error>((
-							name.into(),
-							server
-								.add_expression(&Expression::Artifact(artifact))
-								.await?,
-						))
+					try_join_all(artifacts.into_iter().map(|(name, hash)| async move {
+						let artifact = server
+							.add_expression(&Expression::Artifact(Artifact { hash }))
+							.await?;
+						Ok::<_, anyhow::Error>((name.into(), artifact))
 					}))
 					.await?
 					.into_iter()
@@ -251,14 +239,10 @@ impl Process {
 				Ok(string)
 			},
 			Expression::Path(path) => {
-				let artifact = match server.get_expression(path.artifact).await? {
-					Expression::Artifact(artifact) => artifact,
-					_ => bail!("Expected artifact."),
-				};
-				let fragment = server.create_fragment(artifact).await?;
+				let fragment = server.create_fragment(path.artifact).await?;
 				let fragment_path = server.fragment_path(&fragment);
 				let fragment_path = if let Some(path) = &path.path {
-					fragment_path.join(path.as_ref())
+					fragment_path.join(path)
 				} else {
 					fragment_path
 				};

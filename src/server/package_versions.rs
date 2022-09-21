@@ -1,5 +1,5 @@
 use super::{error::not_found, Server};
-use crate::expression::Artifact;
+use crate::hash::Hash;
 use anyhow::{anyhow, bail, Context, Result};
 use std::sync::Arc;
 
@@ -9,11 +9,10 @@ impl Server {
 		self: &Arc<Self>,
 		package_name: &str,
 		package_version: &str,
-	) -> Result<Option<Artifact>> {
+	) -> Result<Option<Hash>> {
 		// Retrieve the artifact hash from the database.
-		let maybe_hash = self
-			.database_transaction(|txn| {
-				let sql = r#"
+		self.database_transaction(|txn| {
+			let sql = r#"
 					select
 						hash
 					from
@@ -21,26 +20,25 @@ impl Server {
 					where
 						name = $1 and version = $2
 				"#;
-				let params = (package_name, package_version.to_string());
-				let mut statement = txn
-					.prepare_cached(sql)
-					.context("Failed to prepare the query.")?;
-				let maybe_hash = statement
-					.query(params)
-					.context("Failed to execute the query.")?
-					.and_then(|row| row.get::<_, String>(0))
-					.next()
-					.transpose()?;
-				Ok(maybe_hash)
-			})
-			.await?;
-
-		// Construct the artifact.
-		let artifact = maybe_hash.map(|hash| Artifact {
-			hash: hash.parse().unwrap(),
-		});
-
-		Ok(artifact)
+			let params = (package_name, package_version.to_string());
+			let mut statement = txn
+				.prepare_cached(sql)
+				.context("Failed to prepare the query.")?;
+			let maybe_hash = statement
+				.query(params)
+				.context("Failed to execute the query.")?
+				.and_then(|row| row.get::<_, String>(0))
+				.next()
+				.transpose()?;
+			let maybe_hash = if let Some(hash) = maybe_hash {
+				let hash = hash.parse().context("Failed to parse the hash.")?;
+				Some(hash)
+			} else {
+				None
+			};
+			Ok(maybe_hash)
+		})
+		.await
 	}
 
 	// Create a new package version given an artifact.
@@ -48,8 +46,8 @@ impl Server {
 		self: &Arc<Self>,
 		package_name: &str,
 		package_version: &str,
-		artifact: Artifact,
-	) -> Result<Artifact> {
+		artifact: Hash,
+	) -> Result<Hash> {
 		self.database_transaction(|txn| {
 			// Check if the package already exists.
 			let sql = r#"
@@ -125,7 +123,7 @@ impl Server {
 					$1, $2, $3
 				)
 			"#;
-			let params = (package_name, package_version, artifact.hash.to_string());
+			let params = (package_name, package_version, artifact.to_string());
 			let mut statement = txn
 				.prepare_cached(sql)
 				.context("Failed to prepare the query.")?;

@@ -66,7 +66,7 @@ impl Server {
 
 			// If this expression is a dependency, ensure the dependency is present.
 			Expression::Dependency(dependency) => {
-				let hash = dependency.artifact.hash;
+				let hash = dependency.artifact;
 				let exists = self.expression_exists(hash).await?;
 				if !exists {
 					return Ok(AddExpressionOutcome::DependencyMissing { hash });
@@ -218,10 +218,9 @@ impl Server {
 				);
 
 				// Ensure the package is present.
-				let hash = target.package.hash;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(target.package).await?;
 				if !exists {
-					missing.push(hash);
+					missing.push(target.package);
 				}
 			},
 
@@ -265,7 +264,7 @@ impl Server {
 			return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
 		}
 
-		// Serialize the expression.
+		// Serialize and hash the expression.
 		let data = serde_json::to_vec(&expression)?;
 		let hash = Hash::new(&data);
 

@@ -2,7 +2,7 @@ use crate::config::Config;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tangram::{client::Client, expression::Artifact, hash::Hash};
+use tangram::{client::Client, hash::Hash};
 
 #[derive(Parser)]
 pub struct Args {
@@ -20,20 +20,16 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to create the client.")?;
 
 	// Get the path.
-	let path = if let Some(path) = args.path {
-		path
+	let mut path = std::env::current_dir().context("Failed to determine the current directory.")?;
+	if let Some(path_arg) = args.path {
+		path.push(path_arg);
 	} else {
-		std::env::current_dir()
-			.context("Failed to determine the current directory.")?
-			.join(args.artifact.to_string())
+		path.push(args.artifact.to_string());
 	};
 
 	// Perform the checkout.
-	let artifact = Artifact {
-		hash: args.artifact,
-	};
 	client
-		.checkout(artifact, &path, None)
+		.checkout(args.artifact, &path, None)
 		.await
 		.context("Failed to perform the checkout.")?;
 

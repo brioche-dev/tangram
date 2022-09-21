@@ -1,12 +1,12 @@
 use super::Server;
-use crate::{expression::Artifact, package::SearchResultItem};
+use crate::{hash::Hash, package::SearchResultItem};
 use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
 #[derive(serde::Serialize)]
 pub struct Version {
 	version: String,
-	artifact: Artifact,
+	artifact: Hash,
 }
 
 impl Server {
@@ -93,8 +93,10 @@ impl Server {
 						let version = row.get::<_, String>(0)?;
 						let hash = row.get::<_, String>(1)?;
 						let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
-						let artifact = Artifact { hash };
-						let package_version = Version { version, artifact };
+						let package_version = Version {
+							version,
+							artifact: hash,
+						};
 						Ok(package_version)
 					})
 					.collect::<Result<_>>()?;

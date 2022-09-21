@@ -1,5 +1,5 @@
 use super::{transport::InProcessOrHttp, Client};
-use crate::{expression::Artifact, manifest::Manifest};
+use crate::{hash::Hash, manifest::Manifest};
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
@@ -60,7 +60,7 @@ impl Client {
 	}
 
 	// Retrieve the package with the given name and version.
-	pub async fn get_package(&self, name: &str, version: &str) -> Result<Option<Artifact>> {
+	pub async fn get_package(&self, name: &str, version: &str) -> Result<Option<Hash>> {
 		match self.transport.as_in_process_or_http() {
 			super::transport::InProcessOrHttp::InProcess(server) => {
 				let artifact = server.get_package_version(name, version).await?;
@@ -74,7 +74,7 @@ impl Client {
 		}
 	}
 
-	pub async fn publish_package(&self, package_path: &Path, locked: bool) -> Result<Artifact> {
+	pub async fn publish_package(&self, package_path: &Path, locked: bool) -> Result<Hash> {
 		// Checkin the package.
 		let package = self
 			.checkin_package(package_path, locked)
