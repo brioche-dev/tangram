@@ -116,11 +116,11 @@ impl Process {
 			_ => bail!(r#"Argument "envs" must evaluate to a map."#),
 		};
 		let mut envs: BTreeMap<String, String> =
-			try_join_all(envs.iter().map(|(key, value)| async move {
+			try_join_all(envs.iter().map(|(key, hash)| async move {
 				let key = key.as_ref().to_owned();
-				let value = server.get_expression(*value).await?;
-				let value = self.resolve(server, &value).await?;
-				Ok::<_, anyhow::Error>((key, value))
+				let expression = server.get_expression(*hash).await?;
+				let string = self.resolve(server, *hash, &expression).await?;
+				Ok::<_, anyhow::Error>((key, string))
 			}))
 			.await?
 			.into_iter()
@@ -130,10 +130,8 @@ impl Process {
 		let temps: BTreeMap<String, Temp> =
 			try_join_all(outputs.iter().map(|(name, output)| async {
 				let mut temp = server.create_temp().await?;
-				for (path, dependency) in &output.dependencies {
-					server
-						.temp_add_dependency(&mut temp, path, *dependency)
-						.await?;
+				for (path, hash) in &output.dependencies {
+					server.temp_add_dependency(&mut temp, path, *hash).await?;
 				}
 				Ok::<_, anyhow::Error>((name.clone(), temp))
 			}))
@@ -167,10 +165,10 @@ impl Process {
 			Expression::Array(array) => array,
 			_ => bail!("Args must evaluate to an array."),
 		};
-		let args: Vec<String> = try_join_all(args.iter().copied().map(|value| async move {
-			let value = server.get_expression(value).await?;
-			let value = self.resolve(server, &value).await?;
-			Ok::<_, anyhow::Error>(value)
+		let args: Vec<String> = try_join_all(args.iter().copied().map(|hash| async move {
+			let expression = server.get_expression(hash).await?;
+			let string = self.resolve(server, hash, &expression).await?;
+			Ok::<_, anyhow::Error>(string)
 		}))
 		.await
 		.context("Failed to resolve the args.")?;
@@ -223,20 +221,30 @@ impl Process {
 	}
 
 	#[async_recursion]
-	async fn resolve(&self, server: &Arc<Server>, expression: &Expression) -> Result<String> {
+	async fn resolve(
+		&self,
+		server: &Arc<Server>,
+		hash: Hash,
+		expression: &Expression,
+	) -> Result<String> {
 		match expression {
 			Expression::String(string) => Ok(string.as_ref().to_owned()),
 			Expression::Template(template) => {
-				let components = try_join_all(template.components.iter().copied().map(
-					|component| async move {
-						let component = server.get_expression(component).await?;
-						let component = self.resolve(server, &component).await?;
-						Ok::<_, anyhow::Error>(component)
-					},
-				))
-				.await?;
+				let components =
+					try_join_all(template.components.iter().copied().map(|hash| async move {
+						let expression = server.get_expression(hash).await?;
+						let string = self.resolve(server, hash, &expression).await?;
+						Ok::<_, anyhow::Error>(string)
+					}))
+					.await?;
 				let string = components.join("");
 				Ok(string)
+			},
+			Expression::Artifact(_) => {
+				let fragment = server.create_fragment(hash).await?;
+				let fragment_path = server.fragment_path(&fragment);
+				let fragment_path_string = fragment_path.to_str().unwrap().to_owned();
+				Ok(fragment_path_string)
 			},
 			Expression::Path(path) => {
 				let fragment = server.create_fragment(path.artifact).await?;
@@ -249,7 +257,7 @@ impl Process {
 				let fragment_path_string = fragment_path.to_str().unwrap().to_owned();
 				Ok(fragment_path_string)
 			},
-			_ => bail!("The expression to resolve must be a string, template, or path."),
+			_ => bail!("The expression to resolve must be a string, template, artifact, or path."),
 		}
 	}
 }
