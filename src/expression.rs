@@ -1,6 +1,5 @@
 use crate::{hash::Hash, lockfile::Lockfile};
 use camino::Utf8PathBuf;
-use derive_more::Display;
 use std::{collections::BTreeMap, sync::Arc};
 use url::Url;
 
@@ -41,7 +40,7 @@ pub enum Expression {
 	Map(Map),
 }
 
-#[derive(Copy, Clone, Debug, Display, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Artifact {
 	pub hash: Hash,
 }

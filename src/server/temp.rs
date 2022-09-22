@@ -20,11 +20,11 @@ impl Temp {
 }
 
 impl Server {
-	pub async fn create_temp(self: &Arc<Self>) -> Result<Temp> {
+	#[must_use]
+	pub fn create_temp(self: &Arc<Self>) -> Temp {
 		let id = id::Id::generate();
 		let temp_id = Id(id);
-		let temp = Temp { id: temp_id };
-		Ok(temp)
+		Temp { id: temp_id }
 	}
 
 	#[must_use]

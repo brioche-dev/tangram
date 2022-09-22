@@ -129,7 +129,7 @@ impl Process {
 		// Create the temps for the outputs, add their dependencies, and their paths to the envs.
 		let temps: BTreeMap<String, Temp> =
 			try_join_all(outputs.iter().map(|(name, output)| async {
-				let mut temp = server.create_temp().await?;
+				let mut temp = server.create_temp();
 				for (path, hash) in &output.dependencies {
 					server.temp_add_dependency(&mut temp, path, *hash).await?;
 				}

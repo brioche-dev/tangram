@@ -19,9 +19,9 @@ pub struct ExclusiveGuard {
 }
 
 impl Lock {
-	pub async fn new(path: PathBuf) -> Result<Lock> {
+	pub fn new(path: PathBuf) -> Lock {
 		let shared = RwLock::new(None);
-		Ok(Lock { path, shared })
+		Lock { path, shared }
 	}
 
 	pub async fn lock_shared(&self) -> Result<SharedGuard> {

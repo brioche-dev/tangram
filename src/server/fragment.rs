@@ -25,10 +25,7 @@ impl Server {
 		// Perform the checkout if necessary.
 		if !path_exists(&fragment_path).await? {
 			// Create a temp to check out the artifact to.
-			let temp = self
-				.create_temp()
-				.await
-				.context("Failed to create the temp.")?;
+			let temp = self.create_temp();
 			let temp_path = self.temp_path(&temp);
 
 			// Create the callback to create dependency fragments.

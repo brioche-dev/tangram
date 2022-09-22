@@ -73,7 +73,7 @@ impl Server {
 
 		// Create the lock.
 		let lock_path = path.join("lock");
-		let lock = Lock::new(lock_path).await?;
+		let lock = Lock::new(lock_path);
 
 		// Migrate the path.
 		Server::migrate(&path).await?;

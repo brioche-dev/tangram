@@ -15,7 +15,7 @@ use tokio_stream::StreamExt;
 impl Server {
 	pub async fn add_blob(self: &Arc<Self>, reader: impl AsyncRead + Unpin) -> Result<Hash> {
 		// Create a temp file to read the blob into.
-		let temp = self.create_temp().await?;
+		let temp = self.create_temp();
 		let temp_path = self.temp_path(&temp);
 		let mut temp_file = tokio::fs::File::create(&temp_path).await?;
 

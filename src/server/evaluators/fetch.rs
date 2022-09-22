@@ -45,7 +45,7 @@ impl Evaluator for Fetch {
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
 		// Create a temp.
-		let temp = server.create_temp().await?;
+		let temp = server.create_temp();
 		let temp_path = server.temp_path(&temp);
 
 		// Perform the request and get a reader for the body.
@@ -119,7 +119,7 @@ impl Fetch {
 		let archive_fragment_path = server.fragment_path(&archive_fragment);
 
 		// Create a temp to unpack to.
-		let unpack_temp = server.create_temp().await?;
+		let unpack_temp = server.create_temp();
 		let unpack_temp_path = server.temp_path(&unpack_temp);
 
 		// Unpack in a blocking task.
