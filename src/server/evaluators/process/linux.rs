@@ -30,10 +30,7 @@ impl Process {
 		let server_path = server.path().to_owned();
 
 		// Create a temp for the chroot.
-		let temp = server
-			.create_temp()
-			.await
-			.context("Failed to create a temp for the chroot.")?;
+		let temp = server.create_temp();
 
 		// Create the chroot directory.
 		let parent_child_root_path = server.temp_path(&temp);
