@@ -135,7 +135,7 @@ impl Server {
 
 				// If the expression is a file, mark its blob.
 				Expression::File(file) => {
-					marked_blob_hashes.insert(file.blob_hash);
+					marked_blob_hashes.insert(file.hash);
 				},
 
 				// If the expression is a directory, add its entries to the queue.
@@ -174,13 +174,13 @@ impl Server {
 					},
 					crate::expression::Process::Js(process) => {
 						queue.push_back(process.module);
-						queue.extend(process.args);
+						queue.push_back(process.args);
 					},
 				},
 
 				Expression::Target(target) => {
 					queue.push_back(target.package);
-					queue.extend(target.args);
+					queue.push_back(target.args);
 				},
 
 				Expression::Array(array) => {

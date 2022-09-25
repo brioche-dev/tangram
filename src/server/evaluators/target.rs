@@ -50,7 +50,7 @@ impl Evaluator for Target {
 					lockfile: target.lockfile.clone(),
 					module: module_hash,
 					export: target.name.clone(),
-					args: target.args.clone(),
+					args: target.args,
 				},
 			)))
 			.await?;

@@ -54,7 +54,7 @@ pub struct Directory {
 /// An expression representing a file.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct File {
-	pub blob_hash: Hash,
+	pub hash: Hash,
 	pub executable: bool,
 }
 
@@ -122,7 +122,7 @@ pub struct JsProcess {
 	pub lockfile: Option<Lockfile>,
 	pub module: Hash,
 	pub export: String,
-	pub args: Vec<Hash>,
+	pub args: Hash,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -130,7 +130,7 @@ pub struct Target {
 	pub lockfile: Option<Lockfile>,
 	pub package: Hash,
 	pub name: String,
-	pub args: Vec<Hash>,
+	pub args: Hash,
 }
 
 pub type Array = Vec<Hash>;

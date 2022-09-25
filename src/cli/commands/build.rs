@@ -31,25 +31,29 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to check in the package.")?;
 
-	// Add the expression.
-	let args_hashes = match args.system {
-		Some(system) => {
-			let system_hash = client
+	// Add the args.
+	let mut target_args = Vec::new();
+	if let Some(system) = args.system {
+		target_args.push(
+			client
 				.add_expression(&tangram::expression::Expression::String(
 					system.to_string().into(),
 				))
-				.await?;
-			vec![system_hash]
-		},
-		None => vec![],
+				.await?,
+		);
 	};
+	let target_args = client
+		.add_expression(&tangram::expression::Expression::Array(target_args))
+		.await?;
+
+	// Add the expression.
 	let expression_hash = client
 		.add_expression(&tangram::expression::Expression::Target(
 			tangram::expression::Target {
 				lockfile: None,
 				package,
 				name: args.name,
-				args: args_hashes,
+				args: target_args,
 			},
 		))
 		.await?;

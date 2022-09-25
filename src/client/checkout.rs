@@ -157,13 +157,12 @@ impl Client {
 
 		if let Some(local_server_path) = local_server_path {
 			// If the server is local, copy the file.
-			let local_server_blob_path = local_server_path
-				.join("blobs")
-				.join(file.blob_hash.to_string());
+			let local_server_blob_path =
+				local_server_path.join("blobs").join(file.hash.to_string());
 			tokio::fs::copy(&local_server_blob_path, &path).await?;
 		} else if let Some(http) = self.transport.as_http() {
 			// Otherwise, if the server is remote, retrieve the blob and write it to the path.
-			let blob_hash = file.blob_hash;
+			let blob_hash = file.hash;
 			let request_path = format!("/blobs/{blob_hash}");
 
 			let mut response = http

@@ -90,6 +90,11 @@ pub async fn run(args: Args) -> Result<()> {
 	// Get the target name.
 	let name = args.target.unwrap_or_else(|| "default".to_owned());
 
+	// Add the args.
+	let target_args = client
+		.add_expression(&tangram::expression::Expression::Array(vec![]))
+		.await?;
+
 	// Create the expression.
 	let input_hash = client
 		.add_expression(&tangram::expression::Expression::Target(
@@ -97,7 +102,7 @@ pub async fn run(args: Args) -> Result<()> {
 				lockfile: None,
 				package,
 				name,
-				args: vec![],
+				args: target_args,
 			},
 		))
 		.await?;

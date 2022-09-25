@@ -132,7 +132,7 @@ impl Cache {
 
 		// Create the expression and add it to the cache.
 		let expression = Expression::File(File {
-			blob_hash,
+			hash: blob_hash,
 			executable,
 		});
 		self.add_expression(path, expression);

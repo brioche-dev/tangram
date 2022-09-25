@@ -1,20 +1,14 @@
 use self::module_loader::{ModuleLoader, TANGRAM_MODULE_SCHEME};
 use super::Process;
 use crate::{
-	expression::{self, Artifact, Dependency, Directory, Expression, File, JsProcess, Symlink},
+	expression::{Expression, JsProcess},
 	hash::Hash,
-	lockfile::Lockfile,
 	server::Server,
 };
 use anyhow::{anyhow, bail, Context, Result};
-use camino::Utf8PathBuf;
 use deno_core::{serde_v8, v8};
-use futures::future::try_join_all;
-use itertools::Itertools;
-use std::{
-	cell::RefCell, collections::BTreeMap, convert::TryInto, fmt::Write, future::Future, rc::Rc,
-	sync::Arc,
-};
+use futures::{executor::block_on, future::try_join_all};
+use std::{cell::RefCell, convert::TryInto, fmt::Write, future::Future, rc::Rc, sync::Arc};
 use url::Url;
 
 mod module_loader;
@@ -66,27 +60,10 @@ impl Process {
 		// Build the tangram extension.
 		let tangram_extension = deno_core::Extension::builder()
 			.ops(vec![
-				// Expression ops.
-				op_tangram_null::decl(),
-				op_tangram_bool::decl(),
-				op_tangram_number::decl(),
-				op_tangram_string::decl(),
-				op_tangram_artifact::decl(),
-				op_tangram_directory::decl(),
-				op_tangram_file::decl(),
-				op_tangram_symlink::decl(),
-				op_tangram_dependency::decl(),
-				op_tangram_path::decl(),
-				op_tangram_template::decl(),
-				op_tangram_fetch::decl(),
-				op_tangram_process::decl(),
-				op_tangram_target::decl(),
-				op_tangram_array::decl(),
-				op_tangram_map::decl(),
-				// Other ops.
-				op_tangram_blob::decl(),
+				op_tangram_add_expression::decl(),
 				op_tangram_console_log::decl(),
 				op_tangram_evaluate::decl(),
+				op_tangram_get_expression::decl(),
 			])
 			.state({
 				let server = Arc::clone(&server);
@@ -173,18 +150,22 @@ impl Process {
 		let undefined = v8::undefined(&mut try_catch_scope);
 
 		// Evaluate the args and move them to v8.
-		let args = try_join_all(process.args.iter().map(|arg| {
+		let args = server.get_expression(process.args).await?;
+		let args = match args {
+			Expression::Array(array) => array,
+			_ => bail!("Args must be an array."),
+		};
+		let args = try_join_all(args.iter().map(|arg| {
 			let server = Arc::clone(&server);
 			async move {
 				let expression = server.get_expression(*arg).await?;
 				match expression {
-					Expression::String(s) => Ok::<_, anyhow::Error>(s),
-					_ => bail!(anyhow!("Args must evaluate to strings.")),
+					Expression::String(string) => Ok::<_, anyhow::Error>(string),
+					_ => bail!("Args must evaluate to strings."),
 				}
 			}
 		}))
 		.await?;
-
 		let args = args
 			.iter()
 			.map(|arg| {
@@ -232,294 +213,13 @@ impl Process {
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_null(
+fn op_tangram_add_expression(
 	state: Rc<RefCell<deno_core::OpState>>,
+	expression: Expression,
 ) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server.add_expression(&Expression::Null).await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_bool(
-	state: Rc<RefCell<deno_core::OpState>>,
-	value: bool,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server.add_expression(&Expression::Bool(value)).await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_number(
-	state: Rc<RefCell<deno_core::OpState>>,
-	value: f64,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server.add_expression(&Expression::Number(value)).await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_string(
-	state: Rc<RefCell<deno_core::OpState>>,
-	value: String,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server
-			.add_expression(&Expression::String(value.into()))
-			.await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_artifact(
-	state: Rc<RefCell<deno_core::OpState>>,
-	hash: Hash,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server
-			.add_expression(&Expression::Artifact(Artifact { hash }))
-			.await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_directory(
-	state: Rc<RefCell<deno_core::OpState>>,
-	entries: BTreeMap<String, Hash>,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server
-			.add_expression(&Expression::Directory(Directory { entries }))
-			.await
-	})
-	.await
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
-enum FileBlob {
-	String(String),
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct FileOptions {
-	executable: Option<bool>,
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_file(
-	state: Rc<RefCell<deno_core::OpState>>,
-	blob_hash: Hash,
-	options: Option<FileOptions>,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		let executable = options
-			.and_then(|options| options.executable)
-			.unwrap_or(false);
-		let output = server
-			.add_expression(&Expression::File(File {
-				blob_hash,
-				executable,
-			}))
-			.await?;
-		Ok(output)
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_symlink(
-	state: Rc<RefCell<deno_core::OpState>>,
-	target: Utf8PathBuf,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server
-			.add_expression(&Expression::Symlink(Symlink { target }))
-			.await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_dependency(
-	state: Rc<RefCell<deno_core::OpState>>,
-	artifact: Hash,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server
-			.add_expression(&Expression::Dependency(Dependency { artifact }))
-			.await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_path(
-	state: Rc<RefCell<deno_core::OpState>>,
-	artifact: Hash,
-	path: Option<Utf8PathBuf>,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server
-			.add_expression(&Expression::Path(expression::Path {
-				artifact,
-				path: path.map(Into::into),
-			}))
-			.await
-	})
-	.await
-}
-
-#[derive(serde::Deserialize)]
-struct TemplateArgs {
-	strings: Vec<String>,
-	placeholders: Vec<Hash>,
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_template(
-	state: Rc<RefCell<deno_core::OpState>>,
-	args: TemplateArgs,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		let components = try_join_all(args.strings.into_iter().map(|string| async {
-			server
-				.add_expression(&Expression::String(string.into()))
-				.await
-		}))
-		.await?
-		.into_iter()
-		.interleave(args.placeholders)
-		.collect();
-		let template = crate::expression::Template { components };
-		let output = server
-			.add_expression(&Expression::Template(template))
-			.await?;
-		Ok(output)
-	})
-	.await
-}
-
-#[derive(serde::Deserialize)]
-struct FetchArgs {
-	url: Url,
-	hash: Option<Hash>,
-	unpack: bool,
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_fetch(
-	state: Rc<RefCell<deno_core::OpState>>,
-	args: FetchArgs,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, move |server| async move {
-		server
-			.add_expression(&Expression::Fetch(crate::expression::Fetch {
-				url: args.url,
-				hash: args.hash,
-				unpack: args.unpack,
-			}))
-			.await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_process(
-	state: Rc<RefCell<deno_core::OpState>>,
-	process: expression::Process,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, move |server| async move {
-		server.add_expression(&Expression::Process(process)).await
-	})
-	.await
-}
-
-#[derive(serde::Deserialize)]
-struct TargetArgs {
-	lockfile: Option<Lockfile>,
-	package: Hash,
-	name: String,
-	#[serde(default)]
-	args: Vec<Hash>,
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_target(
-	state: Rc<RefCell<deno_core::OpState>>,
-	args: TargetArgs,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server
-			.add_expression(&Expression::Target(crate::expression::Target {
-				lockfile: args.lockfile,
-				package: args.package,
-				name: args.name,
-				args: args.args,
-			}))
-			.await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_array(
-	state: Rc<RefCell<deno_core::OpState>>,
-	value: Vec<Hash>,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server.add_expression(&Expression::Array(value)).await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_map(
-	state: Rc<RefCell<deno_core::OpState>>,
-	value: BTreeMap<String, Hash>,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		let value = value
-			.into_iter()
-			.map(|(key, value)| (key.into(), value))
-			.collect();
-		server.add_expression(&Expression::Map(value)).await
-	})
-	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_blob(
-	state: Rc<RefCell<deno_core::OpState>>,
-	value: String,
-) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |server| async move {
-		server.add_blob(value.as_bytes()).await
-	})
-	.await
+	block_on(op(state, |server| async move {
+		server.add_expression(&expression).await
+	}))
 }
 
 #[deno_core::op]
@@ -547,6 +247,17 @@ async fn op_tangram_evaluate(
 		|server| async move { server.evaluate(hash, hash).await },
 	)
 	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_get_expression(
+	state: Rc<RefCell<deno_core::OpState>>,
+	hash: Hash,
+) -> Result<Option<Expression>, deno_core::error::AnyError> {
+	block_on(op(state, |server| async move {
+		server.try_get_expression(hash).await
+	}))
 }
 
 async fn op<T, F, Fut>(

@@ -52,11 +52,11 @@ impl Server {
 
 			// If this expression is a file, ensure its blob is present.
 			Expression::File(file) => {
-				let blob_path = self.blob_path(file.blob_hash);
+				let blob_path = self.blob_path(file.hash);
 				let blob_exists = path_exists(&blob_path).await?;
 				if !blob_exists {
 					return Ok(AddExpressionOutcome::FileMissingBlob {
-						blob_hash: file.blob_hash,
+						blob_hash: file.hash,
 					});
 				}
 			},
@@ -181,46 +181,29 @@ impl Server {
 						missing.push(hash);
 					}
 
-					// Ensure all of the args are present.
-					missing.extend(
-						futures::stream::iter(
-							process.args.iter().copied().map(Ok::<_, anyhow::Error>),
-						)
-						.try_filter_map(|hash| async move {
-							let exists = self.expression_exists(hash).await?;
-							if exists {
-								Ok(None)
-							} else {
-								Ok(Some(hash))
-							}
-						})
-						.try_collect::<Vec<Hash>>()
-						.await?,
-					);
+					// Ensure the args are present.
+					let hash = process.args;
+					let exists = self.expression_exists(hash).await?;
+					if !exists {
+						missing.push(hash);
+					}
 				},
 			},
 
 			// If this expression is a target, ensure its children are present.
 			Expression::Target(target) => {
-				// Ensure all of the args are present.
-				missing.extend(
-					futures::stream::iter(target.args.iter().copied().map(Ok::<_, anyhow::Error>))
-						.try_filter_map(|hash| async move {
-							let exists = self.expression_exists(hash).await?;
-							if exists {
-								Ok(None)
-							} else {
-								Ok(Some(hash))
-							}
-						})
-						.try_collect::<Vec<Hash>>()
-						.await?,
-				);
-
 				// Ensure the package is present.
-				let exists = self.expression_exists(target.package).await?;
+				let hash = target.package;
+				let exists = self.expression_exists(hash).await?;
 				if !exists {
-					missing.push(target.package);
+					missing.push(hash);
+				}
+
+				// Ensure the args are present.
+				let hash = target.args;
+				let exists = self.expression_exists(hash).await?;
+				if !exists {
+					missing.push(hash);
 				}
 			},
 
