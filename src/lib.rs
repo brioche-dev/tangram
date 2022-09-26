@@ -9,7 +9,6 @@ mod heuristics;
 pub mod id;
 pub mod lockfile;
 pub mod manifest;
-pub mod package;
 pub mod server;
 pub mod specifier;
 pub mod system;

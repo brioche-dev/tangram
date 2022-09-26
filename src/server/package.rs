@@ -1,7 +1,12 @@
 use super::Server;
-use crate::{hash::Hash, package::SearchResultItem};
+use crate::hash::Hash;
 use anyhow::{bail, Context, Result};
 use std::sync::Arc;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct SearchResult {
+	pub name: String,
+}
 
 #[derive(serde::Serialize)]
 pub struct Version {
@@ -10,7 +15,7 @@ pub struct Version {
 }
 
 impl Server {
-	pub async fn search_packages(self: &Arc<Self>, name: &str) -> Result<Vec<SearchResultItem>> {
+	pub async fn search_packages(self: &Arc<Self>, name: &str) -> Result<Vec<SearchResult>> {
 		// Retrieve packages that match this query.
 		let packages = self
 			.database_transaction(|txn| {
@@ -31,7 +36,7 @@ impl Server {
 					.context("Failed to exeucte the query.")?
 					.and_then(|row| {
 						let name = row.get::<_, String>(0)?;
-						let item = SearchResultItem { name };
+						let item = SearchResult { name };
 						Ok(item)
 					})
 					.collect::<Result<_>>()?;
@@ -41,7 +46,7 @@ impl Server {
 		Ok(packages)
 	}
 
-	pub async fn get_packages(self: &Arc<Self>) -> Result<Vec<SearchResultItem>> {
+	pub async fn get_packages(self: &Arc<Self>) -> Result<Vec<SearchResult>> {
 		// Retrieve packages that match this query.
 		let packages = self
 			.database_transaction(|txn| {
@@ -59,7 +64,7 @@ impl Server {
 					.context("Failed to execute the query.")?
 					.and_then(|row| {
 						let name = row.get::<_, String>(0)?;
-						let item = SearchResultItem { name };
+						let item = SearchResult { name };
 						Ok(item)
 					})
 					.collect::<Result<_>>()?;
