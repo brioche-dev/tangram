@@ -61,9 +61,11 @@ impl Process {
 		let tangram_extension = deno_core::Extension::builder()
 			.ops(vec![
 				op_tangram_add_expression::decl(),
+				op_tangram_get_expression::decl(),
+				op_tangram_add_blob::decl(),
+				op_tangram_get_blob::decl(),
 				op_tangram_console_log::decl(),
 				op_tangram_evaluate::decl(),
-				op_tangram_get_expression::decl(),
 			])
 			.state({
 				let server = Arc::clone(&server);
@@ -166,6 +168,7 @@ impl Process {
 			}
 		}))
 		.await?;
+
 		let args = args
 			.iter()
 			.map(|arg| {
@@ -205,6 +208,7 @@ impl Process {
 		} else {
 			output
 		};
+
 		let output = serde_v8::from_v8(&mut scope, output)?;
 
 		Ok(output)
@@ -220,6 +224,37 @@ fn op_tangram_add_expression(
 	block_on(op(state, |server| async move {
 		server.add_expression(&expression).await
 	}))
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_get_expression(
+	state: Rc<RefCell<deno_core::OpState>>,
+	hash: Hash,
+) -> Result<Option<Expression>, deno_core::error::AnyError> {
+	block_on(op(state, |server| async move {
+		server.try_get_expression(hash).await
+	}))
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_add_blob(
+	state: Rc<RefCell<deno_core::OpState>>,
+	blob: String,
+) -> Result<Hash, deno_core::error::AnyError> {
+	block_on(op(state, |server| async move {
+		server.add_blob(blob.as_bytes()).await
+	}))
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_get_blob(
+	state: Rc<RefCell<deno_core::OpState>>,
+	_hash: Hash,
+) -> Result<Option<Vec<u8>>, deno_core::error::AnyError> {
+	block_on(op(state, |_| async move { todo!() }))
 }
 
 #[deno_core::op]
@@ -247,17 +282,6 @@ async fn op_tangram_evaluate(
 		|server| async move { server.evaluate(hash, hash).await },
 	)
 	.await
-}
-
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-fn op_tangram_get_expression(
-	state: Rc<RefCell<deno_core::OpState>>,
-	hash: Hash,
-) -> Result<Option<Expression>, deno_core::error::AnyError> {
-	block_on(op(state, |server| async move {
-		server.try_get_expression(hash).await
-	}))
 }
 
 async fn op<T, F, Fut>(

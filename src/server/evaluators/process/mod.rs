@@ -4,7 +4,7 @@ use crate::{
 	server::{temp::Temp, Evaluator, Server},
 	system::System,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::{
@@ -145,20 +145,9 @@ impl Process {
 		);
 
 		// Resolve the command.
-		let command = match server.get_expression(command).await? {
-			Expression::Path(path) => path,
-			_ => bail!("Command must evaluate to a path."),
-		};
-		let command_fragment = server
-			.create_fragment(command.artifact)
-			.await
-			.context("Failed to create the fragment for the command.")?;
-		let command_path = server.fragment_path(&command_fragment);
-		let command = if let Some(path) = &command.path {
-			command_path.join(path)
-		} else {
-			command_path
-		};
+		let command = self
+			.resolve(server, command, &server.get_expression(command).await?)
+			.await?;
 
 		// Resolve the args.
 		let args = match server.get_expression(args).await? {
@@ -176,12 +165,12 @@ impl Process {
 		// Run the process.
 
 		#[cfg(target_os = "linux")]
-		self.run_linux_process(server, system, envs, command, args, hash)
+		self.run_linux_process(server, system, envs, command.into(), args, hash)
 			.await
 			.context("Failed to run the process.")?;
 
 		#[cfg(target_os = "macos")]
-		self.run_macos_process(server, system, envs, command, args)
+		self.run_macos_process(server, system, envs, command.into(), args)
 			.await
 			.context("Failed to run the process.")?;
 
@@ -243,7 +232,10 @@ impl Process {
 			Expression::Artifact(_) => {
 				let fragment = server.create_fragment(hash).await?;
 				let fragment_path = server.fragment_path(&fragment);
-				let fragment_path_string = fragment_path.to_str().unwrap().to_owned();
+				let fragment_path_string = fragment_path
+					.to_str()
+					.ok_or_else(|| anyhow!("The path must be valid UTF-8."))?
+					.to_owned();
 				Ok(fragment_path_string)
 			},
 			Expression::Path(path) => {
