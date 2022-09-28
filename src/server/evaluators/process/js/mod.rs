@@ -209,9 +209,100 @@ impl Process {
 			output
 		};
 
-		let output = serde_v8::from_v8(&mut scope, output)?;
+		// If the output is null, create a tangram null expression.
+		if output.is_null() {
+			let hash = server.add_expression(&Expression::Null).await?;
+			return Ok(hash);
+		}
 
-		Ok(output)
+		// If the output is a string, create a tangram string expression.
+		if output.is_string() {
+			let value: String = serde_v8::from_v8(&mut scope, output).unwrap();
+			let hash = server
+				.add_expression(&Expression::String(value.into()))
+				.await?;
+			return Ok(hash);
+		}
+
+		// If the output is a number, create a tangram number expression.
+		if output.is_number() {
+			let value: f64 = serde_v8::from_v8(&mut scope, output).unwrap();
+			let hash = server.add_expression(&Expression::Number(value)).await?;
+			return Ok(hash);
+		}
+
+		// If the output is a bool, create a tangram bool expression.
+		if output.is_boolean() {
+			let value: bool = serde_v8::from_v8(&mut scope, output).unwrap();
+			let hash = server.add_expression(&Expression::Bool(value)).await?;
+			return Ok(hash);
+		}
+
+		// The output must be an object.
+		let output: v8::Local<v8::Object> = output
+			.try_into()
+			.context("The returned value must be a Tangram Expression or Tangram Hash Object.")?;
+
+		// If the output has a "hash" property and it is not a function, get it.
+		let hash_property_name = v8::String::new(&mut scope, "hash").unwrap();
+		let hash_value: Option<v8::Local<v8::Value>> =
+			output.get(&mut scope, hash_property_name.into());
+		if let Some(hash_value) = hash_value {
+			if !hash_value.is_function() {
+				let hash = serde_v8::from_v8(&mut scope, hash_value)?;
+				return Ok(hash);
+			}
+		}
+
+		// Otherwise, it is a Tangram JS Expression Object that we need to call the hash function on.
+		let hash_fn_name = v8::String::new(&mut scope, "hash").unwrap();
+		let hash_fn: v8::Local<v8::Function> = output
+			.get(&mut scope, hash_fn_name.into())
+			.ok_or_else(|| anyhow!(r#"The returned object must be a tangram expression"#))?
+			.try_into()
+			.context(
+				r#"The returned object must be a tangram expression object with a function named "hash"."#,
+			)?;
+
+		// Create a scope to call the export.
+		let mut try_catch_scope = v8::TryCatch::new(&mut scope);
+
+		// Call the specified export.
+		let output = hash_fn.call(&mut try_catch_scope, output.into(), &[]);
+
+		// If an exception was caught, return an error with an error message.
+		if try_catch_scope.has_caught() {
+			let exception = try_catch_scope.exception().unwrap();
+			let mut scope = v8::HandleScope::new(&mut try_catch_scope);
+			let error = deno_core::error::JsError::from_v8_exception(&mut scope, exception);
+			bail!(error);
+		}
+
+		// If there was no caught exception then retrieve the return value.
+		let output = output.unwrap();
+
+		// Move the return value to the global scope.
+		let output = v8::Global::new(&mut try_catch_scope, output);
+		drop(try_catch_scope);
+		drop(scope);
+
+		// Run the event loop to completion.
+		js_runtime.run_event_loop(false).await?;
+
+		// Retrieve the return value.
+		let mut scope = js_runtime.handle_scope();
+		let output = v8::Local::new(&mut scope, output);
+		let output = if output.is_promise() {
+			let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
+			promise.result(&mut scope)
+		} else {
+			output
+		};
+		let output: v8::Local<v8::Object> = output.try_into().unwrap();
+		let hash_property = v8::String::new(&mut scope, "hash").unwrap();
+		let hash = output.get(&mut scope, hash_property.into()).unwrap();
+		let hash = serde_v8::from_v8(&mut scope, hash)?;
+		Ok(hash)
 	}
 }
 
