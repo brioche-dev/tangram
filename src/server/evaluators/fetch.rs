@@ -147,6 +147,13 @@ impl Fetch {
 					archive.set_unpack_xattrs(false);
 					archive.unpack(&unpack_temp_path)?;
 				},
+				ArchiveFormat::TarLz => {
+					let mut archive =
+						tar::Archive::new(lz4_flex::frame::FrameDecoder::new(archive_reader));
+					archive.set_preserve_permissions(false);
+					archive.set_unpack_xattrs(false);
+					archive.unpack(&unpack_temp_path)?;
+				},
 				ArchiveFormat::TarXz => {
 					let mut archive = tar::Archive::new(xz::read::XzDecoder::new(archive_reader));
 					archive.set_preserve_permissions(false);
@@ -179,6 +186,7 @@ impl Fetch {
 enum ArchiveFormat {
 	TarBz2,
 	TarGz,
+	TarLz,
 	TarXz,
 	TarZstd,
 	Tar,
@@ -193,6 +201,8 @@ impl ArchiveFormat {
 			Some(ArchiveFormat::TarBz2)
 		} else if path.ends_with(".tar.gz") || path.ends_with(".tgz") {
 			Some(ArchiveFormat::TarGz)
+		} else if path.ends_with(".tar.lz") || path.ends_with(".tlz") {
+			Some(ArchiveFormat::TarLz)
 		} else if path.ends_with(".tar.xz") || path.ends_with(".txz") {
 			Some(ArchiveFormat::TarXz)
 		} else if path.ends_with(".tar.zstd")
