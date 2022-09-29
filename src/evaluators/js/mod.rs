@@ -1,0 +1,396 @@
+use self::module_loader::{ModuleLoader, TANGRAM_MODULE_SCHEME};
+use crate::{
+	builder,
+	evaluators::Evaluator,
+	expression::{self, Expression},
+	hash::Hash,
+};
+use anyhow::{anyhow, bail, Context, Result};
+use async_trait::async_trait;
+use deno_core::{serde_v8, v8, JsRuntime};
+use futures::future::try_join_all;
+use std::{cell::RefCell, convert::TryInto, future::Future, num::NonZeroUsize, rc::Rc, sync::Arc};
+use url::Url;
+
+mod module_loader;
+
+pub struct Js {
+	local_pool_handle: tokio_util::task::LocalPoolHandle,
+}
+
+impl Js {
+	#[must_use]
+	pub fn new() -> Js {
+		let available_parallelism = std::thread::available_parallelism()
+			.unwrap_or_else(|_| NonZeroUsize::new(1).unwrap())
+			.into();
+		let local_pool_handle = tokio_util::task::LocalPoolHandle::new(available_parallelism);
+		Js { local_pool_handle }
+	}
+}
+
+impl Default for Js {
+	fn default() -> Self {
+		Js::new()
+	}
+}
+
+#[async_trait]
+impl Evaluator for Js {
+	async fn evaluate(
+		&self,
+		builder: &builder::Shared,
+		hash: Hash,
+		expression: &Expression,
+	) -> Result<Option<Hash>> {
+		let js = if let Expression::Js(js) = expression {
+			js
+		} else {
+			return Ok(None);
+		};
+
+		// Get a handle to the current tokio runtime.
+		let main_runtime_handle = tokio::runtime::Handle::current();
+
+		// Run the js process on the local task pool.
+		let output_hash = self
+			.local_pool_handle
+			.spawn_pinned({
+				let builder = builder.clone();
+				let js = js.clone();
+				move || async move { run_js_process(builder, main_runtime_handle, &js).await }
+			})
+			.await
+			.unwrap()?;
+
+		// Evaluate the expression.
+		let output_hash = builder
+			.evaluate(output_hash, hash)
+			.await
+			.context("Failed to evaluate the expression returned by the JS process.")?;
+
+		Ok(Some(output_hash))
+	}
+}
+
+const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/snapshot"));
+
+#[derive(Clone)]
+struct OpState {
+	builder: builder::Shared,
+	main_runtime_handle: tokio::runtime::Handle,
+}
+
+#[allow(clippy::too_many_lines)]
+async fn run_js_process(
+	builder: builder::Shared,
+	main_runtime_handle: tokio::runtime::Handle,
+	js: &expression::Js,
+) -> Result<Hash> {
+	// Build the tangram extension.
+	let tangram_extension = deno_core::Extension::builder()
+		.ops(vec![
+			op_tangram_console::decl(),
+			op_tangram_add_blob::decl(),
+			op_tangram_get_blob::decl(),
+			op_tangram_add_expression::decl(),
+			op_tangram_get_expression::decl(),
+			op_tangram_evaluate::decl(),
+		])
+		.state({
+			let main_runtime_handle = main_runtime_handle.clone();
+			let builder = builder.clone();
+			move |state| {
+				let builder = builder.clone();
+				state.put(Arc::new(OpState {
+					builder,
+					main_runtime_handle: main_runtime_handle.clone(),
+				}));
+				Ok(())
+			}
+		})
+		.build();
+
+	// Create the module loader.
+	let module_loader = Rc::new(ModuleLoader::new(
+		builder.clone(),
+		main_runtime_handle.clone(),
+	));
+
+	// Create the js runtime.
+	let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
+		source_map_getter: Some(
+			Box::new(Rc::clone(&module_loader)) as Box<dyn deno_core::SourceMapGetter>
+		),
+		module_loader: Some(Rc::clone(&module_loader) as Rc<dyn deno_core::ModuleLoader>),
+		extensions: vec![tangram_extension],
+		startup_snapshot: Some(deno_core::Snapshot::Static(SNAPSHOT)),
+		..Default::default()
+	});
+
+	// Create the module URL.
+	let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", js.artifact);
+
+	// Add the module path if necessary.
+	if let Some(path) = &js.path {
+		module_url.push('/');
+		module_url.push_str(path.as_str());
+	}
+
+	// Parse the module URL.
+	let module_url = Url::parse(&module_url).unwrap();
+
+	// Load the module.
+	let module_id = js_runtime.load_side_module(&module_url, None).await?;
+	let evaluate_receiver = js_runtime.mod_evaluate(module_id);
+	js_runtime.run_event_loop(false).await?;
+	evaluate_receiver.await.unwrap()?;
+
+	// Retrieve the specified export from the module.
+	let module_namespace = js_runtime.get_module_namespace(module_id)?;
+	let mut scope = js_runtime.handle_scope();
+	let module_namespace = v8::Local::<v8::Object>::new(&mut scope, module_namespace);
+	let export_name = js.name.clone();
+	let export_literal = v8::String::new(&mut scope, &export_name).unwrap();
+	let export: v8::Local<v8::Function> = module_namespace
+		.get(&mut scope, export_literal.into())
+		.ok_or_else(|| {
+			anyhow!(r#"Failed to get the export "{export_name}" from the module "{module_url}"."#)
+		})?
+		.try_into()
+		.with_context(|| {
+			format!(
+				r#"The export "{export_name}" from the module "{module_url}" must be a function."#
+			)
+		})?;
+
+	// Create a scope to call the export.
+	let mut try_catch_scope = v8::TryCatch::new(&mut scope);
+
+	// Evaluate the args and move them to v8.
+	let args = builder.get_expression(js.args).await?;
+	let args = match args {
+		Expression::Array(array) => array,
+		_ => bail!("Args must be an array."),
+	};
+	let args = try_join_all(args.iter().map(|arg| async {
+		let expression = builder.get_expression(*arg).await?;
+		match expression {
+			Expression::String(string) => Ok::<_, anyhow::Error>(string),
+			_ => bail!("Args must evaluate to strings."),
+		}
+	}))
+	.await?;
+
+	let args = args
+		.iter()
+		.map(|arg| {
+			let arg = serde_v8::to_v8(&mut try_catch_scope, arg)?;
+			Ok(arg)
+		})
+		.collect::<Result<Vec<_>>>()?;
+
+	// Call the specified export.
+	let undefined = v8::undefined(&mut try_catch_scope);
+	let output = export.call(&mut try_catch_scope, undefined.into(), &args);
+
+	// If an exception was caught, return an error with an error message.
+	if try_catch_scope.has_caught() {
+		let exception = try_catch_scope.exception().unwrap();
+		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
+		let error = deno_core::error::JsError::from_v8_exception(&mut scope, exception);
+		bail!(error);
+	}
+
+	// If there was no caught exception then retrieve the return value.
+	let output = output.unwrap();
+
+	// Move the return value to the global scope.
+	let output = v8::Global::new(&mut try_catch_scope, output);
+	drop(try_catch_scope);
+	drop(scope);
+
+	// Run the event loop to completion.
+	js_runtime.run_event_loop(false).await?;
+
+	// Retrieve the return value.
+	let mut scope = js_runtime.handle_scope();
+	let output = v8::Local::new(&mut scope, output);
+	let output = if output.is_promise() {
+		let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
+		promise.result(&mut scope)
+	} else {
+		output
+	};
+
+	// Move the return value to the global scope.
+	let output = v8::Global::new(&mut scope, output);
+	drop(scope);
+
+	// Create a try catch scope to call Tangram.toInternal.
+	let mut scope = js_runtime.handle_scope();
+	let mut try_catch_scope = v8::TryCatch::new(&mut scope);
+
+	// Move the output to the try catch scope.
+	let output = v8::Local::new(&mut try_catch_scope, output);
+
+	// Retrieve Tangram.toInternal.
+	let to_internal_function: v8::Local<v8::Function> =
+		JsRuntime::grab_global(&mut try_catch_scope, "Tangram.toInternal")
+			.ok_or_else(|| anyhow!("Failed to get Tangram.toInternal."))?;
+
+	// Call Tangram.toInternal.
+	let undefined = v8::undefined(&mut try_catch_scope);
+	let output = to_internal_function.call(&mut try_catch_scope, undefined.into(), &[output]);
+
+	// If an exception was caught, return an error with an error message.
+	if try_catch_scope.has_caught() {
+		let exception = try_catch_scope.exception().unwrap();
+		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
+		let error = deno_core::error::JsError::from_v8_exception(&mut scope, exception);
+		bail!(error);
+	}
+
+	// If there was no caught exception then retrieve the return value.
+	let output = output.unwrap();
+
+	// Move the return value to the global scope.
+	let output = v8::Global::new(&mut try_catch_scope, output);
+	drop(try_catch_scope);
+	drop(scope);
+
+	// Run the event loop to completion.
+	js_runtime.run_event_loop(false).await?;
+
+	// Retrieve the output.
+	let mut scope = js_runtime.handle_scope();
+	let output = v8::Local::new(&mut scope, output);
+	let output = if output.is_promise() {
+		let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
+		promise.result(&mut scope)
+	} else {
+		output
+	};
+
+	// Deserialize the output.
+	let expression: Expression = serde_v8::from_v8(&mut scope, output)?;
+
+	// Add the expression.
+	let hash = builder.add_expression(&expression).await?;
+
+	Ok(hash)
+}
+
+#[derive(Clone, Copy, serde::Deserialize, serde::Serialize)]
+enum ConsoleLevel {
+	#[serde(rename = "log")]
+	Log,
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+fn op_tangram_console(
+	_level: ConsoleLevel,
+	args: Vec<serde_json::Value>,
+) -> Result<(), deno_core::error::AnyError> {
+	let len = args.len();
+	for (i, arg) in args.into_iter().enumerate() {
+		print!("{arg}");
+		if i != len - 1 {
+			print!(" ");
+		}
+	}
+	println!();
+	Ok(())
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_add_blob(
+	state: Rc<RefCell<deno_core::OpState>>,
+	blob: String,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |builder| async move {
+		let hash = builder.add_blob(blob.as_bytes()).await?;
+		Ok::<_, anyhow::Error>(hash)
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_get_blob(
+	state: Rc<RefCell<deno_core::OpState>>,
+	hash: Hash,
+) -> Result<String, deno_core::error::AnyError> {
+	op(state, |builder| async move {
+		let path = builder.get_blob(hash).await?;
+		let string = tokio::fs::read_to_string(&path).await?;
+		Ok::<_, anyhow::Error>(string)
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_add_expression(
+	state: Rc<RefCell<deno_core::OpState>>,
+	expression: Expression,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |builder| async move {
+		let hash = builder.add_expression(&expression).await?;
+		Ok::<_, anyhow::Error>(hash)
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_get_expression(
+	state: Rc<RefCell<deno_core::OpState>>,
+	hash: Hash,
+) -> Result<Option<Expression>, deno_core::error::AnyError> {
+	op(state, |builder| async move {
+		let expression = builder.try_get_expression(hash).await?;
+		Ok::<_, anyhow::Error>(expression)
+	})
+	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps)]
+async fn op_tangram_evaluate(
+	state: Rc<RefCell<deno_core::OpState>>,
+	hash: Hash,
+) -> Result<Hash, deno_core::error::AnyError> {
+	op(state, |builder| async move {
+		let output = builder.evaluate(hash, hash).await?;
+		Ok::<_, anyhow::Error>(output)
+	})
+	.await
+}
+
+async fn op<T, F, Fut>(
+	state: Rc<RefCell<deno_core::OpState>>,
+	f: F,
+) -> Result<T, deno_core::error::AnyError>
+where
+	T: 'static + Send,
+	F: FnOnce(builder::Shared) -> Fut,
+	Fut: 'static + Send + Future<Output = Result<T, deno_core::error::AnyError>>,
+{
+	let state = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(state)
+	};
+	let output = state
+		.main_runtime_handle
+		.spawn({
+			let builder = state.builder.clone();
+			f(builder)
+		})
+		.await
+		.unwrap()?;
+	Ok(output)
+}

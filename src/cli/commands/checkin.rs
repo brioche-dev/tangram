@@ -8,8 +8,8 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Create the client.
-	let client = crate::client::new().await?;
+	// Create the builder.
+	let builder = crate::builder().await?;
 
 	// Get the path.
 	let mut path = std::env::current_dir().context("Failed to determine the current directory.")?;
@@ -18,9 +18,9 @@ pub async fn run(args: Args) -> Result<()> {
 	}
 
 	// Perform the checkin.
-	let artifact = client.checkin(&path).await?;
+	let hash = builder.lock_shared().await?.checkin(&path).await?;
 
-	println!("{artifact}");
+	println!("{hash}");
 
 	Ok(())
 }

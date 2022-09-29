@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# Determine the tangram path.
+env_path=${BASH_SOURCE[0]:-${(%):-%x}}
+tangram_path=$(dirname "${env_path}")
+tangram_path=$(readlink -f "${tangram_path}")
+
+# Check if the tangram bin path has been added to $PATH.
+case ":${PATH}:" in
+	*:"${tangram_path}/bin":*)
+		tangram_path_added=0
+		;;
+	*)
+		tangram_path_added=1
+		;;
+esac
+
+# If it has not been added, then add it.
+if [[ ${tangram_path_added} -ne 0 ]]; then
+	export PATH="${tangram_path}/bin:$PATH"
+fi

@@ -1,68 +1,204 @@
-use self::{
-	config::Config,
-	transport::{InProcessOrHttp, Transport},
-};
-use crate::{heuristics::FILESYSTEM_CONCURRENCY_LIMIT, server::Server};
-use anyhow::Result;
-use async_recursion::async_recursion;
-use std::sync::Arc;
-use tokio::sync::Semaphore;
+use anyhow::{bail, Context, Result};
+use url::Url;
 
-mod autoshell;
-mod cache;
-pub mod checkin;
-mod checkin_package;
-pub mod checkout;
-pub mod config;
+mod blob;
 mod evaluate;
 mod expression;
-mod gc;
 mod package;
-mod transport;
 
+#[derive(Clone)]
 pub struct Client {
-	transport: Transport,
-	file_system_semaphore: Arc<Semaphore>,
+	pub url: Url,
+	pub token: Option<String>,
+	pub client:
+		hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>, hyper::Body>,
 }
 
 impl Client {
-	#[async_recursion]
 	#[must_use]
-	pub async fn new_with_config(config: Config) -> Result<Client> {
-		let transport = match config.transport {
-			self::config::Transport::InProcess { server } => {
-				let server = Server::new(server).await?;
-				Transport::InProcess(server)
-			},
-			self::config::Transport::Unix { path } => Transport::Unix(transport::Unix::new(path)),
-			self::config::Transport::Tcp { url } => Transport::Tcp(transport::Tcp::new(url)),
-		};
+	pub fn new(url: Url, token: Option<String>) -> Client {
+		let client: hyper::Client<_, hyper::Body> = hyper::Client::builder().build(
+			hyper_rustls::HttpsConnectorBuilder::new()
+				.with_native_roots()
+				.https_or_http()
+				.enable_http1()
+				.build(),
+		);
+		Client { url, token, client }
+	}
+}
 
-		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
-
-		let client = Client {
-			transport,
-			file_system_semaphore,
-		};
-
-		Ok(client)
+impl Client {
+	pub fn create_request(
+		&self,
+		method: http::Method,
+		uri: String,
+		body: hyper::Body,
+	) -> Result<http::Request<hyper::Body>> {
+		let mut request = http::Request::builder().method(method).uri(uri);
+		if let Some(token) = &self.token {
+			request.headers_mut().unwrap().insert(
+				http::header::AUTHORIZATION,
+				format!("Bearer {token}").parse().unwrap(),
+			);
+		}
+		let request = request.body(body).unwrap();
+		Ok(request)
 	}
 
-	#[must_use]
-	pub fn new_for_server(server: &Arc<Server>) -> Client {
-		let transport = Transport::InProcess(Arc::clone(server));
-		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
-		Client {
-			transport,
-			file_system_semaphore,
-		}
+	pub async fn request(
+		&self,
+		request: http::Request<hyper::Body>,
+	) -> Result<http::Response<hyper::Body>> {
+		self.client
+			.request(request)
+			.await
+			.context("Failed to send the request.")
 	}
 
-	#[must_use]
-	pub fn as_in_process(&self) -> Option<&Arc<Server>> {
-		match self.transport.as_in_process_or_http() {
-			InProcessOrHttp::InProcess(server) => Some(server),
-			InProcessOrHttp::Http(_) => None,
+	pub async fn get(&self, path: &str) -> Result<hyper::Body> {
+		// Build the URL.
+		let mut url = self.url.clone();
+		url.set_path(path);
+
+		// Create the request.
+		let request =
+			self.create_request(http::Method::GET, url.to_string(), hyper::Body::empty())?;
+
+		// Send the request.
+		let response = self.request(request).await?;
+
+		// Handle a non-success status.
+		if !response.status().is_success() {
+			let status = response.status();
+			let body = hyper::body::to_bytes(response.into_body())
+				.await
+				.context("Failed to read response body.")?;
+			let body = String::from_utf8(body.to_vec())
+				.context("Failed to read response body as string.")?;
+			bail!("{status}\n{body}");
 		}
+
+		Ok(response.into_body())
+	}
+
+	pub async fn get_json<U>(&self, path: &str) -> Result<U>
+	where
+		U: serde::de::DeserializeOwned,
+	{
+		// Build the URL.
+		let mut url = self.url.clone();
+		url.set_path(path);
+
+		// Create the request.
+		let request = http::Request::builder()
+			.method(http::Method::GET)
+			.uri(url.to_string())
+			.body(hyper::Body::empty())
+			.unwrap();
+
+		// Send the request.
+		let response = self
+			.client
+			.request(request)
+			.await
+			.context("Failed to send the request.")?;
+
+		// Handle a non-success status.
+		if !response.status().is_success() {
+			let status = response.status();
+			let body = hyper::body::to_bytes(response.into_body())
+				.await
+				.context("Failed to read response body.")?;
+			let body = String::from_utf8(body.to_vec())
+				.context("Failed to read response body as string.")?;
+			bail!("{status}\n{body}");
+		}
+
+		// Read the response body.
+		let body = hyper::body::to_bytes(response.into_body())
+			.await
+			.context("Failed to read response body.")?;
+
+		// Deserialize the response body.
+		let response =
+			serde_json::from_slice(&body).context("Failed to deserialize the response body.")?;
+
+		Ok(response)
+	}
+
+	pub async fn post(&self, path: &str, body: hyper::Body) -> Result<hyper::Body> {
+		// Build the URL.
+		let mut url = self.url.clone();
+		url.set_path(path);
+
+		// Create the request.
+		let request = http::Request::builder()
+			.method(http::Method::POST)
+			.uri(url.to_string())
+			.body(body)
+			.unwrap();
+
+		// Send the request.
+		let response = self.request(request).await?;
+
+		// Handle a non-success status.
+		if !response.status().is_success() {
+			let status = response.status();
+			let body = hyper::body::to_bytes(response.into_body())
+				.await
+				.context("Failed to read response body.")?;
+			let body = String::from_utf8(body.to_vec())
+				.context("Failed to read response body as string.")?;
+			bail!("{status}\n{body}");
+		}
+
+		Ok(response.into_body())
+	}
+
+	pub async fn post_json<T, U>(&self, path: &str, body: &T) -> Result<U>
+	where
+		T: serde::Serialize,
+		U: serde::de::DeserializeOwned,
+	{
+		// Build the URL.
+		let mut url = self.url.clone();
+		url.set_path(path);
+
+		// Serialize the body.
+		let body = serde_json::to_string(&body).context("Failed to serialize the request body.")?;
+
+		// Create the request.
+		let request = http::Request::builder()
+			.method(http::Method::POST)
+			.uri(url.to_string())
+			.header(http::header::CONTENT_TYPE, "application/json")
+			.body(hyper::Body::from(body))
+			.unwrap();
+
+		// Send the request.
+		let response = self.request(request).await?;
+
+		// Handle a non-success status.
+		if !response.status().is_success() {
+			let status = response.status();
+			let body = hyper::body::to_bytes(response.into_body())
+				.await
+				.context("Failed to read response body.")?;
+			let body = String::from_utf8(body.to_vec())
+				.context("Failed to read response body as string.")?;
+			bail!("{status}\n{body}");
+		}
+
+		// Read the response body.
+		let body = hyper::body::to_bytes(response.into_body())
+			.await
+			.context("Failed to read response body.")?;
+
+		// Deserialize the response body.
+		let response =
+			serde_json::from_slice(&body).context("Failed to deserialize the response body.")?;
+
+		Ok(response)
 	}
 }

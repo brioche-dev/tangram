@@ -2,19 +2,21 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 
-use anyhow::Result;
+use crate::config::Config;
+use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use futures::FutureExt;
+use std::path::PathBuf;
+use tangram::builder::Builder;
 use tracing_subscriber::prelude::*;
 
-mod client;
 mod commands;
 mod config;
+mod credentials;
 mod dirs;
-mod util;
 
 #[derive(Parser)]
-#[clap(
+#[command(
 	about = env!("CARGO_PKG_DESCRIPTION"),
 	disable_help_subcommand = true,
 	long_version = env!("CARGO_PKG_VERSION"),
@@ -22,7 +24,7 @@ mod util;
 	version = env!("CARGO_PKG_VERSION"),
 )]
 struct Args {
-	#[clap(subcommand)]
+	#[command(subcommand)]
 	subcommand: Subcommand,
 }
 
@@ -35,14 +37,17 @@ enum Subcommand {
 	Fetch(commands::fetch::Args),
 	Gc(commands::gc::Args),
 	Init(commands::init::Args),
+	// Login(commands::login::Args),
 	New(commands::new::Args),
-	Publish(commands::publish::Args),
+	// Publish(commands::publish::Args),
 	Run(commands::run::Args),
 	Search(commands::search::Args),
-	Server(commands::server::Args),
+	Serve(commands::serve::Args),
 	Shell(commands::shell::Args),
 	Update(commands::update::Args),
 	Upgrade(commands::upgrade::Args),
+	Push(commands::push::Args),
+	Pull(commands::pull::Args),
 }
 
 #[tokio::main]
@@ -64,17 +69,55 @@ async fn main() -> Result<()> {
 		Subcommand::Fetch(args) => commands::fetch::run(args).boxed(),
 		Subcommand::Gc(args) => commands::gc::run(args).boxed(),
 		Subcommand::Init(args) => commands::init::run(args).boxed(),
+		// Subcommand::Login(args) => commands::login::run(args).boxed(),
 		Subcommand::New(args) => commands::new::run(args).boxed(),
-		Subcommand::Publish(args) => commands::publish::run(args).boxed(),
+		// Subcommand::Publish(args) => commands::publish::run(args).boxed(),
+		Subcommand::Pull(args) => commands::pull::run(args).boxed(),
+		Subcommand::Push(args) => commands::push::run(args).boxed(),
 		Subcommand::Run(args) => commands::run::run(args).boxed(),
 		Subcommand::Search(args) => commands::search::run(args).boxed(),
-		Subcommand::Server(args) => commands::server::run(args).boxed(),
+		Subcommand::Serve(args) => commands::serve::run(args).boxed(),
 		Subcommand::Shell(args) => commands::shell::run(args).boxed(),
 		Subcommand::Update(args) => commands::update::run(args).boxed(),
 		Subcommand::Upgrade(args) => commands::upgrade::run(args).boxed(),
 	}
 	.await?;
 	Ok(())
+}
+
+pub fn path() -> Result<PathBuf> {
+	Ok(crate::dirs::home_directory_path()
+		.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
+		.join(".tangram"))
+}
+
+pub fn config_path() -> Result<PathBuf> {
+	Ok(path()?.join("config.json"))
+}
+
+pub fn credentials_path() -> Result<PathBuf> {
+	Ok(path()?.join("credentials.json"))
+}
+
+pub async fn builder() -> Result<Builder> {
+	// Get the path.
+	let path = path()?;
+
+	// Read the config.
+	let config_path = config_path()?;
+	let config = Config::read(&config_path)
+		.await
+		.context("Failed to read the config.")?;
+
+	// Create the builder.
+	let builder = Builder::new(tangram::config::Config {
+		path,
+		peers: config.peers,
+	})
+	.await
+	.context("Failed to create the builder.")?;
+
+	Ok(builder)
 }
 
 fn setup_tracing() {

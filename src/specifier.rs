@@ -1,18 +1,18 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Specifier {
 	Path(Path),
 	Registry(Registry),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Path {
 	pub path: PathBuf,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Registry {
 	pub package_name: String,
 	pub version: Option<String>,

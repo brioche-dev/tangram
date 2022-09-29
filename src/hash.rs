@@ -32,7 +32,7 @@ impl TryFrom<&[u8]> for Hash {
 	fn try_from(slice: &[u8]) -> anyhow::Result<Hash> {
 		let data = slice.try_into().with_context(|| {
 			format!(
-				"Could not create hash from slice with length {}.",
+				"Could not create a hash from a slice with length {}.",
 				slice.len(),
 			)
 		})?;

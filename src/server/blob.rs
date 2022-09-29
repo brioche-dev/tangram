@@ -1,87 +1,11 @@
 use super::{error::bad_request, error::not_found, Server};
-use crate::{
-	hash::{Hash, Hasher},
-	util::path_exists,
-};
-use anyhow::{anyhow, bail, Context, Result};
+use crate::hash::Hash;
+use anyhow::{bail, Context, Result};
 use futures::TryStreamExt;
-use std::{path::PathBuf, sync::Arc};
-use tokio::io::{AsyncRead, AsyncWriteExt};
-use tokio_stream::StreamExt;
 
 impl Server {
-	pub async fn add_blob(self: &Arc<Self>, reader: impl AsyncRead + Unpin) -> Result<Hash> {
-		// Create a temp file to read the blob into.
-		let temp = self.create_temp();
-		let temp_path = self.temp_path(&temp);
-		let mut temp_file = tokio::fs::File::create(&temp_path).await?;
-
-		// Compute the hash of the bytes in the reader and write them to the temp file.
-		let mut stream = tokio_util::io::ReaderStream::new(reader);
-		let mut hasher = Hasher::new();
-		while let Some(chunk) = stream.next().await {
-			let chunk = chunk?;
-			hasher.update(&chunk);
-			temp_file.write_all(&chunk).await?;
-		}
-		let blob_hash = hasher.finalize();
-		temp_file.sync_all().await?;
-		drop(temp_file);
-
-		// Move the temp file to the blobs path.
-		let blob_path = self.blob_path(blob_hash);
-		tokio::fs::rename(&temp_path, &blob_path).await?;
-
-		Ok(blob_hash)
-	}
-
-	pub async fn get_blob(self: &Arc<Self>, hash: Hash) -> Result<Handle> {
-		let hash = self
-			.try_get_blob(hash)
-			.await?
-			.ok_or_else(|| anyhow!(r#"Failed to get blob with hash "{hash}"."#))?;
-		Ok(hash)
-	}
-
-	pub async fn try_get_blob(self: &Arc<Self>, hash: Hash) -> Result<Option<Handle>> {
-		let blob_path = self.blob_path(hash);
-
-		// Check if the blob exists.
-		// TODO Get the blob from peers if it does not exist.
-		if !path_exists(&blob_path).await? {
-			return Ok(None);
-		}
-
-		Ok(Some(Handle {
-			hash,
-			path: blob_path,
-		}))
-	}
-
-	#[must_use]
-	pub fn blobs_path(self: &Arc<Self>) -> PathBuf {
-		self.path.join("blobs")
-	}
-
-	#[must_use]
-	pub fn blob_path(self: &Arc<Self>, blob_hash: Hash) -> PathBuf {
-		self.path.join("blobs").join(blob_hash.to_string())
-	}
-}
-
-pub struct Handle {
-	pub hash: Hash,
-	pub path: PathBuf,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct CreateResponse {
-	pub blob_hash: Hash,
-}
-
-impl Server {
-	pub(super) async fn handle_create_blob_request(
-		self: &Arc<Self>,
+	pub(super) async fn handle_add_blob_request(
+		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
 		// Read the path params.
@@ -104,12 +28,10 @@ impl Server {
 		);
 
 		// Add the blob.
-		let blob_hash = self.add_blob(body).await?;
+		let hash = self.builder.lock_shared().await?.add_blob(body).await?;
 
 		// Create the response.
-		let response = CreateResponse { blob_hash };
-		let response =
-			serde_json::to_vec(&response).context("Failed to serialize the response.")?;
+		let response = hash.to_string();
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(hyper::Body::from(response))
@@ -119,7 +41,7 @@ impl Server {
 	}
 
 	pub(super) async fn handle_get_blob_request(
-		self: &Arc<Self>,
+		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
 		// Read the path params.
@@ -135,18 +57,21 @@ impl Server {
 		};
 
 		// Get the blob.
-		let handle = match self.try_get_blob(blob_hash).await? {
-			Some(handle) => handle,
+		let path = match self
+			.builder
+			.lock_shared()
+			.await?
+			.try_get_blob(blob_hash)
+			.await?
+		{
+			Some(path) => path,
 			None => return Ok(not_found()),
 		};
 
 		// Create the stream for the file.
-		let file = tokio::fs::File::open(&handle.path).await.with_context(|| {
-			format!(
-				r#"Failed to open file at path "{}"."#,
-				&handle.path.display()
-			)
-		})?;
+		let file = tokio::fs::File::open(&path)
+			.await
+			.with_context(|| format!(r#"Failed to open file at path "{}"."#, path.display()))?;
 		let stream = tokio_util::io::ReaderStream::new(file);
 		let response = hyper::Body::wrap_stream(stream);
 

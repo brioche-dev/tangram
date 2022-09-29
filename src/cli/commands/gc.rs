@@ -5,11 +5,18 @@ use clap::Parser;
 pub struct Args {}
 
 pub async fn run(_args: Args) -> Result<()> {
-	// Create the client.
-	let client = crate::client::new().await?;
+	// Create the builder.
+	let builder = crate::builder().await?;
+
+	// Collect the roots.
+	let roots = Vec::new();
 
 	// Perform the garbage collection.
-	client.garbage_collect().await?;
+	builder
+		.lock_exclusive()
+		.await?
+		.garbage_collect(roots)
+		.await?;
 
 	Ok(())
 }

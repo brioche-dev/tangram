@@ -1,56 +1,54 @@
-use std::path::PathBuf;
-
-use crate::util::path_exists;
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
+use std::path::{Path, PathBuf};
 use url::Url;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Config {
-	pub path: PathBuf,
 	pub peers: Vec<Url>,
+	pub autoshells: Vec<PathBuf>,
 }
 
-mod file {
-	use std::path::PathBuf;
+pub mod file {
+	use anyhow::{Context, Result};
+	use std::path::{Path, PathBuf};
+	use tangram::util::path_exists;
 	use url::Url;
 
-	#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+	#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 	pub struct Config {
-		pub path: Option<PathBuf>,
+		#[serde(skip_serializing_if = "Option::is_none")]
 		pub peers: Option<Vec<Url>>,
+		#[serde(skip_serializing_if = "Option::is_none")]
+		pub autoshells: Option<Vec<PathBuf>>,
+	}
+
+	impl Config {
+		pub async fn read(path: &Path) -> Result<Option<Config>> {
+			let config: Option<Config> = if path_exists(path).await? {
+				let config = tokio::fs::read(&path).await.with_context(|| {
+					format!(r#"Failed to read the config from "{}"."#, path.display())
+				})?;
+				let config = serde_json::from_slice(&config)?;
+				Some(config)
+			} else {
+				None
+			};
+			Ok(config)
+		}
+
+		pub async fn write(&self, path: &Path) -> Result<()> {
+			let bytes = serde_json::to_vec(self)?;
+			tokio::fs::write(&path, &bytes).await.with_context(|| {
+				format!(r#"Failed to write the config to "{}"."#, path.display())
+			})?;
+			Ok(())
+		}
 	}
 }
 
 impl Config {
-	pub async fn read() -> Result<Config> {
-		// Read the config.
-		let config_path = crate::dirs::home_directory_path()
-			.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
-			.join(".tangram")
-			.join("config.json");
-		let config: Option<file::Config> = if path_exists(&config_path).await? {
-			let user_config = tokio::fs::read(&config_path).await.with_context(|| {
-				format!(
-					r#"Failed to read the user configuration from "{}"."#,
-					config_path.display()
-				)
-			})?;
-			let user_config = serde_json::from_slice(&user_config)?;
-			Some(user_config)
-		} else {
-			None
-		};
-
-		// Resolve the path.
-		let path = config
-			.as_ref()
-			.and_then(|config| config.path.as_ref())
-			.cloned();
-		let default_path = crate::dirs::home_directory_path()
-			.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
-			.join("tangram")
-			.join("server");
-		let path = path.unwrap_or(default_path);
+	pub async fn read(path: &Path) -> Result<Config> {
+		let config = file::Config::read(path).await?;
 
 		// Resolve the peers.
 		let peers = config
@@ -59,8 +57,15 @@ impl Config {
 			.cloned();
 		let peers = peers.unwrap_or_default();
 
+		// Resolve the autoshells.
+		let autoshells = config
+			.as_ref()
+			.and_then(|config| config.autoshells.as_ref())
+			.cloned();
+		let autoshells = autoshells.unwrap_or_default();
+
 		// Create the config.
-		let config = Config { path, peers };
+		let config = Config { peers, autoshells };
 
 		Ok(config)
 	}

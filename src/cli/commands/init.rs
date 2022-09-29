@@ -5,9 +5,9 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct Args {
-	#[clap(long)]
+	#[arg(long)]
 	pub name: Option<String>,
-	#[clap(long)]
+	#[arg(long)]
 	pub version: Option<String>,
 	pub path: Option<PathBuf>,
 }

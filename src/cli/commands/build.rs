@@ -5,47 +5,46 @@ use tangram::system::System;
 
 #[derive(Parser)]
 pub struct Args {
-	#[clap(long, takes_value = false)]
+	#[arg(long)]
 	locked: bool,
-	#[clap(default_value = ".")]
+	#[arg(default_value = ".")]
 	package: PathBuf,
-	#[clap(default_value = "default")]
+	#[arg(default_value = "default")]
 	name: String,
-	#[clap(long)]
+	#[arg(long)]
 	system: Option<System>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Create the client.
-	let client = crate::client::new().await?;
+	// Create the builder.
+	let builder = crate::builder().await?.lock_shared().await?;
 
-	// Checkin the package.
-	let package = client
+	// Create the package.
+	let package_hash = builder
 		.checkin_package(&args.package, args.locked)
 		.await
-		.context("Failed to check in the package.")?;
+		.context("Failed to create the package.")?;
 
 	// Add the args.
 	let mut target_args = Vec::new();
 	if let Some(system) = args.system {
 		target_args.push(
-			client
+			builder
 				.add_expression(&tangram::expression::Expression::String(
 					system.to_string().into(),
 				))
 				.await?,
 		);
 	};
-	let target_args = client
+	let target_args = builder
 		.add_expression(&tangram::expression::Expression::Array(target_args))
 		.await?;
 
 	// Add the expression.
-	let expression_hash = client
+	let expression_hash = builder
 		.add_expression(&tangram::expression::Expression::Target(
 			tangram::expression::Target {
-				lockfile: None,
-				package,
+				package: package_hash,
 				name: args.name,
 				args: target_args,
 			},
@@ -53,13 +52,13 @@ pub async fn run(args: Args) -> Result<()> {
 		.await?;
 
 	// Evaluate the expression.
-	let output_hash = client
-		.evaluate(expression_hash)
+	let output_hash = builder
+		.evaluate(expression_hash, expression_hash)
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
 	// Print the output.
-	let output = client.get_expression(output_hash).await?;
+	let output = builder.get_expression(output_hash).await?;
 	let output_json =
 		serde_json::to_string_pretty(&output).context("Failed to serialize the expression.")?;
 	println!("{expression_hash} => {output_json}");

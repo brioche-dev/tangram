@@ -1,4 +1,7 @@
-use crate::config::Config;
+use crate::{
+	config::{file, Config},
+	config_path,
+};
 use anyhow::{Context, Result};
 use clap::Parser;
 use futures::FutureExt;
@@ -6,7 +9,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct Args {
-	#[clap(subcommand)]
+	#[command(subcommand)]
 	subcommand: Subcommand,
 }
 
@@ -24,9 +27,6 @@ pub struct AddArgs {
 
 #[derive(Parser, Debug)]
 pub struct ListArgs {}
-
-#[derive(Parser, Debug)]
-pub struct HookArgs {}
 
 #[derive(Parser, Debug)]
 pub struct RemoveArgs {
@@ -54,28 +54,33 @@ async fn add(args: AddArgs) -> Result<()> {
 		.await
 		.context("Failed to canonicalize the path.")?;
 
-	// Add the autoshell.
-	todo!();
+	// Edit the config file.
+	let config_path = config_path()?;
+	let mut config = file::Config::read(&config_path).await?.unwrap_or_default();
+	let mut autoshells = config.autoshells.unwrap_or_default();
+	autoshells.push(path);
+	config.autoshells = Some(autoshells);
+	config.write(&config_path).await?;
 
 	Ok(())
 }
 
 async fn list(_args: ListArgs) -> Result<()> {
 	// Read the config.
-	let config = Config::read().await.context("Failed to read the config.")?;
+	let config_path = config_path()?;
+	let config = Config::read(&config_path)
+		.await
+		.context("Failed to read the config.")?;
 
 	// List the autoshells.
-	todo!();
-
-	// println!("{paths:?}");
+	for path in &config.autoshells {
+		println!("{}", path.display());
+	}
 
 	Ok(())
 }
 
 async fn remove(args: RemoveArgs) -> Result<()> {
-	// Read the config.
-	let config = Config::read().await.context("Failed to read the config.")?;
-
 	// Get the path.
 	let mut path =
 		std::env::current_dir().context("Failed to get the current working directory.")?;
@@ -86,8 +91,16 @@ async fn remove(args: RemoveArgs) -> Result<()> {
 		.await
 		.context("Failed to canonicalize the path.")?;
 
-	// Remove the autoshell.
-	todo!();
+	// Edit the config file.
+	let config_path = config_path()?;
+	let mut config = file::Config::read(&config_path).await?.unwrap_or_default();
+	if let Some(mut autoshells) = config.autoshells {
+		if let Some(index) = autoshells.iter().position(|p| *p == path) {
+			autoshells.remove(index);
+		}
+		config.autoshells = Some(autoshells);
+	}
+	config.write(&config_path).await?;
 
 	Ok(())
 }

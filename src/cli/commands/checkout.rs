@@ -10,8 +10,8 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Create the client.
-	let client = crate::client::new().await?;
+	// Create the builder.
+	let builder = crate::builder().await?;
 
 	// Get the path.
 	let mut path = std::env::current_dir().context("Failed to determine the current directory.")?;
@@ -22,7 +22,9 @@ pub async fn run(args: Args) -> Result<()> {
 	};
 
 	// Perform the checkout.
-	client
+	builder
+		.lock_shared()
+		.await?
 		.checkout(args.artifact, &path, None)
 		.await
 		.context("Failed to perform the checkout.")?;

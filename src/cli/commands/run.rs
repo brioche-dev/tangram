@@ -1,68 +1,59 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tangram::{
-	manifest::Manifest,
-	specifier::{self, Specifier},
-};
+use tangram::specifier::{self, Specifier};
 
 #[derive(Parser, Debug)]
-#[clap(trailing_var_arg = true)]
+#[command(trailing_var_arg = true)]
 pub struct Args {
-	#[clap(long)]
+	#[arg(long)]
 	pub executable_path: Option<PathBuf>,
-	#[clap(long, takes_value = false)]
+	#[arg(long)]
 	pub locked: bool,
-	#[clap(long)]
+	#[arg(long)]
 	pub target: Option<String>,
-	#[clap(default_value = ".")]
+	#[arg(default_value = ".")]
 	pub specifier: Specifier,
 	pub trailing_args: Vec<String>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Create the client.
-	let client = crate::client::new().await?;
+	// Create the builder.
+	let builder = crate::builder().await?.lock_shared().await?;
 
 	// Get the package hash.
 	let package_hash = match args.specifier {
 		Specifier::Path(specifier::Path { path }) => {
-			// Checkin the package.
-			client
+			// Create the package.
+			builder
 				.checkin_package(&path, args.locked)
 				.await
-				.context("Failed to check in the package.")?
+				.context("Failed to create the package.")?
 		},
+
 		Specifier::Registry(specifier::Registry {
 			package_name,
 			version,
 		}) => {
-			// Get the package from the registry.
-			let version = version.ok_or_else(|| anyhow!("A version is required."))?;
-			client
-				.get_package(&package_name, &version)
-				.await
-				.with_context(|| {
-					format!(r#"Failed to get the package "{package_name}" from the registry."#)
-				})?
-				.ok_or_else(|| {
-					anyhow!(
-						r#"Could not find version "{version}" of the package "{package_name}"."#
-					)
-				})?
-		},
-	};
-
-	// Get the client's in process server.
-	let server = match client.as_in_process() {
-		Some(server) => server,
-		None => {
-			bail!("Client must be connected to an in process server in order to run.")
+			// // Get the package from the registry.
+			// let version = version.ok_or_else(|| anyhow!("A version is required."))?;
+			// builder
+			// 	.get_package(&package_name, &version)
+			// 	.await
+			// 	.with_context(|| {
+			// 		format!(r#"Failed to get the package "{package_name}" from the registry."#)
+			// 	})?
+			// 	.ok_or_else(|| {
+			// 		anyhow!(
+			// 			r#"Could not find version "{version}" of the package "{package_name}"."#
+			// 		)
+			// 	})?
+			todo!()
 		},
 	};
 
 	// Get the package manifest.
-	let manifest = server.get_package_manifest(package_hash).await?;
+	let manifest = builder.get_package_manifest(package_hash).await?;
 
 	// Get the package name.
 	let package_name = manifest.name;
@@ -76,15 +67,14 @@ pub async fn run(args: Args) -> Result<()> {
 	let name = args.target.unwrap_or_else(|| "default".to_owned());
 
 	// Add the args.
-	let target_args = client
+	let target_args = builder
 		.add_expression(&tangram::expression::Expression::Array(vec![]))
 		.await?;
 
 	// Create the expression.
-	let input_hash = client
+	let input_hash = builder
 		.add_expression(&tangram::expression::Expression::Target(
 			tangram::expression::Target {
-				lockfile: None,
 				package: package_hash,
 				name,
 				args: target_args,
@@ -93,27 +83,16 @@ pub async fn run(args: Args) -> Result<()> {
 		.await?;
 
 	// Evaluate the expression.
-	let output_hash = client
-		.evaluate(input_hash)
+	let output_hash = builder
+		.evaluate(input_hash, input_hash)
 		.await
 		.context("Failed to evaluate the target expression.")?;
 
-	// Check that the client is connected to an in-process server.
-	let server = match client.as_in_process() {
-		Some(server) => server,
-		None => {
-			bail!("The client must use the in process transport.");
-		},
-	};
-
-	// Create a fragment for the output.
-	let fragment = server.create_fragment(output_hash).await?;
-
-	// Get the path to the fragment.
-	let path = server.fragment_path(&fragment);
+	// Checkout the artifact.
+	let artifact_path = builder.checkout_to_artifacts(output_hash).await?;
 
 	// Get the path to the executable.
-	let executable_path = path.join(executable_path);
+	let executable_path = artifact_path.join(executable_path);
 
 	// Run the process!
 	let mut child = tokio::process::Command::new(&executable_path)

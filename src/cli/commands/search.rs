@@ -1,4 +1,3 @@
-use crate::client::new;
 use anyhow::Result;
 use clap::Parser;
 
@@ -9,12 +8,20 @@ pub struct Args {
 
 pub async fn run(args: Args) -> Result<()> {
 	// Create the client.
-	let client = new().await?;
+	let builder = crate::builder().await?;
 
 	// Search for the package with the given name.
 	let package_name = args.name;
-	let packages = client.search(&package_name).await?;
-	println!("{:?}", packages);
+	let packages = builder
+		.lock_shared()
+		.await?
+		.search_packages(&package_name)
+		.await?;
+
+	for package in packages {
+		let name = package.name;
+		println!("{name}");
+	}
 
 	Ok(())
 }
