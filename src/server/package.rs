@@ -1,6 +1,6 @@
 use super::Server;
-use crate::hash::Hash;
-use anyhow::{bail, Context, Result};
+use crate::{hash::Hash, manifest::Manifest};
+use anyhow::{anyhow, bail, Context, Result};
 use std::sync::Arc;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -12,6 +12,40 @@ pub struct SearchResult {
 pub struct Version {
 	version: String,
 	artifact: Hash,
+}
+
+impl Server {
+	pub async fn get_package_manifest(self: &Arc<Self>, package_hash: Hash) -> Result<Manifest> {
+		let package = self.get_expression(package_hash).await?;
+
+		let source_directory = package
+			.as_directory()
+			.ok_or_else(|| anyhow!("Expected a directory."))?;
+
+		let manifest_hash = source_directory
+			.entries
+			.get("tangram.json")
+			.copied()
+			.ok_or_else(|| anyhow!("The package source does not contain a manifest."))?;
+
+		let hash = self
+			.get_expression(manifest_hash)
+			.await?
+			.as_file()
+			.ok_or_else(|| anyhow!("Expected the manifest to be a file."))?
+			.hash;
+
+		let manifest = self.get_blob(hash).await?;
+
+		let manifest = tokio::fs::read(&manifest.path)
+			.await
+			.context("Failed to read the package manifest.")?;
+
+		let manifest: Manifest = serde_json::from_slice(&manifest)
+			.context(r#"Failed to parse the package manifest."#)?;
+
+		Ok(manifest)
+	}
 }
 
 impl Server {

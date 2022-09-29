@@ -4,7 +4,7 @@ fn main() {
 	let extensions = vec![deno_core::Extension::builder()
 		.js(deno_core::include_js_files!(
 			prefix "deno:ext/tangram",
-			"src/server/evaluators/process/js/tangram.js",
+			"src/server/evaluators/process/js/global.js",
 		))
 		.build()];
 	let runtime_opts = deno_core::RuntimeOptions {

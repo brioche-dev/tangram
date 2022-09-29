@@ -7,6 +7,7 @@ use clap::Parser;
 use futures::FutureExt;
 use tracing_subscriber::prelude::*;
 
+mod client;
 mod commands;
 mod config;
 mod dirs;
@@ -34,12 +35,12 @@ enum Subcommand {
 	Fetch(commands::fetch::Args),
 	Gc(commands::gc::Args),
 	Init(commands::init::Args),
+	New(commands::new::Args),
 	Publish(commands::publish::Args),
 	Run(commands::run::Args),
 	Search(commands::search::Args),
 	Server(commands::server::Args),
 	Shell(commands::shell::Args),
-	Shellhook(commands::shellhook::Args),
 	Update(commands::update::Args),
 	Upgrade(commands::upgrade::Args),
 }
@@ -63,12 +64,12 @@ async fn main() -> Result<()> {
 		Subcommand::Fetch(args) => commands::fetch::run(args).boxed(),
 		Subcommand::Gc(args) => commands::gc::run(args).boxed(),
 		Subcommand::Init(args) => commands::init::run(args).boxed(),
+		Subcommand::New(args) => commands::new::run(args).boxed(),
 		Subcommand::Publish(args) => commands::publish::run(args).boxed(),
 		Subcommand::Run(args) => commands::run::run(args).boxed(),
 		Subcommand::Search(args) => commands::search::run(args).boxed(),
 		Subcommand::Server(args) => commands::server::run(args).boxed(),
 		Subcommand::Shell(args) => commands::shell::run(args).boxed(),
-		Subcommand::Shellhook(args) => commands::shellhook::run(args).boxed(),
 		Subcommand::Update(args) => commands::update::run(args).boxed(),
 		Subcommand::Upgrade(args) => commands::upgrade::run(args).boxed(),
 	}

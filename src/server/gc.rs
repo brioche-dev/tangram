@@ -150,10 +150,6 @@ impl Server {
 					queue.push_back(dependency.artifact);
 				},
 
-				Expression::Path(path) => {
-					queue.push_back(path.artifact);
-				},
-
 				Expression::Template(template) => {
 					queue.extend(template.components);
 				},
@@ -173,7 +169,7 @@ impl Server {
 						}
 					},
 					crate::expression::Process::Js(process) => {
-						queue.push_back(process.module);
+						queue.push_back(process.artifact);
 						queue.push_back(process.args);
 					},
 				},

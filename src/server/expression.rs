@@ -88,15 +88,6 @@ impl Server {
 			// If this expression is artifact, there is nothing to ensure.
 			Expression::Artifact(_) => {},
 
-			// If this expression is a path, ensure the artifact is present.
-			Expression::Path(path) => {
-				let hash = path.artifact;
-				let exists = self.expression_exists(hash).await?;
-				if !exists {
-					return Ok(AddExpressionOutcome::DependencyMissing { hash });
-				}
-			},
-
 			// If this expression is a template, ensure the components are present.
 			Expression::Template(template) => {
 				missing.extend(
@@ -174,8 +165,8 @@ impl Server {
 				},
 
 				crate::expression::Process::Js(process) => {
-					// Ensure the module is present.
-					let hash = process.module;
+					// Ensure the artifact is present.
+					let hash = process.artifact;
 					let exists = self.expression_exists(hash).await?;
 					if !exists {
 						missing.push(hash);

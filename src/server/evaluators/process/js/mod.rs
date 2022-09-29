@@ -97,17 +97,11 @@ impl Process {
 			..Default::default()
 		});
 
-		// Get the path expression for the module.
-		let module = match server.try_get_expression(process.module).await?.unwrap() {
-			Expression::Path(module) => module,
-			_ => bail!("The module must be a path."),
-		};
-
 		// Create the module URL.
-		let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", module.artifact);
+		let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", process.artifact);
 
 		// Add the module path if necessary.
-		if let Some(path) = module.path {
+		if let Some(path) = &process.path {
 			module_url.push('/');
 			module_url.push_str(path.as_str());
 		}

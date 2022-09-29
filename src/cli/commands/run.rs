@@ -1,9 +1,7 @@
-use crate::config::Config;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use tangram::{
-	client::Client,
 	manifest::Manifest,
 	specifier::{self, Specifier},
 };
@@ -23,16 +21,11 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
-	// Read the config.
-	let config = Config::read().await.context("Failed to read the config.")?;
-
 	// Create the client.
-	let client = Client::new_with_config(config.client)
-		.await
-		.context("Failed to create the client.")?;
+	let client = crate::client::new().await?;
 
-	// Get the package artifact.
-	let package = match args.specifier {
+	// Get the package hash.
+	let package_hash = match args.specifier {
 		Specifier::Path(specifier::Path { path }) => {
 			// Checkin the package.
 			client
@@ -52,40 +45,32 @@ pub async fn run(args: Args) -> Result<()> {
 				.with_context(|| {
 					format!(r#"Failed to get the package "{package_name}" from the registry."#)
 				})?
-				.ok_or_else(|| anyhow!(r#"Failed to get the package "{package_name}"."#))?
+				.ok_or_else(|| {
+					anyhow!(
+						r#"Could not find version "{version}" of the package "{package_name}"."#
+					)
+				})?
 		},
 	};
 
-	// Check that the client is connected to an in-process server.
+	// Get the client's in process server.
 	let server = match client.as_in_process() {
 		Some(server) => server,
 		None => {
-			bail!("Client must be connected to an 'In Process' Server in order to run.")
+			bail!("Client must be connected to an in process server in order to run.")
 		},
 	};
 
-	// Create a fragment for the package.
-	let package_fragment = server.create_fragment(package).await?;
+	// Get the package manifest.
+	let manifest = server.get_package_manifest(package_hash).await?;
 
-	// Get the path to the fragment.
-	let package_path = server.fragment_path(&package_fragment);
-
-	// Read the package manifest.
-	let manifest_path = package_path.join("tangram.json");
-	let manifest = tokio::fs::read(&manifest_path)
-		.await
-		.context("Failed to read the package manifest.")?;
-	let manifest: Manifest = serde_json::from_slice(&manifest).with_context(|| {
-		format!(
-			r#"Failed to parse the package manifest at path "{}"."#,
-			manifest_path.display()
-		)
-	})?;
+	// Get the package name.
+	let package_name = manifest.name;
 
 	// Get the executable path.
 	let executable_path = args
 		.executable_path
-		.unwrap_or_else(|| PathBuf::from("bin").join(manifest.name));
+		.unwrap_or_else(|| PathBuf::from("bin").join(package_name));
 
 	// Get the target name.
 	let name = args.target.unwrap_or_else(|| "default".to_owned());
@@ -100,7 +85,7 @@ pub async fn run(args: Args) -> Result<()> {
 		.add_expression(&tangram::expression::Expression::Target(
 			tangram::expression::Target {
 				lockfile: None,
-				package,
+				package: package_hash,
 				name,
 				args: target_args,
 			},

@@ -109,9 +109,9 @@ impl Client {
 							let artifact = if let Some(artifact) = artifact {
 								artifact
 							} else {
-								return Err(anyhow!(format!(
-									r#"Package with name {dependency_name} and version {dependency_version} is not in the package registry"#
-								)));
+								return Err(anyhow!(
+									r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#
+								));
 							};
 							// Create the lockfile Entry.
 							lockfile::Dependency {

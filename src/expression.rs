@@ -24,8 +24,6 @@ pub enum Expression {
 	Symlink(Symlink),
 	#[serde(rename = "dependency")]
 	Dependency(Dependency),
-	#[serde(rename = "path")]
-	Path(Path),
 	#[serde(rename = "template")]
 	Template(Template),
 	#[serde(rename = "fetch")]
@@ -68,12 +66,6 @@ pub struct Symlink {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
 	pub artifact: Hash,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Path {
-	pub artifact: Hash,
-	pub path: Option<Utf8PathBuf>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -120,7 +112,8 @@ pub struct UnixProcessOutput {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct JsProcess {
 	pub lockfile: Option<Lockfile>,
-	pub module: Hash,
+	pub artifact: Hash,
+	pub path: Option<Utf8PathBuf>,
 	pub export: String,
 	pub args: Hash,
 }
@@ -136,3 +129,122 @@ pub struct Target {
 pub type Array = Vec<Hash>;
 
 pub type Map = BTreeMap<Arc<str>, Hash>;
+
+impl Expression {
+	#[must_use]
+	pub fn is_null(&self) -> bool {
+		matches!(self, Self::Null)
+	}
+
+	pub fn as_bool(&self) -> Option<&bool> {
+		if let Self::Bool(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_number(&self) -> Option<&f64> {
+		if let Self::Number(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_string(&self) -> Option<&Arc<str>> {
+		if let Self::String(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_artifact(&self) -> Option<&Artifact> {
+		if let Self::Artifact(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_directory(&self) -> Option<&Directory> {
+		if let Self::Directory(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_file(&self) -> Option<&File> {
+		if let Self::File(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_symlink(&self) -> Option<&Symlink> {
+		if let Self::Symlink(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_dependency(&self) -> Option<&Dependency> {
+		if let Self::Dependency(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_template(&self) -> Option<&Template> {
+		if let Self::Template(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_fetch(&self) -> Option<&Fetch> {
+		if let Self::Fetch(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_process(&self) -> Option<&Process> {
+		if let Self::Process(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_target(&self) -> Option<&Target> {
+		if let Self::Target(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_array(&self) -> Option<&Array> {
+		if let Self::Array(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	pub fn as_map(&self) -> Option<&Map> {
+		if let Self::Map(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+}

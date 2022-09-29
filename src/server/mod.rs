@@ -8,8 +8,7 @@ use crate::{
 use anyhow::Result;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
-use futures::future::try_join_all;
-use futures::FutureExt;
+use futures::{future::try_join_all, FutureExt};
 use hyperlocal::UnixServerExt;
 use std::{
 	convert::Infallible,
@@ -96,7 +95,6 @@ impl Server {
 			Box::new(self::evaluators::array::Array::new()),
 			Box::new(self::evaluators::fetch::Fetch::new()),
 			Box::new(self::evaluators::map::Map::new()),
-			Box::new(self::evaluators::path::Path::new()),
 			Box::new(self::evaluators::primitive::Primitive::new()),
 			Box::new(self::evaluators::process::Process::new()),
 			Box::new(self::evaluators::target::Target::new()),

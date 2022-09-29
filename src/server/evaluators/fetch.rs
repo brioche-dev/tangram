@@ -1,7 +1,7 @@
 use crate::{
 	expression::Expression,
 	hash::{Hash, Hasher},
-	server::{Evaluator, Server},
+	server::{temp::Temp, Evaluator, Server},
 };
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
@@ -80,10 +80,7 @@ impl Evaluator for Fetch {
 			_ => {},
 		};
 
-		// Checkin the temp.
-		let artifact = server.checkin_temp(temp).await?;
-
-		tracing::trace!(r#"Fetched "{}" to artifact "{}"."#, fetch.url, artifact);
+		tracing::trace!(r#"Fetched "{}"."#, fetch.url);
 
 		// Unpack the artifact if requested.
 		let artifact = if fetch.unpack {
@@ -92,15 +89,15 @@ impl Evaluator for Fetch {
 					anyhow!(r#"Could not determine archive format for "{}"."#, fetch.url)
 				})?;
 			tracing::trace!(r#"Unpacking the contents of URL "{}"."#, fetch.url);
-			let artifact = self.unpack(server, artifact, archive_format).await?;
+			let artifact = self.unpack(server, &temp, archive_format).await?;
 			tracing::trace!(
 				r#"Unpacked the contents of URL "{}" to artifact "{}"."#,
 				fetch.url,
-				artifact
+				artifact,
 			);
 			artifact
 		} else {
-			artifact
+			server.checkin_temp(temp).await?
 		};
 
 		Ok(Some(artifact))
@@ -111,12 +108,11 @@ impl Fetch {
 	async fn unpack(
 		&self,
 		server: &Arc<Server>,
-		artifact: Hash,
+		archive_temp: &Temp,
 		archive_format: ArchiveFormat,
 	) -> Result<Hash> {
-		// Checkout the archive.
-		let archive_fragment = server.create_fragment(artifact).await?;
-		let archive_fragment_path = server.fragment_path(&archive_fragment);
+		// Get the archive temp path.
+		let archive_temp_path = server.temp_path(archive_temp);
 
 		// Create a temp to unpack to.
 		let unpack_temp = server.create_temp();
@@ -124,7 +120,7 @@ impl Fetch {
 
 		// Unpack in a blocking task.
 		tokio::task::spawn_blocking(move || -> Result<_> {
-			let archive_file = std::fs::File::open(archive_fragment_path)?;
+			let archive_file = std::fs::File::open(archive_temp_path)?;
 			let archive_reader = std::io::BufReader::new(archive_file);
 			match archive_format {
 				ArchiveFormat::Tar => {

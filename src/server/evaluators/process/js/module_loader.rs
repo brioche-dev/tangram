@@ -1,6 +1,4 @@
-use crate::{
-	hash::Hash, lockfile::Lockfile, manifest::Manifest, server::Server, util::path_exists,
-};
+use crate::{hash::Hash, lockfile::Lockfile, server::Server, util::path_exists};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use futures::FutureExt;
@@ -202,11 +200,22 @@ async fn resolve_tangram(
 		None
 	};
 
+	// // Handle the special case of the package name "std".
+	// if specifier_package_name == "std" {
+	// 	let specifier_sub_path =
+	// 		specifier_sub_path.ok_or_else(|| anyhow!("An import from std requires a subpath."))?;
+	// 	let url = format!("{TANGRAM_STD_SCHEME}:{specifier_sub_path}");
+	// 	let url = Url::parse(&url).unwrap();
+	// 	return Ok(url);
+	// }
+
 	// Retrieve the specifier's entry in the referrer's lockfile.
 	let lockfile_entry = referrer_lockfile
 		.dependencies
 		.get(specifier_package_name)
-		.ok_or_else(|| anyhow!(r#"Could not find package "{specifier_package_name}"."#))?;
+		.ok_or_else(|| {
+			anyhow!(r#"Could not find the package "{specifier_package_name}" in the lockfile."#)
+		})?;
 	let specifier_package = lockfile_entry.hash;
 
 	// Get the specifier's lockfile.
@@ -375,13 +384,12 @@ async fn load_tangram_target_proxy(
 		.ok_or_else(|| anyhow!("The specifier must have a domain."))?;
 	let package_hash: Hash = domain.parse().context("Failed to parse the domain.")?;
 
-	// Create a fragment for the specifier's package.
-	let fragment = state.server.create_fragment(package_hash).await?;
-	let fragment_path = state.server.fragment_path(&fragment);
-
-	// Read the specifier's manifest.
-	let manifest = tokio::fs::read(&fragment_path.join("tangram.json")).await?;
-	let manifest: Manifest = serde_json::from_slice(&manifest)?;
+	// Get the package's manifest.
+	let manifest = state
+		.server
+		.get_package_manifest(package_hash)
+		.await
+		.context("Failed to get the package manifest.")?;
 
 	// Get the lockfile hash from the specifier.
 	let lockfile_hash = specifier.query_pairs().find_map(|(key, value)| {
@@ -394,7 +402,7 @@ async fn load_tangram_target_proxy(
 	let lockfile_hash: Option<Hash> = if let Some(lockfile_hash) = lockfile_hash {
 		let referrer_lockfile_hash = lockfile_hash
 			.parse()
-			.with_context(|| "Failed to parse the lockfile hash.")?;
+			.context("Failed to parse the lockfile hash.")?;
 		Some(referrer_lockfile_hash)
 	} else {
 		None
@@ -440,7 +448,7 @@ async fn load_tangram_target_proxy(
 			code,
 			r#"
 				(...args) => {{
-					return Tangram.target({{
+					return new Tangram.Target({{
 						lockfile,
 						package: {package_json},
 						name: "{target_name}",

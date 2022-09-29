@@ -16,6 +16,7 @@ pub struct V1 {
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
 	pub hash: Hash,
+	// pub source: Hash,
 	pub dependencies: Option<BTreeMap<String, Dependency>>,
 }
 

@@ -38,17 +38,12 @@ impl Evaluator for Target {
 		};
 
 		// Add the js process expression.
-		let module_hash = server
-			.add_expression(&expression::Expression::Path(expression::Path {
-				artifact: target.package,
-				path: Some(Utf8PathBuf::from("tangram.js")),
-			}))
-			.await?;
 		let expression_hash = server
 			.add_expression(&expression::Expression::Process(expression::Process::Js(
 				expression::JsProcess {
 					lockfile: target.lockfile.clone(),
-					module: module_hash,
+					artifact: target.package,
+					path: Some(Utf8PathBuf::from("tangram.js")),
 					export: target.name.clone(),
 					args: target.args,
 				},

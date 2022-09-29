@@ -3,12 +3,9 @@ use crate::{
 	hash::{Hash, Hasher},
 	util::path_exists,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use futures::TryStreamExt;
-use std::{
-	path::{Path, PathBuf},
-	sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
 
@@ -38,16 +35,25 @@ impl Server {
 		Ok(blob_hash)
 	}
 
-	pub async fn get_blob(self: &Arc<Self>, blob_hash: Hash) -> Result<Option<Handle>> {
-		let blob_path = self.blob_path(blob_hash);
+	pub async fn get_blob(self: &Arc<Self>, hash: Hash) -> Result<Handle> {
+		let hash = self
+			.try_get_blob(hash)
+			.await?
+			.ok_or_else(|| anyhow!(r#"Failed to get blob with hash "{hash}"."#))?;
+		Ok(hash)
+	}
+
+	pub async fn try_get_blob(self: &Arc<Self>, hash: Hash) -> Result<Option<Handle>> {
+		let blob_path = self.blob_path(hash);
 
 		// Check if the blob exists.
+		// TODO Get the blob from peers if it does not exist.
 		if !path_exists(&blob_path).await? {
 			return Ok(None);
 		}
 
 		Ok(Some(Handle {
-			_blob_hash: blob_hash,
+			hash,
 			path: blob_path,
 		}))
 	}
@@ -64,15 +70,8 @@ impl Server {
 }
 
 pub struct Handle {
-	_blob_hash: Hash,
-	path: PathBuf,
-}
-
-impl Handle {
-	#[must_use]
-	pub fn path(&self) -> &Path {
-		&self.path
-	}
+	pub hash: Hash,
+	pub path: PathBuf,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -136,7 +135,7 @@ impl Server {
 		};
 
 		// Get the blob.
-		let handle = match self.get_blob(blob_hash).await? {
+		let handle = match self.try_get_blob(blob_hash).await? {
 			Some(handle) => handle,
 			None => return Ok(not_found()),
 		};

@@ -118,8 +118,7 @@ impl Process {
 		let mut envs: BTreeMap<String, String> =
 			try_join_all(envs.iter().map(|(key, hash)| async move {
 				let key = key.as_ref().to_owned();
-				let expression = server.get_expression(*hash).await?;
-				let string = self.resolve(server, *hash, &expression).await?;
+				let string = self.resolve(server, *hash).await?;
 				Ok::<_, anyhow::Error>((key, string))
 			}))
 			.await?
@@ -129,9 +128,22 @@ impl Process {
 		// Create the temps for the outputs, add their dependencies, and their paths to the envs.
 		let temps: BTreeMap<String, Temp> =
 			try_join_all(outputs.iter().map(|(name, output)| async {
-				let mut temp = server.create_temp();
-				for (path, hash) in &output.dependencies {
-					server.temp_add_dependency(&mut temp, path, *hash).await?;
+				let temp = server.create_temp();
+				for (path, dependency_hash) in &output.dependencies {
+					// Evaluate the dependency.
+					let dependency_hash = server.evaluate(*dependency_hash, hash).await?;
+
+					// Create a fragment for the dependency.
+					let dependency_fragment = server.create_fragment(dependency_hash).await?;
+
+					// Create a symlink from `path` within `temp` to `dependency.path` within the `dependency_fragment`.
+					let symlink_path = server.temp_path(&temp).join(path);
+					let symlink_target = server.fragment_path(&dependency_fragment);
+					let symlink_parent_path = symlink_path
+						.parent()
+						.ok_or_else(|| anyhow!("Failed to get the parent for the symlink path."))?;
+					tokio::fs::create_dir_all(&symlink_parent_path).await?;
+					tokio::fs::symlink(&symlink_target, &symlink_path).await?;
 				}
 				Ok::<_, anyhow::Error>((name.clone(), temp))
 			}))
@@ -145,9 +157,7 @@ impl Process {
 		);
 
 		// Resolve the command.
-		let command = self
-			.resolve(server, command, &server.get_expression(command).await?)
-			.await?;
+		let command = self.resolve(server, command).await?;
 
 		// Resolve the args.
 		let args = match server.get_expression(args).await? {
@@ -155,8 +165,7 @@ impl Process {
 			_ => bail!("Args must evaluate to an array."),
 		};
 		let args: Vec<String> = try_join_all(args.iter().copied().map(|hash| async move {
-			let expression = server.get_expression(hash).await?;
-			let string = self.resolve(server, hash, &expression).await?;
+			let string = self.resolve(server, hash).await?;
 			Ok::<_, anyhow::Error>(string)
 		}))
 		.await
@@ -210,25 +219,9 @@ impl Process {
 	}
 
 	#[async_recursion]
-	async fn resolve(
-		&self,
-		server: &Arc<Server>,
-		hash: Hash,
-		expression: &Expression,
-	) -> Result<String> {
+	async fn resolve(&self, server: &Arc<Server>, hash: Hash) -> Result<String> {
+		let expression = server.get_expression(hash).await?;
 		match expression {
-			Expression::String(string) => Ok(string.as_ref().to_owned()),
-			Expression::Template(template) => {
-				let components =
-					try_join_all(template.components.iter().copied().map(|hash| async move {
-						let expression = server.get_expression(hash).await?;
-						let string = self.resolve(server, hash, &expression).await?;
-						Ok::<_, anyhow::Error>(string)
-					}))
-					.await?;
-				let string = components.join("");
-				Ok(string)
-			},
 			Expression::Artifact(_) => {
 				let fragment = server.create_fragment(hash).await?;
 				let fragment_path = server.fragment_path(&fragment);
@@ -238,16 +231,17 @@ impl Process {
 					.to_owned();
 				Ok(fragment_path_string)
 			},
-			Expression::Path(path) => {
-				let fragment = server.create_fragment(path.artifact).await?;
-				let fragment_path = server.fragment_path(&fragment);
-				let fragment_path = if let Some(path) = &path.path {
-					fragment_path.join(path)
-				} else {
-					fragment_path
-				};
-				let fragment_path_string = fragment_path.to_str().unwrap().to_owned();
-				Ok(fragment_path_string)
+			Expression::Template(template) => {
+				let components = try_join_all(template.components.iter().copied().map(
+					|component_hash| async move {
+						let component_hash = server.evaluate(component_hash, hash).await?;
+						let string = self.resolve(server, component_hash).await?;
+						Ok::<_, anyhow::Error>(string)
+					},
+				))
+				.await?;
+				let string = components.join("");
+				Ok(string)
 			},
 			_ => bail!("The expression to resolve must be a string, template, artifact, or path."),
 		}

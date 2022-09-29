@@ -67,22 +67,7 @@ For more convenience but with less isolation, you can run `source $(tg shell --s
 Use Tangram to build both your dependencies and your code. In this example, we build a Rust project and specify the exact version of the OpenSSL C library to link to.
 
 ```javascript
-export default {
-  dependencies: {
-    rust: "1.60",
-    openssl: "3.0.4",
-  },
-};
 
-export let build = () => {
-  let { rust, openssl } = Tangram.dependencies;
-  return rust.cargo({
-    source: Tangram.source,
-    nativeDependencies: {
-      "openssl-sys": [openssl()],
-    },
-  });
-};
 ```
 
 ### Build a container image.
@@ -90,25 +75,7 @@ export let build = () => {
 Add a `tangram.js` file to the root of your project and use the `std.buildContainerImage` function to build a container image. In this example, we build a container image with a simple python project.
 
 ```javascript
-export default {
-  dependencies: {
-    python: "3.7",
-    std: "^1",
-  },
-};
 
-export let build = () => {
-  let { python, std } = Tangram.dependencies;
-  return std.buildContainerImage({
-    packages: [python()],
-    command: "python",
-    args: [Tangram.template`${Tangram.source}/main.py`],
-  });
-};
-```
-
-```
-$ docker run --rm -it $(docker load -i $(tg build))
 ```
 
 Container image builds with Tangram are **fast**, **reproducible**, and **minimal**.
@@ -122,33 +89,7 @@ Container image builds with Tangram are **fast**, **reproducible**, and **minima
 Tangram packages come with a lot of options for customization. In this example, we build the Zig compiler at a particular revision from GitHub and apply a patch from an unmerged pull request. Now every machine that uses this shell will have the same custom build of Zig.
 
 ```js
-export default {
-  dependencies: {
-    std: "^1",
-    zig: "0.9.0",
-  },
-};
 
-export let shell = () => {
-  let { std, zig } = Tangram.dependencies;
-  let zigSource = std.fetchFromGitHub({
-    owner: "ziglang",
-    repo: "zig",
-    rev: "88d1258e08e668e620d5f8f4681315e555acbcd2",
-  });
-  let zigPatch = std.fetch({
-    url: "https://github.com/ziglang/zig/pull/9771.patch",
-    hash: "c0bb3d56ee8f34fb82bd4d64375b565601c62d9c2a289991fc9f088758ad86f8",
-  });
-  return std.buildShell({
-    packages: [
-      zig({
-        source: zigSource,
-        patches: [zigPatch],
-      }),
-    ],
-  });
-};
 ```
 
 ## Try software without modifying your system.
@@ -169,6 +110,8 @@ $ tg shell --system x86_64-linux -p coreutils "uname -sm"
 Linux x86_64
 ```
 
+<!--
 ## Learn more.
 
 To learn more about Tangram and how it works, please [read the blog post](https://www.tangram.dev/blog/hello_world).
+-->
