@@ -173,14 +173,6 @@ async fn run_js_process(
 		Expression::Array(array) => array,
 		_ => bail!("Args must be an array."),
 	};
-	let args = try_join_all(args.iter().map(|arg| async {
-		let expression = builder.get_expression(*arg).await?;
-		match expression {
-			Expression::String(string) => Ok::<_, anyhow::Error>(string),
-			_ => bail!("Args must evaluate to strings."),
-		}
-	}))
-	.await?;
 
 	let args = args
 		.iter()

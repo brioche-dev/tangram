@@ -191,10 +191,9 @@ declare module Tangram {
     Amd64Macos = "amd64_macos",
     Arm64Linux = "arm64_linux",
     Arm64Macos = "arm64_macos",
-    Js = "js",
   }
 
-  class Hash<T extends Expression> {
+  class Hash<T extends Expression | unknown = unknown> {
     constructor(hash: string);
 
     toString(): string;
@@ -202,7 +201,7 @@ declare module Tangram {
 
   type HashOr<T extends Expression> = Hash<T> | T;
 
-  type Expression =
+  type Expression<O> =
     | null
     | boolean
     | number
@@ -213,13 +212,14 @@ declare module Tangram {
     | Symlink
     | Dependency
     | Template
+    | Js<O>
     | Fetch
     | Process
-    | Target
-    | Array<HashOr<Expression>>
-    | { [key: string]: HashOr<Expression> };
+    | Target<O>
+    | Array<HashOr<Expression<O>>>
+    | { [key: string]: HashOr<Expression<O>> };
 
-  type OutputForExpression<T extends Expression> = T extends null
+  type OutputForExpression<T extends Expression<unknown>> = T extends null
     ? null
     : T extends boolean
     ? boolean
@@ -231,16 +231,16 @@ declare module Tangram {
     ? Artifact
     : T extends Template
     ? Template
-    : T extends Js<infer U>
-    ? U
+    : T extends Js<infer O>
+    ? O
     : T extends Fetch
     ? Artifact
     : T extends Process
     ? Artifact
-    : T extends Target<infer U>
-    ? OutputForExpression<U>
-    : T extends Array<infer U>
-    ? Array<OutputForExpression<U>>
+    : T extends Target<infer O>
+    ? OutputForExpression<O>
+    : T extends Array<infer O>
+    ? Array<OutputForExpression<O>>
     : T extends { [key: string]: infer U }
     ? { [key: string]: OutputForExpression<U> }
     : never;
@@ -277,7 +277,7 @@ declare module Tangram {
     path: string | null;
   };
 
-  class Js {
+  class Js<O> {
     constructor(args: JsArgs);
   }
 
@@ -308,7 +308,7 @@ declare module Tangram {
     args: HashOr<Array<HashOr<Expression>>>;
   };
 
-  class Target {
+  class Target<O> {
     constructor(args: TargetArgs);
   }
 

@@ -77,7 +77,7 @@ impl builder::Exclusive {
 				from
 					evaluations
 				where
-					parent_hash = $1
+					parent_hash = ?1
 			"#;
 			let params = (hash.to_string(),);
 			let mut statement = txn
