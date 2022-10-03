@@ -30,7 +30,7 @@ impl builder::Shared {
 		};
 
 		// Create a cache.
-		let cache = Cache::new(path, Arc::clone(&self.file_system_semaphore));
+		let cache = Cache::new(self.path(), path, Arc::clone(&self.file_system_semaphore));
 
 		// Call the recursive checkout function on the root expression.
 		self.checkout_path(&cache, hash, path, dependency_handler)

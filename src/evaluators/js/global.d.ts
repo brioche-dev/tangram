@@ -201,7 +201,7 @@ declare module Tangram {
 
   type HashOr<T extends Expression> = Hash<T> | T;
 
-  type Expression<O> =
+  type Expression<Output extends Expression> =
     | null
     | boolean
     | number
@@ -212,12 +212,12 @@ declare module Tangram {
     | Symlink
     | Dependency
     | Template
-    | Js<O>
+    | Js<Output>
     | Fetch
     | Process
-    | Target<O>
-    | Array<HashOr<Expression<O>>>
-    | { [key: string]: HashOr<Expression<O>> };
+    | Target<Output>
+    | Array<HashOr<Expression<Output>>>
+    | { [key: string]: HashOr<Expression<Output>> };
 
   type OutputForExpression<T extends Expression<unknown>> = T extends null
     ? null

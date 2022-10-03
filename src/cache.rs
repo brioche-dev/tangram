@@ -17,18 +17,25 @@ use std::{
 };
 
 pub struct Cache {
-	path: PathBuf,
+	builder_path: PathBuf,
+	root_path: PathBuf,
 	semaphore: Arc<tokio::sync::Semaphore>,
 	cache: RwLock<HashMap<PathBuf, (Hash, Expression), FnvBuildHasher>>,
 }
 
 impl Cache {
 	#[must_use]
-	pub fn new(path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> Cache {
-		let path = path.to_owned();
+	pub fn new(
+		builder_path: &Path,
+		root_path: &Path,
+		semaphore: Arc<tokio::sync::Semaphore>,
+	) -> Cache {
+		let builder_path = builder_path.to_owned();
+		let root_path = root_path.to_owned();
 		let cache = RwLock::new(HashMap::default());
 		Cache {
-			path,
+			builder_path,
+			root_path,
 			semaphore,
 			cache,
 		}
@@ -151,21 +158,14 @@ impl Cache {
 			.map_err(|_| anyhow!("Symlink target is not a valid UTF-8 path."))?;
 		drop(permit);
 
-		// TODO Implement the new plan for determining if the symlink is a dependency.
-		// Determine if the symlink is a symlink or a dependency by checking if the target has enough leading parent directory components to point outside the root path.
-		let path_in_root = path.strip_prefix(&self.path).unwrap();
-		let path_depth_in_root = path_in_root.components().count();
-		let target_leading_double_dot_count = target
-			.components()
-			.take_while(|component| matches!(component, Utf8Component::ParentDir))
-			.count();
-		let is_symlink = target_leading_double_dot_count < path_depth_in_root;
+		// Create the expression.
+		let expression = if target.is_absolute() {
+			// A symlink that has an absolute target that points into the builder's path is a dependency.
+			let target = target
+				.strip_prefix(&self.builder_path.join("artifacts"))
+				.map_err(|_| anyhow!("Invalid symlink."))?;
 
-		// Create the expression and add it to the cache.
-		let expression = if is_symlink {
-			Expression::Symlink(Symlink { target })
-		} else {
-			// Parse the expression hash of the dependency artifact from the last path component of the target.
+			// Parse the hash from the last path component of the target.
 			let hash: Hash = target
 				.components()
 				.last()
@@ -173,8 +173,13 @@ impl Cache {
 				.as_str()
 				.parse()
 				.context("Failed to parse the last path component as a hash.")?;
+
 			Expression::Dependency(Dependency { artifact: hash })
+		} else {
+			Expression::Symlink(Symlink { target })
 		};
+
+		// Add the expression to the cache.
 		self.add_expression(path, expression);
 
 		Ok(())

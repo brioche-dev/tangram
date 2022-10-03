@@ -173,7 +173,6 @@ async fn run_js_process(
 		Expression::Array(array) => array,
 		_ => bail!("Args must be an array."),
 	};
-
 	let args = args
 		.iter()
 		.map(|arg| {
