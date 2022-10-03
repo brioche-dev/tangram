@@ -145,6 +145,70 @@ async fn run_js_process(
 	runtime.run_event_loop(false).await?;
 	evaluate_receiver.await.unwrap()?;
 
+	// Move the args to v8.
+	let args = builder
+		.get_expression(js.args)
+		.await
+		.context("Failed to get the args expression.")?;
+	let args = args
+		.as_array()
+		.ok_or_else(|| anyhow!("The args must be an array."))?;
+	let mut arg_values = Vec::new();
+	for arg in args {
+		// Create a try catch scope to call Tangram.toJson.
+		let mut scope = runtime.handle_scope();
+		let mut try_catch_scope = v8::TryCatch::new(&mut scope);
+
+		let arg = builder.get_expression(*arg).await?;
+		let arg = serde_v8::to_v8(&mut try_catch_scope, arg)
+			.context("Failed to move the args expression to v8.")?;
+
+		// Retrieve Tangram.fromJson.
+		let from_json_function: v8::Local<v8::Function> =
+			JsRuntime::grab_global(&mut try_catch_scope, "Tangram.fromJson")
+				.ok_or_else(|| anyhow!("Failed to get Tangram.fromJson."))?;
+
+		// Call Tangram.fromJson.
+		let undefined = v8::undefined(&mut try_catch_scope);
+		let output = from_json_function.call(&mut try_catch_scope, undefined.into(), &[arg]);
+
+		// If an exception was caught, return an error with an error message.
+		if try_catch_scope.has_caught() {
+			let exception = try_catch_scope.exception().unwrap();
+			let mut scope = v8::HandleScope::new(&mut try_catch_scope);
+			let error = deno_core::error::JsError::from_v8_exception(&mut scope, exception);
+			bail!(error);
+		}
+
+		// If there was no caught exception then retrieve the return value.
+		let output = output.unwrap();
+
+		// Move the return value to the global scope.
+		let output = v8::Global::new(&mut try_catch_scope, output);
+		drop(try_catch_scope);
+		drop(scope);
+
+		// Run the event loop to completion.
+		runtime.run_event_loop(false).await?;
+
+		// Retrieve the output.
+		let mut scope = runtime.handle_scope();
+		let output = v8::Local::new(&mut scope, output);
+		let output = if output.is_promise() {
+			let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
+			promise.result(&mut scope)
+		} else {
+			output
+		};
+
+		// Move the output to the global scope.
+		let output = v8::Global::new(&mut scope, output);
+
+		drop(scope);
+
+		arg_values.push(output);
+	}
+
 	// Retrieve the specified export from the module.
 	let module_namespace = runtime.get_module_namespace(module_id)?;
 	let mut scope = runtime.handle_scope();
@@ -166,21 +230,11 @@ async fn run_js_process(
 	// Create a scope to call the export.
 	let mut try_catch_scope = v8::TryCatch::new(&mut scope);
 
-	// Move the args to v8.
-	let args = builder
-		.get_expression(js.args)
-		.await
-		.context("Failed to get the args expression.")?;
-	let args = args
-		.as_array()
-		.ok_or_else(|| anyhow!("The args must be an array."))?;
-	let mut arg_values = Vec::new();
-	for arg in args {
-		let arg = builder.get_expression(*arg).await?;
-		let arg = serde_v8::to_v8(&mut try_catch_scope, arg)
-			.context("Failed to move the args expression to v8.")?;
-		arg_values.push(arg);
-	}
+	// Move the arg values to the try catch scope.
+	let arg_values = arg_values
+		.iter()
+		.map(|arg| v8::Local::new(&mut try_catch_scope, arg))
+		.collect::<Vec<_>>();
 
 	// Call the specified export.
 	let undefined = v8::undefined(&mut try_catch_scope);
