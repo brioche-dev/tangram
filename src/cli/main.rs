@@ -6,8 +6,8 @@ use crate::config::Config;
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use futures::FutureExt;
-use std::path::PathBuf;
-use tangram::builder::Builder;
+use std::{collections::BTreeMap, path::PathBuf};
+use tangram::{builder::Builder, hash::Hash, system::System};
 use tracing_subscriber::prelude::*;
 
 mod commands;
@@ -118,6 +118,32 @@ pub async fn builder() -> Result<Builder> {
 	.context("Failed to create the builder.")?;
 
 	Ok(builder)
+}
+
+pub async fn create_target_args(
+	builder: &tangram::builder::Shared,
+	system: Option<System>,
+) -> Result<Hash> {
+	let mut target_arg = BTreeMap::new();
+	let system = if let Some(system) = system {
+		system
+	} else {
+		System::host()?
+	};
+	let system = builder
+		.add_expression(&tangram::expression::Expression::String(
+			system.to_string().into(),
+		))
+		.await?;
+	target_arg.insert("system".into(), system);
+	let target_arg = builder
+		.add_expression(&tangram::expression::Expression::Map(target_arg))
+		.await?;
+	let target_args = vec![target_arg];
+	let target_args = builder
+		.add_expression(&tangram::expression::Expression::Array(target_args))
+		.await?;
+	Ok(target_args)
 }
 
 fn setup_tracing() {

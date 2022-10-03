@@ -755,12 +755,12 @@ impl builder::Shared {
 		child_hash: Hash,
 	) -> Result<()> {
 		let sql = r#"
-				replace into evaluations (
-					parent_hash, child_hash
-				) values (
-					?1, ?2
-				)
-			"#;
+			replace into evaluations (
+				parent_hash, child_hash
+			) values (
+				?1, ?2
+			)
+		"#;
 		let params = (parent_hash.to_string(), child_hash.to_string());
 		txn.execute(sql, params)?;
 		Ok(())

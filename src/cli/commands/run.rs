@@ -1,7 +1,9 @@
+use crate::create_target_args;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use tangram::specifier::{self, Specifier};
+use tangram::system::System;
 
 #[derive(Parser, Debug)]
 #[command(trailing_var_arg = true)]
@@ -15,6 +17,8 @@ pub struct Args {
 	#[arg(default_value = ".")]
 	pub specifier: Specifier,
 	pub trailing_args: Vec<String>,
+	#[arg(long)]
+	system: Option<System>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -66,10 +70,8 @@ pub async fn run(args: Args) -> Result<()> {
 	// Get the target name.
 	let name = args.target.unwrap_or_else(|| "default".to_owned());
 
-	// Add the args.
-	let target_args = builder
-		.add_expression(&tangram::expression::Expression::Array(vec![]))
-		.await?;
+	// Create the target args.
+	let target_args = create_target_args(&builder, args.system).await?;
 
 	// Create the expression.
 	let input_hash = builder

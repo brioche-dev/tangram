@@ -241,7 +241,7 @@ impl builder::Shared {
 					from
 						packages
 					where
-						name like $1
+						name like ?1
 				"#;
 				let params = (format!("%{name}%"),);
 				let mut statement = txn
@@ -301,7 +301,7 @@ impl builder::Shared {
 					from
 						package_versions
 					where
-						name = $1
+						name = ?1
 				"#;
 				let params = (package_name,);
 				let mut statement = txn
@@ -337,7 +337,7 @@ impl builder::Shared {
 				from
 					packages
 				where
-					name = $1
+					name = ?1
 			"#;
 			let params = (package_name,);
 			let mut statement = txn
@@ -357,7 +357,7 @@ impl builder::Shared {
 					insert into packages (
 						name
 					) values (
-						$1
+						?1
 					)
 				"#;
 				let params = (package_name,);
@@ -387,13 +387,13 @@ impl builder::Shared {
 		// Retrieve the artifact hash from the database.
 		self.database_transaction(|txn| {
 			let sql = r#"
-						select
-							hash
-						from
-							package_versions
-						where
-							name = $1 and version = $2
-					"#;
+				select
+					hash
+				from
+					package_versions
+				where
+					name = ?1 and version = ?2
+			"#;
 			let params = (package_name, package_version.to_string());
 			let mut statement = txn
 				.prepare_cached(sql)
@@ -425,13 +425,13 @@ impl builder::Shared {
 		self.database_transaction(|txn| {
 			// Check if the package already exists.
 			let sql = r#"
-					select
-						count(*) > 0
-					from
-						packages
-					where
-						name = $1
-				"#;
+				select
+					count(*) > 0
+				from
+					packages
+				where
+					name = ?1
+			"#;
 			let params = (package_name,);
 			let mut statement = txn
 				.prepare_cached(sql)
@@ -447,12 +447,12 @@ impl builder::Shared {
 			// Create the package if it does not exist.
 			if !package_exists {
 				let sql = r#"
-						insert into packages (
-							name
-						) values (
-							$1
-						)
-					"#;
+					insert into packages (
+						name
+					) values (
+						?1
+					)
+				"#;
 				let params = (package_name,);
 				let mut statement = txn
 					.prepare_cached(sql)
@@ -464,13 +464,13 @@ impl builder::Shared {
 
 			// Check if the package version already exists.
 			let sql = r#"
-					select
-						count(*) > 0
-					from
-						package_versions
-					where
-						name = $1 and version = $2
-				"#;
+				select
+					count(*) > 0
+				from
+					package_versions
+				where
+					name = ?1 and version = ?2
+			"#;
 			let params = (package_name, package_version);
 			let mut statement = txn
 				.prepare_cached(sql)
@@ -491,12 +491,12 @@ impl builder::Shared {
 
 			// Create the new package version.
 			let sql = r#"
-					insert into package_versions (
-						name, version, hash
-					) values (
-						$1, $2, $3
-					)
-				"#;
+				insert into package_versions (
+					name, version, hash
+				) values (
+					?1, ?2, ?3
+				)
+			"#;
 			let params = (package_name, package_version, artifact.to_string());
 			let mut statement = txn
 				.prepare_cached(sql)

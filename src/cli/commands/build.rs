@@ -1,3 +1,4 @@
+use crate::create_target_args;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
@@ -25,20 +26,8 @@ pub async fn run(args: Args) -> Result<()> {
 		.await
 		.context("Failed to create the package.")?;
 
-	// Add the args.
-	let mut target_args = Vec::new();
-	if let Some(system) = args.system {
-		target_args.push(
-			builder
-				.add_expression(&tangram::expression::Expression::String(
-					system.to_string().into(),
-				))
-				.await?,
-		);
-	};
-	let target_args = builder
-		.add_expression(&tangram::expression::Expression::Array(target_args))
-		.await?;
+	// Create the target args.
+	let target_args = create_target_args(&builder, args.system).await?;
 
 	// Add the expression.
 	let expression_hash = builder
