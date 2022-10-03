@@ -216,7 +216,7 @@ fn pre_exec(
 			parent_proc_c_string.as_ptr(),
 			child_proc_path_c_string.as_ptr(),
 			std::ptr::null(),
-			MS_BIND,
+			MS_BIND | MS_REC,
 			std::ptr::null(),
 		)
 	};
