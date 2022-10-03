@@ -105,6 +105,7 @@ impl Process {
 	async fn resolve(&self, builder: &builder::Shared, hash: Hash) -> Result<String> {
 		let expression = builder.get_expression(hash).await?;
 		match expression {
+			Expression::String(string) => Ok(string.as_ref().to_owned()),
 			Expression::Artifact(_) => {
 				let artifact_path = builder.checkout_to_artifacts(hash).await?;
 				let artifact_path_string = artifact_path
@@ -125,7 +126,7 @@ impl Process {
 				let string = components.join("");
 				Ok(string)
 			},
-			_ => bail!("The expression to resolve must be a string, template, artifact, or path."),
+			_ => bail!("The expression to resolve must be a string, artifact, or template."),
 		}
 	}
 }

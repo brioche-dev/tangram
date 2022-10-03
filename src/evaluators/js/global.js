@@ -36,9 +36,6 @@ let System = {
 };
 
 let syscall = (syscall, ...args) => {
-  if (syscall !== Syscall.console) {
-    console.log(syscall, ...args);
-  }
   let opName = "op_tangram_" + syscall;
   switch (syscall) {
     case Syscall.Console:
@@ -250,7 +247,7 @@ class Js {
     return new Js({ dependencies, artifact, path, name, args });
   }
 
-  static async toInternal() {
+  async toInternal() {
     let artifact = await addExpression(this.artifact);
     let args = await addExpression(this.args);
     let dependencies = Object.fromEntries(
@@ -262,11 +259,11 @@ class Js {
     return {
       type: ExpressionType.Js,
       value: {
-        artifact: artifact.toString(),
         args: args.toString(),
-        path: this.path,
-        name: this.name,
+        artifact: artifact.toString(),
         dependencies,
+        name: this.name,
+        path: this.path,
       },
     };
   }
@@ -309,30 +306,30 @@ class Process {
   command;
   args;
 
-  constructor({ system, env, command, args }) {
-    this.system = system;
-    this.env = env;
-    this.command = command;
-    this.args = args;
+  constructor(args) {
+    this.system = args.system;
+    this.env = args.env;
+    this.command = args.command;
+    this.args = args.args;
   }
 
   static fromInternal(expression) {
     let system = expression.value.system;
-    let artifact = new Hash(expression.value.env);
+    let env = new Hash(expression.value.env);
     let command = new Hash(expression.value.command);
     let args = new Hash(expression.value.args);
-    return new Process({ system, artifact, command, args });
+    return new Process({ system, env, command, args });
   }
 
-  static async toInternal() {
-    let artifact = await addExpression(this.artifact);
+  async toInternal() {
+    let env = await addExpression(this.env);
     let command = await addExpression(this.command);
     let args = await addExpression(this.args);
     return {
       type: ExpressionType.Process,
       value: {
         system: this.system,
-        artifact: artifact.toString(),
+        env: env.toString(),
         command: command.toString(),
         args: args.toString(),
       },
@@ -345,10 +342,10 @@ class Target {
   name;
   args;
 
-  constructor({ package, name, args }) {
-    this.package = package;
-    this.name = name;
-    this.args = args;
+  constructor(args) {
+    this.package = args.package;
+    this.name = args.name;
+    this.args = args.args;
   }
 
   static fromInternal(expression) {
@@ -360,12 +357,12 @@ class Target {
   }
 
   async toInternal() {
-    let package = await addExpression(this.package);
+    let _package = await addExpression(this.package);
     let args = await addExpression(this.args);
     return {
       type: ExpressionType.Target,
       value: {
-        package: package.toString(),
+        package: _package.toString(),
         name: this.name,
         args: args.toString(),
       },
@@ -418,56 +415,60 @@ let fromInternal = (expression) => {
 };
 
 let toInternal = async (expression) => {
-  if (value === null) {
+  if (expression === null) {
     return {
       type: ExpressionType.Null,
-      value,
+      value: expression,
     };
-  } else if (typeof value === "boolean") {
+  } else if (typeof expression === "boolean") {
     return {
       type: ExpressionType.Bool,
-      value,
+      value: expression,
     };
-  } else if (typeof value === "number") {
+  } else if (typeof expression === "number") {
     return {
       type: ExpressionType.Number,
-      value,
+      value: expression,
     };
-  } else if (typeof value === "string") {
+  } else if (typeof expression === "string") {
     return {
       type: ExpressionType.String,
-      value,
+      value: expression,
     };
-  } else if (value instanceof Artifact) {
-    return await value.toInternal();
-  } else if (value instanceof Directory) {
-    return await value.toInternal();
-  } else if (value instanceof File) {
-    return await value.toInternal();
-  } else if (value instanceof Symlink) {
-    return await value.toInternal();
-  } else if (value instanceof Dependency) {
-    return await value.toInternal();
-  } else if (value instanceof Template) {
-    return await value.toInternal();
-  } else if (value instanceof Js) {
-    return await value.toInternal();
-  } else if (value instanceof Fetch) {
-    return await value.toInternal();
-  } else if (value instanceof Process) {
-    return await value.toInternal();
-  } else if (value instanceof Target) {
-    return await value.toInternal();
-  } else if (Array.isArray(value)) {
-    let value = await Promise.all(value.map(addExpression));
+  } else if (expression instanceof Artifact) {
+    return await expression.toInternal();
+  } else if (expression instanceof Directory) {
+    return await expression.toInternal();
+  } else if (expression instanceof File) {
+    return await expression.toInternal();
+  } else if (expression instanceof Symlink) {
+    return await expression.toInternal();
+  } else if (expression instanceof Dependency) {
+    return await expression.toInternal();
+  } else if (expression instanceof Template) {
+    return await expression.toInternal();
+  } else if (expression instanceof Js) {
+    return await expression.toInternal();
+  } else if (expression instanceof Fetch) {
+    return await expression.toInternal();
+  } else if (expression instanceof Process) {
+    return await expression.toInternal();
+  } else if (expression instanceof Target) {
+    return await expression.toInternal();
+  } else if (Array.isArray(expression)) {
+    let value = await Promise.all(
+      expression.map(async (value) => {
+        return (await addExpression(value)).toString();
+      })
+    );
     return {
       type: ExpressionType.Array,
       value,
     };
-  } else if (typeof value === "object") {
+  } else if (typeof expression === "object") {
     let value = Object.fromEntries(
       await Promise.all(
-        Object.entries(value).map(async ([key, value]) => [
+        Object.entries(expression).map(async ([key, value]) => [
           key,
           (await addExpression(value)).toString(),
         ])
@@ -491,7 +492,9 @@ let getBlob = async (hash) => {
 };
 
 let addExpression = async (expression) => {
-  return new Hash(await syscall(Syscall.AddExpression, toInternal(expression)));
+  return new Hash(
+    await syscall(Syscall.AddExpression, await toInternal(expression))
+  );
 };
 
 let getExpression = async (hash) => {

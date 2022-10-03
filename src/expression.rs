@@ -554,7 +554,7 @@ impl builder::Shared {
 				replace into expressions (
 					hash, data
 				) values (
-					$1, $2
+					?1, ?2
 				)
 			"#;
 			let params = (hash.to_string(), data);
@@ -581,7 +581,7 @@ impl builder::Shared {
 			from
 				expressions
 			where
-				hash = $1
+				hash = ?1
 		"#;
 		let params = (hash.to_string(),);
 		let exists = txn
@@ -630,7 +630,7 @@ impl builder::Shared {
 			from
 				expressions
 			where
-				hash = $1
+				hash = ?1
 		"#;
 		let params = (hash.to_string(),);
 		let mut statement = txn
@@ -691,7 +691,7 @@ impl builder::Shared {
 			from
 				expressions
 			where
-				hash = $1
+				hash = ?1
 		"#;
 		let params = (hash.to_string(),);
 		let mut statement = txn
@@ -704,7 +704,10 @@ impl builder::Shared {
 				let data = row.get::<_, Vec<u8>>(0)?;
 				let output_hash = row.get::<_, Option<String>>(1)?;
 				let output_hash = if let Some(output_hash) = output_hash {
-					Some(output_hash.parse()?)
+					let output_hash = output_hash
+						.parse()
+						.context("Failed to parse the output hash.")?;
+					Some(output_hash)
 				} else {
 					None
 				};
@@ -727,7 +730,7 @@ impl builder::Shared {
 		hash: Hash,
 	) -> Result<()> {
 		let sql = r#"
-			delete from expressions where hash = $1
+			delete from expressions where hash = ?1
 		"#;
 		let params = (hash.to_string(),);
 		let mut statement = txn
@@ -755,7 +758,7 @@ impl builder::Shared {
 				replace into evaluations (
 					parent_hash, child_hash
 				) values (
-					$1, $2
+					?1, ?2
 				)
 			"#;
 		let params = (parent_hash.to_string(), child_hash.to_string());
@@ -773,7 +776,7 @@ impl builder::Shared {
 			from
 				evaluations
 			where
-				parent_hash = $1
+				parent_hash = ?1
 		"#;
 		let params = (hash.to_string(),);
 		let mut statement = txn
@@ -822,9 +825,9 @@ impl builder::Shared {
 				update
 					expressions
 				set
-					output_hash = $2
+					output_hash = ?2
 				where
-					hash = $1
+					hash = ?1
 			"#;
 			let params = (hash.to_string(), output_hash.to_string());
 			txn.execute(sql, params)
@@ -849,7 +852,7 @@ impl builder::Shared {
 					from
 						evaluations
 					where
-						expression_hash = $1
+						expression_hash = ?1
 				"#;
 				let params = (expression_hash.to_string(),);
 				let mut statement = txn

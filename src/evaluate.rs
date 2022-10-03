@@ -30,10 +30,7 @@ impl builder::Shared {
 
 		// If none of the evaluators can evaluate the expression, return an error.
 		let output_hash = output_hash.ok_or_else(|| {
-			anyhow!(
-				r#"There was no evaluator for the expression with hash "{}"."#,
-				hash
-			)
+			anyhow!(r#"There was no evaluator for the expression with hash "{hash}"."#)
 		})?;
 
 		// Set the expression output.

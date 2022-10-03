@@ -58,10 +58,7 @@ pub async fn run(args: Args) -> Result<()> {
 		.context("Failed to evaluate the target expression.")?;
 
 	// Print the output.
-	let output = builder.get_expression(output_hash).await?;
-	let output_json =
-		serde_json::to_string_pretty(&output).context("Failed to serialize the expression.")?;
-	println!("{expression_hash} => {output_json}");
+	println!("{expression_hash} => {output_hash}");
 
 	Ok(())
 }

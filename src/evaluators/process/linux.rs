@@ -29,11 +29,11 @@ impl Process {
 	) -> Result<()> {
 		let builder_path = builder.path().to_owned();
 
-		// Create a temp for the chroot.
-		let temp = builder.create_temp();
+		// Create a temp path for the chroot.
+		let temp_path = builder.create_temp_path();
 
 		// Create the chroot directory.
-		let parent_child_root_path = builder.temp_path(&temp);
+		let parent_child_root_path = temp_path;
 		tokio::fs::create_dir(&parent_child_root_path)
 			.await
 			.context("Failed to create the chroot directory.")?;
@@ -205,6 +205,62 @@ fn pre_exec(
 		parent_child_root_path.join(child_parent_mount_path.strip_prefix("/").unwrap());
 	std::fs::create_dir_all(&parent_parent_mount_path).unwrap();
 
+	// Mount /proc.
+	let parent_proc = PathBuf::from("/proc");
+	let child_proc_path = parent_child_root_path.join("proc");
+	std::fs::create_dir_all(&child_proc_path).unwrap();
+	let parent_proc_c_string = CString::new(parent_proc.as_os_str().as_bytes()).unwrap();
+	let child_proc_path_c_string = CString::new(child_proc_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			parent_proc_c_string.as_ptr(),
+			child_proc_path_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to mount /proc."));
+	}
+
+	// Mount /dev.
+	let parent_dev = PathBuf::from("/dev");
+	let child_dev_path = parent_child_root_path.join("dev");
+	std::fs::create_dir_all(&child_dev_path).unwrap();
+	let parent_dev_c_string = CString::new(parent_dev.as_os_str().as_bytes()).unwrap();
+	let child_dev_path_c_string = CString::new(child_dev_path.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			parent_dev_c_string.as_ptr(),
+			child_dev_path_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND | MS_REC,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to mount /dev."));
+	}
+
+	// Create /tmp.
+	let child_tmp_path = parent_child_root_path.join("tmp");
+	std::fs::create_dir_all(&child_tmp_path)?;
+	let child_tmp_path_c_string = CString::new(child_tmp_path.as_os_str().as_bytes()).unwrap();
+	let tmpfs_c_string = CString::new("tmpfs").unwrap();
+	let ret = unsafe {
+		mount(
+			tmpfs_c_string.as_ptr(),
+			child_tmp_path_c_string.as_ptr(),
+			tmpfs_c_string.as_ptr(),
+			0,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to create /tmp."));
+	}
+
 	// Mount the builder path.
 	let parent_source_path = &builder_path;
 	let parent_source_path_c_string =
@@ -224,62 +280,6 @@ fn pre_exec(
 	};
 	if ret != 0 {
 		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to mount the builder path."));
-	}
-
-	// Mount /proc
-	let parent_proc = PathBuf::from("/proc");
-	let child_proc_path = parent_child_root_path.join("proc");
-	std::fs::create_dir_all(&child_proc_path).unwrap();
-	let parent_proc_c_string = CString::new(parent_proc.as_os_str().as_bytes()).unwrap();
-	let child_proc_path_c_string = CString::new(child_proc_path.as_os_str().as_bytes()).unwrap();
-	let ret = unsafe {
-		mount(
-			parent_proc_c_string.as_ptr(),
-			child_proc_path_c_string.as_ptr(),
-			std::ptr::null(),
-			MS_BIND,
-			std::ptr::null(),
-		)
-	};
-	if ret != 0 {
-		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to bindmount /proc"));
-	}
-
-	// Mount /dev
-	let parent_dev = PathBuf::from("/dev");
-	let child_dev_path = parent_child_root_path.join("dev");
-	std::fs::create_dir_all(&child_dev_path).unwrap();
-	let parent_dev_c_string = CString::new(parent_dev.as_os_str().as_bytes()).unwrap();
-	let child_dev_path_c_string = CString::new(child_dev_path.as_os_str().as_bytes()).unwrap();
-	let ret = unsafe {
-		mount(
-			parent_dev_c_string.as_ptr(),
-			child_dev_path_c_string.as_ptr(),
-			std::ptr::null(),
-			MS_BIND | MS_REC,
-			std::ptr::null(),
-		)
-	};
-	if ret != 0 {
-		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to bindmount /dev"));
-	}
-
-	// Create <chroot>/tmp
-	let child_tmp_path = parent_child_root_path.join("tmp");
-	std::fs::create_dir_all(&child_tmp_path)?;
-	let child_tmp_path_c_string = CString::new(child_tmp_path.as_os_str().as_bytes()).unwrap();
-	let tmpfs_c_string = CString::new("tmpfs").unwrap();
-	let ret = unsafe {
-		mount(
-			tmpfs_c_string.as_ptr(),
-			child_tmp_path_c_string.as_ptr(),
-			tmpfs_c_string.as_ptr(),
-			0,
-			std::ptr::null(),
-		)
-	};
-	if ret != 0 {
-		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to create /tmp"));
 	}
 
 	// Pivot the root.
