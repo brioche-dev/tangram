@@ -33,17 +33,20 @@ pub async fn run(args: Args) -> Result<()> {
 	}
 
 	// Perform the checkin.
-	let hash = builder.checkin(&path).await?;
+	let source_hash = builder.checkin(&path).await?;
+
+	// Create the package.
+	let package_hash = builder.create_package(source_hash).await?;
 
 	// Push the expression to the registry.
 	builder
-		.push(hash, &client)
+		.push(package_hash, &client)
 		.await
 		.context("Failed to push the expression.")?;
 
 	// Publish the package.
 	client
-		.publish_package(hash)
+		.publish_package(package_hash)
 		.await
 		.context("Failed to publish the package.")?;
 

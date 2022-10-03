@@ -8,7 +8,6 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use deno_core::{serde_v8, v8, JsRuntime};
-use futures::future::try_join_all;
 use std::{cell::RefCell, convert::TryInto, future::Future, num::NonZeroUsize, rc::Rc, sync::Arc};
 use url::Url;
 
@@ -118,7 +117,7 @@ async fn run_js_process(
 	));
 
 	// Create the js runtime.
-	let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
+	let mut runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
 		source_map_getter: Some(
 			Box::new(Rc::clone(&module_loader)) as Box<dyn deno_core::SourceMapGetter>
 		),
@@ -141,14 +140,14 @@ async fn run_js_process(
 	let module_url = Url::parse(&module_url).unwrap();
 
 	// Load the module.
-	let module_id = js_runtime.load_side_module(&module_url, None).await?;
-	let evaluate_receiver = js_runtime.mod_evaluate(module_id);
-	js_runtime.run_event_loop(false).await?;
+	let module_id = runtime.load_side_module(&module_url, None).await?;
+	let evaluate_receiver = runtime.mod_evaluate(module_id);
+	runtime.run_event_loop(false).await?;
 	evaluate_receiver.await.unwrap()?;
 
 	// Retrieve the specified export from the module.
-	let module_namespace = js_runtime.get_module_namespace(module_id)?;
-	let mut scope = js_runtime.handle_scope();
+	let module_namespace = runtime.get_module_namespace(module_id)?;
+	let mut scope = runtime.handle_scope();
 	let module_namespace = v8::Local::<v8::Object>::new(&mut scope, module_namespace);
 	let export_name = js.name.clone();
 	let export_literal = v8::String::new(&mut scope, &export_name).unwrap();
@@ -167,23 +166,25 @@ async fn run_js_process(
 	// Create a scope to call the export.
 	let mut try_catch_scope = v8::TryCatch::new(&mut scope);
 
-	// Evaluate the args and move them to v8.
-	let args = builder.get_expression(js.args).await?;
-	let args = match args {
-		Expression::Array(array) => array,
-		_ => bail!("Args must be an array."),
-	};
+	// Move the args to v8.
+	let args = builder
+		.get_expression(js.args)
+		.await
+		.context("Failed to get the args expression.")?;
 	let args = args
-		.iter()
-		.map(|arg| {
-			let arg = serde_v8::to_v8(&mut try_catch_scope, arg)?;
-			Ok(arg)
-		})
-		.collect::<Result<Vec<_>>>()?;
+		.as_array()
+		.ok_or_else(|| anyhow!("The args must be an array."))?;
+	let mut arg_values = Vec::new();
+	for arg in args {
+		let arg = builder.get_expression(*arg).await?;
+		let arg = serde_v8::to_v8(&mut try_catch_scope, arg)
+			.context("Failed to move the args expression to v8.")?;
+		arg_values.push(arg);
+	}
 
 	// Call the specified export.
 	let undefined = v8::undefined(&mut try_catch_scope);
-	let output = export.call(&mut try_catch_scope, undefined.into(), &args);
+	let output = export.call(&mut try_catch_scope, undefined.into(), &arg_values);
 
 	// If an exception was caught, return an error with an error message.
 	if try_catch_scope.has_caught() {
@@ -202,10 +203,10 @@ async fn run_js_process(
 	drop(scope);
 
 	// Run the event loop to completion.
-	js_runtime.run_event_loop(false).await?;
+	runtime.run_event_loop(false).await?;
 
 	// Retrieve the return value.
-	let mut scope = js_runtime.handle_scope();
+	let mut scope = runtime.handle_scope();
 	let output = v8::Local::new(&mut scope, output);
 	let output = if output.is_promise() {
 		let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
@@ -218,21 +219,21 @@ async fn run_js_process(
 	let output = v8::Global::new(&mut scope, output);
 	drop(scope);
 
-	// Create a try catch scope to call Tangram.toInternal.
-	let mut scope = js_runtime.handle_scope();
+	// Create a try catch scope to call Tangram.toJson.
+	let mut scope = runtime.handle_scope();
 	let mut try_catch_scope = v8::TryCatch::new(&mut scope);
 
 	// Move the output to the try catch scope.
 	let output = v8::Local::new(&mut try_catch_scope, output);
 
-	// Retrieve Tangram.toInternal.
-	let to_internal_function: v8::Local<v8::Function> =
-		JsRuntime::grab_global(&mut try_catch_scope, "Tangram.toInternal")
-			.ok_or_else(|| anyhow!("Failed to get Tangram.toInternal."))?;
+	// Retrieve Tangram.toJson.
+	let to_json_function: v8::Local<v8::Function> =
+		JsRuntime::grab_global(&mut try_catch_scope, "Tangram.toJson")
+			.ok_or_else(|| anyhow!("Failed to get Tangram.toJson."))?;
 
-	// Call Tangram.toInternal.
+	// Call Tangram.toJson.
 	let undefined = v8::undefined(&mut try_catch_scope);
-	let output = to_internal_function.call(&mut try_catch_scope, undefined.into(), &[output]);
+	let output = to_json_function.call(&mut try_catch_scope, undefined.into(), &[output]);
 
 	// If an exception was caught, return an error with an error message.
 	if try_catch_scope.has_caught() {
@@ -251,10 +252,10 @@ async fn run_js_process(
 	drop(scope);
 
 	// Run the event loop to completion.
-	js_runtime.run_event_loop(false).await?;
+	runtime.run_event_loop(false).await?;
 
 	// Retrieve the output.
-	let mut scope = js_runtime.handle_scope();
+	let mut scope = runtime.handle_scope();
 	let output = v8::Local::new(&mut scope, output);
 	let output = if output.is_promise() {
 		let promise: v8::Local<v8::Promise> = output.try_into().unwrap();

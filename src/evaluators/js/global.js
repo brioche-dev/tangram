@@ -72,12 +72,12 @@ class Artifact {
     this.root = root;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     let root = new Hash(expression.value.root);
     return new Artifact(root);
   }
 
-  async toInternal() {
+  async toJson() {
     let root = await addExpression(this.root);
     return {
       type: ExpressionType.Artifact,
@@ -95,7 +95,7 @@ class Directory {
     this.entries = entries;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     let entries = Object.fromEntries(
       Object.entries(expression.value.entries).map(([key, value]) => [
         key,
@@ -105,7 +105,7 @@ class Directory {
     return new Directory(entries);
   }
 
-  async toInternal() {
+  async toJson() {
     let entries = Object.fromEntries(
       await Promise.all(
         Object.entries(this.entries).map(async ([key, value]) => [
@@ -130,13 +130,13 @@ class File {
     this.executable = executable ?? false;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     let blob = new Hash(expression.value.blob);
     let executable = expression.value.executable;
     return new File(blob, executable);
   }
 
-  async toInternal() {
+  async toJson() {
     return {
       type: ExpressionType.File,
       value: {
@@ -154,11 +154,11 @@ class Symlink {
     this.target = target;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     return new Symlink(expression.value.target);
   }
 
-  async toInternal() {
+  async toJson() {
     return {
       type: ExpressionType.Symlink,
       value: {
@@ -175,11 +175,11 @@ class Dependency {
     this.artifact = artifact;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     return new Dependency(new Hash(expression.value.artifact));
   }
 
-  async toInternal() {
+  async toJson() {
     let artifact = await addExpression(this.artifact);
     return {
       type: ExpressionType.Dependency,
@@ -197,13 +197,13 @@ class Template {
     this.components = components;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     return new Template(
       expression.value.components.map((string) => new Hash(string))
     );
   }
 
-  async toInternal() {
+  async toJson() {
     let components = await Promise.all(
       this.components.map(async (component) =>
         (await addExpression(component)).toString()
@@ -233,7 +233,7 @@ class Js {
     this.args = args;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     let dependencies = Object.fromEntries(
       Object.entries(expression.value.dependencies).map(([key, value]) => [
         key,
@@ -247,7 +247,7 @@ class Js {
     return new Js({ dependencies, artifact, path, name, args });
   }
 
-  async toInternal() {
+  async toJson() {
     let artifact = await addExpression(this.artifact);
     let args = await addExpression(this.args);
     let dependencies = Object.fromEntries(
@@ -280,7 +280,7 @@ class Fetch {
     this.unpack = unpack;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     return new Fetch({
       url: expression.value.url,
       hash: expression.value.hash,
@@ -288,7 +288,7 @@ class Fetch {
     });
   }
 
-  async toInternal() {
+  async toJson() {
     return {
       type: ExpressionType.Fetch,
       value: {
@@ -313,7 +313,7 @@ class Process {
     this.args = args.args;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     let system = expression.value.system;
     let env = new Hash(expression.value.env);
     let command = new Hash(expression.value.command);
@@ -321,7 +321,7 @@ class Process {
     return new Process({ system, env, command, args });
   }
 
-  async toInternal() {
+  async toJson() {
     let env = await addExpression(this.env);
     let command = await addExpression(this.command);
     let args = await addExpression(this.args);
@@ -348,15 +348,15 @@ class Target {
     this.args = args.args;
   }
 
-  static fromInternal(expression) {
+  static async fromJson(expression) {
     return new Target({
       package: new Hash(expression.value.package),
       name: expression.value.name,
-      args: new Hash(expression.value.args),
+      args: await getExpression(new Hash(expression.value.args)),
     });
   }
 
-  async toInternal() {
+  async toJson() {
     let _package = await addExpression(this.package);
     let args = await addExpression(this.args);
     return {
@@ -370,7 +370,7 @@ class Target {
   }
 }
 
-let fromInternal = (expression) => {
+let fromJson = async (expression) => {
   switch (expression.type) {
     case ExpressionType.Null:
       return expression.value;
@@ -381,40 +381,46 @@ let fromInternal = (expression) => {
     case ExpressionType.String:
       return expression.value;
     case ExpressionType.Artifact:
-      return Artifact.fromInternal(expression);
+      return Artifact.fromJson(expression);
     case ExpressionType.Directory:
-      return Directory.fromInternal(expression);
+      return Directory.fromJson(expression);
     case ExpressionType.File:
-      return File.fromInternal(expression);
+      return File.fromJson(expression);
     case ExpressionType.Symlink:
-      return Symlink.fromInternal(expression);
+      return Symlink.fromJson(expression);
     case ExpressionType.Dependency:
-      return Dependency.fromInternal(expression);
+      return Dependency.fromJson(expression);
     case ExpressionType.Template:
-      return Template.fromInternal(expression);
+      return Template.fromJson(expression);
     case ExpressionType.Js:
-      return Js.fromInternal(expression);
+      return Js.fromJson(expression);
     case ExpressionType.Fetch:
-      return Fetch.fromInternal(expression);
+      return Fetch.fromJson(expression);
     case ExpressionType.Process:
-      return Process.fromInternal(expression);
+      return Process.fromJson(expression);
     case ExpressionType.Target:
-      return Target.fromInternal(expression);
+      return Target.fromJson(expression);
     case ExpressionType.Array:
-      return expression.value.map((value) => new Hash(value));
+      return await Promise.all(
+        expression.value.map(
+          async (value) => await getExpression(new Hash(value))
+        )
+      );
     case ExpressionType.Map:
       return Object.fromEntries(
-        Object.entries(expression.value).map(([key, value]) => [
-          key,
-          new Hash(value),
-        ])
+        await Promise.all(
+          Object.entries(expression.value).map(async ([key, value]) => [
+            key,
+            await getExpression(new Hash(value)),
+          ])
+        )
       );
     default:
       throw new Error(`Invalid expression type "${expression.type}".`);
   }
 };
 
-let toInternal = async (expression) => {
+let toJson = async (expression) => {
   if (expression === null) {
     return {
       type: ExpressionType.Null,
@@ -436,25 +442,25 @@ let toInternal = async (expression) => {
       value: expression,
     };
   } else if (expression instanceof Artifact) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Directory) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof File) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Symlink) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Dependency) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Template) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Js) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Fetch) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Process) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (expression instanceof Target) {
-    return await expression.toInternal();
+    return await expression.toJson();
   } else if (Array.isArray(expression)) {
     let value = await Promise.all(
       expression.map(async (value) => {
@@ -493,20 +499,19 @@ let getBlob = async (hash) => {
 
 let addExpression = async (expression) => {
   return new Hash(
-    await syscall(Syscall.AddExpression, await toInternal(expression))
+    await syscall(Syscall.AddExpression, await toJson(expression))
   );
 };
 
 let getExpression = async (hash) => {
-  return fromInternal(
-    hash,
-    await syscall(Syscall.GetExpression, hash.toString())
-  );
+  return fromJson(await syscall(Syscall.GetExpression, hash.toString()));
 };
 
 let evaluate = async (hash) => {
   return new Hash(await syscall(Syscall.Evaluate, hash.toString()));
 };
+
+let call = async (fn, args) => fn(args.map(fromJson)).then(toJson);
 
 let template = (strings, ...placeholders) => {
   let components = [];
@@ -546,9 +551,9 @@ globalThis.Tangram = {
   addBlob,
   addExpression,
   evaluate,
-  fromInternal,
+  fromJson,
   getBlob,
   getExpression,
   template,
-  toInternal,
+  toJson,
 };

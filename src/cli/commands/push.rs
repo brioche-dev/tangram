@@ -6,9 +6,7 @@ use url::Url;
 #[derive(Parser, Debug)]
 #[command(trailing_var_arg = true)]
 pub struct Args {
-	#[arg(long)]
 	pub hash: Hash,
-	#[arg(long)]
 	pub url: Url,
 }
 

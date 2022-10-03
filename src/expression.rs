@@ -82,6 +82,15 @@ pub struct Template {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Js {
+	pub dependencies: BTreeMap<Arc<str>, Hash>,
+	pub artifact: Hash,
+	pub path: Option<Utf8PathBuf>,
+	pub name: String,
+	pub args: Hash,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Fetch {
 	pub url: Url,
 	pub hash: Option<Hash>,
@@ -93,15 +102,6 @@ pub struct Process {
 	pub system: System,
 	pub env: Hash,
 	pub command: Hash,
-	pub args: Hash,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Js {
-	pub dependencies: BTreeMap<Arc<str>, Hash>,
-	pub artifact: Hash,
-	pub path: Option<Utf8PathBuf>,
-	pub name: String,
 	pub args: Hash,
 }
 
@@ -365,7 +365,7 @@ impl builder::Shared {
 		&self,
 		expression: &Expression,
 	) -> Result<AddExpressionOutcome> {
-		// Before adding this expression, we need to ensure the server has all its references.
+		// Before adding this expression, we need to ensure the builder has all its references.
 		let mut missing = Vec::new();
 		match expression {
 			// If this expression is a directory, ensure all its entries are present.

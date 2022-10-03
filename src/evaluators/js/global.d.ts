@@ -193,15 +193,13 @@ declare module Tangram {
     Arm64Macos = "arm64_macos",
   }
 
-  class Hash<T extends Expression | unknown = unknown> {
+  class Hash<T extends Expression = Expression> {
     constructor(hash: string);
 
     toString(): string;
   }
 
-  type HashOr<T extends Expression> = Hash<T> | T;
-
-  type Expression<Output extends Expression> =
+  type Expression<Output extends Expression = Expression<any>> =
     | null
     | boolean
     | number
@@ -216,10 +214,10 @@ declare module Tangram {
     | Fetch
     | Process
     | Target<Output>
-    | Array<HashOr<Expression<Output>>>
-    | { [key: string]: HashOr<Expression<Output>> };
+    | Array<Expression<Output>>
+    | { [key: string]: Expression<Output> };
 
-  type OutputForExpression<T extends Expression<unknown>> = T extends null
+  type OutputForExpression<T extends Expression> = T extends null
     ? null
     : T extends boolean
     ? boolean
@@ -232,29 +230,29 @@ declare module Tangram {
     : T extends Template
     ? Template
     : T extends Js<infer O>
-    ? O
+    ? OutputForExpression<O>
     : T extends Fetch
     ? Artifact
     : T extends Process
     ? Artifact
     : T extends Target<infer O>
     ? OutputForExpression<O>
-    : T extends Array<infer O>
-    ? Array<OutputForExpression<O>>
-    : T extends { [key: string]: infer U }
-    ? { [key: string]: OutputForExpression<U> }
+    : T extends Array<infer V extends Expression>
+    ? Array<OutputForExpression<V>>
+    : T extends { [key: string]: infer V extends Expression }
+    ? { [key: string]: OutputForExpression<V> }
     : never;
 
   class Artifact {
-    constructor(expression: HashOr<Expression>);
+    constructor(expression: Expression);
   }
 
   class Directory {
-    constructor(entries: { [key: string]: HashOr<Expression> });
+    constructor(entries: { [key: string]: Expression });
   }
 
   class File {
-    constructor(blob: Hash, executable?: boolean);
+    constructor(blob: Expression<string>, executable?: boolean);
   }
 
   class Symlink {
@@ -262,22 +260,22 @@ declare module Tangram {
   }
 
   class Dependency {
-    constructor(artifact: HashOr<Artifact>);
+    constructor(artifact: Artifact);
   }
 
   class Template {
-    constructor(components: Array<HashOr<string | Artifact>>);
+    constructor(components: Array<string | Artifact | Template>);
   }
 
   type JsArgs = {
-    args: HashOr<Expression>;
-    artifact: HashOr<Expression>;
-    dependencies: { [key: string]: Hash };
+    args: Expression<Array<Expression<string | Artifact | Template>>>;
+    artifact: Expression<Artifact>;
+    dependencies: { [key: string]: Expression<Artifact> };
     export: string;
     path: string | null;
   };
 
-  class Js<O> {
+  class Js<O extends Expression> {
     constructor(args: JsArgs);
   }
 
@@ -292,9 +290,11 @@ declare module Tangram {
   }
 
   type ProcessArgs = {
-    args: HashOr<Expression>;
-    command: HashOr<Artifact | Template>;
-    env: HashOr<Expression>;
+    args: Array<Expression>;
+    command: Expression<string | Artifact | Template>;
+    env: Expression<{
+      [key: string]: Expression<string | Artifact | Template>;
+    }>;
     system: System;
   };
 
@@ -303,23 +303,31 @@ declare module Tangram {
   }
 
   type TargetArgs = {
-    package: HashOr<Artifact>;
+    package: Expression<Artifact>;
     name: string;
-    args: HashOr<Array<HashOr<Expression>>>;
+    args: Array<Expression>;
   };
 
-  class Target<O> {
+  class Target<O extends Expression> {
     constructor(args: TargetArgs);
   }
 
   let template: (
     strings: TemplateStringsArray,
-    ...placeholders: Array<Expression>
+    ...placeholders: Array<Expression<string | Artifact | Template>>
   ) => Template;
 
   let addBlob: (bytes: string) => Promise<Hash>;
-  let addExpression: (expression: Expression) => Promise<Hash>;
-  let evaluate: (hash: Hash) => Promise<Hash>;
+
+  let addExpression: <T extends Expression>(
+    expression: Expression<T>
+  ) => Promise<Hash<T>>;
+
+  let evaluate: <O extends Expression>(
+    hash: Hash<Expression<O>>
+  ) => Promise<Hash<O>>;
+
   let getBlob: (hash: Hash) => Promise<string>;
+
   let getExpression: (hash: Hash) => Promise<Expression>;
 }
