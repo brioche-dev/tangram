@@ -113,6 +113,7 @@ declare module Tangram {
 
     type Dependency = {
       artifact: Hash;
+      path: string | null;
     };
 
     type Template = {
@@ -256,7 +257,7 @@ declare module Tangram {
   }
 
   class Dependency {
-    constructor(artifact: Artifact);
+    constructor(artifact: Artifact, path?: string | null);
   }
 
   class Template {

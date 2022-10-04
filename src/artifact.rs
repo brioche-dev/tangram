@@ -17,42 +17,46 @@ impl builder::Shared {
 			let temp_path = self.create_temp_path();
 
 			// Create the callback to create dependency artifact checkouts.
-			let dependency_handler = {
-				let server = self.clone();
-				move |dependency: &Dependency, path: &Path| {
-					let server = server.clone();
-					let dependency = dependency.clone();
-					let path = path.to_owned();
-					async move {
-						// Checkout the dependency to an artifact.
-						let dependency_path = server
-							.checkout_to_artifacts(dependency.artifact)
-							.await
-							.context(
-								"Failed to checkout the dependency to the artifacts directory.",
-							)?;
+			let dependency_handler =
+				{
+					let server = self.clone();
+					move |dependency: &Dependency, path: &Path| {
+						let server = server.clone();
+						let dependency = dependency.clone();
+						let path = path.to_owned();
+						async move {
+							// Get the target by checking out the dependency to the artifacts directory.
+							let mut target = server
+								.checkout_to_artifacts(dependency.artifact)
+								.await
+								.context(
+									"Failed to checkout the dependency to the artifacts directory.",
+								)?;
 
-						// Compute the symlink target.
-						let parent_path = path
-							.parent()
-							.ok_or_else(|| anyhow!("Expected the path to have a parent."))?;
-						let dependency_path = pathdiff::diff_paths(dependency_path, parent_path)
-							.ok_or_else(|| {
-								anyhow!(
-									"Could not resolve the symlink target relative to the path."
-								)
-							})?;
+							// Add the dependency path to the target.
+							if let Some(dependency_path) = dependency.path {
+								target.push(dependency_path);
+							}
 
-						// Create the symlink.
-						tokio::fs::symlink(dependency_path, path)
-							.await
-							.context("Failed to write the symlink for the dependency.")?;
+							// Make the target relative to the symlink path.
+							let parent_path = path
+								.parent()
+								.ok_or_else(|| anyhow!("Expected the path to have a parent."))?;
+							let target =
+								pathdiff::diff_paths(target, parent_path).ok_or_else(|| {
+									anyhow!("Could not resolve the symlink target relative to the path.")
+								})?;
 
-						Ok(())
+							// Create the symlink.
+							tokio::fs::symlink(target, path)
+								.await
+								.context("Failed to write the symlink for the dependency.")?;
+
+							Ok(())
+						}
+						.boxed()
 					}
-					.boxed()
-				}
-			};
+				};
 
 			// Perform the checkout.
 			self.checkout(artifact_hash, &temp_path, Some(&dependency_handler))

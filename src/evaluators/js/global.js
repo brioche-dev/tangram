@@ -170,13 +170,18 @@ class Symlink {
 
 class Dependency {
   artifact;
+  path;
 
-  constructor(artifact) {
+  constructor(artifact, path) {
     this.artifact = artifact;
+    this.path = path ?? null;
   }
 
   static fromJson(expression) {
-    return new Dependency(new Hash(expression.value.artifact));
+    return new Dependency(
+      new Hash(expression.value.artifact),
+      expression.value.path
+    );
   }
 
   async toJson() {
@@ -185,6 +190,7 @@ class Dependency {
       type: ExpressionType.Dependency,
       value: {
         artifact: artifact.toString(),
+        path: this.path,
       },
     };
   }

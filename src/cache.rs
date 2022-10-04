@@ -158,16 +158,28 @@ impl Cache {
 				.strip_prefix(&self.builder_path.join("artifacts"))
 				.map_err(|_| anyhow!("Invalid symlink."))?;
 
-			// Parse the hash from the last path component of the target.
-			let hash: Hash = target
-				.components()
-				.last()
+			// Get the path components.
+			let mut components = target.components().peekable();
+
+			// Parse the hash from the first component.
+			let hash: Hash = components
+				.next()
 				.ok_or_else(|| anyhow!("Invalid symlink."))?
 				.as_str()
 				.parse()
 				.context("Failed to parse the last path component as a hash.")?;
 
-			Expression::Dependency(Dependency { artifact: hash })
+			// Collect the remaining dependencies to get the path within the dependency.
+			let path = if components.peek().is_some() {
+				Some(components.collect())
+			} else {
+				None
+			};
+
+			Expression::Dependency(Dependency {
+				artifact: hash,
+				path,
+			})
 		} else {
 			Expression::Symlink(Symlink { target })
 		};

@@ -74,6 +74,7 @@ pub struct Symlink {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
 	pub artifact: Hash,
+	pub path: Option<Utf8PathBuf>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
