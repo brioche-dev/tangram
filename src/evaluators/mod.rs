@@ -6,6 +6,7 @@ pub mod array;
 pub mod fetch;
 pub mod js;
 pub mod map;
+pub mod package;
 pub mod primitive;
 pub mod process;
 pub mod target;

@@ -63,6 +63,7 @@ impl Builder {
 		let evaluators: Vec<Box<dyn Send + Sync + Evaluator>> = vec![
 			Box::new(crate::evaluators::array::Array::new()),
 			Box::new(crate::evaluators::fetch::Fetch::new()),
+			Box::new(crate::evaluators::package::Package::new()),
 			Box::new(crate::evaluators::map::Map::new()),
 			Box::new(crate::evaluators::primitive::Primitive::new()),
 			Box::new(crate::evaluators::js::Js::new()),

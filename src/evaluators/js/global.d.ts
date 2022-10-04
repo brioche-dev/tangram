@@ -19,6 +19,7 @@ declare module Tangram {
       File = "file",
       Symlink = "symlink",
       Dependency = "dependency",
+      Package = "package",
       Template = "template",
       Js = "js",
       Fetch = "fetch",
@@ -64,6 +65,10 @@ declare module Tangram {
       | {
           type: ExpressionType.Dependency;
           value: Dependency;
+        }
+      | {
+          type: ExpressionType.Package;
+          value: Package;
         }
       | {
           type: ExpressionType.Template;
@@ -115,6 +120,11 @@ declare module Tangram {
       artifact: Hash;
     };
 
+    type Package = {
+      source: Hash;
+      dependencies: { [key: string]: Hash };
+    };
+
     type Template = {
       components: Array<Hash>;
     };
@@ -159,11 +169,7 @@ declare module Tangram {
       Evaluate = "evaluate",
     }
 
-    function syscall(
-      syscall: Syscall.Console,
-      level: ConsoleLevel,
-      args: Array<any>
-    );
+    function syscall(syscall: Syscall.Print, value: string);
 
     function syscall(syscall: Syscall.AddBlob, bytes: string): Promise<Hash>;
 
@@ -205,6 +211,7 @@ declare module Tangram {
     | File
     | Symlink
     | Dependency
+    | Package
     | Template
     | Js<Output>
     | Fetch
@@ -225,6 +232,8 @@ declare module Tangram {
     ? Artifact
     : T extends Template
     ? Template
+    : T extends Package
+    ? Package
     : T extends Js<infer O>
     ? OutputForExpression<O>
     : T extends Fetch
@@ -257,6 +266,15 @@ declare module Tangram {
 
   class Dependency {
     constructor(artifact: Artifact);
+  }
+
+  type PackageArgs = {
+    source: Expression<Artifact>;
+    dependencies: Array<Expression<Artifact>>;
+  };
+
+  class Package {
+    constructor(args: PackageArgs);
   }
 
   class Template {
