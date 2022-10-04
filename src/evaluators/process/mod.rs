@@ -96,6 +96,18 @@ impl Evaluator for Process {
 		// Create the output.
 		let output_hash = builder.checkin(&out_temp_path).await?;
 
+		// Verify output hash matches if provided in the expression
+		match process.hash {
+			Some(expected_hash) if expected_hash != output_hash => {
+				bail!(
+					"Hash mismatch in process!\nExpected: {}\nReceived: {}\n",
+					expected_hash,
+					output_hash,
+				)
+			},
+			_ => {},
+		}
+
 		Ok(Some(output_hash))
 	}
 }
