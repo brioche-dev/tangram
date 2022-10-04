@@ -325,7 +325,9 @@ async fn load_tangram_target_proxy(
 	let domain = specifier
 		.domain()
 		.ok_or_else(|| anyhow!("The specifier must have a domain."))?;
-	let package_hash: Hash = domain.parse().context("Failed to parse the domain.")?;
+	let package_hash: Hash = domain
+		.parse()
+		.context("Failed to parse the domain as a hash.")?;
 
 	// Get the package's manifest.
 	let manifest = state
@@ -336,6 +338,12 @@ async fn load_tangram_target_proxy(
 
 	// Generate the code for the target proxy module.
 	let mut code = String::new();
+	writedoc!(
+		code,
+		r#"let _package = await Tangram.getExpression(new Tangram.Hash("{package_hash}"));"#
+	)
+	.unwrap();
+	code.push('\n');
 	for target_name in manifest.targets {
 		if target_name == "default" {
 			writedoc!(code, r#"export default "#).unwrap();
@@ -345,18 +353,17 @@ async fn load_tangram_target_proxy(
 		writedoc!(
 			code,
 			r#"
-				(...args) => {{
-					return new Tangram.Target({{
-						package: new Tangram.Hash("{package_hash}"),
-						name: "{target_name}",
-						args,
-					}});
-				}}
+				(...args) => new Tangram.Target({{
+					package: _package,
+					name: "{target_name}",
+					args,
+				}});
 			"#,
 		)
 		.unwrap();
 		code.push('\n');
 	}
+	println!("{code}");
 
 	Ok(deno_core::ModuleSource {
 		code: code.into_bytes().into_boxed_slice(),

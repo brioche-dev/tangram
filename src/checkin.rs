@@ -13,7 +13,7 @@ use std::{path::Path, sync::Arc};
 impl builder::Shared {
 	pub async fn checkin(&self, path: &Path) -> Result<Hash> {
 		// Create a cache.
-		let cache = Cache::new(self.path(), path, Arc::clone(&self.file_system_semaphore));
+		let cache = Cache::new(self.path(), Arc::clone(&self.file_system_semaphore));
 
 		// Checkin the expression for the path.
 		self.checkin_path(&cache, path).await?;

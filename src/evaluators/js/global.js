@@ -20,7 +20,7 @@ let ExpressionType = {
 };
 
 let Syscall = {
-  Console: "console",
+  Print: "print",
   AddBlob: "add_blob",
   GetBlob: "get_blob",
   AddExpression: "add_expression",
@@ -38,7 +38,7 @@ let System = {
 let syscall = (syscall, ...args) => {
   let opName = "op_tangram_" + syscall;
   switch (syscall) {
-    case Syscall.Console:
+    case Syscall.Print:
       return Deno.core.opSync(opName, ...args);
     case Syscall.AddBlob:
       return Deno.core.opAsync(opName, ...args);
@@ -72,7 +72,7 @@ class Artifact {
     this.root = root;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     let root = new Hash(expression.value.root);
     return new Artifact(root);
   }
@@ -95,7 +95,7 @@ class Directory {
     this.entries = entries;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     let entries = Object.fromEntries(
       Object.entries(expression.value.entries).map(([key, value]) => [
         key,
@@ -130,7 +130,7 @@ class File {
     this.executable = executable ?? false;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     let blob = new Hash(expression.value.blob);
     let executable = expression.value.executable;
     return new File(blob, executable);
@@ -154,7 +154,7 @@ class Symlink {
     this.target = target;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     return new Symlink(expression.value.target);
   }
 
@@ -175,7 +175,7 @@ class Dependency {
     this.artifact = artifact;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     return new Dependency(new Hash(expression.value.artifact));
   }
 
@@ -197,7 +197,7 @@ class Template {
     this.components = components;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     return new Template(
       expression.value.components.map((string) => new Hash(string))
     );
@@ -233,7 +233,7 @@ class Js {
     this.args = args;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     let dependencies = Object.fromEntries(
       Object.entries(expression.value.dependencies).map(([key, value]) => [
         key,
@@ -280,7 +280,7 @@ class Fetch {
     this.unpack = unpack;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     return new Fetch({
       url: expression.value.url,
       hash: expression.value.hash,
@@ -314,7 +314,7 @@ class Process {
     this.hash = args.hash;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     let system = expression.value.system;
     let env = new Hash(expression.value.env);
     let command = new Hash(expression.value.command);
@@ -351,11 +351,11 @@ class Target {
     this.args = args.args;
   }
 
-  static async fromJson(expression) {
+  static fromJson(expression) {
     return new Target({
       package: new Hash(expression.value.package),
       name: expression.value.name,
-      args: await getExpression(new Hash(expression.value.args)),
+      args: new Hash(expression.value.args),
     });
   }
 
@@ -372,6 +372,18 @@ class Target {
     };
   }
 }
+
+let template = (strings, ...placeholders) => {
+  let components = [];
+  for (let i = 0; i < strings.length - 1; i++) {
+    let string = strings[i];
+    let placeholder = placeholders[i];
+    components.push(string);
+    components.push(placeholder);
+  }
+  components.push(strings[strings.length - 1]);
+  return new Template(components);
+};
 
 let fromJson = async (expression) => {
   switch (expression.type) {
@@ -501,6 +513,9 @@ let getBlob = async (hash) => {
 };
 
 let addExpression = async (expression) => {
+  if (expression instanceof Hash) {
+    return expression;
+  }
   return new Hash(
     await syscall(Syscall.AddExpression, await toJson(expression))
   );
@@ -514,22 +529,11 @@ let evaluate = async (hash) => {
   return new Hash(await syscall(Syscall.Evaluate, hash.toString()));
 };
 
-let call = async (fn, args) => fn(args.map(fromJson)).then(toJson);
-
-let template = (strings, ...placeholders) => {
-  let components = [];
-  for (let i = 0; i < strings.length - 1; i++) {
-    let string = strings[i];
-    let placeholder = placeholders[i];
-    components.push(string);
-    components.push(placeholder);
-  }
-  components.push(strings[strings.length - 1]);
-  return new Template(components);
-};
-
 globalThis.console = {
-  log: (...args) => syscall(Syscall.Console, "log", args),
+  log: (...args) => {
+    let string = args.map(JSON.stringify).join(" ");
+    syscall(Syscall.Print, string);
+  },
 };
 
 globalThis.Tangram = {

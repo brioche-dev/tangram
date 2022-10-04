@@ -89,7 +89,7 @@ async fn run_js_process(
 	// Build the tangram extension.
 	let tangram_extension = deno_core::Extension::builder()
 		.ops(vec![
-			op_tangram_console::decl(),
+			op_tangram_print::decl(),
 			op_tangram_add_blob::decl(),
 			op_tangram_get_blob::decl(),
 			op_tangram_add_expression::decl(),
@@ -327,26 +327,10 @@ async fn run_js_process(
 	Ok(hash)
 }
 
-#[derive(Clone, Copy, serde::Deserialize, serde::Serialize)]
-enum ConsoleLevel {
-	#[serde(rename = "log")]
-	Log,
-}
-
 #[deno_core::op]
-#[allow(clippy::unnecessary_wraps)]
-fn op_tangram_console(
-	_level: ConsoleLevel,
-	args: Vec<serde_json::Value>,
-) -> Result<(), deno_core::error::AnyError> {
-	let len = args.len();
-	for (i, arg) in args.into_iter().enumerate() {
-		print!("{arg}");
-		if i != len - 1 {
-			print!(" ");
-		}
-	}
-	println!();
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
+fn op_tangram_print(string: String) -> Result<(), deno_core::error::AnyError> {
+	println!("{string}");
 	Ok(())
 }
 

@@ -16,17 +16,10 @@ const SQL: &str = r#"
 	);
 
 	create table packages (
-		registry text not null,
-		name text not null,
-		primary key (registry, name)
-	);
-
-	create table package_versions (
-		registry text not null,
 		name text not null,
 		version text not null,
 		hash blob not null,
-		primary key (registry, name, version)
+		primary key (name, version)
 	);
 "#;
 

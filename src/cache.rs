@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
-use camino::{Utf8Component, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use fnv::FnvBuildHasher;
 use futures::future::try_join_all;
 use std::{
@@ -18,24 +18,17 @@ use std::{
 
 pub struct Cache {
 	builder_path: PathBuf,
-	root_path: PathBuf,
 	semaphore: Arc<tokio::sync::Semaphore>,
 	cache: RwLock<HashMap<PathBuf, (Hash, Expression), FnvBuildHasher>>,
 }
 
 impl Cache {
 	#[must_use]
-	pub fn new(
-		builder_path: &Path,
-		root_path: &Path,
-		semaphore: Arc<tokio::sync::Semaphore>,
-	) -> Cache {
+	pub fn new(builder_path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> Cache {
 		let builder_path = builder_path.to_owned();
-		let root_path = root_path.to_owned();
 		let cache = RwLock::new(HashMap::default());
 		Cache {
 			builder_path,
-			root_path,
 			semaphore,
 			cache,
 		}

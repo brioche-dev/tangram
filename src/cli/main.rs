@@ -31,9 +31,11 @@ struct Args {
 #[derive(Parser)]
 enum Subcommand {
 	Autoshell(commands::autoshell::Args),
+	Blob(commands::blob::Args),
 	Build(commands::build::Args),
 	Checkin(commands::checkin::Args),
 	Checkout(commands::checkout::Args),
+	Expression(commands::expression::Args),
 	Fetch(commands::fetch::Args),
 	Gc(commands::gc::Args),
 	Init(commands::init::Args),
@@ -64,8 +66,10 @@ async fn main() -> Result<()> {
 	match args.subcommand {
 		Subcommand::Autoshell(args) => commands::autoshell::run(args).boxed(),
 		Subcommand::Build(args) => commands::build::run(args).boxed(),
+		Subcommand::Blob(args) => commands::blob::run(args).boxed(),
 		Subcommand::Checkin(args) => commands::checkin::run(args).boxed(),
 		Subcommand::Checkout(args) => commands::checkout::run(args).boxed(),
+		Subcommand::Expression(args) => commands::expression::run(args).boxed(),
 		Subcommand::Fetch(args) => commands::fetch::run(args).boxed(),
 		Subcommand::Gc(args) => commands::gc::run(args).boxed(),
 		Subcommand::Init(args) => commands::init::run(args).boxed(),

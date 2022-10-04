@@ -150,12 +150,8 @@ declare module Tangram {
 
     type _Map = { [key: string]: Hash };
 
-    enum ConsoleLevel {
-      Log = "log",
-    }
-
     enum Syscall {
-      Console = "console",
+      Print = "print",
       AddBlob = "add_blob",
       GetBlob = "get_blob",
       AddExpression = "add_expression",

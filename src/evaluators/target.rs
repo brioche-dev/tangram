@@ -38,9 +38,10 @@ impl Evaluator for Target {
 		};
 
 		// Get the package's dependencies.
-		let package = builder.get_expression(target.package).await?;
-		let package = package
-			.as_map()
+		let package = builder
+			.get_expression(target.package)
+			.await?
+			.into_map()
 			.ok_or_else(|| anyhow!("Expected the package expression to be a map."))?;
 		let dependencies = package.get("dependencies").ok_or_else(|| {
 			anyhow!(r#"Expected the package expression to contain the key "dependencies"."#)

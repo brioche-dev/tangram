@@ -142,7 +142,6 @@ impl builder::Shared {
 
 			// Check in the package source.
 			let package_source_hash = self.checkin(&package_source_path).await?;
-			cache.insert(package_source_path.clone(), package_source_hash);
 
 			// Read the lockfile.
 			let lockfile_path = package_source_path.join("tangram.lock");
@@ -162,9 +161,12 @@ impl builder::Shared {
 			let mut package = BTreeMap::new();
 			package.insert("dependencies".into(), dependencies);
 			package.insert("source".into(), package_source_hash);
-			let package = self.add_expression(&Expression::Map(package)).await?;
+			let package_hash = self.add_expression(&Expression::Map(package)).await?;
 
-			root_package = Some(package);
+			// Add the package to the cache.
+			cache.insert(package_source_path.clone(), package_hash);
+
+			root_package = Some(package_hash);
 		}
 
 		let root_package = root_package.unwrap();
@@ -187,10 +189,16 @@ impl builder::Shared {
 	pub async fn get_package_manifest(&self, package_hash: Hash) -> Result<Manifest> {
 		let package_source_hash = self.get_package_source(package_hash).await?;
 
-		let package_source = self.get_expression(package_source_hash).await?;
+		let source_artifact = self
+			.get_expression(package_source_hash)
+			.await?
+			.into_artifact()
+			.ok_or_else(|| anyhow!("Expected an artifact."))?;
 
-		let source_directory = package_source
-			.as_directory()
+		let source_directory = self
+			.get_expression(source_artifact.root)
+			.await?
+			.into_directory()
 			.ok_or_else(|| anyhow!("Expected a directory."))?;
 
 		let manifest_hash = source_directory

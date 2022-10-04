@@ -8,6 +8,8 @@ pub mod init;
 // pub mod login;
 pub mod new;
 // pub mod publish;
+pub mod blob;
+pub mod expression;
 pub mod pull;
 pub mod push;
 pub mod run;
