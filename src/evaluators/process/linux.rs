@@ -172,15 +172,6 @@ fn pre_exec(
 		);
 	}
 
-	if !enable_network_access {
-		// Unshare the network namespace to disable network access.
-		let ret = unsafe { unshare(CLONE_NEWNET) };
-		if ret != 0 {
-			bail!(anyhow!(std::io::Error::last_os_error())
-				.context("Failed to unshare network namespace."));
-		}
-	}
-
 	// Ensure the parent child root path does not have shared propagation.
 	let child_root_path = PathBuf::from("/");
 	let child_root_path_c_string = CString::new(child_root_path.as_os_str().as_bytes()).unwrap();
@@ -275,6 +266,22 @@ fn pre_exec(
 	};
 	if ret != 0 {
 		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to create /tmp."));
+	}
+
+	// Create /etc.
+	let child_etc_path = parent_child_root_path.join("etc");
+	std::fs::create_dir_all(&child_etc_path)?;
+
+	if enable_network_access {
+		// Copy resolv.conf to re-use DNS config from host.
+		std::fs::copy("/etc/resolv.conf", child_etc_path.join("resolv.conf"))?;
+	} else {
+		// Unshare the network namespace to disable network access.
+		let ret = unsafe { unshare(CLONE_NEWNET) };
+		if ret != 0 {
+			bail!(anyhow!(std::io::Error::last_os_error())
+				.context("Failed to unshare network namespace."));
+		}
 	}
 
 	// Mount the builder path.
