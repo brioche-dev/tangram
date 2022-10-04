@@ -101,9 +101,16 @@ impl Evaluator for Process {
 		.context("Failed to run the process.")?;
 
 		#[cfg(target_os = "macos")]
-		self.run_macos_process(builder, process.system, envs, command.into(), args)
-			.await
-			.context("Failed to run the process.")?;
+		self.run_macos_process(
+			builder,
+			process.system,
+			envs,
+			command.into(),
+			args,
+			enable_network_access,
+		)
+		.await
+		.context("Failed to run the process.")?;
 
 		// Create the output.
 		let output_hash = builder.checkin(&out_temp_path).await?;
