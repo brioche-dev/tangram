@@ -688,7 +688,7 @@ impl builder::Shared {
 		let sql = r#"
 			select
 				data,
-				output_hash is null
+				output_hash
 			from
 				expressions
 			where
