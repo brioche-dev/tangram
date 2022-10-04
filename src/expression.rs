@@ -30,6 +30,8 @@ pub enum Expression {
 	Symlink(Symlink),
 	#[serde(rename = "dependency")]
 	Dependency(Dependency),
+	#[serde(rename = "package")]
+	Package(Package),
 	#[serde(rename = "template")]
 	Template(Template),
 	#[serde(rename = "js")]
@@ -51,30 +53,32 @@ pub struct Artifact {
 	pub root: Hash,
 }
 
-/// An expression representing a directory.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Directory {
 	pub entries: BTreeMap<String, Hash>,
 }
 
-/// An expression representing a file.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct File {
 	pub blob: Hash,
 	pub executable: bool,
 }
 
-/// An expression representing a symbolic link.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Symlink {
 	pub target: Utf8PathBuf,
 }
 
-/// An expression representing a dependency on another artifact.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
 	pub artifact: Hash,
 	pub path: Option<Utf8PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Package {
+	pub source: Hash,
+	pub dependencies: BTreeMap<Arc<str>, Hash>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -188,6 +192,15 @@ impl Expression {
 	}
 
 	#[must_use]
+	pub fn as_package(&self) -> Option<&Package> {
+		if let Expression::Package(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
 	pub fn as_template(&self) -> Option<&Template> {
 		if let Expression::Template(v) = self {
 			Some(v)
@@ -282,6 +295,15 @@ impl Expression {
 	#[must_use]
 	pub fn into_dependency(self) -> Option<Dependency> {
 		if let Expression::Dependency(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_package(self) -> Option<Package> {
+		if let Expression::Package(v) = self {
 			Some(v)
 		} else {
 			None
@@ -406,6 +428,34 @@ impl builder::Shared {
 				if !exists {
 					return Ok(AddExpressionOutcome::DependencyMissing { hash });
 				}
+			},
+
+			// If this expression is a package, ensure its source and dependencies are present.
+			Expression::Package(package) => {
+				let hash = package.source;
+				let exists = self.expression_exists(package.source).await?;
+				if !exists {
+					missing.push(hash);
+				}
+				missing.extend(
+					futures::stream::iter(
+						package
+							.dependencies
+							.values()
+							.copied()
+							.map(Ok::<_, anyhow::Error>),
+					)
+					.try_filter_map(|hash| async move {
+						let exists = self.expression_exists(hash).await?;
+						if exists {
+							Ok(None)
+						} else {
+							Ok(Some(hash))
+						}
+					})
+					.try_collect::<Vec<Hash>>()
+					.await?,
+				);
 			},
 
 			// If this expression is null, there is nothing to ensure.

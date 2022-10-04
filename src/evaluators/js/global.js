@@ -11,6 +11,7 @@ let ExpressionType = {
   Symlink: "symlink",
   Dependency: "dependency",
   Template: "template",
+  Package: "package",
   Js: "js",
   Fetch: "fetch",
   Process: "process",
@@ -191,6 +192,47 @@ class Dependency {
       value: {
         artifact: artifact.toString(),
         path: this.path,
+      },
+    };
+  }
+}
+
+class Package {
+  source;
+  dependencies;
+
+  constructor({ source, dependencies }) {
+    this.source = source;
+    this.dependencies = dependencies;
+  }
+
+  static fromJson(expression) {
+    let source = new Hash(expression.value.source);
+    let dependencies = Object.fromEntries(
+      Object.entries(expression.value.dependencies).map(([key, value]) => [
+        key,
+        new Hash(value),
+      ])
+    );
+    return new Package({
+      source,
+      dependencies,
+    });
+  }
+
+  async toJson() {
+    let source = await addExpression(this.source);
+    let dependencies = Object.fromEntries(
+      Object.entries(this.dependencies).map(async ([key, value]) => [
+        key,
+        (await addExpression(value)).toString(),
+      ])
+    );
+    return {
+      type: ExpressionType.Package,
+      value: {
+        source: source.to_string(),
+        dependencies,
       },
     };
   }
@@ -411,6 +453,8 @@ let fromJson = async (expression) => {
       return Symlink.fromJson(expression);
     case ExpressionType.Dependency:
       return Dependency.fromJson(expression);
+    case ExpressionType.Package:
+      return Package.fromJson(expression);
     case ExpressionType.Template:
       return Template.fromJson(expression);
     case ExpressionType.Js:
@@ -471,6 +515,8 @@ let toJson = async (expression) => {
   } else if (expression instanceof Symlink) {
     return await expression.toJson();
   } else if (expression instanceof Dependency) {
+    return await expression.toJson();
+  } else if (expression instanceof Package) {
     return await expression.toJson();
   } else if (expression instanceof Template) {
     return await expression.toJson();
@@ -555,6 +601,7 @@ globalThis.Tangram = {
     System,
     syscall,
   },
+  Package,
   Process,
   Js,
   Symlink,

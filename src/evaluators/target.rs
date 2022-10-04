@@ -41,21 +41,13 @@ impl Evaluator for Target {
 		let package = builder
 			.get_expression(target.package)
 			.await?
-			.into_map()
-			.ok_or_else(|| anyhow!("Expected the package expression to be a map."))?;
-		let dependencies = package.get("dependencies").ok_or_else(|| {
-			anyhow!(r#"Expected the package expression to contain the key "dependencies"."#)
-		})?;
-		let dependencies = builder
-			.get_expression(*dependencies)
-			.await?
-			.into_map()
-			.ok_or_else(|| anyhow!("Expected the dependencies to be a map."))?;
+			.into_package()
+			.ok_or_else(|| anyhow!("Expected a package expression."))?;
 
 		// Add the js process expression.
 		let expression_hash = builder
 			.add_expression(&expression::Expression::Js(expression::Js {
-				dependencies,
+				dependencies: package.dependencies,
 				artifact: target.package,
 				path: Some(Utf8PathBuf::from("tangram.js")),
 				name: target.name.clone(),

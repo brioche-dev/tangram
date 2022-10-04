@@ -151,23 +151,13 @@ async fn resolve_tangram(
 	};
 
 	// Get the referrer's dependencies.
-	let referrer_dependencies_hash = state
+	let referrer_dependencies = state
 		.builder
 		.get_expression(referrer_package_hash)
 		.await?
-		.into_map()
-		.ok_or_else(|| anyhow!("Expected the dependencies to be a map."))?
-		.get("dependencies")
-		.copied()
-		.ok_or_else(|| {
-			anyhow!(r#"Expected the package expression to contain the key "dependencies"."#)
-		})?;
-	let referrer_dependencies = state
-		.builder
-		.get_expression(referrer_dependencies_hash)
-		.await?
-		.into_map()
-		.ok_or_else(|| anyhow!("Expected the dependencies to be a map."))?;
+		.into_package()
+		.ok_or_else(|| anyhow!("Expected a package expression."))?
+		.dependencies;
 
 	// Look up the specifier's package name in the referrer's dependencies.
 	let specifier_package_hash = referrer_dependencies

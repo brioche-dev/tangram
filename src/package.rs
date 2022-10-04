@@ -1,6 +1,6 @@
 use crate::{
 	builder,
-	expression::Expression,
+	expression::{Expression, Package},
 	hash::Hash,
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
@@ -156,12 +156,11 @@ impl builder::Shared {
 				.iter()
 				.map(|(name, entry)| (name.clone().into(), entry.hash))
 				.collect();
-			let dependencies = self.add_expression(&Expression::Map(dependencies)).await?;
-
-			let mut package = BTreeMap::new();
-			package.insert("dependencies".into(), dependencies);
-			package.insert("source".into(), package_source_hash);
-			let package_hash = self.add_expression(&Expression::Map(package)).await?;
+			let package = Package {
+				source: package_source_hash,
+				dependencies,
+			};
+			let package_hash = self.add_expression(&Expression::Package(package)).await?;
 
 			// Add the package to the cache.
 			cache.insert(package_source_path.clone(), package_hash);
@@ -174,15 +173,12 @@ impl builder::Shared {
 	}
 
 	pub async fn get_package_source(&self, package_hash: Hash) -> Result<Hash> {
-		let package_map = self
+		let package = self
 			.get_expression(package_hash)
 			.await?
-			.into_map()
-			.ok_or_else(|| anyhow!("Expected map."))?;
-		let package_source = package_map
-			.get("source")
-			.copied()
-			.ok_or_else(|| anyhow!("Expected source."))?;
+			.into_package()
+			.ok_or_else(|| anyhow!("Expected package."))?;
+		let package_source = package.source;
 		Ok(package_source)
 	}
 

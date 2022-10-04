@@ -126,6 +126,11 @@ impl builder::Exclusive {
 					queue.push_back(dependency.artifact);
 				},
 
+				Expression::Package(package) => {
+					queue.push_back(package.source);
+					queue.extend(package.dependencies.values());
+				},
+
 				Expression::Template(template) => {
 					queue.extend(template.components);
 				},
