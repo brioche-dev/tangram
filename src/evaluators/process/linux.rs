@@ -13,7 +13,6 @@ use std::{
 	ffi::CString,
 	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
-	sync::Arc,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -38,6 +37,25 @@ impl Process {
 		tokio::fs::create_dir(&parent_child_root_path)
 			.await
 			.context("Failed to create the chroot directory.")?;
+
+		// Create a symlink from /bin/sh in the chroot to a fragment with statically-linked bash.
+		let bash_artifact = self
+			.bash_artifact(builder, system, parent_hash)
+			.await
+			.context("Failed to evaluate the bash artifact.")?;
+		let bash_checkout = builder
+			.checkout_to_artifacts(bash_artifact)
+			.await
+			.context("Failed to create the bash artifact checkout.")?;
+		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
+		tokio::fs::symlink(
+			builder
+				.artifacts_path()
+				.join(&bash_checkout)
+				.join("bin/bash"),
+			parent_child_root_path.join("bin/sh"),
+		)
+		.await?;
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -129,6 +147,43 @@ impl Process {
 		}
 
 		Ok(())
+	}
+	async fn bash_artifact(
+		&self,
+		builder: &builder::Shared,
+		system: System,
+		parent_hash: Hash,
+	) -> Result<Hash> {
+		// Get the URL and hash for the system.
+		let (url, hash) = match system {
+			System::Amd64Linux => (
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_x86_64_20220907.tar.zstd",
+				"9341f10797f4ca59316da48a5e318bc8a7fe7db755773c5b115e3c94c1b387f3",
+			),
+			System::Arm64Linux => (
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_aarch64_20220907.tar.zstd",
+				"7baaeb63aa221312dec152ec74a24972fc6bdeec3e070e9003cdf775c77b5781",
+			),
+			_ => bail!(r#"Unexpected system "{}"."#, system),
+		};
+
+		// Create the expression.
+		let hash = builder
+			.add_expression(&Expression::Fetch(expression::Fetch {
+				url: url.parse().unwrap(),
+				hash: Some(hash.parse().unwrap()),
+				unpack: true,
+			}))
+			.await
+			.context("Failed to add the bash expression.")?;
+
+		// Evaluate the expression.
+		let output_hash = builder
+			.evaluate(hash, parent_hash)
+			.await
+			.context("Failed to evaluate the expression.")?;
+
+		Ok(output_hash)
 	}
 }
 
