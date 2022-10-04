@@ -363,7 +363,6 @@ async fn load_tangram_target_proxy(
 		.unwrap();
 		code.push('\n');
 	}
-	println!("{code}");
 
 	Ok(deno_core::ModuleSource {
 		code: code.into_bytes().into_boxed_slice(),
