@@ -231,7 +231,7 @@ class Package {
     return {
       type: ExpressionType.Package,
       value: {
-        source: source.to_string(),
+        source: source.toString(),
         dependencies,
       },
     };
