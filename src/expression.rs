@@ -552,7 +552,7 @@ impl builder::Shared {
 		// Add the expression to the database.
 		self.database_transaction(|txn| {
 			let sql = r#"
-				replace into expressions (
+				insert or ignore into expressions (
 					hash, data
 				) values (
 					?1, ?2
