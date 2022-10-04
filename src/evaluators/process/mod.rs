@@ -81,12 +81,24 @@ impl Evaluator for Process {
 		.await
 		.context("Failed to resolve the args.")?;
 
+		// Only allow network access if an ouput hash was provided.
+		let expected_hash = process.hash;
+		let enable_network_access = expected_hash.is_some();
+
 		// Run the process.
 
 		#[cfg(target_os = "linux")]
-		self.run_linux_process(builder, process.system, envs, command.into(), args, hash)
-			.await
-			.context("Failed to run the process.")?;
+		self.run_linux_process(
+			builder,
+			process.system,
+			envs,
+			command.into(),
+			args,
+			hash,
+			enable_network_access,
+		)
+		.await
+		.context("Failed to run the process.")?;
 
 		#[cfg(target_os = "macos")]
 		self.run_macos_process(builder, process.system, envs, command.into(), args)
@@ -97,7 +109,7 @@ impl Evaluator for Process {
 		let output_hash = builder.checkin(&out_temp_path).await?;
 
 		// Verify output hash matches if provided in the expression
-		match process.hash {
+		match expected_hash {
 			Some(expected_hash) if expected_hash != output_hash => {
 				bail!(
 					"Hash mismatch in process!\nExpected: {}\nReceived: {}\n",
