@@ -1,5 +1,4 @@
 use anyhow::Context;
-use digest::Digest;
 use tokio::io::AsyncWrite;
 
 #[derive(
@@ -41,12 +40,6 @@ impl TryFrom<&[u8]> for Hash {
 	}
 }
 
-impl From<digest::Output<sha2::Sha256>> for Hash {
-	fn from(value: digest::Output<sha2::Sha256>) -> Self {
-		Hash(value.into())
-	}
-}
-
 impl std::fmt::Debug for Hash {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let hash = hex::encode(self.0);
@@ -78,7 +71,7 @@ impl rand::distributions::Distribution<Hash> for rand::distributions::Standard {
 
 #[derive(Default)]
 pub struct Hasher {
-	sha256: sha2::Sha256,
+	hasher: blake3::Hasher,
 }
 
 impl Hasher {
@@ -88,12 +81,12 @@ impl Hasher {
 	}
 
 	pub fn update(&mut self, data: impl AsRef<[u8]>) {
-		self.sha256.update(data);
+		self.hasher.update(data.as_ref());
 	}
 
 	#[must_use]
 	pub fn finalize(self) -> Hash {
-		Hash(self.sha256.finalize().into())
+		Hash(self.hasher.finalize().into())
 	}
 }
 
@@ -114,7 +107,7 @@ impl AsyncWrite for Hasher {
 		_cx: &mut std::task::Context<'_>,
 		buf: &[u8],
 	) -> std::task::Poll<Result<usize, std::io::Error>> {
-		self.sha256.update(&buf);
+		self.update(&buf);
 		std::task::Poll::Ready(Ok(buf.len()))
 	}
 	fn poll_flush(

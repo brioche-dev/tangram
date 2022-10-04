@@ -23,6 +23,7 @@ tokio = { version = "1", features = ["full"] }
 anyhow = { version = "1", features = ["backtrace"] }
 async-recursion = "1"
 async-trait = "0.1.53"
+blake3 = "1"
 byteorder = "1.4"
 bytes = "1"
 bzip2 = "0.4"
@@ -73,6 +74,9 @@ zstd = "0.11"
 [profile.release]
 lto = true
 strip = true
+
+[profile.dev.package.blake3]
+opt-level = 3
 
 [profile.dev.package.bzip2]
 opt-level = 3
