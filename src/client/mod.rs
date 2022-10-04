@@ -73,9 +73,9 @@ impl Client {
 			let status = response.status();
 			let body = hyper::body::to_bytes(response.into_body())
 				.await
-				.context("Failed to read response body.")?;
+				.context("Failed to read the response body.")?;
 			let body = String::from_utf8(body.to_vec())
-				.context("Failed to read response body as string.")?;
+				.context("Failed to read the response body as a string.")?;
 			bail!("{status}\n{body}");
 		}
 
@@ -109,16 +109,16 @@ impl Client {
 			let status = response.status();
 			let body = hyper::body::to_bytes(response.into_body())
 				.await
-				.context("Failed to read response body.")?;
+				.context("Failed to read the response body.")?;
 			let body = String::from_utf8(body.to_vec())
-				.context("Failed to read response body as string.")?;
+				.context("Failed to read the response body as a string.")?;
 			bail!("{status}\n{body}");
 		}
 
 		// Read the response body.
 		let body = hyper::body::to_bytes(response.into_body())
 			.await
-			.context("Failed to read response body.")?;
+			.context("Failed to read the response body.")?;
 
 		// Deserialize the response body.
 		let response =
@@ -147,9 +147,9 @@ impl Client {
 			let status = response.status();
 			let body = hyper::body::to_bytes(response.into_body())
 				.await
-				.context("Failed to read response body.")?;
+				.context("Failed to read the response body.")?;
 			let body = String::from_utf8(body.to_vec())
-				.context("Failed to read response body as string.")?;
+				.context("Failed to read the response body as a string.")?;
 			bail!("{status}\n{body}");
 		}
 
@@ -184,16 +184,16 @@ impl Client {
 			let status = response.status();
 			let body = hyper::body::to_bytes(response.into_body())
 				.await
-				.context("Failed to read response body.")?;
+				.context("Failed to read the response body.")?;
 			let body = String::from_utf8(body.to_vec())
-				.context("Failed to read response body as string.")?;
+				.context("Failed to read the response body as a string.")?;
 			bail!("{status}\n{body}");
 		}
 
 		// Read the response body.
 		let body = hyper::body::to_bytes(response.into_body())
 			.await
-			.context("Failed to read response body.")?;
+			.context("Failed to read the response body.")?;
 
 		// Deserialize the response body.
 		let response =

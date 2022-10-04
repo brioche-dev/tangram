@@ -4,6 +4,7 @@ pub mod checkin;
 pub mod checkout;
 pub mod fetch;
 pub mod gc;
+pub mod hash;
 pub mod init;
 // pub mod login;
 pub mod new;

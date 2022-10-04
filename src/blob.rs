@@ -10,7 +10,7 @@ use tokio_stream::StreamExt;
 
 pub enum Blob {
 	Local(PathBuf),
-	Remote(Box<dyn AsyncRead + Send + Sync + Unpin>),
+	Remote(Box<dyn AsyncRead + Unpin + Send + Sync>),
 }
 
 impl builder::Shared {

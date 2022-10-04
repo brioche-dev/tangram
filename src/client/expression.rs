@@ -56,7 +56,7 @@ impl Client {
 		// Read the response body.
 		let body = hyper::body::to_bytes(response.into_body())
 			.await
-			.context("Failed to read response body.")?;
+			.context("Failed to read the response body.")?;
 
 		// Deserialize the response body.
 		let output =
