@@ -18,6 +18,7 @@ impl Process {
 		envs: BTreeMap<String, String>,
 		command: PathBuf,
 		args: Vec<String>,
+		enable_network_access: bool,
 	) -> Result<()> {
 		let path = builder.path().to_owned();
 
@@ -34,7 +35,7 @@ impl Process {
 		// Set up the sandbox.
 		unsafe {
 			process.pre_exec(move || {
-				pre_exec(&path)
+				pre_exec(&path, enable_network_access)
 					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
@@ -56,7 +57,7 @@ impl Process {
 	}
 }
 
-fn pre_exec(path: &Path) -> Result<()> {
+fn pre_exec(path: &Path, enable_network_access: bool) -> Result<()> {
 	let mut profile = String::new();
 
 	// Add the default policy.
@@ -110,26 +111,41 @@ fn pre_exec(path: &Path) -> Result<()> {
 		"#
 	).unwrap();
 
-	// Allow network access.
-	writedoc!(
-		profile,
-		r#"
-			;; Allow network access.
-			(allow network*)
+	// Allow network access if enabled.
+	if enable_network_access {
+		writedoc!(
+			profile,
+			r#"
+				;; Allow network access.
+				(allow network*)
 
-			;; Allow reading network preference files.
-			(allow file-read*
-				(literal "/Library/Preferences/com.apple.networkd.plist")
-				(literal "/private/var/db/com.apple.networkextension.tracker-info")
-				(literal "/private/var/db/nsurlstoraged/dafsaData.bin"))
-			(allow user-preference-read (preference-domain "com.apple.CFNetwork"))
+				;; Allow reading network preference files.
+				(allow file-read*
+					(literal "/Library/Preferences/com.apple.networkd.plist")
+					(literal "/private/var/db/com.apple.networkextension.tracker-info")
+					(literal "/private/var/db/nsurlstoraged/dafsaData.bin"))
+				(allow user-preference-read (preference-domain "com.apple.CFNetwork"))
 
-			;; (allow mach*) is included in the prelude, so all IPCs are allowed.
+				;; (allow mach*) is included in the prelude, so all IPCs are allowed.
 
-			;; (allow system-socket) is included in the prelude, so all sockets are allowed.
-		"#
-	)
-	.unwrap();
+				;; (allow system-socket) is included in the prelude, so all sockets are allowed.
+			"#
+		)
+		.unwrap();
+	} else {
+		writedoc!(
+			profile,
+			r#"
+				;; Disable global network access.
+				(deny network*)
+
+				;; Allow network access to localhost and Unix sockets
+				(allow network* (remote ip "localhost:*"))
+				(allow network* (remote unix-socket))
+			"#
+		)
+		.unwrap();
+	}
 
 	// Allow access to the builder path.
 	writedoc!(

@@ -26,6 +26,7 @@ impl Process {
 		command: PathBuf,
 		args: Vec<String>,
 		parent_hash: Hash,
+		enable_network_access: bool,
 	) -> Result<()> {
 		let builder_path = builder.path().to_owned();
 
@@ -61,8 +62,13 @@ impl Process {
 		// Set up the sandbox.
 		unsafe {
 			process.pre_exec(move || {
-				pre_exec(&mut child_socket, &parent_child_root_path, &builder_path)
-					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+				pre_exec(
+					&mut child_socket,
+					&parent_child_root_path,
+					&builder_path,
+					enable_network_access,
+				)
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
 
@@ -130,6 +136,7 @@ fn pre_exec(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
 	builder_path: &Path,
+	enable_network_access: bool,
 ) -> Result<()> {
 	// Unshare the user namespace.
 	let ret = unsafe { unshare(CLONE_NEWUSER) };
@@ -259,6 +266,22 @@ fn pre_exec(
 	};
 	if ret != 0 {
 		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to create /tmp."));
+	}
+
+	// Create /etc.
+	let child_etc_path = parent_child_root_path.join("etc");
+	std::fs::create_dir_all(&child_etc_path)?;
+
+	if enable_network_access {
+		// Copy resolv.conf to re-use DNS config from host.
+		std::fs::copy("/etc/resolv.conf", child_etc_path.join("resolv.conf"))?;
+	} else {
+		// Unshare the network namespace to disable network access.
+		let ret = unsafe { unshare(CLONE_NEWNET) };
+		if ret != 0 {
+			bail!(anyhow!(std::io::Error::last_os_error())
+				.context("Failed to unshare network namespace."));
+		}
 	}
 
 	// Mount the builder path.

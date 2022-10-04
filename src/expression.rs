@@ -103,6 +103,7 @@ pub struct Process {
 	pub env: Hash,
 	pub command: Hash,
 	pub args: Hash,
+	pub hash: Option<Hash>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]

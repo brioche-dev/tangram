@@ -311,6 +311,7 @@ class Process {
     this.env = args.env;
     this.command = args.command;
     this.args = args.args;
+    this.hash = args.hash;
   }
 
   static async fromJson(expression) {
@@ -318,7 +319,8 @@ class Process {
     let env = new Hash(expression.value.env);
     let command = new Hash(expression.value.command);
     let args = new Hash(expression.value.args);
-    return new Process({ system, env, command, args });
+    let hash = expression.value.hash;
+    return new Process({ system, env, command, args, hash });
   }
 
   async toJson() {
@@ -332,6 +334,7 @@ class Process {
         env: env.toString(),
         command: command.toString(),
         args: args.toString(),
+        hash: this.hash,
       },
     };
   }
