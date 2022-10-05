@@ -1,25 +1,18 @@
-[package]
-name = "tangram"
+[workspace]
+members = [
+  "packages/api_client",
+  "packages/cli",
+  "packages/core",
+]
 
+[workspace.package]
 description = "Tangram is a build system and package manager that makes your builds simple, reproducible, cacheable, and distributable."
 edition = "2021"
 license = "MIT"
 publish = false
 version = "0.0.0"
 
-[lib]
-name = "tangram"
-path = "src/lib.rs"
-
-[[bin]]
-name = "tg"
-path = "src/cli/main.rs"
-
-[build-dependencies]
-deno_core = "0.153"
-tokio = { version = "1", features = ["full"] }
-
-[dependencies]
+[workspace.dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
 async-recursion = "1"
 async-trait = "0.1.53"
@@ -56,7 +49,6 @@ serde_urlencoded = "0.7.1"
 serde_yaml = "0.9"
 sha2 = "0.10"
 tar = "0.4"
-tempfile = "3.3"
 thiserror = "1"
 time = { version = "0.3", features = ["alloc", "formatting", "parsing"] }
 tokio = { version = "1", features = ["full"] }
@@ -71,9 +63,12 @@ xz = "0.1"
 zip = { version = "0.6", default-features = false, features = ["aes-crypto", "deflate", "bzip2", "time"] }
 zstd = "0.11"
 
+tangram_api_client = { path = "packages/api_client" }
+tangram_cli = { path = "packages/cli" }
+tangram_core = { path = "packages/core" }
+
 [profile.release]
 lto = true
-strip = true
 
 [profile.dev.package.blake3]
 opt-level = 3
