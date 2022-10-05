@@ -1,6 +1,5 @@
-use crate::create_target_args;
 use crate::Cli;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use tangram_core::specifier::{self, Specifier};
@@ -24,8 +23,8 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_run(&self, args: Args) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?.lock_shared().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Get the package hash.
 		let package_hash = match args.specifier {
@@ -41,20 +40,19 @@ impl Cli {
 				package_name,
 				version,
 			}) => {
-				// // Get the package from the registry.
-				// let version = version.ok_or_else(|| anyhow!("A version is required."))?;
-				// builder
-				// 	.get_package(&package_name, &version)
-				// 	.await
-				// 	.with_context(|| {
-				// 		format!(r#"Failed to get the package "{package_name}" from the registry."#)
-				// 	})?
-				// 	.ok_or_else(|| {
-				// 		anyhow!(
-				// 			r#"Could not find version "{version}" of the package "{package_name}"."#
-				// 		)
-				// 	})?
-				todo!()
+				// Get the package from the registry.
+				let version = version.ok_or_else(|| anyhow!("A version is required."))?;
+				self.api_client
+					.get_package(&package_name, &version)
+					.await
+					.with_context(|| {
+						format!(r#"Failed to get the package "{package_name}" from the registry."#)
+					})?
+					.ok_or_else(|| {
+						anyhow!(
+							r#"Could not find version "{version}" of the package "{package_name}"."#
+						)
+					})?
 			},
 		};
 
@@ -73,7 +71,7 @@ impl Cli {
 		let name = args.target.unwrap_or_else(|| "default".to_owned());
 
 		// Create the target args.
-		let target_args = create_target_args(&builder, args.system).await?;
+		let target_args = self.create_target_args(args.system).await?;
 
 		// Create the expression.
 		let input_hash = builder

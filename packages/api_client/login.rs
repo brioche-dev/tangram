@@ -17,15 +17,15 @@ pub struct CreateLoginResponse {
 
 impl ApiClient {
 	pub async fn create_login(&self) -> Result<CreateLoginResponse> {
-		// Perform the request.
-		let mut url = self.api_url.clone();
+		// Send the request.
+		let mut url = self.url.clone();
 		url.set_path("/v1/logins/");
 		let response = self
-			.client
+			.http_client
 			.request(reqwest::Method::POST, url)
 			.send()
-			.await?;
-		let response = response.error_for_status()?;
+			.await?
+			.error_for_status()?;
 
 		// Get the response.
 		let response = response.json().await?;
@@ -41,15 +41,15 @@ pub struct GetLoginResponse {
 
 impl ApiClient {
 	pub async fn get_login(&self, _id: Id) -> Result<GetLoginResponse> {
-		// Perform the request.
-		let mut url = self.api_url.clone();
+		// Send the request.
+		let mut url = self.url.clone();
 		url.set_path("/v1/logins/");
 		let response = self
-			.client
+			.http_client
 			.request(reqwest::Method::GET, url)
 			.send()
-			.await?;
-		let response = response.error_for_status()?;
+			.await?
+			.error_for_status()?;
 
 		// Get the response.
 		let response = response.json().await?;
@@ -66,16 +66,16 @@ pub struct GetCurrentUserResponse {
 
 impl ApiClient {
 	pub async fn get_current_user(&self, token: String) -> Result<User> {
-		// Perform the request.
-		let mut url = self.api_url.clone();
+		// Send the request.
+		let mut url = self.url.clone();
 		url.set_path("/v1/user/");
 		let response = self
-			.client
+			.http_client
 			.request(reqwest::Method::GET, url)
 			.header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
 			.send()
-			.await?;
-		let response = response.error_for_status()?;
+			.await?
+			.error_for_status()?;
 
 		// Get the response.
 		let response: GetCurrentUserResponse = response.json().await?;

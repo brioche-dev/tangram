@@ -15,13 +15,10 @@ impl Client {
 
 		// Send the request.
 		let response = self
-			.create_request(http::Method::GET, url.to_string(), hyper::Body::empty())
+			.request(http::Method::GET, url.to_string(), hyper::Body::empty())
 			.send()
-			.await
-			.context("Failed to send the request.")?;
-
-		// Handle a non-success status.
-		let response = response.error_for_status()?;
+			.await?
+			.error_for_status()?;
 
 		// Read the response body.
 		let response = response
@@ -47,17 +44,14 @@ impl Client {
 		let mut url = self.url.clone();
 		url.set_path("/expressions/");
 
-		// Create the request.
-		let request = self
-			.client
-			.request(http::Method::POST, url.to_string())
-			.json(&expression);
-
 		// Send the request.
-		let response = request.send().await?;
-
-		// Handle a non-success status.
-		let response = response.error_for_status()?;
+		let response = self
+			.http_client
+			.request(http::Method::POST, url.to_string())
+			.json(&expression)
+			.send()
+			.await?
+			.error_for_status()?;
 
 		// Read the response body.
 		let response = response
@@ -77,7 +71,7 @@ impl Client {
 		url.set_path(&format!("/expressions/{expression_hash}"));
 
 		// Create the request.
-		let request = self.create_request(http::Method::GET, url.to_string(), hyper::Body::empty());
+		let request = self.request(http::Method::GET, url.to_string(), hyper::Body::empty());
 
 		// Send the request.
 		let response = request

@@ -13,8 +13,8 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_fetch(&self, args: Args) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?.lock_shared().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Create the expression.
 		let hash = builder

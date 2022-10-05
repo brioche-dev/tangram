@@ -19,12 +19,10 @@ impl Client {
 
 		// Send the request.
 		let response = self
-			.create_request(http::Method::POST, url.to_string(), body)
+			.request(http::Method::POST, url.to_string(), body)
 			.send()
-			.await?;
-
-		// Handle a non-success status.
-		let response = response.error_for_status()?;
+			.await?
+			.error_for_status()?;
 
 		// Read the response.
 		let response = response.bytes().await?;
@@ -44,13 +42,10 @@ impl Client {
 
 		// Send the request.
 		let response = self
-			.create_request(http::Method::GET, url.to_string(), hyper::Body::empty())
+			.request(http::Method::GET, url.to_string(), hyper::Body::empty())
 			.send()
-			.await
-			.context("Failed to send the request")?;
-
-		// Handle a non-success status.
-		let response = response.error_for_status()?;
+			.await?
+			.error_for_status()?;
 
 		// Read the response body.
 		let body = response

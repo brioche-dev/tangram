@@ -13,8 +13,8 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_pull(&self, args: Args) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?.lock_shared().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Create the client.
 		let client = Client::new(args.url, None);
@@ -22,7 +22,7 @@ impl Cli {
 		builder
 			.pull(args.hash, &client)
 			.await
-			.context("Failed to pull hash from url.")?;
+			.context("Failed to pull.")?;
 
 		Ok(())
 	}

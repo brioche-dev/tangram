@@ -21,6 +21,7 @@ pub struct GetArgs {
 
 impl Cli {
 	pub(crate) async fn command_blob(&self, args: Args) -> Result<()> {
+		// Run the subcommand.
 		match args.subcommand {
 			Subcommand::Get(args) => self.command_blob_get(args),
 		}
@@ -29,15 +30,11 @@ impl Cli {
 	}
 
 	async fn command_blob_get(&self, args: GetArgs) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Get the blob.
-		let blob_path = builder
-			.lock_shared()
-			.await?
-			.get_blob(args.blob_hash)
-			.await?;
+		let blob_path = builder.get_blob(args.blob_hash).await?;
 
 		// Open the blob file.
 		let mut file = tokio::fs::File::open(blob_path).await?;

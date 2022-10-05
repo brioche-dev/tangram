@@ -1,8 +1,4 @@
 use crate::Cli;
-use crate::{
-	config::{file, Config},
-	config_path,
-};
 use anyhow::{Context, Result};
 use clap::Parser;
 use futures::FutureExt;
@@ -56,26 +52,26 @@ impl Cli {
 			.await
 			.context("Failed to canonicalize the path.")?;
 
-		// Edit the config file.
-		let config_path = config_path()?;
-		let mut config = file::Config::read(&config_path).await?.unwrap_or_default();
+		// Read the config.
+		let mut config = Cli::read_config().await?.unwrap_or_default();
+
+		// Add the autoshell.
 		let mut autoshells = config.autoshells.unwrap_or_default();
 		autoshells.push(path);
 		config.autoshells = Some(autoshells);
-		config.write(&config_path).await?;
+
+		// Write the config.
+		Cli::write_config(&config).await?;
 
 		Ok(())
 	}
 
 	async fn command_autoshell_list(&self, _args: ListArgs) -> Result<()> {
 		// Read the config.
-		let config_path = config_path()?;
-		let config = Config::read(&config_path)
-			.await
-			.context("Failed to read the config.")?;
+		let config = Cli::read_config().await?.unwrap_or_default();
 
 		// List the autoshells.
-		for path in &config.autoshells {
+		for path in config.autoshells.iter().flatten() {
 			println!("{}", path.display());
 		}
 
@@ -93,16 +89,19 @@ impl Cli {
 			.await
 			.context("Failed to canonicalize the path.")?;
 
-		// Edit the config file.
-		let config_path = config_path()?;
-		let mut config = file::Config::read(&config_path).await?.unwrap_or_default();
+		// Read the config.
+		let mut config = Cli::read_config().await?.unwrap_or_default();
+
+		// Remove the autoshell.
 		if let Some(mut autoshells) = config.autoshells {
 			if let Some(index) = autoshells.iter().position(|p| *p == path) {
 				autoshells.remove(index);
 			}
 			config.autoshells = Some(autoshells);
 		}
-		config.write(&config_path).await?;
+
+		// Write the config.
+		Cli::write_config(&config).await?;
 
 		Ok(())
 	}

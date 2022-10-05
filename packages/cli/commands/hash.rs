@@ -18,9 +18,8 @@ impl Cli {
 		// Get the input.
 		let mut input: Box<dyn AsyncRead + Unpin + Send + Sync> = if let Some(input) = args.input {
 			if let Ok(input) = Url::parse(&input) {
-				// Perform the request.
-				let response = reqwest::get(input).await?;
-				let response = response.error_for_status()?;
+				// Send the request.
+				let response = reqwest::get(input).await?.error_for_status()?;
 
 				// Create a reader from the stream.
 				let response = response

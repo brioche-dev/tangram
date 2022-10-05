@@ -7,18 +7,14 @@ pub struct Args {}
 
 impl Cli {
 	pub(crate) async fn command_gc(&self, _args: Args) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_exclusive().await?;
 
 		// Collect the roots.
 		let roots = Vec::new();
 
 		// Perform the garbage collection.
-		builder
-			.lock_exclusive()
-			.await?
-			.garbage_collect(roots)
-			.await?;
+		builder.garbage_collect(roots).await?;
 
 		Ok(())
 	}

@@ -9,17 +9,10 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_search(&self, args: Args) -> Result<()> {
-		// Create the client.
-		let builder = crate::builder().await?;
-
 		// Search for the package with the given name.
-		let package_name = args.name;
-		let packages = builder
-			.lock_shared()
-			.await?
-			.search_packages(&package_name)
-			.await?;
+		let packages = self.api_client.search_packages(&args.name).await?;
 
+		// Print the package names.
 		for package in packages {
 			let name = package.name;
 			println!("{name}");

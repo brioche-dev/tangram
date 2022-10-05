@@ -23,8 +23,8 @@ async fn main() -> Result<()> {
 	// Create the CLI.
 	let cli = Cli::new().await?;
 
-	// Run the CLI.
-	cli.run(args).await?;
+	// Run the command.
+	cli.run_command(args).await?;
 
 	Ok(())
 }

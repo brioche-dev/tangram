@@ -29,15 +29,11 @@ impl Cli {
 	}
 
 	pub async fn command_expression_get(&self, args: GetArgs) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Get the expression.
-		let expression = builder
-			.lock_shared()
-			.await?
-			.get_expression(args.expression)
-			.await?;
+		let expression = builder.get_expression(args.expression).await?;
 
 		// Serialize the expression.
 		let json = serde_json::to_string_pretty(&expression)?;

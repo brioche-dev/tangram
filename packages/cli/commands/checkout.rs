@@ -12,8 +12,8 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_checkout(&self, args: Args) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Get the path.
 		let mut path =
@@ -26,8 +26,6 @@ impl Cli {
 
 		// Perform the checkout.
 		builder
-			.lock_shared()
-			.await?
 			.checkout(args.artifact, &path, None)
 			.await
 			.context("Failed to perform the checkout.")?;

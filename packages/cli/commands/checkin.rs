@@ -10,8 +10,8 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_checkin(&self, args: Args) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Get the path.
 		let mut path =
@@ -21,7 +21,7 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let hash = builder.lock_shared().await?.checkin(&path).await?;
+		let hash = builder.checkin(&path).await?;
 
 		println!("{hash}");
 

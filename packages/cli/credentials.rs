@@ -1,28 +1,32 @@
-use crate::credentials_path;
+use crate::Cli;
 use anyhow::Result;
+use std::path::PathBuf;
 
-#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
 	pub email: String,
 	pub token: String,
 }
 
-impl Credentials {
-	pub async fn read() -> Result<Credentials> {
-		let path = credentials_path()?;
-		if !path.exists() {
-			return Ok(Credentials::default());
-		}
-		let config = tokio::fs::read(&path).await?;
-		let config = serde_json::from_slice(&config)?;
-		Ok(config)
+impl Cli {
+	fn credentials_path() -> Result<PathBuf> {
+		Ok(Self::path()?.join("credentials.json"))
 	}
 
-	pub async fn write(&self) -> Result<()> {
-		let path = credentials_path()?;
-		tokio::fs::create_dir_all(path.parent().unwrap()).await?;
-		let json = serde_json::to_string(self)?;
-		tokio::fs::write(&path, &json).await?;
+	pub async fn read_credentials() -> Result<Option<Credentials>> {
+		let path = Self::credentials_path()?;
+		if !path.exists() {
+			return Ok(None);
+		}
+		let credentials = tokio::fs::read(&path).await?;
+		let credentials = serde_json::from_slice(&credentials)?;
+		Ok(credentials)
+	}
+
+	pub async fn write_credentials(credentials: &Credentials) -> Result<()> {
+		let path = Self::credentials_path()?;
+		let credentials = serde_json::to_string(credentials)?;
+		tokio::fs::write(&path, &credentials).await?;
 		Ok(())
 	}
 }

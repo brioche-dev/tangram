@@ -45,12 +45,18 @@ impl Evaluator for Fetch {
 		};
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
-		// Create a temp.
+		// Create a temp path.
 		let temp_path = builder.create_temp_path();
 
-		// Perform the request and get a reader for the body.
-		let response = self.http_client.get(fetch.url.clone()).send().await?;
-		let response = response.error_for_status()?;
+		// Send the request.
+		let response = self
+			.http_client
+			.get(fetch.url.clone())
+			.send()
+			.await?
+			.error_for_status()?;
+
+		// Get a reader for the response body.
 		let mut stream = response
 			.bytes_stream()
 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));

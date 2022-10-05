@@ -70,7 +70,7 @@ impl builder::Shared {
 			format!(r#"Failed to open file at path "{}"."#, blob_path.display())
 		})?;
 
-		// Perform the request.
+		// Send the request.
 		let hash = client.add_blob(Box::new(file), hash).await?;
 
 		Ok(hash)

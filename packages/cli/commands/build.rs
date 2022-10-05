@@ -1,4 +1,3 @@
-use crate::create_target_args;
 use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -19,8 +18,8 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_build(&self, args: Args) -> Result<()> {
-		// Create the builder.
-		let builder = crate::builder().await?.lock_shared().await?;
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
 
 		// Create the package.
 		let package_hash = builder
@@ -29,7 +28,7 @@ impl Cli {
 			.context("Failed to create the package.")?;
 
 		// Create the target args.
-		let target_args = create_target_args(&builder, args.system).await?;
+		let target_args = self.create_target_args(args.system).await?;
 
 		// Add the expression.
 		let expression_hash = builder

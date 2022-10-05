@@ -2,18 +2,18 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 
-use crate::config::Config;
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use futures::FutureExt;
-use std::{collections::BTreeMap, path::PathBuf};
+use std::path::PathBuf;
 use tangram_api_client::ApiClient;
-use tangram_core::{builder::Builder, hash::Hash, system::System};
+use tangram_core::builder::Builder;
 
 mod commands;
 mod config;
 mod credentials;
 mod dirs;
+mod util;
 
 #[derive(Parser)]
 #[command(
@@ -54,19 +54,75 @@ enum Subcommand {
 }
 
 pub struct Cli {
-	config: Config,
 	builder: Builder,
 	api_client: ApiClient,
 }
 
 impl Cli {
-	#[must_use]
 	pub async fn new() -> Result<Cli> {
-		// Read the config.
-		todo!()
+		// Get the CLI path.
+		let path = Self::path()?;
+
+		// Read the config file.
+		let config = Self::read_config().await?;
+
+		// Resolve the peers.
+		let peers = config
+			.as_ref()
+			.and_then(|config| config.peers.as_ref())
+			.cloned();
+		let peers = peers.unwrap_or_default();
+
+		// Resolve the autoshells.
+		let autoshells = config
+			.as_ref()
+			.and_then(|config| config.autoshells.as_ref())
+			.cloned();
+		let _autoshells = autoshells.unwrap_or_default();
+
+		// Resolve the API URL.
+		let api_url = config
+			.as_ref()
+			.and_then(|config| config.api_url.as_ref())
+			.cloned();
+		let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
+
+		// Create the builder options.
+		let builder_options = tangram_core::options::Options { path, peers };
+
+		// Create the builder.
+		let builder = Builder::new(builder_options)
+			.await
+			.context("Failed to create the builder.")?;
+
+		// Read the credentials.
+		let credentials = Self::read_credentials().await?;
+
+		// Create the API client.
+		let api_client = ApiClient::new(
+			api_url.clone(),
+			credentials.map(|credentials| credentials.token),
+		);
+
+		let cli = Cli {
+			builder,
+			api_client,
+		};
+
+		Ok(cli)
 	}
 
-	pub async fn run(&self, args: Args) -> Result<()> {
+	fn path() -> Result<PathBuf> {
+		Ok(crate::dirs::home_directory_path()
+			.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
+			.join(".tangram"))
+	}
+}
+
+impl Cli {
+	/// Run a command.
+	pub async fn run_command(&self, args: Args) -> Result<()> {
+		// Run the subcommand.
 		match args.subcommand {
 			Subcommand::Autoshell(args) => self.command_autoshell(args).boxed(),
 			Subcommand::Build(args) => self.command_build(args).boxed(),
@@ -93,96 +149,4 @@ impl Cli {
 		.await?;
 		Ok(())
 	}
-}
-
-fn path() -> Result<PathBuf> {
-	Ok(crate::dirs::home_directory_path()
-		.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
-		.join(".tangram"))
-}
-
-fn config_path() -> Result<PathBuf> {
-	Ok(path()?.join("config.json"))
-}
-
-fn credentials_path() -> Result<PathBuf> {
-	Ok(path()?.join("credentials.json"))
-}
-
-async fn builder() -> Result<Builder> {
-	// Get the path.
-	let path = path()?;
-
-	// Read the config.
-	let config_path = config_path()?;
-	let config = Config::read(&config_path)
-		.await
-		.context("Failed to read the config.")?;
-
-	// Create the builder.
-	let builder = Builder::new(tangram_core::options::Options {
-		path,
-		peers: config.peers,
-	})
-	.await
-	.context("Failed to create the builder.")?;
-
-	Ok(builder)
-}
-
-// async fn client(url: Option<Url>) -> Result<Client> {
-// 	let (url, token) = if let Some(url) = url {
-// 		(url, None)
-// 	} else {
-// 		// Read the config.
-// 		let config_path = config_path()?;
-// 		let config = Config::read(&config_path)
-// 			.await
-// 			.context("Failed to read the config.")?;
-// 			let credentials = credentials();
-// 		(config.api_url,
-// 	};
-
-// 	Client::new(url)
-// }
-
-async fn api_client() -> Result<ApiClient> {
-	// Get the path.
-	let path = path()?;
-
-	// Read the config.
-	let config_path = config_path()?;
-	let config = Config::read(&config_path)
-		.await
-		.context("Failed to read the config.")?;
-
-	let api_client = ApiClient::new(config.api_url, "".to_owned());
-
-	Ok(api_client)
-}
-
-async fn create_target_args(
-	builder: &tangram_core::builder::Shared,
-	system: Option<System>,
-) -> Result<Hash> {
-	let mut target_arg = BTreeMap::new();
-	let system = if let Some(system) = system {
-		system
-	} else {
-		System::host()?
-	};
-	let system = builder
-		.add_expression(&tangram_core::expression::Expression::String(
-			system.to_string().into(),
-		))
-		.await?;
-	target_arg.insert("system".into(), system);
-	let target_arg = builder
-		.add_expression(&tangram_core::expression::Expression::Map(target_arg))
-		.await?;
-	let target_args = vec![target_arg];
-	let target_args = builder
-		.add_expression(&tangram_core::expression::Expression::Array(target_args))
-		.await?;
-	Ok(target_args)
 }

@@ -57,11 +57,11 @@ impl builder::Shared {
 	}
 
 	pub async fn pull_blob(&self, hash: Hash, client: &Client) -> Result<()> {
-		// Perform the request.
+		// Get the blob.
 		let response = client.get_blob(hash).await?;
 		let mut body = match response {
-			crate::blob::Blob::Remote(body) => body,
 			crate::blob::Blob::Local(_) => unreachable!(),
+			crate::blob::Blob::Remote(body) => body,
 		};
 
 		// Create the file to write to.

@@ -11,12 +11,10 @@ impl Client {
 
 		// Send the request.
 		let response = self
-			.create_request(http::Method::POST, url.to_string(), hyper::Body::empty())
+			.request(http::Method::POST, url.to_string(), hyper::Body::empty())
 			.send()
-			.await?;
-
-		// Handle a non-success status.
-		let response = response.error_for_status()?;
+			.await?
+			.error_for_status()?;
 
 		// Get the response body.
 		let body = response.bytes().await?;
