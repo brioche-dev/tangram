@@ -67,13 +67,12 @@ impl ApiClient {
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
-pub struct SearchResultItem {
+pub struct SearchResult {
 	pub name: String,
-	pub hash: Hash,
 }
 
 impl ApiClient {
-	pub async fn search_packages(&self, query: &str) -> Result<Vec<SearchResultItem>> {
+	pub async fn search_packages(&self, query: &str) -> Result<Vec<SearchResult>> {
 		// Build the URL.
 		let mut url = self.url.clone();
 		url.set_path("/v1/packages/search");

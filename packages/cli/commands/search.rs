@@ -13,6 +13,9 @@ impl Cli {
 		let packages = self.api_client.search_packages(&args.name).await?;
 
 		// Print the package names.
+		if packages.is_empty() {
+			println!("No packages matched your query.");
+		}
 		for package in packages {
 			let name = package.name;
 			println!("{name}");
