@@ -16,10 +16,10 @@ impl Cli {
 			.context("Failed to create the login.")?;
 
 		// Open the browser to the login URL.
-		webbrowser::open(login.login_url.as_ref())?;
+		webbrowser::open(login.login_page_url.as_ref())?;
 		eprintln!(
 			"To login, please open your browser to:\n\n{}\n",
-			login.login_url
+			login.login_page_url
 		);
 
 		// Poll.

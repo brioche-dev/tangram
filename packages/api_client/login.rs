@@ -12,7 +12,7 @@ pub struct User {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CreateLoginResponse {
 	pub id: Id,
-	pub login_url: Url,
+	pub login_page_url: Url,
 }
 
 impl ApiClient {
@@ -40,10 +40,10 @@ pub struct GetLoginResponse {
 }
 
 impl ApiClient {
-	pub async fn get_login(&self, _id: Id) -> Result<GetLoginResponse> {
+	pub async fn get_login(&self, id: Id) -> Result<GetLoginResponse> {
 		// Send the request.
 		let mut url = self.url.clone();
-		url.set_path("/v1/logins/");
+		url.set_path(&format!("/v1/logins/{id}"));
 		let response = self
 			.http_client
 			.request(reqwest::Method::GET, url)
@@ -68,7 +68,7 @@ impl ApiClient {
 	pub async fn get_current_user(&self, token: String) -> Result<User> {
 		// Send the request.
 		let mut url = self.url.clone();
-		url.set_path("/v1/user/");
+		url.set_path("/v1/user");
 		let response = self
 			.http_client
 			.request(reqwest::Method::GET, url)

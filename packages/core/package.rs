@@ -5,7 +5,7 @@ use crate::{
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use fnv::FnvBuildHasher;
 use std::{
 	collections::{BTreeMap, HashMap, VecDeque},
@@ -488,9 +488,9 @@ impl builder::Shared {
 				.unwrap();
 
 			if package_version_exists {
-				return Err(anyhow!(format!(
+				bail!(
 					r#"The package with name "{package_name}" and version "{package_version}" already exists."#
-				)));
+				);
 			}
 
 			// Create the new package version.
