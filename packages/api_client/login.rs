@@ -21,7 +21,6 @@ impl ApiClient {
 		let mut url = self.url.clone();
 		url.set_path("/v1/logins/");
 		let response = self
-			.http_client
 			.request(reqwest::Method::POST, url)
 			.send()
 			.await?
@@ -45,7 +44,6 @@ impl ApiClient {
 		let mut url = self.url.clone();
 		url.set_path(&format!("/v1/logins/{id}"));
 		let response = self
-			.http_client
 			.request(reqwest::Method::GET, url)
 			.send()
 			.await?
@@ -70,7 +68,6 @@ impl ApiClient {
 		let mut url = self.url.clone();
 		url.set_path("/v1/user");
 		let response = self
-			.http_client
 			.request(reqwest::Method::GET, url)
 			.header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
 			.send()

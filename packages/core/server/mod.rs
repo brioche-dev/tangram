@@ -73,13 +73,13 @@ impl Server {
 			(http::Method::GET, ["v1", "blobs", _]) => {
 				Some(self.handle_get_blob_request(request).boxed())
 			},
-			(http::Method::PUT, ["v1", "blobs", _]) => {
+			(http::Method::POST, ["v1", "blobs", ""]) => {
 				Some(self.handle_add_blob_request(request).boxed())
 			},
 			(http::Method::GET, ["v1", "expressions", _]) => {
 				Some(self.handle_get_expression_request(request).boxed())
 			},
-			(http::Method::PUT, ["v1", "expressions", _]) => {
+			(http::Method::POST, ["v1", "expressions", ""]) => {
 				Some(self.handle_add_expression_request(request).boxed())
 			},
 			(http::Method::POST, ["v1", "expressions", _, "evaluate"]) => {

@@ -10,8 +10,7 @@ impl ApiClient {
 		url.set_path(&path);
 
 		// Send the request.
-		self.http_client
-			.request(reqwest::Method::POST, url)
+		self.request(reqwest::Method::POST, url)
 			.send()
 			.await?
 			.error_for_status()?;
@@ -29,7 +28,6 @@ impl ApiClient {
 
 		// Send the request.
 		let response = self
-			.http_client
 			.request(reqwest::Method::GET, url)
 			.send()
 			.await?
@@ -56,11 +54,7 @@ impl ApiClient {
 		url.set_path(&path);
 
 		// Make the request.
-		let response = self
-			.http_client
-			.request(reqwest::Method::GET, url)
-			.send()
-			.await?;
+		let response = self.request(reqwest::Method::GET, url).send().await?;
 
 		// Handle a non-success status.
 		let response = response.error_for_status()?;
@@ -87,7 +81,6 @@ impl ApiClient {
 
 		// Send the request.
 		let response = self
-			.http_client
 			.request(reqwest::Method::GET, url)
 			.send()
 			.await?

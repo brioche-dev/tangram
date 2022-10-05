@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 
 impl Client {
 	pub async fn get_expression(&self, hash: Hash) -> Result<Expression> {
-		let path = format!("/expressions/{}", hash);
+		let path = format!("/v1/expressions/{}", hash);
 
 		// Build the URL.
 		let mut url = self.url.clone();
@@ -42,7 +42,7 @@ impl Client {
 	) -> Result<AddExpressionOutcome> {
 		// Build the URL.
 		let mut url = self.url.clone();
-		url.set_path("/expressions/");
+		url.set_path("/v1/expressions/");
 
 		// Send the request.
 		let response = self
@@ -68,7 +68,7 @@ impl Client {
 	) -> Result<Option<Expression>> {
 		// Build the URL.
 		let mut url = self.url.clone();
-		url.set_path(&format!("/expressions/{expression_hash}"));
+		url.set_path(&format!("/v1/expressions/{expression_hash}"));
 
 		// Create the request.
 		let request = self.request(http::Method::GET, url.to_string(), hyper::Body::empty());

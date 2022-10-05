@@ -5,7 +5,6 @@ use tangram_core::{client::Client, hash::Hash};
 use url::Url;
 
 #[derive(Parser, Debug)]
-#[command(trailing_var_arg = true)]
 pub struct Args {
 	pub hash: Hash,
 	pub url: Option<Url>,
@@ -16,9 +15,14 @@ impl Cli {
 		// Lock the builder.
 		let builder = self.builder.lock_shared().await?;
 
-		// Create the client.
-		let client = Client::new(args.url.unwrap(), None);
+		// Get the client.
+		let client = if let Some(url) = args.url {
+			Client::new(url, None)
+		} else {
+			self.api_client.client.clone()
+		};
 
+		// Push.
 		builder
 			.push(args.hash, &client)
 			.await

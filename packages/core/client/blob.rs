@@ -13,7 +13,7 @@ impl Client {
 		let body = hyper::Body::wrap_stream(stream);
 
 		// Build the URL.
-		let path = format!("/blobs/{hash}");
+		let path = format!("/v1/blobs/{hash}");
 		let mut url = self.url.clone();
 		url.set_path(&path);
 
@@ -36,7 +36,7 @@ impl Client {
 
 	pub async fn get_blob(&self, hash: Hash) -> Result<Blob> {
 		// Build the URL.
-		let path = format!("/blobs/{hash}");
+		let path = format!("/v1/blobs/{hash}");
 		let mut url = self.url.clone();
 		url.set_path(&path);
 

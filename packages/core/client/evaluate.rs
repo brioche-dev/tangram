@@ -5,7 +5,7 @@ use anyhow::Result;
 impl Client {
 	pub async fn evaluate(&self, hash: Hash) -> Result<Hash> {
 		// Build the URL.
-		let path = format!("/expressions/{hash}/evaluate");
+		let path = format!("/v1/expressions/{hash}/evaluate");
 		let mut url = self.url.clone();
 		url.set_path(&path);
 
