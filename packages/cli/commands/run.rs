@@ -43,15 +43,10 @@ impl Cli {
 				// Get the package from the registry.
 				let version = version.ok_or_else(|| anyhow!("A version is required."))?;
 				self.api_client
-					.get_package(&package_name, &version)
+					.get_package_version(&package_name, &version)
 					.await
 					.with_context(|| {
 						format!(r#"Failed to get the package "{package_name}" from the registry."#)
-					})?
-					.ok_or_else(|| {
-						anyhow!(
-							r#"Could not find version "{version}" of the package "{package_name}"."#
-						)
 					})?
 			},
 		};
