@@ -221,10 +221,12 @@ class Package {
 	async toJson() {
 		let source = await addExpression(this.source);
 		let dependencies = Object.fromEntries(
-			Object.entries(this.dependencies).map(async ([key, value]) => [
-				key,
-				(await addExpression(value)).toString(),
-			]),
+			await Promise.all(
+				Object.entries(this.dependencies).map(async ([key, value]) => [
+					key,
+					(await addExpression(value)).toString(),
+				]),
+			),
 		);
 		return {
 			type: ExpressionType.Package,
@@ -297,10 +299,12 @@ class Js {
 		let artifact = await addExpression(this.artifact);
 		let args = await addExpression(this.args);
 		let dependencies = Object.fromEntries(
-			Object.entries(this.dependencies).map(async ([key, value]) => [
-				key,
-				(await addExpression(value)).toString(),
-			]),
+			await Promise.all(
+				Object.entries(this.dependencies).map(async ([key, value]) => [
+					key,
+					(await addExpression(value)).toString(),
+				]),
+			),
 		);
 		return {
 			type: ExpressionType.Js,
