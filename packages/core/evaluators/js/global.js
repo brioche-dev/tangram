@@ -85,6 +85,10 @@ class Artifact {
 			},
 		};
 	}
+
+	async getRoot() {
+		return await getExpression(this.root);
+	}
 }
 
 class Directory {
@@ -118,6 +122,17 @@ class Directory {
 			value: { entries },
 		};
 	}
+
+	async getEntries() {
+		return Object.fromEntries(
+			await Promise.all(
+				Object.entries(this.entries).map(async ([key, value]) => [
+					key,
+					await getExpression(value),
+				]),
+			),
+		);
+	}
 }
 
 class File {
@@ -143,6 +158,10 @@ class File {
 				executable: this.executable,
 			},
 		};
+	}
+
+	async getBlob() {
+		return await getBlob(this.blob.toString());
 	}
 }
 
@@ -193,6 +212,10 @@ class Dependency {
 			},
 		};
 	}
+
+	async getArtifact() {
+		return await getExpression(this.artifact);
+	}
 }
 
 class Package {
@@ -234,6 +257,21 @@ class Package {
 			},
 		};
 	}
+
+	async getSource() {
+		return await getExpression(this.source);
+	}
+
+	async getDependencies() {
+		return Object.fromEntries(
+			await Promise.all(
+				Object.entries(this.dependencies).map(async ([key, value]) => [
+					key,
+					await getExpression(value),
+				]),
+			),
+		);
+	}
 }
 
 class Template {
@@ -261,6 +299,12 @@ class Template {
 				components,
 			},
 		};
+	}
+
+	async getComponents() {
+		return await Promise.all(
+			this.components.map(async (component) => await getExpression(component)),
+		);
 	}
 }
 
@@ -312,6 +356,25 @@ class Js {
 				path: this.path,
 			},
 		};
+	}
+
+	async getDependencies() {
+		return Object.fromEntries(
+			await Promise.all(
+				Object.entries(this.dependencies).map(async ([key, value]) => [
+					key,
+					await getExpression(value),
+				]),
+			),
+		);
+	}
+
+	async getArtifact() {
+		return await getExpression(this.artifact);
+	}
+
+	async getArgs() {
+		return await getExpression(this.args);
 	}
 }
 
@@ -384,6 +447,18 @@ class Process {
 			},
 		};
 	}
+
+	async getEnv() {
+		return await getExpression(this.env);
+	}
+
+	async getCommand() {
+		return await getExpression(this.command);
+	}
+
+	async getArgs() {
+		return await getExpression(this.args);
+	}
 }
 
 class Target {
@@ -416,6 +491,14 @@ class Target {
 				args: args.toString(),
 			},
 		};
+	}
+
+	async getPackage() {
+		return await getExpression(this.package);
+	}
+
+	async getArgs() {
+		return await getExpression(this.args);
 	}
 }
 
@@ -571,8 +654,13 @@ let addExpression = async (expression) => {
 	);
 };
 
-let getExpression = async (hash) => {
-	return fromJson(await syscall(Syscall.GetExpression, hash.toString()));
+let getExpression = async (hashOrExpression) => {
+	if (hashOrExpression instanceof Hash) {
+		return fromJson(
+			await syscall(Syscall.GetExpression, hashOrExpression.toString()),
+		);
+	}
+	return hashOrExpression;
 };
 
 let evaluate = async (hash) => {
@@ -581,9 +669,33 @@ let evaluate = async (hash) => {
 
 globalThis.console = {
 	log: (...args) => {
-		let string = args.map(JSON.stringify).join(" ");
+		let string = args
+			.map((arg) => {
+				return format(arg);
+			})
+			.join(" ");
 		syscall(Syscall.Print, string);
 	},
+};
+
+let format = (value) => {
+	let pretty;
+	if (typeof value === "object") {
+		let fields = [];
+		if (value.constructor.name === "Object") {
+			pretty = "{ ";
+		} else {
+			pretty = value.constructor.name + " { ";
+		}
+		for (let [k, v] of Object.entries(value)) {
+			fields.push(`${k}: ${format(v)}`);
+		}
+		pretty += fields.join(", ");
+		pretty += " }";
+	} else {
+		pretty = JSON.stringify(value);
+	}
+	return pretty;
 };
 
 globalThis.Tangram = {
