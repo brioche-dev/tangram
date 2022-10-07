@@ -6,6 +6,7 @@ use crate::{
 
 use super::{SandboxPathMode, SandboxedCommand};
 use anyhow::{anyhow, bail, Context, Result};
+use bstr::ByteSlice;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use libc::*;
 use std::{
@@ -425,7 +426,7 @@ fn get_mountpoint_remount_options(mountpoint: &Path) -> Result<c_ulong> {
 	let mounts_table = std::fs::File::open("/proc/mounts")?;
 	let mounts_table = std::io::BufReader::new(mounts_table);
 
-	let mount_rows = mounts_table.lines();
+	let mount_rows = mounts_table.split(b'\n');
 
 	// Iterate through each row in the mount table until we find the row matching `mountpoint`.
 	for mount_row in mount_rows {
@@ -440,12 +441,12 @@ fn get_mountpoint_remount_options(mountpoint: &Path) -> Result<c_ulong> {
 		}
 
 		// Ignore comments.
-		if mount_row.starts_with('#') {
+		if mount_row.starts_with_str("#") {
 			continue;
 		}
 
-		// Break the line into fields (separated by whitespace in the fstab format).
-		let mut mount_fields = mount_row.split_ascii_whitespace();
+		// Break the line into fields separated by whitespace.
+		let mut mount_fields = mount_row.fields();
 
 		// Ignore the mount source (first field).
 		let _mount_source = mount_fields.next();
@@ -453,9 +454,12 @@ fn get_mountpoint_remount_options(mountpoint: &Path) -> Result<c_ulong> {
 		// Get the mount target and decode spaces/tabs (second field).
 		let mount_target = mount_fields.next().unwrap_or_default().to_owned();
 		let mount_target = mount_target.replace("\\040", " ").replace("\\011", "\t");
+		let mount_target = mount_target
+			.to_path()
+			.context("Failed to parse mount target path.")?;
 
 		// Skip this row if it isn't the mountpoint we're looking for
-		if mountpoint.to_str() != Some(&mount_target) {
+		if mountpoint != mount_target {
 			continue;
 		}
 
@@ -467,36 +471,36 @@ fn get_mountpoint_remount_options(mountpoint: &Path) -> Result<c_ulong> {
 
 		// Gather a list of bitflags by looking for known mount options (comma separated).
 		let mut mount_flags = 0;
-		for mount_opt in mount_opts.split(',') {
+		for mount_opt in mount_opts.split_str(",") {
 			match mount_opt {
-				"ro" => {
+				b"ro" => {
 					mount_flags |= MS_RDONLY;
 				},
-				"noatime" => {
+				b"noatime" => {
 					mount_flags |= MS_NOATIME;
 				},
-				"nodev" => {
+				b"nodev" => {
 					mount_flags |= MS_NODEV;
 				},
-				"nodiratime" => {
+				b"nodiratime" => {
 					mount_flags |= MS_NODIRATIME;
 				},
-				"noexec" => {
+				b"noexec" => {
 					mount_flags |= MS_NOEXEC;
 				},
-				"mand" => {
+				b"mand" => {
 					mount_flags |= MS_MANDLOCK;
 				},
-				"relatime" => {
+				b"relatime" => {
 					mount_flags |= MS_RELATIME;
 				},
-				"lazytime" => {
+				b"lazytime" => {
 					mount_flags |= MS_LAZYTIME;
 				},
-				"nosuid" => {
+				b"nosuid" => {
 					mount_flags |= MS_NOSUID;
 				},
-				"strictatime" => {
+				b"strictatime" => {
 					mount_flags |= MS_STRICTATIME;
 				},
 				_ => {
