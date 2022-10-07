@@ -4,7 +4,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use futures::FutureExt;
 use indoc::writedoc;
 use std::{
-	collections::HashMap,
+	collections::{BTreeMap, HashMap},
 	fmt::Write,
 	pin::Pin,
 	sync::{Arc, Mutex},
@@ -70,13 +70,11 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		let specifier = match specifier.scheme() {
 			// Resolve a specifier with the tangram scheme.
 			TANGRAM_SCHEME => {
-				futures::executor::block_on(resolve_tangram(&state, specifier, referrer))?
+				futures::executor::block_on(deno_resolve_tangram(&state, specifier, referrer))?
 			},
 
-			// Resolve a specifier with the tangram module scheme.
-			TANGRAM_MODULE_SCHEME => {
-				futures::executor::block_on(resolve_tangram_module(&state, specifier, referrer))?
-			},
+			// Pass through specifiers with the tangram module scheme.
+			TANGRAM_MODULE_SCHEME => specifier,
 
 			_ => {
 				bail!(r#"The specifier "{specifier}" has an invalid scheme."#,)
@@ -100,11 +98,13 @@ impl deno_core::ModuleLoader for ModuleLoader {
 			.spawn(async move {
 				match specifier.scheme() {
 					// Load a module with the tangram module scheme.
-					TANGRAM_MODULE_SCHEME => load_tangram_module(&state, specifier, referrer).await,
+					TANGRAM_MODULE_SCHEME => {
+						deno_load_tangram_module(&state, specifier, referrer).await
+					},
 
 					// Load a module with the tangram target proxy scheme.
 					TANGRAM_TARGET_PROXY_SCHEME => {
-						load_tangram_target_proxy(&state, specifier, referrer).await
+						deno_load_tangram_target_proxy(&state, specifier, referrer).await
 					},
 
 					_ => {
@@ -117,8 +117,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
 	}
 }
 
-#[allow(clippy::unused_async)]
-async fn resolve_tangram(
+async fn deno_resolve_tangram(
 	state: &State,
 	specifier: deno_core::ModuleSpecifier,
 	referrer: Option<deno_core::ModuleSpecifier>,
@@ -142,15 +141,6 @@ async fn resolve_tangram(
 		.parse()
 		.with_context(|| "Failed to parse referrer domain.")?;
 
-	// Get the specifier's package name and sub path.
-	let specifier_path = Utf8Path::new(specifier.path());
-	let specifier_package_name = specifier_path.components().next().unwrap().as_str();
-	let specifier_sub_path = if specifier_path.components().count() > 1 {
-		Some(specifier_path.components().skip(1).collect::<Utf8PathBuf>())
-	} else {
-		None
-	};
-
 	// Get the referrer's dependencies.
 	let referrer_dependencies = state
 		.builder
@@ -160,6 +150,45 @@ async fn resolve_tangram(
 		.ok_or_else(|| anyhow!("Expected a package expression."))?
 		.dependencies;
 
+	// Get the specifier's package name and sub path.
+	let specifier_path = Utf8Path::new(specifier.path());
+	let specifier_package_name = specifier_path.components().next().unwrap().as_str();
+	let specifier_sub_path = if specifier_path.components().count() > 1 {
+		Some(specifier_path.components().skip(1).collect::<Utf8PathBuf>())
+	} else {
+		None
+	};
+
+	// Resolve the package.
+	// The `resolve()` function contains the logic shared between the runtime, and the integration with the Typescript compiler.
+	let (specifier_package_hash, specifier_sub_path) = resolve(
+		&state.builder,
+		&referrer_dependencies,
+		specifier_package_name,
+		specifier_sub_path.as_deref(),
+	)
+	.await
+	.with_context(|| format!(r#"Could not resolve URL "{specifier}""#))?;
+
+	// Compute the URL to resolve to.
+	let url = if let Some(specifier_sub_path) = specifier_sub_path {
+		format!("{TANGRAM_MODULE_SCHEME}://{specifier_package_hash}/{specifier_sub_path}")
+	} else {
+		format!("{TANGRAM_TARGET_PROXY_SCHEME}://{specifier_package_hash}")
+	};
+	let url = Url::parse(&url).unwrap();
+
+	Ok(url)
+}
+
+/// Given a package name, an optional subpath, and the referring package's dependencies, resolve
+/// the import to the hash of a package and an optional subpath.
+pub async fn resolve(
+	builder: &builder::Shared,
+	referrer_dependencies: &BTreeMap<Arc<str>, Hash>,
+	specifier_package_name: &str,
+	specifier_sub_path: Option<&Utf8Path>,
+) -> Result<(Hash, Option<Utf8PathBuf>)> {
 	// Look up the specifier's package name in the referrer's dependencies.
 	let specifier_package_hash = *referrer_dependencies
 		.get(specifier_package_name)
@@ -177,21 +206,18 @@ async fn resolve_tangram(
 			// If the file has an extension, check if it's supported.
 			if let Some(_valid_extension) = Extension::from_str(ext_str) {
 				// All OK, we pass the subpath through unchanged.
-				Some(sub_path)
+				Some(sub_path.to_owned())
 			} else {
-				bail!(r#"Cannot load module with extension "{ext_str}" at URL "{specifier}"."#);
+				bail!(r#"Cannot load module with extension "{ext_str}"."#);
 			}
 		} else {
 			// If the file doesn't have an extension, check for the presence of files which do.
 
 			// We need to check out the specifier's package here, because we need to poke around in its
 			// files to resolve the file extension.
-			let specifier_package_source_hash = state
-				.builder
-				.get_package_source(specifier_package_hash)
-				.await?;
-			let artifact_path = state
-				.builder
+			let specifier_package_source_hash =
+				builder.get_package_source(specifier_package_hash).await?;
+			let artifact_path = builder
 				.checkout_to_artifacts(specifier_package_source_hash)
 				.await?;
 
@@ -220,24 +246,7 @@ async fn resolve_tangram(
 		None
 	};
 
-	// Compute the URL to resolve to.
-	let url = if let Some(specifier_sub_path) = specifier_sub_path {
-		format!("{TANGRAM_MODULE_SCHEME}://{specifier_package_hash}/{specifier_sub_path}")
-	} else {
-		format!("{TANGRAM_TARGET_PROXY_SCHEME}://{specifier_package_hash}")
-	};
-	let url = Url::parse(&url).unwrap();
-
-	Ok(url)
-}
-
-#[allow(clippy::unused_async)]
-async fn resolve_tangram_module(
-	_state: &State,
-	specifier: deno_core::ModuleSpecifier,
-	_referrer: Option<deno_core::ModuleSpecifier>,
-) -> Result<deno_core::ModuleSpecifier> {
-	Ok(specifier)
+	Ok((specifier_package_hash, specifier_sub_path))
 }
 
 /// The supported list of file extensions the module loader understands.
@@ -258,7 +267,7 @@ impl Extension {
 	}
 }
 
-async fn load_tangram_module(
+async fn deno_load_tangram_module(
 	state: &State,
 	specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
@@ -364,7 +373,7 @@ async fn load_tangram_module(
 	})
 }
 
-async fn load_tangram_target_proxy(
+async fn deno_load_tangram_target_proxy(
 	state: &State,
 	specifier: deno_core::ModuleSpecifier,
 	_referrer: Option<deno_core::ModuleSpecifier>,
