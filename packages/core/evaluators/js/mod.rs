@@ -130,11 +130,9 @@ async fn run_js_process(
 	// Create the module URL.
 	let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", js.artifact);
 
-	// Add the module path if necessary.
-	if let Some(path) = &js.path {
-		module_url.push('/');
-		module_url.push_str(path.as_str());
-	}
+	// Add the module path.
+	module_url.push('/');
+	module_url.push_str(js.path.as_str());
 
 	// Parse the module URL.
 	let module_url = Url::parse(&module_url).unwrap();

@@ -9,6 +9,7 @@ use std::{
 	pin::Pin,
 	sync::{Arc, Mutex},
 };
+use strum::IntoEnumIterator;
 use url::Url;
 
 pub const TANGRAM_SCHEME: &str = "tangram";
@@ -160,13 +161,64 @@ async fn resolve_tangram(
 		.dependencies;
 
 	// Look up the specifier's package name in the referrer's dependencies.
-	let specifier_package_hash = referrer_dependencies
+	let specifier_package_hash = *referrer_dependencies
 		.get(specifier_package_name)
 		.ok_or_else(|| {
 			anyhow!(
 				r#"Expected the referrer's package dependencies to contain the specifier's package name."#
 			)
 		})?;
+
+	// If there's a subpath: we need to resolve the extension of the file.
+	let specifier_sub_path = if let Some(sub_path) = specifier_sub_path {
+		// If we have a file extension, check it's supported. If not, resolve a bare path by checking
+		// for the existence of the extension-ed versions of that file.
+		if let Some(ext_str) = sub_path.extension() {
+			// If the file has an extension, check if it's supported.
+			if let Some(_valid_extension) = Extension::from_str(ext_str) {
+				// All OK, we pass the subpath through unchanged.
+				Some(sub_path)
+			} else {
+				bail!(r#"Cannot load module with extension "{ext_str}" at URL "{specifier}"."#);
+			}
+		} else {
+			// If the file doesn't have an extension, check for the presence of files which do.
+
+			// We need to check out the specifier's package here, because we need to poke around in its
+			// files to resolve the file extension.
+			let specifier_package_source_hash = state
+				.builder
+				.get_package_source(specifier_package_hash)
+				.await?;
+			let artifact_path = state
+				.builder
+				.checkout_to_artifacts(specifier_package_source_hash)
+				.await?;
+
+			// Existence-check files with each prospective extension.
+			let mut result = None;
+			for candidate_ext in Extension::iter() {
+				let path_with_ext = sub_path.with_extension(candidate_ext.as_ref());
+				let artifact_path_with_ext = artifact_path.join(&path_with_ext);
+				let exists = path_exists(&artifact_path_with_ext)
+					.await
+					.context("Failed to check for file presence while resolving module")?;
+				if exists {
+					result = Some(path_with_ext);
+					break;
+				}
+			}
+
+			let found_sub_path = result.context(
+				"Could not locate a module by adding file extensions to \"{specifier}\"",
+			)?;
+
+			Some(found_sub_path)
+		}
+	} else {
+		// If there's no subpath, don't do anything.
+		None
+	};
 
 	// Compute the URL to resolve to.
 	let url = if let Some(specifier_sub_path) = specifier_sub_path {
@@ -188,6 +240,24 @@ async fn resolve_tangram_module(
 	Ok(specifier)
 }
 
+/// The supported list of file extensions the module loader understands.
+#[derive(strum::Display, strum::AsRefStr, strum::EnumIter)]
+enum Extension {
+	#[strum(serialize = "ts")]
+	Ts,
+	#[strum(serialize = "js")]
+	Js,
+	#[strum(serialize = "json")]
+	Json,
+}
+
+impl Extension {
+	/// Convert a string (like `js`) to an Extension, if valid. Otherwise, return `None`.
+	fn from_str(extension: &str) -> Option<Extension> {
+		Extension::iter().find(|e| e.as_ref() == extension)
+	}
+}
+
 async fn load_tangram_module(
 	state: &State,
 	specifier: deno_core::ModuleSpecifier,
@@ -205,7 +275,21 @@ async fn load_tangram_module(
 		.ok_or_else(|| anyhow!("The specifier must have a domain."))?;
 	let specifier_package_hash: Hash = domain.parse()?;
 
-	// Checkout specifier's package.
+	// Get the path from the specifier.
+	let specifier_path = Utf8Path::new(specifier.path());
+	let specifier_path = specifier_path
+		.strip_prefix("/")
+		.with_context(|| "The specifier must have a leading slash.")?;
+
+	let extension_str = specifier_path.extension().with_context(|| {
+		format!("Cannot load a file with no extension from URL \"{specifier_path}\"")
+	})?;
+
+	let extension = Extension::from_str(extension_str).with_context(|| {
+		format!("Cannot load a file with unknown extension '.{extension_str}'.")
+	})?;
+
+	// Checkout specifier's package, and get a `module_path` into the checked-out files.
 	let specifier_package_source_hash = state
 		.builder
 		.get_package_source(specifier_package_hash)
@@ -214,25 +298,7 @@ async fn load_tangram_module(
 		.builder
 		.checkout_to_artifacts(specifier_package_source_hash)
 		.await?;
-
-	// Get the path from the specifier.
-	let specifier_path = Utf8Path::new(specifier.path());
-	let specifier_path = specifier_path
-		.strip_prefix("/")
-		.with_context(|| "The specifier must have a leading slash.")?;
-
-	// Get the module path.
 	let module_path = artifact_path.join(specifier_path);
-	let (module_path, is_typescript) = if path_exists(&module_path).await? {
-		(module_path, false)
-	} else if path_exists(&module_path.with_extension("ts")).await? {
-		(module_path.with_extension("ts"), true)
-	} else {
-		bail!(
-			r#"Failed to find a module at path "{}"."#,
-			module_path.display(),
-		);
-	};
 
 	// Read the module's source.
 	let source = tokio::fs::read(&module_path).await.with_context(|| {
@@ -243,8 +309,8 @@ async fn load_tangram_module(
 	})?;
 	let source = String::from_utf8(source)?;
 
-	// Transpile the code if necessary.
-	let code = if is_typescript {
+	// Transpile the code if it's typescript.
+	let code = if let Extension::Ts = extension {
 		// Parse the code.
 		let parsed_source = deno_ast::parse_module(deno_ast::ParseParams {
 			specifier: specifier.to_string(),
@@ -283,13 +349,11 @@ async fn load_tangram_module(
 		source
 	};
 
-	// Determine the module type.
-	let module_type = match specifier_path.extension() {
-		Some("js") | None => deno_core::ModuleType::JavaScript,
-		Some("json") => deno_core::ModuleType::Json,
-		_ => {
-			bail!(r#"Cannot load module at path "{}"."#, module_path.display());
-		},
+	// Determine the module type from the extension.
+	let module_type = match extension {
+		// JavaScript is passed through unchanged; TypeScript is transpiled.
+		Extension::Js | Extension::Ts => deno_core::ModuleType::JavaScript,
+		Extension::Json => deno_core::ModuleType::Json,
 	};
 
 	Ok(deno_core::ModuleSource {

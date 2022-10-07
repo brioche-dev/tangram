@@ -90,7 +90,7 @@ pub struct Template {
 pub struct Js {
 	pub dependencies: BTreeMap<Arc<str>, Hash>,
 	pub artifact: Hash,
-	pub path: Option<Utf8PathBuf>,
+	pub path: Utf8PathBuf,
 	pub name: String,
 	pub args: Hash,
 }
