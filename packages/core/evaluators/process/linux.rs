@@ -1,36 +1,24 @@
-use super::Process;
 use crate::{
-	builder,
 	expression::{self, Expression},
 	hash::Hash,
 	system::System,
 };
+
+use super::{SandboxPathMode, SandboxedCommand};
 use anyhow::{anyhow, bail, Context, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use libc::*;
 use std::{
-	collections::BTreeMap,
 	ffi::CString,
 	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-impl Process {
-	pub(super) async fn run_linux_process(
-		&self,
-		builder: &builder::Shared,
-		system: System,
-		envs: BTreeMap<String, String>,
-		command: PathBuf,
-		args: Vec<String>,
-		parent_hash: Hash,
-		enable_network_access: bool,
-	) -> Result<()> {
-		let builder_path = builder.path().to_owned();
-
+impl SandboxedCommand {
+	pub async fn run(self) -> Result<()> {
 		// Create a temp path for the chroot.
-		let temp_path = builder.create_temp_path();
+		let temp_path = self.builder.create_temp_path();
 
 		// Create the chroot directory.
 		let parent_child_root_path = temp_path;
@@ -40,16 +28,17 @@ impl Process {
 
 		// Create a symlink from /bin/sh in the chroot to a fragment with statically-linked bash.
 		let bash_artifact = self
-			.bash_artifact(builder, system, parent_hash)
+			.bash_artifact()
 			.await
 			.context("Failed to evaluate the bash artifact.")?;
-		let bash_checkout = builder
+		let bash_checkout = self
+			.builder
 			.checkout_to_artifacts(bash_artifact)
 			.await
 			.context("Failed to create the bash artifact checkout.")?;
 		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
 		tokio::fs::symlink(
-			builder
+			self.builder
 				.artifacts_path()
 				.join(&bash_checkout)
 				.join("bin/bash"),
@@ -68,25 +57,23 @@ impl Process {
 			.context("Failed to make the child socket nonblocking.")?;
 
 		// Create the process.
-		let mut process = tokio::process::Command::new(command);
+		let mut process = tokio::process::Command::new(&self.command.string);
+
+		// Set the working directory.
+		process.current_dir(&self.working_dir);
 
 		// Set the envs.
 		process.env_clear();
-		process.envs(envs);
+		process.envs(self.envs.iter().map(|(k, v)| (k.clone(), v.string.clone())));
 
 		// Set the args.
-		process.args(args);
+		process.args(self.args.iter().map(|arg| arg.string.clone()));
 
 		// Set up the sandbox.
 		unsafe {
 			process.pre_exec(move || {
-				pre_exec(
-					&mut child_socket,
-					&parent_child_root_path,
-					&builder_path,
-					enable_network_access,
-				)
-				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+				pre_exec(&mut child_socket, &parent_child_root_path, &self)
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
 
@@ -148,14 +135,10 @@ impl Process {
 
 		Ok(())
 	}
-	async fn bash_artifact(
-		&self,
-		builder: &builder::Shared,
-		system: System,
-		parent_hash: Hash,
-	) -> Result<Hash> {
+
+	async fn bash_artifact(&self) -> Result<Hash> {
 		// Get the URL and hash for the system.
-		let (url, hash) = match system {
+		let (url, hash) = match self.system {
 			System::Amd64Linux => (
 				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_x86_64_20220907.tar.zstd",
 				"9341f10797f4ca59316da48a5e318bc8a7fe7db755773c5b115e3c94c1b387f3",
@@ -164,11 +147,12 @@ impl Process {
 				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_aarch64_20220907.tar.zstd",
 				"7baaeb63aa221312dec152ec74a24972fc6bdeec3e070e9003cdf775c77b5781",
 			),
-			_ => bail!(r#"Unexpected system "{}"."#, system),
+			_ => bail!(r#"Unexpected system "{}"."#, self.system),
 		};
 
 		// Create the expression.
-		let hash = builder
+		let hash = self
+			.builder
 			.add_expression(&Expression::Fetch(expression::Fetch {
 				url: url.parse().unwrap(),
 				hash: Some(hash.parse().unwrap()),
@@ -178,8 +162,9 @@ impl Process {
 			.context("Failed to add the bash expression.")?;
 
 		// Evaluate the expression.
-		let output_hash = builder
-			.evaluate(hash, parent_hash)
+		let output_hash = self
+			.builder
+			.evaluate(hash, self.parent_hash)
 			.await
 			.context("Failed to evaluate the expression.")?;
 
@@ -190,8 +175,7 @@ impl Process {
 fn pre_exec(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
-	builder_path: &Path,
-	enable_network_access: bool,
+	command: &SandboxedCommand,
 ) -> Result<()> {
 	// Unshare the user namespace.
 	let ret = unsafe { unshare(CLONE_NEWUSER) };
@@ -327,7 +311,7 @@ fn pre_exec(
 	let child_etc_path = parent_child_root_path.join("etc");
 	std::fs::create_dir_all(&child_etc_path)?;
 
-	if enable_network_access {
+	if command.enable_network_access {
 		// Copy resolv.conf to re-use DNS config from host.
 		std::fs::copy("/etc/resolv.conf", child_etc_path.join("resolv.conf"))?;
 	} else {
@@ -339,25 +323,54 @@ fn pre_exec(
 		}
 	}
 
-	// Mount the builder path.
-	let parent_source_path = &builder_path;
-	let parent_source_path_c_string =
-		CString::new(parent_source_path.as_os_str().as_bytes()).unwrap();
-	let parent_target_path =
-		parent_child_root_path.join(parent_source_path.strip_prefix("/").unwrap());
-	std::fs::create_dir_all(&parent_target_path).unwrap();
-	let parent_target_c_string = CString::new(parent_target_path.as_os_str().as_bytes()).unwrap();
-	let ret = unsafe {
-		mount(
-			parent_source_path_c_string.as_ptr(),
-			parent_target_c_string.as_ptr(),
-			std::ptr::null(),
-			MS_BIND,
-			std::ptr::null(),
-		)
-	};
-	if ret != 0 {
-		bail!(anyhow!(std::io::Error::last_os_error()).context("Failed to mount the builder path."));
+	// Mount all paths used in the build.
+	for (path, mode) in command.paths() {
+		let parent_source_path = match mode {
+			// Allow access to just the path.
+			SandboxPathMode::Read | SandboxPathMode::ReadWrite => &path,
+			// To allow creation of the new file, allow access to the parent path.
+			SandboxPathMode::ReadWriteCreate => path.parent().unwrap_or(&path),
+		};
+		let parent_source_path_c_string =
+			CString::new(parent_source_path.as_os_str().as_bytes()).unwrap();
+		let parent_target_path =
+			parent_child_root_path.join(parent_source_path.strip_prefix("/").unwrap());
+		std::fs::create_dir_all(&parent_target_path).unwrap();
+		let parent_target_c_string =
+			CString::new(parent_target_path.as_os_str().as_bytes()).unwrap();
+		let ret = unsafe {
+			mount(
+				parent_source_path_c_string.as_ptr(),
+				parent_target_c_string.as_ptr(),
+				std::ptr::null(),
+				MS_BIND,
+				std::ptr::null(),
+			)
+		};
+		if ret != 0 {
+			bail!(anyhow!(std::io::Error::last_os_error())
+				.context("Failed to mount the builder path."));
+		}
+
+		// Remount as read-only if writes are disabled. Bind mounts can only be made read-only by mounting it normally then remounting in read-only mode.
+		match mode {
+			SandboxPathMode::Read => {
+				let ret = unsafe {
+					mount(
+						parent_source_path_c_string.as_ptr(),
+						parent_target_c_string.as_ptr(),
+						std::ptr::null(),
+						MS_REMOUNT | MS_BIND | MS_RDONLY,
+						std::ptr::null(),
+					)
+				};
+				if ret != 0 {
+					bail!(anyhow!(std::io::Error::last_os_error())
+						.context("Failed to re-mount the builder path as read-only."));
+				}
+			},
+			SandboxPathMode::ReadWrite | SandboxPathMode::ReadWriteCreate => {},
+		}
 	}
 
 	// Pivot the root.

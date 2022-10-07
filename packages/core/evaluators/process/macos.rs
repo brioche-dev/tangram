@@ -1,41 +1,31 @@
-use super::Process;
-use crate::{builder, system::System};
+use super::{SandboxPathMode, SandboxedCommand};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
 use std::{
-	collections::BTreeMap,
 	ffi::{CStr, CString},
 	fmt::Write,
 	os::unix::prelude::OsStrExt,
-	path::{Path, PathBuf},
 };
 
-impl Process {
-	pub(super) async fn run_macos_process(
-		&self,
-		builder: &builder::Shared,
-		_system: System,
-		envs: BTreeMap<String, String>,
-		command: PathBuf,
-		args: Vec<String>,
-		enable_network_access: bool,
-	) -> Result<()> {
-		let path = builder.path().to_owned();
-
+impl SandboxedCommand {
+	pub async fn run(self) -> Result<()> {
 		// Create the process.
-		let mut process = tokio::process::Command::new(command);
+		let mut process = tokio::process::Command::new(&self.command.string);
+
+		// Set the working directory.
+		process.current_dir(&self.working_dir);
 
 		// Set the envs.
 		process.env_clear();
-		process.envs(envs);
+		process.envs(self.envs.iter().map(|(k, v)| (k.clone(), v.string.clone())));
 
 		// Set the args.
-		process.args(args);
+		process.args(self.args.iter().map(|arg| arg.string.clone()));
 
 		// Set up the sandbox.
 		unsafe {
 			process.pre_exec(move || {
-				pre_exec(&path, enable_network_access)
+				pre_exec(&self)
 					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
@@ -57,7 +47,7 @@ impl Process {
 	}
 }
 
-fn pre_exec(path: &Path, enable_network_access: bool) -> Result<()> {
+fn pre_exec(command: &SandboxedCommand) -> Result<()> {
 	let mut profile = String::new();
 
 	// Add the default policy.
@@ -112,7 +102,7 @@ fn pre_exec(path: &Path, enable_network_access: bool) -> Result<()> {
 	).unwrap();
 
 	// Allow network access if enabled.
-	if enable_network_access {
+	if command.enable_network_access {
 		writedoc!(
 			profile,
 			r#"
@@ -147,16 +137,35 @@ fn pre_exec(path: &Path, enable_network_access: bool) -> Result<()> {
 		.unwrap();
 	}
 
-	// Allow access to the builder path.
-	writedoc!(
-		profile,
-		r#"
-			(allow process-exec* file* (subpath {0}))
-			(allow file-read-metadata (path-ancestors {0}))
-		"#,
-		escape(path.as_os_str().as_bytes())
-	)
-	.unwrap();
+	// Allow access to all paths used in the build.
+	for (path, mode) in command.paths() {
+		match mode {
+			SandboxPathMode::Read => {
+				writedoc!(
+					profile,
+					r#"
+						(allow process-exec* (subpath {0}))
+						(allow file-read* (path-ancestors {0}))
+						(allow file-read* (subpath {0}))
+					"#,
+					escape(path.as_os_str().as_bytes())
+				)
+				.unwrap();
+			},
+			SandboxPathMode::ReadWrite | SandboxPathMode::ReadWriteCreate => {
+				writedoc!(
+					profile,
+					r#"
+						(allow process-exec* (subpath {0}))
+						(allow file-read* (path-ancestors {0}))
+						(allow file* (subpath {0}))
+					"#,
+					escape(path.as_os_str().as_bytes())
+				)
+				.unwrap();
+			},
+		}
+	}
 
 	// Call `sandbox_init`.
 	let profile = CString::new(profile).unwrap();
