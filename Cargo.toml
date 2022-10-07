@@ -17,6 +17,7 @@ anyhow = { version = "1", features = ["backtrace"] }
 async-recursion = "1"
 async-trait = "0.1.53"
 blake3 = "1"
+bstr = "1"
 byteorder = "1.4"
 bytes = "1"
 bzip2 = "0.4"

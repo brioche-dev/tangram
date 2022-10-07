@@ -19,6 +19,7 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 async-recursion = { workspace = true }
 async-trait = { workspace = true }
+bstr = { workspace = true }
 blake3 = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
