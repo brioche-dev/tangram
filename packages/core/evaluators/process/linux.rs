@@ -140,12 +140,12 @@ impl SandboxedCommand {
 		// Get the URL and hash for the system.
 		let (url, hash) = match self.system {
 			System::Amd64Linux => (
-				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_x86_64_20220907.tar.zstd",
-				"9341f10797f4ca59316da48a5e318bc8a7fe7db755773c5b115e3c94c1b387f3",
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v2022.10.07/bash_static_x86_64_20221007.tar.zstd",
+				"9217dd76ac03ef36763a1964751f1eb681f8d7540552455f4108685e15f179fc",
 			),
 			System::Arm64Linux => (
-				"https://github.com/tangramdotdev/bootstrap/releases/download/v0.1/bash_static_aarch64_20220907.tar.zstd",
-				"7baaeb63aa221312dec152ec74a24972fc6bdeec3e070e9003cdf775c77b5781",
+				"https://github.com/tangramdotdev/bootstrap/releases/download/v2022.10.07/bash_static_aarch64_20221007.tar.zstd",
+				"c1a4dbc54fb8cd6cf5d026d3094577842208f39e872453e6e2445489a86c9da9",
 			),
 			_ => bail!(r#"Unexpected system "{}"."#, self.system),
 		};
