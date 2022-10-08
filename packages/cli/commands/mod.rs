@@ -15,7 +15,6 @@ pub mod pull;
 pub mod push;
 pub mod run;
 pub mod search;
-pub mod serve;
 pub mod shell;
 pub mod update;
 pub mod upgrade;

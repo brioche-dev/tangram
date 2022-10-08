@@ -1,7 +1,7 @@
 use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
-use tangram_core::{client::Client, hash::Hash};
+use tangram_core::hash::Hash;
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -15,18 +15,8 @@ impl Cli {
 		// Lock the builder.
 		let builder = self.builder.lock_shared().await?;
 
-		// Get the client.
-		let client = if let Some(url) = args.url {
-			Client::new(url, None)
-		} else {
-			self.api_client.client.clone()
-		};
-
 		// Push.
-		builder
-			.push(args.hash, &client)
-			.await
-			.context("Failed to push.")?;
+		builder.push(args.hash).await.context("Failed to push.")?;
 
 		Ok(())
 	}

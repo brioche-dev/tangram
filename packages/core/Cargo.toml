@@ -13,7 +13,6 @@ path = "lib.rs"
 
 [build-dependencies]
 deno_core = { workspace = true }
-tokio = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -28,7 +27,7 @@ camino = { workspace = true }
 deadpool-sqlite = { workspace = true }
 deno_ast = { workspace = true }
 deno_core = { workspace = true }
-digest = { workspace = true }
+either = { workspace = true }
 flate2 = { workspace = true }
 fnv = { workspace = true }
 futures = { workspace = true }
@@ -50,7 +49,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }
 serde_yaml = { workspace = true }
-sha2 = { workspace = true }
 strum = { workspace = true }
 tar = { workspace = true }
 thiserror = { workspace = true }

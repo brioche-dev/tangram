@@ -48,7 +48,7 @@ impl Cli {
 			.context("Failed to evaluate the target expression.")?;
 
 		// Print the output.
-		println!("{expression_hash} => {output_hash}");
+		println!("{output_hash}");
 
 		Ok(())
 	}

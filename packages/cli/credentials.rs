@@ -1,6 +1,7 @@
 use crate::Cli;
 use anyhow::Result;
 use std::path::PathBuf;
+use tangram_core::util::path_exists;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
@@ -15,7 +16,7 @@ impl Cli {
 
 	pub async fn read_credentials() -> Result<Option<Credentials>> {
 		let path = Self::credentials_path()?;
-		if !path.exists() {
+		if !path_exists(&path).await? {
 			return Ok(None);
 		}
 		let credentials = tokio::fs::read(&path).await?;

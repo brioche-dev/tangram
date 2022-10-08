@@ -2,7 +2,7 @@ use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::net::{IpAddr, SocketAddr};
-use tangram_core::server::Server;
+use tangram_core::builder::server::Server;
 
 #[derive(Parser)]
 pub struct Args {

@@ -7,8 +7,6 @@ use url::Url;
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Config {
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub peers: Option<Vec<Url>>,
-	#[serde(skip_serializing_if = "Option::is_none")]
 	pub autoshells: Option<Vec<PathBuf>>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub api_url: Option<Url>,

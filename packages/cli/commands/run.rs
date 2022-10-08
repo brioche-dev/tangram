@@ -1,5 +1,5 @@
 use crate::Cli;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use tangram_core::specifier::{self, Specifier};
@@ -41,8 +41,9 @@ impl Cli {
 				version,
 			}) => {
 				// Get the package from the registry.
-				let version = version.ok_or_else(|| anyhow!("A version is required."))?;
-				self.api_client
+				let version = version.context("A version is required.")?;
+				builder
+					.client
 					.get_package_version(&package_name, &version)
 					.await
 					.with_context(|| {
@@ -68,7 +69,7 @@ impl Cli {
 		// Create the target args.
 		let target_args = self.create_target_args(args.system).await?;
 
-		// Create the expression.
+		// Add the expression.
 		let input_hash = builder
 			.add_expression(&tangram_core::expression::Expression::Target(
 				tangram_core::expression::Target {
@@ -85,7 +86,7 @@ impl Cli {
 			.await
 			.context("Failed to evaluate the target expression.")?;
 
-		// Checkout the artifact.
+		// Check out the artifact.
 		let artifact_path = builder.checkout_to_artifacts(output_hash).await?;
 
 		// Get the path to the executable.

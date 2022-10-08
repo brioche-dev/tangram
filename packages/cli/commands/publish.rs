@@ -22,17 +22,18 @@ impl Cli {
 			path.push(path_arg);
 		}
 
-		// Checkin the package.
+		// Check in the package.
 		let package_hash = builder.checkin_package(&path, args.locked).await?;
 
 		// Push the package to the registry.
 		builder
-			.push(package_hash, &self.api_client.client)
+			.push(package_hash)
 			.await
 			.context("Failed to push the expression.")?;
 
 		// Publish the package.
-		self.api_client
+		builder
+			.client
 			.publish_package(package_hash)
 			.await
 			.context("Failed to publish the package.")?;

@@ -2656,22 +2656,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tangram_api_client"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "futures",
- "reqwest",
- "serde",
- "serde_json",
- "tangram_core",
- "tokio",
- "tokio-util",
- "toml",
- "url",
-]
-
-[[package]]
 name = "tangram_cli"
 version = "0.0.0"
 dependencies = [
@@ -2682,7 +2666,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tangram_api_client",
  "tangram_core",
  "tokio",
  "tokio-util",
@@ -2707,7 +2690,7 @@ dependencies = [
  "deadpool-sqlite",
  "deno_ast",
  "deno_core",
- "digest",
+ "either",
  "flate2",
  "fnv",
  "futures",
@@ -2729,7 +2712,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_yaml",
- "sha2",
  "strum",
  "tar",
  "thiserror",

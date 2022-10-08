@@ -2,11 +2,10 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 use futures::FutureExt;
 use std::path::PathBuf;
-use tangram_api_client::ApiClient;
 use tangram_core::builder::Builder;
 
 mod commands;
@@ -14,6 +13,10 @@ mod config;
 mod credentials;
 mod dirs;
 mod util;
+
+pub struct Cli {
+	builder: Builder,
+}
 
 #[derive(Parser)]
 #[command(
@@ -45,17 +48,11 @@ enum Subcommand {
 	Publish(commands::publish::Args),
 	Run(commands::run::Args),
 	Search(commands::search::Args),
-	Serve(commands::serve::Args),
 	Shell(commands::shell::Args),
 	Update(commands::update::Args),
 	Upgrade(commands::upgrade::Args),
 	Push(commands::push::Args),
 	Pull(commands::pull::Args),
-}
-
-pub struct Cli {
-	builder: Builder,
-	api_client: ApiClient,
 }
 
 impl Cli {
@@ -65,13 +62,6 @@ impl Cli {
 
 		// Read the config file.
 		let config = Self::read_config().await?;
-
-		// Resolve the peers.
-		let peers = config
-			.as_ref()
-			.and_then(|config| config.peers.as_ref())
-			.cloned();
-		let peers = peers.unwrap_or_default();
 
 		// Resolve the autoshells.
 		let autoshells = config
@@ -87,34 +77,23 @@ impl Cli {
 			.cloned();
 		let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
 
-		// Create the builder options.
-		let builder_options = tangram_core::options::Options { path, peers };
-
 		// Create the builder.
-		let builder = Builder::new(builder_options)
+		let builder = Builder::new(path)
 			.await
 			.context("Failed to create the builder.")?;
 
 		// Read the credentials.
 		let credentials = Self::read_credentials().await?;
 
-		// Create the API client.
-		let api_client = ApiClient::new(
-			api_url.clone(),
-			credentials.map(|credentials| credentials.token),
-		);
-
-		let cli = Cli {
-			builder,
-			api_client,
-		};
+		// Create the CLI.
+		let cli = Cli { builder };
 
 		Ok(cli)
 	}
 
 	fn path() -> Result<PathBuf> {
 		Ok(crate::dirs::home_directory_path()
-			.ok_or_else(|| anyhow!("Failed to find the user home directory."))?
+			.context("Failed to find the user home directory.")?
 			.join(".tangram"))
 	}
 }
@@ -141,7 +120,6 @@ impl Cli {
 			Subcommand::Push(args) => self.command_push(args).boxed(),
 			Subcommand::Run(args) => self.command_run(args).boxed(),
 			Subcommand::Search(args) => self.command_search(args).boxed(),
-			Subcommand::Serve(args) => self.command_serve(args).boxed(),
 			Subcommand::Shell(args) => self.command_shell(args).boxed(),
 			Subcommand::Update(args) => self.command_update(args).boxed(),
 			Subcommand::Upgrade(args) => self.command_upgrade(args).boxed(),

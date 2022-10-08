@@ -9,8 +9,11 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_search(&self, args: Args) -> Result<()> {
+		// Lock the builder.
+		let builder = self.builder.lock_shared().await?;
+
 		// Search for the package with the given name.
-		let packages = self.api_client.search_packages(&args.name).await?;
+		let packages = builder.client.search_packages(&args.name).await?;
 
 		// Print the package names.
 		if packages.is_empty() {

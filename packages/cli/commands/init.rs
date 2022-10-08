@@ -1,5 +1,5 @@
 use crate::Cli;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use indoc::formatdoc;
 use std::path::PathBuf;
@@ -46,7 +46,7 @@ impl Cli {
 			let last_path_component_string = last_path_component
 				.as_os_str()
 				.to_str()
-				.ok_or_else(|| anyhow!("The last component of the path must be valid UTF-8."))?;
+				.context("The last component of the path must be valid UTF-8.")?;
 			last_path_component_string.to_owned()
 		};
 
