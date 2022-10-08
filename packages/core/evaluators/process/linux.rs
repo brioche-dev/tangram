@@ -86,38 +86,47 @@ impl SandboxedCommand {
 		});
 
 		// Wait for the message from the child process that the UID and GID maps are ready to be set.
-		let pid: pid_t = parent_socket
-			.read_i32()
-			.await
-			.context("Failed to read from the parent socket.")?;
+		let pid: Result<pid_t, _> = parent_socket.read_i32().await;
 
-		// Write the UID map.
-		let uid_map_path = PathBuf::from(format!("/proc/{pid}/uid_map"));
-		let uid = unsafe { getuid() };
-		let uid_map = format!("0 {uid} 1\n");
-		tokio::fs::write(&uid_map_path, &uid_map)
-			.await
-			.context("Failed to write the UID map file.")?;
+		match pid {
+			Ok(pid) => {
+				// Child process sent a message, so set the UID and GID maps.
 
-		// Disable setgroups.
-		let setgroups_path = PathBuf::from(format!("/proc/{pid}/setgroups"));
-		let setgroups = "deny";
-		tokio::fs::write(&setgroups_path, &setgroups)
-			.await
-			.context("Failed to write the setgroups file.")?;
+				// Write the UID map.
+				let uid_map_path = PathBuf::from(format!("/proc/{pid}/uid_map"));
+				let uid = unsafe { getuid() };
+				let uid_map = format!("0 {uid} 1\n");
+				tokio::fs::write(&uid_map_path, &uid_map)
+					.await
+					.context("Failed to write the UID map file.")?;
 
-		// Write the GID map.
-		let gid_map_path = PathBuf::from(format!("/proc/{pid}/gid_map"));
-		let gid = unsafe { getgid() };
-		let gid_map = format!("0 {gid} 1\n");
-		tokio::fs::write(&gid_map_path, &gid_map)
-			.await
-			.context("Failed to write the GID map file.")?;
+				// Disable setgroups.
+				let setgroups_path = PathBuf::from(format!("/proc/{pid}/setgroups"));
+				let setgroups = "deny";
+				tokio::fs::write(&setgroups_path, &setgroups)
+					.await
+					.context("Failed to write the setgroups file.")?;
 
-		// Send the message to the child process that the UID and GID maps have been set.
-		parent_socket.write_u8(0).await.context(
-			"Failed to notify the child process that the UID and GID maps have been set.",
-		)?;
+				// Write the GID map.
+				let gid_map_path = PathBuf::from(format!("/proc/{pid}/gid_map"));
+				let gid = unsafe { getgid() };
+				let gid_map = format!("0 {gid} 1\n");
+				tokio::fs::write(&gid_map_path, &gid_map)
+					.await
+					.context("Failed to write the GID map file.")?;
+
+				// Send the message to the child process that the UID and GID maps have been set.
+				parent_socket.write_u8(0).await.context(
+					"Failed to notify the child process that the UID and GID maps have been set.",
+				)?;
+			},
+			Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+				// Child process did not respond, meaning the process is running uncontainerized. Don't do anything.
+			},
+			Err(error) => {
+				return Err(error).context("Failed to read from the parent socket.");
+			},
+		}
 
 		// Wait for the sandbox parent task to complete.
 		let mut child = spawn_task
