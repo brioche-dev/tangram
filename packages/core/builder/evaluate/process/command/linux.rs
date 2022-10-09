@@ -9,7 +9,7 @@ use libc::*;
 use std::{
 	ffi::CString,
 	io::BufRead,
-	os::unix::prelude::OsStrExt,
+	os::unix::{fs::PermissionsExt, prelude::OsStrExt},
 	path::{Path, PathBuf},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -73,7 +73,13 @@ impl Command {
 			System::Arm64Linux => include_bytes!("./bash_arm64_linux").as_slice(),
 			_ => unreachable!(),
 		};
-		tokio::fs::write(parent_child_root_path.join("bin/sh"), bash).await?;
+		let sh_path = parent_child_root_path.join("bin/sh");
+		tokio::fs::write(&sh_path, bash).await?;
+		// Set executable bit for owner, group, and other on the bash executable.
+		let mut permissions = tokio::fs::metadata(&sh_path).await?.permissions();
+		let mode = permissions.mode();
+		permissions.set_mode(mode | 0o111);
+		tokio::fs::set_permissions(&sh_path, permissions).await?;
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
