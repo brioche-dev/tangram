@@ -6,7 +6,8 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use futures::FutureExt;
 use std::path::PathBuf;
-use tangram_core::builder::Builder;
+use tangram_core::api_client::ApiClient;
+use tangram_core::builder::{self, clients, Builder};
 
 mod commands;
 mod config;
@@ -16,6 +17,7 @@ mod util;
 
 pub struct Cli {
 	builder: Builder,
+	api_client: ApiClient,
 }
 
 #[derive(Parser)]
@@ -77,16 +79,35 @@ impl Cli {
 			.cloned();
 		let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
 
-		// Create the builder.
-		let builder = Builder::new(path)
-			.await
-			.context("Failed to create the builder.")?;
-
 		// Read the credentials.
 		let credentials = Self::read_credentials().await?;
 
+		// Get the token.
+		let token = credentials.map(|credentials| credentials.token);
+
+		// Create the API Client.
+		let api_client = ApiClient::new(api_url.clone(), token.clone());
+
+		// Create the blob client.
+		let blob_client = clients::blob::Client::new(api_url.clone(), token.clone());
+
+		// Create the expression client.
+		let expression_client = clients::expression::Client::new(api_url.clone(), token.clone());
+
+		// Create the builder.
+		let options = builder::Options {
+			blob_client,
+			expression_client,
+		};
+		let builder = Builder::new(path, options)
+			.await
+			.context("Failed to create the builder.")?;
+
 		// Create the CLI.
-		let cli = Cli { builder };
+		let cli = Cli {
+			builder,
+			api_client,
+		};
 
 		Ok(cli)
 	}

@@ -12,7 +12,10 @@ impl Shared {
 		let expression = self.get_expression(hash).await?;
 
 		// Try to add the expression.
-		let outcome = self.client.try_add_expression(&expression).await?;
+		let outcome = self
+			.expression_client
+			.try_add_expression(&expression)
+			.await?;
 
 		// Handle the outcome.
 		match outcome {
@@ -40,7 +43,7 @@ impl Shared {
 					})?);
 
 				// Add the blob.
-				self.client.add_blob(file, blob_hash).await?;
+				self.blob_client.add_blob(file, blob_hash).await?;
 			},
 
 			// If this expression is a dependency that is missing, push it.
@@ -57,7 +60,10 @@ impl Shared {
 		};
 
 		// Attempt to push the expression again. At this point, there should not be any missing entries or a missing blob.
-		let outcome = self.client.try_add_expression(&expression).await?;
+		let outcome = self
+			.expression_client
+			.try_add_expression(&expression)
+			.await?;
 		if !matches!(outcome, AddExpressionOutcome::Added { .. }) {
 			bail!("An unexpected error occurred.");
 		}

@@ -31,7 +31,7 @@ impl Cli {
 			Specifier::Path(specifier::Path { path }) => {
 				// Create the package.
 				builder
-					.checkin_package(&path, args.locked)
+					.checkin_package(&self.api_client, &path, args.locked)
 					.await
 					.context("Failed to create the package.")?
 			},
@@ -42,8 +42,7 @@ impl Cli {
 			}) => {
 				// Get the package from the registry.
 				let version = version.context("A version is required.")?;
-				builder
-					.client
+				self.api_client
 					.get_package_version(&package_name, &version)
 					.await
 					.with_context(|| {

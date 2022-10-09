@@ -9,7 +9,7 @@ impl Shared {
 	#[must_use]
 	pub async fn pull(&self, hash: Hash) -> Result<()> {
 		// Get the expression.
-		let expression = self.client.get_expression(hash).await?;
+		let expression = self.expression_client.get_expression(hash).await?;
 
 		// Try to add the expression.
 		let outcome = self.try_add_expression(&expression).await?;
@@ -27,7 +27,7 @@ impl Shared {
 			},
 			AddExpressionOutcome::FileMissingBlob { blob_hash } => {
 				// Pull the blob.
-				self.client.get_blob(blob_hash).await?;
+				self.blob_client.get_blob(blob_hash).await?;
 			},
 			AddExpressionOutcome::DependencyMissing { hash } => {
 				// Pull the missing dependency.

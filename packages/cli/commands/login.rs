@@ -8,12 +8,9 @@ pub struct Args {}
 
 impl Cli {
 	pub(crate) async fn command_login(&self, _args: Args) -> Result<()> {
-		// Lock the builder.
-		let builder = self.builder.lock_shared().await?;
-
 		// Create a login.
-		let login = builder
-			.client
+		let login = self
+			.api_client
 			.create_login()
 			.await
 			.context("Failed to create the login.")?;
@@ -33,8 +30,8 @@ impl Cli {
 			if start_instant.elapsed() >= poll_duration {
 				bail!("Login timed out. Please try again.");
 			}
-			let login = builder
-				.client
+			let login = self
+				.api_client
 				.get_login(login.id)
 				.await
 				.context("Failed to get the login.")?;
@@ -45,8 +42,8 @@ impl Cli {
 		};
 
 		// Retrieve the user.
-		let user = builder
-			.client
+		let user = self
+			.api_client
 			.get_current_user(token)
 			.await
 			.context("Failed to get the current user.")?;

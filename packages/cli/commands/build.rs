@@ -23,7 +23,7 @@ impl Cli {
 
 		// Create the package.
 		let package_hash = builder
-			.checkin_package(&args.package, args.locked)
+			.checkin_package(&self.api_client, &args.package, args.locked)
 			.await
 			.context("Failed to create the package.")?;
 

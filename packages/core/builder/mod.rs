@@ -1,5 +1,6 @@
 use self::{
-	client::Client, db::create_database_pool, heuristics::FILESYSTEM_CONCURRENCY_LIMIT, lock::Lock,
+	clients::blob::Client as BlobClient, clients::expression::Client as ExpressionClient,
+	db::create_database_pool, heuristics::FILESYSTEM_CONCURRENCY_LIMIT, lock::Lock,
 };
 use crate::{hash::Hash, id::Id};
 use anyhow::Result;
@@ -18,7 +19,7 @@ pub mod blob;
 pub mod cache;
 pub mod checkin;
 pub mod checkout;
-pub mod client;
+pub mod clients;
 pub mod db;
 pub mod evaluate;
 pub mod expression;
@@ -26,9 +27,12 @@ pub mod gc;
 pub mod heuristics;
 pub mod lock;
 pub mod migrations;
+pub mod options;
 pub mod package;
 pub mod pull;
 pub mod push;
+
+pub use options::Options;
 
 #[derive(Clone)]
 pub struct Builder {
@@ -46,9 +50,6 @@ pub struct State {
 	/// This is the connection pool for the builder's SQLite database.
 	database_connection_pool: deadpool_sqlite::Pool,
 
-	/// This is the client the builder will use to communicate with the API.
-	pub client: Client,
-
 	/// This HTTP client is for performing HTTP requests when evaluating fetch expressions.
 	http_client: reqwest::Client,
 
@@ -61,12 +62,18 @@ pub struct State {
 
 	/// The file system semaphore is used to prevent the builder from opening too many files simultaneously.
 	file_system_semaphore: Arc<Semaphore>,
+
+	// The client that connects to the blob server.
+	pub blob_client: BlobClient,
+
+	// The client that connects to the blob expression server.
+	pub expression_client: ExpressionClient,
 }
 
 impl Builder {
 	#[async_recursion]
 	#[must_use]
-	pub async fn new(path: PathBuf) -> Result<Builder> {
+	pub async fn new(path: PathBuf, options: Options) -> Result<Builder> {
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
 
@@ -100,11 +107,12 @@ impl Builder {
 		let state = State {
 			path,
 			database_connection_pool,
-			client: Client::new("http://asdf".parse().unwrap(), None),
 			http_client,
 			in_progress_evaluations,
 			local_pool_handle,
 			file_system_semaphore,
+			blob_client: options.blob_client,
+			expression_client: options.expression_client,
 		};
 
 		// Create the server.

@@ -1,4 +1,5 @@
 use crate::{
+	api_client::ApiClient,
 	builder::Shared,
 	expression::{Expression, Package},
 	hash::Hash,
@@ -15,7 +16,12 @@ use std::{
 impl Shared {
 	/// Check in a package from the provided source path.
 	#[allow(clippy::too_many_lines)]
-	pub async fn checkin_package(&self, source_path: &Path, locked: bool) -> Result<Hash> {
+	pub async fn checkin_package(
+		&self,
+		api_client: &ApiClient,
+		source_path: &Path,
+		locked: bool,
+	) -> Result<Hash> {
 		let source_path = tokio::fs::canonicalize(source_path).await?;
 
 		// Collect all path dependencies in topological order.
@@ -112,24 +118,23 @@ impl Shared {
 						},
 
 						// Handle a registry dependency.
-						crate::manifest::Dependency::RegistryDependency(_) => {
-							// // Get the package hash from the registry.
-							// let dependency_version = &dependency.version;
-							// let package_hash = self
-							// 	.get_package_version(dependency_name, &dependency.version)
-							// 	.await?
-							// 	.with_context(||
-							// 		format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
-							// 	)?;
-							// let package_source_hash = self.get_package_source(package_hash).await?;
+						crate::manifest::Dependency::RegistryDependency(dependency) => {
+							// Get the package hash from the registry.
+							let dependency_version = &dependency.version;
+							let package_hash = api_client
+								.get_package_version(dependency_name, &dependency.version)
+								.await
+								.with_context(||
+									format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
+								)?;
+							let package_source_hash = self.get_package_source(package_hash).await?;
 
-							// // Create the lockfile Entry.
-							// lockfile::Dependency {
-							// 	hash: package_hash,
-							// 	source: package_source_hash,
-							// 	dependencies: None,
-							// }
-							todo!()
+							// Create the lockfile Entry.
+							lockfile::Dependency {
+								hash: package_hash,
+								source: package_source_hash,
+								dependencies: None,
+							}
 						},
 					};
 
