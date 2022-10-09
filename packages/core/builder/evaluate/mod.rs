@@ -101,10 +101,10 @@ impl Shared {
 			Either::Right(sender) => {
 				let output_hash = evaluate().await?;
 				let mut in_progress_evaluations = self.in_progress_evaluations.lock().unwrap();
-				in_progress_evaluations.remove(&hash);
 				sender
 					.send(output_hash)
 					.context("Failed to send the output hash on the broadcast channel.")?;
+				in_progress_evaluations.remove(&hash);
 				Ok(output_hash)
 			},
 		}
