@@ -83,71 +83,13 @@ impl Shared {
 			let manifest: Manifest = serde_json::from_slice(&manifest)?;
 
 			if !locked {
-				// Create the lockfile for this package.
-				let mut dependencies = BTreeMap::new();
-				for (dependency_name, dependency) in manifest.dependencies.iter().flatten() {
-					// Retrieve the path dependency.
-					let entry = match dependency {
-						crate::manifest::Dependency::PathDependency(dependency) => {
-							// Get the absolute path to the dependency.
-							let dependency_path = package_source_path.join(&dependency.path);
-							let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
-
-							// Get the dependency's expression hash.
-							let dependency_hash =
-								cache.get(&dependency_path).copied().with_context(|| {
-									let dependency_path = dependency_path.display();
-									format!(
-										r#"Failed to get the artifact for path "{dependency_path}"."#
-									)
-								})?;
-
-							// Get the dependency package.
-							let dependency_package = self
-								.get_expression(dependency_hash)
-								.await?
-								.into_package()
-								.context("Hello")?;
-
-							// Create the lockfile entry.
-							lockfile::Dependency {
-								hash: dependency_hash,
-								source: dependency_package.source,
-								dependencies: None,
-							}
-						},
-
-						// Handle a registry dependency.
-						crate::manifest::Dependency::RegistryDependency(dependency) => {
-							// Get the package hash from the registry.
-							let dependency_version = &dependency.version;
-							let package_hash = api_client
-								.get_package_version(dependency_name, &dependency.version)
-								.await
-								.with_context(||
-									format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
-								)?;
-							let package_source_hash = self.get_package_source(package_hash).await?;
-
-							// Create the lockfile Entry.
-							lockfile::Dependency {
-								hash: package_hash,
-								source: package_source_hash,
-								dependencies: None,
-							}
-						},
-					};
-
-					// Add the dependency.
-					dependencies.insert(dependency_name.clone(), entry);
-				}
-
-				// Write the lockfile.
-				let lockfile = Lockfile::new_v1(dependencies);
+				let lockfile = self
+					.create_lockfile(api_client, &mut cache, manifest, &package_source_path)
+					.await?;
 				let lockfile = serde_json::to_vec_pretty(&lockfile)?;
 				let lockfile_path = package_source_path.join("tangram.lock");
 				tokio::fs::write(&lockfile_path, lockfile).await?;
-			};
+			}
 
 			// Check in the package source.
 			let package_source_hash = self.checkin(&package_source_path).await?;
@@ -229,5 +171,74 @@ impl Shared {
 			.context(r#"Failed to parse the package manifest."#)?;
 
 		Ok(manifest)
+	}
+
+	async fn create_lockfile(
+		&self,
+		api_client: &ApiClient,
+		cache: &mut HashMap<PathBuf, Hash, FnvBuildHasher>,
+		manifest: Manifest,
+		package_source_path: &Path,
+	) -> Result<Lockfile> {
+		// Create the lockfile for this package.
+		let mut dependencies = BTreeMap::new();
+		for (dependency_name, dependency) in manifest.dependencies.iter().flatten() {
+			// Retrieve the path dependency.
+			let entry = match dependency {
+				crate::manifest::Dependency::PathDependency(dependency) => {
+					// Get the absolute path to the dependency.
+					let dependency_path = package_source_path.join(&dependency.path);
+					let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
+
+					// Get the dependency's expression hash.
+					let dependency_hash =
+						cache.get(&dependency_path).copied().with_context(|| {
+							let dependency_path = dependency_path.display();
+							format!(r#"Failed to get the artifact for path "{dependency_path}"."#)
+						})?;
+
+					// Get the dependency package.
+					let dependency_package = self
+						.get_expression(dependency_hash)
+						.await?
+						.into_package()
+						.context("Hello")?;
+
+					// Create the lockfile entry.
+					lockfile::Dependency {
+						hash: dependency_hash,
+						source: dependency_package.source,
+						dependencies: None,
+					}
+				},
+
+				// Handle a registry dependency.
+				crate::manifest::Dependency::RegistryDependency(dependency) => {
+					// Get the package hash from the registry.
+					let dependency_version = &dependency.version;
+					let package_hash = api_client
+								.get_package_version(dependency_name, &dependency.version)
+								.await
+								.with_context(||
+									format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
+								)?;
+					let package_source_hash = self.get_package_source(package_hash).await?;
+
+					// Create the lockfile Entry.
+					lockfile::Dependency {
+						hash: package_hash,
+						source: package_source_hash,
+						dependencies: None,
+					}
+				},
+			};
+
+			// Add the dependency.
+			dependencies.insert(dependency_name.clone(), entry);
+		}
+
+		// Create the lockfile.
+		let lockfile = Lockfile::new_v1(dependencies);
+		Ok(lockfile)
 	}
 }
