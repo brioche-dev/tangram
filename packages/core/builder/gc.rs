@@ -1,6 +1,6 @@
 use super::Exclusive;
 use crate::{expression::Expression, hash::Hash};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::{
 	collections::{HashSet, VecDeque},
 	path::Path,
@@ -12,19 +12,13 @@ impl Exclusive {
 		let mut marked_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 		let mut marked_blob_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 
-		self.as_shared()
-			.database_transaction(|txn| {
-				// Mark the expressions and blobs.
-				self.mark(txn, &mut marked_hashes, &mut marked_blob_hashes, roots)
-					.context("Failed to mark the expressions and blobs.")?;
+		// Mark the expressions and blobs.
+		self.mark(&mut marked_hashes, &mut marked_blob_hashes, roots)
+			.context("Failed to mark the expressions and blobs.")?;
 
-				// Sweep the expressions.
-				self.sweep_expressions(txn, &marked_hashes)
-					.context("Failed to sweep the expressions.")?;
-
-				Ok(())
-			})
-			.await?;
+		// Sweep the expressions.
+		self.sweep_expressions(&marked_hashes)
+			.context("Failed to sweep the expressions.")?;
 
 		// Sweep the blobs.
 		self.sweep_blobs(&self.as_shared().blobs_path(), &marked_blob_hashes)
@@ -45,7 +39,6 @@ impl Exclusive {
 	#[allow(clippy::too_many_lines)]
 	fn mark(
 		&self,
-		txn: &rusqlite::Transaction,
 		marked_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		marked_blob_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		roots: Vec<Hash>,
@@ -62,9 +55,7 @@ impl Exclusive {
 			marked_hashes.insert(hash);
 
 			// Get the expression.
-			let (expression, output_hash) = self
-				.as_shared()
-				.get_expression_with_output_with_transaction(txn, hash)?;
+			let (expression, output_hash) = self.as_shared().get_expression_with_output(hash)?;
 
 			// Add this expression's output, if it has one, to the queue.
 			if let Some(output_hash) = output_hash {
@@ -72,30 +63,16 @@ impl Exclusive {
 			}
 
 			// Add this expression's evaluations to the queue.
-			let sql = r#"
-				select
-					child_hash
-				from
-					evaluations
-				where
-					parent_hash = ?1
-			"#;
-			let params = (hash.to_string(),);
-			let mut statement = txn
-				.prepare_cached(sql)
-				.context("Failed to prepare the query.")?;
-			let evaluations = statement
-				.query(params)
-				.context("Failed to execute the query.")?
-				.and_then(|row| {
-					let hash = row.get::<_, String>(0)?;
-					let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
-					Ok::<_, anyhow::Error>(hash)
-				});
-			for hash in evaluations {
-				let hash = hash?;
-				queue.push_back(hash);
-			}
+			let txn = self
+				.env
+				.read_txn()
+				.map_err(|_| anyhow!("Unable to get a read transaction."))?;
+			let child_hashes = self
+				.evaluations_db
+				.get(&txn, &hash)
+				.map_err(|_| anyhow!("Unable to get the child hashes."))?
+				.unwrap_or_default();
+			queue.extend(child_hashes);
 
 			// Add the expression's children to the queue.
 			match expression {
@@ -167,36 +144,28 @@ impl Exclusive {
 		Ok(())
 	}
 
-	fn sweep_expressions(
-		&self,
-		txn: &rusqlite::Transaction,
-		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
-	) -> Result<()> {
+	fn sweep_expressions(&self, marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>) -> Result<()> {
+		// Get a read transaction.
+		let txn = self
+			.env
+			.read_txn()
+			.map_err(|_| anyhow!("Unable to get a read transaction."))?;
+
 		// Get an iterator over all expressions.
-		let sql = r#"
-			select
-				hash
-			from
-				expressions
-		"#;
-		let mut statement = txn
-			.prepare_cached(sql)
-			.context("Failed to prepare the query.")?;
-		let hashes = statement
-			.query(())
-			.context("Failed to execute the query.")?
-			.and_then(|row| {
-				let hash = row.get::<_, String>(0)?;
-				let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
-				Ok::<_, anyhow::Error>(hash)
-			});
+		let hashes = self
+			.expressions_db
+			.iter(&txn)
+			.map_err(|_| anyhow!("Unable to get an iterator."))?
+			.map(|value| match value {
+				Ok((hash, _)) => Ok(hash),
+				Err(_) => Err(anyhow!("Unable to get the value.")),
+			})
+			.collect::<Result<Vec<Hash>>>()?;
 
 		// Delete all expressions that are not marked.
 		for hash in hashes {
-			let hash = hash?;
 			if !marked_hashes.contains(&hash) {
-				self.as_shared()
-					.delete_expression_with_transaction(txn, hash)?;
+				self.as_shared().delete_expression(hash)?;
 			}
 		}
 

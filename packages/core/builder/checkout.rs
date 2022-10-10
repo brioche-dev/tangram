@@ -20,7 +20,7 @@ impl Shared {
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Get the artifact expression.
-		let expression = self.get_expression(artifact).await?;
+		let expression = self.get_expression(artifact)?;
 
 		// Get the hash.
 		let hash = match expression {
@@ -46,7 +46,7 @@ impl Shared {
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Get the expression.
-		let expression = self.get_expression(hash).await?;
+		let expression = self.get_expression(hash)?;
 
 		// Call the appropriate function for the expression's type.
 		match expression {

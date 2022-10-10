@@ -358,7 +358,7 @@ impl Expression {
 	}
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum AddExpressionOutcome {
 	Added { hash: Hash },

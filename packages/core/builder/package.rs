@@ -123,10 +123,9 @@ impl Shared {
 		Ok(root_package)
 	}
 
-	pub async fn get_package_source(&self, package_hash: Hash) -> Result<Hash> {
+	pub fn get_package_source(&self, package_hash: Hash) -> Result<Hash> {
 		let package = self
-			.get_expression(package_hash)
-			.await?
+			.get_expression(package_hash)?
 			.into_package()
 			.context("Expected package.")?;
 		let package_source = package.source;
@@ -134,17 +133,15 @@ impl Shared {
 	}
 
 	pub async fn get_package_manifest(&self, package_hash: Hash) -> Result<Manifest> {
-		let package_source_hash = self.get_package_source(package_hash).await?;
+		let package_source_hash = self.get_package_source(package_hash)?;
 
 		let source_artifact = self
-			.get_expression(package_source_hash)
-			.await?
+			.get_expression(package_source_hash)?
 			.into_artifact()
 			.context("Expected an artifact.")?;
 
 		let source_directory = self
-			.get_expression(source_artifact.root)
-			.await?
+			.get_expression(source_artifact.root)?
 			.into_directory()
 			.context("Expected a directory.")?;
 
@@ -155,8 +152,7 @@ impl Shared {
 			.context("The package source does not contain a manifest.")?;
 
 		let manifest_blob_hash = self
-			.get_expression(manifest_hash)
-			.await?
+			.get_expression(manifest_hash)?
 			.as_file()
 			.context("Expected the manifest to be a file.")?
 			.blob;
@@ -199,8 +195,7 @@ impl Shared {
 
 					// Get the dependency package.
 					let dependency_package = self
-						.get_expression(dependency_hash)
-						.await?
+						.get_expression(dependency_hash)?
 						.into_package()
 						.context("Hello")?;
 
@@ -222,7 +217,7 @@ impl Shared {
 								.with_context(||
 									format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
 								)?;
-					let package_source_hash = self.get_package_source(package_hash).await?;
+					let package_source_hash = self.get_package_source(package_hash)?;
 
 					// Create the lockfile Entry.
 					lockfile::Dependency {

@@ -111,7 +111,6 @@ async fn run_js_process(
 	// Move the args to v8.
 	let args = builder
 		.get_expression(js.args)
-		.await
 		.context("Failed to get the args expression.")?;
 	let args = args.as_array().context("The args must be an array.")?;
 	let mut arg_values = Vec::new();
@@ -120,7 +119,7 @@ async fn run_js_process(
 		let mut scope = runtime.handle_scope();
 		let mut try_catch_scope = v8::TryCatch::new(&mut scope);
 
-		let arg = builder.get_expression(*arg).await?;
+		let arg = builder.get_expression(*arg)?;
 		let arg = serde_v8::to_v8(&mut try_catch_scope, arg)
 			.context("Failed to move the args expression to v8.")?;
 
@@ -342,7 +341,7 @@ async fn op_tangram_get_expression(
 	hash: Hash,
 ) -> Result<Option<Expression>, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let expression = builder.try_get_expression(hash).await?;
+		let expression = builder.try_get_expression(hash)?;
 		Ok::<_, anyhow::Error>(expression)
 	})
 	.await

@@ -21,10 +21,10 @@ impl Shared {
 	#[must_use]
 	pub async fn evaluate(&self, hash: Hash, parent_hash: Hash) -> Result<Hash> {
 		// Add the evaluation.
-		self.add_evaluation(parent_hash, hash).await?;
+		self.add_evaluation(parent_hash, hash)?;
 
 		// Get the expression and the output hash if the expression was previously evaluated.
-		let (expression, output_hash) = self.get_expression_with_output(hash).await?;
+		let (expression, output_hash) = self.get_expression_with_output(hash)?;
 
 		// If the expression was previously evaluated, return the output hash.
 		if let Some(output_hash) = output_hash {
@@ -61,7 +61,7 @@ impl Shared {
 		.await?;
 
 		// Set the expression output.
-		self.set_expression_output(hash, output_hash).await?;
+		self.set_expression_output(hash, output_hash)?;
 
 		Ok(output_hash)
 	}

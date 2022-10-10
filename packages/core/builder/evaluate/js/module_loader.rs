@@ -145,8 +145,7 @@ async fn deno_resolve_tangram(
 	// Get the referrer's dependencies.
 	let referrer_dependencies = state
 		.builder
-		.get_expression(referrer_package_hash)
-		.await?
+		.get_expression(referrer_package_hash)?
 		.into_package()
 		.context("Expected a package expression.")?
 		.dependencies;
@@ -213,7 +212,7 @@ pub async fn resolve(
 			// We need to check out the specifier's package here, because we need to poke around in its
 			// files to resolve the file extension.
 			let specifier_package_source_hash =
-				builder.get_package_source(specifier_package_hash).await?;
+				builder.get_package_source(specifier_package_hash)?;
 			let artifact_path = builder
 				.checkout_to_artifacts(specifier_package_source_hash)
 				.await?;
@@ -297,10 +296,7 @@ async fn deno_load_tangram_module(
 		.with_context(|| format!(r#"Cannot load a file with unknown extension "{extension}"."#))?;
 
 	// Check out specifier's package.
-	let specifier_package_source_hash = state
-		.builder
-		.get_package_source(specifier_package_hash)
-		.await?;
+	let specifier_package_source_hash = state.builder.get_package_source(specifier_package_hash)?;
 
 	// Get the module path.
 	let artifact_path = state
