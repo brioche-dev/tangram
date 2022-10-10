@@ -33,7 +33,7 @@ impl Cli {
 		let builder = self.builder.lock_shared().await?;
 
 		// Get the expression.
-		let expression = builder.get_expression(args.expression).await?;
+		let expression = builder.get_expression(args.expression)?;
 
 		// Serialize the expression.
 		let json = serde_json::to_string_pretty(&expression)?;

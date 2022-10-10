@@ -5,7 +5,6 @@ use crate::{
 	util::path_exists,
 };
 use anyhow::{anyhow, bail, Context, Result};
-use async_recursion::async_recursion;
 use futures::stream::TryStreamExt;
 
 impl Shared {
@@ -30,7 +29,7 @@ impl Shared {
 				let mut missing = Vec::new();
 				for (entry_name, hash) in &directory.entries {
 					let hash = *hash;
-					let exists = self.expression_exists(hash).await?;
+					let exists = self.expression_exists(hash)?;
 					if !exists {
 						missing.push((entry_name.clone(), hash));
 					}
@@ -57,7 +56,7 @@ impl Shared {
 			// If this expression is a dependency, ensure the dependency is present.
 			Expression::Dependency(dependency) => {
 				let hash = dependency.artifact;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					return Ok(AddExpressionOutcome::DependencyMissing { hash });
 				}
@@ -66,7 +65,7 @@ impl Shared {
 			// If this expression is a package, ensure its source and dependencies are present.
 			Expression::Package(package) => {
 				let hash = package.source;
-				let exists = self.expression_exists(package.source).await?;
+				let exists = self.expression_exists(package.source)?;
 				if !exists {
 					missing.push(hash);
 				}
@@ -79,7 +78,7 @@ impl Shared {
 							.map(Ok::<_, anyhow::Error>),
 					)
 					.try_filter_map(|hash| async move {
-						let exists = self.expression_exists(hash).await?;
+						let exists = self.expression_exists(hash)?;
 						if exists {
 							Ok(None)
 						} else {
@@ -117,7 +116,7 @@ impl Shared {
 							.map(Ok::<_, anyhow::Error>),
 					)
 					.try_filter_map(|hash| async move {
-						let exists = self.expression_exists(hash).await?;
+						let exists = self.expression_exists(hash)?;
 						if exists {
 							Ok(None)
 						} else {
@@ -135,14 +134,14 @@ impl Shared {
 			Expression::Js(js) => {
 				// Ensure the artifact is present.
 				let hash = js.package;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the args are present.
 				let hash = js.args;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
@@ -152,21 +151,21 @@ impl Shared {
 			Expression::Process(process) => {
 				// Ensure the command expression is present.
 				let hash = process.command;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the args expression is present.
 				let hash = process.args;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the env expression is present.
 				let hash = process.env;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
@@ -176,14 +175,14 @@ impl Shared {
 			Expression::Target(target) => {
 				// Ensure the package is present.
 				let hash = target.package;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the args are present.
 				let hash = target.args;
-				let exists = self.expression_exists(hash).await?;
+				let exists = self.expression_exists(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
@@ -194,7 +193,7 @@ impl Shared {
 				missing.extend(
 					futures::stream::iter(array.iter().copied().map(Ok::<_, anyhow::Error>))
 						.try_filter_map(|hash| async move {
-							let exists = self.expression_exists(hash).await?;
+							let exists = self.expression_exists(hash)?;
 							if exists {
 								Ok(None)
 							} else {
@@ -211,7 +210,7 @@ impl Shared {
 				missing.extend(
 					futures::stream::iter(map.values().copied().map(Ok::<_, anyhow::Error>))
 						.try_filter_map(|hash| async move {
-							let exists = self.expression_exists(hash).await?;
+							let exists = self.expression_exists(hash)?;
 							if exists {
 								Ok(None)
 							} else {
@@ -234,325 +233,152 @@ impl Shared {
 		let hash = Hash::new(&data);
 
 		// Add the expression to the database.
-		self.database_transaction(|txn| {
-			let sql = r#"
-				insert or ignore into expressions (
-					hash, data
-				) values (
-					?1, ?2
-				)
-			"#;
-			let params = (hash.to_string(), data);
-			txn.execute(sql, params)?;
-			Ok(())
-		})
-		.await?;
+		let mut txn = self
+			.env
+			.write_txn()
+			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
+
+		self.expressions_db
+			.put(&mut txn, &hash, &(expression.clone(), None))
+			.map_err(|_| anyhow!("Unable to put the expression"))?;
+
+		txn.commit()
+			.map_err(|_| anyhow!("Unable to commit the transaction."))?;
 
 		Ok(AddExpressionOutcome::Added { hash })
 	}
 
-	pub async fn expression_exists(&self, hash: Hash) -> Result<bool> {
-		self.database_transaction(|txn| Self::expression_exists_with_transaction(txn, hash))
-			.await
-	}
+	pub fn expression_exists(&self, hash: Hash) -> Result<bool> {
+		let txn = self
+			.env
+			.read_txn()
+			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
 
-	pub fn expression_exists_with_transaction(
-		txn: &rusqlite::Transaction<'_>,
-		hash: Hash,
-	) -> Result<bool> {
-		let sql = r#"
-			select
-				count(*) > 0
-			from
-				expressions
-			where
-				hash = ?1
-		"#;
-		let params = (hash.to_string(),);
-		let exists = txn
-			.prepare_cached(sql)
-			.context("Failed to prepare the query.")?
-			.query(params)
-			.context("Failed to execute the query.")?
-			.and_then(|row| row.get::<_, bool>(0))
-			.next()
-			.unwrap()?;
+		let exists = self
+			.expressions_db
+			.get(&txn, &hash)
+			.map_err(|_| anyhow!("Unable to get the value."))?
+			.is_some();
+
 		Ok(exists)
 	}
 
-	pub async fn get_expression(&self, hash: Hash) -> Result<Expression> {
+	pub fn get_expression(&self, hash: Hash) -> Result<Expression> {
 		let expression = self
-			.try_get_expression(hash)
-			.await?
+			.try_get_expression(hash)?
 			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
 		Ok(expression)
 	}
 
-	pub fn get_expression_with_transaction(
-		&self,
-		txn: &rusqlite::Transaction,
-		hash: Hash,
-	) -> Result<Expression> {
-		self.try_get_expression_with_transaction(txn, hash)?
-			.with_context(|| format!(r#"Failed to find the expression with hash "{}"."#, hash))
-	}
+	pub fn try_get_expression(&self, hash: Hash) -> Result<Option<Expression>> {
+		let txn = self
+			.env
+			.read_txn()
+			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
 
-	pub async fn try_get_expression(&self, hash: Hash) -> Result<Option<Expression>> {
 		let maybe_expression = self
-			.database_transaction(|txn| self.try_get_expression_with_transaction(txn, hash))
-			.await?;
+			.expressions_db
+			.get(&txn, &hash)
+			.map_err(|_| anyhow!("Unable to get the value."))?
+			.map(|(expression, _)| expression);
+
 		Ok(maybe_expression)
 	}
 
-	pub fn try_get_expression_with_transaction(
+	pub fn get_expression_with_output(&self, hash: Hash) -> Result<(Expression, Option<Hash>)> {
+		let expression = self
+			.try_get_expression_with_output(hash)?
+			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
+		Ok(expression)
+	}
+
+	pub fn try_get_expression_with_output(
 		&self,
-		txn: &rusqlite::Transaction,
 		hash: Hash,
-	) -> Result<Option<Expression>> {
-		let sql = r#"
-			select
-				data
-			from
-				expressions
-			where
-				hash = ?1
-		"#;
-		let params = (hash.to_string(),);
-		let mut statement = txn
-			.prepare_cached(sql)
-			.context("Failed to prepare the query.")?;
-		let maybe_expression = statement
-			.query(params)
-			.context("Failed to execute the query.")?
-			.and_then(|row| {
-				let data = row.get::<_, Vec<u8>>(0)?;
-				let expression = serde_json::from_slice(&data)?;
-				Ok::<_, anyhow::Error>(expression)
-			})
-			.next()
-			.transpose()?;
+	) -> Result<Option<(Expression, Option<Hash>)>> {
+		let txn = self
+			.env
+			.read_txn()
+			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
+
+		let maybe_expression = self
+			.expressions_db
+			.get(&txn, &hash)
+			.map_err(|_| anyhow!("Unable to get the value."))?;
+
 		Ok(maybe_expression)
 	}
 
-	pub async fn get_expression_with_output(
-		&self,
-		hash: Hash,
-	) -> Result<(Expression, Option<Hash>)> {
-		self.try_get_expression_with_output(hash)
-			.await?
-			.ok_or_else(|| anyhow!(r#"Failed to find the expression with hash "{}"."#, hash))
-	}
+	pub fn delete_expression(&self, hash: Hash) -> Result<()> {
+		let mut txn = self
+			.env
+			.write_txn()
+			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
 
-	pub fn get_expression_with_output_with_transaction(
-		&self,
-		txn: &rusqlite::Transaction,
-		hash: Hash,
-	) -> Result<(Expression, Option<Hash>)> {
-		self.try_get_expression_with_output_with_transaction(txn, hash)?
-			.ok_or_else(|| anyhow!(r#"Failed to find the expression with hash "{}"."#, hash))
-	}
+		self.expressions_db
+			.delete(&mut txn, &hash)
+			.map_err(|_| anyhow!("Unable to delete the expression."))?;
 
-	pub async fn try_get_expression_with_output(
-		&self,
-		hash: Hash,
-	) -> Result<Option<(Expression, Option<Hash>)>> {
-		let maybe = self
-			.database_transaction(|txn| {
-				self.try_get_expression_with_output_with_transaction(txn, hash)
-			})
-			.await?;
-		Ok(maybe)
-	}
-
-	pub fn try_get_expression_with_output_with_transaction(
-		&self,
-		txn: &rusqlite::Transaction,
-		hash: Hash,
-	) -> Result<Option<(Expression, Option<Hash>)>> {
-		let sql = r#"
-			select
-				data,
-				output_hash
-			from
-				expressions
-			where
-				hash = ?1
-		"#;
-		let params = (hash.to_string(),);
-		let mut statement = txn
-			.prepare_cached(sql)
-			.context("Failed to prepare the query.")?;
-		let maybe_expression_with_output = statement
-			.query(params)
-			.context("Failed to execute the query.")?
-			.and_then(|row| {
-				let data = row.get::<_, Vec<u8>>(0)?;
-				let output_hash = row.get::<_, Option<String>>(1)?;
-				let output_hash = if let Some(output_hash) = output_hash {
-					let output_hash = output_hash
-						.parse()
-						.context("Failed to parse the output hash.")?;
-					Some(output_hash)
-				} else {
-					None
-				};
-				let expression = serde_json::from_slice(&data)?;
-				Ok::<_, anyhow::Error>((expression, output_hash))
-			})
-			.next()
-			.transpose()?;
-		Ok(maybe_expression_with_output)
-	}
-
-	pub async fn delete_expression(&self, hash: Hash) -> Result<()> {
-		self.database_transaction(|txn| self.delete_expression_with_transaction(txn, hash))
-			.await
-	}
-
-	pub fn delete_expression_with_transaction(
-		&self,
-		txn: &rusqlite::Transaction,
-		hash: Hash,
-	) -> Result<()> {
-		let sql = r#"
-			delete from expressions where hash = ?1
-		"#;
-		let params = (hash.to_string(),);
-		let mut statement = txn
-			.prepare_cached(sql)
-			.context("Failed to prepare the query.")?;
-		statement
-			.execute(params)
-			.context("Failed to execute the query.")?;
 		Ok(())
 	}
 
-	pub async fn add_evaluation(&self, parent_hash: Hash, child_hash: Hash) -> Result<()> {
-		self.database_transaction(|txn| {
-			Self::add_evaluation_with_transaction(txn, parent_hash, child_hash)
-		})
-		.await
-	}
+	pub fn add_evaluation(&self, parent_hash: Hash, child_hash: Hash) -> Result<()> {
+		let mut txn = self
+			.env
+			.write_txn()
+			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
 
-	pub fn add_evaluation_with_transaction(
-		txn: &rusqlite::Transaction,
-		parent_hash: Hash,
-		child_hash: Hash,
-	) -> Result<()> {
-		let sql = r#"
-			replace into evaluations (
-				parent_hash, child_hash
-			) values (
-				?1, ?2
-			)
-		"#;
-		let params = (parent_hash.to_string(), child_hash.to_string());
-		txn.execute(sql, params)?;
+		let mut children = self
+			.evaluations_db
+			.get(&txn, &parent_hash)
+			.map_err(|_| anyhow!("Unable to get."))?
+			.unwrap_or_default();
+
+		children.push(child_hash);
+
+		self.evaluations_db
+			.put(&mut txn, &parent_hash, &children)
+			.map_err(|_| anyhow!("Unable to delete the expression."))?;
+
+		txn.commit()
+			.map_err(|_| anyhow!("Unable to commit the transaction."))?;
+
 		Ok(())
 	}
 
-	pub fn get_evaluations_with_transaction<'a>(
-		txn: &'a rusqlite::Transaction<'a>,
-		hash: Hash,
-	) -> Result<Vec<Hash>> {
-		let sql = r#"
-			select
-				child_hash
-			from
-				evaluations
-			where
-				parent_hash = ?1
-		"#;
-		let params = (hash.to_string(),);
-		let mut statement = txn
-			.prepare_cached(sql)
-			.context("Failed to prepare the query.")?;
-		let evaluations = statement
-			.query_and_then(params, |row| {
-				let hash = row.get::<_, String>(0)?;
-				let hash = hash.parse().with_context(|| "Failed to parse the hash.")?;
-				Ok::<_, anyhow::Error>(hash)
-			})
-			.context("Failed to execute the query.")?
-			.collect::<Result<_>>()?;
-		Ok(evaluations)
-	}
+	pub fn get_evaluations(&self, hash: Hash) -> Result<Vec<Hash>> {
+		let txn = self
+			.env
+			.read_txn()
+			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
 
-	/// Retrieve the memoized output from a previous evaluation of an expression, if one exists, either on this server or one of its peer servers.
-	#[async_recursion]
-	#[must_use]
-	pub async fn get_memoized_evaluation(
-		&self,
-		expression_hash: Hash,
-	) -> Result<Option<Expression>> {
-		// Check if we have memoized a previous evaluation of the expression.
-		if let Some(output) = self.get_local_memoized_evaluation(&expression_hash).await? {
-			return Ok(Some(output));
-		}
+		let children = self
+			.evaluations_db
+			.get(&txn, &hash)
+			.map_err(|_| anyhow!("Unable to get evaluations."))?
+			.unwrap_or_default();
 
-		// Otherwise, there is no memoized evaluation of the expression.
-		Ok(None)
+		Ok(children)
 	}
 
 	/// Memoize the output from the evaluation of an expression.
-	pub async fn set_expression_output(&self, hash: Hash, output_hash: Hash) -> Result<()> {
-		self.database_transaction(|txn| {
-			let sql = r#"
-				update
-					expressions
-				set
-					output_hash = ?2
-				where
-					hash = ?1
-			"#;
-			let params = (hash.to_string(), output_hash.to_string());
-			txn.execute(sql, params)
-				.context("Failed to execute the query.")?;
-			Ok(())
-		})
-		.await?;
+	pub fn set_expression_output(&self, hash: Hash, output_hash: Hash) -> Result<()> {
+		let mut txn = self
+			.env
+			.write_txn()
+			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
+
+		// Get the expression.
+		let expression = self.get_expression(hash)?;
+
+		// Set the expression output.
+		self.expressions_db
+			.put(&mut txn, &hash, &(expression, Some(output_hash)))
+			.map_err(|_| anyhow!("Unable to set the expression output."))?;
+
+		txn.commit()
+			.map_err(|_| anyhow!("Unable to commit the transaction."))?;
+
 		Ok(())
-	}
-
-	/// Retrieve the memoized output from a previous evaluation of an expression, if one exists on this server.
-	pub async fn get_local_memoized_evaluation(
-		&self,
-		expression_hash: &Hash,
-	) -> Result<Option<Expression>> {
-		// Retrieve a previous evaluation of the expression from the database.
-		let output = self
-			.database_transaction(|txn| {
-				let sql = r#"
-					select
-						output
-					from
-						evaluations
-					where
-						expression_hash = ?1
-				"#;
-				let params = (expression_hash.to_string(),);
-				let mut statement = txn
-					.prepare_cached(sql)
-					.context("Failed to prepare the query.")?;
-				let expression: Option<Vec<u8>> = statement
-					.query(params)
-					.context("Failed to execute the query.")?
-					.and_then(|row| row.get::<_, Vec<u8>>(0))
-					.next()
-					.transpose()
-					.context("Failed to read a row from the query.")?;
-				Ok(expression)
-			})
-			.await?;
-
-		// Deserialize the expression.
-		let output = if let Some(output) = output {
-			let output = serde_json::from_slice(&output)?;
-			Some(output)
-		} else {
-			None
-		};
-
-		Ok(output)
 	}
 }

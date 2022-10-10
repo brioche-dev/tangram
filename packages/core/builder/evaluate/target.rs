@@ -11,7 +11,6 @@ impl Shared {
 		// Get the path to the package's JS module.
 		let path = self
 			.get_package_js_path(target.package)
-			.await
 			.context("Failed to resolve the entrypoint to the package.")?
 			.context("The package did not have an entry point file.")?;
 
@@ -35,18 +34,16 @@ impl Shared {
 const CANDIDATE_ENTRYPOINT_FILENAMES: &[&str] = &["tangram.ts", "tangram.js"];
 
 impl Shared {
-	pub async fn get_package_js_path(&self, hash: Hash) -> Result<Option<Utf8PathBuf>> {
+	pub fn get_package_js_path(&self, hash: Hash) -> Result<Option<Utf8PathBuf>> {
 		// Get the package.
 		let package = self
-			.get_expression(hash)
-			.await?
+			.get_expression(hash)?
 			.into_package()
 			.context("Expected a package expression.")?;
 
 		// Get the root package artifact.
 		let source_artifact: expression::Artifact = self
 			.get_expression(package.source)
-			.await
 			.context("Failed to get the package source.")?
 			.into_artifact()
 			.context("The package source must be an artifact expression.")?;
@@ -54,7 +51,6 @@ impl Shared {
 		// Get the source directory.
 		let source_directory: expression::Directory = self
 			.get_expression(source_artifact.root)
-			.await
 			.context("Failed to get the contents of the package source artifact.")?
 			.into_directory()
 			.context("The package source artifact did not contain a directory.")?;

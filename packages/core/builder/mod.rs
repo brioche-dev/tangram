@@ -1,11 +1,15 @@
 use self::{
-	clients::blob::Client as BlobClient, clients::expression::Client as ExpressionClient,
-	db::create_database_pool, heuristics::FILESYSTEM_CONCURRENCY_LIMIT, lock::Lock,
+	clients::blob::Client as BlobClient,
+	clients::expression::Client as ExpressionClient,
+	db::{EvaluationsDatabase, ExpressionsDatabase},
+	heuristics::FILESYSTEM_CONCURRENCY_LIMIT,
+	lock::Lock,
 };
 use crate::{hash::Hash, id::Id};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use fnv::FnvBuildHasher;
+use heed::{flags::Flags, Env, EnvOpenOptions};
 use std::{
 	collections::HashMap,
 	num::NonZeroUsize,
@@ -47,8 +51,14 @@ pub struct State {
 	/// This is the path to the directory where the builder stores its data.
 	path: PathBuf,
 
-	/// This is the connection pool for the builder's SQLite database.
-	database_connection_pool: deadpool_sqlite::Pool,
+	/// This is the LMDB env.
+	env: Env,
+
+	/// This is the expressions database.
+	expressions_db: ExpressionsDatabase,
+
+	/// This is the evaluations database.
+	evaluations_db: EvaluationsDatabase,
 
 	/// This HTTP client is for performing HTTP requests when evaluating fetch expressions.
 	http_client: reqwest::Client,
@@ -64,10 +74,10 @@ pub struct State {
 	file_system_semaphore: Arc<Semaphore>,
 
 	// The client that connects to the blob server.
-	pub blob_client: BlobClient,
+	blob_client: BlobClient,
 
 	// The client that connects to the blob expression server.
-	pub expression_client: ExpressionClient,
+	expression_client: ExpressionClient,
 }
 
 impl Builder {
@@ -80,10 +90,28 @@ impl Builder {
 		// Migrate the path.
 		Builder::migrate(&path).await?;
 
-		// Create the database pool.
-		let database_path = path.join("db.sqlite3");
-		let database_connection_pool =
-			tokio::task::block_in_place(|| create_database_pool(database_path))?;
+		// Create the env.
+		let database_path = path.join("db.mdb");
+		let mut env_builder = EnvOpenOptions::new();
+		env_builder.max_dbs(2);
+		unsafe {
+			env_builder.flag(Flags::MdbNoSubDir);
+		}
+		let env = env_builder
+			.open(database_path)
+			.map_err(|_| anyhow!("Unable to open the database."))?;
+
+		// Open the expression db.
+		let expressions_db = env
+			.open_database("expressions".into())
+			.map_err(|_| anyhow!("Unable to open the database."))?
+			.ok_or_else(|| anyhow!("Expressions database does not exists."))?;
+
+		// Open the evaluations db.
+		let evaluations_db = env
+			.open_database("evaluations".into())
+			.map_err(|_| anyhow!("Unable to open the database."))?
+			.ok_or_else(|| anyhow!("Evaluations database does not exists."))?;
 
 		// Create the file system semaphore.
 		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
@@ -106,7 +134,9 @@ impl Builder {
 		// Create the state.
 		let state = State {
 			path,
-			database_connection_pool,
+			env,
+			expressions_db,
+			evaluations_db,
 			http_client,
 			in_progress_evaluations,
 			local_pool_handle,
