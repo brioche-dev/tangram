@@ -9,7 +9,7 @@ impl Shared {
 	#[must_use]
 	pub async fn push(&self, hash: Hash) -> Result<()> {
 		// Get the expression.
-		let expression = self.get_expression(hash)?;
+		let expression = self.get_expression_local(hash)?;
 
 		// Try to add the expression.
 		let outcome = self

@@ -145,7 +145,7 @@ async fn deno_resolve_tangram(
 	// Get the referrer's dependencies.
 	let referrer_dependencies = state
 		.builder
-		.get_expression(referrer_package_hash)?
+		.get_expression_local(referrer_package_hash)?
 		.into_package()
 		.context("Expected a package expression.")?
 		.dependencies;

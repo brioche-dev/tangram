@@ -56,7 +56,8 @@ impl Exclusive {
 			marked_hashes.insert(hash);
 
 			// Get the expression.
-			let (expression, output_hash) = self.as_shared().get_expression_with_output(hash)?;
+			let (expression, output_hash) =
+				self.as_shared().get_expression_local_with_output(hash)?;
 
 			// Add this expression's output, if it has one, to the queue.
 			if let Some(output_hash) = output_hash {

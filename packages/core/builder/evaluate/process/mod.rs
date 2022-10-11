@@ -25,7 +25,7 @@ impl Shared {
 		.await?;
 
 		// Convert the envs to strings.
-		let envs = match self.get_expression(envs)? {
+		let envs = match self.get_expression_local(envs)? {
 			Expression::Map(envs) => envs,
 			_ => bail!(r#"Argument "envs" must evaluate to a map."#),
 		};
@@ -50,7 +50,7 @@ impl Shared {
 		);
 
 		// Convert the args to strings.
-		let args = match self.get_expression(args)? {
+		let args = match self.get_expression_local(args)? {
 			Expression::Array(array) => array,
 			_ => bail!("Args must evaluate to an array."),
 		};
@@ -137,7 +137,7 @@ struct StringWithPaths {
 impl Shared {
 	#[async_recursion]
 	async fn to_string_with_paths(&self, hash: Hash) -> Result<StringWithPaths> {
-		let expression = self.get_expression(hash)?;
+		let expression = self.get_expression_local(hash)?;
 		match expression {
 			Expression::String(string) => Ok(StringWithPaths {
 				string: string.as_ref().to_owned(),

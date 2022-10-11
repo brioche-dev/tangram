@@ -6,6 +6,7 @@ use crate::{hash::Hash, id::Id};
 use anyhow::Result;
 use async_recursion::async_recursion;
 use fnv::FnvBuildHasher;
+use lmdb::{Database, Environment};
 use std::{
 	collections::HashMap,
 	num::NonZeroUsize,
@@ -47,13 +48,13 @@ pub struct State {
 	path: PathBuf,
 
 	/// This is the LMDB env.
-	env: lmdb::Environment,
+	env: Environment,
 
 	/// This is the expressions database.
-	expressions_db: lmdb::Database,
+	expressions_db: Database,
 
 	/// This is the evaluations database.
-	evaluations_db: lmdb::Database,
+	evaluations_db: Database,
 
 	/// This HTTP client is for performing HTTP requests when evaluating fetch expressions.
 	http_client: reqwest::Client,

@@ -125,7 +125,7 @@ impl Shared {
 
 	pub fn get_package_source(&self, package_hash: Hash) -> Result<Hash> {
 		let package = self
-			.get_expression(package_hash)?
+			.get_expression_local(package_hash)?
 			.into_package()
 			.context("Expected package.")?;
 		let package_source = package.source;
@@ -136,12 +136,12 @@ impl Shared {
 		let package_source_hash = self.get_package_source(package_hash)?;
 
 		let source_artifact = self
-			.get_expression(package_source_hash)?
+			.get_expression_local(package_source_hash)?
 			.into_artifact()
 			.context("Expected an artifact.")?;
 
 		let source_directory = self
-			.get_expression(source_artifact.root)?
+			.get_expression_local(source_artifact.root)?
 			.into_directory()
 			.context("Expected a directory.")?;
 
@@ -152,7 +152,7 @@ impl Shared {
 			.context("The package source does not contain a manifest.")?;
 
 		let manifest_blob_hash = self
-			.get_expression(manifest_hash)?
+			.get_expression_local(manifest_hash)?
 			.as_file()
 			.context("Expected the manifest to be a file.")?
 			.blob;
@@ -195,7 +195,7 @@ impl Shared {
 
 					// Get the dependency package.
 					let dependency_package = self
-						.get_expression(dependency_hash)?
+						.get_expression_local(dependency_hash)?
 						.into_package()
 						.context("Hello")?;
 

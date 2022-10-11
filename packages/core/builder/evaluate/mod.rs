@@ -24,7 +24,7 @@ impl Shared {
 		self.add_evaluation(parent_hash, hash)?;
 
 		// Get the expression and the output hash if the expression was previously evaluated.
-		let (expression, output_hash) = self.get_expression_with_output(hash)?;
+		let (expression, output_hash) = self.get_expression_local_with_output(hash)?;
 
 		// If the expression was previously evaluated, return the output hash.
 		if let Some(output_hash) = output_hash {

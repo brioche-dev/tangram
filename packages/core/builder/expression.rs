@@ -264,34 +264,34 @@ impl Shared {
 		Ok(exists)
 	}
 
-	pub fn get_expression(&self, hash: Hash) -> Result<Expression> {
+	pub fn get_expression_local(&self, hash: Hash) -> Result<Expression> {
 		let expression = self
-			.try_get_expression(hash)?
+			.try_get_expression_local(hash)?
 			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
 		Ok(expression)
 	}
 
-	pub fn get_expression_with_txn<Txn>(&self, txn: &Txn, hash: Hash) -> Result<Expression>
+	pub fn get_expression_local_with_txn<Txn>(&self, txn: &Txn, hash: Hash) -> Result<Expression>
 	where
 		Txn: Transaction,
 	{
 		let expression = self
-			.try_get_expression_with_txn(txn, hash)?
+			.try_get_expression_local_with_txn(txn, hash)?
 			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
 		Ok(expression)
 	}
 
-	pub fn try_get_expression(&self, hash: Hash) -> Result<Option<Expression>> {
+	pub fn try_get_expression_local(&self, hash: Hash) -> Result<Option<Expression>> {
 		// Get a read transaction.
 		let txn = self.env.begin_ro_txn()?;
 
 		// Get the expression.
-		let maybe_expression = self.try_get_expression_with_txn(&txn, hash)?;
+		let maybe_expression = self.try_get_expression_local_with_txn(&txn, hash)?;
 
 		Ok(maybe_expression)
 	}
 
-	pub fn try_get_expression_with_txn<Txn>(
+	pub fn try_get_expression_local_with_txn<Txn>(
 		&self,
 		txn: &Txn,
 		hash: Hash,
@@ -300,26 +300,24 @@ impl Shared {
 		Txn: Transaction,
 	{
 		// Get the expression.
-		let maybe_expression = match txn.get(self.expressions_db, &hash.as_slice()) {
-			Ok(value) => {
-				let (expression, _): (Expression, Option<Hash>) = serde_json::from_slice(value)?;
-				Ok::<_, anyhow::Error>(Some(expression))
-			},
-			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(e) => bail!(e),
-		}?;
+		let maybe_expression = self
+			.try_get_expression_local_with_output_with_txn(txn, hash)?
+			.map(|(expression, _)| expression);
 
 		Ok(maybe_expression)
 	}
 
-	pub fn get_expression_with_output(&self, hash: Hash) -> Result<(Expression, Option<Hash>)> {
+	pub fn get_expression_local_with_output(
+		&self,
+		hash: Hash,
+	) -> Result<(Expression, Option<Hash>)> {
 		let expression = self
-			.try_get_expression_with_output(hash)?
+			.try_get_expression_local_with_output(hash)?
 			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
 		Ok(expression)
 	}
 
-	pub fn get_expression_with_output_with_txn<Txn>(
+	pub fn get_expression_local_with_output_with_txn<Txn>(
 		&self,
 		txn: &Txn,
 		hash: Hash,
@@ -328,12 +326,12 @@ impl Shared {
 		Txn: Transaction,
 	{
 		let expression = self
-			.try_get_expression_with_output_with_txn(txn, hash)?
+			.try_get_expression_local_with_output_with_txn(txn, hash)?
 			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
 		Ok(expression)
 	}
 
-	pub fn try_get_expression_with_output(
+	pub fn try_get_expression_local_with_output(
 		&self,
 		hash: Hash,
 	) -> Result<Option<(Expression, Option<Hash>)>> {
@@ -341,12 +339,35 @@ impl Shared {
 		let txn = self.env.begin_ro_txn()?;
 
 		// Get the expression.
-		let maybe_expression = self.try_get_expression_with_output_with_txn(&txn, hash)?;
+		let maybe_expression = self.try_get_expression_local_with_output_with_txn(&txn, hash)?;
 
 		Ok(maybe_expression)
 	}
 
-	pub fn try_get_expression_with_output_with_txn<Txn>(
+	pub async fn try_get_expression_with_output_with_txn<Txn>(
+		&self,
+		txn: &Txn,
+		hash: Hash,
+	) -> Result<Option<(Expression, Option<Hash>)>>
+	where
+		Txn: Transaction,
+	{
+		// Get the expression from the local database.
+		let maybe_expression = self.try_get_expression_local_with_output_with_txn(txn, hash)?;
+		if let Some(expression) = maybe_expression {
+			return Ok(Some(expression));
+		}
+
+		// Get the expression from the expression server.
+		let maybe_expression = self
+			.expression_client
+			.try_get_expression_with_output(hash)
+			.await?;
+
+		Ok(maybe_expression)
+	}
+
+	pub fn try_get_expression_local_with_output_with_txn<Txn>(
 		&self,
 		txn: &Txn,
 		hash: Hash,
@@ -427,7 +448,7 @@ impl Shared {
 		let mut txn = self.env.begin_rw_txn()?;
 
 		// Get the expression.
-		let expression = self.get_expression_with_txn(&txn, hash)?;
+		let expression = self.get_expression_local_with_txn(&txn, hash)?;
 
 		// Add the expression with output to the database.
 		let value: (Expression, Option<Hash>) = (expression, Some(output_hash));

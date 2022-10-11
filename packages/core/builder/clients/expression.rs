@@ -35,7 +35,18 @@ impl Client {
 }
 
 impl Client {
-	pub async fn get_expression(&self, hash: Hash) -> Result<Expression> {
+	pub async fn try_get_expression(&self, hash: Hash) -> Result<Option<Expression>> {
+		let response = self
+			.try_get_expression_with_output(hash)
+			.await?
+			.map(|(expression, _)| expression);
+		Ok(response)
+	}
+
+	pub async fn try_get_expression_with_output(
+		&self,
+		hash: Hash,
+	) -> Result<Option<(Expression, Option<Hash>)>> {
 		let path = format!("/v1/expressions/{}", hash);
 
 		// Build the URL.

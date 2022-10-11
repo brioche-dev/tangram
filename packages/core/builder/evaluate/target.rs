@@ -37,20 +37,20 @@ impl Shared {
 	pub fn get_package_js_path(&self, hash: Hash) -> Result<Option<Utf8PathBuf>> {
 		// Get the package.
 		let package = self
-			.get_expression(hash)?
+			.get_expression_local(hash)?
 			.into_package()
 			.context("Expected a package expression.")?;
 
 		// Get the root package artifact.
 		let source_artifact: expression::Artifact = self
-			.get_expression(package.source)
+			.get_expression_local(package.source)
 			.context("Failed to get the package source.")?
 			.into_artifact()
 			.context("The package source must be an artifact expression.")?;
 
 		// Get the source directory.
 		let source_directory: expression::Directory = self
-			.get_expression(source_artifact.root)
+			.get_expression_local(source_artifact.root)
 			.context("Failed to get the contents of the package source artifact.")?
 			.into_directory()
 			.context("The package source artifact did not contain a directory.")?;
