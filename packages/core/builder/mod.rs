@@ -88,6 +88,7 @@ impl Builder {
 		// Create the env.
 		let database_path = path.join("db.mdb");
 		let mut env_builder = lmdb::Environment::new();
+		env_builder.set_map_size(1_099_511_627_776);
 		env_builder.set_max_dbs(2);
 		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
 		let env = env_builder.open(&database_path)?;

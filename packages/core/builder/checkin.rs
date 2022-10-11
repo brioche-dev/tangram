@@ -57,8 +57,18 @@ impl Shared {
 
 			// If this expression is a file and the blob is missing, add it.
 			AddExpressionOutcome::FileMissingBlob { blob_hash } => {
+				let permit = self.file_system_semaphore.acquire().await?;
+
+				let temp_path = self.create_temp_path();
 				let blob_path = self.blob_path(blob_hash);
-				tokio::fs::copy(path, blob_path).await?;
+
+				// Copy to the temp path.
+				tokio::fs::copy(path, &temp_path).await?;
+
+				// Rename from the temp path to the blob path.
+				tokio::fs::rename(&temp_path, &blob_path).await?;
+
+				drop(permit);
 			},
 
 			// If this expression is a dependency that is missing, check it in.
