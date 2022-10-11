@@ -1,9 +1,6 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use async_trait::async_trait;
-use heed::{flags::Flags, EnvOpenOptions};
 use std::path::Path;
-
-use crate::builder::db::{EvaluationsDatabase, ExpressionsDatabase};
 
 pub struct Migration;
 
@@ -16,24 +13,19 @@ impl super::Migration for Migration {
 
 		// Create the env.
 		let database_path = path.join("db.mdb");
-		let mut env_builder = EnvOpenOptions::new();
-		env_builder.max_dbs(2);
-		unsafe {
-			env_builder.flag(Flags::MdbNoSubDir);
-		}
-		let env = env_builder
-			.open(database_path)
-			.map_err(|_| anyhow!("Unable to open the database."))?;
+		let mut env_builder = lmdb::Environment::new();
+		env_builder.set_max_dbs(2);
+		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
+		let env = env_builder.open(&database_path)?;
 
 		// Create the expression db.
-		let _expressions_db: ExpressionsDatabase = env
-			.create_database("expressions".into())
-			.map_err(|_| anyhow!("Unable to create the database."))?;
+		let _expressions_db = env.create_db("expressions".into(), lmdb::DatabaseFlags::empty())?;
 
 		// Create the evaluations db.
-		let _evaluations_db: EvaluationsDatabase = env
-			.create_database("evaluations".into())
-			.map_err(|_| anyhow!("Unable to create the database."))?;
+		let mut flags = lmdb::DatabaseFlags::empty();
+		flags.insert(lmdb::DatabaseFlags::DUP_SORT);
+		flags.insert(lmdb::DatabaseFlags::DUP_FIXED);
+		let _evaluations_db = env.create_db("evaluations".into(), flags)?;
 
 		// Create the blobs directory.
 		let blobs_path = path.join("blobs");

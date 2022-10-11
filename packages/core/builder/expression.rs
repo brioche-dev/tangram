@@ -4,8 +4,9 @@ use crate::{
 	hash::Hash,
 	util::path_exists,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use futures::stream::TryStreamExt;
+use lmdb::{Cursor, Transaction};
 
 impl Shared {
 	pub async fn add_expression(&self, expression: &Expression) -> Result<Hash> {
@@ -232,33 +233,33 @@ impl Shared {
 		let data = serde_json::to_vec(&expression)?;
 		let hash = Hash::new(&data);
 
+		// Get a write transaction.
+		let mut txn = self.env.begin_rw_txn()?;
+
 		// Add the expression to the database.
-		let mut txn = self
-			.env
-			.write_txn()
-			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
+		let value: (Expression, Option<Hash>) = (expression.clone(), None);
+		txn.put(
+			self.expressions_db,
+			&hash.as_slice(),
+			&serde_json::to_vec(&value).unwrap(),
+			lmdb::WriteFlags::empty(),
+		)?;
 
-		self.expressions_db
-			.put(&mut txn, &hash, &(expression.clone(), None))
-			.map_err(|_| anyhow!("Unable to put the expression"))?;
-
-		txn.commit()
-			.map_err(|_| anyhow!("Unable to commit the transaction."))?;
+		// Commit the transaction.
+		txn.commit()?;
 
 		Ok(AddExpressionOutcome::Added { hash })
 	}
 
 	pub fn expression_exists(&self, hash: Hash) -> Result<bool> {
-		let txn = self
-			.env
-			.read_txn()
-			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
+		// Get a read transaction.
+		let txn = self.env.begin_ro_txn()?;
 
-		let exists = self
-			.expressions_db
-			.get(&txn, &hash)
-			.map_err(|_| anyhow!("Unable to get the value."))?
-			.is_some();
+		let exists = match txn.get(self.expressions_db, &hash.as_slice()) {
+			Ok(_) => Ok::<_, anyhow::Error>(true),
+			Err(lmdb::Error::NotFound) => Ok(false),
+			Err(e) => bail!(e),
+		}?;
 
 		Ok(exists)
 	}
@@ -270,17 +271,43 @@ impl Shared {
 		Ok(expression)
 	}
 
-	pub fn try_get_expression(&self, hash: Hash) -> Result<Option<Expression>> {
-		let txn = self
-			.env
-			.read_txn()
-			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
+	pub fn get_expression_with_txn<Txn>(&self, txn: &Txn, hash: Hash) -> Result<Expression>
+	where
+		Txn: Transaction,
+	{
+		let expression = self
+			.try_get_expression_with_txn(txn, hash)?
+			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
+		Ok(expression)
+	}
 
-		let maybe_expression = self
-			.expressions_db
-			.get(&txn, &hash)
-			.map_err(|_| anyhow!("Unable to get the value."))?
-			.map(|(expression, _)| expression);
+	pub fn try_get_expression(&self, hash: Hash) -> Result<Option<Expression>> {
+		// Get a read transaction.
+		let txn = self.env.begin_ro_txn()?;
+
+		// Get the expression.
+		let maybe_expression = self.try_get_expression_with_txn(&txn, hash)?;
+
+		Ok(maybe_expression)
+	}
+
+	pub fn try_get_expression_with_txn<Txn>(
+		&self,
+		txn: &Txn,
+		hash: Hash,
+	) -> Result<Option<Expression>>
+	where
+		Txn: Transaction,
+	{
+		// Get the expression.
+		let maybe_expression = match txn.get(self.expressions_db, &hash.as_slice()) {
+			Ok(value) => {
+				let (expression, _): (Expression, Option<Hash>) = serde_json::from_slice(value)?;
+				Ok::<_, anyhow::Error>(Some(expression))
+			},
+			Err(lmdb::Error::NotFound) => Ok(None),
+			Err(e) => bail!(e),
+		}?;
 
 		Ok(maybe_expression)
 	}
@@ -292,92 +319,127 @@ impl Shared {
 		Ok(expression)
 	}
 
+	pub fn get_expression_with_output_with_txn<Txn>(
+		&self,
+		txn: &Txn,
+		hash: Hash,
+	) -> Result<(Expression, Option<Hash>)>
+	where
+		Txn: Transaction,
+	{
+		let expression = self
+			.try_get_expression_with_output_with_txn(txn, hash)?
+			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
+		Ok(expression)
+	}
+
 	pub fn try_get_expression_with_output(
 		&self,
 		hash: Hash,
 	) -> Result<Option<(Expression, Option<Hash>)>> {
-		let txn = self
-			.env
-			.read_txn()
-			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
+		// Get a read transaction.
+		let txn = self.env.begin_ro_txn()?;
 
-		let maybe_expression = self
-			.expressions_db
-			.get(&txn, &hash)
-			.map_err(|_| anyhow!("Unable to get the value."))?;
+		// Get the expression.
+		let maybe_expression = self.try_get_expression_with_output_with_txn(&txn, hash)?;
+
+		Ok(maybe_expression)
+	}
+
+	pub fn try_get_expression_with_output_with_txn<Txn>(
+		&self,
+		txn: &Txn,
+		hash: Hash,
+	) -> Result<Option<(Expression, Option<Hash>)>>
+	where
+		Txn: Transaction,
+	{
+		// Get the expression.
+		let maybe_expression = match txn.get(self.expressions_db, &hash.as_slice()) {
+			Ok(value) => {
+				let value = serde_json::from_slice(value)?;
+				Ok::<_, anyhow::Error>(Some(value))
+			},
+			Err(lmdb::Error::NotFound) => Ok(None),
+			Err(e) => bail!(e),
+		}?;
 
 		Ok(maybe_expression)
 	}
 
 	pub fn delete_expression(&self, hash: Hash) -> Result<()> {
-		let mut txn = self
-			.env
-			.write_txn()
-			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
+		// Get a write transaction.
+		let mut txn = self.env.begin_rw_txn()?;
 
-		self.expressions_db
-			.delete(&mut txn, &hash)
-			.map_err(|_| anyhow!("Unable to delete the expression."))?;
+		// Delete the expression.
+		txn.del(self.expressions_db, &hash.as_slice(), None)?;
+
+		// Commit the transaction.
+		txn.commit()?;
 
 		Ok(())
 	}
 
 	pub fn add_evaluation(&self, parent_hash: Hash, child_hash: Hash) -> Result<()> {
-		let mut txn = self
-			.env
-			.write_txn()
-			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
+		// Get a write transaction.
+		let mut txn = self.env.begin_rw_txn()?;
 
-		let mut children = self
-			.evaluations_db
-			.get(&txn, &parent_hash)
-			.map_err(|_| anyhow!("Unable to get."))?
-			.unwrap_or_default();
+		// Add the evaluation.
+		txn.put(
+			self.evaluations_db,
+			&parent_hash.as_slice(),
+			&child_hash.as_slice(),
+			lmdb::WriteFlags::empty(),
+		)?;
 
-		children.push(child_hash);
-
-		self.evaluations_db
-			.put(&mut txn, &parent_hash, &children)
-			.map_err(|_| anyhow!("Unable to delete the expression."))?;
-
-		txn.commit()
-			.map_err(|_| anyhow!("Unable to commit the transaction."))?;
+		// Commit the transaction.
+		txn.commit()?;
 
 		Ok(())
 	}
 
 	pub fn get_evaluations(&self, hash: Hash) -> Result<Vec<Hash>> {
-		let txn = self
-			.env
-			.read_txn()
-			.map_err(|_| anyhow!("Unable to get a read transaction"))?;
+		// Get a read transaction.
+		let txn = self.env.begin_ro_txn()?;
 
-		let children = self
-			.evaluations_db
-			.get(&txn, &hash)
-			.map_err(|_| anyhow!("Unable to get evaluations."))?
-			.unwrap_or_default();
+		// Get a cursor.
+		let mut cursor = txn.open_ro_cursor(self.evaluations_db)?;
+
+		// Get the children.
+		let children: Vec<Hash> = cursor
+			.iter_dup_of(&hash.as_slice())
+			.into_iter()
+			.map(|value| match value {
+				Ok((_, value)) => {
+					let value = serde_json::from_slice(value)?;
+					Ok(value)
+				},
+				Err(e) => bail!(e),
+			})
+			.collect::<Result<Vec<_>>>()?;
 
 		Ok(children)
 	}
 
 	/// Memoize the output from the evaluation of an expression.
 	pub fn set_expression_output(&self, hash: Hash, output_hash: Hash) -> Result<()> {
-		let mut txn = self
-			.env
-			.write_txn()
-			.map_err(|_| anyhow!("Unable to get a write transaction"))?;
+		// Get a write transaction.
+		let mut txn = self.env.begin_rw_txn()?;
 
 		// Get the expression.
-		let expression = self.get_expression(hash)?;
+		let expression = self.get_expression_with_txn(&txn, hash)?;
 
-		// Set the expression output.
-		self.expressions_db
-			.put(&mut txn, &hash, &(expression, Some(output_hash)))
-			.map_err(|_| anyhow!("Unable to set the expression output."))?;
+		// Add the expression with output to the database.
+		let value: (Expression, Option<Hash>) = (expression, Some(output_hash));
+		txn.put(
+			self.expressions_db,
+			&hash.as_slice(),
+			&serde_json::to_vec(&value).unwrap(),
+			lmdb::WriteFlags::empty(),
+		)?;
 
-		txn.commit()
-			.map_err(|_| anyhow!("Unable to commit the transaction."))?;
+		// Commit the transaction.
+		txn.commit()?;
 
 		Ok(())
 	}

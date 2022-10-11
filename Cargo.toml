@@ -30,7 +30,6 @@ flate2 = "1"
 fnv = "1"
 futures = "0.3"
 futures-util = "0.3"
-heed = { version = "0.11" }
 hex = { version = "0.4", features = ["serde"] }
 http = "0.2"
 hyper = { version = "0.14.18", features = ["full"] }
@@ -39,6 +38,7 @@ indoc = "1"
 insta = "1.14"
 itertools = "0.10"
 libc = "0.2"
+lmdb-rkv = { version = "0.14" }
 lz4_flex = "0.9"
 pathdiff = "0.2"
 rand = "0.8"

@@ -1,15 +1,11 @@
 use self::{
-	clients::blob::Client as BlobClient,
-	clients::expression::Client as ExpressionClient,
-	db::{EvaluationsDatabase, ExpressionsDatabase},
-	heuristics::FILESYSTEM_CONCURRENCY_LIMIT,
-	lock::Lock,
+	clients::blob::Client as BlobClient, clients::expression::Client as ExpressionClient,
+	heuristics::FILESYSTEM_CONCURRENCY_LIMIT, lock::Lock,
 };
 use crate::{hash::Hash, id::Id};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use async_recursion::async_recursion;
 use fnv::FnvBuildHasher;
-use heed::{flags::Flags, Env, EnvOpenOptions};
 use std::{
 	collections::HashMap,
 	num::NonZeroUsize,
@@ -24,7 +20,6 @@ pub mod cache;
 pub mod checkin;
 pub mod checkout;
 pub mod clients;
-pub mod db;
 pub mod evaluate;
 pub mod expression;
 pub mod gc;
@@ -52,13 +47,13 @@ pub struct State {
 	path: PathBuf,
 
 	/// This is the LMDB env.
-	env: Env,
+	env: lmdb::Environment,
 
 	/// This is the expressions database.
-	expressions_db: ExpressionsDatabase,
+	expressions_db: lmdb::Database,
 
 	/// This is the evaluations database.
-	evaluations_db: EvaluationsDatabase,
+	evaluations_db: lmdb::Database,
 
 	/// This HTTP client is for performing HTTP requests when evaluating fetch expressions.
 	http_client: reqwest::Client,
@@ -92,26 +87,16 @@ impl Builder {
 
 		// Create the env.
 		let database_path = path.join("db.mdb");
-		let mut env_builder = EnvOpenOptions::new();
-		env_builder.max_dbs(2);
-		unsafe {
-			env_builder.flag(Flags::MdbNoSubDir);
-		}
-		let env = env_builder
-			.open(database_path)
-			.map_err(|_| anyhow!("Unable to open the database."))?;
+		let mut env_builder = lmdb::Environment::new();
+		env_builder.set_max_dbs(2);
+		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
+		let env = env_builder.open(&database_path)?;
 
 		// Open the expression db.
-		let expressions_db = env
-			.open_database("expressions".into())
-			.map_err(|_| anyhow!("Unable to open the database."))?
-			.ok_or_else(|| anyhow!("Expressions database does not exists."))?;
+		let expressions_db = env.open_db("expressions".into())?;
 
 		// Open the evaluations db.
-		let evaluations_db = env
-			.open_database("evaluations".into())
-			.map_err(|_| anyhow!("Unable to open the database."))?
-			.ok_or_else(|| anyhow!("Evaluations database does not exists."))?;
+		let evaluations_db = env.open_db("evaluations".into())?;
 
 		// Create the file system semaphore.
 		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));

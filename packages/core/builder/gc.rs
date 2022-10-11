@@ -1,6 +1,7 @@
 use super::Exclusive;
 use crate::{expression::Expression, hash::Hash};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{bail, Context, Result};
+use lmdb::{Cursor, Transaction};
 use std::{
 	collections::{HashSet, VecDeque},
 	path::Path,
@@ -63,15 +64,7 @@ impl Exclusive {
 			}
 
 			// Add this expression's evaluations to the queue.
-			let txn = self
-				.env
-				.read_txn()
-				.map_err(|_| anyhow!("Unable to get a read transaction."))?;
-			let child_hashes = self
-				.evaluations_db
-				.get(&txn, &hash)
-				.map_err(|_| anyhow!("Unable to get the child hashes."))?
-				.unwrap_or_default();
+			let child_hashes = self.as_shared().get_evaluations(hash)?;
 			queue.extend(child_hashes);
 
 			// Add the expression's children to the queue.
@@ -146,19 +139,20 @@ impl Exclusive {
 
 	fn sweep_expressions(&self, marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>) -> Result<()> {
 		// Get a read transaction.
-		let txn = self
-			.env
-			.read_txn()
-			.map_err(|_| anyhow!("Unable to get a read transaction."))?;
+		let txn = self.env.begin_ro_txn()?;
+
+		// Get a read cursor.
+		let mut cursor = txn.open_ro_cursor(self.expressions_db)?;
 
 		// Get an iterator over all expressions.
-		let hashes = self
-			.expressions_db
-			.iter(&txn)
-			.map_err(|_| anyhow!("Unable to get an iterator."))?
+		let hashes = cursor
+			.iter()
 			.map(|value| match value {
-				Ok((hash, _)) => Ok(hash),
-				Err(_) => Err(anyhow!("Unable to get the value.")),
+				Ok((key, _)) => {
+					let key: Hash = serde_json::from_slice(key)?;
+					Ok(key)
+				},
+				Err(e) => bail!(e),
 			})
 			.collect::<Result<Vec<Hash>>>()?;
 
