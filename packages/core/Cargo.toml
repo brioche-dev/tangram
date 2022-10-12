@@ -24,7 +24,6 @@ byteorder = { workspace = true }
 bytes = { workspace = true }
 bzip2 = { workspace = true }
 camino = { workspace = true }
-deadpool-sqlite = { workspace = true }
 deno_ast = { workspace = true }
 deno_core = { workspace = true }
 either = { workspace = true }
@@ -48,7 +47,6 @@ num-traits = { workspace = true }
 pathdiff = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
-rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }

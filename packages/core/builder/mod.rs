@@ -8,7 +8,6 @@ use async_recursion::async_recursion;
 use fnv::FnvBuildHasher;
 use std::{
 	collections::HashMap,
-	num::NonZeroUsize,
 	path::{Path, PathBuf},
 	sync::{Arc, Mutex},
 };
@@ -56,9 +55,6 @@ pub struct State {
 	pub in_progress_evaluations:
 		Arc<Mutex<HashMap<Hash, tokio::sync::broadcast::Receiver<Hash>, FnvBuildHasher>>>,
 
-	// This is a pool for spawning !Send tasks.
-	local_pool_handle: tokio_util::task::LocalPoolHandle,
-
 	/// The file system semaphore is used to prevent the builder from opening too many files simultaneously.
 	file_system_semaphore: Arc<Semaphore>,
 
@@ -92,12 +88,6 @@ impl Builder {
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
 
-		// Create the local pool.
-		let available_parallelism = std::thread::available_parallelism()
-			.unwrap_or_else(|_| NonZeroUsize::new(1).unwrap())
-			.into();
-		let local_pool_handle = tokio_util::task::LocalPoolHandle::new(available_parallelism);
-
 		// Create the in progress evaluations.
 		let in_progress_evaluations = Arc::new(Mutex::new(HashMap::default()));
 
@@ -107,7 +97,6 @@ impl Builder {
 			db,
 			http_client,
 			in_progress_evaluations,
-			local_pool_handle,
 			file_system_semaphore,
 			blob_client: options.blob_client,
 			expression_client: options.expression_client,

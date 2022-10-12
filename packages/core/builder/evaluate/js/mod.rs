@@ -17,16 +17,40 @@ impl Shared {
 		// Get a handle to the current tokio runtime.
 		let main_runtime_handle = tokio::runtime::Handle::current();
 
-		// Run the js process on the local task pool.
-		let output_hash = self
-			.local_pool_handle
-			.spawn_pinned({
-				let builder = self.clone();
-				let js = js.clone();
-				move || async move { run_js_process(builder, main_runtime_handle, &js).await }
-			})
-			.await
-			.unwrap()?;
+		// Create a channel to receive the output.
+		let (sender, receiver) = tokio::sync::oneshot::channel();
+
+		// Run the js process on its own thread.
+		let thread = std::thread::spawn({
+			let builder = self.clone();
+			let js = js.clone();
+			|| {
+				// Create a single threaded tokio runtime.
+				let runtime = tokio::runtime::Builder::new_current_thread()
+					.enable_all()
+					.build()
+					.context("Failed to create the runtime.")?;
+
+				// Run the JS process.
+				let result = runtime.block_on(async move {
+					run_js_process(builder, main_runtime_handle, &js).await
+				});
+
+				// Notify the receiver that the process is complete.
+				sender.send(()).unwrap();
+
+				result
+			}
+		});
+
+		// Wait for the thread to complete.
+		receiver.await.unwrap();
+
+		// Join the thread to receive the output.
+		let output_hash = thread
+			.join()
+			.unwrap()
+			.context("There was an error in the JS process.")?;
 
 		// Evaluate the expression.
 		let output_hash = self
