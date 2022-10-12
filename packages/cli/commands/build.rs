@@ -14,6 +14,8 @@ pub struct Args {
 	name: String,
 	#[arg(long)]
 	system: Option<System>,
+	#[arg(long)]
+	checkout: Option<PathBuf>,
 }
 
 impl Cli {
@@ -49,6 +51,14 @@ impl Cli {
 
 		// Print the output.
 		println!("{output_hash}");
+
+		// Checkout the built artifact if a path is provided.
+		if let Some(checkout_path) = &args.checkout {
+			builder
+				.checkout(output_hash, checkout_path, None)
+				.await
+				.context("Failed to perform the checkout")?;
+		}
 
 		Ok(())
 	}
