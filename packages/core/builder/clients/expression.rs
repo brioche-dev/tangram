@@ -1,4 +1,5 @@
 use crate::{
+	db::ExpressionWithOutput,
 	expression::{AddExpressionOutcome, Expression},
 	hash::Hash,
 };
@@ -39,14 +40,14 @@ impl Client {
 		let response = self
 			.try_get_expression_with_output(hash)
 			.await?
-			.map(|(expression, _)| expression);
+			.map(|expression_with_output| expression_with_output.expression);
 		Ok(response)
 	}
 
 	pub async fn try_get_expression_with_output(
 		&self,
 		hash: Hash,
-	) -> Result<Option<(Expression, Option<Hash>)>> {
+	) -> Result<Option<ExpressionWithOutput>> {
 		let path = format!("/v1/expressions/{}", hash);
 
 		// Build the URL.

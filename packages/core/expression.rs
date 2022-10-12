@@ -1,113 +1,294 @@
 use crate::{hash::Hash, system::System};
+use anyhow::{bail, Result};
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use camino::Utf8PathBuf;
 use std::{collections::BTreeMap, sync::Arc};
 use url::Url;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 #[serde(tag = "type", content = "value")]
 pub enum Expression {
+	#[buffalo(id = 0)]
 	#[serde(rename = "null")]
-	Null,
+	Null(()),
+
+	#[buffalo(id = 1)]
 	#[serde(rename = "bool")]
 	Bool(bool),
+
+	#[buffalo(id = 2)]
 	#[serde(rename = "number")]
 	Number(f64),
+
+	#[buffalo(id = 3)]
 	#[serde(rename = "string")]
 	String(Arc<str>),
+
+	#[buffalo(id = 4)]
 	#[serde(rename = "artifact")]
 	Artifact(Artifact),
+
+	#[buffalo(id = 5)]
 	#[serde(rename = "directory")]
 	Directory(Directory),
+
+	#[buffalo(id = 6)]
 	#[serde(rename = "file")]
 	File(File),
+
+	#[buffalo(id = 7)]
 	#[serde(rename = "symlink")]
 	Symlink(Symlink),
+
+	#[buffalo(id = 8)]
 	#[serde(rename = "dependency")]
 	Dependency(Dependency),
+
+	#[buffalo(id = 9)]
 	#[serde(rename = "package")]
 	Package(Package),
+
+	#[buffalo(id = 10)]
 	#[serde(rename = "template")]
 	Template(Template),
+
+	#[buffalo(id = 11)]
 	#[serde(rename = "js")]
 	Js(Js),
+
+	#[buffalo(id = 12)]
 	#[serde(rename = "fetch")]
 	Fetch(Fetch),
+
+	#[buffalo(id = 13)]
 	#[serde(rename = "process")]
 	Process(Process),
+
+	#[buffalo(id = 14)]
 	#[serde(rename = "target")]
 	Target(Target),
+
+	#[buffalo(id = 15)]
 	#[serde(rename = "array")]
 	Array(Array),
+
+	#[buffalo(id = 16)]
 	#[serde(rename = "map")]
 	Map(Map),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Artifact {
+	#[buffalo(id = 0)]
 	pub root: Hash,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Directory {
+	#[buffalo(id = 0)]
 	pub entries: BTreeMap<String, Hash>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct File {
+	#[buffalo(id = 0)]
 	pub blob: Hash,
+
+	#[buffalo(id = 1)]
 	pub executable: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Symlink {
+	#[buffalo(id = 0)]
 	pub target: Utf8PathBuf,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Dependency {
+	#[buffalo(id = 0)]
 	pub artifact: Hash,
+
+	#[buffalo(id = 1)]
 	pub path: Option<Utf8PathBuf>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Package {
+	#[buffalo(id = 0)]
 	pub source: Hash,
+
+	#[buffalo(id = 1)]
 	pub dependencies: BTreeMap<Arc<str>, Hash>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Template {
+	#[buffalo(id = 0)]
 	pub components: Vec<Hash>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Js {
+	#[buffalo(id = 0)]
 	pub package: Hash,
+
+	#[buffalo(id = 1)]
 	pub path: Utf8PathBuf,
+
+	#[buffalo(id = 2)]
 	pub name: String,
+
+	#[buffalo(id = 3)]
 	pub args: Hash,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Fetch {
+	#[buffalo(id = 0)]
 	pub url: Url,
+
+	#[buffalo(id = 1)]
 	pub hash: Option<Hash>,
+
+	#[buffalo(id = 2)]
 	pub unpack: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Process {
+	#[buffalo(id = 0)]
 	pub system: System,
+
+	#[buffalo(id = 1)]
 	pub env: Hash,
+
+	#[buffalo(id = 2)]
 	pub command: Hash,
+
+	#[buffalo(id = 3)]
 	pub args: Hash,
+
+	#[buffalo(id = 4)]
 	pub hash: Option<Hash>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 pub struct Target {
+	#[buffalo(id = 0)]
 	pub package: Hash,
+
+	#[buffalo(id = 1)]
 	pub name: String,
+
+	#[buffalo(id = 2)]
 	pub args: Hash,
 }
 
@@ -116,9 +297,68 @@ pub type Array = Vec<Hash>;
 pub type Map = BTreeMap<Arc<str>, Hash>;
 
 impl Expression {
+	pub fn deserialize<R>(mut reader: R) -> Result<Expression>
+	where
+		R: std::io::Read,
+	{
+		// Read the version.
+		let version = reader.read_u8()?;
+		if version != 0 {
+			bail!("Invalid version for expression.");
+		}
+
+		// Deserialize the expression.
+		let expression = buffalo::from_reader(reader)?;
+
+		Ok(expression)
+	}
+
+	pub fn deserialize_from_slice(slice: &[u8]) -> Result<Expression> {
+		Expression::deserialize(slice)
+	}
+
+	pub fn serialize<W>(&self, mut writer: W) -> Result<()>
+	where
+		W: std::io::Write,
+	{
+		// Write the version.
+		writer.write_u8(0)?;
+
+		// Write the expression.
+		buffalo::to_writer(self, &mut writer)?;
+
+		Ok(())
+	}
+
 	#[must_use]
-	pub fn is_null(&self) -> bool {
-		matches!(self, Expression::Null)
+	pub fn serialize_to_vec(&self) -> Vec<u8> {
+		let mut data = Vec::new();
+		self.serialize(&mut data).unwrap();
+		data
+	}
+
+	#[must_use]
+	pub fn serialize_to_vec_and_hash(&self) -> (Hash, Vec<u8>) {
+		let data = self.serialize_to_vec();
+		let hash = Hash::new(&data);
+		(hash, data)
+	}
+
+	#[must_use]
+	pub fn hash(&self) -> Hash {
+		let data = self.serialize_to_vec();
+		Hash::new(&data)
+	}
+}
+
+impl Expression {
+	#[must_use]
+	pub fn as_null(&self) -> Option<&()> {
+		if let Expression::Null(v) = self {
+			Some(v)
+		} else {
+			None
+		}
 	}
 
 	#[must_use]

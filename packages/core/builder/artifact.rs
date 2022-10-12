@@ -1,6 +1,6 @@
 use super::Shared;
 use crate::{expression::Dependency, hash::Hash, util::path_exists};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use async_recursion::async_recursion;
 use futures::FutureExt;
 use std::path::{Path, PathBuf};
@@ -66,13 +66,12 @@ impl Shared {
 			match tokio::fs::rename(&temp_path, &path).await {
 				Ok(()) => {},
 
-				// If the error is ENOTEMPTY or EEXIST then we can ignore it because there is already a artifact checkout present.
+				// If the error is ENOTEMPTY or EEXIST then we can ignore it because there is already an artifact checkout present.
 				Err(error)
-					if error.raw_os_error() == Some(libc::ENOTEMPTY)
-						|| error.raw_os_error() == Some(libc::EEXIST) => {},
+					if matches!(error.raw_os_error(), Some(libc::ENOTEMPTY | libc::EEXIST)) => {},
 
 				Err(error) => {
-					return Err(anyhow::Error::from(error)
+					return Err(anyhow!(error)
 						.context("Failed to move the checkout to the artifacts path."));
 				},
 			};

@@ -1,5 +1,5 @@
 use super::Shared;
-use crate::{expression::Expression, hash::Hash};
+use crate::{db::ExpressionWithOutput, expression::Expression, hash::Hash};
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use either::Either;
@@ -24,7 +24,10 @@ impl Shared {
 		self.add_evaluation(parent_hash, hash)?;
 
 		// Get the expression and the output hash if the expression was previously evaluated.
-		let (expression, output_hash) = self.get_expression_local_with_output(hash)?;
+		let ExpressionWithOutput {
+			expression,
+			output_hash,
+		} = self.get_expression_with_output_local(hash)?;
 
 		// If the expression was previously evaluated, return the output hash.
 		if let Some(output_hash) = output_hash {
@@ -34,7 +37,7 @@ impl Shared {
 
 		// Evaluate the expression.
 		let output_hash = match &expression {
-			Expression::Null
+			Expression::Null(_)
 			| Expression::Bool(_)
 			| Expression::Number(_)
 			| Expression::String(_)

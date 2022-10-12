@@ -1,17 +1,31 @@
 use anyhow::{anyhow, bail, Result};
+use num_traits::{FromPrimitive, ToPrimitive};
 
 #[derive(
-	Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+	Clone,
+	Copy,
+	Debug,
+	Eq,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	serde::Deserialize,
+	serde::Serialize,
+	num_derive::ToPrimitive,
+	num_derive::FromPrimitive,
 )]
 pub enum System {
 	#[serde(rename = "amd64_linux", alias = "x86_64_linux")]
-	Amd64Linux,
+	Amd64Linux = 0,
+
 	#[serde(rename = "amd64_macos", alias = "x86_64_macos")]
-	Amd64Macos,
+	Amd64Macos = 1,
+
 	#[serde(rename = "arm64_linux", alias = "aarch64_linux")]
-	Arm64Linux,
+	Arm64Linux = 2,
+
 	#[serde(rename = "arm64_macos", alias = "aarch64_macos")]
-	Arm64Macos,
+	Arm64Macos = 3,
 }
 
 impl System {
@@ -28,6 +42,28 @@ impl System {
 			bail!("Unsupported host system.");
 		};
 		Ok(host)
+	}
+}
+
+impl buffalo::Serialize for System {
+	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
+	where
+		W: std::io::Write,
+	{
+		let value = self.to_u8().unwrap();
+		serializer.serialize_uvarint(value.into())
+	}
+}
+
+impl buffalo::Deserialize for System {
+	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
+	where
+		R: std::io::Read,
+	{
+		let value = deserializer.deserialize_uvarint()?;
+		let value = System::from_u64(value)
+			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Invalid system."))?;
+		Ok(value)
 	}
 }
 

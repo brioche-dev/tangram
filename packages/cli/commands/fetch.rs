@@ -34,10 +34,7 @@ impl Cli {
 			.context("Failed to evaluate the expression.")?;
 
 		// Print the output.
-		let output = builder.get_expression_local(output_hash)?;
-		let output_json =
-			serde_json::to_string_pretty(&output).context("Failed to serialize the value.")?;
-		println!("{output_json}");
+		println!("{output_hash}");
 
 		Ok(())
 	}

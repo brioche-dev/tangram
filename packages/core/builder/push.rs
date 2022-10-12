@@ -8,14 +8,20 @@ impl Shared {
 	#[async_recursion]
 	#[must_use]
 	pub async fn push(&self, hash: Hash) -> Result<()> {
+		let expression_client = self
+			.expression_client
+			.as_ref()
+			.context("Cannot push without an expression client.")?;
+		let blob_client = self
+			.blob_client
+			.as_ref()
+			.context("Cannot push without a blob client.")?;
+
 		// Get the expression.
 		let expression = self.get_expression_local(hash)?;
 
 		// Try to add the expression.
-		let outcome = self
-			.expression_client
-			.try_add_expression(&expression)
-			.await?;
+		let outcome = expression_client.try_add_expression(&expression).await?;
 
 		// Handle the outcome.
 		match outcome {
@@ -43,7 +49,7 @@ impl Shared {
 					})?);
 
 				// Add the blob.
-				self.blob_client.add_blob(file, blob_hash).await?;
+				blob_client.add_blob(file, blob_hash).await?;
 			},
 
 			// If this expression is a dependency that is missing, push it.
@@ -60,10 +66,7 @@ impl Shared {
 		};
 
 		// Attempt to push the expression again. At this point, there should not be any missing entries or a missing blob.
-		let outcome = self
-			.expression_client
-			.try_add_expression(&expression)
-			.await?;
+		let outcome = expression_client.try_add_expression(&expression).await?;
 		if !matches!(outcome, AddExpressionOutcome::Added { .. }) {
 			bail!("An unexpected error occurred.");
 		}

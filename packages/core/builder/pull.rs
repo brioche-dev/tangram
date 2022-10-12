@@ -1,5 +1,5 @@
 use crate::{builder::Shared, expression::AddExpressionOutcome, hash::Hash};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 
@@ -8,9 +8,17 @@ impl Shared {
 	#[async_recursion]
 	#[must_use]
 	pub async fn pull(&self, hash: Hash) -> Result<()> {
-		// Get the expression.
-		let expression = self
+		let expression_client = self
 			.expression_client
+			.as_ref()
+			.context("Cannot pull without an expression client.")?;
+		let blob_client = self
+			.blob_client
+			.as_ref()
+			.context("Cannot pull without a blob client.")?;
+
+		// Get the expression.
+		let expression = expression_client
 			.try_get_expression(hash)
 			.await?
 			.ok_or_else(|| anyhow!(r#"Unable to find expression with hash "{hash}""#))?;
@@ -31,7 +39,7 @@ impl Shared {
 			},
 			AddExpressionOutcome::FileMissingBlob { blob_hash } => {
 				// Pull the blob.
-				self.blob_client.get_blob(blob_hash).await?;
+				blob_client.get_blob(blob_hash).await?;
 			},
 			AddExpressionOutcome::DependencyMissing { hash } => {
 				// Pull the missing dependency.

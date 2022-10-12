@@ -1,4 +1,4 @@
-use super::{cache::Cache, Shared};
+use super::{watcher::Watcher, Shared};
 use crate::{
 	expression::{AddExpressionOutcome, Artifact, Expression},
 	hash::Hash,
@@ -10,14 +10,14 @@ use std::{path::Path, sync::Arc};
 
 impl Shared {
 	pub async fn checkin(&self, path: &Path) -> Result<Hash> {
-		// Create a cache.
-		let cache = Cache::new(self.path(), Arc::clone(&self.file_system_semaphore));
+		// Create a watcher.
+		let watcher = Watcher::new(self.path(), Arc::clone(&self.file_system_semaphore));
 
 		// Check in the expression for the path.
-		self.checkin_path(&cache, path).await?;
+		self.checkin_path(&watcher, path).await?;
 
 		// Retrieve the expression for the path.
-		let (hash, _) = cache.get(path).await?.unwrap();
+		let (hash, _) = watcher.get(path).await?.unwrap();
 
 		// Add the artifact expression.
 		let hash = self
@@ -28,11 +28,11 @@ impl Shared {
 	}
 
 	#[async_recursion]
-	async fn checkin_path(&self, cache: &Cache, path: &Path) -> Result<()> {
+	async fn checkin_path(&self, watcher: &Watcher, path: &Path) -> Result<()> {
 		tracing::trace!(r#"Checking in expression at path "{}"."#, path.display());
 
 		// Retrieve the expression hash and expression for the path, computing them if necessary.
-		let (_, expression) = cache.get(path).await?.with_context(|| {
+		let (_, expression) = watcher.get(path).await?.with_context(|| {
 			let path = path.display();
 			format!(r#"No file system object found at path "{path}"."#)
 		})?;
@@ -49,7 +49,7 @@ impl Shared {
 			AddExpressionOutcome::DirectoryMissingEntries { entries } => {
 				try_join_all(entries.into_iter().map(|(entry_name, _)| async {
 					let path = path.join(entry_name);
-					self.checkin_path(cache, &path).await?;
+					self.checkin_path(watcher, &path).await?;
 					Ok::<_, anyhow::Error>(())
 				}))
 				.await?;
@@ -79,7 +79,7 @@ impl Shared {
 				drop(permit);
 
 				// Checkin the path pointed to by the symlink.
-				self.checkin_path(cache, &path.join(target)).await?;
+				self.checkin_path(watcher, &path.join(target)).await?;
 			},
 
 			AddExpressionOutcome::MissingExpressions { .. } => {

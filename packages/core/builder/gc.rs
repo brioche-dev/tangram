@@ -1,5 +1,5 @@
 use super::Exclusive;
-use crate::{expression::Expression, hash::Hash};
+use crate::{db::ExpressionWithOutput, expression::Expression, hash::Hash};
 use anyhow::{bail, Context, Result};
 use lmdb::{Cursor, Transaction};
 use std::{
@@ -13,13 +13,21 @@ impl Exclusive {
 		let mut marked_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 		let mut marked_blob_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 
-		// Mark the expressions and blobs.
-		self.mark(&mut marked_hashes, &mut marked_blob_hashes, roots)
-			.context("Failed to mark the expressions and blobs.")?;
+		{
+			// Create a read/write transaction.
+			let mut txn = self.db.env.begin_rw_txn()?;
 
-		// Sweep the expressions.
-		self.sweep_expressions(&marked_hashes)
-			.context("Failed to sweep the expressions.")?;
+			// Mark the expressions and blobs.
+			self.mark(&mut txn, &mut marked_hashes, &mut marked_blob_hashes, roots)
+				.context("Failed to mark the expressions and blobs.")?;
+
+			// Sweep the expressions.
+			self.sweep_expressions_with_txn(&mut txn, &marked_hashes)
+				.context("Failed to sweep the expressions.")?;
+
+			// Commit.
+			txn.commit()?;
+		}
 
 		// Sweep the blobs.
 		self.sweep_blobs(&self.as_shared().blobs_path(), &marked_blob_hashes)
@@ -40,6 +48,7 @@ impl Exclusive {
 	#[allow(clippy::too_many_lines)]
 	fn mark(
 		&self,
+		txn: &mut lmdb::RwTransaction,
 		marked_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		marked_blob_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		roots: Vec<Hash>,
@@ -56,8 +65,10 @@ impl Exclusive {
 			marked_hashes.insert(hash);
 
 			// Get the expression.
-			let (expression, output_hash) =
-				self.as_shared().get_expression_local_with_output(hash)?;
+			let ExpressionWithOutput {
+				expression,
+				output_hash,
+			} = self.as_shared().get_expression_with_output_local(hash)?;
 
 			// Add this expression's output, if it has one, to the queue.
 			if let Some(output_hash) = output_hash {
@@ -65,12 +76,15 @@ impl Exclusive {
 			}
 
 			// Add this expression's evaluations to the queue.
-			let child_hashes = self.as_shared().get_evaluations(hash)?;
-			queue.extend(child_hashes);
+			let hashes = self.as_shared().get_evaluations_with_txn(txn, hash)?;
+			for hash in hashes {
+				let hash = hash?;
+				queue.push_back(hash);
+			}
 
 			// Add the expression's children to the queue.
 			match expression {
-				Expression::Null
+				Expression::Null(_)
 				| Expression::Bool(_)
 				| Expression::Number(_)
 				| Expression::String(_)
@@ -138,29 +152,25 @@ impl Exclusive {
 		Ok(())
 	}
 
-	fn sweep_expressions(&self, marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>) -> Result<()> {
-		// Get a read transaction.
-		let txn = self.env.begin_ro_txn()?;
-
+	fn sweep_expressions_with_txn(
+		&self,
+		txn: &mut lmdb::RwTransaction,
+		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
+	) -> Result<()> {
 		// Get a read cursor.
-		let mut cursor = txn.open_ro_cursor(self.expressions_db)?;
+		let mut cursor = txn.open_rw_cursor(self.db.expressions)?;
 
-		// Get an iterator over all expressions.
-		let hashes = cursor
-			.iter()
-			.map(|value| match value {
+		// Get an iterator over all expressions and delete them if they are not marked.
+		for value in cursor.iter() {
+			match value {
 				Ok((key, _)) => {
-					let key: Hash = serde_json::from_slice(key)?;
-					Ok(key)
+					let key = key.try_into()?;
+					let hash = Hash(key);
+					if !marked_hashes.contains(&hash) {
+						cursor.del(lmdb::WriteFlags::empty())?;
+					}
 				},
-				Err(e) => bail!(e),
-			})
-			.collect::<Result<Vec<Hash>>>()?;
-
-		// Delete all expressions that are not marked.
-		for hash in hashes {
-			if !marked_hashes.contains(&hash) {
-				self.as_shared().delete_expression(hash)?;
+				Err(error) => bail!(error),
 			}
 		}
 

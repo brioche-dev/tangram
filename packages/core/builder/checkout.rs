@@ -1,4 +1,4 @@
-use super::{cache::Cache, Shared};
+use super::{watcher::Watcher, Shared};
 use crate::{
 	expression::{Artifact, Dependency, Directory, Expression, File, Symlink},
 	hash::Hash,
@@ -28,11 +28,11 @@ impl Shared {
 			_ => bail!("Expected the expression to be an artifact."),
 		};
 
-		// Create a cache.
-		let cache = Cache::new(self.path(), Arc::clone(&self.file_system_semaphore));
+		// Create a watcher.
+		let watcher = Watcher::new(self.path(), Arc::clone(&self.file_system_semaphore));
 
 		// Call the recursive checkout function on the root expression.
-		self.checkout_path(&cache, hash, path, dependency_handler)
+		self.checkout_path(&watcher, hash, path, dependency_handler)
 			.await?;
 
 		Ok(())
@@ -40,7 +40,7 @@ impl Shared {
 
 	async fn checkout_path(
 		&self,
-		cache: &Cache,
+		watcher: &Watcher,
 		hash: Hash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
@@ -51,17 +51,17 @@ impl Shared {
 		// Call the appropriate function for the expression's type.
 		match expression {
 			Expression::Directory(directory) => {
-				self.checkout_directory(cache, directory, path, dependency_handler)
+				self.checkout_directory(watcher, directory, path, dependency_handler)
 					.await?;
 			},
 			Expression::File(file) => {
-				self.checkout_file(cache, file, path).await?;
+				self.checkout_file(watcher, file, path).await?;
 			},
 			Expression::Symlink(symlink) => {
-				self.checkout_symlink(cache, symlink, path).await?;
+				self.checkout_symlink(watcher, symlink, path).await?;
 			},
 			Expression::Dependency(dependency) => {
-				self.checkout_dependency(cache, dependency, path, dependency_handler)
+				self.checkout_dependency(watcher, dependency, path, dependency_handler)
 					.await?;
 			},
 			_ => {
@@ -75,13 +75,13 @@ impl Shared {
 	#[async_recursion]
 	async fn checkout_directory(
 		&self,
-		cache: &Cache,
+		watcher: &Watcher,
 		directory: Directory,
 		path: &Path,
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match cache.get(path).await? {
+		match watcher.get(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::Directory(local_directory))) if local_directory == directory => {
 				return Ok(());
@@ -121,7 +121,7 @@ impl Shared {
 				.into_iter()
 				.map(|(entry_name, entry_hash)| async move {
 					let entry_path = path.join(&entry_name);
-					self.checkout_path(cache, entry_hash, &entry_path, dependency_handler)
+					self.checkout_path(watcher, entry_hash, &entry_path, dependency_handler)
 						.await?;
 					Ok::<_, anyhow::Error>(())
 				}),
@@ -131,9 +131,9 @@ impl Shared {
 		Ok(())
 	}
 
-	async fn checkout_file(&self, cache: &Cache, file: File, path: &Path) -> Result<()> {
+	async fn checkout_file(&self, watcher: &Watcher, file: File, path: &Path) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match cache.get(path).await? {
+		match watcher.get(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::File(local_file))) if local_file == file => {
 				return Ok(());
@@ -171,9 +171,14 @@ impl Shared {
 		Ok(())
 	}
 
-	async fn checkout_symlink(&self, cache: &Cache, symlink: Symlink, path: &Path) -> Result<()> {
+	async fn checkout_symlink(
+		&self,
+		watcher: &Watcher,
+		symlink: Symlink,
+		path: &Path,
+	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match cache.get(path).await? {
+		match watcher.get(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::Symlink(local_symlink))) if local_symlink == symlink => {
 				return Ok(());
@@ -197,13 +202,13 @@ impl Shared {
 	#[async_recursion]
 	async fn checkout_dependency(
 		&self,
-		cache: &Cache,
+		watcher: &Watcher,
 		dependency: Dependency,
 		path: &Path,
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match cache.get(path).await? {
+		match watcher.get(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::Dependency(local_dependency)))
 				if local_dependency == dependency =>

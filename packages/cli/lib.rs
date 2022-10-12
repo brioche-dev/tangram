@@ -96,8 +96,8 @@ impl Cli {
 
 		// Create the builder.
 		let options = builder::Options {
-			blob_client,
-			expression_client,
+			blob_client: Some(blob_client),
+			expression_client: Some(expression_client),
 		};
 		let builder = Builder::new(path, options)
 			.await

@@ -40,6 +40,9 @@ itertools = "0.10"
 libc = "0.2"
 lmdb-rkv = { version = "0.14" }
 lz4_flex = "0.9"
+num = "0.4"
+num-derive = "0.3"
+num-traits = "0.2"
 pathdiff = "0.2"
 rand = "0.8"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
@@ -64,6 +67,7 @@ xz = "0.1"
 zip = { version = "0.6", default-features = false, features = ["aes-crypto", "deflate", "bzip2", "time"] }
 zstd = "0.11"
 
+buffalo = { git = "https://github.com/tangramdotdev/buffalo", features = ["camino"] }
 tangram_cli = { path = "packages/cli" }
 tangram_core = { path = "packages/core" }
 

@@ -1,4 +1,3 @@
-use anyhow::Context;
 use tokio::io::AsyncWrite;
 
 #[derive(
@@ -25,17 +24,26 @@ impl Hash {
 	}
 }
 
-impl TryFrom<&[u8]> for Hash {
-	type Error = anyhow::Error;
+impl buffalo::Serialize for Hash {
+	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
+	where
+		W: std::io::Write,
+	{
+		serializer.serialize_bytes(self.0.as_slice())
+	}
+}
 
-	fn try_from(slice: &[u8]) -> anyhow::Result<Hash> {
-		let data = slice.try_into().with_context(|| {
-			format!(
-				"Could not create a hash from a slice with length {}.",
-				slice.len(),
-			)
-		})?;
-		let hash = Hash(data);
+impl buffalo::Deserialize for Hash {
+	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
+	where
+		R: std::io::Read,
+	{
+		let value = deserializer.deserialize_bytes()?;
+		let value = value
+			.as_slice()
+			.try_into()
+			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+		let hash = Hash(value);
 		Ok(hash)
 	}
 }

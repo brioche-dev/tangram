@@ -1,11 +1,11 @@
 use super::Shared;
 use crate::{
+	db::ExpressionWithOutput,
 	expression::{AddExpressionOutcome, Expression},
 	hash::Hash,
 	util::path_exists,
 };
 use anyhow::{bail, Context, Result};
-use futures::stream::TryStreamExt;
 use lmdb::{Cursor, Transaction};
 
 impl Shared {
@@ -30,7 +30,7 @@ impl Shared {
 				let mut missing = Vec::new();
 				for (entry_name, hash) in &directory.entries {
 					let hash = *hash;
-					let exists = self.expression_exists(hash)?;
+					let exists = self.expression_exists_local(hash)?;
 					if !exists {
 						missing.push((entry_name.clone(), hash));
 					}
@@ -57,7 +57,7 @@ impl Shared {
 			// If this expression is a dependency, ensure the dependency is present.
 			Expression::Dependency(dependency) => {
 				let hash = dependency.artifact;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					return Ok(AddExpressionOutcome::DependencyMissing { hash });
 				}
@@ -66,33 +66,20 @@ impl Shared {
 			// If this expression is a package, ensure its source and dependencies are present.
 			Expression::Package(package) => {
 				let hash = package.source;
-				let exists = self.expression_exists(package.source)?;
+				let exists = self.expression_exists_local(package.source)?;
 				if !exists {
 					missing.push(hash);
 				}
-				missing.extend(
-					futures::stream::iter(
-						package
-							.dependencies
-							.values()
-							.copied()
-							.map(Ok::<_, anyhow::Error>),
-					)
-					.try_filter_map(|hash| async move {
-						let exists = self.expression_exists(hash)?;
-						if exists {
-							Ok(None)
-						} else {
-							Ok(Some(hash))
-						}
-					})
-					.try_collect::<Vec<Hash>>()
-					.await?,
-				);
+
+				for hash in package.dependencies.values().copied() {
+					if !self.expression_exists_local(hash)? {
+						missing.push(hash);
+					}
+				}
 			},
 
 			// If this expression is null, there is nothing to ensure.
-			Expression::Null => {},
+			Expression::Null(_) => {},
 
 			// If this expression is bool, there is nothing to ensure.
 			Expression::Bool(_) => {},
@@ -108,25 +95,11 @@ impl Shared {
 
 			// If this expression is a template, ensure the components are present.
 			Expression::Template(template) => {
-				missing.extend(
-					futures::stream::iter(
-						template
-							.components
-							.iter()
-							.copied()
-							.map(Ok::<_, anyhow::Error>),
-					)
-					.try_filter_map(|hash| async move {
-						let exists = self.expression_exists(hash)?;
-						if exists {
-							Ok(None)
-						} else {
-							Ok(Some(hash))
-						}
-					})
-					.try_collect::<Vec<Hash>>()
-					.await?,
-				);
+				for hash in template.components.iter().copied() {
+					if !self.expression_exists_local(hash)? {
+						missing.push(hash);
+					}
+				}
 			},
 
 			// If this expression is fetch, there is nothing to ensure.
@@ -135,14 +108,14 @@ impl Shared {
 			Expression::Js(js) => {
 				// Ensure the artifact is present.
 				let hash = js.package;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the args are present.
 				let hash = js.args;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
@@ -152,21 +125,21 @@ impl Shared {
 			Expression::Process(process) => {
 				// Ensure the command expression is present.
 				let hash = process.command;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the args expression is present.
 				let hash = process.args;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the env expression is present.
 				let hash = process.env;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
@@ -176,14 +149,14 @@ impl Shared {
 			Expression::Target(target) => {
 				// Ensure the package is present.
 				let hash = target.package;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
 				// Ensure the args are present.
 				let hash = target.args;
-				let exists = self.expression_exists(hash)?;
+				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
@@ -191,62 +164,51 @@ impl Shared {
 
 			// If this expression is an array, ensure the values are present.
 			Expression::Array(array) => {
-				missing.extend(
-					futures::stream::iter(array.iter().copied().map(Ok::<_, anyhow::Error>))
-						.try_filter_map(|hash| async move {
-							let exists = self.expression_exists(hash)?;
-							if exists {
-								Ok(None)
-							} else {
-								Ok(Some(hash))
-							}
-						})
-						.try_collect::<Vec<Hash>>()
-						.await?,
-				);
+				for hash in array.iter().copied() {
+					if !self.expression_exists_local(hash)? {
+						missing.push(hash);
+					}
+				}
 			},
 
 			// If this expression is a map, ensure the values are present.
 			Expression::Map(map) => {
-				missing.extend(
-					futures::stream::iter(map.values().copied().map(Ok::<_, anyhow::Error>))
-						.try_filter_map(|hash| async move {
-							let exists = self.expression_exists(hash)?;
-							if exists {
-								Ok(None)
-							} else {
-								Ok(Some(hash))
-							}
-						})
-						.try_collect::<Vec<Hash>>()
-						.await?,
-				);
+				for hash in map.values().copied() {
+					if !self.expression_exists_local(hash)? {
+						missing.push(hash);
+					}
+				}
 			},
 		}
 
-		// If there are any missing expressions, return.
+		// Return if there are any missing expressions.
 		if !missing.is_empty() {
 			return Ok(AddExpressionOutcome::MissingExpressions { hashes: missing });
 		}
 
-		// Serialize and hash the expression.
-		let data = serde_json::to_vec(&expression)?;
-		let hash = Hash::new(&data);
+		// Hash the expression.
+		let hash = expression.hash();
+
+		// Serialize the expression with output.
+		let value = ExpressionWithOutput {
+			expression: expression.clone(),
+			output_hash: None,
+		};
+		let value = buffalo::to_vec(&value).unwrap();
 
 		// Get a write transaction.
-		let mut txn = self.env.begin_rw_txn()?;
+		let mut txn = self.db.env.begin_rw_txn()?;
 
 		// Add the expression to the database.
-		let value: (Expression, Option<Hash>) = (expression.clone(), None);
 		match txn.put(
-			self.expressions_db,
+			self.db.expressions,
 			&hash.as_slice(),
-			&serde_json::to_vec(&value).unwrap(),
+			&value,
 			lmdb::WriteFlags::NO_OVERWRITE,
 		) {
 			Ok(_) => {},
 			Err(lmdb::Error::KeyExist) => {},
-			Err(e) => bail!(e),
+			Err(error) => bail!(error),
 		};
 
 		// Commit the transaction.
@@ -255,14 +217,14 @@ impl Shared {
 		Ok(AddExpressionOutcome::Added { hash })
 	}
 
-	pub fn expression_exists(&self, hash: Hash) -> Result<bool> {
+	pub fn expression_exists_local(&self, hash: Hash) -> Result<bool> {
 		// Get a read transaction.
-		let txn = self.env.begin_ro_txn()?;
+		let txn = self.db.env.begin_ro_txn()?;
 
-		let exists = match txn.get(self.expressions_db, &hash.as_slice()) {
+		let exists = match txn.get(self.db.expressions, &hash.as_slice()) {
 			Ok(_) => Ok::<_, anyhow::Error>(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
-			Err(e) => bail!(e),
+			Err(error) => Err(error.into()),
 		}?;
 
 		Ok(exists)
@@ -277,7 +239,7 @@ impl Shared {
 
 	pub fn get_expression_local_with_txn<Txn>(&self, txn: &Txn, hash: Hash) -> Result<Expression>
 	where
-		Txn: Transaction,
+		Txn: lmdb::Transaction,
 	{
 		let expression = self
 			.try_get_expression_local_with_txn(txn, hash)?
@@ -287,7 +249,7 @@ impl Shared {
 
 	pub fn try_get_expression_local(&self, hash: Hash) -> Result<Option<Expression>> {
 		// Get a read transaction.
-		let txn = self.env.begin_ro_txn()?;
+		let txn = self.db.env.begin_ro_txn()?;
 
 		// Get the expression.
 		let maybe_expression = self.try_get_expression_local_with_txn(&txn, hash)?;
@@ -301,49 +263,46 @@ impl Shared {
 		hash: Hash,
 	) -> Result<Option<Expression>>
 	where
-		Txn: Transaction,
+		Txn: lmdb::Transaction,
 	{
 		// Get the expression.
 		let maybe_expression = self
-			.try_get_expression_local_with_output_with_txn(txn, hash)?
-			.map(|(expression, _)| expression);
+			.try_get_expression_with_output_local_with_txn(txn, hash)?
+			.map(|expression_with_output| expression_with_output.expression);
 
 		Ok(maybe_expression)
 	}
 
-	pub fn get_expression_local_with_output(
-		&self,
-		hash: Hash,
-	) -> Result<(Expression, Option<Hash>)> {
+	pub fn get_expression_with_output_local(&self, hash: Hash) -> Result<ExpressionWithOutput> {
 		let expression = self
-			.try_get_expression_local_with_output(hash)?
+			.try_get_expression_with_output_local(hash)?
 			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
 		Ok(expression)
 	}
 
-	pub fn get_expression_local_with_output_with_txn<Txn>(
+	pub fn get_expression_with_output_local_with_txn<Txn>(
 		&self,
 		txn: &Txn,
 		hash: Hash,
-	) -> Result<(Expression, Option<Hash>)>
+	) -> Result<ExpressionWithOutput>
 	where
-		Txn: Transaction,
+		Txn: lmdb::Transaction,
 	{
-		let expression = self
-			.try_get_expression_local_with_output_with_txn(txn, hash)?
+		let expression_with_output = self
+			.try_get_expression_with_output_local_with_txn(txn, hash)?
 			.with_context(|| format!(r#"Failed to find the expression with hash "{hash}"."#))?;
-		Ok(expression)
+		Ok(expression_with_output)
 	}
 
-	pub fn try_get_expression_local_with_output(
+	pub fn try_get_expression_with_output_local(
 		&self,
 		hash: Hash,
-	) -> Result<Option<(Expression, Option<Hash>)>> {
+	) -> Result<Option<ExpressionWithOutput>> {
 		// Get a read transaction.
-		let txn = self.env.begin_ro_txn()?;
+		let txn = self.db.env.begin_ro_txn()?;
 
 		// Get the expression.
-		let maybe_expression = self.try_get_expression_local_with_output_with_txn(&txn, hash)?;
+		let maybe_expression = self.try_get_expression_with_output_local_with_txn(&txn, hash)?;
 
 		Ok(maybe_expression)
 	}
@@ -352,66 +311,56 @@ impl Shared {
 		&self,
 		txn: &Txn,
 		hash: Hash,
-	) -> Result<Option<(Expression, Option<Hash>)>>
+	) -> Result<Option<ExpressionWithOutput>>
 	where
-		Txn: Transaction,
+		Txn: lmdb::Transaction,
 	{
 		// Get the expression from the local database.
-		let maybe_expression = self.try_get_expression_local_with_output_with_txn(txn, hash)?;
+		let maybe_expression = self.try_get_expression_with_output_local_with_txn(txn, hash)?;
 		if let Some(expression) = maybe_expression {
 			return Ok(Some(expression));
 		}
 
-		// Get the expression from the expression server.
-		let maybe_expression = self
-			.expression_client
-			.try_get_expression_with_output(hash)
-			.await?;
+		// Try to get the expression from the expression server.
+		let maybe_expression = if let Some(expression_client) = &self.expression_client {
+			expression_client
+				.try_get_expression_with_output(hash)
+				.await?
+		} else {
+			None
+		};
 
 		Ok(maybe_expression)
 	}
 
-	pub fn try_get_expression_local_with_output_with_txn<Txn>(
+	pub fn try_get_expression_with_output_local_with_txn<Txn>(
 		&self,
 		txn: &Txn,
 		hash: Hash,
-	) -> Result<Option<(Expression, Option<Hash>)>>
+	) -> Result<Option<ExpressionWithOutput>>
 	where
-		Txn: Transaction,
+		Txn: lmdb::Transaction,
 	{
 		// Get the expression.
-		let maybe_expression = match txn.get(self.expressions_db, &hash.as_slice()) {
+		let maybe_expression = match txn.get(self.db.expressions, &hash.as_slice()) {
 			Ok(value) => {
-				let value = serde_json::from_slice(value)?;
+				let value = buffalo::from_slice(value)?;
 				Ok::<_, anyhow::Error>(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(e) => bail!(e),
+			Err(error) => Err(error.into()),
 		}?;
 
 		Ok(maybe_expression)
 	}
 
-	pub fn delete_expression(&self, hash: Hash) -> Result<()> {
-		// Get a write transaction.
-		let mut txn = self.env.begin_rw_txn()?;
-
-		// Delete the expression.
-		txn.del(self.expressions_db, &hash.as_slice(), None)?;
-
-		// Commit the transaction.
-		txn.commit()?;
-
-		Ok(())
-	}
-
 	pub fn add_evaluation(&self, parent_hash: Hash, child_hash: Hash) -> Result<()> {
 		// Get a write transaction.
-		let mut txn = self.env.begin_rw_txn()?;
+		let mut txn = self.db.env.begin_rw_txn()?;
 
 		// Add the evaluation.
 		txn.put(
-			self.evaluations_db,
+			self.db.evaluations,
 			&parent_hash.as_slice(),
 			&child_hash.as_slice(),
 			lmdb::WriteFlags::empty(),
@@ -423,43 +372,53 @@ impl Shared {
 		Ok(())
 	}
 
-	pub fn get_evaluations(&self, hash: Hash) -> Result<Vec<Hash>> {
-		// Get a read transaction.
-		let txn = self.env.begin_ro_txn()?;
-
+	pub fn get_evaluations_with_txn<Txn>(
+		&self,
+		txn: &Txn,
+		hash: Hash,
+	) -> Result<impl Iterator<Item = Result<Hash>>>
+	where
+		Txn: lmdb::Transaction,
+	{
 		// Get a cursor.
-		let mut cursor = txn.open_ro_cursor(self.evaluations_db)?;
+		let mut cursor = txn.open_ro_cursor(self.db.evaluations)?;
 
-		// Get the children.
-		let children: Vec<Hash> = cursor
-			.iter_dup_of(&hash.as_slice())
-			.into_iter()
-			.map(|value| match value {
-				Ok((_, value)) => {
-					let value = serde_json::from_slice(value)?;
-					Ok(value)
-				},
-				Err(e) => bail!(e),
-			})
-			.collect::<Result<Vec<_>>>()?;
+		// Get the evaluations.
+		let evaluations =
+			cursor
+				.iter_dup_of(&hash.as_slice())
+				.into_iter()
+				.map(|value| match value {
+					Ok((_, value)) => {
+						let value = buffalo::from_slice(value)?;
+						Ok(value)
+					},
+					Err(error) => Err(error.into()),
+				});
 
-		Ok(children)
+		Ok(evaluations)
 	}
 
-	/// Memoize the output from the evaluation of an expression.
+	/// Add an expression with output to the database.
 	pub fn set_expression_output(&self, hash: Hash, output_hash: Hash) -> Result<()> {
 		// Get a write transaction.
-		let mut txn = self.env.begin_rw_txn()?;
+		let mut txn = self.db.env.begin_rw_txn()?;
 
 		// Get the expression.
 		let expression = self.get_expression_local_with_txn(&txn, hash)?;
 
+		// Create the expression with output.
+		let value = ExpressionWithOutput {
+			expression,
+			output_hash: Some(output_hash),
+		};
+		let value = buffalo::to_vec(&value).unwrap();
+
 		// Add the expression with output to the database.
-		let value: (Expression, Option<Hash>) = (expression, Some(output_hash));
 		txn.put(
-			self.expressions_db,
+			self.db.expressions,
 			&hash.as_slice(),
-			&serde_json::to_vec(&value).unwrap(),
+			&value,
 			lmdb::WriteFlags::empty(),
 		)?;
 

@@ -34,13 +34,12 @@ Create a `tangram.json` file at the root of your project and add some dependenci
 
 ```json
 {
-  "dependencies": {
-    "nodejs": "16.15.1",
-    "postgresql": "14.4",
-    "python": "3.10.4",
-    "libopenssl": "3.10.4",
-    "ripgrep": "13.0.0"
-  }
+	"dependencies": {
+		"nodejs": "16.15.1",
+		"postgresql": "14.4",
+		"python": "3.10.4",
+		"ripgrep": "13.0.0"
+	}
 }
 ```
 
@@ -72,7 +71,7 @@ Use Tangram to build both your dependencies and your code. In this example, we b
 
 ### Build a container image.
 
-Add a `tangram.js` file to the root of your project and use the `std.buildContainerImage` function to build a container image. In this example, we build a container image with a simple python project.
+Use the `std.buildContainerImage` function to build a container image. In this example, we build a container image with a simple python project.
 
 ```javascript
 

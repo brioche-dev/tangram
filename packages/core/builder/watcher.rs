@@ -16,18 +16,18 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
-pub struct Cache {
+pub struct Watcher {
 	builder_path: PathBuf,
 	semaphore: Arc<tokio::sync::Semaphore>,
 	cache: RwLock<HashMap<PathBuf, (Hash, Expression), FnvBuildHasher>>,
 }
 
-impl Cache {
+impl Watcher {
 	#[must_use]
-	pub fn new(builder_path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> Cache {
+	pub fn new(builder_path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> Watcher {
 		let builder_path = builder_path.to_owned();
 		let cache = RwLock::new(HashMap::default());
-		Cache {
+		Watcher {
 			builder_path,
 			semaphore,
 			cache,
@@ -113,7 +113,7 @@ impl Cache {
 
 		// Create the expression and add it to the cache.
 		let expression = Expression::Directory(Directory { entries });
-		self.add_expression(path, expression);
+		self.cache_expression_for_path(path, expression);
 
 		Ok(())
 	}
@@ -136,7 +136,7 @@ impl Cache {
 			blob: blob_hash,
 			executable,
 		});
-		self.add_expression(path, expression);
+		self.cache_expression_for_path(path, expression);
 
 		Ok(())
 	}
@@ -185,17 +185,15 @@ impl Cache {
 		};
 
 		// Add the expression to the cache.
-		self.add_expression(path, expression);
+		self.cache_expression_for_path(path, expression);
 
 		Ok(())
 	}
 
-	fn add_expression(&self, path: &Path, expression: Expression) {
-		let data = serde_json::to_vec(&expression).unwrap();
-		let hash = Hash::new(&data);
+	fn cache_expression_for_path(&self, path: &Path, expression: Expression) {
 		self.cache
 			.write()
 			.unwrap()
-			.insert(path.to_owned(), (hash, expression));
+			.insert(path.to_owned(), (expression.hash(), expression));
 	}
 }
