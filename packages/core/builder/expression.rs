@@ -4,7 +4,7 @@ use crate::{
 	hash::Hash,
 	util::path_exists,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use futures::stream::TryStreamExt;
 use lmdb::{Cursor, Transaction};
 
@@ -238,12 +238,16 @@ impl Shared {
 
 		// Add the expression to the database.
 		let value: (Expression, Option<Hash>) = (expression.clone(), None);
-		txn.put(
+		match txn.put(
 			self.expressions_db,
 			&hash.as_slice(),
 			&serde_json::to_vec(&value).unwrap(),
-			lmdb::WriteFlags::empty(),
-		)?;
+			lmdb::WriteFlags::NO_OVERWRITE,
+		) {
+			Ok(_) => {},
+			Err(lmdb::Error::KeyExist) => {},
+			Err(e) => bail!(e),
+		};
 
 		// Commit the transaction.
 		txn.commit()?;
