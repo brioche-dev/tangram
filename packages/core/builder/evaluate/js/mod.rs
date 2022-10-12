@@ -85,6 +85,7 @@ async fn run_js_process(
 			op_tangram_add_expression::decl(),
 			op_tangram_get_expression::decl(),
 			op_tangram_evaluate::decl(),
+			op_tangram_encode_utf8::decl(),
 		])
 		.state({
 			let main_runtime_handle = main_runtime_handle.clone();
@@ -384,6 +385,12 @@ async fn op_tangram_evaluate(
 		Ok::<_, anyhow::Error>(output)
 	})
 	.await
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
+fn op_tangram_encode_utf8(string: String) -> Result<Vec<u8>, deno_core::error::AnyError> {
+	Ok(string.into_bytes())
 }
 
 async fn op<T, F, Fut>(

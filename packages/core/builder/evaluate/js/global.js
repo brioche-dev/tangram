@@ -25,6 +25,7 @@ let Syscall = {
 	AddExpression: "add_expression",
 	GetExpression: "get_expression",
 	Evaluate: "evaluate",
+	EncodeUtf8: "encode_utf8",
 };
 
 let System = {
@@ -49,6 +50,8 @@ let syscall = (syscall, ...args) => {
 			return Deno.core.opAsync(opName, ...args);
 		case Syscall.Evaluate:
 			return Deno.core.opAsync(opName, ...args);
+		case Syscall.EncodeUtf8:
+			return Deno.core.opSync(opName, ...args);
 	}
 };
 
@@ -673,6 +676,10 @@ let evaluate = async (hash) => {
 	return new Hash(await syscall(Syscall.Evaluate, hash.toString()));
 };
 
+let encodeUtf8 = (string) => {
+	return syscall(Syscall.EncodeUtf8, string);
+};
+
 globalThis.console = {
 	log: (...args) => {
 		let string = args.map((arg) => print(arg)).join(" ");
@@ -719,6 +726,7 @@ globalThis.Tangram = {
 	Template,
 	addBlob,
 	addExpression,
+	encodeUtf8,
 	evaluate,
 	fromJson,
 	getBlob,
