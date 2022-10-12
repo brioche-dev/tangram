@@ -4,7 +4,7 @@ use crate::{
 	hash::Hash,
 	util::path_exists,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use futures::stream::TryStreamExt;
 use lmdb::{Cursor, Transaction};
 

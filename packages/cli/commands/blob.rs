@@ -34,16 +34,19 @@ impl Cli {
 		let builder = self.builder.lock_shared().await?;
 
 		// Get the blob.
-		let blob_path = builder.get_blob(args.blob_hash).await?;
-
-		// Open the blob file.
-		let mut file = tokio::fs::File::open(blob_path).await?;
+		let mut blob = builder.get_blob(args.blob_hash).await?.into_std().await;
 
 		// Open stdout.
-		let mut stdout = tokio::io::stdout();
+		let mut stdout = std::io::stdout();
 
-		// Copy the blob to stdout.
-		tokio::io::copy(&mut file, &mut stdout).await?;
+		// Copy the blob to the path.
+		tokio::task::spawn_blocking(move || {
+			// Copy the blob to stdout.
+			std::io::copy(&mut blob, &mut stdout)?;
+			Ok::<_, anyhow::Error>(())
+		})
+		.await
+		.unwrap()?;
 
 		Ok(())
 	}

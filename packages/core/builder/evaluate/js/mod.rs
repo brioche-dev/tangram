@@ -7,6 +7,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use deno_core::{serde_v8, v8, JsRuntime};
 use std::{cell::RefCell, convert::TryInto, future::Future, rc::Rc, sync::Arc};
+use tokio::io::AsyncReadExt;
 use url::Url;
 
 mod module_loader;
@@ -314,8 +315,9 @@ async fn op_tangram_get_blob(
 	hash: Hash,
 ) -> Result<String, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let path = builder.get_blob(hash).await?;
-		let string = tokio::fs::read_to_string(&path).await?;
+		let mut blob = builder.get_blob(hash).await?;
+		let mut string = String::new();
+		blob.read_to_string(&mut string).await?;
 		Ok::<_, anyhow::Error>(string)
 	})
 	.await

@@ -12,6 +12,7 @@ use std::{
 	collections::{BTreeMap, HashMap, VecDeque},
 	path::{Path, PathBuf},
 };
+use tokio::io::AsyncReadExt;
 
 impl Shared {
 	/// Check in a package from the provided source path.
@@ -157,13 +158,10 @@ impl Shared {
 			.context("Expected the manifest to be a file.")?
 			.blob;
 
-		let manifest_path = self.get_blob(manifest_blob_hash).await?;
-
-		let manifest = tokio::fs::read(&manifest_path)
-			.await
-			.context("Failed to read the package manifest.")?;
-
-		let manifest: Manifest = serde_json::from_slice(&manifest)
+		let mut manifest = self.get_blob(manifest_blob_hash).await?;
+		let mut manifest_bytes = Vec::new();
+		manifest.read_to_end(&mut manifest_bytes).await?;
+		let manifest: Manifest = serde_json::from_slice(&manifest_bytes)
 			.context(r#"Failed to parse the package manifest."#)?;
 
 		Ok(manifest)

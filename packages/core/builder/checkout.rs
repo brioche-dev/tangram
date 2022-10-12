@@ -149,10 +149,16 @@ impl Shared {
 		};
 
 		// Get the blob.
-		let blob = self.get_blob(file.blob).await?;
+		let mut blob = self.get_blob(file.blob).await?.into_std().await;
+		let mut output = std::fs::File::create(&path)?;
 
 		// Copy the blob to the path.
-		tokio::fs::copy(&blob, &path).await?;
+		tokio::task::spawn_blocking(move || {
+			std::io::copy(&mut blob, &mut output)?;
+			Ok::<_, anyhow::Error>(())
+		})
+		.await
+		.unwrap()?;
 
 		// Make the file executable if necessary.
 		if file.executable {

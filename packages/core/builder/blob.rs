@@ -53,7 +53,7 @@ impl Shared {
 		Ok(blob_hash)
 	}
 
-	pub async fn get_blob(&self, hash: Hash) -> Result<PathBuf> {
+	pub async fn get_blob(&self, hash: Hash) -> Result<tokio::fs::File> {
 		let blob = self
 			.try_get_blob(hash)
 			.await?
@@ -61,7 +61,7 @@ impl Shared {
 		Ok(blob)
 	}
 
-	pub async fn try_get_blob(&self, hash: Hash) -> Result<Option<PathBuf>> {
+	pub async fn try_get_blob(&self, hash: Hash) -> Result<Option<tokio::fs::File>> {
 		let path = self.blob_path(hash);
 
 		// Check if the blob exists.
@@ -69,6 +69,8 @@ impl Shared {
 			return Ok(None);
 		}
 
-		Ok(Some(path))
+		let blob = tokio::fs::File::open(path).await?;
+
+		Ok(Some(blob))
 	}
 }
