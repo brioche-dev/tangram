@@ -574,7 +574,7 @@ let fromJson = async (expression) => {
 };
 
 let toJson = async (expression) => {
-	if (expression === null) {
+	if (expression === null || expression === undefined) {
 		return {
 			type: ExpressionType.Null,
 			value: expression,
