@@ -334,5 +334,5 @@ declare module Tangram {
 		...placeholders: Array<Expression<string | Artifact | Template>>
 	) => Template;
 
-	let evaluate: <O extends Expression>(hash: Expression<O>) => Promise<O>;
+	let evaluate: <O extends Expression>(hash: Hash<O>) => Promise<Hash<OutputForExpression<O>>>;
 }
