@@ -253,10 +253,20 @@ declare module Tangram {
 
 	class Artifact {
 		constructor(expression: Expression);
+
+		getRoot(): Promise<FilesystemExpression>;
 	}
+
+	type FilesystemExpression = Directory | File | Symlink | Dependency;
+
+	type DirectoryEntries = {
+		[filename: string]: FilesystemExpression | undefined,
+	};
 
 	class Directory {
 		constructor(entries: { [key: string]: Expression });
+
+		getEntries(): Promise<DirectoryEntries>;
 	}
 
 	class File {
@@ -282,6 +292,8 @@ declare module Tangram {
 
 	class Template {
 		constructor(components: Array<string | Artifact | Template>);
+
+		getComponents(): Promise<Array<string | Artifact | Template>>;
 	}
 
 	type JsArgs = {
@@ -325,8 +337,10 @@ declare module Tangram {
 		args: Array<Expression>;
 	};
 
-	class Target<O extends Expression> {
+	class Target<O extends Expression = FilesystemExpression> {
 		constructor(args: TargetArgs);
+
+		getRoot(): Promise<O>;
 	}
 
 	let template: (
@@ -335,4 +349,12 @@ declare module Tangram {
 	) => Template;
 
 	let evaluate: <O extends Expression>(hash: Hash<O>) => Promise<Hash<OutputForExpression<O>>>;
+
+	let addExpression: <E extends Expression>(expression: E) => Promise<Hash<E>>;
+
+	let getExpression: <E extends Expression>(hash: Hash<E>) => Promise<E>;
+
+	let addBlob: (blob: string) => Promise<Expression<string>>;
+
+	let encodeUtf8: (string: string) => Array<number>;
 }
