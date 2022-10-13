@@ -260,7 +260,7 @@ declare module Tangram {
 	type FilesystemExpression = Directory | File | Symlink | Dependency;
 
 	type DirectoryEntries = {
-		[filename: string]: FilesystemExpression | undefined,
+		[filename: string]: FilesystemExpression,
 	};
 
 	class Directory {
