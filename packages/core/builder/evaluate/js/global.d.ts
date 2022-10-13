@@ -221,32 +221,34 @@ declare module Tangram {
 		| Array<Expression<Output>>
 		| { [key: string]: Expression<Output> };
 
-	type OutputForExpression<T extends Expression> = T extends null
-		? null
-		: T extends boolean
-		? boolean
-		: T extends number
-		? number
-		: T extends string
-		? string
-		: T extends Artifact
+	type OutputForExpression<T extends Expression> = [T] extends [Artifact]
 		? Artifact
-		: T extends Template
+		: [T] extends [Fetch]
+		? Artifact
+		: [T] extends [Process]
+		? Artifact
+		: [T] extends [Template]
 		? Template
-		: T extends Package
+		: [T] extends [Package]
 		? Package
-		: T extends Js<infer O>
+		: [T] extends [Js<infer O>]
 		? OutputForExpression<O>
-		: T extends Fetch
-		? Artifact
-		: T extends Process
-		? Artifact
-		: T extends Target<infer O>
+		: [T] extends [Target<infer O>]
 		? OutputForExpression<O>
-		: T extends Array<infer V extends Expression>
+		: [T] extends [Array<infer V extends Expression>]
 		? Array<OutputForExpression<V>>
-		: T extends { [key: string]: infer V extends Expression }
+		: [T] extends [{ [key: string]: infer V extends Expression }]
 		? { [key: string]: OutputForExpression<V> }
+		: [T] extends [Expression<infer O extends Expression>]
+		? OutputForExpression<O>
+		: [T] extends [null]
+		? null
+		: [T] extends [boolean]
+		? boolean
+		: [T] extends [number]
+		? number
+		: [T] extends [string]
+		? string
 		: never;
 
 	class Artifact {
