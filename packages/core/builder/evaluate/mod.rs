@@ -7,7 +7,9 @@ use futures::FutureExt;
 use std::future::Future;
 
 pub mod array;
+pub mod artifact;
 pub mod dependency;
+pub mod directory;
 pub mod fetch;
 pub mod js;
 pub mod map;
@@ -42,10 +44,10 @@ impl Shared {
 			| Expression::Bool(_)
 			| Expression::Number(_)
 			| Expression::String(_)
-			| Expression::Artifact(_)
-			| Expression::Directory(_)
 			| Expression::File(_)
 			| Expression::Symlink(_) => futures::future::ok(hash).boxed(),
+			Expression::Artifact(artifact) => self.evaluate_artifact(hash, artifact).boxed(),
+			Expression::Directory(directory) => self.evaluate_directory(hash, directory).boxed(),
 			Expression::Dependency(dependency) => {
 				self.evaluate_dependency(hash, dependency).boxed()
 			},
