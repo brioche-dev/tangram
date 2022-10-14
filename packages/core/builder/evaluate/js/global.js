@@ -66,9 +66,17 @@ class Hash {
 
 class Artifact {
 	#root;
+	#hash;
 
 	constructor(root) {
 		this.#root = root;
+	}
+
+	async hash() {
+		if (this.#hash === undefined) {
+			this.#hash = await addExpression(this);
+		}
+		return this.#hash;
 	}
 
 	static fromJson(expression) {

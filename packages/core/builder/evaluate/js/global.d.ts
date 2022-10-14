@@ -261,10 +261,13 @@ declare module Tangram {
 
 	class Artifact {
 		#type: "artifact";
+		#hash: Tangram.Hash;
 
 		constructor(
 			expression: Expression<Directory | File | Symlink | Dependency>,
 		);
+
+		hash(): Promise<Hash>;
 
 		getRoot(): Promise<Expression<Directory | File | Symlink | Dependency>>;
 	}
@@ -304,7 +307,7 @@ declare module Tangram {
 	class Dependency {
 		#type: "dependency";
 
-		constructor(artifact: Artifact, path?: string | null);
+		constructor(artifact: Expression<Artifact>, path?: string | null);
 
 		getArtifact(): Promise<Artifact>;
 	}
