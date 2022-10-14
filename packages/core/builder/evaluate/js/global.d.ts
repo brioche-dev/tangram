@@ -172,9 +172,9 @@ declare module Tangram {
 
 		function syscall(syscall: Syscall.Print, value: string);
 
-		function syscall(syscall: Syscall.AddBlob, bytes: string): Promise<Hash>;
+		function syscall(syscall: Syscall.AddBlob, blob: Uint8Array): Promise<Hash>;
 
-		function syscall(syscall: Syscall.GetBlob, hash: Hash): Promise<string>;
+		function syscall(syscall: Syscall.GetBlob, hash: Hash): Promise<Uint8Array>;
 
 		function syscall(
 			syscall: Syscall.AddExpression,
@@ -197,7 +197,7 @@ declare module Tangram {
 	}
 
 	class Hash<T extends Expression = Expression> {
-		constructor(hash: string);
+		constructor(string: string);
 
 		toString(): string;
 	}
@@ -221,27 +221,7 @@ declare module Tangram {
 		| Array<Expression<Output>>
 		| { [key: string]: Expression<Output> };
 
-	type OutputForExpression<T extends Expression> = [T] extends [Artifact]
-		? Artifact
-		: [T] extends [Fetch]
-		? Artifact
-		: [T] extends [Process]
-		? Artifact
-		: [T] extends [Template]
-		? Template
-		: [T] extends [Package]
-		? Package
-		: [T] extends [Js<infer O>]
-		? OutputForExpression<O>
-		: [T] extends [Target<infer O>]
-		? OutputForExpression<O>
-		: [T] extends [Array<infer V extends Expression>]
-		? Array<OutputForExpression<V>>
-		: [T] extends [{ [key: string]: infer V extends Expression }]
-		? { [key: string]: OutputForExpression<V> }
-		: [T] extends [Expression<infer O extends Expression>]
-		? OutputForExpression<O>
-		: [T] extends [null]
+	type OutputForExpression<T extends Expression> = [T] extends [null]
 		? null
 		: [T] extends [boolean]
 		? boolean
@@ -249,48 +229,108 @@ declare module Tangram {
 		? number
 		: [T] extends [string]
 		? string
+		: [T] extends [Artifact]
+		? Artifact
+		: [T] extends [Directory]
+		? Directory
+		: [T] extends [File]
+		? File
+		: [T] extends [Symlink]
+		? Symlink
+		: [T] extends [Dependency]
+		? Dependency
+		: [T] extends [Package]
+		? Package
+		: [T] extends [Template]
+		? Template
+		: [T] extends [Js<infer O>]
+		? OutputForExpression<O>
+		: [T] extends [Fetch]
+		? Artifact
+		: [T] extends [Process]
+		? Artifact
+		: [T] extends [Target<infer O>]
+		? OutputForExpression<O>
+		: [T] extends [Array<infer V extends Expression>]
+		? Array<OutputForExpression<V>>
+		: [T] extends [{ [key: string]: Expression<infer V extends Expression> }]
+		? { [K in keyof T]: OutputForExpression<T[K]> }
+		: [T] extends [Expression<infer O extends Expression>]
+		? OutputForExpression<O>
 		: never;
 
 	class Artifact {
-		constructor(expression: Expression);
+		#type: "artifact";
 
-		getRoot(): Promise<FilesystemExpression>;
+		constructor(
+			expression: Expression<Directory | File | Symlink | Dependency>,
+		);
+
+		getRoot(): Promise<Expression<Directory | File | Symlink | Dependency>>;
 	}
 
 	type FilesystemExpression = Directory | File | Symlink | Dependency;
 
 	type DirectoryEntries = {
-		[filename: string]: FilesystemExpression,
+		[filename: string]: FilesystemExpression;
 	};
 
 	class Directory {
-		constructor(entries: { [key: string]: Expression });
+		#type: "directory";
 
-		getEntries(): Promise<DirectoryEntries>;
+		constructor(entries: {
+			[key: string]: Directory | File | Symlink | Dependency;
+		});
+
+		getEntries(): Promise<{
+			[key: string]: Directory | File | Symlink | Dependency;
+		}>;
 	}
 
 	class File {
-		constructor(blob: Expression<string>, executable?: boolean);
+		#type: "file";
+
+		constructor(blob: Expression<any>, executable?: boolean);
+
+		executable: boolean;
+
+		getBlob(): Promise<Uint8Array>;
 	}
 
 	class Symlink {
+		#type: "symlink";
+
 		constructor(target: string);
+
+		target: string;
 	}
 
 	class Dependency {
+		#type: "dependency";
+
 		constructor(artifact: Artifact, path?: string | null);
+
+		getArtifact(): Promise<Artifact>;
 	}
 
 	type PackageArgs = {
 		source: Expression<Artifact>;
-		dependencies: Array<Expression<Artifact>>;
+		dependencies: { [name: string]: Expression<Artifact> };
 	};
 
 	class Package {
+		#type: "package";
+
 		constructor(args: PackageArgs);
+
+		getSource(): Promise<Artifact>;
+
+		getDependencies(): Promise<{ [name: string]: Package }>;
 	}
 
 	class Template {
+		#type: "template";
+
 		constructor(components: Array<string | Artifact | Template>);
 
 		getComponents(): Promise<Array<string | Artifact | Template>>;
@@ -299,13 +339,17 @@ declare module Tangram {
 	type JsArgs = {
 		args: Expression<Array<Expression<string | Artifact | Template>>>;
 		artifact: Expression<Artifact>;
-		dependencies: { [key: string]: Expression<Artifact> };
+		path: string;
+		dependencies: { [name: string]: Expression<Artifact> };
 		export: string;
-		path: string | null;
 	};
 
 	class Js<O extends Expression> {
+		#type: "js";
+
 		constructor(args: JsArgs);
+
+		getArgs(): Promise<Expression<Array<Expression>>>;
 	}
 
 	type FetchArgs = {
@@ -315,11 +359,16 @@ declare module Tangram {
 	};
 
 	class Fetch {
+		#type: `fetch`;
+		url: string;
+		hash: string | null;
+		unpack: boolean;
+
 		constructor(args: FetchArgs);
 	}
 
 	type ProcessArgs = {
-		args: Array<Expression>;
+		args: Expression<Array<Expression>>;
 		command: Expression<string | Artifact | Template>;
 		env: Expression<{
 			[key: string]: Expression<string | Artifact | Template>;
@@ -328,19 +377,21 @@ declare module Tangram {
 	};
 
 	class Process {
+		#type: `process`;
 		constructor(args: ProcessArgs);
 	}
 
 	type TargetArgs = {
 		package: Expression<Artifact>;
 		name: string;
-		args: Array<Expression>;
+		args: Expression<Array<Expression>>;
 	};
 
-	class Target<O extends Expression = FilesystemExpression> {
+	class Target<O extends Expression> {
+		#type: `target`;
 		constructor(args: TargetArgs);
-
-		getRoot(): Promise<O>;
+		getPackage(): Promise<Package>;
+		getArgs(): Promise<Array<Expression>>;
 	}
 
 	let template: (
@@ -348,13 +399,17 @@ declare module Tangram {
 		...placeholders: Array<Expression<string | Artifact | Template>>
 	) => Template;
 
-	let evaluate: <O extends Expression>(hash: Hash<O>) => Promise<Hash<OutputForExpression<O>>>;
+	let evaluate: <E extends Expression>(
+		expression: E,
+	) => Promise<OutputForExpression<E>>;
 
 	let addExpression: <E extends Expression>(expression: E) => Promise<Hash<E>>;
 
 	let getExpression: <E extends Expression>(hash: Hash<E>) => Promise<E>;
 
-	let addBlob: (blob: string) => Promise<Expression<string>>;
+	let addBlob: (blob: Uint8Array) => Promise<Hash>;
 
-	let encodeUtf8: (string: string) => Array<number>;
+	let getBlob: (hash: Hash) => Promise<Uint8Array>;
+
+	let source: (url: string | URL) => Promise<Package>;
 }

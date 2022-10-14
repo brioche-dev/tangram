@@ -1,3 +1,10 @@
+let System = {
+	Amd64Linux: "amd64_linux",
+	Amd64Macos: "amd64_macos",
+	Arm64Linux: "arm64_linux",
+	Arm64Macos: "arm64_macos",
+};
+
 let ExpressionType = {
 	Null: "null",
 	Bool: "bool",
@@ -25,14 +32,6 @@ let Syscall = {
 	AddExpression: "add_expression",
 	GetExpression: "get_expression",
 	Evaluate: "evaluate",
-	EncodeUtf8: "encode_utf8",
-};
-
-let System = {
-	Amd64Linux: "amd64_linux",
-	Amd64Macos: "amd64_macos",
-	Arm64Linux: "arm64_linux",
-	Arm64Macos: "arm64_macos",
 };
 
 let syscall = (syscall, ...args) => {
@@ -50,28 +49,26 @@ let syscall = (syscall, ...args) => {
 			return Deno.core.opAsync(opName, ...args);
 		case Syscall.Evaluate:
 			return Deno.core.opAsync(opName, ...args);
-		case Syscall.EncodeUtf8:
-			return Deno.core.opSync(opName, ...args);
 	}
 };
 
 class Hash {
-	string;
+	#string;
 
 	constructor(string) {
-		this.string = string;
+		this.#string = string;
 	}
 
 	toString() {
-		return this.string;
+		return this.#string;
 	}
 }
 
 class Artifact {
-	root;
+	#root;
 
 	constructor(root) {
-		this.root = root;
+		this.#root = root;
 	}
 
 	static fromJson(expression) {
@@ -80,7 +77,7 @@ class Artifact {
 	}
 
 	async toJson() {
-		let root = await addExpression(this.root);
+		let root = await addExpression(this.#root);
 		return {
 			type: ExpressionType.Artifact,
 			value: {
@@ -90,15 +87,15 @@ class Artifact {
 	}
 
 	async getRoot() {
-		return await getExpression(this.root);
+		return await getExpression(this.#root);
 	}
 }
 
 class Directory {
-	entries;
+	#entries;
 
 	constructor(entries) {
-		this.entries = entries;
+		this.#entries = entries;
 	}
 
 	static fromJson(expression) {
@@ -114,7 +111,7 @@ class Directory {
 	async toJson() {
 		let entries = Object.fromEntries(
 			await Promise.all(
-				Object.entries(this.entries).map(async ([key, value]) => [
+				Object.entries(this.#entries).map(async ([key, value]) => [
 					key,
 					(await addExpression(value)).toString(),
 				]),
@@ -129,7 +126,7 @@ class Directory {
 	async getEntries() {
 		return Object.fromEntries(
 			await Promise.all(
-				Object.entries(this.entries).map(async ([key, value]) => [
+				Object.entries(this.#entries).map(async ([key, value]) => [
 					key,
 					await getExpression(value),
 				]),
@@ -139,11 +136,11 @@ class Directory {
 }
 
 class File {
-	blob;
+	#blob;
 	executable;
 
 	constructor(blob, executable) {
-		this.blob = blob;
+		this.#blob = blob;
 		this.executable = executable ?? false;
 	}
 
@@ -157,14 +154,14 @@ class File {
 		return {
 			type: ExpressionType.File,
 			value: {
-				blob: this.blob.toString(),
+				blob: this.#blob.toString(),
 				executable: this.executable,
 			},
 		};
 	}
 
 	async getBlob() {
-		return await getBlob(this.blob);
+		return await getBlob(this.#blob);
 	}
 }
 
@@ -392,8 +389,8 @@ class Fetch {
 
 	constructor({ url, hash, unpack }) {
 		this.url = url;
-		this.hash = hash;
-		this.unpack = unpack;
+		this.hash = hash ?? null;
+		this.unpack = unpack ?? false;
 	}
 
 	static fromJson(expression) {
@@ -672,12 +669,11 @@ let getExpression = async (hashOrExpression) => {
 	}
 };
 
-let evaluate = async (hash) => {
-	return new Hash(await syscall(Syscall.Evaluate, hash.toString()));
-};
-
-let encodeUtf8 = (string) => {
-	return syscall(Syscall.EncodeUtf8, string);
+let evaluate = async (expression) => {
+	let hash = await addExpression(expression);
+	let outputHash = new Hash(await syscall(Syscall.Evaluate, hash.toString()));
+	let output = await getExpression(outputHash);
+	return output;
 };
 
 globalThis.console = {
@@ -691,7 +687,7 @@ let print = (value) => {
 	if (Array.isArray(value)) {
 		return `[${value.map(print).join(", ")}]`;
 	} else if (typeof value === "object") {
-		let constructorName;
+		let constructorName = "";
 		if (value.constructor.name !== "Object") {
 			constructorName = `${value.constructor.name} `;
 		}
@@ -702,6 +698,12 @@ let print = (value) => {
 	} else {
 		return JSON.stringify(value);
 	}
+};
+
+let source = async (url) => {
+	let hash = new Hash(new URL(url).hostname);
+	let package = await getExpression(hash);
+	return await package.getSource();
 };
 
 globalThis.Tangram = {
@@ -717,20 +719,29 @@ globalThis.Tangram = {
 		System,
 		syscall,
 	},
+	Js,
 	Package,
 	Process,
-	Js,
 	Symlink,
 	System,
 	Target,
 	Template,
 	addBlob,
 	addExpression,
-	encodeUtf8,
 	evaluate,
 	fromJson,
 	getBlob,
 	getExpression,
+	source,
 	template,
 	toJson,
 };
+
+let bs = globalThis.__bootstrap;
+Object.defineProperties(globalThis, {
+	TextDecoder: { value: bs.encoding.TextDecoder },
+	TextEncoder: { value: bs.encoding.TextEncoder },
+	URL: { value: bs.url.URL },
+	URLPattern: { value: bs.urlPattern.URLPattern },
+	URLSearchParams: { value: bs.url.URLSearchParams },
+});

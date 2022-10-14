@@ -23,7 +23,10 @@ bzip2 = "0.4"
 camino = { version = "1", features = ["serde1"] }
 clap = { version = "4", features = ["derive"] }
 deno_ast = { version = "0.19", features = ["transpiling"] }
-deno_core = "0.153"
+deno_core = "0.154"
+deno_url = "0.72"
+deno_web = "0.103"
+deno_webidl = "0.72"
 either = "1"
 flate2 = "1"
 fnv = "1"

@@ -160,7 +160,6 @@ async fn deno_resolve_tangram(
 	};
 
 	// Resolve the package.
-	// The `resolve()` function contains the logic shared between the runtime, and the integration with the Typescript compiler.
 	let (specifier_package_hash, specifier_sub_path) = resolve(
 		&state.builder,
 		&referrer_dependencies,

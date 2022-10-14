@@ -85,7 +85,6 @@ async fn run_js_process(
 			op_tangram_add_expression::decl(),
 			op_tangram_get_expression::decl(),
 			op_tangram_evaluate::decl(),
-			op_tangram_encode_utf8::decl(),
 		])
 		.state({
 			let main_runtime_handle = main_runtime_handle.clone();
@@ -113,7 +112,12 @@ async fn run_js_process(
 			Box::new(Rc::clone(&module_loader)) as Box<dyn deno_core::SourceMapGetter>
 		),
 		module_loader: Some(Rc::clone(&module_loader) as Rc<dyn deno_core::ModuleLoader>),
-		extensions: vec![tangram_extension],
+		extensions: vec![
+			deno_webidl::init(),
+			deno_url::init(),
+			deno_web::init::<Permissions>(deno_web::BlobStore::default(), None),
+			tangram_extension,
+		],
 		startup_snapshot: Some(deno_core::Snapshot::Static(SNAPSHOT)),
 		..Default::default()
 	});
@@ -324,10 +328,10 @@ fn op_tangram_print(string: String) -> Result<(), deno_core::error::AnyError> {
 #[allow(clippy::unnecessary_wraps)]
 async fn op_tangram_add_blob(
 	state: Rc<RefCell<deno_core::OpState>>,
-	blob: String,
+	blob: serde_v8::ZeroCopyBuf,
 ) -> Result<Hash, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let hash = builder.add_blob(blob.as_bytes()).await?;
+		let hash = builder.add_blob(blob.as_ref()).await?;
 		Ok::<_, anyhow::Error>(hash)
 	})
 	.await
@@ -338,12 +342,13 @@ async fn op_tangram_add_blob(
 async fn op_tangram_get_blob(
 	state: Rc<RefCell<deno_core::OpState>>,
 	hash: Hash,
-) -> Result<String, deno_core::error::AnyError> {
+) -> Result<serde_v8::ZeroCopyBuf, deno_core::error::AnyError> {
 	op(state, |builder| async move {
 		let mut blob = builder.get_blob(hash).await?;
-		let mut string = String::new();
-		blob.read_to_string(&mut string).await?;
-		Ok::<_, anyhow::Error>(string)
+		let mut bytes = Vec::new();
+		blob.read_to_end(&mut bytes).await?;
+		let output = serde_v8::ZeroCopyBuf::ToV8(Some(bytes.into_boxed_slice()));
+		Ok::<_, anyhow::Error>(output)
 	})
 	.await
 }
@@ -387,12 +392,6 @@ async fn op_tangram_evaluate(
 	.await
 }
 
-#[deno_core::op]
-#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
-fn op_tangram_encode_utf8(string: String) -> Result<Vec<u8>, deno_core::error::AnyError> {
-	Ok(string.into_bytes())
-}
-
 async fn op<T, F, Fut>(
 	state: Rc<RefCell<deno_core::OpState>>,
 	f: F,
@@ -416,4 +415,14 @@ where
 		.await
 		.unwrap()?;
 	Ok(output)
+}
+
+struct Permissions;
+
+impl deno_web::TimersPermission for Permissions {
+	fn allow_hrtime(&mut self) -> bool {
+		false
+	}
+
+	fn check_unstable(&self, _state: &deno_core::OpState, _api_name: &'static str) {}
 }
