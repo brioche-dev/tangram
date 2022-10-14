@@ -170,7 +170,7 @@ declare module Tangram {
 			Evaluate = "evaluate",
 		}
 
-		function syscall(syscall: Syscall.Print, value: string);
+		function syscall(syscall: Syscall.Print, value: string): void;
 
 		function syscall(syscall: Syscall.AddBlob, blob: Uint8Array): Promise<Hash>;
 
@@ -278,19 +278,15 @@ declare module Tangram {
 	class Directory {
 		#type: "directory";
 
-		constructor(entries: {
-			[key: string]: Directory | File | Symlink | Dependency;
-		});
+		constructor(entries: DirectoryEntries);
 
-		getEntries(): Promise<{
-			[key: string]: Directory | File | Symlink | Dependency;
-		}>;
+		getEntries(): Promise<DirectoryEntries>;
 	}
 
 	class File {
 		#type: "file";
 
-		constructor(blob: Expression<any>, executable?: boolean);
+		constructor(blob: Hash, executable?: boolean);
 
 		executable: boolean;
 
