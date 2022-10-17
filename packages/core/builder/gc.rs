@@ -9,17 +9,24 @@ use std::{
 
 impl Exclusive {
 	pub async fn garbage_collect(&self, roots: Vec<Hash>) -> Result<()> {
-		// Create hash sets to track the marked expressions and blobs.
+		// Create hash sets to track the marked expressions, artifacts, and blobs.
 		let mut marked_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
+		let mut marked_artifact_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 		let mut marked_blob_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 
 		{
 			// Create a read/write transaction.
 			let mut txn = self.db.env.begin_rw_txn()?;
 
-			// Mark the expressions and blobs.
-			self.mark(&mut txn, &mut marked_hashes, &mut marked_blob_hashes, roots)
-				.context("Failed to mark the expressions and blobs.")?;
+			// Mark the expressions, artifacts, and blobs.
+			self.mark(
+				&mut txn,
+				&mut marked_hashes,
+				&mut marked_artifact_hashes,
+				&mut marked_blob_hashes,
+				roots,
+			)
+			.context("Failed to mark the expressions and blobs.")?;
 
 			// Sweep the expressions.
 			self.sweep_expressions_with_txn(&mut txn, &marked_hashes)
@@ -28,6 +35,11 @@ impl Exclusive {
 			// Commit.
 			txn.commit()?;
 		}
+
+		// Sweep the artifacts.
+		self.sweep_artifacts(&self.as_shared().artifacts_path(), &marked_artifact_hashes)
+			.await
+			.context("Failed to sweep the artifacts.")?;
 
 		// Sweep the blobs.
 		self.sweep_blobs(&self.as_shared().blobs_path(), &marked_blob_hashes)
@@ -50,10 +62,12 @@ impl Exclusive {
 		&self,
 		txn: &mut lmdb::RwTransaction,
 		marked_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
+		marked_artifact_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		marked_blob_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		roots: Vec<Hash>,
 	) -> Result<()> {
 		// Traverse the transitive dependencies of the roots and add each hash to the marked expression hashes and marked blob hashes.
+
 		let mut queue: VecDeque<Hash> = VecDeque::from_iter(roots);
 		while let Some(hash) = queue.pop_front() {
 			// If this expression has already been marked, continue to avoid an infinite loop.
@@ -68,7 +82,9 @@ impl Exclusive {
 			let ExpressionWithOutput {
 				expression,
 				output_hash,
-			} = self.as_shared().get_expression_with_output_local(hash)?;
+			} = self
+				.as_shared()
+				.get_expression_with_output_local_with_txn(txn, hash)?;
 
 			// Add this expression's output, if it has one, to the queue.
 			if let Some(output_hash) = output_hash {
@@ -92,6 +108,7 @@ impl Exclusive {
 				| Expression::Symlink(_) => {},
 
 				Expression::Artifact(artifact) => {
+					marked_artifact_hashes.insert(hash);
 					queue.push_back(artifact.root);
 				},
 
@@ -197,6 +214,31 @@ impl Exclusive {
 				tokio::fs::remove_file(&entry.path())
 					.await
 					.context("Failed to remove the blob.")?;
+			}
+		}
+		Ok(())
+	}
+
+	async fn sweep_artifacts(
+		&self,
+		artifacts_path: &Path,
+		marked_artifact_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
+	) -> Result<()> {
+		// Delete all artifacts that are not not marked.
+		let mut read_dir = tokio::fs::read_dir(artifacts_path)
+			.await
+			.context("Failed to read the artifacts directory.")?;
+		while let Some(entry) = read_dir.next_entry().await? {
+			let artifact_hash: Hash = entry
+				.file_name()
+				.to_str()
+				.context("Failed to parse the file name as a string.")?
+				.parse()
+				.context("Failed to parse the entry in the artifacts directory as a hash.")?;
+			if !marked_artifact_hashes.contains(&artifact_hash) {
+				tokio::fs::remove_file(&entry.path())
+					.await
+					.context("Failed to remove the artifact.")?;
 			}
 		}
 		Ok(())
