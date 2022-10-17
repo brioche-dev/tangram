@@ -2,14 +2,15 @@ use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tangram_core::system::System;
+use tangram_core::{specifier::Specifier, system::System};
 
 #[derive(Parser)]
+#[command(long_about = "Build a package.")]
 pub struct Args {
 	#[arg(long)]
 	locked: bool,
 	#[arg(default_value = ".")]
-	package: PathBuf,
+	specifier: Specifier,
 	#[arg(default_value = "default")]
 	name: String,
 	#[arg(long)]
@@ -23,11 +24,10 @@ impl Cli {
 		// Lock the builder.
 		let builder = self.builder.lock_shared().await?;
 
-		// Create the package.
-		let package_hash = builder
-			.checkin_package(&self.api_client, &args.package, args.locked)
-			.await
-			.context("Failed to create the package.")?;
+		// Get the package hash.
+		let package_hash = self
+			.package_hash_for_specifier(&args.specifier, args.locked)
+			.await?;
 
 		// Create the target args.
 		let target_args = self.create_target_args(args.system).await?;
@@ -57,7 +57,7 @@ impl Cli {
 			builder
 				.checkout(output_hash, checkout_path, None)
 				.await
-				.context("Failed to perform the checkout")?;
+				.context("Failed to perform the checkout.")?;
 		}
 
 		Ok(())

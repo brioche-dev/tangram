@@ -1,5 +1,5 @@
 use crate::{builder::Shared, hash::Hash, util::path_exists};
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use futures::FutureExt;
 use indoc::writedoc;
@@ -259,7 +259,7 @@ impl FromStr for Extension {
 	fn from_str(string: &str) -> Result<Self, Self::Err> {
 		let extension = Extension::iter()
 			.find(|extension| extension.as_ref() == string)
-			.ok_or_else(|| anyhow!(r#"Invalid extension "{string}"."#))?;
+			.with_context(|| format!(r#"Invalid extension "{string}"."#))?;
 		Ok(extension)
 	}
 }

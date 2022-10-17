@@ -1,5 +1,5 @@
 use crate::{builder::Shared, expression::AddExpressionOutcome, hash::Hash};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 
@@ -21,7 +21,7 @@ impl Shared {
 		let expression = expression_client
 			.try_get_expression(hash)
 			.await?
-			.ok_or_else(|| anyhow!(r#"Unable to find expression with hash "{hash}""#))?;
+			.with_context(|| format!(r#"Unable to find expression with hash "{hash}""#))?;
 
 		// Try to add the expression.
 		let outcome = self.try_add_expression(&expression).await?;

@@ -29,9 +29,9 @@ impl Builder {
 
 		// If this path is from a newer version of tangram, we cannot migrate it.
 		if path_format_version > migrations.len() {
+			let path = path.display();
 			bail!(
-				r#"The server path "{}" has run migrations from a newer version of tangram. Please update to the latest version of tangram."#,
-				path.display(),
+				r#"The path "{path}" has run migrations from a newer version of tangram. Please run `tg upgrade` to upgrade to the latest version of tangram."#
 			);
 		}
 

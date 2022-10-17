@@ -4,6 +4,7 @@ use clap::Parser;
 use tangram_core::hash::Hash;
 
 #[derive(Parser)]
+#[command(long_about = "Manage expressions.")]
 pub struct Args {
 	#[command(subcommand)]
 	subcommand: Subcommand,
@@ -15,6 +16,7 @@ pub enum Subcommand {
 }
 
 #[derive(Parser, Debug)]
+#[command(long_about = "Get an expression.")]
 pub struct GetArgs {
 	expression: Hash,
 }

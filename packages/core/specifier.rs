@@ -60,10 +60,10 @@ mod tests {
 		});
 		assert_eq!(left, right);
 
-		let left: Specifier = "hello@version".parse().unwrap();
+		let left: Specifier = "hello@0.0.0".parse().unwrap();
 		let right = Specifier::Registry(Registry {
 			package_name: "hello".to_owned(),
-			version: Some("version".to_owned()),
+			version: Some("0.0.0".to_owned()),
 		});
 		assert_eq!(left, right);
 	}

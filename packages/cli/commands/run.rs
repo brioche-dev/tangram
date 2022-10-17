@@ -1,7 +1,7 @@
 use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::path::PathBuf;
+use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_core::specifier::{self, Specifier};
 use tangram_core::system::System;
 
@@ -91,12 +91,13 @@ impl Cli {
 		// Get the path to the executable.
 		let executable_path = artifact_path.join(executable_path);
 
-		// Run the process!
-		let mut child = tokio::process::Command::new(&executable_path)
-			.args(args.trailing_args)
-			.spawn()?;
-		child.wait().await?;
+		// Drop the lock on the builder.
+		drop(builder);
 
-		Ok(())
+		// Exec the process.
+		Err(std::process::Command::new(&executable_path)
+			.args(args.trailing_args)
+			.exec()
+			.into())
 	}
 }

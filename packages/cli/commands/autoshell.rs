@@ -5,6 +5,7 @@ use futures::FutureExt;
 use std::path::PathBuf;
 
 #[derive(Parser)]
+#[command(long_about = "Manage autoshells.")]
 pub struct Args {
 	#[command(subcommand)]
 	subcommand: Subcommand,
@@ -18,14 +19,17 @@ pub enum Subcommand {
 }
 
 #[derive(Parser, Debug)]
+#[command(long_about = "Add a path as an autoshell.")]
 pub struct AddArgs {
 	path: Option<PathBuf>,
 }
 
 #[derive(Parser, Debug)]
+#[command(long_about = "List all autoshells.")]
 pub struct ListArgs {}
 
 #[derive(Parser, Debug)]
+#[command(long_about = "Remove a path as an autoshells.")]
 pub struct RemoveArgs {
 	path: Option<PathBuf>,
 }

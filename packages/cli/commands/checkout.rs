@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use tangram_core::hash::Hash;
 
 #[derive(Parser)]
+#[command(long_about = "Check out an artifact.")]
 pub struct Args {
 	artifact: Hash,
 	path: Option<PathBuf>,

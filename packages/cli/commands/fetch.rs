@@ -4,6 +4,7 @@ use clap::Parser;
 use url::Url;
 
 #[derive(Parser)]
+#[command(long_about = "Evaluate a fetch expression.")]
 pub struct Args {
 	#[arg(help = "The URL to fetch.")]
 	url: Url,

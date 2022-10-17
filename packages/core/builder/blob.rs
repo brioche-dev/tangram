@@ -3,7 +3,7 @@ use crate::{
 	hash::{Hash, Hasher},
 	util::path_exists,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
@@ -57,7 +57,7 @@ impl Shared {
 		let blob = self
 			.try_get_blob(hash)
 			.await?
-			.ok_or_else(|| anyhow!(r#"Failed to get blob with hash "{hash}"."#))?;
+			.with_context(|| format!(r#"Failed to get blob with hash "{hash}"."#))?;
 		Ok(blob)
 	}
 

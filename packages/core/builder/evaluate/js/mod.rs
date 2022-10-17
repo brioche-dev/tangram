@@ -20,27 +20,26 @@ impl Shared {
 		// Create a channel to receive the output.
 		let (sender, receiver) = tokio::sync::oneshot::channel();
 
-		// Run the js process on its own thread.
-		let thread = std::thread::spawn({
-			let builder = self.clone();
-			let js = js.clone();
-			|| {
-				// Create a single threaded tokio runtime.
-				let runtime = tokio::runtime::Builder::new_current_thread()
-					.enable_all()
-					.build()
-					.context("Failed to create the runtime.")?;
+		// Clone the builder and js expression to send to the thread.
+		let builder = self.clone();
+		let js = js.clone();
 
-				// Run the JS process.
-				let result = runtime.block_on(async move {
-					run_js_process(builder, main_runtime_handle, &js).await
-				});
+		// Run the js runtime on its own thread.
+		let thread = std::thread::spawn(|| {
+			// Create a single threaded tokio runtime.
+			let runtime = tokio::runtime::Builder::new_current_thread()
+				.enable_all()
+				.build()
+				.context("Failed to create the runtime.")?;
 
-				// Notify the receiver that the process is complete.
-				sender.send(()).unwrap();
+			// Run the JS process.
+			let result = runtime
+				.block_on(async move { run_js_process(builder, main_runtime_handle, &js).await });
 
-				result
-			}
+			// Notify the receiver that the process is complete.
+			sender.send(()).unwrap();
+
+			result
 		});
 
 		// Wait for the thread to complete.

@@ -4,13 +4,13 @@ use clap::Parser;
 
 #[derive(Parser)]
 pub struct Args {
-	name: String,
+	query: String,
 }
 
 impl Cli {
 	pub(crate) async fn command_search(&self, args: Args) -> Result<()> {
-		// Search for the package with the given name.
-		let packages = self.api_client.search_packages(&args.name).await?;
+		// Search for the package with the given query.
+		let packages = self.api_client.search_packages(&args.query).await?;
 
 		// Print the package names.
 		if packages.is_empty() {
