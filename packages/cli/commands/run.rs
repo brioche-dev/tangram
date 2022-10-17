@@ -2,7 +2,7 @@ use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::{os::unix::process::CommandExt, path::PathBuf};
-use tangram_core::specifier::{self, Specifier};
+use tangram_core::specifier::Specifier;
 use tangram_core::system::System;
 
 #[derive(Parser, Debug)]
@@ -27,29 +27,10 @@ impl Cli {
 		let builder = self.builder.lock_shared().await?;
 
 		// Get the package hash.
-		let package_hash = match args.specifier {
-			Specifier::Path(specifier::Path { path }) => {
-				// Create the package.
-				builder
-					.checkin_package(&self.api_client, &path, args.locked)
-					.await
-					.context("Failed to create the package.")?
-			},
-
-			Specifier::Registry(specifier::Registry {
-				package_name,
-				version,
-			}) => {
-				// Get the package from the registry.
-				let version = version.context("A version is required.")?;
-				self.api_client
-					.get_package_version(&package_name, &version)
-					.await
-					.with_context(|| {
-						format!(r#"Failed to get the package "{package_name}" from the registry."#)
-					})?
-			},
-		};
+		let package_hash = self
+			.package_hash_for_specifier(&args.specifier, false)
+			.await
+			.context("Failed to get the hash for the specifier.")?;
 
 		// Get the package manifest.
 		let manifest = builder.get_package_manifest(package_hash).await?;

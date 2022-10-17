@@ -1,3 +1,4 @@
+use byteorder::{LittleEndian, ReadBytesExt};
 use tokio::io::AsyncWrite;
 
 #[derive(
@@ -131,6 +132,22 @@ impl AsyncWrite for Hasher {
 		std::task::Poll::Ready(Ok(()))
 	}
 }
+
+#[derive(Default)]
+pub struct StdHasher(Option<u64>);
+
+impl std::hash::Hasher for StdHasher {
+	fn finish(&self) -> u64 {
+		self.0.unwrap()
+	}
+
+	fn write(&mut self, mut bytes: &[u8]) {
+		assert_eq!(bytes.len(), 32);
+		self.0 = Some(bytes.read_u64::<LittleEndian>().unwrap());
+	}
+}
+
+pub type BuildHasher = std::hash::BuildHasherDefault<StdHasher>;
 
 #[cfg(test)]
 mod tests {

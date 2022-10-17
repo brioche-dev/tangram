@@ -27,7 +27,8 @@ impl Cli {
 		// Get the package hash.
 		let package_hash = self
 			.package_hash_for_specifier(&args.specifier, args.locked)
-			.await?;
+			.await
+			.context("Failed to get the hash for the specifier.")?;
 
 		// Create the target args.
 		let target_args = self.create_target_args(args.system).await?;

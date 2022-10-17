@@ -2,10 +2,13 @@ use self::{
 	clients::blob::Client as BlobClient, clients::expression::Client as ExpressionClient,
 	heuristics::FILESYSTEM_CONCURRENCY_LIMIT, lock::Lock,
 };
-use crate::{db::Db, hash::Hash, id::Id};
+use crate::{
+	db::Db,
+	hash::{self, Hash},
+	id::Id,
+};
 use anyhow::Result;
 use async_recursion::async_recursion;
-use fnv::FnvBuildHasher;
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -53,7 +56,7 @@ pub struct State {
 
 	// For expressions that are expensive to evaluate, it is a waste to evaluate them if another evaluation for the same expression is already in progress. This map stores a receiver that will be notified when an in progress evaluation of the expression completes.
 	pub in_progress_evaluations:
-		Arc<Mutex<HashMap<Hash, tokio::sync::broadcast::Receiver<Hash>, FnvBuildHasher>>>,
+		Arc<Mutex<HashMap<Hash, tokio::sync::broadcast::Receiver<Hash>, hash::BuildHasher>>>,
 
 	/// The file system semaphore is used to prevent the builder from opening too many files simultaneously.
 	file_system_semaphore: Arc<Semaphore>,

@@ -1,5 +1,9 @@
 use super::Exclusive;
-use crate::{db::ExpressionWithOutput, expression::Expression, hash::Hash};
+use crate::{
+	db::ExpressionWithOutput,
+	expression::Expression,
+	hash::{self, Hash},
+};
 use anyhow::{bail, Context, Result};
 use lmdb::{Cursor, Transaction};
 use std::{
@@ -10,8 +14,8 @@ use std::{
 impl Exclusive {
 	pub async fn garbage_collect(&self, roots: Vec<Hash>) -> Result<()> {
 		// Create hash sets to track the marked expressions and blobs.
-		let mut marked_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
-		let mut marked_blob_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
+		let mut marked_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
+		let mut marked_blob_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
 
 		{
 			// Create a read/write transaction.
@@ -54,8 +58,8 @@ impl Exclusive {
 	fn mark(
 		&self,
 		txn: &mut lmdb::RwTransaction,
-		marked_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
-		marked_blob_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
+		marked_hashes: &mut HashSet<Hash, hash::BuildHasher>,
+		marked_blob_hashes: &mut HashSet<Hash, hash::BuildHasher>,
 		roots: Vec<Hash>,
 	) -> Result<()> {
 		// Traverse the transitive dependencies of the roots and add each hash to the marked expression hashes and marked blob hashes.
@@ -163,7 +167,7 @@ impl Exclusive {
 	fn sweep_expressions_with_txn(
 		&self,
 		txn: &mut lmdb::RwTransaction,
-		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
+		marked_hashes: &HashSet<Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Get a read cursor.
 		let mut cursor = txn.open_rw_cursor(self.db.expressions)?;
@@ -188,7 +192,7 @@ impl Exclusive {
 	async fn sweep_blobs(
 		&self,
 		blobs_path: &Path,
-		marked_blob_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
+		marked_blob_hashes: &HashSet<Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Delete all blobs that are not not marked.
 		let mut read_dir = tokio::fs::read_dir(blobs_path)
@@ -213,7 +217,7 @@ impl Exclusive {
 	async fn sweep_artifacts(
 		&self,
 		artifacts_path: &Path,
-		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
+		marked_hashes: &HashSet<Hash, hash::BuildHasher>,
 	) -> Result<()> {
 		// Delete all artifacts that are not not marked.
 		let mut read_dir = tokio::fs::read_dir(artifacts_path)
