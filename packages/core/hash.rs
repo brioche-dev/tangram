@@ -1,4 +1,4 @@
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, NativeEndian, ReadBytesExt};
 use tokio::io::AsyncWrite;
 
 #[derive(
@@ -142,8 +142,13 @@ impl std::hash::Hasher for StdHasher {
 	}
 
 	fn write(&mut self, mut bytes: &[u8]) {
-		assert_eq!(bytes.len(), 32);
-		self.0 = Some(bytes.read_u64::<LittleEndian>().unwrap());
+		if bytes.len() == 8 {
+			assert_eq!(bytes.read_u64::<NativeEndian>().unwrap(), 32);
+		} else if bytes.len() == 32 {
+			self.0 = Some(bytes.read_u64::<LittleEndian>().unwrap());
+		} else {
+			panic!("Unexpected value to hash.");
+		}
 	}
 }
 
