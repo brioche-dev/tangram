@@ -226,23 +226,8 @@ impl Runtime {
 			drop(try_catch_scope);
 			drop(scope);
 
-			// Run the event loop to completion.
-			self.runtime.run_event_loop(false).await?;
-
-			// Retrieve the output.
-			let mut scope = self.runtime.handle_scope();
-			let output = v8::Local::new(&mut scope, output);
-			let output = if output.is_promise() {
-				let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
-				promise.result(&mut scope)
-			} else {
-				output
-			};
-
-			// Move the output to the global scope.
-			let output = v8::Global::new(&mut scope, output);
-
-			drop(scope);
+			// Resolve the value.
+			let output = self.runtime.resolve_value(output).await?;
 
 			arg_values.push(output);
 		}
@@ -296,22 +281,8 @@ impl Runtime {
 		drop(try_catch_scope);
 		drop(scope);
 
-		// Run the event loop to completion.
-		self.runtime.run_event_loop(false).await?;
-
-		// Retrieve the return value.
-		let mut scope = self.runtime.handle_scope();
-		let output = v8::Local::new(&mut scope, output);
-		let output = if output.is_promise() {
-			let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
-			promise.result(&mut scope)
-		} else {
-			output
-		};
-
-		// Move the return value to the global scope.
-		let output = v8::Global::new(&mut scope, output);
-		drop(scope);
+		// Resolve the output.
+		let output = self.runtime.resolve_value(output).await?;
 
 		// Create a try catch scope to call Tangram.toJson.
 		let mut scope = self.runtime.handle_scope();
@@ -345,21 +316,14 @@ impl Runtime {
 		drop(try_catch_scope);
 		drop(scope);
 
-		// Run the event loop to completion.
-		self.runtime.run_event_loop(false).await?;
-
-		// Retrieve the output.
-		let mut scope = self.runtime.handle_scope();
-		let output = v8::Local::new(&mut scope, output);
-		let output = if output.is_promise() {
-			let promise: v8::Local<v8::Promise> = output.try_into().unwrap();
-			promise.result(&mut scope)
-		} else {
-			output
-		};
+		// Resolve the output.
+		let output = self.runtime.resolve_value(output).await?;
 
 		// Deserialize the output.
+		let mut scope = self.runtime.handle_scope();
+		let output = v8::Local::new(&mut scope, output);
 		let expression: Expression = serde_v8::from_v8(&mut scope, output)?;
+		drop(scope);
 
 		// Add the expression.
 		let hash = self.builder.add_expression(&expression).await?;
