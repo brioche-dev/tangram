@@ -21,7 +21,7 @@ pub struct Registry {
 impl std::str::FromStr for Specifier {
 	type Err = anyhow::Error;
 	fn from_str(source: &str) -> Result<Specifier> {
-		if source.starts_with('.') {
+		if source.starts_with('.') || source.starts_with('/') {
 			// Parse this as a path specifier.
 			let path = PathBuf::from_str(source)?;
 			Ok(Specifier::Path(Path { path }))
