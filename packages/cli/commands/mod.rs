@@ -13,6 +13,7 @@ pub mod new;
 pub mod publish;
 pub mod pull;
 pub mod push;
+pub mod repl;
 pub mod run;
 pub mod search;
 pub mod shell;

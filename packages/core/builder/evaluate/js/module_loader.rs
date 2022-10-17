@@ -22,7 +22,7 @@ pub struct ModuleLoader {
 }
 
 struct State {
-	pub builder: crate::builder::Shared,
+	pub builder: Shared,
 	pub main_runtime_handle: tokio::runtime::Handle,
 	pub modules: Mutex<HashMap<Url, Module, fnv::FnvBuildHasher>>,
 }
@@ -34,10 +34,7 @@ struct Module {
 
 impl ModuleLoader {
 	/// Create a new module loader.
-	pub fn new(
-		builder: crate::builder::Shared,
-		main_runtime_handle: tokio::runtime::Handle,
-	) -> ModuleLoader {
+	pub fn new(builder: Shared, main_runtime_handle: tokio::runtime::Handle) -> ModuleLoader {
 		let state = State {
 			builder,
 			main_runtime_handle,

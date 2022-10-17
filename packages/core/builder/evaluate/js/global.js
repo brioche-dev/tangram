@@ -692,8 +692,16 @@ globalThis.console = {
 };
 
 let print = (value) => {
-	if (Array.isArray(value)) {
+	if (value === undefined) {
+		return "undefined";
+	} else if (value === null) {
+		return "null";
+	} else if (Array.isArray(value)) {
 		return `[${value.map(print).join(", ")}]`;
+	} else if (value instanceof Error) {
+		return value.stack;
+	} else if (value instanceof Promise) {
+		return "Promise";
 	} else if (typeof value === "object") {
 		let constructorName = "";
 		if (value.constructor.name !== "Object") {
@@ -703,6 +711,8 @@ let print = (value) => {
 			([key, value]) => `${key}: ${print(value)}`,
 		);
 		return `${constructorName}{ ${entries.join(", ")} }`;
+	} else if (typeof value === "function") {
+		return `[Function: ${value.name || "(anonymous)"}]`;
 	} else {
 		return JSON.stringify(value);
 	}
@@ -740,6 +750,7 @@ globalThis.Tangram = {
 	fromJson,
 	getBlob,
 	getExpression,
+	print,
 	source,
 	template,
 	toJson,
