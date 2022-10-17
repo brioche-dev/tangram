@@ -9,24 +9,17 @@ use std::{
 
 impl Exclusive {
 	pub async fn garbage_collect(&self, roots: Vec<Hash>) -> Result<()> {
-		// Create hash sets to track the marked expressions, artifacts, and blobs.
+		// Create hash sets to track the marked expressions and blobs.
 		let mut marked_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
-		let mut marked_artifact_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 		let mut marked_blob_hashes: HashSet<Hash, fnv::FnvBuildHasher> = HashSet::default();
 
 		{
 			// Create a read/write transaction.
 			let mut txn = self.db.env.begin_rw_txn()?;
 
-			// Mark the expressions, artifacts, and blobs.
-			self.mark(
-				&mut txn,
-				&mut marked_hashes,
-				&mut marked_artifact_hashes,
-				&mut marked_blob_hashes,
-				roots,
-			)
-			.context("Failed to mark the expressions and blobs.")?;
+			// Mark the expressions and blobs.
+			self.mark(&mut txn, &mut marked_hashes, &mut marked_blob_hashes, roots)
+				.context("Failed to mark the expressions and blobs.")?;
 
 			// Sweep the expressions.
 			self.sweep_expressions_with_txn(&mut txn, &marked_hashes)
@@ -37,7 +30,7 @@ impl Exclusive {
 		}
 
 		// Sweep the artifacts.
-		self.sweep_artifacts(&self.as_shared().artifacts_path(), &marked_artifact_hashes)
+		self.sweep_artifacts(&self.as_shared().artifacts_path(), &marked_hashes)
 			.await
 			.context("Failed to sweep the artifacts.")?;
 
@@ -62,7 +55,6 @@ impl Exclusive {
 		&self,
 		txn: &mut lmdb::RwTransaction,
 		marked_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
-		marked_artifact_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		marked_blob_hashes: &mut HashSet<Hash, fnv::FnvBuildHasher>,
 		roots: Vec<Hash>,
 	) -> Result<()> {
@@ -108,7 +100,6 @@ impl Exclusive {
 				| Expression::Symlink(_) => {},
 
 				Expression::Artifact(artifact) => {
-					marked_artifact_hashes.insert(hash);
 					queue.push_back(artifact.root);
 				},
 
@@ -222,7 +213,7 @@ impl Exclusive {
 	async fn sweep_artifacts(
 		&self,
 		artifacts_path: &Path,
-		marked_artifact_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
+		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
 	) -> Result<()> {
 		// Delete all artifacts that are not not marked.
 		let mut read_dir = tokio::fs::read_dir(artifacts_path)
@@ -235,7 +226,7 @@ impl Exclusive {
 				.context("Failed to parse the file name as a string.")?
 				.parse()
 				.context("Failed to parse the entry in the artifacts directory as a hash.")?;
-			if !marked_artifact_hashes.contains(&artifact_hash) {
+			if !marked_hashes.contains(&artifact_hash) {
 				tokio::fs::remove_file(&entry.path())
 					.await
 					.context("Failed to remove the artifact.")?;
