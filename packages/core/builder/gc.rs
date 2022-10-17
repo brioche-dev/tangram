@@ -29,6 +29,11 @@ impl Exclusive {
 			txn.commit()?;
 		}
 
+		// Sweep the artifacts.
+		self.sweep_artifacts(&self.as_shared().artifacts_path(), &marked_hashes)
+			.await
+			.context("Failed to sweep the artifacts.")?;
+
 		// Sweep the blobs.
 		self.sweep_blobs(&self.as_shared().blobs_path(), &marked_blob_hashes)
 			.await
@@ -54,6 +59,7 @@ impl Exclusive {
 		roots: Vec<Hash>,
 	) -> Result<()> {
 		// Traverse the transitive dependencies of the roots and add each hash to the marked expression hashes and marked blob hashes.
+
 		let mut queue: VecDeque<Hash> = VecDeque::from_iter(roots);
 		while let Some(hash) = queue.pop_front() {
 			// If this expression has already been marked, continue to avoid an infinite loop.
@@ -68,7 +74,9 @@ impl Exclusive {
 			let ExpressionWithOutput {
 				expression,
 				output_hash,
-			} = self.as_shared().get_expression_with_output_local(hash)?;
+			} = self
+				.as_shared()
+				.get_expression_with_output_local_with_txn(txn, hash)?;
 
 			// Add this expression's output, if it has one, to the queue.
 			if let Some(output_hash) = output_hash {
@@ -197,6 +205,31 @@ impl Exclusive {
 				tokio::fs::remove_file(&entry.path())
 					.await
 					.context("Failed to remove the blob.")?;
+			}
+		}
+		Ok(())
+	}
+
+	async fn sweep_artifacts(
+		&self,
+		artifacts_path: &Path,
+		marked_hashes: &HashSet<Hash, fnv::FnvBuildHasher>,
+	) -> Result<()> {
+		// Delete all artifacts that are not not marked.
+		let mut read_dir = tokio::fs::read_dir(artifacts_path)
+			.await
+			.context("Failed to read the artifacts directory.")?;
+		while let Some(entry) = read_dir.next_entry().await? {
+			let artifact_hash: Hash = entry
+				.file_name()
+				.to_str()
+				.context("Failed to parse the file name as a string.")?
+				.parse()
+				.context("Failed to parse the entry in the artifacts directory as a hash.")?;
+			if !marked_hashes.contains(&artifact_hash) {
+				tokio::fs::remove_file(&entry.path())
+					.await
+					.context("Failed to remove the artifact.")?;
 			}
 		}
 		Ok(())
