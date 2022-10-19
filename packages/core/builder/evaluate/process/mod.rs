@@ -7,6 +7,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::{try_join3, try_join_all};
+use itertools::Itertools;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::PathBuf,
@@ -143,13 +144,31 @@ impl Shared {
 				string: string.as_ref().to_owned(),
 				paths: HashMap::new(),
 			}),
-			Expression::Artifact(_) => {
+			Expression::Artifact(artifact) => {
+				// Checkout the artifact.
 				let artifact_path = self.checkout_to_artifacts(hash).await?;
 				let string = artifact_path
 					.to_str()
 					.context("The path must be valid UTF-8.")?
 					.to_owned();
-				let paths = [(artifact_path, PathMode::Read)].into();
+
+				// Get all dependent artifacts recursively.
+				let dependent_artifact_hashes = self.get_dependent_artifacts(artifact.root)?;
+
+				// Checkout all dependent artifacts.
+				let dependent_artifact_paths = try_join_all(
+					dependent_artifact_hashes
+						.into_iter()
+						.map(|hash| self.checkout_to_artifacts(hash)),
+				)
+				.await?;
+
+				// Include the artifact and all dependencies as read-only.
+				let paths = std::iter::once(artifact_path)
+					.chain(dependent_artifact_paths.into_iter())
+					.map(|artifact_path| (artifact_path, PathMode::Read))
+					.collect();
+
 				Ok(StringWithPaths { string, paths })
 			},
 			Expression::Template(template) => {
@@ -175,6 +194,41 @@ impl Shared {
 				Ok(string_with_paths)
 			},
 			_ => bail!("The expression must be a string, artifact, or template."),
+		}
+	}
+
+	// Return all dependent artifacts recursively for an artifact or directory.
+	fn get_dependent_artifacts(&self, hash: Hash) -> Result<Vec<Hash>> {
+		let expression = self.get_expression_local(hash)?;
+		match expression {
+			Expression::Artifact(artifact) => {
+				// Get all dependent artifacts from the root.
+				let mut deps = self.get_dependent_artifacts(artifact.root)?;
+
+				// Add the artifact itself as a dependency.
+				deps.push(hash);
+
+				Ok(deps)
+			},
+			Expression::Directory(dir) => {
+				// Get the dependencies of each entry.
+				let deps = dir
+					.entries
+					.values()
+					.map(|&entry_hash| self.get_dependent_artifacts(entry_hash))
+					.flatten_ok()
+					.collect::<Result<Vec<_>>>()?;
+				Ok(deps)
+			},
+			// Files and symlinks aren't dependencies.
+			Expression::File(_) | Expression::Symlink(_) => Ok(vec![]),
+			// Recurse into dependencies.
+			Expression::Dependency(dep) => self.get_dependent_artifacts(dep.artifact),
+			other => {
+				bail!(
+					"Tried to get dependent artifacts for a non-filesystem expression {other:?}."
+				);
+			},
 		}
 	}
 }
