@@ -196,13 +196,13 @@ declare module Tangram {
 		Arm64Macos = "arm64_macos",
 	}
 
-	class Hash<T extends Expression = Expression> {
+	class Hash<T extends AnyExpression = AnyExpression> {
 		constructor(string: string);
 
 		toString(): string;
 	}
 
-	type Expression<Output extends Expression = Expression<any>> =
+	type AnyExpression =
 		| null
 		| boolean
 		| number
@@ -214,49 +214,83 @@ declare module Tangram {
 		| Dependency
 		| Package
 		| Template
-		| Js<Output>
 		| Fetch
 		| Process
-		| Target<Output>
-		| Array<Expression<Output>>
-		| { [key: string]: Expression<Output> };
+		| Js<any>
+		| Target<any>
+		| Array<AnyExpression>
+		| { [key: string]: AnyExpression };
 
-	type OutputForExpression<T extends Expression> = [T] extends [null]
+	type Expression<Output extends AnyExpression> = Output extends null
 		? null
-		: [T] extends [boolean]
+		: Output extends boolean
 		? boolean
-		: [T] extends [number]
+		: Output extends number
 		? number
-		: [T] extends [string]
-		? string
-		: [T] extends [Artifact]
-		? Artifact
-		: [T] extends [Directory]
-		? Directory
-		: [T] extends [File]
+		: Output extends string
+		? (string | Template)
+		: Output extends Artifact
+		? (Artifact | Fetch | Process)
+		: Output extends File
 		? File
-		: [T] extends [Symlink]
+		: Output extends Directory
+		? Directory
+		: Output extends Symlink
 		? Symlink
-		: [T] extends [Dependency]
+		: Output extends Dependency
 		? Dependency
-		: [T] extends [Package]
+		: Output extends Package
 		? Package
-		: [T] extends [Template]
+		: Output extends Template
 		? Template
-		: [T] extends [Js<infer O>]
-		? OutputForExpression<O>
-		: [T] extends [Fetch]
+		: Output extends Js<infer O extends AnyExpression>
+		? Js<O>
+		: Output extends Fetch
+		? Fetch
+		: Output extends Process
+		? Process
+		: Output extends Target<infer O extends AnyExpression>
+		? Target<O>
+		: Output extends Array<infer V extends AnyExpression>
+		? Array<V>
+		: Output extends { [key: string]: AnyExpression }
+		? { [K in keyof(Output)]: Output[K] }
+		: never;
+
+	type OutputForExpression<T extends AnyExpression> = T extends null
+		? null
+		: T extends boolean
+		? boolean
+		: T extends number
+		? number
+		: T extends string
+		? string
+		: T extends Artifact
 		? Artifact
-		: [T] extends [Process]
+		: T extends Directory
+		? Directory
+		: T extends File
+		? File
+		: T extends Symlink
+		? Symlink
+		: T extends Dependency
+		? Dependency
+		: T extends Package
+		? Package
+		: T extends Template
+		? Template
+		: T extends Js<infer O extends AnyExpression>
+		? O
+		: T extends Fetch
 		? Artifact
-		: [T] extends [Target<infer O>]
-		? OutputForExpression<O>
-		: [T] extends [Array<infer V extends Expression>]
-		? Array<OutputForExpression<V>>
-		: [T] extends [{ [key: string]: Expression<infer V extends Expression> }]
-		? { [K in keyof T]: OutputForExpression<T[K]> }
-		: [T] extends [Expression<infer O extends Expression>]
-		? OutputForExpression<O>
+		: T extends Process
+		? Artifact
+		: T extends Target<infer O extends AnyExpression>
+		? O
+		: T extends Array<infer V extends AnyExpression>
+		? Array<V>
+		: T extends { [key: string]: AnyExpression }
+		? { [K in keyof T]: T[K] }
 		: never;
 
 	class Artifact {
@@ -264,12 +298,12 @@ declare module Tangram {
 		#hash: Tangram.Hash;
 
 		constructor(
-			expression: Expression<Directory | File | Symlink | Dependency>,
+			expression: FilesystemExpression,
 		);
 
 		hash(): Promise<Hash>;
 
-		getRoot(): Promise<Expression<Directory | File | Symlink | Dependency>>;
+		getRoot(): Promise<FilesystemExpression>;
 	}
 
 	type FilesystemExpression = Directory | File | Symlink | Dependency;
@@ -343,12 +377,12 @@ declare module Tangram {
 		export: string;
 	};
 
-	class Js<O extends Expression> {
+	class Js<O extends AnyExpression> {
 		#type: "js";
 
 		constructor(args: JsArgs);
 
-		getArgs(): Promise<Expression<Array<Expression>>>;
+		getArgs(): Promise<Expression<Array<AnyExpression>>>;
 	}
 
 	type FetchArgs = {
@@ -367,7 +401,7 @@ declare module Tangram {
 	}
 
 	type ProcessArgs = {
-		args: Expression<Array<Expression>>;
+		args: Expression<Array<AnyExpression>>;
 		command: Expression<string | Artifact | Template>;
 		env: Expression<{
 			[key: string]: Expression<string | Artifact | Template>;
@@ -383,14 +417,14 @@ declare module Tangram {
 	type TargetArgs = {
 		package: Expression<Artifact>;
 		name: string;
-		args: Expression<Array<Expression>>;
+		args: Expression<Array<AnyExpression>>;
 	};
 
-	class Target<O extends Expression> {
+	class Target<O extends AnyExpression> {
 		#type: `target`;
 		constructor(args: TargetArgs);
 		getPackage(): Promise<Package>;
-		getArgs(): Promise<Array<Expression>>;
+		getArgs(): Promise<Array<AnyExpression>>;
 	}
 
 	let template: (
@@ -398,17 +432,17 @@ declare module Tangram {
 		...placeholders: Array<Expression<string | Artifact | Template>>
 	) => Template;
 
-	let evaluate: <E extends Expression>(
+	let evaluate: <E extends AnyExpression>(
 		expression: E,
 	) => Promise<OutputForExpression<E>>;
 
-	let addExpression: <E extends Expression>(expression: E) => Promise<Hash<E>>;
+	let addExpression: <E extends AnyExpression>(expression: E) => Promise<Hash<E>>;
 
-	let getExpression: <E extends Expression>(hash: Hash<E>) => Promise<E>;
+	let getExpression: <E extends AnyExpression>(hash: Hash<E>) => Promise<E>;
 
 	let addBlob: (blob: Uint8Array) => Promise<Hash>;
 
 	let getBlob: (hash: Hash) => Promise<Uint8Array>;
 
-	let source: (url: string | URL) => Promise<Package>;
+	let source: (url: string | URL) => Promise<Artifact>;
 }
