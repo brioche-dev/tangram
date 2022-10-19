@@ -446,3 +446,7 @@ declare module Tangram {
 
 	let source: (url: string | URL) => Promise<Artifact>;
 }
+
+declare class TOML {
+	static parse(toml: string): any;
+}

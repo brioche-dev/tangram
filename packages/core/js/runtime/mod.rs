@@ -38,6 +38,7 @@ impl Runtime {
 		let tangram_extension = deno_core::Extension::builder()
 			.ops(vec![
 				op_tangram_print::decl(),
+				op_tangram_parse_value::decl(),
 				op_tangram_add_blob::decl(),
 				op_tangram_get_blob::decl(),
 				op_tangram_add_expression::decl(),
@@ -381,6 +382,26 @@ impl Runtime {
 fn op_tangram_print(string: String) -> Result<(), deno_core::error::AnyError> {
 	println!("{string}");
 	Ok(())
+}
+
+#[derive(Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ParserFormat {
+	Toml,
+}
+
+#[deno_core::op]
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
+fn op_tangram_parse_value(
+	format: ParserFormat,
+	string: String,
+) -> Result<serde_json::Value, deno_core::error::AnyError> {
+	match format {
+		ParserFormat::Toml => {
+			let value = toml::from_str(&string)?;
+			Ok(value)
+		},
+	}
 }
 
 #[deno_core::op]

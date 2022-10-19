@@ -27,6 +27,7 @@ let ExpressionType = {
 
 let Syscall = {
 	Print: "print",
+	ParseValue: "parse_value",
 	AddBlob: "add_blob",
 	GetBlob: "get_blob",
 	AddExpression: "add_expression",
@@ -38,6 +39,8 @@ let syscall = (syscall, ...args) => {
 	let opName = "op_tangram_" + syscall;
 	switch (syscall) {
 		case Syscall.Print:
+			return Deno.core.opSync(opName, ...args);
+		case Syscall.ParseValue:
 			return Deno.core.opSync(opName, ...args);
 		case Syscall.AddBlob:
 			return Deno.core.opAsync(opName, ...args);
@@ -723,6 +726,12 @@ let source = async (url) => {
 	let package = await getExpression(hash);
 	return await package.getSource();
 };
+
+class TOML {
+	static parse(toml) {
+		return syscall(Syscall.ParseValue, "toml", toml);
+	}
+}
 
 globalThis.Tangram = {
 	Artifact,
