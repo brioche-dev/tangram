@@ -1,6 +1,7 @@
 pub mod autoshell;
 pub mod blob;
 pub mod build;
+pub mod check;
 pub mod checkin;
 pub mod checkout;
 pub mod expression;
@@ -9,6 +10,7 @@ pub mod gc;
 pub mod hash;
 pub mod init;
 pub mod login;
+pub mod lsp;
 pub mod new;
 pub mod publish;
 pub mod pull;

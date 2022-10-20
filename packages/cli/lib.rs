@@ -38,6 +38,7 @@ enum Subcommand {
 	Autoshell(commands::autoshell::Args),
 	Blob(commands::blob::Args),
 	Build(commands::build::Args),
+	Check(commands::check::Args),
 	Checkin(commands::checkin::Args),
 	Checkout(commands::checkout::Args),
 	Expression(commands::expression::Args),
@@ -46,16 +47,17 @@ enum Subcommand {
 	Hash(commands::hash::Args),
 	Init(commands::init::Args),
 	Login(commands::login::Args),
+	Lsp(commands::lsp::Args),
 	New(commands::new::Args),
 	Publish(commands::publish::Args),
+	Pull(commands::pull::Args),
+	Push(commands::push::Args),
 	Repl(commands::repl::Args),
 	Run(commands::run::Args),
 	Search(commands::search::Args),
 	Shell(commands::shell::Args),
 	Update(commands::update::Args),
 	Upgrade(commands::upgrade::Args),
-	Push(commands::push::Args),
-	Pull(commands::pull::Args),
 }
 
 impl Cli {
@@ -126,8 +128,9 @@ impl Cli {
 		// Run the subcommand.
 		match args.subcommand {
 			Subcommand::Autoshell(args) => self.command_autoshell(args).boxed(),
-			Subcommand::Build(args) => self.command_build(args).boxed(),
 			Subcommand::Blob(args) => self.command_blob(args).boxed(),
+			Subcommand::Build(args) => self.command_build(args).boxed(),
+			Subcommand::Check(args) => self.command_check(args).boxed(),
 			Subcommand::Checkin(args) => self.command_checkin(args).boxed(),
 			Subcommand::Checkout(args) => self.command_checkout(args).boxed(),
 			Subcommand::Expression(args) => self.command_expression(args).boxed(),
@@ -136,6 +139,7 @@ impl Cli {
 			Subcommand::Hash(args) => self.command_hash(args).boxed(),
 			Subcommand::Init(args) => self.command_init(args).boxed(),
 			Subcommand::Login(args) => self.command_login(args).boxed(),
+			Subcommand::Lsp(args) => self.command_lsp(args).boxed(),
 			Subcommand::New(args) => self.command_new(args).boxed(),
 			Subcommand::Publish(args) => self.command_publish(args).boxed(),
 			Subcommand::Pull(args) => self.command_pull(args).boxed(),

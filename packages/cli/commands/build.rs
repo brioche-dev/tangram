@@ -9,12 +9,16 @@ use tangram_core::{specifier::Specifier, system::System};
 pub struct Args {
 	#[arg(long)]
 	locked: bool,
+
 	#[arg(default_value = ".")]
 	specifier: Specifier,
+
 	#[arg(default_value = "default")]
 	name: String,
+
 	#[arg(long)]
 	system: Option<System>,
+
 	#[arg(long)]
 	checkout: Option<PathBuf>,
 }

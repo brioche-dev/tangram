@@ -5,10 +5,12 @@
 pub mod api_client;
 pub mod blob;
 pub mod builder;
+pub mod command;
 pub mod db;
 pub mod expression;
 pub mod hash;
 pub mod id;
+pub mod js;
 pub mod lockfile;
 pub mod manifest;
 pub mod specifier;

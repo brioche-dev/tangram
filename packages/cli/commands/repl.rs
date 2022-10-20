@@ -1,7 +1,7 @@
 use crate::Cli;
 use anyhow::Result;
 use clap::Parser;
-use tangram_core::builder::evaluate::js::Runtime;
+use tangram_core::js;
 
 #[derive(Parser)]
 #[command(long_about = "Read, Eval, Print, Loop.")]
@@ -23,7 +23,9 @@ impl Cli {
 			// Run the REPL.
 			rt.block_on(async move {
 				// Create the runtime.
-				let mut runtime = Runtime::new(builder, main_runtime_handle).await.unwrap();
+				let mut runtime = js::Runtime::new(builder, main_runtime_handle)
+					.await
+					.unwrap();
 
 				// This is the REPL loop.
 				let mut readline = rustyline::Editor::<()>::new().unwrap();
