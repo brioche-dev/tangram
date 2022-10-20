@@ -2,6 +2,7 @@ use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
 use futures::FutureExt;
+use indoc::indoc;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -16,6 +17,8 @@ pub enum Subcommand {
 	Add(AddArgs),
 	List(ListArgs),
 	Remove(RemoveArgs),
+	#[command(hide = true)]
+	Hook(HookArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -34,12 +37,19 @@ pub struct RemoveArgs {
 	path: Option<PathBuf>,
 }
 
+#[derive(Parser, Debug)]
+#[command(long_about = "Hook")]
+pub struct HookArgs {
+	shell: String,
+}
+
 impl Cli {
 	pub(crate) async fn command_autoshell(&self, args: Args) -> Result<()> {
 		match args.subcommand {
 			Subcommand::Add(args) => self.command_autoshell_add(args).boxed(),
 			Subcommand::List(args) => self.command_autoshell_list(args).boxed(),
 			Subcommand::Remove(args) => self.command_autoshell_remove(args).boxed(),
+			Subcommand::Hook(args) => self.command_autoshell_hook(args).boxed(),
 		}
 		.await?;
 		Ok(())
@@ -75,7 +85,13 @@ impl Cli {
 		let config = Cli::read_config().await?.unwrap_or_default();
 
 		// List the autoshells.
-		for path in config.autoshells.iter().flatten() {
+		let autoshells = config.autoshells.unwrap_or_default();
+
+		if autoshells.is_empty() {
+			println!("There are no autoshells.");
+		}
+
+		for path in autoshells {
 			println!("{}", path.display());
 		}
 
@@ -106,6 +122,73 @@ impl Cli {
 
 		// Write the config.
 		Cli::write_config(&config).await?;
+
+		Ok(())
+	}
+
+	async fn command_autoshell_hook(&self, _args: HookArgs) -> Result<()> {
+		// Read the config.
+		let config = Cli::read_config().await?.unwrap_or_default();
+
+		// Deactivate an existing shell.
+		let program = indoc! {"
+			type _tangram_deactivate &> /dev/null && _tangram_deactivate
+		"};
+		print!("{}", program);
+
+		// Get the current working directory.
+		let cwd = std::env::current_dir().context("Failed to get the working directory.")?;
+
+		// If the new working directory is a subdirectory of an autoshell, write a script to set to the PATH and other environment variables.
+		if let Some(autoshells) = config.autoshells.as_ref() {
+			let mut ancestor_autoshells: Vec<_> = autoshells
+				.iter()
+				.filter(|path| cwd.starts_with(path))
+				.collect();
+			ancestor_autoshells.sort_by(|path_a, path_b| {
+				path_a
+					.components()
+					.count()
+					.cmp(&path_b.components().count())
+			});
+			if let Some(autoshell) = ancestor_autoshells.last() {
+				// Build the shell at the given path.
+				let builder = self.builder.lock_shared().await?;
+
+				// Checkin the package for this autoshell.
+				let package_hash = builder
+					.checkin_package(&self.api_client, autoshell, false)
+					.await?;
+
+				// Create the target args.
+				let target_args = self.create_target_args(None).await?;
+
+				// Add the expression.
+				let expression_hash = builder
+					.add_expression(&tangram_core::expression::Expression::Target(
+						tangram_core::expression::Target {
+							package: package_hash,
+							name: "shell".into(),
+							args: target_args,
+						},
+					))
+					.await?;
+
+				// Evaluate the expression.
+				let output_hash = builder
+					.evaluate(expression_hash, expression_hash)
+					.await
+					.context("Failed to evaluate the target expression.")?;
+
+				// Check out the artifact.
+				let artifact_path = builder.checkout_to_artifacts(output_hash).await?;
+
+				// Get the path to the executable.
+				let shell_activate_script_path = artifact_path.join("activate");
+
+				println!("source {}", shell_activate_script_path.to_str().unwrap());
+			}
+		}
 
 		Ok(())
 	}

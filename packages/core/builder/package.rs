@@ -4,7 +4,7 @@ use crate::{
 	expression::{Expression, Package},
 	hash::Hash,
 	lockfile::{self, Lockfile},
-	manifest::{Dependency, Manifest, RegistryDependency},
+	manifest::Manifest,
 };
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
@@ -77,22 +77,9 @@ impl Shared {
 			)
 		})?;
 
-		let mut manifest_dependencies = match manifest.dependencies {
+		let manifest_dependencies = match manifest.dependencies {
 			Some(dependencies) => dependencies,
 			None => BTreeMap::new(),
-		};
-		if manifest.name != "std" && !manifest_dependencies.contains_key("std") {
-			let mut std_dependency_versions =
-				api_client.get_package("std".to_owned()).await?.versions;
-			std_dependency_versions.sort();
-			let std_dependency_latest = std_dependency_versions
-				.last()
-				.context("Failed to retrieve a valid std dependency.")?;
-			let std_dependency = Dependency::RegistryDependency(RegistryDependency {
-				name: Some("std".to_owned()),
-				version: std_dependency_latest.clone(),
-			});
-			manifest_dependencies.insert("std".into(), std_dependency);
 		};
 
 		// Get the dependencies.
