@@ -288,9 +288,9 @@ declare module Tangram {
 		: T extends Target<infer O extends AnyExpression>
 		? O
 		: T extends Array<infer V extends AnyExpression>
-		? Array<V>
+		? Array<OutputForExpression<V>>
 		: T extends { [key: string]: AnyExpression }
-		? { [K in keyof T]: T[K] }
+		? { [K in keyof T]: OutputForExpression<T[K]> }
 		: never;
 
 	class Artifact {
