@@ -304,6 +304,12 @@ declare module Tangram {
 		hash(): Promise<Hash>;
 
 		getRoot(): Promise<FilesystemExpression>;
+
+		getRootDir(): Promise<Directory>;
+
+		map(func: (_root: FilesystemExpression) => FilesystemExpression | Promise<FilesystemExpression>): Promise<Artifact>;
+
+		mapDir(func: (_root: Directory) => FilesystemExpression | Promise<FilesystemExpression>): Promise<Artifact>;
 	}
 
 	type FilesystemExpression = Directory | File | Symlink | Dependency;
