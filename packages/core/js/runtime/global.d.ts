@@ -163,6 +163,7 @@ declare module Tangram {
 
 		enum Syscall {
 			Print = "print",
+			ParseValue = "parse_value",
 			AddBlob = "add_blob",
 			GetBlob = "get_blob",
 			AddExpression = "add_expression",
@@ -171,6 +172,8 @@ declare module Tangram {
 		}
 
 		function syscall(syscall: Syscall.Print, value: string): void;
+
+		function syscall(syscall: Syscall.ParseValue, format: string, contents: string): any;
 
 		function syscall(syscall: Syscall.AddBlob, blob: Uint8Array): Promise<Hash>;
 
@@ -428,6 +431,12 @@ declare module Tangram {
 		getArgs(): Promise<Array<AnyExpression>>;
 	}
 
+	enum ParseFormat {
+		Toml = "toml",
+	}
+
+	let parseValue: (format: ParseFormat, contents: string) => any;
+
 	let template: (
 		strings: TemplateStringsArray,
 		...placeholders: Array<Expression<string | Artifact | Template>>
@@ -446,8 +455,4 @@ declare module Tangram {
 	let getBlob: (hash: Hash) => Promise<Uint8Array>;
 
 	let source: (url: string | URL) => Promise<Artifact>;
-}
-
-declare class TOML {
-	static parse(toml: string): any;
 }

@@ -46,6 +46,10 @@ let Syscall = {
 	Evaluate: "evaluate",
 };
 
+let ParseFormat = {
+	Toml: "toml",
+};
+
 let syscall = (syscall, ...args) => {
 	let opName = "op_tangram_" + syscall;
 	switch (syscall) {
@@ -735,15 +739,13 @@ let print = (value) => {
 
 let source = async (url) => {
 	let hash = new Hash(new URL(url).hostname);
-	let package = await getExpression(hash);
-	return await package.getSource();
+	let pkg = await getExpression(hash);
+	return await pkg.getSource();
 };
 
-class TOML {
-	static parse(toml) {
-		return syscall(Syscall.ParseValue, "toml", toml);
-	}
-}
+let parseValue = (format, contents) => {
+	return syscall(Syscall.ParseValue, format, contents);
+};
 
 globalThis.Tangram = {
 	Artifact,
@@ -760,6 +762,7 @@ globalThis.Tangram = {
 	},
 	Js,
 	Package,
+	ParseFormat,
 	Process,
 	Symlink,
 	System,
@@ -771,6 +774,7 @@ globalThis.Tangram = {
 	fromJson,
 	getBlob,
 	getExpression,
+	parseValue,
 	print,
 	source,
 	template,
