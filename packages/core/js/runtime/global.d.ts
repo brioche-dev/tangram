@@ -407,6 +407,7 @@ declare module Tangram {
 			[key: string]: Expression<string | Artifact | Template>;
 		}>;
 		system: System;
+		hash?: string;
 	};
 
 	class Process {

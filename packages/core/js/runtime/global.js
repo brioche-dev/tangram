@@ -440,6 +440,7 @@ class Process {
 	env;
 	command;
 	args;
+	hash;
 
 	constructor(args) {
 		this.system = args.system;
