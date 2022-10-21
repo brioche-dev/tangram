@@ -78,27 +78,24 @@ impl deno_core::ModuleLoader for ModuleLoader {
 	}
 }
 
-async fn load(state: Arc<State>, specifier: Url) -> Result<deno_core::ModuleSource> {
+async fn load(state: Arc<State>, url: Url) -> Result<deno_core::ModuleSource> {
 	// Load the source.
-	let source = state.compiler.load(specifier.clone()).await?;
+	let source = state.compiler.load(url.clone()).await?;
 
 	// Get the specifier's extension.
-	let specifier_path = Utf8Path::new(specifier.path());
-	let extension = specifier_path.extension().with_context(|| {
-		format!(r#"Cannot load a module with no extension from URL "{specifier_path}"."#)
-	})?;
+	let extension = Utf8Path::new(url.path()).extension();
 
 	// Create the module from the source.
 	let module = match extension {
-		"js" => Module {
+		None | Some("js") => Module {
 			source,
 			transpiled_source: None,
 			source_map: None,
 		},
 
 		// If the extension is `.ts` then transpile the source.
-		"ts" => {
-			let transpile_output = state.compiler.transpile(&specifier, &source)?;
+		Some("ts") => {
+			let transpile_output = state.compiler.transpile(&url, &source)?;
 			Module {
 				source,
 				transpiled_source: Some(transpile_output.transpiled_source),
@@ -106,7 +103,7 @@ async fn load(state: Arc<State>, specifier: Url) -> Result<deno_core::ModuleSour
 			}
 		},
 
-		_ => {
+		Some(extension) => {
 			bail!(r#"Cannot load a module with extension "{extension}"."#);
 		},
 	};
@@ -116,7 +113,7 @@ async fn load(state: Arc<State>, specifier: Url) -> Result<deno_core::ModuleSour
 		.modules
 		.lock()
 		.unwrap()
-		.insert(specifier.clone(), module.clone());
+		.insert(url.clone(), module.clone());
 
 	// Create the module source.
 	let code = module
@@ -127,8 +124,8 @@ async fn load(state: Arc<State>, specifier: Url) -> Result<deno_core::ModuleSour
 	let module_source = deno_core::ModuleSource {
 		code,
 		module_type: deno_core::ModuleType::JavaScript,
-		module_url_specified: specifier.to_string(),
-		module_url_found: specifier.to_string(),
+		module_url_specified: url.to_string(),
+		module_url_found: url.to_string(),
 	};
 
 	Ok(module_source)
