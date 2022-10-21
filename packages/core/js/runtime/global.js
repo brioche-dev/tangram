@@ -100,27 +100,6 @@ class Artifact {
 	async getRoot() {
 		return await getExpression(this.#root);
 	}
-
-	async getRootDir() {
-		let root = await this.getRoot();
-		if (!(root instanceof Directory)) {
-			throw new Error("Artifact root is not a directory.");
-		}
-
-		return root;
-	}
-
-	async map(func) {
-		let root = await this.getRoot();
-		let newRoot = await func(root);
-		return new Artifact(newRoot);
-	}
-
-	async mapDir(func) {
-		let root = await this.getRootDir();
-		let newRoot = await func(root);
-		return new Artifact(newRoot);
-	}
 }
 
 class Directory {
