@@ -9,8 +9,7 @@ pub struct Args {}
 
 impl Cli {
 	pub async fn command_repl(&self, _args: Args) -> Result<()> {
-		// Lock the builder.
-		let builder = self.builder.lock_shared().await?;
+		let builder = self.builder.clone();
 		let main_runtime_handle = tokio::runtime::Handle::current();
 
 		std::thread::spawn(|| {

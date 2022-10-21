@@ -1,4 +1,4 @@
-use super::{watcher::Watcher, Shared};
+use super::{watcher::Watcher, State};
 use crate::{
 	expression::{Artifact, Dependency, Directory, Expression, File, Symlink},
 	hash::Hash,
@@ -12,7 +12,7 @@ use std::{os::unix::prelude::PermissionsExt, path::Path, pin::Pin, sync::Arc};
 pub type DependencyHandlerFn =
 	dyn Sync + Fn(&Dependency, &Path) -> Pin<Box<dyn Send + Future<Output = Result<()>>>>;
 
-impl Shared {
+impl State {
 	pub async fn checkout(
 		&self,
 		artifact: Hash,

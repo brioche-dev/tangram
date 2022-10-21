@@ -1,4 +1,4 @@
-use super::Shared;
+use super::State;
 use crate::{
 	hash::{Hash, Hasher},
 	util::path_exists,
@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
 
-impl Shared {
+impl State {
 	#[must_use]
 	pub fn blobs_path(&self) -> PathBuf {
 		self.path.join("blobs")
@@ -20,7 +20,7 @@ impl Shared {
 	}
 }
 
-impl Shared {
+impl State {
 	pub async fn add_blob(&self, reader: impl AsyncRead + Unpin) -> Result<Hash> {
 		// Get a file system permit.
 		let permit = self.file_system_semaphore.acquire().await.unwrap();

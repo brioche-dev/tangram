@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
 use crate::{
-	builder::Shared,
+	builder::State,
 	expression::{self, Expression},
 	hash::Hash,
 };
 use anyhow::Result;
 use futures::future::try_join_all;
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_directory(
 		&self,
 		hash: Hash,

@@ -1,12 +1,12 @@
 use crate::{
-	builder::Shared,
+	builder::State,
 	expression::{self, Expression, Template},
 	hash::Hash,
 };
 use anyhow::Result;
 use futures::future::try_join_all;
 
-impl Shared {
+impl State {
 	/// Evaluate a template expression.
 	pub(super) async fn evaluate_template(&self, hash: Hash, template: &Template) -> Result<Hash> {
 		// Evaluate the components.

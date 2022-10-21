@@ -1,5 +1,5 @@
 pub use self::{compiler::Compiler, lsp::LanguageServer, runtime::Runtime};
 
-mod compiler;
-mod lsp;
-mod runtime;
+pub mod compiler;
+pub mod lsp;
+pub mod runtime;

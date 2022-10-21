@@ -1,4 +1,4 @@
-use super::Shared;
+use super::State;
 use crate::{
 	db::ExpressionWithOutput,
 	expression::{AddExpressionOutcome, Expression},
@@ -8,7 +8,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use lmdb::{Cursor, Transaction};
 
-impl Shared {
+impl State {
 	pub async fn add_expression(&self, expression: &Expression) -> Result<Hash> {
 		match self.try_add_expression(expression).await? {
 			AddExpressionOutcome::Added { hash } => Ok(hash),

@@ -1,5 +1,5 @@
 use crate::{
-	builder::Shared,
+	builder::State,
 	expression::{self, Target},
 	hash::Hash,
 	system::System,
@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use camino::Utf8PathBuf;
 use std::collections::BTreeMap;
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_target(&self, hash: Hash, target: &Target) -> Result<Hash> {
 		// Evaluate the package.
 		let package_hash = self

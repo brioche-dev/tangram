@@ -1,12 +1,12 @@
 use crate::{
-	builder::Shared,
+	builder::State,
 	expression::{Array, Expression},
 	hash::Hash,
 };
 use anyhow::Result;
 use futures::future::try_join_all;
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_array(&self, hash: Hash, array: &Array) -> Result<Hash> {
 		let output_hashes =
 			try_join_all(array.iter().map(|item| self.evaluate(*item, hash))).await?;

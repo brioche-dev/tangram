@@ -1,6 +1,6 @@
 use crate::{
 	api_client::ApiClient,
-	builder::Shared,
+	builder::State,
 	expression::{Expression, Package},
 	hash::Hash,
 	lockfile::{self, Lockfile},
@@ -11,7 +11,7 @@ use async_recursion::async_recursion;
 use std::{collections::BTreeMap, path::Path};
 use tokio::io::AsyncReadExt;
 
-impl Shared {
+impl State {
 	/// Check in a package from the provided source path.
 	pub async fn checkin_package(
 		&self,

@@ -1,5 +1,5 @@
 use crate::{
-	builder::Shared,
+	builder::State,
 	expression::Fetch,
 	hash::{Hash, Hasher},
 };
@@ -8,7 +8,7 @@ use futures::{StreamExt, TryStreamExt};
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_fetch(&self, _hash: Hash, fetch: &Fetch) -> Result<Hash> {
 		tracing::trace!(r#"Fetching "{}"."#, fetch.url);
 
@@ -77,7 +77,7 @@ impl Shared {
 	}
 }
 
-impl Shared {
+impl State {
 	async fn unpack(
 		&self,
 		archive_temp_path: PathBuf,

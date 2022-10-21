@@ -1,4 +1,4 @@
-use super::Exclusive;
+use super::State;
 use crate::{
 	db::ExpressionWithOutput,
 	expression::Expression,
@@ -11,8 +11,8 @@ use std::{
 	path::Path,
 };
 
-impl Exclusive {
-	pub async fn garbage_collect(&self, roots: Vec<Hash>) -> Result<()> {
+impl State {
+	pub async fn garbage_collect(&mut self, roots: Vec<Hash>) -> Result<()> {
 		// Create hash sets to track the marked expressions and blobs.
 		let mut marked_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
 		let mut marked_blob_hashes: HashSet<Hash, hash::BuildHasher> = HashSet::default();
@@ -34,12 +34,12 @@ impl Exclusive {
 		}
 
 		// Sweep the artifacts.
-		self.sweep_artifacts(&self.as_shared().artifacts_path(), &marked_hashes)
+		self.sweep_artifacts(&self.artifacts_path(), &marked_hashes)
 			.await
 			.context("Failed to sweep the artifacts.")?;
 
 		// Sweep the blobs.
-		self.sweep_blobs(&self.as_shared().blobs_path(), &marked_blob_hashes)
+		self.sweep_blobs(&self.blobs_path(), &marked_blob_hashes)
 			.await
 			.context("Failed to sweep the blobs.")?;
 
@@ -78,9 +78,7 @@ impl Exclusive {
 			let ExpressionWithOutput {
 				expression,
 				output_hash,
-			} = self
-				.as_shared()
-				.get_expression_with_output_local_with_txn(txn, hash)?;
+			} = self.get_expression_with_output_local_with_txn(txn, hash)?;
 
 			// Add this expression's output, if it has one, to the queue.
 			if let Some(output_hash) = output_hash {
@@ -88,7 +86,7 @@ impl Exclusive {
 			}
 
 			// Add this expression's evaluations to the queue.
-			let hashes = self.as_shared().get_evaluations_with_txn(txn, hash)?;
+			let hashes = self.get_evaluations_with_txn(txn, hash)?;
 			for hash in hashes {
 				let hash = hash?;
 				queue.push_back(hash);

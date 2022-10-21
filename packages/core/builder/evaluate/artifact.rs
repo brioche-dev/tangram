@@ -1,11 +1,11 @@
 use crate::{
-	builder::Shared,
+	builder::State,
 	expression::{self, Expression},
 	hash::Hash,
 };
 use anyhow::Result;
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_artifact(
 		&self,
 		hash: Hash,

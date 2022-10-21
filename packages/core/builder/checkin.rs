@@ -1,4 +1,4 @@
-use super::{watcher::Watcher, Shared};
+use super::{watcher::Watcher, State};
 use crate::{
 	expression::{AddExpressionOutcome, Artifact, Expression},
 	hash::Hash,
@@ -8,7 +8,7 @@ use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{path::Path, sync::Arc};
 
-impl Shared {
+impl State {
 	pub async fn checkin(&self, path: &Path) -> Result<Hash> {
 		// Create a watcher.
 		let watcher = Watcher::new(self.path(), Arc::clone(&self.file_system_semaphore));

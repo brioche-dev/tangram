@@ -1,7 +1,7 @@
-use crate::{builder::Shared, expression::Js, hash::Hash, js};
+use crate::{builder::State, expression::Js, hash::Hash, js};
 use anyhow::{Context, Result};
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_js(&self, hash: Hash, js: &Js) -> Result<Hash> {
 		// Get a handle to the current tokio runtime.
 		let main_runtime_handle = tokio::runtime::Handle::current();
@@ -10,7 +10,7 @@ impl Shared {
 		let (sender, receiver) = tokio::sync::oneshot::channel();
 
 		// Clone the builder and js expression to send to the thread.
-		let builder = self.clone();
+		let builder = self.builder();
 		let js = js.clone();
 
 		// Run the js runtime on its own thread.

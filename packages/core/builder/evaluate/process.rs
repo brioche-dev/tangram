@@ -1,5 +1,5 @@
 use crate::{
-	builder::Shared,
+	builder::State,
 	command::{Command, PathMode},
 	expression::{Expression, Process},
 	hash::Hash,
@@ -13,7 +13,7 @@ use std::{
 	path::PathBuf,
 };
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_process(&self, hash: Hash, process: &Process) -> Result<Hash> {
 		// Evaluate the envs, command, and args.
 		let (envs, command, args) = try_join3(
@@ -133,7 +133,7 @@ struct StringWithPaths {
 	paths: HashMap<PathBuf, PathMode>,
 }
 
-impl Shared {
+impl State {
 	#[async_recursion]
 	async fn to_string_with_paths(&self, hash: Hash) -> Result<StringWithPaths> {
 		let expression = self.get_expression_local(hash)?;

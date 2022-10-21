@@ -1,8 +1,9 @@
-use self::module_loader::{ModuleLoader, TANGRAM_MODULE_SCHEME};
+use self::module_loader::ModuleLoader;
 use crate::{
-	builder::Shared,
+	builder::Builder,
 	expression::{Expression, Js},
 	hash::Hash,
+	js::compiler::{resolve::TANGRAM_MODULE_SCHEME, Compiler},
 };
 use anyhow::{bail, Context, Result};
 use deno_core::{serde_v8, v8};
@@ -14,7 +15,8 @@ mod cdp;
 mod module_loader;
 
 pub struct Runtime {
-	builder: Shared,
+	builder: Builder,
+	_compiler: Compiler,
 	_main_runtime_handle: tokio::runtime::Handle,
 	runtime: deno_core::JsRuntime,
 	inspector_session: deno_core::LocalInspectorSession,
@@ -25,15 +27,24 @@ const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/js_runtime_sna
 
 #[derive(Clone)]
 struct OpState {
-	builder: Shared,
+	builder: Builder,
 	main_runtime_handle: tokio::runtime::Handle,
 }
 
 impl Runtime {
 	pub async fn new(
-		builder: Shared,
+		builder: Builder,
 		main_runtime_handle: tokio::runtime::Handle,
 	) -> Result<Runtime> {
+		// Create the compiler.
+		let compiler = Compiler::new(builder.clone());
+
+		// Create the module loader.
+		let module_loader = Rc::new(ModuleLoader::new(
+			compiler.clone(),
+			main_runtime_handle.clone(),
+		));
+
 		// Build the tangram extension.
 		let tangram_extension = deno_core::Extension::builder()
 			.ops(vec![
@@ -58,12 +69,6 @@ impl Runtime {
 				}
 			})
 			.build();
-
-		// Create the module loader.
-		let module_loader = Rc::new(ModuleLoader::new(
-			builder.clone(),
-			main_runtime_handle.clone(),
-		));
 
 		// Create the js runtime.
 		let mut runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
@@ -108,6 +113,7 @@ impl Runtime {
 
 		let runtime = Runtime {
 			builder,
+			_compiler: compiler,
 			_main_runtime_handle: main_runtime_handle,
 			runtime,
 			inspector_session,
@@ -118,6 +124,9 @@ impl Runtime {
 
 	#[allow(clippy::too_many_lines)]
 	pub async fn js(&mut self, js: &Js) -> Result<Hash> {
+		// Acquire a shared lock to the builder.
+		let builder = self.builder.lock_shared().await?;
+
 		// Create the module URL.
 		let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", js.package);
 
@@ -135,8 +144,7 @@ impl Runtime {
 		evaluate_receiver.await.unwrap()?;
 
 		// Move the args to v8.
-		let args = self
-			.builder
+		let args = builder
 			.get_expression_local(js.args)
 			.context("Failed to get the args expression.")?;
 		let args = args.as_array().context("The args must be an array.")?;
@@ -146,7 +154,7 @@ impl Runtime {
 			let mut scope = self.runtime.handle_scope();
 			let mut try_catch_scope = v8::TryCatch::new(&mut scope);
 
-			let arg = self.builder.get_expression_local(*arg)?;
+			let arg = builder.get_expression_local(*arg)?;
 			let arg = serde_v8::to_v8(&mut try_catch_scope, arg)
 				.context("Failed to move the args expression to v8.")?;
 
@@ -275,7 +283,7 @@ impl Runtime {
 		drop(scope);
 
 		// Add the expression.
-		let hash = self.builder.add_expression(&expression).await?;
+		let hash = builder.add_expression(&expression).await?;
 
 		Ok(hash)
 	}
@@ -411,7 +419,7 @@ async fn op_tangram_add_blob(
 	blob: serde_v8::ZeroCopyBuf,
 ) -> Result<Hash, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let hash = builder.add_blob(blob.as_ref()).await?;
+		let hash = builder.lock_shared().await?.add_blob(blob.as_ref()).await?;
 		Ok::<_, anyhow::Error>(hash)
 	})
 	.await
@@ -424,7 +432,7 @@ async fn op_tangram_get_blob(
 	hash: Hash,
 ) -> Result<serde_v8::ZeroCopyBuf, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let mut blob = builder.get_blob(hash).await?;
+		let mut blob = builder.lock_shared().await?.get_blob(hash).await?;
 		let mut bytes = Vec::new();
 		blob.read_to_end(&mut bytes).await?;
 		let output = serde_v8::ZeroCopyBuf::ToV8(Some(bytes.into_boxed_slice()));
@@ -440,7 +448,11 @@ async fn op_tangram_add_expression(
 	expression: Expression,
 ) -> Result<Hash, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let hash = builder.add_expression(&expression).await?;
+		let hash = builder
+			.lock_shared()
+			.await?
+			.add_expression(&expression)
+			.await?;
 		Ok::<_, anyhow::Error>(hash)
 	})
 	.await
@@ -453,7 +465,10 @@ async fn op_tangram_get_expression(
 	hash: Hash,
 ) -> Result<Option<Expression>, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let expression = builder.try_get_expression_local(hash)?;
+		let expression = builder
+			.lock_shared()
+			.await?
+			.try_get_expression_local(hash)?;
 		Ok::<_, anyhow::Error>(expression)
 	})
 	.await
@@ -466,7 +481,7 @@ async fn op_tangram_evaluate(
 	hash: Hash,
 ) -> Result<Hash, deno_core::error::AnyError> {
 	op(state, |builder| async move {
-		let output = builder.evaluate(hash, hash).await?;
+		let output = builder.lock_shared().await?.evaluate(hash, hash).await?;
 		Ok::<_, anyhow::Error>(output)
 	})
 	.await
@@ -478,7 +493,7 @@ async fn op<T, F, Fut>(
 ) -> Result<T, deno_core::error::AnyError>
 where
 	T: 'static + Send,
-	F: FnOnce(Shared) -> Fut,
+	F: FnOnce(Builder) -> Fut,
 	Fut: 'static + Send + Future<Output = Result<T, deno_core::error::AnyError>>,
 {
 	let state = {

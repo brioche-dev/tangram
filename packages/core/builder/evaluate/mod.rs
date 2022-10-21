@@ -1,4 +1,4 @@
-use super::Shared;
+use super::State;
 use crate::{db::ExpressionWithOutput, expression::Expression, hash::Hash};
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
@@ -18,7 +18,7 @@ pub mod process;
 pub mod target;
 pub mod template;
 
-impl Shared {
+impl State {
 	/// Evaluate an [`Expression`].
 	#[async_recursion]
 	#[must_use]

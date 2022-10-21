@@ -1,5 +1,5 @@
 use crate::{
-	builder::Shared,
+	builder::State,
 	expression::{self, Expression, Package},
 	hash::Hash,
 };
@@ -7,7 +7,7 @@ use anyhow::Result;
 use futures::future::try_join_all;
 use std::sync::Arc;
 
-impl Shared {
+impl State {
 	pub(super) async fn evaluate_package(&self, hash: Hash, package: &Package) -> Result<Hash> {
 		// Evaluate the source.
 		let source = self.evaluate(package.source, hash).await?;

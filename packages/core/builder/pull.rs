@@ -1,9 +1,9 @@
-use crate::{builder::Shared, expression::AddExpressionOutcome, hash::Hash};
+use crate::{builder::State, expression::AddExpressionOutcome, hash::Hash};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 
-impl Shared {
+impl State {
 	/// Pull an expression from a remote server.
 	#[async_recursion]
 	#[must_use]

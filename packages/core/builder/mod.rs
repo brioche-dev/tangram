@@ -1,6 +1,8 @@
 use self::{
-	clients::blob::Client as BlobClient, clients::expression::Client as ExpressionClient,
-	heuristics::FILESYSTEM_CONCURRENCY_LIMIT, lock::Lock,
+	clients::blob::Client as BlobClient,
+	clients::expression::Client as ExpressionClient,
+	heuristics::FILESYSTEM_CONCURRENCY_LIMIT,
+	lock::{ExclusiveGuard, Lock, SharedGuard},
 };
 use crate::{
 	db::Db,
@@ -9,10 +11,11 @@ use crate::{
 };
 use anyhow::Result;
 use async_recursion::async_recursion;
+pub use options::Options;
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
-	sync::{Arc, Mutex},
+	sync::{Arc, Mutex, Weak},
 };
 use tokio::sync::Semaphore;
 
@@ -33,18 +36,15 @@ pub mod pull;
 pub mod push;
 pub mod watcher;
 
-pub use options::Options;
-
 #[derive(Clone)]
 pub struct Builder {
 	state: Arc<Lock<State>>,
 }
 
-pub type Shared = lock::SharedGuard<State>;
-
-pub type Exclusive = lock::ExclusiveGuard<State>;
-
 pub struct State {
+	/// This is a back reference to the lock that wraps this state.
+	lock: Weak<Lock<State>>,
+
 	/// This is the path to the directory where the builder stores its data.
 	path: PathBuf,
 
@@ -55,7 +55,7 @@ pub struct State {
 	http_client: reqwest::Client,
 
 	// For expressions that are expensive to evaluate, it is a waste to evaluate them if another evaluation for the same expression is already in progress. This map stores a receiver that will be notified when an in progress evaluation of the expression completes.
-	pub in_progress_evaluations:
+	in_progress_evaluations:
 		Arc<Mutex<HashMap<Hash, tokio::sync::broadcast::Receiver<Hash>, hash::BuildHasher>>>,
 
 	/// The file system semaphore is used to prevent the builder from opening too many files simultaneously.
@@ -95,31 +95,39 @@ impl Builder {
 		let in_progress_evaluations = Arc::new(Mutex::new(HashMap::default()));
 
 		// Create the state.
-		let state = State {
-			path,
-			db,
-			http_client,
-			in_progress_evaluations,
-			file_system_semaphore,
-			blob_client: options.blob_client,
-			expression_client: options.expression_client,
-		};
+		let state = Arc::new_cyclic(|builder| {
+			let state = State {
+				lock: builder.clone(),
+				path,
+				db,
+				http_client,
+				in_progress_evaluations,
+				file_system_semaphore,
+				blob_client: options.blob_client,
+				expression_client: options.expression_client,
+			};
+			Lock::new(lock_path, state)
+		});
 
-		// Create the server.
-		let state = Arc::new(Lock::new(lock_path, state));
-		let server = Builder { state };
+		// Create the builder.
+		let builder = Builder { state };
 
-		Ok(server)
+		Ok(builder)
 	}
-}
 
-impl Builder {
-	pub async fn lock_shared(&self) -> Result<Shared> {
+	pub async fn lock_shared(&self) -> Result<SharedGuard<State>> {
 		self.state.lock_shared().await
 	}
 
-	pub async fn lock_exclusive(&self) -> Result<Exclusive> {
+	pub async fn lock_exclusive(&self) -> Result<ExclusiveGuard<State>> {
 		self.state.lock_exclusive().await
+	}
+}
+
+impl State {
+	pub fn builder(&self) -> Builder {
+		let state = self.lock.upgrade().unwrap();
+		Builder { state }
 	}
 }
 

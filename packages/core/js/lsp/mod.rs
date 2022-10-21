@@ -32,8 +32,6 @@ impl tower_lsp::LanguageServer for LanguageServer {
 						change: None,
 						will_save: Some(false),
 						will_save_wait_until: None,
-
-						// Register for did-save notifications.
 						save: Some(lsp::TextDocumentSyncSaveOptions::SaveOptions(
 							lsp::SaveOptions {
 								include_text: Some(false),

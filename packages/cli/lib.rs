@@ -6,8 +6,10 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use futures::FutureExt;
 use std::path::PathBuf;
-use tangram_core::api_client::ApiClient;
-use tangram_core::builder::{self, clients, Builder};
+use tangram_core::{
+	api_client::ApiClient,
+	builder::{self, clients, Builder},
+};
 
 mod commands;
 mod config;

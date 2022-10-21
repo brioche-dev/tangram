@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::{
+	cell::UnsafeCell,
 	path::PathBuf,
 	sync::{Arc, Weak},
 };
@@ -7,32 +8,40 @@ use tokio::sync::RwLock;
 
 pub struct Lock<T> {
 	pub path: PathBuf,
-	pub value: Arc<T>,
+	pub value: UnsafeCell<T>,
 	pub shared_lock_file: Arc<RwLock<Option<Weak<tokio::fs::File>>>>,
 }
 
-pub struct SharedGuard<T> {
-	pub value: Arc<T>,
+unsafe impl<T> Send for Lock<T> where T: Send {}
+unsafe impl<T> Sync for Lock<T> where T: Send {}
+
+pub struct SharedGuard<'a, T> {
+	pub value: &'a T,
 	pub lock_file: Arc<tokio::fs::File>,
 }
 
-pub struct ExclusiveGuard<T> {
-	pub value: Arc<T>,
+unsafe impl<T> Send for SharedGuard<'_, T> where T: Send {}
+unsafe impl<T> Sync for SharedGuard<'_, T> where T: Send {}
+
+pub struct ExclusiveGuard<'a, T> {
+	pub value: &'a mut T,
 	pub lock_file: Arc<tokio::fs::File>,
 }
+
+unsafe impl<T> Send for ExclusiveGuard<'_, T> where T: Send {}
+unsafe impl<T> Sync for ExclusiveGuard<'_, T> where T: Send {}
 
 impl<T> Lock<T> {
 	pub fn new(path: PathBuf, value: T) -> Lock<T> {
-		let value = Arc::new(value);
 		let shared_lock_file = Arc::new(RwLock::new(None));
 		Lock {
 			path,
-			value,
+			value: UnsafeCell::new(value),
 			shared_lock_file,
 		}
 	}
 
-	pub async fn lock_shared(&self) -> Result<SharedGuard<T>> {
+	pub async fn lock_shared(&self) -> Result<SharedGuard<'_, T>> {
 		let lock_file = {
 			self.shared_lock_file
 				.read()
@@ -58,12 +67,12 @@ impl<T> Lock<T> {
 			lock_file
 		};
 		Ok(SharedGuard {
-			value: Arc::clone(&self.value),
+			value: unsafe { &*self.value.get() },
 			lock_file,
 		})
 	}
 
-	pub async fn lock_exclusive(&self) -> Result<ExclusiveGuard<T>> {
+	pub async fn lock_exclusive(&self) -> Result<ExclusiveGuard<'_, T>> {
 		let lock_file = tokio::fs::OpenOptions::new()
 			.read(true)
 			.write(true)
@@ -73,59 +82,41 @@ impl<T> Lock<T> {
 		self::sys::lock_exclusive(&lock_file).await?;
 		let lock_file = Arc::new(lock_file);
 		Ok(ExclusiveGuard {
-			value: Arc::clone(&self.value),
+			value: unsafe { &mut *self.value.get() },
 			lock_file,
 		})
 	}
 }
 
-impl<T> ExclusiveGuard<T> {
+impl<'a, T> std::ops::Deref for SharedGuard<'a, T> {
+	type Target = T;
+
+	fn deref(&self) -> &Self::Target {
+		self.value
+	}
+}
+
+impl<'a, T> std::ops::Deref for ExclusiveGuard<'a, T> {
+	type Target = T;
+
+	fn deref(&self) -> &Self::Target {
+		self.value
+	}
+}
+
+impl<'a, T> std::ops::DerefMut for ExclusiveGuard<'a, T> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		self.value
+	}
+}
+
+impl<'a, T> ExclusiveGuard<'a, T> {
 	#[must_use]
 	pub fn as_shared(&self) -> SharedGuard<T> {
 		SharedGuard {
-			value: Arc::clone(&self.value),
+			value: self.value,
 			lock_file: self.lock_file.clone(),
 		}
-	}
-}
-
-impl<T> Clone for SharedGuard<T> {
-	fn clone(&self) -> Self {
-		Self {
-			value: self.value.clone(),
-			lock_file: self.lock_file.clone(),
-		}
-	}
-}
-
-impl<T> Clone for ExclusiveGuard<T> {
-	fn clone(&self) -> Self {
-		Self {
-			value: self.value.clone(),
-			lock_file: self.lock_file.clone(),
-		}
-	}
-}
-
-impl<T> std::ops::Deref for SharedGuard<T> {
-	type Target = Arc<T>;
-
-	fn deref(&self) -> &Self::Target {
-		&self.value
-	}
-}
-
-impl<T> std::ops::Deref for ExclusiveGuard<T> {
-	type Target = Arc<T>;
-
-	fn deref(&self) -> &Self::Target {
-		&self.value
-	}
-}
-
-impl<T> std::ops::DerefMut for ExclusiveGuard<T> {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut self.value
 	}
 }
 
