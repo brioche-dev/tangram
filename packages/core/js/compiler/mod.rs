@@ -36,37 +36,43 @@ impl Compiler {
 	}
 
 	fn runtime_sender(&self) -> tokio::sync::mpsc::UnboundedSender<Option<Envelope>> {
-		let lock = self.state.sender.lock().unwrap();
+		let mut lock = self.state.sender.lock().unwrap();
 		if let Some(sender) = lock.as_ref() {
 			sender.clone()
 		} else {
 			// Create a channel to send requests to the compiler runtime.
 			let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<Option<Envelope>>();
 
-			// Save the sender.
-			self.state.sender.lock().unwrap().replace(sender.clone());
-
 			// Spawn a thread for the compiler runtime to respond to requests.
 			std::thread::spawn({
 				let builder = self.state.builder.clone();
 				move || {
-					let mut runtime = Runtime::new(builder);
-					while let Some(envelope) = receiver.blocking_recv() {
-						// If the received value is `None`, then the thread should terminate.
-						let envelope = if let Some(envelope) = envelope {
-							envelope
-						} else {
-							break;
-						};
+					let runtime = tokio::runtime::Builder::new_current_thread()
+						.enable_all()
+						.build()
+						.unwrap();
+					runtime.block_on(async move {
+						let mut runtime = Runtime::new(builder);
+						while let Some(envelope) = receiver.recv().await {
+							// If the received value is `None`, then the thread should terminate.
+							let envelope = if let Some(envelope) = envelope {
+								envelope
+							} else {
+								break;
+							};
 
-						// Handle the request.
-						let response = runtime.handle(envelope.request);
+							// Handle the request.
+							let response = runtime.handle(envelope.request).await;
 
-						// Send the response.
-						envelope.sender.send(response).ok();
-					}
+							// Send the response.
+							envelope.sender.send(response).ok();
+						}
+					});
 				}
 			});
+
+			// Save the sender.
+			lock.replace(sender.clone());
 
 			sender
 		}

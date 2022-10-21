@@ -19,7 +19,7 @@ impl State {
 			let rt = tokio::runtime::Builder::new_current_thread()
 				.enable_all()
 				.build()
-				.context("Failed to create the runtime.")?;
+				.unwrap();
 
 			// Run the JS process.
 			let result = rt.block_on(async move {

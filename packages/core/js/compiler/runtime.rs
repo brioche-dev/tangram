@@ -78,7 +78,7 @@ impl Runtime {
 		}
 	}
 
-	pub fn handle(&mut self, request: Request) -> Result<Response> {
+	pub async fn handle(&mut self, request: Request) -> Result<Response> {
 		// Create a scope to call the handle function.
 		let mut scope = self.runtime.handle_scope();
 		let mut try_catch_scope = v8::TryCatch::new(&mut scope);
@@ -92,7 +92,7 @@ impl Runtime {
 		let receiver = v8::undefined(&mut try_catch_scope).into();
 		let request = serde_v8::to_v8(&mut try_catch_scope, request)
 			.context("Failed to serialize the request.")?;
-		let response = handle.call(&mut try_catch_scope, receiver, &[request]);
+		let output = handle.call(&mut try_catch_scope, receiver, &[request]);
 
 		// Handle an exception from js.
 		if try_catch_scope.has_caught() {
@@ -101,11 +101,24 @@ impl Runtime {
 			let error = deno_core::error::JsError::from_v8_exception(&mut scope, exception);
 			return Err(error.into());
 		}
-		let response = response.unwrap();
+
+		// If there was no caught exception then retrieve the return value.
+		let output = output.unwrap();
+
+		// Move the return value to the global scope.
+		let output = v8::Global::new(&mut try_catch_scope, output);
+		drop(try_catch_scope);
+		drop(scope);
+
+		// Resolve the value.
+		let output = self.runtime.resolve_value(output).await?;
 
 		// Deserialize the response.
-		let response = serde_v8::from_v8(&mut try_catch_scope, response)
-			.context("Failed to deserialize the response.")?;
+		let mut scope = self.runtime.handle_scope();
+		let output = v8::Local::new(&mut scope, output);
+		let response =
+			serde_v8::from_v8(&mut scope, output).context("Failed to deserialize the response.")?;
+		drop(scope);
 
 		Ok(response)
 	}

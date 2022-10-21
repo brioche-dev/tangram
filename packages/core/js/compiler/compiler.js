@@ -1,4 +1,4 @@
-globalThis.handle = (request) => {
+globalThis.handle = async (request) => {
 	switch (request.type) {
 		// Handle a check request.
 		case "check": {
