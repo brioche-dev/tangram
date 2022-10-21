@@ -4,7 +4,7 @@ use crate::{
 	expression::{Expression, Package},
 	hash::Hash,
 	lockfile::{self, Lockfile},
-	manifest::{Dependency, Manifest, RegistryDependency},
+	manifest::Manifest,
 };
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;

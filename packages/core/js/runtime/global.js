@@ -1,3 +1,14 @@
+let bs = globalThis.__bootstrap;
+Object.defineProperties(globalThis, {
+	TextDecoder: { value: bs.encoding.TextDecoder },
+	TextEncoder: { value: bs.encoding.TextEncoder },
+	URL: { value: bs.url.URL },
+	URLPattern: { value: bs.urlPattern.URLPattern },
+	URLSearchParams: { value: bs.url.URLSearchParams },
+});
+
+let textEncoder = new TextEncoder();
+
 let System = {
 	Amd64Linux: "amd64_linux",
 	Amd64Macos: "amd64_macos",
@@ -764,12 +775,3 @@ globalThis.Tangram = {
 	template,
 	toJson,
 };
-
-let bs = globalThis.__bootstrap;
-Object.defineProperties(globalThis, {
-	TextDecoder: { value: bs.encoding.TextDecoder },
-	TextEncoder: { value: bs.encoding.TextEncoder },
-	URL: { value: bs.url.URL },
-	URLPattern: { value: bs.urlPattern.URLPattern },
-	URLSearchParams: { value: bs.url.URLSearchParams },
-});
