@@ -7,7 +7,6 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::{try_join3, try_join_all};
-use itertools::Itertools;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::PathBuf,
@@ -142,6 +141,7 @@ impl State {
 				string: string.as_ref().to_owned(),
 				paths: HashMap::new(),
 			}),
+
 			Expression::Artifact(artifact) => {
 				// Checkout the artifact.
 				let artifact_path = self.checkout_to_artifacts(hash).await?;
@@ -151,7 +151,8 @@ impl State {
 					.to_owned();
 
 				// Get all dependent artifacts recursively.
-				let dependent_artifact_hashes = self.get_dependent_artifacts(artifact.root)?;
+				let mut dependent_artifact_hashes = Vec::new();
+				self.get_dependent_artifacts(artifact.root, &mut dependent_artifact_hashes)?;
 
 				// Checkout all dependent artifacts.
 				let dependent_artifact_paths = try_join_all(
@@ -169,6 +170,7 @@ impl State {
 
 				Ok(StringWithPaths { string, paths })
 			},
+
 			Expression::Template(template) => {
 				let components = try_join_all(template.components.iter().copied().map(
 					|component_hash| async move {
@@ -191,42 +193,40 @@ impl State {
 				);
 				Ok(string_with_paths)
 			},
+
 			_ => bail!("The expression must be a string, artifact, or template."),
 		}
 	}
 
 	// Return all dependent artifacts recursively for an artifact or directory.
-	fn get_dependent_artifacts(&self, hash: Hash) -> Result<Vec<Hash>> {
+	fn get_dependent_artifacts(&self, hash: Hash, artifact_hashes: &mut Vec<Hash>) -> Result<()> {
 		let expression = self.get_expression_local(hash)?;
 		match expression {
 			Expression::Artifact(artifact) => {
-				// Get all dependent artifacts from the root.
-				let mut deps = self.get_dependent_artifacts(artifact.root)?;
-
-				// Add the artifact itself as a dependency.
-				deps.push(hash);
-
-				Ok(deps)
+				self.get_dependent_artifacts(artifact.root, artifact_hashes)?;
 			},
+
 			Expression::Directory(dir) => {
 				// Get the dependencies of each entry.
-				let deps = dir
-					.entries
-					.values()
-					.map(|&entry_hash| self.get_dependent_artifacts(entry_hash))
-					.flatten_ok()
-					.collect::<Result<Vec<_>>>()?;
-				Ok(deps)
+				for entry_hash in dir.entries.values() {
+					self.get_dependent_artifacts(*entry_hash, artifact_hashes)?;
+				}
 			},
+
 			// Files and symlinks aren't dependencies.
-			Expression::File(_) | Expression::Symlink(_) => Ok(vec![]),
+			Expression::File(_) | Expression::Symlink(_) => {},
+
 			// Recurse into dependencies.
-			Expression::Dependency(dep) => self.get_dependent_artifacts(dep.artifact),
-			other => {
+			Expression::Dependency(dep) => {
+				self.get_dependent_artifacts(dep.artifact, artifact_hashes)?;
+			},
+
+			_ => {
 				bail!(
-					"Tried to get dependent artifacts for a non-filesystem expression {other:?}."
+					r#"Tried to get dependent artifacts for a non-filesystem expression "{hash}"."#
 				);
 			},
-		}
+		};
+		Ok(())
 	}
 }
