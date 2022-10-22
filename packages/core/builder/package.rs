@@ -1,13 +1,14 @@
 use crate::{
 	api_client::ApiClient,
 	builder::State,
-	expression::{Expression, Package},
+	expression::{Artifact, Directory, Expression, Package},
 	hash::Hash,
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
 };
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
+use camino::Utf8PathBuf;
 use std::{collections::BTreeMap, path::Path};
 use tokio::io::AsyncReadExt;
 
@@ -196,5 +197,42 @@ impl State {
 			.context(r#"Failed to parse the package manifest."#)?;
 
 		Ok(manifest)
+	}
+
+	/// Given a package expression, resolve the filename of the script entry point.
+	///
+	/// See [`CANDIDATE_ENTRYPOINT_FILENAMES`] for an ordered list of the filenames this function
+	/// will check for in the package root.
+	///
+	/// If no suitable file is found, returns `None`.
+	pub fn resolve_package_entrypoint_file(&self, package: Hash) -> Result<Option<Utf8PathBuf>> {
+		/// List of candidate filenames, in priority order, for resolving the script
+		/// entrypoint to a Tangram package.
+		const CANDIDATE_ENTRYPOINT_FILENAMES: &[&str] = &["tangram.ts", "tangram.js"];
+
+		// Get the package source.
+		let source_hash = self
+			.get_package_source(package)
+			.context("Failed to get package source")?;
+		let source_artifact: Artifact = self
+			.get_expression_local(source_hash)?
+			.into_artifact()
+			.context("Source was not an artifact")?;
+
+		let source_directory: Directory = self
+			.get_expression_local(source_artifact.root)
+			.context("Failed to get contents of package source artifact")?
+			.into_directory()
+			.context("Package source artifact did not contain a directory")?;
+
+		// Look through the list of candidates, returning the first one which matches.
+		for candidate in CANDIDATE_ENTRYPOINT_FILENAMES {
+			if source_directory.entries.contains_key(candidate as &str) {
+				return Ok(Some(candidate.into()));
+			}
+		}
+
+		// Here, we've fallen through the candidates list, and there's no suitable entrypoint file.
+		Ok(None)
 	}
 }

@@ -12,7 +12,7 @@ use tokio::io::AsyncReadExt;
 use url::Url;
 
 mod cdp;
-mod module_loader;
+pub(crate) mod module_loader;
 
 pub struct Runtime {
 	builder: Builder,

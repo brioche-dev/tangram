@@ -1,12 +1,14 @@
-use self::runtime::{CheckRequest, Request, Response, Runtime};
 use crate::{builder::Builder, hash::Hash};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
+use camino::Utf8PathBuf;
 use std::sync::Arc;
 
 pub mod load;
 pub mod resolve;
 pub mod runtime;
 pub mod transpile;
+
+use runtime::{CheckRequest, Envelope, Request, Response};
 
 #[derive(Clone)]
 pub struct Compiler {
@@ -16,11 +18,6 @@ pub struct Compiler {
 pub struct State {
 	builder: Builder,
 	sender: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<Option<Envelope>>>>,
-}
-
-struct Envelope {
-	request: Request,
-	sender: tokio::sync::oneshot::Sender<Result<Response>>,
 }
 
 impl Compiler {
@@ -52,7 +49,7 @@ impl Compiler {
 						.build()
 						.unwrap();
 					runtime.block_on(async move {
-						let mut runtime = Runtime::new(builder);
+						let mut runtime = runtime::Runtime::new(builder);
 						while let Some(envelope) = receiver.recv().await {
 							// If the received value is `None`, then the thread should terminate.
 							let envelope = if let Some(envelope) = envelope {
@@ -78,6 +75,7 @@ impl Compiler {
 		}
 	}
 
+	/// Send an `Request` into the runtime for evaluation.
 	async fn request(&self, request: Request) -> Result<Response> {
 		// Create a channel for the compiler runtime to send responses.
 		let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -97,14 +95,37 @@ impl Compiler {
 		Ok(response)
 	}
 
-	pub async fn check(&self, package_hash: Hash) -> Result<Vec<String>> {
+	/// Get all diagnostics for a checked-in package.
+	pub async fn check(&self, package_hash: Hash) -> Result<Vec<Diagnostic>> {
+		// Get the entrypoint file to this module.
+		let entrypoint_file: Utf8PathBuf = self
+			.state
+			.builder
+			.lock_shared()
+			.await?
+			.resolve_package_entrypoint_file(package_hash)
+			.context("Could not resolve package entry point for type-checking")?
+			.context("Package has no entrypoint file (e.g. 'tangram.ts').")?;
+
 		// Create the request.
-		let request = Request::Check(CheckRequest { package_hash });
+		let files_to_check = vec![
+			format!("/__tangram__/module/{package_hash}/{entrypoint_file}"),
+			// Also typecheck the target-proxy, because it may contain useful type assertions about
+			// this package's targets.
+			format!("/__tangram__/target-proxy/{package_hash}/proxy.d.ts"),
+		];
+		let request = Request::Check(CheckRequest {
+			file_names: files_to_check,
+		});
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
+
+		// TODO: Remove the #[allow] when there's more than one type of Response.
+		#[allow(unreachable_patterns)]
 		let response = match response {
 			Response::Check(response) => response,
+			_ => bail!("Unexpected response type."),
 		};
 
 		// Get the result from the response.
@@ -120,4 +141,24 @@ impl Drop for Compiler {
 			sender.send(None).ok();
 		}
 	}
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(tag = "kind")]
+pub enum Diagnostic {
+	File(FileDiagnostic),
+	Other(OtherDiagnostic),
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FileDiagnostic {
+	pub file_name: String,
+	pub line: u32,
+	pub col: u32,
+	pub message: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct OtherDiagnostic {
+	pub message: String,
 }

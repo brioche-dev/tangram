@@ -7,14 +7,17 @@ use tower_lsp::{jsonrpc, lsp_types as lsp};
 pub struct LanguageServer(Arc<RwLock<State>>);
 
 struct State {
-	client: tower_lsp::Client,
-	compiler: Compiler,
+	_client: tower_lsp::Client,
+	_compiler: Compiler,
 }
 
 impl LanguageServer {
 	#[must_use]
 	pub fn new(client: tower_lsp::Client, compiler: Compiler) -> LanguageServer {
-		LanguageServer(Arc::new(RwLock::new(State { client, compiler })))
+		LanguageServer(Arc::new(RwLock::new(State {
+			_client: client,
+			_compiler: compiler,
+		})))
 	}
 }
 
