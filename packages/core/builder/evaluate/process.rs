@@ -142,7 +142,7 @@ impl State {
 				paths: HashMap::new(),
 			}),
 
-			Expression::Artifact(artifact) => {
+			Expression::Artifact(_) => {
 				// Checkout the artifact.
 				let artifact_path = self.checkout_to_artifacts(hash).await?;
 				let string = artifact_path
@@ -150,21 +150,21 @@ impl State {
 					.context("The path must be valid UTF-8.")?
 					.to_owned();
 
-				// Get all dependent artifacts recursively.
-				let mut dependent_artifact_hashes = Vec::new();
-				self.get_dependent_artifacts(artifact.root, &mut dependent_artifact_hashes)?;
+				// Collect all transitive artifact hashes.
+				let mut artifact_hashes = Vec::new();
+				self.collect_into_artifact_hashes(hash, &mut artifact_hashes)?;
 
-				// Checkout all dependent artifacts.
-				let dependent_artifact_paths = try_join_all(
-					dependent_artifact_hashes
+				// Checkout all artifacts.
+				let artifact_paths = try_join_all(
+					artifact_hashes
 						.into_iter()
 						.map(|hash| self.checkout_to_artifacts(hash)),
 				)
 				.await?;
 
 				// Include the artifact and all dependencies as read-only.
-				let paths = std::iter::once(artifact_path)
-					.chain(dependent_artifact_paths.into_iter())
+				let paths = artifact_paths
+					.into_iter()
 					.map(|artifact_path| (artifact_path, PathMode::Read))
 					.collect();
 
@@ -198,8 +198,12 @@ impl State {
 		}
 	}
 
-	// Return all dependent artifacts recursively for an artifact or directory.
-	fn get_dependent_artifacts(&self, hash: Hash, artifact_hashes: &mut Vec<Hash>) -> Result<()> {
+	// Return all dependent artifacts recursively for an artifact.
+	fn collect_into_artifact_hashes(
+		&self,
+		hash: Hash,
+		artifact_hashes: &mut Vec<Hash>,
+	) -> Result<()> {
 		let expression = self.get_expression_local(hash)?;
 		match expression {
 			Expression::Artifact(artifact) => {
@@ -207,13 +211,13 @@ impl State {
 				artifact_hashes.push(hash);
 
 				// Get all dependent artifacts from the root.
-				self.get_dependent_artifacts(artifact.root, artifact_hashes)?;
+				self.collect_into_artifact_hashes(artifact.root, artifact_hashes)?;
 			},
 
 			Expression::Directory(dir) => {
 				// Get the dependencies of each entry.
 				for entry_hash in dir.entries.values() {
-					self.get_dependent_artifacts(*entry_hash, artifact_hashes)?;
+					self.collect_into_artifact_hashes(*entry_hash, artifact_hashes)?;
 				}
 			},
 
@@ -222,7 +226,7 @@ impl State {
 
 			// Recurse into dependencies.
 			Expression::Dependency(dep) => {
-				self.get_dependent_artifacts(dep.artifact, artifact_hashes)?;
+				self.collect_into_artifact_hashes(dep.artifact, artifact_hashes)?;
 			},
 
 			_ => {
