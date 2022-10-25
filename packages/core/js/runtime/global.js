@@ -51,7 +51,7 @@ let ParseFormat = {
 };
 
 let syscall = (syscall, ...args) => {
-	let opName = "op_tangram_" + syscall;
+	let opName = "op_tg_" + syscall;
 	switch (syscall) {
 		case Syscall.Print:
 			return Deno.core.opSync(opName, ...args);
@@ -705,6 +705,10 @@ let evaluate = async (expression) => {
 
 globalThis.console = {
 	log: (...args) => {
+		let string = args.map((arg) => print(arg)).join(" ");
+		syscall(Syscall.Print, string);
+	},
+	error: (...args) => {
 		let string = args.map((arg) => print(arg)).join(" ");
 		syscall(Syscall.Print, string);
 	},

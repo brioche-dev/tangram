@@ -3,13 +3,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Specifier {
-	Path(Path),
+	Path(PathBuf),
 	Registry(Registry),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Path {
-	pub path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,7 +19,7 @@ impl std::str::FromStr for Specifier {
 		if source.starts_with('.') || source.starts_with('/') {
 			// Parse this as a path specifier.
 			let path = PathBuf::from_str(source)?;
-			Ok(Specifier::Path(Path { path }))
+			Ok(Specifier::Path(path))
 		} else {
 			// Parse this as a registry specifier.
 			let mut components = source.split('@');
@@ -47,9 +42,7 @@ mod tests {
 		let path_specifiers = ["./hello", "./", "."];
 		for path_specifier in path_specifiers {
 			let left: Specifier = path_specifier.parse().unwrap();
-			let right = Specifier::Path(Path {
-				path: PathBuf::from(path_specifier),
-			});
+			let right = Specifier::Path(PathBuf::from(path_specifier));
 			assert_eq!(left, right);
 		}
 

@@ -1,184 +1,184 @@
-/**
- * Handle a request from the embedder.
- */
-async function handle({ type, request }) {
-	if (type === "check") {
-		let diagnostics = check(request.fileNames);
-		return {
-			type: "check",
-			response: { diagnostics },
-		};
-	} else {
-		throw new Error(`Unknown request type: ${type}`);
+globalThis.handle = ({ type, request }) => {
+	switch (type) {
+		case "check": {
+			let diagnostics = check(request);
+			return {
+				type: "check",
+				response: { diagnostics },
+			};
+		}
+		case "get_diagnostics": {
+			let diagnostics = getDiagnostics(request);
+			return {
+				type: "get_diagnostics",
+				response: { diagnostics },
+			};
+		}
+		default: {
+			throw new Error(`Unknown request type "${type}".`);
+		}
 	}
-}
-
-globalThis.console = {
-	log(...args) {
-		Deno.core.opSync("op_tg_console_log", args);
-	},
-	error(...args) {
-		Deno.core.opSync("op_tg_console_error", args);
-	},
 };
 
 let compilerOptions = {
-	noEmitOnError: true,
-	noImplicitAny: true,
+	maxNodeModuleJsDepth: 0,
+	module: ts.ModuleKind.ESNext,
 	noEmit: true,
-	noLib: true, // Disable the default `lib.js`, we'll pass it ourselves explicitly.
-	maxNodeModuleJsDepth: 0, // Don't resolve `import "file.js"` in node_modules
-	target: ts.ScriptTarget.ES2022,
-	module: ts.ModuleKind.CommonJS,
+	strict: true,
+	target: ts.ScriptTarget.ESNext,
 };
 
-function tgReadFile(fileName) {
-	let result = Deno.core.opSync("op_tg_read_file", fileName);
-	if (typeof result == "string") {
-		return result;
-	} else {
+let host = {
+	getCompilationSettings: () => compilerOptions,
+	getCanonicalFileName: (fileName) => {
+		return fileName;
+	},
+	getCurrentDirectory: () => {
 		return undefined;
-	}
-}
+	},
+	getDefaultLibFileName: () => "/__tangram_typescript_lib__/lib.d.ts",
+	getNewLine: () => "\n",
+	getScriptFileNames: () => {
+		return Deno.core.opSync("op_tg_documents");
+	},
+	getScriptSnapshot: (fileName) => {
+		let source = Deno.core.opSync("op_tg_load", fileName);
+		return ts.ScriptSnapshot.fromString(source);
+	},
+	getScriptVersion: (fileName) => {
+		return Deno.core.opSync("op_tg_version", fileName);
+	},
+	getSourceFile: (fileName, languageVersion, _onError) => {
+		let source = Deno.core.opSync("op_tg_load", fileName);
+		return ts.createSourceFile(fileName, source, languageVersion);
+	},
+	resolveModuleNames: (specifiers, referrer) => {
+		return specifiers.map((specifier) => {
+			let path = Deno.core.opSync("op_tg_resolve", specifier, referrer);
+			return {
+				resolvedFileName: path,
+				extension: ".ts",
+			};
+		});
+	},
+	useCaseSensitiveFileNames: () => true,
+};
 
-function tgFileExists(fileName) {
-	return Deno.core.opSync("op_tg_file_exists", fileName);
-}
+let languageService = ts.createLanguageService(host);
 
-function tgGetSourceFile(fileName, languageVersion, onError) {
-	const sourceText = tgReadFile(fileName);
-	return sourceText !== undefined
-		? ts.createSourceFile(fileName, sourceText, languageVersion)
-		: undefined;
-}
-
-function tgResolveModuleNames(moduleNames, containingFile) {
-	const resolvedModules = [];
-	for (const moduleName of moduleNames) {
-		// Call out to the host to resolve the module name.
-		try {
-			let resolved = Deno.core.opSync(
-				"op_tg_resolve",
-				containingFile,
-				moduleName,
-			);
-			resolvedModules.push(resolved);
-		} catch (e) {
-			console.error(`Error resolving '${moduleName}': ${e.message}`);
-			resolvedModules.push(undefined);
-		}
-	}
-	return resolvedModules;
-}
-
-function check(fileNames) {
-	if (!Array.isArray(fileNames)) {
-		throw new Error(
-			"check() expects an array of filenames as its first parameter",
-		);
-	}
-
-	let host = {
-		getDefaultLibFileName: () => "lib.d.ts",
-
-		// Use Unix conventions for typechecking.
-		getNewLine: () => "\n",
-
-		// Use case-sensitive filenames
-		getCanonicalFileName: (fileName) => fileName,
-		useCaseSensitiveFileNames: () => true,
-
-		// Use the Tangram VFS
-		getCurrentDirectory: () => ".", // Not necessary
-		readFile: tgReadFile,
-		getSourceFile: tgGetSourceFile,
-		resolveModuleNames: tgResolveModuleNames,
-	};
-
-	let program = ts.createProgram(
-		["/__tangram__/internal/environment.d.ts", ...fileNames],
-		compilerOptions,
-		host,
-	);
-	let emitResult = program.emit();
-
-	let allDiagnostics = ts
-		.getPreEmitDiagnostics(program)
-		.concat(emitResult.diagnostics);
-
-	// Extract data from diagnostics before returning to Rust
-	return allDiagnostics.map(exportDiagnostic);
-}
-
-/** Convert a TypeScript diagnostic into the format we're expecting in the embedding Rust code. */
-function exportDiagnostic(diagnostic) {
-	if (diagnostic.file) {
-		let { line, character } = ts.getLineAndCharacterOfPosition(
-			diagnostic.file,
-			diagnostic.start,
-		);
-		let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
-
-		return {
-			kind: "File",
-			file_name: diagnostic.file.fileName,
-			line: line + 1,
-			col: character + 1,
-			message,
-		};
-	} else {
-		return {
-			kind: "Other",
-			message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-		};
-	}
-}
-
-function createService() {
-	let serviceHost = {
-		getCurrentDirectory: () => ".",
-		getCompilationSettings: () => compilerOptions,
-		getDefaultLibFileName: () => "lib.d.ts",
-
-		// This should return the set of files the LSP considers "currently open".
-		getScriptFileNames: () => [
-			"/__tangram__/internal/environment.d.ts",
-			...globalThis.openFiles,
-		],
-
-		// Use the Tangram module resolver.
-		resolveModuleNames: tgResolveModuleNames,
-
-		// Track versions for scripts.
-		getScriptVersion: (fileName) => false, // TODO: do we need this to cache-invalidate?
-		getScriptSnapshot: (fileName) => {
-			console.log("getScriptSnapshot", fileName);
-			const sourceText = tgReadFile(fileName);
-			return sourceText !== undefined
-				? ts.ScriptSnapshot.fromString(sourceText)
-				: undefined;
-		},
-
-		readFile: tgReadFile,
-	};
-
-	return ts.createLanguageService(serviceHost, ts.createDocumentRegistry());
-}
-
-function getDiagnosticsForFile(fileName) {
-	// TypeScript needs to consider this file as "open" while getting its diagnostics.
-	globalThis.openFiles = [fileName];
-
+let check = ({ paths }) => {
+	let program = ts.createProgram([...paths], compilerOptions, host);
 	let diagnostics = [
-		...globalThis.compilerService.getSyntacticDiagnostics(fileName),
-		...globalThis.compilerService.getSemanticDiagnostics(fileName),
+		...program.getConfigFileParsingDiagnostics(),
+		...program.getOptionsDiagnostics(),
+		...program.getGlobalDiagnostics(),
+		...program.getDeclarationDiagnostics(),
+		...program.getSyntacticDiagnostics(),
+		...program.getSemanticDiagnostics(),
 	];
+	diagnostics = convertDiagnostics(diagnostics);
+	return diagnostics;
+};
 
-	globalThis.openFiles = [];
+let getDiagnostics = () => {
+	let paths = Deno.core.opSync("op_tg_documents");
+	let diagnostics = {};
+	for (let path of paths) {
+		diagnostics[path] = [
+			...languageService.getSyntacticDiagnostics(path),
+			...languageService.getSemanticDiagnostics(path),
+			...languageService.getSuggestionDiagnostics(path),
+		].map(convertDiagnostic);
+	}
+	return diagnostics;
+};
 
-	return diagnostics.map(exportDiagnostic);
-}
+/** Convert TypeScript diagnostics to Tangram diagnostics. */
+let convertDiagnostics = (diagnostics) => {
+	let output = {};
 
-// Create the compiler host at build-time, when the v8 snapshot is populated.
-globalThis.compilerService = createService();
-globalThis.openFiles = [];
+	for (diagnostic of diagnostics) {
+		// Ignore diagnostics that do not have a file.
+		if (!diagnostic.file) {
+			continue;
+		}
+
+		// Add an entry for this diagnostic's file in the output if necessary.
+		let path = diagnostic.file.fileName;
+		if (output[path] === undefined) {
+			output[path] = [];
+		}
+
+		// Add the diagnostic to the output.
+		output[path].push(convertDiagnostic(diagnostic));
+	}
+
+	return output;
+};
+
+let convertDiagnostic = (diagnostic) => {
+	// Get the diagnostic's path.
+	let path = diagnostic.file.fileName;
+
+	// Get the diagnostic's range.
+	let start = ts.getLineAndCharacterOfPosition(
+		diagnostic.file,
+		diagnostic.start,
+	);
+	let end = ts.getLineAndCharacterOfPosition(
+		diagnostic.file,
+		diagnostic.start + diagnostic.length,
+	);
+	let range = { start, end };
+
+	let location = {
+		path,
+		range,
+	};
+
+	// Get the diagnostic's message.
+	let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+
+	return {
+		location,
+		message,
+	};
+};
+
+globalThis.console = {
+	log: (...args) => {
+		let string = args.map((arg) => print(arg)).join(" ");
+		Deno.core.opSync("op_tg_print", string);
+	},
+	error: (...args) => {
+		let string = args.map((arg) => print(arg)).join(" ");
+		Deno.core.opSync("op_tg_print", string);
+	},
+};
+
+let print = (value) => {
+	if (value === undefined) {
+		return "undefined";
+	} else if (value === null) {
+		return "null";
+	} else if (Array.isArray(value)) {
+		return `[${value.map(print).join(", ")}]`;
+	} else if (value instanceof Error) {
+		return value.stack;
+	} else if (value instanceof Promise) {
+		return "Promise";
+	} else if (typeof value === "object") {
+		let constructorName = "";
+		if (value.constructor.name !== "Object") {
+			constructorName = `${value.constructor.name} `;
+		}
+		let entries = Object.entries(value).map(
+			([key, value]) => `${key}: ${print(value)}`,
+		);
+		return `${constructorName}{ ${entries.join(", ")} }`;
+	} else if (typeof value === "function") {
+		return `[Function: ${value.name || "(anonymous)"}]`;
+	} else {
+		return JSON.stringify(value);
+	}
+};

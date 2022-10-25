@@ -3,16 +3,15 @@ use crate::{
 	builder::Builder,
 	expression::{Expression, Js},
 	hash::Hash,
-	js::compiler::{resolve::TANGRAM_MODULE_SCHEME, Compiler},
+	js::{self, compiler::Compiler},
 };
 use anyhow::{bail, Context, Result};
 use deno_core::{serde_v8, v8};
 use std::{cell::RefCell, future::Future, rc::Rc, sync::Arc};
 use tokio::io::AsyncReadExt;
-use url::Url;
 
 mod cdp;
-pub(crate) mod module_loader;
+mod module_loader;
 
 pub struct Runtime {
 	builder: Builder,
@@ -37,7 +36,7 @@ impl Runtime {
 		main_runtime_handle: tokio::runtime::Handle,
 	) -> Result<Runtime> {
 		// Create the compiler.
-		let compiler = Compiler::new(builder.clone());
+		let compiler = Compiler::new(builder.clone(), main_runtime_handle.clone());
 
 		// Create the module loader.
 		let module_loader = Rc::new(ModuleLoader::new(
@@ -48,13 +47,13 @@ impl Runtime {
 		// Build the tangram extension.
 		let tangram_extension = deno_core::Extension::builder()
 			.ops(vec![
-				op_tangram_print::decl(),
-				op_tangram_parse_value::decl(),
-				op_tangram_add_blob::decl(),
-				op_tangram_get_blob::decl(),
-				op_tangram_add_expression::decl(),
-				op_tangram_get_expression::decl(),
-				op_tangram_evaluate::decl(),
+				op_tg_print::decl(),
+				op_tg_parse_value::decl(),
+				op_tg_add_blob::decl(),
+				op_tg_get_blob::decl(),
+				op_tg_add_expression::decl(),
+				op_tg_get_expression::decl(),
+				op_tg_evaluate::decl(),
 			])
 			.state({
 				let main_runtime_handle = main_runtime_handle.clone();
@@ -127,18 +126,14 @@ impl Runtime {
 		// Acquire a shared lock to the builder.
 		let builder = self.builder.lock_shared().await?;
 
-		// Create the module URL.
-		let mut module_url = format!("{TANGRAM_MODULE_SCHEME}://{}", js.package);
-
-		// Add the module path.
-		module_url.push('/');
-		module_url.push_str(js.path.as_str());
-
-		// Parse the module URL.
-		let module_url = Url::parse(&module_url).unwrap();
+		// Create the URL.
+		let url = js::Url::new_package_module(js.package, js.path.clone());
 
 		// Load the module.
-		let module_id = self.runtime.load_side_module(&module_url, None).await?;
+		let module_id = self
+			.runtime
+			.load_side_module(&url.clone().into(), None)
+			.await?;
 		let evaluate_receiver = self.runtime.mod_evaluate(module_id);
 		self.runtime.run_event_loop(false).await?;
 		evaluate_receiver.await.unwrap()?;
@@ -198,15 +193,11 @@ impl Runtime {
 		let export: v8::Local<v8::Function> = module_namespace
 			.get(&mut scope, export_literal.into())
 			.with_context(|| {
-				format!(
-					r#"Failed to get the export "{export_name}" from the module "{module_url}"."#
-				)
+				format!(r#"Failed to get the export "{export_name}" from URL "{url}"."#)
 			})?
 			.try_into()
 			.with_context(|| {
-				format!(
-					r#"The export "{export_name}" from the module "{module_url}" must be a function."#
-				)
+				format!(r#"The export "{export_name}" from URL "{url}" must be a function."#)
 			})?;
 
 		// Create a scope to call the export.
@@ -387,7 +378,7 @@ impl Runtime {
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
-fn op_tangram_print(string: String) -> Result<(), deno_core::error::AnyError> {
+fn op_tg_print(string: String) -> Result<(), deno_core::error::AnyError> {
 	println!("{string}");
 	Ok(())
 }
@@ -400,7 +391,7 @@ enum ParserFormat {
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
-fn op_tangram_parse_value(
+fn op_tg_parse_value(
 	format: ParserFormat,
 	string: String,
 ) -> Result<serde_json::Value, deno_core::error::AnyError> {
@@ -414,12 +405,17 @@ fn op_tangram_parse_value(
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_add_blob(
+async fn op_tg_add_blob(
 	state: Rc<RefCell<deno_core::OpState>>,
 	blob: serde_v8::ZeroCopyBuf,
 ) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |builder| async move {
-		let hash = builder.lock_shared().await?.add_blob(blob.as_ref()).await?;
+	op(state, |state| async move {
+		let hash = state
+			.builder
+			.lock_shared()
+			.await?
+			.add_blob(blob.as_ref())
+			.await?;
 		Ok::<_, anyhow::Error>(hash)
 	})
 	.await
@@ -427,12 +423,12 @@ async fn op_tangram_add_blob(
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_get_blob(
+async fn op_tg_get_blob(
 	state: Rc<RefCell<deno_core::OpState>>,
 	hash: Hash,
 ) -> Result<serde_v8::ZeroCopyBuf, deno_core::error::AnyError> {
-	op(state, |builder| async move {
-		let mut blob = builder.lock_shared().await?.get_blob(hash).await?;
+	op(state, |state| async move {
+		let mut blob = state.builder.lock_shared().await?.get_blob(hash).await?;
 		let mut bytes = Vec::new();
 		blob.read_to_end(&mut bytes).await?;
 		let output = serde_v8::ZeroCopyBuf::ToV8(Some(bytes.into_boxed_slice()));
@@ -443,12 +439,13 @@ async fn op_tangram_get_blob(
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_add_expression(
+async fn op_tg_add_expression(
 	state: Rc<RefCell<deno_core::OpState>>,
 	expression: Expression,
 ) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |builder| async move {
-		let hash = builder
+	op(state, |state| async move {
+		let hash = state
+			.builder
 			.lock_shared()
 			.await?
 			.add_expression(&expression)
@@ -460,12 +457,13 @@ async fn op_tangram_add_expression(
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_get_expression(
+async fn op_tg_get_expression(
 	state: Rc<RefCell<deno_core::OpState>>,
 	hash: Hash,
 ) -> Result<Option<Expression>, deno_core::error::AnyError> {
-	op(state, |builder| async move {
-		let expression = builder
+	op(state, |state| async move {
+		let expression = state
+			.builder
 			.lock_shared()
 			.await?
 			.try_get_expression_local(hash)?;
@@ -476,40 +474,51 @@ async fn op_tangram_get_expression(
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps)]
-async fn op_tangram_evaluate(
+async fn op_tg_evaluate(
 	state: Rc<RefCell<deno_core::OpState>>,
 	hash: Hash,
 ) -> Result<Hash, deno_core::error::AnyError> {
-	op(state, |builder| async move {
-		let output = builder.lock_shared().await?.evaluate(hash, hash).await?;
+	op(state, |state| async move {
+		let output = state
+			.builder
+			.lock_shared()
+			.await?
+			.evaluate(hash, hash)
+			.await?;
 		Ok::<_, anyhow::Error>(output)
 	})
 	.await
 }
 
-async fn op<T, F, Fut>(
+async fn op<R, F, Fut>(
 	state: Rc<RefCell<deno_core::OpState>>,
 	f: F,
-) -> Result<T, deno_core::error::AnyError>
+) -> Result<R, deno_core::error::AnyError>
 where
-	T: 'static + Send,
-	F: FnOnce(Builder) -> Fut,
-	Fut: 'static + Send + Future<Output = Result<T, deno_core::error::AnyError>>,
+	R: 'static + Send,
+	F: FnOnce(Arc<OpState>) -> Fut,
+	Fut: 'static + Send + Future<Output = Result<R, deno_core::error::AnyError>>,
 {
 	let state = {
 		let state = state.borrow();
 		let state = state.borrow::<Arc<OpState>>();
 		Arc::clone(state)
 	};
-	let output = state
-		.main_runtime_handle
-		.spawn({
-			let builder = state.builder.clone();
-			f(builder)
-		})
-		.await
-		.unwrap()?;
+	let main_runtime_handle = state.main_runtime_handle.clone();
+	let output = main_runtime_handle.spawn(f(state)).await.unwrap()?;
 	Ok(output)
+}
+
+fn _op_sync<R, F, Fut>(
+	state: Rc<RefCell<deno_core::OpState>>,
+	f: F,
+) -> Result<R, deno_core::error::AnyError>
+where
+	R: 'static + Send,
+	F: FnOnce(Arc<OpState>) -> Fut,
+	Fut: 'static + Send + Future<Output = Result<R, deno_core::error::AnyError>>,
+{
+	futures::executor::block_on(op(state, f))
 }
 
 struct Permissions;

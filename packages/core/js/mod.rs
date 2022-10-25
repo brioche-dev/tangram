@@ -1,5 +1,5 @@
 pub use self::{
-	compiler::{Compiler, Diagnostic, FileDiagnostic, OtherDiagnostic},
+	compiler::{url::Url, Compiler},
 	lsp::LanguageServer,
 	runtime::Runtime,
 };

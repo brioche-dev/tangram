@@ -1,49 +1,33 @@
 use super::Compiler;
-use crate::{
-	hash::Hash,
-	js::compiler::resolve::{TANGRAM_MODULE_SCHEME, TANGRAM_TARGET_SCHEME},
-};
-use anyhow::{bail, ensure, Context, Result};
+use crate::{hash::Hash, js, manifest::Manifest};
+use anyhow::{bail, Context, Result};
 use camino::Utf8Path;
 use indoc::writedoc;
-use std::fmt::Write;
+use std::{fmt::Write, path::Path};
 use tokio::io::AsyncReadExt;
-use url::Url;
 
 impl Compiler {
-	pub async fn load(&self, url: Url) -> Result<String> {
-		match url.scheme() {
-			// Load a module with the tangram module scheme.
-			TANGRAM_MODULE_SCHEME => self.load_module(url).await,
-
-			// Load a module with the tangram target proxy scheme.
-			TANGRAM_TARGET_SCHEME => self.load_target(url).await,
-
-			_ => {
-				bail!(r#"The URL "{url}" has an unsupported scheme."#);
+	pub async fn load(&self, url: &js::Url) -> Result<String> {
+		match url {
+			js::Url::PackageModule {
+				package_hash,
+				sub_path,
+			} => self.load_package_module(*package_hash, sub_path).await,
+			js::Url::PackageTargets { package_hash } => {
+				self.load_package_targets(*package_hash).await
 			},
+			js::Url::PathModule {
+				package_path: path,
+				sub_path,
+			} => self.load_path_module(path, sub_path).await,
+			js::Url::PathTargets { package_path } => self.load_path_targets(package_path).await,
+			js::Url::TsLib => bail!(r#"Cannot load from URL "{url}"."#),
 		}
 	}
 
-	async fn load_module(&self, url: Url) -> Result<String> {
+	async fn load_package_module(&self, package_hash: Hash, sub_path: &Utf8Path) -> Result<String> {
 		// Lock the builder.
 		let builder = self.state.builder.lock_shared().await?;
-
-		// Ensure the url has the tangram module scheme.
-		ensure!(
-			url.scheme() == TANGRAM_MODULE_SCHEME,
-			r#"The URL "{url}" must have the scheme "{TANGRAM_MODULE_SCHEME}"."#,
-		);
-
-		// Get the package hash from the url.
-		let domain = url.domain().context("The URL must have a domain.")?;
-		let package_hash: Hash = domain.parse()?;
-
-		// Get the path from the url.
-		let path = Utf8Path::new(url.path());
-		let path = path
-			.strip_prefix("/")
-			.with_context(|| "The URL must have a leading slash.")?;
 
 		// Find the module in the package.
 		let package_source_hash = builder
@@ -54,7 +38,7 @@ impl Compiler {
 			.into_artifact()
 			.context("Expected the package source to be an artifact.")?;
 		let mut expression = builder.get_expression_local(package_source_artifact.root)?;
-		for component in path.components() {
+		for component in sub_path.components() {
 			expression = builder.get_expression_local(
 				expression
 					.into_directory()
@@ -62,7 +46,7 @@ impl Compiler {
 					.entries
 					.get(component.as_str())
 					.copied()
-					.context(r#"Failed to find file at path {path}"#)?,
+					.with_context(|| format!(r#"Failed to find file at path {sub_path}"#))?,
 			)?;
 		}
 
@@ -78,21 +62,28 @@ impl Compiler {
 		Ok(source)
 	}
 
-	async fn load_target(&self, url: Url) -> Result<String> {
+	async fn load_path_module(&self, path: &Path, sub_path: &Utf8Path) -> Result<String> {
+		// Construct the path to the module.
+		let mut path = path.to_owned();
+		path.push(sub_path);
+
+		// If there is a document for this path, return it.
+		if let Some(document) = self.state.open_files.read().await.get(&path) {
+			return Ok(document.source.clone());
+		}
+
+		// Otherwise, read the file from disk.
+		let source = tokio::fs::read_to_string(&path).await?;
+
+		Ok(source)
+	}
+
+	async fn load_package_targets(&self, package_hash: Hash) -> Result<String> {
 		// Lock the builder.
 		let builder = self.state.builder.lock_shared().await?;
 
-		// Ensure the specifier has the tangram target proxy scheme.
-		ensure!(
-			url.scheme() == TANGRAM_TARGET_SCHEME,
-			r#"The URL "{url}" must have the scheme "{TANGRAM_TARGET_SCHEME}"."#,
-		);
-
-		// Get the package from the specifier.
-		let domain = url.domain().context("The specifier must have a domain.")?;
-		let package_hash: Hash = domain
-			.parse()
-			.context("Failed to parse the domain as a hash.")?;
+		// Produce the package module URL.
+		let module_url = js::Url::new_package_module(package_hash, "tangram.ts".into());
 
 		// Get the package's manifest.
 		let manifest = builder
@@ -100,34 +91,59 @@ impl Compiler {
 			.await
 			.context("Failed to get the package manifest.")?;
 
-		// Generate the code for the target proxy module.
-		let mut code = String::new();
+		let source = Self::generate_targets_source(&module_url, &manifest, package_hash);
+
+		Ok(source)
+	}
+
+	async fn load_path_targets(&self, package_path: &Path) -> Result<String> {
+		// Read the manifest.
+		let manifest = tokio::fs::read(package_path.join("tangram.json")).await?;
+		let manifest = serde_json::from_slice(&manifest)?;
+
+		// Produce the path module URL.
+		let module_url = js::Url::new_path_module(package_path.to_owned(), "tangram.ts".into());
+
+		// Generate the source.
+		let source = Self::generate_targets_source(&module_url, &manifest, Hash::zero());
+
+		Ok(source)
+	}
+
+	/// Generate the code for the targets.
+	fn generate_targets_source(
+		module_url: &js::Url,
+		manifest: &Manifest,
+		package_hash: Hash,
+	) -> String {
+		let mut source = String::new();
+		writedoc!(source, r#"import type * as module from "{module_url}";"#,).unwrap();
+		source.push('\n');
 		writedoc!(
-			code,
-			r#"let _package = await Tangram.getExpression(new Tangram.Hash("{package_hash}"));"#
+			source,
+			r#"let _package: Tangram.Package = await Tangram.getExpression(new Tangram.Hash("{package_hash}"));"#
 		)
 		.unwrap();
-		code.push('\n');
-		for target_name in manifest.targets {
+		source.push('\n');
+		for target_name in &manifest.targets {
 			if target_name == "default" {
-				writedoc!(code, r#"export default "#).unwrap();
+				writedoc!(source, r#"export default "#).unwrap();
 			} else {
-				writedoc!(code, r#"export let {target_name} = "#).unwrap();
+				writedoc!(source, r#"export let {target_name} = "#).unwrap();
 			}
 			writedoc!(
-				code,
+				source,
 				r#"
-				(...args) => new Tangram.Target({{
-					package: _package,
-					name: "{target_name}",
-					args,
-				}});
-			"#,
+					(...args: Parameters<typeof module.{target_name}>): Tangram.Target<ReturnType<typeof module.{target_name}>> => new Tangram.Target({{
+						package: _package,
+						name: "{target_name}",
+						args,
+					}});
+				"#,
 			)
 			.unwrap();
-			code.push('\n');
+			source.push('\n');
 		}
-
-		Ok(code)
+		source
 	}
 }

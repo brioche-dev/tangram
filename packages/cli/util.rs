@@ -41,7 +41,7 @@ impl Cli {
 	) -> Result<Hash> {
 		// Get the package hash.
 		let package_hash = match specifier {
-			Specifier::Path(specifier::Path { path }) => {
+			Specifier::Path(path) => {
 				// Create the package.
 				self.builder
 					.lock_shared()

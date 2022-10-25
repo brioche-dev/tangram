@@ -1,6 +1,6 @@
 use super::Compiler;
+use crate::js;
 use anyhow::{Context, Result};
-use url::Url;
 
 pub struct Output {
 	pub transpiled_source: String,
@@ -8,7 +8,7 @@ pub struct Output {
 }
 
 impl Compiler {
-	pub fn transpile(&self, url: &Url, source: &str) -> Result<Output> {
+	pub fn transpile(&self, url: &js::Url, source: &str) -> Result<Output> {
 		// Parse the code.
 		let parsed_source = deno_ast::parse_module(deno_ast::ParseParams {
 			specifier: url.to_string(),

@@ -1,13 +1,11 @@
-use crate::js::Compiler;
+use crate::js::{self, Compiler};
 use anyhow::{bail, Context, Result};
-use camino::Utf8Path;
 use futures::FutureExt;
 use std::{
 	collections::HashMap,
 	pin::Pin,
 	sync::{Arc, Mutex},
 };
-use url::Url;
 
 pub struct ModuleLoader {
 	state: Arc<State>,
@@ -16,7 +14,7 @@ pub struct ModuleLoader {
 struct State {
 	pub compiler: Compiler,
 	pub main_runtime_handle: tokio::runtime::Handle,
-	pub modules: Mutex<HashMap<Url, Module, fnv::FnvBuildHasher>>,
+	pub modules: Mutex<HashMap<js::Url, Module, fnv::FnvBuildHasher>>,
 }
 
 #[derive(Clone)]
@@ -53,13 +51,14 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		let referrer = if referrer == "." {
 			None
 		} else {
-			Some(Url::parse(referrer).context("Failed to parse the referrer.")?)
+			Some(referrer.parse().context("Failed to parse the referrer.")?)
 		};
 
 		// Resolve.
-		let url = futures::executor::block_on(state.compiler.resolve(specifier, referrer))?;
+		let url =
+			futures::executor::block_on(state.compiler.resolve(specifier, referrer.as_ref()))?;
 
-		Ok(url)
+		Ok(url.into())
 	}
 
 	fn load(
@@ -72,40 +71,55 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		let specifier = module_specifier.clone();
 		self.state
 			.main_runtime_handle
-			.spawn(async move { load(state, specifier).await })
+			.spawn(async move {
+				let specifier = specifier.try_into()?;
+				let module_source = load(state, &specifier).await?;
+				Ok(module_source)
+			})
 			.map(std::result::Result::unwrap)
 			.boxed_local()
 	}
 }
 
-async fn load(state: Arc<State>, url: Url) -> Result<deno_core::ModuleSource> {
+async fn load(state: Arc<State>, url: &js::Url) -> Result<deno_core::ModuleSource> {
 	// Load the source.
-	let source = state.compiler.load(url.clone()).await?;
+	let source = state.compiler.load(url).await?;
 
-	// Get the specifier's extension.
-	let extension = Utf8Path::new(url.path()).extension();
+	// Determine if the module should be transpiled.
+	let transpile = match url {
+		js::Url::PackageModule { sub_path, .. } => {
+			// Get the module's path extension.
+			let extension = sub_path
+				.extension()
+				.with_context(|| format!(r#"Cannot load from URL "{url}" with no extension."#))?;
+			match extension {
+				"js" => false,
+				"ts" => true,
+				_ => {
+					bail!(r#"Cannot load from URL with extension "{extension}"."#);
+				},
+			}
+		},
+		js::Url::PackageTargets { .. } => true,
+		_ => {
+			bail!(r#"Cannot load from URL "{url}"."#);
+		},
+	};
 
-	// Create the module from the source.
-	let module = match extension {
-		None | Some("js") => Module {
+	// Transpile the module if necessary.
+	let module = if transpile {
+		let transpile_output = state.compiler.transpile(url, &source)?;
+		Module {
+			source,
+			transpiled_source: Some(transpile_output.transpiled_source),
+			source_map: transpile_output.source_map,
+		}
+	} else {
+		Module {
 			source,
 			transpiled_source: None,
 			source_map: None,
-		},
-
-		// If the extension is `.ts` then transpile the source.
-		Some("ts") => {
-			let transpile_output = state.compiler.transpile(&url, &source)?;
-			Module {
-				source,
-				transpiled_source: Some(transpile_output.transpiled_source),
-				source_map: transpile_output.source_map,
-			}
-		},
-
-		Some(extension) => {
-			bail!(r#"Cannot load a module with extension "{extension}"."#);
-		},
+		}
 	};
 
 	// Insert into the modules map.
@@ -136,8 +150,8 @@ impl deno_core::SourceMapGetter for ModuleLoader {
 		// Lock the modules.
 		let modules = self.state.modules.lock().unwrap();
 
-		// Parse the file name.
-		let specifier = Url::parse(file_name).ok()?;
+		// Parse the file name as a URL.
+		let specifier = file_name.parse().ok()?;
 
 		// Retrieve the module.
 		let module = modules.get(&specifier)?;
@@ -152,8 +166,8 @@ impl deno_core::SourceMapGetter for ModuleLoader {
 		// Lock the modules.
 		let modules = self.state.modules.lock().unwrap();
 
-		// Parse the file name.
-		let specifier = Url::parse(file_name).ok()?;
+		// Parse the file name as a URL.
+		let specifier = file_name.parse().ok()?;
 
 		// Retrieve the transpiled source.
 		let module = modules.get(&specifier)?;
