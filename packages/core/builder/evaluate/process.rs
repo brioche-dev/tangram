@@ -203,6 +203,10 @@ impl State {
 		let expression = self.get_expression_local(hash)?;
 		match expression {
 			Expression::Artifact(artifact) => {
+				// Add the artifact itself as a dependency.
+				artifact_hashes.push(hash);
+
+				// Get all dependent artifacts from the root.
 				self.get_dependent_artifacts(artifact.root, artifact_hashes)?;
 			},
 
