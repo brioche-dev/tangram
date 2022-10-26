@@ -1,4 +1,4 @@
-use crate::{builder::State, digest::DigestHasher, expression::Fetch, hash::Hash};
+use crate::{builder::State, digest::Hasher, expression::Fetch, hash::Hash};
 use anyhow::{anyhow, Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use std::path::{Path, PathBuf};
@@ -25,7 +25,7 @@ impl State {
 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
 
 		// Stream the body to the temp while computing its hash.
-		let mut hasher = DigestHasher::new(fetch.digest.clone());
+		let mut hasher = Hasher::new(fetch.digest.clone());
 		let mut file = tokio::fs::File::create(&temp_path).await?;
 		let mut file_writer = tokio::io::BufWriter::new(&mut file);
 		while let Some(chunk) = stream.next().await {

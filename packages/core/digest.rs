@@ -12,9 +12,9 @@ use num_traits::{FromPrimitive, ToPrimitive};
 )]
 pub struct Digest {
 	#[buffalo(id = 0)]
-	algorithm: DigestAlgorithm,
+	algorithm: Algorithm,
 	#[buffalo(id = 1)]
-	encoding: DigestEncoding,
+	encoding: Encoding,
 	#[buffalo(id = 2)]
 	value: String,
 }
@@ -32,12 +32,12 @@ pub struct Digest {
 	num_derive::ToPrimitive,
 )]
 #[serde(rename_all = "camelCase")]
-pub enum DigestAlgorithm {
+pub enum Algorithm {
 	#[default]
 	Sha256 = 0,
 }
 
-impl std::fmt::Display for DigestAlgorithm {
+impl std::fmt::Display for Algorithm {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::Sha256 => write!(f, "SHA256"),
@@ -45,7 +45,7 @@ impl std::fmt::Display for DigestAlgorithm {
 	}
 }
 
-impl buffalo::Serialize for DigestAlgorithm {
+impl buffalo::Serialize for Algorithm {
 	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
 	where
 		W: std::io::Write,
@@ -55,7 +55,7 @@ impl buffalo::Serialize for DigestAlgorithm {
 	}
 }
 
-impl buffalo::Deserialize for DigestAlgorithm {
+impl buffalo::Deserialize for Algorithm {
 	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
 	where
 		R: std::io::Read,
@@ -80,19 +80,19 @@ impl buffalo::Deserialize for DigestAlgorithm {
 	num_derive::ToPrimitive,
 )]
 #[serde(rename_all = "camelCase")]
-pub enum DigestEncoding {
+pub enum Encoding {
 	#[default]
 	Hexadecimal = 0,
 }
 
-impl DigestEncoding {
-	fn encode(&self, data: impl AsRef<[u8]>) -> String {
+impl Encoding {
+	fn encode(self, data: impl AsRef<[u8]>) -> String {
 		match self {
 			Self::Hexadecimal => hex::encode(data),
 		}
 	}
 
-	fn decode(&self, string: &str) -> Result<Vec<u8>, DigestDecodeError> {
+	fn decode(self, string: &str) -> Result<Vec<u8>, DecodeError> {
 		match self {
 			Self::Hexadecimal => {
 				let data = hex::decode(string)?;
@@ -102,7 +102,7 @@ impl DigestEncoding {
 	}
 }
 
-impl buffalo::Serialize for DigestEncoding {
+impl buffalo::Serialize for Encoding {
 	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
 	where
 		W: std::io::Write,
@@ -112,7 +112,7 @@ impl buffalo::Serialize for DigestEncoding {
 	}
 }
 
-impl buffalo::Deserialize for DigestEncoding {
+impl buffalo::Deserialize for Encoding {
 	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
 	where
 		R: std::io::Read,
@@ -124,30 +124,28 @@ impl buffalo::Deserialize for DigestEncoding {
 	}
 }
 
-pub struct DigestHasher {
+pub struct Hasher {
 	hasher: DigestAlgorithmHasher,
-	algorithm: DigestAlgorithm,
-	encoding: DigestEncoding,
+	algorithm: Algorithm,
+	encoding: Encoding,
 	expected_value: Option<String>,
 }
 
-impl DigestHasher {
+impl Hasher {
+	#[must_use]
 	pub fn new(expected_digest: Option<Digest>) -> Self {
 		let algorithm;
 		let encoding;
 		let expected_value;
 
-		match expected_digest {
-			Some(digest) => {
-				algorithm = digest.algorithm;
-				encoding = digest.encoding;
-				expected_value = Some(digest.value);
-			},
-			None => {
-				algorithm = DigestAlgorithm::default();
-				encoding = DigestEncoding::default();
-				expected_value = None;
-			},
+		if let Some(digest) = expected_digest {
+			algorithm = digest.algorithm;
+			encoding = digest.encoding;
+			expected_value = Some(digest.value);
+		} else {
+			algorithm = Algorithm::default();
+			encoding = Encoding::default();
+			expected_value = None;
 		}
 
 		let hasher = DigestAlgorithmHasher::new(algorithm);
@@ -164,18 +162,16 @@ impl DigestHasher {
 		self.hasher.update(data);
 	}
 
-	pub fn finalize_and_validate(self) -> Result<(), DigestError> {
+	pub fn finalize_and_validate(self) -> Result<(), Error> {
 		let actual_bytes = self.hasher.finalize();
-		let expected = self
-			.expected_value
-			.ok_or_else(|| DigestError::MissingValue {
-				actual: self.encoding.encode(&actual_bytes),
-				algorithm: self.algorithm,
-			})?;
+		let expected = self.expected_value.ok_or_else(|| Error::MissingValue {
+			actual: self.encoding.encode(&actual_bytes),
+			algorithm: self.algorithm,
+		})?;
 		let expected_bytes =
 			self.encoding
 				.decode(&expected)
-				.map_err(|error| DigestError::InvalidValue {
+				.map_err(|error| Error::InvalidValue {
 					expected: expected.clone(),
 					actual: self.encoding.encode(&actual_bytes),
 					algorithm: self.algorithm,
@@ -185,7 +181,7 @@ impl DigestHasher {
 		if expected_bytes == actual_bytes {
 			Ok(())
 		} else {
-			Err(DigestError::Mismatch {
+			Err(Error::Mismatch {
 				expected,
 				actual: self.encoding.encode(&actual_bytes),
 				algorithm: self.algorithm,
@@ -199,9 +195,9 @@ enum DigestAlgorithmHasher {
 }
 
 impl DigestAlgorithmHasher {
-	fn new(algorithm: DigestAlgorithm) -> Self {
+	fn new(algorithm: Algorithm) -> Self {
 		match algorithm {
-			DigestAlgorithm::Sha256 => Self::Sha256(sha2::Sha256::default()),
+			Algorithm::Sha256 => Self::Sha256(sha2::Sha256::default()),
 		}
 	}
 
@@ -219,30 +215,30 @@ impl DigestAlgorithmHasher {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum DigestError {
+pub enum Error {
 	#[error("expected {expected}, got {actual} ({algorithm}")]
 	Mismatch {
 		expected: String,
 		actual: String,
-		algorithm: DigestAlgorithm,
+		algorithm: Algorithm,
 	},
 	#[error("no digest was provided, actual digest was {actual} ({algorithm})")]
 	MissingValue {
 		actual: String,
-		algorithm: DigestAlgorithm,
+		algorithm: Algorithm,
 	},
 	#[error("actual digest was {actual} ({algorithm}), expected digest {expected:?} is invalid")]
 	InvalidValue {
 		expected: String,
 		actual: String,
-		algorithm: DigestAlgorithm,
+		algorithm: Algorithm,
 		#[source]
-		error: DigestDecodeError,
+		error: DecodeError,
 	},
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum DigestDecodeError {
+pub enum DecodeError {
 	#[error("hexadecimal error: {0}")]
 	HexadecimalError(#[from] hex::FromHexError),
 }
