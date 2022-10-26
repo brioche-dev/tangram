@@ -27,8 +27,17 @@ impl tower_lsp::LanguageServer for LanguageServer {
 	) -> jsonrpc::Result<lsp::InitializeResult> {
 		Ok(lsp::InitializeResult {
 			capabilities: lsp::ServerCapabilities {
-				text_document_sync: Some(lsp::TextDocumentSyncCapability::Kind(
-					lsp::TextDocumentSyncKind::FULL,
+				text_document_sync: Some(lsp::TextDocumentSyncCapability::Options(
+					lsp::TextDocumentSyncOptions {
+						open_close: Some(true),
+						change: Some(lsp::TextDocumentSyncKind::FULL),
+						// save: Some(lsp::TextDocumentSyncSaveOptions::SaveOptions(
+						// 	lsp::SaveOptions {
+						// 		include_text: Some(true),
+						// 	},
+						// )),
+						..Default::default()
+					},
 				)),
 				..Default::default()
 			},
@@ -41,56 +50,69 @@ impl tower_lsp::LanguageServer for LanguageServer {
 	}
 
 	async fn did_open(&self, params: lsp::DidOpenTextDocumentParams) {
-		// Get the document info.
+		// Get the file path, version, and text.
 		let path = Path::new(params.text_document.uri.path());
 		let version = params.text_document.version;
-		let source = params.text_document.text;
+		let text = params.text_document.text;
 
-		// Open the document with the compiler.
-		self.compiler.open_document(path, version, source).await;
+		// Open the file with the compiler.
+		self.compiler.open_file(path, version, text).await;
 
 		// Update all diagnostics.
-		self.check_documents().await;
+		self.check_open_files().await;
 	}
 
 	async fn did_change(&self, params: lsp::DidChangeTextDocumentParams) {
-		// Get the document's path.
+		// Get the file's path.
 		let path = Path::new(params.text_document.uri.path());
 
 		// Update the document in the compiler.
 		for change in params.content_changes {
 			self.compiler
-				.change_document(path, params.text_document.version, change.text)
+				.change_file(path, params.text_document.version, change.text)
 				.await;
 		}
 
 		// Update all diagnostics.
-		self.check_documents().await;
+		self.check_open_files().await;
 	}
+
+	// async fn did_save(&self, _params: lsp::DidSaveTextDocumentParams) {
+	// 	// Update all diagnostics.
+	// 	self.check_open_files().await;
+	// }
 
 	async fn did_close(&self, params: lsp::DidCloseTextDocumentParams) {
 		// Get the document's path.
 		let path = Path::new(params.text_document.uri.path());
 
-		// Close the document in the compiler.
-		self.compiler.close_document(path).await;
+		// Close the file in the compiler.
+		self.compiler.close_file(path).await;
 
 		// Update all diagnostics.
-		self.check_documents().await;
+		self.check_open_files().await;
 	}
 }
 
 impl LanguageServer {
-	async fn check_documents(&self) {
+	async fn check_open_files(&self) {
 		// Perform the check.
-		let diagnostics = if let Ok(diagnostics) = dbg!(self.compiler.get_diagnostics().await) {
-			diagnostics
-		} else {
-			return;
+		let diagnostics = match self.compiler.get_diagnostics().await {
+			Ok(diagnostics) => diagnostics,
+			Err(error) => {
+				self.client
+					.log_message(
+						lsp::MessageType::ERROR,
+						format!("Failed to get diagnostics.\n{error}"),
+					)
+					.await;
+				return;
+			},
 		};
 
 		// Publish the diagnostics.
 		for (url, diagnostics) in diagnostics {
+			let version = self.compiler.get_version(&url).await.ok();
 			let path = match url {
 				js::Url::PathModule {
 					package_path,
@@ -101,7 +123,7 @@ impl LanguageServer {
 			let url = format!("file://{}", path.display()).parse().unwrap();
 			let diagnostics = diagnostics.into_iter().map(Into::into).collect();
 			self.client
-				.publish_diagnostics(url, diagnostics, None)
+				.publish_diagnostics(url, diagnostics, version)
 				.await;
 		}
 	}

@@ -36,6 +36,7 @@ hex = { version = "0.4", features = ["serde"] }
 http = "0.2"
 hyper = { version = "0.14.18", features = ["full"] }
 hyper-rustls = "0.23"
+include_dir = "0.7"
 indoc = "1"
 insta = "1.14"
 itertools = "0.10"

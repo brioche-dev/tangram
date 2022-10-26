@@ -5,12 +5,11 @@ use std::path::{Path, PathBuf};
 
 pub const TANGRAM_SCHEME: &str = "tangram";
 
-pub const TANGRAM_TS_LIB_SCHEME: &str = "tangram-typescript-lib";
-
 pub const TANGRAM_PACKAGE_MODULE_SCHEME: &str = "tangram-package-module";
 pub const TANGRAM_PACKAGE_TARGETS_SCHEME: &str = "tangram-package-targets";
 pub const TANGRAM_PATH_MODULE_SCHEME: &str = "tangram-path-module";
 pub const TANGRAM_PATH_TARGETS_SCHEME: &str = "tangram-path-targets";
+pub const TANGRAM_TS_LIB_SCHEME: &str = "tangram-typescript-lib";
 
 #[derive(
 	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
@@ -31,7 +30,9 @@ pub enum Url {
 	PathTargets {
 		package_path: PathBuf,
 	},
-	TsLib,
+	TsLib {
+		path: Utf8PathBuf,
+	},
 }
 
 impl Url {
@@ -84,96 +85,6 @@ impl Url {
 	}
 }
 
-impl Url {
-	pub async fn from_typescript_path(path: &str) -> Result<Url> {
-		let path = Utf8PathBuf::from(path);
-
-		let mut components = path.components();
-		components.next().context("Invalid path.")?;
-		let first_component = components.next().context("Invalid path.")?.as_str();
-
-		let url = match first_component {
-			"__tangram_package_module__" => {
-				let package_hash = components
-					.next()
-					.context("Invalid path.")?
-					.as_str()
-					.parse()?;
-				let sub_path = components.collect();
-				Url::new_package_module(package_hash, sub_path)
-			},
-
-			"__tangram_package_targets__" => {
-				let package_hash = components
-					.next()
-					.context("Invalid path.")?
-					.as_str()
-					.parse()?;
-				Url::new_package_targets(package_hash)
-			},
-
-			"__tangram_path_module__" => {
-				let mut path: Utf8PathBuf = Utf8PathBuf::from("/");
-				for component in components {
-					path.push(component);
-				}
-				let path: PathBuf = path.into();
-				Url::new_for_module_path(&path).await?
-			},
-
-			"__tangram_path_targets__" => {
-				let mut path: Utf8PathBuf = Utf8PathBuf::from("/");
-				for component in components {
-					path.push(component);
-				}
-				path.pop();
-				Url::new_path_targets(path.into())
-			},
-
-			"__tangram_typescript_lib__" => Url::TsLib,
-
-			_ => bail!("Invalid path."),
-		};
-
-		Ok(url)
-	}
-
-	#[must_use]
-	pub fn to_typescript_path(&self) -> String {
-		match self {
-			Url::PackageModule {
-				package_hash,
-				sub_path,
-			} => {
-				format!("/__tangram_package_module__/{package_hash}/{sub_path}")
-			},
-
-			Url::PackageTargets { package_hash } => {
-				format!("/__tangram_package_targets__/{package_hash}/targets.ts")
-			},
-
-			Url::PathModule {
-				package_path,
-				sub_path,
-			} => {
-				format!(
-					"/__tangram_path_module__/{package_path}/{sub_path}",
-					package_path = package_path.strip_prefix("/").unwrap().display(),
-				)
-			},
-
-			Url::PathTargets { package_path } => {
-				format!(
-					"/__tangram_path_targets__/{package_path}/targets.ts",
-					package_path = package_path.strip_prefix("/").unwrap().display(),
-				)
-			},
-
-			Url::TsLib => "/__tangram_typescript_lib__/lib.d.ts".to_owned(),
-		}
-	}
-}
-
 impl TryFrom<url::Url> for Url {
 	type Error = anyhow::Error;
 
@@ -215,7 +126,10 @@ impl TryFrom<url::Url> for Url {
 				Ok(Url::PathTargets { package_path })
 			},
 
-			TANGRAM_TS_LIB_SCHEME => Ok(Url::TsLib),
+			TANGRAM_TS_LIB_SCHEME => {
+				let path = value.path().into();
+				Ok(Url::TsLib { path })
+			},
 
 			_ => bail!(r#"Invalid URL "{value}"."#),
 		}
@@ -229,37 +143,24 @@ impl From<Url> for url::Url {
 				package_hash,
 				sub_path,
 			} => {
-				format!(
-					"{}://{}?{}",
-					TANGRAM_PACKAGE_MODULE_SCHEME, package_hash, sub_path
-				)
+				format!("{TANGRAM_PACKAGE_MODULE_SCHEME}://{package_hash}?{sub_path}",)
 			},
 			Url::PackageTargets { package_hash } => {
-				format!(
-					"{}://{}?targets.ts",
-					TANGRAM_PACKAGE_TARGETS_SCHEME, package_hash
-				)
+				format!("{TANGRAM_PACKAGE_TARGETS_SCHEME}://{package_hash}?targets.ts",)
 			},
 			Url::PathModule {
-				package_path: path,
+				package_path,
 				sub_path,
 			} => {
-				format!(
-					"{}://{}?{}",
-					TANGRAM_PATH_MODULE_SCHEME,
-					path.display(),
-					sub_path
-				)
+				let package_path = package_path.display();
+				format!("{TANGRAM_PATH_MODULE_SCHEME}://{package_path}?{sub_path}",)
 			},
-			Url::PathTargets { package_path: path } => {
-				format!(
-					"{}://{}?targets.ts",
-					TANGRAM_PATH_TARGETS_SCHEME,
-					path.display()
-				)
+			Url::PathTargets { package_path } => {
+				let package_path = package_path.display();
+				format!("{TANGRAM_PATH_TARGETS_SCHEME}://{package_path}?targets.ts",)
 			},
-			Url::TsLib => {
-				format!("{}:", TANGRAM_TS_LIB_SCHEME)
+			Url::TsLib { path } => {
+				format!("{TANGRAM_TS_LIB_SCHEME}://{path}")
 			},
 		};
 		url.parse().unwrap()

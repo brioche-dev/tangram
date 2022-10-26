@@ -1,10 +1,15 @@
-use super::Compiler;
+use super::{Compiler, File};
 use crate::{hash::Hash, js, manifest::Manifest};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use camino::Utf8Path;
+use include_dir::include_dir;
 use indoc::writedoc;
 use std::{fmt::Write, path::Path};
 use tokio::io::AsyncReadExt;
+
+static LIB: include_dir::Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/js/compiler/lib");
+
+const LIB_TANGRAM_NS_D_TS: &str = include_str!("../runtime/global.d.ts");
 
 impl Compiler {
 	pub async fn load(&self, url: &js::Url) -> Result<String> {
@@ -21,7 +26,7 @@ impl Compiler {
 				sub_path,
 			} => self.load_path_module(path, sub_path).await,
 			js::Url::PathTargets { package_path } => self.load_path_targets(package_path).await,
-			js::Url::TsLib => bail!(r#"Cannot load from URL "{url}"."#),
+			js::Url::TsLib { path } => Self::load_ts_lib(path),
 		}
 	}
 
@@ -67,15 +72,15 @@ impl Compiler {
 		let mut path = path.to_owned();
 		path.push(sub_path);
 
-		// If there is a document for this path, return it.
-		if let Some(document) = self.state.open_files.read().await.get(&path) {
-			return Ok(document.source.clone());
+		// If there is an opened file for this path, return it.
+		if let Some(File::Opened(open_file)) = self.state.files.read().await.get(&path) {
+			return Ok(open_file.text.clone());
 		}
 
 		// Otherwise, read the file from disk.
-		let source = tokio::fs::read_to_string(&path).await?;
+		let text = tokio::fs::read_to_string(&path).await?;
 
-		Ok(source)
+		Ok(text)
 	}
 
 	async fn load_package_targets(&self, package_hash: Hash) -> Result<String> {
@@ -91,9 +96,9 @@ impl Compiler {
 			.await
 			.context("Failed to get the package manifest.")?;
 
-		let source = Self::generate_targets_source(&module_url, &manifest, package_hash);
+		let text = Self::generate_targets(&module_url, &manifest, package_hash);
 
-		Ok(source)
+		Ok(text)
 	}
 
 	async fn load_path_targets(&self, package_path: &Path) -> Result<String> {
@@ -105,34 +110,30 @@ impl Compiler {
 		let module_url = js::Url::new_path_module(package_path.to_owned(), "tangram.ts".into());
 
 		// Generate the source.
-		let source = Self::generate_targets_source(&module_url, &manifest, Hash::zero());
+		let text = Self::generate_targets(&module_url, &manifest, Hash::zero());
 
-		Ok(source)
+		Ok(text)
 	}
 
 	/// Generate the code for the targets.
-	fn generate_targets_source(
-		module_url: &js::Url,
-		manifest: &Manifest,
-		package_hash: Hash,
-	) -> String {
-		let mut source = String::new();
-		writedoc!(source, r#"import type * as module from "{module_url}";"#,).unwrap();
-		source.push('\n');
+	fn generate_targets(module_url: &js::Url, manifest: &Manifest, package_hash: Hash) -> String {
+		let mut code = String::new();
+		writedoc!(code, r#"import type * as module from "{module_url}";"#,).unwrap();
+		code.push('\n');
 		writedoc!(
-			source,
+			code,
 			r#"let _package: Tangram.Package = await Tangram.getExpression(new Tangram.Hash("{package_hash}"));"#
 		)
 		.unwrap();
-		source.push('\n');
+		code.push('\n');
 		for target_name in &manifest.targets {
 			if target_name == "default" {
-				writedoc!(source, r#"export default "#).unwrap();
+				writedoc!(code, r#"export default "#).unwrap();
 			} else {
-				writedoc!(source, r#"export let {target_name} = "#).unwrap();
+				writedoc!(code, r#"export let {target_name} = "#).unwrap();
 			}
 			writedoc!(
-				source,
+				code,
 				r#"
 					(...args: Parameters<typeof module.{target_name}>): Tangram.Target<ReturnType<typeof module.{target_name}>> => new Tangram.Target({{
 						package: _package,
@@ -142,8 +143,23 @@ impl Compiler {
 				"#,
 			)
 			.unwrap();
-			source.push('\n');
+			code.push('\n');
 		}
-		source
+		code
+	}
+
+	fn load_ts_lib(path: &Utf8Path) -> Result<String> {
+		let path = path
+			.strip_prefix("/")
+			.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
+		let text = match path.as_str() {
+			"lib.tangram.ns.d.ts" => LIB_TANGRAM_NS_D_TS,
+			_ => LIB
+				.get_file(path)
+				.with_context(|| format!(r#"Could not find typescript lib for path "{path}"."#))?
+				.contents_utf8()
+				.context("Failed to read file as UTF-8.")?,
+		};
+		Ok(text.to_owned())
 	}
 }

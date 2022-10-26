@@ -8,8 +8,7 @@ pub struct Args {}
 impl Cli {
 	pub async fn command_lsp(&self, _args: Args) -> anyhow::Result<()> {
 		// Create the compiler.
-		let main_runtime_handle = tokio::runtime::Handle::current();
-		let compiler = js::Compiler::new(self.builder.clone(), main_runtime_handle);
+		let compiler = js::Compiler::new(self.builder.clone());
 
 		// Create the language server and serve it over stdin/stdout.
 		let stdin = tokio::io::stdin();

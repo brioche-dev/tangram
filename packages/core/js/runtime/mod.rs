@@ -36,7 +36,7 @@ impl Runtime {
 		main_runtime_handle: tokio::runtime::Handle,
 	) -> Result<Runtime> {
 		// Create the compiler.
-		let compiler = Compiler::new(builder.clone(), main_runtime_handle.clone());
+		let compiler = Compiler::new(builder.clone());
 
 		// Create the module loader.
 		let module_loader = Rc::new(ModuleLoader::new(

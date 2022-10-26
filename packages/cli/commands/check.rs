@@ -15,8 +15,7 @@ pub struct Args {
 impl Cli {
 	pub(crate) async fn command_check(&self, args: Args) -> Result<()> {
 		// Create a compiler.
-		let main_runtime_handle = tokio::runtime::Handle::current();
-		let compiler = js::Compiler::new(self.builder.clone(), main_runtime_handle);
+		let compiler = js::Compiler::new(self.builder.clone());
 
 		// Create the URL.
 		let url = match &args.specifier {
@@ -43,8 +42,7 @@ impl Cli {
 			for diagnostic in diagnostics {
 				let js::compiler::Diagnostic { location, message } = diagnostic;
 				if let Some(location) = location {
-					let js::compiler::DiagnosticLocation { path, range, .. } = location;
-					let url = js::Url::from_typescript_path(path).await?;
+					let js::compiler::DiagnosticLocation { url, range, .. } = location;
 					let js::compiler::Position { line, character } = range.start;
 					let line = line + 1;
 					let character = character + 1;

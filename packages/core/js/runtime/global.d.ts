@@ -1,3 +1,7 @@
+interface ImportMeta {
+	url: string;
+}
+
 declare module Tangram {
 	module internal {
 		enum System {
@@ -173,7 +177,11 @@ declare module Tangram {
 
 		function syscall(syscall: Syscall.Print, value: string): void;
 
-		function syscall(syscall: Syscall.ParseValue, format: string, contents: string): any;
+		function syscall(
+			syscall: Syscall.ParseValue,
+			format: string,
+			contents: string,
+		): any;
 
 		function syscall(syscall: Syscall.AddBlob, blob: Uint8Array): Promise<Hash>;
 
@@ -231,9 +239,9 @@ declare module Tangram {
 		: Output extends number
 		? number
 		: Output extends string
-		? (string | Template)
+		? string | Template
 		: Output extends Artifact
-		? (Artifact | Fetch | Process)
+		? Artifact | Fetch | Process
 		: Output extends File
 		? File
 		: Output extends Directory
@@ -257,7 +265,7 @@ declare module Tangram {
 		: Output extends Array<infer V extends AnyExpression>
 		? Array<V>
 		: Output extends { [key: string]: AnyExpression }
-		? { [K in keyof(Output)]: Output[K] }
+		? { [K in keyof Output]: Output[K] }
 		: never;
 
 	type OutputForExpression<T extends AnyExpression> = T extends null
@@ -300,9 +308,7 @@ declare module Tangram {
 		#type: "artifact";
 		#hash: Tangram.Hash;
 
-		constructor(
-			expression: FilesystemExpression,
-		);
+		constructor(expression: FilesystemExpression);
 
 		hash(): Promise<Hash>;
 
@@ -446,7 +452,9 @@ declare module Tangram {
 		expression: E,
 	) => Promise<OutputForExpression<E>>;
 
-	let addExpression: <E extends AnyExpression>(expression: E) => Promise<Hash<E>>;
+	let addExpression: <E extends AnyExpression>(
+		expression: E,
+	) => Promise<Hash<E>>;
 
 	let getExpression: <E extends AnyExpression>(hash: Hash<E>) => Promise<E>;
 

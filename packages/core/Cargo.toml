@@ -41,6 +41,7 @@ hex = { workspace = true }
 http = { workspace = true }
 hyper = { workspace = true }
 hyper-rustls = { workspace = true }
+include_dir = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 itertools = { workspace = true }
