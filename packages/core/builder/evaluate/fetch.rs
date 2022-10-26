@@ -1,9 +1,5 @@
-use crate::{
-	builder::State,
-	expression::Fetch,
-	hash::{Hash, Hasher},
-};
-use anyhow::{anyhow, bail, Context, Result};
+use crate::{builder::State, digest::DigestHasher, expression::Fetch, hash::Hash};
+use anyhow::{anyhow, Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
@@ -29,29 +25,20 @@ impl State {
 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
 
 		// Stream the body to the temp while computing its hash.
-		let mut hasher = Hasher::new();
+		let mut hasher = DigestHasher::new(fetch.digest.clone());
 		let mut file = tokio::fs::File::create(&temp_path).await?;
 		let mut file_writer = tokio::io::BufWriter::new(&mut file);
 		while let Some(chunk) = stream.next().await {
 			let chunk = chunk?;
-			hasher.write_all(&chunk).await?;
+			hasher.update(&chunk);
 			file_writer.write_all(&chunk).await?;
 		}
-		let hash = hasher.finalize();
 		file_writer.flush().await?;
 
 		// Verify the hash.
-		match (fetch.hash, hash) {
-			(None, _) => bail!("Missing hash!\nReceived: {}\n", hash),
-			(Some(fetch_hash), hash) if fetch_hash != hash => {
-				bail!(
-					"Hash mismatch in fetch!\nExpected: {}\nReceived: {}\n",
-					fetch_hash,
-					hash,
-				);
-			},
-			_ => {},
-		};
+		hasher
+			.finalize_and_validate()
+			.map_err(|error| anyhow!("Error fetching URL {}: {error}.", fetch.url.clone()))?;
 
 		tracing::trace!(r#"Fetched "{}"."#, fetch.url);
 

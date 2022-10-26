@@ -1,4 +1,4 @@
-use crate::{hash::Hash, system::System};
+use crate::{digest::Digest, hash::Hash, system::System};
 use anyhow::{bail, Result};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use camino::Utf8PathBuf;
@@ -238,7 +238,7 @@ pub struct Fetch {
 	pub url: Url,
 
 	#[buffalo(id = 1)]
-	pub hash: Option<Hash>,
+	pub digest: Option<Digest>,
 
 	#[buffalo(id = 2)]
 	pub unpack: bool,

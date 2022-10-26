@@ -394,8 +394,22 @@ declare module Tangram {
 		getArgs(): Promise<Expression<Array<AnyExpression>>>;
 	}
 
+	enum DigestAlgorithm {
+		Sha256 = "sha256",
+	}
+
+	enum DigestEncoding {
+		Hexadecimal = "hexadecimal",
+	}
+
+	type Digest = {
+		algorithm: DigestAlgorithm,
+		encoding: DigestEncoding,
+		value: string,
+	};
+
 	type FetchArgs = {
-		hash?: string;
+		digest?: Digest;
 		unpack?: boolean;
 		url: string;
 	};
@@ -403,7 +417,7 @@ declare module Tangram {
 	class Fetch {
 		#type: `fetch`;
 		url: string;
-		hash: string | null;
+		digest: Digest | null;
 		unpack: boolean;
 
 		constructor(args: FetchArgs);

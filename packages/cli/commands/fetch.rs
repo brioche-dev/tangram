@@ -23,7 +23,7 @@ impl Cli {
 				tangram_core::expression::Fetch {
 					url: args.url,
 					unpack: args.unpack,
-					hash: None,
+					digest: None,
 				},
 			))
 			.await?;

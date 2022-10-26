@@ -36,6 +36,14 @@ let ExpressionType = {
 	Map: "map",
 };
 
+let DigestAlgorithm = {
+	Sha256: "sha256",
+};
+
+let DigestEncoding = {
+	Hexadecimal: "hexadecimal",
+};
+
 let Syscall = {
 	Print: "print",
 	ParseValue: "parse_value",
@@ -410,19 +418,19 @@ class Js {
 
 class Fetch {
 	url;
-	hash;
+	digest;
 	unpack;
 
-	constructor({ url, hash, unpack }) {
+	constructor({ url, digest, unpack }) {
 		this.url = url;
-		this.hash = hash ?? null;
+		this.digest = digest ?? null;
 		this.unpack = unpack ?? false;
 	}
 
 	static fromJson(expression) {
 		return new Fetch({
 			url: expression.value.url,
-			hash: expression.value.hash,
+			digest: expression.value.digest,
 			unpack: expression.value.unpack,
 		});
 	}
@@ -432,7 +440,7 @@ class Fetch {
 			type: ExpressionType.Fetch,
 			value: {
 				url: this.url,
-				hash: this.hash,
+				digest: this.digest,
 				unpack: this.unpack,
 			},
 		};
@@ -754,6 +762,8 @@ let parseValue = (format, contents) => {
 globalThis.Tangram = {
 	Artifact,
 	Dependency,
+	DigestAlgorithm,
+	DigestEncoding,
 	Directory,
 	Fetch,
 	File,
