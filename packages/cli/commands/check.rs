@@ -46,19 +46,18 @@ impl Cli {
 					let js::compiler::Position { line, character } = range.start;
 					let line = line + 1;
 					let character = character + 1;
-					match url {
-						js::Url::PathModule { package_path, .. }
-						| js::Url::PathTargets { package_path } => {
-							let package_path = package_path.display();
-							println!("{package_path}:{line}:{character}");
-						},
-						_ => {
-							println!("{url}:{line}:{character}");
-						},
+					if let js::Url::PathModule {
+						package_path,
+						sub_path,
+					} = url
+					{
+						let path = package_path.join(sub_path);
+						let path = path.display();
+						println!("{path}:{line}:{character}");
+						println!("{message}");
+						println!();
 					}
 				}
-				println!("{message}");
-				println!();
 			}
 		}
 

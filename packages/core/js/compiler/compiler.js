@@ -64,7 +64,6 @@ let host = {
 	getSourceFile: (fileName, languageVersion, _onError) => {
 		let { text, version } = syscall(Syscall.Load, fileName);
 		let sourceFile = ts.createSourceFile(fileName, text, languageVersion);
-		sourceFile.moduleName = fileName;
 		sourceFile.version = version;
 		return sourceFile;
 	},

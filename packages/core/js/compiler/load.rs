@@ -135,7 +135,7 @@ impl Compiler {
 			writedoc!(
 				code,
 				r#"
-					(...args: Parameters<typeof module.{target_name}>): Tangram.Target<ReturnType<typeof module.{target_name}>> => new Tangram.Target({{
+					(...args: Parameters<typeof module.{target_name}>): Tangram.Target<Awaited<ReturnType<typeof module.{target_name}>>> => new Tangram.Target({{
 						package: _package,
 						name: "{target_name}",
 						args,
