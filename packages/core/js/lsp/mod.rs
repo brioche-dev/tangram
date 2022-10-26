@@ -31,11 +31,6 @@ impl tower_lsp::LanguageServer for LanguageServer {
 					lsp::TextDocumentSyncOptions {
 						open_close: Some(true),
 						change: Some(lsp::TextDocumentSyncKind::FULL),
-						// save: Some(lsp::TextDocumentSyncSaveOptions::SaveOptions(
-						// 	lsp::SaveOptions {
-						// 		include_text: Some(true),
-						// 	},
-						// )),
 						..Default::default()
 					},
 				)),
@@ -76,11 +71,6 @@ impl tower_lsp::LanguageServer for LanguageServer {
 		// Update all diagnostics.
 		self.check_open_files().await;
 	}
-
-	// async fn did_save(&self, _params: lsp::DidSaveTextDocumentParams) {
-	// 	// Update all diagnostics.
-	// 	self.check_open_files().await;
-	// }
 
 	async fn did_close(&self, params: lsp::DidCloseTextDocumentParams) {
 		// Get the document's path.
