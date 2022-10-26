@@ -87,10 +87,6 @@ let host = {
 	},
 };
 
-// // Add our libs to the private libs field.
-// ts.libs.push("tangram.ns");
-// ts.libMap.set("tangram.ns", "lib.tangram.ns.d.ts");
-
 // Create the TypeScript language service.
 let languageService = ts.createLanguageService(host);
 
