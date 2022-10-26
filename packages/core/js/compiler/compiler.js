@@ -79,10 +79,10 @@ let host = {
 	useCaseSensitiveFileNames: () => {
 		return true;
 	},
-	readFile: (fileName) => {
+	readFile: () => {
 		return undefined;
 	},
-	fileExists: (fileName) => {
+	fileExists: () => {
 		return false;
 	},
 };
