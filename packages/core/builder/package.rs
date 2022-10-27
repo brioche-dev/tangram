@@ -199,40 +199,28 @@ impl State {
 		Ok(manifest)
 	}
 
-	/// Given a package expression, resolve the filename of the script entry point.
-	///
-	/// See [`CANDIDATE_ENTRYPOINT_FILENAMES`] for an ordered list of the filenames this function
-	/// will check for in the package root.
-	///
-	/// If no suitable file is found, returns `None`.
-	pub fn resolve_package_entrypoint_file(&self, package: Hash) -> Result<Option<Utf8PathBuf>> {
-		/// List of candidate filenames, in priority order, for resolving the script
-		/// entrypoint to a Tangram package.
-		const CANDIDATE_ENTRYPOINT_FILENAMES: &[&str] = &["tangram.ts", "tangram.js"];
+	pub fn get_package_js_entrypoint(&self, package_hash: Hash) -> Result<Option<Utf8PathBuf>> {
+		const JS_ENTRYPOINT_FILE_NAMES: [&str; 2] = ["tangram.ts", "tangram.js"];
 
-		// Get the package source.
+		// Get the package source directory.
 		let source_hash = self
-			.get_package_source(package)
-			.context("Failed to get package source")?;
+			.get_package_source(package_hash)
+			.context("Failed to get the package source.")?;
 		let source_artifact: Artifact = self
 			.get_expression_local(source_hash)?
 			.into_artifact()
-			.context("Source was not an artifact")?;
-
+			.context("The source must be an artifact.")?;
 		let source_directory: Directory = self
 			.get_expression_local(source_artifact.root)
-			.context("Failed to get contents of package source artifact")?
+			.context("Failed to get the contents of the package source artifact.")?
 			.into_directory()
-			.context("Package source artifact did not contain a directory")?;
+			.context("The package source artifact root must be a directory")?;
 
-		// Look through the list of candidates, returning the first one which matches.
-		for candidate in CANDIDATE_ENTRYPOINT_FILENAMES {
-			if source_directory.entries.contains_key(candidate as &str) {
-				return Ok(Some(candidate.into()));
-			}
-		}
+		let js_entrypoint = JS_ENTRYPOINT_FILE_NAMES
+			.into_iter()
+			.find(|file_name| source_directory.entries.contains_key(*file_name))
+			.map(Into::into);
 
-		// Here, we've fallen through the candidates list, and there's no suitable entrypoint file.
-		Ok(None)
+		Ok(js_entrypoint)
 	}
 }

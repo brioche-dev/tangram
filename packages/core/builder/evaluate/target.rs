@@ -4,8 +4,7 @@ use crate::{
 	hash::Hash,
 	system::System,
 };
-use anyhow::{bail, Context, Result};
-use camino::Utf8PathBuf;
+use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 
 impl State {
@@ -93,34 +92,17 @@ impl State {
 			return Ok(output);
 		}
 
-		// Get the package source artifact.
-		let source_artifact: expression::Artifact = self
-			.get_expression_local(package.source)
-			.context("Failed to get the package source.")?
-			.into_artifact()
-			.context("The package source must be an artifact expression.")?;
-
-		// Get the source directory.
-		let source_directory: expression::Directory = self
-			.get_expression_local(source_artifact.root)
-			.context("Failed to get the contents of the package source artifact.")?
-			.into_directory()
-			.context("The package source artifact did not contain a directory.")?;
-
-		// Get the js path.
-		let path = if source_directory.entries.contains_key("tangram.ts") {
-			Utf8PathBuf::from("tangram.ts")
-		} else if source_directory.entries.contains_key("tangram.js") {
-			Utf8PathBuf::from("tangram.js")
-		} else {
-			bail!("No tangram.ts or tangram.js found.");
-		};
+		// Get the package's js entrypoint path.
+		let js_entrypoint_path = self
+			.get_package_js_entrypoint(package_hash)
+			.context("Failed to retrieve the package JS entrypoint.")?
+			.context("The package must have a JS entrypoint.")?;
 
 		// Add the js process expression.
 		let expression_hash = self
 			.add_expression(&expression::Expression::Js(expression::Js {
 				package: target.package,
-				path,
+				path: js_entrypoint_path,
 				name: target.name.clone(),
 				args: target.args,
 			}))

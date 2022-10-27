@@ -1,7 +1,7 @@
 use super::{Compiler, File};
-use crate::{hash::Hash, js, manifest::Manifest};
-use anyhow::{Context, Result};
-use camino::Utf8Path;
+use crate::{hash::Hash, js, manifest::Manifest, util::path_exists};
+use anyhow::{bail, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use include_dir::include_dir;
 use indoc::writedoc;
 use std::{fmt::Write, path::Path};
@@ -75,8 +75,18 @@ impl Compiler {
 		// Lock the builder.
 		let builder = self.state.builder.lock_shared().await?;
 
+		// Get the package's JS entrypoint path.
+		let js_entrypoint_path = self
+			.state
+			.builder
+			.lock_shared()
+			.await?
+			.get_package_js_entrypoint(package_hash)
+			.context("Failed to retrieve the package JS entrypoint.")?
+			.context("The package must have a JS entrypoint.")?;
+
 		// Produce the package module URL.
-		let module_url = js::Url::new_package_module(package_hash, "tangram.ts".into());
+		let module_url = js::Url::new_package_module(package_hash, js_entrypoint_path);
 
 		// Get the package's manifest.
 		let manifest = builder
@@ -113,8 +123,17 @@ impl Compiler {
 		let manifest = tokio::fs::read(package_path.join("tangram.json")).await?;
 		let manifest = serde_json::from_slice(&manifest)?;
 
+		// Get the js entrypoint path.
+		let js_entrypoint_path = if path_exists(&package_path.join("tangram.ts")).await? {
+			Utf8PathBuf::from("tangram.ts")
+		} else if path_exists(&package_path.join("tangram.js")).await? {
+			Utf8PathBuf::from("tangram.js")
+		} else {
+			bail!("No tangram.ts or tangram.js found.");
+		};
+
 		// Produce the path module URL.
-		let module_url = js::Url::new_path_module(package_path.to_owned(), "tangram.ts".into());
+		let module_url = js::Url::new_path_module(package_path.to_owned(), js_entrypoint_path);
 
 		// Generate the source.
 		let text = generate_targets(&module_url, &manifest, Hash::zero());
