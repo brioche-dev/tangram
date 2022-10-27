@@ -1,8 +1,8 @@
-use super::{Compiler, Diagnostic, File};
+use super::{Compiler, Diagnostic, File, OpenedFile};
 use crate::js;
 use anyhow::{Context, Result};
 use deno_core::{serde_v8, v8};
-use futures::{future::try_join_all, Future};
+use futures::Future;
 use std::{cell::RefCell, collections::BTreeMap, env, rc::Rc, sync::Arc};
 use tokio::sync::oneshot;
 
@@ -182,16 +182,18 @@ fn op_tg_opened_files(
 ) -> Result<Vec<js::Url>, deno_core::error::AnyError> {
 	op_sync(state, |state| async move {
 		let files = state.compiler.state.files.read().await;
-		let urls = try_join_all(
-			files
-				.iter()
-				.filter_map(|(path, file)| match file {
-					File::Opened(_) => Some(path),
-					File::Unopened(_) => None,
-				})
-				.map(|path| js::Url::new_for_module_path(path)),
-		)
-		.await?;
+		let urls = files
+			.values()
+			.filter_map(|file| match file {
+				File::Opened(
+					opened_file @ OpenedFile {
+						url: js::Url::PackageModule { .. },
+						..
+					},
+				) => Some(opened_file.url.clone()),
+				_ => None,
+			})
+			.collect();
 		Ok(urls)
 	})
 }

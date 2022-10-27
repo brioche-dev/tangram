@@ -32,11 +32,13 @@ enum File {
 }
 
 struct OpenedFile {
+	url: js::Url,
 	version: i32,
 	text: String,
 }
 
 struct UnopenedFile {
+	_url: js::Url,
 	version: i32,
 	modified: SystemTime,
 }
@@ -125,13 +127,13 @@ impl Compiler {
 			// Path modules update versions when the file at their path changes.
 			js::Url::PathModule {
 				package_path,
-				sub_path,
-			} => package_path.join(sub_path),
+				module_path,
+			} => package_path.join(module_path),
 
 			// Path targets update versions when their manifest changes.
 			js::Url::PathTargets { package_path } => package_path.join("tangram.json"),
 
-			// Package module and package targets URLs have hashes, so they never change. For this reason, we can always return 0. Similarly, the typescript lib.d.ts never changes.
+			// Package module and package targets URLs have hashes. They never change, so we can always return 0. The same goes for the typescript libraries.
 			js::Url::PackageModule { .. }
 			| js::Url::PackageTargets { .. }
 			| js::Url::TsLib { .. } => {
@@ -148,6 +150,7 @@ impl Compiler {
 				files.insert(
 					path,
 					File::Unopened(UnopenedFile {
+						_url: url.clone(),
 						version: 0,
 						modified,
 					}),
@@ -174,7 +177,8 @@ impl Compiler {
 
 impl Compiler {
 	pub async fn open_file(&self, path: &Path, version: i32, text: String) {
-		let file = File::Opened(OpenedFile { version, text });
+		let url = js::Url::for_path(path).await.unwrap();
+		let file = File::Opened(OpenedFile { url, version, text });
 		self.state.files.write().await.insert(path.to_owned(), file);
 	}
 
@@ -183,7 +187,8 @@ impl Compiler {
 	}
 
 	pub async fn change_file(&self, path: &Path, version: i32, text: String) {
-		let file = File::Opened(OpenedFile { version, text });
+		let url = js::Url::for_path(path).await.unwrap();
+		let file = File::Opened(OpenedFile { url, version, text });
 		self.state.files.write().await.insert(path.to_owned(), file);
 	}
 }

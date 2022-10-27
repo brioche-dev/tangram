@@ -18,14 +18,14 @@ pub const TANGRAM_TS_LIB_SCHEME: &str = "tangram-typescript-lib";
 pub enum Url {
 	PackageModule {
 		package_hash: Hash,
-		sub_path: Utf8PathBuf,
+		module_path: Utf8PathBuf,
 	},
 	PackageTargets {
 		package_hash: Hash,
 	},
 	PathModule {
 		package_path: PathBuf,
-		sub_path: Utf8PathBuf,
+		module_path: Utf8PathBuf,
 	},
 	PathTargets {
 		package_path: PathBuf,
@@ -37,10 +37,10 @@ pub enum Url {
 
 impl Url {
 	#[must_use]
-	pub fn new_package_module(package_hash: Hash, sub_path: Utf8PathBuf) -> Url {
+	pub fn new_package_module(package_hash: Hash, module_path: Utf8PathBuf) -> Url {
 		Url::PackageModule {
 			package_hash,
-			sub_path,
+			module_path,
 		}
 	}
 
@@ -50,21 +50,21 @@ impl Url {
 	}
 
 	#[must_use]
-	pub fn new_path_module(path: PathBuf, sub_path: Utf8PathBuf) -> Url {
+	pub fn new_path_module(package_path: PathBuf, module_path: Utf8PathBuf) -> Url {
 		Url::PathModule {
-			package_path: path,
-			sub_path,
+			package_path,
+			module_path,
 		}
 	}
 
 	#[must_use]
-	pub fn new_path_targets(path: PathBuf) -> Url {
-		Url::PathTargets { package_path: path }
+	pub fn new_path_targets(package_path: PathBuf) -> Url {
+		Url::PathTargets { package_path }
 	}
 }
 
 impl Url {
-	pub async fn new_for_module_path(path: &Path) -> Result<Url> {
+	pub async fn for_path(path: &Path) -> Result<Url> {
 		let mut found = false;
 		let mut package_path = path.to_owned();
 		while package_path.pop() {
@@ -76,12 +76,12 @@ impl Url {
 		if !found {
 			bail!("Could not find package for path {}", path.display());
 		}
-		let sub_path = path
+		let module_path = path
 			.strip_prefix(&package_path)
 			.unwrap()
 			.to_owned()
 			.try_into()?;
-		Ok(Url::new_path_module(package_path, sub_path))
+		Ok(Url::new_path_module(package_path, module_path))
 	}
 }
 
@@ -93,13 +93,16 @@ impl TryFrom<url::Url> for Url {
 			TANGRAM_PACKAGE_MODULE_SCHEME => {
 				let package_hash = value
 					.domain()
-					.context("The URL must have a domain.")?
+					.with_context(|| format!(r#"The URL "{value}" is missing a domain."#))?
 					.parse()
 					.context("Failed to parse the domain as a hash.")?;
-				let sub_path = value.query().context("The URL must have a query.")?.into();
+				let module_path = value
+					.query()
+					.with_context(|| format!(r#"The URL "{value}" must have a query."#))?
+					.into();
 				Ok(Url::PackageModule {
 					package_hash,
-					sub_path,
+					module_path,
 				})
 			},
 
@@ -114,10 +117,13 @@ impl TryFrom<url::Url> for Url {
 
 			TANGRAM_PATH_MODULE_SCHEME => {
 				let package_path = value.path().into();
-				let sub_path = value.query().context("The URL must have a query.")?.into();
+				let module_path = value
+					.query()
+					.with_context(|| format!(r#"The URL "{value}" must have a query."#))?
+					.into();
 				Ok(Url::PathModule {
 					package_path,
-					sub_path,
+					module_path,
 				})
 			},
 
@@ -141,23 +147,23 @@ impl From<Url> for url::Url {
 		let url = match value {
 			Url::PackageModule {
 				package_hash,
-				sub_path,
+				module_path,
 			} => {
-				format!("{TANGRAM_PACKAGE_MODULE_SCHEME}://{package_hash}?{sub_path}",)
+				format!("{TANGRAM_PACKAGE_MODULE_SCHEME}://{package_hash}?{module_path}")
 			},
 			Url::PackageTargets { package_hash } => {
-				format!("{TANGRAM_PACKAGE_TARGETS_SCHEME}://{package_hash}?targets.ts",)
+				format!("{TANGRAM_PACKAGE_TARGETS_SCHEME}://{package_hash}")
 			},
 			Url::PathModule {
 				package_path,
-				sub_path,
+				module_path,
 			} => {
 				let package_path = package_path.display();
-				format!("{TANGRAM_PATH_MODULE_SCHEME}://{package_path}?{sub_path}",)
+				format!("{TANGRAM_PATH_MODULE_SCHEME}://{package_path}?{module_path}")
 			},
 			Url::PathTargets { package_path } => {
 				let package_path = package_path.display();
-				format!("{TANGRAM_PATH_TARGETS_SCHEME}://{package_path}?targets.ts",)
+				format!("{TANGRAM_PATH_TARGETS_SCHEME}://{package_path}")
 			},
 			Url::TsLib { path } => {
 				format!("{TANGRAM_TS_LIB_SCHEME}://{path}")

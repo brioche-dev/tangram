@@ -106,8 +106,8 @@ impl LanguageServer {
 			let path = match url {
 				js::Url::PathModule {
 					package_path,
-					sub_path,
-				} => package_path.join(sub_path),
+					module_path,
+				} => package_path.join(module_path),
 				_ => continue,
 			};
 			let url = format!("file://{}", path.display()).parse().unwrap();

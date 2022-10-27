@@ -4,12 +4,12 @@ use std::path::PathBuf;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Specifier {
 	Path(PathBuf),
-	Registry(Registry),
+	Package(Package),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Registry {
-	pub package_name: String,
+pub struct Package {
+	pub name: String,
 	pub version: Option<String>,
 }
 
@@ -23,12 +23,9 @@ impl std::str::FromStr for Specifier {
 		} else {
 			// Parse this as a registry specifier.
 			let mut components = source.split('@');
-			let package_name = components.next().unwrap().to_owned();
+			let name = components.next().unwrap().to_owned();
 			let version = components.next().map(ToOwned::to_owned);
-			Ok(Specifier::Registry(Registry {
-				package_name,
-				version,
-			}))
+			Ok(Specifier::Package(Package { name, version }))
 		}
 	}
 }
@@ -47,15 +44,15 @@ mod tests {
 		}
 
 		let left: Specifier = "hello".parse().unwrap();
-		let right = Specifier::Registry(Registry {
-			package_name: "hello".to_owned(),
+		let right = Specifier::Package(Package {
+			name: "hello".to_owned(),
 			version: None,
 		});
 		assert_eq!(left, right);
 
 		let left: Specifier = "hello@0.0.0".parse().unwrap();
-		let right = Specifier::Registry(Registry {
-			package_name: "hello".to_owned(),
+		let right = Specifier::Package(Package {
+			name: "hello".to_owned(),
 			version: Some("0.0.0".to_owned()),
 		});
 		assert_eq!(left, right);

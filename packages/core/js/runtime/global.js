@@ -735,7 +735,10 @@ let print = (value) => {
 		return "Promise";
 	} else if (typeof value === "object") {
 		let constructorName = "";
-		if (value.constructor.name !== "Object") {
+		if (
+			value.constructor?.name !== undefined &&
+			value.constructor.name !== "Object"
+		) {
 			constructorName = `${value.constructor.name} `;
 		}
 		let entries = Object.entries(value).map(

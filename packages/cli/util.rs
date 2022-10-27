@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use tangram_core::{
 	hash::Hash,
+	js,
 	specifier::{self, Specifier},
 	system::System,
 };
@@ -34,37 +35,65 @@ impl Cli {
 }
 
 impl Cli {
+	pub async fn js_url_for_specifier(&self, specifier: &Specifier) -> Result<js::Url> {
+		match &specifier {
+			Specifier::Path(path) => {
+				let path = std::env::current_dir()
+					.context("Failed to get the current directory")?
+					.join(path);
+				let path = tokio::fs::canonicalize(&path).await?;
+				let url = js::Url::new_path_targets(path);
+				Ok(url)
+			},
+
+			Specifier::Package(package_specifier) => {
+				let package_hash = self.get_package_version(package_specifier).await?;
+				let url = js::Url::new_package_targets(package_hash);
+				Ok(url)
+			},
+		}
+	}
+
 	pub async fn package_hash_for_specifier(
 		&self,
 		specifier: &Specifier,
 		locked: bool,
 	) -> Result<Hash> {
-		// Get the package hash.
-		let package_hash = match specifier {
+		match specifier {
 			Specifier::Path(path) => {
-				// Create the package.
-				self.builder
+				let package_hash = self
+					.builder
 					.lock_shared()
 					.await?
 					.checkin_package(&self.api_client, path, locked)
 					.await
-					.context("Failed to create the package.")?
+					.context("Failed to create the package.")?;
+				Ok(package_hash)
 			},
 
-			Specifier::Registry(specifier::Registry {
-				package_name,
-				version,
-			}) => {
-				// Get the package from the registry.
-				let version = version.as_ref().context("A version is required.")?;
-				self.api_client
-					.get_package_version(package_name, version)
-					.await
-					.with_context(|| {
-						format!(r#"Failed to get the package "{package_name}" from the registry."#)
-					})?
+			Specifier::Package(package_specifier) => {
+				let package_hash = self.get_package_version(package_specifier).await?;
+				Ok(package_hash)
 			},
-		};
-		Ok(package_hash)
+		}
+	}
+
+	pub async fn get_package_version(
+		&self,
+		package_specifier: &specifier::Package,
+	) -> Result<Hash> {
+		let name = &package_specifier.name;
+		let version = package_specifier
+			.version
+			.as_ref()
+			.context("A version is required.")?;
+		let hash = self
+			.api_client
+			.get_package_version(name, version)
+			.await
+			.with_context(|| {
+				format!(r#"Failed to get the package "{name}" at version "{version}"."#)
+			})?;
+		Ok(hash)
 	}
 }
