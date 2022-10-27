@@ -187,7 +187,7 @@ fn op_tg_opened_files(
 			.filter_map(|file| match file {
 				File::Opened(
 					opened_file @ OpenedFile {
-						url: js::Url::PackageModule { .. },
+						url: js::Url::PathModule { .. },
 						..
 					},
 				) => Some(opened_file.url.clone()),

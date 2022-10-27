@@ -54,7 +54,7 @@ impl tower_lsp::LanguageServer for LanguageServer {
 		self.compiler.open_file(path, version, text).await;
 
 		// Update all diagnostics.
-		self.check_open_files().await;
+		self.update_diagnostics().await;
 	}
 
 	async fn did_change(&self, params: lsp::DidChangeTextDocumentParams) {
@@ -69,7 +69,7 @@ impl tower_lsp::LanguageServer for LanguageServer {
 		}
 
 		// Update all diagnostics.
-		self.check_open_files().await;
+		self.update_diagnostics().await;
 	}
 
 	async fn did_close(&self, params: lsp::DidCloseTextDocumentParams) {
@@ -80,12 +80,12 @@ impl tower_lsp::LanguageServer for LanguageServer {
 		self.compiler.close_file(path).await;
 
 		// Update all diagnostics.
-		self.check_open_files().await;
+		self.update_diagnostics().await;
 	}
 }
 
 impl LanguageServer {
-	async fn check_open_files(&self) {
+	async fn update_diagnostics(&self) {
 		// Perform the check.
 		let diagnostics = match self.compiler.get_diagnostics().await {
 			Ok(diagnostics) => diagnostics,
