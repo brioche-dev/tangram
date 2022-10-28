@@ -1,4 +1,4 @@
-use super::{Compiler, Diagnostic, File, OpenedFile};
+use super::{Compiler, Diagnostic, File, Location, OpenedFile, Position};
 use crate::js;
 use anyhow::{Context, Result};
 use deno_core::{serde_v8, v8};
@@ -115,7 +115,8 @@ pub struct Envelope {
 pub enum Request {
 	Check(CheckRequest),
 	GetDiagnostics(GetDiagnosticsRequest),
-	GetDefinition(GetDefinitionRequest),
+	GotoDefinition(GotoDefintionRequest),
+	GetHover(GetHoverRequest),
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -123,7 +124,8 @@ pub enum Request {
 pub enum Response {
 	Check(CheckResponse),
 	GetDiagnostics(GetDiagnosticsResponse),
-	GetDefinition(GetDefinitionResponse),
+	GotoDefinition(GotoDefinitionResponse),
+	GetHover(GetHoverResponse),
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -150,11 +152,42 @@ pub struct GetDiagnosticsResponse {
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDefinitionRequest {}
+pub struct GotoDefintionRequest {
+	pub url: js::Url,
+	pub position: Position,
+}
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDefinitionResponse {}
+pub struct GotoDefinitionResponse {
+	pub locations: Option<Vec<Location>>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetHoverRequest {
+	pub url: js::Url,
+	pub position: Position,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetHoverResponse {
+	pub info: Option<QuickInfo>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickInfo {
+	pub display_parts: Option<Vec<SymbolDisplayPart>>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolDisplayPart {
+	pub text: String,
+	pub kind: String,
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

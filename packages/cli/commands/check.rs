@@ -26,9 +26,11 @@ impl Cli {
 		// Print the diagnostics.
 		for diagnostics in diagnostics.values() {
 			for diagnostic in diagnostics {
-				let js::compiler::Diagnostic { location, message } = diagnostic;
+				let js::compiler::Diagnostic {
+					location, message, ..
+				} = diagnostic;
 				if let Some(location) = location {
-					let js::compiler::DiagnosticLocation { url, range, .. } = location;
+					let js::compiler::Location { url, range, .. } = location;
 					let js::compiler::Position { line, character } = range.start;
 					let line = line + 1;
 					let character = character + 1;

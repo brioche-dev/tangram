@@ -1,6 +1,10 @@
-use self::runtime::{CheckRequest, Envelope, GetDiagnosticsRequest, Request, Response};
+use self::runtime::{
+	CheckRequest, Envelope, GetDiagnosticsRequest, GetHoverRequest, GotoDefintionRequest,
+	QuickInfo, Request, Response,
+};
 use crate::{builder::Builder, js};
 use anyhow::{anyhow, bail, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::{Path, PathBuf},
@@ -227,6 +231,54 @@ impl Compiler {
 
 		Ok(diagnostics)
 	}
+
+	pub async fn hover(&self, url: js::Url, position: Position) -> Result<Option<QuickInfo>> {
+		// Create the request.
+		let request = Request::GetHover(GetHoverRequest { url, position });
+
+		// Send the request and receive the response.
+		let response = self.request(request).await?;
+
+		// Get the response.
+		let response = match response {
+			Response::GetHover(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+
+		// Get the result from the response.
+		let info = response.info;
+
+		Ok(info)
+	}
+
+	pub async fn goto_definition(
+		&self,
+		url: js::Url,
+		position: Position,
+	) -> Result<Option<Vec<Location>>> {
+		// Create the request.
+		let request = Request::GotoDefinition(GotoDefintionRequest { url, position });
+
+		// Send the request and receive the response.
+		let response = self.request(request).await?;
+
+		// Get the response.
+		let response = match response {
+			Response::GotoDefinition(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+
+		// Get the result from the response.
+		let locations = response.locations;
+
+		Ok(locations)
+	}
+
+	pub fn virtual_text_document(&self, path: &Utf8Path) -> Result<Option<String>> {
+		// Get the contents for this document.
+		let contents = self.load_ts_lib(path)?;
+		Ok(Some(contents))
+	}
 }
 
 impl Drop for Compiler {
@@ -239,12 +291,43 @@ impl Drop for Compiler {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct Diagnostic {
-	pub location: Option<DiagnosticLocation>,
+	pub location: Option<Location>,
 	pub message: String,
+	pub category: DiagnosticCategory,
+}
+
+#[derive(Debug, Clone)]
+pub enum DiagnosticCategory {
+	Warning,
+	Error,
+	Suggestion,
+	Message,
+}
+
+impl<'de> serde::Deserialize<'de> for DiagnosticCategory {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		let s: i64 = serde::Deserialize::deserialize(deserializer)?;
+		Ok(DiagnosticCategory::from(s))
+	}
+}
+
+impl From<i64> for DiagnosticCategory {
+	fn from(value: i64) -> Self {
+		match value {
+			0 => DiagnosticCategory::Warning,
+			1 => DiagnosticCategory::Error,
+			2 => DiagnosticCategory::Suggestion,
+			3 => DiagnosticCategory::Message,
+			_ => panic!("Unknown value: {}", value),
+		}
+	}
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct DiagnosticLocation {
+pub struct Location {
 	pub url: js::Url,
 	pub range: Range,
 }
@@ -255,8 +338,12 @@ pub struct Range {
 	pub end: Position,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Position {
 	pub line: u32,
 	pub character: u32,
+}
+
+pub struct VirtualTextDocumentParams {
+	pub path: Utf8PathBuf,
 }

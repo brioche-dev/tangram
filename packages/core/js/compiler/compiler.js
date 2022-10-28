@@ -14,6 +14,20 @@ globalThis.handle = ({ type, request }) => {
 				response: { diagnostics },
 			};
 		}
+		case "get_hover": {
+			let info = hover(request);
+			return {
+				type: "get_hover",
+				response: { info },
+			};
+		}
+		case "goto_definition": {
+			let locations = gotoDefinition(request);
+			return {
+				type: "goto_definition",
+				response: { locations },
+			};
+		}
 		default: {
 			throw new Error(`Unknown request type "${type}".`);
 		}
@@ -172,10 +186,70 @@ let convertDiagnostic = (diagnostic) => {
 	// Get the diagnostic's message.
 	let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 
+	let category = diagnostic.category;
+
 	return {
 		location,
 		message,
+		category,
 	};
+};
+
+let hover = (request) => {
+	let sourceFile = host.getSourceFile(request.url);
+	let position = ts.getPositionOfLineAndCharacter(
+		sourceFile,
+		request.position.line,
+		request.position.character,
+	);
+	let info = languageService.getQuickInfoAtPosition(request.url, position);
+	return info;
+};
+
+let gotoDefinition = (request) => {
+	let sourceFile = host.getSourceFile(request.url);
+	let position = ts.getPositionOfLineAndCharacter(
+		sourceFile,
+		request.position.line,
+		request.position.character,
+	);
+	let definitions = languageService.getDefinitionAtPosition(
+		request.url,
+		position,
+	);
+	if (definitions == undefined) {
+		return undefined;
+	}
+	return definitions.map((definition) =>
+		convertDefinitionInfo(sourceFile, definition),
+	);
+};
+
+let convertDefinitionInfo = (sourceFile, definition) => {
+	// Get the definition's location.
+	let location = null;
+
+	// Get the definition's file name.
+	let url = definition.fileName;
+
+	// Get the definitions's range.
+	let start = ts.getLineAndCharacterOfPosition(
+		sourceFile,
+		definition.textSpan.start,
+	);
+	let end = ts.getLineAndCharacterOfPosition(
+		sourceFile,
+		definition.textSpan.start + definition.textSpan.length,
+	);
+
+	let range = { start, end };
+
+	location = {
+		url,
+		range,
+	};
+
+	return location;
 };
 
 globalThis.console = {
