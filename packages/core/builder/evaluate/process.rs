@@ -52,13 +52,12 @@ impl State {
 			Expression::Array(array) => array,
 			_ => bail!("Args must evaluate to an array."),
 		};
-		let args: Vec<StringWithPaths> =
-			try_join_all(args.iter().copied().map(|hash| async move {
-				let string = self.to_string_with_paths(hash).await?;
-				Ok::<_, anyhow::Error>(string)
-			}))
-			.await
-			.context("Failed to resolve the args.")?;
+		let args = try_join_all(args.iter().copied().map(|hash| async move {
+			let string = self.to_string_with_paths(hash).await?;
+			Ok::<_, anyhow::Error>(string)
+		}))
+		.await
+		.context("Failed to resolve the args.")?;
 
 		// Conver the command to a string.
 		let command = self.to_string_with_paths(command).await?;
