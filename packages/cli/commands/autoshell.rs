@@ -3,10 +3,11 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use futures::FutureExt;
 use indoc::indoc;
+use itertools::Itertools;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(long_about = "Manage autoshells.")]
+#[command(long_about = "Manage autoshell paths.")]
 pub struct Args {
 	#[command(subcommand)]
 	subcommand: Subcommand,
@@ -22,17 +23,17 @@ pub enum Subcommand {
 }
 
 #[derive(Parser, Debug)]
-#[command(long_about = "Add a path as an autoshell.")]
+#[command(long_about = "Add an autoshell path.")]
 pub struct AddArgs {
 	path: Option<PathBuf>,
 }
 
 #[derive(Parser, Debug)]
-#[command(long_about = "List all autoshells.")]
+#[command(long_about = "List all autoshell paths.")]
 pub struct ListArgs {}
 
 #[derive(Parser, Debug)]
-#[command(long_about = "Remove a path as an autoshells.")]
+#[command(long_about = "Remove an autoshell path.")]
 pub struct RemoveArgs {
 	path: Option<PathBuf>,
 }
@@ -149,13 +150,13 @@ impl Cli {
 		};
 
 		// Get the autoshells for .
-		let mut autoshells: Vec<_> = autoshells
+		let mut autoshells_paths = autoshells
 			.iter()
 			.filter(|path| cwd.starts_with(path))
-			.collect();
-		autoshells.sort_by_key(|path| path.components().count());
+			.collect_vec();
+		autoshells_paths.sort_by_key(|path| path.components().count());
 
-		let autoshell = if let Some(autoshell) = autoshells.last() {
+		let autoshell = if let Some(autoshell) = autoshells_paths.last() {
 			autoshell
 		} else {
 			return Ok(());

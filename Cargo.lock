@@ -3078,6 +3078,7 @@ dependencies = [
  "clap",
  "futures",
  "indoc",
+ "itertools",
  "reqwest",
  "rustyline",
  "serde",
