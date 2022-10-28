@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use crate::{
 	builder::State,
 	expression::{self, Expression},
@@ -7,6 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use futures::future::try_join_all;
+use std::collections::BTreeMap;
 
 impl State {
 	pub(super) async fn evaluate_directory(
