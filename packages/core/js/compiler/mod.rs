@@ -68,27 +68,21 @@ impl Compiler {
 			std::thread::spawn({
 				let compiler = self.clone();
 				move || {
-					let runtime = tokio::runtime::Builder::new_current_thread()
-						.enable_all()
-						.build()
-						.unwrap();
-					runtime.block_on(async move {
-						let mut runtime = runtime::Runtime::new(compiler);
-						while let Some(envelope) = receiver.recv().await {
-							// If the received value is `None`, then the thread should terminate.
-							let envelope = if let Some(envelope) = envelope {
-								envelope
-							} else {
-								break;
-							};
+					let mut runtime = runtime::Runtime::new(compiler);
+					while let Some(envelope) = receiver.blocking_recv() {
+						// If the received value is `None`, then the thread should terminate.
+						let envelope = if let Some(envelope) = envelope {
+							envelope
+						} else {
+							break;
+						};
 
-							// Handle the request.
-							let response = runtime.handle(envelope.request).await;
+						// Handle the request.
+						let response = runtime.handle(envelope.request);
 
-							// Send the response.
-							envelope.sender.send(response).ok();
-						}
-					});
+						// Send the response.
+						envelope.sender.send(response).ok();
+					}
 				}
 			});
 

@@ -16,12 +16,18 @@ pub struct Runtime {
 
 struct OpState {
 	compiler: Compiler,
+	runtime: Arc<tokio::runtime::Runtime>,
 }
 
 impl Runtime {
 	#[must_use]
 	pub fn new(compiler: Compiler) -> Runtime {
-		let state = Arc::new(OpState { compiler });
+		let runtime = tokio::runtime::Builder::new_current_thread()
+			.enable_all()
+			.build()
+			.unwrap();
+		let runtime = Arc::new(runtime);
+		let state = Arc::new(OpState { compiler, runtime });
 
 		// Build the tangram extension.
 		let tangram_extension = deno_core::Extension::builder()
@@ -57,7 +63,7 @@ impl Runtime {
 		}
 	}
 
-	pub async fn handle(&mut self, request: Request) -> Result<Response> {
+	pub fn handle(&mut self, request: Request) -> Result<Response> {
 		// Create a scope to call the handle function.
 		let mut scope = self.runtime.handle_scope();
 		let mut try_catch_scope = v8::TryCatch::new(&mut scope);
@@ -88,9 +94,6 @@ impl Runtime {
 		let output = v8::Global::new(&mut try_catch_scope, output);
 		drop(try_catch_scope);
 		drop(scope);
-
-		// Resolve the value.
-		let output = self.runtime.resolve_value(output).await?;
 
 		// Deserialize the response.
 		let mut scope = self.runtime.handle_scope();
@@ -260,5 +263,10 @@ where
 	F: FnOnce(Arc<OpState>) -> Fut,
 	Fut: 'static + Send + Future<Output = Result<R, deno_core::error::AnyError>>,
 {
-	futures::executor::block_on(op(state, f))
+	let runtime = {
+		let state = state.borrow();
+		let state = state.borrow::<Arc<OpState>>();
+		Arc::clone(&state.runtime)
+	};
+	runtime.block_on(op(state, f))
 }
