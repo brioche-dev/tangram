@@ -16,7 +16,7 @@ impl Cli {
 		std::thread::spawn({
 			let builder = self.builder.clone();
 			move || {
-				// Create a single threaded tokio runtime.
+				// Create a tokio runtime for the current thread.
 				let runtime = tokio::runtime::Builder::new_current_thread()
 					.enable_all()
 					.build()

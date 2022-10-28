@@ -45,8 +45,6 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		referrer: &str,
 		_is_main: bool,
 	) -> Result<deno_core::ModuleSpecifier> {
-		let state = Arc::clone(&self.state);
-
 		// Parse the referrer.
 		let referrer = if referrer == "." {
 			None
@@ -54,11 +52,22 @@ impl deno_core::ModuleLoader for ModuleLoader {
 			Some(referrer.parse().context("Failed to parse the referrer.")?)
 		};
 
-		// Resolve.
-		let url = self
-			.state
-			.main_runtime_handle
-			.block_on(state.compiler.resolve(specifier, referrer.as_ref()))?;
+		// Block this thread using a synchronous channel while resolution runs on the main runtime.
+		let (sender, receiver) = std::sync::mpsc::channel();
+		self.state.main_runtime_handle.spawn({
+			let state = Arc::clone(&self.state);
+			let specifier = specifier.to_owned();
+			let referrer = referrer.clone();
+			async move {
+				let result = state.compiler.resolve(&specifier, referrer.as_ref()).await;
+				sender.send(result).unwrap();
+			}
+		});
+		let url = receiver.recv().unwrap().with_context(|| {
+			format!(
+				r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer:?}"."#
+			)
+		})?;
 
 		Ok(url.into())
 	}

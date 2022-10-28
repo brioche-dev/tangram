@@ -15,14 +15,14 @@ impl State {
 
 		// Run the js runtime on its own thread.
 		let thread = std::thread::spawn(|| {
-			// Create a single threaded tokio runtime.
-			let rt = tokio::runtime::Builder::new_current_thread()
+			// Create a tokio runtime for the current thread.
+			let runtime = tokio::runtime::Builder::new_current_thread()
 				.enable_all()
 				.build()
 				.unwrap();
 
 			// Run the JS process.
-			let result = rt.block_on(async move {
+			let result = runtime.block_on(async move {
 				let mut runtime = js::Runtime::new(builder, main_runtime_handle).await?;
 				let hash = runtime.js(&js).await?;
 				Ok::<_, anyhow::Error>(hash)
