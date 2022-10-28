@@ -213,6 +213,9 @@ declare module Tangram {
 		toString(): string;
 	}
 
+	/**
+	 * Any expression type.
+	 */
 	type AnyExpression =
 		| null
 		| boolean
@@ -232,7 +235,18 @@ declare module Tangram {
 		| Array<AnyExpression>
 		| { [key: string]: AnyExpression };
 
-	type Expression<Output extends AnyExpression> = Output extends null
+	/**
+	 * Any expression that returns `Output` when evaluated.
+	 */
+	type Expression<Output extends AnyExpression> =
+		| FlatExpression<Output>
+		| Js<FlatExpression<Output>>
+		| Target<FlatExpression<Output>>;
+
+	/**
+	 * Any expression that returns `Output` directly when evaluated, excluding wrapper types like `Target`.
+	 */
+	type FlatExpression<Output extends AnyExpression> = Output extends null
 		? null
 		: Output extends boolean
 		? boolean
@@ -261,13 +275,16 @@ declare module Tangram {
 		: Output extends Process
 		? Process
 		: Output extends Target<infer O extends AnyExpression>
-		? Target<O>
+		? Target<O | Target<O> | Js<O>>
 		: Output extends Array<infer V extends AnyExpression>
-		? Array<V>
+		? Array<V | Target<V> | Js<V>>
 		: Output extends { [key: string]: AnyExpression }
-		? { [K in keyof Output]: Output[K] }
+		? { [K in keyof Output]: Output[K] | Target<Output[K]> | Js<Output[K]> }
 		: never;
 
+	/**
+	 * Given an expression type, returns the type that the expression will evaluate to.
+	 */
 	type OutputForExpression<T extends AnyExpression> = T extends null
 		? null
 		: T extends boolean
@@ -291,13 +308,13 @@ declare module Tangram {
 		: T extends Template
 		? Template
 		: T extends Js<infer O extends AnyExpression>
-		? O
+		? OutputForExpression<O>
 		: T extends Fetch
 		? Artifact
 		: T extends Process
 		? Artifact
 		: T extends Target<infer O extends AnyExpression>
-		? O
+		? OutputForExpression<O>
 		: T extends Array<infer V extends AnyExpression>
 		? Array<OutputForExpression<V>>
 		: T extends { [key: string]: AnyExpression }
