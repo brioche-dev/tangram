@@ -184,7 +184,7 @@ impl Compiler {
 			.dependencies
 			.as_ref()
 			.and_then(|dependencies| dependencies.get(specifier_package_name))
-			.context("Failed to find the specifier in the referrer's lockfile.")?;
+			.with_context(|| format!("Failed to find the specifier {specifier_package_name:?} in the referrer's lockfile at {}.", referrer_package_path.display()))?;
 
 		match dependency {
 			manifest::Dependency::PathDependency(dependency) => {
@@ -215,7 +215,7 @@ impl Compiler {
 					.unwrap()
 					.dependencies
 					.get(specifier_package_name)
-					.context("Failed to find the specifier in the referrer's lockfile.")?;
+					.with_context(|| format!("Failed to find the specifier {specifier_package_name:?} in the referrer's lockfile at {} for a registry dependency.", referrer_lockfile_path.display()))?;
 				let specifier_hash = dependency.hash;
 
 				// Compute the URL.
