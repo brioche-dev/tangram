@@ -55,8 +55,10 @@ impl deno_core::ModuleLoader for ModuleLoader {
 		};
 
 		// Resolve.
-		let url =
-			futures::executor::block_on(state.compiler.resolve(specifier, referrer.as_ref()))?;
+		let url = self
+			.state
+			.main_runtime_handle
+			.block_on(state.compiler.resolve(specifier, referrer.as_ref()))?;
 
 		Ok(url.into())
 	}

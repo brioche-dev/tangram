@@ -509,18 +509,6 @@ where
 	Ok(output)
 }
 
-fn _op_sync<R, F, Fut>(
-	state: Rc<RefCell<deno_core::OpState>>,
-	f: F,
-) -> Result<R, deno_core::error::AnyError>
-where
-	R: 'static + Send,
-	F: FnOnce(Arc<OpState>) -> Fut,
-	Fut: 'static + Send + Future<Output = Result<R, deno_core::error::AnyError>>,
-{
-	futures::executor::block_on(op(state, f))
-}
-
 struct Permissions;
 
 impl deno_web::TimersPermission for Permissions {

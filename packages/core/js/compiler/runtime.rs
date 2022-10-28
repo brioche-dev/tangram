@@ -16,18 +16,16 @@ pub struct Runtime {
 
 struct OpState {
 	compiler: Compiler,
-	runtime: Arc<tokio::runtime::Runtime>,
+	main_runtime_handle: tokio::runtime::Handle,
 }
 
 impl Runtime {
 	#[must_use]
-	pub fn new(compiler: Compiler) -> Runtime {
-		let runtime = tokio::runtime::Builder::new_current_thread()
-			.enable_all()
-			.build()
-			.unwrap();
-		let runtime = Arc::new(runtime);
-		let state = Arc::new(OpState { compiler, runtime });
+	pub fn new(compiler: Compiler, main_runtime_handle: tokio::runtime::Handle) -> Runtime {
+		let state = Arc::new(OpState {
+			compiler,
+			main_runtime_handle,
+		});
 
 		// Build the tangram extension.
 		let tangram_extension = deno_core::Extension::builder()
@@ -171,7 +169,7 @@ fn op_tg_load(
 	state: Rc<RefCell<deno_core::OpState>>,
 	url: js::Url,
 ) -> Result<LoadOutput, deno_core::error::AnyError> {
-	op_sync(state, |state| async move {
+	op(state, |state| async move {
 		let text = state.compiler.load(&url).await?;
 		let version = state.compiler.get_version(&url).await?;
 		Ok(LoadOutput { text, version })
@@ -183,7 +181,7 @@ fn op_tg_load(
 fn op_tg_opened_files(
 	state: Rc<RefCell<deno_core::OpState>>,
 ) -> Result<Vec<js::Url>, deno_core::error::AnyError> {
-	op_sync(state, |state| async move {
+	op(state, |state| async move {
 		let files = state.compiler.state.files.read().await;
 		let urls = files
 			.values()
@@ -215,7 +213,7 @@ fn op_tg_resolve(
 	specifier: String,
 	referrer: Option<js::Url>,
 ) -> Result<js::Url, deno_core::error::AnyError> {
-	op_sync(state, |state| async move {
+	op(state, |state| async move {
 		let url = state
 			.compiler
 			.resolve(&specifier, referrer.as_ref())
@@ -230,13 +228,14 @@ fn op_tg_version(
 	state: Rc<RefCell<deno_core::OpState>>,
 	url: js::Url,
 ) -> Result<String, deno_core::error::AnyError> {
-	op_sync(state, |state| async move {
+	op(state, |state| async move {
 		let version = state.compiler.get_version(&url).await?;
 		Ok(version.to_string())
 	})
 }
 
-async fn op<R, F, Fut>(
+#[allow(clippy::needless_pass_by_value)]
+fn op<R, F, Fut>(
 	state: Rc<RefCell<deno_core::OpState>>,
 	f: F,
 ) -> Result<R, deno_core::error::AnyError>
@@ -250,23 +249,6 @@ where
 		let state = state.borrow::<Arc<OpState>>();
 		Arc::clone(state)
 	};
-	let output = f(state).await?;
+	let output = state.main_runtime_handle.clone().block_on(f(state))?;
 	Ok(output)
-}
-
-fn op_sync<R, F, Fut>(
-	state: Rc<RefCell<deno_core::OpState>>,
-	f: F,
-) -> Result<R, deno_core::error::AnyError>
-where
-	R: 'static + Send,
-	F: FnOnce(Arc<OpState>) -> Fut,
-	Fut: 'static + Send + Future<Output = Result<R, deno_core::error::AnyError>>,
-{
-	let runtime = {
-		let state = state.borrow();
-		let state = state.borrow::<Arc<OpState>>();
-		Arc::clone(&state.runtime)
-	};
-	runtime.block_on(op(state, f))
 }

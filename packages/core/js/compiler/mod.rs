@@ -57,6 +57,7 @@ impl Compiler {
 	}
 
 	fn runtime_sender(&self) -> tokio::sync::mpsc::UnboundedSender<Option<Envelope>> {
+		let main_runtime_handle = tokio::runtime::Handle::current();
 		let mut lock = self.state.sender.lock().unwrap();
 		if let Some(sender) = lock.as_ref() {
 			sender.clone()
@@ -68,7 +69,7 @@ impl Compiler {
 			std::thread::spawn({
 				let compiler = self.clone();
 				move || {
-					let mut runtime = runtime::Runtime::new(compiler);
+					let mut runtime = runtime::Runtime::new(compiler, main_runtime_handle);
 					while let Some(envelope) = receiver.blocking_recv() {
 						// If the received value is `None`, then the thread should terminate.
 						let envelope = if let Some(envelope) = envelope {
