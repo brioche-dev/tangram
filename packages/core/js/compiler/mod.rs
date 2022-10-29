@@ -1,10 +1,13 @@
-use self::runtime::{
-	CheckRequest, Envelope, GetDiagnosticsRequest, GetHoverRequest, GotoDefintionRequest,
-	QuickInfo, Request, Response,
+use self::{
+	load::load_ts_lib,
+	runtime::{
+		CheckRequest, CompletionRequest, Envelope, GetDiagnosticsRequest, GetHoverRequest,
+		GotoDefintionRequest, QuickInfo, Request, Response,
+	},
 };
 use crate::{builder::Builder, js};
 use anyhow::{anyhow, bail, Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::{Path, PathBuf},
@@ -274,9 +277,38 @@ impl Compiler {
 		Ok(locations)
 	}
 
-	pub fn virtual_text_document(&self, path: &Utf8Path) -> Result<Option<String>> {
+	pub async fn completion(
+		&self,
+		url: js::Url,
+		position: Position,
+	) -> Result<Option<CompletionInfo>> {
+		// Create the request.
+		let request = Request::Completion(CompletionRequest { url, position });
+
+		// Send the request and receive the response.
+		let response = self.request(request).await?;
+
+		// Get the response.
+		let response = match response {
+			Response::Completion(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+
+		// Get the result from the response.
+		let completion = response.completion_info;
+
+		Ok(completion)
+	}
+
+	pub fn virtual_text_document(&self, url: js::Url) -> Result<Option<String>> {
 		// Get the contents for this document.
-		let contents = self.load_ts_lib(path)?;
+		let contents = match url {
+			js::Url::TsLib { path } => load_ts_lib(&path)?,
+			js::Url::PackageModule { .. }
+			| js::Url::PackageTargets { .. }
+			| js::Url::PathTargets { .. }
+			| js::Url::PathModule { .. } => return Ok(None),
+		};
 		Ok(Some(contents))
 	}
 }
@@ -342,6 +374,18 @@ pub struct Range {
 pub struct Position {
 	pub line: u32,
 	pub character: u32,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionInfo {
+	pub entries: Vec<CompletionEntry>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionEntry {
+	pub name: String,
 }
 
 pub struct VirtualTextDocumentParams {

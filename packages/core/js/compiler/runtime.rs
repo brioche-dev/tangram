@@ -1,4 +1,4 @@
-use super::{Compiler, Diagnostic, File, Location, OpenedFile, Position};
+use super::{Compiler, CompletionInfo, Diagnostic, File, Location, OpenedFile, Position};
 use crate::js;
 use anyhow::{Context, Result};
 use deno_core::{serde_v8, v8};
@@ -117,6 +117,7 @@ pub enum Request {
 	GetDiagnostics(GetDiagnosticsRequest),
 	GotoDefinition(GotoDefintionRequest),
 	GetHover(GetHoverRequest),
+	Completion(CompletionRequest),
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -126,6 +127,7 @@ pub enum Response {
 	GetDiagnostics(GetDiagnosticsResponse),
 	GotoDefinition(GotoDefinitionResponse),
 	GetHover(GetHoverResponse),
+	Completion(CompletionResponse),
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -187,6 +189,19 @@ pub struct QuickInfo {
 pub struct SymbolDisplayPart {
 	pub text: String,
 	pub kind: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionRequest {
+	pub url: js::Url,
+	pub position: Position,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionResponse {
+	pub completion_info: Option<CompletionInfo>,
 }
 
 #[derive(serde::Serialize)]

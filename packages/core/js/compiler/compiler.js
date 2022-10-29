@@ -28,6 +28,13 @@ globalThis.handle = ({ type, request }) => {
 				response: { locations },
 			};
 		}
+		case "completion": {
+			let completionInfo = completion(request);
+			return {
+				type: "completion",
+				response: { completionInfo },
+			};
+		}
 		default: {
 			throw new Error(`Unknown request type "${type}".`);
 		}
@@ -250,6 +257,20 @@ let convertDefinitionInfo = (sourceFile, definition) => {
 	};
 
 	return location;
+};
+
+let completion = (request) => {
+	let sourceFile = host.getSourceFile(request.url);
+	let position = ts.getPositionOfLineAndCharacter(
+		sourceFile,
+		request.position.line,
+		request.position.character,
+	);
+	let completion_info = languageService.getCompletionsAtPosition(
+		request.url,
+		position,
+	);
+	return completion_info;
 };
 
 globalThis.console = {

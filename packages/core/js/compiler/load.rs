@@ -26,7 +26,7 @@ impl Compiler {
 				module_path,
 			} => self.load_path_module(package_path, module_path).await,
 			js::Url::PathTargets { package_path } => self.load_path_targets(package_path).await,
-			js::Url::TsLib { path } => self.load_ts_lib(path),
+			js::Url::TsLib { path } => load_ts_lib(path),
 		}
 	}
 
@@ -140,21 +140,22 @@ impl Compiler {
 
 		Ok(text)
 	}
+}
 
-	pub fn load_ts_lib(&self, path: &Utf8Path) -> Result<String> {
-		let path = path
-			.strip_prefix("/")
-			.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
-		let text = match path.as_str() {
-			"lib.tangram.ns.d.ts" => LIB_TANGRAM_NS_D_TS,
-			_ => LIB
-				.get_file(path)
-				.with_context(|| format!(r#"Could not find typescript lib for path "{path}"."#))?
-				.contents_utf8()
-				.context("Failed to read file as UTF-8.")?,
-		};
-		Ok(text.to_owned())
-	}
+#[allow(clippy::module_name_repetitions)]
+pub fn load_ts_lib(path: &Utf8Path) -> Result<String> {
+	let path = path
+		.strip_prefix("/")
+		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
+	let text = match path.as_str() {
+		"lib.tangram.ns.d.ts" => LIB_TANGRAM_NS_D_TS,
+		_ => LIB
+			.get_file(path)
+			.with_context(|| format!(r#"Could not find typescript lib for path "{path}"."#))?
+			.contents_utf8()
+			.context("Failed to read file as UTF-8.")?,
+	};
+	Ok(text.to_owned())
 }
 
 /// Generate the code for the targets.

@@ -4,7 +4,6 @@ use super::{
 };
 use crate::js;
 use async_trait::async_trait;
-use camino::Utf8PathBuf;
 use std::path::{Path, PathBuf};
 use tower_lsp::{
 	jsonrpc,
@@ -32,6 +31,7 @@ impl tower_lsp::LanguageServer for LanguageServer {
 		Ok(lsp::InitializeResult {
 			capabilities: lsp::ServerCapabilities {
 				hover_provider: Some(lsp::HoverProviderCapability::Simple(true)),
+				completion_provider: Some(lsp::CompletionOptions::default()),
 				definition_provider: Some(lsp::OneOf::Left(true)),
 				text_document_sync: Some(lsp::TextDocumentSyncCapability::Options(
 					lsp::TextDocumentSyncOptions {
@@ -51,10 +51,12 @@ impl tower_lsp::LanguageServer for LanguageServer {
 	}
 
 	async fn did_open(&self, params: lsp::DidOpenTextDocumentParams) {
+		// Only proceed if the url has a file scheme.
 		let scheme = params.text_document.uri.scheme();
-		if scheme == VIRTUAL_TEXT_DOCUMENT_SCHEME {
+		if scheme != "file" {
 			return;
 		}
+
 		// Get the file path, version, and text.
 		let path = Path::new(params.text_document.uri.path());
 		let version = params.text_document.version;
@@ -82,8 +84,66 @@ impl tower_lsp::LanguageServer for LanguageServer {
 		self.update_diagnostics().await;
 	}
 
+	async fn did_close(&self, params: lsp::DidCloseTextDocumentParams) {
+		// Get the document's path.
+		let path = Path::new(params.text_document.uri.path());
+
+		// Close the file in the compiler.
+		self.compiler.close_file(path).await;
+
+		// Update all diagnostics.
+		self.update_diagnostics().await;
+	}
+
+	async fn completion(
+		&self,
+		params: lsp::CompletionParams,
+	) -> jsonrpc::Result<Option<lsp::CompletionResponse>> {
+		// Get the position for the request.
+		let position = params.text_document_position.position;
+
+		// Parse the path.
+		let path: PathBuf = params
+			.text_document_position
+			.text_document
+			.uri
+			.path()
+			.parse()
+			.map_err(|_| jsonrpc::Error::internal_error())?;
+
+		// Get the url for this path.
+		let url = js::Url::for_path(&path)
+			.await
+			.map_err(|_| jsonrpc::Error::internal_error())?;
+
+		// Get the completions.
+		let completion_info = self
+			.compiler
+			.completion(url, position.into())
+			.await
+			.map_err(|_| jsonrpc::Error::internal_error())?;
+
+		// Convert the completions.
+		if let Some(completion_info) = completion_info {
+			let completions = completion_info
+				.entries
+				.into_iter()
+				.map(|completion| lsp::CompletionItem {
+					label: completion.name,
+					..Default::default()
+				})
+				.collect();
+			Ok(Some(lsp::CompletionResponse::Array(completions)))
+		} else {
+			Ok(None)
+		}
+	}
+
 	async fn hover(&self, params: lsp::HoverParams) -> jsonrpc::Result<Option<lsp::Hover>> {
+		// Get the position for the request.
 		let position = params.text_document_position_params.position;
+
+		// Parse the path.
 		let path: PathBuf = params
 			.text_document_position_params
 			.text_document
@@ -91,6 +151,8 @@ impl tower_lsp::LanguageServer for LanguageServer {
 			.path()
 			.parse()
 			.map_err(|_| jsonrpc::Error::internal_error())?;
+
+		// Get the url for this path.
 		let url = js::Url::for_path(&path)
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
@@ -146,7 +208,7 @@ impl tower_lsp::LanguageServer for LanguageServer {
 
 		// Convert the definitions.
 		let location = locations.and_then(|location| location.into_iter().next());
-		let location = location.and_then(|location| {
+		let location = location.map(|location| {
 			let url = match location.url {
 				js::Url::PathModule {
 					package_path,
@@ -155,26 +217,17 @@ impl tower_lsp::LanguageServer for LanguageServer {
 					let path = package_path.join(module_path);
 					format!("file://{}", path.display()).parse().unwrap()
 				},
-				js::Url::TsLib { path } => format!("tangram://{}", path).parse().unwrap(),
-				_ => return None,
+				js::Url::TsLib { .. }
+				| js::Url::PackageModule { .. }
+				| js::Url::PackageTargets { .. }
+				| js::Url::PathTargets { .. } => location.url.into(),
 			};
-			Some(lsp::GotoDefinitionResponse::Scalar(lsp::Location {
+			lsp::GotoDefinitionResponse::Scalar(lsp::Location {
 				uri: url,
 				range: location.range.into(),
-			}))
+			})
 		});
 		Ok(location)
-	}
-
-	async fn did_close(&self, params: lsp::DidCloseTextDocumentParams) {
-		// Get the document's path.
-		let path = Path::new(params.text_document.uri.path());
-
-		// Close the file in the compiler.
-		self.compiler.close_file(path).await;
-
-		// Update all diagnostics.
-		self.update_diagnostics().await;
 	}
 }
 
@@ -221,14 +274,14 @@ impl LanguageServer {
 		let params: VirtualTextDocumentParams =
 			serde_json::from_value(params).map_err(|_| jsonrpc::Error::internal_error())?;
 
-		// Get the path to the virtual document.
-		let path = params.text_document.uri.path();
-		let path: Utf8PathBuf = path.parse().unwrap();
+		// Get the url for the virtual document.
+		let url = js::Url::try_from(params.text_document.uri)
+			.map_err(|_| jsonrpc::Error::internal_error())?;
 
 		// Get the contents for this path.
 		let contents = self
 			.compiler
-			.virtual_text_document(&path)
+			.virtual_text_document(url)
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
 		Ok(Some(contents.into()))
