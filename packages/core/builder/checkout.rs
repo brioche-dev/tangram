@@ -4,7 +4,7 @@ use crate::{
 	hash::Hash,
 	util::rmrf,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::{future::try_join_all, Future};
 use std::{os::unix::prelude::PermissionsExt, path::Path, pin::Pin, sync::Arc};
@@ -52,17 +52,43 @@ impl State {
 		match expression {
 			Expression::Directory(directory) => {
 				self.checkout_directory(watcher, directory, path, dependency_handler)
-					.await?;
+					.await
+					.with_context(|| {
+						format!(
+							"While checking out directory \"{hash}\" to \"{}\"",
+							path.display()
+						)
+					})?;
 			},
 			Expression::File(file) => {
-				self.checkout_file(watcher, file, path).await?;
+				self.checkout_file(watcher, file, path)
+					.await
+					.with_context(|| {
+						format!(
+							"While checking out file \"{hash}\" to \"{}\"",
+							path.display()
+						)
+					})?;
 			},
 			Expression::Symlink(symlink) => {
-				self.checkout_symlink(watcher, symlink, path).await?;
+				self.checkout_symlink(watcher, symlink, path)
+					.await
+					.with_context(|| {
+						format!(
+							"While checking out symlink \"{hash}\" to \"{}\"",
+							path.display()
+						)
+					})?;
 			},
 			Expression::Dependency(dependency) => {
 				self.checkout_dependency(watcher, dependency, path, dependency_handler)
-					.await?;
+					.await
+					.with_context(|| {
+						format!(
+							"While checking out dependency \"{hash}\" to \"{}\"",
+							path.display()
+						)
+					})?;
 			},
 			_ => {
 				bail!(r#"Unexpected expression type in artifact. {hash}"#);
