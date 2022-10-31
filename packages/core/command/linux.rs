@@ -5,7 +5,12 @@ use crate::system::System;
 use anyhow::{bail, Context, Result};
 use bstr::ByteSlice;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use libc::*;
+use libc::{
+	c_ulong, chdir, getgid, getpid, getuid, mount, rmdir, setresgid, setresuid, syscall, umount2,
+	unshare, SYS_pivot_root, CLONE_NEWNET, CLONE_NEWNS, CLONE_NEWUSER, MNT_DETACH, MS_BIND,
+	MS_LAZYTIME, MS_MANDLOCK, MS_NOATIME, MS_NODEV, MS_NODIRATIME, MS_NOEXEC, MS_NOSUID,
+	MS_PRIVATE, MS_RDONLY, MS_REC, MS_RELATIME, MS_REMOUNT, MS_STRICTATIME,
+};
 use std::{
 	ffi::CString,
 	io::BufRead,
@@ -203,6 +208,7 @@ fn pre_exec(
 	}
 }
 
+#[allow(clippy::too_many_lines)]
 fn set_up_sandbox(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
@@ -365,9 +371,9 @@ fn set_up_sandbox(
 	for (path, mode) in &command.paths {
 		let parent_source_path = match mode {
 			// Allow access to just the path.
-			PathMode::Read | PathMode::ReadWrite => &path,
+			PathMode::Read | PathMode::ReadWrite => path,
 			// To allow creation of the new file, allow access to the parent path.
-			PathMode::ReadWriteCreate => path.parent().unwrap_or(&path),
+			PathMode::ReadWriteCreate => path.parent().unwrap_or(path),
 		};
 		let parent_source_path_c_string =
 			CString::new(parent_source_path.as_os_str().as_bytes()).unwrap();
