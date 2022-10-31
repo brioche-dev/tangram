@@ -55,7 +55,7 @@ impl State {
 					.await
 					.with_context(|| {
 						format!(
-							"While checking out directory \"{hash}\" to \"{}\"",
+							"Failed to check out directory \"{hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
@@ -65,7 +65,7 @@ impl State {
 					.await
 					.with_context(|| {
 						format!(
-							"While checking out file \"{hash}\" to \"{}\"",
+							"Failed to check out file \"{hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
@@ -75,7 +75,7 @@ impl State {
 					.await
 					.with_context(|| {
 						format!(
-							"While checking out symlink \"{hash}\" to \"{}\"",
+							"Failed to check out symlink \"{hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
@@ -85,7 +85,7 @@ impl State {
 					.await
 					.with_context(|| {
 						format!(
-							"While checking out dependency \"{hash}\" to \"{}\"",
+							"Failed to check out dependency \"{hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
