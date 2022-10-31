@@ -30,6 +30,27 @@ impl std::str::FromStr for Specifier {
 	}
 }
 
+impl std::fmt::Display for Specifier {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match self {
+			Specifier::Path(path) => {
+				if path.is_absolute() {
+					write!(f, "{}", path.display())
+				} else {
+					write!(f, "./{}", path.display())
+				}
+			},
+			Specifier::Package(Package { name, version }) => {
+				if let Some(v) = version {
+					write!(f, "{name}@{v}")
+				} else {
+					write!(f, "{name}")
+				}
+			},
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

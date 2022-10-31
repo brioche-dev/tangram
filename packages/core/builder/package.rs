@@ -24,7 +24,13 @@ impl State {
 		if !locked {
 			self.generate_lockfile(api_client, path, locked)
 				.await
-				.context("Failed to generate the lockfile.")?;
+				.with_context(|| {
+					format!(
+						"Failed to generate the lockfile for path \"{}\" ({})",
+						path.display(),
+						if locked { "locked" } else { "not locked" }
+					)
+				})?;
 		}
 
 		// Check in the package source.
@@ -91,7 +97,11 @@ impl State {
 				crate::manifest::Dependency::PathDependency(dependency) => {
 					// Get the absolute path to the dependency.
 					let dependency_path = path.join(&dependency.path);
-					let dependency_path = tokio::fs::canonicalize(&dependency_path).await?;
+					let dependency_path = tokio::fs::canonicalize(&dependency_path)
+						.await
+						.with_context(|| {
+							format!("Could not canonicalize \"{}\"", dependency_path.display())
+						})?;
 
 					// Get the dependency's hash.
 					let dependency_hash = self

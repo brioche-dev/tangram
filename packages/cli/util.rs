@@ -67,7 +67,9 @@ impl Cli {
 					.await?
 					.checkin_package(&self.api_client, path, locked)
 					.await
-					.context("Failed to create the package.")?;
+					.with_context(|| {
+						format!("Failed to create the package for specifier '{specifier}'.")
+					})?;
 				Ok(package_hash)
 			},
 
