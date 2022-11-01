@@ -1,14 +1,11 @@
 use super::{
-	compiler::{Diagnostic, DiagnosticCategory, Position, Range},
+	compiler::types::{Diagnostic, Position, Range, Severity},
 	Compiler,
 };
 use crate::js;
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
-use tower_lsp::{
-	jsonrpc,
-	lsp_types::{self as lsp},
-};
+use tower_lsp::{jsonrpc, lsp_types as lsp};
 
 pub struct LanguageServer {
 	client: tower_lsp::Client,
@@ -116,27 +113,29 @@ impl tower_lsp::LanguageServer for LanguageServer {
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
-		// Get the completions.
-		let completion_info = self
+		// Get the completion entries.
+		let entries = self
 			.compiler
 			.completion(url, position.into())
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
-		// Convert the completions.
-		if let Some(completion_info) = completion_info {
-			let completions = completion_info
-				.entries
-				.into_iter()
-				.map(|completion| lsp::CompletionItem {
-					label: completion.name,
-					..Default::default()
-				})
-				.collect();
-			Ok(Some(lsp::CompletionResponse::Array(completions)))
+		let entries = if let Some(entries) = entries {
+			entries
 		} else {
-			Ok(None)
-		}
+			return Ok(None);
+		};
+
+		// Convert the completion entries.
+		let entries = entries
+			.into_iter()
+			.map(|completion| lsp::CompletionItem {
+				label: completion.name,
+				..Default::default()
+			})
+			.collect();
+
+		Ok(Some(lsp::CompletionResponse::Array(entries)))
 	}
 
 	async fn hover(&self, params: lsp::HoverParams) -> jsonrpc::Result<Option<lsp::Hover>> {
@@ -156,26 +155,29 @@ impl tower_lsp::LanguageServer for LanguageServer {
 		let url = js::Url::for_path(&path)
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
-		let info = self
+
+		// Get the hover info.
+		let hover = self
 			.compiler
 			.hover(url, position.into())
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
-		let info_string = info.and_then(|info| {
-			info.display_parts.map(|display_parts| {
-				display_parts
-					.into_iter()
-					.map(|part| part.text)
-					.collect::<String>()
-			})
-		});
-		Ok(info_string.map(|info_string| lsp::Hover {
+		let hover = if let Some(hover) = hover {
+			hover
+		} else {
+			return Ok(None);
+		};
+
+		// Create the hover.
+		let hover = lsp::Hover {
 			contents: lsp::HoverContents::Scalar(lsp::MarkedString::from_language_code(
 				"typescript".into(),
-				info_string,
+				hover,
 			)),
 			range: None,
-		}))
+		};
+
+		Ok(Some(hover))
 	}
 
 	async fn goto_definition(
@@ -206,28 +208,41 @@ impl tower_lsp::LanguageServer for LanguageServer {
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
+		let locations = if let Some(locations) = locations {
+			locations
+		} else {
+			return Ok(None);
+		};
+
 		// Convert the definitions.
-		let location = locations.and_then(|location| location.into_iter().next());
-		let location = location.map(|location| {
-			let url = match location.url {
-				js::Url::PathModule {
-					package_path,
-					module_path,
-				} => {
-					let path = package_path.join(module_path);
-					format!("file://{}", path.display()).parse().unwrap()
-				},
-				js::Url::TsLib { .. }
-				| js::Url::PackageModule { .. }
-				| js::Url::PackageTargets { .. }
-				| js::Url::PathTargets { .. } => location.url.into(),
-			};
-			lsp::GotoDefinitionResponse::Scalar(lsp::Location {
-				uri: url,
-				range: location.range.into(),
+		let locations = locations
+			.into_iter()
+			.map(|location| {
+				// Map the URL.
+				let url = match location.url {
+					js::Url::PathModule {
+						package_path,
+						module_path,
+					} => {
+						let path = package_path.join(module_path);
+						format!("file://{}", path.display()).parse().unwrap()
+					},
+					js::Url::Lib { .. }
+					| js::Url::PackageModule { .. }
+					| js::Url::PackageTargets { .. }
+					| js::Url::PathTargets { .. } => location.url.into(),
+				};
+
+				lsp::Location {
+					uri: url,
+					range: location.range.into(),
+				}
 			})
-		});
-		Ok(location)
+			.collect();
+
+		let response = lsp::GotoDefinitionResponse::Array(locations);
+
+		Ok(Some(response))
 	}
 }
 
@@ -275,40 +290,49 @@ impl LanguageServer {
 			serde_json::from_value(params).map_err(|_| jsonrpc::Error::internal_error())?;
 
 		// Get the url for the virtual document.
-		let url = js::Url::try_from(params.text_document.uri)
+		let url = params
+			.text_document
+			.uri
+			.try_into()
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
-		// Get the contents for this path.
-		let contents = self
+		// Load the file.
+		let text = self
 			.compiler
-			.virtual_text_document(url)
+			.load(&url)
+			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
-		Ok(Some(contents.into()))
+		Ok(Some(text.into()))
 	}
 }
 
 impl From<Diagnostic> for lsp::Diagnostic {
 	fn from(value: Diagnostic) -> Self {
+		let range = value
+			.location
+			.map(|location| location.range.into())
+			.unwrap_or_default();
+		let severity = Some(value.severity.into());
+		let source = Some("tangram".to_owned());
+		let message = value.message;
 		lsp::Diagnostic {
-			message: value.message,
-			range: value
-				.location
-				.map(|location| location.range.into())
-				.unwrap_or_default(),
-			severity: Some(value.category.into()),
+			range,
+			severity,
+			source,
+			message,
 			..Default::default()
 		}
 	}
 }
 
-impl From<DiagnosticCategory> for lsp::DiagnosticSeverity {
-	fn from(value: DiagnosticCategory) -> Self {
+impl From<Severity> for lsp::DiagnosticSeverity {
+	fn from(value: Severity) -> Self {
 		match value {
-			DiagnosticCategory::Error => lsp::DiagnosticSeverity::ERROR,
-			DiagnosticCategory::Warning => lsp::DiagnosticSeverity::WARNING,
-			DiagnosticCategory::Message => lsp::DiagnosticSeverity::INFORMATION,
-			DiagnosticCategory::Suggestion => lsp::DiagnosticSeverity::HINT,
+			Severity::Error => lsp::DiagnosticSeverity::ERROR,
+			Severity::Warning => lsp::DiagnosticSeverity::WARNING,
+			Severity::Information => lsp::DiagnosticSeverity::INFORMATION,
+			Severity::Hint => lsp::DiagnosticSeverity::HINT,
 		}
 	}
 }
@@ -350,7 +374,6 @@ impl From<Position> for lsp::Position {
 }
 
 pub const VIRTUAL_TEXT_DOCUMENT_REQUEST: &str = "tangram/virtualTextDocument";
-pub const VIRTUAL_TEXT_DOCUMENT_SCHEME: &str = "tangram";
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -1,13 +1,15 @@
-use super::{Compiler, CompletionInfo, Diagnostic, File, Location, OpenedFile, Position};
+use self::types::{Request, Response};
+use super::{Compiler, File, OpenedFile};
 use crate::js;
 use anyhow::{Context, Result};
 use deno_core::{serde_v8, v8};
 use futures::Future;
-use std::{cell::RefCell, collections::BTreeMap, env, rc::Rc, sync::Arc};
-use tokio::sync::oneshot;
+use std::{cell::RefCell, env, rc::Rc, sync::Arc};
+
+pub mod types;
 
 // TODO: Compress this snapshot with zstd to save 20MB of binary size (and presumably some startup time too).
-const TS_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/js_compiler_snapshot"));
+const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/js_compiler_runtime_snapshot"));
 
 pub struct Runtime {
 	runtime: deno_core::JsRuntime,
@@ -51,7 +53,7 @@ impl Runtime {
 		let runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
 			extensions: vec![tangram_extension],
 			module_loader: None,
-			startup_snapshot: Some(deno_core::Snapshot::Static(TS_SNAPSHOT)),
+			startup_snapshot: Some(deno_core::Snapshot::Static(SNAPSHOT)),
 			..Default::default()
 		});
 
@@ -102,106 +104,6 @@ impl Runtime {
 
 		Ok(response)
 	}
-}
-
-#[derive(Debug)]
-pub struct Envelope {
-	pub request: Request,
-	pub sender: oneshot::Sender<Result<Response>>,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(tag = "type", content = "request", rename_all = "snake_case")]
-pub enum Request {
-	Check(CheckRequest),
-	GetDiagnostics(GetDiagnosticsRequest),
-	GotoDefinition(GotoDefintionRequest),
-	GetHover(GetHoverRequest),
-	Completion(CompletionRequest),
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(tag = "type", content = "response", rename_all = "snake_case")]
-pub enum Response {
-	Check(CheckResponse),
-	GetDiagnostics(GetDiagnosticsResponse),
-	GotoDefinition(GotoDefinitionResponse),
-	GetHover(GetHoverResponse),
-	Completion(CompletionResponse),
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CheckRequest {
-	pub urls: Vec<js::Url>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CheckResponse {
-	pub diagnostics: BTreeMap<js::Url, Vec<Diagnostic>>,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetDiagnosticsRequest {}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetDiagnosticsResponse {
-	pub diagnostics: BTreeMap<js::Url, Vec<Diagnostic>>,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GotoDefintionRequest {
-	pub url: js::Url,
-	pub position: Position,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GotoDefinitionResponse {
-	pub locations: Option<Vec<Location>>,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetHoverRequest {
-	pub url: js::Url,
-	pub position: Position,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetHoverResponse {
-	pub info: Option<QuickInfo>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct QuickInfo {
-	pub display_parts: Option<Vec<SymbolDisplayPart>>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SymbolDisplayPart {
-	pub text: String,
-	pub kind: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompletionRequest {
-	pub url: js::Url,
-	pub position: Position,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompletionResponse {
-	pub completion_info: Option<CompletionInfo>,
 }
 
 #[derive(serde::Serialize)]

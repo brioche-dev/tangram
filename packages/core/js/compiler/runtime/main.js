@@ -1,39 +1,19 @@
 globalThis.handle = ({ type, request }) => {
 	switch (type) {
 		case "check": {
-			let diagnostics = check(request);
-			return {
-				type: "check",
-				response: { diagnostics },
-			};
+			return check(request);
 		}
 		case "get_diagnostics": {
-			let diagnostics = getDiagnostics(request);
-			return {
-				type: "get_diagnostics",
-				response: { diagnostics },
-			};
+			return getDiagnostics(request);
 		}
 		case "get_hover": {
-			let info = hover(request);
-			return {
-				type: "get_hover",
-				response: { info },
-			};
+			return hover(request);
 		}
 		case "goto_definition": {
-			let locations = gotoDefinition(request);
-			return {
-				type: "goto_definition",
-				response: { locations },
-			};
+			return gotoDefinition(request);
 		}
 		case "completion": {
-			let completionInfo = completion(request);
-			return {
-				type: "completion",
-				response: { completionInfo },
-			};
+			return completion(request);
 		}
 		default: {
 			throw new Error(`Unknown request type "${type}".`);
@@ -64,10 +44,10 @@ let host = {
 		return undefined;
 	},
 	getDefaultLibFileName: () => {
-		return "tangram-typescript-lib:///lib.esnext.full.d.ts";
+		return "tangram-lib:///lib.esnext.full.d.ts";
 	},
 	getDefaultLibLocation: () => {
-		return "tangram-typescript-lib:///";
+		return "tangram-lib:///";
 	},
 	getNewLine: () => {
 		return "\n";
@@ -82,7 +62,7 @@ let host = {
 	getScriptVersion: (fileName) => {
 		return syscall(Syscall.Version, fileName);
 	},
-	getSourceFile: (fileName, languageVersion, _onError) => {
+	getSourceFile: (fileName, languageVersion) => {
 		let { text, version } = syscall(Syscall.Load, fileName);
 		let sourceFile = ts.createSourceFile(fileName, text, languageVersion);
 		sourceFile.version = version;
@@ -106,31 +86,43 @@ let host = {
 	fileExists: () => {
 		return false;
 	},
+	writeFile: () => {
+		throw new Error("Unimplemented.");
+	},
 };
 
 // Create the TypeScript language service.
 let languageService = ts.createLanguageService(host);
 
-let check = ({ urls }) => {
+let check = (request) => {
+	// Create a typescript program.
 	let program = ts.createIncrementalProgram({
-		rootNames: [...urls],
+		rootNames: [...request.urls],
 		options: compilerOptions,
 		host,
 	});
-	let diagnostics = [
+
+	// Get the diagnostics and convert them.
+	let diagnostics = convertDiagnostics([
 		...program.getConfigFileParsingDiagnostics(),
 		...program.getOptionsDiagnostics(),
 		...program.getGlobalDiagnostics(),
 		...program.getDeclarationDiagnostics(),
 		...program.getSyntacticDiagnostics(),
 		...program.getSemanticDiagnostics(),
-	];
-	diagnostics = convertDiagnostics(diagnostics);
-	return diagnostics;
+	]);
+
+	return {
+		type: "check",
+		response: { diagnostics },
+	};
 };
 
-let getDiagnostics = () => {
+let getDiagnostics = (_request) => {
+	// Get the list of opened files.
 	let urls = syscall(Syscall.OpenedFiles);
+
+	// Collect the diagnostics for each opened file.
 	let diagnostics = {};
 	for (let url of urls) {
 		diagnostics[url] = [
@@ -139,7 +131,11 @@ let getDiagnostics = () => {
 			...languageService.getSuggestionDiagnostics(url),
 		].map(convertDiagnostic);
 	}
-	return diagnostics;
+
+	return {
+		type: "get_diagnostics",
+		response: { diagnostics },
+	};
 };
 
 /** Convert TypeScript diagnostics to Tangram diagnostics. */
@@ -190,107 +186,141 @@ let convertDiagnostic = (diagnostic) => {
 		};
 	}
 
+	// Convert the diagnostic's severity.
+	let severity;
+	switch (diagnostic.category) {
+		case ts.DiagnosticCategory.Warning: {
+			severity = "warning";
+			break;
+		}
+		case ts.DiagnosticCategory.Error: {
+			severity = "error";
+			break;
+		}
+		case ts.DiagnosticCategory.Suggestion: {
+			severity = "hint";
+			break;
+		}
+		case ts.DiagnosticCategory.Message: {
+			severity = "information";
+			break;
+		}
+		default: {
+			throw new Error("Unknown diagnostic category.");
+		}
+	}
+
 	// Get the diagnostic's message.
 	let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 
-	let category = diagnostic.category;
-
 	return {
 		location,
+		severity,
 		message,
-		category,
 	};
 };
 
 let hover = (request) => {
+	// Get the source file and position.
 	let sourceFile = host.getSourceFile(request.url);
 	let position = ts.getPositionOfLineAndCharacter(
 		sourceFile,
 		request.position.line,
 		request.position.character,
 	);
-	let info = languageService.getQuickInfoAtPosition(request.url, position);
-	return info;
+
+	// Get the quick info at the position.
+	let quickInfo = languageService.getQuickInfoAtPosition(request.url, position);
+
+	// Get the text.
+	let text = quickInfo?.displayParts?.map(({ text }) => text).join("");
+
+	return {
+		type: "get_hover",
+		response: { text },
+	};
 };
 
 let gotoDefinition = (request) => {
+	// Get the source file and position.
 	let sourceFile = host.getSourceFile(request.url);
 	let position = ts.getPositionOfLineAndCharacter(
 		sourceFile,
 		request.position.line,
 		request.position.character,
 	);
+
+	// Get the definitions.
 	let definitions = languageService.getDefinitionAtPosition(
 		request.url,
 		position,
 	);
-	if (definitions == undefined) {
-		return undefined;
-	}
-	return definitions.map((definition) =>
-		convertDefinitionInfo(sourceFile, definition),
-	);
-};
 
-let convertDefinitionInfo = (sourceFile, definition) => {
-	// Get the definition's location.
-	let location = null;
+	// Convert the definitions.
+	let locations = definitions?.map((definition) => {
+		// Get the definitions's range.
+		let start = ts.getLineAndCharacterOfPosition(
+			sourceFile,
+			definition.textSpan.start,
+		);
+		let end = ts.getLineAndCharacterOfPosition(
+			sourceFile,
+			definition.textSpan.start + definition.textSpan.length,
+		);
 
-	// Get the definition's file name.
-	let url = definition.fileName;
+		let location = {
+			url: definition.fileName,
+			range: { start, end },
+		};
 
-	// Get the definitions's range.
-	let start = ts.getLineAndCharacterOfPosition(
-		sourceFile,
-		definition.textSpan.start,
-	);
-	let end = ts.getLineAndCharacterOfPosition(
-		sourceFile,
-		definition.textSpan.start + definition.textSpan.length,
-	);
+		return location;
+	});
 
-	let range = { start, end };
-
-	location = {
-		url,
-		range,
+	return {
+		type: "goto_definition",
+		response: { locations },
 	};
-
-	return location;
 };
 
 let completion = (request) => {
+	// Get the source file and position.
 	let sourceFile = host.getSourceFile(request.url);
 	let position = ts.getPositionOfLineAndCharacter(
 		sourceFile,
 		request.position.line,
 		request.position.character,
 	);
-	let completion_info = languageService.getCompletionsAtPosition(
-		request.url,
-		position,
-	);
-	return completion_info;
+
+	// Get the completions.
+	let info = languageService.getCompletionsAtPosition(request.url, position);
+
+	// Convert the completion entries.
+	let entries = info?.entries.map((entry) => ({ name: entry.name }));
+
+	return {
+		type: "completion",
+		response: { entries },
+	};
 };
 
 globalThis.console = {
 	log: (...args) => {
-		let string = args.map((arg) => print(arg)).join(" ");
+		let string = args.map((arg) => stringify(arg)).join(" ");
 		syscall(Syscall.Print, string);
 	},
 	error: (...args) => {
-		let string = args.map((arg) => print(arg)).join(" ");
+		let string = args.map((arg) => stringify(arg)).join(" ");
 		syscall(Syscall.Print, string);
 	},
 };
 
-let print = (value) => {
+let stringify = (value) => {
 	if (value === undefined) {
 		return "undefined";
 	} else if (value === null) {
 		return "null";
 	} else if (Array.isArray(value)) {
-		return `[${value.map(print).join(", ")}]`;
+		return `[${value.map(stringify).join(", ")}]`;
 	} else if (value instanceof Error) {
 		return value.stack;
 	} else if (value instanceof Promise) {
@@ -301,7 +331,7 @@ let print = (value) => {
 			constructorName = `${value.constructor.name} `;
 		}
 		let entries = Object.entries(value).map(
-			([key, value]) => `${key}: ${print(value)}`,
+			([key, value]) => `${key}: ${stringify(value)}`,
 		);
 		return `${constructorName}{ ${entries.join(", ")} }`;
 	} else if (typeof value === "function") {
@@ -323,14 +353,14 @@ let syscall = (syscall, ...args) => {
 	let opName = "op_tg_" + syscall;
 	switch (syscall) {
 		case Syscall.Load:
-			return Deno.core.opSync(opName, ...args);
+			return globalThis.Deno.core.opSync(opName, ...args);
 		case Syscall.OpenedFiles:
-			return Deno.core.opSync(opName, ...args);
+			return globalThis.Deno.core.opSync(opName, ...args);
 		case Syscall.Print:
-			return Deno.core.opSync(opName, ...args);
+			return globalThis.Deno.core.opSync(opName, ...args);
 		case Syscall.Resolve:
-			return Deno.core.opSync(opName, ...args);
+			return globalThis.Deno.core.opSync(opName, ...args);
 		case Syscall.Version:
-			return Deno.core.opSync(opName, ...args);
+			return globalThis.Deno.core.opSync(opName, ...args);
 	}
 };

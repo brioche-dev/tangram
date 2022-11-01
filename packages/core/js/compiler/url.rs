@@ -9,7 +9,7 @@ pub const TANGRAM_PACKAGE_MODULE_SCHEME: &str = "tangram-package-module";
 pub const TANGRAM_PACKAGE_TARGETS_SCHEME: &str = "tangram-package-targets";
 pub const TANGRAM_PATH_MODULE_SCHEME: &str = "tangram-path-module";
 pub const TANGRAM_PATH_TARGETS_SCHEME: &str = "tangram-path-targets";
-pub const TANGRAM_TS_LIB_SCHEME: &str = "tangram-typescript-lib";
+pub const TANGRAM_LIB_SCHEME: &str = "tangram-lib";
 
 #[derive(
 	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
@@ -30,7 +30,7 @@ pub enum Url {
 	PathTargets {
 		package_path: PathBuf,
 	},
-	TsLib {
+	Lib {
 		path: Utf8PathBuf,
 	},
 }
@@ -132,9 +132,9 @@ impl TryFrom<url::Url> for Url {
 				Ok(Url::PathTargets { package_path })
 			},
 
-			TANGRAM_TS_LIB_SCHEME => {
+			TANGRAM_LIB_SCHEME => {
 				let path = value.path().into();
-				Ok(Url::TsLib { path })
+				Ok(Url::Lib { path })
 			},
 
 			_ => bail!(r#"Invalid URL "{value}"."#),
@@ -165,8 +165,8 @@ impl From<Url> for url::Url {
 				let package_path = package_path.display();
 				format!("{TANGRAM_PATH_TARGETS_SCHEME}://{package_path}")
 			},
-			Url::TsLib { path } => {
-				format!("{TANGRAM_TS_LIB_SCHEME}://{path}")
+			Url::Lib { path } => {
+				format!("{TANGRAM_LIB_SCHEME}://{path}")
 			},
 		};
 		url.parse().unwrap()

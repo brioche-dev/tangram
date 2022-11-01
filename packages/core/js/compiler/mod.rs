@@ -1,13 +1,12 @@
 use self::{
-	load::load_ts_lib,
-	runtime::{
-		CheckRequest, CompletionRequest, Envelope, GetDiagnosticsRequest, GetHoverRequest,
-		GotoDefintionRequest, QuickInfo, Request, Response,
+	runtime::types::{
+		CheckRequest, CompletionRequest, GetDiagnosticsRequest, GetHoverRequest,
+		GotoDefintionRequest, Request, Response,
 	},
+	types::{CompletionEntry, Diagnostic, Location, Position},
 };
 use crate::{builder::Builder, js};
 use anyhow::{anyhow, bail, Context, Result};
-use camino::Utf8PathBuf;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::{Path, PathBuf},
@@ -20,6 +19,7 @@ pub mod load;
 pub mod resolve;
 pub mod runtime;
 pub mod transpile;
+pub mod types;
 pub mod url;
 
 #[derive(Clone)]
@@ -48,6 +48,11 @@ struct UnopenedFile {
 	_url: js::Url,
 	version: i32,
 	modified: SystemTime,
+}
+
+pub struct Envelope {
+	pub request: Request,
+	pub sender: tokio::sync::oneshot::Sender<Result<Response>>,
 }
 
 impl Compiler {
@@ -138,7 +143,7 @@ impl Compiler {
 			// Package module and package targets URLs have hashes. They never change, so we can always return 0. The same goes for the typescript libraries.
 			js::Url::PackageModule { .. }
 			| js::Url::PackageTargets { .. }
-			| js::Url::TsLib { .. } => {
+			| js::Url::Lib { .. } => {
 				return Ok(0);
 			},
 		};
@@ -235,7 +240,7 @@ impl Compiler {
 		Ok(diagnostics)
 	}
 
-	pub async fn hover(&self, url: js::Url, position: Position) -> Result<Option<QuickInfo>> {
+	pub async fn hover(&self, url: js::Url, position: Position) -> Result<Option<String>> {
 		// Create the request.
 		let request = Request::GetHover(GetHoverRequest { url, position });
 
@@ -249,9 +254,9 @@ impl Compiler {
 		};
 
 		// Get the result from the response.
-		let info = response.info;
+		let text = response.text;
 
-		Ok(info)
+		Ok(text)
 	}
 
 	pub async fn goto_definition(
@@ -281,7 +286,7 @@ impl Compiler {
 		&self,
 		url: js::Url,
 		position: Position,
-	) -> Result<Option<CompletionInfo>> {
+	) -> Result<Option<Vec<CompletionEntry>>> {
 		// Create the request.
 		let request = Request::Completion(CompletionRequest { url, position });
 
@@ -295,21 +300,9 @@ impl Compiler {
 		};
 
 		// Get the result from the response.
-		let completion = response.completion_info;
+		let entries = response.entries;
 
-		Ok(completion)
-	}
-
-	pub fn virtual_text_document(&self, url: js::Url) -> Result<Option<String>> {
-		// Get the contents for this document.
-		let contents = match url {
-			js::Url::TsLib { path } => load_ts_lib(&path)?,
-			js::Url::PackageModule { .. }
-			| js::Url::PackageTargets { .. }
-			| js::Url::PathTargets { .. }
-			| js::Url::PathModule { .. } => return Ok(None),
-		};
-		Ok(Some(contents))
+		Ok(entries)
 	}
 }
 
@@ -319,75 +312,4 @@ impl Drop for Compiler {
 			sender.send(None).ok();
 		}
 	}
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Diagnostic {
-	pub location: Option<Location>,
-	pub message: String,
-	pub category: DiagnosticCategory,
-}
-
-#[derive(Debug, Clone)]
-pub enum DiagnosticCategory {
-	Warning,
-	Error,
-	Suggestion,
-	Message,
-}
-
-impl<'de> serde::Deserialize<'de> for DiagnosticCategory {
-	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-	where
-		D: serde::Deserializer<'de>,
-	{
-		let s: i64 = serde::Deserialize::deserialize(deserializer)?;
-		Ok(DiagnosticCategory::from(s))
-	}
-}
-
-impl From<i64> for DiagnosticCategory {
-	fn from(value: i64) -> Self {
-		match value {
-			0 => DiagnosticCategory::Warning,
-			1 => DiagnosticCategory::Error,
-			2 => DiagnosticCategory::Suggestion,
-			3 => DiagnosticCategory::Message,
-			_ => panic!("Unknown value: {}", value),
-		}
-	}
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Location {
-	pub url: js::Url,
-	pub range: Range,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Range {
-	pub start: Position,
-	pub end: Position,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Position {
-	pub line: u32,
-	pub character: u32,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompletionInfo {
-	pub entries: Vec<CompletionEntry>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompletionEntry {
-	pub name: String,
-}
-
-pub struct VirtualTextDocumentParams {
-	pub path: Utf8PathBuf,
 }

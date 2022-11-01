@@ -331,7 +331,7 @@ impl Runtime {
 		// Otherwise, stringify the evaluation response's result.
 		let function = r#"
 			function stringify(value) {
-				return Tangram.print(value);
+				return Tangram.stringify(value);
 			}
 		"#;
 		let call_function_on_response: cdp::CallFunctionOnResponse = match futures::try_join!(

@@ -26,12 +26,12 @@ impl Cli {
 		// Print the diagnostics.
 		for diagnostics in diagnostics.values() {
 			for diagnostic in diagnostics {
-				let js::compiler::Diagnostic {
+				let js::compiler::types::Diagnostic {
 					location, message, ..
 				} = diagnostic;
 				if let Some(location) = location {
-					let js::compiler::Location { url, range, .. } = location;
-					let js::compiler::Position { line, character } = range.start;
+					let js::compiler::types::Location { url, range, .. } = location;
+					let js::compiler::types::Position { line, character } = range.start;
 					let line = line + 1;
 					let character = character + 1;
 					if let js::Url::PathModule {

@@ -713,22 +713,22 @@ let evaluate = async (expression) => {
 
 globalThis.console = {
 	log: (...args) => {
-		let string = args.map((arg) => print(arg)).join(" ");
+		let string = args.map((arg) => stringify(arg)).join(" ");
 		syscall(Syscall.Print, string);
 	},
 	error: (...args) => {
-		let string = args.map((arg) => print(arg)).join(" ");
+		let string = args.map((arg) => stringify(arg)).join(" ");
 		syscall(Syscall.Print, string);
 	},
 };
 
-let print = (value) => {
+let stringify = (value) => {
 	if (value === undefined) {
 		return "undefined";
 	} else if (value === null) {
 		return "null";
 	} else if (Array.isArray(value)) {
-		return `[${value.map(print).join(", ")}]`;
+		return `[${value.map(stringify).join(", ")}]`;
 	} else if (value instanceof Error) {
 		return value.stack;
 	} else if (value instanceof Promise) {
@@ -742,7 +742,7 @@ let print = (value) => {
 			constructorName = `${value.constructor.name} `;
 		}
 		let entries = Object.entries(value).map(
-			([key, value]) => `${key}: ${print(value)}`,
+			([key, value]) => `${key}: ${stringify(value)}`,
 		);
 		return `${constructorName}{ ${entries.join(", ")} }`;
 	} else if (typeof value === "function") {
@@ -792,8 +792,8 @@ globalThis.Tangram = {
 	getBlob,
 	getExpression,
 	parseValue,
-	print,
 	source,
+	stringify,
 	template,
 	toJson,
 };

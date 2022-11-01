@@ -1,4 +1,4 @@
-use super::{js, Compiler};
+use super::{js, url::TANGRAM_SCHEME, Compiler};
 use crate::{
 	hash::Hash,
 	lockfile::Lockfile,
@@ -25,7 +25,7 @@ impl Compiler {
 
 			// Handle each supported scheme.
 			match specifier.scheme() {
-				"tangram" => self.resolve_tangram(&specifier, referrer).await?,
+				TANGRAM_SCHEME => self.resolve_tangram(&specifier, referrer).await?,
 				_ => specifier.try_into()?,
 			}
 		};
@@ -35,8 +35,9 @@ impl Compiler {
 
 fn resolve_relative(specifier: &str, referrer: Option<&js::Url>) -> Result<js::Url> {
 	// Ensure there is a referrer.
-	let referrer =
-		referrer.context(r#"A specifier with the scheme "tangram" must have a referrer."#)?;
+	let referrer = referrer.with_context(|| {
+		format!(r#"A specifier with the scheme "{TANGRAM_SCHEME}" must have a referrer."#)
+	})?;
 
 	let specifier = Utf8Path::new(specifier);
 
@@ -56,7 +57,7 @@ fn resolve_relative(specifier: &str, referrer: Option<&js::Url>) -> Result<js::U
 			package_path: package_path.clone(),
 			module_path: resolve_path(module_path, specifier)?,
 		},
-		js::Url::TsLib { path } => js::Url::TsLib {
+		js::Url::Lib { path } => js::Url::Lib {
 			path: resolve_path(path, specifier)?,
 		},
 		_ => {

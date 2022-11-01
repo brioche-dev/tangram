@@ -26,7 +26,7 @@ impl Compiler {
 				module_path,
 			} => self.load_path_module(package_path, module_path).await,
 			js::Url::PathTargets { package_path } => self.load_path_targets(package_path).await,
-			js::Url::TsLib { path } => load_ts_lib(path),
+			js::Url::Lib { path } => load_ts_lib(path),
 		}
 	}
 
@@ -143,7 +143,7 @@ impl Compiler {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub fn load_ts_lib(path: &Utf8Path) -> Result<String> {
+fn load_ts_lib(path: &Utf8Path) -> Result<String> {
 	let path = path
 		.strip_prefix("/")
 		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
