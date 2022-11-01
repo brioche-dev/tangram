@@ -448,6 +448,8 @@ declare module Tangram {
 		}>;
 		system: System;
 		hash?: string;
+		network?: boolean,
+		unsafe?: boolean,
 	};
 
 	class Process {

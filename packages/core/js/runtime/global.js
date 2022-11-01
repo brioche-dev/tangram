@@ -453,6 +453,8 @@ class Process {
 	command;
 	args;
 	hash;
+	network;
+	unsafe;
 
 	constructor(args) {
 		this.system = args.system;
@@ -460,6 +462,8 @@ class Process {
 		this.command = args.command;
 		this.args = args.args;
 		this.hash = args.hash;
+		this.network = args.network;
+		this.unsafe = args.unsafe;
 	}
 
 	static fromJson(expression) {
@@ -468,7 +472,17 @@ class Process {
 		let command = new Hash(expression.value.command);
 		let args = new Hash(expression.value.args);
 		let hash = expression.value.hash;
-		return new Process({ system, env, command, args, hash });
+		let network = expression.value.network;
+		let unsafe = expression.value.unsafe;
+		return new Process({
+			system,
+			env,
+			command,
+			args,
+			hash,
+			network,
+			unsafe,
+		});
 	}
 
 	async toJson() {
@@ -483,6 +497,8 @@ class Process {
 				command: command.toString(),
 				args: args.toString(),
 				hash: this.hash,
+				network: this.network,
+				unsafe: this.unsafe,
 			},
 		};
 	}

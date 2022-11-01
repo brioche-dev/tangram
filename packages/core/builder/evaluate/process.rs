@@ -62,8 +62,11 @@ impl State {
 		// Conver the command to a string.
 		let command = self.to_string_with_paths(command).await?;
 
-		// Only allow network access if a hash was provided.
-		let enable_network_access = process.hash.is_some();
+		// If networking is required, ensure that there is an output hash or that the process is marked as unsafe.
+		let is_network_access_allowed = process.hash.is_some() || process.is_unsafe;
+		if process.network && !is_network_access_allowed {
+			bail!("Process is not allowed to access the network! If the process requires network access, the `hash` field must be set or the process must be marked as unsafe.");
+		}
 
 		// Create a new working dir.
 		let current_dir = self.create_temp_path();
@@ -105,7 +108,7 @@ impl State {
 			command,
 			args,
 			paths,
-			enable_network_access,
+			enable_network_access: process.network,
 		};
 
 		// Run the command.

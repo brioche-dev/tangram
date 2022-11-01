@@ -254,6 +254,7 @@ pub struct Fetch {
 	serde::Deserialize,
 	serde::Serialize,
 )]
+#[serde(rename_all = "camelCase")]
 pub struct Process {
 	#[buffalo(id = 0)]
 	pub system: System,
@@ -269,6 +270,14 @@ pub struct Process {
 
 	#[buffalo(id = 4)]
 	pub hash: Option<Hash>,
+
+	#[buffalo(id = 5)]
+	#[serde(default, rename = "unsafe")]
+	pub is_unsafe: bool,
+
+	#[buffalo(id = 6)]
+	#[serde(default)]
+	pub network: bool,
 }
 
 #[derive(
