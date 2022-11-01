@@ -142,7 +142,7 @@ let getDiagnostics = (_request) => {
 let convertDiagnostics = (diagnostics) => {
 	let output = {};
 
-	for (diagnostic of diagnostics) {
+	for (let diagnostic of diagnostics) {
 		// Ignore diagnostics that do not have a file.
 		if (!diagnostic.file) {
 			continue;
