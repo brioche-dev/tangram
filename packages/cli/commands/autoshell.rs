@@ -143,9 +143,7 @@ impl Cli {
 		let cwd = std::env::current_dir().context("Failed to get the working directory.")?;
 
 		// Get the autoshells.
-		let autoshells = if let Some(autoshells) = config.autoshells.as_ref() {
-			autoshells
-		} else {
+		let Some(autoshells) = config.autoshells.as_ref() else {
 			return Ok(());
 		};
 
@@ -156,9 +154,7 @@ impl Cli {
 			.collect_vec();
 		autoshells_paths.sort_by_key(|path| path.components().count());
 
-		let autoshell = if let Some(autoshell) = autoshells_paths.last() {
-			autoshell
-		} else {
+		let Some(autoshell) = autoshells_paths.last() else {
 			return Ok(());
 		};
 

@@ -41,8 +41,8 @@ impl std::fmt::Display for Specifier {
 				}
 			},
 			Specifier::Package(Package { name, version }) => {
-				if let Some(v) = version {
-					write!(f, "{name}@{v}")
+				if let Some(version) = version {
+					write!(f, "{name}@{version}")
 				} else {
 					write!(f, "{name}")
 				}

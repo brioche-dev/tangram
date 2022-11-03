@@ -386,7 +386,7 @@ impl State {
 		// Get the evaluations.
 		let evaluations =
 			cursor
-				.iter_dup_of(&hash.as_slice())
+				.iter_dup_of(hash.as_slice())
 				.into_iter()
 				.map(|value| match value {
 					Ok((_, value)) => {

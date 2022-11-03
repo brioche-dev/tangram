@@ -184,7 +184,7 @@ impl State {
 				.await?;
 				let string_with_paths = components.into_iter().fold(
 					StringWithPaths {
-						string: "".to_owned(),
+						string: String::new(),
 						paths: HashMap::new(),
 					},
 					|mut a, b| {

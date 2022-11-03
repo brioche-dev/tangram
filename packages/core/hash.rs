@@ -116,7 +116,7 @@ impl AsyncWrite for Hasher {
 		_cx: &mut std::task::Context<'_>,
 		buf: &[u8],
 	) -> std::task::Poll<Result<usize, std::io::Error>> {
-		self.update(&buf);
+		self.update(buf);
 		std::task::Poll::Ready(Ok(buf.len()))
 	}
 	fn poll_flush(
@@ -162,7 +162,7 @@ mod tests {
 	fn display_fromstr_roundtrip() {
 		let message = "Hello, World!";
 		let mut hasher = Hasher::new();
-		hasher.update(&message);
+		hasher.update(message);
 		let left = hasher.finalize();
 		let right = left.to_string().parse().unwrap();
 		assert_eq!(left, right);

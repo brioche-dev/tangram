@@ -363,9 +363,7 @@ impl Runtime {
 		}
 
 		// Retrieve the output.
-		let output = if let Some(output) = call_function_on_response.result.value {
-			output
-		} else {
+		let Some(output) = call_function_on_response.result.value else {
 			return Err("An unexpected error occurred.".to_owned());
 		};
 

@@ -176,7 +176,7 @@ impl State {
 
 		// Get the blob.
 		let mut blob = self.get_blob(file.blob).await?.into_std().await;
-		let mut output = std::fs::File::create(&path)?;
+		let mut output = std::fs::File::create(path)?;
 
 		// Copy the blob to the path.
 		tokio::task::spawn_blocking(move || {

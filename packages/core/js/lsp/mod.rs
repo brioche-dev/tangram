@@ -120,9 +120,7 @@ impl tower_lsp::LanguageServer for LanguageServer {
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
-		let entries = if let Some(entries) = entries {
-			entries
-		} else {
+		let Some(entries) = entries else {
 			return Ok(None);
 		};
 
@@ -162,9 +160,7 @@ impl tower_lsp::LanguageServer for LanguageServer {
 			.hover(url, position.into())
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
-		let hover = if let Some(hover) = hover {
-			hover
-		} else {
+		let Some(hover) = hover else {
 			return Ok(None);
 		};
 
@@ -208,9 +204,7 @@ impl tower_lsp::LanguageServer for LanguageServer {
 			.await
 			.map_err(|_| jsonrpc::Error::internal_error())?;
 
-		let locations = if let Some(locations) = locations {
-			locations
-		} else {
+		let Some(locations) = locations else {
 			return Ok(None);
 		};
 
