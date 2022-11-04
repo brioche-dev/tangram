@@ -253,7 +253,7 @@ declare module Tangram {
 		: Output extends number
 		? number
 		: Output extends string
-		? string | Template
+		? string
 		: Output extends Artifact
 		? Artifact | Fetch | Process
 		: Output extends File
@@ -440,11 +440,13 @@ declare module Tangram {
 		constructor(args: FetchArgs);
 	}
 
+	type ProcessString = string | Artifact | Template;
+
 	type ProcessArgs = {
-		args: Expression<Array<AnyExpression>>;
-		command: Expression<string | Artifact | Template>;
+		args: Expression<Array<ProcessString>>;
+		command: Expression<ProcessString>;
 		env: Expression<{
-			[key: string]: Expression<string | Artifact | Template>;
+			[key: string]: Expression<ProcessString>;
 		}>;
 		system: System;
 		hash?: string;
