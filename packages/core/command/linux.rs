@@ -1,7 +1,6 @@
 #![allow(clippy::similar_names)]
 
 use super::{Command, PathMode};
-use crate::system::System;
 use anyhow::{bail, Context, Result};
 use bstr::ByteSlice;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -14,7 +13,7 @@ use libc::{
 use std::{
 	ffi::CString,
 	io::BufRead,
-	os::unix::{fs::PermissionsExt, prelude::OsStrExt},
+	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -70,21 +69,6 @@ impl Command {
 		tokio::fs::create_dir(&parent_child_root_path)
 			.await
 			.context("Failed to create the chroot directory.")?;
-
-		// Create a symlink from /bin/sh in the chroot to a file with a statically linked bash.
-		tokio::fs::create_dir(parent_child_root_path.join("bin")).await?;
-		let bash = match System::host()? {
-			System::Amd64Linux => include_bytes!("./bash_amd64_linux").as_slice(),
-			System::Arm64Linux => include_bytes!("./bash_arm64_linux").as_slice(),
-			_ => unreachable!(),
-		};
-		let sh_path = parent_child_root_path.join("bin/sh");
-		tokio::fs::write(&sh_path, bash).await?;
-		// Set executable bit for owner, group, and other on the bash executable.
-		let mut permissions = tokio::fs::metadata(&sh_path).await?.permissions();
-		let mode = permissions.mode();
-		permissions.set_mode(mode | 0o111);
-		tokio::fs::set_permissions(&sh_path, permissions).await?;
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
