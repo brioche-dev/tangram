@@ -80,42 +80,26 @@ impl State {
 				let archive_file = std::fs::File::open(archive_temp_path)?;
 				let archive_reader = std::io::BufReader::new(archive_file);
 				match archive_format {
-					ArchiveFormat::Tar => {
+					ArchiveFormat::Tar(compression_format) => {
+						let archive_reader: Box<dyn std::io::Read> = match compression_format {
+							None => Box::new(archive_reader),
+							Some(CompressionFormat::Bz2) => {
+								Box::new(bzip2::read::BzDecoder::new(archive_reader))
+							},
+							Some(CompressionFormat::Gz) => {
+								Box::new(flate2::read::GzDecoder::new(archive_reader))
+							},
+							Some(CompressionFormat::Lz) => {
+								Box::new(lz4_flex::frame::FrameDecoder::new(archive_reader))
+							},
+							Some(CompressionFormat::Xz) => {
+								Box::new(xz::read::XzDecoder::new(archive_reader))
+							},
+							Some(CompressionFormat::Zstd) => {
+								Box::new(zstd::Decoder::new(archive_reader)?)
+							},
+						};
 						let mut archive = tar::Archive::new(archive_reader);
-						archive.set_preserve_permissions(false);
-						archive.set_unpack_xattrs(false);
-						archive.unpack(&unpack_temp_path)?;
-					},
-					ArchiveFormat::TarBz2 => {
-						let mut archive =
-							tar::Archive::new(bzip2::read::BzDecoder::new(archive_reader));
-						archive.set_preserve_permissions(false);
-						archive.set_unpack_xattrs(false);
-						archive.unpack(&unpack_temp_path)?;
-					},
-					ArchiveFormat::TarGz => {
-						let mut archive =
-							tar::Archive::new(flate2::read::GzDecoder::new(archive_reader));
-						archive.set_preserve_permissions(false);
-						archive.set_unpack_xattrs(false);
-						archive.unpack(&unpack_temp_path)?;
-					},
-					ArchiveFormat::TarLz => {
-						let mut archive =
-							tar::Archive::new(lz4_flex::frame::FrameDecoder::new(archive_reader));
-						archive.set_preserve_permissions(false);
-						archive.set_unpack_xattrs(false);
-						archive.unpack(&unpack_temp_path)?;
-					},
-					ArchiveFormat::TarXz => {
-						let mut archive =
-							tar::Archive::new(xz::read::XzDecoder::new(archive_reader));
-						archive.set_preserve_permissions(false);
-						archive.set_unpack_xattrs(false);
-						archive.unpack(&unpack_temp_path)?;
-					},
-					ArchiveFormat::TarZstd => {
-						let mut archive = tar::Archive::new(zstd::Decoder::new(archive_reader)?);
 						archive.set_preserve_permissions(false);
 						archive.set_unpack_xattrs(false);
 						archive.unpack(&unpack_temp_path)?;
@@ -139,13 +123,16 @@ impl State {
 }
 
 enum ArchiveFormat {
-	TarBz2,
-	TarGz,
-	TarLz,
-	TarXz,
-	TarZstd,
-	Tar,
+	Tar(Option<CompressionFormat>),
 	Zip,
+}
+
+enum CompressionFormat {
+	Bz2,
+	Gz,
+	Lz,
+	Xz,
+	Zstd,
 }
 
 impl ArchiveFormat {
@@ -153,21 +140,21 @@ impl ArchiveFormat {
 	pub fn for_path(path: &Path) -> Option<ArchiveFormat> {
 		let path = path.to_str().unwrap();
 		if path.ends_with(".tar.bz2") || path.ends_with(".tbz2") {
-			Some(ArchiveFormat::TarBz2)
+			Some(ArchiveFormat::Tar(Some(CompressionFormat::Bz2)))
 		} else if path.ends_with(".tar.gz") || path.ends_with(".tgz") {
-			Some(ArchiveFormat::TarGz)
+			Some(ArchiveFormat::Tar(Some(CompressionFormat::Gz)))
 		} else if path.ends_with(".tar.lz") || path.ends_with(".tlz") {
-			Some(ArchiveFormat::TarLz)
+			Some(ArchiveFormat::Tar(Some(CompressionFormat::Lz)))
 		} else if path.ends_with(".tar.xz") || path.ends_with(".txz") {
-			Some(ArchiveFormat::TarXz)
+			Some(ArchiveFormat::Tar(Some(CompressionFormat::Xz)))
 		} else if path.ends_with(".tar.zstd")
 			|| path.ends_with(".tzstd")
 			|| path.ends_with(".tar.zst")
 			|| path.ends_with(".tzst")
 		{
-			Some(ArchiveFormat::TarZstd)
+			Some(ArchiveFormat::Tar(Some(CompressionFormat::Zstd)))
 		} else if path.ends_with(".tar") {
-			Some(ArchiveFormat::Tar)
+			Some(ArchiveFormat::Tar(None))
 		} else if path.ends_with(".zip") {
 			Some(ArchiveFormat::Zip)
 		} else {
