@@ -453,6 +453,7 @@ class Process {
 	command;
 	args;
 	hash;
+	base;
 	network;
 	unsafe;
 
@@ -461,6 +462,7 @@ class Process {
 		this.env = args.env;
 		this.command = args.command;
 		this.args = args.args;
+		this.base = args.base;
 		this.hash = args.hash;
 		this.network = args.network;
 		this.unsafe = args.unsafe;
@@ -471,6 +473,7 @@ class Process {
 		let env = new Hash(expression.value.env);
 		let command = new Hash(expression.value.command);
 		let args = new Hash(expression.value.args);
+		let base = expression.value.base != null ? new Hash(expression.value.base) : undefined;
 		let hash = expression.value.hash;
 		let network = expression.value.network;
 		let unsafe = expression.value.unsafe;
@@ -489,6 +492,7 @@ class Process {
 		let env = await addExpression(this.env);
 		let command = await addExpression(this.command);
 		let args = await addExpression(this.args);
+		let base = this.base != null ? await addExpression(this.base) : undefined;
 		return {
 			type: ExpressionType.Process,
 			value: {
@@ -496,6 +500,7 @@ class Process {
 				env: env.toString(),
 				command: command.toString(),
 				args: args.toString(),
+				base: base?.toString(),
 				hash: this.hash,
 				network: this.network,
 				unsafe: this.unsafe,

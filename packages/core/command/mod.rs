@@ -12,6 +12,8 @@ mod macos;
 pub struct Command {
 	#[cfg(target_os = "linux")]
 	pub chroot_path: PathBuf,
+	#[cfg(target_os = "linux")]
+	pub has_base: bool,
 	pub current_dir: PathBuf,
 	pub envs: BTreeMap<String, String>,
 	pub command: PathBuf,

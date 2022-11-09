@@ -3033,6 +3033,7 @@ dependencies = [
  "bytes",
  "bzip2",
  "camino",
+ "cfg-if",
  "deno_ast",
  "deno_core",
  "deno_url",

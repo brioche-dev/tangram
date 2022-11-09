@@ -13,6 +13,7 @@ use std::{
 };
 
 impl State {
+	#[allow(clippy::too_many_lines)]
 	pub(super) async fn evaluate_process(&self, hash: Hash, process: &Process) -> Result<Hash> {
 		// Evaluate the envs, command, and args.
 		let (envs, command, args) = try_join3(
@@ -21,6 +22,12 @@ impl State {
 			self.evaluate(process.args, hash),
 		)
 		.await?;
+
+		// Evaluate the base, if set.
+		let base = match process.base {
+			Some(base) => Some(self.evaluate(base, hash).await?),
+			None => None,
+		};
 
 		// Convert the envs to strings.
 		let envs = match self.get_expression_local(envs)? {
@@ -99,10 +106,34 @@ impl State {
 		let command = PathBuf::from(command.string);
 		let args = args.into_iter().map(|arg| arg.string).collect();
 
+		// Handle the base artifact.
+		cfg_if::cfg_if! {
+			if #[cfg(target_os = "linux")] {
+				// Create a new chroot path.
+				let chroot_path = self.create_temp_path();
+				tokio::fs::create_dir_all(&chroot_path).await?;
+
+				// Checkout the base artifact to the chroot path if set.
+				if let Some(base) = base {
+					self.checkout(base, &chroot_path, None).await
+						.context("Failed to checkout base.")?;
+				}
+			} else {
+				// `Process.base` is only supported on Linux, so return an error if set.
+				if let Some(_) = base {
+					Some(_) => {
+						bail!("Process.base can only be set for Linux processes.");
+					}
+				}
+			}
+		}
+
 		// Create the command.
 		let command = Command {
 			#[cfg(target_os = "linux")]
-			chroot_path: self.create_temp_path(),
+			chroot_path,
+			#[cfg(target_os = "linux")]
+			has_base: base.is_some(),
 			current_dir,
 			envs,
 			command,

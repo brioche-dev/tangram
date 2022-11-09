@@ -268,6 +268,9 @@ pub struct Process {
 	#[buffalo(id = 3)]
 	pub args: Hash,
 
+	#[buffalo(id = 7)]
+	pub base: Option<Hash>,
+
 	#[buffalo(id = 4)]
 	pub hash: Option<Hash>,
 

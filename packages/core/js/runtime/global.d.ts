@@ -444,6 +444,7 @@ declare module Tangram {
 
 	type ProcessArgs = {
 		args: Expression<Array<ProcessString>>;
+		base?: Expression<Artifact>;
 		command: Expression<ProcessString>;
 		env: Expression<{
 			[key: string]: Expression<ProcessString>;

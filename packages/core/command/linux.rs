@@ -64,11 +64,8 @@ enum SandboxError {
 
 impl Command {
 	pub async fn run(self) -> Result<()> {
-		// Create the chroot directory.
+		// Get the chroot directory.
 		let parent_child_root_path = self.chroot_path.clone();
-		tokio::fs::create_dir(&parent_child_root_path)
-			.await
-			.context("Failed to create the chroot directory.")?;
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -176,9 +173,19 @@ fn pre_exec(
 	parent_child_root_path: &Path,
 	command: &Command,
 ) -> std::io::Result<()> {
+	// Sandboxing is required if the process has a base artifact. This implies that the sandbox will be reading things from absolute paths at the root, and we don't want the host's root to interfere with the sandbox.
+	let is_sandbox_required = command.has_base;
+
 	let result = set_up_sandbox(child_socket, parent_child_root_path, command);
 	match result {
 		Ok(()) => Ok(()),
+		Err(SandboxError::Incomplete(error)) if is_sandbox_required => {
+			// Print an error and exit if the sandbox setup did not finish completely when sandboxing is required.
+			eprintln!(
+				"Sandbox setup failed while evaluating a process with a base artifact. {error:#}"
+			);
+			Err(std::io::Error::new(std::io::ErrorKind::Other, error))
+		},
 		Err(SandboxError::Incomplete(error)) => {
 			// Print a warning if the sandbox setup did not finish completely.
 			eprintln!("Warning: Sandbox setup failed. {error:#}");
