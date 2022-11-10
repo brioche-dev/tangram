@@ -124,6 +124,7 @@ impl buffalo::Deserialize for Encoding {
 	}
 }
 
+#[derive(Debug)]
 pub struct Hasher {
 	hasher: DigestAlgorithmHasher,
 	algorithm: Algorithm,
@@ -190,6 +191,7 @@ impl Hasher {
 	}
 }
 
+#[derive(Debug)]
 enum DigestAlgorithmHasher {
 	Sha256(sha2::Sha256),
 }
