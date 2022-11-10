@@ -120,10 +120,8 @@ impl State {
 				}
 			} else {
 				// `Process.base` is only supported on Linux, so return an error if set.
-				if let Some(_) = base {
-					Some(_) => {
+				if base.is_some() {
 						bail!("Process.base can only be set for Linux processes.");
-					}
 				}
 			}
 		}
