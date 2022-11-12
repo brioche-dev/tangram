@@ -174,17 +174,18 @@ impl State {
 			None => {},
 		};
 
-		// Get the blob.
+		// Copy the blob to the path. Use std::io::copy to ensure reflinking is used on supported filesystems.
+		let permit = self.file_system_semaphore.acquire().await;
 		let mut blob = self.get_blob(file.blob).await?.into_std().await;
-		let mut output = std::fs::File::create(path)?;
-
-		// Copy the blob to the path.
+		let mut output =
+			std::fs::File::create(path).context("Failed to create the file to checkout.")?;
 		tokio::task::spawn_blocking(move || {
 			std::io::copy(&mut blob, &mut output)?;
 			Ok::<_, anyhow::Error>(())
 		})
 		.await
 		.unwrap()?;
+		drop(permit);
 
 		// Make the file executable if necessary.
 		if file.executable {

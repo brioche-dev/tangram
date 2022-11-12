@@ -48,7 +48,7 @@ impl Runtime {
 		let tangram_extension = deno_core::Extension::builder()
 			.ops(vec![
 				op_tg_print::decl(),
-				op_tg_parse_value::decl(),
+				op_tg_deserialize::decl(),
 				op_tg_add_blob::decl(),
 				op_tg_get_blob::decl(),
 				op_tg_add_expression::decl(),
@@ -382,19 +382,19 @@ fn op_tg_print(string: String) -> Result<(), deno_core::error::AnyError> {
 }
 
 #[derive(Clone, Copy, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-enum ParserFormat {
+enum SerializationFormat {
+	#[serde(rename = "toml")]
 	Toml,
 }
 
 #[deno_core::op]
 #[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
-fn op_tg_parse_value(
-	format: ParserFormat,
+fn op_tg_deserialize(
+	format: SerializationFormat,
 	string: String,
 ) -> Result<serde_json::Value, deno_core::error::AnyError> {
 	match format {
-		ParserFormat::Toml => {
+		SerializationFormat::Toml => {
 			let value = toml::from_str(&string)?;
 			Ok(value)
 		},
@@ -514,5 +514,7 @@ impl deno_web::TimersPermission for Permissions {
 		false
 	}
 
-	fn check_unstable(&self, _state: &deno_core::OpState, _api_name: &'static str) {}
+	fn check_unstable(&self, _state: &deno_core::OpState, _api_name: &'static str) {
+		// No-op.
+	}
 }

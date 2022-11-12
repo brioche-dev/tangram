@@ -7,13 +7,15 @@ use indoc::writedoc;
 use std::{fmt::Write, path::Path};
 use tokio::io::AsyncReadExt;
 
-static LIB: include_dir::Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/js/compiler/lib");
-
+const BUILTINS: &str = include_str!("../runtime/builtins.ts");
 const LIB_TANGRAM_NS_D_TS: &str = include_str!("../runtime/global.d.ts");
+const LIB: include_dir::Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/js/compiler/lib");
 
 impl Compiler {
 	pub async fn load(&self, url: &js::Url) -> Result<String> {
 		match url {
+			js::Url::Builtins { path } => load_builtins(path),
+			js::Url::Lib { path } => load_lib(path),
 			js::Url::PackageModule {
 				package_hash,
 				module_path,
@@ -26,10 +28,39 @@ impl Compiler {
 				module_path,
 			} => self.load_path_module(package_path, module_path).await,
 			js::Url::PathTargets { package_path } => self.load_path_targets(package_path).await,
-			js::Url::Lib { path } => load_ts_lib(path),
 		}
 	}
+}
 
+#[allow(clippy::module_name_repetitions)]
+fn load_builtins(path: &Utf8Path) -> Result<String> {
+	let path = path
+		.strip_prefix("/")
+		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
+	let text = match path.as_str() {
+		"lib.ts" => BUILTINS,
+		_ => bail!(r#"Unable to find builtins with path "{path}"."#),
+	};
+	Ok(text.to_owned())
+}
+
+#[allow(clippy::module_name_repetitions)]
+fn load_lib(path: &Utf8Path) -> Result<String> {
+	let path = path
+		.strip_prefix("/")
+		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
+	let text = match path.as_str() {
+		"lib.tangram.ns.d.ts" => LIB_TANGRAM_NS_D_TS,
+		_ => LIB
+			.get_file(path)
+			.with_context(|| format!(r#"Could not find typescript lib for path "{path}"."#))?
+			.contents_utf8()
+			.context("Failed to read file as UTF-8.")?,
+	};
+	Ok(text.to_owned())
+}
+
+impl Compiler {
 	async fn load_package_module(
 		&self,
 		package_hash: Hash,
@@ -142,32 +173,21 @@ impl Compiler {
 	}
 }
 
-#[allow(clippy::module_name_repetitions)]
-fn load_ts_lib(path: &Utf8Path) -> Result<String> {
-	let path = path
-		.strip_prefix("/")
-		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
-	let text = match path.as_str() {
-		"lib.tangram.ns.d.ts" => LIB_TANGRAM_NS_D_TS,
-		_ => LIB
-			.get_file(path)
-			.with_context(|| format!(r#"Could not find typescript lib for path "{path}"."#))?
-			.contents_utf8()
-			.context("Failed to read file as UTF-8.")?,
-	};
-	Ok(text.to_owned())
-}
-
 /// Generate the code for the targets.
 fn generate_targets(module_url: &js::Url, manifest: &Manifest, package_hash: Hash) -> String {
 	let mut code = String::new();
+	writedoc!(
+		code,
+		r#"import {{ getExpression, Hash, Package, Target }} from "tangram-builtins:///lib.ts";"#
+	)
+	.unwrap();
 	writedoc!(code, r#"import type * as module from "{module_url}";"#).unwrap();
 	code.push('\n');
 	writedoc!(
-			code,
-			r#"let _package: Tangram.Package = await Tangram.getExpression(new Tangram.Hash("{package_hash}"));"#
-		)
-		.unwrap();
+		code,
+		r#"let _package: Package = await getExpression(new Hash("{package_hash}"));"#
+	)
+	.unwrap();
 	code.push('\n');
 	for target_name in &manifest.targets {
 		if target_name == "default" {
@@ -178,7 +198,7 @@ fn generate_targets(module_url: &js::Url, manifest: &Manifest, package_hash: Has
 		writedoc!(
 				code,
 				r#"
-					(...args: Parameters<typeof module.{target_name}>): Tangram.Target<Awaited<ReturnType<typeof module.{target_name}>>> => new Tangram.Target({{
+					(...args: Parameters<typeof module.{target_name}>): Target<Awaited<ReturnType<typeof module.{target_name}>>> => new Target({{
 						package: _package,
 						name: "{target_name}",
 						args,

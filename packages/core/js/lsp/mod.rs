@@ -221,7 +221,8 @@ impl tower_lsp::LanguageServer for LanguageServer {
 						let path = package_path.join(module_path);
 						format!("file://{}", path.display()).parse().unwrap()
 					},
-					js::Url::Lib { .. }
+					js::Url::Builtins { .. }
+					| js::Url::Lib { .. }
 					| js::Url::PackageModule { .. }
 					| js::Url::PackageTargets { .. }
 					| js::Url::PathTargets { .. } => location.url.into(),

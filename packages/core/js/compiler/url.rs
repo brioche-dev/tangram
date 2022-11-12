@@ -3,19 +3,25 @@ use anyhow::{bail, Context, Result};
 use camino::Utf8PathBuf;
 use std::path::{Path, PathBuf};
 
-pub const TANGRAM_SCHEME: &str = "tangram";
-
+pub const TANGRAM_BUILTINS_SCHEME: &str = "tangram-builtins";
+pub const TANGRAM_LIB_SCHEME: &str = "tangram-lib";
 pub const TANGRAM_PACKAGE_MODULE_SCHEME: &str = "tangram-package-module";
 pub const TANGRAM_PACKAGE_TARGETS_SCHEME: &str = "tangram-package-targets";
 pub const TANGRAM_PATH_MODULE_SCHEME: &str = "tangram-path-module";
 pub const TANGRAM_PATH_TARGETS_SCHEME: &str = "tangram-path-targets";
-pub const TANGRAM_LIB_SCHEME: &str = "tangram-lib";
+pub const TANGRAM_SCHEME: &str = "tangram";
 
 #[derive(
 	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
 )]
 #[serde(into = "url::Url", try_from = "url::Url")]
 pub enum Url {
+	Builtins {
+		path: Utf8PathBuf,
+	},
+	Lib {
+		path: Utf8PathBuf,
+	},
 	PackageModule {
 		package_hash: Hash,
 		module_path: Utf8PathBuf,
@@ -29,9 +35,6 @@ pub enum Url {
 	},
 	PathTargets {
 		package_path: PathBuf,
-	},
-	Lib {
-		path: Utf8PathBuf,
 	},
 }
 
@@ -90,6 +93,16 @@ impl TryFrom<url::Url> for Url {
 
 	fn try_from(value: url::Url) -> Result<Self, Self::Error> {
 		match value.scheme() {
+			TANGRAM_BUILTINS_SCHEME => {
+				let path = value.path().into();
+				Ok(Url::Builtins { path })
+			},
+
+			TANGRAM_LIB_SCHEME => {
+				let path = value.path().into();
+				Ok(Url::Lib { path })
+			},
+
 			TANGRAM_PACKAGE_MODULE_SCHEME => {
 				let package_hash = value
 					.domain()
@@ -132,11 +145,6 @@ impl TryFrom<url::Url> for Url {
 				Ok(Url::PathTargets { package_path })
 			},
 
-			TANGRAM_LIB_SCHEME => {
-				let path = value.path().into();
-				Ok(Url::Lib { path })
-			},
-
 			_ => bail!(r#"Invalid URL "{value}"."#),
 		}
 	}
@@ -145,6 +153,12 @@ impl TryFrom<url::Url> for Url {
 impl From<Url> for url::Url {
 	fn from(value: Url) -> Self {
 		let url = match value {
+			Url::Builtins { path } => {
+				format!("{TANGRAM_BUILTINS_SCHEME}://{path}")
+			},
+			Url::Lib { path } => {
+				format!("{TANGRAM_LIB_SCHEME}://{path}")
+			},
 			Url::PackageModule {
 				package_hash,
 				module_path,
@@ -164,9 +178,6 @@ impl From<Url> for url::Url {
 			Url::PathTargets { package_path } => {
 				let package_path = package_path.display();
 				format!("{TANGRAM_PATH_TARGETS_SCHEME}://{package_path}")
-			},
-			Url::Lib { path } => {
-				format!("{TANGRAM_LIB_SCHEME}://{path}")
 			},
 		};
 		url.parse().unwrap()

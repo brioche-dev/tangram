@@ -140,10 +140,11 @@ impl Compiler {
 			// Path targets update versions when their manifest changes.
 			js::Url::PathTargets { package_path } => package_path.join("tangram.json"),
 
-			// Package module and package targets URLs have hashes. They never change, so we can always return 0. The same goes for the typescript libraries.
-			js::Url::PackageModule { .. }
-			| js::Url::PackageTargets { .. }
-			| js::Url::Lib { .. } => {
+			// Package module and package targets URLs have hashes. They never change, so we can always return 0. The same goes for the builtins and libs.
+			js::Url::Builtins { .. }
+			| js::Url::Lib { .. }
+			| js::Url::PackageModule { .. }
+			| js::Url::PackageTargets { .. } => {
 				return Ok(0);
 			},
 		};
