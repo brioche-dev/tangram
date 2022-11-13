@@ -69,7 +69,6 @@ impl ApiClient {
 		url.set_path("/v1/user");
 		let response = self
 			.request(reqwest::Method::GET, url)
-			.header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
 			.send()
 			.await?
 			.error_for_status()?;

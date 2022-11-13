@@ -1,5 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 
 #[derive(Parser)]
@@ -10,10 +10,10 @@ impl Cli {
 		tokio::process::Command::new("sh")
 			.args(["-c", "curl https://tangram.dev/install.sh | sh"])
 			.spawn()
-			.unwrap()
+			.context("Failed to spawn the install script.")?
 			.wait()
 			.await
-			.unwrap();
+			.context("Failed to run the install script.")?;
 		Ok(())
 	}
 }

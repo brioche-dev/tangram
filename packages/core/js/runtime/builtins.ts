@@ -1,4 +1,39 @@
-let textEncoder = new TextEncoder();
+enum Syscall {
+	Print = "print",
+	Deserialize = "deserialize",
+	AddBlob = "add_blob",
+	GetBlob = "get_blob",
+	AddExpression = "add_expression",
+	GetExpression = "get_expression",
+	Evaluate = "evaluate",
+}
+
+declare function syscall(syscall: Syscall.Print, value: string): void;
+declare function syscall(
+	syscall: Syscall.Deserialize,
+	format: string,
+	content: string,
+): any;
+declare function syscall(
+	syscall: Syscall.AddBlob,
+	blob: Uint8Array,
+): Promise<HashJson>;
+declare function syscall(
+	syscall: Syscall.GetBlob,
+	hash: HashJson,
+): Promise<Uint8Array>;
+declare function syscall(
+	syscall: Syscall.AddExpression,
+	expression: ExpressionJson,
+): HashJson;
+declare function syscall(
+	syscall: Syscall.GetExpression,
+	hash: HashJson,
+): Promise<ExpressionJson>;
+declare function syscall(
+	syscall: Syscall.Evaluate,
+	hash: HashJson,
+): Promise<HashJson>;
 
 export enum System {
 	Amd64Linux = "amd64_linux",
@@ -26,6 +61,142 @@ export enum ExpressionType {
 	Array = "array",
 	Map = "map",
 }
+
+type HashJson = string;
+
+type ExpressionJson =
+	| {
+			type: ExpressionType.Null;
+			value: null;
+	  }
+	| {
+			type: ExpressionType.Bool;
+			value: boolean;
+	  }
+	| {
+			type: ExpressionType.Number;
+			value: number;
+	  }
+	| {
+			type: ExpressionType.String;
+			value: string;
+	  }
+	| {
+			type: ExpressionType.Artifact;
+			value: ArtifactJson;
+	  }
+	| {
+			type: ExpressionType.Directory;
+			value: DirectoryJson;
+	  }
+	| {
+			type: ExpressionType.File;
+			value: FileJson;
+	  }
+	| {
+			type: ExpressionType.Symlink;
+			value: SymlinkJson;
+	  }
+	| {
+			type: ExpressionType.Dependency;
+			value: DependencyJson;
+	  }
+	| {
+			type: ExpressionType.Package;
+			value: PackageJson;
+	  }
+	| {
+			type: ExpressionType.Template;
+			value: TemplateJson;
+	  }
+	| {
+			type: ExpressionType.Fetch;
+			value: FetchJson;
+	  }
+	| {
+			type: ExpressionType.Js;
+			value: JsJson;
+	  }
+	| {
+			type: ExpressionType.Process;
+			value: ProcessJson;
+	  }
+	| {
+			type: ExpressionType.Target;
+			value: TargetJson;
+	  }
+	| {
+			type: ExpressionType.Array;
+			value: ArrayJson;
+	  }
+	| {
+			type: ExpressionType.Map;
+			value: MapJson;
+	  };
+
+type ArtifactJson = {
+	root: HashJson;
+};
+
+type DirectoryJson = {
+	entries: { [key: string]: HashJson };
+};
+
+type FileJson = {
+	blob: HashJson;
+	executable: boolean;
+};
+
+type SymlinkJson = {
+	target: string;
+};
+
+type DependencyJson = {
+	artifact: HashJson;
+	path: string | null;
+};
+
+type PackageJson = {
+	source: HashJson;
+	dependencies: { [key: string]: HashJson };
+};
+
+type TemplateJson = {
+	components: Array<HashJson>;
+};
+
+type JsJson = {
+	package: HashJson;
+	name: string;
+	path: string;
+	args: HashJson;
+};
+
+type FetchJson = {
+	url: string;
+	digest: Digest | null;
+	unpack: boolean;
+};
+
+type ProcessJson = {
+	system: System;
+	env: HashJson;
+	command: HashJson;
+	args: HashJson;
+	digest: Digest | null;
+	unsafe: boolean | null;
+	network: boolean | null;
+};
+
+type TargetJson = {
+	args: HashJson;
+	name: string;
+	package: HashJson;
+};
+
+type ArrayJson = Array<HashJson>;
+
+type MapJson = { [key: string]: HashJson };
 
 type AnyExpression =
 	| null
@@ -123,7 +294,11 @@ export type HashOrExpression<E extends AnyExpression> =
 	| Hash<Expression<E>>
 	| Expression<E>;
 
-export type Digest = Tangram.Digest;
+export type Digest = {
+	algorithm: DigestAlgorithm;
+	encoding: DigestEncoding;
+	value: string;
+};
 
 export enum DigestAlgorithm {
 	Sha256 = "sha256",
@@ -153,12 +328,12 @@ export class Artifact {
 		this.root = root;
 	}
 
-	static fromJson(artifact: Tangram.Artifact): Artifact {
+	static fromJson(artifact: ArtifactJson): Artifact {
 		let root = new Hash(artifact.root);
 		return new Artifact(root);
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let root = await addExpression(this.root);
 		return {
 			type: ExpressionType.Artifact,
@@ -185,7 +360,7 @@ export class Directory {
 		this.#entries = entries;
 	}
 
-	static fromJson(directory: Tangram.Directory): Directory {
+	static fromJson(directory: DirectoryJson): Directory {
 		let entries = Object.fromEntries(
 			Object.entries(directory.entries).map(([key, value]) => [
 				key,
@@ -195,7 +370,7 @@ export class Directory {
 		return new Directory(entries);
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let entries = Object.fromEntries(
 			await Promise.all(
 				Object.entries(this.#entries).map(async ([key, value]) => [
@@ -210,15 +385,10 @@ export class Directory {
 		};
 	}
 
-	async getEntries() {
-		return Object.fromEntries(
-			await Promise.all(
-				Object.entries(this.#entries).map(async ([key, value]) => [
-					key,
-					await getExpression(value),
-				]),
-			),
-		);
+	public async get(
+		name: string,
+	): Promise<Directory | File | Symlink | Dependency> {
+		return (await getExpression(this.#entries[name])) as any;
 	}
 }
 
@@ -237,13 +407,13 @@ export class File {
 		this.executable = executable ?? false;
 	}
 
-	static fromJson(file: Tangram.File): File {
+	static fromJson(file: FileJson): File {
 		let blob = new Hash(file.blob);
 		let executable = file.executable;
 		return new File({ blob, executable });
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		return {
 			type: ExpressionType.File,
 			value: {
@@ -266,11 +436,11 @@ export class Symlink {
 		this.target = target;
 	}
 
-	static fromJson(symlink: Tangram.Symlink): Symlink {
+	static fromJson(symlink: SymlinkJson): Symlink {
 		return new Symlink(symlink.target);
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		return {
 			type: ExpressionType.Symlink,
 			value: {
@@ -295,14 +465,14 @@ export class Dependency {
 		this.path = path ?? null;
 	}
 
-	static fromJson(dependency: Tangram.Dependency): Dependency {
+	static fromJson(dependency: DependencyJson): Dependency {
 		return new Dependency({
 			artifact: new Hash(dependency.artifact),
 			path: dependency.path,
 		});
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let artifact = await addExpression(this.artifact);
 		return {
 			type: ExpressionType.Dependency,
@@ -333,7 +503,7 @@ export class Package {
 		this.dependencies = dependencies;
 	}
 
-	static fromJson(_package: Tangram.Package): Package {
+	static fromJson(_package: PackageJson): Package {
 		let source = new Hash(_package.source);
 		let dependencies = Object.fromEntries(
 			Object.entries(_package.dependencies).map(([key, value]) => [
@@ -347,7 +517,7 @@ export class Package {
 		});
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let source = await addExpression(this.source);
 		let dependencies = Object.fromEntries(
 			await Promise.all(
@@ -392,11 +562,11 @@ export class Template {
 		this.components = components;
 	}
 
-	static fromJson(template: Tangram.Template): Template {
+	static fromJson(template: TemplateJson): Template {
 		return new Template(template.components.map((string) => new Hash(string)));
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let components = await Promise.all(
 			this.components.map(async (component) =>
 				(await addExpression(component)).toString(),
@@ -440,7 +610,7 @@ export class Js<O extends AnyExpression> {
 		this.args = args;
 	}
 
-	static fromJson<O extends AnyExpression>(js: Tangram.Js): Js<O> {
+	static fromJson<O extends AnyExpression>(js: JsJson): Js<O> {
 		let _package = new Hash(js.package);
 		let path = js.path;
 		let name = js.name;
@@ -448,7 +618,7 @@ export class Js<O extends AnyExpression> {
 		return new Js({ package: _package, path, name, args });
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let _package = await addExpression(this.package);
 		let args = await addExpression(this.args);
 		return {
@@ -489,7 +659,7 @@ export class Fetch {
 		this.unpack = unpack ?? false;
 	}
 
-	static fromJson(fetch: Tangram.Fetch) {
+	static fromJson(fetch: FetchJson) {
 		return new Fetch({
 			url: fetch.url,
 			digest: fetch.digest,
@@ -497,7 +667,7 @@ export class Fetch {
 		});
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		return {
 			type: ExpressionType.Fetch,
 			value: {
@@ -506,6 +676,10 @@ export class Fetch {
 				unpack: this.unpack,
 			},
 		};
+	}
+
+	public async evaluate(): Promise<Artifact> {
+		return evaluate(this);
 	}
 }
 
@@ -541,7 +715,7 @@ export class Process {
 		this.unsafe = args.unsafe ?? null;
 	}
 
-	static fromJson(process: Tangram.Process): Process {
+	static fromJson(process: ProcessJson): Process {
 		let system = process.system;
 		let env = new Hash(process.env);
 		let command = new Hash(process.command);
@@ -560,7 +734,7 @@ export class Process {
 		});
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let env = await addExpression(this.env);
 		let command = await addExpression(this.command);
 		let args = await addExpression(this.args);
@@ -595,6 +769,10 @@ export class Process {
 	> {
 		return (await getExpression(this.args)) as any;
 	}
+
+	public async evaluate(): Promise<Artifact> {
+		return evaluate(this);
+	}
 }
 
 type TargetArgs = {
@@ -615,7 +793,7 @@ export class Target<O extends AnyExpression> {
 		this.args = args.args;
 	}
 
-	static fromJson<O extends AnyExpression>(json: Tangram.Target): Target<O> {
+	static fromJson<O extends AnyExpression>(json: TargetJson): Target<O> {
 		return new Target({
 			package: new Hash(json.package),
 			name: json.name,
@@ -623,7 +801,7 @@ export class Target<O extends AnyExpression> {
 		});
 	}
 
-	async toJson(): Promise<Tangram.Expression> {
+	async toJson(): Promise<ExpressionJson> {
 		let _package = await addExpression(this.package);
 		let args = await addExpression(this.args);
 		return {
@@ -643,6 +821,10 @@ export class Target<O extends AnyExpression> {
 	async getArgs(): Promise<Expression<Array<AnyExpression>>> {
 		return await getExpression(this.args);
 	}
+
+	public async evaluate(): Promise<O> {
+		return evaluate(this) as any;
+	}
 }
 
 export let template = (
@@ -661,7 +843,7 @@ export let template = (
 };
 
 export let fromJson = async (
-	expression: Tangram.Expression,
+	expression: ExpressionJson,
 ): Promise<AnyExpression> => {
 	switch (expression.type) {
 		case ExpressionType.Null: {
@@ -726,15 +908,12 @@ export let fromJson = async (
 				),
 			);
 		}
-		default: {
-			throw new Error(`Invalid expression type "${expression.type}".`);
-		}
 	}
 };
 
 export let toJson = async (
 	expression: AnyExpression,
-): Promise<Tangram.Expression> => {
+): Promise<ExpressionJson> => {
 	if (expression === null || expression === undefined) {
 		return {
 			type: ExpressionType.Null,
@@ -806,11 +985,11 @@ export let toJson = async (
 };
 
 export let addBlob = async (bytes: Uint8Array): Promise<Hash> => {
-	return new Hash(await Tangram.syscall(Tangram.Syscall.AddBlob, bytes));
+	return new Hash(await syscall(Syscall.AddBlob, bytes));
 };
 
 export let getBlob = async (hash: Hash): Promise<Uint8Array> => {
-	return await Tangram.syscall(Tangram.Syscall.GetBlob, hash.toString());
+	return await syscall(Syscall.GetBlob, hash.toString());
 };
 
 export let addExpression = async <E extends AnyExpression>(
@@ -820,10 +999,7 @@ export let addExpression = async <E extends AnyExpression>(
 		return hashOrExpression;
 	} else {
 		return new Hash(
-			await Tangram.syscall(
-				Tangram.Syscall.AddExpression,
-				await toJson(hashOrExpression),
-			),
+			await syscall(Syscall.AddExpression, await toJson(hashOrExpression)),
 		);
 	}
 };
@@ -833,10 +1009,7 @@ export let getExpression = async <E extends AnyExpression>(
 ): Promise<E> => {
 	if (hashOrExpression instanceof Hash) {
 		return (await fromJson(
-			await Tangram.syscall(
-				Tangram.Syscall.GetExpression,
-				hashOrExpression.toString(),
-			),
+			await syscall(Syscall.GetExpression, hashOrExpression.toString()),
 		)) as E;
 	} else {
 		return hashOrExpression;
@@ -848,9 +1021,7 @@ export let evaluate = <E extends AnyExpression>(
 ): Promise<OutputForExpression<E>> => {
 	return (async () => {
 		let hash = await addExpression(expression);
-		let outputHash = new Hash(
-			await Tangram.syscall(Tangram.Syscall.Evaluate, hash.toString()),
-		);
+		let outputHash = new Hash(await syscall(Syscall.Evaluate, hash.toString()));
 		let output = await getExpression(outputHash);
 		return output;
 	})() as any;
@@ -877,5 +1048,5 @@ export let deserialize = <T>(
 	format: SerializationFormat,
 	contents: string,
 ): T => {
-	return Tangram.syscall(Tangram.Syscall.Deserialize, format, contents);
+	return syscall(Syscall.Deserialize, format, contents);
 };

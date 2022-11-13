@@ -16,7 +16,7 @@ impl Cli {
 			format!(r#"Failed to create the directory at "{}"."#, path.display())
 		})?;
 
-		// Run init.
+		// Init.
 		self.command_init(args).await?;
 
 		Ok(())

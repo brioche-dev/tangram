@@ -56,41 +56,26 @@ Object.defineProperties(globalThis, {
 	console: { value: console },
 });
 
-let Syscall = {
-	Print: "print",
-	Deserialize: "deserialize",
-	AddBlob: "add_blob",
-	GetBlob: "get_blob",
-	AddExpression: "add_expression",
-	GetExpression: "get_expression",
-	Evaluate: "evaluate",
-};
-
-let syscall = (syscall, ...args) => {
+function syscall(syscall, ...args) {
 	let opName = "op_tg_" + syscall;
 	switch (syscall) {
-		case Syscall.Print:
+		case "print":
 			return Deno.core.opSync(opName, ...args);
-		case Syscall.Deserialize:
+		case "deserialize":
 			return Deno.core.opSync(opName, ...args);
-		case Syscall.AddBlob:
+		case "add_blob":
 			return Deno.core.opAsync(opName, ...args);
-		case Syscall.GetBlob:
+		case "get_blob":
 			return Deno.core.opAsync(opName, ...args);
-		case Syscall.AddExpression:
+		case "add_expression":
 			return Deno.core.opAsync(opName, ...args);
-		case Syscall.GetExpression:
+		case "get_expression":
 			return Deno.core.opAsync(opName, ...args);
-		case Syscall.Evaluate:
+		case "evaluate":
 			return Deno.core.opAsync(opName, ...args);
 	}
-};
-
-let Tangram = {
-	syscall,
-	Syscall,
-};
+}
 
 Object.defineProperties(globalThis, {
-	Tangram: { value: Tangram },
+	syscall: { value: syscall },
 });

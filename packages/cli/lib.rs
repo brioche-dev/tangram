@@ -38,6 +38,7 @@ pub struct Args {
 #[derive(Parser)]
 enum Subcommand {
 	Autoshell(commands::autoshell::Args),
+	Add(commands::add::Args),
 	Blob(commands::blob::Args),
 	Build(commands::build::Args),
 	Check(commands::check::Args),
@@ -45,9 +46,11 @@ enum Subcommand {
 	Checkout(commands::checkout::Args),
 	Expression(commands::expression::Args),
 	Fetch(commands::fetch::Args),
+	Fmt(commands::fmt::Args),
 	Gc(commands::gc::Args),
 	Hash(commands::hash::Args),
 	Init(commands::init::Args),
+	Lint(commands::lint::Args),
 	Login(commands::login::Args),
 	Lsp(commands::lsp::Args),
 	New(commands::new::Args),
@@ -57,6 +60,7 @@ enum Subcommand {
 	Repl(commands::repl::Args),
 	Run(commands::run::Args),
 	Search(commands::search::Args),
+	Serve(commands::serve::Args),
 	Shell(commands::shell::Args),
 	Update(commands::update::Args),
 	Upgrade(commands::upgrade::Args),
@@ -129,6 +133,7 @@ impl Cli {
 	pub async fn run_command(&self, args: Args) -> Result<()> {
 		// Run the subcommand.
 		match args.subcommand {
+			Subcommand::Add(args) => self.command_add(args).boxed(),
 			Subcommand::Autoshell(args) => self.command_autoshell(args).boxed(),
 			Subcommand::Blob(args) => self.command_blob(args).boxed(),
 			Subcommand::Build(args) => self.command_build(args).boxed(),
@@ -137,9 +142,11 @@ impl Cli {
 			Subcommand::Checkout(args) => self.command_checkout(args).boxed(),
 			Subcommand::Expression(args) => self.command_expression(args).boxed(),
 			Subcommand::Fetch(args) => self.command_fetch(args).boxed(),
+			Subcommand::Fmt(args) => self.command_fmt(args).boxed(),
 			Subcommand::Gc(args) => self.command_gc(args).boxed(),
 			Subcommand::Hash(args) => self.command_hash(args).boxed(),
 			Subcommand::Init(args) => self.command_init(args).boxed(),
+			Subcommand::Lint(args) => self.command_lint(args).boxed(),
 			Subcommand::Login(args) => self.command_login(args).boxed(),
 			Subcommand::Lsp(args) => self.command_lsp(args).boxed(),
 			Subcommand::New(args) => self.command_new(args).boxed(),
@@ -149,6 +156,7 @@ impl Cli {
 			Subcommand::Repl(args) => self.command_repl(args).boxed(),
 			Subcommand::Run(args) => self.command_run(args).boxed(),
 			Subcommand::Search(args) => self.command_search(args).boxed(),
+			Subcommand::Serve(args) => self.command_serve(args).boxed(),
 			Subcommand::Shell(args) => self.command_shell(args).boxed(),
 			Subcommand::Update(args) => self.command_update(args).boxed(),
 			Subcommand::Upgrade(args) => self.command_upgrade(args).boxed(),

@@ -24,7 +24,7 @@ globalThis.handle = ({ type, request }) => {
 // Create the TypeScript compiler options.
 let compilerOptions = {
 	allowNonTsExtensions: true,
-	lib: ["lib.esnext.full.d.ts", "lib.tangram.ns.d.ts"],
+	lib: ["lib.esnext.full.d.ts", "lib.tangram.d.ts"],
 	maxNodeModuleJsDepth: 0,
 	module: ts.ModuleKind.ESNext,
 	noEmit: true,

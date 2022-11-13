@@ -34,6 +34,7 @@ pub mod options;
 pub mod package;
 pub mod pull;
 pub mod push;
+pub mod server;
 pub mod watcher;
 
 #[derive(Clone)]

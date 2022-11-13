@@ -6,6 +6,7 @@ use crate::{
 	js::{self, compiler::Compiler},
 };
 use anyhow::{bail, Context, Result};
+use camino::Utf8PathBuf;
 use deno_core::{serde_v8, v8};
 use std::{cell::RefCell, future::Future, rc::Rc, sync::Arc};
 use tokio::io::AsyncReadExt;
@@ -126,6 +127,46 @@ impl Runtime {
 		// Acquire a shared lock to the builder.
 		let builder = self.builder.lock_shared().await?;
 
+		// Load the builtins module.
+		let url = js::Url::new_builtins(Utf8PathBuf::from("/lib.ts"));
+		let module_id = self
+			.runtime
+			.load_side_module(&url.clone().into(), None)
+			.await?;
+		let evaluate_receiver = self.runtime.mod_evaluate(module_id);
+		self.runtime.run_event_loop(false).await?;
+		evaluate_receiver.await.unwrap()?;
+
+		// Get the fromJson and toJson exports.
+		let module_namespace = self.runtime.get_module_namespace(module_id)?;
+		let mut scope = self.runtime.handle_scope();
+		let module_namespace = v8::Local::<v8::Object>::new(&mut scope, module_namespace);
+		let export_name = "fromJson";
+		let export_literal = v8::String::new(&mut scope, export_name).unwrap();
+		let export: v8::Local<v8::Function> = module_namespace
+			.get(&mut scope, export_literal.into())
+			.with_context(|| {
+				format!(r#"Failed to get the export "{export_name}" from URL "{url}"."#)
+			})?
+			.try_into()
+			.with_context(|| {
+				format!(r#"The export "{export_name}" from URL "{url}" must be a function."#)
+			})?;
+		let from_json = v8::Global::new(&mut scope, export);
+		let export_name = "toJson";
+		let export_literal = v8::String::new(&mut scope, export_name).unwrap();
+		let export: v8::Local<v8::Function> = module_namespace
+			.get(&mut scope, export_literal.into())
+			.with_context(|| {
+				format!(r#"Failed to get the export "{export_name}" from URL "{url}"."#)
+			})?
+			.try_into()
+			.with_context(|| {
+				format!(r#"The export "{export_name}" from URL "{url}" must be a function."#)
+			})?;
+		let to_json = v8::Global::new(&mut scope, export);
+		drop(scope);
+
 		// Create the URL.
 		let url = js::Url::new_package_module(js.package, js.path.clone());
 
@@ -153,14 +194,10 @@ impl Runtime {
 			let arg = serde_v8::to_v8(&mut try_catch_scope, arg)
 				.context("Failed to move the args expression to v8.")?;
 
-			// Retrieve Tangram.fromJson.
-			let from_json_function: v8::Local<v8::Function> =
-				deno_core::JsRuntime::grab_global(&mut try_catch_scope, "Tangram.fromJson")
-					.context("Failed to get Tangram.fromJson.")?;
-
-			// Call Tangram.fromJson.
+			// Call fromJson.
 			let undefined = v8::undefined(&mut try_catch_scope);
-			let output = from_json_function.call(&mut try_catch_scope, undefined.into(), &[arg]);
+			let from_json = v8::Local::new(&mut try_catch_scope, from_json.clone());
+			let output = from_json.call(&mut try_catch_scope, undefined.into(), &[arg]);
 
 			// If an exception was caught, return an error with an error message.
 			if try_catch_scope.has_caught() {
@@ -239,14 +276,10 @@ impl Runtime {
 		// Move the output to the try catch scope.
 		let output = v8::Local::new(&mut try_catch_scope, output);
 
-		// Retrieve Tangram.toJson.
-		let to_json_function: v8::Local<v8::Function> =
-			deno_core::JsRuntime::grab_global(&mut try_catch_scope, "Tangram.toJson")
-				.context("Failed to get Tangram.toJson.")?;
-
-		// Call Tangram.toJson.
+		// Call toJson.
 		let undefined = v8::undefined(&mut try_catch_scope);
-		let output = to_json_function.call(&mut try_catch_scope, undefined.into(), &[output]);
+		let to_json = v8::Local::new(&mut try_catch_scope, to_json);
+		let output = to_json.call(&mut try_catch_scope, undefined.into(), &[output]);
 
 		// If an exception was caught, return an error with an error message.
 		if try_catch_scope.has_caught() {

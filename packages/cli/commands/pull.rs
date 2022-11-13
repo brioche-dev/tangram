@@ -13,6 +13,7 @@ impl Cli {
 		// Lock the builder.
 		let builder = self.builder.lock_shared().await?;
 
+		// Pull.
 		builder.pull(args.hash).await.context("Failed to pull.")?;
 
 		Ok(())

@@ -8,7 +8,7 @@ use std::{fmt::Write, path::Path};
 use tokio::io::AsyncReadExt;
 
 const BUILTINS: &str = include_str!("../runtime/builtins.ts");
-const LIB_TANGRAM_NS_D_TS: &str = include_str!("../runtime/global.d.ts");
+const LIB_TANGRAM_D_TS: &str = include_str!("../runtime/global.d.ts");
 const LIB: include_dir::Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/js/compiler/lib");
 
 impl Compiler {
@@ -50,7 +50,7 @@ fn load_lib(path: &Utf8Path) -> Result<String> {
 		.strip_prefix("/")
 		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
 	let text = match path.as_str() {
-		"lib.tangram.ns.d.ts" => LIB_TANGRAM_NS_D_TS,
+		"lib.tangram.d.ts" => LIB_TANGRAM_D_TS,
 		_ => LIB
 			.get_file(path)
 			.with_context(|| format!(r#"Could not find typescript lib for path "{path}"."#))?

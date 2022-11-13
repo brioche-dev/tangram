@@ -40,6 +40,11 @@ pub enum Url {
 
 impl Url {
 	#[must_use]
+	pub fn new_builtins(path: Utf8PathBuf) -> Url {
+		Url::Builtins { path }
+	}
+
+	#[must_use]
 	pub fn new_package_module(package_hash: Hash, module_path: Utf8PathBuf) -> Url {
 		Url::PackageModule {
 			package_hash,

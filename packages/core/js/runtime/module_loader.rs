@@ -98,7 +98,7 @@ async fn load(state: Arc<State>, url: &js::Url) -> Result<deno_core::ModuleSourc
 
 	// Determine if the module should be transpiled.
 	let transpile = match url {
-		js::Url::PackageModule { module_path, .. } => {
+		js::Url::PathModule { module_path, .. } | js::Url::PackageModule { module_path, .. } => {
 			// Get the module's path extension.
 			let extension = module_path
 				.extension()
@@ -111,7 +111,9 @@ async fn load(state: Arc<State>, url: &js::Url) -> Result<deno_core::ModuleSourc
 				},
 			}
 		},
-		js::Url::PackageTargets { .. } => true,
+
+		js::Url::PackageTargets { .. } | js::Url::Builtins { .. } => true,
+
 		_ => {
 			bail!(r#"Cannot load from URL "{url}"."#);
 		},
