@@ -35,6 +35,16 @@ declare function syscall(
 	hash: HashJson,
 ): Promise<HashJson>;
 
+export enum Arch {
+	Amd64 = "amd64",
+	Arm64 = "arm64",
+}
+
+export enum Os {
+	Linux = "linux",
+	Macos = "macos",
+}
+
 export enum System {
 	Amd64Linux = "amd64_linux",
 	Amd64Macos = "amd64_macos",
@@ -339,7 +349,14 @@ export class Directory {
 	}
 
 	async toJson(): Promise<ExpressionJson> {
-		let entries = this.resolveEntries();
+		let entries = Object.fromEntries(
+			await Promise.all(
+				Object.entries(this.#entries).map(async ([key, value]) => [
+					key,
+					(await addExpression(value)).toString(),
+				]),
+			),
+		);
 		return {
 			type: ExpressionType.Directory,
 			value: { entries },
@@ -350,21 +367,6 @@ export class Directory {
 		name: string,
 	): Promise<Expression<Directory | File | Symlink | Dependency>> {
 		return await getExpression(this.#entries[name]);
-	}
-
-	async resolveEntries() {
-		return Object.fromEntries(
-			await Promise.all(
-				Object.entries(this.#entries).map(async ([key, value]) => [
-					key,
-					(await addExpression(value)).toString(),
-				]),
-			),
-		);
-	}
-
-	public getEntries() {
-		return this.resolveEntries();
 	}
 }
 

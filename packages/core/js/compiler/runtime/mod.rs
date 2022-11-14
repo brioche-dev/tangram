@@ -120,8 +120,16 @@ fn op_tg_load(
 	url: js::Url,
 ) -> Result<LoadOutput, deno_core::error::AnyError> {
 	op(state, |state| async move {
-		let text = state.compiler.load(&url).await?;
-		let version = state.compiler.get_version(&url).await?;
+		let text = state
+			.compiler
+			.load(&url)
+			.await
+			.with_context(|| format!(r#"Failed to load from URL "{url}"."#))?;
+		let version = state
+			.compiler
+			.get_version(&url)
+			.await
+			.with_context(|| format!(r#"Failed to get the version for URL "{url}"."#))?;
 		Ok(LoadOutput { text, version })
 	})
 }
