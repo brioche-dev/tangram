@@ -199,8 +199,6 @@ type ArrayJson = Array<HashJson>;
 
 type MapJson = { [key: string]: HashJson };
 
-export type Artifact = Directory | File | Symlink | Dependency;
-
 type AnyExpression =
 	| null
 	| boolean
@@ -851,6 +849,8 @@ export class Target<O extends AnyExpression> {
 		return evaluate(this) as any;
 	}
 }
+
+export type Artifact = Directory | File | Symlink | Dependency;
 
 export let isArtifact = (value: unknown): value is Artifact => {
 	return (
