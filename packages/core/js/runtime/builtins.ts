@@ -387,8 +387,8 @@ export class Directory {
 
 	public async get(
 		name: string,
-	): Promise<Directory | File | Symlink | Dependency> {
-		return (await getExpression(this.#entries[name])) as any;
+	): Promise<Expression<Directory | File | Symlink | Dependency>> {
+		return await getExpression(this.#entries[name]);
 	}
 }
 

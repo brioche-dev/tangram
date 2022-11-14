@@ -44,11 +44,11 @@ Object.defineProperties(globalThis, {
 let console = {
 	log: (...args) => {
 		let string = args.map((arg) => stringify(arg)).join(" ");
-		syscall(Syscall.Print, string);
+		syscall("print", string);
 	},
 	error: (...args) => {
 		let string = args.map((arg) => stringify(arg)).join(" ");
-		syscall(Syscall.Print, string);
+		syscall("print", string);
 	},
 };
 
