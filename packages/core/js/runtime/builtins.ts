@@ -199,7 +199,7 @@ type ArrayJson = Array<HashJson>;
 
 type MapJson = { [key: string]: HashJson };
 
-type Artifact = Directory | File | Symlink | Dependency;
+export type Artifact = Directory | File | Symlink | Dependency;
 
 type AnyExpression =
 	| null
@@ -322,15 +322,11 @@ export class Hash<T extends AnyExpression = AnyExpression> {
 	}
 }
 
-type DirectoryEntries = {
-	[filename: string]: HashOrExpression<Directory | File | Symlink | Dependency>;
-};
-
 export class Directory {
 	#tangram = "directory";
-	#entries: DirectoryEntries;
+	#entries: Record<string, HashOrExpression<Artifact>>;
 
-	constructor(entries: DirectoryEntries) {
+	constructor(entries: Record<string, HashOrExpression<Artifact>>) {
 		this.#entries = entries;
 	}
 
@@ -363,10 +359,23 @@ export class Directory {
 		};
 	}
 
-	public async get(
-		name: string,
-	): Promise<Expression<Directory | File | Symlink | Dependency>> {
+	public async get(name: string): Promise<Expression<Artifact>> {
 		return await getExpression(this.#entries[name]);
+	}
+
+	public async getEntries(): Promise<Record<string, Artifact>> {
+		let entryPromises = Object.entries(this.#entries).map(
+			async ([name, hashOrExpr]) => {
+				if (hashOrExpr instanceof Hash) {
+					return [name, await getExpression(hashOrExpr)];
+				} else {
+					return [name, hashOrExpr];
+				}
+			},
+		);
+
+		let entries = await Promise.all(entryPromises);
+		return Object.fromEntries(entries);
 	}
 }
 
