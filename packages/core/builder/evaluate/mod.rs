@@ -7,7 +7,6 @@ use futures::FutureExt;
 use std::future::Future;
 
 pub mod array;
-pub mod artifact;
 pub mod dependency;
 pub mod directory;
 pub mod fetch;
@@ -46,7 +45,6 @@ impl State {
 			| Expression::String(_)
 			| Expression::File(_)
 			| Expression::Symlink(_) => futures::future::ok(hash).boxed(),
-			Expression::Artifact(artifact) => self.evaluate_artifact(hash, artifact).boxed(),
 			Expression::Directory(directory) => self.evaluate_directory(hash, directory).boxed(),
 			Expression::Dependency(dependency) => {
 				self.evaluate_dependency(hash, dependency).boxed()

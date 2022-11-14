@@ -33,71 +33,52 @@ pub enum Expression {
 	String(Arc<str>),
 
 	#[buffalo(id = 4)]
-	#[serde(rename = "artifact")]
-	Artifact(Artifact),
-
-	#[buffalo(id = 5)]
 	#[serde(rename = "directory")]
 	Directory(Directory),
 
-	#[buffalo(id = 6)]
+	#[buffalo(id = 5)]
 	#[serde(rename = "file")]
 	File(File),
 
-	#[buffalo(id = 7)]
+	#[buffalo(id = 6)]
 	#[serde(rename = "symlink")]
 	Symlink(Symlink),
 
-	#[buffalo(id = 8)]
+	#[buffalo(id = 7)]
 	#[serde(rename = "dependency")]
 	Dependency(Dependency),
 
-	#[buffalo(id = 9)]
+	#[buffalo(id = 8)]
 	#[serde(rename = "package")]
 	Package(Package),
 
-	#[buffalo(id = 10)]
+	#[buffalo(id = 9)]
 	#[serde(rename = "template")]
 	Template(Template),
 
-	#[buffalo(id = 11)]
+	#[buffalo(id = 10)]
 	#[serde(rename = "js")]
 	Js(Js),
 
-	#[buffalo(id = 12)]
+	#[buffalo(id = 11)]
 	#[serde(rename = "fetch")]
 	Fetch(Fetch),
 
-	#[buffalo(id = 13)]
+	#[buffalo(id = 12)]
 	#[serde(rename = "process")]
 	Process(Process),
 
-	#[buffalo(id = 14)]
+	#[buffalo(id = 13)]
 	#[serde(rename = "target")]
 	Target(Target),
 
-	#[buffalo(id = 15)]
+	#[buffalo(id = 14)]
 	#[serde(rename = "array")]
 	Array(Array),
 
-	#[buffalo(id = 16)]
+	#[buffalo(id = 15)]
 	#[serde(rename = "map")]
 	Map(Map),
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-pub struct Artifact {
-	#[buffalo(id = 0)]
-	pub root: Hash,
 }
 
 #[derive(
@@ -392,15 +373,6 @@ impl Expression {
 	}
 
 	#[must_use]
-	pub fn as_artifact(&self) -> Option<&Artifact> {
-		if let Expression::Artifact(v) = self {
-			Some(v)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
 	pub fn as_directory(&self) -> Option<&Directory> {
 		if let Expression::Directory(v) = self {
 			Some(v)
@@ -501,15 +473,6 @@ impl Expression {
 }
 
 impl Expression {
-	#[must_use]
-	pub fn into_artifact(self) -> Option<Artifact> {
-		if let Expression::Artifact(v) = self {
-			Some(v)
-		} else {
-			None
-		}
-	}
-
 	#[must_use]
 	pub fn into_directory(self) -> Option<Directory> {
 		if let Expression::Directory(v) = self {

@@ -1,8 +1,5 @@
 use super::{watcher::Watcher, State};
-use crate::{
-	expression::{AddExpressionOutcome, Artifact, Expression},
-	hash::Hash,
-};
+use crate::{expression::AddExpressionOutcome, hash::Hash};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
@@ -18,11 +15,6 @@ impl State {
 
 		// Retrieve the expression for the path.
 		let (hash, _) = watcher.get(path).await?.unwrap();
-
-		// Add the artifact expression.
-		let hash = self
-			.add_expression(&Expression::Artifact(Artifact { root: hash }))
-			.await?;
 
 		Ok(hash)
 	}

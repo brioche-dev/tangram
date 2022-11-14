@@ -101,20 +101,16 @@ impl State {
 				| Expression::Fetch(_)
 				| Expression::Symlink(_) => {},
 
-				Expression::Artifact(artifact) => {
-					queue.push_back(artifact.root);
-				},
-
-				// If the expression is a file, mark its blob.
-				Expression::File(file) => {
-					marked_blob_hashes.insert(file.blob);
-				},
-
 				// If the expression is a directory, add its entries to the queue.
 				Expression::Directory(directory) => {
 					for (_, hash) in directory.entries {
 						queue.push_back(hash);
 					}
+				},
+
+				// If the expression is a file, mark its blob.
+				Expression::File(file) => {
+					marked_blob_hashes.insert(file.blob);
 				},
 
 				// If the expression is a dependency, add the dependent expression to the queue.

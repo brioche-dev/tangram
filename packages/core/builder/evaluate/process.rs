@@ -173,7 +173,10 @@ impl State {
 				paths: HashMap::new(),
 			}),
 
-			Expression::Artifact(_) => {
+			Expression::Directory(_)
+			| Expression::File(_)
+			| Expression::Symlink(_)
+			| Expression::Dependency(_) => {
 				// Checkout the artifact.
 				let artifact_path = self.checkout_to_artifacts(hash).await?;
 				let string = artifact_path
@@ -237,16 +240,8 @@ impl State {
 	) -> Result<()> {
 		let expression = self.get_expression_local(hash)?;
 		match expression {
-			Expression::Artifact(artifact) => {
-				// Add the artifact itself as a dependency.
-				artifact_hashes.push(hash);
-
-				// Get all dependent artifacts from the root.
-				self.collect_into_artifact_hashes(artifact.root, artifact_hashes)?;
-			},
-
 			Expression::Directory(dir) => {
-				// Get the dependencies of each entry.
+				// Recurse into each entry.
 				for entry_hash in dir.entries.values() {
 					self.collect_into_artifact_hashes(*entry_hash, artifact_hashes)?;
 				}
@@ -255,9 +250,12 @@ impl State {
 			// Files and symlinks aren't dependencies.
 			Expression::File(_) | Expression::Symlink(_) => {},
 
-			// Recurse into dependencies.
-			Expression::Dependency(dep) => {
-				self.collect_into_artifact_hashes(dep.artifact, artifact_hashes)?;
+			Expression::Dependency(dependency) => {
+				// Add the dependency.
+				artifact_hashes.push(dependency.artifact);
+
+				// Recurse into the dependency.
+				self.collect_into_artifact_hashes(dependency.artifact, artifact_hashes)?;
 			},
 
 			_ => {

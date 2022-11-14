@@ -1,6 +1,6 @@
 use super::{watcher::Watcher, State};
 use crate::{
-	expression::{Artifact, Dependency, Directory, Expression, File, Symlink},
+	expression::{Dependency, Directory, Expression, File, Symlink},
 	hash::Hash,
 	util::rmrf,
 };
@@ -15,23 +15,14 @@ pub type DependencyHandlerFn =
 impl State {
 	pub async fn checkout(
 		&self,
-		artifact: Hash,
+		hash: Hash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
-		// Get the artifact expression.
-		let expression = self.get_expression_local(artifact)?;
-
-		// Get the hash.
-		let hash = match expression {
-			Expression::Artifact(Artifact { root: hash }) => hash,
-			_ => bail!("Expected the expression to be an artifact."),
-		};
-
 		// Create a watcher.
 		let watcher = Watcher::new(self.path(), Arc::clone(&self.file_system_semaphore));
 
-		// Call the recursive checkout function on the root expression.
+		// Call the recursive checkout function on the expression.
 		self.checkout_path(&watcher, hash, path, dependency_handler)
 			.await?;
 

@@ -73,11 +73,7 @@ impl Compiler {
 		let package_source_hash = builder
 			.get_package_source(package_hash)
 			.context("Failed to get the package source.")?;
-		let package_source_artifact = builder
-			.get_expression_local(package_source_hash)?
-			.into_artifact()
-			.context("Expected the package source to be an artifact.")?;
-		let mut expression = builder.get_expression_local(package_source_artifact.root)?;
+		let mut expression = builder.get_expression_local(package_source_hash)?;
 		for component in module_path.components() {
 			expression = builder.get_expression_local(
 				expression

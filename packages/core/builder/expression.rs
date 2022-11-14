@@ -90,9 +90,6 @@ impl State {
 			// If this expression is string, there is nothing to ensure.
 			Expression::String(_) => {},
 
-			// If this expression is artifact, there is nothing to ensure.
-			Expression::Artifact(_) => {},
-
 			// If this expression is a template, ensure the components are present.
 			Expression::Template(template) => {
 				for hash in template.components.iter().copied() {

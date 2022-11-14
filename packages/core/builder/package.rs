@@ -1,7 +1,7 @@
 use crate::{
 	api_client::ApiClient,
 	builder::State,
-	expression::{Artifact, Directory, Expression, Package},
+	expression::{Directory, Expression, Package},
 	hash::Hash,
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
@@ -172,13 +172,8 @@ impl State {
 	pub async fn get_package_manifest(&self, package_hash: Hash) -> Result<Manifest> {
 		let package_source_hash = self.get_package_source(package_hash)?;
 
-		let source_artifact = self
-			.get_expression_local(package_source_hash)?
-			.into_artifact()
-			.context("Expected an artifact.")?;
-
 		let source_directory = self
-			.get_expression_local(source_artifact.root)?
+			.get_expression_local(package_source_hash)?
 			.into_directory()
 			.context("Expected a directory.")?;
 
@@ -216,15 +211,11 @@ impl State {
 		let source_hash = self
 			.get_package_source(package_hash)
 			.context("Failed to get the package source.")?;
-		let source_artifact: Artifact = self
-			.get_expression_local(source_hash)?
-			.into_artifact()
-			.context("The source must be an artifact.")?;
 		let source_directory: Directory = self
-			.get_expression_local(source_artifact.root)
-			.context("Failed to get the contents of the package source artifact.")?
+			.get_expression_local(source_hash)
+			.context("Failed to get the package source.")?
 			.into_directory()
-			.context("The package source artifact root must be a directory")?;
+			.context("The package source must be a directory.")?;
 
 		let js_entrypoint = JS_ENTRYPOINT_FILE_NAMES
 			.into_iter()

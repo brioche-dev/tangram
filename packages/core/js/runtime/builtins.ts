@@ -47,7 +47,6 @@ export enum ExpressionType {
 	Bool = "bool",
 	Number = "number",
 	String = "string",
-	Artifact = "artifact",
 	Directory = "directory",
 	File = "file",
 	Symlink = "symlink",
@@ -80,10 +79,6 @@ type ExpressionJson =
 	| {
 			type: ExpressionType.String;
 			value: string;
-	  }
-	| {
-			type: ExpressionType.Artifact;
-			value: ArtifactJson;
 	  }
 	| {
 			type: ExpressionType.Directory;
@@ -133,10 +128,6 @@ type ExpressionJson =
 			type: ExpressionType.Map;
 			value: MapJson;
 	  };
-
-type ArtifactJson = {
-	root: HashJson;
-};
 
 type DirectoryJson = {
 	entries: { [key: string]: HashJson };
@@ -198,12 +189,13 @@ type ArrayJson = Array<HashJson>;
 
 type MapJson = { [key: string]: HashJson };
 
+type Artifact = Directory | File | Symlink | Dependency;
+
 type AnyExpression =
 	| null
 	| boolean
 	| number
 	| string
-	| Artifact
 	| Directory
 	| File
 	| Symlink
@@ -230,8 +222,6 @@ type ExpressionShallow<O extends AnyExpression> = O extends null
 	? number
 	: O extends string
 	? string
-	: O extends Artifact
-	? Artifact | Fetch | Process
 	: O extends Directory
 	? Directory
 	: O extends File
@@ -262,8 +252,6 @@ export type OutputForExpression<E extends AnyExpression> = E extends null
 	? number
 	: E extends string
 	? string
-	: E extends Artifact
-	? Artifact
 	: E extends Directory
 	? Directory
 	: E extends File
@@ -315,36 +303,12 @@ export class Hash<T extends AnyExpression = AnyExpression> {
 		this.#string = string;
 	}
 
+	isHash(value: unknown): value is Hash {
+		return value instanceof Hash;
+	}
+
 	toString() {
 		return this.#string;
-	}
-}
-
-export class Artifact {
-	#tangram = "artifact";
-	root: HashOrExpression<Directory | File>;
-
-	constructor(root: HashOrExpression<Directory | File>) {
-		this.root = root;
-	}
-
-	static fromJson(artifact: ArtifactJson): Artifact {
-		let root = new Hash(artifact.root);
-		return new Artifact(root);
-	}
-
-	async toJson(): Promise<ExpressionJson> {
-		let root = await addExpression(this.root);
-		return {
-			type: ExpressionType.Artifact,
-			value: {
-				root: root.toString(),
-			},
-		};
-	}
-
-	async getRoot(): Promise<Expression<Directory | File>> {
-		return await getExpression(this.root);
 	}
 }
 
@@ -358,6 +322,10 @@ export class Directory {
 
 	constructor(entries: DirectoryEntries) {
 		this.#entries = entries;
+	}
+
+	public static isDirectory(value: unknown): value is Directory {
+		return value instanceof Directory;
 	}
 
 	static fromJson(directory: DirectoryJson): Directory {
@@ -407,6 +375,10 @@ export class File {
 		this.executable = executable ?? false;
 	}
 
+	public static isFile(value: unknown): value is File {
+		return value instanceof File;
+	}
+
 	static fromJson(file: FileJson): File {
 		let blob = new Hash(file.blob);
 		let executable = file.executable;
@@ -436,6 +408,10 @@ export class Symlink {
 		this.target = target;
 	}
 
+	public static isSymlink(value: unknown): value is Symlink {
+		return value instanceof Symlink;
+	}
+
 	static fromJson(symlink: SymlinkJson): Symlink {
 		return new Symlink(symlink.target);
 	}
@@ -463,6 +439,10 @@ export class Dependency {
 	constructor({ artifact, path }: DependencyArgs) {
 		this.artifact = artifact;
 		this.path = path ?? null;
+	}
+
+	public static isDependency(value: unknown): value is Dependency {
+		return value instanceof Dependency;
 	}
 
 	static fromJson(dependency: DependencyJson): Dependency {
@@ -501,6 +481,10 @@ export class Package {
 	constructor({ source, dependencies }: PackageArgs) {
 		this.source = source;
 		this.dependencies = dependencies;
+	}
+
+	public static isPackage(value: unknown): value is Package {
+		return value instanceof Package;
 	}
 
 	static fromJson(_package: PackageJson): Package {
@@ -562,6 +546,10 @@ export class Template {
 		this.components = components;
 	}
 
+	public static isTemplate(value: unknown): value is Template {
+		return value instanceof Template;
+	}
+
 	static fromJson(template: TemplateJson): Template {
 		return new Template(template.components.map((string) => new Hash(string)));
 	}
@@ -608,6 +596,10 @@ export class Js<O extends AnyExpression> {
 		this.path = path;
 		this.name = name;
 		this.args = args;
+	}
+
+	public static isJs<O extends AnyExpression>(value: unknown): value is Js<O> {
+		return value instanceof Js;
 	}
 
 	static fromJson<O extends AnyExpression>(js: JsJson): Js<O> {
@@ -657,6 +649,10 @@ export class Fetch {
 		this.url = url;
 		this.digest = digest ?? null;
 		this.unpack = unpack ?? false;
+	}
+
+	public static isFetch(value: unknown): value is Fetch {
+		return value instanceof Fetch;
 	}
 
 	static fromJson(fetch: FetchJson) {
@@ -713,6 +709,10 @@ export class Process {
 		this.digest = args.digest ?? null;
 		this.network = args.network ?? null;
 		this.unsafe = args.unsafe ?? null;
+	}
+
+	public static isProcess(value: unknown): value is Process {
+		return value instanceof Process;
 	}
 
 	static fromJson(process: ProcessJson): Process {
@@ -793,6 +793,12 @@ export class Target<O extends AnyExpression> {
 		this.args = args.args;
 	}
 
+	public static isTarget<O extends AnyExpression>(
+		value: unknown,
+	): value is Target<O> {
+		return value instanceof Target;
+	}
+
 	static fromJson<O extends AnyExpression>(json: TargetJson): Target<O> {
 		return new Target({
 			package: new Hash(json.package),
@@ -827,6 +833,15 @@ export class Target<O extends AnyExpression> {
 	}
 }
 
+export let isArtifact = (value: unknown): value is Artifact => {
+	return (
+		Directory.isDirectory(value) ||
+		File.isFile(value) ||
+		Symlink.isSymlink(value) ||
+		Dependency.isDependency(value)
+	);
+};
+
 export let template = (
 	strings: TemplateStringsArray,
 	...placeholders: Array<Expression<string | Artifact | Template>>
@@ -857,9 +872,6 @@ export let fromJson = async (
 		}
 		case ExpressionType.String: {
 			return expression.value;
-		}
-		case ExpressionType.Artifact: {
-			return Artifact.fromJson(expression.value);
 		}
 		case ExpressionType.Directory: {
 			return Directory.fromJson(expression.value);
@@ -934,27 +946,25 @@ export let toJson = async (
 			type: ExpressionType.String,
 			value: expression,
 		};
-	} else if (expression instanceof Artifact) {
+	} else if (Directory.isDirectory(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Directory) {
+	} else if (File.isFile(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof File) {
+	} else if (Symlink.isSymlink(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Symlink) {
+	} else if (Dependency.isDependency(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Dependency) {
+	} else if (Package.isPackage(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Package) {
+	} else if (Template.isTemplate(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Template) {
+	} else if (Js.isJs(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Js) {
+	} else if (Fetch.isFetch(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Fetch) {
+	} else if (Process.isProcess(expression)) {
 		return await expression.toJson();
-	} else if (expression instanceof Process) {
-		return await expression.toJson();
-	} else if (expression instanceof Target) {
+	} else if (Target.isTarget(expression)) {
 		return await expression.toJson();
 	} else if (Array.isArray(expression)) {
 		let value = await Promise.all(
@@ -1030,11 +1040,11 @@ export let evaluate = <E extends AnyExpression>(
 export let source = async (url: string | URL): Promise<Artifact> => {
 	let hash = new Hash(new URL(url).hostname);
 	let _package = await getExpression(hash);
-	if (!(_package instanceof Package)) {
+	if (!Package.isPackage(_package)) {
 		throw new Error("Expected package.");
 	}
 	let source = await _package.getSource();
-	if (!(source instanceof Artifact)) {
+	if (!isArtifact(source)) {
 		throw new Error("Expected artifact.");
 	}
 	return source;
