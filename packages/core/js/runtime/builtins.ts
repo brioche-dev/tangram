@@ -339,14 +339,7 @@ export class Directory {
 	}
 
 	async toJson(): Promise<ExpressionJson> {
-		let entries = Object.fromEntries(
-			await Promise.all(
-				Object.entries(this.#entries).map(async ([key, value]) => [
-					key,
-					(await addExpression(value)).toString(),
-				]),
-			),
-		);
+		let entries = this.resolveEntries();
 		return {
 			type: ExpressionType.Directory,
 			value: { entries },
@@ -357,6 +350,21 @@ export class Directory {
 		name: string,
 	): Promise<Expression<Directory | File | Symlink | Dependency>> {
 		return await getExpression(this.#entries[name]);
+	}
+
+	async resolveEntries() {
+		return Object.fromEntries(
+			await Promise.all(
+				Object.entries(this.#entries).map(async ([key, value]) => [
+					key,
+					(await addExpression(value)).toString(),
+				]),
+			),
+		);
+	}
+
+	public getEntries() {
+		return this.resolveEntries();
 	}
 }
 
