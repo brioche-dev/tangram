@@ -186,7 +186,7 @@ impl State {
 
 				// Collect all transitive artifact hashes.
 				let mut artifact_hashes = Vec::new();
-				self.collect_into_artifact_hashes(hash, &mut artifact_hashes)?;
+				self.collect_into_artifact_hashes(hash, &mut artifact_hashes, true)?;
 
 				// Checkout all artifacts.
 				let artifact_paths = try_join_all(
@@ -237,26 +237,30 @@ impl State {
 		&self,
 		hash: Hash,
 		artifact_hashes: &mut Vec<Hash>,
+		artifact: bool,
 	) -> Result<()> {
+		// Add the dependency if this is an artifact.
+		if artifact {
+			artifact_hashes.push(hash);
+		}
+
+		// Get the expression.
 		let expression = self.get_expression_local(hash)?;
+
+		// Recurse into the children, if any.
 		match expression {
 			Expression::Directory(dir) => {
-				// Recurse into each entry.
 				for entry_hash in dir.entries.values() {
-					self.collect_into_artifact_hashes(*entry_hash, artifact_hashes)?;
+					self.collect_into_artifact_hashes(*entry_hash, artifact_hashes, false)?;
 				}
 			},
 
-			// Files and symlinks aren't dependencies.
-			Expression::File(_) | Expression::Symlink(_) => {},
-
 			Expression::Dependency(dependency) => {
-				// Add the dependency.
-				artifact_hashes.push(dependency.artifact);
-
 				// Recurse into the dependency.
-				self.collect_into_artifact_hashes(dependency.artifact, artifact_hashes)?;
+				self.collect_into_artifact_hashes(dependency.artifact, artifact_hashes, true)?;
 			},
+
+			Expression::File(_) | Expression::Symlink(_) => {},
 
 			_ => {
 				bail!(
