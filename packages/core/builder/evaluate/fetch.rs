@@ -209,7 +209,7 @@ impl State {
 
 		// Map the stream to support hash and copy in one pass.
 		let stream = {
-			let hasher = hasher.clone();
+			let hasher = Arc::clone(&hasher);
 			stream.map(move |value| {
 				let value = value?;
 				hasher.lock().unwrap().update(&value);
@@ -218,10 +218,12 @@ impl State {
 		};
 
 		// Create a reader and copy the bytes to the temp.
-		let mut reader = StreamReader::new(stream);
-		let mut file = tokio::fs::File::create(fetch_temp_path).await?;
-		let mut file_writer = tokio::io::BufWriter::new(&mut file);
-		tokio::io::copy(&mut reader, &mut file_writer).await?;
+		{
+			let mut reader = StreamReader::new(stream);
+			let mut file = tokio::fs::File::create(fetch_temp_path).await?;
+			let mut file_writer = tokio::io::BufWriter::new(&mut file);
+			tokio::io::copy(&mut reader, &mut file_writer).await?;
+		}
 
 		// Verify the hash.
 		let hasher = Arc::try_unwrap(hasher).unwrap().into_inner()?;
