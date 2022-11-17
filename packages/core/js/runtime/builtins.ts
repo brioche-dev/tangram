@@ -181,6 +181,7 @@ type FetchJson = {
 
 type ProcessJson = {
 	system: System;
+	base: HashJson | null;
 	env: HashJson;
 	command: HashJson;
 	args: HashJson;
@@ -698,6 +699,7 @@ export class Fetch {
 
 type ProcessArgs = {
 	system: System;
+	base?: HashOrExpression<Artifact> | null;
 	env: HashOrExpression<{
 		[key: string]: Expression<string | Artifact | Template>;
 	}>;
@@ -711,6 +713,7 @@ type ProcessArgs = {
 export class Process {
 	#tangram = "process";
 	system: System;
+	base: HashOrExpression<Artifact> | null;
 	env: HashOrExpression<{ [key: string]: AnyExpression }>;
 	command: HashOrExpression<Artifact | Template>;
 	args: HashOrExpression<Array<AnyExpression>>;
@@ -720,6 +723,7 @@ export class Process {
 
 	constructor(args: ProcessArgs) {
 		this.system = args.system;
+		this.base = args.base ?? null;
 		this.env = args.env;
 		this.command = args.command;
 		this.args = args.args;
@@ -734,6 +738,7 @@ export class Process {
 
 	static fromJson(process: ProcessJson): Process {
 		let system = process.system;
+		let base = process.base != null ? new Hash(process.base) : undefined;
 		let env = new Hash(process.env);
 		let command = new Hash(process.command);
 		let args = new Hash(process.args);
@@ -742,6 +747,7 @@ export class Process {
 		let unsafe = process.unsafe;
 		return new Process({
 			system,
+			base,
 			env,
 			command,
 			args,
@@ -752,6 +758,8 @@ export class Process {
 	}
 
 	async toJson(): Promise<ExpressionJson> {
+		let base =
+			this.base != null ? (await addExpression(this.base)).toString() : null;
 		let env = await addExpression(this.env);
 		let command = await addExpression(this.command);
 		let args = await addExpression(this.args);
@@ -759,6 +767,7 @@ export class Process {
 			type: ExpressionType.Process,
 			value: {
 				system: this.system,
+				base,
 				env: env.toString(),
 				command: command.toString(),
 				args: args.toString(),
