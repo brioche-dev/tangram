@@ -7,6 +7,9 @@ use std::{
 	os::unix::prelude::OsStrExt,
 };
 
+// The following command will display sandbox log events:
+// log stream --style compact --info --debug  --predicate '(((processID == 0) AND (senderImagePath CONTAINS "/Sandbox")) OR (subsystem == "com.apple.sandbox.reporting"))'
+
 impl Command {
 	pub async fn run(self) -> Result<()> {
 		// Create the process.
@@ -86,6 +89,12 @@ fn pre_exec(command: &Command) -> Result<()> {
 				(literal "/dev/null")
 				(literal "/dev/zero")
 				(literal "/dev/dtracehelper"))
+
+			;; Allow reading and writing temporary files.
+			(allow file-write* file-read*
+				(subpath "/tmp")
+				(subpath "/private/tmp")
+				(subpath "/private/var/tmp"))
 
 			;; Allow reading some system devices and files.
 			(allow file-read*
