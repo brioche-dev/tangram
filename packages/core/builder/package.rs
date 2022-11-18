@@ -78,11 +78,16 @@ impl State {
 		//  - We do this so that we can fail gracefully if a user attempts to check in a package with a cyclic path dependency.
 		//  - This will also prevent two concurrent package checkins from overwriting each other's lockfile changes.
 		let manifest_lock = Lock::new(&manifest_path, ());
-		let Some(_manifest_lock_guard) = 
-				manifest_lock.try_lock_exclusive().await.context("Attempt to acquire file lock on manifest failed.")? 
-		else {
-			// Here, something else is holding the lock on this manifest. Fail gracefully.
-			bail!("Encountered a cyclic dependency or concurrent package checkin.")
+		let manifest_lock_result = manifest_lock
+			.try_lock_exclusive()
+			.await
+			.context("Attempt to acquire file lock on manifest failed.")?;
+		let _manifest_lock_guard = match manifest_lock_result {
+			Some(guard) => guard,
+			None => {
+				// Here, something else is holding the lock on this manifest. Fail gracefully.
+				bail!("Encountered a cyclic dependency or concurrent package checkin.")
+			},
 		};
 
 		// Read the manifest.
