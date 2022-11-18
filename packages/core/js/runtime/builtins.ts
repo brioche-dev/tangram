@@ -325,7 +325,7 @@ export class Directory {
 	#tangram = "directory";
 	#entries: Record<string, HashOrExpression<Artifact>>;
 
-	constructor(entries: Record<string, HashOrExpression<Artifact>>) {
+	constructor(entries: Record<string, HashOrExpression<Artifact>> = {}) {
 		this.#entries = entries;
 	}
 
