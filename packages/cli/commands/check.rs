@@ -14,14 +14,21 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_check(&self, args: Args) -> Result<()> {
+		// If we're checking a module by its path, make sure lockfiles are valid and up-to-date.
+		// This will also report any errors in package manifests.
+		if let Specifier::Path(path) = &args.specifier {
+			self.builder
+				.lock_shared()
+				.await?
+				.generate_lockfile(&self.api_client, path, args.locked)
+				.await?;
+		}
+
 		// Create a compiler.
 		let compiler = js::Compiler::new(self.builder.clone());
 
-		// Check in the package, and create a URL to its targets.
-		let package_hash = self
-			.package_hash_for_specifier(&args.specifier, args.locked)
-			.await?;
-		let url = js::Url::new_package_targets(package_hash);
+		// Get a path URL to the package.
+		let url = self.js_url_for_specifier(&args.specifier).await?;
 
 		// Check the package for diagnostics.
 		let diagnostics = compiler.check(vec![url]).await?;

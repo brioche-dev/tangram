@@ -73,10 +73,19 @@ impl State {
 		locked: bool,
 	) -> Result<()> {
 		let manifest_path = path.join("tangram.json");
+		let mut manifest_file = tokio::fs::File::open(&manifest_path)
+			.await
+			.with_context(|| {
+				format!(
+					r#"Failed to open the package manifest at path "{}"."#,
+					manifest_path.display()
+				)
+			})?;
 
 		// Acquire a lock on the manifest.
 		//  - We do this so that we can fail gracefully if a user attempts to check in a package with a cyclic path dependency.
 		//  - This will also prevent two concurrent package checkins from overwriting each other's lockfile changes.
+		// Note: Acquiring this lock will create the manifest file if it doesn't already exist. That's why we open `manifest_file` above, and fail if it does not exist.
 		let manifest_lock = Lock::new(&manifest_path, ());
 		let manifest_lock_result = manifest_lock
 			.try_lock_exclusive()
@@ -91,10 +100,12 @@ impl State {
 		};
 
 		// Read the manifest.
-		let manifest = tokio::fs::read(&manifest_path)
+		let mut manifest = String::new();
+		manifest_file
+			.read_to_string(&mut manifest)
 			.await
 			.context("Failed to read the package manifest.")?;
-		let manifest: Manifest = serde_json::from_slice(&manifest).with_context(|| {
+		let manifest: Manifest = serde_json::from_str(&manifest).with_context(|| {
 			format!(
 				r#"Failed to parse the package manifest at path "{}"."#,
 				manifest_path.display()
@@ -107,6 +118,7 @@ impl State {
 		};
 
 		// Get the dependencies.
+		// NOTE: Do not make this concurrent. If you do, a diamond-dependency with path dependencies may cause us to update the lockfile of a package from two tasks at once. This is invalid.
 		let mut dependencies = BTreeMap::new();
 		for (dependency_name, dependency) in &manifest_dependencies {
 			// Retrieve the path dependency.

@@ -64,7 +64,8 @@ impl State {
 			Expression::Array(array) => self.evaluate_array(hash, array).boxed(),
 			Expression::Map(map) => self.evaluate_map(hash, map).boxed(),
 		}
-		.await?;
+		.await
+		.with_context(|| format!("Failed to evaluate expression \"{hash}\"."))?;
 
 		// Set the expression output.
 		self.set_expression_output(hash, output_hash)?;
