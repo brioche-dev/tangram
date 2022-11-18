@@ -1,12 +1,12 @@
 use crate::{
 	api_client::ApiClient,
-	builder::State,
+	builder::{lock::Lock, State},
 	expression::{Directory, Expression, Package},
 	hash::Hash,
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
 };
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use camino::Utf8PathBuf;
 use std::{collections::BTreeMap, path::Path};
@@ -72,8 +72,20 @@ impl State {
 		path: &Path,
 		locked: bool,
 	) -> Result<()> {
-		// Read the manifest.
 		let manifest_path = path.join("tangram.json");
+
+		// Acquire a lock on the manifest.
+		//  - We do this so that we can fail gracefully if a user attempts to check in a package with a cyclic path dependency.
+		//  - This will also prevent two concurrent package checkins from overwriting each other's lockfile changes.
+		let manifest_lock = Lock::new(&manifest_path, ());
+		let Some(_manifest_lock_guard) = 
+				manifest_lock.try_lock_exclusive().await.context("Attempt to acquire file lock on manifest failed.")? 
+		else {
+			// Here, something else is holding the lock on this manifest. Fail gracefully.
+			bail!("Encountered a cyclic dependency or concurrent package checkin.")
+		};
+
+		// Read the manifest.
 		let manifest = tokio::fs::read(&manifest_path)
 			.await
 			.context("Failed to read the package manifest.")?;
