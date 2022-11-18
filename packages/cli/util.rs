@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use tangram_core::{
 	hash::Hash,
-	js,
 	specifier::{self, Specifier},
 	system::System,
 };
@@ -35,25 +34,6 @@ impl Cli {
 }
 
 impl Cli {
-	pub async fn js_url_for_specifier(&self, specifier: &Specifier) -> Result<js::Url> {
-		match &specifier {
-			Specifier::Path(path) => {
-				let path = std::env::current_dir()
-					.context("Failed to get the current directory")?
-					.join(path);
-				let path = tokio::fs::canonicalize(&path).await?;
-				let url = js::Url::new_path_targets(path);
-				Ok(url)
-			},
-
-			Specifier::Package(package_specifier) => {
-				let package_hash = self.get_package_version(package_specifier).await?;
-				let url = js::Url::new_package_targets(package_hash);
-				Ok(url)
-			},
-		}
-	}
-
 	pub async fn package_hash_for_specifier(
 		&self,
 		specifier: &Specifier,

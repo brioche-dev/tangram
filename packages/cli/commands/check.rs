@@ -17,8 +17,11 @@ impl Cli {
 		// Create a compiler.
 		let compiler = js::Compiler::new(self.builder.clone());
 
-		// Create the URL.
-		let url = self.js_url_for_specifier(&args.specifier).await?;
+		// Check in the package, and create a URL to its targets.
+		let package_hash = self
+			.package_hash_for_specifier(&args.specifier, args.locked)
+			.await?;
+		let url = js::Url::new_package_targets(package_hash);
 
 		// Check the package for diagnostics.
 		let diagnostics = compiler.check(vec![url]).await?;
