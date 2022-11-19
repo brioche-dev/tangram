@@ -6,7 +6,6 @@ use crate::{
 	js::{self, compiler::Compiler},
 };
 use anyhow::{bail, Context, Result};
-use camino::Utf8PathBuf;
 use deno_core::{serde_v8, v8};
 use std::{cell::RefCell, future::Future, rc::Rc, sync::Arc};
 use tokio::io::AsyncReadExt;
@@ -16,7 +15,7 @@ mod module_loader;
 
 pub struct Runtime {
 	builder: Builder,
-	_compiler: Compiler,
+	compiler: Compiler,
 	_main_runtime_handle: tokio::runtime::Handle,
 	runtime: deno_core::JsRuntime,
 	inspector_session: deno_core::LocalInspectorSession,
@@ -113,7 +112,7 @@ impl Runtime {
 
 		let runtime = Runtime {
 			builder,
-			_compiler: compiler,
+			compiler,
 			_main_runtime_handle: main_runtime_handle,
 			runtime,
 			inspector_session,
@@ -127,17 +126,30 @@ impl Runtime {
 		// Acquire a shared lock to the builder.
 		let builder = self.builder.lock_shared().await?;
 
-		// Load the builtins module.
-		let url = js::Url::new_builtins(Utf8PathBuf::from("/lib.ts"));
+		// Create the URL.
+		let url = js::Url::new_package_module(js.package, js.path.clone());
+
+		// Load the core module.
+		let core = self
+			.compiler
+			.resolve("tangram:core/lib.ts", Some(&url))
+			.await;
+		let std = self
+			.compiler
+			.resolve("tangram:std/lib.ts", Some(&url))
+			.await;
+		let core_url = core
+			.or(std)
+			.context("The package must include a dependency on either core or std.")?;
 		let module_id = self
 			.runtime
-			.load_side_module(&url.clone().into(), None)
+			.load_side_module(&core_url.clone().into(), None)
 			.await?;
 		let evaluate_receiver = self.runtime.mod_evaluate(module_id);
 		self.runtime.run_event_loop(false).await?;
 		evaluate_receiver.await.unwrap()?;
 
-		// Get the fromJson and toJson exports.
+		// Get the fromJson and toJson exports from the core module.
 		let module_namespace = self.runtime.get_module_namespace(module_id)?;
 		let mut scope = self.runtime.handle_scope();
 		let module_namespace = v8::Local::<v8::Object>::new(&mut scope, module_namespace);
@@ -146,11 +158,11 @@ impl Runtime {
 		let export: v8::Local<v8::Function> = module_namespace
 			.get(&mut scope, export_literal.into())
 			.with_context(|| {
-				format!(r#"Failed to get the export "{export_name}" from URL "{url}"."#)
+				format!(r#"Failed to get the export "{export_name}" from URL "{core_url}"."#)
 			})?
 			.try_into()
 			.with_context(|| {
-				format!(r#"The export "{export_name}" from URL "{url}" must be a function."#)
+				format!(r#"The export "{export_name}" from URL "{core_url}" must be a function."#)
 			})?;
 		let from_json = v8::Global::new(&mut scope, export);
 		let export_name = "toJson";
@@ -158,17 +170,14 @@ impl Runtime {
 		let export: v8::Local<v8::Function> = module_namespace
 			.get(&mut scope, export_literal.into())
 			.with_context(|| {
-				format!(r#"Failed to get the export "{export_name}" from URL "{url}"."#)
+				format!(r#"Failed to get the export "{export_name}" from URL "{core_url}"."#)
 			})?
 			.try_into()
 			.with_context(|| {
-				format!(r#"The export "{export_name}" from URL "{url}" must be a function."#)
+				format!(r#"The export "{export_name}" from URL "{core_url}" must be a function."#)
 			})?;
 		let to_json = v8::Global::new(&mut scope, export);
 		drop(scope);
-
-		// Create the URL.
-		let url = js::Url::new_package_module(js.package, js.path.clone());
 
 		// Load the module.
 		let module_id = self
@@ -179,14 +188,14 @@ impl Runtime {
 		self.runtime.run_event_loop(false).await?;
 		evaluate_receiver.await.unwrap()?;
 
-		// Move the args to v8.
+		// Serialize the args.
 		let args = builder
 			.get_expression_local(js.args)
 			.context("Failed to get the args expression.")?;
 		let args = args.as_array().context("The args must be an array.")?;
 		let mut arg_values = Vec::new();
 		for arg in args {
-			// Create a try catch scope to call Tangram.toJson.
+			// Create a try catch scope to call toJson.
 			let mut scope = self.runtime.handle_scope();
 			let mut try_catch_scope = v8::TryCatch::new(&mut scope);
 
@@ -221,7 +230,7 @@ impl Runtime {
 			arg_values.push(output);
 		}
 
-		// Retrieve the specified export from the module.
+		// Retrieve the export from the module.
 		let module_namespace = self.runtime.get_module_namespace(module_id)?;
 		let mut scope = self.runtime.handle_scope();
 		let module_namespace = v8::Local::<v8::Object>::new(&mut scope, module_namespace);
@@ -246,7 +255,7 @@ impl Runtime {
 			.map(|arg| v8::Local::new(&mut try_catch_scope, arg))
 			.collect::<Vec<_>>();
 
-		// Call the specified export.
+		// Call the export.
 		let undefined = v8::undefined(&mut try_catch_scope);
 		let output = export.call(&mut try_catch_scope, undefined.into(), &arg_values);
 
@@ -269,7 +278,7 @@ impl Runtime {
 		// Resolve the output.
 		let output = self.runtime.resolve_value(output).await?;
 
-		// Create a try catch scope to call Tangram.toJson.
+		// Create a try catch scope to call toJson.
 		let mut scope = self.runtime.handle_scope();
 		let mut try_catch_scope = v8::TryCatch::new(&mut scope);
 
@@ -363,8 +372,8 @@ impl Runtime {
 
 		// Otherwise, stringify the evaluation response's result.
 		let function = r#"
-			function stringify(value) {
-				return Tangram.stringify(value);
+			function stringifyFunction(value) {
+				return stringify(value);
 			}
 		"#;
 		let call_function_on_response: cdp::CallFunctionOnResponse = match futures::try_join!(

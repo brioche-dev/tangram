@@ -7,14 +7,12 @@ use indoc::writedoc;
 use std::{fmt::Write, path::Path};
 use tokio::io::AsyncReadExt;
 
-const BUILTINS: &str = include_str!("../runtime/builtins.ts");
 const LIB_TANGRAM_D_TS: &str = include_str!("../runtime/global.d.ts");
 const LIB: include_dir::Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/js/compiler/lib");
 
 impl Compiler {
 	pub async fn load(&self, url: &js::Url) -> Result<String> {
 		match url {
-			js::Url::Builtins { path } => load_builtins(path),
 			js::Url::Lib { path } => load_lib(path),
 			js::Url::PackageModule {
 				package_hash,
@@ -30,18 +28,6 @@ impl Compiler {
 			js::Url::PathTargets { package_path } => self.load_path_targets(package_path).await,
 		}
 	}
-}
-
-#[allow(clippy::module_name_repetitions)]
-fn load_builtins(path: &Utf8Path) -> Result<String> {
-	let path = path
-		.strip_prefix("/")
-		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
-	let text = match path.as_str() {
-		"lib.ts" => BUILTINS,
-		_ => bail!(r#"Unable to find builtins with path "{path}"."#),
-	};
-	Ok(text.to_owned())
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -112,8 +98,15 @@ impl Compiler {
 			.context("Failed to retrieve the package JS entrypoint.")?
 			.context("The package must have a JS entrypoint.")?;
 
-		// Produce the package module URL.
-		let module_url = js::Url::new_package_module(package_hash, js_entrypoint_path);
+		// Create the URL.
+		let url = js::Url::new_package_module(package_hash, js_entrypoint_path);
+
+		// Get the core URL.
+		let core = self.resolve("tangram:core/lib.ts", Some(&url)).await;
+		let std = self.resolve("tangram:std/lib.ts", Some(&url)).await;
+		let core_url = core
+			.or(std)
+			.context("The package must include a dependency on either core or std.")?;
 
 		// Get the package's manifest.
 		let manifest = builder
@@ -121,7 +114,7 @@ impl Compiler {
 			.await
 			.context("Failed to get the package manifest.")?;
 
-		let text = generate_targets(&module_url, &manifest, package_hash);
+		let text = generate_targets(&url, &core_url, &manifest, package_hash);
 
 		Ok(text)
 	}
@@ -146,10 +139,6 @@ impl Compiler {
 	}
 
 	async fn load_path_targets(&self, package_path: &Path) -> Result<String> {
-		// Read the manifest.
-		let manifest = tokio::fs::read(package_path.join("tangram.json")).await?;
-		let manifest = serde_json::from_slice(&manifest)?;
-
 		// Get the js entrypoint path.
 		let js_entrypoint_path = if path_exists(&package_path.join("tangram.ts")).await? {
 			Utf8PathBuf::from("tangram.ts")
@@ -159,31 +148,41 @@ impl Compiler {
 			bail!("No tangram.ts or tangram.js found.");
 		};
 
-		// Produce the path module URL.
-		let module_url = js::Url::new_path_module(package_path.to_owned(), js_entrypoint_path);
+		// Create the URL.
+		let url = js::Url::new_path_module(package_path.to_owned(), js_entrypoint_path);
+
+		// Get the core URL.
+		let core = self.resolve("tangram:core/lib.ts", Some(&url)).await;
+		let std = self.resolve("tangram:std/lib.ts", Some(&url)).await;
+		let core_url = core
+			.or(std)
+			.context("The package must include a dependency on either core or std.")?;
+
+		// Read the package's manifest.
+		let manifest = tokio::fs::read(package_path.join("tangram.json")).await?;
+		let manifest: Manifest = serde_json::from_slice(&manifest)?;
 
 		// Generate the source.
-		let text = generate_targets(&module_url, &manifest, Hash::zero());
+		let text = generate_targets(&url, &core_url, &manifest, Hash::zero());
 
 		Ok(text)
 	}
 }
 
 /// Generate the code for the targets.
-fn generate_targets(module_url: &js::Url, manifest: &Manifest, package_hash: Hash) -> String {
+fn generate_targets(
+	url: &js::Url,
+	core_url: &js::Url,
+	manifest: &Manifest,
+	package_hash: Hash,
+) -> String {
 	let mut code = String::new();
 	writedoc!(
 		code,
-		r#"import {{ getExpression, Hash, Package, Target }} from "tangram-builtins:///lib.ts";"#
+		r#"import {{ getExpression, Hash, Package, target }} from "{core_url}";"#
 	)
 	.unwrap();
-	writedoc!(code, r#"import type * as module from "{module_url}";"#).unwrap();
-	code.push('\n');
-	writedoc!(
-		code,
-		r#"let _package: Package = await getExpression(new Hash("{package_hash}"));"#
-	)
-	.unwrap();
+	writedoc!(code, r#"import type * as module from "{url}";"#).unwrap();
 	code.push('\n');
 	for target_name in &manifest.targets {
 		if target_name == "default" {
@@ -194,8 +193,8 @@ fn generate_targets(module_url: &js::Url, manifest: &Manifest, package_hash: Has
 		writedoc!(
 				code,
 				r#"
-					(...args: Parameters<typeof module.{target_name}>): Target<Awaited<ReturnType<typeof module.{target_name}>>> => new Target({{
-						package: _package,
+					async (...args: Parameters<typeof module.{target_name}>): Target<Awaited<ReturnType<typeof module.{target_name}>>> => target({{
+						package: await getExpression(new Hash("{package_hash}")),
 						name: "{target_name}",
 						args,
 					}});

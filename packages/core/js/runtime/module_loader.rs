@@ -112,7 +112,7 @@ async fn load(state: Arc<State>, url: &js::Url) -> Result<deno_core::ModuleSourc
 			}
 		},
 
-		js::Url::PackageTargets { .. } | js::Url::Builtins { .. } => true,
+		js::Url::PackageTargets { .. } => true,
 
 		_ => {
 			bail!(r#"Cannot load from URL "{url}"."#);

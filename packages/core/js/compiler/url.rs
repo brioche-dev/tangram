@@ -3,7 +3,6 @@ use anyhow::{bail, Context, Result};
 use camino::Utf8PathBuf;
 use std::path::{Path, PathBuf};
 
-pub const TANGRAM_BUILTINS_SCHEME: &str = "tangram-builtins";
 pub const TANGRAM_LIB_SCHEME: &str = "tangram-lib";
 pub const TANGRAM_PACKAGE_MODULE_SCHEME: &str = "tangram-package-module";
 pub const TANGRAM_PACKAGE_TARGETS_SCHEME: &str = "tangram-package-targets";
@@ -16,9 +15,6 @@ pub const TANGRAM_SCHEME: &str = "tangram";
 )]
 #[serde(into = "url::Url", try_from = "url::Url")]
 pub enum Url {
-	Builtins {
-		path: Utf8PathBuf,
-	},
 	Lib {
 		path: Utf8PathBuf,
 	},
@@ -39,11 +35,6 @@ pub enum Url {
 }
 
 impl Url {
-	#[must_use]
-	pub fn new_builtins(path: Utf8PathBuf) -> Url {
-		Url::Builtins { path }
-	}
-
 	#[must_use]
 	pub fn new_package_module(package_hash: Hash, module_path: Utf8PathBuf) -> Url {
 		Url::PackageModule {
@@ -98,11 +89,6 @@ impl TryFrom<url::Url> for Url {
 
 	fn try_from(value: url::Url) -> Result<Self, Self::Error> {
 		match value.scheme() {
-			TANGRAM_BUILTINS_SCHEME => {
-				let path = value.path().into();
-				Ok(Url::Builtins { path })
-			},
-
 			TANGRAM_LIB_SCHEME => {
 				let path = value.path().into();
 				Ok(Url::Lib { path })
@@ -158,9 +144,6 @@ impl TryFrom<url::Url> for Url {
 impl From<Url> for url::Url {
 	fn from(value: Url) -> Self {
 		let url = match value {
-			Url::Builtins { path } => {
-				format!("{TANGRAM_BUILTINS_SCHEME}://{path}")
-			},
 			Url::Lib { path } => {
 				format!("{TANGRAM_LIB_SCHEME}://{path}")
 			},
