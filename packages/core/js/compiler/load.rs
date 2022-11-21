@@ -182,7 +182,14 @@ fn generate_targets(
 		r#"import {{ getExpression, Hash, Package, Target }} from "{core_url}";"#
 	)
 	.unwrap();
+	code.push('\n');
 	writedoc!(code, r#"import type * as module from "{url}";"#).unwrap();
+	code.push('\n');
+	writedoc!(
+		code,
+		r#"let _package: Package = await getExpression(new Hash("{package_hash}"));"#
+	)
+	.unwrap();
 	code.push('\n');
 	for target_name in &manifest.targets {
 		if target_name == "default" {
@@ -193,9 +200,9 @@ fn generate_targets(
 		writedoc!(
 			code,
 			r#"
-					async (...args: Parameters<typeof module.{target_name}>): 
-						Promise<Target<Awaited<ReturnType<typeof module.{target_name}>>>> => new Target({{
-						package: await getExpression(new Hash("{package_hash}")),
+					(...args: Parameters<typeof module.{target_name}>):
+						Target<Awaited<ReturnType<typeof module.{target_name}>>> => new Target({{
+						package: _package,
 						name: "{target_name}",
 						args,
 					}});
