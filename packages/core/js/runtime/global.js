@@ -56,6 +56,17 @@ Object.defineProperties(globalThis, {
 	console: { value: console },
 });
 
+let Syscall = {
+	Print: "print",
+	Serialize: "serialize",
+	Deserialize: "deserialize",
+	AddBlob: "add_blob",
+	GetBlob: "get_blob",
+	AddExpression: "add_expression",
+	GetExpression: "get_expression",
+	Evaluate: "evaluate",
+};
+
 function syscall(syscall, ...args) {
 	let opName = "op_tg_" + syscall;
 	switch (syscall) {
@@ -76,6 +87,31 @@ function syscall(syscall, ...args) {
 	}
 }
 
+let ExpressionType = {
+	Null: "null",
+	Bool: "bool",
+	Number: "number",
+	String: "string",
+	Directory: "directory",
+	File: "file",
+	Symlink: "symlink",
+	Dependency: "dependency",
+	Template: "template",
+	Package: "package",
+	Js: "js",
+	Fetch: "fetch",
+	Process: "process",
+	Target: "target",
+	Array: "array",
+	Map: "map",
+};
+
+let Tangram = {
+	Syscall,
+	syscall,
+	ExpressionType,
+};
+
 Object.defineProperties(globalThis, {
-	syscall: { value: syscall },
+	Tangram: { value: Tangram },
 });
