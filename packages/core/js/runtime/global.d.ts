@@ -205,4 +205,6 @@ declare namespace Tangram {
 	export enum DigestEncoding {
 		Hexadecimal = "hexadecimal",
 	}
+
+	export const typeSymbol: unique symbol;
 }

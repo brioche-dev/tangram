@@ -106,10 +106,13 @@ let ExpressionType = {
 	Map: "map",
 };
 
+let typeSymbol = Symbol();
+
 let Tangram = {
 	Syscall,
 	syscall,
 	ExpressionType,
+	typeSymbol,
 };
 
 Object.defineProperties(globalThis, {
