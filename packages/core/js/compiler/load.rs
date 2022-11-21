@@ -179,7 +179,7 @@ fn generate_targets(
 	let mut code = String::new();
 	writedoc!(
 		code,
-		r#"import {{ getExpression, Hash, Package, target }} from "{core_url}";"#
+		r#"import {{ getExpression, Hash, Package, Target }} from "{core_url}";"#
 	)
 	.unwrap();
 	writedoc!(code, r#"import type * as module from "{url}";"#).unwrap();
@@ -191,16 +191,17 @@ fn generate_targets(
 			writedoc!(code, r#"export let {target_name} = "#).unwrap();
 		}
 		writedoc!(
-				code,
-				r#"
-					async (...args: Parameters<typeof module.{target_name}>): Target<Awaited<ReturnType<typeof module.{target_name}>>> => target({{
+			code,
+			r#"
+					async (...args: Parameters<typeof module.{target_name}>): 
+						Promise<Target<Awaited<ReturnType<typeof module.{target_name}>>>> => new Target({{
 						package: await getExpression(new Hash("{package_hash}")),
 						name: "{target_name}",
 						args,
 					}});
 				"#,
-			)
-			.unwrap();
+		)
+		.unwrap();
 		code.push('\n');
 	}
 	code
