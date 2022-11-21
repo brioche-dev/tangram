@@ -33,3 +33,4 @@ url = { workspace = true }
 webbrowser = { workspace = true }
 
 tangram_core = { workspace = true }
+regex.workspace = true

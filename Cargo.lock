@@ -2973,6 +2973,7 @@ dependencies = [
  "futures",
  "indoc",
  "itertools",
+ "regex",
  "reqwest",
  "rustyline",
  "serde",

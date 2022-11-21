@@ -10,6 +10,10 @@ pub struct Args {
 
 	#[arg(default_value = ".")]
 	specifier: Specifier,
+
+	/// Only show errors from path modules matching the given regular expression.
+	#[arg(short, long)]
+	filter_filenames: Option<regex::Regex>,
 }
 
 impl Cli {
@@ -43,17 +47,50 @@ impl Cli {
 					let js::compiler::types::Position { line, character } = range.start;
 					let line = line + 1;
 					let character = character + 1;
-					if let js::Url::PathModule {
-						package_path,
-						module_path,
-					} = url
-					{
-						let path = package_path.join(module_path);
-						let path = path.display();
-						println!("{path}:{line}:{character}");
-						println!("{message}");
-						println!();
-					}
+
+					match url {
+						js::Url::PathModule {
+							package_path,
+							module_path,
+						} => {
+							let path = package_path.join(module_path);
+							let path = path.display().to_string();
+
+							// Skip diagnostics from paths that do not match the filter
+							if let Some(filter) = &args.filter_filenames {
+								if !filter.is_match(&path) {
+									continue;
+								}
+							}
+
+							println!("{path}:{line}:{character}");
+							println!("{message}");
+							println!();
+						},
+
+						js::Url::PathTargets { package_path } => {
+							let path = package_path.display().to_string();
+
+							// Skip diagnostics from paths that do not match the filter
+							if let Some(filter) = &args.filter_filenames {
+								if !filter.is_match(&path) {
+									continue;
+								}
+							}
+
+							println!("[target shim]:{path}:{line}:{character}");
+							println!("{message}");
+							println!();
+						},
+
+						other @ js::Url::Lib { .. }
+						| other @ js::Url::PackageModule { .. }
+						| other @ js::Url::PackageTargets { .. } => {
+							println!("{other}:{line}:{character}");
+							println!("{message}");
+							println!();
+						},
+					};
 				}
 			}
 		}
