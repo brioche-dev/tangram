@@ -259,13 +259,14 @@ let gotoDefinition = (request) => {
 
 	// Convert the definitions.
 	let locations = definitions?.map((definition) => {
+		let destFile = host.getSourceFile(definition.fileName);
 		// Get the definitions's range.
 		let start = ts.getLineAndCharacterOfPosition(
-			sourceFile,
+			destFile,
 			definition.textSpan.start,
 		);
 		let end = ts.getLineAndCharacterOfPosition(
-			sourceFile,
+			destFile,
 			definition.textSpan.start + definition.textSpan.length,
 		);
 
