@@ -170,12 +170,13 @@ fn op_tg_resolve(
 	state: Rc<RefCell<deno_core::OpState>>,
 	specifier: String,
 	referrer: Option<js::Url>,
-) -> Result<js::Url, deno_core::error::AnyError> {
+) -> Result<Option<js::Url>, deno_core::error::AnyError> {
 	op(state, |state| async move {
 		let url = state
 			.compiler
 			.resolve(&specifier, referrer.as_ref())
-			.await?;
+			.await
+			.ok();
 		Ok(url)
 	})
 }

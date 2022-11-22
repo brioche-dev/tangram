@@ -104,20 +104,29 @@ let check = (request) => {
 	});
 
 	// Get the diagnostics and convert them.
-	let diagnostics = convertDiagnostics([
-		...program.getConfigFileParsingDiagnostics(),
-		...program.getOptionsDiagnostics(),
-		...program.getGlobalDiagnostics(),
-		...program.getDeclarationDiagnostics(),
-		...program.getSyntacticDiagnostics(),
-		...program.getSemanticDiagnostics(),
-	]);
+	let diagnostics = convertDiagnostics(
+		[
+			...program.getConfigFileParsingDiagnostics(),
+			...program.getOptionsDiagnostics(),
+			...program.getGlobalDiagnostics(),
+			...program.getDeclarationDiagnostics(),
+			...program.getSyntacticDiagnostics(),
+			...program.getSemanticDiagnostics(),
+		].filter(({ code }) => !IGNORED_DIAGNOSTICS.includes(code)),
+	);
 
 	return {
 		type: "check",
 		response: { diagnostics },
 	};
 };
+
+/** Tangram typescript ignored diagnostics.*/
+const IGNORED_DIAGNOSTICS = [
+	// TS2691: An import path cannot end with a '.ts' extension. Consider
+	// importing 'bad-module' instead.
+	2691,
+];
 
 let getDiagnostics = (_request) => {
 	// Get the list of opened files.
@@ -130,7 +139,9 @@ let getDiagnostics = (_request) => {
 			...languageService.getSyntacticDiagnostics(url),
 			...languageService.getSemanticDiagnostics(url),
 			...languageService.getSuggestionDiagnostics(url),
-		].map(convertDiagnostic);
+		]
+			.filter(({ code }) => !IGNORED_DIAGNOSTICS.includes(code))
+			.map(convertDiagnostic);
 	}
 
 	return {

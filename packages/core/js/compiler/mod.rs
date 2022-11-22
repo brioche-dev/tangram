@@ -33,17 +33,20 @@ pub struct State {
 	files: RwLock<HashMap<PathBuf, File, fnv::FnvBuildHasher>>,
 }
 
+#[derive(Debug)]
 enum File {
 	Opened(OpenedFile),
 	Unopened(UnopenedFile),
 }
 
+#[derive(Debug)]
 struct OpenedFile {
 	url: js::Url,
 	version: i32,
 	text: String,
 }
 
+#[derive(Debug)]
 struct UnopenedFile {
 	_url: js::Url,
 	version: i32,
