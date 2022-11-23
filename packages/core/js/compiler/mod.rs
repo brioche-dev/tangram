@@ -1,6 +1,7 @@
 use self::{
 	runtime::types::{
-		CheckRequest, CompletionRequest, GetDiagnosticsRequest, GetHoverRequest,
+		CheckRequest, CompletionRequest, GetDiagnosticsRequest, GetDiagnosticsResponse,
+		GetHoverRequest, GetReferencesRequest, GetReferencesResponse, GotoDefinitionResponse,
 		GotoDefintionRequest, Request, Response,
 	},
 	types::{CompletionEntry, Diagnostic, Location, Position},
@@ -237,10 +238,33 @@ impl Compiler {
 			_ => bail!("Unexpected response type."),
 		};
 
-		// Get the result from the response.
-		let diagnostics = response.diagnostics;
+		// Get the result the response.
+		let GetDiagnosticsResponse { diagnostics } = response;
 
 		Ok(diagnostics)
+	}
+
+	pub async fn get_references(
+		&self,
+		url: js::Url,
+		position: Position,
+	) -> Result<Option<Vec<Location>>> {
+		// Create the request.
+		let request = Request::GetReferences(GetReferencesRequest { url, position });
+
+		// Send the request and receive the response.
+		let response = self.request(request).await?;
+
+		// Get the response.
+		let response = match response {
+			Response::GetReferences(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+
+		// Get the result from the response.
+		let GetReferencesResponse { locations } = response;
+
+		Ok(locations)
 	}
 
 	pub async fn hover(&self, url: js::Url, position: Position) -> Result<Option<String>> {
@@ -280,7 +304,7 @@ impl Compiler {
 		};
 
 		// Get the result from the response.
-		let locations = response.locations;
+		let GotoDefinitionResponse { locations } = response;
 
 		Ok(locations)
 	}

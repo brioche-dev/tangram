@@ -11,6 +11,7 @@ pub enum Request {
 	GetDiagnostics(GetDiagnosticsRequest),
 	GotoDefinition(GotoDefintionRequest),
 	GetHover(GetHoverRequest),
+	GetReferences(GetReferencesRequest),
 	Completion(CompletionRequest),
 }
 
@@ -19,8 +20,9 @@ pub enum Request {
 pub enum Response {
 	Check(CheckResponse),
 	GetDiagnostics(GetDiagnosticsResponse),
-	GotoDefinition(GotoDefinitionResponse),
 	GetHover(GetHoverResponse),
+	GetReferences(GetReferencesResponse),
+	GotoDefinition(GotoDefinitionResponse),
 	Completion(CompletionResponse),
 }
 
@@ -48,19 +50,6 @@ pub struct GetDiagnosticsResponse {
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GotoDefintionRequest {
-	pub url: js::Url,
-	pub position: Position,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GotoDefinitionResponse {
-	pub locations: Option<Vec<Location>>,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct GetHoverRequest {
 	pub url: js::Url,
 	pub position: Position,
@@ -70,6 +59,32 @@ pub struct GetHoverRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetHoverResponse {
 	pub text: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetReferencesRequest {
+	pub url: js::Url,
+	pub position: Position,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetReferencesResponse {
+	pub locations: Option<Vec<Location>>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GotoDefintionRequest {
+	pub url: js::Url,
+	pub position: Position,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GotoDefinitionResponse {
+	pub locations: Option<Vec<Location>>,
 }
 
 #[derive(Debug, serde::Serialize)]

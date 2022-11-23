@@ -9,6 +9,9 @@ globalThis.handle = ({ type, request }) => {
 		case "get_hover": {
 			return hover(request);
 		}
+		case "get_references": {
+			return getReferences(request);
+		}
 		case "goto_definition": {
 			return gotoDefinition(request);
 		}
@@ -132,16 +135,14 @@ let check = (request) => {
 	});
 
 	// Get the diagnostics and convert them.
-	let diagnostics = convertDiagnostics(
-		[
-			...program.getConfigFileParsingDiagnostics(),
-			...program.getOptionsDiagnostics(),
-			...program.getGlobalDiagnostics(),
-			...program.getDeclarationDiagnostics(),
-			...program.getSyntacticDiagnostics(),
-			...program.getSemanticDiagnostics(),
-		].filter(({ code }) => !IGNORED_DIAGNOSTICS.includes(code)),
-	);
+	let diagnostics = convertDiagnostics([
+		...program.getConfigFileParsingDiagnostics(),
+		...program.getOptionsDiagnostics(),
+		...program.getGlobalDiagnostics(),
+		...program.getDeclarationDiagnostics(),
+		...program.getSyntacticDiagnostics(),
+		...program.getSemanticDiagnostics(),
+	]);
 
 	return {
 		type: "check",
@@ -149,32 +150,24 @@ let check = (request) => {
 	};
 };
 
-/** Tangram typescript ignored diagnostics.*/
-const IGNORED_DIAGNOSTICS = [
-	// TS2691: An import path cannot end with a '.ts' extension. Consider
-	// importing 'bad-module' instead.
-	2691,
-];
-
 let getDiagnostics = (_request) => {
 	// Get the list of opened files.
 	let urls = syscall(Syscall.OpenedFiles);
 
 	// Collect the diagnostics for each opened file.
 	let diagnostics = {};
+	let ignored = {};
 	for (let url of urls) {
 		diagnostics[url] = [
 			...languageService.getSyntacticDiagnostics(url),
 			...languageService.getSemanticDiagnostics(url),
 			...languageService.getSuggestionDiagnostics(url),
-		]
-			.filter(({ code }) => !IGNORED_DIAGNOSTICS.includes(code))
-			.map(convertDiagnostic);
+		].map(convertDiagnostic);
 	}
 
 	return {
 		type: "get_diagnostics",
-		response: { diagnostics },
+		response: { diagnostics, ignored },
 	};
 };
 
@@ -201,14 +194,21 @@ let convertDiagnostics = (diagnostics) => {
 	return output;
 };
 
+// TS2691: An import path cannot end with a '.ts' extension. Consider
+// importing 'bad-module' instead.
+const TS2691 = 2691;
+// TS2792: Cannot find module. Did you mean to set the 'moduleResolution'
+// option to 'node', or to add aliases to the 'paths' option?
+const TS2792 = 2792;
+
 /** Convert a TypeScript diagnostic to a Tangram diagnostic. */
 let convertDiagnostic = (diagnostic) => {
+	// Get the diagnostic's URL.
+	let url = diagnostic.file.fileName;
+
 	// Get the diagnostic's location.
 	let location = null;
 	if (diagnostic.file) {
-		// Get the diagnostic's URL.
-		let url = diagnostic.file.fileName;
-
 		// Get the diagnostic's range.
 		let start = ts.getLineAndCharacterOfPosition(
 			diagnostic.file,
@@ -250,8 +250,16 @@ let convertDiagnostic = (diagnostic) => {
 		}
 	}
 
-	// Get the diagnostic's message.
-	let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+	let message;
+	// Map diagnostics for '.ts' extensions to bad Tangram url import errors instead.
+	if (diagnostic.code === TS2691) {
+		message = "Could not load dependency.";
+	} else if (diagnostic.code === TS2792) {
+		message = "Could not load dependency.";
+	} else {
+		// Get the diagnostic's message.
+		message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+	}
 
 	return {
 		location,
@@ -341,6 +349,46 @@ let completion = (request) => {
 	return {
 		type: "completion",
 		response: { entries },
+	};
+};
+
+let getReferences = (request) => {
+	// Get the source file and position.
+	let sourceFile = host.getSourceFile(request.url);
+	let position = ts.getPositionOfLineAndCharacter(
+		sourceFile,
+		request.position.line,
+		request.position.character,
+	);
+	let references = languageService.getReferencesAtPosition(
+		request.url,
+		position,
+	);
+
+	// Convert the references.
+	let locations = references?.map((reference) => {
+		let destFile = host.getSourceFile(reference.fileName);
+		// Get the references's range.
+		let start = ts.getLineAndCharacterOfPosition(
+			destFile,
+			reference.textSpan.start,
+		);
+		let end = ts.getLineAndCharacterOfPosition(
+			destFile,
+			reference.textSpan.start + reference.textSpan.length,
+		);
+
+		let location = {
+			url: reference.fileName,
+			range: { start, end },
+		};
+
+		return location;
+	});
+
+	return {
+		type: "get_references",
+		response: { locations },
 	};
 };
 
