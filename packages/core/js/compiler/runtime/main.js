@@ -38,38 +38,51 @@ let host = {
 	getCompilationSettings: () => {
 		return compilerOptions;
 	},
+
 	getCanonicalFileName: (fileName) => {
 		return fileName;
 	},
+
 	getCurrentDirectory: () => {
 		return undefined;
 	},
+
 	getDefaultLibFileName: () => {
 		return "tangram-lib:///lib.esnext.full.d.ts";
 	},
+
 	getDefaultLibLocation: () => {
 		return "tangram-lib:///";
 	},
+
 	getNewLine: () => {
 		return "\n";
 	},
+
 	getScriptFileNames: () => {
 		return syscall(Syscall.OpenedFiles);
 	},
+
 	getScriptSnapshot: (fileName) => {
-		let result = syscall(Syscall.Load, fileName);
-		if (result === null) {
+		let result;
+		try {
+			result = syscall(Syscall.Load, fileName);
+		} catch {
 			return undefined;
 		}
 		let { text } = result;
 		return ts.ScriptSnapshot.fromString(text);
 	},
+
 	getScriptVersion: (fileName) => {
 		return syscall(Syscall.Version, fileName);
 	},
+
 	getSourceFile: (fileName, languageVersion) => {
-		let result = syscall(Syscall.Load, fileName);
-		if (result === null) {
+		let result;
+		try {
+			syscall(Syscall.Load, fileName);
+		} catch {
 			return undefined;
 		}
 		let { text, version } = result;
@@ -77,28 +90,31 @@ let host = {
 		sourceFile.version = version;
 		return sourceFile;
 	},
+
 	resolveModuleNames: (specifiers, referrer) => {
 		return specifiers.map((specifier) => {
-			let resolvedFileName = syscall(Syscall.Resolve, specifier, referrer);
-			if (resolvedFileName === null) {
+			let resolvedFileName;
+			try {
+				resolvedFileName = syscall(Syscall.Resolve, specifier, referrer);
+			} catch {
 				return undefined;
-			} else {
-				return {
-					resolvedFileName: resolvedFileName,
-					extension: ".ts",
-				};
 			}
+			return { resolvedFileName };
 		});
 	},
+
 	useCaseSensitiveFileNames: () => {
 		return true;
 	},
+
 	readFile: () => {
 		return undefined;
 	},
+
 	fileExists: () => {
 		return false;
 	},
+
 	writeFile: () => {
 		throw new Error("Unimplemented.");
 	},
@@ -385,6 +401,9 @@ let stringify = (value) => {
 			}
 			case "symbol": {
 				return "[symbol]";
+			}
+			case "bigint": {
+				return value.toString();
 			}
 		}
 	};

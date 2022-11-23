@@ -54,6 +54,9 @@ let stringify = (value) => {
 			case "symbol": {
 				return "[symbol]";
 			}
+			case "bigint": {
+				return value.toString();
+			}
 		}
 	};
 	return inner(value, new Set());

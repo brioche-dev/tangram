@@ -87,7 +87,7 @@ fn resolve_path(referrer: &Utf8Path, specifier: &Utf8Path) -> Result<Utf8PathBuf
 			camino::Utf8Component::ParentDir => {
 				let popped = path.pop();
 				if !popped {
-					bail!(r#"Specifier "{specifier}" escapes path "{referrer}"."#);
+					bail!(r#"Specifier "{specifier}" escapes the package at "{referrer}"."#);
 				}
 			},
 			camino::Utf8Component::Normal(string) => {

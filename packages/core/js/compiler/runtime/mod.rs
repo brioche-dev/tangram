@@ -118,7 +118,7 @@ struct LoadOutput {
 fn op_tg_load(
 	state: Rc<RefCell<deno_core::OpState>>,
 	url: js::Url,
-) -> Result<Option<LoadOutput>, deno_core::error::AnyError> {
+) -> Result<LoadOutput, deno_core::error::AnyError> {
 	op(state, |state| async move {
 		let text = state
 			.compiler
@@ -130,7 +130,7 @@ fn op_tg_load(
 			.get_version(&url)
 			.await
 			.with_context(|| format!(r#"Failed to get the version for URL "{url}"."#))?;
-		Ok(Some(LoadOutput { text, version }))
+		Ok(LoadOutput { text, version })
 	})
 }
 
@@ -170,7 +170,7 @@ fn op_tg_resolve(
 	state: Rc<RefCell<deno_core::OpState>>,
 	specifier: String,
 	referrer: Option<js::Url>,
-) -> Result<Option<js::Url>, deno_core::error::AnyError> {
+) -> Result<js::Url, deno_core::error::AnyError> {
 	op(state, |state| async move {
 		let url = state
 			.compiler
@@ -179,7 +179,7 @@ fn op_tg_resolve(
 			.with_context(|| {
 				format!(r#"Failed to resolve "{specifier}" relative to "{referrer:?}"."#)
 			})?;
-		Ok(Some(url))
+		Ok(url)
 	})
 }
 
