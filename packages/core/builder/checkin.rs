@@ -14,7 +14,7 @@ impl State {
 		self.checkin_path(&watcher, path).await?;
 
 		// Retrieve the expression for the path.
-		let (hash, _) = watcher.get(path).await?.unwrap();
+		let (hash, _) = watcher.get_expression_for_path(path).await?.unwrap();
 
 		Ok(hash)
 	}
@@ -24,10 +24,13 @@ impl State {
 		tracing::trace!(r#"Checking in expression at path "{}"."#, path.display());
 
 		// Retrieve the expression hash and expression for the path, computing them if necessary.
-		let (_, expression) = watcher.get(path).await?.with_context(|| {
-			let path = path.display();
-			format!(r#"No file system object found at path "{path}"."#)
-		})?;
+		let (_, expression) = watcher
+			.get_expression_for_path(path)
+			.await?
+			.with_context(|| {
+				let path = path.display();
+				format!(r#"No file system object found at path "{path}"."#)
+			})?;
 
 		// Attempt to add the expression.
 		let outcome = self.try_add_expression(&expression).await?;

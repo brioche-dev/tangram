@@ -34,7 +34,7 @@ impl Watcher {
 		}
 	}
 
-	pub async fn get(&self, path: &Path) -> Result<Option<(Hash, Expression)>> {
+	pub async fn get_expression_for_path(&self, path: &Path) -> Result<Option<(Hash, Expression)>> {
 		// Fill the cache for this path if necessary.
 		if self.cache.read().unwrap().get(path).is_none() {
 			tracing::trace!(r#"Filling cache for path "{}"."#, path.display());
@@ -54,19 +54,19 @@ impl Watcher {
 
 			// Call the appropriate function for the file system object the path points to.
 			if metadata.is_dir() {
-				self.cache_for_directory(path, &metadata)
+				self.cache_expression_for_directory(path, &metadata)
 					.await
 					.with_context(|| {
 						format!(r#"Failed to cache directory at path "{}"."#, path.display())
 					})?;
 			} else if metadata.is_file() {
-				self.cache_for_file(path, &metadata)
+				self.cache_expression_for_file(path, &metadata)
 					.await
 					.with_context(|| {
 						format!(r#"Failed to cache file at path "{}"."#, path.display())
 					})?;
 			} else if metadata.is_symlink() {
-				self.cache_for_symlink(path, &metadata)
+				self.cache_expression_for_symlink(path, &metadata)
 					.await
 					.with_context(|| {
 						format!(r#"Failed to cache symlink at path "{}"."#, path.display())
@@ -82,7 +82,11 @@ impl Watcher {
 	}
 
 	#[async_recursion]
-	async fn cache_for_directory(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
+	async fn cache_expression_for_directory(
+		&self,
+		path: &Path,
+		_metadata: &Metadata,
+	) -> Result<()> {
 		// Read the contents of the directory.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut read_dir = tokio::fs::read_dir(path)
@@ -103,7 +107,7 @@ impl Watcher {
 		// Recurse into the directory's entries.
 		let entries = try_join_all(entry_names.into_iter().map(|entry_name| async {
 			let entry_path = path.join(&entry_name);
-			self.get(&entry_path).await?;
+			self.get_expression_for_path(&entry_path).await?;
 			let (hash, _) = self.cache.read().unwrap().get(&entry_path).unwrap().clone();
 			Ok::<_, anyhow::Error>((entry_name, hash))
 		}))
@@ -111,14 +115,19 @@ impl Watcher {
 		.into_iter()
 		.collect();
 
-		// Create the expression and add it to the cache.
+		// Create the expression.
 		let expression = Expression::Directory(Directory { entries });
-		self.cache_expression_for_path(path, expression);
+
+		// Add the expression to the cache.
+		self.cache
+			.write()
+			.unwrap()
+			.insert(path.to_owned(), (expression.hash(), expression));
 
 		Ok(())
 	}
 
-	async fn cache_for_file(&self, path: &Path, metadata: &Metadata) -> Result<()> {
+	async fn cache_expression_for_file(&self, path: &Path, metadata: &Metadata) -> Result<()> {
 		// Compute the file's blob hash.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut file = tokio::fs::File::open(path).await?;
@@ -131,17 +140,22 @@ impl Watcher {
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
 
-		// Create the expression and add it to the cache.
+		// Create the expression.
 		let expression = Expression::File(File {
 			blob: blob_hash,
 			executable,
 		});
-		self.cache_expression_for_path(path, expression);
+
+		// Add the expression to the cache.
+		self.cache
+			.write()
+			.unwrap()
+			.insert(path.to_owned(), (expression.hash(), expression));
 
 		Ok(())
 	}
 
-	async fn cache_for_symlink(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
+	async fn cache_expression_for_symlink(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
 		// Read the symlink.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let target = tokio::fs::read_link(path)
@@ -153,7 +167,7 @@ impl Watcher {
 
 		// Create the expression.
 		let expression = if target.is_absolute() {
-			// A symlink that has an absolute target that points into the builder's path is a dependency.
+			// A symlink that has an absolute target that points into the artifacts directory is a dependency.
 			let target = target
 				.strip_prefix(&self.builder_path.join("artifacts"))
 				.map_err(|_| anyhow!("Invalid symlink."))?;
@@ -167,9 +181,9 @@ impl Watcher {
 				.context("Invalid symlink.")?
 				.as_str()
 				.parse()
-				.context("Failed to parse the last path component as a hash.")?;
+				.context("Failed to parse the path component as a hash.")?;
 
-			// Collect the remaining dependencies to get the path within the dependency.
+			// Collect the remaining components to get the path within the dependency.
 			let path = if components.peek().is_some() {
 				Some(components.collect())
 			} else {
@@ -185,15 +199,11 @@ impl Watcher {
 		};
 
 		// Add the expression to the cache.
-		self.cache_expression_for_path(path, expression);
-
-		Ok(())
-	}
-
-	fn cache_expression_for_path(&self, path: &Path, expression: Expression) {
 		self.cache
 			.write()
 			.unwrap()
 			.insert(path.to_owned(), (expression.hash(), expression));
+
+		Ok(())
 	}
 }

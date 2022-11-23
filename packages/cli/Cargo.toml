@@ -21,6 +21,8 @@ clap = { workspace = true }
 futures = { workspace = true }
 indoc = {workspace = true }
 itertools = { workspace = true }
+pathdiff = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true }
 rustyline = { workspace = true }
 serde = { workspace = true }
@@ -33,4 +35,3 @@ url = { workspace = true }
 webbrowser = { workspace = true }
 
 tangram_core = { workspace = true }
-regex.workspace = true

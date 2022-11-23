@@ -98,13 +98,13 @@ impl State {
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
+		match watcher.get_expression_for_path(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::Directory(local_directory))) if local_directory == directory => {
 				return Ok(());
 			},
 
-			// If there is already a directory then remove any entries in the local directory that are not present in the remote directory.
+			// If there is already a directory then remove any extraneous entries.
 			Some((_, Expression::Directory(local_directory))) => {
 				try_join_all(local_directory.entries.keys().map(|entry_name| {
 					let directory = &directory;
@@ -150,7 +150,7 @@ impl State {
 
 	async fn checkout_file(&self, watcher: &Watcher, file: File, path: &Path) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
+		match watcher.get_expression_for_path(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::File(local_file))) if local_file == file => {
 				return Ok(());
@@ -169,7 +169,7 @@ impl State {
 		let permit = self.file_system_semaphore.acquire().await;
 		let mut blob = self.get_blob(file.blob).await?.into_std().await;
 		let mut output =
-			std::fs::File::create(path).context("Failed to create the file to checkout.")?;
+			std::fs::File::create(path).context("Failed to create the file to checkout to.")?;
 		tokio::task::spawn_blocking(move || {
 			std::io::copy(&mut blob, &mut output)?;
 			Ok::<_, anyhow::Error>(())
@@ -196,7 +196,7 @@ impl State {
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
+		match watcher.get_expression_for_path(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::Symlink(local_symlink))) if local_symlink == symlink => {
 				return Ok(());
@@ -226,7 +226,7 @@ impl State {
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
+		match watcher.get_expression_for_path(path).await? {
 			// If the expression is already checked out then return.
 			Some((_, Expression::Dependency(local_dependency)))
 				if local_dependency == dependency =>

@@ -1,7 +1,6 @@
 use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::path::PathBuf;
 use tangram_core::{specifier::Specifier, system::System};
 
 #[derive(Parser)]
@@ -18,9 +17,6 @@ pub struct Args {
 
 	#[arg(long)]
 	system: Option<System>,
-
-	#[arg(long)]
-	checkout: Option<PathBuf>,
 }
 
 impl Cli {
@@ -56,14 +52,6 @@ impl Cli {
 
 		// Print the output.
 		println!("{output_hash}");
-
-		// Checkout the built artifact if a path is provided.
-		if let Some(checkout_path) = &args.checkout {
-			builder
-				.checkout(output_hash, checkout_path, None)
-				.await
-				.context("Failed to perform the checkout.")?;
-		}
 
 		Ok(())
 	}
