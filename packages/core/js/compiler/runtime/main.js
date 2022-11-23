@@ -81,7 +81,7 @@ let host = {
 	getSourceFile: (fileName, languageVersion) => {
 		let result;
 		try {
-			syscall(Syscall.Load, fileName);
+			result = syscall(Syscall.Load, fileName);
 		} catch {
 			return undefined;
 		}
