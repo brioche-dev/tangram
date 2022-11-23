@@ -249,7 +249,7 @@ impl LanguageServer {
 				self.client
 					.log_message(
 						lsp::MessageType::ERROR,
-						format!("Failed to get diagnostics.\n{error:?}"),
+						format!("Failed to get diagnostics.\n{error}"),
 					)
 					.await;
 				return;

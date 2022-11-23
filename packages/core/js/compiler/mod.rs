@@ -187,7 +187,7 @@ impl Compiler {
 
 impl Compiler {
 	pub async fn open_file(&self, path: &Path, version: i32, text: String) {
-		let url = js::Url::for_path(path).await.unwrap();
+		let Ok(url) = js::Url::for_path(path).await else { return };
 		let file = File::Opened(OpenedFile { url, version, text });
 		self.state.files.write().await.insert(path.to_owned(), file);
 	}
@@ -197,7 +197,7 @@ impl Compiler {
 	}
 
 	pub async fn change_file(&self, path: &Path, version: i32, text: String) {
-		let url = js::Url::for_path(path).await.unwrap();
+		let Ok(url) = js::Url::for_path(path).await else { return };
 		let file = File::Opened(OpenedFile { url, version, text });
 		self.state.files.write().await.insert(path.to_owned(), file);
 	}

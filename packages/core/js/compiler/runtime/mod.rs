@@ -120,12 +120,17 @@ fn op_tg_load(
 	url: js::Url,
 ) -> Result<Option<LoadOutput>, deno_core::error::AnyError> {
 	op(state, |state| async move {
-		let text = state.compiler.load(&url).await;
-		let version = state.compiler.get_version(&url).await;
-		match (text, version) {
-			(Ok(text), Ok(version)) => Ok(Some(LoadOutput { text, version })),
-			(_, _) => Ok(None),
-		}
+		let text = state
+			.compiler
+			.load(&url)
+			.await
+			.with_context(|| format!(r#"Failed to load from URL "{url}"."#))?;
+		let version = state
+			.compiler
+			.get_version(&url)
+			.await
+			.with_context(|| format!(r#"Failed to get the version for URL "{url}"."#))?;
+		Ok(Some(LoadOutput { text, version }))
 	})
 }
 
@@ -171,8 +176,10 @@ fn op_tg_resolve(
 			.compiler
 			.resolve(&specifier, referrer.as_ref())
 			.await
-			.ok();
-		Ok(url)
+			.with_context(|| {
+				format!(r#"Failed to resolve "{specifier}" relative to "{referrer:?}"."#)
+			})?;
+		Ok(Some(url))
 	})
 }
 

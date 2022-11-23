@@ -53,10 +53,9 @@ impl Cli {
 							package_path,
 							module_path,
 						} => {
+							// Skip diagnostics from paths that do not match the filter.
 							let path = package_path.join(module_path);
 							let path = path.display().to_string();
-
-							// Skip diagnostics from paths that do not match the filter
 							if let Some(filter) = &args.filter_filenames {
 								if !filter.is_match(&path) {
 									continue;
@@ -69,24 +68,23 @@ impl Cli {
 						},
 
 						js::Url::PathTargets { package_path } => {
+							// Skip diagnostics from paths that do not match the filter.
 							let path = package_path.display().to_string();
-
-							// Skip diagnostics from paths that do not match the filter
 							if let Some(filter) = &args.filter_filenames {
 								if !filter.is_match(&path) {
 									continue;
 								}
 							}
 
-							println!("[target shim]:{path}:{line}:{character}");
+							println!("{url}:{line}:{character}");
 							println!("{message}");
 							println!();
 						},
 
-						other @ js::Url::Lib { .. }
-						| other @ js::Url::PackageModule { .. }
-						| other @ js::Url::PackageTargets { .. } => {
-							println!("{other}:{line}:{character}");
+						js::Url::Lib { .. }
+						| js::Url::PackageModule { .. }
+						| js::Url::PackageTargets { .. } => {
+							println!("{url}:{line}:{character}");
 							println!("{message}");
 							println!();
 						},
