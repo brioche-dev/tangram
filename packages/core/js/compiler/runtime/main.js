@@ -57,14 +57,22 @@ let host = {
 		return syscall(Syscall.OpenedFiles);
 	},
 	getScriptSnapshot: (fileName) => {
-		let { text } = syscall(Syscall.Load, fileName);
+		let result = syscall(Syscall.Load, fileName);
+		if (result === null) {
+			return undefined;
+		}
+		let { text } = result;
 		return ts.ScriptSnapshot.fromString(text);
 	},
 	getScriptVersion: (fileName) => {
 		return syscall(Syscall.Version, fileName);
 	},
 	getSourceFile: (fileName, languageVersion) => {
-		let { text, version } = syscall(Syscall.Load, fileName);
+		let result = syscall(Syscall.Load, fileName);
+		if (result === null) {
+			return undefined;
+		}
+		let { text, version } = result;
 		let sourceFile = ts.createSourceFile(fileName, text, languageVersion);
 		sourceFile.version = version;
 		return sourceFile;
@@ -72,10 +80,14 @@ let host = {
 	resolveModuleNames: (specifiers, referrer) => {
 		return specifiers.map((specifier) => {
 			let resolvedFileName = syscall(Syscall.Resolve, specifier, referrer);
-			return {
-				resolvedFileName: resolvedFileName,
-				extension: ".ts",
-			};
+			if (resolvedFileName === null) {
+				return undefined;
+			} else {
+				return {
+					resolvedFileName: resolvedFileName,
+					extension: ".ts",
+				};
+			}
 		});
 	},
 	useCaseSensitiveFileNames: () => {
@@ -340,8 +352,8 @@ let stringify = (value) => {
 		return "Promise";
 	} else if (typeof value === "object") {
 		let constructorName = "";
-		if (value.constructor.name !== "Object") {
-			constructorName = `${value.constructor.name} `;
+		if (value.constructor?.name !== "Object") {
+			constructorName = `${value.constructor?.name} `;
 		}
 		let entries = Object.entries(value).map(
 			([key, value]) => `${key}: ${stringify(value)}`,
