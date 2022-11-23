@@ -99,7 +99,7 @@ let host = {
 			} catch {
 				return undefined;
 			}
-			return { resolvedFileName };
+			return { resolvedFileName, extension: ".ts" };
 		});
 	},
 

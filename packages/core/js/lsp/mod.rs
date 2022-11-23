@@ -159,7 +159,10 @@ impl tower_lsp::LanguageServer for LanguageServer {
 			.compiler
 			.hover(url, position.into())
 			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
+			.map_err(|error| {
+				eprintln!("{error:?}");
+				jsonrpc::Error::internal_error()
+			})?;
 		let Some(hover) = hover else {
 			return Ok(None);
 		};
@@ -246,12 +249,7 @@ impl LanguageServer {
 		let diagnostics = match self.compiler.get_diagnostics().await {
 			Ok(diagnostics) => diagnostics,
 			Err(error) => {
-				self.client
-					.log_message(
-						lsp::MessageType::ERROR,
-						format!("Failed to get diagnostics.\n{error}"),
-					)
-					.await;
+				eprintln!("{error:?}");
 				return;
 			},
 		};
