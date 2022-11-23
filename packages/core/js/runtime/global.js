@@ -8,33 +8,55 @@ Object.defineProperties(globalThis, {
 });
 
 let stringify = (value) => {
-	if (value === undefined) {
-		return "undefined";
-	} else if (value === null) {
-		return "null";
-	} else if (Array.isArray(value)) {
-		return `[${value.map(stringify).join(", ")}]`;
-	} else if (value instanceof Error) {
-		return value.stack;
-	} else if (value instanceof Promise) {
-		return "Promise";
-	} else if (typeof value === "object") {
-		let constructorName = "";
-		if (
-			value.constructor?.name !== undefined &&
-			value.constructor.name !== "Object"
-		) {
-			constructorName = `${value.constructor.name} `;
+	let inner = (value, visited) => {
+		let type = typeof value;
+		switch (type) {
+			case "string": {
+				return `"${value}"`;
+			}
+			case "number": {
+				return value.toString();
+			}
+			case "boolean": {
+				return value ? "true" : "false";
+			}
+			case "undefined": {
+				return "undefined";
+			}
+			case "object": {
+				if (value === null) {
+					return "null";
+				}
+				if (visited.has(value)) {
+					return "[circular]";
+				}
+				visited.add(value);
+				if (Array.isArray(value)) {
+					return `[${value.map((value) => inner(value, visited)).join(", ")}]`;
+				} else if (value instanceof Error) {
+					return value.stack;
+				} else if (value instanceof Promise) {
+					return "[promise]";
+				} else {
+					let constructorName = "";
+					if (value.constructor?.name !== "Object") {
+						constructorName = `${value.constructor?.name} `;
+					}
+					let entries = Object.entries(value).map(
+						([key, value]) => `${key}: ${inner(value, visited)}`,
+					);
+					return `${constructorName}{ ${entries.join(", ")} }`;
+				}
+			}
+			case "function": {
+				return `[function ${value.name ?? "(anonymous)"}]`;
+			}
+			case "symbol": {
+				return "[symbol]";
+			}
 		}
-		let entries = Object.entries(value).map(
-			([key, value]) => `${key}: ${stringify(value)}`,
-		);
-		return `${constructorName}{ ${entries.join(", ")} }`;
-	} else if (typeof value === "function") {
-		return `[Function: ${value.name || "(anonymous)"}]`;
-	} else {
-		return JSON.stringify(value);
-	}
+	};
+	return inner(value, new Set());
 };
 
 Object.defineProperties(globalThis, {
