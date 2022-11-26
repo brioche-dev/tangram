@@ -1,436 +1,351 @@
-use super::{
-	compiler::types::{Diagnostic, Position, Range, Severity},
-	Compiler,
-};
 use crate::js;
-use async_trait::async_trait;
-use std::path::{Path, PathBuf};
-use tower_lsp::{jsonrpc, lsp_types as lsp};
+use anyhow::{bail, Context, Result};
+use futures::FutureExt;
+use lsp::{notification::Notification, request::Request};
+use lsp_types as lsp;
+use std::{collections::HashMap, future::Future};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt};
 
+mod completion;
+mod definition;
+mod diagnostics;
+mod files;
+mod hover;
+mod initialize;
+mod jsonrpc;
+mod references;
+mod types;
+mod virtual_text_document;
+
+#[derive(Clone)]
 pub struct LanguageServer {
-	client: tower_lsp::Client,
-	compiler: Compiler,
+	compiler: js::Compiler,
+	outgoing_message_sender: Option<tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>>,
 }
 
 impl LanguageServer {
 	#[must_use]
-	pub fn new(client: tower_lsp::Client, compiler: Compiler) -> LanguageServer {
-		LanguageServer { client, compiler }
-	}
-}
-
-#[async_trait]
-impl tower_lsp::LanguageServer for LanguageServer {
-	async fn initialize(
-		&self,
-		_params: lsp::InitializeParams,
-	) -> jsonrpc::Result<lsp::InitializeResult> {
-		Ok(lsp::InitializeResult {
-			capabilities: lsp::ServerCapabilities {
-				hover_provider: Some(lsp::HoverProviderCapability::Simple(true)),
-				references_provider: Some(lsp::OneOf::Left(true)),
-				completion_provider: Some(lsp::CompletionOptions::default()),
-				definition_provider: Some(lsp::OneOf::Left(true)),
-				text_document_sync: Some(lsp::TextDocumentSyncCapability::Options(
-					lsp::TextDocumentSyncOptions {
-						open_close: Some(true),
-						change: Some(lsp::TextDocumentSyncKind::FULL),
-						..Default::default()
-					},
-				)),
-				..Default::default()
-			},
-			..Default::default()
-		})
+	pub fn new(compiler: js::Compiler) -> LanguageServer {
+		LanguageServer {
+			compiler,
+			outgoing_message_sender: None,
+		}
 	}
 
-	async fn shutdown(&self) -> jsonrpc::Result<()> {
+	#[allow(clippy::too_many_lines)]
+	pub async fn serve(mut self) -> Result<()> {
+		let mut stdin = tokio::io::BufReader::new(tokio::io::stdin());
+		let mut stdout = tokio::io::BufWriter::new(tokio::io::stdout());
+
+		// Create a channel to send outgoing messages.
+		let (outgoing_message_sender, mut outgoing_message_receiver) =
+			tokio::sync::mpsc::unbounded_channel::<jsonrpc::Message>();
+		self.outgoing_message_sender = Some(outgoing_message_sender);
+
+		// Create a task to send outgoing messages.
+		let outgoing_message_task = tokio::spawn(async move {
+			while let Some(outgoing_message) = outgoing_message_receiver.recv().await {
+				let body = serde_json::to_string(&outgoing_message)?;
+				let head = format!("Content-Length: {}\r\n\r\n", body.len());
+				stdout.write_all(head.as_bytes()).await?;
+				stdout.write_all(body.as_bytes()).await?;
+				stdout.flush().await?;
+			}
+			Ok::<_, anyhow::Error>(())
+		});
+
+		// Read incoming messages.
+		loop {
+			// Read a message.
+			let message = Self::read_incoming_message(&mut stdin).await?;
+
+			// If the message is the exit notification then break.
+			if matches!(message,
+				jsonrpc::Message::Notification(jsonrpc::Notification {
+					ref method,
+					..
+				}) if method == lsp::notification::Exit::METHOD
+			) {
+				break;
+			};
+
+			// Spawn a task to handle the message.
+			tokio::spawn({
+				let server = self.clone();
+				async move {
+					server.handle_message(message).await;
+				}
+			});
+		}
+
+		// Wait for the outgoing message task to complete.
+		outgoing_message_task.await.unwrap()?;
+
 		Ok(())
 	}
 
-	async fn did_open(&self, params: lsp::DidOpenTextDocumentParams) {
-		// Only proceed if the url has a file scheme.
-		let scheme = params.text_document.uri.scheme();
-		if scheme != "file" {
+	async fn read_incoming_message<R>(reader: &mut R) -> Result<jsonrpc::Message>
+	where
+		R: Unpin + AsyncRead + AsyncBufRead,
+	{
+		// Read the headers.
+		let mut headers = HashMap::new();
+		loop {
+			let mut line = String::new();
+			let n = reader
+				.read_line(&mut line)
+				.await
+				.context("Failed to read a line.")?;
+			if n == 0 {
+				break;
+			}
+			if !line.ends_with("\r\n") {
+				bail!("Unexpected line ending.");
+			}
+			let line = &line[..line.len() - 2];
+			if line.is_empty() {
+				break;
+			}
+			let mut components = line.split(": ");
+			let key = components.next().context("Expected a header name.")?;
+			let value = components.next().context("Expected a header value.")?;
+			headers.insert(key.to_owned(), value.to_owned());
+		}
+
+		// Read and deserialize the message.
+		let content_length: usize = headers
+			.get("Content-Length")
+			.context("Expected a Content-Length header.")?
+			.parse()
+			.context("Failed to parse the Content-Length header value.")?;
+		let mut message: Vec<u8> = vec![0; content_length];
+		reader.read_exact(&mut message).await?;
+		let message =
+			serde_json::from_slice(&message).context("Failed to deserialize the message.")?;
+
+		Ok(message)
+	}
+
+	#[allow(clippy::too_many_lines)]
+	async fn handle_message(&self, message: jsonrpc::Message) {
+		#[allow(clippy::match_same_arms)]
+		match message {
+			// Handle a request.
+			jsonrpc::Message::Request(request) => {
+				match request.method.as_str() {
+					lsp::request::Completion::METHOD => {
+						self.handle_request::<lsp::request::Completion, _, _>(request, |params| {
+							self.completion(params)
+						})
+						.boxed()
+						.await;
+					},
+
+					lsp::request::GotoDefinition::METHOD => {
+						self.handle_request::<lsp::request::GotoDefinition, _, _>(
+							request,
+							|params| self.definition(params),
+						)
+						.boxed()
+						.await;
+					},
+
+					lsp::request::HoverRequest::METHOD => {
+						self.handle_request::<lsp::request::HoverRequest, _, _>(
+							request,
+							|params| self.hover(params),
+						)
+						.boxed()
+						.await;
+					},
+
+					lsp::request::Initialize::METHOD => {
+						self.handle_request::<lsp::request::Initialize, _, _>(request, |params| {
+							self.initialize(params)
+						})
+						.boxed()
+						.await;
+					},
+
+					lsp::request::References::METHOD => {
+						self.handle_request::<lsp::request::References, _, _>(request, |params| {
+							self.references(params)
+						})
+						.boxed()
+						.await;
+					},
+
+					lsp::request::Shutdown::METHOD => {
+						self.handle_request::<lsp::request::Shutdown, _, _>(request, |params| {
+							self.shutdown(params)
+						})
+						.boxed()
+						.await;
+					},
+
+					self::virtual_text_document::VirtualTextDocument::METHOD => {
+						self.handle_request::<self::virtual_text_document::VirtualTextDocument, _, _>(
+								request,
+								|params| self.virtual_text_document(params),
+							)
+							.boxed()
+							.await;
+					},
+
+					// If the request method does not have a handler, send a method not found response.
+					_ => {
+						self.send_message(jsonrpc::Message::Response(jsonrpc::Response {
+							jsonrpc: jsonrpc::VERSION.to_owned(),
+							id: request.id,
+							result: None,
+							error: Some(jsonrpc::ResponseError {
+								code: jsonrpc::ResponseErrorCode::MethodNotFound,
+								message: "Method not found.".to_owned(),
+							}),
+						}));
+					},
+				};
+			},
+
+			// Handle a response.
+			jsonrpc::Message::Response(_) => {},
+
+			// Handle a notification.
+			jsonrpc::Message::Notification(notification) => {
+				match notification.method.as_str() {
+					lsp::notification::DidOpenTextDocument::METHOD => {
+						self.handle_notification::<lsp::notification::DidOpenTextDocument, _, _>(
+							notification,
+							|params| self.did_open(params),
+						)
+						.boxed()
+						.await;
+					},
+
+					lsp::notification::DidChangeTextDocument::METHOD => {
+						self.handle_notification::<lsp::notification::DidChangeTextDocument, _, _>(
+							notification,
+							|params| self.did_change(params),
+						)
+						.boxed()
+						.await;
+					},
+
+					lsp::notification::DidCloseTextDocument::METHOD => {
+						self.handle_notification::<lsp::notification::DidCloseTextDocument, _, _>(
+							notification,
+							|params| self.did_close(params),
+						)
+						.boxed()
+						.await;
+					},
+
+					// If the notification method does not have a handler, do nothing.
+					_ => {},
+				}
+			},
+		}
+	}
+
+	async fn handle_request<T, F, Fut>(&self, request: jsonrpc::Request, handler: F)
+	where
+		T: lsp::request::Request,
+		F: Fn(T::Params) -> Fut,
+		Fut: Future<Output = Result<T::Result>>,
+	{
+		// Deserialize the params.
+		let params = if let Ok(params) =
+			serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
+		{
+			params
+		} else {
+			self.send_message(jsonrpc::Message::Response(jsonrpc::Response {
+				jsonrpc: jsonrpc::VERSION.to_owned(),
+				id: request.id,
+				result: None,
+				error: Some(jsonrpc::ResponseError {
+					code: jsonrpc::ResponseErrorCode::InvalidParams,
+					message: "Invalid params.".to_owned(),
+				}),
+			}));
 			return;
-		}
-
-		// Get the file path, version, and text.
-		let path = Path::new(params.text_document.uri.path());
-		let version = params.text_document.version;
-		let text = params.text_document.text;
-
-		// Open the file with the compiler.
-		self.compiler.open_file(path, version, text).await;
-
-		// Update all diagnostics.
-		self.update_diagnostics().await;
-	}
-
-	async fn did_change(&self, params: lsp::DidChangeTextDocumentParams) {
-		// Get the file's path.
-		let path = Path::new(params.text_document.uri.path());
-
-		// Update the document in the compiler.
-		for change in params.content_changes {
-			self.compiler
-				.change_file(path, params.text_document.version, change.text)
-				.await;
-		}
-
-		// Update all diagnostics.
-		self.update_diagnostics().await;
-	}
-
-	async fn did_close(&self, params: lsp::DidCloseTextDocumentParams) {
-		// Get the document's path.
-		let path = Path::new(params.text_document.uri.path());
-
-		// Close the file in the compiler.
-		self.compiler.close_file(path).await;
-
-		// Update all diagnostics.
-		self.update_diagnostics().await;
-	}
-
-	async fn completion(
-		&self,
-		params: lsp::CompletionParams,
-	) -> jsonrpc::Result<Option<lsp::CompletionResponse>> {
-		// Get the position for the request.
-		let position = params.text_document_position.position;
-
-		// Parse the path.
-		let path: PathBuf = params
-			.text_document_position
-			.text_document
-			.uri
-			.path()
-			.parse()
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the url for this path.
-		let url = js::Url::for_path(&path)
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the completion entries.
-		let entries = self
-			.compiler
-			.completion(url, position.into())
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		let Some(entries) = entries else {
-			return Ok(None);
 		};
 
-		// Convert the completion entries.
-		let entries = entries
-			.into_iter()
-			.map(|completion| lsp::CompletionItem {
-				label: completion.name,
-				..Default::default()
-			})
-			.collect();
+		// Call the handler.
+		let result = handler(params).await;
 
-		Ok(Some(lsp::CompletionResponse::Array(entries)))
-	}
-
-	async fn hover(&self, params: lsp::HoverParams) -> jsonrpc::Result<Option<lsp::Hover>> {
-		// Get the position for the request.
-		let position = params.text_document_position_params.position;
-
-		// Parse the path.
-		let path: PathBuf = params
-			.text_document_position_params
-			.text_document
-			.uri
-			.path()
-			.parse()
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the url for this path.
-		let url = js::Url::for_path(&path)
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the hover info.
-		let hover = self
-			.compiler
-			.hover(url, position.into())
-			.await
-			.map_err(|error| {
-				eprintln!("{error:?}");
-				jsonrpc::Error::internal_error()
-			})?;
-		let Some(hover) = hover else {
-			return Ok(None);
-		};
-
-		// Create the hover.
-		let hover = lsp::Hover {
-			contents: lsp::HoverContents::Scalar(lsp::MarkedString::from_language_code(
-				"typescript".into(),
-				hover,
-			)),
-			range: None,
-		};
-
-		Ok(Some(hover))
-	}
-
-	async fn goto_definition(
-		&self,
-		params: lsp::GotoDefinitionParams,
-	) -> jsonrpc::Result<Option<lsp::GotoDefinitionResponse>> {
-		// Get the position for the request.
-		let position = params.text_document_position_params.position;
-
-		// Parse the path.
-		let path: PathBuf = params
-			.text_document_position_params
-			.text_document
-			.uri
-			.path()
-			.parse()
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the url for this path.
-		let url = js::Url::for_path(&path)
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the definitions.
-		let locations = self
-			.compiler
-			.goto_definition(url, position.into())
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		let Some(locations) = locations else {
-			return Ok(None);
-		};
-
-		// Convert the definitions.
-		let locations = locations
-			.into_iter()
-			.map(|location| {
-				// Map the URL.
-				let url = match location.url {
-					js::Url::PathModule {
-						package_path,
-						module_path,
-					} => {
-						let path = package_path.join(module_path);
-						format!("file://{}", path.display()).parse().unwrap()
-					},
-					js::Url::Lib { .. }
-					| js::Url::PackageModule { .. }
-					| js::Url::PackageTargets { .. }
-					| js::Url::PathTargets { .. } => location.url.into(),
-				};
-
-				lsp::Location {
-					uri: url,
-					range: location.range.into(),
-				}
-			})
-			.collect();
-
-		let response = lsp::GotoDefinitionResponse::Array(locations);
-
-		Ok(Some(response))
-	}
-
-	async fn references(
-		&self,
-		params: lsp::ReferenceParams,
-	) -> jsonrpc::Result<Option<Vec<lsp::Location>>> {
-		// Get the position for the request.
-		let position = params.text_document_position.position;
-
-		// Parse the path.
-		let path: PathBuf = params
-			.text_document_position
-			.text_document
-			.uri
-			.path()
-			.parse()
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the url for this path.
-		let url = js::Url::for_path(&path)
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the references.
-		let locations = self
-			.compiler
-			.get_references(url, position.into())
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		let Some(locations) = locations else {
-				return Ok(None);
-			};
-
-		// Convert the reference.
-		let locations = locations
-			.into_iter()
-			.map(|location| {
-				// Map the URL.
-				let url = match location.url {
-					js::Url::PathModule {
-						package_path,
-						module_path,
-					} => {
-						let path = package_path.join(module_path);
-						format!("file://{}", path.display()).parse().unwrap()
-					},
-					js::Url::Lib { .. }
-					| js::Url::PackageModule { .. }
-					| js::Url::PackageTargets { .. }
-					| js::Url::PathTargets { .. } => location.url.into(),
-				};
-
-				lsp::Location {
-					uri: url,
-					range: location.range.into(),
-				}
-			})
-			.collect();
-
-		Ok(Some(locations))
-	}
-}
-
-impl LanguageServer {
-	async fn update_diagnostics(&self) {
-		// Perform the check.
-		let diagnostics = match self.compiler.get_diagnostics().await {
-			Ok(diagnostics) => diagnostics,
+		// Get the result and error.
+		let (result, error) = match result {
+			Ok(result) => {
+				let result = serde_json::to_value(result).unwrap();
+				(Some(result), None)
+			},
 			Err(error) => {
-				eprintln!("{error:?}");
-				return;
+				let message = error.to_string();
+				let error = jsonrpc::ResponseError {
+					code: jsonrpc::ResponseErrorCode::InternalError,
+					message,
+				};
+				(None, Some(error))
 			},
 		};
 
-		// Publish the diagnostics.
-		for (url, diagnostics) in diagnostics {
-			let version = self.compiler.get_version(&url).await.ok();
-			let path = match url {
-				js::Url::PathModule {
-					package_path,
-					module_path,
-				} => package_path.join(module_path),
-				_ => continue,
-			};
-			let url = format!("file://{}", path.display()).parse().unwrap();
-			let diagnostics = diagnostics.into_iter().map(Into::into).collect();
-			self.client
-				.publish_diagnostics(url, diagnostics, version)
-				.await;
+		// Send the response.
+		self.send_message(jsonrpc::Message::Response(jsonrpc::Response {
+			jsonrpc: jsonrpc::VERSION.to_owned(),
+			id: request.id,
+			result,
+			error,
+		}));
+	}
+
+	async fn handle_notification<T, F, Fut>(&self, request: jsonrpc::Notification, handler: F)
+	where
+		T: lsp::notification::Notification,
+		F: Fn(T::Params) -> Fut,
+		Fut: Future<Output = Result<()>>,
+	{
+		let params = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
+			.context("Failed to deserialize the request params.")
+			.unwrap();
+		let result = handler(params).await;
+		if let Err(error) = result {
+			eprintln!("{error:?}");
 		}
 	}
 
-	#[allow(clippy::unused_async)]
-	pub async fn virtual_text_document(
+	pub fn send_message(&self, message: jsonrpc::Message) {
+		if let Some(outgoing_message_sender) = self.outgoing_message_sender.as_ref() {
+			outgoing_message_sender.send(message).ok();
+		}
+	}
+
+	pub fn send_response<T>(
 		&self,
-		params: serde_json::Value,
-	) -> jsonrpc::Result<Option<serde_json::Value>> {
-		// Parse the parameters.
-		let params: VirtualTextDocumentParams =
-			serde_json::from_value(params).map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Get the url for the virtual document.
-		let url = params
-			.text_document
-			.uri
-			.try_into()
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		// Load the file.
-		let text = self
-			.compiler
-			.load(&url)
-			.await
-			.map_err(|_| jsonrpc::Error::internal_error())?;
-
-		Ok(Some(text.into()))
+		id: jsonrpc::Id,
+		result: Option<T::Result>,
+		error: Option<jsonrpc::ResponseError>,
+	) where
+		T: lsp::request::Request,
+	{
+		let result = result.map(|result| serde_json::to_value(result).unwrap());
+		self.send_message(jsonrpc::Message::Response(jsonrpc::Response {
+			jsonrpc: jsonrpc::VERSION.to_owned(),
+			id,
+			result,
+			error,
+		}));
 	}
-}
 
-impl From<Diagnostic> for lsp::Diagnostic {
-	fn from(value: Diagnostic) -> Self {
-		let range = value
-			.location
-			.map(|location| location.range.into())
-			.unwrap_or_default();
-		let severity = Some(value.severity.into());
-		let source = Some("tangram".to_owned());
-		let message = value.message;
-		lsp::Diagnostic {
-			range,
-			severity,
-			source,
-			message,
-			..Default::default()
-		}
+	pub fn send_notification<T>(&self, params: T::Params)
+	where
+		T: lsp::notification::Notification,
+	{
+		let params = serde_json::to_value(params).unwrap();
+		self.send_message(jsonrpc::Message::Notification(jsonrpc::Notification {
+			jsonrpc: jsonrpc::VERSION.to_owned(),
+			method: T::METHOD.to_owned(),
+			params: Some(params),
+		}));
 	}
-}
-
-impl From<Severity> for lsp::DiagnosticSeverity {
-	fn from(value: Severity) -> Self {
-		match value {
-			Severity::Error => lsp::DiagnosticSeverity::ERROR,
-			Severity::Warning => lsp::DiagnosticSeverity::WARNING,
-			Severity::Information => lsp::DiagnosticSeverity::INFORMATION,
-			Severity::Hint => lsp::DiagnosticSeverity::HINT,
-		}
-	}
-}
-
-impl From<Range> for lsp::Range {
-	fn from(value: Range) -> Self {
-		lsp::Range {
-			start: value.start.into(),
-			end: value.end.into(),
-		}
-	}
-}
-
-impl From<lsp::Range> for Range {
-	fn from(value: lsp::Range) -> Self {
-		Range {
-			start: value.start.into(),
-			end: value.end.into(),
-		}
-	}
-}
-
-impl From<lsp::Position> for Position {
-	fn from(value: lsp::Position) -> Self {
-		Position {
-			line: value.line,
-			character: value.character,
-		}
-	}
-}
-
-impl From<Position> for lsp::Position {
-	fn from(value: Position) -> Self {
-		lsp::Position {
-			line: value.line,
-			character: value.character,
-		}
-	}
-}
-
-pub const VIRTUAL_TEXT_DOCUMENT_REQUEST: &str = "tangram/virtualTextDocument";
-
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VirtualTextDocumentParams {
-	pub text_document: lsp::TextDocumentIdentifier,
 }
