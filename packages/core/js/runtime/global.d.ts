@@ -3,124 +3,119 @@ interface ImportMeta {
 }
 
 declare namespace Tangram {
-	export enum Syscall {
-		Print = "print",
-		Serialize = "serialize",
-		Deserialize = "deserialize",
-		AddBlob = "add_blob",
-		GetBlob = "get_blob",
-		AddExpression = "add_expression",
-		GetExpression = "get_expression",
-		Evaluate = "evaluate",
-	}
+	export type Syscall =
+		| "print"
+		| "serialize"
+		| "deserialize"
+		| "add_blob"
+		| "get_blob"
+		| "add_expression"
+		| "get_expression"
+		| "evaluate";
 
-	function syscall(syscall: Syscall.Print, value: string): void;
+	function syscall(syscall: "print", value: string): void;
 	function syscall<T>(
-		syscall: Syscall.Serialize,
+		syscall: "serialize",
 		format: string,
 		value: T,
 	): Uint8Array;
 	function syscall<T>(
-		syscall: Syscall.Deserialize,
+		syscall: "deserialize",
 		format: string,
 		value: string | Uint8Array,
 	): T;
-	function syscall(syscall: Syscall.AddBlob, blob: Uint8Array): Promise<Hash>;
-	function syscall(syscall: Syscall.GetBlob, hash: Hash): Promise<Uint8Array>;
+	function syscall(syscall: "add_blob", blob: Uint8Array): Promise<Hash>;
+	function syscall(syscall: "get_blob", hash: Hash): Promise<Uint8Array>;
 	function syscall(
-		syscall: Syscall.AddExpression,
+		syscall: "add_expression",
 		expression: Expression,
 	): Promise<Hash>;
-	function syscall(
-		syscall: Syscall.GetExpression,
-		hash: Hash,
-	): Promise<Expression>;
-	function syscall(syscall: Syscall.Evaluate, hash: Hash): Promise<Hash>;
+	function syscall(syscall: "get_expression", hash: Hash): Promise<Expression>;
+	function syscall(syscall: "evaluate", hash: Hash): Promise<Hash>;
 
 	export type Hash = string;
 
-	export enum ExpressionType {
-		Null = "null",
-		Bool = "bool",
-		Number = "number",
-		String = "string",
-		Directory = "directory",
-		File = "file",
-		Symlink = "symlink",
-		Dependency = "dependency",
-		Template = "template",
-		Package = "package",
-		Js = "js",
-		Fetch = "fetch",
-		Process = "process",
-		Target = "target",
-		Array = "array",
-		Map = "map",
-	}
+	export type ExpressionType =
+		| "null"
+		| "bool"
+		| "number"
+		| "string"
+		| "directory"
+		| "file"
+		| "symlink"
+		| "dependency"
+		| "template"
+		| "package"
+		| "js"
+		| "fetch"
+		| "process"
+		| "target"
+		| "array"
+		| "map";
 
 	export type Expression =
 		| {
-				type: ExpressionType.Null;
+				type: "null";
 				value: null;
 		  }
 		| {
-				type: ExpressionType.Bool;
+				type: "bool";
 				value: boolean;
 		  }
 		| {
-				type: ExpressionType.Number;
+				type: "number";
 				value: number;
 		  }
 		| {
-				type: ExpressionType.String;
+				type: "string";
 				value: string;
 		  }
 		| {
-				type: ExpressionType.Directory;
+				type: "directory";
 				value: Directory;
 		  }
 		| {
-				type: ExpressionType.File;
+				type: "file";
 				value: File;
 		  }
 		| {
-				type: ExpressionType.Symlink;
+				type: "symlink";
 				value: Symlink;
 		  }
 		| {
-				type: ExpressionType.Dependency;
+				type: "dependency";
 				value: Dependency;
 		  }
 		| {
-				type: ExpressionType.Package;
+				type: "package";
 				value: Package;
 		  }
 		| {
-				type: ExpressionType.Template;
+				type: "template";
 				value: Template;
 		  }
 		| {
-				type: ExpressionType.Fetch;
+				type: "fetch";
 				value: Fetch;
 		  }
 		| {
-				type: ExpressionType.Js;
+				type: "js";
 				value: Js;
 		  }
 		| {
-				type: ExpressionType.Process;
+				type: "process";
 				value: Process;
 		  }
 		| {
-				type: ExpressionType.Target;
+				type: "target";
 				value: Target;
 		  }
 		| {
-				type: ExpressionType.Array;
+				type: "array";
 				value: _Array;
 		  }
 		| {
-				type: ExpressionType.Map;
+				type: "map";
 				value: _Map;
 		  };
 
@@ -185,12 +180,11 @@ declare namespace Tangram {
 
 	export type _Map = Record<string, Hash>;
 
-	export enum System {
-		Amd64Linux = "amd64_linux",
-		Amd64Macos = "amd64_macos",
-		Arm64Linux = "arm64_linux",
-		Arm64Macos = "arm64_macos",
-	}
+	export type System =
+		| "amd64_linux"
+		| "amd64_macos"
+		| "arm64_linux"
+		| "arm64_macos";
 
 	export type Digest = {
 		algorithm: DigestAlgorithm;
@@ -198,13 +192,9 @@ declare namespace Tangram {
 		value: string;
 	};
 
-	export enum DigestAlgorithm {
-		Sha256 = "sha256",
-	}
+	export type DigestAlgorithm = "sha256";
 
-	export enum DigestEncoding {
-		Hexadecimal = "hexadecimal",
-	}
+	export type DigestEncoding = "hexadecimal";
 
 	export const typeSymbol: unique symbol;
 }
