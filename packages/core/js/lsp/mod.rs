@@ -1,6 +1,6 @@
 use crate::js;
 use anyhow::{bail, Context, Result};
-use futures::FutureExt;
+use futures::{future, FutureExt};
 use lsp::{notification::Notification, request::Request};
 use lsp_types as lsp;
 use std::{collections::HashMap, future::Future};
@@ -133,64 +133,48 @@ impl LanguageServer {
 			// Handle a request.
 			jsonrpc::Message::Request(request) => {
 				match request.method.as_str() {
-					lsp::request::Completion::METHOD => {
-						self.handle_request::<lsp::request::Completion, _, _>(request, |params| {
+					lsp::request::Completion::METHOD => self
+						.handle_request::<lsp::request::Completion, _, _>(request, |params| {
 							self.completion(params)
 						})
-						.boxed()
-						.await;
-					},
+						.boxed(),
 
-					lsp::request::GotoDefinition::METHOD => {
-						self.handle_request::<lsp::request::GotoDefinition, _, _>(
-							request,
-							|params| self.definition(params),
-						)
-						.boxed()
-						.await;
-					},
+					lsp::request::GotoDefinition::METHOD => self
+						.handle_request::<lsp::request::GotoDefinition, _, _>(request, |params| {
+							self.definition(params)
+						})
+						.boxed(),
 
-					lsp::request::HoverRequest::METHOD => {
-						self.handle_request::<lsp::request::HoverRequest, _, _>(
-							request,
-							|params| self.hover(params),
-						)
-						.boxed()
-						.await;
-					},
+					lsp::request::HoverRequest::METHOD => self
+						.handle_request::<lsp::request::HoverRequest, _, _>(request, |params| {
+							self.hover(params)
+						})
+						.boxed(),
 
-					lsp::request::Initialize::METHOD => {
-						self.handle_request::<lsp::request::Initialize, _, _>(request, |params| {
+					lsp::request::Initialize::METHOD => self
+						.handle_request::<lsp::request::Initialize, _, _>(request, |params| {
 							self.initialize(params)
 						})
-						.boxed()
-						.await;
-					},
+						.boxed(),
 
-					lsp::request::References::METHOD => {
-						self.handle_request::<lsp::request::References, _, _>(request, |params| {
+					lsp::request::References::METHOD => self
+						.handle_request::<lsp::request::References, _, _>(request, |params| {
 							self.references(params)
 						})
-						.boxed()
-						.await;
-					},
+						.boxed(),
 
-					lsp::request::Shutdown::METHOD => {
-						self.handle_request::<lsp::request::Shutdown, _, _>(request, |params| {
+					lsp::request::Shutdown::METHOD => self
+						.handle_request::<lsp::request::Shutdown, _, _>(request, |params| {
 							self.shutdown(params)
 						})
-						.boxed()
-						.await;
-					},
+						.boxed(),
 
-					self::virtual_text_document::VirtualTextDocument::METHOD => {
-						self.handle_request::<self::virtual_text_document::VirtualTextDocument, _, _>(
-								request,
-								|params| self.virtual_text_document(params),
-							)
-							.boxed()
-							.await;
-					},
+					self::virtual_text_document::VirtualTextDocument::METHOD => self
+						.handle_request::<self::virtual_text_document::VirtualTextDocument, _, _>(
+							request,
+							|params| self.virtual_text_document(params),
+						)
+						.boxed(),
 
 					// If the request method does not have a handler, send a method not found response.
 					_ => {
@@ -203,8 +187,10 @@ impl LanguageServer {
 								message: "Method not found.".to_owned(),
 							}),
 						}));
+						future::ready(()).boxed()
 					},
-				};
+				}
+				.await;
 			},
 
 			// Handle a response.
@@ -213,36 +199,31 @@ impl LanguageServer {
 			// Handle a notification.
 			jsonrpc::Message::Notification(notification) => {
 				match notification.method.as_str() {
-					lsp::notification::DidOpenTextDocument::METHOD => {
-						self.handle_notification::<lsp::notification::DidOpenTextDocument, _, _>(
+					lsp::notification::DidOpenTextDocument::METHOD => self
+						.handle_notification::<lsp::notification::DidOpenTextDocument, _, _>(
 							notification,
 							|params| self.did_open(params),
 						)
-						.boxed()
-						.await;
-					},
+						.boxed(),
 
-					lsp::notification::DidChangeTextDocument::METHOD => {
-						self.handle_notification::<lsp::notification::DidChangeTextDocument, _, _>(
+					lsp::notification::DidChangeTextDocument::METHOD => self
+						.handle_notification::<lsp::notification::DidChangeTextDocument, _, _>(
 							notification,
 							|params| self.did_change(params),
 						)
-						.boxed()
-						.await;
-					},
+						.boxed(),
 
-					lsp::notification::DidCloseTextDocument::METHOD => {
-						self.handle_notification::<lsp::notification::DidCloseTextDocument, _, _>(
+					lsp::notification::DidCloseTextDocument::METHOD => self
+						.handle_notification::<lsp::notification::DidCloseTextDocument, _, _>(
 							notification,
 							|params| self.did_close(params),
 						)
-						.boxed()
-						.await;
-					},
+						.boxed(),
 
 					// If the notification method does not have a handler, do nothing.
-					_ => {},
+					_ => future::ready(()).boxed(),
 				}
+				.await;
 			},
 		}
 	}
