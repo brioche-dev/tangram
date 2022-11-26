@@ -3,9 +3,9 @@ use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use tangram_core::{
 	hash::Hash,
+	js,
 	specifier::{self, Specifier},
 	system::System,
-	js,
 };
 
 impl Cli {

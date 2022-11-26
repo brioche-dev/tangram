@@ -194,11 +194,10 @@ let convertDiagnostics = (diagnostics) => {
 	return output;
 };
 
-// TS2691: An import path cannot end with a '.ts' extension. Consider
-// importing 'bad-module' instead.
+// TS2691: An import path cannot end with a '.ts' extension. Consider importing 'bad-module' instead.
 const TS2691 = 2691;
-// TS2792: Cannot find module. Did you mean to set the 'moduleResolution'
-// option to 'node', or to add aliases to the 'paths' option?
+
+// TS2792: Cannot find module. Did you mean to set the 'moduleResolution' option to 'node', or to add aliases to the 'paths' option?
 const TS2792 = 2792;
 
 /** Convert a TypeScript diagnostic to a Tangram diagnostic. */
