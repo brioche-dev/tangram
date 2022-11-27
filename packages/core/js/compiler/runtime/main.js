@@ -3,6 +3,9 @@ globalThis.handle = ({ type, request }) => {
 		case "check": {
 			return check(request);
 		}
+		case "find_rename_locations": {
+			return findRenameLocations(request);
+		}
 		case "get_diagnostics": {
 			return getDiagnostics(request);
 		}
@@ -264,6 +267,48 @@ let convertDiagnostic = (diagnostic) => {
 		location,
 		severity,
 		message,
+	};
+};
+
+let findRenameLocations = (request) => {
+	// Get the source file and position.
+	let sourceFile = host.getSourceFile(request.url);
+	let position = ts.getPositionOfLineAndCharacter(
+		sourceFile,
+		request.position.line,
+		request.position.character,
+	);
+
+	// Get the rename locations.
+	let renameLocations = languageService.findRenameLocations(
+		request.url,
+		position,
+		false,
+		false,
+	);
+
+	// Convert the definitions.
+	let locations = renameLocations?.map((renameLocation) => {
+		let destFile = host.getSourceFile(renameLocation.fileName);
+		// Get the definitions's range.
+		let start = ts.getLineAndCharacterOfPosition(
+			destFile,
+			renameLocation.textSpan.start,
+		);
+		let end = ts.getLineAndCharacterOfPosition(
+			destFile,
+			renameLocation.textSpan.start + renameLocation.textSpan.length,
+		);
+		let location = {
+			url: renameLocation.fileName,
+			range: { start, end },
+		};
+		return location;
+	});
+
+	return {
+		type: "find_rename_locations",
+		response: { locations },
 	};
 };
 

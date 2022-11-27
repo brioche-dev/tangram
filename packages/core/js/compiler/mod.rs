@@ -1,13 +1,14 @@
 use self::{
 	runtime::types::{
-		CheckRequest, CompletionRequest, GetDiagnosticsRequest, GetDiagnosticsResponse,
-		GetHoverRequest, GetReferencesRequest, GetReferencesResponse, GotoDefinitionResponse,
-		GotoDefintionRequest, Request, Response,
+		CheckRequest, CompletionRequest, FindRenameLocationsRequest, FindRenameLocationsResponse,
+		GetDiagnosticsRequest, GetDiagnosticsResponse, GetHoverRequest, GetReferencesRequest,
+		GetReferencesResponse, GotoDefinitionResponse, GotoDefintionRequest, Request, Response,
 	},
-	types::{CompletionEntry, Diagnostic, Location, Position},
+	types::{CompletionEntry, Diagnostic, Location, Position, Range},
 };
 use crate::{builder::Builder, js};
 use anyhow::{anyhow, bail, Context, Result};
+use nom::ToUsize;
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::{Path, PathBuf},
@@ -197,10 +198,26 @@ impl Compiler {
 		self.state.files.write().await.remove(path);
 	}
 
-	pub async fn change_file(&self, path: &Path, version: i32, text: String) {
-		let Ok(url) = js::Url::for_path(path).await else { return };
-		let file = File::Opened(OpenedFile { url, version, text });
-		self.state.files.write().await.insert(path.to_owned(), file);
+	pub async fn change_file(&self, path: &Path, version: i32, range: Option<Range>, text: String) {
+		let Some(range) = range else { return };
+		let mut files = self.state.files.write().await;
+		let file = files.get_mut(path);
+		if let Some(File::Opened(file)) = file {
+			let start = file
+				.text
+				.lines()
+				.take(range.start.line.to_usize())
+				.map(str::len)
+				.sum::<usize>() + range.start.character.to_usize();
+			let end: usize = file
+				.text
+				.lines()
+				.take(range.end.line.to_usize())
+				.map(str::len)
+				.sum::<usize>() + range.end.character.to_usize();
+			file.text.replace_range(start..end, &text);
+			file.version = version;
+		}
 	}
 }
 
@@ -223,6 +240,29 @@ impl Compiler {
 		let diagnostics = response.diagnostics;
 
 		Ok(diagnostics)
+	}
+
+	pub async fn find_rename_locations(
+		&self,
+		url: js::Url,
+		position: Position,
+	) -> Result<Option<Vec<Location>>> {
+		// Create the request.
+		let request = Request::FindRenameLocations(FindRenameLocationsRequest { url, position });
+
+		// Send the request and receive the response.
+		let response = self.request(request).await?;
+
+		// Get the response.
+		let response = match response {
+			Response::FindRenameLocations(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+
+		// Get the result from the response.
+		let FindRenameLocationsResponse { locations } = response;
+
+		Ok(locations)
 	}
 
 	pub async fn get_diagnostics(&self) -> Result<BTreeMap<js::Url, Vec<Diagnostic>>> {

@@ -32,7 +32,12 @@ impl LanguageServer {
 		// Update the document in the compiler.
 		for change in params.content_changes {
 			self.compiler
-				.change_file(path, params.text_document.version, change.text)
+				.change_file(
+					path,
+					params.text_document.version,
+					change.range.map(Into::into),
+					change.text,
+				)
 				.await;
 		}
 

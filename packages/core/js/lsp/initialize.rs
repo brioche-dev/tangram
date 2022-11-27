@@ -14,10 +14,11 @@ impl LanguageServer {
 				references_provider: Some(lsp::OneOf::Left(true)),
 				completion_provider: Some(lsp::CompletionOptions::default()),
 				definition_provider: Some(lsp::OneOf::Left(true)),
+				rename_provider: Some(lsp::OneOf::Left(true)),
 				text_document_sync: Some(lsp::TextDocumentSyncCapability::Options(
 					lsp::TextDocumentSyncOptions {
 						open_close: Some(true),
-						change: Some(lsp::TextDocumentSyncKind::FULL),
+						change: Some(lsp::TextDocumentSyncKind::INCREMENTAL),
 						..Default::default()
 					},
 				)),

@@ -14,6 +14,7 @@ mod hover;
 mod initialize;
 mod jsonrpc;
 mod references;
+mod rename;
 mod types;
 mod virtual_text_document;
 
@@ -164,6 +165,12 @@ impl LanguageServer {
 					lsp::request::References::METHOD => self
 						.handle_request::<lsp::request::References, _, _>(request, |params| {
 							self.references(params)
+						})
+						.boxed(),
+
+					lsp::request::Rename::METHOD => self
+						.handle_request::<lsp::request::Rename, _, _>(request, |params| {
+							self.rename(params)
 						})
 						.boxed(),
 
