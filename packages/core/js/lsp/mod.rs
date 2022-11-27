@@ -69,13 +69,17 @@ impl LanguageServer {
 				break;
 			};
 
-			// Spawn a task to handle the message.
-			tokio::spawn({
-				let server = self.clone();
-				async move {
-					server.handle_message(message).await;
-				}
-			});
+			// Handle the message.
+			self.handle_message(message).await;
+
+			// TODO
+			// // Spawn a task to handle the message.
+			// tokio::spawn({
+			// 	let server = self.clone();
+			// 	async move {
+			// 		server.handle_message(message).await;
+			// 	}
+			// });
 		}
 
 		// Wait for the outgoing message task to complete.
@@ -86,7 +90,7 @@ impl LanguageServer {
 
 	async fn read_incoming_message<R>(reader: &mut R) -> Result<jsonrpc::Message>
 	where
-		R: Unpin + AsyncRead + AsyncBufRead,
+		R: AsyncRead + AsyncBufRead + Unpin,
 	{
 		// Read the headers.
 		let mut headers = HashMap::new();
