@@ -203,18 +203,21 @@ impl Compiler {
 		let mut files = self.state.files.write().await;
 		let file = files.get_mut(path);
 		if let Some(File::Opened(file)) = file {
-			let start = file
+			// For a given line and character offset, we need to compute a character offset in the file.
+			let start: usize = file
 				.text
 				.lines()
 				.take(range.start.line.to_usize())
-				.map(str::len)
-				.sum::<usize>() + range.start.character.to_usize();
+				.map(|s| s.chars().count())
+				.sum::<usize>() + range.start.line.to_usize()
+				+ range.start.character.to_usize();
 			let end: usize = file
 				.text
 				.lines()
 				.take(range.end.line.to_usize())
-				.map(str::len)
-				.sum::<usize>() + range.end.character.to_usize();
+				.map(|s| s.chars().count())
+				.sum::<usize>() + range.end.line.to_usize()
+				+ range.end.character.to_usize();
 			file.text.replace_range(start..end, &text);
 			file.version = version;
 		}
