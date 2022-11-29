@@ -16,6 +16,7 @@ mod jsonrpc;
 mod references;
 mod rename;
 mod types;
+mod util;
 mod virtual_text_document;
 
 #[derive(Clone)]
@@ -70,17 +71,13 @@ impl LanguageServer {
 				break;
 			};
 
-			// Handle the message.
-			self.handle_message(message).await;
-
-			// TODO
-			// // Spawn a task to handle the message.
-			// tokio::spawn({
-			// 	let server = self.clone();
-			// 	async move {
-			// 		server.handle_message(message).await;
-			// 	}
-			// });
+			// Spawn a task to handle the message.
+			tokio::spawn({
+				let server = self.clone();
+				async move {
+					server.handle_message(message).await;
+				}
+			});
 		}
 
 		// Wait for the outgoing message task to complete.

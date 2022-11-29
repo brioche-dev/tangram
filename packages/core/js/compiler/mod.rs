@@ -136,19 +136,23 @@ impl Compiler {
 	pub async fn get_version(&self, url: &js::Url) -> Result<i32> {
 		// Get the path for the URL, or return version 0 for URLs whose contents never change.
 		let path = match url {
-			// Path modules update versions when the file at their path changes.
-			js::Url::PathModule {
+			// Path modules change when the file at their path changes.
+			js::Url::PathModule(js::compiler::url::PathModule {
 				package_path,
 				module_path,
-			} => package_path.join(module_path),
+			}) => package_path.join(module_path),
 
-			// Path targets update versions when their manifest changes.
-			js::Url::PathTargets { package_path } => package_path.join("tangram.json"),
+			// Path consumer and process URLs change when their manifest changes.
+			js::Url::PathImport(js::compiler::url::PathImport { package_path, .. })
+			| js::Url::PathTarget(js::compiler::url::PathTarget { package_path, .. }) => {
+				package_path.join("tangram.json")
+			},
 
-			// Package module and package targets URLs have hashes. They never change, so we can always return 0. The same goes for the libs.
+			// The contents from library and package URLs never change, so we can always return 0.
 			js::Url::Lib { .. }
-			| js::Url::PackageModule { .. }
-			| js::Url::PackageTargets { .. } => {
+			| js::Url::HashModule { .. }
+			| js::Url::HashImport { .. }
+			| js::Url::HashTarget { .. } => {
 				return Ok(0);
 			},
 		};

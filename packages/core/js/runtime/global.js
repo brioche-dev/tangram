@@ -1,12 +1,3 @@
-let bs = globalThis.__bootstrap;
-Object.defineProperties(globalThis, {
-	TextDecoder: { value: bs.encoding.TextDecoder },
-	TextEncoder: { value: bs.encoding.TextEncoder },
-	URL: { value: bs.url.URL },
-	URLPattern: { value: bs.urlPattern.URLPattern },
-	URLSearchParams: { value: bs.url.URLSearchParams },
-});
-
 let stringify = (value) => {
 	let inner = (value, visited) => {
 		let type = typeof value;
@@ -40,8 +31,11 @@ let stringify = (value) => {
 					return "[promise]";
 				} else {
 					let constructorName = "";
-					if (value.constructor?.name !== "Object") {
-						constructorName = `${value.constructor?.name} `;
+					if (
+						value.constructor !== undefined &&
+						value.constructor.name !== "Object"
+					) {
+						constructorName = `${value.constructor.name} `;
 					}
 
 					// If the value has a `.toString()` method, which returns a string, use that as the body of the debug output.
@@ -94,9 +88,13 @@ Object.defineProperties(globalThis, {
 function syscall(syscall, ...args) {
 	let opName = "op_tg_" + syscall;
 	switch (syscall) {
-		case "print":
+		case "get_hash":
 			return Deno.core.opSync(opName, ...args);
-		case "deserialize":
+		case "get_name":
+			return Deno.core.opSync(opName, ...args);
+		case "get_args":
+			return Deno.core.opSync(opName, ...args);
+		case "return":
 			return Deno.core.opSync(opName, ...args);
 		case "add_blob":
 			return Deno.core.opAsync(opName, ...args);
@@ -108,6 +106,14 @@ function syscall(syscall, ...args) {
 			return Deno.core.opAsync(opName, ...args);
 		case "evaluate":
 			return Deno.core.opAsync(opName, ...args);
+		case "print":
+			return Deno.core.opSync(opName, ...args);
+		case "serialize":
+			return Deno.core.opSync(opName, ...args);
+		case "deserialize":
+			return Deno.core.opSync(opName, ...args);
+		default:
+			throw new Error("Unknown syscall.");
 	}
 }
 

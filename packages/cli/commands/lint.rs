@@ -12,6 +12,6 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub(crate) async fn command_lint(&self, _args: Args) -> Result<()> {
-		todo!()
+		Ok(())
 	}
 }

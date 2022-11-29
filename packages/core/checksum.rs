@@ -10,7 +10,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 	serde::Deserialize,
 	serde::Serialize,
 )]
-pub struct Digest {
+pub struct Checksum {
 	#[buffalo(id = 0)]
 	algorithm: Algorithm,
 	#[buffalo(id = 1)]
@@ -31,9 +31,9 @@ pub struct Digest {
 	num_derive::FromPrimitive,
 	num_derive::ToPrimitive,
 )]
-#[serde(rename_all = "camelCase")]
 pub enum Algorithm {
 	#[default]
+	#[serde(rename = "sha256")]
 	Sha256 = 0,
 }
 
@@ -62,7 +62,7 @@ impl buffalo::Deserialize for Algorithm {
 	{
 		let value = deserializer.deserialize_uvarint()?;
 		let value = Self::from_u64(value)
-			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Invalid system."))?;
+			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Invalid algorithm."))?;
 		Ok(value)
 	}
 }
@@ -82,19 +82,19 @@ impl buffalo::Deserialize for Algorithm {
 #[serde(rename_all = "camelCase")]
 pub enum Encoding {
 	#[default]
-	Hexadecimal = 0,
+	Base16 = 0,
 }
 
 impl Encoding {
 	fn encode(self, data: impl AsRef<[u8]>) -> String {
 		match self {
-			Self::Hexadecimal => hex::encode(data),
+			Self::Base16 => hex::encode(data),
 		}
 	}
 
 	fn decode(self, string: &str) -> Result<Vec<u8>, DecodeError> {
 		match self {
-			Self::Hexadecimal => {
+			Self::Base16 => {
 				let data = hex::decode(string)?;
 				Ok(data)
 			},
@@ -125,31 +125,31 @@ impl buffalo::Deserialize for Encoding {
 }
 
 #[derive(Debug)]
-pub struct Hasher {
-	hasher: DigestAlgorithmHasher,
+pub struct Checksummer {
+	hasher: Hasher,
 	algorithm: Algorithm,
 	encoding: Encoding,
 	expected_value: Option<String>,
 }
 
-impl Hasher {
+impl Checksummer {
 	#[must_use]
-	pub fn new(expected_digest: Option<Digest>) -> Self {
+	pub fn new(expected_checksum: Option<Checksum>) -> Self {
 		let algorithm;
 		let encoding;
 		let expected_value;
 
-		if let Some(digest) = expected_digest {
-			algorithm = digest.algorithm;
-			encoding = digest.encoding;
-			expected_value = Some(digest.value);
+		if let Some(checksum) = expected_checksum {
+			algorithm = checksum.algorithm;
+			encoding = checksum.encoding;
+			expected_value = Some(checksum.value);
 		} else {
 			algorithm = Algorithm::default();
 			encoding = Encoding::default();
 			expected_value = None;
 		}
 
-		let hasher = DigestAlgorithmHasher::new(algorithm);
+		let hasher = Hasher::new(algorithm);
 
 		Self {
 			hasher,
@@ -165,10 +165,12 @@ impl Hasher {
 
 	pub fn finalize_and_validate(self) -> Result<(), Error> {
 		let actual_bytes = self.hasher.finalize();
+
 		let expected = self.expected_value.ok_or_else(|| Error::MissingValue {
 			actual: self.encoding.encode(&actual_bytes),
 			algorithm: self.algorithm,
 		})?;
+
 		let expected_bytes =
 			self.encoding
 				.decode(&expected)
@@ -192,11 +194,11 @@ impl Hasher {
 }
 
 #[derive(Debug)]
-enum DigestAlgorithmHasher {
+enum Hasher {
 	Sha256(sha2::Sha256),
 }
 
-impl DigestAlgorithmHasher {
+impl Hasher {
 	fn new(algorithm: Algorithm) -> Self {
 		match algorithm {
 			Algorithm::Sha256 => Self::Sha256(sha2::Sha256::default()),
@@ -218,18 +220,18 @@ impl DigestAlgorithmHasher {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	#[error("expected {expected}, got {actual} ({algorithm})")]
+	#[error(r#"Expected "{expected}", got "{actual} ({algorithm})"."#)]
 	Mismatch {
 		expected: String,
 		actual: String,
 		algorithm: Algorithm,
 	},
-	#[error("no digest was provided, actual digest was {actual} ({algorithm})")]
+	#[error(r#"No checksum was provided. The actual checksum was "{actual} ({algorithm})"."#)]
 	MissingValue {
 		actual: String,
 		algorithm: Algorithm,
 	},
-	#[error("actual digest was {actual} ({algorithm}), expected digest {expected:?} is invalid")]
+	#[error(r#"The actual checksum was "{actual} ({algorithm})". The expected checksum "{expected:?}" is invalid."#)]
 	InvalidValue {
 		expected: String,
 		actual: String,
@@ -241,6 +243,6 @@ pub enum Error {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
-	#[error("hexadecimal error: {0}")]
+	#[error(r#"Hex error: "{0}"."#)]
 	HexadecimalError(#[from] hex::FromHexError),
 }

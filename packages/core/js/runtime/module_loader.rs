@@ -1,5 +1,5 @@
 use crate::js::{self, Compiler};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use futures::FutureExt;
 use std::{
 	collections::HashMap,
@@ -96,43 +96,12 @@ async fn load(state: Arc<State>, url: &js::Url) -> Result<deno_core::ModuleSourc
 	// Load the source.
 	let source = state.compiler.load(url).await?;
 
-	// Determine if the module should be transpiled.
-	let transpile = match url {
-		js::Url::PathModule { module_path, .. } | js::Url::PackageModule { module_path, .. } => {
-			// Get the module's path extension.
-			let extension = module_path
-				.extension()
-				.with_context(|| format!(r#"Cannot load from URL "{url}" with no extension."#))?;
-			match extension {
-				"js" => false,
-				"ts" => true,
-				_ => {
-					bail!(r#"Cannot load from URL with extension "{extension}"."#);
-				},
-			}
-		},
-
-		js::Url::PackageTargets { .. } => true,
-
-		_ => {
-			bail!(r#"Cannot load from URL "{url}"."#);
-		},
-	};
-
-	// Transpile the module if necessary.
-	let module = if transpile {
-		let transpile_output = state.compiler.transpile(source.clone()).await?;
-		Module {
-			source,
-			transpiled_source: Some(transpile_output.transpiled_source),
-			source_map: Some(transpile_output.source_map),
-		}
-	} else {
-		Module {
-			source,
-			transpiled_source: None,
-			source_map: None,
-		}
+	// Transpile the module.
+	let transpile_output = state.compiler.transpile(source.clone()).await?;
+	let module = Module {
+		source,
+		transpiled_source: Some(transpile_output.transpiled_source),
+		source_map: Some(transpile_output.source_map),
 	};
 
 	// Insert into the modules map.

@@ -1,6 +1,7 @@
 #![allow(clippy::similar_names)]
 
-use super::{Command, PathMode};
+use super::{PathMode, ReferencedPathSet};
+use crate::builder::State;
 use anyhow::{bail, Context, Result};
 use bstr::ByteSlice;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -11,6 +12,7 @@ use libc::{
 	MS_PRIVATE, MS_RDONLY, MS_REC, MS_RELATIME, MS_REMOUNT, MS_STRICTATIME,
 };
 use std::{
+	collections::BTreeMap,
 	ffi::CString,
 	io::BufRead,
 	os::unix::prelude::OsStrExt,
@@ -18,54 +20,18 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-#[derive(Debug, thiserror::Error)]
-enum SandboxIncomplete {
-	#[error("Failed to unshare the user namespace.")]
-	UnshareUser(#[source] std::io::Error),
-	#[error("Failed to set the uid.")]
-	SetUidFailed(#[source] std::io::Error),
-	#[error("Failed to set the gid.")]
-	SetGidFailed(#[source] std::io::Error),
-	#[error("Failed to unshare the mount namespace.")]
-	UnshareMount(#[source] std::io::Error),
-	#[error("Failed to ensure the root does not have shared propagation.")]
-	MountPrivateRoot(#[source] std::io::Error),
-	#[error("Failed to ensure the new root is a mount point.")]
-	MountBindRoot(#[source] std::io::Error),
-	#[error("Failed to mount {1:?}.")]
-	MountFailed(#[source] std::io::Error, PathBuf),
-	#[error("Failed to mount {1:?} as read-only.")]
-	MountReadOnlyFailed(#[source] std::io::Error, PathBuf),
-	#[error("Failed to pivot the root.")]
-	PivotRootFailed(#[source] std::io::Error),
-	#[error("Failed to chdir.")]
-	ChdirFailed(#[source] std::io::Error),
-	#[error("Failed to unmount the parent's root.")]
-	UnmountParentFailed(#[source] std::io::Error),
-	#[error("Failed to remove the mountpoint for the parent's root.")]
-	RemoveParentFailed(#[source] std::io::Error),
-	#[error("Failed to unshare the network namespace.")]
-	UnshareNetwork(#[source] std::io::Error),
-	#[error("Failed to get resolv.conf from host.")]
-	ResolvConf(#[source] std::io::Error),
-}
-
-#[derive(Debug, thiserror::Error)]
-enum SandboxError {
-	#[error("Failed to send the message to the parent process that the UID and GID maps are ready to be set.")]
-	FailedToSendUidMapMessage(#[source] std::io::Error),
-	#[error("Failed to receive the message from the parent process that the UID and GID maps have been set.")]
-	FailedToReceiveUidMapMessage(#[source] std::io::Error),
-	#[error("Failed to get options for mountpoint {1:?}.")]
-	FailedToGetMountpointOptions(#[source] anyhow::Error, PathBuf),
-	#[error("Failed to set up sandbox.")]
-	Incomplete(#[from] SandboxIncomplete),
-}
-
-impl Command {
-	pub async fn run(self) -> Result<()> {
-		// Get the chroot directory.
-		let parent_child_root_path = self.chroot_path.clone();
+impl State {
+	pub async fn run_process_linux(
+		&self,
+		working_directory: String,
+		env: BTreeMap<String, String>,
+		command: String,
+		args: Vec<String>,
+		referenced_path_set: ReferencedPathSet,
+		network: bool,
+	) -> Result<()> {
+		// Create a temp path for the chroot.
+		let parent_child_root_path = self.create_temp_path();
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -80,29 +46,34 @@ impl Command {
 			.context("Failed to make the child socket nonblocking.")?;
 
 		// Create the process.
-		let mut process = tokio::process::Command::new(&self.command);
+		let mut command = tokio::process::Command::new(&command);
 
 		// Set the current dir.
-		process.current_dir(&self.current_dir);
+		command.current_dir(&working_directory);
 
 		// Set the envs.
-		process.env_clear();
-		process.envs(&self.envs);
+		command.env_clear();
+		command.envs(env);
 
 		// Set the args.
-		process.args(&self.args);
+		command.args(args);
 
 		// Set up the sandbox.
 		unsafe {
-			process.pre_exec(move || {
-				pre_exec(&mut child_socket, &parent_child_root_path, &self)
-					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+			command.pre_exec(move || {
+				pre_exec(
+					&mut child_socket,
+					&parent_child_root_path,
+					&referenced_path_set,
+					network,
+				)
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
 
 		// Spawn the process.
 		let spawn_task = tokio::task::spawn_blocking(move || {
-			let child = process.spawn().context("Failed to spawn the process.")?;
+			let child = command.spawn().context("Failed to spawn the process.")?;
 			Ok::<_, anyhow::Error>(child)
 		});
 
@@ -171,21 +142,17 @@ impl Command {
 fn pre_exec(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
-	command: &Command,
+	referenced_path_set: &ReferencedPathSet,
+	network: bool,
 ) -> std::io::Result<()> {
-	// Sandboxing is required if the process has a base artifact. This implies that the sandbox will be reading things from absolute paths at the root, and we don't want the host's root to interfere with the sandbox.
-	let is_sandbox_required = command.has_base;
-
-	let result = set_up_sandbox(child_socket, parent_child_root_path, command);
+	let result = set_up_sandbox(
+		child_socket,
+		parent_child_root_path,
+		referenced_path_set,
+		network,
+	);
 	match result {
 		Ok(()) => Ok(()),
-		Err(SandboxError::Incomplete(error)) if is_sandbox_required => {
-			// Print an error and exit if the sandbox setup did not finish completely when sandboxing is required.
-			eprintln!(
-				"Sandbox setup failed while evaluating a process with a base artifact. {error:#}"
-			);
-			Err(std::io::Error::new(std::io::ErrorKind::Other, error))
-		},
 		Err(SandboxError::Incomplete(error)) => {
 			// Print a warning if the sandbox setup did not finish completely.
 			eprintln!("Warning: Sandbox setup failed. {error:#}");
@@ -199,11 +166,72 @@ fn pre_exec(
 	}
 }
 
+#[derive(Debug, thiserror::Error)]
+enum SandboxIncomplete {
+	#[error("Failed to unshare the user namespace.")]
+	UnshareUser(#[source] std::io::Error),
+
+	#[error("Failed to set the uid.")]
+	SetUidFailed(#[source] std::io::Error),
+
+	#[error("Failed to set the gid.")]
+	SetGidFailed(#[source] std::io::Error),
+
+	#[error("Failed to unshare the mount namespace.")]
+	UnshareMount(#[source] std::io::Error),
+
+	#[error("Failed to ensure the root does not have shared propagation.")]
+	MountPrivateRoot(#[source] std::io::Error),
+
+	#[error("Failed to ensure the new root is a mount point.")]
+	MountBindRoot(#[source] std::io::Error),
+
+	#[error("Failed to mount {1:?}.")]
+	MountFailed(#[source] std::io::Error, PathBuf),
+
+	#[error("Failed to mount {1:?} as read-only.")]
+	MountReadOnlyFailed(#[source] std::io::Error, PathBuf),
+
+	#[error("Failed to pivot the root.")]
+	PivotRootFailed(#[source] std::io::Error),
+
+	#[error("Failed to chdir.")]
+	ChdirFailed(#[source] std::io::Error),
+
+	#[error("Failed to unmount the parent's root.")]
+	UnmountParentFailed(#[source] std::io::Error),
+
+	#[error("Failed to remove the mountpoint for the parent's root.")]
+	RemoveParentFailed(#[source] std::io::Error),
+
+	#[error("Failed to unshare the network namespace.")]
+	UnshareNetwork(#[source] std::io::Error),
+
+	#[error("Failed to get resolv.conf from host.")]
+	ResolvConf(#[source] std::io::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+enum SandboxError {
+	#[error("Failed to send the message to the parent process that the UID and GID maps are ready to be set.")]
+	FailedToSendUidMapMessage(#[source] std::io::Error),
+
+	#[error("Failed to receive the message from the parent process that the UID and GID maps have been set.")]
+	FailedToReceiveUidMapMessage(#[source] std::io::Error),
+
+	#[error("Failed to get options for mountpoint {1:?}.")]
+	FailedToGetMountpointOptions(#[source] anyhow::Error, PathBuf),
+
+	#[error("Failed to set up sandbox.")]
+	Incomplete(#[from] SandboxIncomplete),
+}
+
 #[allow(clippy::too_many_lines)]
 fn set_up_sandbox(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
-	command: &Command,
+	referenced_path_set: &ReferencedPathSet,
+	network: bool,
 ) -> Result<(), SandboxError> {
 	// Unshare the user namespace.
 	let ret = unsafe { unshare(CLONE_NEWUSER) };
@@ -346,25 +374,28 @@ fn set_up_sandbox(
 	let child_etc_path = parent_child_root_path.join("etc");
 	std::fs::create_dir_all(&child_etc_path).unwrap();
 
-	if command.enable_network_access {
-		// Copy resolv.conf to re-use DNS config from host.
+	if network {
+		// If network access is enabled, copy /etc/resolv.conf to use the DNS config from the host.
 		std::fs::copy("/etc/resolv.conf", child_etc_path.join("resolv.conf"))
 			.map_err(SandboxIncomplete::ResolvConf)?;
 	} else {
-		// Unshare the network namespace to disable network access.
+		// If network access is disabled, unshare the network namespace.
 		let ret = unsafe { unshare(CLONE_NEWNET) };
 		if ret != 0 {
 			return Err(SandboxIncomplete::UnshareNetwork(std::io::Error::last_os_error()).into());
 		}
 	}
 
-	// Mount all paths used in the build.
-	for (path, mode) in &command.paths {
-		let parent_source_path = match mode {
+	// Mount all referenced paths.
+	for referenced_path in referenced_path_set {
+		let parent_source_path = match referenced_path.mode {
 			// Allow access to just the path.
-			PathMode::Read | PathMode::ReadWrite => path,
+			PathMode::Read | PathMode::ReadWrite => &referenced_path.path,
 			// To allow creation of the new file, allow access to the parent path.
-			PathMode::ReadWriteCreate => path.parent().unwrap_or(path),
+			PathMode::ReadWriteCreate => referenced_path
+				.path
+				.parent()
+				.unwrap_or(&referenced_path.path),
 		};
 		let parent_source_path_c_string =
 			CString::new(parent_source_path.as_os_str().as_bytes()).unwrap();
@@ -391,7 +422,7 @@ fn set_up_sandbox(
 		}
 
 		// Remount as read-only if writes are disabled. Bind mounts can only be made read-only by mounting it normally then remounting in read-only mode.
-		match mode {
+		match referenced_path.mode {
 			PathMode::Read => {
 				let current_mount_options = get_mountpoint_remount_options(&parent_target_path)
 					.map_err(|error| {
@@ -463,7 +494,7 @@ fn set_up_sandbox(
 	Ok(())
 }
 
-// Get the current options associated with a mountpoint that affect remounting. In some cases, when calling `mount` targeting an existing bind mount with the `MS_REMOUNT` option set, some extra options from the mountpoint underlying the bind mount need to be included too. Not including some extra options can cause the `mount` call to fail, such as the `MS_NODEV` option when inside a Podman container. This function parses the mount table at `/proc/mount` to get the current mount options. See mount(2) for a list of mount options that are used when remounting.
+// Get the current options associated with a mountpoint that affect remounting. In some cases, when calling `mount` targeting an existing bind mount with the `MS_REMOUNT` option set, some extra options from the mountpoint underlying the bind mount need to be included too. Not including some extra options can cause the `mount` call to fail, such as the `MS_NODEV` option when inside a container. This function parses the mount table at `/proc/mount` to get the current mount options. See mount(2) for a list of mount options that are used when remounting.
 fn get_mountpoint_remount_options(mountpoint: &Path) -> Result<c_ulong> {
 	// Read the mount table for the current mount namespace. This file uses the same format as fstab.
 	let mounts_table = std::fs::File::open("/proc/mounts")?;

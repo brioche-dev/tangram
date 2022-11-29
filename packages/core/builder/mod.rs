@@ -52,7 +52,7 @@ pub struct State {
 	/// This is the database used to store expressions and evaluations.
 	db: Db,
 
-	/// This HTTP client is for performing HTTP requests when evaluating fetch expressions.
+	/// This HTTP client is for performing HTTP requests when evaluating download expressions.
 	http_client: reqwest::Client,
 
 	// For expressions that are expensive to evaluate, it is a waste to evaluate them if another evaluation for the same expression is already in progress. This map stores a receiver that will be notified when an in progress evaluation of the expression completes.

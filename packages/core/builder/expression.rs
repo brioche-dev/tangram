@@ -16,16 +16,28 @@ impl State {
 		}
 	}
 
-	// Add an expression to the server after ensuring the server has all its references.
+	// Add an expression after ensuring all its references are present.
 	#[allow(clippy::too_many_lines, clippy::match_same_arms)]
 	pub async fn try_add_expression(
 		&self,
 		expression: &Expression,
 	) -> Result<AddExpressionOutcome> {
-		// Before adding this expression, we need to ensure the builder has all its references.
+		// Before adding this expression, we need to ensure all its references are present.
 		let mut missing = Vec::new();
 		match expression {
-			// If this expression is a directory, ensure all its entries are present.
+			// If this expression is null, there is nothing to ensure.
+			Expression::Null(_) => {},
+
+			// If this expression is bool, there is nothing to ensure.
+			Expression::Bool(_) => {},
+
+			// If this expression is number, there is nothing to ensure.
+			Expression::Number(_) => {},
+
+			// If this expression is string, there is nothing to ensure.
+			Expression::String(_) => {},
+
+			// If this expression is a directory, ensure all its entry expressions are present.
 			Expression::Directory(directory) => {
 				let mut missing = Vec::new();
 				for (entry_name, hash) in &directory.entries {
@@ -54,7 +66,7 @@ impl State {
 			// If this expression is a symlink, there is nothing to ensure.
 			Expression::Symlink(_) => {},
 
-			// If this expression is a dependency, ensure the dependency is present.
+			// If this expression is a dependency, ensure the dependency expression is present.
 			Expression::Dependency(dependency) => {
 				let hash = dependency.artifact;
 				let exists = self.expression_exists_local(hash)?;
@@ -63,7 +75,7 @@ impl State {
 				}
 			},
 
-			// If this expression is a package, ensure its source and dependencies are present.
+			// If this expression is a package, ensure its source and dependencies expressions are present.
 			Expression::Package(package) => {
 				let hash = package.source;
 				let exists = self.expression_exists_local(package.source)?;
@@ -78,18 +90,6 @@ impl State {
 				}
 			},
 
-			// If this expression is null, there is nothing to ensure.
-			Expression::Null(_) => {},
-
-			// If this expression is bool, there is nothing to ensure.
-			Expression::Bool(_) => {},
-
-			// If this expression is number, there is nothing to ensure.
-			Expression::Number(_) => {},
-
-			// If this expression is string, there is nothing to ensure.
-			Expression::String(_) => {},
-
 			// If this expression is a template, ensure the components are present.
 			Expression::Template(template) => {
 				for hash in template.components.iter().copied() {
@@ -99,27 +99,28 @@ impl State {
 				}
 			},
 
-			// If this expression is fetch, there is nothing to ensure.
-			Expression::Fetch(_) => {},
+			// If this expression is a placeholder, there is nothing to ensure.
+			Expression::Placeholder(_) => {},
 
-			Expression::Js(js) => {
-				// Ensure the artifact is present.
-				let hash = js.package;
-				let exists = self.expression_exists_local(hash)?;
-				if !exists {
-					missing.push(hash);
-				}
-
-				// Ensure the args are present.
-				let hash = js.args;
-				let exists = self.expression_exists_local(hash)?;
-				if !exists {
-					missing.push(hash);
-				}
-			},
+			// If this expression is a download, there is nothing to ensure.
+			Expression::Download(_) => {},
 
 			// If this expression is a process, ensure its children are present.
 			Expression::Process(process) => {
+				// Ensure the command expression is present.
+				let hash = process.working_directory;
+				let exists = self.expression_exists_local(hash)?;
+				if !exists {
+					missing.push(hash);
+				}
+
+				// Ensure the env expression is present.
+				let hash = process.env;
+				let exists = self.expression_exists_local(hash)?;
+				if !exists {
+					missing.push(hash);
+				}
+
 				// Ensure the command expression is present.
 				let hash = process.command;
 				let exists = self.expression_exists_local(hash)?;
@@ -133,25 +134,18 @@ impl State {
 				if !exists {
 					missing.push(hash);
 				}
-
-				// Ensure the env expression is present.
-				let hash = process.env;
-				let exists = self.expression_exists_local(hash)?;
-				if !exists {
-					missing.push(hash);
-				}
 			},
 
 			// If this expression is a target, ensure its children are present.
 			Expression::Target(target) => {
-				// Ensure the package is present.
+				// Ensure the package expression is present.
 				let hash = target.package;
 				let exists = self.expression_exists_local(hash)?;
 				if !exists {
 					missing.push(hash);
 				}
 
-				// Ensure the args are present.
+				// Ensure the args expression is present.
 				let hash = target.args;
 				let exists = self.expression_exists_local(hash)?;
 				if !exists {
@@ -159,7 +153,7 @@ impl State {
 				}
 			},
 
-			// If this expression is an array, ensure the values are present.
+			// If this expression is an array, ensure the values expressions are present.
 			Expression::Array(array) => {
 				for hash in array.iter().copied() {
 					if !self.expression_exists_local(hash)? {

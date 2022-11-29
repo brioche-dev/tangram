@@ -1,9 +1,10 @@
 use crate::Cli;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_core::specifier::Specifier;
 use tangram_core::system::System;
+use tangram_core::util::path_exists;
 
 #[derive(Parser, Debug)]
 #[command(trailing_var_arg = true)]
@@ -71,6 +72,14 @@ impl Cli {
 
 		// Get the path to the executable.
 		let executable_path = artifact_path.join(executable_path);
+
+		// Verify the executable path exists.
+		if !path_exists(&executable_path).await? {
+			bail!(
+				r#"No executable found at path "{}"."#,
+				executable_path.display()
+			);
+		}
 
 		// Drop the lock on the builder.
 		drop(builder);

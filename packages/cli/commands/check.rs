@@ -30,11 +30,11 @@ impl Cli {
 		// Create a compiler.
 		let compiler = js::Compiler::new(self.builder.clone());
 
-		// Get a path URL to the package.
-		let url = self.js_url_for_specifier(&args.specifier).await?;
+		// Get the js URLs for the package.
+		let urls = self.js_urls_for_specifier(&args.specifier).await?;
 
 		// Check the package for diagnostics.
-		let diagnostics = compiler.check(vec![url]).await?;
+		let diagnostics = compiler.check(urls).await?;
 
 		// Print the diagnostics.
 		let mut exit_with_error = false;
@@ -53,10 +53,10 @@ impl Cli {
 					let character = character + 1;
 
 					match url {
-						js::Url::PathModule {
+						js::Url::PathModule(js::compiler::url::PathModule {
 							package_path,
 							module_path,
-						} => {
+						}) => {
 							// Skip diagnostics from paths that do not match the filter.
 							let path = package_path.join(module_path);
 							let path = path.display().to_string();
@@ -71,7 +71,12 @@ impl Cli {
 							println!();
 						},
 
-						js::Url::PathTargets { package_path } => {
+						js::Url::PathImport(js::compiler::url::PathImport {
+							package_path, ..
+						})
+						| js::Url::PathTarget(js::compiler::url::PathTarget {
+							package_path, ..
+						}) => {
 							// Skip diagnostics from paths that do not match the filter.
 							let path = package_path.display().to_string();
 							if let Some(filter) = &args.filter_filenames {
@@ -85,9 +90,7 @@ impl Cli {
 							println!();
 						},
 
-						js::Url::Lib { .. }
-						| js::Url::PackageModule { .. }
-						| js::Url::PackageTargets { .. } => {
+						_ => {
 							println!("{url}:{line}:{character}");
 							println!("{message}");
 							println!();

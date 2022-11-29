@@ -35,6 +35,61 @@ impl<T> Lock<T> {
 		}
 	}
 
+	pub async fn try_lock_shared(&self) -> Result<Option<SharedGuard<'_, T>>> {
+		let lock_file = {
+			self.shared_lock_file
+				.read()
+				.await
+				.as_ref()
+				.and_then(Weak::upgrade)
+		};
+		if let Some(lock_file) = lock_file {
+			return Ok(Some(SharedGuard {
+				value: unsafe { &*self.value.get() },
+				lock_file,
+			}));
+		}
+		let lock_file = tokio::fs::OpenOptions::new()
+			.read(true)
+			.write(true)
+			.create(true)
+			.open(&self.path)
+			.await?;
+		let locked = self::sys::try_lock_shared(&lock_file)?;
+		if locked {
+			let lock_file = Arc::new(lock_file);
+			self.shared_lock_file
+				.write()
+				.await
+				.replace(Arc::downgrade(&lock_file));
+			Ok(Some(SharedGuard {
+				value: unsafe { &*self.value.get() },
+				lock_file,
+			}))
+		} else {
+			Ok(None)
+		}
+	}
+
+	pub async fn try_lock_exclusive(&self) -> Result<Option<ExclusiveGuard<'_, T>>> {
+		let lock_file = tokio::fs::OpenOptions::new()
+			.read(true)
+			.write(true)
+			.create(true)
+			.open(&self.path)
+			.await?;
+		let locked = self::sys::try_lock_exclusive(&lock_file)?;
+		if locked {
+			let lock_file = Arc::new(lock_file);
+			Ok(Some(ExclusiveGuard {
+				value: unsafe { &mut *self.value.get() },
+				lock_file,
+			}))
+		} else {
+			Ok(None)
+		}
+	}
+
 	pub async fn lock_shared(&self) -> Result<SharedGuard<'_, T>> {
 		let lock_file = {
 			self.shared_lock_file
@@ -80,29 +135,6 @@ impl<T> Lock<T> {
 			lock_file,
 		})
 	}
-
-	pub async fn try_lock_exclusive(&self) -> Result<Option<ExclusiveGuard<'_, T>>> {
-		let lock_file = tokio::fs::OpenOptions::new()
-			.read(true)
-			.write(true)
-			.create(true)
-			.open(&self.path)
-			.await?;
-
-		// Try to acquire the lock.
-		let locked = self::sys::try_lock_exclusive(&lock_file)?;
-
-		if locked {
-			let lock_file = Arc::new(lock_file);
-			Ok(Some(ExclusiveGuard {
-				value: unsafe { &mut *self.value.get() },
-				lock_file,
-			}))
-		} else {
-			// We did not acquire the lock.
-			Ok(None)
-		}
-	}
 }
 
 impl<'a, T> std::ops::Deref for SharedGuard<'a, T> {
@@ -140,8 +172,32 @@ impl<'a, T> ExclusiveGuard<'a, T> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod sys {
 	use anyhow::{anyhow, bail, Result};
-	use libc::{flock, LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN};
+	use libc::{flock, EWOULDBLOCK, LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN};
 	use std::os::unix::io::AsRawFd;
+
+	pub(super) fn try_lock_shared(file: &tokio::fs::File) -> Result<bool> {
+		let fd = file.as_raw_fd();
+		let ret = unsafe { flock(fd, LOCK_SH | LOCK_NB) };
+		if ret == EWOULDBLOCK {
+			return Ok(false);
+		}
+		if ret != 0 {
+			bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."));
+		}
+		Ok(true)
+	}
+
+	pub(super) fn try_lock_exclusive(file: &tokio::fs::File) -> Result<bool> {
+		let fd = file.as_raw_fd();
+		let ret = unsafe { flock(fd, LOCK_EX | LOCK_NB) };
+		if ret == EWOULDBLOCK {
+			return Ok(false);
+		}
+		if ret != 0 {
+			bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."));
+		}
+		Ok(true)
+	}
 
 	pub(super) async fn lock_shared(file: &tokio::fs::File) -> Result<()> {
 		let fd = file.as_raw_fd();
@@ -163,25 +219,6 @@ mod sys {
 			bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."));
 		}
 		Ok(())
-	}
-
-	/// Attempt to acquire the lock, returning true if the lock was acquired.
-	pub(super) fn try_lock_exclusive(file: &tokio::fs::File) -> Result<bool> {
-		let fd = file.as_raw_fd();
-		let ret = unsafe { flock(fd, LOCK_EX | LOCK_NB) };
-
-		if ret != 0 {
-			let err = std::io::Error::last_os_error();
-
-			// If the lock is held, return that we did not acquire the lock.
-			if err.kind() == std::io::ErrorKind::WouldBlock {
-				return Ok(false);
-			}
-
-			bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."));
-		}
-
-		Ok(true)
 	}
 
 	pub fn _unlock(file: &tokio::fs::File) -> Result<()> {

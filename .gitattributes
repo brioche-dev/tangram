@@ -1,3 +1,1 @@
-packages/core/js/compiler/lib linguist-vendored
-packages/core/js/compiler/runtime/typescript.d.ts linguist-vendored
-packages/core/js/compiler/runtime/typescript.js linguist-vendored
+packages/core/js/compiler/typescript linguist-vendored

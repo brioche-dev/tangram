@@ -4,15 +4,23 @@ interface ImportMeta {
 
 declare namespace Tangram {
 	export type Syscall =
-		| "print"
-		| "serialize"
-		| "deserialize"
+		| "get_hash"
+		| "get_name"
+		| "get_args"
+		| "return"
 		| "add_blob"
 		| "get_blob"
 		| "add_expression"
 		| "get_expression"
-		| "evaluate";
+		| "evaluate"
+		| "print"
+		| "serialize"
+		| "deserialize";
 
+	function syscall(syscall: "get_hash", url: String): Hash;
+	function syscall(syscall: "get_name"): string;
+	function syscall(syscall: "get_args"): Array<Hash>;
+	function syscall(syscall: "return", hash: Hash): void;
 	function syscall(syscall: "print", value: string): void;
 	function syscall<T>(
 		syscall: "serialize",
@@ -44,10 +52,10 @@ declare namespace Tangram {
 		| "file"
 		| "symlink"
 		| "dependency"
-		| "template"
 		| "package"
-		| "js"
-		| "fetch"
+		| "template"
+		| "placeholder"
+		| "download"
 		| "process"
 		| "target"
 		| "array"
@@ -95,12 +103,12 @@ declare namespace Tangram {
 				value: Template;
 		  }
 		| {
-				type: "fetch";
-				value: Fetch;
+				type: "placeholder";
+				value: Placeholder;
 		  }
 		| {
-				type: "js";
-				value: Js;
+				type: "download";
+				value: Download;
 		  }
 		| {
 				type: "process";
@@ -146,34 +154,31 @@ declare namespace Tangram {
 		components: Array<Hash>;
 	};
 
-	export type Js = {
-		package: Hash;
+	export type Placeholder = {
 		name: string;
-		path: string;
-		args: Hash;
 	};
 
-	export type Fetch = {
+	export type Download = {
 		url: string;
-		digest: Digest | null;
+		checksum: Checksum | null;
 		unpack: boolean;
 	};
 
 	export type Process = {
 		system: System;
-		base: Hash | null;
+		workingDirectory: Hash;
 		env: Hash;
 		command: Hash;
 		args: Hash;
-		digest: Digest | null;
-		unsafe: boolean | null;
 		network: boolean | null;
+		checksum: Checksum | null;
+		unsafe: boolean | null;
 	};
 
 	export type Target = {
-		args: Hash;
-		name: string;
 		package: Hash;
+		name: string;
+		args: Hash;
 	};
 
 	export type _Array = Array<Hash>;
@@ -182,19 +187,19 @@ declare namespace Tangram {
 
 	export type System =
 		| "amd64_linux"
-		| "amd64_macos"
 		| "arm64_linux"
+		| "amd64_macos"
 		| "arm64_macos";
 
-	export type Digest = {
-		algorithm: DigestAlgorithm;
-		encoding: DigestEncoding;
+	export type Checksum = {
+		algorithm: ChecksumAlgorithm;
+		encoding: ChecksumEncoding;
 		value: string;
 	};
 
-	export type DigestAlgorithm = "sha256";
+	export type ChecksumAlgorithm = "sha256";
 
-	export type DigestEncoding = "hexadecimal";
+	export type ChecksumEncoding = "base16";
 
 	export const typeSymbol: unique symbol;
 }

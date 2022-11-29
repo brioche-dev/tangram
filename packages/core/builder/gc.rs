@@ -98,8 +98,9 @@ impl State {
 				| Expression::Bool(_)
 				| Expression::Number(_)
 				| Expression::String(_)
-				| Expression::Fetch(_)
-				| Expression::Symlink(_) => {},
+				| Expression::Download(_)
+				| Expression::Symlink(_)
+				| Expression::Placeholder(_) => {},
 
 				// If the expression is a directory, add its entries to the queue.
 				Expression::Directory(directory) => {
@@ -127,12 +128,8 @@ impl State {
 					queue.extend(template.components);
 				},
 
-				Expression::Js(js) => {
-					queue.push_back(js.package);
-					queue.push_back(js.args);
-				},
-
 				Expression::Process(process) => {
+					queue.push_back(process.working_directory);
 					queue.push_back(process.env);
 					queue.push_back(process.command);
 					queue.push_back(process.args);

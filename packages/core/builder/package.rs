@@ -13,7 +13,7 @@ use std::{collections::BTreeMap, path::Path};
 use tokio::io::AsyncReadExt;
 
 impl State {
-	/// Check in a package from the provided source path.
+	/// Check in a package at the specified path.
 	pub async fn checkin_package(
 		&self,
 		api_client: &ApiClient,
@@ -26,14 +26,13 @@ impl State {
 				.await
 				.with_context(|| {
 					format!(
-						"Failed to generate the lockfile for path \"{}\" ({})",
+						r#"Failed to generate the lockfile for the package at path "{}"."#,
 						path.display(),
-						if locked { "locked" } else { "not locked" }
 					)
 				})?;
 		}
 
-		// Check in the package source.
+		// Check in the path.
 		let package_source_hash = self
 			.checkin(path)
 			.await
@@ -82,10 +81,7 @@ impl State {
 				)
 			})?;
 
-		// Acquire a lock on the manifest.
-		//  - We do this so that we can fail gracefully if a user attempts to check in a package with a cyclic path dependency.
-		//  - This will also prevent two concurrent package checkins from overwriting each other's lockfile changes.
-		// Note: Acquiring this lock will create the manifest file if it doesn't already exist. That's why we open `manifest_file` above, and fail if it does not exist.
+		// Acquire a lock on the manifest to prevent concurrent lockfile generation.
 		let manifest_lock = Lock::new(&manifest_path, ());
 		let manifest_lock_result = manifest_lock
 			.try_lock_exclusive()
@@ -112,15 +108,10 @@ impl State {
 			)
 		})?;
 
-		let manifest_dependencies = match manifest.dependencies {
-			Some(dependencies) => dependencies,
-			None => BTreeMap::new(),
-		};
-
 		// Get the dependencies.
 		// NOTE: Do not make this concurrent. If you do, a diamond-dependency with path dependencies may cause us to update the lockfile of a package from two tasks at once. This is invalid.
 		let mut dependencies = BTreeMap::new();
-		for (dependency_name, dependency) in &manifest_dependencies {
+		for (dependency_name, dependency) in manifest.dependencies.unwrap_or_default() {
 			// Retrieve the path dependency.
 			let entry = match dependency {
 				crate::manifest::Dependency::PathDependency(dependency) => {
@@ -157,7 +148,7 @@ impl State {
 					// Get the package hash from the registry.
 					let dependency_version = &dependency.version;
 					let dependency_hash = api_client
-								.get_package_version(dependency_name, &dependency.version)
+									.get_package_version(&dependency_name, &dependency.version)
 								.await
 								.with_context(||
 									format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
@@ -232,9 +223,11 @@ impl State {
 
 		Ok(manifest)
 	}
+}
 
-	pub fn get_package_js_entrypoint(&self, package_hash: Hash) -> Result<Option<Utf8PathBuf>> {
-		const JS_ENTRYPOINT_FILE_NAMES: [&str; 2] = ["tangram.ts", "tangram.js"];
+impl State {
+	pub fn get_package_entrypoint(&self, package_hash: Hash) -> Result<Option<Utf8PathBuf>> {
+		const ENTRYPOINT_FILE_NAMES: [&str; 2] = ["tangram.ts", "tangram.js"];
 
 		// Get the package source directory.
 		let source_hash = self
@@ -246,11 +239,11 @@ impl State {
 			.into_directory()
 			.context("The package source must be a directory.")?;
 
-		let js_entrypoint = JS_ENTRYPOINT_FILE_NAMES
+		let entrypoint = ENTRYPOINT_FILE_NAMES
 			.into_iter()
 			.find(|file_name| source_directory.entries.contains_key(*file_name))
-			.map(Into::into);
+			.map(Utf8PathBuf::from);
 
-		Ok(js_entrypoint)
+		Ok(entrypoint)
 	}
 }

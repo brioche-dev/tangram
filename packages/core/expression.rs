@@ -1,4 +1,4 @@
-use crate::{digest::Digest, hash::Hash, system::System};
+use crate::{checksum::Checksum, hash::Hash, system::System};
 use anyhow::{bail, Result};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use camino::Utf8PathBuf;
@@ -57,12 +57,12 @@ pub enum Expression {
 	Template(Template),
 
 	#[buffalo(id = 10)]
-	#[serde(rename = "js")]
-	Js(Js),
+	#[serde(rename = "placeholder")]
+	Placeholder(Placeholder),
 
 	#[buffalo(id = 11)]
-	#[serde(rename = "fetch")]
-	Fetch(Fetch),
+	#[serde(rename = "download")]
+	Download(Download),
 
 	#[buffalo(id = 12)]
 	#[serde(rename = "process")]
@@ -190,18 +190,9 @@ pub struct Template {
 	serde::Deserialize,
 	serde::Serialize,
 )]
-pub struct Js {
+pub struct Placeholder {
 	#[buffalo(id = 0)]
-	pub package: Hash,
-
-	#[buffalo(id = 1)]
-	pub path: Utf8PathBuf,
-
-	#[buffalo(id = 2)]
 	pub name: String,
-
-	#[buffalo(id = 3)]
-	pub args: Hash,
 }
 
 #[derive(
@@ -214,12 +205,12 @@ pub struct Js {
 	serde::Deserialize,
 	serde::Serialize,
 )]
-pub struct Fetch {
+pub struct Download {
 	#[buffalo(id = 0)]
 	pub url: Url,
 
 	#[buffalo(id = 1)]
-	pub digest: Option<Digest>,
+	pub checksum: Option<Checksum>,
 
 	#[buffalo(id = 2)]
 	pub unpack: bool,
@@ -241,27 +232,28 @@ pub struct Process {
 	pub system: System,
 
 	#[buffalo(id = 1)]
-	pub env: Hash,
+	pub working_directory: Hash,
 
 	#[buffalo(id = 2)]
-	pub command: Hash,
+	pub env: Hash,
 
 	#[buffalo(id = 3)]
-	pub args: Hash,
-
-	#[buffalo(id = 7)]
-	pub base: Option<Hash>,
+	pub command: Hash,
 
 	#[buffalo(id = 4)]
-	pub hash: Option<Hash>,
+	pub args: Hash,
 
 	#[buffalo(id = 5)]
-	#[serde(default, rename = "unsafe")]
-	pub is_unsafe: bool,
+	#[serde(default)]
+	pub network: bool,
 
 	#[buffalo(id = 6)]
 	#[serde(default)]
-	pub network: bool,
+	pub checksum: Option<Checksum>,
+
+	#[buffalo(id = 7)]
+	#[serde(default, rename = "unsafe")]
+	pub is_unsafe: bool,
 }
 
 #[derive(
@@ -297,7 +289,7 @@ impl Expression {
 		// Read the version.
 		let version = reader.read_u8()?;
 		if version != 0 {
-			bail!("Invalid version for expression.");
+			bail!(r#"Cannot deserialize expression with version "{version}"."#);
 		}
 
 		// Deserialize the expression.
@@ -348,6 +340,15 @@ impl Expression {
 	#[must_use]
 	pub fn as_null(&self) -> Option<&()> {
 		if let Expression::Null(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_bool(&self) -> Option<&bool> {
+		if let Expression::Bool(v) = self {
 			Some(v)
 		} else {
 			None
@@ -427,8 +428,17 @@ impl Expression {
 	}
 
 	#[must_use]
-	pub fn as_fetch(&self) -> Option<&Fetch> {
-		if let Expression::Fetch(v) = self {
+	pub fn as_placeholder(&self) -> Option<&Placeholder> {
+		if let Expression::Placeholder(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_download(&self) -> Option<&Download> {
+		if let Expression::Download(v) = self {
 			Some(v)
 		} else {
 			None
@@ -473,6 +483,42 @@ impl Expression {
 }
 
 impl Expression {
+	#[must_use]
+	pub fn into_null(self) -> Option<()> {
+		if let Expression::Null(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_bool(self) -> Option<bool> {
+		if let Expression::Bool(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_number(self) -> Option<f64> {
+		if let Expression::Number(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_string(self) -> Option<Arc<str>> {
+		if let Expression::String(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
 	#[must_use]
 	pub fn into_directory(self) -> Option<Directory> {
 		if let Expression::Directory(v) = self {
@@ -528,8 +574,17 @@ impl Expression {
 	}
 
 	#[must_use]
-	pub fn into_fetch(self) -> Option<Fetch> {
-		if let Expression::Fetch(v) = self {
+	pub fn into_placeholder(self) -> Option<Placeholder> {
+		if let Expression::Placeholder(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_download(self) -> Option<Download> {
+		if let Expression::Download(v) = self {
 			Some(v)
 		} else {
 			None

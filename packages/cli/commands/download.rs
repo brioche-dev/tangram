@@ -4,26 +4,26 @@ use clap::Parser;
 use url::Url;
 
 #[derive(Parser)]
-#[command(long_about = "Evaluate a fetch expression.")]
+#[command(long_about = "Evaluate a download expression.")]
 pub struct Args {
-	#[arg(help = "The URL to fetch.")]
+	#[arg(help = "The URL to download from.")]
 	url: Url,
 	#[arg(long, help = "If the URL points to a tarball, should it be unpacked?")]
 	unpack: bool,
 }
 
 impl Cli {
-	pub(crate) async fn command_fetch(&self, args: Args) -> Result<()> {
+	pub(crate) async fn command_download(&self, args: Args) -> Result<()> {
 		// Lock the builder.
 		let builder = self.builder.lock_shared().await?;
 
 		// Create the expression.
 		let hash = builder
-			.add_expression(&tangram_core::expression::Expression::Fetch(
-				tangram_core::expression::Fetch {
+			.add_expression(&tangram_core::expression::Expression::Download(
+				tangram_core::expression::Download {
 					url: args.url,
 					unpack: args.unpack,
-					digest: None,
+					checksum: None,
 				},
 			))
 			.await?;

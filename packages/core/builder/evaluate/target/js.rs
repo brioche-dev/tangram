@@ -1,20 +1,20 @@
-use crate::{builder::State, expression::Js, hash::Hash, js};
+use crate::{builder::State, expression::Target, hash::Hash, js};
 use anyhow::{Context, Result};
 
 impl State {
-	pub(super) async fn evaluate_js(&self, hash: Hash, js: &Js) -> Result<Hash> {
+	pub async fn evaluate_target_js(&self, hash: Hash, target: &Target) -> Result<Hash> {
 		// Get a handle to the current tokio runtime.
 		let main_runtime_handle = tokio::runtime::Handle::current();
 
 		// Create a channel to receive the output.
 		let (sender, receiver) = tokio::sync::oneshot::channel();
 
-		// Clone the builder and js expression to send to the thread.
+		// Clone the builder and the process expression to send to the thread.
 		let builder = self.builder();
-		let js = js.clone();
+		let target = target.clone();
 
 		// Run the js runtime on its own thread.
-		let thread = std::thread::spawn(|| {
+		let thread = std::thread::spawn(move || {
 			// Create a tokio runtime for the current thread.
 			let runtime = tokio::runtime::Builder::new_current_thread()
 				.enable_all()
@@ -24,8 +24,8 @@ impl State {
 			// Run the JS process.
 			let result = runtime.block_on(async move {
 				let mut runtime = js::Runtime::new(builder, main_runtime_handle).await?;
-				let hash = runtime.js(&js).await?;
-				Ok::<_, anyhow::Error>(hash)
+				let output_hash = runtime.run(hash, &target).await?;
+				Ok::<_, anyhow::Error>(output_hash)
 			});
 
 			// Notify the receiver that the process is complete.

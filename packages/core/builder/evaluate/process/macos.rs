@@ -1,47 +1,63 @@
-use super::{Command, PathMode};
+//! The following command will display sandbox log events:
+//!
+//! ```
+//! log stream --style compact --info --debug  --predicate '(((processID == 0) AND (senderImagePath CONTAINS "/Sandbox")) OR (subsystem == "com.apple.sandbox.reporting"))'
+//! ```
+//!
+
+use super::{PathMode, ReferencedPathSet};
+use crate::builder::State;
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
+use libc::{c_char, c_int, c_void};
 use std::{
+	collections::BTreeMap,
 	ffi::{CStr, CString},
 	fmt::Write,
 	os::unix::prelude::OsStrExt,
 };
 
-// The following command will display sandbox log events:
-// log stream --style compact --info --debug  --predicate '(((processID == 0) AND (senderImagePath CONTAINS "/Sandbox")) OR (subsystem == "com.apple.sandbox.reporting"))'
-
-impl Command {
-	pub async fn run(self) -> Result<()> {
-		// Create the process.
-		let mut process = tokio::process::Command::new(&self.command);
+impl State {
+	pub async fn run_process_macos(
+		&self,
+		working_directory: String,
+		env: BTreeMap<String, String>,
+		command: String,
+		args: Vec<String>,
+		referenced_path_set: ReferencedPathSet,
+		network: bool,
+	) -> Result<()> {
+		// Create the command.
+		let mut command = tokio::process::Command::new(&command);
 
 		// Set the working directory.
-		process.current_dir(&self.current_dir);
+		command.current_dir(working_directory);
 
 		// Set the envs.
-		process.env_clear();
-		process.envs(&self.envs);
+		command.env_clear();
+		command.envs(env);
 
 		// Set the args.
-		process.args(&self.args);
+		command.args(args);
 
 		// Set up the sandbox.
 		unsafe {
-			process.pre_exec(move || {
-				pre_exec(&self)
+			command.pre_exec(move || {
+				pre_exec(&referenced_path_set, network)
 					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
 
-		// Spawn the process.
-		let mut child = process.spawn().context("Failed to spawn the process.")?;
+		// Spawn the child.
+		let mut child = command.spawn().context("Failed to spawn the process.")?;
 
-		// Wait for the process to exit.
+		// Wait for the child to exit.
 		let status = child
 			.wait()
 			.await
 			.context("Failed to wait for the process to exit.")?;
 
+		// Error if the process does not exit successfully.
 		if !status.success() {
 			bail!("The process did not exit successfully.");
 		}
@@ -51,7 +67,7 @@ impl Command {
 }
 
 #[allow(clippy::too_many_lines)]
-fn pre_exec(command: &Command) -> Result<()> {
+fn pre_exec(referenced_path_set: &ReferencedPathSet, network: bool) -> Result<()> {
 	let mut profile = String::new();
 
 	// Add the default policy.
@@ -59,6 +75,8 @@ fn pre_exec(command: &Command) -> Result<()> {
 		profile,
 		r#"
 			(version 1)
+
+			;; Deny everything by default.
 			(deny default)
 
 			;; Allow most system operations.
@@ -68,11 +86,8 @@ fn pre_exec(command: &Command) -> Result<()> {
 			(allow ipc*)
 			(allow sysctl*)
 
-			;; Allow most process operations, EXCEPT for `process-exec`. `process-exec` will let you execute binaries without having been granted the corresponding `file-read*` permission.
+			;; Allow most process operations, except for `process-exec`. `process-exec` will let you execute binaries without having been granted the corresponding `file-read*` permission.
 			(allow process-fork process-info*)
-
-			;; Allow TTY `ioctl()`s, so sandboxed interactive shells work smoothly.
-			(allow file-ioctl (regex #"^/dev/ttys[0-9]+$"))
 
 			;; Allow limited exploration of the root.
 			(allow file-read-data (literal "/"))
@@ -112,7 +127,7 @@ fn pre_exec(command: &Command) -> Result<()> {
 	).unwrap();
 
 	// Allow network access if enabled.
-	if command.enable_network_access {
+	if network {
 		writedoc!(
 			profile,
 			r#"
@@ -148,8 +163,8 @@ fn pre_exec(command: &Command) -> Result<()> {
 	}
 
 	// Allow access to all paths used in the build.
-	for (path, mode) in &command.paths {
-		match mode {
+	for entry in referenced_path_set {
+		match entry.mode {
 			PathMode::Read => {
 				writedoc!(
 					profile,
@@ -158,7 +173,7 @@ fn pre_exec(command: &Command) -> Result<()> {
 						(allow file-read* (path-ancestors {0}))
 						(allow file-read* (subpath {0}))
 					"#,
-					escape(path.as_os_str().as_bytes())
+					escape(entry.path.as_os_str().as_bytes())
 				)
 				.unwrap();
 			},
@@ -170,7 +185,7 @@ fn pre_exec(command: &Command) -> Result<()> {
 						(allow file-read* (path-ancestors {0}))
 						(allow file* (subpath {0}))
 					"#,
-					escape(path.as_os_str().as_bytes())
+					escape(entry.path.as_os_str().as_bytes())
 				)
 				.unwrap();
 			},
@@ -193,7 +208,6 @@ fn pre_exec(command: &Command) -> Result<()> {
 	Ok(())
 }
 
-use libc::{c_char, c_int, c_void};
 extern "C" {
 	fn sandbox_init(profile: *const c_char, flags: u64, errorbuf: *mut *const c_char) -> c_int;
 	fn sandbox_free_error(errorbuf: *const c_char) -> c_void;

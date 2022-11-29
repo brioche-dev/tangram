@@ -35,30 +35,40 @@ impl Cli {
 }
 
 impl Cli {
-	pub async fn js_url_for_specifier(&self, specifier: &Specifier) -> Result<js::Url> {
+	pub async fn js_urls_for_specifier(&self, specifier: &Specifier) -> Result<Vec<js::Url>> {
 		match &specifier {
+			Specifier::Package(package_specifier) => {
+				let package_hash = self
+					.get_package_hash_from_specifier(package_specifier)
+					.await?;
+				let url = js::Url::new_hash_module(package_hash, "tangram.ts".into());
+				Ok(vec![url])
+			},
+
 			Specifier::Path(path) => {
 				let path = std::env::current_dir()
 					.context("Failed to get the current directory")?
 					.join(path);
 				let path = tokio::fs::canonicalize(&path).await?;
-				let url = js::Url::new_path_targets(path);
-				Ok(url)
-			},
-
-			Specifier::Package(package_specifier) => {
-				let package_hash = self.get_package_version(package_specifier).await?;
-				let url = js::Url::new_package_targets(package_hash);
-				Ok(url)
+				let url = js::Url::new_path_module(path, "tangram.ts".into());
+				Ok(vec![url])
 			},
 		}
 	}
+
 	pub async fn package_hash_for_specifier(
 		&self,
 		specifier: &Specifier,
 		locked: bool,
 	) -> Result<Hash> {
 		match specifier {
+			Specifier::Package(package_specifier) => {
+				let package_hash = self
+					.get_package_hash_from_specifier(package_specifier)
+					.await?;
+				Ok(package_hash)
+			},
+
 			Specifier::Path(path) => {
 				let package_hash = self
 					.builder
@@ -71,15 +81,10 @@ impl Cli {
 					})?;
 				Ok(package_hash)
 			},
-
-			Specifier::Package(package_specifier) => {
-				let package_hash = self.get_package_version(package_specifier).await?;
-				Ok(package_hash)
-			},
 		}
 	}
 
-	pub async fn get_package_version(
+	pub async fn get_package_hash_from_specifier(
 		&self,
 		package_specifier: &specifier::Package,
 	) -> Result<Hash> {

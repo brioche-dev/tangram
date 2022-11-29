@@ -9,8 +9,7 @@ use std::future::Future;
 pub mod array;
 pub mod dependency;
 pub mod directory;
-pub mod fetch;
-pub mod js;
+pub mod download;
 pub mod map;
 pub mod package;
 pub mod process;
@@ -44,16 +43,18 @@ impl State {
 			| Expression::Number(_)
 			| Expression::String(_)
 			| Expression::File(_)
-			| Expression::Symlink(_) => futures::future::ok(hash).boxed(),
+			| Expression::Symlink(_)
+			| Expression::Placeholder(_) => futures::future::ok(hash).boxed(),
 			Expression::Directory(directory) => self.evaluate_directory(hash, directory).boxed(),
 			Expression::Dependency(dependency) => {
 				self.evaluate_dependency(hash, dependency).boxed()
 			},
-			Expression::Template(template) => self.evaluate_template(hash, template).boxed(),
 			Expression::Package(package) => self.evaluate_package(hash, package).boxed(),
-			Expression::Js(js) => self.evaluate_js(hash, js).boxed(),
-			Expression::Fetch(fetch) => self
-				.evaluate_or_await_in_progress_evaluation(hash, || self.evaluate_fetch(hash, fetch))
+			Expression::Template(template) => self.evaluate_template(hash, template).boxed(),
+			Expression::Download(download) => self
+				.evaluate_or_await_in_progress_evaluation(hash, || {
+					self.evaluate_download(hash, download)
+				})
 				.boxed(),
 			Expression::Process(process) => self
 				.evaluate_or_await_in_progress_evaluation(hash, || {

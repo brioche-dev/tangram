@@ -1,10 +1,11 @@
-use super::LanguageServer;
+use super::{util::to_uri, LanguageServer};
 use crate::js;
 use anyhow::Result;
 use lsp_types as lsp;
 use std::{collections::HashMap, path::PathBuf};
 
 impl LanguageServer {
+	#[allow(clippy::similar_names)]
 	pub async fn rename(&self, params: lsp::RenameParams) -> Result<Option<lsp::WorkspaceEdit>> {
 		// Get the position for the request.
 		let position = params.text_document_position.position;
@@ -38,32 +39,20 @@ impl LanguageServer {
 			let version = self.compiler.get_version(&location.url).await.ok();
 
 			// Map the URL.
-			let url: url::Url = match location.url {
-				js::Url::PathModule {
-					package_path,
-					module_path,
-				} => {
-					let path = package_path.join(module_path);
-					format!("file://{}", path.display()).parse().unwrap()
-				},
-				js::Url::Lib { .. }
-				| js::Url::PackageModule { .. }
-				| js::Url::PackageTargets { .. }
-				| js::Url::PathTargets { .. } => location.url.into(),
-			};
-			if document_changes.get_mut(&url).is_none() {
+			let uri = to_uri(location.url);
+			if document_changes.get_mut(&uri).is_none() {
 				document_changes.insert(
-					url.clone(),
+					uri.clone(),
 					lsp::TextDocumentEdit {
 						text_document: lsp::OptionalVersionedTextDocumentIdentifier {
-							uri: url.clone(),
+							uri: uri.clone(),
 							version,
 						},
 						edits: Vec::<lsp::OneOf<lsp::TextEdit, lsp::AnnotatedTextEdit>>::new(),
 					},
 				);
 			}
-			let changes_for_url = document_changes.get_mut(&url).unwrap();
+			let changes_for_url = document_changes.get_mut(&uri).unwrap();
 			changes_for_url.edits.push(lsp::OneOf::Left(lsp::TextEdit {
 				range: location.range.into(),
 				new_text: new_text.clone(),

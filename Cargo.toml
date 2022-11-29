@@ -15,18 +15,15 @@ version = "0.0.0"
 anyhow = { version = "1", features = ["backtrace"] }
 async-recursion = "1"
 async-trait = "0.1.53"
+base64 = "0.13"
 blake3 = "1"
 bstr = "1"
 byteorder = "1.4"
 bytes = "1"
 bzip2 = "0.4"
 camino = { version = "1", features = ["serde1"] }
-cfg-if = "1"
 clap = { version = "4", features = ["derive"] }
 deno_core = "0.154"
-deno_url = "0.72"
-deno_web = "0.103"
-deno_webidl = "0.72"
 either = "1"
 flate2 = "1"
 fnv = "1"
@@ -67,6 +64,8 @@ toml = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2.2"
+wasmtime = "2.0"
+wasmtime-wasi = "2.0"
 webbrowser = "0.8"
 xz = "0.1"
 zip = { version = "0.6", default-features = false, features = ["aes-crypto", "deflate", "bzip2", "time"] }

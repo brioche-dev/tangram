@@ -34,7 +34,7 @@ globalThis.handle = ({ type, request }) => {
 let compilerOptions = {
 	allowNonTsExtensions: true,
 	isolatedModules: true,
-	lib: ["lib.esnext.full.d.ts", "lib.tangram.d.ts"],
+	lib: ["lib.esnext.d.ts", "lib.tangram.d.ts"],
 	maxNodeModuleJsDepth: 0,
 	module: ts.ModuleKind.ESNext,
 	noEmit: true,
@@ -57,11 +57,11 @@ let host = {
 	},
 
 	getDefaultLibFileName: () => {
-		return "tangram-lib:///lib.esnext.full.d.ts";
+		return "tangram-internal://lib/lib.esnext.d.ts";
 	},
 
 	getDefaultLibLocation: () => {
-		return "tangram-lib:///";
+		return "tangram-internal://lib/";
 	},
 
 	getNewLine: () => {
@@ -501,8 +501,11 @@ let stringify = (value) => {
 					return "[promise]";
 				} else {
 					let constructorName = "";
-					if (value.constructor?.name !== "Object") {
-						constructorName = `${value.constructor?.name} `;
+					if (
+						value.constructor !== undefined &&
+						value.constructor.name !== "Object"
+					) {
+						constructorName = `${value.constructor.name} `;
 					}
 					let entries = Object.entries(value).map(
 						([key, value]) => `${key}: ${inner(value, visited)}`,

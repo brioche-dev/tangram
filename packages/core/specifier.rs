@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Specifier {
-	Path(PathBuf),
 	Package(Package),
+	Path(PathBuf),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -33,18 +33,18 @@ impl std::str::FromStr for Specifier {
 impl std::fmt::Display for Specifier {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
-			Specifier::Path(path) => {
-				if path.is_absolute() {
-					write!(f, "{}", path.display())
-				} else {
-					write!(f, "./{}", path.display())
-				}
-			},
 			Specifier::Package(Package { name, version }) => {
 				if let Some(version) = version {
 					write!(f, "{name}@{version}")
 				} else {
 					write!(f, "{name}")
+				}
+			},
+			Specifier::Path(path) => {
+				if path.is_absolute() {
+					write!(f, "{}", path.display())
+				} else {
+					write!(f, "./{}", path.display())
 				}
 			},
 		}
@@ -57,13 +57,6 @@ mod tests {
 
 	#[test]
 	fn test_parse_specifier() {
-		let path_specifiers = ["./hello", "./", "."];
-		for path_specifier in path_specifiers {
-			let left: Specifier = path_specifier.parse().unwrap();
-			let right = Specifier::Path(PathBuf::from(path_specifier));
-			assert_eq!(left, right);
-		}
-
 		let left: Specifier = "hello".parse().unwrap();
 		let right = Specifier::Package(Package {
 			name: "hello".to_owned(),
@@ -77,5 +70,12 @@ mod tests {
 			version: Some("0.0.0".to_owned()),
 		});
 		assert_eq!(left, right);
+
+		let path_specifiers = ["./hello", "./", "."];
+		for path_specifier in path_specifiers {
+			let left: Specifier = path_specifier.parse().unwrap();
+			let right = Specifier::Path(PathBuf::from(path_specifier));
+			assert_eq!(left, right);
+		}
 	}
 }

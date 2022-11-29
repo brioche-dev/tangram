@@ -1,4 +1,4 @@
-use super::LanguageServer;
+use super::{util::to_uri, LanguageServer};
 use crate::js;
 use anyhow::Result;
 use lsp_types as lsp;
@@ -32,26 +32,9 @@ impl LanguageServer {
 		// Convert the reference.
 		let locations = locations
 			.into_iter()
-			.map(|location| {
-				// Map the URL.
-				let url = match location.url {
-					js::Url::PathModule {
-						package_path,
-						module_path,
-					} => {
-						let path = package_path.join(module_path);
-						format!("file://{}", path.display()).parse().unwrap()
-					},
-					js::Url::Lib { .. }
-					| js::Url::PackageModule { .. }
-					| js::Url::PackageTargets { .. }
-					| js::Url::PathTargets { .. } => location.url.into(),
-				};
-
-				lsp::Location {
-					uri: url,
-					range: location.range.into(),
-				}
+			.map(|location| lsp::Location {
+				uri: to_uri(location.url),
+				range: location.range.into(),
 			})
 			.collect();
 
