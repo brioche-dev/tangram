@@ -28,7 +28,6 @@ bytes = { workspace = true }
 bzip2 = { workspace = true }
 camino = { workspace = true }
 cfg-if = { workspace = true }
-deno_ast = { workspace = true }
 deno_core = { workspace = true }
 deno_url = { workspace = true }
 deno_web = { workspace = true }
