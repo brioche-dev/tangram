@@ -3,8 +3,9 @@ use self::{
 		CheckRequest, CompletionRequest, FindRenameLocationsRequest, FindRenameLocationsResponse,
 		GetDiagnosticsRequest, GetDiagnosticsResponse, GetHoverRequest, GetReferencesRequest,
 		GetReferencesResponse, GotoDefinitionResponse, GotoDefintionRequest, Request, Response,
+		TranspileRequest,
 	},
-	types::{CompletionEntry, Diagnostic, Location, Position, Range},
+	types::{CompletionEntry, Diagnostic, Location, Position, Range, TranspileOutput},
 };
 use crate::{builder::Builder, js};
 use anyhow::{anyhow, bail, Context, Result};
@@ -20,7 +21,6 @@ use tokio::sync::RwLock;
 pub mod load;
 pub mod resolve;
 pub mod runtime;
-pub mod transpile;
 pub mod types;
 pub mod url;
 
@@ -373,6 +373,25 @@ impl Compiler {
 		let entries = response.entries;
 
 		Ok(entries)
+	}
+
+	pub async fn transpile(&self, source: String) -> Result<TranspileOutput> {
+		// Create the request.
+		let request = Request::Transpile(TranspileRequest { source });
+
+		// Send the request and receive the response.
+		let response = self.request(request).await?;
+
+		// Get the response.
+		let response = match response {
+			Response::Transpile(response) => response,
+			_ => bail!("Unexpected response type."),
+		};
+
+		Ok(TranspileOutput {
+			transpiled_source: response.output_text,
+			source_map: response.source_map_text,
+		})
 	}
 }
 

@@ -21,6 +21,9 @@ globalThis.handle = ({ type, request }) => {
 		case "completion": {
 			return completion(request);
 		}
+		case "transpile": {
+			return transpile(request);
+		}
 		default: {
 			throw new Error(`Unknown request type "${type}".`);
 		}
@@ -433,6 +436,25 @@ let getReferences = (request) => {
 	return {
 		type: "get_references",
 		response: { locations },
+	};
+};
+
+let transpile = (request) => {
+	// Transpile.
+	let output = ts.transpileModule(request.source, {
+		compilerOptions: {
+			module: ts.ModuleKind.ESNext,
+			target: ts.ScriptTarget.ESNext,
+			sourceMap: true,
+		},
+	});
+
+	return {
+		type: "transpile",
+		response: {
+			outputText: output.outputText,
+			sourceMapText: output.sourceMapText,
+		},
 	};
 };
 

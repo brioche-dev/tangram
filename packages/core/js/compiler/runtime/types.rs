@@ -14,6 +14,7 @@ pub enum Request {
 	GetHover(GetHoverRequest),
 	GetReferences(GetReferencesRequest),
 	Completion(CompletionRequest),
+	Transpile(TranspileRequest),
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -26,6 +27,7 @@ pub enum Response {
 	GetReferences(GetReferencesResponse),
 	GotoDefinition(GotoDefinitionResponse),
 	Completion(CompletionResponse),
+	Transpile(TranspileResponse),
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -113,4 +115,17 @@ pub struct CompletionRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CompletionResponse {
 	pub entries: Option<Vec<CompletionEntry>>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranspileRequest {
+	pub source: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranspileResponse {
+	pub output_text: String,
+	pub source_map_text: String,
 }

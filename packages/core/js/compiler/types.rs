@@ -43,3 +43,10 @@ pub struct Position {
 pub struct CompletionEntry {
 	pub name: String,
 }
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranspileOutput {
+	pub transpiled_source: String,
+	pub source_map: String,
+}

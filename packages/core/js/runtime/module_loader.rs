@@ -121,11 +121,11 @@ async fn load(state: Arc<State>, url: &js::Url) -> Result<deno_core::ModuleSourc
 
 	// Transpile the module if necessary.
 	let module = if transpile {
-		let transpile_output = state.compiler.transpile(url, &source)?;
+		let transpile_output = state.compiler.transpile(source.clone()).await?;
 		Module {
 			source,
 			transpiled_source: Some(transpile_output.transpiled_source),
-			source_map: transpile_output.source_map,
+			source_map: Some(transpile_output.source_map),
 		}
 	} else {
 		Module {
