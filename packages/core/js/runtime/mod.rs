@@ -5,7 +5,7 @@ use crate::{
 	hash::Hash,
 	js::{self, compiler::Compiler},
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use deno_core::{serde_v8, v8};
 use std::{cell::RefCell, future::Future, rc::Rc, sync::Arc};
 use tokio::io::AsyncReadExt;
@@ -524,7 +524,8 @@ async fn op_tg_evaluate(
 			.lock_shared()
 			.await?
 			.evaluate(hash, hash)
-			.await?;
+			.await
+			.map_err(|e| anyhow!("{e:#}"))?; // Include the entire cause chain in the error string.
 		Ok::<_, anyhow::Error>(output)
 	})
 	.await
