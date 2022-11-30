@@ -1,5 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::Parser;
 use tangram_core::{js, specifier::Specifier};
 
@@ -37,8 +37,12 @@ impl Cli {
 		let diagnostics = compiler.check(vec![url]).await?;
 
 		// Print the diagnostics.
+		let mut exit_with_error = false;
 		for diagnostics in diagnostics.values() {
 			for diagnostic in diagnostics {
+				// If we see a diagnostic, make sure we exit with a nonzero exit code.
+				exit_with_error = true;
+
 				let js::compiler::types::Diagnostic {
 					location, message, ..
 				} = diagnostic;
@@ -91,6 +95,10 @@ impl Cli {
 					};
 				}
 			}
+		}
+
+		if exit_with_error {
+			bail!("Some checks failed.");
 		}
 
 		Ok(())
