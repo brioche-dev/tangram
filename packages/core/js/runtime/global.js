@@ -31,6 +31,7 @@ let stringify = (value) => {
 					return "[circular]";
 				}
 				visited.add(value);
+
 				if (Array.isArray(value)) {
 					return `[${value.map((value) => inner(value, visited)).join(", ")}]`;
 				} else if (value instanceof Error) {
@@ -42,6 +43,15 @@ let stringify = (value) => {
 					if (value.constructor?.name !== "Object") {
 						constructorName = `${value.constructor?.name} `;
 					}
+
+					// If the value has a `.toString()` method, which returns a string, use that as the body of the debug output.
+					if ("toString" in value) {
+						let result = value.toString();
+						if (typeof result === "string") {
+							return `${constructorName}{ ${result} }`;
+						}
+					}
+
 					let entries = Object.entries(value).map(
 						([key, value]) => `${key}: ${inner(value, visited)}`,
 					);
