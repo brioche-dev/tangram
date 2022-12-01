@@ -32,6 +32,7 @@ impl State {
 	) -> Result<()> {
 		// Create a temp path for the chroot.
 		let parent_child_root_path = self.create_temp_path();
+		tokio::fs::create_dir_all(&parent_child_root_path).await?;
 
 		// Create a socket pair so the parent and child can communicate to set up the sandbox.
 		let (mut parent_socket, child_socket) =
@@ -295,9 +296,9 @@ fn set_up_sandbox(
 			MS_BIND,
 			std::ptr::null(),
 		)
-	};
+	};	
 	if ret != 0 {
-		return Err(SandboxIncomplete::MountBindRoot(std::io::Error::last_os_error()).into());
+		return Err(SandboxIncomplete::MountBindRoot(dbg!(std::io::Error::last_os_error())).into());
 	}
 
 	// Create the parent mount path.
