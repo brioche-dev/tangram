@@ -218,7 +218,7 @@ impl DigestAlgorithmHasher {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	#[error("expected {expected}, got {actual} ({algorithm}")]
+	#[error("expected {expected}, got {actual} ({algorithm})")]
 	Mismatch {
 		expected: String,
 		actual: String,
