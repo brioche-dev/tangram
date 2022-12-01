@@ -35,7 +35,7 @@ impl State {
 					.await?;
 			},
 			_ => {
-				bail!("The working directory must be a directory.");
+				bail!("The working directory must be a directory or null.");
 			},
 		};
 		let mut referenced_path_set = ReferencedPathSet::default();

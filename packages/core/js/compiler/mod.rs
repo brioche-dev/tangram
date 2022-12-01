@@ -142,7 +142,7 @@ impl Compiler {
 				module_path,
 			}) => package_path.join(module_path),
 
-			// Path consumer and process URLs change when their manifest changes.
+			// Path import and target URLs change when their manifest changes.
 			js::Url::PathImport(js::compiler::url::PathImport { package_path, .. })
 			| js::Url::PathTarget(js::compiler::url::PathTarget { package_path, .. }) => {
 				package_path.join("tangram.json")

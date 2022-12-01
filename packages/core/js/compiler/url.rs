@@ -183,18 +183,18 @@ impl TryFrom<url::Url> for Url {
 				Url::HashModule(data)
 			},
 
-			"hash_process" => {
-				let data = value.query().context("The URL must have a query.")?;
-				let data = hex::decode(data)?;
-				let data = serde_json::from_slice(&data)?;
-				Url::HashTarget(data)
-			},
-
-			"hash_consumer" => {
+			"hash_import" => {
 				let data = value.query().context("The URL must have a query.")?;
 				let data = hex::decode(data)?;
 				let data = serde_json::from_slice(&data)?;
 				Url::HashImport(data)
+			},
+
+			"hash_target" => {
+				let data = value.query().context("The URL must have a query.")?;
+				let data = hex::decode(data)?;
+				let data = serde_json::from_slice(&data)?;
+				Url::HashTarget(data)
 			},
 
 			"lib" => {
@@ -209,18 +209,18 @@ impl TryFrom<url::Url> for Url {
 				Url::PathModule(data)
 			},
 
-			"path_process" => {
-				let data = value.query().context("The URL must have a query.")?;
-				let data = hex::decode(data)?;
-				let data = serde_json::from_slice(&data)?;
-				Url::PathTarget(data)
-			},
-
-			"path_consumer" => {
+			"path_import" => {
 				let data = value.query().context("The URL must have a query.")?;
 				let data = hex::decode(data)?;
 				let data = serde_json::from_slice(&data)?;
 				Url::PathImport(data)
+			},
+
+			"path_target" => {
+				let data = value.query().context("The URL must have a query.")?;
+				let data = hex::decode(data)?;
+				let data = serde_json::from_slice(&data)?;
+				Url::PathTarget(data)
 			},
 
 			_ => bail!(r#"Invalid URL "{value}"."#),
@@ -239,16 +239,16 @@ impl From<Url> for url::Url {
 				format!("{TANGRAM_INTERNAL_SCHEME}://hash_module/?{data}#.ts")
 			},
 
-			Url::HashTarget(value) => {
-				let data = serde_json::to_vec(&value).unwrap();
-				let data = hex::encode(&data);
-				format!("{TANGRAM_INTERNAL_SCHEME}://hash_process/?{data}#.ts")
-			},
-
 			Url::HashImport(value) => {
 				let data = serde_json::to_vec(&value).unwrap();
 				let data = hex::encode(&data);
-				format!("{TANGRAM_INTERNAL_SCHEME}://hash_consumer/?{data}#.ts")
+				format!("{TANGRAM_INTERNAL_SCHEME}://hash_import/?{data}#.ts")
+			},
+
+			Url::HashTarget(value) => {
+				let data = serde_json::to_vec(&value).unwrap();
+				let data = hex::encode(&data);
+				format!("{TANGRAM_INTERNAL_SCHEME}://hash_target/?{data}#.ts")
 			},
 
 			Url::Lib(value) => {
@@ -262,16 +262,16 @@ impl From<Url> for url::Url {
 				format!("{TANGRAM_INTERNAL_SCHEME}://path_module/?{data}#.ts")
 			},
 
-			Url::PathTarget(value) => {
-				let data = serde_json::to_vec(&value).unwrap();
-				let data = hex::encode(&data);
-				format!("{TANGRAM_INTERNAL_SCHEME}://path_process/?{data}#.ts")
-			},
-
 			Url::PathImport(value) => {
 				let data = serde_json::to_vec(&value).unwrap();
 				let data = hex::encode(&data);
-				format!("{TANGRAM_INTERNAL_SCHEME}://path_consumer/?{data}#.ts")
+				format!("{TANGRAM_INTERNAL_SCHEME}://path_import/?{data}#.ts")
+			},
+
+			Url::PathTarget(value) => {
+				let data = serde_json::to_vec(&value).unwrap();
+				let data = hex::encode(&data);
+				format!("{TANGRAM_INTERNAL_SCHEME}://path_target/?{data}#.ts")
 			},
 		}
 		.parse()
