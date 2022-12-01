@@ -298,7 +298,7 @@ fn set_up_sandbox(
 		)
 	};	
 	if ret != 0 {
-		return Err(SandboxIncomplete::MountBindRoot(dbg!(std::io::Error::last_os_error())).into());
+		return Err(SandboxIncomplete::MountBindRoot(std::io::Error::last_os_error()).into());
 	}
 
 	// Create the parent mount path.
