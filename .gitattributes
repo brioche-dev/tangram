@@ -1,1 +1,2 @@
-packages/core/js/compiler/typescript/** linguist-vendored
+src/compiler/lib/** linguist-vendored
+src/compiler/runtime/main.js linguist-generated
