@@ -1,5 +1,3 @@
-use num_traits::{FromPrimitive, ToPrimitive};
-
 #[derive(
 	Clone,
 	Debug,
@@ -10,239 +8,53 @@ use num_traits::{FromPrimitive, ToPrimitive};
 	serde::Deserialize,
 	serde::Serialize,
 )]
-pub struct Checksum {
+#[serde(tag = "algorithm", content = "value")]
+pub enum Checksum {
 	#[buffalo(id = 0)]
-	algorithm: Algorithm,
-	#[buffalo(id = 1)]
-	encoding: Encoding,
-	#[buffalo(id = 2)]
-	value: String,
+	#[serde(rename = "sha256", with = "hex")]
+	Sha256([u8; 32]),
 }
 
-#[derive(
-	Debug,
-	Clone,
-	Copy,
-	Default,
-	PartialEq,
-	Eq,
-	serde::Deserialize,
-	serde::Serialize,
-	num_derive::FromPrimitive,
-	num_derive::ToPrimitive,
-)]
+impl Checksum {
+	#[must_use]
+	pub fn algorithm(&self) -> Algorithm {
+		match self {
+			Self::Sha256(_) => Algorithm::Sha256,
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Algorithm {
-	#[default]
-	#[serde(rename = "sha256")]
-	Sha256 = 0,
-}
-
-impl std::fmt::Display for Algorithm {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			Self::Sha256 => write!(f, "SHA256"),
-		}
-	}
-}
-
-impl buffalo::Serialize for Algorithm {
-	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
-	where
-		W: std::io::Write,
-	{
-		let value = self.to_u8().unwrap();
-		serializer.serialize_uvarint(value.into())
-	}
-}
-
-impl buffalo::Deserialize for Algorithm {
-	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
-	where
-		R: std::io::Read,
-	{
-		let value = deserializer.deserialize_uvarint()?;
-		let value = Self::from_u64(value)
-			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Invalid algorithm."))?;
-		Ok(value)
-	}
-}
-
-#[derive(
-	Debug,
-	Clone,
-	Copy,
-	Default,
-	PartialEq,
-	Eq,
-	serde::Deserialize,
-	serde::Serialize,
-	num_derive::FromPrimitive,
-	num_derive::ToPrimitive,
-)]
-#[serde(rename_all = "camelCase")]
-pub enum Encoding {
-	#[default]
-	Base16 = 0,
-}
-
-impl Encoding {
-	fn encode(self, data: impl AsRef<[u8]>) -> String {
-		match self {
-			Self::Base16 => hex::encode(data),
-		}
-	}
-
-	fn decode(self, string: &str) -> Result<Vec<u8>, DecodeError> {
-		match self {
-			Self::Base16 => {
-				let data = hex::decode(string)?;
-				Ok(data)
-			},
-		}
-	}
-}
-
-impl buffalo::Serialize for Encoding {
-	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
-	where
-		W: std::io::Write,
-	{
-		let value = self.to_u8().unwrap();
-		serializer.serialize_uvarint(value.into())
-	}
-}
-
-impl buffalo::Deserialize for Encoding {
-	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
-	where
-		R: std::io::Read,
-	{
-		let value = deserializer.deserialize_uvarint()?;
-		let value = Self::from_u64(value)
-			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Invalid system."))?;
-		Ok(value)
-	}
+	Sha256,
 }
 
 #[derive(Debug)]
-pub struct Checksummer {
-	hasher: Hasher,
-	algorithm: Algorithm,
-	encoding: Encoding,
-	expected_value: Option<String>,
+pub enum Checksummer {
+	Sha256(sha2::Sha256),
 }
 
 impl Checksummer {
 	#[must_use]
-	pub fn new(expected_checksum: Option<Checksum>) -> Self {
-		let algorithm;
-		let encoding;
-		let expected_value;
-
-		if let Some(checksum) = expected_checksum {
-			algorithm = checksum.algorithm;
-			encoding = checksum.encoding;
-			expected_value = Some(checksum.value);
-		} else {
-			algorithm = Algorithm::default();
-			encoding = Encoding::default();
-			expected_value = None;
-		}
-
-		let hasher = Hasher::new(algorithm);
-
-		Self {
-			hasher,
-			algorithm,
-			encoding,
-			expected_value,
-		}
-	}
-
-	pub fn update(&mut self, data: impl AsRef<[u8]>) {
-		self.hasher.update(data);
-	}
-
-	pub fn finalize_and_validate(self) -> Result<(), Error> {
-		let actual_bytes = self.hasher.finalize();
-
-		let expected = self.expected_value.ok_or_else(|| Error::MissingValue {
-			actual: self.encoding.encode(&actual_bytes),
-			algorithm: self.algorithm,
-		})?;
-
-		let expected_bytes =
-			self.encoding
-				.decode(&expected)
-				.map_err(|error| Error::InvalidValue {
-					expected: expected.clone(),
-					actual: self.encoding.encode(&actual_bytes),
-					algorithm: self.algorithm,
-					error,
-				})?;
-
-		if expected_bytes == actual_bytes {
-			Ok(())
-		} else {
-			Err(Error::Mismatch {
-				expected,
-				actual: self.encoding.encode(&actual_bytes),
-				algorithm: self.algorithm,
-			})
-		}
-	}
-}
-
-#[derive(Debug)]
-enum Hasher {
-	Sha256(sha2::Sha256),
-}
-
-impl Hasher {
-	fn new(algorithm: Algorithm) -> Self {
-		match algorithm {
+	pub fn new(kind: Algorithm) -> Self {
+		match kind {
 			Algorithm::Sha256 => Self::Sha256(sha2::Sha256::default()),
 		}
 	}
 
-	fn update(&mut self, data: impl AsRef<[u8]>) {
+	pub fn update(&mut self, data: impl AsRef<[u8]>) {
 		match self {
 			Self::Sha256(sha256) => sha2::Digest::update(sha256, data),
 		}
 	}
 
-	fn finalize(self) -> Vec<u8> {
+	#[must_use]
+	pub fn finalize(self) -> Checksum {
 		match self {
-			Self::Sha256(sha256) => sha2::Digest::finalize(sha256).to_vec(),
+			Self::Sha256(sha256) => {
+				let value = sha2::Digest::finalize(sha256);
+				Checksum::Sha256(value.into())
+			},
 		}
 	}
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-	#[error(r#"Expected "{expected}", got "{actual} ({algorithm})"."#)]
-	Mismatch {
-		expected: String,
-		actual: String,
-		algorithm: Algorithm,
-	},
-	#[error(r#"No checksum was provided. The actual checksum was "{actual} ({algorithm})"."#)]
-	MissingValue {
-		actual: String,
-		algorithm: Algorithm,
-	},
-	#[error(r#"The actual checksum was "{actual} ({algorithm})". The expected checksum "{expected:?}" is invalid."#)]
-	InvalidValue {
-		expected: String,
-		actual: String,
-		algorithm: Algorithm,
-		#[source]
-		error: DecodeError,
-	},
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum DecodeError {
-	#[error(r#"Hex error: "{0}"."#)]
-	HexadecimalError(#[from] hex::FromHexError),
 }

@@ -4,9 +4,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(
-	long_about = "Update the specified package's lockfile to reflect the latest compatible dependency versions."
-)]
+#[command(about = "Update a package's dependencies.")]
 pub struct Args {
 	path: Option<PathBuf>,
 }

@@ -4,7 +4,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(long_about = "Check in an artifact.")]
+#[command(about = "Check in an artifact.")]
 pub struct Args {
 	path: Option<PathBuf>,
 }

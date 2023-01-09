@@ -1,5 +1,5 @@
 use crate::{
-	expression::{self, Expression},
+	operation::{Operation, Target},
 	Cli,
 };
 use anyhow::{Context, Result};
@@ -10,7 +10,7 @@ use itertools::Itertools;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(long_about = "Manage autoshell paths.")]
+#[command(about = "Manage autoshell paths.")]
 pub struct Args {
 	#[command(subcommand)]
 	subcommand: Subcommand,
@@ -26,23 +26,23 @@ pub enum Subcommand {
 }
 
 #[derive(Parser, Debug)]
-#[command(long_about = "Add an autoshell path.")]
+#[command(about = "Add an autoshell path.")]
 pub struct AddArgs {
 	path: Option<PathBuf>,
 }
 
 #[derive(Parser, Debug)]
-#[command(long_about = "List all autoshell paths.")]
+#[command(about = "List all autoshell paths.")]
 pub struct ListArgs {}
 
 #[derive(Parser, Debug)]
-#[command(long_about = "Remove an autoshell path.")]
+#[command(about = "Remove an autoshell path.")]
 pub struct RemoveArgs {
 	path: Option<PathBuf>,
 }
 
 #[derive(Parser, Debug)]
-#[command(long_about = "Hook")]
+#[command(about = "Hook")]
 pub struct HookArgs {
 	shell: String,
 }
@@ -140,7 +140,7 @@ impl Cli {
 				type _tangram_deactivate &> /dev/null && _tangram_deactivate
 			"#
 		);
-		print!("{}", program);
+		print!("{program}");
 
 		// Get the current working directory.
 		let cwd = std::env::current_dir().context("Failed to get the working directory.")?;
@@ -150,7 +150,7 @@ impl Cli {
 			return Ok(());
 		};
 
-		// Get the autoshells for .
+		// Get the autoshells for the path.
 		let mut autoshells_paths = autoshells
 			.iter()
 			.filter(|path| cwd.starts_with(path))
@@ -168,25 +168,28 @@ impl Cli {
 		let package_hash = cli.checkin_package(autoshell, false).await?;
 
 		// Create the target args.
-		let target_args = cli.create_target_args(None).await?;
+		let target_args = cli.create_target_args(None)?;
 
-		// Add the expression.
-		let expression_hash = cli
-			.add_expression(&Expression::Target(expression::Target {
-				package: package_hash,
-				name: "shell".into(),
-				args: target_args,
-			}))
-			.await?;
+		// Create the operation.
+		let operation = Operation::Target(Target {
+			package: package_hash,
+			name: "shell".into(),
+			args: target_args,
+		});
 
-		// Evaluate the expression.
-		let output_hash = cli
-			.evaluate(expression_hash, expression_hash)
+		// Run the operation.
+		let output = cli
+			.run(&operation)
 			.await
-			.context("Failed to evaluate the target expression.")?;
+			.context("Failed to run the operation.")?;
+
+		// Get the output artifact.
+		let output_artifact_hash = output
+			.into_artifact()
+			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = cli.checkout_to_artifacts(output_hash).await?;
+		let artifact_path = cli.checkout_to_artifacts(output_artifact_hash).await?;
 
 		// Get the path to the executable.
 		let shell_activate_script_path = artifact_path.join("activate");

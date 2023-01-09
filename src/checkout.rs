@@ -1,11 +1,10 @@
 use crate::{
-	expression::{Dependency, Directory, Expression, File, Symlink},
-	hash::Hash,
+	artifact::{Artifact, ArtifactHash, Dependency, Directory, File, Symlink},
 	util::{path_exists, rmrf},
 	watcher::Watcher,
 	State,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use async_recursion::async_recursion;
 use futures::{future::try_join_all, Future, FutureExt};
 use std::{
@@ -21,15 +20,15 @@ pub type DependencyHandlerFn =
 impl State {
 	pub async fn checkout(
 		&self,
-		hash: Hash,
+		artifact_hash: ArtifactHash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Create a watcher.
 		let watcher = Watcher::new(self.path(), Arc::clone(&self.file_system_semaphore));
 
-		// Call the recursive checkout function on the expression.
-		self.checkout_path(&watcher, hash, path, dependency_handler)
+		// Call the recursive checkout function.
+		self.checkout_path(&watcher, artifact_hash, path, dependency_handler)
 			.await?;
 
 		Ok(())
@@ -38,59 +37,68 @@ impl State {
 	async fn checkout_path(
 		&self,
 		watcher: &Watcher,
-		hash: Hash,
+		artifact_hash: ArtifactHash,
 		path: &Path,
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
-		// Get the expression.
-		let expression = self.get_expression_local(hash)?;
+		// Get the artifact.
+		let artifact = self.get_artifact_local(artifact_hash)?;
 
-		// Call the appropriate function for the expression's type.
-		match expression {
-			Expression::Directory(directory) => {
+		// Call the appropriate function for the artifact's type.
+		match artifact {
+			Artifact::Directory(directory) => {
 				self.checkout_directory(watcher, directory, path, dependency_handler)
 					.await
 					.with_context(|| {
 						format!(
-							"Failed to check out directory \"{hash}\" to \"{}\"",
+							"Failed to check out directory \"{artifact_hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
 			},
-			Expression::File(file) => {
+			Artifact::File(file) => {
 				self.checkout_file(watcher, file, path)
 					.await
 					.with_context(|| {
 						format!(
-							"Failed to check out file \"{hash}\" to \"{}\"",
+							"Failed to check out file \"{artifact_hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
 			},
-			Expression::Symlink(symlink) => {
+			Artifact::Symlink(symlink) => {
 				self.checkout_symlink(watcher, symlink, path)
 					.await
 					.with_context(|| {
 						format!(
-							"Failed to check out symlink \"{hash}\" to \"{}\"",
+							"Failed to check out symlink \"{artifact_hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
 			},
-			Expression::Dependency(dependency) => {
+			Artifact::Dependency(dependency) => {
 				self.checkout_dependency(watcher, dependency, path, dependency_handler)
 					.await
 					.with_context(|| {
 						format!(
-							"Failed to check out dependency \"{hash}\" to \"{}\"",
+							"Failed to check out dependency \"{artifact_hash}\" to \"{}\"",
 							path.display()
 						)
 					})?;
 			},
-			_ => {
-				bail!(r#"Unexpected expression type in artifact. {hash}"#);
-			},
 		}
+
+		// Clear the file system object's timestamps after performing the checkout.
+		tokio::task::spawn_blocking({
+			let path = path.to_owned();
+			move || {
+				let epoch = filetime::FileTime::from_unix_time(0, 0);
+				filetime::set_symlink_file_times(path, epoch, epoch)?;
+				Ok::<_, anyhow::Error>(())
+			}
+		})
+		.await
+		.unwrap()?;
 
 		Ok(())
 	}
@@ -104,14 +112,14 @@ impl State {
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get_expression_for_path(path).await? {
-			// If the expression is already checked out then return.
-			Some((_, Expression::Directory(local_directory))) if local_directory == directory => {
+		match watcher.get(path).await? {
+			// If the artifact is already checked out then return.
+			Some((_, Artifact::Directory(local_directory))) if local_directory == directory => {
 				return Ok(());
 			},
 
 			// If there is already a directory then remove any extraneous entries.
-			Some((_, Expression::Directory(local_directory))) => {
+			Some((_, Artifact::Directory(local_directory))) => {
 				try_join_all(local_directory.entries.keys().map(|entry_name| {
 					let directory = &directory;
 					async move {
@@ -156,9 +164,9 @@ impl State {
 
 	async fn checkout_file(&self, watcher: &Watcher, file: File, path: &Path) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get_expression_for_path(path).await? {
-			// If the expression is already checked out then return.
-			Some((_, Expression::File(local_file))) if local_file == file => {
+		match watcher.get(path).await? {
+			// If the artifact is already checked out then return.
+			Some((_, Artifact::File(local_file))) if local_file == file => {
 				return Ok(());
 			},
 
@@ -202,9 +210,9 @@ impl State {
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get_expression_for_path(path).await? {
-			// If the expression is already checked out then return.
-			Some((_, Expression::Symlink(local_symlink))) if local_symlink == symlink => {
+		match watcher.get(path).await? {
+			// If the artifact is already checked out then return.
+			Some((_, Artifact::Symlink(local_symlink))) if local_symlink == symlink => {
 				return Ok(());
 			},
 
@@ -232,11 +240,9 @@ impl State {
 		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
 	) -> Result<()> {
 		// Handle an existing file system object at the path.
-		match watcher.get_expression_for_path(path).await? {
-			// If the expression is already checked out then return.
-			Some((_, Expression::Dependency(local_dependency)))
-				if local_dependency == dependency =>
-			{
+		match watcher.get(path).await? {
+			// If the artifact is already checked out then return.
+			Some((_, Artifact::Dependency(local_dependency))) if local_dependency == dependency => {
 				return Ok(());
 			},
 
@@ -264,7 +270,7 @@ impl State {
 impl State {
 	#[async_recursion]
 	#[must_use]
-	pub async fn checkout_to_artifacts(&self, artifact_hash: Hash) -> Result<PathBuf> {
+	pub async fn checkout_to_artifacts(&self, artifact_hash: ArtifactHash) -> Result<PathBuf> {
 		// Get the path.
 		let path = self.artifacts_path().join(artifact_hash.to_string());
 

@@ -137,22 +137,13 @@ impl Compiler {
 		// Get the path for the URL, or return version 0 for URLs whose contents never change.
 		let path = match url {
 			// Path modules change when the file at their path changes.
-			compiler::Url::PathModule(compiler::url::PathModule {
+			compiler::Url::Path {
 				package_path,
 				module_path,
-			}) => package_path.join(module_path),
+			} => package_path.join(module_path),
 
-			// Path import and target URLs change when their manifest changes.
-			compiler::Url::PathImport(compiler::url::PathImport { package_path, .. })
-			| compiler::Url::PathTarget(compiler::url::PathTarget { package_path, .. }) => {
-				package_path.join("tangram.json")
-			},
-
-			// The contents from library and package URLs never change, so we can always return 0.
-			compiler::Url::Lib { .. }
-			| compiler::Url::HashModule { .. }
-			| compiler::Url::HashImport { .. }
-			| compiler::Url::HashTarget { .. } => {
+			// The contents from library, core, and hash URLs never change, so we can always return 0.
+			compiler::Url::Lib { .. } | compiler::Url::Core { .. } | compiler::Url::Hash { .. } => {
 				return Ok(0);
 			},
 		};
@@ -418,7 +409,7 @@ impl Compiler {
 		};
 
 		Ok(TranspileOutput {
-			transpiled_source: response.output_text,
+			transpiled: response.output_text,
 			source_map: response.source_map_text,
 		})
 	}

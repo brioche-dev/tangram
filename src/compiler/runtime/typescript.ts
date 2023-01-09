@@ -31,7 +31,7 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	},
 
 	getDefaultLibLocation: () => {
-		return "tangram-internal://lib/";
+		return "tangram-internal://lib";
 	},
 
 	getNewLine: () => {

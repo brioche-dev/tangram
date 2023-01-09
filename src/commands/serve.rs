@@ -4,6 +4,7 @@ use clap::Parser;
 use std::net::{IpAddr, SocketAddr};
 
 #[derive(Parser)]
+#[command(about = "Run a server.")]
 pub struct Args {
 	#[arg(long, default_value = "0.0.0.0")]
 	host: IpAddr,

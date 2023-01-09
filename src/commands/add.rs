@@ -3,6 +3,7 @@ use anyhow::Result;
 use clap::Parser;
 
 #[derive(Parser)]
+#[command(about = "Add a dependency to a package.")]
 pub struct Args {
 	#[arg(default_value = ".")]
 	specifier: Specifier,

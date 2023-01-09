@@ -56,7 +56,7 @@ impl Server {
 				tracing::error!(?error, backtrace = %error.backtrace());
 				http::Response::builder()
 					.status(http::StatusCode::INTERNAL_SERVER_ERROR)
-					.body(hyper::Body::from(format!("{:?}", error)))
+					.body(hyper::Body::from(format!("{error:?}")))
 					.unwrap()
 			},
 		}

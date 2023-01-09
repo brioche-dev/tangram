@@ -47,6 +47,6 @@ pub struct CompletionEntry {
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranspileOutput {
-	pub transpiled_source: String,
+	pub transpiled: String,
 	pub source_map: String,
 }

@@ -1,5 +1,5 @@
 use crate::{
-	expression::{self, Expression},
+	operation::{Operation, Target},
 	specifier::Specifier,
 	system::System,
 	Cli,
@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(long_about = "Build a package.")]
+#[command(about = "Build a package.")]
 pub struct Args {
 	#[arg(long)]
 	locked: bool,
@@ -35,25 +35,23 @@ impl Cli {
 			.context("Failed to get the hash for the specifier.")?;
 
 		// Create the target args.
-		let target_args = cli.create_target_args(args.system).await?;
+		let target_args = cli.create_target_args(args.system)?;
 
-		// Add the expression.
-		let expression_hash = cli
-			.add_expression(&Expression::Target(expression::Target {
-				package: package_hash,
-				name: args.name,
-				args: target_args,
-			}))
-			.await?;
+		// Create the operation.
+		let operation = Operation::Target(Target {
+			package: package_hash,
+			name: args.name,
+			args: target_args,
+		});
 
-		// Evaluate the expression.
-		let output_hash = cli
-			.evaluate(expression_hash, expression_hash)
+		// Run the operation.
+		let output = cli
+			.run(&operation)
 			.await
-			.context("Failed to evaluate the target expression.")?;
+			.context("Failed to run the operation.")?;
 
 		// Print the output.
-		println!("{output_hash}");
+		println!("{output:?}");
 
 		Ok(())
 	}

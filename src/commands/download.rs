@@ -1,5 +1,5 @@
 use crate::{
-	expression::{self, Expression},
+	operation::{Download, Operation},
 	Cli,
 };
 use anyhow::{Context, Result};
@@ -7,7 +7,7 @@ use clap::Parser;
 use url::Url;
 
 #[derive(Parser)]
-#[command(long_about = "Evaluate a download expression.")]
+#[command(about = "Run a download operation.")]
 pub struct Args {
 	#[arg(help = "The URL to download from.")]
 	url: Url,
@@ -18,25 +18,27 @@ pub struct Args {
 impl Cli {
 	pub(crate) async fn command_download(&self, args: Args) -> Result<()> {
 		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
-		// Create the expression.
-		let hash = cli
-			.add_expression(&Expression::Download(expression::Download {
-				url: args.url,
-				unpack: args.unpack,
-				checksum: None,
-			}))
-			.await?;
-
-		// Evaluate the expression.
-		let output_hash = cli
-			.evaluate(hash, hash)
+		let cli = self
+			.lock_shared()
 			.await
-			.context("Failed to evaluate the expression.")?;
+			.context("Failed to lock the cli.")?;
+
+		// Create the operation.
+		let operation = Operation::Download(Download {
+			url: args.url,
+			unpack: args.unpack,
+			checksum: None,
+			is_unsafe: true,
+		});
+
+		// Run the operation.
+		let output = cli
+			.run(&operation)
+			.await
+			.context("Failed to run the operation.")?;
 
 		// Print the output.
-		println!("{output_hash}");
+		println!("{output:?}");
 
 		Ok(())
 	}

@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 #[derive(Parser)]
+#[command(about = "Upgrade tangram to the latest version.")]
 pub struct Args {}
 
 impl Cli {

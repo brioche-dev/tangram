@@ -210,7 +210,7 @@ fn syscall_opened_files(state: Arc<State>) -> Result<Vec<compiler::Url>> {
 			.filter_map(|file| match file {
 				File::Opened(
 					opened_file @ OpenedFile {
-						url: compiler::Url::PathModule { .. },
+						url: compiler::Url::Path { .. },
 						..
 					},
 				) => Some(opened_file.url.clone()),
@@ -241,7 +241,9 @@ fn syscall_resolve(
 			.resolve(&specifier, referrer.as_ref())
 			.await
 			.with_context(|| {
-				format!(r#"Failed to resolve "{specifier}" relative to "{referrer:?}"."#)
+				format!(
+					r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer:?}"."#
+				)
 			})?;
 		Ok(url)
 	})
@@ -273,7 +275,7 @@ fn exception_to_string(scope: &mut v8::HandleScope, exception: v8::Local<v8::Val
 		.to_string(scope)
 		.unwrap()
 		.to_rust_string_lossy(scope);
-	writeln!(&mut string, "{}", message).unwrap();
+	writeln!(&mut string, "{message}").unwrap();
 
 	// Write the stack trace if one is available.
 	if let Some(stack_trace) = v8::Exception::get_stack_trace(scope, exception) {

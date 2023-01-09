@@ -3,7 +3,7 @@ use anyhow::Result;
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(long_about = "Perform garbage collection.")]
+#[command(about = "Perform garbage collection.")]
 pub struct Args {}
 
 impl Cli {

@@ -1,138 +1,80 @@
-interface ImportMeta {
-	url: string;
-}
+// declare var tg: typeof import("tangram-internal://core/mod.ts");
 
-declare namespace Tangram {
-	export type Syscall =
-		| "get_hash"
-		| "get_name"
-		| "get_args"
-		| "return"
-		| "add_blob"
-		| "get_blob"
-		| "add_expression"
-		| "get_expression"
-		| "evaluate"
-		| "print"
-		| "serialize"
-		| "deserialize";
+declare function syscall(syscall: "get_target_info"): syscall.TargetInfo;
 
-	function syscall(syscall: "get_hash", url: String): Hash;
-	function syscall(syscall: "get_name"): string;
-	function syscall(syscall: "get_args"): Array<Hash>;
-	function syscall(syscall: "return", hash: Hash): void;
-	function syscall(syscall: "print", value: string): void;
-	function syscall<T>(
-		syscall: "serialize",
-		format: string,
-		value: T,
-	): Uint8Array;
-	function syscall<T>(
-		syscall: "deserialize",
-		format: string,
-		value: string | Uint8Array,
-	): T;
-	function syscall(syscall: "add_blob", blob: Uint8Array): Promise<Hash>;
-	function syscall(syscall: "get_blob", hash: Hash): Promise<Uint8Array>;
-	function syscall(
-		syscall: "add_expression",
-		expression: Expression,
-	): Promise<Hash>;
-	function syscall(syscall: "get_expression", hash: Hash): Promise<Expression>;
-	function syscall(syscall: "evaluate", hash: Hash): Promise<Hash>;
+declare function syscall(syscall: "print", value: string): void;
 
-	export type Hash = string;
+declare function syscall(
+	syscall: "serialize",
+	format: syscall.SerializationFormat,
+	value: any,
+): Uint8Array;
 
-	export type ExpressionType =
-		| "null"
-		| "bool"
-		| "number"
-		| "string"
-		| "directory"
-		| "file"
-		| "symlink"
-		| "dependency"
-		| "package"
-		| "template"
-		| "placeholder"
-		| "download"
-		| "process"
-		| "target"
-		| "array"
-		| "map";
+declare function syscall<T>(
+	syscall: "deserialize",
+	format: syscall.SerializationFormat,
+	value: string | Uint8Array,
+): T;
 
-	export type Expression =
-		| {
-				type: "null";
-				value: null;
-		  }
-		| {
-				type: "bool";
-				value: boolean;
-		  }
-		| {
-				type: "number";
-				value: number;
-		  }
-		| {
-				type: "string";
-				value: string;
-		  }
-		| {
-				type: "directory";
-				value: Directory;
-		  }
-		| {
-				type: "file";
-				value: File;
-		  }
-		| {
-				type: "symlink";
-				value: Symlink;
-		  }
-		| {
-				type: "dependency";
-				value: Dependency;
-		  }
-		| {
-				type: "package";
-				value: Package;
-		  }
-		| {
-				type: "template";
-				value: Template;
-		  }
-		| {
-				type: "placeholder";
-				value: Placeholder;
-		  }
-		| {
-				type: "download";
-				value: Download;
-		  }
-		| {
-				type: "process";
-				value: Process;
-		  }
-		| {
-				type: "target";
-				value: Target;
-		  }
-		| {
-				type: "array";
-				value: _Array;
-		  }
-		| {
-				type: "map";
-				value: _Map;
-		  };
+declare function syscall(
+	syscall: "add_blob",
+	blob: Uint8Array,
+): Promise<syscall.BlobHash>;
+
+declare function syscall(
+	syscall: "get_blob",
+	hash: syscall.BlobHash,
+): Promise<Uint8Array>;
+
+declare function syscall(
+	syscall: "add_artifact",
+	artifact: syscall.Artifact,
+): Promise<syscall.ArtifactHash>;
+
+declare function syscall(
+	syscall: "get_artifact",
+	hash: syscall.ArtifactHash,
+): Promise<syscall.Artifact>;
+
+declare function syscall(
+	syscall: "add_package",
+	package: syscall.Package,
+): Promise<syscall.PackageHash>;
+
+declare function syscall(
+	syscall: "get_package",
+	hash: syscall.PackageHash,
+): Promise<syscall.Package>;
+
+declare function syscall(
+	syscall: "run",
+	operation: syscall.Operation,
+): Promise<syscall.Value>;
+
+declare namespace syscall {
+	export type TargetInfo = {
+		packageHash: PackageHash;
+		name: string;
+	};
+
+	export type SerializationFormat = "toml";
+
+	export type BlobHash = string;
+
+	export type ArtifactHash = string;
+
+	export type Artifact =
+		| { type: "directory"; value: Directory }
+		| { type: "file"; value: File }
+		| { type: "symlink"; value: Symlink }
+		| { type: "dependency"; value: Dependency };
 
 	export type Directory = {
-		entries: { [key: string]: Hash };
+		entries: { [key: string]: ArtifactHash };
 	};
 
 	export type File = {
-		blob: Hash;
+		blob: BlobHash;
 		executable: boolean;
 	};
 
@@ -141,49 +83,79 @@ declare namespace Tangram {
 	};
 
 	export type Dependency = {
-		artifact: Hash;
-		path: string | null;
+		artifact: ArtifactHash;
+		path: string | null | undefined;
 	};
 
-	export type Package = {
-		source: Hash;
-		dependencies: { [key: string]: Hash };
-	};
+	export type ValueType =
+		| "null"
+		| "bool"
+		| "number"
+		| "string"
+		| "artifact"
+		| "placeholder"
+		| "template"
+		| "array"
+		| "map";
 
-	export type Template = {
-		components: Array<Hash>;
-	};
+	export type Value =
+		| { type: "null"; value: null | undefined }
+		| { type: "bool"; value: boolean }
+		| { type: "number"; value: number }
+		| { type: "string"; value: string }
+		| { type: "artifact"; value: ArtifactHash }
+		| { type: "placeholder"; value: Placeholder }
+		| { type: "template"; value: Template }
+		| { type: "array"; value: Array<Value> }
+		| { type: "map"; value: Record<string, Value> };
 
 	export type Placeholder = {
 		name: string;
 	};
 
+	export type Template = {
+		components: Array<TemplateComponent>;
+	};
+
+	export type TemplateComponentType =
+		| "string"
+		| "artifact"
+		| "placeholder"
+		| "template";
+
+	export type TemplateComponent =
+		| { type: "string"; value: string }
+		| { type: "artifact"; value: ArtifactHash }
+		| { type: "placeholder"; value: Placeholder };
+
+	export type OperationType = "download" | "process" | "target";
+
+	export type Operation =
+		| { type: "download"; value: Download }
+		| { type: "process"; value: Process }
+		| { type: "target"; value: Target };
+
 	export type Download = {
 		url: string;
-		checksum: Checksum | null;
-		unpack: boolean;
+		unpack: boolean | null | undefined;
+		checksum: Checksum | null | undefined;
+		unsafe: boolean | null | undefined;
 	};
+
+	export type Checksum = {
+		algorithm: ChecksumAlgorithm;
+		value: string;
+	};
+
+	export type ChecksumAlgorithm = "sha256";
 
 	export type Process = {
 		system: System;
-		workingDirectory: Hash;
-		env: Hash;
-		command: Hash;
-		args: Hash;
-		network: boolean | null;
-		checksum: Checksum | null;
-		unsafe: boolean | null;
+		env: Record<string, Template> | null | undefined;
+		command: Template;
+		args: Array<Template> | null | undefined;
+		unsafe: boolean | null | undefined;
 	};
-
-	export type Target = {
-		package: Hash;
-		name: string;
-		args: Hash;
-	};
-
-	export type _Array = Array<Hash>;
-
-	export type _Map = Record<string, Hash>;
 
 	export type System =
 		| "amd64_linux"
@@ -191,15 +163,16 @@ declare namespace Tangram {
 		| "amd64_macos"
 		| "arm64_macos";
 
-	export type Checksum = {
-		algorithm: ChecksumAlgorithm;
-		encoding: ChecksumEncoding;
-		value: string;
+	export type Target = {
+		package: PackageHash;
+		name: string;
+		args: Array<Value> | null | undefined;
 	};
 
-	export type ChecksumAlgorithm = "sha256";
+	export type PackageHash = string;
 
-	export type ChecksumEncoding = "base16";
-
-	export const typeSymbol: unique symbol;
+	export type Package = {
+		source: ArtifactHash;
+		dependencies: { [key: string]: PackageHash };
+	};
 }

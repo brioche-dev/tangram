@@ -1,12 +1,9 @@
-use super::{
-	url::{Referrer, TANGRAM_SCHEME},
-	Compiler,
-};
+use super::{url::TANGRAM_SCHEME, Compiler};
 use crate::{
 	compiler,
-	hash::Hash,
 	lockfile::Lockfile,
 	manifest::{self, Manifest},
+	package::PackageHash,
 	util::normalize,
 };
 use anyhow::{bail, Context, Result};
@@ -20,12 +17,14 @@ impl Compiler {
 		specifier: &str,
 		referrer: Option<&compiler::Url>,
 	) -> Result<compiler::Url> {
-		// If the specifier starts with /, ./, or ../, then resolve it as a path specifier. Otherwise, resolve it as a URL.
+		// If the specifier starts with /, ./, or ../, then resolve it as a path specifier. If the specifier is "tangram" then resolve it to the root core module. Otherwise, resolve it as a URL.
 		let url = if specifier.starts_with('/')
 			|| specifier.starts_with("./")
 			|| specifier.starts_with("../")
 		{
-			resolve_path(specifier, referrer)?
+			Self::resolve_path(specifier, referrer)?
+		} else if specifier == "tangram" {
+			compiler::Url::new_core("/mod.ts".into())
 		} else {
 			// Parse the specifier as URL.
 			let specifier: Url = specifier
@@ -42,42 +41,44 @@ impl Compiler {
 	}
 }
 
-fn resolve_path(specifier: &str, referrer: Option<&compiler::Url>) -> Result<compiler::Url> {
-	// Ensure there is a referrer.
-	let referrer = referrer.with_context(|| {
-		format!(r#"A specifier with the scheme "{TANGRAM_SCHEME}" must have a referrer."#)
-	})?;
+impl Compiler {
+	fn resolve_path(specifier: &str, referrer: Option<&compiler::Url>) -> Result<compiler::Url> {
+		// Ensure there is a referrer.
+		let referrer = referrer.with_context(|| {
+			format!(r#"A specifier with the scheme "{TANGRAM_SCHEME}" must have a referrer."#)
+		})?;
 
-	let specifier = Utf8Path::new(specifier);
+		let specifier = Utf8Path::new(specifier);
 
-	// Resolve.
-	let url = match referrer {
-		compiler::Url::Lib(compiler::url::Lib { path }) => compiler::Url::Lib(compiler::url::Lib {
-			path: normalize(&path.join("..").join(specifier)),
-		}),
+		// Resolve.
+		let url = match referrer {
+			compiler::Url::Lib { path } => compiler::Url::Lib {
+				path: normalize(&path.join("..").join(specifier)),
+			},
 
-		compiler::Url::HashModule(compiler::url::HashModule {
-			package_hash,
-			module_path,
-		}) => compiler::Url::HashModule(compiler::url::HashModule {
-			package_hash: *package_hash,
-			module_path: normalize(&module_path.join("..").join(specifier)),
-		}),
+			compiler::Url::Core { path } => compiler::Url::Core {
+				path: normalize(&path.join("..").join(specifier)),
+			},
 
-		compiler::Url::PathModule(compiler::url::PathModule {
-			package_path,
-			module_path,
-		}) => compiler::Url::PathModule(compiler::url::PathModule {
-			package_path: package_path.clone(),
-			module_path: normalize(&module_path.join("..").join(specifier)),
-		}),
+			compiler::Url::Hash {
+				package_hash,
+				module_path,
+			} => compiler::Url::Hash {
+				package_hash: *package_hash,
+				module_path: normalize(&module_path.join("..").join(specifier)),
+			},
 
-		_ => {
-			bail!(r#"Cannot resolve specifier "{specifier}" from referrer "{referrer}"."#);
-		},
-	};
+			compiler::Url::Path {
+				package_path,
+				module_path,
+			} => compiler::Url::Path {
+				package_path: package_path.clone(),
+				module_path: normalize(&module_path.join("..").join(specifier)),
+			},
+		};
 
-	Ok(url)
+		Ok(url)
+	}
 }
 
 impl Compiler {
@@ -91,18 +92,14 @@ impl Compiler {
 			referrer.context(r#"A specifier with the scheme "tangram" must have a referrer."#)?;
 
 		match referrer {
-			compiler::Url::HashModule(compiler::url::HashModule { package_hash, .. })
-			| compiler::Url::HashImport(compiler::url::HashImport { package_hash, .. })
-			| compiler::Url::HashTarget(compiler::url::HashTarget { package_hash, .. }) => {
+			compiler::Url::Lib { .. } | compiler::Url::Core { .. } => bail!("Invalid referrer."),
+
+			compiler::Url::Hash { package_hash, .. } => {
 				self.resolve_tangram_from_hash(specifier, *package_hash)
 					.await
 			},
 
-			compiler::Url::Lib { .. } => bail!("Invalid referrer."),
-
-			compiler::Url::PathModule(compiler::url::PathModule { package_path, .. })
-			| compiler::Url::PathImport(compiler::url::PathImport { package_path, .. })
-			| compiler::Url::PathTarget(compiler::url::PathTarget { package_path, .. }) => {
+			compiler::Url::Path { package_path, .. } => {
 				self.resolve_tangram_from_path(specifier, package_path)
 					.await
 			},
@@ -112,7 +109,7 @@ impl Compiler {
 	async fn resolve_tangram_from_hash(
 		&self,
 		specifier: &url::Url,
-		referrer_package_hash: Hash,
+		referrer_package_hash: PackageHash,
 	) -> Result<compiler::Url> {
 		// Lock the cli.
 		let cli = self.cli.lock_shared().await?;
@@ -121,11 +118,7 @@ impl Compiler {
 		let specifier_package_name = specifier.path();
 
 		// Get the referrer's dependencies.
-		let referrer_dependencies = cli
-			.get_expression_local(referrer_package_hash)?
-			.into_package()
-			.context("Expected a package expression.")?
-			.dependencies;
+		let referrer_dependencies = cli.get_package_local(referrer_package_hash)?.dependencies;
 
 		// Get the specifier's package hash from the referrer's dependencies.
 		let specifier_package_hash = referrer_dependencies.get(specifier_package_name).context(
@@ -133,10 +126,7 @@ impl Compiler {
 		)?;
 
 		// Create the URL.
-		let url = compiler::Url::new_hash_import(
-			*specifier_package_hash,
-			Referrer::Hash(referrer_package_hash),
-		);
+		let url = compiler::Url::new_hash(*specifier_package_hash, "tangram.ts".into());
 
 		Ok(url)
 	}
@@ -169,10 +159,7 @@ impl Compiler {
 					tokio::fs::canonicalize(&specifier_package_path).await?;
 
 				// Create the URL.
-				let url = compiler::Url::new_path_import(
-					specifier_package_path,
-					Referrer::Path(referrer_package_path.to_owned()),
-				);
+				let url = compiler::Url::new_path(specifier_package_path, "tangram.ts".into());
 
 				Ok(url)
 			},
@@ -195,10 +182,7 @@ impl Compiler {
 				let specifier_hash = dependency.hash;
 
 				// Create the URL.
-				let url = compiler::Url::new_hash_import(
-					specifier_hash,
-					Referrer::Path(referrer_package_path.to_owned()),
-				);
+				let url = compiler::Url::new_hash(specifier_hash, "tangram.ts".into());
 
 				Ok(url)
 			},

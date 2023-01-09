@@ -1,8 +1,9 @@
-use crate::{hash::Hash, Cli};
+use crate::{blob::BlobHash, Cli};
 use anyhow::Result;
 use clap::Parser;
 
 #[derive(Parser)]
+#[command(about = "Manage blobs.")]
 pub struct Args {
 	#[command(subcommand)]
 	subcommand: Subcommand,
@@ -14,8 +15,9 @@ pub enum Subcommand {
 }
 
 #[derive(Parser, Debug)]
+#[command(about = "Get a blob.")]
 pub struct GetArgs {
-	blob_hash: Hash,
+	blob_hash: BlobHash,
 }
 
 impl Cli {

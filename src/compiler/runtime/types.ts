@@ -1,17 +1,3 @@
-declare global {
-	export function syscall(name: "opened_files"): Array<string>;
-	export function syscall(
-		name: "load",
-		fileName: string,
-	): { version: string; text: string };
-	export function syscall(name: "version", fileName: string): string;
-	export function syscall(
-		name: "resolve",
-		specifier: string,
-		referrer: string,
-	): string;
-}
-
 export type Request =
 	| { type: "check"; request: CheckRequest }
 	| { type: "completion"; request: CompletionRequest }
@@ -134,6 +120,6 @@ export type CompletionEntry = {
 };
 
 export type TranspileOutput = {
-	transpiled_source: string;
-	source_map: string;
+	transpiled: string;
+	sourceMap: string;
 };

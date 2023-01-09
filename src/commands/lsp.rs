@@ -2,6 +2,7 @@ use crate::{compiler::Compiler, lsp::LanguageServer, Cli};
 use clap::Parser;
 
 #[derive(Parser)]
+#[command(about = "Run the language server.")]
 pub struct Args {}
 
 impl Cli {

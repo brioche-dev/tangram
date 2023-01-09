@@ -5,38 +5,31 @@
 pub use self::commands::Args;
 use self::dirs::home_directory_path;
 use crate::{
-	api_client::ApiClient,
-	clients::{blob::Client as BlobClient, expression::Client as ExpressionClient},
-	db::Db,
-	hash::Hash,
+	blob::BlobHash,
+	database::Database,
 	heuristics::FILESYSTEM_CONCURRENCY_LIMIT,
 	id::Id,
 	lock::{ExclusiveGuard, Lock, SharedGuard},
 };
 use anyhow::{Context, Result};
 use std::{
-	collections::HashMap,
 	path::{Path, PathBuf},
-	sync::{Arc, Mutex, Weak},
+	sync::{Arc, Weak},
 };
 use tokio::sync::Semaphore;
 use tokio_util::task::LocalPoolHandle;
 
-pub mod api_client;
 pub mod artifact;
 pub mod blob;
 pub mod checkin;
 pub mod checkout;
 pub mod checksum;
-pub mod clients;
 pub mod commands;
 pub mod compiler;
 pub mod config;
 pub mod credentials;
-pub mod db;
+pub mod database;
 pub mod dirs;
-pub mod evaluate;
-pub mod expression;
 pub mod gc;
 pub mod hash;
 pub mod heuristics;
@@ -48,9 +41,9 @@ pub mod manifest;
 pub mod migrations;
 pub mod operation;
 pub mod package;
-pub mod pull;
-pub mod push;
-pub mod server;
+// pub mod pull;
+// pub mod push;
+// pub mod server;
 pub mod specifier;
 pub mod system;
 pub mod util;
@@ -69,30 +62,17 @@ pub struct State {
 	/// This is the path to the directory where the cli stores its data.
 	pub path: PathBuf,
 
-	/// This is the database used to store expressions and evaluations.
-	pub db: Db,
-
-	/// For expressions that are expensive to evaluate, it is a waste to evaluate them if another evaluation for the same expression is already in progress. This map stores a receiver that will be notified when an in progress evaluation of the expression completes.
-	pub in_progress_evaluations:
-		Arc<Mutex<HashMap<Hash, tokio::sync::broadcast::Receiver<Hash>, hash::BuildHasher>>>,
+	/// This is the database used to store artifacts, package, operations, evaluations, and outputs.
+	pub database: Database,
 
 	/// The file system semaphore is used to prevent the cli from opening too many files simultaneously.
 	pub file_system_semaphore: Arc<Semaphore>,
 
-	/// The client that connects to the blob server.
-	pub blob_client: Option<BlobClient>,
-
-	/// The client that connects to the blob expression server.
-	pub expression_client: Option<ExpressionClient>,
-
-	/// This HTTP client is for performing HTTP requests when evaluating download expressions.
+	/// This HTTP client is for performing HTTP requests when running download operations.
 	pub http_client: reqwest::Client,
 
-	/// This local pool handle is for spawning `!Send` futures.
+	/// This local pool handle is for spawning `!Send` futures, such as targets.
 	pub local_pool_handle: LocalPoolHandle,
-
-	/// The API client is used to communicate with the API.
-	pub api_client: ApiClient,
 }
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
@@ -102,30 +82,21 @@ impl Cli {
 		// Get the path.
 		let path = Self::path()?;
 
-		// Read the config.
-		let config = Self::read_config().await?;
+		// // Read the config.
+		// let config = Self::read_config().await?;
 
-		// Read the credentials.
-		let credentials = Self::read_credentials().await?;
+		// // Read the credentials.
+		// let credentials = Self::read_credentials().await?;
 
-		// Resolve the API URL.
-		let api_url = config
-			.as_ref()
-			.and_then(|config| config.api_url.as_ref())
-			.cloned();
-		let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
+		// // Resolve the API URL.
+		// let api_url = config
+		// 	.as_ref()
+		// 	.and_then(|config| config.api_url.as_ref())
+		// 	.cloned();
+		// let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
 
-		// Get the token.
-		let token = credentials.map(|credentials| credentials.token);
-
-		// Create the API Client.
-		let api_client = ApiClient::new(api_url.clone(), token.clone());
-
-		// Create the blob client.
-		let blob_client = clients::blob::Client::new(api_url.clone(), token.clone());
-
-		// Create the expression client.
-		let expression_client = clients::expression::Client::new(api_url.clone(), token.clone());
+		// // Get the token.
+		// let token = credentials.map(|credentials| credentials.token);
 
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
@@ -134,8 +105,8 @@ impl Cli {
 		Self::migrate(&path).await?;
 
 		// Create the database.
-		let db_path = path.join("db.mdb");
-		let db = Db::new(&db_path)?;
+		let database_path = path.join("database.mdb");
+		let database = Database::new(&database_path)?;
 
 		// Create the file system semaphore.
 		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
@@ -145,9 +116,6 @@ impl Cli {
 
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
-
-		// Create the in progress evaluations.
-		let in_progress_evaluations = Arc::new(Mutex::new(HashMap::default()));
 
 		// Create the local pool handle.
 		let threads = std::thread::available_parallelism().unwrap().get();
@@ -169,14 +137,10 @@ impl Cli {
 			let state = State {
 				state: state.clone(),
 				path,
-				db,
+				database,
 				http_client,
-				in_progress_evaluations,
 				file_system_semaphore,
-				blob_client: Some(blob_client),
-				expression_client: Some(expression_client),
 				local_pool_handle,
-				api_client,
 			};
 			Lock::new(lock_path, state)
 		});
@@ -238,7 +202,7 @@ impl State {
 	}
 
 	#[must_use]
-	pub fn blob_path(&self, blob_hash: Hash) -> PathBuf {
+	pub fn blob_path(&self, blob_hash: BlobHash) -> PathBuf {
 		self.path.join("blobs").join(blob_hash.to_string())
 	}
 

@@ -1,5 +1,5 @@
 use crate::{
-	expression::{self, Expression},
+	operation::{Operation, Target},
 	specifier::Specifier,
 	system::System,
 	util::path_exists,
@@ -10,7 +10,10 @@ use clap::Parser;
 use std::{os::unix::process::CommandExt, path::PathBuf};
 
 #[derive(Parser, Debug)]
-#[command(trailing_var_arg = true)]
+#[command(
+	about = "Build a package and run an executable from its output.",
+	trailing_var_arg = true
+)]
 pub struct Args {
 	#[arg(long)]
 	pub executable_path: Option<PathBuf>,
@@ -22,7 +25,7 @@ pub struct Args {
 	pub specifier: Specifier,
 	pub trailing_args: Vec<String>,
 	#[arg(long)]
-	system: Option<System>,
+	pub system: Option<System>,
 }
 
 impl Cli {
@@ -51,25 +54,28 @@ impl Cli {
 		let name = args.target.unwrap_or_else(|| "default".to_owned());
 
 		// Create the target args.
-		let target_args = cli.create_target_args(args.system).await?;
+		let target_args = cli.create_target_args(args.system)?;
 
-		// Add the expression.
-		let input_hash = cli
-			.add_expression(&Expression::Target(expression::Target {
-				package: package_hash,
-				name,
-				args: target_args,
-			}))
-			.await?;
+		// Create the operation.
+		let operation = Operation::Target(Target {
+			package: package_hash,
+			name,
+			args: target_args,
+		});
 
-		// Evaluate the expression.
-		let output_hash = cli
-			.evaluate(input_hash, input_hash)
+		// Run the operation.
+		let output = cli
+			.run(&operation)
 			.await
-			.context("Failed to evaluate the target expression.")?;
+			.context("Failed to run the operation.")?;
+
+		// Get the output artifact.
+		let output_artifact_hash = output
+			.into_artifact()
+			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = cli.checkout_to_artifacts(output_hash).await?;
+		let artifact_path = cli.checkout_to_artifacts(output_artifact_hash).await?;
 
 		// Get the path to the executable.
 		let executable_path = artifact_path.join(executable_path);

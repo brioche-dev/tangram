@@ -1,6 +1,7 @@
 use crate::{
-	expression::{Dependency, Directory, Expression, File, Symlink},
-	hash::{Hash, Hasher},
+	artifact::{Artifact, ArtifactHash, Dependency, Directory, File, Symlink},
+	blob::BlobHash,
+	hash::Hasher,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
@@ -11,15 +12,14 @@ use std::{
 	collections::HashMap,
 	fs::Metadata,
 	os::unix::prelude::PermissionsExt,
-	path::Path,
-	path::PathBuf,
+	path::{Path, PathBuf},
 	sync::{Arc, RwLock},
 };
 
 pub struct Watcher {
 	path: PathBuf,
 	semaphore: Arc<tokio::sync::Semaphore>,
-	cache: RwLock<HashMap<PathBuf, (Hash, Expression), FnvBuildHasher>>,
+	cache: RwLock<HashMap<PathBuf, (ArtifactHash, Artifact), FnvBuildHasher>>,
 }
 
 impl Watcher {
@@ -34,11 +34,9 @@ impl Watcher {
 		}
 	}
 
-	pub async fn get_expression_for_path(&self, path: &Path) -> Result<Option<(Hash, Expression)>> {
+	pub async fn get(&self, path: &Path) -> Result<Option<(ArtifactHash, Artifact)>> {
 		// Fill the cache for this path if necessary.
 		if self.cache.read().unwrap().get(path).is_none() {
-			tracing::trace!(r#"Filling cache for path "{}"."#, path.display());
-
 			// Get the metadata for the path.
 			let permit = self.semaphore.acquire().await.unwrap();
 			let metadata = match tokio::fs::symlink_metadata(path).await {
@@ -54,23 +52,19 @@ impl Watcher {
 
 			// Call the appropriate function for the file system object the path points to.
 			if metadata.is_dir() {
-				self.cache_expression_for_directory(path, &metadata)
+				self.cache_directory(path, &metadata)
 					.await
 					.with_context(|| {
 						format!(r#"Failed to cache directory at path "{}"."#, path.display())
 					})?;
 			} else if metadata.is_file() {
-				self.cache_expression_for_file(path, &metadata)
-					.await
-					.with_context(|| {
-						format!(r#"Failed to cache file at path "{}"."#, path.display())
-					})?;
+				self.cache_file(path, &metadata).await.with_context(|| {
+					format!(r#"Failed to cache file at path "{}"."#, path.display())
+				})?;
 			} else if metadata.is_symlink() {
-				self.cache_expression_for_symlink(path, &metadata)
-					.await
-					.with_context(|| {
-						format!(r#"Failed to cache symlink at path "{}"."#, path.display())
-					})?;
+				self.cache_symlink(path, &metadata).await.with_context(|| {
+					format!(r#"Failed to cache symlink at path "{}"."#, path.display())
+				})?;
 			} else {
 				bail!("The path must point to a directory, file, or symlink.");
 			};
@@ -82,11 +76,7 @@ impl Watcher {
 	}
 
 	#[async_recursion]
-	async fn cache_expression_for_directory(
-		&self,
-		path: &Path,
-		_metadata: &Metadata,
-	) -> Result<()> {
+	async fn cache_directory(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
 		// Read the contents of the directory.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut read_dir = tokio::fs::read_dir(path)
@@ -107,7 +97,7 @@ impl Watcher {
 		// Recurse into the directory's entries.
 		let entries = try_join_all(entry_names.into_iter().map(|entry_name| async {
 			let entry_path = path.join(&entry_name);
-			self.get_expression_for_path(&entry_path).await?;
+			self.get(&entry_path).await?;
 			let (hash, _) = self.cache.read().unwrap().get(&entry_path).unwrap().clone();
 			Ok::<_, anyhow::Error>((entry_name, hash))
 		}))
@@ -115,58 +105,58 @@ impl Watcher {
 		.into_iter()
 		.collect();
 
-		// Create the expression.
-		let expression = Expression::Directory(Directory { entries });
+		// Create the artifact.
+		let artifact = Artifact::Directory(Directory { entries });
 
-		// Add the expression to the cache.
+		// Add the artifact to the cache.
 		self.cache
 			.write()
 			.unwrap()
-			.insert(path.to_owned(), (expression.hash(), expression));
+			.insert(path.to_owned(), (artifact.hash(), artifact));
 
 		Ok(())
 	}
 
-	async fn cache_expression_for_file(&self, path: &Path, metadata: &Metadata) -> Result<()> {
+	async fn cache_file(&self, path: &Path, metadata: &Metadata) -> Result<()> {
 		// Compute the file's blob hash.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let mut file = tokio::fs::File::open(path).await?;
 		let mut hasher = Hasher::new();
 		tokio::io::copy(&mut file, &mut hasher).await?;
-		let blob_hash = hasher.finalize();
+		let blob_hash = BlobHash(hasher.finalize());
 		drop(file);
 		drop(permit);
 
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
 
-		// Create the expression.
-		let expression = Expression::File(File {
+		// Create the artifact.
+		let artifact = Artifact::File(File {
 			blob: blob_hash,
 			executable,
 		});
 
-		// Add the expression to the cache.
+		// Add the artifact to the cache.
 		self.cache
 			.write()
 			.unwrap()
-			.insert(path.to_owned(), (expression.hash(), expression));
+			.insert(path.to_owned(), (artifact.hash(), artifact));
 
 		Ok(())
 	}
 
-	async fn cache_expression_for_symlink(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
+	async fn cache_symlink(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
 		// Read the symlink.
 		let permit = self.semaphore.acquire().await.unwrap();
 		let target = tokio::fs::read_link(path)
 			.await
 			.with_context(|| format!(r#"Failed to read symlink at path "{}"."#, path.display()))?;
 		let target = Utf8PathBuf::from_path_buf(target)
-			.map_err(|_| anyhow!("Symlink target is not a valid UTF-8 path."))?;
+			.map_err(|_| anyhow!("The symlink target is not a valid UTF-8 path."))?;
 		drop(permit);
 
-		// Create the expression.
-		let expression = if target.is_absolute() {
+		// Create the artifact.
+		let artifact = if target.is_absolute() {
 			// A symlink that has an absolute target that points into the artifacts directory is a dependency.
 			let target = target
 				.strip_prefix(&self.path.join("artifacts"))
@@ -176,7 +166,7 @@ impl Watcher {
 			let mut components = target.components().peekable();
 
 			// Parse the hash from the first component.
-			let hash: Hash = components
+			let artifact_hash: ArtifactHash = components
 				.next()
 				.context("Invalid symlink.")?
 				.as_str()
@@ -190,19 +180,19 @@ impl Watcher {
 				None
 			};
 
-			Expression::Dependency(Dependency {
-				artifact: hash,
+			Artifact::Dependency(Dependency {
+				artifact: artifact_hash,
 				path,
 			})
 		} else {
-			Expression::Symlink(Symlink { target })
+			Artifact::Symlink(Symlink { target })
 		};
 
-		// Add the expression to the cache.
+		// Add the artifact to the cache.
 		self.cache
 			.write()
 			.unwrap()
-			.insert(path.to_owned(), (expression.hash(), expression));
+			.insert(path.to_owned(), (artifact.hash(), artifact));
 
 		Ok(())
 	}

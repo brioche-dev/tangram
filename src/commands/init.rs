@@ -5,6 +5,7 @@ use indoc::formatdoc;
 use std::path::PathBuf;
 
 #[derive(Parser)]
+#[command(about = "Initialize a new package.")]
 pub struct Args {
 	#[arg(long)]
 	pub name: Option<String>,
