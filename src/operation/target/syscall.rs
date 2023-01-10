@@ -48,7 +48,8 @@ fn syscall_inner<'s>(
 		"add_artifact" => syscall_async(scope, args, syscall_add_artifact),
 		"get_artifact" => syscall_async(scope, args, syscall_get_artifact),
 		"run" => syscall_async(scope, args, syscall_run),
-		"get_target_info" => syscall_sync(scope, args, syscall_get_target_info),
+		"get_current_package_hash" => syscall_sync(scope, args, syscall_get_current_package_hash),
+		"get_target_name" => syscall_sync(scope, args, syscall_get_target_name),
 		_ => {
 			bail!(r#"Unknown syscall "{name}"."#);
 		},
@@ -154,35 +155,32 @@ async fn syscall_run(state: Rc<ContextState>, args: (Operation,)) -> Result<Valu
 	Ok(output)
 }
 
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TargetInfo {
-	pub package_hash: PackageHash,
-	pub name: String,
-}
-
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_get_target_info(
+fn syscall_get_current_package_hash(
 	scope: &mut v8::HandleScope,
-	state: Rc<ContextState>,
+	_state: Rc<ContextState>,
 	_args: (),
-) -> Result<TargetInfo> {
-	// Get the URL, line, and column of the caller's caller.
-	let stack_trace = v8::StackTrace::current_stack_trace(scope, 2).unwrap();
-	let stack_frame = stack_trace.get_frame(scope, 1).unwrap();
-	let url = stack_frame
-		.get_script_name(scope)
-		.unwrap()
-		.to_rust_string_lossy(scope);
-	let url: compiler::Url = url.parse().unwrap();
-	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
-	let column = stack_frame.get_column().to_u32().unwrap() - 1;
+) -> Result<PackageHash> {
+	// Get the location.
+	let Location { url, .. } = get_location(scope);
 
 	// Get the package hash.
 	let package_hash = match url {
 		compiler::Url::Hash { package_hash, .. } => package_hash,
 		_ => panic!(),
 	};
+
+	Ok(package_hash)
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_get_target_name(
+	scope: &mut v8::HandleScope,
+	state: Rc<ContextState>,
+	_args: (),
+) -> Result<String> {
+	// Get the location.
+	let Location { url, line, column } = get_location(scope);
 
 	// Get the module.
 	let modules = state.modules.borrow();
@@ -211,7 +209,27 @@ fn syscall_get_target_info(
 		bail!("Invalid target.");
 	};
 
-	Ok(TargetInfo { package_hash, name })
+	Ok(name)
+}
+
+struct Location {
+	url: compiler::Url,
+	line: u32,
+	column: u32,
+}
+
+fn get_location(scope: &mut v8::HandleScope) -> Location {
+	// Get the URL, line, and column of the caller's caller.
+	let stack_trace = v8::StackTrace::current_stack_trace(scope, 2).unwrap();
+	let stack_frame = stack_trace.get_frame(scope, 1).unwrap();
+	let url = stack_frame
+		.get_script_name(scope)
+		.unwrap()
+		.to_rust_string_lossy(scope);
+	let url: compiler::Url = url.parse().unwrap();
+	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
+	let column = stack_frame.get_column().to_u32().unwrap() - 1;
+	Location { url, line, column }
 }
 
 fn syscall_sync<'s, A, T, F>(

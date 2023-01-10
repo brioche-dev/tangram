@@ -1,6 +1,10 @@
 // declare var tg: typeof import("tangram-internal://core/mod.ts");
 
-declare function syscall(syscall: "get_target_info"): syscall.TargetInfo;
+declare function syscall(
+	syscall: "get_current_package_hash",
+): syscall.PackageHash;
+
+declare function syscall(syscall: "get_target_name"): string;
 
 declare function syscall(syscall: "print", value: string): void;
 
@@ -52,11 +56,6 @@ declare function syscall(
 ): Promise<syscall.Value>;
 
 declare namespace syscall {
-	export type TargetInfo = {
-		packageHash: PackageHash;
-		name: string;
-	};
-
 	export type SerializationFormat = "toml";
 
 	export type BlobHash = string;

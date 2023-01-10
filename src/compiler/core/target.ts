@@ -67,13 +67,14 @@ export let createTarget = <A extends Value, R extends Value>(
 	f: (args: A) => MaybePromise<R>,
 ): TargetFunction<A, R> => {
 	// Get the target's package and name.
-	let { name, packageHash } = syscall("get_target_info");
+	let packageHash = new PackageHash(syscall("get_current_package_hash"));
+	let name = syscall("get_target_name");
 
 	// Create the target function.
 	let targetFunction: TargetFunction<A, R> = async (args: Unresolved<A>) => {
 		let resolvedArgs = await resolve(args);
 		return await target({
-			package: await getPackage(new PackageHash(packageHash)),
+			package: await getPackage(packageHash),
 			name,
 			args: [resolvedArgs],
 		});

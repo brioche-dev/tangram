@@ -1,5 +1,9 @@
 import { Artifact, ArtifactHash, addArtifact } from "./artifact.ts";
 
+export let currentPackage = async (): Promise<Package> => {
+	return await getPackage(new PackageHash(syscall("get_current_package_hash")));
+};
+
 export type PackageArgs = {
 	source: Artifact;
 	dependencies: { [name: string]: Package };
