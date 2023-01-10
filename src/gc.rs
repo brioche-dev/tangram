@@ -38,6 +38,10 @@ impl State {
 		self.sweep_operations(&marks)
 			.context("Failed to sweep operations.")?;
 
+		// Sweep the operation's children.
+		self.sweep_operation_children(&marks)
+			.context("Failed to sweep operation children.")?;
+
 		// Sweep the packages.
 		self.sweep_packages(&marks)
 			.context("Failed to sweep packages.")?;
@@ -291,6 +295,32 @@ impl State {
 
 		// Open a read/write cursor.
 		let mut cursor = txn.open_rw_cursor(self.database.operations)?;
+
+		// Delete all operations that are not marked.
+		for entry in cursor.iter() {
+			let (hash, _) = entry?;
+			let hash = hash.try_into()?;
+			let hash = OperationHash(Hash(hash));
+			if !marks.contains_operation(hash) {
+				cursor.del(lmdb::WriteFlags::empty())?;
+			}
+		}
+
+		// Drop the cursor.
+		drop(cursor);
+
+		// Commit the transaction.
+		txn.commit()?;
+
+		Ok(())
+	}
+
+	fn sweep_operation_children(&self, marks: &Marks) -> Result<()> {
+		// Open a read/write transaction.
+		let mut txn = self.database.env.begin_rw_txn()?;
+
+		// Open a read/write cursor.
+		let mut cursor = txn.open_rw_cursor(self.database.operation_children)?;
 
 		// Delete all operations that are not marked.
 		for entry in cursor.iter() {
