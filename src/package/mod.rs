@@ -144,7 +144,7 @@ impl State {
 		let package_hash = package.hash();
 
 		// Serialize the package.
-		let value = buffalo::to_vec(package).unwrap();
+		let value = package.serialize_to_vec();
 
 		// Begin a write transaction.
 		let mut txn = self.database.env.begin_rw_txn()?;

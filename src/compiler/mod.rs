@@ -14,6 +14,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::{Path, PathBuf},
+	rc::Rc,
 	sync::{Arc, Mutex},
 	time::SystemTime,
 };
@@ -438,17 +439,10 @@ struct ContextState {
 impl Runtime {
 	#[must_use]
 	pub fn new(compiler: Compiler, main_runtime_handle: tokio::runtime::Handle) -> Runtime {
-		// Create the state.
-		let context_state = Arc::new(ContextState {
-			compiler,
-			main_runtime_handle,
-		});
-
 		// Create the isolate.
 		let params = v8::CreateParams::default();
 		let mut isolate = v8::Isolate::new(params);
 		isolate.set_capture_stack_trace_for_uncaught_exceptions(true, 10);
-		isolate.set_slot(context_state);
 
 		// Create the context.
 		let mut handle_scope = v8::HandleScope::new(&mut isolate);
@@ -456,10 +450,19 @@ impl Runtime {
 		let context = v8::Global::new(&mut handle_scope, context);
 		drop(handle_scope);
 
+		// Create the context state.
+		let context_state = Rc::new(ContextState {
+			compiler,
+			main_runtime_handle,
+		});
+
 		// Enter the context.
 		let mut handle_scope = v8::HandleScope::new(&mut isolate);
 		let context = v8::Local::new(&mut handle_scope, &context);
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
+
+		// Set the context state on the context.
+		context.set_slot(&mut context_scope, context_state);
 
 		// Run the main script.
 		let source = v8::String::new(&mut context_scope, include_str!("./main.js")).unwrap();

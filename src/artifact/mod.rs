@@ -311,7 +311,7 @@ impl State {
 		let artifact_hash = artifact.hash();
 
 		// Serialize the artifact.
-		let value = buffalo::to_vec(artifact).unwrap();
+		let value = artifact.serialize_to_vec();
 
 		// Begin a write transaction.
 		let mut txn = self.database.env.begin_rw_txn()?;

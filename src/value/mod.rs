@@ -85,6 +85,7 @@ pub struct Template {
 	serde::Deserialize,
 	serde::Serialize,
 )]
+#[serde(tag = "type", content = "value")]
 pub enum TemplateComponent {
 	#[buffalo(id = 0)]
 	#[serde(rename = "string")]
