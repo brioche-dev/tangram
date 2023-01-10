@@ -39,14 +39,14 @@ impl Cli {
 		for diagnostics in diagnostics.values() {
 			for diagnostic in diagnostics {
 				// Retrieve the diagnostic location and message.
-				let compiler::types::Diagnostic {
+				let compiler::Diagnostic {
 					location, message, ..
 				} = diagnostic;
 
 				// Print the location if one is available.
 				if let Some(location) = location {
-					let compiler::types::Location { url, range, .. } = location;
-					let compiler::types::Position { line, character } = range.start;
+					let compiler::Location { url, range, .. } = location;
+					let compiler::Position { line, character } = range.start;
 					let line = line + 1;
 					let character = character + 1;
 

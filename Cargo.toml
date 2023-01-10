@@ -31,6 +31,7 @@ bytes = "1"
 bzip2 = "0.4"
 camino = { version = "1", features = ["serde1"] }
 clap = { version = "4", features = ["derive"] }
+derive_more = "0.99"
 either = "1"
 filetime = "0.2"
 flate2 = "1"

@@ -188,7 +188,7 @@ impl State {
 	{
 		match txn.get(self.database.packages, &hash.as_slice()) {
 			Ok(value) => {
-				let value = buffalo::from_slice(value)?;
+				let value = Package::deserialize(value)?;
 				Ok(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),

@@ -1,8 +1,8 @@
 use crate::compiler;
 use lsp_types as lsp;
 
-impl From<compiler::types::Diagnostic> for lsp::Diagnostic {
-	fn from(value: compiler::types::Diagnostic) -> Self {
+impl From<compiler::Diagnostic> for lsp::Diagnostic {
+	fn from(value: compiler::Diagnostic) -> Self {
 		let range = value
 			.location
 			.map(|location| location.range.into())
@@ -20,19 +20,19 @@ impl From<compiler::types::Diagnostic> for lsp::Diagnostic {
 	}
 }
 
-impl From<compiler::types::Severity> for lsp::DiagnosticSeverity {
-	fn from(value: compiler::types::Severity) -> Self {
+impl From<compiler::Severity> for lsp::DiagnosticSeverity {
+	fn from(value: compiler::Severity) -> Self {
 		match value {
-			compiler::types::Severity::Error => lsp::DiagnosticSeverity::ERROR,
-			compiler::types::Severity::Warning => lsp::DiagnosticSeverity::WARNING,
-			compiler::types::Severity::Information => lsp::DiagnosticSeverity::INFORMATION,
-			compiler::types::Severity::Hint => lsp::DiagnosticSeverity::HINT,
+			compiler::Severity::Error => lsp::DiagnosticSeverity::ERROR,
+			compiler::Severity::Warning => lsp::DiagnosticSeverity::WARNING,
+			compiler::Severity::Information => lsp::DiagnosticSeverity::INFORMATION,
+			compiler::Severity::Hint => lsp::DiagnosticSeverity::HINT,
 		}
 	}
 }
 
-impl From<compiler::types::Range> for lsp::Range {
-	fn from(value: compiler::types::Range) -> Self {
+impl From<compiler::Range> for lsp::Range {
+	fn from(value: compiler::Range) -> Self {
 		lsp::Range {
 			start: value.start.into(),
 			end: value.end.into(),
@@ -40,26 +40,26 @@ impl From<compiler::types::Range> for lsp::Range {
 	}
 }
 
-impl From<lsp::Range> for compiler::types::Range {
+impl From<lsp::Range> for compiler::Range {
 	fn from(value: lsp::Range) -> Self {
-		compiler::types::Range {
+		compiler::Range {
 			start: value.start.into(),
 			end: value.end.into(),
 		}
 	}
 }
 
-impl From<lsp::Position> for compiler::types::Position {
+impl From<lsp::Position> for compiler::Position {
 	fn from(value: lsp::Position) -> Self {
-		compiler::types::Position {
+		compiler::Position {
 			line: value.line,
 			character: value.character,
 		}
 	}
 }
 
-impl From<compiler::types::Position> for lsp::Position {
-	fn from(value: compiler::types::Position) -> Self {
+impl From<compiler::Position> for lsp::Position {
+	fn from(value: compiler::Position) -> Self {
 		lsp::Position {
 			line: value.line,
 			character: value.character,

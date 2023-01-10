@@ -18,17 +18,16 @@ impl State {
 		// Get the operation hash.
 		let operation_hash = operation.hash();
 
-		// Add the run.
+		// Add the operation child.
 		if let Some(parent_operation_hash) = parent_operation_hash {
 			self.add_operation_child(parent_operation_hash, operation_hash)?;
 		}
 
-		// Get the operation output.
-		let output = self.get_output(operation_hash)?;
+		// Attempt to get the operation output.
+		let output = self.get_operation_output(operation_hash)?;
 
 		// If the operation has already run, then return its output.
 		if let Some(output) = output {
-			// Return the output.
 			return Ok(output);
 		}
 
@@ -39,8 +38,8 @@ impl State {
 			Operation::Target(target) => self.run_target(target).await?,
 		};
 
-		// Set the output.
-		self.set_output(operation_hash, &output)?;
+		// Set the operation output.
+		self.set_operation_output(operation_hash, &output)?;
 
 		Ok(output)
 	}

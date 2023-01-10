@@ -386,7 +386,7 @@ impl State {
 	{
 		match txn.get(self.database.artifacts, &hash.as_slice()) {
 			Ok(value) => {
-				let value = buffalo::from_slice(value)?;
+				let value = Artifact::deserialize(value)?;
 				Ok(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),

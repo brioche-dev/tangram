@@ -154,7 +154,7 @@ impl State {
 					}
 
 					// Get the output and add it to the queue.
-					let output = self.get_output(operation_hash)?;
+					let output = self.get_operation_output(operation_hash)?;
 					if let Some(value) = output {
 						queue.push_back(QueueItem::Value(value));
 					}

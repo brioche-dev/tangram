@@ -1,10 +1,6 @@
 import * as ts from "typescript";
-import {
-	Diagnostic,
-	GetDiagnosticsResponse,
-	GetDiangosticsRequest,
-	Severity,
-} from "./types";
+import { Diagnostic, Severity } from "./types";
+import { GetDiagnosticsResponse, GetDiangosticsRequest } from "./request";
 import { languageService } from "./typescript";
 
 export let getDiagnostics = (

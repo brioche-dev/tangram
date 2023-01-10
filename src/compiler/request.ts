@@ -1,3 +1,5 @@
+import { Location, CompletionEntry, Diagnostic, Position } from "./types";
+
 export type Request =
 	| { type: "check"; request: CheckRequest }
 	| { type: "completion"; request: CompletionRequest }
@@ -84,42 +86,10 @@ export type GotoDefinitionResponse = {
 };
 
 export type TranspileRequest = {
-	source: string;
+	text: string;
 };
 
 export type TranspileResponse = {
 	outputText: string;
 	sourceMapText: string;
-};
-
-export type Diagnostic = {
-	location: Location | null;
-	severity: Severity;
-	message: string;
-};
-
-export type Position = {
-	line: number;
-	character: number;
-};
-
-export type Severity = "error" | "warning" | "information" | "hint";
-
-export type Location = {
-	url: string;
-	range: Range;
-};
-
-export type Range = {
-	start: Position;
-	end: Position;
-};
-
-export type CompletionEntry = {
-	name: string;
-};
-
-export type TranspileOutput = {
-	transpiled: string;
-	sourceMap: string;
 };

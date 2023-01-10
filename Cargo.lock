@@ -2599,6 +2599,7 @@ dependencies = [
  "bzip2",
  "camino",
  "clap",
+ "derive_more",
  "either",
  "filetime",
  "flate2",

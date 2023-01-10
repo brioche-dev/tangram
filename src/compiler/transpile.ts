@@ -1,9 +1,9 @@
 import * as ts from "typescript";
-import { TranspileRequest, TranspileResponse } from "./types";
+import { TranspileRequest, TranspileResponse } from "./request";
 
 export let transpile = (request: TranspileRequest): TranspileResponse => {
 	// Transpile.
-	let output = ts.transpileModule(request.source, {
+	let output = ts.transpileModule(request.text, {
 		compilerOptions: {
 			module: ts.ModuleKind.ESNext,
 			target: ts.ScriptTarget.ESNext,

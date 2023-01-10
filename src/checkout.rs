@@ -93,7 +93,8 @@ impl State {
 			let path = path.to_owned();
 			move || {
 				let epoch = filetime::FileTime::from_unix_time(0, 0);
-				filetime::set_symlink_file_times(path, epoch, epoch)?;
+				filetime::set_symlink_file_times(path, epoch, epoch)
+					.context("Failed to set the file system object's timestamps.")?;
 				Ok::<_, anyhow::Error>(())
 			}
 		})

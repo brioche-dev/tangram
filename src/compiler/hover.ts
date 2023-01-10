@@ -1,5 +1,5 @@
 import * as ts from "typescript";
-import { GetHoverRequest, GetHoverResponse } from "./types";
+import { GetHoverRequest, GetHoverResponse } from "./request";
 import { host, languageService } from "./typescript";
 
 export let hover = (request: GetHoverRequest): GetHoverResponse => {

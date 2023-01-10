@@ -1,5 +1,3 @@
-use crate::compiler;
-
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
@@ -20,7 +18,7 @@ pub enum Severity {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
-	pub url: compiler::Url,
+	pub url: super::Url,
 	pub range: Range,
 }
 

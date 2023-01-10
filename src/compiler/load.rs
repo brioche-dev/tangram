@@ -108,8 +108,8 @@ impl Compiler {
 		let path = package_path.join(module_path);
 
 		// If there is an opened file for this path, return it.
-		if let Some(File::Opened(open_file)) = self.state.files.read().await.get(&path) {
-			return Ok(open_file.text.clone());
+		if let Some(File::Opened(opened_file)) = self.state.files.read().await.get(&path) {
+			return Ok(opened_file.text.clone());
 		}
 
 		// Otherwise, read the file from disk.

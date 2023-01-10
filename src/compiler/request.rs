@@ -1,7 +1,6 @@
-use crate::compiler::{
-	self,
-	types::{CompletionEntry, Diagnostic, Location, Position},
-};
+#![allow(clippy::module_name_repetitions)]
+
+use crate::compiler::{self, CompletionEntry, Diagnostic, Location, Position};
 use std::collections::BTreeMap;
 
 #[derive(Debug, serde::Serialize)]
@@ -120,7 +119,7 @@ pub struct CompletionResponse {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranspileRequest {
-	pub source: String,
+	pub text: String,
 }
 
 #[derive(Debug, serde::Deserialize)]

@@ -1,10 +1,10 @@
 import * as ts from "typescript";
-import { GotoDefinitionRequest, GotoDefinitionResponse } from "./types";
+import { GetReferencesRequest, GetReferencesResponse } from "./request";
 import { host, languageService } from "./typescript";
 
-export let gotoDefinition = (
-	request: GotoDefinitionRequest,
-): GotoDefinitionResponse => {
+export let getReferences = (
+	request: GetReferencesRequest,
+): GetReferencesResponse => {
 	// Get the source file and position.
 	let sourceFile = host.getSourceFile(request.url, ts.ScriptTarget.ESNext);
 	if (sourceFile === undefined) {
@@ -15,35 +15,33 @@ export let gotoDefinition = (
 		request.position.line,
 		request.position.character,
 	);
-
-	// Get the definitions.
-	let definitions = languageService.getDefinitionAtPosition(
+	let references = languageService.getReferencesAtPosition(
 		request.url,
 		position,
 	);
 
-	// Convert the definitions.
+	// Convert the references.
 	let locations =
-		definitions?.map((definition) => {
+		references?.map((reference) => {
 			let destFile = host.getSourceFile(
-				definition.fileName,
+				reference.fileName,
 				ts.ScriptTarget.ESNext,
 			);
 			if (destFile === undefined) {
-				throw new Error();
+				throw new Error(destFile);
 			}
-			// Get the definitions's range.
+			// Get the references's range.
 			let start = ts.getLineAndCharacterOfPosition(
 				destFile,
-				definition.textSpan.start,
+				reference.textSpan.start,
 			);
 			let end = ts.getLineAndCharacterOfPosition(
 				destFile,
-				definition.textSpan.start + definition.textSpan.length,
+				reference.textSpan.start + reference.textSpan.length,
 			);
 
 			let location = {
-				url: definition.fileName,
+				url: reference.fileName,
 				range: { start, end },
 			};
 

@@ -1,4 +1,4 @@
-import { Request, Response } from "./types";
+import { Request, Response } from "./request";
 import { completion } from "./completion";
 import { check } from "./check";
 import { getDiagnostics } from "./diagnostics";

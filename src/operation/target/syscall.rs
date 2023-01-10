@@ -4,7 +4,7 @@ use crate::{
 	blob::BlobHash,
 	compiler,
 	operation::Operation,
-	package::PackageHash,
+	package::{Package, PackageHash},
 	value::Value,
 };
 use anyhow::{bail, Context, Result};
@@ -47,12 +47,12 @@ fn syscall_inner<'s>(
 		"get_blob" => syscall_async(scope, args, syscall_get_blob),
 		"add_artifact" => syscall_async(scope, args, syscall_add_artifact),
 		"get_artifact" => syscall_async(scope, args, syscall_get_artifact),
+		"add_package" => syscall_async(scope, args, syscall_add_package),
+		"get_package" => syscall_async(scope, args, syscall_get_package),
 		"run" => syscall_async(scope, args, syscall_run),
 		"get_current_package_hash" => syscall_sync(scope, args, syscall_get_current_package_hash),
 		"get_target_name" => syscall_sync(scope, args, syscall_get_target_name),
-		_ => {
-			bail!(r#"Unknown syscall "{name}"."#);
-		},
+		_ => bail!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
@@ -140,11 +140,30 @@ async fn syscall_get_artifact(
 	state: Rc<ContextState>,
 	args: (ArtifactHash,),
 ) -> Result<Option<Artifact>> {
-	let (hash,) = args;
+	let (artifact_hash,) = args;
 	let cli = state.cli.clone();
 	let cli = cli.lock_shared().await?;
-	let artifact = cli.try_get_artifact_local(hash)?;
+	let artifact = cli.try_get_artifact_local(artifact_hash)?;
 	Ok(artifact)
+}
+
+async fn syscall_add_package(state: Rc<ContextState>, args: (Package,)) -> Result<PackageHash> {
+	let (package,) = args;
+	let cli = state.cli.clone();
+	let cli = cli.lock_shared().await?;
+	let package_hash = cli.add_package(&package)?;
+	Ok(package_hash)
+}
+
+async fn syscall_get_package(
+	state: Rc<ContextState>,
+	args: (PackageHash,),
+) -> Result<Option<Package>> {
+	let (package_hash,) = args;
+	let cli = state.cli.clone();
+	let cli = cli.lock_shared().await?;
+	let package = cli.try_get_package_local(package_hash)?;
+	Ok(package)
 }
 
 async fn syscall_run(state: Rc<ContextState>, args: (Operation,)) -> Result<Value> {

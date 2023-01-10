@@ -1,6 +1,6 @@
 import * as ts from "typescript";
 import { host, languageService } from "./typescript";
-import { CompletionRequest, CompletionResponse } from "./types";
+import { CompletionRequest, CompletionResponse } from "./request";
 
 export let completion = (request: CompletionRequest): CompletionResponse => {
 	// Get the source file and position.

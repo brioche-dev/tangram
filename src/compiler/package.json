@@ -7,6 +7,8 @@
 	},
 	"private": true,
 	"scripts": {
+		"check": "tsc",
+		"fmt": "prettier --write .",
 		"build": "esbuild --minify --bundle --format=iife --global-name=main --outfile=main.js main.ts"
 	}
 }

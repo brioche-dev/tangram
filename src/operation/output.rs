@@ -5,7 +5,7 @@ use lmdb::Transaction;
 
 impl State {
 	/// Get the output for an operation from the database.
-	pub fn get_output(&self, operation_hash: OperationHash) -> Result<Option<Value>> {
+	pub fn get_operation_output(&self, operation_hash: OperationHash) -> Result<Option<Value>> {
 		// Begin a read transaction.
 		let txn = self.database.env.begin_ro_txn()?;
 
@@ -23,7 +23,7 @@ impl State {
 	}
 
 	/// Set the output for an operation in the database.
-	pub fn set_output(&self, operation_hash: OperationHash, value: &Value) -> Result<()> {
+	pub fn set_operation_output(&self, operation_hash: OperationHash, value: &Value) -> Result<()> {
 		// Begin a write transaction.
 		let mut txn = self.database.env.begin_rw_txn()?;
 

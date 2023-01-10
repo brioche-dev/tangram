@@ -2,7 +2,7 @@ import * as ts from "typescript";
 import {
 	FindRenameLocationsRequest,
 	FindRenameLocationsResponse,
-} from "./types";
+} from "./request";
 import { host, languageService } from "./typescript";
 
 export let findRenameLocations = (

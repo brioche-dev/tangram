@@ -1,36 +1,23 @@
 use crate::hash::Hash;
+use derive_more::{Deref, Display, FromStr};
 
 #[derive(
-	Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+	Clone,
+	Copy,
+	Debug,
+	Default,
+	Deref,
+	Display,
+	Eq,
+	FromStr,
+	Hash,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 pub struct ArtifactHash(pub Hash);
-
-impl std::ops::Deref for ArtifactHash {
-	type Target = Hash;
-
-	fn deref(&self) -> &Self::Target {
-		&self.0
-	}
-}
-
-impl std::fmt::Debug for ArtifactHash {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		self.0.fmt(f)
-	}
-}
-
-impl std::fmt::Display for ArtifactHash {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		self.0.fmt(f)
-	}
-}
-
-impl std::str::FromStr for ArtifactHash {
-	type Err = hex::FromHexError;
-	fn from_str(source: &str) -> Result<Self, hex::FromHexError> {
-		Ok(Self(Hash::from_str(source)?))
-	}
-}
 
 impl buffalo::Serialize for ArtifactHash {
 	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>

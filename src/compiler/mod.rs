@@ -1,15 +1,16 @@
-use crate::{compiler, Cli};
-use anyhow::{anyhow, bail, Context, Result};
-pub use compiler::url::Url;
-use compiler::{
-	runtime::types::{
+pub use self::types::*;
+pub use self::url::Url;
+use self::{
+	request::{
 		CheckRequest, CompletionRequest, FindRenameLocationsRequest, FindRenameLocationsResponse,
 		GetDiagnosticsRequest, GetDiagnosticsResponse, GetHoverRequest, GetReferencesRequest,
 		GetReferencesResponse, GotoDefinitionResponse, GotoDefintionRequest, Request, Response,
 		TranspileRequest,
 	},
-	types::{CompletionEntry, Diagnostic, Location, Position, Range, TranspileOutput},
+	syscall::syscall,
 };
+use crate::{compiler, Cli};
+use anyhow::{anyhow, bail, Context, Result};
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::{Path, PathBuf},
@@ -18,20 +19,22 @@ use std::{
 };
 use tokio::sync::RwLock;
 
-pub mod load;
-pub mod resolve;
-pub mod runtime;
-pub mod types;
-pub mod url;
+mod exception;
+mod load;
+mod request;
+mod resolve;
+mod syscall;
+mod types;
+mod url;
 
 #[derive(Clone)]
 pub struct Compiler {
 	cli: Cli,
+	sender: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<Option<Envelope>>>>>,
 	state: Arc<State>,
 }
 
 pub struct State {
-	sender: Mutex<Option<tokio::sync::mpsc::UnboundedSender<Option<Envelope>>>>,
 	files: RwLock<HashMap<PathBuf, File, fnv::FnvBuildHasher>>,
 }
 
@@ -64,18 +67,18 @@ impl Compiler {
 	#[must_use]
 	pub fn new(cli: Cli) -> Compiler {
 		let state = State {
-			sender: std::sync::Mutex::new(None),
 			files: RwLock::new(HashMap::default()),
 		};
 		Compiler {
 			cli,
+			sender: Arc::new(std::sync::Mutex::new(None)),
 			state: Arc::new(state),
 		}
 	}
 
 	fn runtime_sender(&self) -> tokio::sync::mpsc::UnboundedSender<Option<Envelope>> {
 		let main_runtime_handle = tokio::runtime::Handle::current();
-		let mut lock = self.state.sender.lock().unwrap();
+		let mut lock = self.sender.lock().unwrap();
 		if let Some(sender) = lock.as_ref() {
 			sender.clone()
 		} else {
@@ -86,7 +89,7 @@ impl Compiler {
 			std::thread::spawn({
 				let compiler = self.clone();
 				move || {
-					let mut runtime = runtime::Runtime::new(compiler, main_runtime_handle);
+					let mut runtime = Runtime::new(compiler, main_runtime_handle);
 					while let Some(envelope) = receiver.blocking_recv() {
 						// If the received value is `None`, then the thread should terminate.
 						let envelope = if let Some(envelope) = envelope {
@@ -111,9 +114,8 @@ impl Compiler {
 		}
 	}
 
-	/// Send an `Request` into the runtime for evaluation.
 	async fn request(&self, request: Request) -> Result<Response> {
-		// Create a channel for the compiler runtime to send responses.
+		// Create a oneshot channel for js to send the response.
 		let (sender, receiver) = tokio::sync::oneshot::channel();
 
 		// Send the request.
@@ -395,9 +397,9 @@ impl Compiler {
 		Ok(entries)
 	}
 
-	pub async fn transpile(&self, source: String) -> Result<TranspileOutput> {
+	pub async fn transpile(&self, text: String) -> Result<TranspileOutput> {
 		// Create the request.
-		let request = Request::Transpile(TranspileRequest { source });
+		let request = Request::Transpile(TranspileRequest { text });
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
@@ -417,8 +419,118 @@ impl Compiler {
 
 impl Drop for Compiler {
 	fn drop(&mut self) {
-		if let Some(sender) = self.state.sender.lock().unwrap().take() {
+		if let Some(sender) = self.sender.lock().unwrap().take() {
 			sender.send(None).ok();
 		}
+	}
+}
+
+pub struct Runtime {
+	isolate: v8::OwnedIsolate,
+	context: v8::Global<v8::Context>,
+}
+
+struct ContextState {
+	compiler: Compiler,
+	main_runtime_handle: tokio::runtime::Handle,
+}
+
+impl Runtime {
+	#[must_use]
+	pub fn new(compiler: Compiler, main_runtime_handle: tokio::runtime::Handle) -> Runtime {
+		// Create the state.
+		let context_state = Arc::new(ContextState {
+			compiler,
+			main_runtime_handle,
+		});
+
+		// Create the isolate.
+		let params = v8::CreateParams::default();
+		let mut isolate = v8::Isolate::new(params);
+		isolate.set_capture_stack_trace_for_uncaught_exceptions(true, 10);
+		isolate.set_slot(context_state);
+
+		// Create the context.
+		let mut handle_scope = v8::HandleScope::new(&mut isolate);
+		let context = v8::Context::new(&mut handle_scope);
+		let context = v8::Global::new(&mut handle_scope, context);
+		drop(handle_scope);
+
+		// Enter the context.
+		let mut handle_scope = v8::HandleScope::new(&mut isolate);
+		let context = v8::Local::new(&mut handle_scope, &context);
+		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
+
+		// Run the main script.
+		let source = v8::String::new(&mut context_scope, include_str!("./main.js")).unwrap();
+		let script = v8::Script::compile(&mut context_scope, source, None).unwrap();
+		script.run(&mut context_scope).unwrap();
+
+		// Add the syscall function to the global.
+		let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();
+		let syscall_function = v8::Function::new(&mut context_scope, syscall).unwrap();
+		context
+			.global(&mut context_scope)
+			.set(
+				&mut context_scope,
+				syscall_string.into(),
+				syscall_function.into(),
+			)
+			.unwrap();
+
+		// Exit the context.
+		let context = v8::Global::new(&mut context_scope, context);
+		drop(context_scope);
+		drop(handle_scope);
+
+		Runtime { isolate, context }
+	}
+
+	pub fn handle(&mut self, request: Request) -> Result<Response> {
+		// Enter the context.
+		let mut handle_scope = v8::HandleScope::new(&mut self.isolate);
+		let context = v8::Local::new(&mut handle_scope, &self.context);
+		let mut scope = v8::ContextScope::new(&mut handle_scope, context);
+
+		// Create a scope to call the handle function.
+		let mut try_catch_scope = v8::TryCatch::new(&mut scope);
+
+		// Get the handle function.
+		let main_string = v8::String::new(&mut try_catch_scope, "main").unwrap();
+		let main: v8::Local<v8::Object> = context
+			.global(&mut try_catch_scope)
+			.get(&mut try_catch_scope, main_string.into())
+			.unwrap()
+			.try_into()
+			.unwrap();
+		let default_string = v8::String::new(&mut try_catch_scope, "default").unwrap();
+		let handle: v8::Local<v8::Function> = main
+			.get(&mut try_catch_scope, default_string.into())
+			.unwrap()
+			.try_into()
+			.unwrap();
+
+		// Serialize the request.
+		let request = serde_v8::to_v8(&mut try_catch_scope, request)
+			.context("Failed to serialize the request.")?;
+
+		// Call the handle function.
+		let receiver = v8::undefined(&mut try_catch_scope).into();
+		let output = handle.call(&mut try_catch_scope, receiver, &[request]);
+
+		// Handle a js exception.
+		if try_catch_scope.has_caught() {
+			let exception = try_catch_scope.exception().unwrap();
+			let mut scope = v8::HandleScope::new(&mut try_catch_scope);
+			let exception = self::exception::render(&mut scope, exception);
+			bail!("{exception}");
+		}
+
+		// Deserialize the response.
+		let output = output.unwrap();
+		let response = serde_v8::from_v8(&mut try_catch_scope, output)
+			.context("Failed to deserialize the response.")?;
+
+		Ok(response)
 	}
 }
