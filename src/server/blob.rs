@@ -1,5 +1,5 @@
 use super::{error::bad_request, error::not_found, Server};
-use crate::hash::Hash;
+use crate::blob::BlobHash;
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
 
@@ -10,15 +10,14 @@ impl Server {
 	) -> Result<http::Response<hyper::Body>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let blob_hash = if let ["blobs", blob_hash] = path_components.as_slice() {
+		let blob_hash = if let ["v1", "blobs", blob_hash] = path_components.as_slice() {
 			blob_hash
 		} else {
 			bail!("Unexpected path.")
 		};
-		let _blob_hash: Hash = match blob_hash.parse() {
-			Ok(client_blob_hash) => client_blob_hash,
-			Err(_) => return Ok(bad_request()),
-		};
+		if blob_hash.parse::<BlobHash>().is_err() {
+			return Ok(bad_request());
+		}
 
 		// Create an async reader from the body.
 		let body = tokio_util::io::StreamReader::new(
@@ -46,12 +45,12 @@ impl Server {
 	) -> Result<http::Response<hyper::Body>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let blob_hash = if let ["blobs", blob_hash] = path_components.as_slice() {
+		let blob_hash = if let ["v1", "blobs", blob_hash] = path_components.as_slice() {
 			blob_hash
 		} else {
 			bail!("Unexpected path.")
 		};
-		let blob_hash: Hash = match blob_hash.parse() {
+		let blob_hash: BlobHash = match blob_hash.parse() {
 			Ok(client_blob_hash) => client_blob_hash,
 			Err(_) => return Ok(bad_request()),
 		};

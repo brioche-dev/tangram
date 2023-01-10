@@ -1,13 +1,13 @@
 use super::{error::bad_request, Server};
-use crate::expression::{AddExpressionOutcome, Expression};
+use crate::artifact::{AddArtifactOutcome, Artifact};
 use anyhow::{bail, Context, Result};
 
-pub type AddExpressionRequest = Expression;
+pub type AddArtifactRequest = Artifact;
 
-pub type AddExpressionResponse = AddExpressionOutcome;
+pub type AddArtifactResponse = AddArtifactOutcome;
 
 impl Server {
-	pub(super) async fn handle_add_expression_request(
+	pub(super) async fn handle_add_artifact_request(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
@@ -15,17 +15,17 @@ impl Server {
 		let body = hyper::body::to_bytes(request.into_body())
 			.await
 			.context("Failed to read the request body.")?;
-		let expression =
+		let artifact =
 			serde_json::from_slice(&body).context("Failed to deserialize the request body.")?;
 
-		// Add the expression.
+		// Add the artifact.
 		let outcome = self
 			.cli
 			.lock_shared()
 			.await?
-			.try_add_expression(&expression)
+			.try_add_artifact(&artifact)
 			.await
-			.context("Failed to get the expression.")?;
+			.context("Failed to add the artifact.")?;
 
 		// Create the response.
 		let body =
@@ -38,13 +38,13 @@ impl Server {
 		Ok(response)
 	}
 
-	pub(super) async fn handle_get_expression_request(
+	pub(super) async fn handle_get_artifact_request(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let hash = if let ["expressions", hash] = path_components.as_slice() {
+		let hash = if let ["v1", "artifacts", hash] = path_components.as_slice() {
 			hash
 		} else {
 			bail!("Unexpected path.");
@@ -54,16 +54,12 @@ impl Server {
 			Err(_) => return Ok(bad_request()),
 		};
 
-		// Get the expression.
-		let expression = self
-			.cli
-			.lock_shared()
-			.await?
-			.try_get_expression_local(hash)?;
+		// Get the artifact.
+		let artifact = self.cli.lock_shared().await?.try_get_artifact_local(hash)?;
 
 		// Create the response.
 		let body =
-			serde_json::to_vec(&expression).context("Failed to serialize the response body.")?;
+			serde_json::to_vec(&artifact).context("Failed to serialize the response body.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(hyper::Body::from(body))

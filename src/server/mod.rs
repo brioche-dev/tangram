@@ -3,10 +3,9 @@ use anyhow::Result;
 use futures::FutureExt;
 use std::{convert::Infallible, net::SocketAddr};
 
+pub mod artifact;
 mod blob;
 mod error;
-mod evaluate;
-pub mod expression;
 
 #[derive(Clone)]
 pub struct Server {
@@ -76,14 +75,11 @@ impl Server {
 			(http::Method::POST, ["v1", "blobs", ""]) => {
 				Some(self.handle_add_blob_request(request).boxed())
 			},
-			(http::Method::GET, ["v1", "expressions", _]) => {
-				Some(self.handle_get_expression_request(request).boxed())
+			(http::Method::GET, ["v1", "artifacts", _]) => {
+				Some(self.handle_get_artifact_request(request).boxed())
 			},
-			(http::Method::POST, ["v1", "expressions", ""]) => {
-				Some(self.handle_add_expression_request(request).boxed())
-			},
-			(http::Method::POST, ["v1", "expressions", _, "evaluate"]) => {
-				Some(self.handle_evaluate_expression_request(request).boxed())
+			(http::Method::POST, ["v1", "artifacts", ""]) => {
+				Some(self.handle_add_artifact_request(request).boxed())
 			},
 			(_, _) => None,
 		};

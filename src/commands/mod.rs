@@ -24,7 +24,7 @@ pub mod outdated;
 // pub mod push;
 pub mod run;
 // pub mod search;
-// pub mod serve;
+pub mod serve;
 pub mod shell;
 pub mod update;
 pub mod upgrade;
@@ -65,7 +65,7 @@ enum Subcommand {
 	// Push(self::push::Args),
 	Run(self::run::Args),
 	// Search(self::search::Args),
-	// Serve(self::serve::Args),
+	Serve(self::serve::Args),
 	Shell(self::shell::Args),
 	Update(self::update::Args),
 	Upgrade(self::upgrade::Args),
@@ -97,7 +97,7 @@ impl Cli {
 			// Subcommand::Push(args) => self.command_push(args).boxed(),
 			Subcommand::Run(args) => self.command_run(args).boxed(),
 			// Subcommand::Search(args) => self.command_search(args).boxed(),
-			// Subcommand::Serve(args) => self.command_serve(args).boxed(),
+			Subcommand::Serve(args) => self.command_serve(args).boxed(),
 			Subcommand::Shell(args) => self.command_shell(args).boxed(),
 			Subcommand::Update(args) => self.command_update(args).boxed(),
 			Subcommand::Upgrade(args) => self.command_upgrade(args).boxed(),
