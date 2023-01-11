@@ -1,62 +1,46 @@
-use crate::{expression::AddExpressionOutcome, hash::Hash, State};
+use crate::{artifact::AddArtifactOutcome, artifact::ArtifactHash, client::Client, State};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 
 impl State {
-	/// Pull an expression from a remote server.
+	/// Pull an artifact from a remote server.
 	#[async_recursion]
 	#[must_use]
-	pub async fn pull(&self, hash: Hash) -> Result<()> {
-		let expression_client = self
-			.expression_client
-			.as_ref()
-			.context("Cannot pull without an expression client.")?;
-		let blob_client = self
-			.blob_client
-			.as_ref()
-			.context("Cannot pull without a blob client.")?;
-
-		// Get the expression.
-		let expression = expression_client
-			.try_get_expression(hash)
+	pub async fn pull(&self, client: &Client, artifact_hash: ArtifactHash) -> Result<()> {
+		// Get the artifact.
+		let artifact = client
+			.try_get_artifact(artifact_hash)
 			.await?
-			.with_context(|| format!(r#"Unable to find expression with hash "{hash}""#))?;
+			.with_context(|| format!(r#"Unable to find artifact with hash "{artifact_hash}""#))?;
 
-		// Try to add the expression.
-		let outcome = self.try_add_expression(&expression).await?;
+		// Try to add the artifact.
+		let outcome = self.try_add_artifact(&artifact).await?;
 
 		// Handle the outcome.
 		match outcome {
-			AddExpressionOutcome::Added { .. } => return Ok(()),
-			AddExpressionOutcome::DirectoryMissingEntries { entries } => {
+			AddArtifactOutcome::Added { .. } => return Ok(()),
+			AddArtifactOutcome::DirectoryMissingEntries { entries } => {
 				// Pull the missing entries.
-				try_join_all(entries.into_iter().map(|(_, hash)| async move {
-					self.pull(hash).await?;
+				try_join_all(entries.into_iter().map(|(_, artifact_hash)| async move {
+					self.pull(client, artifact_hash).await?;
 					Ok::<_, anyhow::Error>(())
 				}))
 				.await?;
 			},
-			AddExpressionOutcome::FileMissingBlob { blob_hash } => {
+			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
 				// Pull the blob.
-				blob_client.get_blob(blob_hash).await?;
+				client.get_blob(blob_hash).await?;
 			},
-			AddExpressionOutcome::DependencyMissing { hash } => {
+			AddArtifactOutcome::DependencyMissing { artifact_hash } => {
 				// Pull the missing dependency.
-				self.pull(hash).await?;
-			},
-			AddExpressionOutcome::MissingExpressions { hashes } => {
-				try_join_all(hashes.into_iter().map(|hash| async move {
-					self.pull(hash).await?;
-					Ok::<_, anyhow::Error>(())
-				}))
-				.await?;
+				self.pull(client, artifact_hash).await?;
 			},
 		};
 
-		// Attempt to add the expression again. At this point, there should not be any missing entries or a missing blob.
-		let outcome = self.try_add_expression(&expression).await?;
-		if !matches!(outcome, AddExpressionOutcome::Added { .. }) {
+		// Attempt to add the artifact again. At this point, there should not be any missing entries or a missing blob.
+		let outcome = self.try_add_artifact(&artifact).await?;
+		if !matches!(outcome, AddArtifactOutcome::Added { .. }) {
 			bail!("An unexpected error occurred.");
 		}
 

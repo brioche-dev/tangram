@@ -20,8 +20,8 @@ pub mod lsp;
 pub mod new;
 pub mod outdated;
 // pub mod publish;
-// pub mod pull;
-// pub mod push;
+pub mod pull;
+pub mod push;
 pub mod run;
 // pub mod search;
 pub mod serve;
@@ -61,8 +61,8 @@ enum Subcommand {
 	New(self::new::Args),
 	Outdated(self::outdated::Args),
 	// Publish(self::publish::Args),
-	// Pull(self::pull::Args),
-	// Push(self::push::Args),
+	Pull(self::pull::Args),
+	Push(self::push::Args),
 	Run(self::run::Args),
 	// Search(self::search::Args),
 	Serve(self::serve::Args),
@@ -93,8 +93,8 @@ impl Cli {
 			Subcommand::New(args) => self.command_new(args).boxed(),
 			Subcommand::Outdated(args) => self.command_outdated(args).boxed(),
 			// Subcommand::Publish(args) => self.command_publish(args).boxed(),
-			// Subcommand::Pull(args) => self.command_pull(args).boxed(),
-			// Subcommand::Push(args) => self.command_push(args).boxed(),
+			Subcommand::Pull(args) => self.command_pull(args).boxed(),
+			Subcommand::Push(args) => self.command_push(args).boxed(),
 			Subcommand::Run(args) => self.command_run(args).boxed(),
 			// Subcommand::Search(args) => self.command_search(args).boxed(),
 			Subcommand::Serve(args) => self.command_serve(args).boxed(),

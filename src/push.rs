@@ -1,44 +1,39 @@
-use crate::{expression::AddExpressionOutcome, hash::Hash, State};
+use crate::{
+	artifact::{AddArtifactOutcome, ArtifactHash},
+	client::Client,
+	State,
+};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 
 impl State {
-	/// Push an expression to a remote server.
+	/// Push an artifact to a remote server.
 	#[async_recursion]
 	#[must_use]
-	pub async fn push(&self, hash: Hash) -> Result<()> {
-		let expression_client = self
-			.expression_client
-			.as_ref()
-			.context("Cannot push without an expression client.")?;
-		let blob_client = self
-			.blob_client
-			.as_ref()
-			.context("Cannot push without a blob client.")?;
+	pub async fn push(&self, client: &Client, artifact_hash: ArtifactHash) -> Result<()> {
+		// Get the artifact.
+		let artifact = self.get_artifact_local(artifact_hash)?;
 
-		// Get the expression.
-		let expression = self.get_expression_local(hash)?;
-
-		// Try to add the expression.
-		let outcome = expression_client.try_add_expression(&expression).await?;
+		// Try to add the artifact.
+		let outcome = client.try_add_artifact(&artifact).await?;
 
 		// Handle the outcome.
 		match outcome {
-			// If the expression was added, we are done.
-			AddExpressionOutcome::Added { .. } => return Ok(()),
+			// If the artifact was added, we are done.
+			AddArtifactOutcome::Added { .. } => return Ok(()),
 
-			// If this expression is a directory and there were missing entries, recurse to push them.
-			AddExpressionOutcome::DirectoryMissingEntries { entries } => {
+			// If this artifact is a directory and there were missing entries, recurse to push them.
+			AddArtifactOutcome::DirectoryMissingEntries { entries } => {
 				try_join_all(entries.into_iter().map(|(_, hash)| async move {
-					self.push(hash).await?;
+					self.push(client, hash).await?;
 					Ok::<_, anyhow::Error>(())
 				}))
 				.await?;
 			},
 
-			// If this expression is a file and the blob is missing, push it.
-			AddExpressionOutcome::FileMissingBlob { blob_hash } => {
+			// If this artifact is a file and the blob is missing, push it.
+			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
 				// Get the path to the blob.
 				let blob_path = self.blob_path(blob_hash);
 
@@ -49,25 +44,18 @@ impl State {
 					})?);
 
 				// Add the blob.
-				blob_client.add_blob(file, blob_hash).await?;
+				client.add_blob(file, blob_hash).await?;
 			},
 
-			// If this expression is a dependency that is missing, push it.
-			AddExpressionOutcome::DependencyMissing { hash } => {
-				self.push(hash).await?;
-			},
-
-			// If this expression has missing subexpressions, push them.
-			AddExpressionOutcome::MissingExpressions { hashes } => {
-				for hash in hashes {
-					self.push(hash).await?;
-				}
+			// If this artifact is a dependency that is missing, push it.
+			AddArtifactOutcome::DependencyMissing { artifact_hash } => {
+				self.push(client, artifact_hash).await?;
 			},
 		};
 
-		// Attempt to push the expression again. At this point, there should not be any missing entries or a missing blob.
-		let outcome = expression_client.try_add_expression(&expression).await?;
-		if !matches!(outcome, AddExpressionOutcome::Added { .. }) {
+		// Attempt to push the artifact again. At this point, there should not be any missing entries or a missing blob.
+		let outcome = client.try_add_artifact(&artifact).await?;
+		if !matches!(outcome, AddArtifactOutcome::Added { .. }) {
 			bail!("An unexpected error occurred.");
 		}
 
