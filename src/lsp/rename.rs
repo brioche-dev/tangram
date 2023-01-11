@@ -33,7 +33,7 @@ impl LanguageServer {
 			// Get the version.
 			let version = self
 				.compiler
-				.get_version(&location.module_identifier)
+				.version(&location.module_identifier)
 				.await
 				.ok();
 

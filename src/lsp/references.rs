@@ -19,7 +19,7 @@ impl LanguageServer {
 		// Get the references.
 		let locations = self
 			.compiler
-			.get_references(module_identifier, position.into())
+			.references(module_identifier, position.into())
 			.await?;
 		let Some(locations) = locations else {
 			return Ok(None);

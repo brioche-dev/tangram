@@ -20,7 +20,7 @@ impl LanguageServer {
 		// Get the definitions.
 		let locations = self
 			.compiler
-			.goto_definition(module_identifier, position.into())
+			.definition(module_identifier, position.into())
 			.await?;
 
 		let Some(locations) = locations else {

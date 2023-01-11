@@ -2,9 +2,7 @@ import * as ts from "typescript";
 import { DefinitionRequest, DefinitionResponse } from "./request";
 import { host, languageService } from "./typescript";
 
-export let gotoDefinition = (
-	request: DefinitionRequest,
-): DefinitionResponse => {
+export let definition = (request: DefinitionRequest): DefinitionResponse => {
 	// Get the source file and position.
 	let sourceFile = host.getSourceFile(
 		request.moduleIdentifier,

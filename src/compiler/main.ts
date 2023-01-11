@@ -3,7 +3,7 @@ import { completion } from "./completion";
 import { check } from "./check";
 import { getDiagnostics } from "./diagnostics";
 import { getReferences } from "./references";
-import { gotoDefinition } from "./definition";
+import { definition } from "./definition";
 import { transpile } from "./transpile";
 import { rename } from "./rename";
 import { hover } from "./hover";
@@ -40,7 +40,7 @@ export default ({ type, request }: Request): Response => {
 			return { type: "references", response };
 		}
 		case "definition": {
-			let response = gotoDefinition(request);
+			let response = definition(request);
 			return { type: "definition", response };
 		}
 		case "transpile": {

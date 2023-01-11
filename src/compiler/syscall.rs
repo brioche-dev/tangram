@@ -119,7 +119,7 @@ fn syscall_version(
 	let (url,) = args;
 	let main_runtime_handle = state.main_runtime_handle.clone();
 	main_runtime_handle.block_on(async move {
-		let version = state.compiler.get_version(&url).await?;
+		let version = state.compiler.version(&url).await?;
 		Ok(version.to_string())
 	})
 }
@@ -160,7 +160,7 @@ fn syscall_load(
 			.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
 		let version = state
 			.compiler
-			.get_version(&module_identifier)
+			.version(&module_identifier)
 			.await
 			.with_context(|| {
 				format!(r#"Failed to get the version for module "{module_identifier}"."#)
