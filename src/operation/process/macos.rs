@@ -15,6 +15,7 @@ use std::{
 	ffi::{CStr, CString},
 	fmt::Write,
 	os::unix::prelude::OsStrExt,
+	path::Path,
 };
 
 impl State {
@@ -26,8 +27,15 @@ impl State {
 		referenced_path_set: ReferencedPathSet,
 		network_enabled: bool,
 	) -> Result<()> {
+		// Create a temp path for the working directory.
+		let working_directory = self.create_temp_path();
+		tokio::fs::create_dir_all(&working_directory).await?;
+
 		// Create the command.
 		let mut command = tokio::process::Command::new(&command);
+
+		// Set the current dir.
+		command.current_dir(&working_directory);
 
 		// Set the envs.
 		command.env_clear();
@@ -39,7 +47,7 @@ impl State {
 		// Set up the sandbox.
 		unsafe {
 			command.pre_exec(move || {
-				pre_exec(&referenced_path_set, network_enabled)
+				pre_exec(&referenced_path_set, &working_directory, network_enabled)
 					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
@@ -63,7 +71,11 @@ impl State {
 }
 
 #[allow(clippy::too_many_lines)]
-fn pre_exec(referenced_path_set: &ReferencedPathSet, network_enabled: bool) -> Result<()> {
+fn pre_exec(
+	referenced_path_set: &ReferencedPathSet,
+	working_directory: &Path,
+	network_enabled: bool,
+) -> Result<()> {
 	let mut profile = String::new();
 
 	// Add the default policy.
@@ -157,6 +169,18 @@ fn pre_exec(referenced_path_set: &ReferencedPathSet, network_enabled: bool) -> R
 		)
 		.unwrap();
 	}
+
+	// Allow access to the working directory.
+	writedoc!(
+		profile,
+		r#"
+			(allow process-exec* (subpath {0}))
+			(allow file-read* (path-ancestors {0}))
+			(allow file-read* (subpath {0}))
+		"#,
+		escape(working_directory.as_os_str().as_bytes())
+	)
+	.unwrap();
 
 	// Allow access to all paths used in the build.
 	for entry in referenced_path_set {
