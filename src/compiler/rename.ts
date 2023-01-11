@@ -1,6 +1,15 @@
 import * as ts from "typescript";
-import { RenameRequest, RenameResponse } from "./request";
+import { Location, Position } from "./types";
 import { host, languageService } from "./typescript";
+
+export type RenameRequest = {
+	moduleIdentifier: string;
+	position: Position;
+};
+
+export type RenameResponse = {
+	locations: Array<Location> | null | undefined;
+};
 
 export let rename = (request: RenameRequest): RenameResponse => {
 	// Get the source file and position.

@@ -1,5 +1,13 @@
 import * as ts from "typescript";
-import { TranspileRequest, TranspileResponse } from "./request";
+
+export type TranspileRequest = {
+	text: string;
+};
+
+export type TranspileResponse = {
+	outputText: string;
+	sourceMapText: string;
+};
 
 export let transpile = (request: TranspileRequest): TranspileResponse => {
 	// Transpile.

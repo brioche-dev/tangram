@@ -1,9 +1,18 @@
-use super::{
-	request::{CheckRequest, Request, Response},
-	Compiler, Diagnostic, ModuleIdentifier,
-};
+use super::{Compiler, Diagnostic, ModuleIdentifier, Request, Response};
 use anyhow::{bail, Result};
 use std::collections::BTreeMap;
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckRequest {
+	pub module_identifiers: Vec<ModuleIdentifier>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckResponse {
+	pub diagnostics: BTreeMap<ModuleIdentifier, Vec<Diagnostic>>,
+}
 
 impl Compiler {
 	/// Get all diagnostics for a package.
@@ -23,9 +32,6 @@ impl Compiler {
 			_ => bail!("Unexpected response type."),
 		};
 
-		// Get the result from the response.
-		let diagnostics = response.diagnostics;
-
-		Ok(diagnostics)
+		Ok(response.diagnostics)
 	}
 }

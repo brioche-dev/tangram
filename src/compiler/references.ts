@@ -1,6 +1,15 @@
 import * as ts from "typescript";
-import { ReferencesRequest, ReferencesResponse } from "./request";
+import { Location, Position } from "./types";
 import { host, languageService } from "./typescript";
+
+export type ReferencesRequest = {
+	moduleIdentifier: string;
+	position: Position;
+};
+
+export type ReferencesResponse = {
+	locations: Array<Location> | null;
+};
 
 export let getReferences = (request: ReferencesRequest): ReferencesResponse => {
 	// Get the source file and position.

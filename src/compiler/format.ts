@@ -1,5 +1,12 @@
 import * as prettier from "prettier";
-import { FormatRequest, FormatResponse } from "./request";
+
+export type FormatRequest = {
+	text: string;
+};
+
+export type FormatResponse = {
+	text: string;
+};
 
 let prettierOptions: prettier.Options = {
 	useTabs: true,

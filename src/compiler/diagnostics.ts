@@ -1,7 +1,12 @@
 import * as ts from "typescript";
 import { Diagnostic, Severity } from "./types";
-import { DiagnosticsResponse, DiangosticsRequest } from "./request";
 import { languageService } from "./typescript";
+
+export type DiangosticsRequest = {};
+
+export type DiagnosticsResponse = {
+	diagnostics: { [key: string]: Array<Diagnostic> };
+};
 
 export let getDiagnostics = (
 	_request: DiangosticsRequest,

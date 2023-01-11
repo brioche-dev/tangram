@@ -1,8 +1,18 @@
-use super::{
-	request::{RenameLocationsResponse, RenameRequest, Request, Response},
-	Compiler, Location, ModuleIdentifier, Position,
-};
+use super::{Compiler, Location, ModuleIdentifier, Position, Request, Response};
 use anyhow::{bail, Result};
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameRequest {
+	pub module_identifier: ModuleIdentifier,
+	pub position: Position,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameResponse {
+	pub locations: Option<Vec<Location>>,
+}
 
 impl Compiler {
 	pub async fn rename(
@@ -25,9 +35,6 @@ impl Compiler {
 			_ => bail!("Unexpected response type."),
 		};
 
-		// Get the result from the response.
-		let RenameLocationsResponse { locations } = response;
-
-		Ok(locations)
+		Ok(response.locations)
 	}
 }

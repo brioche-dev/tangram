@@ -1,8 +1,18 @@
-use super::{
-	request::{HoverRequest, HoverResponse, Request, Response},
-	Compiler, ModuleIdentifier, Position,
-};
+use super::{Compiler, ModuleIdentifier, Position, Request, Response};
 use anyhow::{bail, Result};
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HoverRequest {
+	pub module_identifier: ModuleIdentifier,
+	pub position: Position,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HoverResponse {
+	pub text: Option<String>,
+}
 
 impl Compiler {
 	pub async fn hover(

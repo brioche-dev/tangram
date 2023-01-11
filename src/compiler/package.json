@@ -9,6 +9,6 @@
 	"scripts": {
 		"check": "tsc",
 		"fmt": "prettier --write .",
-		"build": "esbuild --minify --bundle --format=iife --global-name=main --outfile=main.js main.ts"
+		"build": "esbuild --minify --bundle --format=iife --global-name=mod --outfile=mod.js mod.ts"
 	}
 }

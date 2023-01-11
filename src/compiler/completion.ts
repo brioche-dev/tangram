@@ -1,6 +1,15 @@
 import * as ts from "typescript";
+import { CompletionEntry, Position } from "./types";
 import { host, languageService } from "./typescript";
-import { CompletionRequest, CompletionResponse } from "./request";
+
+export type CompletionRequest = {
+	moduleIdentifier: string;
+	position: Position;
+};
+
+export type CompletionResponse = {
+	entries?: Array<CompletionEntry>;
+};
 
 export let completion = (request: CompletionRequest): CompletionResponse => {
 	// Get the source file and position.

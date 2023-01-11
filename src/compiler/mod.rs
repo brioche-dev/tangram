@@ -1,8 +1,15 @@
-pub use self::{module_identifier::ModuleIdentifier, types::*};
 use self::{
-	request::{Request, Response},
+	check::{CheckRequest, CheckResponse},
+	completion::{CompletionRequest, CompletionResponse},
+	definition::{DefinitionResponse, DefintionRequest},
+	diagnostics::{DiagnosticsRequest, DiagnosticsResponse},
+	hover::{HoverRequest, HoverResponse},
+	references::{ReferencesRequest, ReferencesResponse},
+	rename::{RenameRequest, RenameResponse},
 	syscall::syscall,
+	transpile::{TranspileRequest, TranspileResponse},
 };
+pub use self::{module_identifier::ModuleIdentifier, types::*};
 use crate::Cli;
 use anyhow::{anyhow, Context, Result};
 use std::{
@@ -26,7 +33,6 @@ mod load;
 mod module_identifier;
 mod references;
 mod rename;
-mod request;
 mod resolve;
 mod syscall;
 mod transpile;
@@ -61,6 +67,32 @@ struct UnopenedFile {
 	_module_identifier: ModuleIdentifier,
 	version: i32,
 	modified: SystemTime,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "type", content = "request", rename_all = "snake_case")]
+pub enum Request {
+	Check(CheckRequest),
+	Rename(RenameRequest),
+	Diagnostics(DiagnosticsRequest),
+	Definition(DefintionRequest),
+	Hover(HoverRequest),
+	References(ReferencesRequest),
+	Completion(CompletionRequest),
+	Transpile(TranspileRequest),
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "type", content = "response", rename_all = "snake_case")]
+pub enum Response {
+	Check(CheckResponse),
+	Rename(RenameResponse),
+	Diagnostics(DiagnosticsResponse),
+	Hover(HoverResponse),
+	References(ReferencesResponse),
+	Definition(DefinitionResponse),
+	Completion(CompletionResponse),
+	Transpile(TranspileResponse),
 }
 
 type RequestSender = tokio::sync::mpsc::UnboundedSender<Option<(Request, ResponseSender)>>;
@@ -171,20 +203,20 @@ fn handle_requests(
 		.unwrap();
 
 	// Run the main script.
-	let source = v8::String::new(&mut context_scope, include_str!("./main.js")).unwrap();
+	let source = v8::String::new(&mut context_scope, include_str!("./mod.js")).unwrap();
 	let script = v8::Script::compile(&mut context_scope, source, None).unwrap();
 	script.run(&mut context_scope).unwrap();
 
 	// Get the handle function.
-	let main_string = v8::String::new(&mut context_scope, "main").unwrap();
-	let main: v8::Local<v8::Object> = context
+	let mod_string = v8::String::new(&mut context_scope, "mod").unwrap();
+	let mod_object: v8::Local<v8::Object> = context
 		.global(&mut context_scope)
-		.get(&mut context_scope, main_string.into())
+		.get(&mut context_scope, mod_string.into())
 		.unwrap()
 		.try_into()
 		.unwrap();
 	let default_string = v8::String::new(&mut context_scope, "default").unwrap();
-	let handle: v8::Local<v8::Function> = main
+	let default: v8::Local<v8::Function> = mod_object
 		.get(&mut context_scope, default_string.into())
 		.unwrap()
 		.try_into()
@@ -207,7 +239,7 @@ fn handle_requests(
 
 		// Call the handle function.
 		let receiver = v8::undefined(&mut try_catch_scope).into();
-		let response = handle.call(&mut try_catch_scope, receiver, &[request]);
+		let response = default.call(&mut try_catch_scope, receiver, &[request]);
 
 		// Handle a js exception.
 		if try_catch_scope.has_caught() {

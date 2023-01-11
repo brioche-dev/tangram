@@ -1,7 +1,13 @@
 import * as ts from "typescript";
 import { convertDiagnostics } from "./diagnostics";
+import { Diagnostic } from "./types";
 import { host, compilerOptions } from "./typescript";
-import { CheckRequest, CheckResponse } from "./request";
+
+export type CheckRequest = { moduleIdentifiers: Array<string> };
+
+export type CheckResponse = {
+	diagnostics: { [key: string]: Array<Diagnostic> };
+};
 
 export let check = (request: CheckRequest): CheckResponse => {
 	// Create a typescript program.

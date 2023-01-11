@@ -1,5 +1,3 @@
-#![allow(clippy::module_name_repetitions)]
-
 pub use self::hash::ArtifactHash;
 use crate::{blob::BlobHash, hash::Hash, util::path_exists, State};
 use anyhow::{bail, Context, Result};

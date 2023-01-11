@@ -1,6 +1,15 @@
 import * as ts from "typescript";
-import { DefinitionRequest, DefinitionResponse } from "./request";
+import { Location, Position } from "./types";
 import { host, languageService } from "./typescript";
+
+export type DefinitionRequest = {
+	moduleIdentifier: string;
+	position: Position;
+};
+
+export type DefinitionResponse = {
+	locations: Array<Location> | null;
+};
 
 export let definition = (request: DefinitionRequest): DefinitionResponse => {
 	// Get the source file and position.

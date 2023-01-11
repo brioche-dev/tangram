@@ -29,7 +29,6 @@ impl Compiler {
 const LIB_TANGRAM_D_TS: &str = include_str!("./tangram.d.ts");
 const LIB: include_dir::Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/compiler/lib");
 
-#[allow(clippy::module_name_repetitions)]
 fn load_lib(path: &Utf8Path) -> Result<String> {
 	let path = path
 		.strip_prefix("/")
@@ -47,7 +46,6 @@ fn load_lib(path: &Utf8Path) -> Result<String> {
 
 const CORE: include_dir::Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/compiler/core");
 
-#[allow(clippy::module_name_repetitions)]
 fn load_core(path: &Utf8Path) -> Result<String> {
 	let path = path
 		.strip_prefix("/")

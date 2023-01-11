@@ -1,5 +1,3 @@
-#![allow(clippy::module_name_repetitions)]
-
 pub use self::hash::BlobHash;
 use crate::{hash::Hasher, util::path_exists, State};
 use anyhow::{Context, Result};

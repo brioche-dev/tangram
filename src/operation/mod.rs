@@ -1,5 +1,3 @@
-#![allow(clippy::module_name_repetitions)]
-
 pub use self::hash::OperationHash;
 use crate::{
 	checksum::Checksum,

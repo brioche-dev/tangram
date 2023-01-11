@@ -1,8 +1,18 @@
-use super::{
-	request::{CompletionRequest, Request, Response},
-	Compiler, CompletionEntry, ModuleIdentifier, Position,
-};
+use super::{Compiler, CompletionEntry, ModuleIdentifier, Position, Request, Response};
 use anyhow::{bail, Result};
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionRequest {
+	pub module_identifier: ModuleIdentifier,
+	pub position: Position,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionResponse {
+	pub entries: Option<Vec<CompletionEntry>>,
+}
 
 impl Compiler {
 	pub async fn completion(
@@ -25,9 +35,6 @@ impl Compiler {
 			_ => bail!("Unexpected response type."),
 		};
 
-		// Get the result from the response.
-		let entries = response.entries;
-
-		Ok(entries)
+		Ok(response.entries)
 	}
 }
