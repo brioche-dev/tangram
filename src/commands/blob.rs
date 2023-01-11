@@ -6,11 +6,11 @@ use clap::Parser;
 #[command(about = "Manage blobs.")]
 pub struct Args {
 	#[command(subcommand)]
-	subcommand: Subcommand,
+	command: Command,
 }
 
 #[derive(Parser)]
-pub enum Subcommand {
+pub enum Command {
 	Get(GetArgs),
 }
 
@@ -23,8 +23,8 @@ pub struct GetArgs {
 impl Cli {
 	pub(crate) async fn command_blob(&self, args: Args) -> Result<()> {
 		// Run the subcommand.
-		match args.subcommand {
-			Subcommand::Get(args) => self.command_blob_get(args),
+		match args.command {
+			Command::Get(args) => self.command_blob_get(args),
 		}
 		.await?;
 		Ok(())

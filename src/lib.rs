@@ -79,9 +79,13 @@ pub struct State {
 static V8_INIT: std::sync::Once = std::sync::Once::new();
 
 impl Cli {
-	pub async fn new() -> Result<Cli> {
+	pub async fn new(path: Option<PathBuf>) -> Result<Cli> {
 		// Get the path.
-		let path = Self::path()?;
+		let path = if let Some(path) = path {
+			path
+		} else {
+			Self::path()?
+		};
 
 		// // Read the config.
 		// let config = Self::read_config().await?;

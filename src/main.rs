@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
 	let args = Args::parse();
 
 	// Create the CLI.
-	let cli = Cli::new().await?;
+	let cli = Cli::new(args.path.clone()).await?;
 
 	// Run the command.
 	cli.run_command(args).await?;

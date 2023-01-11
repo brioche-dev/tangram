@@ -5,7 +5,7 @@ use super::Client;
 
 impl Client {
 	pub async fn try_get_artifact(&self, artifact_hash: ArtifactHash) -> Result<Option<Artifact>> {
-		let path = format!("/v1/artifact/{artifact_hash}");
+		let path = format!("/v1/artifacts/{artifact_hash}");
 
 		// Build the URL.
 		let mut url = self.url.clone();

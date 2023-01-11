@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::Cli;
 use anyhow::Result;
 use clap::Parser;
@@ -38,12 +40,17 @@ pub mod upgrade;
 	version = env!("CARGO_PKG_VERSION"),
 )]
 pub struct Args {
+	#[arg(
+		long,
+		help = "The path where tangram should store its data. Defaults to $HOME/.tangram."
+	)]
+	pub path: Option<PathBuf>,
 	#[command(subcommand)]
-	subcommand: Subcommand,
+	pub command: Command,
 }
 
 #[derive(Parser)]
-enum Subcommand {
+pub enum Command {
 	Add(self::add::Args),
 	Autoshell(self::autoshell::Args),
 	Blob(self::blob::Args),
@@ -75,32 +82,32 @@ impl Cli {
 	/// Run a command.
 	pub async fn run_command(&self, args: Args) -> Result<()> {
 		// Run the subcommand.
-		match args.subcommand {
-			Subcommand::Add(args) => self.command_add(args).boxed(),
-			Subcommand::Autoshell(args) => self.command_autoshell(args).boxed(),
-			Subcommand::Blob(args) => self.command_blob(args).boxed(),
-			Subcommand::Build(args) => self.command_build(args).boxed(),
-			Subcommand::Check(args) => self.command_check(args).boxed(),
-			Subcommand::Checkin(args) => self.command_checkin(args).boxed(),
-			Subcommand::Checkout(args) => self.command_checkout(args).boxed(),
-			Subcommand::Download(args) => self.command_download(args).boxed(),
-			Subcommand::Fmt(args) => self.command_fmt(args).boxed(),
-			Subcommand::Gc(args) => self.command_gc(args).boxed(),
-			Subcommand::Init(args) => self.command_init(args).boxed(),
-			Subcommand::Lint(args) => self.command_lint(args).boxed(),
+		match args.command {
+			Command::Add(args) => self.command_add(args).boxed(),
+			Command::Autoshell(args) => self.command_autoshell(args).boxed(),
+			Command::Blob(args) => self.command_blob(args).boxed(),
+			Command::Build(args) => self.command_build(args).boxed(),
+			Command::Check(args) => self.command_check(args).boxed(),
+			Command::Checkin(args) => self.command_checkin(args).boxed(),
+			Command::Checkout(args) => self.command_checkout(args).boxed(),
+			Command::Download(args) => self.command_download(args).boxed(),
+			Command::Fmt(args) => self.command_fmt(args).boxed(),
+			Command::Gc(args) => self.command_gc(args).boxed(),
+			Command::Init(args) => self.command_init(args).boxed(),
+			Command::Lint(args) => self.command_lint(args).boxed(),
 			// Subcommand::Login(args) => self.command_login(args).boxed(),
-			Subcommand::Lsp(args) => self.command_lsp(args).boxed(),
-			Subcommand::New(args) => self.command_new(args).boxed(),
-			Subcommand::Outdated(args) => self.command_outdated(args).boxed(),
+			Command::Lsp(args) => self.command_lsp(args).boxed(),
+			Command::New(args) => self.command_new(args).boxed(),
+			Command::Outdated(args) => self.command_outdated(args).boxed(),
 			// Subcommand::Publish(args) => self.command_publish(args).boxed(),
-			Subcommand::Pull(args) => self.command_pull(args).boxed(),
-			Subcommand::Push(args) => self.command_push(args).boxed(),
-			Subcommand::Run(args) => self.command_run(args).boxed(),
+			Command::Pull(args) => self.command_pull(args).boxed(),
+			Command::Push(args) => self.command_push(args).boxed(),
+			Command::Run(args) => self.command_run(args).boxed(),
 			// Subcommand::Search(args) => self.command_search(args).boxed(),
-			Subcommand::Serve(args) => self.command_serve(args).boxed(),
-			Subcommand::Shell(args) => self.command_shell(args).boxed(),
-			Subcommand::Update(args) => self.command_update(args).boxed(),
-			Subcommand::Upgrade(args) => self.command_upgrade(args).boxed(),
+			Command::Serve(args) => self.command_serve(args).boxed(),
+			Command::Shell(args) => self.command_shell(args).boxed(),
+			Command::Update(args) => self.command_update(args).boxed(),
+			Command::Upgrade(args) => self.command_upgrade(args).boxed(),
 		}
 		.await?;
 		Ok(())

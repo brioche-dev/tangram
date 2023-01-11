@@ -13,11 +13,11 @@ use std::path::PathBuf;
 #[command(about = "Manage autoshell paths.")]
 pub struct Args {
 	#[command(subcommand)]
-	subcommand: Subcommand,
+	command: Command,
 }
 
 #[derive(Parser)]
-pub enum Subcommand {
+pub enum Command {
 	Add(AddArgs),
 	List(ListArgs),
 	Remove(RemoveArgs),
@@ -49,11 +49,11 @@ pub struct HookArgs {
 
 impl Cli {
 	pub(crate) async fn command_autoshell(&self, args: Args) -> Result<()> {
-		match args.subcommand {
-			Subcommand::Add(args) => self.command_autoshell_add(args).boxed(),
-			Subcommand::List(args) => self.command_autoshell_list(args).boxed(),
-			Subcommand::Remove(args) => self.command_autoshell_remove(args).boxed(),
-			Subcommand::Hook(args) => self.command_autoshell_hook(args).boxed(),
+		match args.command {
+			Command::Add(args) => self.command_autoshell_add(args).boxed(),
+			Command::List(args) => self.command_autoshell_list(args).boxed(),
+			Command::Remove(args) => self.command_autoshell_remove(args).boxed(),
+			Command::Hook(args) => self.command_autoshell_hook(args).boxed(),
 		}
 		.await?;
 		Ok(())

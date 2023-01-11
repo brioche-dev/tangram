@@ -4,6 +4,7 @@ use clap::Parser;
 use url::Url;
 
 #[derive(Parser, Debug)]
+#[command(about = "Push an artifact.")]
 pub struct Args {
 	pub artifact_hash: ArtifactHash,
 	pub url: Url,
