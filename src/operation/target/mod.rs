@@ -49,7 +49,7 @@ async fn run_target_inner(
 		.context("Failed to retrieve the package entrypoint.")?
 		.context("The package must have an entrypoint.")?;
 
-	// Create the module url.
+	// Create the module identifier.
 	let module_identifier = ModuleIdentifier::new_hash(target.package, entrypoint_path);
 
 	// Evaluate the module.

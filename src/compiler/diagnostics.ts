@@ -1,11 +1,11 @@
 import * as ts from "typescript";
 import { Diagnostic, Severity } from "./types";
-import { GetDiagnosticsResponse, GetDiangosticsRequest } from "./request";
+import { DiagnosticsResponse, DiangosticsRequest } from "./request";
 import { languageService } from "./typescript";
 
 export let getDiagnostics = (
-	_request: GetDiangosticsRequest,
-): GetDiagnosticsResponse => {
+	_request: DiangosticsRequest,
+): DiagnosticsResponse => {
 	// Get the list of opened files.
 	let moduleIdentifiers = syscall("opened_files");
 
@@ -83,7 +83,7 @@ export let convertDiagnostic = (diagnostic: ts.Diagnostic): Diagnostic => {
 		let range = { start, end };
 
 		location = {
-			url: moduleIdentifier,
+			moduleIdentifier,
 			range,
 		};
 	}
@@ -113,7 +113,7 @@ export let convertDiagnostic = (diagnostic: ts.Diagnostic): Diagnostic => {
 	}
 
 	let message: string;
-	// Map diagnostics for '.ts' extensions to url import errors instead.
+	// Map diagnostics for '.ts' extensions to import errors instead.
 	if (diagnostic.code === TS2691) {
 		message = "Could not load dependency.";
 	} else if (diagnostic.code === TS2792) {

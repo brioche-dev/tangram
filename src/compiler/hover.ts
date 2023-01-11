@@ -1,8 +1,8 @@
 import * as ts from "typescript";
-import { GetHoverRequest, GetHoverResponse } from "./request";
+import { HoverRequest, HoverResponse } from "./request";
 import { host, languageService } from "./typescript";
 
-export let hover = (request: GetHoverRequest): GetHoverResponse => {
+export let hover = (request: HoverRequest): HoverResponse => {
 	// Get the source file and position.
 	let sourceFile = host.getSourceFile(
 		request.moduleIdentifier,

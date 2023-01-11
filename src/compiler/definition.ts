@@ -1,10 +1,10 @@
 import * as ts from "typescript";
-import { GotoDefinitionRequest, GotoDefinitionResponse } from "./request";
+import { DefinitionRequest, DefinitionResponse } from "./request";
 import { host, languageService } from "./typescript";
 
 export let gotoDefinition = (
-	request: GotoDefinitionRequest,
-): GotoDefinitionResponse => {
+	request: DefinitionRequest,
+): DefinitionResponse => {
 	// Get the source file and position.
 	let sourceFile = host.getSourceFile(
 		request.moduleIdentifier,
@@ -46,7 +46,7 @@ export let gotoDefinition = (
 			);
 
 			let location = {
-				url: definition.fileName,
+				moduleIdentifier: definition.fileName,
 				range: { start, end },
 			};
 

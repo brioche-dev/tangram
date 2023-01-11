@@ -12,7 +12,7 @@ export type Position = {
 export type Severity = "error" | "warning" | "information" | "hint";
 
 export type Location = {
-	url: string;
+	moduleIdentifier: string;
 	range: Range;
 };
 

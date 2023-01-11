@@ -20,7 +20,7 @@ impl LanguageServer {
 		// Get the references.
 		let locations = self
 			.compiler
-			.find_rename_locations(module_identifier, position.into())
+			.rename(module_identifier, position.into())
 			.await?;
 
 		let Some(locations) = locations else {

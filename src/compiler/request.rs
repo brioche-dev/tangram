@@ -7,11 +7,11 @@ use std::collections::BTreeMap;
 #[serde(tag = "type", content = "request", rename_all = "snake_case")]
 pub enum Request {
 	Check(CheckRequest),
-	FindRenameLocations(FindRenameLocationsRequest),
-	GetDiagnostics(GetDiagnosticsRequest),
-	GotoDefinition(GotoDefintionRequest),
-	GetHover(GetHoverRequest),
-	GetReferences(GetReferencesRequest),
+	Rename(RenameRequest),
+	Diagnostics(DiagnosticsRequest),
+	Definition(DefintionRequest),
+	Hover(HoverRequest),
+	References(ReferencesRequest),
 	Completion(CompletionRequest),
 	Transpile(TranspileRequest),
 }
@@ -20,11 +20,11 @@ pub enum Request {
 #[serde(tag = "type", content = "response", rename_all = "snake_case")]
 pub enum Response {
 	Check(CheckResponse),
-	FindRenameLocations(FindRenameLocationsResponse),
-	GetDiagnostics(GetDiagnosticsResponse),
-	GetHover(GetHoverResponse),
-	GetReferences(GetReferencesResponse),
-	GotoDefinition(GotoDefinitionResponse),
+	Rename(RenameLocationsResponse),
+	Diagnostics(DiagnosticsResponse),
+	Hover(HoverResponse),
+	References(ReferencesResponse),
+	Definition(DefinitionResponse),
 	Completion(CompletionResponse),
 	Transpile(TranspileResponse),
 }
@@ -43,63 +43,63 @@ pub struct CheckResponse {
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FindRenameLocationsRequest {
+pub struct RenameRequest {
 	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FindRenameLocationsResponse {
+pub struct RenameLocationsResponse {
 	pub locations: Option<Vec<Location>>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDiagnosticsRequest {}
+pub struct DiagnosticsRequest {}
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetDiagnosticsResponse {
+pub struct DiagnosticsResponse {
 	pub diagnostics: BTreeMap<ModuleIdentifier, Vec<Diagnostic>>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetHoverRequest {
+pub struct HoverRequest {
 	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetHoverResponse {
+pub struct HoverResponse {
 	pub text: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetReferencesRequest {
+pub struct ReferencesRequest {
 	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetReferencesResponse {
+pub struct ReferencesResponse {
 	pub locations: Option<Vec<Location>>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GotoDefintionRequest {
+pub struct DefintionRequest {
 	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GotoDefinitionResponse {
+pub struct DefinitionResponse {
 	pub locations: Option<Vec<Location>>,
 }
 

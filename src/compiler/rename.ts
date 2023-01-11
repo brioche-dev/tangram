@@ -1,13 +1,8 @@
 import * as ts from "typescript";
-import {
-	FindRenameLocationsRequest,
-	FindRenameLocationsResponse,
-} from "./request";
+import { RenameRequest, RenameResponse } from "./request";
 import { host, languageService } from "./typescript";
 
-export let findRenameLocations = (
-	request: FindRenameLocationsRequest,
-): FindRenameLocationsResponse => {
+export let rename = (request: RenameRequest): RenameResponse => {
 	// Get the source file and position.
 	let sourceFile = host.getSourceFile(
 		request.moduleIdentifier,
@@ -49,14 +44,11 @@ export let findRenameLocations = (
 			renameLocation.textSpan.start + renameLocation.textSpan.length,
 		);
 		let location = {
-			url: renameLocation.fileName,
+			moduleIdentifier: renameLocation.fileName,
 			range: { start, end },
 		};
 		return location;
 	});
 
-	return {
-		type: "find_rename_locations",
-		response: { locations },
-	};
+	return { locations };
 };

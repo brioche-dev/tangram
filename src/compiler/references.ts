@@ -1,10 +1,8 @@
 import * as ts from "typescript";
-import { GetReferencesRequest, GetReferencesResponse } from "./request";
+import { ReferencesRequest, ReferencesResponse } from "./request";
 import { host, languageService } from "./typescript";
 
-export let getReferences = (
-	request: GetReferencesRequest,
-): GetReferencesResponse => {
+export let getReferences = (request: ReferencesRequest): ReferencesResponse => {
 	// Get the source file and position.
 	let sourceFile = host.getSourceFile(
 		request.moduleIdentifier,
@@ -44,7 +42,7 @@ export let getReferences = (
 			);
 
 			let location = {
-				url: reference.fileName,
+				moduleIdentifier: reference.fileName,
 				range: { start, end },
 			};
 

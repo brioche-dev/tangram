@@ -5,7 +5,7 @@ import { getDiagnostics } from "./diagnostics";
 import { getReferences } from "./references";
 import { gotoDefinition } from "./definition";
 import { transpile } from "./transpile";
-import { findRenameLocations } from "./rename";
+import { rename } from "./rename";
 import { hover } from "./hover";
 import { format } from "./format";
 
@@ -19,29 +19,29 @@ export default ({ type, request }: Request): Response => {
 			let response = completion(request);
 			return { type: "completion", response };
 		}
-		case "find_rename_locations": {
-			let response = findRenameLocations(request);
-			return { type: "find_rename_locations", response };
+		case "rename": {
+			let response = rename(request);
+			return { type: "rename", response };
 		}
 		case "format": {
 			let response = format(request);
 			return { type: "format", response };
 		}
-		case "get_diagnostics": {
+		case "diagnostics": {
 			let response = getDiagnostics(request);
-			return { type: "get_diagnostics", response };
+			return { type: "diagnostics", response };
 		}
-		case "get_hover": {
+		case "hover": {
 			let response = hover(request);
-			return { type: "get_hover", response };
+			return { type: "hover", response };
 		}
-		case "get_references": {
+		case "references": {
 			let response = getReferences(request);
-			return { type: "get_references", response };
+			return { type: "references", response };
 		}
-		case "goto_definition": {
+		case "definition": {
 			let response = gotoDefinition(request);
-			return { type: "goto_definition", response };
+			return { type: "definition", response };
 		}
 		case "transpile": {
 			let response = transpile(request);

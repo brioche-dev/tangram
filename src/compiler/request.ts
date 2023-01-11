@@ -3,23 +3,23 @@ import { Location, CompletionEntry, Diagnostic, Position } from "./types";
 export type Request =
 	| { type: "check"; request: CheckRequest }
 	| { type: "completion"; request: CompletionRequest }
-	| { type: "find_rename_locations"; request: FindRenameLocationsRequest }
+	| { type: "rename"; request: RenameRequest }
 	| { type: "format"; request: FormatRequest }
-	| { type: "get_diagnostics"; request: GetDiangosticsRequest }
-	| { type: "get_hover"; request: GetHoverRequest }
-	| { type: "get_references"; request: GetReferencesRequest }
-	| { type: "goto_definition"; request: GotoDefinitionRequest }
+	| { type: "diagnostics"; request: DiangosticsRequest }
+	| { type: "hover"; request: HoverRequest }
+	| { type: "references"; request: ReferencesRequest }
+	| { type: "definition"; request: DefinitionRequest }
 	| { type: "transpile"; request: TranspileRequest };
 
 export type Response =
 	| { type: "check"; response: CheckResponse }
 	| { type: "completion"; response: CompletionResponse }
-	| { type: "find_rename_locations"; response: FindRenameLocationsResponse }
+	| { type: "rename"; response: RenameResponse }
 	| { type: "format"; response: FormatResponse }
-	| { type: "get_diagnostics"; response: GetDiagnosticsResponse }
-	| { type: "get_hover"; response: GetHoverResponse }
-	| { type: "get_references"; response: GetReferencesResponse }
-	| { type: "goto_definition"; response: GotoDefinitionResponse }
+	| { type: "diagnostics"; response: DiagnosticsResponse }
+	| { type: "hover"; response: HoverResponse }
+	| { type: "references"; response: ReferencesResponse }
+	| { type: "definition"; response: DefinitionResponse }
 	| { type: "transpile"; response: TranspileResponse };
 
 export type CheckRequest = { moduleIdentifiers: Array<string> };
@@ -37,12 +37,14 @@ export type CompletionResponse = {
 	entries?: Array<CompletionEntry>;
 };
 
-export type FindRenameLocationsRequest = {
+export type RenameRequest = {
 	moduleIdentifier: string;
 	position: Position;
 };
 
-export type FindRenameLocationsResponse = {};
+export type RenameResponse = {
+	locations: Array<Location> | null | undefined;
+};
 
 export type FormatRequest = {
 	text: string;
@@ -52,36 +54,36 @@ export type FormatResponse = {
 	text: string;
 };
 
-export type GetDiangosticsRequest = {};
+export type DiangosticsRequest = {};
 
-export type GetDiagnosticsResponse = {
+export type DiagnosticsResponse = {
 	diagnostics: { [key: string]: Array<Diagnostic> };
 };
 
-export type GetHoverRequest = {
+export type HoverRequest = {
 	moduleIdentifier: string;
 	position: Position;
 };
 
-export type GetHoverResponse = {
+export type HoverResponse = {
 	text?: string;
 };
 
-export type GetReferencesRequest = {
+export type ReferencesRequest = {
 	moduleIdentifier: string;
 	position: Position;
 };
 
-export type GetReferencesResponse = {
+export type ReferencesResponse = {
 	locations: Array<Location> | null;
 };
 
-export type GotoDefinitionRequest = {
+export type DefinitionRequest = {
 	moduleIdentifier: string;
 	position: Position;
 };
 
-export type GotoDefinitionResponse = {
+export type DefinitionResponse = {
 	locations: Array<Location> | null;
 };
 

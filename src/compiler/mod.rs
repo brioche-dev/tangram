@@ -1,10 +1,9 @@
 pub use self::{module_identifier::ModuleIdentifier, types::*};
 use self::{
 	request::{
-		CheckRequest, CompletionRequest, FindRenameLocationsRequest, FindRenameLocationsResponse,
-		GetDiagnosticsRequest, GetDiagnosticsResponse, GetHoverRequest, GetReferencesRequest,
-		GetReferencesResponse, GotoDefinitionResponse, GotoDefintionRequest, Request, Response,
-		TranspileRequest,
+		CheckRequest, CompletionRequest, DefinitionResponse, DefintionRequest, DiagnosticsRequest,
+		DiagnosticsResponse, HoverRequest, ReferencesRequest, ReferencesResponse,
+		RenameLocationsResponse, RenameRequest, Request, Response, TranspileRequest,
 	},
 	syscall::syscall,
 };
@@ -273,13 +272,13 @@ impl Compiler {
 		Ok(diagnostics)
 	}
 
-	pub async fn find_rename_locations(
+	pub async fn rename(
 		&self,
 		module_identifier: ModuleIdentifier,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the request.
-		let request = Request::FindRenameLocations(FindRenameLocationsRequest {
+		let request = Request::Rename(RenameRequest {
 			module_identifier,
 			position,
 		});
@@ -289,31 +288,31 @@ impl Compiler {
 
 		// Get the response.
 		let response = match response {
-			Response::FindRenameLocations(response) => response,
+			Response::Rename(response) => response,
 			_ => bail!("Unexpected response type."),
 		};
 
 		// Get the result from the response.
-		let FindRenameLocationsResponse { locations } = response;
+		let RenameLocationsResponse { locations } = response;
 
 		Ok(locations)
 	}
 
 	pub async fn get_diagnostics(&self) -> Result<BTreeMap<ModuleIdentifier, Vec<Diagnostic>>> {
 		// Create the request.
-		let request = Request::GetDiagnostics(GetDiagnosticsRequest {});
+		let request = Request::Diagnostics(DiagnosticsRequest {});
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
 
 		// Get the response.
 		let response = match response {
-			Response::GetDiagnostics(response) => response,
+			Response::Diagnostics(response) => response,
 			_ => bail!("Unexpected response type."),
 		};
 
 		// Get the result the response.
-		let GetDiagnosticsResponse { diagnostics } = response;
+		let DiagnosticsResponse { diagnostics } = response;
 
 		Ok(diagnostics)
 	}
@@ -324,7 +323,7 @@ impl Compiler {
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the request.
-		let request = Request::GetReferences(GetReferencesRequest {
+		let request = Request::References(ReferencesRequest {
 			module_identifier,
 			position,
 		});
@@ -334,12 +333,12 @@ impl Compiler {
 
 		// Get the response.
 		let response = match response {
-			Response::GetReferences(response) => response,
+			Response::References(response) => response,
 			_ => bail!("Unexpected response type."),
 		};
 
 		// Get the result from the response.
-		let GetReferencesResponse { locations } = response;
+		let ReferencesResponse { locations } = response;
 
 		Ok(locations)
 	}
@@ -350,7 +349,7 @@ impl Compiler {
 		position: Position,
 	) -> Result<Option<String>> {
 		// Create the request.
-		let request = Request::GetHover(GetHoverRequest {
+		let request = Request::Hover(HoverRequest {
 			module_identifier,
 			position,
 		});
@@ -360,7 +359,7 @@ impl Compiler {
 
 		// Get the response.
 		let response = match response {
-			Response::GetHover(response) => response,
+			Response::Hover(response) => response,
 			_ => bail!("Unexpected response type."),
 		};
 
@@ -376,7 +375,7 @@ impl Compiler {
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the request.
-		let request = Request::GotoDefinition(GotoDefintionRequest {
+		let request = Request::Definition(DefintionRequest {
 			module_identifier,
 			position,
 		});
@@ -386,12 +385,12 @@ impl Compiler {
 
 		// Get the response.
 		let response = match response {
-			Response::GotoDefinition(response) => response,
+			Response::Definition(response) => response,
 			_ => bail!("Unexpected response type."),
 		};
 
 		// Get the result from the response.
-		let GotoDefinitionResponse { locations } = response;
+		let DefinitionResponse { locations } = response;
 
 		Ok(locations)
 	}
