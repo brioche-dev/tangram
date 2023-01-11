@@ -9,10 +9,10 @@ use num_traits::{FromPrimitive, ToPrimitive};
 	Ord,
 	PartialEq,
 	PartialOrd,
+	num_derive::FromPrimitive,
+	num_derive::ToPrimitive,
 	serde::Deserialize,
 	serde::Serialize,
-	num_derive::ToPrimitive,
-	num_derive::FromPrimitive,
 )]
 pub enum System {
 	#[serde(rename = "amd64_linux", alias = "x86_64_linux")]

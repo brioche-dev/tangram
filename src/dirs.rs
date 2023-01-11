@@ -32,7 +32,7 @@ pub fn _user_config_directory_path() -> Option<PathBuf> {
 #[must_use]
 pub fn _user_data_directory_path() -> Option<PathBuf> {
 	if cfg!(any(target_os = "linux", target_os = "macos")) {
-		Some(home_directory_path()?.join(".local").join("share"))
+		Some(home_directory_path()?.join(".local/share"))
 	} else {
 		None
 	}

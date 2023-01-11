@@ -46,26 +46,24 @@ impl serde::Serialize for Id {
 	}
 }
 
-struct IdVisitor;
-
-impl<'de> serde::de::Visitor<'de> for IdVisitor {
-	type Value = Id;
-	fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-		formatter.write_str("a string")
-	}
-	fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-	where
-		E: serde::de::Error,
-	{
-		value.parse().map_err(|_| E::custom("Invalid ID."))
-	}
-}
-
 impl<'de> serde::Deserialize<'de> for Id {
 	fn deserialize<D>(deserializer: D) -> Result<Id, D::Error>
 	where
 		D: serde::Deserializer<'de>,
 	{
+		struct IdVisitor;
+		impl<'de> serde::de::Visitor<'de> for IdVisitor {
+			type Value = Id;
+			fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+				formatter.write_str("a string")
+			}
+			fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				value.parse().map_err(|_| E::custom("Invalid ID."))
+			}
+		}
 		deserializer.deserialize_str(IdVisitor)
 	}
 }

@@ -1,6 +1,6 @@
-//! The following command will display sandbox log events:
+//! The following command will log sandbox events:
 //!
-//! ```
+//! ```text
 //! log stream --style compact --info --debug  --predicate '(((processID == 0) AND (senderImagePath CONTAINS "/Sandbox")) OR (subsystem == "com.apple.sandbox.reporting"))'
 //! ```
 //!
