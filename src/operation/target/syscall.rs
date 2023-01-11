@@ -2,7 +2,7 @@ use super::{ContextState, FutureOutput, THREAD_LOCAL_ISOLATE};
 use crate::{
 	artifact::{Artifact, ArtifactHash},
 	blob::BlobHash,
-	compiler,
+	compiler::ModuleIdentifier,
 	operation::Operation,
 	package::{Package, PackageHash},
 	value::Value,
@@ -181,11 +181,14 @@ fn syscall_get_current_package_hash(
 	_args: (),
 ) -> Result<PackageHash> {
 	// Get the location.
-	let Location { url, .. } = get_location(scope);
+	let Location {
+		module_identifier: url,
+		..
+	} = get_location(scope);
 
 	// Get the package hash.
 	let package_hash = match url {
-		compiler::Url::Hash { package_hash, .. } => package_hash,
+		ModuleIdentifier::Hash { package_hash, .. } => package_hash,
 		_ => panic!(),
 	};
 
@@ -199,11 +202,18 @@ fn syscall_get_target_name(
 	_args: (),
 ) -> Result<String> {
 	// Get the location.
-	let Location { url, line, column } = get_location(scope);
+	let Location {
+		module_identifier: url,
+		line,
+		column,
+	} = get_location(scope);
 
 	// Get the module.
 	let modules = state.modules.borrow();
-	let module = modules.iter().find(|module| module.url == url).unwrap();
+	let module = modules
+		.iter()
+		.find(|module| module.module_identifier == url)
+		.unwrap();
 
 	// Apply a source map if one is available.
 	let (line, _column) = module
@@ -232,23 +242,28 @@ fn syscall_get_target_name(
 }
 
 struct Location {
-	url: compiler::Url,
+	module_identifier: ModuleIdentifier,
 	line: u32,
 	column: u32,
 }
 
 fn get_location(scope: &mut v8::HandleScope) -> Location {
-	// Get the URL, line, and column of the caller's caller.
+	// Get the module identifier, line, and column of the caller's caller.
 	let stack_trace = v8::StackTrace::current_stack_trace(scope, 2).unwrap();
 	let stack_frame = stack_trace.get_frame(scope, 1).unwrap();
-	let url = stack_frame
+	let module_identifier = stack_frame
 		.get_script_name(scope)
 		.unwrap()
-		.to_rust_string_lossy(scope);
-	let url: compiler::Url = url.parse().unwrap();
+		.to_rust_string_lossy(scope)
+		.parse()
+		.unwrap();
 	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
 	let column = stack_frame.get_column().to_u32().unwrap() - 1;
-	Location { url, line, column }
+	Location {
+		module_identifier,
+		line,
+		column,
+	}
 }
 
 fn syscall_sync<'s, A, T, F>(

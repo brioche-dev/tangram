@@ -9,7 +9,10 @@ export let findRenameLocations = (
 	request: FindRenameLocationsRequest,
 ): FindRenameLocationsResponse => {
 	// Get the source file and position.
-	let sourceFile = host.getSourceFile(request.url, ts.ScriptTarget.ESNext);
+	let sourceFile = host.getSourceFile(
+		request.moduleIdentifier,
+		ts.ScriptTarget.ESNext,
+	);
 	if (sourceFile === undefined) {
 		throw new Error();
 	}
@@ -21,7 +24,7 @@ export let findRenameLocations = (
 
 	// Get the rename locations.
 	let renameLocations = languageService.findRenameLocations(
-		request.url,
+		request.moduleIdentifier,
 		position,
 		false,
 		false,

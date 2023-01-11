@@ -1,5 +1,5 @@
 use crate::{
-	compiler::{self, Compiler},
+	compiler::{Compiler, Diagnostic, Location, Position},
 	specifier::Specifier,
 	Cli,
 };
@@ -22,31 +22,37 @@ impl Cli {
 		let cli = self.lock_shared().await?;
 
 		// If the specifier is a path specifier, first generate its lockfile.
-		if let Specifier::Path(path) = &args.specifier {
+		if let Specifier::Path { path } = &args.specifier {
 			cli.generate_lockfile(path, args.locked).await?;
 		}
 
 		// Create a compiler.
 		let compiler = Compiler::new(self.clone());
 
-		// Get the js URLs for the package.
-		let urls = cli.js_urls_for_specifier(&args.specifier).await?;
+		// Get the entrypoint module identifier.
+		let module_identifier = cli
+			.entrypoint_module_identifier_for_specifier(&args.specifier)
+			.await?;
 
 		// Check the package for diagnostics.
-		let diagnostics = compiler.check(urls).await?;
+		let diagnostics = compiler.check(vec![module_identifier]).await?;
 
 		// Print the diagnostics.
 		for diagnostics in diagnostics.values() {
 			for diagnostic in diagnostics {
 				// Retrieve the diagnostic location and message.
-				let compiler::Diagnostic {
+				let Diagnostic {
 					location, message, ..
 				} = diagnostic;
 
 				// Print the location if one is available.
 				if let Some(location) = location {
-					let compiler::Location { url, range, .. } = location;
-					let compiler::Position { line, character } = range.start;
+					let Location {
+						module_identifier: url,
+						range,
+						..
+					} = location;
+					let Position { line, character } = range.start;
 					let line = line + 1;
 					let character = character + 1;
 

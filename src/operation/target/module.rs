@@ -1,5 +1,5 @@
 use super::context::{ContextState, Module};
-use crate::compiler;
+use crate::compiler::ModuleIdentifier;
 use anyhow::{bail, Context, Result};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
@@ -12,28 +12,28 @@ use std::rc::Rc;
 // 	todo!();
 // }
 
-/// Load a module at the specified URL.
+/// Load a module.
 pub fn load_module<'s>(
 	scope: &mut v8::HandleScope<'s>,
-	url: &compiler::Url,
+	module_identifier: &ModuleIdentifier,
 ) -> Result<v8::Local<'s, v8::Module>> {
 	// Get the context and context scope.
 	let context = scope.get_current_context();
 	let context_state = Rc::clone(context.get_slot::<Rc<ContextState>>(scope).unwrap());
 
-	// Return a cached module if this URL has already been loaded.
+	// Return a cached module if this module has already been loaded.
 	if let Some(module) = context_state
 		.modules
 		.borrow()
 		.iter()
-		.find(|module| &module.url == url)
+		.find(|module| &module.module_identifier == module_identifier)
 	{
 		let module = v8::Local::new(scope, &module.module);
 		return Ok(module);
 	}
 
 	// Define the module's origin.
-	let resource_name = v8::String::new(scope, &url.to_string()).unwrap();
+	let resource_name = v8::String::new(scope, &module_identifier.to_string()).unwrap();
 	let resource_line_offset = 0;
 	let resource_column_offset = 0;
 	let resource_is_shared_cross_origin = false;
@@ -59,10 +59,10 @@ pub fn load_module<'s>(
 	let (sender, receiver) = std::sync::mpsc::channel();
 	context_state.main_runtime_handle.spawn({
 		let compiler = context_state.compiler.clone();
-		let url = url.clone();
+		let module_identifier = module_identifier.clone();
 		async move {
 			// Load the module.
-			let source = match compiler.load(&url).await {
+			let source = match compiler.load(&module_identifier).await {
 				Ok(source) => source,
 				Err(error) => return sender.send(Err(error)).unwrap(),
 			};
@@ -81,7 +81,7 @@ pub fn load_module<'s>(
 	let (source, transpiled, source_map) = receiver
 		.recv()
 		.unwrap()
-		.with_context(|| format!(r#"Failed to load from URL "{url}"."#))?;
+		.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
 	let source_map =
 		SourceMap::from_slice(source_map.as_bytes()).context("Failed to parse the source map.")?;
 
@@ -103,7 +103,7 @@ pub fn load_module<'s>(
 	context_state.modules.borrow_mut().push(Module {
 		identity_hash: module.get_identity_hash(),
 		module: v8::Global::new(scope, module),
-		url: url.clone(),
+		module_identifier: module_identifier.clone(),
 		source,
 		_transpiled: Some(transpiled),
 		source_map: Some(source_map),
@@ -143,7 +143,7 @@ fn resolve_module_callback_inner<'s>(
 	// Get the specifier.
 	let specifier = specifier.to_rust_string_lossy(&mut scope);
 
-	// Get the referrer URL.
+	// Get the referrer.
 	let referrer_identity_hash = referrer.get_identity_hash();
 	let referrer = context_state
 		.modules
@@ -155,7 +155,7 @@ fn resolve_module_callback_inner<'s>(
 				r#"Unable to find the referrer module with identity hash "{referrer_identity_hash}"."#
 			)
 		})?
-		.url
+		.module_identifier
 		.clone();
 
 	// Resolve.
@@ -165,17 +165,17 @@ fn resolve_module_callback_inner<'s>(
 		let specifier = specifier.clone();
 		let referrer = referrer.clone();
 		async move {
-			let url = compiler.resolve(&specifier, Some(&referrer)).await;
-			sender.send(url).unwrap();
+			let module_identifier = compiler.resolve(&specifier, Some(&referrer)).await;
+			sender.send(module_identifier).unwrap();
 		}
 	});
-	let url = receiver.recv().unwrap().with_context(|| {
+	let module_identifier = receiver.recv().unwrap().with_context(|| {
 		format!(r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer:?}"."#)
 	})?;
 
 	// Load.
-	let module = load_module(&mut scope, &url)
-		.with_context(|| format!(r#"Failed to load the module with URL "{url}"."#))?;
+	let module = load_module(&mut scope, &module_identifier)
+		.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
 
 	Ok(module)
 }

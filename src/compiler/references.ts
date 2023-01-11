@@ -6,7 +6,10 @@ export let getReferences = (
 	request: GetReferencesRequest,
 ): GetReferencesResponse => {
 	// Get the source file and position.
-	let sourceFile = host.getSourceFile(request.url, ts.ScriptTarget.ESNext);
+	let sourceFile = host.getSourceFile(
+		request.moduleIdentifier,
+		ts.ScriptTarget.ESNext,
+	);
 	if (sourceFile === undefined) {
 		throw new Error();
 	}
@@ -16,7 +19,7 @@ export let getReferences = (
 		request.position.character,
 	);
 	let references = languageService.getReferencesAtPosition(
-		request.url,
+		request.moduleIdentifier,
 		position,
 	);
 

@@ -4,7 +4,7 @@ use self::{
 	module::{load_module, resolve_module_callback},
 };
 use super::Target;
-use crate::{compiler, value::Value, Cli, State};
+use crate::{compiler::ModuleIdentifier, value::Value, Cli, State};
 use anyhow::{bail, Context, Result};
 use std::rc::Rc;
 
@@ -50,7 +50,7 @@ async fn run_target_inner(
 		.context("The package must have an entrypoint.")?;
 
 	// Create the module url.
-	let url = compiler::Url::new_hash(target.package, entrypoint_path);
+	let module_identifier = ModuleIdentifier::new_hash(target.package, entrypoint_path);
 
 	// Evaluate the module.
 	let (module, module_output) = {
@@ -62,7 +62,7 @@ async fn run_target_inner(
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
 		// Load the module.
-		let module = load_module(&mut context_scope, &url)?;
+		let module = load_module(&mut context_scope, &module_identifier)?;
 
 		// Instantiate the module.
 		let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);

@@ -1,5 +1,4 @@
-pub use self::types::*;
-pub use self::url::Url;
+pub use self::{module_identifier::ModuleIdentifier, types::*};
 use self::{
 	request::{
 		CheckRequest, CompletionRequest, FindRenameLocationsRequest, FindRenameLocationsResponse,
@@ -9,7 +8,7 @@ use self::{
 	},
 	syscall::syscall,
 };
-use crate::{compiler, Cli};
+use crate::Cli;
 use anyhow::{anyhow, bail, Context, Result};
 use std::{
 	collections::{BTreeMap, HashMap},
@@ -22,11 +21,11 @@ use tokio::sync::RwLock;
 
 mod exception;
 mod load;
+mod module_identifier;
 mod request;
 mod resolve;
 mod syscall;
 mod types;
-mod url;
 
 #[derive(Clone)]
 pub struct Compiler {
@@ -47,14 +46,14 @@ enum File {
 
 #[derive(Debug)]
 struct OpenedFile {
-	url: compiler::Url,
+	module_identifier: ModuleIdentifier,
 	version: i32,
 	text: String,
 }
 
 #[derive(Debug)]
 struct UnopenedFile {
-	_url: compiler::Url,
+	_module_identifier: ModuleIdentifier,
 	version: i32,
 	modified: SystemTime,
 }
@@ -136,17 +135,19 @@ impl Compiler {
 }
 
 impl Compiler {
-	pub async fn get_version(&self, url: &compiler::Url) -> Result<i32> {
-		// Get the path for the URL, or return version 0 for URLs whose contents never change.
-		let path = match url {
+	pub async fn get_version(&self, module_identifier: &ModuleIdentifier) -> Result<i32> {
+		// Get the path for the module identifier, or return version 0 for modules whose contents never change.
+		let path = match module_identifier {
 			// Path modules change when the file at their path changes.
-			compiler::Url::Path {
+			ModuleIdentifier::Path {
 				package_path,
 				module_path,
 			} => package_path.join(module_path),
 
-			// The contents from library, core, and hash URLs never change, so we can always return 0.
-			compiler::Url::Lib { .. } | compiler::Url::Core { .. } | compiler::Url::Hash { .. } => {
+			// Library, core, and hash modules never change, so we can always return 0.
+			ModuleIdentifier::Lib { .. }
+			| ModuleIdentifier::Core { .. }
+			| ModuleIdentifier::Hash { .. } => {
 				return Ok(0);
 			},
 		};
@@ -160,7 +161,7 @@ impl Compiler {
 				files.insert(
 					path,
 					File::Unopened(UnopenedFile {
-						_url: url.clone(),
+						_module_identifier: module_identifier.clone(),
 						version: 0,
 						modified,
 					}),
@@ -187,8 +188,12 @@ impl Compiler {
 
 impl Compiler {
 	pub async fn open_file(&self, path: &Path, version: i32, text: String) {
-		let Ok(url) = compiler::Url::for_path(path).await else { return };
-		let file = File::Opened(OpenedFile { url, version, text });
+		let Ok(url) = ModuleIdentifier::for_path(path).await else { return };
+		let file = File::Opened(OpenedFile {
+			module_identifier: url,
+			version,
+			text,
+		});
 		self.state.files.write().await.insert(path.to_owned(), file);
 	}
 
@@ -248,10 +253,10 @@ impl Compiler {
 	/// Get all diagnostics for a package.
 	pub async fn check(
 		&self,
-		urls: Vec<compiler::Url>,
-	) -> Result<BTreeMap<compiler::Url, Vec<Diagnostic>>> {
+		module_identifiers: Vec<ModuleIdentifier>,
+	) -> Result<BTreeMap<ModuleIdentifier, Vec<Diagnostic>>> {
 		// Create the request.
-		let request = Request::Check(CheckRequest { urls });
+		let request = Request::Check(CheckRequest { module_identifiers });
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
@@ -270,11 +275,14 @@ impl Compiler {
 
 	pub async fn find_rename_locations(
 		&self,
-		url: compiler::Url,
+		module_identifier: ModuleIdentifier,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the request.
-		let request = Request::FindRenameLocations(FindRenameLocationsRequest { url, position });
+		let request = Request::FindRenameLocations(FindRenameLocationsRequest {
+			module_identifier,
+			position,
+		});
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
@@ -291,7 +299,7 @@ impl Compiler {
 		Ok(locations)
 	}
 
-	pub async fn get_diagnostics(&self) -> Result<BTreeMap<compiler::Url, Vec<Diagnostic>>> {
+	pub async fn get_diagnostics(&self) -> Result<BTreeMap<ModuleIdentifier, Vec<Diagnostic>>> {
 		// Create the request.
 		let request = Request::GetDiagnostics(GetDiagnosticsRequest {});
 
@@ -312,11 +320,14 @@ impl Compiler {
 
 	pub async fn get_references(
 		&self,
-		url: compiler::Url,
+		module_identifier: ModuleIdentifier,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the request.
-		let request = Request::GetReferences(GetReferencesRequest { url, position });
+		let request = Request::GetReferences(GetReferencesRequest {
+			module_identifier,
+			position,
+		});
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
@@ -333,9 +344,16 @@ impl Compiler {
 		Ok(locations)
 	}
 
-	pub async fn hover(&self, url: compiler::Url, position: Position) -> Result<Option<String>> {
+	pub async fn hover(
+		&self,
+		module_identifier: ModuleIdentifier,
+		position: Position,
+	) -> Result<Option<String>> {
 		// Create the request.
-		let request = Request::GetHover(GetHoverRequest { url, position });
+		let request = Request::GetHover(GetHoverRequest {
+			module_identifier,
+			position,
+		});
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
@@ -354,11 +372,14 @@ impl Compiler {
 
 	pub async fn goto_definition(
 		&self,
-		url: compiler::Url,
+		module_identifier: ModuleIdentifier,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the request.
-		let request = Request::GotoDefinition(GotoDefintionRequest { url, position });
+		let request = Request::GotoDefinition(GotoDefintionRequest {
+			module_identifier,
+			position,
+		});
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;
@@ -377,11 +398,14 @@ impl Compiler {
 
 	pub async fn completion(
 		&self,
-		url: compiler::Url,
+		module_identifier: ModuleIdentifier,
 		position: Position,
 	) -> Result<Option<Vec<CompletionEntry>>> {
 		// Create the request.
-		let request = Request::Completion(CompletionRequest { url, position });
+		let request = Request::Completion(CompletionRequest {
+			module_identifier,
+			position,
+		});
 
 		// Send the request and receive the response.
 		let response = self.request(request).await?;

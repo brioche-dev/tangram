@@ -4,7 +4,10 @@ import { host, languageService } from "./typescript";
 
 export let hover = (request: GetHoverRequest): GetHoverResponse => {
 	// Get the source file and position.
-	let sourceFile = host.getSourceFile(request.url, ts.ScriptTarget.ESNext);
+	let sourceFile = host.getSourceFile(
+		request.moduleIdentifier,
+		ts.ScriptTarget.ESNext,
+	);
 	if (sourceFile === undefined) {
 		throw new Error();
 	}
@@ -15,7 +18,10 @@ export let hover = (request: GetHoverRequest): GetHoverResponse => {
 	);
 
 	// Get the quick info at the position.
-	let quickInfo = languageService.getQuickInfoAtPosition(request.url, position);
+	let quickInfo = languageService.getQuickInfoAtPosition(
+		request.moduleIdentifier,
+		position,
+	);
 
 	// Get the text.
 	let text = quickInfo?.displayParts?.map(({ text }) => text).join("");

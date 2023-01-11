@@ -22,14 +22,14 @@ export type Response =
 	| { type: "goto_definition"; response: GotoDefinitionResponse }
 	| { type: "transpile"; response: TranspileResponse };
 
-export type CheckRequest = { urls: Array<string> };
+export type CheckRequest = { moduleIdentifiers: Array<string> };
 
 export type CheckResponse = {
 	diagnostics: { [key: string]: Array<Diagnostic> };
 };
 
 export type CompletionRequest = {
-	url: string;
+	moduleIdentifier: string;
 	position: Position;
 };
 
@@ -38,7 +38,7 @@ export type CompletionResponse = {
 };
 
 export type FindRenameLocationsRequest = {
-	url: string;
+	moduleIdentifier: string;
 	position: Position;
 };
 
@@ -59,7 +59,7 @@ export type GetDiagnosticsResponse = {
 };
 
 export type GetHoverRequest = {
-	url: string;
+	moduleIdentifier: string;
 	position: Position;
 };
 
@@ -68,7 +68,7 @@ export type GetHoverResponse = {
 };
 
 export type GetReferencesRequest = {
-	url: string;
+	moduleIdentifier: string;
 	position: Position;
 };
 
@@ -77,7 +77,7 @@ export type GetReferencesResponse = {
 };
 
 export type GotoDefinitionRequest = {
-	url: string;
+	moduleIdentifier: string;
 	position: Position;
 };
 

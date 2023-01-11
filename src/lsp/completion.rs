@@ -7,14 +7,17 @@ impl LanguageServer {
 		&self,
 		params: lsp::CompletionParams,
 	) -> Result<Option<lsp::CompletionResponse>> {
-		// Get the URL.
-		let url = from_uri(params.text_document_position.text_document.uri).await?;
+		// Get the module identifier.
+		let module_identifier = from_uri(params.text_document_position.text_document.uri).await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
 
 		// Get the completion entries.
-		let entries = self.compiler.completion(url, position.into()).await?;
+		let entries = self
+			.compiler
+			.completion(module_identifier, position.into())
+			.await?;
 		let Some(entries) = entries else {
 			return Ok(None);
 		};

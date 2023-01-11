@@ -1,10 +1,6 @@
 use crate::{
-	compiler,
-	package::PackageHash,
-	specifier::{self, Specifier},
-	system::System,
-	value::Value,
-	State,
+	compiler::ModuleIdentifier, package::PackageHash, specifier::Specifier, system::System,
+	value::Value, State,
 };
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
@@ -21,23 +17,27 @@ impl State {
 }
 
 impl State {
-	pub async fn js_urls_for_specifier(&self, specifier: &Specifier) -> Result<Vec<compiler::Url>> {
+	pub async fn entrypoint_module_identifier_for_specifier(
+		&self,
+		specifier: &Specifier,
+	) -> Result<ModuleIdentifier> {
 		match &specifier {
-			Specifier::Package(package_specifier) => {
+			Specifier::Package { name, version } => {
 				let package_hash = self
-					.get_package_hash_from_specifier(package_specifier)
+					.get_package_hash_from_specifier(name, version.as_deref())
 					.await?;
-				let url = compiler::Url::new_hash(package_hash, "tangram.ts".into());
-				Ok(vec![url])
+				let module_identifier =
+					ModuleIdentifier::new_hash(package_hash, "tangram.ts".into());
+				Ok(module_identifier)
 			},
 
-			Specifier::Path(path) => {
+			Specifier::Path { path } => {
 				let path = std::env::current_dir()
 					.context("Failed to get the current directory")?
 					.join(path);
 				let path = tokio::fs::canonicalize(&path).await?;
-				let url = compiler::Url::new_path(path, "tangram.ts".into());
-				Ok(vec![url])
+				let module_identifier = ModuleIdentifier::new_path(path, "tangram.ts".into());
+				Ok(module_identifier)
 			},
 		}
 	}
@@ -48,14 +48,14 @@ impl State {
 		locked: bool,
 	) -> Result<PackageHash> {
 		match specifier {
-			Specifier::Package(package_specifier) => {
+			Specifier::Package { name, version } => {
 				let package_hash = self
-					.get_package_hash_from_specifier(package_specifier)
+					.get_package_hash_from_specifier(name, version.as_deref())
 					.await?;
 				Ok(package_hash)
 			},
 
-			Specifier::Path(path) => {
+			Specifier::Path { path } => {
 				let package_hash = self.checkin_package(path, locked).await.with_context(|| {
 					format!("Failed to create the package for specifier '{specifier}'.")
 				})?;
@@ -67,7 +67,8 @@ impl State {
 	#[allow(clippy::unused_async)]
 	pub async fn get_package_hash_from_specifier(
 		&self,
-		_package_specifier: &specifier::Package,
+		_name: &str,
+		_version: Option<&str>,
 	) -> Result<PackageHash> {
 		todo!()
 		// let name = &package_specifier.name;

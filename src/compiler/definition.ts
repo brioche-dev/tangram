@@ -6,7 +6,10 @@ export let gotoDefinition = (
 	request: GotoDefinitionRequest,
 ): GotoDefinitionResponse => {
 	// Get the source file and position.
-	let sourceFile = host.getSourceFile(request.url, ts.ScriptTarget.ESNext);
+	let sourceFile = host.getSourceFile(
+		request.moduleIdentifier,
+		ts.ScriptTarget.ESNext,
+	);
 	if (sourceFile === undefined) {
 		throw new Error();
 	}
@@ -18,7 +21,7 @@ export let gotoDefinition = (
 
 	// Get the definitions.
 	let definitions = languageService.getDefinitionAtPosition(
-		request.url,
+		request.moduleIdentifier,
 		position,
 	);
 

@@ -1,3 +1,5 @@
+use super::ModuleIdentifier;
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
@@ -18,7 +20,7 @@ pub enum Severity {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
-	pub url: super::Url,
+	pub module_identifier: ModuleIdentifier,
 	pub range: Range,
 }
 

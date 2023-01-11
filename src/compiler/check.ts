@@ -6,7 +6,7 @@ import { CheckRequest, CheckResponse } from "./request";
 export let check = (request: CheckRequest): CheckResponse => {
 	// Create a typescript program.
 	let program = ts.createProgram({
-		rootNames: [...request.urls],
+		rootNames: [...request.moduleIdentifiers],
 		options: compilerOptions,
 		host,
 	});

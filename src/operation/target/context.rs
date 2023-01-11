@@ -1,6 +1,6 @@
 use super::{isolate::THREAD_LOCAL_ISOLATE, syscall::syscall};
 use crate::{
-	compiler::{self, Compiler},
+	compiler::{Compiler, ModuleIdentifier},
 	Cli,
 };
 use anyhow::{anyhow, Result};
@@ -20,7 +20,7 @@ pub struct ContextState {
 pub struct Module {
 	pub identity_hash: NonZeroI32,
 	pub module: v8::Global<v8::Module>,
-	pub url: compiler::Url,
+	pub module_identifier: ModuleIdentifier,
 	pub source: String,
 	pub _transpiled: Option<String>,
 	pub source_map: Option<SourceMap>,

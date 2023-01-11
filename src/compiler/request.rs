@@ -1,6 +1,6 @@
 #![allow(clippy::module_name_repetitions)]
 
-use crate::compiler::{self, CompletionEntry, Diagnostic, Location, Position};
+use crate::compiler::{CompletionEntry, Diagnostic, Location, ModuleIdentifier, Position};
 use std::collections::BTreeMap;
 
 #[derive(Debug, serde::Serialize)]
@@ -32,19 +32,19 @@ pub enum Response {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckRequest {
-	pub urls: Vec<compiler::Url>,
+	pub module_identifiers: Vec<ModuleIdentifier>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckResponse {
-	pub diagnostics: BTreeMap<compiler::Url, Vec<Diagnostic>>,
+	pub diagnostics: BTreeMap<ModuleIdentifier, Vec<Diagnostic>>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FindRenameLocationsRequest {
-	pub url: compiler::Url,
+	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
@@ -61,13 +61,13 @@ pub struct GetDiagnosticsRequest {}
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDiagnosticsResponse {
-	pub diagnostics: BTreeMap<compiler::Url, Vec<Diagnostic>>,
+	pub diagnostics: BTreeMap<ModuleIdentifier, Vec<Diagnostic>>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetHoverRequest {
-	pub url: compiler::Url,
+	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
@@ -80,7 +80,7 @@ pub struct GetHoverResponse {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetReferencesRequest {
-	pub url: compiler::Url,
+	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
@@ -93,7 +93,7 @@ pub struct GetReferencesResponse {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GotoDefintionRequest {
-	pub url: compiler::Url,
+	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 
@@ -106,7 +106,7 @@ pub struct GotoDefinitionResponse {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionRequest {
-	pub url: compiler::Url,
+	pub module_identifier: ModuleIdentifier,
 	pub position: Position,
 }
 

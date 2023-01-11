@@ -21,9 +21,9 @@ pub fn render(
 	if let Some(stack_trace) = v8::Exception::get_stack_trace(scope, exception) {
 		// Write the stack trace one frame at a time.
 		for i in 0..stack_trace.get_frame_count() {
-			// Retrieve the URL, line, and column.
+			// Retrieve the module identifier, line, and column.
 			let stack_trace_frame = stack_trace.get_frame(scope, i).unwrap();
-			let url = stack_trace_frame
+			let module_identifier = stack_trace_frame
 				.get_script_name(scope)
 				.unwrap()
 				.to_rust_string_lossy(scope)
@@ -37,7 +37,7 @@ pub fn render(
 				.modules
 				.borrow()
 				.iter()
-				.find(|module| module.url == url)
+				.find(|module| module.module_identifier == module_identifier)
 				.and_then(|module| module.source_map.as_ref())
 				.map_or((line, column), |source_map| {
 					let token = source_map.lookup_token(line, column).unwrap();
@@ -46,8 +46,8 @@ pub fn render(
 					(line, column)
 				});
 
-			// Write the URL, line, and column.
-			write!(string, "{url}:{}:{}", line + 1, column + 1).unwrap();
+			// Write the module identifier, line, and column.
+			write!(string, "{module_identifier}:{}:{}", line + 1, column + 1).unwrap();
 
 			// Add a newline if this is not the last frame.
 			if i < stack_trace.get_frame_count() - 1 {

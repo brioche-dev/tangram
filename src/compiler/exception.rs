@@ -20,7 +20,7 @@ pub fn render(scope: &mut v8::HandleScope, exception: v8::Local<v8::Value>) -> S
 			let line = stack_trace_frame.get_line_number();
 			let column = stack_trace_frame.get_column();
 
-			// Write the URL, line, and column.
+			// Write the line and column.
 			write!(string, "{line}:{column}").unwrap();
 
 			// Add a newline if this is not the last frame.

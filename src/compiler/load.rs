@@ -1,5 +1,5 @@
-use super::{Compiler, File};
-use crate::{compiler, package::PackageHash};
+use super::{Compiler, File, ModuleIdentifier};
+use crate::package::PackageHash;
 use anyhow::{Context, Result};
 use camino::Utf8Path;
 use include_dir::include_dir;
@@ -7,18 +7,18 @@ use std::path::Path;
 use tokio::io::AsyncReadExt;
 
 impl Compiler {
-	pub async fn load(&self, url: &compiler::Url) -> Result<String> {
-		match url {
-			compiler::Url::Lib { path } => load_lib(path),
+	pub async fn load(&self, module_identifier: &ModuleIdentifier) -> Result<String> {
+		match module_identifier {
+			ModuleIdentifier::Lib { path } => load_lib(path),
 
-			compiler::Url::Core { path } => load_core(path),
+			ModuleIdentifier::Core { path } => load_core(path),
 
-			compiler::Url::Hash {
+			ModuleIdentifier::Hash {
 				package_hash,
 				module_path,
 			} => self.load_hash_module(*package_hash, module_path).await,
 
-			compiler::Url::Path {
+			ModuleIdentifier::Path {
 				package_path,
 				module_path,
 			} => self.load_path_module(package_path, module_path).await,

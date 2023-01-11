@@ -5,12 +5,13 @@ use super::{
 use anyhow::Result;
 use lsp_types as lsp;
 use std::collections::HashMap;
+use url::Url;
 
 impl LanguageServer {
 	#[allow(clippy::similar_names)]
 	pub async fn rename(&self, params: lsp::RenameParams) -> Result<Option<lsp::WorkspaceEdit>> {
-		// Get the URL.
-		let url = from_uri(params.text_document_position.text_document.uri).await?;
+		// Get the module identifier.
+		let module_identifier = from_uri(params.text_document_position.text_document.uri).await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
@@ -19,7 +20,7 @@ impl LanguageServer {
 		// Get the references.
 		let locations = self
 			.compiler
-			.find_rename_locations(url, position.into())
+			.find_rename_locations(module_identifier, position.into())
 			.await?;
 
 		let Some(locations) = locations else {
@@ -27,13 +28,18 @@ impl LanguageServer {
       };
 
 		// Convert the changes.
-		let mut document_changes = HashMap::<url::Url, lsp::TextDocumentEdit>::new();
+		let mut document_changes = HashMap::<Url, lsp::TextDocumentEdit>::new();
 		for location in locations {
 			// Get the version.
-			let version = self.compiler.get_version(&location.url).await.ok();
+			let version = self
+				.compiler
+				.get_version(&location.module_identifier)
+				.await
+				.ok();
 
-			// Map the URL.
-			let uri = to_uri(location.url);
+			// Create the URI.
+			let uri = to_uri(location.module_identifier);
+
 			if document_changes.get_mut(&uri).is_none() {
 				document_changes.insert(
 					uri.clone(),
@@ -46,11 +52,14 @@ impl LanguageServer {
 					},
 				);
 			}
-			let changes_for_url = document_changes.get_mut(&uri).unwrap();
-			changes_for_url.edits.push(lsp::OneOf::Left(lsp::TextEdit {
-				range: location.range.into(),
-				new_text: new_text.clone(),
-			}));
+			document_changes
+				.get_mut(&uri)
+				.unwrap()
+				.edits
+				.push(lsp::OneOf::Left(lsp::TextEdit {
+					range: location.range.into(),
+					new_text: new_text.clone(),
+				}));
 		}
 
 		let changes = lsp::WorkspaceEdit {

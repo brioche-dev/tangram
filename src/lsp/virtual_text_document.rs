@@ -19,11 +19,11 @@ pub struct Params {
 impl LanguageServer {
 	#[allow(clippy::unused_async)]
 	pub async fn virtual_text_document(&self, params: Params) -> Result<Option<String>> {
-		// Get the url for the virtual document.
-		let url = params.text_document.uri.try_into()?;
+		// Get the module identifier.
+		let module_identifier = params.text_document.uri.try_into()?;
 
 		// Load the file.
-		let text = self.compiler.load(&url).await?;
+		let text = self.compiler.load(&module_identifier).await?;
 
 		Ok(Some(text))
 	}

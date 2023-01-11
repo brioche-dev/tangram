@@ -1,5 +1,5 @@
-use super::ContextState;
-use crate::compiler::{self, File, OpenedFile};
+use super::{ContextState, ModuleIdentifier};
+use crate::compiler::{File, OpenedFile};
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use std::rc::Rc;
@@ -91,30 +91,30 @@ fn syscall_opened_files(
 	_scope: &mut v8::HandleScope,
 	state: Rc<ContextState>,
 	_args: (),
-) -> Result<Vec<compiler::Url>> {
+) -> Result<Vec<ModuleIdentifier>> {
 	let main_runtime_handle = state.main_runtime_handle.clone();
 	main_runtime_handle.block_on(async move {
 		let files = state.compiler.state.files.read().await;
-		let urls = files
+		let module_identifiers = files
 			.values()
 			.filter_map(|file| match file {
 				File::Opened(
 					opened_file @ OpenedFile {
-						url: compiler::Url::Path { .. },
+						module_identifier: ModuleIdentifier::Path { .. },
 						..
 					},
-				) => Some(opened_file.url.clone()),
+				) => Some(opened_file.module_identifier.clone()),
 				_ => None,
 			})
 			.collect();
-		Ok(urls)
+		Ok(module_identifiers)
 	})
 }
 
 fn syscall_version(
 	_scope: &mut v8::HandleScope,
 	state: Rc<ContextState>,
-	args: (compiler::Url,),
+	args: (ModuleIdentifier,),
 ) -> Result<String> {
 	let (url,) = args;
 	let main_runtime_handle = state.main_runtime_handle.clone();
@@ -127,12 +127,12 @@ fn syscall_version(
 fn syscall_resolve(
 	_scope: &mut v8::HandleScope,
 	state: Rc<ContextState>,
-	args: (String, Option<compiler::Url>),
-) -> Result<compiler::Url> {
+	args: (String, Option<ModuleIdentifier>),
+) -> Result<ModuleIdentifier> {
 	let (specifier, referrer) = args;
 	let main_runtime_handle = state.main_runtime_handle.clone();
 	main_runtime_handle.block_on(async move {
-		let url = state
+		let module_identifier = state
 			.compiler
 			.resolve(&specifier, referrer.as_ref())
 			.await
@@ -141,28 +141,30 @@ fn syscall_resolve(
 					r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer:?}"."#
 				)
 			})?;
-		Ok(url)
+		Ok(module_identifier)
 	})
 }
 
 fn syscall_load(
 	_scope: &mut v8::HandleScope,
 	state: Rc<ContextState>,
-	args: (compiler::Url,),
+	args: (ModuleIdentifier,),
 ) -> Result<LoadOutput> {
-	let (url,) = args;
+	let (module_identifier,) = args;
 	let main_runtime_handle = state.main_runtime_handle.clone();
 	main_runtime_handle.block_on(async move {
 		let text = state
 			.compiler
-			.load(&url)
+			.load(&module_identifier)
 			.await
-			.with_context(|| format!(r#"Failed to load from URL "{url}"."#))?;
+			.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
 		let version = state
 			.compiler
-			.get_version(&url)
+			.get_version(&module_identifier)
 			.await
-			.with_context(|| format!(r#"Failed to get the version for URL "{url}"."#))?;
+			.with_context(|| {
+				format!(r#"Failed to get the version for module "{module_identifier}"."#)
+			})?;
 		Ok(LoadOutput { text, version })
 	})
 }

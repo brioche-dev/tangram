@@ -1,6 +1,5 @@
-use super::{url::TANGRAM_SCHEME, Compiler};
+use super::{module_identifier::TANGRAM_SCHEME, Compiler, ModuleIdentifier};
 use crate::{
-	compiler,
 	lockfile::Lockfile,
 	manifest::{self, Manifest},
 	package::PackageHash,
@@ -15,18 +14,19 @@ impl Compiler {
 	pub async fn resolve(
 		&self,
 		specifier: &str,
-		referrer: Option<&compiler::Url>,
-	) -> Result<compiler::Url> {
-		// If the specifier starts with /, ./, or ../, then resolve it as a path specifier. If the specifier is "tangram" then resolve it to the root core module. Otherwise, resolve it as a URL.
-		let url = if specifier.starts_with('/')
+		referrer: Option<&ModuleIdentifier>,
+	) -> Result<ModuleIdentifier> {
+		let module_identifier = if specifier.starts_with('/')
 			|| specifier.starts_with("./")
 			|| specifier.starts_with("../")
 		{
+			// If the specifier starts with /, ./, or ../, then resolve it as a path specifier.
 			Self::resolve_path(specifier, referrer)?
 		} else if specifier == "tangram" {
-			compiler::Url::new_core("/mod.ts".into())
+			// If the specifier is "tangram", then resolve it to the root core module.
+			ModuleIdentifier::new_core("/mod.ts".into())
 		} else {
-			// Parse the specifier as URL.
+			// Parse the specifier as a URL.
 			let specifier: Url = specifier
 				.parse()
 				.with_context(|| format!(r#"The specifier "{specifier}" is not a valid URL."#))?;
@@ -37,12 +37,15 @@ impl Compiler {
 				_ => specifier.try_into()?,
 			}
 		};
-		Ok(url)
+		Ok(module_identifier)
 	}
 }
 
 impl Compiler {
-	fn resolve_path(specifier: &str, referrer: Option<&compiler::Url>) -> Result<compiler::Url> {
+	fn resolve_path(
+		specifier: &str,
+		referrer: Option<&ModuleIdentifier>,
+	) -> Result<ModuleIdentifier> {
 		// Ensure there is a referrer.
 		let referrer = referrer.with_context(|| {
 			format!(r#"A specifier with the scheme "{TANGRAM_SCHEME}" must have a referrer."#)
@@ -51,55 +54,57 @@ impl Compiler {
 		let specifier = Utf8Path::new(specifier);
 
 		// Resolve.
-		let url = match referrer {
-			compiler::Url::Lib { path } => compiler::Url::Lib {
+		let module_identifier = match referrer {
+			ModuleIdentifier::Lib { path } => ModuleIdentifier::Lib {
 				path: normalize(&path.join("..").join(specifier)),
 			},
 
-			compiler::Url::Core { path } => compiler::Url::Core {
+			ModuleIdentifier::Core { path } => ModuleIdentifier::Core {
 				path: normalize(&path.join("..").join(specifier)),
 			},
 
-			compiler::Url::Hash {
+			ModuleIdentifier::Hash {
 				package_hash,
 				module_path,
-			} => compiler::Url::Hash {
+			} => ModuleIdentifier::Hash {
 				package_hash: *package_hash,
 				module_path: normalize(&module_path.join("..").join(specifier)),
 			},
 
-			compiler::Url::Path {
+			ModuleIdentifier::Path {
 				package_path,
 				module_path,
-			} => compiler::Url::Path {
+			} => ModuleIdentifier::Path {
 				package_path: package_path.clone(),
 				module_path: normalize(&module_path.join("..").join(specifier)),
 			},
 		};
 
-		Ok(url)
+		Ok(module_identifier)
 	}
 }
 
 impl Compiler {
 	async fn resolve_tangram(
 		&self,
-		specifier: &url::Url,
-		referrer: Option<&compiler::Url>,
-	) -> Result<compiler::Url> {
+		specifier: &Url,
+		referrer: Option<&ModuleIdentifier>,
+	) -> Result<ModuleIdentifier> {
 		// Ensure there is a referrer.
 		let referrer =
 			referrer.context(r#"A specifier with the scheme "tangram" must have a referrer."#)?;
 
 		match referrer {
-			compiler::Url::Lib { .. } | compiler::Url::Core { .. } => bail!("Invalid referrer."),
+			ModuleIdentifier::Lib { .. } | ModuleIdentifier::Core { .. } => {
+				bail!("Invalid referrer.")
+			},
 
-			compiler::Url::Hash { package_hash, .. } => {
+			ModuleIdentifier::Hash { package_hash, .. } => {
 				self.resolve_tangram_from_hash(specifier, *package_hash)
 					.await
 			},
 
-			compiler::Url::Path { package_path, .. } => {
+			ModuleIdentifier::Path { package_path, .. } => {
 				self.resolve_tangram_from_path(specifier, package_path)
 					.await
 			},
@@ -108,9 +113,9 @@ impl Compiler {
 
 	async fn resolve_tangram_from_hash(
 		&self,
-		specifier: &url::Url,
+		specifier: &Url,
 		referrer_package_hash: PackageHash,
-	) -> Result<compiler::Url> {
+	) -> Result<ModuleIdentifier> {
 		// Lock the cli.
 		let cli = self.cli.lock_shared().await?;
 
@@ -125,17 +130,18 @@ impl Compiler {
 			"Expected the referrer's package dependencies to contain the specifier's package name.",
 		)?;
 
-		// Create the URL.
-		let url = compiler::Url::new_hash(*specifier_package_hash, "tangram.ts".into());
+		// Create the module identifier.
+		let module_identifier =
+			ModuleIdentifier::new_hash(*specifier_package_hash, "tangram.ts".into());
 
-		Ok(url)
+		Ok(module_identifier)
 	}
 
 	async fn resolve_tangram_from_path(
 		&self,
-		specifier: &url::Url,
+		specifier: &Url,
 		referrer_package_path: &Path,
-	) -> Result<compiler::Url> {
+	) -> Result<ModuleIdentifier> {
 		// Get the specifier's package name.
 		let specifier_package_name = specifier.path();
 
@@ -158,10 +164,11 @@ impl Compiler {
 				let specifier_package_path =
 					tokio::fs::canonicalize(&specifier_package_path).await?;
 
-				// Create the URL.
-				let url = compiler::Url::new_path(specifier_package_path, "tangram.ts".into());
+				// Create the module identifier.
+				let module_identifier =
+					ModuleIdentifier::new_path(specifier_package_path, "tangram.ts".into());
 
-				Ok(url)
+				Ok(module_identifier)
 			},
 			manifest::Dependency::RegistryDependency(_) => {
 				// Read the lockfile.
@@ -181,10 +188,11 @@ impl Compiler {
 					.with_context(|| format!("Failed to find the specifier {specifier_package_name:?} in the referrer's lockfile at {} for a registry dependency.", referrer_lockfile_path.display()))?;
 				let specifier_hash = dependency.hash;
 
-				// Create the URL.
-				let url = compiler::Url::new_hash(specifier_hash, "tangram.ts".into());
+				// Create the module identifier.
+				let module_identifier =
+					ModuleIdentifier::new_hash(specifier_hash, "tangram.ts".into());
 
-				Ok(url)
+				Ok(module_identifier)
 			},
 		}
 	}

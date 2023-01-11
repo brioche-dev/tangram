@@ -7,15 +7,15 @@ export let getDiagnostics = (
 	_request: GetDiangosticsRequest,
 ): GetDiagnosticsResponse => {
 	// Get the list of opened files.
-	let urls = syscall("opened_files");
+	let moduleIdentifiers = syscall("opened_files");
 
 	// Collect the diagnostics for each opened file.
 	let diagnostics: Record<string, Array<Diagnostic>> = {};
-	for (let url of urls) {
-		diagnostics[url] = [
-			...languageService.getSyntacticDiagnostics(url),
-			...languageService.getSemanticDiagnostics(url),
-			...languageService.getSuggestionDiagnostics(url),
+	for (let moduleIdentifier of moduleIdentifiers) {
+		diagnostics[moduleIdentifier] = [
+			...languageService.getSyntacticDiagnostics(moduleIdentifier),
+			...languageService.getSemanticDiagnostics(moduleIdentifier),
+			...languageService.getSuggestionDiagnostics(moduleIdentifier),
 		].map((diagnostic) => convertDiagnostic(diagnostic));
 	}
 
@@ -37,13 +37,13 @@ export let convertDiagnostics = (
 		}
 
 		// Add an entry for this diagnostic's file in the output if necessary.
-		let url = diagnostic.file.fileName;
-		if (output[url] === undefined) {
-			output[url] = [];
+		let moduleIdentifier = diagnostic.file.fileName;
+		if (output[moduleIdentifier] === undefined) {
+			output[moduleIdentifier] = [];
 		}
 
 		// Add the diagnostic to the output.
-		output[url].push(convertDiagnostic(diagnostic));
+		output[moduleIdentifier].push(convertDiagnostic(diagnostic));
 	}
 
 	return output;
@@ -65,8 +65,8 @@ export let convertDiagnostic = (diagnostic: ts.Diagnostic): Diagnostic => {
 		throw new Error("The diagnostic does not have a location.");
 	}
 
-	// Get the diagnostic's URL.
-	let url = diagnostic.file.fileName;
+	// Get the diagnostic's module identifier.
+	let moduleIdentifier = diagnostic.file.fileName;
 
 	// Get the diagnostic's location.
 	let location = null;
@@ -83,7 +83,7 @@ export let convertDiagnostic = (diagnostic: ts.Diagnostic): Diagnostic => {
 		let range = { start, end };
 
 		location = {
-			url,
+			url: moduleIdentifier,
 			range,
 		};
 	}

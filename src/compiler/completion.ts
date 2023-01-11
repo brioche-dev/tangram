@@ -4,7 +4,10 @@ import { CompletionRequest, CompletionResponse } from "./request";
 
 export let completion = (request: CompletionRequest): CompletionResponse => {
 	// Get the source file and position.
-	let sourceFile = host.getSourceFile(request.url, ts.ScriptTarget.ESNext);
+	let sourceFile = host.getSourceFile(
+		request.moduleIdentifier,
+		ts.ScriptTarget.ESNext,
+	);
 	if (sourceFile === undefined) {
 		throw new Error();
 	}
@@ -16,7 +19,7 @@ export let completion = (request: CompletionRequest): CompletionResponse => {
 
 	// Get the completions.
 	let info = languageService.getCompletionsAtPosition(
-		request.url,
+		request.moduleIdentifier,
 		position,
 		undefined,
 	);

@@ -1,8 +1,8 @@
-use crate::compiler;
+use crate::compiler::{Diagnostic, Position, Range, Severity};
 use lsp_types as lsp;
 
-impl From<compiler::Diagnostic> for lsp::Diagnostic {
-	fn from(value: compiler::Diagnostic) -> Self {
+impl From<Diagnostic> for lsp::Diagnostic {
+	fn from(value: Diagnostic) -> Self {
 		let range = value
 			.location
 			.map(|location| location.range.into())
@@ -20,19 +20,19 @@ impl From<compiler::Diagnostic> for lsp::Diagnostic {
 	}
 }
 
-impl From<compiler::Severity> for lsp::DiagnosticSeverity {
-	fn from(value: compiler::Severity) -> Self {
+impl From<Severity> for lsp::DiagnosticSeverity {
+	fn from(value: Severity) -> Self {
 		match value {
-			compiler::Severity::Error => lsp::DiagnosticSeverity::ERROR,
-			compiler::Severity::Warning => lsp::DiagnosticSeverity::WARNING,
-			compiler::Severity::Information => lsp::DiagnosticSeverity::INFORMATION,
-			compiler::Severity::Hint => lsp::DiagnosticSeverity::HINT,
+			Severity::Error => lsp::DiagnosticSeverity::ERROR,
+			Severity::Warning => lsp::DiagnosticSeverity::WARNING,
+			Severity::Information => lsp::DiagnosticSeverity::INFORMATION,
+			Severity::Hint => lsp::DiagnosticSeverity::HINT,
 		}
 	}
 }
 
-impl From<compiler::Range> for lsp::Range {
-	fn from(value: compiler::Range) -> Self {
+impl From<Range> for lsp::Range {
+	fn from(value: Range) -> Self {
 		lsp::Range {
 			start: value.start.into(),
 			end: value.end.into(),
@@ -40,26 +40,26 @@ impl From<compiler::Range> for lsp::Range {
 	}
 }
 
-impl From<lsp::Range> for compiler::Range {
+impl From<lsp::Range> for Range {
 	fn from(value: lsp::Range) -> Self {
-		compiler::Range {
+		Range {
 			start: value.start.into(),
 			end: value.end.into(),
 		}
 	}
 }
 
-impl From<lsp::Position> for compiler::Position {
+impl From<lsp::Position> for Position {
 	fn from(value: lsp::Position) -> Self {
-		compiler::Position {
+		Position {
 			line: value.line,
 			character: value.character,
 		}
 	}
 }
 
-impl From<compiler::Position> for lsp::Position {
-	fn from(value: compiler::Position) -> Self {
+impl From<Position> for lsp::Position {
+	fn from(value: Position) -> Self {
 		lsp::Position {
 			line: value.line,
 			character: value.character,
