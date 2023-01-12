@@ -87,8 +87,15 @@ impl State {
 			System::Amd64Linux | System::Arm64Linux => {
 				#[cfg(target_os = "linux")]
 				{
-					self.run_process_linux(env, command, args, referenced_path_set, network_enabled)
-						.boxed()
+					self.run_process_linux(
+						process.system,
+						env,
+						command,
+						args,
+						referenced_path_set,
+						network_enabled,
+					)
+					.boxed()
 				}
 				#[cfg(not(target_os = "linux"))]
 				{

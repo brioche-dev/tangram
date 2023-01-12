@@ -1,7 +1,14 @@
 #![allow(clippy::similar_names)]
 
 use super::{PathMode, ReferencedPathSet};
-use crate::State;
+use crate::{
+	artifact::{Artifact, ArtifactHash},
+	checksum::Checksum,
+	operation::{Download, Operation},
+	system::System,
+	value::Value,
+	State,
+};
 use anyhow::{bail, Context, Result};
 use bstr::ByteSlice;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -27,6 +34,7 @@ const TANGRAM_GID: gid_t = 1000;
 impl State {
 	pub async fn run_process_linux(
 		&self,
+		system: System,
 		env: BTreeMap<String, String>,
 		command: String,
 		args: Vec<String>,
@@ -36,6 +44,9 @@ impl State {
 		// Create a temp path for the chroot.
 		let parent_child_root_path = self.create_temp_path();
 		tokio::fs::create_dir_all(&parent_child_root_path).await?;
+
+		// set up the chroot with tools from toybox.
+		self.install_toybox(system, &parent_child_root_path).await?;
 
 		// Create the home directory for the sandbox user.
 		let parent_child_home_directory = parent_child_root_path.join("home/tangram");
@@ -152,6 +163,84 @@ impl State {
 
 		Ok(())
 	}
+
+	async fn install_toybox(&self, system: System, path: &Path) -> Result<()> {
+		// Download the toybox binary.
+		let toybox_hash = self.get_toybox(system).await?;
+
+		// Create /bin.
+		let bin_dir = path.join("bin");
+		tokio::fs::create_dir_all(&bin_dir).await?;
+
+		// Create /usr/bin.
+		let usr_bin_dir = path.join("usr").join("bin");
+		tokio::fs::create_dir_all(&usr_bin_dir).await?;
+
+		let bin_sh_path = bin_dir.join("sh");
+		let usr_bin_env_path = usr_bin_dir.join("env");
+
+		// Create a copy of the toybox binary at /bin/sh and /usr/bin/env.
+		self.checkout(toybox_hash, &bin_sh_path, None).await?;
+		self.checkout(toybox_hash, &usr_bin_env_path, None).await?;
+
+		Ok(())
+	}
+
+	async fn get_toybox(&self, system: System) -> Result<ArtifactHash> {
+		// Download the correct version of toybox for the system.
+		let download_operation = match system {
+			System::Amd64Linux => Download {
+				checksum: Some(Checksum::Sha256(hex::decode("9889888bb7cd2ee1ec1136ca7314c1fc5fb09cb2553ad269b9a43a193ee19aad").unwrap().try_into().unwrap())),
+				is_unsafe: false,
+				unpack: true,
+				url: url::Url::parse("https://github.com/tangramdotdev/bootstrap/releases/download/v2022.10.31/toybox_amd64_linux.tar.zstd")
+					.unwrap(),
+			},
+			System::Arm64Linux => Download {
+				checksum: Some(Checksum::Sha256(hex::decode("53e51ebf85949ab6735e4df9b31c2ad51e16f05b66f55610dcd1c6afbf2c2a66").unwrap().try_into().unwrap())),
+				is_unsafe: false,
+				unpack: true,
+				url: url::Url::parse("https://github.com/tangramdotdev/bootstrap/releases/download/v2022.10.31/toybox_arm64_linux.tar.zstd")
+					.unwrap(),
+			},
+			_ => {
+				bail!("Unsupported system: {}", system);
+			}
+		};
+
+		// Download the toybox archive.
+		let toybox_unpacked = self.run(&Operation::Download(download_operation)).await?;
+
+		// Get the top-level directoy from the artifact.
+		let toybox_unpacked = match toybox_unpacked {
+			Value::Artifact(artifact_hash) => self.get_artifact_local(artifact_hash)?,
+			_ => bail!("Expected a value of type Artifact."),
+		};
+		let toybox_unpacked = match toybox_unpacked {
+			Artifact::Directory(directory) => directory,
+			_ => bail!("Expected a value of type Directory."),
+		};
+
+		// Get the bin directory from the artifact.
+		let toybox_bin_dir = toybox_unpacked
+			.entries
+			.get("bin")
+			.context("Failed to get 'bin' directory from toybox archive.")?;
+		let toybox_bin_dir = self.get_artifact_local(*toybox_bin_dir)?;
+		let toybox_bin_dir = match toybox_bin_dir {
+			Artifact::Directory(directory) => directory,
+			_ => bail!("Expected a value of type Directory."),
+		};
+
+		// Get the bin/toybox executable from the artifact.
+		let toybox_executable = toybox_bin_dir
+			.entries
+			.get("toybox")
+			.context("Failed to get toybox binary from toybox archive.")?;
+
+		// Return the hash of the bin/toybox executable.
+		Ok(*toybox_executable)
+	}
 }
 
 fn pre_exec(
@@ -161,7 +250,7 @@ fn pre_exec(
 	referenced_path_set: &ReferencedPathSet,
 	network_enabled: bool,
 ) -> std::io::Result<()> {
-	let result = pre_exec_inner(
+	let result = set_up_sandbox(
 		child_socket,
 		parent_child_root_path,
 		child_working_directory,
@@ -173,6 +262,11 @@ fn pre_exec(
 		Err(SandboxError::Incomplete(error)) => {
 			// Print a warning if the sandbox setup did not finish completely.
 			eprintln!("Warning: Sandbox setup failed. {error:#?}");
+
+			// Validate that the host has the required executables when running unsandboxed.
+			validate_host_unsandboxed()
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+
 			Ok(())
 		},
 		Err(error) => {
@@ -244,7 +338,7 @@ enum SandboxError {
 }
 
 #[allow(clippy::too_many_lines)]
-fn pre_exec_inner(
+fn set_up_sandbox(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
 	child_working_directory: &Path,
@@ -520,6 +614,22 @@ fn pre_exec_inner(
 	if ret != 0 {
 		return Err(SandboxIncomplete::RemoveParentFailed(std::io::Error::last_os_error()).into());
 	}
+
+	Ok(())
+}
+
+fn validate_host_unsandboxed() -> Result<()> {
+	// Ensure that the host system has /bin/sh.
+	anyhow::ensure!(
+		Path::new("/bin/sh").exists(),
+		"Host must have /bin/sh to run unsandboxed."
+	);
+
+	// Ensure that the host system has /usr/bin/env.
+	anyhow::ensure!(
+		Path::new("/usr/bin/env").exists(),
+		"Host must have /usr/bin/env to run unsandboxed."
+	);
 
 	Ok(())
 }
