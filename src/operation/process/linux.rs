@@ -89,6 +89,7 @@ impl Cli {
 				pre_exec(
 					&mut child_socket,
 					&parent_child_root_path,
+					&parent_child_home_directory,
 					&child_working_directory,
 					&referenced_path_set,
 					network_enabled,
@@ -246,6 +247,7 @@ impl Cli {
 fn pre_exec(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
+	parent_child_home_directory: &Path,
 	child_working_directory: &Path,
 	referenced_path_set: &ReferencedPathSet,
 	network_enabled: bool,
@@ -253,6 +255,7 @@ fn pre_exec(
 	let result = set_up_sandbox(
 		child_socket,
 		parent_child_root_path,
+		parent_child_home_directory,
 		child_working_directory,
 		referenced_path_set,
 		network_enabled,
@@ -303,6 +306,9 @@ enum SandboxIncomplete {
 	#[error("Failed to mount {1:?} as read-only.")]
 	MountReadOnlyFailed(#[source] std::io::Error, PathBuf),
 
+	#[error("Failed to ensure the new root is read-only.")]
+	MountReadOnlyRootFailed(#[source] std::io::Error),
+
 	#[error("Failed to pivot the root.")]
 	PivotRootFailed(#[source] std::io::Error),
 
@@ -341,6 +347,7 @@ enum SandboxError {
 fn set_up_sandbox(
 	child_socket: &mut std::os::unix::net::UnixStream,
 	parent_child_root_path: &Path,
+	parent_child_home_directory: &Path,
 	child_working_directory: &Path,
 	referenced_path_set: &ReferencedPathSet,
 	network_enabled: bool,
@@ -408,6 +415,26 @@ fn set_up_sandbox(
 	};
 	if ret != 0 {
 		return Err(SandboxIncomplete::MountBindRoot(std::io::Error::last_os_error()).into());
+	}
+
+	// Ensure the parent child home directory is a mount point. We mount it separately from the root because the root will be re-mounted as read-only.
+	let parent_child_home_directory_c_string =
+		CString::new(parent_child_home_directory.as_os_str().as_bytes()).unwrap();
+	let ret = unsafe {
+		mount(
+			parent_child_home_directory_c_string.as_ptr(),
+			parent_child_home_directory_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		return Err(SandboxIncomplete::MountFailed(
+			std::io::Error::last_os_error(),
+			parent_child_home_directory.to_path_buf(),
+		)
+		.into());
 	}
 
 	// Create the parent mount path.
@@ -575,6 +602,21 @@ fn set_up_sandbox(
 			},
 			PathMode::ReadWrite | PathMode::ReadWriteCreate => {},
 		}
+	}
+
+	let ret = unsafe {
+		mount(
+			parent_child_root_path_c_string.as_ptr(),
+			parent_child_root_path_c_string.as_ptr(),
+			std::ptr::null(),
+			MS_BIND | MS_REMOUNT | MS_RDONLY,
+			std::ptr::null(),
+		)
+	};
+	if ret != 0 {
+		return Err(
+			SandboxIncomplete::MountReadOnlyRootFailed(std::io::Error::last_os_error()).into(),
+		);
 	}
 
 	// Pivot the root.
