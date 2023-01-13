@@ -1,7 +1,6 @@
 use self::archive_format::{ArchiveFormat, CompressionFormat};
 use crate::{
 	checksum::{Algorithm, Checksum, Checksummer},
-	operation::Download,
 	value::Value,
 	State,
 };
@@ -12,8 +11,27 @@ use std::{
 	sync::{Arc, Mutex},
 };
 use tokio_util::io::{StreamReader, SyncIoBridge};
+use url::Url;
 
 mod archive_format;
+
+#[derive(
+	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+)]
+pub struct Download {
+	#[buffalo(id = 0)]
+	pub url: Url,
+
+	#[buffalo(id = 1)]
+	pub unpack: bool,
+
+	#[buffalo(id = 2)]
+	pub checksum: Option<Checksum>,
+
+	#[buffalo(id = 3)]
+	#[serde(default, rename = "unsafe")]
+	pub is_unsafe: bool,
+}
 
 impl State {
 	pub(super) async fn run_download(&self, download: &Download) -> Result<Value> {

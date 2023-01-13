@@ -157,9 +157,9 @@ impl Watcher {
 
 		// Create the artifact.
 		let artifact = if target.is_absolute() {
-			// A symlink that has an absolute target that points into the artifacts directory is a dependency.
+			// A symlink that has an absolute target that points into the checkouts directory is a dependency.
 			let target = target
-				.strip_prefix(&self.path.join("artifacts"))
+				.strip_prefix(&self.path.join("checkouts"))
 				.map_err(|_| anyhow!("Invalid symlink."))?;
 
 			// Get the path components.

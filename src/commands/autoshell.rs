@@ -189,7 +189,7 @@ impl Cli {
 			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = cli.checkout_to_artifacts(output_artifact_hash).await?;
+		let artifact_path = cli.checkout_internal(output_artifact_hash).await?;
 
 		// Get the path to the executable.
 		let shell_activate_script_path = artifact_path.join("activate");

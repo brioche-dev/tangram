@@ -1,6 +1,5 @@
 use crate::{
 	artifact::{Artifact, ArtifactHash},
-	operation::Process,
 	system::System,
 	value::{Template, TemplateComponent, Value},
 	State,
@@ -17,6 +16,35 @@ use std::{
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	buffalo::Deserialize,
+	buffalo::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct Process {
+	#[buffalo(id = 0)]
+	pub system: System,
+
+	#[buffalo(id = 1)]
+	pub env: Option<BTreeMap<String, Template>>,
+
+	#[buffalo(id = 2)]
+	pub command: Template,
+
+	#[buffalo(id = 3)]
+	pub args: Option<Vec<Template>>,
+
+	#[buffalo(id = 4)]
+	#[serde(default, rename = "unsafe")]
+	pub is_unsafe: bool,
+}
 
 impl State {
 	#[allow(clippy::too_many_lines)]
@@ -249,7 +277,7 @@ impl State {
 					}),
 
 					TemplateComponent::Artifact(artifact_hash) => {
-						let artifact_path = self.checkout_to_artifacts(*artifact_hash).await?;
+						let artifact_path = self.checkout_internal(*artifact_hash).await?;
 
 						let string = artifact_path
 							.to_str()
@@ -262,7 +290,7 @@ impl State {
 						let dependency_paths = try_join_all(
 							dependency_hashes
 								.into_iter()
-								.map(|hash| self.checkout_to_artifacts(hash)),
+								.map(|hash| self.checkout_internal(hash)),
 						)
 						.await?;
 

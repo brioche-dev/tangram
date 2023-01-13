@@ -40,9 +40,9 @@ impl super::Migration for Migration {
 		let blobs_path = path.join("blobs");
 		tokio::fs::create_dir_all(&blobs_path).await?;
 
-		// Create the artifacts directory.
-		let artifacts_path = path.join("artifacts");
-		tokio::fs::create_dir_all(&artifacts_path).await?;
+		// Create the checkouts directory.
+		let checkouts_path = path.join("checkouts");
+		tokio::fs::create_dir_all(&checkouts_path).await?;
 
 		// Create the temps directory.
 		let temps_path = path.join("temps");

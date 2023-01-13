@@ -188,7 +188,7 @@ impl State {
 	}
 
 	#[must_use]
-	pub fn artifacts_path(&self) -> PathBuf {
+	pub fn checkouts_path(&self) -> PathBuf {
 		self.path.join("artifacts")
 	}
 

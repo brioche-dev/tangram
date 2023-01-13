@@ -271,63 +271,62 @@ impl State {
 impl State {
 	#[async_recursion]
 	#[must_use]
-	pub async fn checkout_to_artifacts(&self, artifact_hash: ArtifactHash) -> Result<PathBuf> {
-		// Get the path.
-		let path = self.artifacts_path().join(artifact_hash.to_string());
+	pub async fn checkout_internal(&self, artifact_hash: ArtifactHash) -> Result<PathBuf> {
+		// Get the checkout path.
+		let checkout_path = self.checkouts_path().join(artifact_hash.to_string());
 
 		// Perform the checkout if necessary.
-		if !path_exists(&path).await? {
+		if !path_exists(&checkout_path).await? {
 			// Create a temp path to check out the artifact to.
 			let temp_path = self.create_temp_path();
 
 			// Create the callback to create dependency artifact checkouts.
-			let dependency_handler =
-				{
-					let cli = self.upgrade();
-					move |dependency: &Dependency, path: &Path| {
-						let cli = cli.clone();
-						let dependency = dependency.clone();
-						let path = path.to_owned();
-						async move {
-							// Get the target by checking out the dependency to the artifacts directory.
-							let mut target = cli
-								.lock_shared()
-								.await?
-								.checkout_to_artifacts(dependency.artifact)
-								.await
-								.context("Failed to check out the dependency to the artifacts directory.")?;
+			let dependency_handler = {
+				let cli = self.upgrade();
+				move |dependency: &Dependency, path: &Path| {
+					let cli = cli.clone();
+					let dependency = dependency.clone();
+					let path = path.to_owned();
+					async move {
+						// Get the target by checking out the dependency.
+						let mut target = cli
+							.lock_shared()
+							.await?
+							.checkout_internal(dependency.artifact)
+							.await
+							.context("Failed to check out the dependency.")?;
 
-							// Add the dependency path to the target.
-							if let Some(dependency_path) = dependency.path {
-								target.push(dependency_path);
-							}
-
-							// Make the target relative to the symlink path.
-							let parent_path = path
-								.parent()
-								.context("Expected the path to have a parent.")?;
-							let target = pathdiff::diff_paths(target, parent_path).context(
-								"Could not resolve the symlink target relative to the path.",
-							)?;
-
-							// Create the symlink.
-							tokio::fs::symlink(target, path)
-								.await
-								.context("Failed to write the symlink for the dependency.")?;
-
-							Ok::<_, anyhow::Error>(())
+						// Add the dependency path to the target.
+						if let Some(dependency_path) = dependency.path {
+							target.push(dependency_path);
 						}
-						.boxed()
+
+						// Make the target relative to the symlink path.
+						let parent_path = path
+							.parent()
+							.context("Expected the path to have a parent.")?;
+						let target = pathdiff::diff_paths(target, parent_path).context(
+							"Could not resolve the symlink target relative to the path.",
+						)?;
+
+						// Create the symlink.
+						tokio::fs::symlink(target, path)
+							.await
+							.context("Failed to write the symlink for the dependency.")?;
+
+						Ok::<_, anyhow::Error>(())
 					}
-				};
+					.boxed()
+				}
+			};
 
 			// Perform the checkout.
 			self.checkout(artifact_hash, &temp_path, Some(&dependency_handler))
 				.await
 				.context("Failed to perform the checkout.")?;
 
-			// Move the checkout to the artifacts path.
-			match tokio::fs::rename(&temp_path, &path).await {
+			// Move the checkout to the checkouts path.
+			match tokio::fs::rename(&temp_path, &checkout_path).await {
 				Ok(()) => {},
 
 				// If the error is ENOTEMPTY or EEXIST then we can ignore it because there is already an artifact checkout present.
@@ -335,12 +334,13 @@ impl State {
 					if matches!(error.raw_os_error(), Some(libc::ENOTEMPTY | libc::EEXIST)) => {},
 
 				Err(error) => {
-					return Err(anyhow!(error)
-						.context("Failed to move the checkout to the artifacts path."));
+					return Err(
+						anyhow!(error).context("Failed to move the checkout to the checkout path.")
+					);
 				},
 			};
 		}
 
-		Ok(path)
+		Ok(checkout_path)
 	}
 }

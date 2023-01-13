@@ -3,8 +3,7 @@ use self::{
 	isolate::THREAD_LOCAL_ISOLATE,
 	module::{load_module, resolve_module_callback},
 };
-use super::Target;
-use crate::{compiler::ModuleIdentifier, value::Value, Cli, State};
+use crate::{compiler::ModuleIdentifier, package::PackageHash, value::Value, Cli, State};
 use anyhow::{bail, Context, Result};
 use std::rc::Rc;
 
@@ -13,6 +12,20 @@ mod exception;
 mod isolate;
 mod module;
 mod syscall;
+
+#[derive(
+	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+)]
+pub struct Target {
+	#[buffalo(id = 0)]
+	pub package: PackageHash,
+
+	#[buffalo(id = 1)]
+	pub name: String,
+
+	#[buffalo(id = 2)]
+	pub args: Vec<Value>,
+}
 
 impl State {
 	pub(super) async fn run_target(&self, target: &Target) -> Result<Value> {

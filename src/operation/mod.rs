@@ -1,14 +1,6 @@
-pub use self::hash::OperationHash;
-use crate::{
-	checksum::Checksum,
-	package::PackageHash,
-	system::System,
-	value::{Template, Value},
-	State,
-};
+pub use self::{download::Download, hash::OperationHash, process::Process, target::Target};
+use crate::State;
 use anyhow::{bail, Context, Result};
-use std::collections::BTreeMap;
-use url::Url;
 
 mod children;
 mod download;
@@ -35,67 +27,6 @@ pub enum Operation {
 	#[buffalo(id = 2)]
 	#[serde(rename = "target")]
 	Target(Target),
-}
-
-#[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
-)]
-pub struct Download {
-	#[buffalo(id = 0)]
-	pub url: Url,
-
-	#[buffalo(id = 1)]
-	pub unpack: bool,
-
-	#[buffalo(id = 2)]
-	pub checksum: Option<Checksum>,
-
-	#[buffalo(id = 3)]
-	#[serde(default, rename = "unsafe")]
-	pub is_unsafe: bool,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-#[serde(rename_all = "camelCase")]
-pub struct Process {
-	#[buffalo(id = 0)]
-	pub system: System,
-
-	#[buffalo(id = 1)]
-	pub env: Option<BTreeMap<String, Template>>,
-
-	#[buffalo(id = 2)]
-	pub command: Template,
-
-	#[buffalo(id = 3)]
-	pub args: Option<Vec<Template>>,
-
-	#[buffalo(id = 4)]
-	#[serde(default, rename = "unsafe")]
-	pub is_unsafe: bool,
-}
-
-#[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
-)]
-pub struct Target {
-	#[buffalo(id = 0)]
-	pub package: PackageHash,
-
-	#[buffalo(id = 1)]
-	pub name: String,
-
-	#[buffalo(id = 2)]
-	pub args: Vec<Value>,
 }
 
 impl Operation {

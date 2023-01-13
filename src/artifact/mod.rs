@@ -1,12 +1,16 @@
-pub use self::hash::ArtifactHash;
-use crate::{blob::BlobHash, hash::Hash, util::path_exists, State};
+pub use self::{
+	dependency::Dependency, directory::Directory, file::File, hash::ArtifactHash, symlink::Symlink,
+};
+use crate::{blob::BlobHash, util::path_exists, State};
 use anyhow::{bail, Context, Result};
-use byteorder::{ReadBytesExt, WriteBytesExt};
-use camino::Utf8PathBuf;
 use lmdb::Transaction;
-use std::collections::BTreeMap;
 
+mod dependency;
+mod directory;
+mod file;
 mod hash;
+mod serialize;
+mod symlink;
 
 #[derive(
 	Clone,
@@ -35,123 +39,6 @@ pub enum Artifact {
 	#[buffalo(id = 3)]
 	#[serde(rename = "dependency")]
 	Dependency(Dependency),
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-pub struct Directory {
-	#[buffalo(id = 0)]
-	pub entries: BTreeMap<String, ArtifactHash>,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-pub struct File {
-	#[buffalo(id = 0)]
-	pub blob: BlobHash,
-
-	#[buffalo(id = 1)]
-	pub executable: bool,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-pub struct Symlink {
-	#[buffalo(id = 0)]
-	pub target: Utf8PathBuf,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-pub struct Dependency {
-	#[buffalo(id = 0)]
-	pub artifact: ArtifactHash,
-
-	#[buffalo(id = 1)]
-	pub path: Option<Utf8PathBuf>,
-}
-
-impl Artifact {
-	pub fn deserialize<R>(mut reader: R) -> Result<Artifact>
-	where
-		R: std::io::Read,
-	{
-		// Read the version.
-		let version = reader.read_u8()?;
-		if version != 0 {
-			bail!(r#"Cannot deserialize artifact with version "{version}"."#);
-		}
-
-		// Deserialize the artifact.
-		let artifact = buffalo::from_reader(reader)?;
-
-		Ok(artifact)
-	}
-
-	pub fn serialize<W>(&self, mut writer: W) -> Result<()>
-	where
-		W: std::io::Write,
-	{
-		// Write the version.
-		writer.write_u8(0)?;
-
-		// Write the artifact.
-		buffalo::to_writer(self, &mut writer)?;
-
-		Ok(())
-	}
-
-	#[must_use]
-	pub fn serialize_to_vec(&self) -> Vec<u8> {
-		let mut data = Vec::new();
-		self.serialize(&mut data).unwrap();
-		data
-	}
-
-	#[must_use]
-	pub fn serialize_to_vec_and_hash(&self) -> (Vec<u8>, ArtifactHash) {
-		let data = self.serialize_to_vec();
-		let hash = ArtifactHash(Hash::new(&data));
-		(data, hash)
-	}
-
-	#[must_use]
-	pub fn hash(&self) -> ArtifactHash {
-		let data = self.serialize_to_vec();
-		ArtifactHash(Hash::new(data))
-	}
 }
 
 impl Artifact {

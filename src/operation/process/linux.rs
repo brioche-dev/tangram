@@ -45,7 +45,7 @@ impl State {
 		let parent_child_root_path = self.create_temp_path();
 		tokio::fs::create_dir_all(&parent_child_root_path).await?;
 
-		// set up the chroot with tools from toybox.
+		// Set up the chroot with tools from toybox.
 		self.install_toybox(system, &parent_child_root_path).await?;
 
 		// Create the home directory for the sandbox user.

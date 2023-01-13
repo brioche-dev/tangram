@@ -24,10 +24,10 @@ impl State {
 		self.sweep_artifacts(&marks)
 			.context("Failed to sweep the artifacts.")?;
 
-		// Sweep the artifacts directory.
-		self.sweep_artifacts_directory(&marks)
+		// Sweep the checkouts directory.
+		self.sweep_checkouts_directory(&marks)
 			.await
-			.context("Failed to sweep the artifacts directory.")?;
+			.context("Failed to sweep the checkouts directory.")?;
 
 		// Sweep the blobs.
 		self.sweep_blobs(&marks)
@@ -245,18 +245,18 @@ impl State {
 		Ok(())
 	}
 
-	async fn sweep_artifacts_directory(&self, marks: &Marks) -> Result<()> {
-		// Delete all entries in the artifacts directory that are not marked.
-		let mut read_dir = tokio::fs::read_dir(self.artifacts_path())
+	async fn sweep_checkouts_directory(&self, marks: &Marks) -> Result<()> {
+		// Delete all entries in the checkouts directory that are not marked.
+		let mut read_dir = tokio::fs::read_dir(self.checkouts_path())
 			.await
-			.context("Failed to read the artifacts directory.")?;
+			.context("Failed to read the checkouts directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
 			let artifact_hash: Hash = entry
 				.file_name()
 				.to_str()
 				.context("Failed to parse the file name as a string.")?
 				.parse()
-				.context("Failed to parse the entry in the artifacts directory as a hash.")?;
+				.context("Failed to parse the entry in the checkouts directory as a hash.")?;
 			let artifact_hash = ArtifactHash(artifact_hash);
 			if !marks.contains_artifact(artifact_hash) {
 				tokio::fs::remove_file(&entry.path())
