@@ -5,7 +5,7 @@ use crate::{
 	lock::Lock,
 	lockfile::{self, Lockfile},
 	manifest::Manifest,
-	State,
+	Cli,
 };
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
@@ -86,12 +86,12 @@ impl Package {
 	}
 }
 
-impl State {
+impl Cli {
 	pub fn package_exists_local(&self, package_hash: PackageHash) -> Result<bool> {
 		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
+		let txn = self.state.database.env.begin_ro_txn()?;
 
-		let exists = match txn.get(self.database.packages, &package_hash.as_slice()) {
+		let exists = match txn.get(self.state.database.packages, &package_hash.as_slice()) {
 			Ok(_) => Ok::<_, anyhow::Error>(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.into()),
@@ -115,7 +115,7 @@ pub enum AddPackageOutcome {
 	},
 }
 
-impl State {
+impl Cli {
 	/// Add a pacakge after ensuring all its references are present.
 	pub fn try_add_package(&self, package: &Package) -> Result<AddPackageOutcome> {
 		// Ensure the package's source is present.
@@ -145,11 +145,11 @@ impl State {
 		let value = package.serialize_to_vec();
 
 		// Begin a write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Add the package to the database.
 		match txn.put(
-			self.database.packages,
+			self.state.database.packages,
 			&package_hash.as_slice(),
 			&value,
 			lmdb::WriteFlags::NO_OVERWRITE,
@@ -165,7 +165,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	pub fn add_package(&self, package: &Package) -> Result<PackageHash> {
 		match self.try_add_package(package)? {
 			AddPackageOutcome::Added { package_hash } => Ok(package_hash),
@@ -174,7 +174,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	/// Try to get a package from the database with the given transaction.
 	pub fn try_get_package_local_with_txn<Txn>(
 		&self,
@@ -184,7 +184,7 @@ impl State {
 	where
 		Txn: lmdb::Transaction,
 	{
-		match txn.get(self.database.packages, &hash.as_slice()) {
+		match txn.get(self.state.database.packages, &hash.as_slice()) {
 			Ok(value) => {
 				let value = Package::deserialize(value)?;
 				Ok(Some(value))
@@ -195,7 +195,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	pub fn get_package_local(&self, hash: PackageHash) -> Result<Package> {
 		let package = self
 			.try_get_package_local(hash)?
@@ -215,7 +215,7 @@ impl State {
 
 	pub fn try_get_package_local(&self, hash: PackageHash) -> Result<Option<Package>> {
 		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
+		let txn = self.state.database.env.begin_ro_txn()?;
 
 		// Get the package.
 		let maybe_package = self.try_get_package_local_with_txn(&txn, hash)?;
@@ -224,7 +224,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	/// Check in a package at the specified path.
 	pub async fn checkin_package(&self, path: &Path, locked: bool) -> Result<PackageHash> {
 		// Generate the lockfile if necessary.
@@ -433,7 +433,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	pub fn get_package_entrypoint_path(
 		&self,
 		package_hash: PackageHash,

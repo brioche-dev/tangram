@@ -17,12 +17,6 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_download(&self, args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self
-			.lock_shared()
-			.await
-			.context("Failed to lock the cli.")?;
-
 		// Create the operation.
 		let operation = Operation::Download(Download {
 			url: args.url,
@@ -32,7 +26,7 @@ impl Cli {
 		});
 
 		// Run the operation.
-		let output = cli
+		let output = self
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;

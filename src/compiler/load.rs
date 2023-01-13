@@ -64,16 +64,14 @@ impl Compiler {
 		package_hash: PackageHash,
 		module_path: &Utf8Path,
 	) -> Result<String> {
-		// Lock the cli.
-		let cli = self.cli.lock_shared().await?;
-
 		// Find the module in the package.
-		let package_source_artifact_hash = cli
+		let package_source_artifact_hash = self
+			.cli
 			.get_package_source(package_hash)
 			.context("Failed to get the package source.")?;
-		let mut artifact = cli.get_artifact_local(package_source_artifact_hash)?;
+		let mut artifact = self.cli.get_artifact_local(package_source_artifact_hash)?;
 		for component in module_path.components() {
-			artifact = cli.get_artifact_local(
+			artifact = self.cli.get_artifact_local(
 				artifact
 					.into_directory()
 					.context("Expected a directory.")?
@@ -87,7 +85,8 @@ impl Compiler {
 		// Read the module.
 		let file = artifact.into_file().context("Expected a file.")?;
 		let mut source = String::new();
-		cli.get_blob(file.blob)
+		self.cli
+			.get_blob(file.blob)
 			.await?
 			.read_to_string(&mut source)
 			.await?;

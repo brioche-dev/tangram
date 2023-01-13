@@ -1,7 +1,13 @@
+pub use self::{
+	placeholder::Placeholder,
+	template::{Template, TemplateComponent},
+};
 use crate::artifact::ArtifactHash;
-use anyhow::{bail, Result};
-use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::collections::BTreeMap;
+
+mod placeholder;
+mod serialize;
+mod template;
 
 #[derive(
 	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
@@ -45,102 +51,9 @@ pub enum Value {
 	Map(Map),
 }
 
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-pub struct Placeholder {
-	#[buffalo(id = 0)]
-	pub name: String,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-pub struct Template {
-	#[buffalo(id = 0)]
-	pub components: Vec<TemplateComponent>,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-#[serde(tag = "type", content = "value")]
-pub enum TemplateComponent {
-	#[buffalo(id = 0)]
-	#[serde(rename = "string")]
-	String(String),
-
-	#[buffalo(id = 1)]
-	#[serde(rename = "artifact")]
-	Artifact(ArtifactHash),
-
-	#[buffalo(id = 2)]
-	#[serde(rename = "placeholder")]
-	Placeholder(Placeholder),
-}
-
 pub type Array = Vec<Value>;
 
 pub type Map = BTreeMap<String, Value>;
-
-impl Value {
-	pub fn deserialize<R>(mut reader: R) -> Result<Value>
-	where
-		R: std::io::Read,
-	{
-		// Read the version.
-		let version = reader.read_u8()?;
-		if version != 0 {
-			bail!(r#"Cannot deserialize value with version "{version}"."#);
-		}
-
-		// Deserialize the value.
-		let value = buffalo::from_reader(reader)?;
-
-		Ok(value)
-	}
-
-	pub fn serialize<W>(&self, mut writer: W) -> Result<()>
-	where
-		W: std::io::Write,
-	{
-		// Write the version.
-		writer.write_u8(0)?;
-
-		// Write the value.
-		buffalo::to_writer(self, &mut writer)?;
-
-		Ok(())
-	}
-
-	#[must_use]
-	pub fn serialize_to_vec(&self) -> Vec<u8> {
-		let mut data = Vec::new();
-		self.serialize(&mut data).unwrap();
-		data
-	}
-}
 
 impl Value {
 	#[must_use]

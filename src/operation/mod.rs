@@ -1,5 +1,5 @@
 pub use self::{download::Download, hash::OperationHash, process::Process, target::Target};
-use crate::State;
+use crate::Cli;
 use anyhow::{bail, Context, Result};
 
 mod children;
@@ -87,7 +87,7 @@ impl Operation {
 	}
 }
 
-impl State {
+impl Cli {
 	pub fn get_operation_local(&self, hash: OperationHash) -> Result<Operation> {
 		let operation = self
 			.try_get_operation_local(hash)?
@@ -111,7 +111,7 @@ impl State {
 
 	pub fn try_get_operation_local(&self, hash: OperationHash) -> Result<Option<Operation>> {
 		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
+		let txn = self.state.database.env.begin_ro_txn()?;
 
 		// Get the operation.
 		let maybe_operation = self.try_get_operation_local_with_txn(&txn, hash)?;
@@ -128,7 +128,7 @@ impl State {
 	where
 		Txn: lmdb::Transaction,
 	{
-		match txn.get(self.database.operations, &hash.as_slice()) {
+		match txn.get(self.state.database.operations, &hash.as_slice()) {
 			Ok(value) => {
 				let value = buffalo::from_slice(value)?;
 				Ok(Some(value))

@@ -1,9 +1,9 @@
 use super::{Operation, OperationHash};
-use crate::{value::Value, State};
+use crate::{value::Value, Cli};
 use anyhow::Result;
 use async_recursion::async_recursion;
 
-impl State {
+impl Cli {
 	pub async fn run(&self, operation: &Operation) -> Result<Value> {
 		self.run_inner(operation, None).await
 	}

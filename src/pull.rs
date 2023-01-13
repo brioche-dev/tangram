@@ -1,9 +1,9 @@
-use crate::{artifact::AddArtifactOutcome, artifact::ArtifactHash, client::Client, State};
+use crate::{artifact::AddArtifactOutcome, artifact::ArtifactHash, client::Client, Cli};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 
-impl State {
+impl Cli {
 	/// Pull an artifact from a remote server.
 	#[async_recursion]
 	#[must_use]

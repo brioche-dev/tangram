@@ -71,7 +71,7 @@ impl Cli {
 			.context("Failed to canonicalize the path.")?;
 
 		// Read the config.
-		let mut config = Cli::read_config().await?.unwrap_or_default();
+		let mut config = self.read_config().await?.unwrap_or_default();
 
 		// Add the autoshell.
 		let mut autoshells = config.autoshells.unwrap_or_default();
@@ -79,14 +79,14 @@ impl Cli {
 		config.autoshells = Some(autoshells);
 
 		// Write the config.
-		Cli::write_config(&config).await?;
+		self.write_config(&config).await?;
 
 		Ok(())
 	}
 
 	async fn command_autoshell_list(&self, _args: ListArgs) -> Result<()> {
 		// Read the config.
-		let config = Cli::read_config().await?.unwrap_or_default();
+		let config = self.read_config().await?.unwrap_or_default();
 
 		// List the autoshells.
 		let autoshells = config.autoshells.unwrap_or_default();
@@ -114,7 +114,7 @@ impl Cli {
 			.context("Failed to canonicalize the path.")?;
 
 		// Read the config.
-		let mut config = Cli::read_config().await?.unwrap_or_default();
+		let mut config = self.read_config().await?.unwrap_or_default();
 
 		// Remove the autoshell.
 		if let Some(mut autoshells) = config.autoshells {
@@ -125,14 +125,14 @@ impl Cli {
 		}
 
 		// Write the config.
-		Cli::write_config(&config).await?;
+		self.write_config(&config).await?;
 
 		Ok(())
 	}
 
 	async fn command_autoshell_hook(&self, _args: HookArgs) -> Result<()> {
 		// Read the config.
-		let config = Cli::read_config().await?.unwrap_or_default();
+		let config = self.read_config().await?.unwrap_or_default();
 
 		// Deactivate an existing autoshell.
 		let program = indoc!(
@@ -161,14 +161,11 @@ impl Cli {
 			return Ok(());
 		};
 
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// Check in the package for this autoshell.
-		let package_hash = cli.checkin_package(autoshell, false).await?;
+		let package_hash = self.checkin_package(autoshell, false).await?;
 
 		// Create the target args.
-		let target_args = cli.create_target_args(None)?;
+		let target_args = self.create_target_args(None)?;
 
 		// Create the operation.
 		let operation = Operation::Target(Target {
@@ -178,7 +175,7 @@ impl Cli {
 		});
 
 		// Run the operation.
-		let output = cli
+		let output = self
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;
@@ -189,7 +186,7 @@ impl Cli {
 			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = cli.checkout_internal(output_artifact_hash).await?;
+		let artifact_path = self.checkout_internal(output_artifact_hash).await?;
 
 		// Get the path to the executable.
 		let shell_activate_script_path = artifact_path.join("activate");

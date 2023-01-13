@@ -2,7 +2,7 @@ use crate::{
 	artifact::{Artifact, ArtifactHash},
 	system::System,
 	value::{Template, TemplateComponent, Value},
-	State,
+	Cli,
 };
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
@@ -46,11 +46,11 @@ pub struct Process {
 	pub is_unsafe: bool,
 }
 
-impl State {
+impl Cli {
 	#[allow(clippy::too_many_lines)]
 	pub(super) async fn run_process(&self, process: &Process) -> Result<Value> {
 		// Create the output temp path.
-		let output_temp_path = self.create_temp_path();
+		let output_temp_path = self.temp_path();
 
 		// Resolve the envs to strings with referenced paths.
 		let env = if let Some(env) = &process.env {
@@ -261,7 +261,8 @@ impl IntoIterator for ReferencedPathSet {
 	}
 }
 
-impl State {
+impl Cli {
+	#[must_use]
 	#[async_recursion]
 	pub async fn to_string_with_referenced_path_set(
 		&self,

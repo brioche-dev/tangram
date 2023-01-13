@@ -27,7 +27,7 @@ impl Server {
 		);
 
 		// Add the blob.
-		let hash = self.cli.lock_shared().await?.add_blob(body).await?;
+		let hash = self.cli.add_blob(body).await?;
 
 		// Create the response.
 		let response = hash.to_string();
@@ -56,13 +56,7 @@ impl Server {
 		};
 
 		// Get the blob.
-		let file = match self
-			.cli
-			.lock_shared()
-			.await?
-			.try_get_blob(blob_hash)
-			.await?
-		{
+		let file = match self.cli.try_get_blob(blob_hash).await? {
 			Some(path) => path,
 			None => return Ok(not_found()),
 		};

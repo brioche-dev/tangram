@@ -7,7 +7,7 @@ use crate::{
 	operation::{Download, Operation},
 	system::System,
 	value::Value,
-	State,
+	Cli,
 };
 use anyhow::{bail, Context, Result};
 use bstr::ByteSlice;
@@ -31,7 +31,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 const TANGRAM_UID: uid_t = 1000;
 const TANGRAM_GID: gid_t = 1000;
 
-impl State {
+impl Cli {
 	pub async fn run_process_linux(
 		&self,
 		system: System,
@@ -42,7 +42,7 @@ impl State {
 		network_enabled: bool,
 	) -> Result<()> {
 		// Create a temp path for the chroot.
-		let parent_child_root_path = self.create_temp_path();
+		let parent_child_root_path = self.temp_path();
 		tokio::fs::create_dir_all(&parent_child_root_path).await?;
 
 		// Set up the chroot with tools from toybox.

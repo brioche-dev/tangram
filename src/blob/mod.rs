@@ -1,5 +1,5 @@
 pub use self::hash::BlobHash;
-use crate::{hash::Hasher, util::path_exists, State};
+use crate::{hash::Hasher, util::path_exists, Cli};
 use anyhow::{Context, Result};
 use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
@@ -8,13 +8,13 @@ mod hash;
 
 pub type Blob = Box<dyn AsyncRead + Unpin + Send + Sync>;
 
-impl State {
+impl Cli {
 	pub async fn add_blob(&self, reader: impl AsyncRead + Unpin) -> Result<BlobHash> {
 		// Get a file system permit.
-		let permit = self.file_system_semaphore.acquire().await.unwrap();
+		let permit = self.state.file_system_semaphore.acquire().await.unwrap();
 
 		// Create a temp file to read the blob into.
-		let temp_path = self.create_temp_path();
+		let temp_path = self.temp_path();
 		let mut temp_file = tokio::fs::File::create(&temp_path).await?;
 
 		// Compute the hash of the bytes in the reader and write the bytes to the temp file.

@@ -108,9 +108,7 @@ async fn syscall_add_blob(
 	args: (serde_v8::ZeroCopyBuf,),
 ) -> Result<BlobHash> {
 	let (blob,) = args;
-	let cli = state.cli.clone();
-	let cli = cli.lock_shared().await?;
-	let blob_hash = cli.add_blob(blob.as_ref()).await?;
+	let blob_hash = state.cli.add_blob(blob.as_ref()).await?;
 	Ok(blob_hash)
 }
 
@@ -119,9 +117,7 @@ async fn syscall_get_blob(
 	args: (BlobHash,),
 ) -> Result<serde_v8::ZeroCopyBuf> {
 	let (blob_hash,) = args;
-	let cli = state.cli.clone();
-	let cli = cli.lock_shared().await?;
-	let mut blob = cli.get_blob(blob_hash).await?;
+	let mut blob = state.cli.get_blob(blob_hash).await?;
 	let mut bytes = Vec::new();
 	tokio::io::copy(&mut blob, &mut bytes).await?;
 	let output = serde_v8::ZeroCopyBuf::ToV8(Some(bytes.into_boxed_slice()));
@@ -130,47 +126,40 @@ async fn syscall_get_blob(
 
 async fn syscall_add_artifact(state: Rc<ContextState>, args: (Artifact,)) -> Result<ArtifactHash> {
 	let (artifact,) = args;
-	let cli = state.cli.clone();
-	let cli = cli.lock_shared().await?;
-	let artifact_hash = cli.add_artifact(&artifact).await?;
+	let artifact_hash = state.cli.add_artifact(&artifact).await?;
 	Ok(artifact_hash)
 }
 
+#[allow(clippy::unused_async)]
 async fn syscall_get_artifact(
 	state: Rc<ContextState>,
 	args: (ArtifactHash,),
 ) -> Result<Option<Artifact>> {
 	let (artifact_hash,) = args;
-	let cli = state.cli.clone();
-	let cli = cli.lock_shared().await?;
-	let artifact = cli.try_get_artifact_local(artifact_hash)?;
+	let artifact = state.cli.try_get_artifact_local(artifact_hash)?;
 	Ok(artifact)
 }
 
+#[allow(clippy::unused_async)]
 async fn syscall_add_package(state: Rc<ContextState>, args: (Package,)) -> Result<PackageHash> {
 	let (package,) = args;
-	let cli = state.cli.clone();
-	let cli = cli.lock_shared().await?;
-	let package_hash = cli.add_package(&package)?;
+	let package_hash = state.cli.add_package(&package)?;
 	Ok(package_hash)
 }
 
+#[allow(clippy::unused_async)]
 async fn syscall_get_package(
 	state: Rc<ContextState>,
 	args: (PackageHash,),
 ) -> Result<Option<Package>> {
 	let (package_hash,) = args;
-	let cli = state.cli.clone();
-	let cli = cli.lock_shared().await?;
-	let package = cli.try_get_package_local(package_hash)?;
+	let package = state.cli.try_get_package_local(package_hash)?;
 	Ok(package)
 }
 
 async fn syscall_run(state: Rc<ContextState>, args: (Operation,)) -> Result<Value> {
 	let (operation,) = args;
-	let cli = state.cli.clone();
-	let cli = cli.lock_shared().await?;
-	let output = cli.run(&operation).await?;
+	let output = state.cli.run(&operation).await?;
 	Ok(output)
 }
 

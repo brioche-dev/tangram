@@ -12,9 +12,6 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_checkout(&self, args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// Get the path.
 		let mut path =
 			std::env::current_dir().context("Failed to determine the current directory.")?;
@@ -25,7 +22,7 @@ impl Cli {
 		};
 
 		// Perform the checkout.
-		cli.checkout(args.artifact_hash, &path, None)
+		self.checkout(args.artifact_hash, &path, None)
 			.await
 			.context("Failed to perform the checkout.")?;
 

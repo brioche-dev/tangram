@@ -12,14 +12,11 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_push(&self, args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// Create a client.
 		let client = Client::new(args.url, None);
 
 		// Push.
-		cli.push(&client, args.artifact_hash)
+		self.push(&client, args.artifact_hash)
 			.await
 			.context("Failed to push.")?;
 

@@ -1,9 +1,9 @@
-use std::path::PathBuf;
-
 use crate::Cli;
 use anyhow::Result;
 use clap::Parser;
+use either::Either;
 use futures::FutureExt;
+use std::path::PathBuf;
 
 pub mod add;
 pub mod autoshell;
@@ -81,6 +81,26 @@ pub enum Command {
 impl Cli {
 	/// Run a command.
 	pub async fn run_command(&self, args: Args) -> Result<()> {
+		// Acquire an appropriate lock for the subcommand.
+		let _lock = match args.command {
+			Command::Gc(_) => {
+				if let Some(lock) = self.try_lock_exclusive().await? {
+					Either::Left(lock)
+				} else {
+					eprintln!("Waiting on an exclusive lock to the tangram path.");
+					Either::Left(self.lock_exclusive().await?)
+				}
+			},
+			_ => {
+				if let Some(lock) = self.try_lock_shared().await? {
+					Either::Right(lock)
+				} else {
+					eprintln!("Waiting on a shared lock to the tangram path.");
+					Either::Right(self.lock_shared().await?)
+				}
+			},
+		};
+
 		// Run the subcommand.
 		match args.command {
 			Command::Add(args) => self.command_add(args).boxed(),

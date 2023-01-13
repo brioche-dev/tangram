@@ -1,5 +1,5 @@
-use super::{Compiler, Request, Response, TranspileOutput};
-use anyhow::{bail, Result};
+use super::{Compiler, TranspileOutput};
+use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,22 +15,34 @@ pub struct TranspileResponse {
 }
 
 impl Compiler {
+	#[allow(clippy::unused_async)]
 	pub async fn transpile(&self, text: String) -> Result<TranspileOutput> {
-		// Create the request.
-		let request = Request::Transpile(TranspileRequest { text });
+		// Parse the code.
+		let parsed_source = deno_ast::parse_module(deno_ast::ParseParams {
+			specifier: "module".to_owned(),
+			text_info: deno_ast::SourceTextInfo::new(text.into()),
+			media_type: deno_ast::MediaType::TypeScript,
+			capture_tokens: true,
+			scope_analysis: true,
+			maybe_syntax: None,
+		})
+		.with_context(|| "Failed to parse the module.")?;
 
-		// Send the request and receive the response.
-		let response = self.request(request).await?;
+		// Transpile the code.
+		let output = parsed_source
+			.transpile(&deno_ast::EmitOptions {
+				inline_source_map: false,
+				..Default::default()
+			})
+			.with_context(|| "Failed to transpile the module.")?;
 
-		// Get the response.
-		let response = match response {
-			Response::Transpile(response) => response,
-			_ => bail!("Unexpected response type."),
-		};
+		// Get the output.
+		let transpiled = output.text;
+		let source_map = output.source_map.context("Expected a source map.")?;
 
 		Ok(TranspileOutput {
-			transpiled: response.output_text,
-			source_map: response.source_map_text,
+			transpiled,
+			source_map,
 		})
 	}
 }

@@ -1,7 +1,7 @@
 pub use self::{
 	dependency::Dependency, directory::Directory, file::File, hash::ArtifactHash, symlink::Symlink,
 };
-use crate::{blob::BlobHash, util::path_exists, State};
+use crate::{blob::BlobHash, util::path_exists, Cli};
 use anyhow::{bail, Context, Result};
 use lmdb::Transaction;
 
@@ -117,12 +117,12 @@ impl Artifact {
 	}
 }
 
-impl State {
+impl Cli {
 	pub fn artifact_exists_local(&self, artifact_hash: ArtifactHash) -> Result<bool> {
 		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
+		let txn = self.state.database.env.begin_ro_txn()?;
 
-		let exists = match txn.get(self.database.artifacts, &artifact_hash.as_slice()) {
+		let exists = match txn.get(self.state.database.artifacts, &artifact_hash.as_slice()) {
 			Ok(_) => Ok::<_, anyhow::Error>(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.into()),
@@ -149,7 +149,7 @@ pub enum AddArtifactOutcome {
 	},
 }
 
-impl State {
+impl Cli {
 	/// Add an artifact after ensuring all its references are present.
 	pub async fn try_add_artifact(&self, artifact: &Artifact) -> Result<AddArtifactOutcome> {
 		match artifact {
@@ -199,11 +199,11 @@ impl State {
 		let value = artifact.serialize_to_vec();
 
 		// Begin a write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Add the artifact to the database.
 		match txn.put(
-			self.database.artifacts,
+			self.state.database.artifacts,
 			&artifact_hash.as_slice(),
 			&value,
 			lmdb::WriteFlags::NO_OVERWRITE,
@@ -219,7 +219,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<ArtifactHash> {
 		match self.try_add_artifact(artifact).await? {
 			AddArtifactOutcome::Added { artifact_hash } => Ok(artifact_hash),
@@ -228,7 +228,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	pub fn get_artifact_local(&self, hash: ArtifactHash) -> Result<Artifact> {
 		let artifact = self
 			.try_get_artifact_local(hash)?
@@ -252,7 +252,7 @@ impl State {
 
 	pub fn try_get_artifact_local(&self, hash: ArtifactHash) -> Result<Option<Artifact>> {
 		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
+		let txn = self.state.database.env.begin_ro_txn()?;
 
 		// Get the artifact.
 		let maybe_artifact = self.try_get_artifact_local_with_txn(&txn, hash)?;
@@ -269,7 +269,7 @@ impl State {
 	where
 		Txn: lmdb::Transaction,
 	{
-		match txn.get(self.database.artifacts, &hash.as_slice()) {
+		match txn.get(self.state.database.artifacts, &hash.as_slice()) {
 			Ok(value) => {
 				let value = Artifact::deserialize(value)?;
 				Ok(Some(value))

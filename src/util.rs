@@ -1,12 +1,12 @@
 use crate::{
 	compiler::ModuleIdentifier, package::PackageHash, specifier::Specifier, system::System,
-	value::Value, State,
+	value::Value, Cli,
 };
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use std::{fs::Metadata, path::Path};
 
-impl State {
+impl Cli {
 	pub fn create_target_args(&self, system: Option<System>) -> Result<Vec<Value>> {
 		let host = System::host()?;
 		let system = system.unwrap_or(host);
@@ -16,27 +16,27 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	pub async fn entrypoint_module_identifier_for_specifier(
 		&self,
 		specifier: &Specifier,
 	) -> Result<ModuleIdentifier> {
 		match &specifier {
-			Specifier::Package { name, version } => {
-				let package_hash = self
-					.get_package_hash_from_specifier(name, version.as_deref())
-					.await?;
-				let module_identifier =
-					ModuleIdentifier::new_hash(package_hash, "tangram.ts".into());
-				Ok(module_identifier)
-			},
-
 			Specifier::Path { path } => {
 				let path = std::env::current_dir()
 					.context("Failed to get the current directory")?
 					.join(path);
 				let path = tokio::fs::canonicalize(&path).await?;
 				let module_identifier = ModuleIdentifier::new_path(path, "tangram.ts".into());
+				Ok(module_identifier)
+			},
+
+			Specifier::Registry { name, version } => {
+				let package_hash = self
+					.get_package_hash_from_specifier(name, version.as_deref())
+					.await?;
+				let module_identifier =
+					ModuleIdentifier::new_hash(package_hash, "tangram.ts".into());
 				Ok(module_identifier)
 			},
 		}
@@ -48,17 +48,17 @@ impl State {
 		locked: bool,
 	) -> Result<PackageHash> {
 		match specifier {
-			Specifier::Package { name, version } => {
-				let package_hash = self
-					.get_package_hash_from_specifier(name, version.as_deref())
-					.await?;
-				Ok(package_hash)
-			},
-
 			Specifier::Path { path } => {
 				let package_hash = self.checkin_package(path, locked).await.with_context(|| {
 					format!("Failed to create the package for specifier '{specifier}'.")
 				})?;
+				Ok(package_hash)
+			},
+
+			Specifier::Registry { name, version } => {
+				let package_hash = self
+					.get_package_hash_from_specifier(name, version.as_deref())
+					.await?;
 				Ok(package_hash)
 			},
 		}
@@ -162,4 +162,10 @@ pub async fn rmrf(path: &Path, metadata: Option<Metadata>) -> Result<()> {
 	};
 
 	Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[must_use]
+pub fn errno() -> i32 {
+	std::io::Error::last_os_error().raw_os_error().unwrap()
 }

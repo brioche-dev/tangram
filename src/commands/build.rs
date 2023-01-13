@@ -25,17 +25,14 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_build(&self, args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// Get the package hash.
-		let package_hash = cli
+		let package_hash = self
 			.package_hash_for_specifier(&args.specifier, args.locked)
 			.await
 			.context("Failed to get the hash for the specifier.")?;
 
 		// Create the target args.
-		let target_args = cli.create_target_args(args.system)?;
+		let target_args = self.create_target_args(args.system)?;
 
 		// Create the operation.
 		let operation = Operation::Target(Target {
@@ -45,7 +42,7 @@ impl Cli {
 		});
 
 		// Run the operation.
-		let output = cli
+		let output = self
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;

@@ -11,9 +11,6 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_checkin(&self, args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// Get the path.
 		let mut path =
 			std::env::current_dir().context("Failed to determine the current directory.")?;
@@ -22,7 +19,7 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let hash = cli.checkin(&path).await?;
+		let hash = self.checkin(&path).await?;
 
 		println!("{hash}");
 

@@ -30,17 +30,14 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_run(&self, args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// Get the package hash.
-		let package_hash = cli
+		let package_hash = self
 			.package_hash_for_specifier(&args.specifier, false)
 			.await
 			.context("Failed to get the hash for the specifier.")?;
 
 		// Get the package manifest.
-		let manifest = cli.get_package_manifest(package_hash).await?;
+		let manifest = self.get_package_manifest(package_hash).await?;
 
 		// Get the package name.
 		let package_name = manifest.name;
@@ -54,7 +51,7 @@ impl Cli {
 		let name = args.target.unwrap_or_else(|| "default".to_owned());
 
 		// Create the target args.
-		let target_args = cli.create_target_args(args.system)?;
+		let target_args = self.create_target_args(args.system)?;
 
 		// Create the operation.
 		let operation = Operation::Target(Target {
@@ -64,7 +61,7 @@ impl Cli {
 		});
 
 		// Run the operation.
-		let output = cli
+		let output = self
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;
@@ -75,7 +72,7 @@ impl Cli {
 			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = cli.checkout_internal(output_artifact_hash).await?;
+		let artifact_path = self.checkout_internal(output_artifact_hash).await?;
 
 		// Get the path to the executable.
 		let executable_path = artifact_path.join(executable_path);
@@ -87,9 +84,6 @@ impl Cli {
 				executable_path.display()
 			);
 		}
-
-		// Drop the lock on the cli.
-		drop(cli);
 
 		// Exec the process.
 		Err(std::process::Command::new(&executable_path)

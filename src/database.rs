@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::Path;
 
 pub struct Database {
-	/// This is the LMDB env.
+	/// This is the LMDB environment.
 	pub env: lmdb::Environment,
 
 	/// This is the artifacts database.

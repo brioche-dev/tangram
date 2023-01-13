@@ -21,8 +21,6 @@ impl Server {
 		// Add the artifact.
 		let outcome = self
 			.cli
-			.lock_shared()
-			.await?
 			.try_add_artifact(&artifact)
 			.await
 			.context("Failed to add the artifact.")?;
@@ -38,6 +36,7 @@ impl Server {
 		Ok(response)
 	}
 
+	#[allow(clippy::unused_async)]
 	pub(super) async fn handle_get_artifact_request(
 		&self,
 		request: http::Request<hyper::Body>,
@@ -55,7 +54,7 @@ impl Server {
 		};
 
 		// Get the artifact.
-		let artifact = self.cli.lock_shared().await?.try_get_artifact_local(hash)?;
+		let artifact = self.cli.try_get_artifact_local(hash)?;
 
 		// Create the response.
 		let body =

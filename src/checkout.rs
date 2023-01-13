@@ -2,7 +2,7 @@ use crate::{
 	artifact::{Artifact, ArtifactHash, Dependency, Directory, File, Symlink},
 	util::{path_exists, rmrf},
 	watcher::Watcher,
-	State,
+	Cli,
 };
 use anyhow::{anyhow, Context, Result};
 use async_recursion::async_recursion;
@@ -17,7 +17,7 @@ use std::{
 pub type DependencyHandlerFn =
 	dyn Sync + Fn(&Dependency, &Path) -> Pin<Box<dyn Send + Future<Output = Result<()>>>>;
 
-impl State {
+impl Cli {
 	pub async fn checkout(
 		&self,
 		artifact_hash: ArtifactHash,
@@ -25,7 +25,7 @@ impl State {
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Create a watcher.
-		let watcher = Watcher::new(self.path(), Arc::clone(&self.file_system_semaphore));
+		let watcher = Watcher::new(self.path(), Arc::clone(&self.state.file_system_semaphore));
 
 		// Call the recursive checkout function.
 		self.checkout_path(&watcher, artifact_hash, path, dependency_handler)
@@ -181,7 +181,7 @@ impl State {
 		};
 
 		// Copy the blob to the path. Use std::io::copy to ensure reflinking is used on supported filesystems.
-		let permit = self.file_system_semaphore.acquire().await;
+		let permit = self.state.file_system_semaphore.acquire().await;
 		let mut blob = self.get_blob(file.blob).await?.into_std().await;
 		let mut output =
 			std::fs::File::create(path).context("Failed to create the file to checkout to.")?;
@@ -268,7 +268,7 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	#[async_recursion]
 	#[must_use]
 	pub async fn checkout_internal(&self, artifact_hash: ArtifactHash) -> Result<PathBuf> {
@@ -278,11 +278,11 @@ impl State {
 		// Perform the checkout if necessary.
 		if !path_exists(&checkout_path).await? {
 			// Create a temp path to check out the artifact to.
-			let temp_path = self.create_temp_path();
+			let temp_path = self.temp_path();
 
 			// Create the callback to create dependency artifact checkouts.
 			let dependency_handler = {
-				let cli = self.upgrade();
+				let cli = self.clone();
 				move |dependency: &Dependency, path: &Path| {
 					let cli = cli.clone();
 					let dependency = dependency.clone();
@@ -290,8 +290,6 @@ impl State {
 					async move {
 						// Get the target by checking out the dependency.
 						let mut target = cli
-							.lock_shared()
-							.await?
 							.checkout_internal(dependency.artifact)
 							.await
 							.context("Failed to check out the dependency.")?;

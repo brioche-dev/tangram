@@ -172,31 +172,32 @@ impl<'a, T> ExclusiveGuard<'a, T> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod sys {
 	use anyhow::{anyhow, bail, Result};
+	use crate::util::errno;
 	use libc::{flock, EWOULDBLOCK, LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN};
 	use std::os::unix::io::AsRawFd;
 
 	pub(super) fn try_lock_shared(file: &tokio::fs::File) -> Result<bool> {
 		let fd = file.as_raw_fd();
 		let ret = unsafe { flock(fd, LOCK_SH | LOCK_NB) };
-		if ret == EWOULDBLOCK {
-			return Ok(false);
+		match ret {
+			0 => Ok(true),
+			_ if errno() == EWOULDBLOCK => Ok(false),
+			_ => {
+				bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."))
+			},
 		}
-		if ret != 0 {
-			bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."));
-		}
-		Ok(true)
 	}
 
 	pub(super) fn try_lock_exclusive(file: &tokio::fs::File) -> Result<bool> {
 		let fd = file.as_raw_fd();
 		let ret = unsafe { flock(fd, LOCK_EX | LOCK_NB) };
-		if ret == EWOULDBLOCK {
-			return Ok(false);
+		match ret {
+			0 => Ok(true),
+			_ if errno() == EWOULDBLOCK => Ok(false),
+			_ => {
+				bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."))
+			},
 		}
-		if ret != 0 {
-			bail!(anyhow!(std::io::Error::last_os_error()).context("The flock syscall failed."));
-		}
-		Ok(true)
 	}
 
 	pub(super) async fn lock_shared(file: &tokio::fs::File) -> Result<()> {

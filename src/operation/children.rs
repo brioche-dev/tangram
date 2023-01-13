@@ -1,9 +1,9 @@
 use super::OperationHash;
-use crate::State;
+use crate::Cli;
 use anyhow::Result;
 use lmdb::{Cursor, Transaction};
 
-impl State {
+impl Cli {
 	/// Add a run to the database.
 	pub fn add_operation_child(
 		&self,
@@ -11,11 +11,11 @@ impl State {
 		child_operation_hash: OperationHash,
 	) -> Result<()> {
 		// Begin a write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Add the child.
 		txn.put(
-			self.database.operation_children,
+			self.state.database.operation_children,
 			&parent_operation_hash.as_slice(),
 			&child_operation_hash.as_slice(),
 			lmdb::WriteFlags::empty(),
@@ -37,7 +37,7 @@ impl State {
 		Txn: lmdb::Transaction,
 	{
 		// Open a readonly cursor.
-		let mut cursor = txn.open_ro_cursor(self.database.operation_children)?;
+		let mut cursor = txn.open_ro_cursor(self.state.database.operation_children)?;
 
 		// Get the children.
 		let children = cursor

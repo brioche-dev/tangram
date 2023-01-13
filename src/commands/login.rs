@@ -8,9 +8,6 @@ pub struct Args {}
 
 impl Cli {
 	pub(crate) async fn command_login(&self, _args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self.state.lock_shared().await?;
-
 		// Create a login.
 		let login = cli
 			.api_client

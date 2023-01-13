@@ -18,19 +18,16 @@ pub struct Args {
 
 impl Cli {
 	pub(crate) async fn command_check(&self, args: Args) -> Result<()> {
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// If the specifier is a path specifier, first generate its lockfile.
 		if let Specifier::Path { path } = &args.specifier {
-			cli.generate_lockfile(path, args.locked).await?;
+			self.generate_lockfile(path, args.locked).await?;
 		}
 
 		// Create a compiler.
 		let compiler = Compiler::new(self.clone());
 
 		// Get the entrypoint module identifier.
-		let module_identifier = cli
+		let module_identifier = self
 			.entrypoint_module_identifier_for_specifier(&args.specifier)
 			.await?;
 

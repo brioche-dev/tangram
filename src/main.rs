@@ -37,7 +37,7 @@ fn setup_tracing() {
 			tracing_subscriber::filter::EnvFilter::try_from_env("TANGRAM_TRACING").unwrap();
 		Some(filter)
 	} else if cfg!(debug_assertions) {
-		Some(tracing_subscriber::EnvFilter::new("[]=info"))
+		Some(tracing_subscriber::EnvFilter::new("[]=off,tangram=info"))
 	} else {
 		None
 	};

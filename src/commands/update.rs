@@ -20,10 +20,7 @@ impl Cli {
 		}
 
 		// Generate the lockfile.
-		self.lock_shared()
-			.await?
-			.generate_lockfile(&path, true)
-			.await?;
+		self.generate_lockfile(&path, true).await?;
 
 		Ok(())
 	}

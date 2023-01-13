@@ -1,17 +1,17 @@
 use crate::{
 	artifact::{AddArtifactOutcome, ArtifactHash},
 	watcher::Watcher,
-	State,
+	Cli,
 };
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{path::Path, sync::Arc};
 
-impl State {
+impl Cli {
 	pub async fn checkin(&self, path: &Path) -> Result<ArtifactHash> {
 		// Create a watcher.
-		let watcher = Watcher::new(self.path(), Arc::clone(&self.file_system_semaphore));
+		let watcher = Watcher::new(self.path(), Arc::clone(&self.state.file_system_semaphore));
 
 		// Check in the artifact for the path recursively.
 		self.checkin_path(&watcher, path).await?;
@@ -50,9 +50,9 @@ impl State {
 
 			// If the artifact is a file and the blob is missing, add it.
 			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
-				let permit = self.file_system_semaphore.acquire().await?;
+				let permit = self.state.file_system_semaphore.acquire().await?;
 
-				let temp_path = self.create_temp_path();
+				let temp_path = self.temp_path();
 				let blob_path = self.blob_path(blob_hash);
 
 				// Copy to the temp path.
@@ -67,7 +67,7 @@ impl State {
 			// If the artifact is a dependency that is missing, check it in.
 			AddArtifactOutcome::DependencyMissing { .. } => {
 				// Read the target from the path.
-				let permit = self.file_system_semaphore.acquire().await.unwrap();
+				let permit = self.state.file_system_semaphore.acquire().await.unwrap();
 				let target = tokio::fs::read_link(path).await?;
 				drop(permit);
 

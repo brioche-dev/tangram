@@ -2,7 +2,7 @@ use self::archive_format::{ArchiveFormat, CompressionFormat};
 use crate::{
 	checksum::{Algorithm, Checksum, Checksummer},
 	value::Value,
-	State,
+	Cli,
 };
 use anyhow::{bail, Result};
 use futures::{Stream, StreamExt, TryStreamExt};
@@ -33,16 +33,17 @@ pub struct Download {
 	pub is_unsafe: bool,
 }
 
-impl State {
+impl Cli {
 	pub(super) async fn run_download(&self, download: &Download) -> Result<Value> {
 		// Acquire a file system permit.
-		let _permit = self.file_system_semaphore.acquire().await?;
+		let _permit = self.state.file_system_semaphore.acquire().await?;
 
 		// Get the archive format.
 		let archive_format = ArchiveFormat::for_path(Path::new(download.url.path()));
 
 		// Send the request.
 		let response = self
+			.state
 			.http_client
 			.get(download.url.clone())
 			.send()
@@ -105,13 +106,13 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	async fn download_simple<S>(&self, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp path.
-		let temp_path = self.create_temp_path();
+		let temp_path = self.temp_path();
 
 		// Read the stream to the temp path.
 		{
@@ -139,7 +140,7 @@ impl State {
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp path to unpack to.
-		let unpack_temp_path = self.create_temp_path();
+		let unpack_temp_path = self.temp_path();
 
 		// Stream and unpack simultaneously in a blocking task.
 		tokio::task::spawn_blocking({
@@ -188,7 +189,7 @@ impl State {
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp path.
-		let temp_path = self.create_temp_path();
+		let temp_path = self.temp_path();
 
 		// Read the stream to the temp path.
 		{
@@ -199,7 +200,7 @@ impl State {
 		}
 
 		// Create a temp path to unpack to.
-		let unpack_temp_path = self.create_temp_path();
+		let unpack_temp_path = self.temp_path();
 
 		// Unpack in a blocking task.
 		tokio::task::spawn_blocking({

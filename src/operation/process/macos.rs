@@ -6,7 +6,7 @@
 //!
 
 use super::{PathMode, ReferencedPathSet};
-use crate::State;
+use crate::Cli;
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
 use libc::{c_char, c_int, c_void};
@@ -18,7 +18,7 @@ use std::{
 	path::Path,
 };
 
-impl State {
+impl Cli {
 	pub async fn run_process_macos(
 		&self,
 		env: BTreeMap<String, String>,
@@ -28,7 +28,7 @@ impl State {
 		network_enabled: bool,
 	) -> Result<()> {
 		// Create a temp path for the working directory.
-		let working_directory = self.create_temp_path();
+		let working_directory = self.temp_path();
 		tokio::fs::create_dir_all(&working_directory).await?;
 
 		// Create the command.

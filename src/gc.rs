@@ -4,15 +4,16 @@ use crate::{
 	hash::{self, Hash},
 	operation::{Operation, OperationHash},
 	package::PackageHash,
+	util::rmrf,
 	value::{TemplateComponent, Value},
-	State,
+	Cli,
 };
 use anyhow::{Context, Result};
 use lmdb::{Cursor, Transaction};
 use std::collections::{HashSet, VecDeque};
 
-impl State {
-	pub async fn garbage_collect(&mut self, roots: Vec<OperationHash>) -> Result<()> {
+impl Cli {
+	pub async fn garbage_collect(&self, roots: Vec<OperationHash>) -> Result<()> {
 		// Create marks to track marked artifacts, blobs, operations, and packages.
 		let mut marks = Marks::default();
 
@@ -67,10 +68,10 @@ enum QueueItem {
 	Package(PackageHash),
 }
 
-impl State {
+impl Cli {
 	#[allow(clippy::too_many_lines)]
 	fn mark(&self, marks: &mut Marks, roots: Vec<OperationHash>) -> Result<()> {
-		let txn = self.database.env.begin_ro_txn()?;
+		let txn = self.state.database.env.begin_ro_txn()?;
 		let mut queue: VecDeque<QueueItem> = roots.into_iter().map(QueueItem::Operation).collect();
 		while let Some(item) = queue.pop_front() {
 			match item {
@@ -218,13 +219,13 @@ impl State {
 	}
 }
 
-impl State {
+impl Cli {
 	fn sweep_artifacts(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.database.artifacts)?;
+		let mut cursor = txn.open_rw_cursor(self.state.database.artifacts)?;
 
 		// Delete all artifacts that are not marked.
 		for entry in cursor.iter() {
@@ -259,7 +260,7 @@ impl State {
 				.context("Failed to parse the entry in the checkouts directory as a hash.")?;
 			let artifact_hash = ArtifactHash(artifact_hash);
 			if !marks.contains_artifact(artifact_hash) {
-				tokio::fs::remove_file(&entry.path())
+				rmrf(&entry.path(), None)
 					.await
 					.context("Failed to remove the artifact.")?;
 			}
@@ -291,10 +292,10 @@ impl State {
 
 	fn sweep_operations(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.database.operations)?;
+		let mut cursor = txn.open_rw_cursor(self.state.database.operations)?;
 
 		// Delete all operations that are not marked.
 		for entry in cursor.iter() {
@@ -317,10 +318,10 @@ impl State {
 
 	fn sweep_operation_children(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.database.operation_children)?;
+		let mut cursor = txn.open_rw_cursor(self.state.database.operation_children)?;
 
 		// Delete all operations that are not marked.
 		for entry in cursor.iter() {
@@ -343,10 +344,10 @@ impl State {
 
 	fn sweep_packages(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.database.packages)?;
+		let mut cursor = txn.open_rw_cursor(self.state.database.packages)?;
 
 		// Delete all packages that are not marked.
 		for entry in cursor.iter() {

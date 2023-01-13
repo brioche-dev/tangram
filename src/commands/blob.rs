@@ -31,11 +31,8 @@ impl Cli {
 	}
 
 	async fn command_blob_get(&self, args: GetArgs) -> Result<()> {
-		// Lock the cli.
-		let cli = self.lock_shared().await?;
-
 		// Get the blob.
-		let mut blob = cli.get_blob(args.blob_hash).await?.into_std().await;
+		let mut blob = self.get_blob(args.blob_hash).await?.into_std().await;
 
 		// Open stdout.
 		let mut stdout = std::io::stdout();

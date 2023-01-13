@@ -3,7 +3,7 @@ use self::{
 	isolate::THREAD_LOCAL_ISOLATE,
 	module::{load_module, resolve_module_callback},
 };
-use crate::{compiler::ModuleIdentifier, package::PackageHash, value::Value, Cli, State};
+use crate::{compiler::ModuleIdentifier, package::PackageHash, value::Value, Cli};
 use anyhow::{bail, Context, Result};
 use std::rc::Rc;
 
@@ -27,14 +27,15 @@ pub struct Target {
 	pub args: Vec<Value>,
 }
 
-impl State {
+impl Cli {
 	pub(super) async fn run_target(&self, target: &Target) -> Result<Value> {
 		// Run the target on the local pool because it is a `!Send` future.
 		let output = self
+			.state
 			.local_pool_handle
 			.spawn_pinned({
 				let main_runtime_handle = tokio::runtime::Handle::current();
-				let cli = self.upgrade();
+				let cli = self.clone();
 				let target = target.clone();
 				move || async move { run_target_inner(cli, main_runtime_handle, &target).await }
 			})
@@ -56,8 +57,6 @@ async fn run_target_inner(
 
 	// Get the package's entrypoint path.
 	let entrypoint_path = cli
-		.lock_shared()
-		.await?
 		.get_package_entrypoint_path(target.package)
 		.context("Failed to retrieve the package entrypoint.")?
 		.context("The package must have an entrypoint.")?;

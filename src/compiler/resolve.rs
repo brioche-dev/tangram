@@ -101,7 +101,6 @@ impl Compiler {
 
 			ModuleIdentifier::Hash { package_hash, .. } => {
 				self.resolve_tangram_from_hash(specifier, *package_hash)
-					.await
 			},
 
 			ModuleIdentifier::Path { package_path, .. } => {
@@ -111,19 +110,19 @@ impl Compiler {
 		}
 	}
 
-	async fn resolve_tangram_from_hash(
+	fn resolve_tangram_from_hash(
 		&self,
 		specifier: &Url,
 		referrer_package_hash: PackageHash,
 	) -> Result<ModuleIdentifier> {
-		// Lock the cli.
-		let cli = self.cli.lock_shared().await?;
-
 		// Get the specifier's package name.
 		let specifier_package_name = specifier.path();
 
 		// Get the referrer's dependencies.
-		let referrer_dependencies = cli.get_package_local(referrer_package_hash)?.dependencies;
+		let referrer_dependencies = self
+			.cli
+			.get_package_local(referrer_package_hash)?
+			.dependencies;
 
 		// Get the specifier's package hash from the referrer's dependencies.
 		let specifier_package_hash = referrer_dependencies.get(specifier_package_name).context(
