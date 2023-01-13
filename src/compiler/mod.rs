@@ -3,6 +3,7 @@ use self::{
 	completion::{CompletionRequest, CompletionResponse},
 	definition::{DefinitionResponse, DefintionRequest},
 	diagnostics::{DiagnosticsRequest, DiagnosticsResponse},
+	format::{FormatRequest, FormatResponse},
 	hover::{HoverRequest, HoverResponse},
 	references::{ReferencesRequest, ReferencesResponse},
 	rename::{RenameRequest, RenameResponse},
@@ -73,12 +74,13 @@ struct UnopenedFile {
 #[serde(tag = "type", content = "request", rename_all = "snake_case")]
 pub enum Request {
 	Check(CheckRequest),
-	Rename(RenameRequest),
-	Diagnostics(DiagnosticsRequest),
+	Completion(CompletionRequest),
 	Definition(DefintionRequest),
+	Diagnostics(DiagnosticsRequest),
+	Format(FormatRequest),
 	Hover(HoverRequest),
 	References(ReferencesRequest),
-	Completion(CompletionRequest),
+	Rename(RenameRequest),
 	Transpile(TranspileRequest),
 }
 
@@ -86,12 +88,13 @@ pub enum Request {
 #[serde(tag = "type", content = "response", rename_all = "snake_case")]
 pub enum Response {
 	Check(CheckResponse),
-	Rename(RenameResponse),
+	Completion(CompletionResponse),
+	Definition(DefinitionResponse),
 	Diagnostics(DiagnosticsResponse),
+	Format(FormatResponse),
 	Hover(HoverResponse),
 	References(ReferencesResponse),
-	Definition(DefinitionResponse),
-	Completion(CompletionResponse),
+	Rename(RenameResponse),
 	Transpile(TranspileResponse),
 }
 
