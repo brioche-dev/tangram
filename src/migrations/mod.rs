@@ -11,7 +11,7 @@ trait Migration: Send + Sync {
 }
 
 impl Cli {
-	pub(super) async fn migrate(path: &Path) -> Result<()> {
+	pub async fn migrate(path: &Path) -> Result<()> {
 		let migrations = vec![Box::new(migration_0000::Migration) as Box<dyn Migration>];
 
 		// Retrieve the path format version.

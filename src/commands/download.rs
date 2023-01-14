@@ -16,7 +16,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub(crate) async fn command_download(&self, args: Args) -> Result<()> {
+	pub async fn command_download(&self, args: Args) -> Result<()> {
 		// Create the operation.
 		let operation = Operation::Download(Download {
 			url: args.url,

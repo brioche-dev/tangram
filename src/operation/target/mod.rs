@@ -28,10 +28,10 @@ pub struct Target {
 }
 
 impl Cli {
-	pub(super) async fn run_target(&self, target: &Target) -> Result<Value> {
+	pub async fn run_target(&self, target: &Target) -> Result<Value> {
 		// Run the target on the local pool because it is a `!Send` future.
 		let output = self
-			.state
+			.inner
 			.local_pool_handle
 			.spawn_pinned({
 				let main_runtime_handle = tokio::runtime::Handle::current();

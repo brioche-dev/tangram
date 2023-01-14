@@ -8,7 +8,7 @@ use self::dirs::home_directory_path;
 use crate::{
 	blob::BlobHash,
 	database::Database,
-	heuristics::FILESYSTEM_CONCURRENCY_LIMIT,
+	heuristics::FILE_SYSTEM_CONCURRENCY_LIMIT,
 	id::Id,
 	lock::{ExclusiveGuard, Lock, SharedGuard},
 };
@@ -54,10 +54,10 @@ pub mod watcher;
 
 #[derive(Clone)]
 pub struct Cli {
-	state: Arc<State>,
+	inner: Arc<Inner>,
 }
 
-struct State {
+struct Inner {
 	/// This is the path to the directory where the cli stores its data.
 	pub path: PathBuf,
 
@@ -121,7 +121,7 @@ impl Cli {
 		let database = Database::new(&database_path)?;
 
 		// Create the file system semaphore.
-		let file_system_semaphore = Arc::new(Semaphore::new(FILESYSTEM_CONCURRENCY_LIMIT));
+		let file_system_semaphore = Arc::new(Semaphore::new(FILE_SYSTEM_CONCURRENCY_LIMIT));
 
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
@@ -143,7 +143,7 @@ impl Cli {
 
 		// Create the cli.
 		let cli = Cli {
-			state: Arc::new(State {
+			inner: Arc::new(Inner {
 				path,
 				lock,
 				database,
@@ -159,26 +159,26 @@ impl Cli {
 
 impl Cli {
 	pub async fn try_lock_shared(&self) -> Result<Option<SharedGuard<()>>> {
-		self.state.lock.try_lock_shared().await
+		self.inner.lock.try_lock_shared().await
 	}
 
 	pub async fn try_lock_exclusive(&self) -> Result<Option<ExclusiveGuard<()>>> {
-		self.state.lock.try_lock_exclusive().await
+		self.inner.lock.try_lock_exclusive().await
 	}
 
 	pub async fn lock_shared(&self) -> Result<SharedGuard<()>> {
-		self.state.lock.lock_shared().await
+		self.inner.lock.lock_shared().await
 	}
 
 	pub async fn lock_exclusive(&self) -> Result<ExclusiveGuard<()>> {
-		self.state.lock.lock_exclusive().await
+		self.inner.lock.lock_exclusive().await
 	}
 }
 
 impl Cli {
 	#[must_use]
 	pub fn path(&self) -> &Path {
-		&self.state.path
+		&self.inner.path
 	}
 
 	#[must_use]

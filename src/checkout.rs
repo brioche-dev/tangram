@@ -25,7 +25,7 @@ impl Cli {
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Create a watcher.
-		let watcher = Watcher::new(self.path(), Arc::clone(&self.state.file_system_semaphore));
+		let watcher = Watcher::new(self.path(), Arc::clone(&self.inner.file_system_semaphore));
 
 		// Call the recursive checkout function.
 		self.checkout_path(&watcher, artifact_hash, path, dependency_handler)
@@ -180,18 +180,12 @@ impl Cli {
 			None => {},
 		};
 
-		// Copy the blob to the path. Use std::io::copy to ensure reflinking is used on supported filesystems.
-		let permit = self.state.file_system_semaphore.acquire().await;
-		let mut blob = self.get_blob(file.blob).await?.into_std().await;
-		let mut output =
+		// Copy the blob to the path.
+		let output =
 			std::fs::File::create(path).context("Failed to create the file to checkout to.")?;
-		tokio::task::spawn_blocking(move || {
-			std::io::copy(&mut blob, &mut output)?;
-			Ok::<_, anyhow::Error>(())
-		})
-		.await
-		.unwrap()?;
-		drop(permit);
+		self.copy_blob(file.blob, output)
+			.await
+			.context("Failed to copy the blob.")?;
 
 		// Make the file executable if necessary.
 		if file.executable {

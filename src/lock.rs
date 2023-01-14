@@ -171,12 +171,12 @@ impl<'a, T> ExclusiveGuard<'a, T> {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod sys {
-	use anyhow::{anyhow, bail, Result};
 	use crate::util::errno;
+	use anyhow::{anyhow, bail, Result};
 	use libc::{flock, EWOULDBLOCK, LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN};
 	use std::os::unix::io::AsRawFd;
 
-	pub(super) fn try_lock_shared(file: &tokio::fs::File) -> Result<bool> {
+	pub fn try_lock_shared(file: &tokio::fs::File) -> Result<bool> {
 		let fd = file.as_raw_fd();
 		let ret = unsafe { flock(fd, LOCK_SH | LOCK_NB) };
 		match ret {
@@ -188,7 +188,7 @@ mod sys {
 		}
 	}
 
-	pub(super) fn try_lock_exclusive(file: &tokio::fs::File) -> Result<bool> {
+	pub fn try_lock_exclusive(file: &tokio::fs::File) -> Result<bool> {
 		let fd = file.as_raw_fd();
 		let ret = unsafe { flock(fd, LOCK_EX | LOCK_NB) };
 		match ret {
@@ -200,7 +200,7 @@ mod sys {
 		}
 	}
 
-	pub(super) async fn lock_shared(file: &tokio::fs::File) -> Result<()> {
+	pub async fn lock_shared(file: &tokio::fs::File) -> Result<()> {
 		let fd = file.as_raw_fd();
 		let ret = tokio::task::spawn_blocking(move || unsafe { flock(fd, LOCK_SH) })
 			.await
@@ -211,7 +211,7 @@ mod sys {
 		Ok(())
 	}
 
-	pub(super) async fn lock_exclusive(file: &tokio::fs::File) -> Result<()> {
+	pub async fn lock_exclusive(file: &tokio::fs::File) -> Result<()> {
 		let fd = file.as_raw_fd();
 		let ret = tokio::task::spawn_blocking(move || unsafe { flock(fd, LOCK_EX) })
 			.await

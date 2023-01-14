@@ -89,9 +89,9 @@ impl Package {
 impl Cli {
 	pub fn package_exists_local(&self, package_hash: PackageHash) -> Result<bool> {
 		// Begin a read transaction.
-		let txn = self.state.database.env.begin_ro_txn()?;
+		let txn = self.inner.database.env.begin_ro_txn()?;
 
-		let exists = match txn.get(self.state.database.packages, &package_hash.as_slice()) {
+		let exists = match txn.get(self.inner.database.packages, &package_hash.as_slice()) {
 			Ok(_) => Ok::<_, anyhow::Error>(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.into()),
@@ -145,11 +145,11 @@ impl Cli {
 		let value = package.serialize_to_vec();
 
 		// Begin a write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self.inner.database.env.begin_rw_txn()?;
 
 		// Add the package to the database.
 		match txn.put(
-			self.state.database.packages,
+			self.inner.database.packages,
 			&package_hash.as_slice(),
 			&value,
 			lmdb::WriteFlags::NO_OVERWRITE,
@@ -184,7 +184,7 @@ impl Cli {
 	where
 		Txn: lmdb::Transaction,
 	{
-		match txn.get(self.state.database.packages, &hash.as_slice()) {
+		match txn.get(self.inner.database.packages, &hash.as_slice()) {
 			Ok(value) => {
 				let value = Package::deserialize(value)?;
 				Ok(Some(value))
@@ -215,7 +215,7 @@ impl Cli {
 
 	pub fn try_get_package_local(&self, hash: PackageHash) -> Result<Option<Package>> {
 		// Begin a read transaction.
-		let txn = self.state.database.env.begin_ro_txn()?;
+		let txn = self.inner.database.env.begin_ro_txn()?;
 
 		// Get the package.
 		let maybe_package = self.try_get_package_local_with_txn(&txn, hash)?;

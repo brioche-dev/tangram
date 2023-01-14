@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 pub struct Args {}
 
 impl Cli {
-	pub(crate) async fn command_login(&self, _args: Args) -> Result<()> {
+	pub async fn command_login(&self, _args: Args) -> Result<()> {
 		// Create a login.
 		let login = cli
 			.api_client

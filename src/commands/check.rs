@@ -17,7 +17,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub(crate) async fn command_check(&self, args: Args) -> Result<()> {
+	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// If the specifier is a path specifier, first generate its lockfile.
 		if let Specifier::Path { path } = &args.specifier {
 			self.generate_lockfile(path, args.locked).await?;

@@ -10,7 +10,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub(crate) async fn command_checkin(&self, args: Args) -> Result<()> {
+	pub async fn command_checkin(&self, args: Args) -> Result<()> {
 		// Get the path.
 		let mut path =
 			std::env::current_dir().context("Failed to determine the current directory.")?;

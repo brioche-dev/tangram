@@ -71,7 +71,7 @@ enum QueueItem {
 impl Cli {
 	#[allow(clippy::too_many_lines)]
 	fn mark(&self, marks: &mut Marks, roots: Vec<OperationHash>) -> Result<()> {
-		let txn = self.state.database.env.begin_ro_txn()?;
+		let txn = self.inner.database.env.begin_ro_txn()?;
 		let mut queue: VecDeque<QueueItem> = roots.into_iter().map(QueueItem::Operation).collect();
 		while let Some(item) = queue.pop_front() {
 			match item {
@@ -222,10 +222,10 @@ impl Cli {
 impl Cli {
 	fn sweep_artifacts(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self.inner.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.state.database.artifacts)?;
+		let mut cursor = txn.open_rw_cursor(self.inner.database.artifacts)?;
 
 		// Delete all artifacts that are not marked.
 		for entry in cursor.iter() {
@@ -292,10 +292,10 @@ impl Cli {
 
 	fn sweep_operations(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self.inner.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.state.database.operations)?;
+		let mut cursor = txn.open_rw_cursor(self.inner.database.operations)?;
 
 		// Delete all operations that are not marked.
 		for entry in cursor.iter() {
@@ -318,10 +318,10 @@ impl Cli {
 
 	fn sweep_operation_children(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self.inner.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.state.database.operation_children)?;
+		let mut cursor = txn.open_rw_cursor(self.inner.database.operation_children)?;
 
 		// Delete all operations that are not marked.
 		for entry in cursor.iter() {
@@ -344,10 +344,10 @@ impl Cli {
 
 	fn sweep_packages(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self.inner.database.env.begin_rw_txn()?;
 
 		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.state.database.packages)?;
+		let mut cursor = txn.open_rw_cursor(self.inner.database.packages)?;
 
 		// Delete all packages that are not marked.
 		for entry in cursor.iter() {

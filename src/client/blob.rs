@@ -1,15 +1,15 @@
 use super::Client;
-use crate::blob::{Blob, BlobHash};
+use crate::blob::BlobHash;
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
+use tokio::io::AsyncRead;
 use tokio_util::io::StreamReader;
 
 impl Client {
-	pub async fn add_blob(
-		&self,
-		reader: Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>,
-		blob_hash: BlobHash,
-	) -> Result<BlobHash> {
+	pub async fn add_blob<R>(&self, reader: R, blob_hash: BlobHash) -> Result<BlobHash>
+	where
+		R: AsyncRead + Send + Sync + Unpin + 'static,
+	{
 		let stream = tokio_util::io::ReaderStream::new(reader);
 		let body = hyper::Body::wrap_stream(stream);
 
@@ -36,7 +36,7 @@ impl Client {
 		Ok(blob_hash)
 	}
 
-	pub async fn get_blob(&self, blob_hash: BlobHash) -> Result<Blob> {
+	pub async fn get_blob(&self, blob_hash: BlobHash) -> Result<impl AsyncRead> {
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");
 		let mut url = self.url.clone();

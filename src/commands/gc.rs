@@ -7,7 +7,7 @@ use clap::Parser;
 pub struct Args {}
 
 impl Cli {
-	pub(crate) async fn command_gc(&self, _args: Args) -> Result<()> {
+	pub async fn command_gc(&self, _args: Args) -> Result<()> {
 		// Collect the roots.
 		let roots = Vec::new();
 

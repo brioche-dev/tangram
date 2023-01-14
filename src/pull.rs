@@ -20,6 +20,7 @@ impl Cli {
 		// Handle the outcome.
 		match outcome {
 			AddArtifactOutcome::Added { .. } => return Ok(()),
+
 			AddArtifactOutcome::DirectoryMissingEntries { entries } => {
 				// Pull the missing entries.
 				try_join_all(entries.into_iter().map(|(_, artifact_hash)| async move {
@@ -28,10 +29,13 @@ impl Cli {
 				}))
 				.await?;
 			},
+
 			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
 				// Pull the blob.
-				client.get_blob(blob_hash).await?;
+				let blob = client.get_blob(blob_hash).await?;
+				self.add_blob(blob).await?;
 			},
+
 			AddArtifactOutcome::DependencyMissing { artifact_hash } => {
 				// Pull the missing dependency.
 				self.pull(client, artifact_hash).await?;

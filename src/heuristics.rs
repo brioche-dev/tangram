@@ -1,1 +1,1 @@
-pub const FILESYSTEM_CONCURRENCY_LIMIT: usize = 16;
+pub const FILE_SYSTEM_CONCURRENCY_LIMIT: usize = 16;

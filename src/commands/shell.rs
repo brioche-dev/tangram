@@ -23,7 +23,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub(crate) async fn command_shell(&self, mut args: Args) -> Result<()> {
+	pub async fn command_shell(&self, mut args: Args) -> Result<()> {
 		// Set the default target name to "shell".
 		args.target = args.target.or_else(|| Some("shell".to_owned()));
 

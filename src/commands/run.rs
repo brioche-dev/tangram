@@ -29,7 +29,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub(crate) async fn command_run(&self, args: Args) -> Result<()> {
+	pub async fn command_run(&self, args: Args) -> Result<()> {
 		// Get the package hash.
 		let package_hash = self
 			.package_hash_for_specifier(&args.specifier, false)

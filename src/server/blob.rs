@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use futures::TryStreamExt;
 
 impl Server {
-	pub(super) async fn handle_add_blob_request(
+	pub async fn handle_add_blob_request(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
@@ -39,7 +39,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub(super) async fn handle_get_blob_request(
+	pub async fn handle_get_blob_request(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
@@ -57,7 +57,7 @@ impl Server {
 
 		// Get the blob.
 		let file = match self.cli.try_get_blob(blob_hash).await? {
-			Some(path) => path,
+			Some(file) => file,
 			None => return Ok(not_found()),
 		};
 

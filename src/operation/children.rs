@@ -11,11 +11,11 @@ impl Cli {
 		child_operation_hash: OperationHash,
 	) -> Result<()> {
 		// Begin a write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self.inner.database.env.begin_rw_txn()?;
 
 		// Add the child.
 		txn.put(
-			self.state.database.operation_children,
+			self.inner.database.operation_children,
 			&parent_operation_hash.as_slice(),
 			&child_operation_hash.as_slice(),
 			lmdb::WriteFlags::empty(),
@@ -37,7 +37,7 @@ impl Cli {
 		Txn: lmdb::Transaction,
 	{
 		// Open a readonly cursor.
-		let mut cursor = txn.open_ro_cursor(self.state.database.operation_children)?;
+		let mut cursor = txn.open_ro_cursor(self.inner.database.operation_children)?;
 
 		// Get the children.
 		let children = cursor

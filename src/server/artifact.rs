@@ -7,7 +7,7 @@ pub type AddArtifactRequest = Artifact;
 pub type AddArtifactResponse = AddArtifactOutcome;
 
 impl Server {
-	pub(super) async fn handle_add_artifact_request(
+	pub async fn handle_add_artifact_request(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {
@@ -37,7 +37,7 @@ impl Server {
 	}
 
 	#[allow(clippy::unused_async)]
-	pub(super) async fn handle_get_artifact_request(
+	pub async fn handle_get_artifact_request(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<http::Response<hyper::Body>> {

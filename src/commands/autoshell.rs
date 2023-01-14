@@ -48,7 +48,7 @@ pub struct HookArgs {
 }
 
 impl Cli {
-	pub(crate) async fn command_autoshell(&self, args: Args) -> Result<()> {
+	pub async fn command_autoshell(&self, args: Args) -> Result<()> {
 		match args.command {
 			Command::Add(args) => self.command_autoshell_add(args).boxed(),
 			Command::List(args) => self.command_autoshell_list(args).boxed(),

@@ -111,7 +111,7 @@ impl Cli {
 
 	pub fn try_get_operation_local(&self, hash: OperationHash) -> Result<Option<Operation>> {
 		// Begin a read transaction.
-		let txn = self.state.database.env.begin_ro_txn()?;
+		let txn = self.inner.database.env.begin_ro_txn()?;
 
 		// Get the operation.
 		let maybe_operation = self.try_get_operation_local_with_txn(&txn, hash)?;
@@ -128,7 +128,7 @@ impl Cli {
 	where
 		Txn: lmdb::Transaction,
 	{
-		match txn.get(self.state.database.operations, &hash.as_slice()) {
+		match txn.get(self.inner.database.operations, &hash.as_slice()) {
 			Ok(value) => {
 				let value = buffalo::from_slice(value)?;
 				Ok(Some(value))

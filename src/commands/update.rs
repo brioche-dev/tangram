@@ -11,7 +11,7 @@ pub struct Args {
 
 impl Cli {
 	#[allow(clippy::unused_async)]
-	pub(crate) async fn command_update(&self, args: Args) -> Result<()> {
+	pub async fn command_update(&self, args: Args) -> Result<()> {
 		// Get the path.
 		let mut path =
 			std::env::current_dir().context("Failed to get the current working directory.")?;

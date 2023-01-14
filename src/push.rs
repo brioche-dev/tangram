@@ -34,17 +34,19 @@ impl Cli {
 
 			// If this artifact is a file and the blob is missing, push it.
 			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
-				// Get the path to the blob.
-				let blob_path = self.blob_path(blob_hash);
+				let _permit = self.inner.file_system_semaphore.acquire().await?;
 
-				// Create a stream for the file.
-				let file =
-					Box::new(tokio::fs::File::open(&blob_path).await.with_context(|| {
-						format!(r#"Failed to open file at path "{}"."#, blob_path.display())
-					})?);
+				// Get the blob.
+				let blob = self
+					.get_blob(blob_hash)
+					.await
+					.context("Failed to get the blob.")?;
 
 				// Add the blob.
-				client.add_blob(file, blob_hash).await?;
+				client
+					.add_blob(blob, blob_hash)
+					.await
+					.context("Failed to add the blob.")?;
 			},
 
 			// If this artifact is a dependency that is missing, push it.

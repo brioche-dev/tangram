@@ -13,7 +13,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub(crate) async fn command_serve(&self, args: Args) -> Result<()> {
+	pub async fn command_serve(&self, args: Args) -> Result<()> {
 		// Create the server.
 		let server = Server::new(self.clone());
 
