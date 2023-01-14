@@ -45,7 +45,7 @@ pub mod operation;
 pub mod package;
 pub mod pull;
 pub mod push;
-pub mod server;
+pub mod serve;
 pub mod specifier;
 pub mod system;
 pub mod util;

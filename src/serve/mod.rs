@@ -3,22 +3,12 @@ use anyhow::Result;
 use futures::FutureExt;
 use std::{convert::Infallible, net::SocketAddr};
 
-pub mod artifact;
+mod artifact;
 mod blob;
 mod error;
 
-#[derive(Clone)]
-pub struct Server {
-	cli: Cli,
-}
-
-impl Server {
-	#[must_use]
-	pub fn new(cli: Cli) -> Server {
-		Server { cli }
-	}
-
-	pub async fn serve(self, addr: SocketAddr) -> Result<()> {
+impl Cli {
+	pub async fn serve(&self, addr: SocketAddr) -> Result<()> {
 		let server = self;
 		hyper::Server::try_bind(&addr)
 			.map(|server| {

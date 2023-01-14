@@ -18,18 +18,18 @@ use std::{
 
 pub struct Watcher {
 	path: PathBuf,
-	semaphore: Arc<tokio::sync::Semaphore>,
+	file_system_semaphore: Arc<tokio::sync::Semaphore>,
 	cache: RwLock<HashMap<PathBuf, (ArtifactHash, Artifact), FnvBuildHasher>>,
 }
 
 impl Watcher {
 	#[must_use]
-	pub fn new(path: &Path, semaphore: Arc<tokio::sync::Semaphore>) -> Watcher {
+	pub fn new(path: &Path, file_system_semaphore: Arc<tokio::sync::Semaphore>) -> Watcher {
 		let path = path.to_owned();
 		let cache = RwLock::new(HashMap::default());
 		Watcher {
 			path,
-			semaphore,
+			file_system_semaphore,
 			cache,
 		}
 	}
@@ -38,7 +38,6 @@ impl Watcher {
 		// Fill the cache for this path if necessary.
 		if self.cache.read().unwrap().get(path).is_none() {
 			// Get the metadata for the path.
-			let permit = self.semaphore.acquire().await.unwrap();
 			let metadata = match tokio::fs::symlink_metadata(path).await {
 				Ok(metadata) => metadata,
 				Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -48,7 +47,6 @@ impl Watcher {
 					return Err(error.into());
 				},
 			};
-			drop(permit);
 
 			// Call the appropriate function for the file system object the path points to.
 			if metadata.is_dir() {
@@ -78,7 +76,7 @@ impl Watcher {
 	#[async_recursion]
 	async fn cache_directory(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
 		// Read the contents of the directory.
-		let permit = self.semaphore.acquire().await.unwrap();
+		let permit = self.file_system_semaphore.acquire().await.unwrap();
 		let mut read_dir = tokio::fs::read_dir(path)
 			.await
 			.context("Failed to read the directory.")?;
@@ -119,7 +117,7 @@ impl Watcher {
 
 	async fn cache_file(&self, path: &Path, metadata: &Metadata) -> Result<()> {
 		// Compute the file's blob hash.
-		let permit = self.semaphore.acquire().await.unwrap();
+		let permit = self.file_system_semaphore.acquire().await.unwrap();
 		let mut file = tokio::fs::File::open(path).await?;
 		let mut hasher = Hasher::new();
 		tokio::io::copy(&mut file, &mut hasher).await?;
@@ -147,7 +145,7 @@ impl Watcher {
 
 	async fn cache_symlink(&self, path: &Path, _metadata: &Metadata) -> Result<()> {
 		// Read the symlink.
-		let permit = self.semaphore.acquire().await.unwrap();
+		let permit = self.file_system_semaphore.acquire().await.unwrap();
 		let target = tokio::fs::read_link(path)
 			.await
 			.with_context(|| format!(r#"Failed to read symlink at path "{}"."#, path.display()))?;

@@ -1,12 +1,8 @@
-use super::{error::bad_request, Server};
-use crate::artifact::{AddArtifactOutcome, Artifact};
+use super::error::bad_request;
+use crate::Cli;
 use anyhow::{bail, Context, Result};
 
-pub type AddArtifactRequest = Artifact;
-
-pub type AddArtifactResponse = AddArtifactOutcome;
-
-impl Server {
+impl Cli {
 	pub async fn handle_add_artifact_request(
 		&self,
 		request: http::Request<hyper::Body>,
@@ -20,7 +16,6 @@ impl Server {
 
 		// Add the artifact.
 		let outcome = self
-			.cli
 			.try_add_artifact(&artifact)
 			.await
 			.context("Failed to add the artifact.")?;
@@ -54,7 +49,7 @@ impl Server {
 		};
 
 		// Get the artifact.
-		let artifact = self.cli.try_get_artifact_local(hash)?;
+		let artifact = self.try_get_artifact_local(hash)?;
 
 		// Create the response.
 		let body =

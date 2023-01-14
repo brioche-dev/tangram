@@ -1,4 +1,4 @@
-use crate::{server::Server, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::net::{IpAddr, SocketAddr};
@@ -14,12 +14,9 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_serve(&self, args: Args) -> Result<()> {
-		// Create the server.
-		let server = Server::new(self.clone());
-
 		// Serve!
 		let addr = SocketAddr::new(args.host, args.port);
-		server.serve(addr).await.context("Failed to serve.")?;
+		self.serve(addr).await.context("Failed to serve.")?;
 
 		Ok(())
 	}

@@ -20,14 +20,18 @@ impl Cli {
 			return Ok(None);
 		}
 
-		// Open the blob.
+		// Acquire a permit for the blob.
 		let permit = self
 			.inner
 			.file_system_semaphore
 			.clone()
 			.acquire_owned()
 			.await?;
+
+		// Open the blob file.
 		let file = tokio::fs::File::open(path).await?;
+
+		// Create the blob.
 		let blob = Blob::new(permit, file);
 
 		Ok(Some(blob))

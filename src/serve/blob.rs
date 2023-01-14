@@ -1,9 +1,9 @@
-use super::{error::bad_request, error::not_found, Server};
-use crate::blob::BlobHash;
+use super::{error::bad_request, error::not_found};
+use crate::{blob::BlobHash, Cli};
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
 
-impl Server {
+impl Cli {
 	pub async fn handle_add_blob_request(
 		&self,
 		request: http::Request<hyper::Body>,
@@ -27,7 +27,7 @@ impl Server {
 		);
 
 		// Add the blob.
-		let hash = self.cli.add_blob(body).await?;
+		let hash = self.add_blob(body).await?;
 
 		// Create the response.
 		let response = hash.to_string();
@@ -56,7 +56,7 @@ impl Server {
 		};
 
 		// Get the blob.
-		let file = match self.cli.try_get_blob(blob_hash).await? {
+		let file = match self.try_get_blob(blob_hash).await? {
 			Some(file) => file,
 			None => return Ok(not_found()),
 		};
