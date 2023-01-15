@@ -41,7 +41,7 @@ impl Cli {
 			tokio::time::sleep(poll_interval).await;
 		};
 
-		// Retrieve the user.
+		// Get the user.
 		let user = cli
 			.api_client
 			.get_current_user(token)

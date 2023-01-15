@@ -1,4 +1,5 @@
-use super::{Compiler, CompletionEntry, ModuleIdentifier, Position, Request, Response};
+use super::{CompletionEntry, ModuleIdentifier, Position, Request, Response};
+use crate::Cli;
 use anyhow::{bail, Result};
 
 #[derive(Debug, serde::Serialize)]
@@ -14,7 +15,7 @@ pub struct CompletionResponse {
 	pub entries: Option<Vec<CompletionEntry>>,
 }
 
-impl Compiler {
+impl Cli {
 	pub async fn completion(
 		&self,
 		module_identifier: ModuleIdentifier,

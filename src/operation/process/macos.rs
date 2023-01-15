@@ -6,7 +6,7 @@
 //!
 
 use super::{PathMode, ReferencedPathSet};
-use crate::Cli;
+use crate::{system::System, Cli};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
 use libc::{c_char, c_int, c_void};
@@ -21,6 +21,7 @@ use std::{
 impl Cli {
 	pub async fn run_process_macos(
 		&self,
+		_system: System,
 		env: BTreeMap<String, String>,
 		command: String,
 		args: Vec<String>,

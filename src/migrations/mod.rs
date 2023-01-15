@@ -14,7 +14,7 @@ impl Cli {
 	pub async fn migrate(path: &Path) -> Result<()> {
 		let migrations = vec![Box::new(migration_0000::Migration) as Box<dyn Migration>];
 
-		// Retrieve the path format version.
+		// Get the path format version.
 		let version_file_path = path.join("version");
 		let version_file_exists = path_exists(&version_file_path).await?;
 		let path_format_version: usize = if version_file_exists {

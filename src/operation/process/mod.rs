@@ -52,7 +52,7 @@ impl Cli {
 		// Create the output temp path.
 		let output_temp_path = self.temp_path();
 
-		// Resolve the envs to strings with referenced paths.
+		// Render the env templates.
 		let env = if let Some(env) = &process.env {
 			let output_temp_path = &output_temp_path;
 			try_join_all(env.iter().map(|(key, value)| async move {
@@ -66,12 +66,12 @@ impl Cli {
 			vec![]
 		};
 
-		// Resolve the command to a string with referenced paths.
+		// Render the command template.
 		let command = self
 			.to_string_with_referenced_path_set(&process.command, &output_temp_path)
 			.await?;
 
-		// Resolve the args to strings with referenced paths.
+		// Render the args templates.
 		let args = if let Some(args) = &process.args {
 			let output_temp_path = &output_temp_path;
 			try_join_all(args.iter().map(|value| async move {
@@ -85,7 +85,7 @@ impl Cli {
 			vec![]
 		};
 
-		// Collect the referenced paths and get the strings for the envs, command, and args.
+		// Collect the referenced paths and get the strings for the env, command, and args.
 		let mut referenced_path_set = ReferencedPathSet::default();
 
 		let env = env
@@ -133,8 +133,15 @@ impl Cli {
 			System::Amd64Macos | System::Arm64Macos => {
 				#[cfg(target_os = "macos")]
 				{
-					self.run_process_macos(env, command, args, referenced_path_set, network_enabled)
-						.boxed()
+					self.run_process_macos(
+						process.system,
+						env,
+						command,
+						args,
+						referenced_path_set,
+						network_enabled,
+					)
+					.boxed()
 				}
 				#[cfg(not(target_os = "macos"))]
 				{

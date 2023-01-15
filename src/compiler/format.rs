@@ -1,4 +1,5 @@
-use super::{Compiler, Request, Response};
+use super::{Request, Response};
+use crate::Cli;
 use anyhow::{bail, Result};
 
 #[derive(Debug, serde::Serialize)]
@@ -13,7 +14,7 @@ pub struct FormatResponse {
 	pub text: String,
 }
 
-impl Compiler {
+impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn format(&self, text: String) -> Result<String> {
 		// Create the request.

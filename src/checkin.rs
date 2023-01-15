@@ -16,7 +16,7 @@ impl Cli {
 		// Check in the artifact for the path recursively.
 		self.checkin_path(&watcher, path).await?;
 
-		// Retrieve the artifact for the path.
+		// Get the artifact for the path.
 		let (artifact_hash, _) = watcher.get(path).await?.unwrap();
 
 		Ok(artifact_hash)
@@ -24,7 +24,7 @@ impl Cli {
 
 	#[async_recursion]
 	async fn checkin_path(&self, watcher: &Watcher, path: &Path) -> Result<()> {
-		// Retrieve the artifact hash and artifact for the path, computing them if necessary.
+		// Get the artifact hash and artifact for the path, computing them if necessary.
 		let (_, artifact) = watcher.get(path).await?.with_context(|| {
 			let path = path.display();
 			format!(r#"No file system object found at path "{path}"."#)

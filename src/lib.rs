@@ -13,11 +13,13 @@ use crate::{
 	lock::{ExclusiveGuard, Lock, SharedGuard},
 };
 use anyhow::{Context, Result};
+use compiler::{RequestSender, TrackedFile};
 use std::{
+	collections::HashMap,
 	path::{Path, PathBuf},
-	sync::Arc,
+	sync::{Arc, Mutex},
 };
-use tokio::sync::Semaphore;
+use tokio::sync::{RwLock, Semaphore};
 use tokio_util::task::LocalPoolHandle;
 
 pub mod artifact;
@@ -73,8 +75,17 @@ struct Inner {
 	/// The HTTP client is for performing HTTP requests when running download operations.
 	pub http_client: reqwest::Client,
 
+	/// This is a handle to the tokio runtime the CLI was created on.
+	pub runtime_handle: tokio::runtime::Handle,
+
 	/// The local pool is for running targets because they are `!Send` futures.
 	pub local_pool_handle: LocalPoolHandle,
+
+	/// The compiler request sender is used to send requests to the compiler.
+	pub compiler_request_sender: Mutex<Option<RequestSender>>,
+
+	/// The tracked files map tracks files on the filesystem used by the compiler.
+	pub tracked_files: RwLock<HashMap<PathBuf, TrackedFile, fnv::FnvBuildHasher>>,
 }
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
@@ -132,14 +143,22 @@ impl Cli {
 
 		// Initialize v8.
 		V8_INIT.call_once(|| {
+			// Set the ICU data.
 			#[repr(C, align(16))]
 			struct IcuData([u8; 10_454_784]);
 			static ICU_DATA: IcuData = IcuData(*include_bytes!("../icudtl.dat"));
 			v8::icu::set_common_data_71(&ICU_DATA.0).unwrap();
+
+			// Initialize the platform.
 			let platform = v8::new_default_platform(0, true);
 			v8::V8::initialize_platform(platform.make_shared());
+
+			// Initialize v8.
 			v8::V8::initialize();
 		});
+
+		// Get a handle to the tokio runtime.
+		let runtime_handle = tokio::runtime::Handle::current();
 
 		// Create the cli.
 		let cli = Cli {
@@ -150,6 +169,9 @@ impl Cli {
 				file_system_semaphore,
 				http_client,
 				local_pool_handle,
+				runtime_handle,
+				compiler_request_sender: Mutex::new(None),
+				tracked_files: RwLock::new(HashMap::default()),
 			}),
 		};
 
@@ -172,6 +194,15 @@ impl Cli {
 
 	pub async fn lock_exclusive(&self) -> Result<ExclusiveGuard<()>> {
 		self.inner.lock.lock_exclusive().await
+	}
+}
+
+impl Drop for Inner {
+	fn drop(&mut self) {
+		// Attempt to shut down the request handler.
+		if let Some(sender) = self.compiler_request_sender.lock().unwrap().take() {
+			sender.send(None).ok();
+		}
 	}
 }
 
@@ -204,6 +235,11 @@ impl Cli {
 	#[must_use]
 	pub fn lock_path(&self) -> PathBuf {
 		self.path().join("lock")
+	}
+
+	#[must_use]
+	pub fn logs_path(&self) -> PathBuf {
+		self.path().join("logs")
 	}
 
 	#[must_use]

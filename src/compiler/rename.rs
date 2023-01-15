@@ -1,4 +1,5 @@
-use super::{Compiler, Location, ModuleIdentifier, Position, Request, Response};
+use super::{Location, ModuleIdentifier, Position, Request, Response};
+use crate::Cli;
 use anyhow::{bail, Result};
 
 #[derive(Debug, serde::Serialize)]
@@ -14,7 +15,7 @@ pub struct RenameResponse {
 	pub locations: Option<Vec<Location>>,
 }
 
-impl Compiler {
+impl Cli {
 	pub async fn rename(
 		&self,
 		module_identifier: ModuleIdentifier,

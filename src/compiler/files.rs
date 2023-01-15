@@ -1,28 +1,49 @@
-use super::{Compiler, File, ModuleIdentifier, OpenedFile, Range, UnopenedFile};
+use super::{ModuleIdentifier, Range};
+use crate::Cli;
 use anyhow::Result;
-use std::path::Path;
+use std::{path::Path, time::SystemTime};
 
-impl Compiler {
+pub enum TrackedFile {
+	Opened(OpenedTrackedFile),
+	Unopened(UnopenedTrackedFile),
+}
+
+pub struct OpenedTrackedFile {
+	pub module_identifier: ModuleIdentifier,
+	pub version: i32,
+	pub text: String,
+}
+
+pub struct UnopenedTrackedFile {
+	pub version: i32,
+	pub modified: SystemTime,
+}
+
+impl Cli {
 	pub async fn open_file(&self, path: &Path, version: i32, text: String) {
 		let Ok(module_identifier) = ModuleIdentifier::for_path(path).await else { return };
-		let file = File::Opened(OpenedFile {
+		let file = TrackedFile::Opened(OpenedTrackedFile {
 			module_identifier,
 			version,
 			text,
 		});
-		self.state.files.write().await.insert(path.to_owned(), file);
+		self.inner
+			.tracked_files
+			.write()
+			.await
+			.insert(path.to_owned(), file);
 	}
 
 	pub async fn close_file(&self, path: &Path) {
-		self.state.files.write().await.remove(path);
+		self.inner.tracked_files.write().await.remove(path);
 	}
 
 	pub async fn change_file(&self, path: &Path, version: i32, range: Option<Range>, text: String) {
 		// Lock the files.
-		let mut files = self.state.files.write().await;
+		let mut files = self.inner.tracked_files.write().await;
 
 		// Get the file.
-		let Some(File::Opened(file)) = files.get_mut(path) else { return };
+		let Some(TrackedFile::Opened(file)) = files.get_mut(path) else { return };
 
 		// Convert the range to bytes.
 		let range = if let Some(range) = range {
@@ -63,16 +84,15 @@ impl Compiler {
 			},
 		};
 
-		let mut files = self.state.files.write().await;
+		let mut files = self.inner.tracked_files.write().await;
 		match files.get_mut(&path) {
-			// If the file is not in the files map, add it at version 0 and save its modified time.
+			// If the file is not tracked, add it as unopened at version 0 and save its modified time.
 			None => {
 				let metadata = tokio::fs::metadata(&path).await?;
 				let modified = metadata.modified()?;
 				files.insert(
 					path,
-					File::Unopened(UnopenedFile {
-						_module_identifier: module_identifier.clone(),
+					TrackedFile::Unopened(UnopenedTrackedFile {
 						version: 0,
 						modified,
 					}),
@@ -80,11 +100,11 @@ impl Compiler {
 				Ok(0)
 			},
 
-			// If the file is opened, return its version.
-			Some(File::Opened(opened_file)) => Ok(opened_file.version),
+			// If the tracked file is opened, return its version.
+			Some(TrackedFile::Opened(opened_file)) => Ok(opened_file.version),
 
-			// If the file is in the files map but unopened, update its version if the file's modified time is newer, and return the version.
-			Some(File::Unopened(unopened_file)) => {
+			// If the tracked file is unopened, update its version if the file's modified time is newer, and return the version.
+			Some(TrackedFile::Unopened(unopened_file)) => {
 				let metadata = tokio::fs::metadata(&path).await?;
 				let modified = metadata.modified()?;
 				if modified > unopened_file.modified {

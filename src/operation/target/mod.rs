@@ -1,5 +1,5 @@
 use self::{
-	context::{await_value, create_context, ContextState, FutureOutput},
+	context::{await_value, create_context, FutureOutput, State},
 	isolate::THREAD_LOCAL_ISOLATE,
 	module::{load_module, resolve_module_callback},
 };
@@ -34,10 +34,9 @@ impl Cli {
 			.inner
 			.local_pool_handle
 			.spawn_pinned({
-				let main_runtime_handle = tokio::runtime::Handle::current();
 				let cli = self.clone();
 				let target = target.clone();
-				move || async move { run_target_inner(cli, main_runtime_handle, &target).await }
+				move || async move { run_target_inner(cli, &target).await }
 			})
 			.await
 			.context("Failed to join the task.")?
@@ -48,12 +47,8 @@ impl Cli {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn run_target_inner(
-	cli: Cli,
-	main_runtime_handle: tokio::runtime::Handle,
-	target: &Target,
-) -> Result<Value> {
-	let (context, context_state) = create_context(cli.clone(), main_runtime_handle);
+async fn run_target_inner(cli: Cli, target: &Target) -> Result<Value> {
+	let (context, state) = create_context(cli.clone());
 
 	// Get the package's entrypoint path.
 	let entrypoint_path = cli
@@ -82,7 +77,7 @@ async fn run_target_inner(
 		if try_catch_scope.has_caught() {
 			let exception = try_catch_scope.exception().unwrap();
 			let mut scope = v8::HandleScope::new(&mut try_catch_scope);
-			let exception = self::exception::render(&mut scope, &context_state, exception);
+			let exception = self::exception::render(&mut scope, &state, exception);
 			bail!("{exception}");
 		}
 		output.unwrap();
@@ -93,8 +88,7 @@ async fn run_target_inner(
 		let module_output = module.evaluate(&mut try_catch_scope);
 		if try_catch_scope.has_caught() {
 			let exception = try_catch_scope.exception().unwrap();
-			let exception =
-				self::exception::render(&mut try_catch_scope, &context_state, exception);
+			let exception = self::exception::render(&mut try_catch_scope, &state, exception);
 			bail!("{exception}");
 		}
 		let module_output = module_output.unwrap();
@@ -107,7 +101,7 @@ async fn run_target_inner(
 	};
 
 	// Await the module output.
-	await_value(context.clone(), Rc::clone(&context_state), module_output)
+	await_value(context.clone(), Rc::clone(&state), module_output)
 		.await
 		.context("Failed to evaluate the module.")?;
 
@@ -164,7 +158,7 @@ async fn run_target_inner(
 	};
 
 	// Await the output.
-	let output = await_value(context.clone(), Rc::clone(&context_state), output).await?;
+	let output = await_value(context.clone(), Rc::clone(&state), output).await?;
 
 	// Get the output and deserialize it from v8.
 	let output = {

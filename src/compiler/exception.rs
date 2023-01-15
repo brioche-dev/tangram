@@ -15,7 +15,7 @@ pub fn render(scope: &mut v8::HandleScope, exception: v8::Local<v8::Value>) -> S
 	if let Some(stack_trace) = v8::Exception::get_stack_trace(scope, exception) {
 		// Write the stack trace one frame at a time.
 		for i in 0..stack_trace.get_frame_count() {
-			// Retrieve the line, and column.
+			// Get the line, and column.
 			let stack_trace_frame = stack_trace.get_frame(scope, i).unwrap();
 			let line = stack_trace_frame.get_line_number();
 			let column = stack_trace_frame.get_column();

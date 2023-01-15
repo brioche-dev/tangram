@@ -1,4 +1,4 @@
-use super::LanguageServer;
+use crate::Cli;
 use anyhow::Result;
 use lsp_types as lsp;
 
@@ -16,15 +16,13 @@ pub struct Params {
 	pub text_document: lsp::TextDocumentIdentifier,
 }
 
-impl LanguageServer {
-	#[allow(clippy::unused_async)]
-	pub async fn virtual_text_document(&self, params: Params) -> Result<Option<String>> {
-		// Get the module identifier.
-		let module_identifier = params.text_document.uri.try_into()?;
+#[allow(clippy::unused_async)]
+pub async fn virtual_text_document(cli: Cli, params: Params) -> Result<Option<String>> {
+	// Get the module identifier.
+	let module_identifier = params.text_document.uri.try_into()?;
 
-		// Load the file.
-		let text = self.compiler.load(&module_identifier).await?;
+	// Load the file.
+	let text = cli.load(&module_identifier).await?;
 
-		Ok(Some(text))
-	}
+	Ok(Some(text))
 }

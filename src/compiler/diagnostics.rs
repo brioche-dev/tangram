@@ -1,4 +1,5 @@
-use super::{Compiler, Diagnostic, ModuleIdentifier, Request, Response};
+use super::{Diagnostic, ModuleIdentifier, Request, Response};
+use crate::Cli;
 use anyhow::{bail, Result};
 use std::collections::BTreeMap;
 
@@ -12,7 +13,7 @@ pub struct DiagnosticsResponse {
 	pub diagnostics: BTreeMap<ModuleIdentifier, Vec<Diagnostic>>,
 }
 
-impl Compiler {
+impl Cli {
 	pub async fn diagnostics(&self) -> Result<BTreeMap<ModuleIdentifier, Vec<Diagnostic>>> {
 		// Create the request.
 		let request = Request::Diagnostics(DiagnosticsRequest {});

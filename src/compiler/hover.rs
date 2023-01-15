@@ -1,4 +1,5 @@
-use super::{Compiler, ModuleIdentifier, Position, Request, Response};
+use super::{ModuleIdentifier, Position, Request, Response};
+use crate::Cli;
 use anyhow::{bail, Result};
 
 #[derive(Debug, serde::Serialize)]
@@ -14,7 +15,7 @@ pub struct HoverResponse {
 	pub text: Option<String>,
 }
 
-impl Compiler {
+impl Cli {
 	pub async fn hover(
 		&self,
 		module_identifier: ModuleIdentifier,

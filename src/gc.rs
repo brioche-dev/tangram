@@ -39,7 +39,7 @@ impl Cli {
 		self.sweep_operations(&marks)
 			.context("Failed to sweep operations.")?;
 
-		// Sweep the operation's children.
+		// Sweep the operation children.
 		self.sweep_operation_children(&marks)
 			.context("Failed to sweep operation children.")?;
 
@@ -54,8 +54,6 @@ impl Cli {
 		tokio::fs::create_dir_all(&self.temps_path())
 			.await
 			.context("Failed to recreate the temps directory.")?;
-
-		// TODO: Compact the database.
 
 		Ok(())
 	}

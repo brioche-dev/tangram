@@ -1,5 +1,5 @@
-use super::context::{ContextState, Module};
-use crate::compiler::ModuleIdentifier;
+use super::context::{Module, State};
+use crate::{compiler::ModuleIdentifier, Cli};
 use anyhow::{bail, Context, Result};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
@@ -17,12 +17,17 @@ pub fn load_module<'s>(
 	scope: &mut v8::HandleScope<'s>,
 	module_identifier: &ModuleIdentifier,
 ) -> Result<v8::Local<'s, v8::Module>> {
-	// Get the context and context scope.
+	// Get the context.
 	let context = scope.get_current_context();
-	let context_state = Rc::clone(context.get_slot::<Rc<ContextState>>(scope).unwrap());
+
+	// Get the cli.
+	let cli = context.get_slot::<Cli>(scope).unwrap().clone();
+
+	// Get the state.
+	let state = Rc::clone(context.get_slot::<Rc<State>>(scope).unwrap());
 
 	// Return a cached module if this module has already been loaded.
-	if let Some(module) = context_state
+	if let Some(module) = state
 		.modules
 		.borrow()
 		.iter()
@@ -37,7 +42,7 @@ pub fn load_module<'s>(
 	let resource_line_offset = 0;
 	let resource_column_offset = 0;
 	let resource_is_shared_cross_origin = false;
-	let script_id = context_state.modules.borrow().len().to_i32().unwrap() + 1;
+	let script_id = state.modules.borrow().len().to_i32().unwrap() + 1;
 	let source_map_url = v8::undefined(scope).into();
 	let resource_is_opaque = true;
 	let is_wasm = false;
@@ -57,18 +62,18 @@ pub fn load_module<'s>(
 
 	// Load the module.
 	let (sender, receiver) = std::sync::mpsc::channel();
-	context_state.main_runtime_handle.spawn({
-		let compiler = context_state.compiler.clone();
+	cli.inner.runtime_handle.spawn({
+		let cli = cli.clone();
 		let module_identifier = module_identifier.clone();
 		async move {
 			// Load the module.
-			let source = match compiler.load(&module_identifier).await {
+			let source = match cli.load(&module_identifier).await {
 				Ok(source) => source,
 				Err(error) => return sender.send(Err(error)).unwrap(),
 			};
 
 			// Transpile the module.
-			let output = match compiler.transpile(source.clone()).await {
+			let output = match cli.transpile(source.clone()).await {
 				Ok(transpile_output) => transpile_output,
 				Err(error) => return sender.send(Err(error)).unwrap(),
 			};
@@ -93,14 +98,14 @@ pub fn load_module<'s>(
 	if try_catch_scope.has_caught() {
 		let exception = try_catch_scope.exception().unwrap();
 		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
-		let exception = super::exception::render(&mut scope, &context_state, exception);
+		let exception = super::exception::render(&mut scope, &state, exception);
 		bail!("{exception}");
 	}
 	let module = module.unwrap();
 	drop(try_catch_scope);
 
 	// Cache the module.
-	context_state.modules.borrow_mut().push(Module {
+	state.modules.borrow_mut().push(Module {
 		identity_hash: module.get_identity_hash(),
 		module: v8::Global::new(scope, module),
 		module_identifier: module_identifier.clone(),
@@ -136,16 +141,21 @@ fn resolve_module_callback_inner<'s>(
 	_import_assertions: v8::Local<'s, v8::FixedArray>,
 	referrer: v8::Local<'s, v8::Module>,
 ) -> Result<v8::Local<'s, v8::Module>> {
-	// Get a scope for the callback and the context state.
+	// Get a scope for the callback.
 	let mut scope = unsafe { v8::CallbackScope::new(context) };
-	let context_state = Rc::clone(context.get_slot::<Rc<ContextState>>(&mut scope).unwrap());
+
+	// Get the cli.
+	let cli = context.get_slot::<Cli>(&mut scope).unwrap().clone();
+
+	// Get the state.
+	let state = Rc::clone(context.get_slot::<Rc<State>>(&mut scope).unwrap());
 
 	// Get the specifier.
 	let specifier = specifier.to_rust_string_lossy(&mut scope);
 
 	// Get the referrer.
 	let referrer_identity_hash = referrer.get_identity_hash();
-	let referrer = context_state
+	let referrer = state
 		.modules
 		.borrow()
 		.iter()
@@ -160,12 +170,12 @@ fn resolve_module_callback_inner<'s>(
 
 	// Resolve.
 	let (sender, receiver) = std::sync::mpsc::channel();
-	context_state.main_runtime_handle.spawn({
-		let compiler = context_state.compiler.clone();
+	cli.inner.runtime_handle.spawn({
+		let cli = cli.clone();
 		let specifier = specifier.clone();
 		let referrer = referrer.clone();
 		async move {
-			let module_identifier = compiler.resolve(&specifier, Some(&referrer)).await;
+			let module_identifier = cli.resolve(&specifier, Some(&referrer)).await;
 			sender.send(module_identifier).unwrap();
 		}
 	});

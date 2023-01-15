@@ -1,17 +1,11 @@
 use super::{isolate::THREAD_LOCAL_ISOLATE, syscall::syscall};
-use crate::{
-	compiler::{Compiler, ModuleIdentifier},
-	Cli,
-};
+use crate::{compiler::ModuleIdentifier, Cli};
 use anyhow::{anyhow, Result};
 use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, task::Poll};
 
-pub struct ContextState {
-	pub cli: Cli,
-	pub compiler: Compiler,
-	pub main_runtime_handle: tokio::runtime::Handle,
+pub struct State {
 	pub modules: Rc<RefCell<Vec<Module>>>,
 	pub futures: Rc<RefCell<FuturesUnordered<LocalBoxFuture<'static, FutureOutput>>>>,
 }
@@ -32,27 +26,24 @@ pub struct FutureOutput {
 	pub result: Result<v8::Global<v8::Value>>,
 }
 
-pub fn create_context(
-	cli: Cli,
-	main_runtime_handle: tokio::runtime::Handle,
-) -> (v8::Global<v8::Context>, Rc<ContextState>) {
+pub fn create_context(cli: Cli) -> (v8::Global<v8::Context>, Rc<State>) {
 	// Create the context.
 	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
 	let mut isolate = isolate.borrow_mut();
 	let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
 	let context = v8::Context::new(&mut handle_scope);
 
-	// Create the context state.
-	let context_state = Rc::new(ContextState {
-		cli: cli.clone(),
-		compiler: Compiler::new(cli),
-		main_runtime_handle,
+	// Set the cli on the context.
+	context.set_slot(&mut handle_scope, cli);
+
+	// Create the state.
+	let state = Rc::new(State {
 		modules: Rc::new(RefCell::new(Vec::new())),
 		futures: Rc::new(RefCell::new(FuturesUnordered::new())),
 	});
 
-	// Set the context state on the context.
-	context.set_slot(&mut handle_scope, Rc::clone(&context_state));
+	// Set the state on the context.
+	context.set_slot(&mut handle_scope, Rc::clone(&state));
 
 	// Create a context scope.
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
@@ -86,12 +77,12 @@ pub fn create_context(
 	// Make the context global.
 	let context = v8::Global::new(&mut handle_scope, context);
 
-	(context, context_state)
+	(context, state)
 }
 
 pub async fn await_value(
 	context: v8::Global<v8::Context>,
-	context_state: Rc<ContextState>,
+	state: Rc<State>,
 	value: v8::Global<v8::Value>,
 ) -> Result<v8::Global<v8::Value>> {
 	let context = context.clone();
@@ -101,7 +92,7 @@ pub async fn await_value(
 		// Poll the context's futures and resolve or reject all that are ready.
 		loop {
 			// Poll the context's futures.
-			let output = match context_state.futures.borrow_mut().poll_next_unpin(cx) {
+			let output = match state.futures.borrow_mut().poll_next_unpin(cx) {
 				Poll::Ready(Some(output)) => output,
 				Poll::Ready(None) => break,
 				Poll::Pending => return Poll::Pending,
@@ -112,7 +103,7 @@ pub async fn await_value(
 				result,
 			} = output;
 
-			// Retrieve the thread local isolate and enter the context.
+			// Get the thread local isolate and enter the context.
 			let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
 			let mut isolate = isolate.borrow_mut();
 			let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
@@ -161,8 +152,7 @@ pub async fn await_value(
 
 				v8::PromiseState::Rejected => {
 					let exception = promise.result(&mut context_scope);
-					let exception =
-						super::exception::render(&mut context_scope, &context_state, exception);
+					let exception = super::exception::render(&mut context_scope, &state, exception);
 					Poll::Ready(Err(anyhow!("{exception}")))
 				},
 			},

@@ -10,17 +10,13 @@ use self::{
 	syscall::syscall,
 	transpile::{TranspileRequest, TranspileResponse},
 };
-pub use self::{module_identifier::ModuleIdentifier, types::*};
+pub use self::{
+	files::{OpenedTrackedFile, TrackedFile, UnopenedTrackedFile},
+	module_identifier::ModuleIdentifier,
+	types::*,
+};
 use crate::Cli;
 use anyhow::{anyhow, Context, Result};
-use std::{
-	collections::HashMap,
-	path::PathBuf,
-	rc::Rc,
-	sync::{Arc, Mutex},
-	time::SystemTime,
-};
-use tokio::sync::RwLock;
 
 mod check;
 mod completion;
@@ -38,37 +34,6 @@ mod resolve;
 mod syscall;
 mod transpile;
 mod types;
-
-#[derive(Clone)]
-pub struct Compiler {
-	cli: Cli,
-	request_sender: Arc<Mutex<Option<RequestSender>>>,
-	state: Arc<State>,
-}
-
-pub struct State {
-	files: RwLock<HashMap<PathBuf, File, fnv::FnvBuildHasher>>,
-}
-
-#[derive(Debug)]
-enum File {
-	Opened(OpenedFile),
-	Unopened(UnopenedFile),
-}
-
-#[derive(Debug)]
-struct OpenedFile {
-	module_identifier: ModuleIdentifier,
-	version: i32,
-	text: String,
-}
-
-#[derive(Debug)]
-struct UnopenedFile {
-	_module_identifier: ModuleIdentifier,
-	version: i32,
-	modified: SystemTime,
-}
 
 #[derive(Debug, serde::Serialize)]
 #[serde(tag = "type", content = "request", rename_all = "snake_case")]
@@ -98,28 +63,17 @@ pub enum Response {
 	Transpile(TranspileResponse),
 }
 
-type RequestSender = tokio::sync::mpsc::UnboundedSender<Option<(Request, ResponseSender)>>;
-type RequestReceiver = tokio::sync::mpsc::UnboundedReceiver<Option<(Request, ResponseSender)>>;
-type ResponseSender = tokio::sync::oneshot::Sender<Result<Response>>;
-type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
+pub type RequestSender = tokio::sync::mpsc::UnboundedSender<Option<(Request, ResponseSender)>>;
+pub type RequestReceiver = tokio::sync::mpsc::UnboundedReceiver<Option<(Request, ResponseSender)>>;
+pub type ResponseSender = tokio::sync::oneshot::Sender<Result<Response>>;
+pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
-impl Compiler {
-	#[must_use]
-	pub fn new(cli: Cli) -> Compiler {
-		let state = State {
-			files: RwLock::new(HashMap::default()),
-		};
-		Compiler {
-			cli,
-			request_sender: Arc::new(std::sync::Mutex::new(None)),
-			state: Arc::new(state),
-		}
-	}
-
+impl Cli {
 	async fn request(&self, request: Request) -> Result<Response> {
 		// Create the request handler if necessary.
 		let request_sender = self
-			.request_sender
+			.inner
+			.compiler_request_sender
 			.lock()
 			.unwrap()
 			.get_or_insert_with(|| {
@@ -129,9 +83,8 @@ impl Compiler {
 
 				// Spawn a thread for the request handler.
 				std::thread::spawn({
-					let compiler = self.clone();
-					let main_runtime_handle = tokio::runtime::Handle::current();
-					move || handle_requests(compiler, main_runtime_handle, request_receiver)
+					let cli = self.clone();
+					move || handle_requests(cli, request_receiver)
 				});
 
 				request_sender
@@ -156,25 +109,7 @@ impl Compiler {
 	}
 }
 
-impl Drop for Compiler {
-	fn drop(&mut self) {
-		// Attempt to shut down the request handler.
-		if let Some(sender) = self.request_sender.lock().unwrap().take() {
-			sender.send(None).ok();
-		}
-	}
-}
-
-struct ContextState {
-	compiler: Compiler,
-	main_runtime_handle: tokio::runtime::Handle,
-}
-
-fn handle_requests(
-	compiler: Compiler,
-	main_runtime_handle: tokio::runtime::Handle,
-	mut request_receiver: RequestReceiver,
-) {
+fn handle_requests(cli: Cli, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
 	let params = v8::CreateParams::default();
 	let mut isolate = v8::Isolate::new(params);
@@ -184,14 +119,8 @@ fn handle_requests(
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-	// Create the context state.
-	let context_state = Rc::new(ContextState {
-		compiler,
-		main_runtime_handle,
-	});
-
-	// Set the context state on the context.
-	context.set_slot(&mut context_scope, context_state);
+	// Set the cli on the context.
+	context.set_slot(&mut context_scope, cli);
 
 	// Add the syscall function to the global.
 	let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();

@@ -55,7 +55,7 @@ impl Cli {
 		// Get the dependencies.
 		let mut dependencies = BTreeMap::new();
 		for (dependency_name, dependency) in manifest.dependencies.unwrap_or_default() {
-			// Retrieve the path dependency.
+			// Get the path dependency.
 			let entry = match dependency {
 				crate::manifest::Dependency::PathDependency(dependency) => {
 					// Get the absolute path to the dependency.

@@ -1,8 +1,7 @@
-use super::{ContextState, ModuleIdentifier};
-use crate::compiler::{File, OpenedFile};
+use super::{ModuleIdentifier, OpenedTrackedFile, TrackedFile};
+use crate::Cli;
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
-use std::rc::Rc;
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn syscall(
@@ -47,11 +46,13 @@ fn syscall_sync<'s, A, T, F>(
 where
 	A: serde::de::DeserializeOwned,
 	T: serde::Serialize,
-	F: FnOnce(&mut v8::HandleScope<'s>, Rc<ContextState>, A) -> Result<T>,
+	F: FnOnce(&Cli, &mut v8::HandleScope<'s>, A) -> Result<T>,
 {
-	// Retrieve the context and context state.
+	// Get the context.
 	let context = scope.get_current_context();
-	let context_state = Rc::clone(context.get_slot::<Rc<ContextState>>(scope).unwrap());
+
+	// Get the cli.
+	let cli = context.get_slot::<Cli>(scope).unwrap().clone();
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
@@ -61,7 +62,7 @@ where
 	let args = serde_v8::from_v8(scope, args.into()).context("Failed to deserialize the args.")?;
 
 	// Call the function.
-	let value = f(scope, context_state, args)?;
+	let value = f(&cli, scope, args)?;
 
 	// Serialize the value.
 	let value = serde_v8::to_v8(scope, &value).context("Failed to serialize the value.")?;
@@ -70,11 +71,7 @@ where
 }
 
 #[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)]
-fn syscall_print(
-	_scope: &mut v8::HandleScope,
-	_state: Rc<ContextState>,
-	args: (String,),
-) -> Result<()> {
+fn syscall_print(_cli: &Cli, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	eprintln!("{string}");
 	Ok(())
@@ -88,18 +85,17 @@ struct LoadOutput {
 }
 
 fn syscall_opened_files(
+	cli: &Cli,
 	_scope: &mut v8::HandleScope,
-	state: Rc<ContextState>,
 	_args: (),
 ) -> Result<Vec<ModuleIdentifier>> {
-	let main_runtime_handle = state.main_runtime_handle.clone();
-	main_runtime_handle.block_on(async move {
-		let files = state.compiler.state.files.read().await;
-		let module_identifiers = files
+	cli.inner.runtime_handle.clone().block_on(async move {
+		let tracked_files = cli.inner.tracked_files.read().await;
+		let module_identifiers = tracked_files
 			.values()
-			.filter_map(|file| match file {
-				File::Opened(
-					opened_file @ OpenedFile {
+			.filter_map(|tracked_file| match tracked_file {
+				TrackedFile::Opened(
+					opened_file @ OpenedTrackedFile {
 						module_identifier: ModuleIdentifier::Path { .. },
 						..
 					},
@@ -112,28 +108,25 @@ fn syscall_opened_files(
 }
 
 fn syscall_version(
+	cli: &Cli,
 	_scope: &mut v8::HandleScope,
-	state: Rc<ContextState>,
 	args: (ModuleIdentifier,),
 ) -> Result<String> {
 	let (url,) = args;
-	let main_runtime_handle = state.main_runtime_handle.clone();
-	main_runtime_handle.block_on(async move {
-		let version = state.compiler.version(&url).await?;
+	cli.inner.runtime_handle.clone().block_on(async move {
+		let version = cli.version(&url).await?;
 		Ok(version.to_string())
 	})
 }
 
 fn syscall_resolve(
+	cli: &Cli,
 	_scope: &mut v8::HandleScope,
-	state: Rc<ContextState>,
 	args: (String, Option<ModuleIdentifier>),
 ) -> Result<ModuleIdentifier> {
 	let (specifier, referrer) = args;
-	let main_runtime_handle = state.main_runtime_handle.clone();
-	main_runtime_handle.block_on(async move {
-		let module_identifier = state
-			.compiler
+	cli.inner.runtime_handle.clone().block_on(async move {
+		let module_identifier = cli
 			.resolve(&specifier, referrer.as_ref())
 			.await
 			.with_context(|| {
@@ -146,25 +139,19 @@ fn syscall_resolve(
 }
 
 fn syscall_load(
+	cli: &Cli,
 	_scope: &mut v8::HandleScope,
-	state: Rc<ContextState>,
 	args: (ModuleIdentifier,),
 ) -> Result<LoadOutput> {
 	let (module_identifier,) = args;
-	let main_runtime_handle = state.main_runtime_handle.clone();
-	main_runtime_handle.block_on(async move {
-		let text = state
-			.compiler
+	cli.inner.runtime_handle.clone().block_on(async move {
+		let text = cli
 			.load(&module_identifier)
 			.await
 			.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
-		let version = state
-			.compiler
-			.version(&module_identifier)
-			.await
-			.with_context(|| {
-				format!(r#"Failed to get the version for module "{module_identifier}"."#)
-			})?;
+		let version = cli.version(&module_identifier).await.with_context(|| {
+			format!(r#"Failed to get the version for module "{module_identifier}"."#)
+		})?;
 		Ok(LoadOutput { text, version })
 	})
 }

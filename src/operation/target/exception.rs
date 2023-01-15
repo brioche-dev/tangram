@@ -1,11 +1,11 @@
-use super::context::ContextState;
+use super::context::State;
 use num::ToPrimitive;
 use std::fmt::Write;
 
 /// Render an exception to a string. The string will include the exception's message and a stack trace.
 pub fn render(
 	scope: &mut v8::HandleScope,
-	context_state: &ContextState,
+	state: &State,
 	exception: v8::Local<v8::Value>,
 ) -> String {
 	let mut string = String::new();
@@ -21,7 +21,7 @@ pub fn render(
 	if let Some(stack_trace) = v8::Exception::get_stack_trace(scope, exception) {
 		// Write the stack trace one frame at a time.
 		for i in 0..stack_trace.get_frame_count() {
-			// Retrieve the module identifier, line, and column.
+			// Get the module identifier, line, and column.
 			let stack_trace_frame = stack_trace.get_frame(scope, i).unwrap();
 			let module_identifier = stack_trace_frame
 				.get_script_name(scope)
@@ -33,7 +33,7 @@ pub fn render(
 			let column = stack_trace_frame.get_column().to_u32().unwrap() - 1;
 
 			// Apply a source map if one is available.
-			let (line, column) = context_state
+			let (line, column) = state
 				.modules
 				.borrow()
 				.iter()

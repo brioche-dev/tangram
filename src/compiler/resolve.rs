@@ -1,4 +1,5 @@
-use super::{module_identifier::TANGRAM_SCHEME, Compiler, ModuleIdentifier};
+use super::{module_identifier::TANGRAM_SCHEME, ModuleIdentifier};
+use crate::Cli;
 use crate::{
 	lockfile::Lockfile,
 	manifest::{self, Manifest},
@@ -10,7 +11,7 @@ use camino::Utf8Path;
 use std::path::Path;
 use url::Url;
 
-impl Compiler {
+impl Cli {
 	pub async fn resolve(
 		&self,
 		specifier: &str,
@@ -41,7 +42,7 @@ impl Compiler {
 	}
 }
 
-impl Compiler {
+impl Cli {
 	fn resolve_path(
 		specifier: &str,
 		referrer: Option<&ModuleIdentifier>,
@@ -84,7 +85,7 @@ impl Compiler {
 	}
 }
 
-impl Compiler {
+impl Cli {
 	async fn resolve_tangram(
 		&self,
 		specifier: &Url,
@@ -119,10 +120,7 @@ impl Compiler {
 		let specifier_package_name = specifier.path();
 
 		// Get the referrer's dependencies.
-		let referrer_dependencies = self
-			.cli
-			.get_package_local(referrer_package_hash)?
-			.dependencies;
+		let referrer_dependencies = self.get_package_local(referrer_package_hash)?.dependencies;
 
 		// Get the specifier's package hash from the referrer's dependencies.
 		let specifier_package_hash = referrer_dependencies.get(specifier_package_name).context(

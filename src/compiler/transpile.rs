@@ -1,4 +1,5 @@
-use super::{Compiler, TranspileOutput};
+use super::TranspileOutput;
+use crate::Cli;
 use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Serialize)]
@@ -14,7 +15,7 @@ pub struct TranspileResponse {
 	pub source_map_text: String,
 }
 
-impl Compiler {
+impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn transpile(&self, text: String) -> Result<TranspileOutput> {
 		// Parse the code.

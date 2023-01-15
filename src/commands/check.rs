@@ -1,5 +1,5 @@
 use crate::{
-	compiler::{Compiler, Diagnostic, Location, Position},
+	compiler::{Diagnostic, Location, Position},
 	specifier::Specifier,
 	Cli,
 };
@@ -23,21 +23,18 @@ impl Cli {
 			self.generate_lockfile(path, args.locked).await?;
 		}
 
-		// Create a compiler.
-		let compiler = Compiler::new(self.clone());
-
 		// Get the entrypoint module identifier.
 		let module_identifier = self
 			.entrypoint_module_identifier_for_specifier(&args.specifier)
 			.await?;
 
 		// Check the package for diagnostics.
-		let diagnostics = compiler.check(vec![module_identifier]).await?;
+		let diagnostics = self.check(vec![module_identifier]).await?;
 
 		// Print the diagnostics.
 		for diagnostics in diagnostics.values() {
 			for diagnostic in diagnostics {
-				// Retrieve the diagnostic location and message.
+				// Get the diagnostic location and message.
 				let Diagnostic {
 					location, message, ..
 				} = diagnostic;

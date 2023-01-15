@@ -1,25 +1,25 @@
-use super::{util::to_uri, LanguageServer};
+use super::{send_notification, util::to_uri, Sender};
+use crate::Cli;
 use anyhow::Result;
 use lsp_types as lsp;
 
-impl LanguageServer {
-	pub async fn update_diagnostics(&self) -> Result<()> {
-		// Perform the check.
-		let diagnostics = self.compiler.diagnostics().await?;
+pub async fn update_diagnostics(cli: &Cli, sender: &Sender) -> Result<()> {
+	// Perform the check.
+	let diagnostics = cli.diagnostics().await?;
 
-		// Publish the diagnostics.
-		for (url, diagnostics) in diagnostics {
-			let version = self.compiler.version(&url).await.ok();
-			let diagnostics = diagnostics.into_iter().map(Into::into).collect();
-			self.send_notification::<lsp::notification::PublishDiagnostics>(
-				lsp::PublishDiagnosticsParams {
-					uri: to_uri(url),
-					diagnostics,
-					version,
-				},
-			);
-		}
-
-		Ok(())
+	// Publish the diagnostics.
+	for (url, diagnostics) in diagnostics {
+		let version = cli.version(&url).await.ok();
+		let diagnostics = diagnostics.into_iter().map(Into::into).collect();
+		send_notification::<lsp::notification::PublishDiagnostics>(
+			sender,
+			lsp::PublishDiagnosticsParams {
+				uri: to_uri(url),
+				diagnostics,
+				version,
+			},
+		);
 	}
+
+	Ok(())
 }

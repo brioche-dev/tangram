@@ -54,7 +54,7 @@ export let directory = async (
 					// If there are trailing path components then recurse.
 					let trailingPath = path(trailingComponents).toString();
 
-					// Retrieve an existing directory.
+					// Get an existing directory.
 					let entryHash = entries.get(name);
 					let entry;
 					if (entryHash !== undefined) {

@@ -68,7 +68,7 @@ impl Watcher {
 			};
 		}
 
-		// Retrieve and return the entry.
+		// Get and return the entry.
 		let entry = self.cache.read().unwrap().get(path).unwrap().clone();
 		Ok(Some(entry))
 	}

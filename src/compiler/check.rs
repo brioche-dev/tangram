@@ -1,4 +1,5 @@
-use super::{Compiler, Diagnostic, ModuleIdentifier, Request, Response};
+use super::{Diagnostic, ModuleIdentifier, Request, Response};
+use crate::Cli;
 use anyhow::{bail, Result};
 use std::collections::BTreeMap;
 
@@ -14,7 +15,7 @@ pub struct CheckResponse {
 	pub diagnostics: BTreeMap<ModuleIdentifier, Vec<Diagnostic>>,
 }
 
-impl Compiler {
+impl Cli {
 	/// Get all diagnostics for a package.
 	pub async fn check(
 		&self,
