@@ -25,7 +25,7 @@ impl Cli {
 		dependency_handler: Option<&'_ DependencyHandlerFn>,
 	) -> Result<()> {
 		// Create a watcher.
-		let watcher = Watcher::new(self.path(), Arc::clone(&self.inner.file_system_semaphore));
+		let watcher = Watcher::new(self.path(), Arc::clone(&self.inner.file_semaphore));
 
 		// Call the recursive checkout function.
 		self.checkout_path(&watcher, artifact_hash, path, dependency_handler)
@@ -181,11 +181,13 @@ impl Cli {
 		};
 
 		// Copy the blob to the path.
+		let permit = self.inner.file_semaphore.acquire_many(2).await?;
 		let output =
 			std::fs::File::create(path).context("Failed to create the file to checkout to.")?;
 		self.copy_blob(file.blob, output)
 			.await
 			.context("Failed to copy the blob.")?;
+		drop(permit);
 
 		// Make the file executable if necessary.
 		if file.executable {

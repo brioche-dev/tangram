@@ -15,8 +15,8 @@ use tokio_util::io::{StreamReader, SyncIoBridge};
 
 impl Cli {
 	pub async fn run_download(&self, download: &Download) -> Result<Value> {
-		// Acquire a file system permit.
-		let _permit = self.inner.file_system_semaphore.acquire().await?;
+		// Acquire a file permit.
+		let _permit = self.inner.file_semaphore.acquire().await?;
 
 		// Get the archive format.
 		let archive_format = ArchiveFormat::for_path(Path::new(download.url.path()));

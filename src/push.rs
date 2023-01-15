@@ -34,7 +34,7 @@ impl Cli {
 
 			// If this artifact is a file and the blob is missing, push it.
 			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
-				let _permit = self.inner.file_system_semaphore.acquire().await?;
+				let _permit = self.inner.file_semaphore.acquire().await?;
 
 				// Get the blob.
 				let blob = self

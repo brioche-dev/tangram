@@ -1,21 +1,34 @@
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 use url::Url;
+
+use crate::Cli;
 
 mod artifact;
 mod blob;
 
+impl Cli {
+	#[must_use]
+	pub fn create_client(&self, url: Url, token: Option<String>) -> Client {
+		Client::new(url, token, Arc::clone(&self.inner.socket_semaphore))
+	}
+}
+
 pub struct Client {
 	pub url: Url,
 	pub token: Option<String>,
+	pub semaphore: Arc<Semaphore>,
 	pub http_client: reqwest::Client,
 }
 
 impl Client {
 	#[must_use]
-	pub fn new(url: Url, token: Option<String>) -> Client {
+	pub fn new(url: Url, token: Option<String>, semaphore: Arc<Semaphore>) -> Client {
 		let http_client = reqwest::Client::new();
 		Client {
 			url,
 			token,
+			semaphore,
 			http_client,
 		}
 	}

@@ -21,12 +21,17 @@ pub struct UnopenedTrackedFile {
 
 impl Cli {
 	pub async fn open_file(&self, path: &Path, version: i32, text: String) {
+		// Get the module identifier.
 		let Ok(module_identifier) = ModuleIdentifier::for_path(path).await else { return };
+
+		// Create the tracked file.
 		let file = TrackedFile::Opened(OpenedTrackedFile {
 			module_identifier,
 			version,
 			text,
 		});
+
+		// Add the tracked file.
 		self.inner
 			.tracked_files
 			.write()

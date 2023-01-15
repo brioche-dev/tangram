@@ -1,3 +1,5 @@
+use std::{pin::Pin, sync::Arc};
+
 use super::Client;
 use crate::blob::BlobHash;
 use anyhow::{Context, Result};
@@ -10,6 +12,10 @@ impl Client {
 	where
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
+		// Get a permit.
+		let _permit = self.semaphore.acquire().await?;
+
+		// Create a stream for the body.
 		let stream = tokio_util::io::ReaderStream::new(reader);
 		let body = hyper::Body::wrap_stream(stream);
 
@@ -37,6 +43,9 @@ impl Client {
 	}
 
 	pub async fn get_blob(&self, blob_hash: BlobHash) -> Result<impl AsyncRead> {
+		// Get a permit.
+		let permit = Arc::clone(&self.semaphore).acquire_owned().await?;
+
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");
 		let mut url = self.url.clone();
@@ -57,9 +66,30 @@ impl Client {
 		// Create an async reader from the body.
 		let body = StreamReader::new(body);
 
-		// Create the blob.
-		let blob = Box::new(body);
+		Ok(AsyncReaderWithPermit {
+			reader: body,
+			permit,
+		})
+	}
+}
 
-		Ok(blob)
+pub struct AsyncReaderWithPermit<R>
+where
+	R: AsyncRead,
+{
+	pub reader: R,
+	pub permit: tokio::sync::OwnedSemaphorePermit,
+}
+
+impl<R> AsyncRead for AsyncReaderWithPermit<R>
+where
+	R: AsyncRead + Unpin,
+{
+	fn poll_read(
+		mut self: std::pin::Pin<&mut Self>,
+		cx: &mut std::task::Context<'_>,
+		buf: &mut tokio::io::ReadBuf<'_>,
+	) -> std::task::Poll<std::io::Result<()>> {
+		Pin::new(&mut self.reader).poll_read(cx, buf)
 	}
 }

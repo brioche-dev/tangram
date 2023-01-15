@@ -11,7 +11,7 @@ use std::{path::Path, sync::Arc};
 impl Cli {
 	pub async fn checkin(&self, path: &Path) -> Result<ArtifactHash> {
 		// Create a watcher.
-		let watcher = Watcher::new(self.path(), Arc::clone(&self.inner.file_system_semaphore));
+		let watcher = Watcher::new(self.path(), Arc::clone(&self.inner.file_semaphore));
 
 		// Check in the artifact for the path recursively.
 		self.checkin_path(&watcher, path).await?;
@@ -50,7 +50,7 @@ impl Cli {
 
 			// If the artifact is a file and the blob is missing, add it.
 			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
-				let permit = self.inner.file_system_semaphore.acquire().await?;
+				let permit = self.inner.file_semaphore.acquire().await?;
 
 				let temp_path = self.temp_path();
 				let blob_path = self.blob_path(blob_hash);
@@ -67,7 +67,7 @@ impl Cli {
 			// If the artifact is a dependency that is missing, check it in.
 			AddArtifactOutcome::DependencyMissing { .. } => {
 				// Read the target from the path.
-				let permit = self.inner.file_system_semaphore.acquire().await.unwrap();
+				let permit = self.inner.file_semaphore.acquire().await.unwrap();
 				let target = tokio::fs::read_link(path).await?;
 				drop(permit);
 

@@ -1,4 +1,4 @@
-use crate::{artifact::ArtifactHash, client::Client, Cli};
+use crate::{artifact::ArtifactHash, Cli};
 use anyhow::{Context, Result};
 use clap::Parser;
 use url::Url;
@@ -13,7 +13,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_pull(&self, args: Args) -> Result<()> {
 		// Create a client.
-		let client = Client::new(args.url, None);
+		let client = self.create_client(args.url, None);
 
 		// Pull.
 		self.pull(&client, args.artifact_hash)

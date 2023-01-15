@@ -8,17 +8,8 @@ mod get;
 mod hash;
 
 pub struct Blob {
-	_permit: tokio::sync::OwnedSemaphorePermit,
-	file: tokio::fs::File,
-}
-
-impl Blob {
-	pub fn new(permit: tokio::sync::OwnedSemaphorePermit, file: tokio::fs::File) -> Blob {
-		Blob {
-			_permit: permit,
-			file,
-		}
-	}
+	pub file: tokio::fs::File,
+	pub permit: tokio::sync::OwnedSemaphorePermit,
 }
 
 impl AsyncRead for Blob {

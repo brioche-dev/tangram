@@ -6,8 +6,8 @@ use tokio_stream::StreamExt;
 
 impl Cli {
 	pub async fn add_blob(&self, reader: impl AsyncRead + Unpin) -> Result<BlobHash> {
-		// Get a file system permit.
-		let permit = self.inner.file_system_semaphore.acquire().await.unwrap();
+		// Get a file permit.
+		let permit = self.inner.file_semaphore.acquire().await.unwrap();
 
 		// Create a temp file to read the blob into.
 		let temp_path = self.temp_path();
@@ -31,7 +31,7 @@ impl Cli {
 		let blob_path = self.blob_path(blob_hash);
 		tokio::fs::rename(&temp_path, &blob_path).await?;
 
-		// Drop the file system permit.
+		// Drop the file permit.
 		drop(permit);
 
 		Ok(blob_hash)

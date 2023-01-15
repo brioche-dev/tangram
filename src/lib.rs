@@ -8,7 +8,7 @@ use self::dirs::home_directory_path;
 use crate::{
 	blob::BlobHash,
 	database::Database,
-	heuristics::FILE_SYSTEM_CONCURRENCY_LIMIT,
+	heuristics::SOCKET_SEMAPHORE_SIZE,
 	id::Id,
 	lock::{ExclusiveGuard, Lock, SharedGuard},
 };
@@ -69,8 +69,11 @@ struct Inner {
 	/// The database is used to store artifacts, packages, and operations.
 	pub database: Database,
 
-	/// The file system semaphore is used to prevent the cli from opening too many files simultaneously.
-	pub file_system_semaphore: Arc<Semaphore>,
+	/// The file semaphore is used to prevent the cli from opening too many sockets simultaneously.
+	pub file_semaphore: Arc<Semaphore>,
+
+	/// The socket semaphore is used to prevent the cli from opening too many files simultaneously.
+	pub socket_semaphore: Arc<Semaphore>,
 
 	/// The HTTP client is for performing HTTP requests when running download operations.
 	pub http_client: reqwest::Client,
@@ -131,8 +134,11 @@ impl Cli {
 		let database_path = path.join("database.mdb");
 		let database = Database::new(&database_path)?;
 
-		// Create the file system semaphore.
-		let file_system_semaphore = Arc::new(Semaphore::new(FILE_SYSTEM_CONCURRENCY_LIMIT));
+		// Create the file semaphore.
+		let file_semaphore = Arc::new(Semaphore::new(SOCKET_SEMAPHORE_SIZE));
+
+		// Create the socket semaphore.
+		let socket_semaphore = Arc::new(Semaphore::new(SOCKET_SEMAPHORE_SIZE));
 
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
@@ -166,7 +172,8 @@ impl Cli {
 				path,
 				lock,
 				database,
-				file_system_semaphore,
+				file_semaphore,
+				socket_semaphore,
 				http_client,
 				local_pool_handle,
 				runtime_handle,

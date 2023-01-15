@@ -1,5 +1,7 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
+
+use crate::{compiler::ModuleIdentifier, package::PackageHash, Cli};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Specifier {
@@ -43,6 +45,77 @@ impl std::fmt::Display for Specifier {
 				Ok(())
 			},
 		}
+	}
+}
+
+impl Cli {
+	pub async fn entrypoint_module_identifier_for_specifier(
+		&self,
+		specifier: &Specifier,
+	) -> Result<ModuleIdentifier> {
+		match &specifier {
+			Specifier::Path { path } => {
+				let path = std::env::current_dir()
+					.context("Failed to get the current directory")?
+					.join(path);
+				let path = tokio::fs::canonicalize(&path).await?;
+				let module_identifier = ModuleIdentifier::new_path(path, "tangram.ts".into());
+				Ok(module_identifier)
+			},
+
+			Specifier::Registry { name, version } => {
+				let package_hash = self
+					.get_package_hash_from_specifier(name, version.as_deref())
+					.await?;
+				let module_identifier =
+					ModuleIdentifier::new_hash(package_hash, "tangram.ts".into());
+				Ok(module_identifier)
+			},
+		}
+	}
+
+	pub async fn package_hash_for_specifier(
+		&self,
+		specifier: &Specifier,
+		locked: bool,
+	) -> Result<PackageHash> {
+		match specifier {
+			Specifier::Path { path } => {
+				let package_hash = self.checkin_package(path, locked).await.with_context(|| {
+					format!("Failed to create the package for specifier '{specifier}'.")
+				})?;
+				Ok(package_hash)
+			},
+
+			Specifier::Registry { name, version } => {
+				let package_hash = self
+					.get_package_hash_from_specifier(name, version.as_deref())
+					.await?;
+				Ok(package_hash)
+			},
+		}
+	}
+
+	#[allow(clippy::unused_async)]
+	pub async fn get_package_hash_from_specifier(
+		&self,
+		_name: &str,
+		_version: Option<&str>,
+	) -> Result<PackageHash> {
+		todo!()
+		// let name = &package_specifier.name;
+		// let version = package_specifier
+		// 	.version
+		// 	.as_ref()
+		// 	.context("A version is required.")?;
+		// let hash = self
+		// 	.api_client
+		// 	.get_package_version(name, version)
+		// 	.await
+		// 	.with_context(|| {
+		// 		format!(r#"Failed to get the package "{name}" at version "{version}"."#)
+		// 	})?;
+		// Ok(hash)
 	}
 }
 
