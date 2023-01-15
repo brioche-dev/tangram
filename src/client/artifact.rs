@@ -6,7 +6,7 @@ use super::Client;
 impl Client {
 	pub async fn try_get_artifact(&self, artifact_hash: ArtifactHash) -> Result<Option<Artifact>> {
 		// Get a permit.
-		let _permit = self.semaphore.acquire().await?;
+		let _permit = self.socket_semaphore.acquire().await?;
 
 		// Create the path.
 		let path = format!("/v1/artifacts/{artifact_hash}");
@@ -40,7 +40,7 @@ impl Client {
 
 	pub async fn try_add_artifact(&self, artifact: &Artifact) -> Result<AddArtifactOutcome> {
 		// Get a permit.
-		let _permit = self.semaphore.acquire().await?;
+		let _permit = self.socket_semaphore.acquire().await?;
 
 		// Build the URL.
 		let mut url = self.url.clone();

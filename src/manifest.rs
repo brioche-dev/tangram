@@ -3,10 +3,8 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Manifest {
-	pub name: String,
-	pub version: String,
-	#[serde(default)]
-	pub targets: Vec<String>,
+	pub name: Option<String>,
+	pub version: Option<String>,
 	pub dependencies: Option<BTreeMap<String, Dependency>>,
 }
 

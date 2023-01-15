@@ -13,7 +13,7 @@ impl Client {
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
 		// Get a permit.
-		let _permit = self.semaphore.acquire().await?;
+		let _permit = self.socket_semaphore.acquire().await?;
 
 		// Create a stream for the body.
 		let stream = tokio_util::io::ReaderStream::new(reader);
@@ -44,7 +44,7 @@ impl Client {
 
 	pub async fn get_blob(&self, blob_hash: BlobHash) -> Result<impl AsyncRead> {
 		// Get a permit.
-		let permit = Arc::clone(&self.semaphore).acquire_owned().await?;
+		let permit = Arc::clone(&self.socket_semaphore).acquire_owned().await?;
 
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");

@@ -39,13 +39,13 @@ impl Cli {
 		// Get the package manifest.
 		let manifest = self.get_package_manifest(package_hash).await?;
 
-		// Get the package name.
-		let package_name = manifest.name;
-
 		// Get the executable path.
-		let executable_path = args
-			.executable_path
-			.unwrap_or_else(|| PathBuf::from("bin").join(package_name));
+		let executable_path = if let Some(executable_path) = args.executable_path {
+			executable_path
+		} else {
+			let package_name = manifest.name.as_ref().context("Could not determine the path of the executable. Please give your package a name or provide the --executable-path argument.")?;
+			PathBuf::from("bin").join(package_name)
+		};
 
 		// Get the target name.
 		let name = args.target.unwrap_or_else(|| "default".to_owned());

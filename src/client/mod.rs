@@ -17,18 +17,18 @@ impl Cli {
 pub struct Client {
 	pub url: Url,
 	pub token: Option<String>,
-	pub semaphore: Arc<Semaphore>,
+	pub socket_semaphore: Arc<Semaphore>,
 	pub http_client: reqwest::Client,
 }
 
 impl Client {
 	#[must_use]
-	pub fn new(url: Url, token: Option<String>, semaphore: Arc<Semaphore>) -> Client {
+	pub fn new(url: Url, token: Option<String>, socket_semaphore: Arc<Semaphore>) -> Client {
 		let http_client = reqwest::Client::new();
 		Client {
 			url,
 			token,
-			semaphore,
+			socket_semaphore,
 			http_client,
 		}
 	}
