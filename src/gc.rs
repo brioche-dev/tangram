@@ -67,7 +67,6 @@ enum QueueItem {
 }
 
 impl Cli {
-	#[allow(clippy::too_many_lines)]
 	fn mark(&self, marks: &mut Marks, roots: Vec<OperationHash>) -> Result<()> {
 		let txn = self.inner.database.env.begin_ro_txn()?;
 		let mut queue: VecDeque<QueueItem> = roots.into_iter().map(QueueItem::Operation).collect();

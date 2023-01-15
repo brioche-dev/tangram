@@ -21,7 +21,7 @@ impl Cli {
 					Ok::<_, Infallible>(hyper::service::service_fn(move |request| {
 						let server = server.clone();
 						async move {
-							let response = server.handle_request_wrapper(request).await;
+							let response = server.handle_request(request).await;
 							Ok::<_, Infallible>(response)
 						}
 					}))
@@ -31,11 +31,11 @@ impl Cli {
 		Ok(())
 	}
 
-	pub async fn handle_request_wrapper(
+	pub async fn handle_request(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> http::Response<hyper::Body> {
-		match self.handle_request(request).await {
+		match self.handle_request_inner(request).await {
 			Ok(Some(response)) => response,
 			Ok(None) => http::Response::builder()
 				.status(http::StatusCode::NOT_FOUND)
@@ -51,7 +51,7 @@ impl Cli {
 		}
 	}
 
-	pub async fn handle_request(
+	pub async fn handle_request_inner(
 		&self,
 		request: http::Request<hyper::Body>,
 	) -> Result<Option<http::Response<hyper::Body>>> {

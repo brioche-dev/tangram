@@ -126,7 +126,6 @@ where
 	Ok(message)
 }
 
-#[allow(clippy::too_many_lines)]
 async fn handle_message(cli: &Cli, sender: &Sender, message: jsonrpc::Message) {
 	match message {
 		// Handle a request.

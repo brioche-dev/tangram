@@ -46,7 +46,6 @@ impl Cli {
 	}
 }
 
-#[allow(clippy::too_many_lines)]
 async fn run_target_inner(cli: Cli, target: &Target) -> Result<Value> {
 	let (context, state) = create_context(cli.clone());
 
@@ -105,8 +104,9 @@ async fn run_target_inner(cli: Cli, target: &Target) -> Result<Value> {
 		.await
 		.context("Failed to evaluate the module.")?;
 
-	// Enter the context.
+	// Run the target.
 	let output = {
+		// Enter the context.
 		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
 		let mut isolate = isolate.borrow_mut();
 		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());

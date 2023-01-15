@@ -30,7 +30,6 @@ pub fn syscall(
 	}
 }
 
-#[allow(clippy::too_many_lines)]
 fn syscall_inner<'s>(
 	scope: &mut v8::HandleScope<'s>,
 	args: &v8::FunctionCallbackArguments,

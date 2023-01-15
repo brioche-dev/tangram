@@ -47,7 +47,6 @@ pub struct Process {
 }
 
 impl Cli {
-	#[allow(clippy::too_many_lines)]
 	pub async fn run_process(&self, process: &Process) -> Result<Value> {
 		// Create the output temp path.
 		let output_temp_path = self.temp_path();
