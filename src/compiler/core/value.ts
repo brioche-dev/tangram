@@ -1,4 +1,5 @@
 import {
+	Artifact,
 	ArtifactHash,
 	addArtifact,
 	getArtifact,
@@ -16,10 +17,7 @@ export type Value =
 	| boolean
 	| number
 	| string
-	| Directory
-	| File
-	| Symlink
-	| Dependency
+	| Artifact
 	| Placeholder
 	| Template
 	| Array<Value>

@@ -3,18 +3,6 @@
 declare function syscall(syscall: "print", value: string): void;
 
 declare function syscall(
-	syscall: "serialize",
-	format: syscall.SerializationFormat,
-	value: any,
-): Uint8Array;
-
-declare function syscall<T>(
-	syscall: "deserialize",
-	format: syscall.SerializationFormat,
-	value: string | Uint8Array,
-): T;
-
-declare function syscall(
 	syscall: "add_blob",
 	blob: Uint8Array,
 ): Promise<syscall.BlobHash>;
@@ -56,8 +44,6 @@ declare function syscall(
 declare function syscall(syscall: "get_target_name"): string;
 
 declare namespace syscall {
-	export type SerializationFormat = "toml";
-
 	export type BlobHash = string;
 
 	export type ArtifactHash = string;

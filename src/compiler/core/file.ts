@@ -1,4 +1,3 @@
-import { Artifact } from "./artifact.ts";
 import { Blob, BlobHash, BlobLike, addBlob, blob, getBlob } from "./blob.ts";
 
 export type FileOptions = {

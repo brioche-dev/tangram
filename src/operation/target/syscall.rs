@@ -41,8 +41,6 @@ fn syscall_inner<'s>(
 	// Invoke the syscall.
 	match name.as_str() {
 		"print" => syscall_sync(scope, args, syscall_print),
-		"serialize" => syscall_sync(scope, args, syscall_serialize),
-		"deserialize" => syscall_sync(scope, args, syscall_deserialize),
 		"add_blob" => syscall_async(scope, args, syscall_add_blob),
 		"get_blob" => syscall_async(scope, args, syscall_get_blob),
 		"add_artifact" => syscall_async(scope, args, syscall_add_artifact),
@@ -61,42 +59,6 @@ fn syscall_print(_scope: &mut v8::HandleScope, _state: Rc<State>, args: (String,
 	let (string,) = args;
 	println!("{string}");
 	Ok(())
-}
-
-#[derive(Clone, Copy, serde::Deserialize, serde::Serialize)]
-enum SerializationFormat {
-	#[serde(rename = "toml")]
-	Toml,
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_serialize(
-	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
-	args: (SerializationFormat, serde_json::Value),
-) -> Result<String> {
-	let (format, value) = args;
-	match format {
-		SerializationFormat::Toml => {
-			let value = toml::to_string(&value)?;
-			Ok(value)
-		},
-	}
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_deserialize(
-	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
-	args: (SerializationFormat, String),
-) -> Result<serde_json::Value> {
-	let (format, string) = args;
-	match format {
-		SerializationFormat::Toml => {
-			let value = toml::from_str(&string)?;
-			Ok(value)
-		},
-	}
 }
 
 async fn syscall_add_blob(cli: Cli, args: (serde_v8::ZeroCopyBuf,)) -> Result<BlobHash> {

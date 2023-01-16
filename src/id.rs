@@ -68,17 +68,22 @@ impl<'de> serde::Deserialize<'de> for Id {
 	}
 }
 
-#[test]
-fn test_parse() {
-	let s = "00000000000000000000000000000000";
-	assert_eq!(s.parse::<Id>().unwrap().to_string(), s);
+#[cfg(test)]
+mod tests {
+	use super::*;
 
-	let s = "0000000000000000000000000000000z";
-	s.parse::<Id>().unwrap_err();
+	#[test]
+	fn test_parse() {
+		let s = "00000000000000000000000000000000";
+		assert_eq!(s.parse::<Id>().unwrap().to_string(), s);
 
-	let s = "f51a3a61ee9d4731b1b06c816a8ab856";
-	assert_eq!(s.parse::<Id>().unwrap().to_string(), s);
+		let s = "0000000000000000000000000000000z";
+		s.parse::<Id>().unwrap_err();
 
-	let s = "abc123";
-	s.parse::<Id>().unwrap_err();
+		let s = "f51a3a61ee9d4731b1b06c816a8ab856";
+		assert_eq!(s.parse::<Id>().unwrap().to_string(), s);
+
+		let s = "abc123";
+		s.parse::<Id>().unwrap_err();
+	}
 }

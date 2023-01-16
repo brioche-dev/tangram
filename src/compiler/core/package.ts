@@ -51,15 +51,13 @@ export class Package {
 		this.dependencies = dependencies;
 	}
 
-	async serialize(): Promise<syscall.Package> {
+	serialize(): syscall.Package {
 		let source = this.source.toString();
 		let dependencies = Object.fromEntries(
-			await Promise.all(
-				Object.entries(this.dependencies).map(async ([key, value]) => [
-					key,
-					value.toString(),
-				]),
-			),
+			Object.entries(this.dependencies).map(([key, value]) => [
+				key,
+				value.toString(),
+			]),
 		);
 		return {
 			source,
@@ -67,7 +65,7 @@ export class Package {
 		};
 	}
 
-	static async deserialize(package_: syscall.Package): Promise<Package> {
+	static deserialize(package_: syscall.Package): Package {
 		let source = new ArtifactHash(package_.source);
 		let dependencies = Object.fromEntries(
 			Object.entries(package_.dependencies).map(([key, value]) => [
@@ -83,13 +81,9 @@ export class Package {
 }
 
 export let addPackage = async (package_: Package): Promise<PackageHash> => {
-	return new PackageHash(
-		await syscall("add_package", await package_.serialize()),
-	);
+	return new PackageHash(await syscall("add_package", package_.serialize()));
 };
 
 export let getPackage = async (hash: PackageHash): Promise<Package> => {
-	return await Package.deserialize(
-		await syscall("get_package", hash.toString()),
-	);
+	return Package.deserialize(await syscall("get_package", hash.toString()));
 };

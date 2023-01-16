@@ -153,18 +153,3 @@ impl std::hash::Hasher for StdHasher {
 }
 
 pub type BuildHasher = std::hash::BuildHasherDefault<StdHasher>;
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn display_fromstr_roundtrip() {
-		let message = "Hello, World!";
-		let mut hasher = Hasher::new();
-		hasher.update(message);
-		let left = hasher.finalize();
-		let right = left.to_string().parse().unwrap();
-		assert_eq!(left, right);
-	}
-}

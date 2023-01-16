@@ -36,8 +36,8 @@ pub enum Checksummer {
 
 impl Checksummer {
 	#[must_use]
-	pub fn new(kind: Algorithm) -> Self {
-		match kind {
+	pub fn new(algorithm: Algorithm) -> Self {
+		match algorithm {
 			Algorithm::Sha256 => Self::Sha256(sha2::Sha256::default()),
 		}
 	}
