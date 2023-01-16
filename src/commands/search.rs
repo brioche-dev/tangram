@@ -10,7 +10,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_search(&self, args: Args) -> Result<()> {
 		// Search for the package with the given query.
-		let packages = self.api_client.search_packages(&args.query).await?;
+		let packages = self.inner.api_client.search_packages(&args.query).await?;
 
 		// Print the package names.
 		if packages.is_empty() {

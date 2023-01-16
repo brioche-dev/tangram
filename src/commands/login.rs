@@ -9,7 +9,8 @@ pub struct Args {}
 impl Cli {
 	pub async fn command_login(&self, _args: Args) -> Result<()> {
 		// Create a login.
-		let login = cli
+		let login = self
+			.inner
 			.api_client
 			.create_login()
 			.await
@@ -30,7 +31,8 @@ impl Cli {
 			if start_instant.elapsed() >= poll_duration {
 				bail!("Login timed out. Please try again.");
 			}
-			let login = cli
+			let login = self
+				.inner
 				.api_client
 				.get_login(login.id)
 				.await
@@ -42,7 +44,8 @@ impl Cli {
 		};
 
 		// Get the user.
-		let user = cli
+		let user = self
+			.inner
 			.api_client
 			.get_current_user(token)
 			.await
@@ -53,7 +56,7 @@ impl Cli {
 			email: user.email,
 			token: user.token,
 		};
-		Self::write_credentials(&credentials)
+		self.write_credentials(&credentials)
 			.await
 			.context("Failed to write the credentials.")?;
 

@@ -1,7 +1,7 @@
-use crate::Cli;
+use crate::{client::Client, Cli};
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Parser)]
 pub struct Args {
@@ -20,16 +20,27 @@ impl Cli {
 		}
 
 		// Check in the package.
-		let package_hash = cli.checkin_package(&path, args.locked).await?;
+		let package_hash = self.checkin_package(&path, args.locked).await?;
 
-		// Push the package to the registry.
-		cli.push(package_hash)
+		// Get the package.
+		let package = self.get_package_local(package_hash)?;
+
+		// Create a client.
+		let client = Client::new(
+			self.inner.api_client.url.clone(),
+			None,
+			Arc::clone(&self.inner.socket_semaphore),
+		);
+
+		// Push the package source to the registry.
+		self.push(&client, package.source)
 			.await
-			.context("Failed to push the expression.")?;
+			.context("Failed to push the package.")?;
 
 		// Publish the package.
-		cli.api_client
-			.publish_package(package_hash)
+		self.inner
+			.api_client
+			.publish_package(package.source)
 			.await
 			.context("Failed to publish the package.")?;
 

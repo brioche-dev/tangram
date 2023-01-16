@@ -17,15 +17,15 @@ pub mod fmt;
 pub mod gc;
 pub mod init;
 pub mod lint;
-// pub mod login;
+pub mod login;
 pub mod lsp;
 pub mod new;
 pub mod outdated;
-// pub mod publish;
+pub mod publish;
 pub mod pull;
 pub mod push;
 pub mod run;
-// pub mod search;
+pub mod search;
 pub mod serve;
 pub mod shell;
 pub mod update;
@@ -63,15 +63,15 @@ pub enum Command {
 	Gc(self::gc::Args),
 	Init(self::init::Args),
 	Lint(self::lint::Args),
-	// Login(self::login::Args),
+	Login(self::login::Args),
 	Lsp(self::lsp::Args),
 	New(self::new::Args),
 	Outdated(self::outdated::Args),
-	// Publish(self::publish::Args),
+	Publish(self::publish::Args),
 	Pull(self::pull::Args),
 	Push(self::push::Args),
 	Run(self::run::Args),
-	// Search(self::search::Args),
+	Search(self::search::Args),
 	Serve(self::serve::Args),
 	Shell(self::shell::Args),
 	Update(self::update::Args),
@@ -115,15 +115,15 @@ impl Cli {
 			Command::Gc(args) => self.command_gc(args).boxed(),
 			Command::Init(args) => self.command_init(args).boxed(),
 			Command::Lint(args) => self.command_lint(args).boxed(),
-			// Subcommand::Login(args) => self.command_login(args).boxed(),
+			Command::Login(args) => self.command_login(args).boxed(),
 			Command::Lsp(args) => self.command_lsp(args).boxed(),
 			Command::New(args) => self.command_new(args).boxed(),
 			Command::Outdated(args) => self.command_outdated(args).boxed(),
-			// Subcommand::Publish(args) => self.command_publish(args).boxed(),
+			Command::Publish(args) => self.command_publish(args).boxed(),
 			Command::Pull(args) => self.command_pull(args).boxed(),
 			Command::Push(args) => self.command_push(args).boxed(),
 			Command::Run(args) => self.command_run(args).boxed(),
-			// Subcommand::Search(args) => self.command_search(args).boxed(),
+			Command::Search(args) => self.command_search(args).boxed(),
 			Command::Serve(args) => self.command_serve(args).boxed(),
 			Command::Shell(args) => self.command_shell(args).boxed(),
 			Command::Update(args) => self.command_update(args).boxed(),

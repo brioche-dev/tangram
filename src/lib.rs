@@ -13,6 +13,7 @@ use crate::{
 	lock::{ExclusiveGuard, Lock, SharedGuard},
 };
 use anyhow::{Context, Result};
+use api_client::ApiClient;
 use compiler::{RequestSender, TrackedFile};
 use std::{
 	collections::HashMap,
@@ -22,6 +23,7 @@ use std::{
 use tokio::sync::{RwLock, Semaphore};
 use tokio_util::task::LocalPoolHandle;
 
+pub mod api_client;
 pub mod artifact;
 pub mod blob;
 pub mod checkin;
@@ -89,6 +91,9 @@ struct Inner {
 
 	/// The tracked files map tracks files on the filesystem used by the compiler.
 	pub tracked_files: RwLock<HashMap<PathBuf, TrackedFile, fnv::FnvBuildHasher>>,
+
+	/// This is the client for communicating with the API.
+	pub api_client: ApiClient,
 }
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
@@ -119,10 +124,10 @@ impl Cli {
 			.as_ref()
 			.and_then(|config| config.api_url.as_ref())
 			.cloned();
-		let _api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
+		let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
 
 		// Get the token.
-		let _token = credentials.map(|credentials| credentials.token);
+		let token = credentials.map(|credentials| credentials.token);
 
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
@@ -166,6 +171,9 @@ impl Cli {
 		// Get a handle to the tokio runtime.
 		let runtime_handle = tokio::runtime::Handle::current();
 
+		// Create the API Client.
+		let api_client = ApiClient::new(api_url, token);
+
 		// Create the cli.
 		let cli = Cli {
 			inner: Arc::new(Inner {
@@ -179,6 +187,7 @@ impl Cli {
 				runtime_handle,
 				compiler_request_sender: Mutex::new(None),
 				tracked_files: RwLock::new(HashMap::default()),
+				api_client,
 			}),
 		};
 

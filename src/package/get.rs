@@ -78,7 +78,15 @@ impl Cli {
 	/// Get the manifest for the package with the given package hash.
 	pub async fn get_package_manifest(&self, package_hash: PackageHash) -> Result<Manifest> {
 		let package_source_artifact_hash = self.get_package_source(package_hash)?;
+		self.get_package_manifest_for_source(package_source_artifact_hash)
+			.await
+	}
 
+	/// Get the manifest from the source of package.
+	pub async fn get_package_manifest_for_source(
+		&self,
+		package_source_artifact_hash: ArtifactHash,
+	) -> Result<Manifest> {
 		// Get the source directory.
 		let source_directory = self
 			.get_artifact_local(package_source_artifact_hash)?
