@@ -13,13 +13,16 @@ use crate::{
 	lock::{ExclusiveGuard, Lock, SharedGuard},
 };
 use anyhow::{Context, Result};
+use api_client::ApiClient;
 use std::{
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 };
 use tokio::sync::Semaphore;
 use tokio_util::task::LocalPoolHandle;
+use url::Url;
 
+pub mod api_client;
 pub mod artifact;
 pub mod blob;
 pub mod checkin;
@@ -75,6 +78,12 @@ pub struct State {
 
 	/// This local pool handle is for spawning `!Send` futures, such as targets.
 	pub local_pool_handle: LocalPoolHandle,
+
+	/// This is the client for communicating with the API.
+	pub api_client: ApiClient,
+
+	/// This is the url for the API.
+	pub api_url: Url,
 }
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
@@ -88,21 +97,21 @@ impl Cli {
 			Self::path()?
 		};
 
-		// // Read the config.
-		// let config = Self::read_config().await?;
+		// Read the config.
+		let config = Self::read_config().await?;
 
-		// // Read the credentials.
-		// let credentials = Self::read_credentials().await?;
+		// Read the credentials.
+		let credentials = Self::read_credentials().await?;
 
-		// // Resolve the API URL.
-		// let api_url = config
-		// 	.as_ref()
-		// 	.and_then(|config| config.api_url.as_ref())
-		// 	.cloned();
-		// let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
+		// Resolve the API URL.
+		let api_url = config
+			.as_ref()
+			.and_then(|config| config.api_url.as_ref())
+			.cloned();
+		let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
 
-		// // Get the token.
-		// let token = credentials.map(|credentials| credentials.token);
+		// Get the token.
+		let token = credentials.map(|credentials| credentials.token);
 
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
@@ -138,6 +147,9 @@ impl Cli {
 			v8::V8::initialize();
 		});
 
+		// Create the API Client.
+		let api_client = ApiClient::new(api_url.clone(), token);
+
 		// Create the state.
 		let state = Arc::new_cyclic(|state| {
 			let state = State {
@@ -147,6 +159,8 @@ impl Cli {
 				http_client,
 				file_system_semaphore,
 				local_pool_handle,
+				api_client,
+				api_url,
 			};
 			Lock::new(lock_path, state)
 		});

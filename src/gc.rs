@@ -251,13 +251,13 @@ impl State {
 			.await
 			.context("Failed to read the artifacts directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
-			let artifact_hash: Hash = entry
+			let hash: Hash = entry
 				.file_name()
 				.to_str()
 				.context("Failed to parse the file name as a string.")?
 				.parse()
 				.context("Failed to parse the entry in the artifacts directory as a hash.")?;
-			let artifact_hash = ArtifactHash(artifact_hash);
+			let artifact_hash = ArtifactHash(hash);
 			if !marks.contains_artifact(artifact_hash) {
 				tokio::fs::remove_file(&entry.path())
 					.await

@@ -1,4 +1,4 @@
-use crate::Cli;
+use crate::{client::Client, Cli};
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
@@ -25,14 +25,23 @@ impl Cli {
 		// Check in the package.
 		let package_hash = cli.checkin_package(&path, args.locked).await?;
 
-		// Push the package to the registry.
-		cli.push(package_hash)
+		// Get the package.
+		let package = cli.get_package_local(package_hash)?;
+
+		// Get the API Url.
+		let api_url = self.state.lock_shared().await?.api_url.clone();
+
+		// Create a client.
+		let client = Client::new(api_url.clone(), None);
+
+		// Push the package source to the registry.
+		cli.push(&client, package.source)
 			.await
-			.context("Failed to push the expression.")?;
+			.context("Failed to push the package.")?;
 
 		// Publish the package.
 		cli.api_client
-			.publish_package(package_hash)
+			.publish_package(package.source)
 			.await
 			.context("Failed to publish the package.")?;
 
