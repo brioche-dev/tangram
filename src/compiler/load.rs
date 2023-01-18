@@ -92,6 +92,11 @@ impl Cli {
 
 impl Cli {
 	async fn load_path(&self, package_path: &Path, module_path: &Utf8Path) -> Result<String> {
+		anyhow::ensure!(
+			module_path.extension() == Some("tg"),
+			"Tried loading file {module_path}, but can only load .tg files."
+		);
+
 		// Construct the path to the module.
 		let path = package_path.join(module_path);
 
