@@ -34,10 +34,12 @@ impl Cli {
 		}
 
 		// Run all migrations to update the path to the latest path format version.
+		let previously_run_migrations_count =
+			path_format_version.map(|version| version + 1).unwrap_or(0);
 		let migrations = migrations
 			.into_iter()
 			.enumerate()
-			.skip(path_format_version.unwrap_or(0));
+			.skip(previously_run_migrations_count);
 		for (path_format_version, migration) in migrations {
 			// Run the migration.
 			migration.await?;
