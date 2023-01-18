@@ -131,7 +131,7 @@ impl Cli {
 		&self,
 		package_hash: PackageHash,
 	) -> Result<Option<Utf8PathBuf>> {
-		const ENTRYPOINT_FILE_NAMES: [&str; 2] = ["tangram.ts", "tangram.js"];
+		const ENTRYPOINT_FILE_NAMES: [&str; 2] = ["package.tg", "tangram.js"];
 
 		// Get the package source directory.
 		let source_hash = self

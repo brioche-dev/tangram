@@ -59,7 +59,7 @@ impl Cli {
 					.context("Failed to get the current directory")?
 					.join(path);
 				let path = tokio::fs::canonicalize(&path).await?;
-				let module_identifier = ModuleIdentifier::new_path(path, "tangram.ts".into());
+				let module_identifier = ModuleIdentifier::new_path(path, "package.tg".into());
 				Ok(module_identifier)
 			},
 
@@ -68,7 +68,7 @@ impl Cli {
 					.get_package_hash_from_specifier(name, version.as_deref())
 					.await?;
 				let module_identifier =
-					ModuleIdentifier::new_hash(package_hash, "tangram.ts".into());
+					ModuleIdentifier::new_hash(package_hash, "package.tg".into());
 				Ok(module_identifier)
 			},
 		}

@@ -129,7 +129,7 @@ impl Cli {
 
 		// Create the module identifier.
 		let module_identifier =
-			ModuleIdentifier::new_hash(*specifier_package_hash, "tangram.ts".into());
+			ModuleIdentifier::new_hash(*specifier_package_hash, "package.tg".into());
 
 		Ok(module_identifier)
 	}
@@ -163,7 +163,7 @@ impl Cli {
 
 				// Create the module identifier.
 				let module_identifier =
-					ModuleIdentifier::new_path(specifier_package_path, "tangram.ts".into());
+					ModuleIdentifier::new_path(specifier_package_path, "package.tg".into());
 
 				Ok(module_identifier)
 			},
@@ -187,7 +187,7 @@ impl Cli {
 
 				// Create the module identifier.
 				let module_identifier =
-					ModuleIdentifier::new_hash(specifier_hash, "tangram.ts".into());
+					ModuleIdentifier::new_hash(specifier_hash, "package.tg".into());
 
 				Ok(module_identifier)
 			},
