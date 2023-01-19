@@ -67,42 +67,52 @@ impl Cli {
 						})?;
 
 					// Get the dependency's hash.
-					let dependency_hash = self
+					let dependency_package_hash = self
 						.checkin_package(&dependency_path, locked)
 						.await
 						.context("Failed to check in the dependency.")?;
 
 					// Get the dependency package.
-					let dependency_package = self.get_package_local(dependency_hash)?;
+					let dependency_package = self.get_package_local(dependency_package_hash)?;
 
 					// Create the lockfile entry.
 					lockfile::Dependency {
-						hash: dependency_hash,
+						hash: dependency_package_hash,
 						source: dependency_package.source,
 						dependencies: None,
 					}
 				},
 
 				// Handle a registry dependency.
-				crate::manifest::Dependency::RegistryDependency(_) => {
-					todo!()
+				crate::manifest::Dependency::RegistryDependency(dependency) => {
+					// Get the package hash from the registry.
+					let dependency_version = &dependency.version;
+					let dependency_source_hash = self.inner.api_client
+						.get_package_version(&dependency_name, &dependency.version)
+						.await
+						.with_context(||
+							format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
+						)?;
 
-					// // Get the package hash from the registry.
-					// let dependency_version = &dependency.version;
-					// let dependency_hash = self.api_client
-					// 	.get_package_version(&dependency_name, &dependency.version)
-					// 	.await
-					// 	.with_context(||
-					// 		format!(r#"Package with name "{dependency_name}" and version "{dependency_version}" is not in the package registry."#)
-					// 	)?;
-					// let dependency_source_hash = self.get_package_source(dependency_hash)?;
+					// Create a client.
+					let client = self.create_client(self.inner.api_client.url.clone(), None);
 
-					// // Create the lockfile Entry.
-					// lockfile::Dependency {
-					// 	hash: dependency_hash,
-					// 	source: dependency_source_hash,
-					// 	dependencies: None,
-					// }
+					// Pull the source.
+					self.pull(&client, dependency_source_hash)
+						.await
+						.context("Failed to pull.")?;
+
+					// Checkin the package we just pulled.
+					let dependency_package_hash = self
+						.checkin_package_from_artifact_hash(dependency_source_hash)
+						.await?;
+
+					// Create the lockfile Entry.
+					lockfile::Dependency {
+						hash: dependency_package_hash,
+						source: dependency_source_hash,
+						dependencies: None,
+					}
 				},
 			};
 
