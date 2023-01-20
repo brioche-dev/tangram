@@ -1,4 +1,7 @@
-use super::{FutureOutput, State, THREAD_LOCAL_ISOLATE};
+use super::{
+	context::{FutureOutput, State},
+	isolate::THREAD_LOCAL_ISOLATE,
+};
 use crate::{
 	artifact::{Artifact, ArtifactHash},
 	blob::BlobHash,

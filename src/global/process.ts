@@ -1,9 +1,10 @@
-import { Artifact } from "./artifact.ts";
-import { run } from "./operation.ts";
-import { placeholder } from "./placeholder.ts";
-import { Unresolved, resolve } from "./resolve.ts";
-import { System } from "./system.ts";
-import { Template, TemplateLike } from "./template.ts";
+import "./syscall";
+import { Artifact } from "./artifact";
+import { run } from "./operation";
+import { placeholder } from "./placeholder";
+import { Unresolved, resolve } from "./resolve";
+import { System } from "./system";
+import { Template, TemplateLike } from "./template";
 
 type ProcessArgs = {
 	system: System;

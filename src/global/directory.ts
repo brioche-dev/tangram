@@ -1,14 +1,15 @@
+import "./syscall";
 import {
 	Artifact,
 	ArtifactHash,
 	addArtifact,
 	getArtifact,
 	isArtifact,
-} from "./artifact.ts";
-import { BlobLike, isBlobLike } from "./blob.ts";
-import { file } from "./file.ts";
-import { PathLike, path } from "./path.ts";
-import { MaybePromise } from "./util.ts";
+} from "./artifact";
+import { BlobLike, isBlobLike } from "./blob";
+import { file } from "./file";
+import { PathLike, path } from "./path";
+import { MaybePromise } from "./util";
 
 type DirectoryObject = {
 	[key: string]: MaybePromise<

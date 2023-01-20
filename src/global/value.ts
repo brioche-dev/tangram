@@ -1,16 +1,17 @@
+import "./syscall";
 import {
 	Artifact,
 	ArtifactHash,
 	addArtifact,
 	getArtifact,
 	isArtifact,
-} from "./artifact.ts";
-import { Dependency } from "./dependency.ts";
-import { Directory } from "./directory.ts";
-import { File } from "./file.ts";
-import { Placeholder } from "./placeholder.ts";
-import { Symlink } from "./symlink.ts";
-import { Template } from "./template.ts";
+} from "./artifact";
+import { Dependency } from "./dependency";
+import { Directory } from "./directory";
+import { File } from "./file";
+import { Placeholder } from "./placeholder";
+import { Symlink } from "./symlink";
+import { Template } from "./template";
 
 export type Value =
 	| (undefined | null)

@@ -1,5 +1,6 @@
-import { decodeUtf8, encodeUtf8 } from "./transcode.ts";
-import { MaybePromise } from "./util.ts";
+import "./syscall";
+import { decodeUtf8, encodeUtf8 } from "./transcode";
+import { MaybePromise } from "./util";
 
 export type BlobLike = string | Uint8Array | Blob;
 

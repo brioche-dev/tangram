@@ -12,8 +12,6 @@ impl Cli {
 		match module_identifier {
 			ModuleIdentifier::Lib { path } => load_lib(path),
 
-			ModuleIdentifier::Core { path } => load_core(path),
-
 			ModuleIdentifier::Hash {
 				package_hash,
 				module_path,
@@ -27,7 +25,7 @@ impl Cli {
 	}
 }
 
-const LIB_TANGRAM_D_TS: &str = include_str!("./tangram.d.ts");
+const GLOBAL_D_TS: &str = include_str!("../global/mod.d.ts");
 const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/src/compiler/lib");
 
 fn load_lib(path: &Utf8Path) -> Result<String> {
@@ -35,27 +33,13 @@ fn load_lib(path: &Utf8Path) -> Result<String> {
 		.strip_prefix("/")
 		.with_context(|| format!(r#"The path "{path}" is missing a leading slash."#))?;
 	let text = match path.as_str() {
-		"lib.tangram.d.ts" => LIB_TANGRAM_D_TS,
+		"global.d.ts" => GLOBAL_D_TS,
 		_ => LIB
 			.get_file(path)
 			.with_context(|| format!(r#"Could not find a lib with the path "{path}"."#))?
 			.contents_utf8()
 			.context("Failed to read the file as UTF-8.")?,
 	};
-	Ok(text.to_owned())
-}
-
-const CORE: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/src/compiler/core");
-
-fn load_core(path: &Utf8Path) -> Result<String> {
-	let path = path
-		.strip_prefix("/")
-		.with_context(|| format!(r#"Path "{path}" is missing a leading slash."#))?;
-	let text = CORE
-		.get_file(path)
-		.with_context(|| format!(r#"Could not find core path "{path}"."#))?
-		.contents_utf8()
-		.context("Failed to read the file as UTF-8.")?;
 	Ok(text.to_owned())
 }
 

@@ -1,2 +1,2 @@
 src/compiler/lib/** linguist-vendored
-src/compiler/runtime/main.js linguist-generated
+src/compiler/mod.js linguist-generated

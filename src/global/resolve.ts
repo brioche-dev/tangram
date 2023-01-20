@@ -1,12 +1,12 @@
-import { Artifact } from "./artifact.ts";
-import { Dependency } from "./dependency.ts";
-import { Directory } from "./directory.ts";
-import { File } from "./file.ts";
-import { Placeholder } from "./placeholder.ts";
-import { Symlink } from "./symlink.ts";
-import { Template } from "./template.ts";
-import { MaybePromise } from "./util.ts";
-import { Value } from "./value.ts";
+import { Artifact } from "./artifact";
+import { Dependency } from "./dependency";
+import { Directory } from "./directory";
+import { File } from "./file";
+import { Placeholder } from "./placeholder";
+import { Symlink } from "./symlink";
+import { Template } from "./template";
+import { MaybePromise } from "./util";
+import { Value } from "./value";
 
 export type Unresolved<T extends Value> = T extends
 	| undefined

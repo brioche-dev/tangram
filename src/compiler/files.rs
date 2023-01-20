@@ -81,10 +81,8 @@ impl Cli {
 				module_path,
 			} => package_path.join(module_path),
 
-			// Library, core, and hash modules never change, so we can always return 0.
-			ModuleIdentifier::Lib { .. }
-			| ModuleIdentifier::Core { .. }
-			| ModuleIdentifier::Hash { .. } => {
+			// Library, and hash modules never change, so we can always return 0.
+			ModuleIdentifier::Lib { .. } | ModuleIdentifier::Hash { .. } => {
 				return Ok(0);
 			},
 		};

@@ -5,7 +5,7 @@
 //! ```
 //!
 
-use super::{PathMode, ReferencedPathSet};
+use super::run::{PathMode, ReferencedPathSet};
 use crate::{system::System, Cli};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;

@@ -1,6 +1,6 @@
 #![allow(clippy::similar_names)]
 
-use super::{PathMode, ReferencedPathSet};
+use super::run::{PathMode, ReferencedPathSet};
 use crate::{
 	artifact::{Artifact, ArtifactHash},
 	checksum::Checksum,

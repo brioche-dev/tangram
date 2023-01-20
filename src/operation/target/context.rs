@@ -48,30 +48,15 @@ pub fn create_context(cli: Cli) -> (v8::Global<v8::Context>, Rc<State>) {
 	// Create a context scope.
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-	// Create the global syscall function.
+	// Create the syscall function.
 	let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();
 	let syscall = v8::Function::new(&mut context_scope, syscall).unwrap();
-	context
-		.global(&mut context_scope)
+	let global = context.global(&mut context_scope);
+	global
 		.set(&mut context_scope, syscall_string.into(), syscall.into())
 		.unwrap();
 
-	// // Create the tg global.
-	// let module = load_module(
-	// 	&mut context_scope,
-	// 	&compiler::Url::new_core("/mod.ts".into()),
-	// )
-	// .context("Failed to load the core module.")?;
-	// evaluate_module(&mut context_scope, module)
-	// 	.await
-	// 	.context("Failed to evaluate the core module.")?;
-	// let tg = module.get_module_namespace();
-	// let tg_string = v8::String::new(&mut context_scope, "tg").unwrap();
-	// context
-	// 	.global(&mut context_scope)
-	// 	.set(&mut context_scope, tg_string.into(), tg)
-	// 	.unwrap();
-
+	// Drop the context scope.
 	drop(context_scope);
 
 	// Make the context global.

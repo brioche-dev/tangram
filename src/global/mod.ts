@@ -1,7 +1,47 @@
-let stringify = (value) => {
-	let inner = (value, visited) => {
-		let type = typeof value;
-		switch (type) {
+import { Blob, blob } from "./blob";
+import { Dependency, dependency } from "./dependency";
+import { Directory, directory } from "./directory";
+import { download } from "./download";
+import { file, File } from "./file";
+import { currentPackage, Package } from "./package";
+import { Path, path } from "./path";
+import { placeholder, Placeholder } from "./placeholder";
+import { process, output } from "./process";
+import { resolve } from "./resolve";
+import { symlink, Symlink } from "./symlink";
+import { target, createTarget } from "./target";
+import { t, Template, template } from "./template";
+
+let tg = {
+	Blob,
+	blob,
+	Dependency,
+	dependency,
+	Directory,
+	directory,
+	download,
+	file,
+	File,
+	currentPackage,
+	Package,
+	Path,
+	path,
+	placeholder,
+	Placeholder,
+	process,
+	output,
+	resolve,
+	symlink,
+	Symlink,
+	target,
+	createTarget,
+	Template,
+	template,
+};
+
+let stringify = (value: unknown): string => {
+	let inner = (value: unknown, visited: Set<unknown>): string => {
+		switch (typeof value) {
 			case "string": {
 				return `"${value}"`;
 			}
@@ -26,7 +66,7 @@ let stringify = (value) => {
 				if (Array.isArray(value)) {
 					return `[${value.map((value) => inner(value, visited)).join(", ")}]`;
 				} else if (value instanceof Error) {
-					return value.stack;
+					return value.stack ?? "";
 				} else if (value instanceof Promise) {
 					return "[promise]";
 				} else {
@@ -36,14 +76,6 @@ let stringify = (value) => {
 						value.constructor.name !== "Object"
 					) {
 						constructorName = `${value.constructor.name} `;
-					}
-
-					// If the value has a `.toString()` method, which returns a string, use that as the body of the debug output.
-					if ("toString" in value) {
-						let result = value.toString();
-						if (typeof result === "string") {
-							return `${constructorName}{ ${result} }`;
-						}
 					}
 
 					let entries = Object.entries(value).map(
@@ -67,16 +99,8 @@ let stringify = (value) => {
 	return inner(value, new Set());
 };
 
-Object.defineProperties(globalThis, {
-	stringify: { value: stringify },
-});
-
 let console = {
-	log: (...args) => {
-		let string = args.map((arg) => stringify(arg)).join(" ");
-		syscall("print", string);
-	},
-	error: (...args) => {
+	log: (...args: Array<unknown>) => {
 		let string = args.map((arg) => stringify(arg)).join(" ");
 		syscall("print", string);
 	},
@@ -84,4 +108,6 @@ let console = {
 
 Object.defineProperties(globalThis, {
 	console: { value: console },
+	tg: { value: tg },
+	t: { value: t },
 });

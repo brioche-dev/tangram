@@ -109,9 +109,11 @@ impl Cli {
 	}
 }
 
+const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compiler.heapsnapshot"));
+
 fn handle_requests(cli: Cli, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
-	let params = v8::CreateParams::default();
+	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);
 
 	// Create the context.
@@ -134,21 +136,16 @@ fn handle_requests(cli: Cli, mut request_receiver: RequestReceiver) {
 		)
 		.unwrap();
 
-	// Run the main script.
-	let source = v8::String::new(&mut context_scope, include_str!("./mod.js")).unwrap();
-	let script = v8::Script::compile(&mut context_scope, source, None).unwrap();
-	script.run(&mut context_scope).unwrap();
-
-	// Get the handle function.
-	let mod_string = v8::String::new(&mut context_scope, "mod").unwrap();
-	let mod_object: v8::Local<v8::Object> = context
+	// Get the compiler.
+	let compiler_string = v8::String::new(&mut context_scope, "compiler").unwrap();
+	let compiler_object: v8::Local<v8::Object> = context
 		.global(&mut context_scope)
-		.get(&mut context_scope, mod_string.into())
+		.get(&mut context_scope, compiler_string.into())
 		.unwrap()
 		.try_into()
 		.unwrap();
 	let default_string = v8::String::new(&mut context_scope, "default").unwrap();
-	let default: v8::Local<v8::Function> = mod_object
+	let compiler: v8::Local<v8::Function> = compiler_object
 		.get(&mut context_scope, default_string.into())
 		.unwrap()
 		.try_into()
@@ -169,9 +166,9 @@ fn handle_requests(cli: Cli, mut request_receiver: RequestReceiver) {
 			},
 		};
 
-		// Call the handle function.
+		// Call the compiler.
 		let receiver = v8::undefined(&mut try_catch_scope).into();
-		let response = default.call(&mut try_catch_scope, receiver, &[request]);
+		let response = compiler.call(&mut try_catch_scope, receiver, &[request]);
 
 		// Handle a js exception.
 		if try_catch_scope.has_caught() {

@@ -34,8 +34,7 @@ impl Cli {
 		}
 
 		// Run all migrations to update the path to the latest path format version.
-		let previously_run_migrations_count =
-			path_format_version.map(|version| version + 1).unwrap_or(0);
+		let previously_run_migrations_count = path_format_version.map_or(0, |version| version + 1);
 		let migrations = migrations
 			.into_iter()
 			.enumerate()

@@ -1,7 +1,8 @@
-import { Dependency } from "./dependency.ts";
-import { Directory } from "./directory.ts";
-import { File } from "./file.ts";
-import { Symlink } from "./symlink.ts";
+import "./syscall";
+import { Directory } from "./directory";
+import { Dependency } from "./dependency";
+import { File } from "./file";
+import { Symlink } from "./symlink";
 
 export class ArtifactHash {
 	#string: string;
@@ -15,9 +16,9 @@ export class ArtifactHash {
 	}
 }
 
-export type ArtifactType = "directory" | "file" | "symlink" | "dependency";
-
 export type Artifact = Directory | File | Symlink | Dependency;
+
+export type ArtifactType = "directory" | "file" | "symlink" | "dependency";
 
 export let isArtifact = (value: unknown): value is Artifact => {
 	return (

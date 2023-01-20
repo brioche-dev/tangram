@@ -1,8 +1,9 @@
-import { Artifact } from "./artifact.ts";
-import { Download } from "./download.ts";
-import { Process } from "./process.ts";
-import { Target } from "./target.ts";
-import { deserializeValue } from "./value.ts";
+import "./syscall";
+import { Artifact } from "./artifact";
+import { Download } from "./download";
+import { Process } from "./process";
+import { Target } from "./target";
+import { deserializeValue } from "./value";
 
 export type OperationType = "download" | "process" | "target";
 

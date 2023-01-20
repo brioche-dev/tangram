@@ -1,6 +1,5 @@
 {
 	"dependencies": {
-		"@types/prettier": "^2.7.1",
 		"esbuild": "^0.17.0",
 		"prettier": "^2.8.1",
 		"typescript": "^4.9.4"
@@ -9,6 +8,6 @@
 	"scripts": {
 		"check": "tsc",
 		"fmt": "prettier --write .",
-		"build": "esbuild --minify --bundle --format=iife --global-name=compiler --outfile=mod.js mod.ts"
+		"build": "esbuild --minify --bundle --format=iife --outfile=mod.js mod.ts"
 	}
 }

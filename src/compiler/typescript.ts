@@ -4,7 +4,7 @@ import * as ts from "typescript";
 export let compilerOptions = {
 	allowNonTsExtensions: true,
 	isolatedModules: true,
-	lib: ["lib.esnext.d.ts", "lib.tangram.d.ts"],
+	lib: ["lib.esnext.d.ts", "global.d.ts"],
 	maxNodeModuleJsDepth: 0,
 	module: ts.ModuleKind.ESNext,
 	noEmit: true,

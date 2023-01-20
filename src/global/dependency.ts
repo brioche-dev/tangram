@@ -1,11 +1,12 @@
+import "./syscall";
 import {
 	Artifact,
 	ArtifactHash,
 	addArtifact,
 	getArtifact,
 	isArtifact,
-} from "./artifact.ts";
-import { MaybePromise } from "./util.ts";
+} from "./artifact";
+import { MaybePromise } from "./util";
 
 export type DependencyArgs = {
 	artifact: MaybePromise<Artifact>;

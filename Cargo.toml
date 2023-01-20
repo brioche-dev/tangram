@@ -16,7 +16,7 @@ name = "tg"
 path = "src/main.rs"
 
 [build-dependencies]
-v8 = "0.58"
+v8 = "0.60"
 
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
@@ -63,7 +63,7 @@ rustyline = "10"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7.1"
-serde_v8 = "0.73"
+serde_v8 = "0.77"
 sha2 = "0.10.6"
 sourcemap = "6"
 tar = "0.4"
@@ -76,7 +76,7 @@ toml = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2.2"
-v8 = "0.58"
+v8 = "0.60"
 wasmtime = "2.0"
 wasmtime-wasi = "2.0"
 webbrowser = "0.8"

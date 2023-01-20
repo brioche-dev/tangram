@@ -1,6 +1,7 @@
-import { Artifact } from "./artifact.ts";
-import { Checksum } from "./checksum.ts";
-import { run } from "./operation.ts";
+import "./syscall";
+import { Artifact } from "./artifact";
+import { Checksum } from "./checksum";
+import { run } from "./operation";
 
 export type DownloadArgs = {
 	url: string;

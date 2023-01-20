@@ -7,5 +7,5 @@
 		"strict": true,
 		"target": "esnext"
 	},
-	"exclude": ["lib"]
+	"exclude": ["mod.js", "mod.d.ts"]
 }

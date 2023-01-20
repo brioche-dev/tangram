@@ -16,10 +16,6 @@ pub enum ModuleIdentifier {
 		path: Utf8PathBuf,
 	},
 
-	Core {
-		path: Utf8PathBuf,
-	},
-
 	Hash {
 		package_hash: PackageHash,
 		module_path: Utf8PathBuf,
@@ -35,11 +31,6 @@ impl ModuleIdentifier {
 	#[must_use]
 	pub fn new_lib(path: Utf8PathBuf) -> ModuleIdentifier {
 		ModuleIdentifier::Lib { path }
-	}
-
-	#[must_use]
-	pub fn new_core(path: Utf8PathBuf) -> ModuleIdentifier {
-		ModuleIdentifier::Core { path }
 	}
 
 	#[must_use]
@@ -98,11 +89,6 @@ impl TryFrom<Url> for ModuleIdentifier {
 				ModuleIdentifier::Lib { path }
 			},
 
-			"core" => {
-				let path = value.path().into();
-				ModuleIdentifier::Core { path }
-			},
-
 			"hash" => {
 				let package_hash = value
 					.path()
@@ -138,10 +124,6 @@ impl From<ModuleIdentifier> for Url {
 		match value {
 			ModuleIdentifier::Lib { path } => {
 				format!("{TANGRAM_INTERNAL_SCHEME}://lib{path}")
-			},
-
-			ModuleIdentifier::Core { path } => {
-				format!("{TANGRAM_INTERNAL_SCHEME}://core{path}")
 			},
 
 			ModuleIdentifier::Hash {

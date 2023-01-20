@@ -1,7 +1,6 @@
 use super::{Package, PackageHash};
 use crate::{artifact::ArtifactHash, manifest::Manifest, Cli};
 use anyhow::{bail, Context, Result};
-use camino::Utf8PathBuf;
 use lmdb::Transaction;
 use tokio::io::AsyncReadExt;
 
@@ -123,32 +122,5 @@ impl Cli {
 			.context(r#"Failed to parse the package manifest."#)?;
 
 		Ok(manifest)
-	}
-}
-
-impl Cli {
-	pub fn get_package_entrypoint_path(
-		&self,
-		package_hash: PackageHash,
-	) -> Result<Option<Utf8PathBuf>> {
-		const ENTRYPOINT_FILE_NAMES: [&str; 2] = ["package.tg", "tangram.js"];
-
-		// Get the package source directory.
-		let source_hash = self
-			.get_package_source(package_hash)
-			.context("Failed to get the package source.")?;
-		let source_directory = self
-			.get_artifact_local(source_hash)
-			.context("Failed to get the package source.")?
-			.into_directory()
-			.context("The package source must be a directory.")?;
-
-		// Get the entrypoint.
-		let entrypoint = ENTRYPOINT_FILE_NAMES
-			.into_iter()
-			.find(|file_name| source_directory.entries.contains_key(*file_name))
-			.map(Utf8PathBuf::from);
-
-		Ok(entrypoint)
 	}
 }

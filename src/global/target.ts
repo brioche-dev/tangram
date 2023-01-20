@@ -1,8 +1,9 @@
-import { run } from "./operation.ts";
-import { Package, PackageHash, addPackage, getPackage } from "./package.ts";
-import { Unresolved, resolve } from "./resolve.ts";
-import { MaybePromise } from "./util.ts";
-import { serializeValue, deserializeValue, Value } from "./value.ts";
+import "./syscall";
+import { run } from "./operation";
+import { Package, PackageHash, addPackage, getPackage } from "./package";
+import { Unresolved, resolve } from "./resolve";
+import { MaybePromise } from "./util";
+import { serializeValue, deserializeValue, Value } from "./value";
 
 type TargetArgs = {
 	package: Package;

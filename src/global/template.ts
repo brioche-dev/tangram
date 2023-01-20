@@ -1,38 +1,51 @@
+import "./syscall";
 import {
 	Artifact,
 	ArtifactHash,
 	addArtifact,
 	getArtifact,
 	isArtifact,
-} from "./artifact.ts";
-import { Placeholder } from "./placeholder.ts";
-import { MaybeArray, MaybePromise } from "./util.ts";
+} from "./artifact";
+import { Placeholder } from "./placeholder";
+import { MaybeArray, MaybePromise } from "./util";
 
 export type TemplateLike = Template | MaybeArray<TemplateComponent>;
 
-export let template = async (
+export let t = async (
 	strings: TemplateStringsArray,
 	...placeholders: Array<MaybePromise<Template | MaybeArray<TemplateComponent>>>
 ): Promise<Template> => {
-	let resolvedPlaceholders = await Promise.all(placeholders);
 	let components = [];
 	for (let i = 0; i < strings.length - 1; i++) {
 		let string = strings[i];
-		let placeholder = resolvedPlaceholders[i];
+		let placeholder = placeholders[i];
 		components.push(string);
-		if (placeholder instanceof Template) {
-			components.push(...placeholder.components);
-		} else if (Array.isArray(placeholder)) {
-			components.push(...placeholder);
-		} else {
-			components.push(placeholder);
-		}
+		components.push(placeholder);
 	}
 	components.push(strings[strings.length - 1]);
-	return new Template(components);
+	return await template(components);
 };
 
-export { template as t };
+export let template = async (
+	components: MaybeArray<
+		MaybePromise<Template | MaybeArray<TemplateComponent>>
+	>,
+): Promise<Template> => {
+	let resolvedComponents = await Promise.all(
+		Array.isArray(components) ? components : [components],
+	);
+	let flattenedComponents = [];
+	for (let component of resolvedComponents) {
+		if (component instanceof Template) {
+			flattenedComponents.push(...component.components);
+		} else if (Array.isArray(component)) {
+			flattenedComponents.push(...component);
+		} else {
+			flattenedComponents.push(component);
+		}
+	}
+	return template(flattenedComponents);
+};
 
 export class Template {
 	components: Array<TemplateComponent>;

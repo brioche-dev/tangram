@@ -1,4 +1,4 @@
-import { Artifact } from "./artifact.ts";
+import "./syscall";
 
 export let symlink = (target: string): Symlink => {
 	return new Symlink(target);

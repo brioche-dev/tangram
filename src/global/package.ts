@@ -1,4 +1,5 @@
-import { Artifact, ArtifactHash, addArtifact } from "./artifact.ts";
+import "./syscall";
+import { Artifact, ArtifactHash, addArtifact } from "./artifact";
 
 export let currentPackage = async (): Promise<Package> => {
 	return await getPackage(new PackageHash(syscall("get_current_package_hash")));

@@ -23,11 +23,8 @@ impl Cli {
 		{
 			// If the specifier starts with /, ./, or ../, then resolve it as a path specifier.
 			Self::resolve_path(specifier, referrer)?
-		} else if specifier == "tangram" {
-			// If the specifier is "tangram", then resolve it to the root core module.
-			ModuleIdentifier::new_core("/mod.ts".into())
 		} else {
-			// Parse the specifier as a URL.
+			// Otherwise, parse the specifier as a URL.
 			let specifier: Url = specifier
 				.parse()
 				.with_context(|| format!(r#"The specifier "{specifier}" is not a valid URL."#))?;
@@ -57,10 +54,6 @@ impl Cli {
 		// Resolve.
 		let module_identifier = match referrer {
 			ModuleIdentifier::Lib { path } => ModuleIdentifier::Lib {
-				path: normalize(&path.join("..").join(specifier)),
-			},
-
-			ModuleIdentifier::Core { path } => ModuleIdentifier::Core {
 				path: normalize(&path.join("..").join(specifier)),
 			},
 
@@ -96,7 +89,7 @@ impl Cli {
 			referrer.context(r#"A specifier with the scheme "tangram" must have a referrer."#)?;
 
 		match referrer {
-			ModuleIdentifier::Lib { .. } | ModuleIdentifier::Core { .. } => {
+			ModuleIdentifier::Lib { .. } => {
 				bail!("Invalid referrer.")
 			},
 

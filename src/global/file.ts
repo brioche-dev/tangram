@@ -1,4 +1,5 @@
-import { Blob, BlobHash, BlobLike, addBlob, blob, getBlob } from "./blob.ts";
+import "./syscall";
+import { Blob, BlobHash, BlobLike, addBlob, blob, getBlob } from "./blob";
 
 export type FileOptions = {
 	executable?: boolean;
