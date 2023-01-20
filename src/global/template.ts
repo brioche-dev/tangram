@@ -44,7 +44,7 @@ export let template = async (
 			flattenedComponents.push(component);
 		}
 	}
-	return template(flattenedComponents);
+	return new Template(flattenedComponents);
 };
 
 export class Template {
