@@ -1,16 +1,70 @@
-use super::context::{Module, State};
+use super::{
+	context::{await_value, Module, State},
+	isolate::THREAD_LOCAL_ISOLATE,
+};
 use crate::{compiler::ModuleIdentifier, Cli};
 use anyhow::{bail, Context, Result};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::rc::Rc;
 
-// async fn evaluate_module<'s>(
-// 	scope: &mut v8::HandleScope<'s>,
-// 	module: v8::Local<'s, v8::Module>,
-// ) -> Result<v8::Local<'s, v8::Value>> {
-// 	todo!();
-// }
+pub async fn evaluate_module(
+	context: v8::Global<v8::Context>,
+	module_identifier: &ModuleIdentifier,
+) -> Result<(v8::Global<v8::Module>, v8::Global<v8::Value>)> {
+	// Enter the context.
+	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
+	let mut isolate = isolate.borrow_mut();
+	let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
+	let context = v8::Local::new(&mut handle_scope, context.clone());
+	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
+
+	// Get the state.
+	let state = Rc::clone(context.get_slot::<Rc<State>>(&mut context_scope).unwrap());
+
+	// Load the module.
+	let module = load_module(&mut context_scope, &module_identifier)?;
+
+	// Instantiate the module.
+	let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
+	let output = module.instantiate_module(&mut try_catch_scope, resolve_module_callback);
+	if try_catch_scope.has_caught() {
+		let exception = try_catch_scope.exception().unwrap();
+		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
+		let exception = super::exception::render(&mut scope, &state, exception);
+		bail!("{exception}");
+	}
+	output.unwrap();
+	drop(try_catch_scope);
+
+	// Evaluate the module.
+	let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
+	let module_output = module.evaluate(&mut try_catch_scope);
+	if try_catch_scope.has_caught() {
+		let exception = try_catch_scope.exception().unwrap();
+		let exception = super::exception::render(&mut try_catch_scope, &state, exception);
+		bail!("{exception}");
+	}
+	let module_output = module_output.unwrap();
+	drop(try_catch_scope);
+
+	let context = v8::Global::new(&mut context_scope, context);
+	let module = v8::Global::new(&mut context_scope, module);
+	let output = v8::Global::new(&mut context_scope, module_output);
+
+	// Exit the context.
+	drop(context_scope);
+	drop(handle_scope);
+	drop(isolate);
+
+	// Await the module output.
+	let output = await_value(context.clone(), Rc::clone(&state), output)
+		.await
+		.context("Failed to evaluate the module.")?;
+
+	// Return the module.
+	Ok((module, output))
+}
 
 /// Load a module.
 pub fn load_module<'s>(

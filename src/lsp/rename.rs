@@ -17,9 +17,10 @@ pub async fn rename(cli: Cli, params: lsp::RenameParams) -> Result<Option<lsp::W
 	// Get the references.
 	let locations = cli.rename(module_identifier, position.into()).await?;
 
+	// If there are no references, return None.
 	let Some(locations) = locations else {
-        return Ok(None);
-      };
+		return Ok(None);
+	};
 
 	// Convert the changes.
 	let mut document_changes = HashMap::<Url, lsp::TextDocumentEdit>::new();

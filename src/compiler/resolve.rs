@@ -1,10 +1,10 @@
 use super::{module_identifier::TANGRAM_SCHEME, ModuleIdentifier};
-use crate::Cli;
 use crate::{
 	lockfile::Lockfile,
 	manifest::{self, Manifest},
 	package::PackageHash,
 	util::normalize,
+	Cli,
 };
 use anyhow::{bail, Context, Result};
 use camino::Utf8Path;

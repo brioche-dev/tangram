@@ -70,79 +70,83 @@ pub async fn await_value(
 	state: Rc<State>,
 	value: v8::Global<v8::Value>,
 ) -> Result<v8::Global<v8::Value>> {
-	let context = context.clone();
-	let value = poll_fn(move |cx| {
+	poll_fn(move |cx| await_value_inner(context.clone(), &state, value.clone(), cx)).await
+}
+
+pub fn await_value_inner(
+	context: v8::Global<v8::Context>,
+	state: &State,
+	value: v8::Global<v8::Value>,
+	cx: &mut std::task::Context<'_>,
+) -> Poll<Result<v8::Global<v8::Value>>> {
+	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
+
+	// Poll the context's futures and resolve or reject all that are ready.
+	loop {
+		// Poll the context's futures.
+		let output = match state.futures.borrow_mut().poll_next_unpin(cx) {
+			Poll::Ready(Some(output)) => output,
+			Poll::Ready(None) => break,
+			Poll::Pending => return Poll::Pending,
+		};
+		let FutureOutput {
+			context,
+			promise_resolver,
+			result,
+		} = output;
+
+		// Get the thread local isolate and enter the context.
 		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-
-		// Poll the context's futures and resolve or reject all that are ready.
-		loop {
-			// Poll the context's futures.
-			let output = match state.futures.borrow_mut().poll_next_unpin(cx) {
-				Poll::Ready(Some(output)) => output,
-				Poll::Ready(None) => break,
-				Poll::Pending => return Poll::Pending,
-			};
-			let FutureOutput {
-				context,
-				promise_resolver,
-				result,
-			} = output;
-
-			// Get the thread local isolate and enter the context.
-			let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-			let mut isolate = isolate.borrow_mut();
-			let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
-			let context = v8::Local::new(&mut handle_scope, context);
-			let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-
-			// Resolve or reject the promise.
-			let promise_resolver = v8::Local::new(&mut context_scope, promise_resolver);
-			match result {
-				Ok(value) => {
-					// Resolve the promise.
-					let value = v8::Local::new(&mut context_scope, value);
-					promise_resolver.resolve(&mut context_scope, value);
-				},
-				Err(error) => {
-					// Reject the promise.
-					let error = v8::String::new(&mut context_scope, &error.to_string()).unwrap();
-					let error = v8::Local::new(&mut context_scope, error);
-					promise_resolver.reject(&mut context_scope, error.into());
-				},
-			};
-		}
-
-		// Enter the context.
 		let mut isolate = isolate.borrow_mut();
 		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
-		let context = v8::Local::new(&mut handle_scope, &context);
+		let context = v8::Local::new(&mut handle_scope, context);
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-		// Handle the value.
-		let value = v8::Local::new(&mut context_scope, value.clone());
-		match v8::Local::<v8::Promise>::try_from(value) {
-			Err(_) => {
+		// Resolve or reject the promise.
+		let promise_resolver = v8::Local::new(&mut context_scope, promise_resolver);
+		match result {
+			Ok(value) => {
+				// Resolve the promise.
+				let value = v8::Local::new(&mut context_scope, value);
+				promise_resolver.resolve(&mut context_scope, value);
+			},
+			Err(error) => {
+				// Reject the promise.
+				let error = v8::String::new(&mut context_scope, &error.to_string()).unwrap();
+				let error = v8::Local::new(&mut context_scope, error);
+				promise_resolver.reject(&mut context_scope, error.into());
+			},
+		};
+	}
+
+	// Enter the context.
+	let mut isolate = isolate.borrow_mut();
+	let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
+	let context = v8::Local::new(&mut handle_scope, &context);
+	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
+
+	// Handle the value.
+	let value = v8::Local::new(&mut context_scope, value.clone());
+	match v8::Local::<v8::Promise>::try_from(value) {
+		Err(_) => {
+			let value = v8::Global::new(&mut context_scope, value);
+			Poll::Ready(Ok::<_, anyhow::Error>(value))
+		},
+
+		Ok(promise) => match promise.state() {
+			v8::PromiseState::Pending => Poll::Pending,
+
+			v8::PromiseState::Fulfilled => {
+				let value = promise.result(&mut context_scope);
 				let value = v8::Global::new(&mut context_scope, value);
-				Poll::Ready(Ok::<_, anyhow::Error>(value))
+				Poll::Ready(Ok(value))
 			},
 
-			Ok(promise) => match promise.state() {
-				v8::PromiseState::Pending => Poll::Pending,
-
-				v8::PromiseState::Fulfilled => {
-					let value = promise.result(&mut context_scope);
-					let value = v8::Global::new(&mut context_scope, value);
-					Poll::Ready(Ok(value))
-				},
-
-				v8::PromiseState::Rejected => {
-					let exception = promise.result(&mut context_scope);
-					let exception = super::exception::render(&mut context_scope, &state, exception);
-					Poll::Ready(Err(anyhow!("{exception}")))
-				},
+			v8::PromiseState::Rejected => {
+				let exception = promise.result(&mut context_scope);
+				let exception = super::exception::render(&mut context_scope, &state, exception);
+				Poll::Ready(Err(anyhow!("{exception}")))
 			},
-		}
-	})
-	.await?;
-	Ok(value)
+		},
+	}
 }
