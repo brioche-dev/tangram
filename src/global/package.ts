@@ -1,5 +1,5 @@
 import "./syscall";
-import { Artifact, ArtifactHash, addArtifact } from "./artifact";
+import { getArtifact, Artifact, ArtifactHash, addArtifact } from "./artifact";
 
 export let currentPackage = async (): Promise<Package> => {
 	return await getPackage(new PackageHash(syscall("get_current_package_hash")));
@@ -78,6 +78,10 @@ export class Package {
 			source,
 			dependencies,
 		});
+	}
+
+	async getSource(): Promise<Artifact> {
+		return await getArtifact(this.source);
 	}
 }
 
