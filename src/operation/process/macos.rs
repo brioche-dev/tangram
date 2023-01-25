@@ -30,18 +30,20 @@ impl Cli {
 	) -> Result<()> {
 		// Create a temp path for the working directory.
 		let working_directory = self.temp_path();
-		tokio::fs::create_dir_all(&working_directory).await?;
+		let home_dir = working_directory.join("Users/tangram");
+
+		tokio::fs::create_dir_all(&home_dir).await?;
 
 		// Create the command.
 		let mut command = tokio::process::Command::new(&command);
 
 		// Set the current dir.
-		command.current_dir(&working_directory);
+		command.current_dir(&home_dir);
 
 		// Set the envs.
 		command.env_clear();
 		command.envs(env);
-
+		command.env("HOME", &home_dir);
 		// Set the args.
 		command.args(args);
 
@@ -78,7 +80,12 @@ fn pre_exec(
 	network_enabled: bool,
 ) -> Result<()> {
 	let mut profile = String::new();
+	let home_dir = working_directory
+		.join("Users/tangram")
+		.display()
+		.to_string();
 
+	// Helpful reference: https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf
 	// Add the default policy.
 	writedoc!(
 		profile,
@@ -101,12 +108,13 @@ fn pre_exec(
 			;; Allow limited exploration of the root.
 			(allow file-read-data (literal "/"))
 			(allow file-read-metadata
+				(literal "/bin/sh")
+				(literal "/usr/bin/env")
 				(literal "/Library")
 				(literal "/System")
 				(literal "/Users")
 				(literal "/Volumes")
-				(literal "/etc")
-				(literal "/var"))
+				(literal "/etc"))
 
 			;; Allow writing to common devices.
 			(allow file-read* file-write-data file-ioctl
@@ -118,7 +126,9 @@ fn pre_exec(
 			(allow file-write* file-read*
 				(subpath "/tmp")
 				(subpath "/private/tmp")
-				(subpath "/private/var/tmp"))
+				(subpath "/private/var")
+				(subpath "{home_dir}")
+				(subpath "/var"))
 
 			;; Allow reading some system devices and files.
 			(allow file-read*
@@ -129,6 +139,13 @@ fn pre_exec(
 				(literal "/private/etc/services")
 				(literal "/private/etc/localtime"))
 
+			;; Allow /bin/sh and /usr/bin/env to execute.
+			(allow process-exec
+				(literal "/bin/sh")
+				(literal "/bin/bash")
+				(literal "/usr/bin/env")
+			)
+			
 			;; Support Rosetta.
 			(allow file-read-metadata file-test-existence
 				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime"))
