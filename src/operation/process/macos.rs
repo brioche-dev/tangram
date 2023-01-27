@@ -5,7 +5,7 @@
 //! ```
 //!
 
-use super::run::{PathMode, ReferencedPathSet};
+use super::run::{PathMode, ReferencedPathSet, ReferencedPath};
 use crate::{system::System, Cli};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
@@ -25,7 +25,7 @@ impl Cli {
 		env: BTreeMap<String, String>,
 		command: String,
 		args: Vec<String>,
-		referenced_path_set: ReferencedPathSet,
+		mut referenced_path_set: ReferencedPathSet,
 		network_enabled: bool,
 	) -> Result<()> {
 		// Create a temp path for the working directory.
@@ -49,9 +49,14 @@ impl Cli {
 		command.args(args);
 
 		// Set up the sandbox.
+		referenced_path_set.add(ReferencedPath {
+			path: home_directory,
+			mode: PathMode::ReadWriteCreate
+		});
+		
 		unsafe {
 			command.pre_exec(move || {
-				pre_exec(&referenced_path_set, &home_directory, &working_directory, network_enabled)
+				pre_exec(&referenced_path_set, &working_directory, network_enabled)
 					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			})
 		};
@@ -77,12 +82,10 @@ impl Cli {
 #[allow(clippy::too_many_lines)]
 fn pre_exec(
 	referenced_path_set: &ReferencedPathSet,
-	home_directory: &Path,
 	working_directory: &Path,
 	network_enabled: bool,
 ) -> Result<()> {
 	let mut profile = String::new();
-	let home_directory = home_directory.display().to_string();
 	
 	// Helpful reference: https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf
 	// Add the default policy.
@@ -126,7 +129,6 @@ fn pre_exec(
 				(subpath "/tmp")
 				(subpath "/private/tmp")
 				(subpath "/private/var")
-				(subpath "{home_directory}")
 				(subpath "/var"))
 
 			;; Allow reading some system devices and files.
