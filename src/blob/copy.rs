@@ -4,48 +4,6 @@ use anyhow::{bail, Result};
 use std::path::Path;
 use tokio::io::AsyncWrite;
 
-/// Helper trait to control the behavior of copying a file given its path.
-#[async_trait::async_trait]
-pub trait CopyFromPath {
-	/// Copy the data from a file at [path].
-	async fn copy_from(&mut self, path: &std::path::Path) -> Result<()>;
-}
-
-// For Stdout, we open the file and use std::io::copy.
-#[async_trait::async_trait]
-impl CopyFromPath for std::io::Stdout {
-	async fn copy_from(&mut self, path: &std::path::Path) -> Result<()> {
-		let file = tokio::fs::File::open(path).await?;
-		let mut file = file.into_std().await;
-		std::io::copy(&mut file, self)?;
-		Ok(())
-	}
-}
-
-// When copying a file to another path, we want to make sure to use the most efficient copying mechanism available.
-// On Linux we can use the same API as Stdout (std::io::copy_file, which falls back to the sendfile, splice, and
-// copy_file_range APIs) however on MacOS we need to use std::fs::copy which allows for shallow clones on APFS.
-#[async_trait::async_trait]
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-impl CopyFromPath for std::path::PathBuf {
-	async fn copy_from(&mut self, path: &std::path::Path) -> Result<()> {
-		// On MacOS use std::fs::copy.
-		#[cfg(target_os = "macos")]
-		{
-			std::fs::copy(path, self)?;
-		}
-		// On Linux, use std::io::copy.
-		#[cfg(target_os = "linux")]
-		{
-			let file = tokio::fs::File::open(path).await?;
-			let mut file = file.into_std().await;
-			std::io::copy(&mut file, self)?;
-			Ok(())
-		}
-		Ok(())
-	}
-}
-
 impl Cli {
 	pub async fn copy_blob_to_path(
 		&self,
@@ -61,7 +19,19 @@ impl Cli {
 		}
 
 		// Acqwuire a permit and copy the file.
-		// TODO: should use tokio::spawn?
+		// Note: We use tokio::fs::copy which calls std::fs::copy under the hood. 	
+		// 
+		// std::fs::copy has the following behavior:
+		// 
+		// On Linux: calls copy_file_at, a syscall that allows filesystems to perform reflinks/copy-on-write behavior.
+		// On MacOS: calls fclonefileat, a syscall that corresponds to shallow clones on APFS.
+		//
+		// References: 
+		//     https://doc.rust-lang.org/std/fs/fn.copy.html#errors
+		//     https://manpages.ubuntu.com/manpages/impish/man2/copy_file_range.2.html
+		//     https://www.manpagez.com/man/2/fclonefileat/
+		// 
+		// Additional notes: when using fs::copy, file watchers may report the source file has changed.
 		let permit = self.inner.file_semaphore.acquire().await?;
 		tokio::fs::copy(blob_path, path).await?;
 		drop(permit);
