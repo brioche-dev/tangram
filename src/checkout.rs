@@ -181,13 +181,9 @@ impl Cli {
 		};
 
 		// Copy the blob to the path.
-		let permit = self.inner.file_semaphore.acquire_many(2).await?;
-		let output =
-			std::fs::File::create(path).context("Failed to create the file to checkout to.")?;
-		self.copy_blob(file.blob, output)
+		self.copy_blob_to_path(file.blob, path)
 			.await
 			.context("Failed to copy the blob.")?;
-		drop(permit);
 
 		// Make the file executable if necessary.
 		if file.executable {

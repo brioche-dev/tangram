@@ -32,10 +32,10 @@ impl Cli {
 
 	async fn command_blob_get(&self, args: GetArgs) -> Result<()> {
 		// Open stdout.
-		let stdout = std::io::stdout();
+		let mut stdout = tokio::io::stdout();
 
 		// Copy the blob.
-		self.copy_blob(args.blob_hash, stdout).await?;
+		self.copy_blob_to_writer(args.blob_hash, &mut stdout).await?;
 
 		Ok(())
 	}

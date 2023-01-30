@@ -5,7 +5,7 @@
 //! ```
 //!
 
-use super::run::{PathMode, ReferencedPathSet};
+use super::run::{PathMode, ReferencedPath, ReferencedPathSet};
 use crate::{system::System, Cli};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
@@ -25,11 +25,14 @@ impl Cli {
 		env: BTreeMap<String, String>,
 		command: String,
 		args: Vec<String>,
-		referenced_path_set: ReferencedPathSet,
+		mut referenced_path_set: ReferencedPathSet,
 		network_enabled: bool,
 	) -> Result<()> {
 		// Create a temp path for the working directory.
-		let working_directory = self.temp_path();
+		let parent_dir = self.temp_path();
+		let home_directory = parent_dir.join("Users/tangram");
+		let working_directory = home_directory.join("work");
+
 		tokio::fs::create_dir_all(&working_directory).await?;
 
 		// Create the command.
@@ -41,11 +44,17 @@ impl Cli {
 		// Set the envs.
 		command.env_clear();
 		command.envs(env);
+		command.env("HOME", &home_directory);
 
 		// Set the args.
 		command.args(args);
 
 		// Set up the sandbox.
+		referenced_path_set.add(ReferencedPath {
+			path: home_directory,
+			mode: PathMode::ReadWriteCreate,
+		});
+
 		unsafe {
 			command.pre_exec(move || {
 				pre_exec(&referenced_path_set, &working_directory, network_enabled)
@@ -79,6 +88,7 @@ fn pre_exec(
 ) -> Result<()> {
 	let mut profile = String::new();
 
+	// Helpful reference: https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf
 	// Add the default policy.
 	writedoc!(
 		profile,
@@ -106,19 +116,22 @@ fn pre_exec(
 				(literal "/Users")
 				(literal "/Volumes")
 				(literal "/etc")
-				(literal "/var"))
+			)
 
 			;; Allow writing to common devices.
 			(allow file-read* file-write-data file-ioctl
 				(literal "/dev/null")
 				(literal "/dev/zero")
-				(literal "/dev/dtracehelper"))
+				(literal "/dev/dtracehelper")
+			)
 
 			;; Allow reading and writing temporary files.
 			(allow file-write* file-read*
 				(subpath "/tmp")
 				(subpath "/private/tmp")
-				(subpath "/private/var/tmp"))
+				(subpath "/private/var")
+				(subpath "/var")
+			)
 
 			;; Allow reading some system devices and files.
 			(allow file-read*
@@ -127,11 +140,20 @@ fn pre_exec(
 				(literal "/dev/urandom")
 				(literal "/private/etc/protocols")
 				(literal "/private/etc/services")
-				(literal "/private/etc/localtime"))
+				(literal "/private/etc/localtime")
+			)
 
+			;; Allow /bin/sh and /usr/bin/env to execute.
+			(allow process-exec
+				(literal "/bin/sh")
+				(literal "/bin/bash")
+				(literal "/usr/bin/env")
+			)
+			
 			;; Support Rosetta.
 			(allow file-read-metadata file-test-existence
-				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime"))
+				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
+			)
 		"#
 	).unwrap();
 
@@ -147,7 +169,8 @@ fn pre_exec(
 				(allow file-read*
 					(literal "/Library/Preferences/com.apple.networkd.plist")
 					(literal "/private/var/db/com.apple.networkextension.tracker-info")
-					(literal "/private/var/db/nsurlstoraged/dafsaData.bin"))
+					(literal "/private/var/db/nsurlstoraged/dafsaData.bin")
+				)
 				(allow user-preference-read (preference-domain "com.apple.CFNetwork"))
 
 				;; (allow mach*) is included in the prelude, so all IPCs are allowed.
