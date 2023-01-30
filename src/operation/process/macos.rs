@@ -33,7 +33,7 @@ impl Cli {
 		let home_directory = parent_dir.join("Users/tangram");
 		let working_directory = home_directory.join("work");
 
-		tokio::fs::create_dir_all(&home_directory).await?;
+		tokio::fs::create_dir_all(&working_directory).await?;
 
 		// Create the command.
 		let mut command = tokio::process::Command::new(&command);
@@ -111,26 +111,27 @@ fn pre_exec(
 			;; Allow limited exploration of the root.
 			(allow file-read-data (literal "/"))
 			(allow file-read-metadata
-				(literal "/bin/sh")
-				(literal "/usr/bin/env")
 				(literal "/Library")
 				(literal "/System")
 				(literal "/Users")
 				(literal "/Volumes")
-				(literal "/etc"))
+				(literal "/etc")
+			)
 
 			;; Allow writing to common devices.
 			(allow file-read* file-write-data file-ioctl
 				(literal "/dev/null")
 				(literal "/dev/zero")
-				(literal "/dev/dtracehelper"))
+				(literal "/dev/dtracehelper")
+			)
 
 			;; Allow reading and writing temporary files.
 			(allow file-write* file-read*
 				(subpath "/tmp")
 				(subpath "/private/tmp")
 				(subpath "/private/var")
-				(subpath "/var"))
+				(subpath "/var")
+			)
 
 			;; Allow reading some system devices and files.
 			(allow file-read*
@@ -139,7 +140,8 @@ fn pre_exec(
 				(literal "/dev/urandom")
 				(literal "/private/etc/protocols")
 				(literal "/private/etc/services")
-				(literal "/private/etc/localtime"))
+				(literal "/private/etc/localtime")
+			)
 
 			;; Allow /bin/sh and /usr/bin/env to execute.
 			(allow process-exec
@@ -150,7 +152,8 @@ fn pre_exec(
 			
 			;; Support Rosetta.
 			(allow file-read-metadata file-test-existence
-				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime"))
+				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
+			)
 		"#
 	).unwrap();
 
@@ -166,7 +169,8 @@ fn pre_exec(
 				(allow file-read*
 					(literal "/Library/Preferences/com.apple.networkd.plist")
 					(literal "/private/var/db/com.apple.networkextension.tracker-info")
-					(literal "/private/var/db/nsurlstoraged/dafsaData.bin"))
+					(literal "/private/var/db/nsurlstoraged/dafsaData.bin")
+				)
 				(allow user-preference-read (preference-domain "com.apple.CFNetwork"))
 
 				;; (allow mach*) is included in the prelude, so all IPCs are allowed.
