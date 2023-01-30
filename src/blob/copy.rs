@@ -18,24 +18,24 @@ impl Cli {
 			bail!(r#"Failed to get blob with hash "{blob_hash}"."#);
 		}
 
-		// Acqwuire a permit and copy the file.
-		// Note: We use tokio::fs::copy which calls std::fs::copy under the hood. 	
-		// 
+		// Acquire a permit and copy the file.
+		// Note: We use tokio::fs::copy which calls std::fs::copy under the hood.
+		//
 		// std::fs::copy has the following behavior:
-		// 
-		// On Linux: calls copy_file_at, a syscall that allows filesystems to perform reflinks/copy-on-write behavior.
+		//
+		// On Linux: calls copy_file_range, a syscall that allows filesystems to perform reflinks/copy-on-write behavior.
 		// On MacOS: calls fclonefileat, a syscall that corresponds to shallow clones on APFS.
 		//
-		// References: 
+		// References:
 		//     https://doc.rust-lang.org/std/fs/fn.copy.html#errors
 		//     https://manpages.ubuntu.com/manpages/impish/man2/copy_file_range.2.html
 		//     https://www.manpagez.com/man/2/fclonefileat/
-		// 
+		//
 		// Additional notes: when using fs::copy, file watchers may report the source file has changed.
 		let permit = self.inner.file_semaphore.acquire().await?;
 		tokio::fs::copy(blob_path, path).await?;
 		drop(permit);
-	
+
 		Ok(())
 	}
 
