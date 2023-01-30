@@ -5,7 +5,7 @@
 //! ```
 //!
 
-use super::run::{PathMode, ReferencedPathSet, ReferencedPath};
+use super::run::{PathMode, ReferencedPath, ReferencedPathSet};
 use crate::{system::System, Cli};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
@@ -39,21 +39,22 @@ impl Cli {
 		let mut command = tokio::process::Command::new(&command);
 
 		// Set the current dir.
-		command.current_dir(&home_directory);
+		command.current_dir(&working_directory);
 
 		// Set the envs.
 		command.env_clear();
 		command.envs(env);
 		command.env("HOME", &home_directory);
+
 		// Set the args.
 		command.args(args);
 
 		// Set up the sandbox.
 		referenced_path_set.add(ReferencedPath {
 			path: home_directory,
-			mode: PathMode::ReadWriteCreate
+			mode: PathMode::ReadWriteCreate,
 		});
-		
+
 		unsafe {
 			command.pre_exec(move || {
 				pre_exec(&referenced_path_set, &working_directory, network_enabled)
@@ -86,7 +87,7 @@ fn pre_exec(
 	network_enabled: bool,
 ) -> Result<()> {
 	let mut profile = String::new();
-	
+
 	// Helpful reference: https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf
 	// Add the default policy.
 	writedoc!(
