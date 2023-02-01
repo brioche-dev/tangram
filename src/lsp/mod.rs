@@ -2,6 +2,7 @@ use self::{
 	completion::completion,
 	definition::definition,
 	files::{did_change, did_close, did_open},
+	formatting::formatting,
 	hover::hover,
 	initialize::{initialize, shutdown},
 	references::references,
@@ -20,6 +21,7 @@ mod completion;
 mod definition;
 mod diagnostics;
 mod files;
+mod formatting;
 mod hover;
 mod initialize;
 mod jsonrpc;
@@ -141,6 +143,13 @@ async fn handle_message(cli: &Cli, sender: &Sender, message: jsonrpc::Message) {
 				lsp::request::GotoDefinition::METHOD => {
 					handle_request::<lsp::request::GotoDefinition, _, _>(
 						cli, sender, request, definition,
+					)
+					.boxed()
+				},
+
+				lsp::request::Formatting::METHOD => {
+					handle_request::<lsp::request::Formatting, _, _>(
+						cli, sender, request, formatting,
 					)
 					.boxed()
 				},

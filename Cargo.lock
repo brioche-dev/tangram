@@ -200,6 +200,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-set"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
+dependencies = [
+ "bit-vec",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -235,6 +250,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cce20737498f97b993470a6e536b8523f0af7892a4f928cceb1ac5e52ebe7e"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "bstr"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba3569f383e8f1598449f1a423e72e99569137b47740b1da11ef19af3d5c3223"
+dependencies = [
+ "lazy_static",
+ "memchr",
+ "regex-automata",
 ]
 
 [[package]]
@@ -280,6 +306,12 @@ name = "bumpalo"
 version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d261e256854913907f67ed06efbc3338dfe6179796deefc1ff763fc1aee5535"
+
+[[package]]
+name = "bytemuck"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c041d3eab048880cb0b86b256447da3f18859a163c3b8d8893f4e6368abe6393"
 
 [[package]]
 name = "byteorder"
@@ -387,6 +419,12 @@ dependencies = [
  "rustix 0.35.13",
  "winx",
 ]
+
+[[package]]
+name = "case"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd6c0e7b807d60291f42f33f58480c0bfafe28ed08286446f45e463728cf9c1c"
 
 [[package]]
 name = "cc"
@@ -521,6 +559,12 @@ name = "core-foundation-sys"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
+
+[[package]]
+name = "countme"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7704b5fdd17b18ae31c4c1da5a2e0305a2bf17b5249300a9ee9ed7b72114c636"
 
 [[package]]
 name = "cpp_demangle"
@@ -891,6 +935,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "drop_bomb"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bda8e21c04aca2ae33ffc2fd8c23134f3cac46db123ba97bd9d3f3b8a4a85e1"
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9b0705efd4599c15a38151f4721f7bc388306f61084d3bfd50bd07fbca5cb60"
+
+[[package]]
 name = "either"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -978,6 +1034,15 @@ name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
+
+[[package]]
+name = "fastrand"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a407cfaa3385c4ae6b23e84623d48c2798d06e3e6a1878f7f59f17b3f86499"
+dependencies = [
+ "instant",
+]
 
 [[package]]
 name = "fd-lock"
@@ -1436,6 +1501,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "instant"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "io-extras"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1865,6 +1939,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "natord"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "308d96db8debc727c3fd9744aac51751243420e46edf401010908da7f8d5e57c"
+
+[[package]]
 name = "ndk-context"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2184,6 +2264,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pico-args"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5be167a7af36ee22fe3115051bc51f6e6c7054c9348e28deb4f49bd6f705a315"
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2264,6 +2350,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "proptest"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e0d9cc07f18492d879586c92b485def06bc850da3118075cd45d50e9c95b0e5"
+dependencies = [
+ "bit-set",
+ "bitflags",
+ "byteorder",
+ "lazy_static",
+ "num-traits",
+ "quick-error 2.0.1",
+ "rand",
+ "rand_chacha",
+ "rand_xorshift",
+ "regex-syntax",
+ "rusty-fork",
+ "tempfile",
+]
+
+[[package]]
 name = "psm"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2271,6 +2377,18 @@ checksum = "5787f7cda34e3033a72192c018bc5883100330f362ef279a8cbccfce8bb4e874"
 dependencies = [
  "cc",
 ]
+
+[[package]]
+name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
+
+[[package]]
+name = "quick-error"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
 name = "quote"
@@ -2319,6 +2437,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom",
+]
+
+[[package]]
+name = "rand_xorshift"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
+dependencies = [
+ "rand_core",
 ]
 
 [[package]]
@@ -2411,6 +2538,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
 
 [[package]]
+name = "remove_dir_all"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.11.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2452,6 +2588,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "retain_mut"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4389f1d5789befaf6029ebd9f7dac4af7f7e3d61b69d4f30e2ac02b57e7712b0"
+
+[[package]]
 name = "ring"
 version = "0.16.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2464,6 +2606,283 @@ dependencies = [
  "untrusted",
  "web-sys",
  "winapi",
+]
+
+[[package]]
+name = "roaring"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd539cab4e32019956fe7e0cf160bb6d4802f4be2b52c4253d76d3bb0f85a5f7"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "retain_mut",
+]
+
+[[package]]
+name = "rome_analyze"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "bitflags",
+ "rome_console",
+ "rome_diagnostics",
+ "rome_rowan",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "rome_aria"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "rome_aria_metadata",
+]
+
+[[package]]
+name = "rome_aria_metadata"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "case",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "rome_console"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "atty",
+ "rome_markup",
+ "rome_text_size",
+ "schemars",
+ "serde",
+ "termcolor",
+ "unicode-width",
+]
+
+[[package]]
+name = "rome_control_flow"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "rome_rowan",
+]
+
+[[package]]
+name = "rome_diagnostics"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "backtrace",
+ "bitflags",
+ "pico-args",
+ "rome_console",
+ "rome_diagnostics_categories",
+ "rome_diagnostics_macros",
+ "rome_rowan",
+ "rome_text_edit",
+ "rome_text_size",
+ "serde",
+ "termcolor",
+ "unicode-width",
+]
+
+[[package]]
+name = "rome_diagnostics_categories"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "quote",
+ "serde",
+]
+
+[[package]]
+name = "rome_diagnostics_macros"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "rome_formatter"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "cfg-if",
+ "countme",
+ "drop_bomb",
+ "indexmap",
+ "rome_console",
+ "rome_diagnostics",
+ "rome_rowan",
+ "rustc-hash",
+ "tracing",
+ "unicode-width",
+]
+
+[[package]]
+name = "rome_js_analyze"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "lazy_static",
+ "natord",
+ "roaring",
+ "rome_analyze",
+ "rome_aria",
+ "rome_console",
+ "rome_control_flow",
+ "rome_diagnostics",
+ "rome_js_factory",
+ "rome_js_semantic",
+ "rome_js_syntax",
+ "rome_rowan",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rome_js_factory"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "rome_js_syntax",
+ "rome_rowan",
+]
+
+[[package]]
+name = "rome_js_formatter"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "cfg-if",
+ "rome_diagnostics_categories",
+ "rome_formatter",
+ "rome_js_factory",
+ "rome_js_syntax",
+ "rome_rowan",
+ "rome_text_size",
+ "tracing",
+ "unicode-width",
+]
+
+[[package]]
+name = "rome_js_parser"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "drop_bomb",
+ "indexmap",
+ "rome_console",
+ "rome_diagnostics",
+ "rome_js_factory",
+ "rome_js_syntax",
+ "rome_js_unicode_table",
+ "rome_parser",
+ "rome_rowan",
+ "smallvec",
+ "tracing",
+]
+
+[[package]]
+name = "rome_js_semantic"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "rome_js_syntax",
+ "rome_rowan",
+ "rust-lapper",
+ "rustc-hash",
+]
+
+[[package]]
+name = "rome_js_syntax"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "rome_console",
+ "rome_diagnostics",
+ "rome_rowan",
+]
+
+[[package]]
+name = "rome_js_unicode_table"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+
+[[package]]
+name = "rome_markup"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "rome_parser"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "drop_bomb",
+ "rome_console",
+ "rome_diagnostics",
+ "rome_rowan",
+]
+
+[[package]]
+name = "rome_rowan"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "countme",
+ "hashbrown",
+ "memoffset 0.6.5",
+ "rome_text_edit",
+ "rome_text_size",
+ "rustc-hash",
+ "tracing",
+]
+
+[[package]]
+name = "rome_text_edit"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "rome_text_size",
+ "serde",
+ "similar",
+]
+
+[[package]]
+name = "rome_text_size"
+version = "0.0.0"
+source = "git+https://github.com/rome/tools.git#ced6f5ba55f9aadb5d90bacd6603787e79689f2a"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "rust-lapper"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee43d8e721ac803031dbab6a944b957b49a3b11eadbc099880c8aaaebf23ed27"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -2560,6 +2979,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusty-fork"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb3dcc6e454c328bb824492db107ab7c0ae8fcffe4ad210136ef014458c1bc4f"
+dependencies = [
+ "fnv",
+ "quick-error 1.2.3",
+ "tempfile",
+ "wait-timeout",
+]
+
+[[package]]
 name = "rustyline"
 version = "10.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2604,6 +3035,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "713cfb06c7059f3588fb8044c0fad1d09e3c01d225e25b9220dbfdcf16dbb1b3"
 dependencies = [
  "windows-sys 0.42.0",
+]
+
+[[package]]
+name = "schemars"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a5fb6c61f29e723026dc8e923d94c694313212abbecbbe5f55a7748eec5b307"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f188d036977451159430f3b8dc82ec76364a42b7e289c2b18a9a18f4470058e9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn",
 ]
 
 [[package]]
@@ -2695,6 +3150,17 @@ name = "serde_derive"
 version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4eae9b04cbffdfd550eb462ed33bc6a1b68c935127d008b27444d08380f94e4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2827,6 +3293,10 @@ name = "similar"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "420acb44afdae038210c99e69aae24109f32f15500aa708e81d46c9f29d55fcf"
+dependencies = [
+ "bstr 0.2.17",
+ "unicode-segmentation",
+]
 
 [[package]]
 name = "siphasher"
@@ -3330,7 +3800,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "blake3",
- "bstr",
+ "bstr 1.1.0",
  "buffalo",
  "byteorder",
  "bytes",
@@ -3362,9 +3832,20 @@ dependencies = [
  "num-derive",
  "num-traits",
  "pathdiff",
+ "proptest",
  "rand",
  "regex",
  "reqwest",
+ "rome_analyze",
+ "rome_console",
+ "rome_diagnostics",
+ "rome_formatter",
+ "rome_js_analyze",
+ "rome_js_factory",
+ "rome_js_formatter",
+ "rome_js_parser",
+ "rome_js_syntax",
+ "rome_rowan",
  "rustyline",
  "serde",
  "serde_json",
@@ -3407,6 +3888,20 @@ name = "target-lexicon"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9410d0f6853b1d94f0e519fb95df60f29d2c1eff2d921ffdf01a4c8a3b54f12d"
+
+[[package]]
+name = "tempfile"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5cdb1ef4eaeeaddc8fbd371e5017057064af0911902ef36b39801f67cc6d79e4"
+dependencies = [
+ "cfg-if",
+ "fastrand",
+ "libc",
+ "redox_syscall",
+ "remove_dir_all",
+ "winapi",
+]
 
 [[package]]
 name = "termcolor"
@@ -3783,6 +4278,15 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f200f5b12eb75f8c1ed65abd4b2db8a6e1b138a20de009dacee265a2498f3f6"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "walkdir"

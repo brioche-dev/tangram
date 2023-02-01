@@ -14,6 +14,7 @@ pub async fn initialize(
 			completion_provider: Some(lsp::CompletionOptions::default()),
 			definition_provider: Some(lsp::OneOf::Left(true)),
 			rename_provider: Some(lsp::OneOf::Left(true)),
+			document_formatting_provider: Some(lsp::OneOf::Left(true)),
 			text_document_sync: Some(lsp::TextDocumentSyncCapability::Options(
 				lsp::TextDocumentSyncOptions {
 					open_close: Some(true),

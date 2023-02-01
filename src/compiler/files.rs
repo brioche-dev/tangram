@@ -52,17 +52,7 @@ impl Cli {
 
 		// Convert the range to bytes.
 		let range = if let Some(range) = range {
-			let start = byte_index_for_line_and_character_index(
-				&file.text,
-				range.start.line as usize,
-				range.start.character as usize,
-			);
-			let end = byte_index_for_line_and_character_index(
-				&file.text,
-				range.end.line as usize,
-				range.end.character as usize,
-			);
-			start..end
+			range.to_byte_range_in_string(&file.text)
 		} else {
 			0..file.text.len()
 		};
@@ -118,22 +108,4 @@ impl Cli {
 			},
 		}
 	}
-}
-
-fn byte_index_for_line_and_character_index(string: &str, line: usize, character: usize) -> usize {
-	let mut byte_index = 0;
-	let mut line_index = 0;
-	let mut character_index = 0;
-	for code_point in string.chars() {
-		if line_index == line && character_index == character {
-			return byte_index;
-		}
-		byte_index += code_point.len_utf8();
-		character_index += 1;
-		if code_point == '\n' {
-			line_index += 1;
-			character_index = 0;
-		}
-	}
-	byte_index
 }

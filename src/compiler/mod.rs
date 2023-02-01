@@ -18,6 +18,7 @@ pub use self::{
 use crate::Cli;
 use anyhow::{anyhow, Context, Result};
 
+mod analyze;
 mod check;
 mod completion;
 mod definition;
@@ -28,6 +29,8 @@ mod format;
 mod hover;
 mod load;
 mod module_identifier;
+mod position;
+mod range;
 mod references;
 mod rename;
 mod resolve;
