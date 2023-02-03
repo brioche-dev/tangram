@@ -72,9 +72,9 @@ impl ModuleIdentifier {
 			.to_owned()
 			.try_into()?;
 
-		// Create the module specifier.
-		let module_specifier = ModuleIdentifier::new_path(package_path, module_path);
-		Ok(module_specifier)
+		// Create the module identifier.
+		let module_identifier = ModuleIdentifier::new_path(package_path, module_path);
+		Ok(module_identifier)
 	}
 }
 
@@ -83,7 +83,7 @@ impl TryFrom<Url> for ModuleIdentifier {
 
 	fn try_from(value: Url) -> Result<Self, Self::Error> {
 		let domain = value.domain().context("The URL must have a domain.")?;
-		let module_specifier = match domain {
+		let module_identifier = match domain {
 			"lib" => {
 				let path = value.path().into();
 				ModuleIdentifier::Lib { path }
@@ -115,7 +115,7 @@ impl TryFrom<Url> for ModuleIdentifier {
 			_ => bail!(r#"Invalid URL "{value}"."#),
 		};
 
-		Ok(module_specifier)
+		Ok(module_identifier)
 	}
 }
 

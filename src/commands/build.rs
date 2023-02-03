@@ -1,6 +1,6 @@
 use crate::{
 	operation::{Operation, Target},
-	specifier::Specifier,
+	package_specifier::PackageSpecifier,
 	system::System,
 	Cli,
 };
@@ -14,7 +14,7 @@ pub struct Args {
 	locked: bool,
 
 	#[arg(default_value = ".")]
-	specifier: Specifier,
+	specifier: PackageSpecifier,
 
 	#[arg(default_value = "default")]
 	name: String,

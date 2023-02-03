@@ -92,7 +92,9 @@ impl Cli {
 		}
 
 		// Otherwise, read the file from disk.
-		let text = tokio::fs::read_to_string(&path).await?;
+		let text = tokio::fs::read_to_string(&path)
+			.await
+			.with_context(|| format!("Failed to load path {path:?}."))?;
 
 		Ok(text)
 	}

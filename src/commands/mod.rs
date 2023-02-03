@@ -13,6 +13,7 @@ pub mod check;
 pub mod checkin;
 pub mod checkout;
 pub mod download;
+pub mod dump_metadata;
 pub mod fmt;
 pub mod gc;
 pub mod init;
@@ -59,6 +60,7 @@ pub enum Command {
 	Checkin(self::checkin::Args),
 	Checkout(self::checkout::Args),
 	Download(self::download::Args),
+	DumpMetadata(self::dump_metadata::Args),
 	Fmt(self::fmt::Args),
 	Gc(self::gc::Args),
 	Init(self::init::Args),
@@ -111,6 +113,7 @@ impl Cli {
 			Command::Checkin(args) => self.command_checkin(args).boxed(),
 			Command::Checkout(args) => self.command_checkout(args).boxed(),
 			Command::Download(args) => self.command_download(args).boxed(),
+			Command::DumpMetadata(args) => self.command_dump_metadata(args).boxed(),
 			Command::Fmt(args) => self.command_fmt(args).boxed(),
 			Command::Gc(args) => self.command_gc(args).boxed(),
 			Command::Init(args) => self.command_init(args).boxed(),

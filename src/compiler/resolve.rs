@@ -1,56 +1,38 @@
-use super::{module_identifier::TANGRAM_SCHEME, ModuleIdentifier};
+use super::{module_specifier::ModuleSpecifier, ModuleIdentifier};
 use crate::{
 	lockfile::Lockfile,
 	manifest::{self, Manifest},
 	package::PackageHash,
+	package_specifier::PackageSpecifier,
 	util::normalize,
 	Cli,
 };
 use anyhow::{bail, Context, Result};
 use camino::Utf8Path;
 use std::path::Path;
-use url::Url;
 
 impl Cli {
 	pub async fn resolve(
 		&self,
-		specifier: &str,
-		referrer: Option<&ModuleIdentifier>,
+		specifier: &ModuleSpecifier,
+		referrer: &ModuleIdentifier,
 	) -> Result<ModuleIdentifier> {
-		let module_identifier = if specifier.starts_with('/')
-			|| specifier.starts_with("./")
-			|| specifier.starts_with("../")
-		{
-			// If the specifier starts with /, ./, or ../, then resolve it as a path specifier.
-			Self::resolve_path(specifier, referrer)?
-		} else {
-			// Otherwise, parse the specifier as a URL.
-			let specifier: Url = specifier
-				.parse()
-				.with_context(|| format!(r#"The specifier "{specifier}" is not a valid URL."#))?;
-
-			// Handle each supported scheme.
-			match specifier.scheme() {
-				TANGRAM_SCHEME => self.resolve_tangram(&specifier, referrer).await?,
-				_ => specifier.try_into()?,
-			}
+		let module_identifier = match specifier {
+			ModuleSpecifier::Path { module_path } => Self::resolve_path(&module_path, referrer)?,
+			ModuleSpecifier::Package(package_specifier) => {
+				self.resolve_tangram(&package_specifier, referrer).await?
+			},
 		};
+
 		Ok(module_identifier)
 	}
 }
 
 impl Cli {
-	fn resolve_path(
-		specifier: &str,
-		referrer: Option<&ModuleIdentifier>,
+	pub fn resolve_path(
+		specifier: &Utf8Path,
+		referrer: &ModuleIdentifier,
 	) -> Result<ModuleIdentifier> {
-		// Ensure there is a referrer.
-		let referrer = referrer.with_context(|| {
-			format!(r#"A specifier with the scheme "{TANGRAM_SCHEME}" must have a referrer."#)
-		})?;
-
-		let specifier = Utf8Path::new(specifier);
-
 		// Resolve.
 		let module_identifier = match referrer {
 			ModuleIdentifier::Lib { path } => ModuleIdentifier::Lib {
@@ -81,13 +63,9 @@ impl Cli {
 impl Cli {
 	async fn resolve_tangram(
 		&self,
-		specifier: &Url,
-		referrer: Option<&ModuleIdentifier>,
+		specifier: &PackageSpecifier,
+		referrer: &ModuleIdentifier,
 	) -> Result<ModuleIdentifier> {
-		// Ensure there is a referrer.
-		let referrer =
-			referrer.context(r#"A specifier with the scheme "tangram" must have a referrer."#)?;
-
 		match referrer {
 			ModuleIdentifier::Lib { .. } => {
 				bail!("Invalid referrer.")
@@ -106,16 +84,17 @@ impl Cli {
 
 	fn resolve_tangram_from_hash(
 		&self,
-		specifier: &Url,
+		specifier: &PackageSpecifier,
 		referrer_package_hash: PackageHash,
 	) -> Result<ModuleIdentifier> {
 		// Get the specifier's package name.
-		let specifier_package_name = specifier.path();
+		let specifier_package_name = specifier.key();
 
 		// Get the referrer's dependencies.
 		let referrer_dependencies = self.get_package_local(referrer_package_hash)?.dependencies;
 
 		// Get the specifier's package hash from the referrer's dependencies.
+		// TODO: Support more sophisticated resolution.
 		let specifier_package_hash = referrer_dependencies.get(specifier_package_name).context(
 			"Expected the referrer's package dependencies to contain the specifier's package name.",
 		)?;
@@ -129,11 +108,11 @@ impl Cli {
 
 	async fn resolve_tangram_from_path(
 		&self,
-		specifier: &Url,
+		specifier: &PackageSpecifier,
 		referrer_package_path: &Path,
 	) -> Result<ModuleIdentifier> {
 		// Get the specifier's package name.
-		let specifier_package_name = specifier.path();
+		let specifier_package_name = specifier.key();
 
 		// Read the referrer's manifest.
 		let referrer_manifest_path = referrer_package_path.join("tangram.json");

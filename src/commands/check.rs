@@ -1,6 +1,6 @@
 use crate::{
 	compiler::{Diagnostic, Location, Position},
-	specifier::Specifier,
+	package_specifier::PackageSpecifier,
 	Cli,
 };
 use anyhow::{bail, Result};
@@ -13,13 +13,13 @@ pub struct Args {
 	locked: bool,
 
 	#[arg(default_value = ".")]
-	specifier: Specifier,
+	specifier: PackageSpecifier,
 }
 
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// If the specifier is a path specifier, first generate its lockfile.
-		if let Specifier::Path { path } = &args.specifier {
+		if let PackageSpecifier::Path { path } = &args.specifier {
 			self.generate_lockfile(path, args.locked).await?;
 		}
 

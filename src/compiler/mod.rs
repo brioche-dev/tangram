@@ -13,6 +13,7 @@ use self::{
 pub use self::{
 	files::{OpenedTrackedFile, TrackedFile, UnopenedTrackedFile},
 	module_identifier::ModuleIdentifier,
+	module_specifier::ModuleSpecifier,
 	types::*,
 };
 use crate::Cli;
@@ -28,7 +29,9 @@ mod files;
 mod format;
 mod hover;
 mod load;
+mod metadata;
 mod module_identifier;
+mod module_specifier;
 mod position;
 mod range;
 mod references;

@@ -2,7 +2,10 @@ use super::{
 	context::{await_value, Module, State},
 	isolate::THREAD_LOCAL_ISOLATE,
 };
-use crate::{compiler::ModuleIdentifier, Cli};
+use crate::{
+	compiler::{ModuleIdentifier, ModuleSpecifier},
+	Cli,
+};
 use anyhow::{bail, Context, Result};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
@@ -206,6 +209,7 @@ fn resolve_module_callback_inner<'s>(
 
 	// Get the specifier.
 	let specifier = specifier.to_rust_string_lossy(&mut scope);
+	let specifier: ModuleSpecifier = specifier.parse()?;
 
 	// Get the referrer.
 	let referrer_identity_hash = referrer.get_identity_hash();
@@ -229,12 +233,12 @@ fn resolve_module_callback_inner<'s>(
 		let specifier = specifier.clone();
 		let referrer = referrer.clone();
 		async move {
-			let module_identifier = cli.resolve(&specifier, Some(&referrer)).await;
+			let module_identifier = cli.resolve(&specifier, &referrer).await;
 			sender.send(module_identifier).unwrap();
 		}
 	});
 	let module_identifier = receiver.recv().unwrap().with_context(|| {
-		format!(r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer:?}"."#)
+		format!(r#"Failed to resolve specifier {specifier:?} relative to referrer "{referrer:?}"."#)
 	})?;
 
 	// Load.

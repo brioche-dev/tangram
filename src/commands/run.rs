@@ -1,6 +1,6 @@
 use crate::{
 	operation::{Operation, Target},
-	specifier::Specifier,
+	package_specifier::PackageSpecifier,
 	system::System,
 	util::path_exists,
 	Cli,
@@ -22,7 +22,7 @@ pub struct Args {
 	#[arg(long)]
 	pub target: Option<String>,
 	#[arg(default_value = ".")]
-	pub specifier: Specifier,
+	pub specifier: PackageSpecifier,
 	pub trailing_args: Vec<String>,
 	#[arg(long)]
 	pub system: Option<System>,

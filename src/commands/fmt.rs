@@ -1,4 +1,4 @@
-use crate::{specifier::Specifier, Cli};
+use crate::{package_specifier::PackageSpecifier, Cli};
 use anyhow::Result;
 use clap::Parser;
 
@@ -6,7 +6,7 @@ use clap::Parser;
 #[command(about = "Format the files in a package.")]
 pub struct Args {
 	#[arg(default_value = ".")]
-	specifier: Specifier,
+	specifier: PackageSpecifier,
 }
 
 impl Cli {

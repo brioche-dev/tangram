@@ -1,4 +1,4 @@
-use crate::{specifier::Specifier, system::System, Cli};
+use crate::{package_specifier::PackageSpecifier, system::System, Cli};
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ pub struct Args {
 	#[arg(long)]
 	pub target: Option<String>,
 	#[arg(default_value = ".")]
-	pub specifier: Specifier,
+	pub specifier: PackageSpecifier,
 	pub trailing_args: Vec<String>,
 	#[arg(long)]
 	pub system: Option<System>,

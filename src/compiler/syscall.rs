@@ -122,18 +122,16 @@ fn syscall_version(
 fn syscall_resolve(
 	cli: &Cli,
 	_scope: &mut v8::HandleScope,
-	args: (String, Option<ModuleIdentifier>),
+	args: (String, ModuleIdentifier),
 ) -> Result<ModuleIdentifier> {
 	let (specifier, referrer) = args;
+	let specifier = specifier.parse()?;
 	cli.inner.runtime_handle.clone().block_on(async move {
-		let module_identifier = cli
-			.resolve(&specifier, referrer.as_ref())
-			.await
-			.with_context(|| {
-				format!(
-					r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer:?}"."#
-				)
-			})?;
+		let module_identifier = cli.resolve(&specifier, &referrer).await.with_context(|| {
+			format!(
+				r#"Failed to resolve specifier "{specifier:?}" relative to referrer "{referrer:?}"."#
+			)
+		})?;
 		Ok(module_identifier)
 	})
 }
