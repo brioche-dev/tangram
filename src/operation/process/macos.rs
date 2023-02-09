@@ -154,6 +154,18 @@ fn pre_exec(
 			(allow file-read-metadata file-test-existence
 				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
 			)
+
+			;; Allow accessing the dyld shared cache.
+			(allow file-read* process-exec 
+				(literal "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld")
+				(subpath "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld")
+			)
+
+			;; Allow bash to create and use file descriptors for pipes.
+			(allow file-read* file-write* file-ioctl process-exec
+				(literal "/dev/fd")
+				(subpath "/dev/fd")
+			)
 		"#
 	).unwrap();
 
