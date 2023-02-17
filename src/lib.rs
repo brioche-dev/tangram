@@ -1,117 +1,132 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
-#![allow(clippy::module_name_repetitions)]
 
 pub use self::commands::Args;
-use self::dirs::home_directory_path;
-use crate::{
-	blob::BlobHash,
+use self::{
+	constants::{FILE_SEMAPHORE_SIZE, SOCKET_SEMAPHORE_SIZE},
 	database::Database,
-	heuristics::SOCKET_SEMAPHORE_SIZE,
 	id::Id,
-	lock::{ExclusiveGuard, Lock, SharedGuard},
+	language::service::RequestSender,
+	lock::Lock,
+	system::System,
+	value::Value,
 };
-use anyhow::{Context, Result};
-use api_client::ApiClient;
-use compiler::{RequestSender, TrackedFile};
+use anyhow::Result;
 use std::{
-	collections::HashMap,
-	path::{Path, PathBuf},
-	sync::{Arc, Mutex},
+	collections::{BTreeMap, HashMap},
+	sync::Arc,
 };
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::Semaphore;
 use tokio_util::task::LocalPoolHandle;
 
-pub mod api_client;
+pub mod api;
 pub mod artifact;
 pub mod blob;
+pub mod call;
 pub mod checkin;
 pub mod checkout;
 pub mod checksum;
+pub mod clean;
 pub mod client;
 pub mod commands;
-pub mod compiler;
 pub mod config;
+pub mod constants;
 pub mod credentials;
 pub mod database;
-pub mod dirs;
-pub mod gc;
+pub mod directory;
+pub mod download;
+pub mod file;
+pub mod function;
 pub mod hash;
-pub mod heuristics;
 pub mod id;
+pub mod language;
 pub mod lock;
 pub mod lockfile;
 pub mod lsp;
-pub mod manifest;
+pub mod metadata;
 pub mod migrations;
+pub mod module;
 pub mod operation;
+pub mod os;
 pub mod package;
-pub mod package_specifier;
+pub mod path;
+pub mod placeholder;
+pub mod process;
 pub mod pull;
 pub mod push;
-pub mod serve;
+pub mod reference;
+pub mod server;
+pub mod symlink;
 pub mod system;
-pub mod util;
+pub mod template;
 pub mod value;
-pub mod watcher;
 
-#[derive(Clone)]
 pub struct Cli {
-	inner: Arc<Inner>,
-}
+	/// The directory where the CLI stores its data.
+	path: os::PathBuf,
 
-struct Inner {
-	/// This is the path to the directory where the cli stores its data.
-	pub path: PathBuf,
+	/// The lock used to acquire shared and exclusive access to the path.
+	lock: Lock<()>,
 
-	/// The lock is used to acquire shared and exclusive access to the path.
-	pub lock: Lock<()>,
+	/// The database used to store artifacts, packages, and operations.
+	database: Database,
 
-	/// The database is used to store artifacts, packages, and operations.
-	pub database: Database,
+	/// The semaphore used to prevent the CLI from opening too many files simultaneously.
+	file_semaphore: Arc<Semaphore>,
 
-	/// The file semaphore is used to prevent the cli from opening too many sockets simultaneously.
-	pub file_semaphore: Arc<Semaphore>,
+	/// The semaphore used to prevent the CLI from opening too many sockets simultaneously.
+	socket_semaphore: Arc<Semaphore>,
 
-	/// The socket semaphore is used to prevent the cli from opening too many files simultaneously.
-	pub socket_semaphore: Arc<Semaphore>,
+	/// The HTTP client for download operations.
+	http_client: reqwest::Client,
 
-	/// The HTTP client is for performing HTTP requests when running download operations.
-	pub http_client: reqwest::Client,
+	/// A handle to the tokio runtime the CLI was created on.
+	runtime_handle: tokio::runtime::Handle,
 
-	/// This is a handle to the tokio runtime the CLI was created on.
-	pub runtime_handle: tokio::runtime::Handle,
+	/// A local pool for running `!Send` futures.
+	local_pool_handle: LocalPoolHandle,
 
-	/// The local pool is for running targets because they are `!Send` futures.
-	pub local_pool_handle: LocalPoolHandle,
+	/// The channel to send requests to the language service.
+	language_service_request_sender: std::sync::Mutex<Option<RequestSender>>,
 
-	/// The compiler request sender is used to send requests to the compiler.
-	pub compiler_request_sender: Mutex<Option<RequestSender>>,
+	/// A map that tracks documents.
+	documents:
+		tokio::sync::RwLock<HashMap<module::Identifier, module::Document, fnv::FnvBuildHasher>>,
 
-	/// The tracked files map tracks files on the filesystem used by the compiler.
-	pub tracked_files: RwLock<HashMap<PathBuf, TrackedFile, fnv::FnvBuildHasher>>,
+	/// A map that tracks changes to modules.
+	module_trackers:
+		tokio::sync::RwLock<HashMap<module::Identifier, module::Tracker, fnv::FnvBuildHasher>>,
 
-	/// This is the client for communicating with the API.
-	pub api_client: ApiClient,
+	/// A client for communicating with the API.
+	api_client: api::Client,
 }
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
 
+fn initialize_v8() {
+	// Set the ICU data.
+	#[repr(C, align(16))]
+	struct IcuData([u8; 10_541_264]);
+	static ICU_DATA: IcuData = IcuData(*include_bytes!("../assets/icudtl.dat"));
+	v8::icu::set_common_data_72(&ICU_DATA.0).unwrap();
+
+	// Initialize the platform.
+	let platform = v8::new_default_platform(0, true);
+	v8::V8::initialize_platform(platform.make_shared());
+
+	// Initialize V8.
+	v8::V8::initialize();
+}
+
 impl Cli {
-	pub async fn new(path: Option<PathBuf>) -> Result<Cli> {
-		// Get the path.
-		let path = if let Some(path) = path {
-			path
-		} else {
-			home_directory_path()
-				.context("Failed to find the user home directory.")?
-				.join(".tangram")
-		};
+	pub async fn new(path: os::PathBuf) -> Result<Cli> {
+		// Initialize V8.
+		V8_INIT.call_once(initialize_v8);
 
 		// Create the lock.
 		let lock_path = path.join("lock");
-		let lock = Lock::new(lock_path, ());
+		let lock = Lock::new(&lock_path, ());
 
 		// Read the config.
 		let config = Self::read_config_from_path(&path.join("config.json")).await?;
@@ -135,12 +150,12 @@ impl Cli {
 		// Migrate the path.
 		Self::migrate(&path).await?;
 
-		// Create the database.
+		// Open the database.
 		let database_path = path.join("database.mdb");
-		let database = Database::new(&database_path)?;
+		let database = Database::open(&database_path)?;
 
 		// Create the file semaphore.
-		let file_semaphore = Arc::new(Semaphore::new(SOCKET_SEMAPHORE_SIZE));
+		let file_semaphore = Arc::new(Semaphore::new(FILE_SEMAPHORE_SIZE));
 
 		// Create the socket semaphore.
 		let socket_semaphore = Arc::new(Semaphore::new(SOCKET_SEMAPHORE_SIZE));
@@ -152,43 +167,35 @@ impl Cli {
 		let threads = std::thread::available_parallelism().unwrap().get();
 		let local_pool_handle = LocalPoolHandle::new(threads);
 
-		// Initialize v8.
-		V8_INIT.call_once(|| {
-			// Set the ICU data.
-			#[repr(C, align(16))]
-			struct IcuData([u8; 10_454_784]);
-			static ICU_DATA: IcuData = IcuData(*include_bytes!("../icudtl.dat"));
-			v8::icu::set_common_data_71(&ICU_DATA.0).unwrap();
-
-			// Initialize the platform.
-			let platform = v8::new_default_platform(0, true);
-			v8::V8::initialize_platform(platform.make_shared());
-
-			// Initialize v8.
-			v8::V8::initialize();
-		});
-
 		// Get a handle to the tokio runtime.
 		let runtime_handle = tokio::runtime::Handle::current();
 
-		// Create the API Client.
-		let api_client = ApiClient::new(api_url, token);
+		// Create the language service request sender.
+		let language_service_request_sender = std::sync::Mutex::new(None);
 
-		// Create the cli.
+		// Create the documents map.
+		let documents = tokio::sync::RwLock::new(HashMap::default());
+
+		// Create the module trackers map.
+		let module_trackers = tokio::sync::RwLock::new(HashMap::default());
+
+		// Create the API Client.
+		let api_client = api::Client::new(api_url, token);
+
+		// Create the CLI.
 		let cli = Cli {
-			inner: Arc::new(Inner {
-				path,
-				lock,
-				database,
-				file_semaphore,
-				socket_semaphore,
-				http_client,
-				local_pool_handle,
-				runtime_handle,
-				compiler_request_sender: Mutex::new(None),
-				tracked_files: RwLock::new(HashMap::default()),
-				api_client,
-			}),
+			path,
+			lock,
+			database,
+			file_semaphore,
+			socket_semaphore,
+			http_client,
+			runtime_handle,
+			local_pool_handle,
+			language_service_request_sender,
+			documents,
+			module_trackers,
+			api_client,
 		};
 
 		Ok(cli)
@@ -196,80 +203,70 @@ impl Cli {
 }
 
 impl Cli {
-	pub async fn try_lock_shared(&self) -> Result<Option<SharedGuard<()>>> {
-		self.inner.lock.try_lock_shared().await
+	pub async fn try_lock_shared(&self) -> Result<Option<lock::SharedGuard<()>>> {
+		self.lock.try_lock_shared().await
 	}
 
-	pub async fn try_lock_exclusive(&self) -> Result<Option<ExclusiveGuard<()>>> {
-		self.inner.lock.try_lock_exclusive().await
+	pub async fn try_lock_exclusive(&self) -> Result<Option<lock::ExclusiveGuard<()>>> {
+		self.lock.try_lock_exclusive().await
 	}
 
-	pub async fn lock_shared(&self) -> Result<SharedGuard<()>> {
-		self.inner.lock.lock_shared().await
+	pub async fn lock_shared(&self) -> Result<lock::SharedGuard<()>> {
+		self.lock.lock_shared().await
 	}
 
-	pub async fn lock_exclusive(&self) -> Result<ExclusiveGuard<()>> {
-		self.inner.lock.lock_exclusive().await
-	}
-}
-
-impl Drop for Inner {
-	fn drop(&mut self) {
-		// Attempt to shut down the request handler.
-		if let Some(sender) = self.compiler_request_sender.lock().unwrap().take() {
-			sender.send(None).ok();
-		}
+	pub async fn lock_exclusive(&self) -> Result<lock::ExclusiveGuard<()>> {
+		self.lock.lock_exclusive().await
 	}
 }
 
 impl Cli {
 	#[must_use]
-	pub fn path(&self) -> &Path {
-		&self.inner.path
+	fn path(&self) -> &os::Path {
+		&self.path
 	}
 
 	#[must_use]
-	pub fn blobs_path(&self) -> PathBuf {
+	fn blobs_path(&self) -> os::PathBuf {
 		self.path().join("blobs")
 	}
 
 	#[must_use]
-	pub fn checkouts_path(&self) -> PathBuf {
+	fn checkouts_path(&self) -> os::PathBuf {
 		self.path().join("checkouts")
 	}
 
 	#[must_use]
-	pub fn config_path(&self) -> PathBuf {
+	fn config_path(&self) -> os::PathBuf {
 		self.path().join("config.json")
 	}
 
 	#[must_use]
-	pub fn credentials_path(&self) -> PathBuf {
+	fn credentials_path(&self) -> os::PathBuf {
 		self.path().join("credentials.json")
 	}
 
 	#[must_use]
-	pub fn lock_path(&self) -> PathBuf {
-		self.path().join("lock")
-	}
-
-	#[must_use]
-	pub fn logs_path(&self) -> PathBuf {
-		self.path().join("logs")
-	}
-
-	#[must_use]
-	pub fn temps_path(&self) -> PathBuf {
+	fn temps_path(&self) -> os::PathBuf {
 		self.path().join("temps")
 	}
 
 	#[must_use]
-	pub fn blob_path(&self, blob_hash: BlobHash) -> PathBuf {
+	fn blob_path(&self, blob_hash: blob::Hash) -> os::PathBuf {
 		self.blobs_path().join(blob_hash.to_string())
 	}
 
 	#[must_use]
-	pub fn temp_path(&self) -> PathBuf {
+	fn temp_path(&self) -> os::PathBuf {
 		self.temps_path().join(Id::generate().to_string())
+	}
+}
+
+impl Cli {
+	pub fn create_default_context(&self) -> Result<BTreeMap<String, Value>> {
+		let host = System::host()?;
+		let host = Value::String(host.to_string());
+		let context = [("host".to_owned(), host)].into();
+		Ok(context)
 	}
 }

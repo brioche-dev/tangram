@@ -1,54 +1,56 @@
 use crate::{
-	operation::{Operation, Target},
-	Cli,
+	function::Function,
+	operation::{Call, Operation},
+	os, package, Cli,
 };
 use anyhow::{Context, Result};
-use clap::Parser;
 use futures::FutureExt;
 use indoc::indoc;
 use itertools::Itertools;
-use std::path::PathBuf;
+use std::sync::Arc;
 
-#[derive(Parser)]
-#[command(about = "Manage autoshell paths.")]
+/// Manage autoshell paths.
+#[derive(clap::Args)]
 pub struct Args {
 	#[command(subcommand)]
 	command: Command,
 }
 
-#[derive(Parser)]
+#[derive(clap::Subcommand)]
 pub enum Command {
 	Add(AddArgs),
+
 	List(ListArgs),
+
 	Remove(RemoveArgs),
+
 	#[command(hide = true)]
 	Hook(HookArgs),
 }
 
-#[derive(Parser, Debug)]
-#[command(about = "Add an autoshell path.")]
+/// Add an autoshell path.
+#[derive(clap::Args)]
 pub struct AddArgs {
-	path: Option<PathBuf>,
+	path: Option<os::PathBuf>,
 }
 
-#[derive(Parser, Debug)]
-#[command(about = "List all autoshell paths.")]
+/// List all autoshell paths.
+#[derive(clap::Args)]
 pub struct ListArgs {}
 
-#[derive(Parser, Debug)]
-#[command(about = "Remove an autoshell path.")]
+/// Remove an autoshell path.
+#[derive(clap::Args)]
 pub struct RemoveArgs {
-	path: Option<PathBuf>,
+	path: Option<os::PathBuf>,
 }
 
-#[derive(Parser, Debug)]
-#[command(about = "Hook")]
+#[derive(clap::Args)]
 pub struct HookArgs {
 	shell: String,
 }
 
 impl Cli {
-	pub async fn command_autoshell(&self, args: Args) -> Result<()> {
+	pub async fn command_autoshell(self: &Arc<Self>, args: Args) -> Result<()> {
 		match args.command {
 			Command::Add(args) => self.command_autoshell_add(args).boxed(),
 			Command::List(args) => self.command_autoshell_list(args).boxed(),
@@ -130,7 +132,7 @@ impl Cli {
 		Ok(())
 	}
 
-	async fn command_autoshell_hook(&self, _args: HookArgs) -> Result<()> {
+	async fn command_autoshell_hook(self: &Arc<Self>, _args: HookArgs) -> Result<()> {
 		// Read the config.
 		let config = self.read_config().await?.unwrap_or_default();
 
@@ -143,35 +145,40 @@ impl Cli {
 		print!("{program}");
 
 		// Get the current working directory.
-		let cwd = std::env::current_dir().context("Failed to get the working directory.")?;
+		let working_directory_path =
+			std::env::current_dir().context("Failed to get the working directory.")?;
 
-		// Get the autoshells.
-		let Some(autoshells) = config.autoshells.as_ref() else {
+		// Get the autoshell path for the working directory path.
+		let Some(autoshells_paths) = config.autoshells.as_ref() else {
 			return Ok(());
 		};
-
-		// Get the autoshells for the path.
-		let mut autoshells_paths = autoshells
+		let mut autoshells_paths = autoshells_paths
 			.iter()
-			.filter(|path| cwd.starts_with(path))
+			.filter(|path| working_directory_path.starts_with(path))
 			.collect_vec();
 		autoshells_paths.sort_by_key(|path| path.components().count());
-
-		let Some(autoshell) = autoshells_paths.last() else {
+		autoshells_paths.reverse();
+		let Some(autoshell_path) = autoshells_paths.first() else {
 			return Ok(());
 		};
+		let autoshell_path = *autoshell_path;
 
-		// Check in the package for this autoshell.
-		let package_hash = self.checkin_package(autoshell, false).await?;
-
-		// Create the target args.
-		let target_args = self.create_target_args(None)?;
+		// Get the package instance hash for this package.
+		let package_identifier = package::Identifier::Path(autoshell_path.clone());
+		let package_instance_hash = self
+			.create_package_instance(&package_identifier, false)
+			.await?;
 
 		// Create the operation.
-		let operation = Operation::Target(Target {
-			package: package_hash,
+		let function = Function {
+			package_instance_hash,
 			name: "shell".into(),
-			args: target_args,
+		};
+		let context = self.create_default_context()?;
+		let operation = Operation::Call(Call {
+			function,
+			context,
+			args: vec![],
 		});
 
 		// Run the operation.
@@ -186,7 +193,7 @@ impl Cli {
 			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = self.checkout_internal(output_artifact_hash).await?;
+		let artifact_path = self.check_out_internal(output_artifact_hash).await?;
 
 		// Get the path to the executable.
 		let shell_activate_script_path = artifact_path.join("activate");

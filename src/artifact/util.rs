@@ -1,4 +1,5 @@
-use super::{Artifact, Dependency, Directory, File, Symlink};
+use super::Artifact;
+use crate::{directory::Directory, file::File, reference::Reference, symlink::Symlink};
 
 impl Artifact {
 	#[must_use]
@@ -29,8 +30,8 @@ impl Artifact {
 	}
 
 	#[must_use]
-	pub fn as_dependency(&self) -> Option<&Dependency> {
-		if let Artifact::Dependency(v) = self {
+	pub fn as_reference(&self) -> Option<&Reference> {
+		if let Artifact::Reference(v) = self {
 			Some(v)
 		} else {
 			None
@@ -67,8 +68,8 @@ impl Artifact {
 	}
 
 	#[must_use]
-	pub fn into_dependency(self) -> Option<Dependency> {
-		if let Artifact::Dependency(v) = self {
+	pub fn into_reference(self) -> Option<Reference> {
+		if let Artifact::Reference(v) = self {
 			Some(v)
 		} else {
 			None

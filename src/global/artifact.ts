@@ -1,44 +1,29 @@
-import "./syscall";
 import { Directory } from "./directory";
-import { Dependency } from "./dependency";
 import { File } from "./file";
+import { Reference as Reference } from "./reference";
 import { Symlink } from "./symlink";
 
-export class ArtifactHash {
-	#string: string;
+export type ArtifactHash = string;
 
-	constructor(string: string) {
-		this.#string = string;
-	}
+export type ArtifactKind = "directory" | "file" | "symlink" | "reference";
 
-	toString(): string {
-		return this.#string;
-	}
-}
-
-export type Artifact = Directory | File | Symlink | Dependency;
-
-export type ArtifactType = "directory" | "file" | "symlink" | "dependency";
+export type Artifact = Directory | File | Symlink | Reference;
 
 export let isArtifact = (value: unknown): value is Artifact => {
 	return (
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||
-		value instanceof Dependency
+		value instanceof Reference
 	);
 };
 
 export let addArtifact = async (artifact: Artifact): Promise<ArtifactHash> => {
-	return new ArtifactHash(
-		await syscall("add_artifact", await serializeArtifact(artifact)),
-	);
+	return await syscall("add_artifact", await serializeArtifact(artifact));
 };
 
 export let getArtifact = async (hash: ArtifactHash): Promise<Artifact> => {
-	return await deserializeArtifact(
-		await syscall("get_artifact", hash.toString()),
-	);
+	return await deserializeArtifact(await syscall("get_artifact", hash));
 };
 
 export let serializeArtifact = async (
@@ -46,22 +31,22 @@ export let serializeArtifact = async (
 ): Promise<syscall.Artifact> => {
 	if (artifact instanceof Directory) {
 		return {
-			type: "directory",
+			kind: "directory",
 			value: await artifact.serialize(),
 		};
 	} else if (artifact instanceof File) {
 		return {
-			type: "file",
+			kind: "file",
 			value: await artifact.serialize(),
 		};
 	} else if (artifact instanceof Symlink) {
 		return {
-			type: "symlink",
+			kind: "symlink",
 			value: await artifact.serialize(),
 		};
-	} else if (artifact instanceof Dependency) {
+	} else if (artifact instanceof Reference) {
 		return {
-			type: "dependency",
+			kind: "reference",
 			value: await artifact.serialize(),
 		};
 	} else {
@@ -72,7 +57,7 @@ export let serializeArtifact = async (
 export let deserializeArtifact = async (
 	artifact: syscall.Artifact,
 ): Promise<Artifact> => {
-	switch (artifact.type) {
+	switch (artifact.kind) {
 		case "directory": {
 			return await Directory.deserialize(artifact.value);
 		}
@@ -82,8 +67,8 @@ export let deserializeArtifact = async (
 		case "symlink": {
 			return await Symlink.deserialize(artifact.value);
 		}
-		case "dependency": {
-			return await Dependency.deserialize(artifact.value);
+		case "reference": {
+			return await Reference.deserialize(artifact.value);
 		}
 	}
 };

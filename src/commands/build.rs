@@ -1,44 +1,45 @@
 use crate::{
-	operation::{Operation, Target},
-	package_specifier::PackageSpecifier,
-	system::System,
-	Cli,
+	function::Function,
+	operation::{Call, Operation},
+	package, Cli,
 };
 use anyhow::{Context, Result};
-use clap::Parser;
+use std::sync::Arc;
 
-#[derive(Parser)]
-#[command(about = "Build a package.")]
+/// Call a function.
+#[derive(clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	locked: bool,
 
 	#[arg(default_value = ".")]
-	specifier: PackageSpecifier,
+	package_specifier: package::Specifier,
 
 	#[arg(default_value = "default")]
 	name: String,
-
-	#[arg(long)]
-	system: Option<System>,
 }
 
 impl Cli {
-	pub async fn command_build(&self, args: Args) -> Result<()> {
-		// Get the package hash.
-		let package_hash = self
-			.package_hash_for_specifier(&args.specifier, args.locked)
-			.await
-			.context("Failed to get the hash for the specifier.")?;
+	pub async fn command_build(self: &Arc<Self>, args: Args) -> Result<()> {
+		// Resolve the package specifier.
+		let package_identifier = self.resolve_package(&args.package_specifier, None).await?;
 
-		// Create the target args.
-		let target_args = self.create_target_args(args.system)?;
+		// Create the package instance.
+		let package_instance_hash = self
+			.create_package_instance(&package_identifier, args.locked)
+			.await
+			.context("Failed to create the package instance.")?;
 
 		// Create the operation.
-		let operation = Operation::Target(Target {
-			package: package_hash,
+		let function = Function {
+			package_instance_hash,
 			name: args.name,
-			args: target_args,
+		};
+		let context = self.create_default_context()?;
+		let operation = Operation::Call(Call {
+			function,
+			context,
+			args: vec![],
 		});
 
 		// Run the operation.

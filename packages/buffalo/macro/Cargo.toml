@@ -1,0 +1,23 @@
+[package]
+name = "buffalo_macro"
+
+authors = ["Tangram <root@tangram.dev"]
+description = "Buffalo is a binary serialization format that gives you ultimate control."
+documentation = "https://docs.rs/buffalo"
+edition = "2021"
+homepage = "https://github.com/tangramdotdev/buffalo"
+license = "MIT"
+publish = true
+repository = "https://github.com/tangramdotdev/buffalo"
+version = "0.4.1"
+
+[lib]
+path = "lib.rs"
+proc-macro = true
+
+[dependencies]
+heck = "0.4"
+num = "0.4"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "1", features = ["full"] }

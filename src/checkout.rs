@@ -1,90 +1,106 @@
 use crate::{
-	artifact::{Artifact, ArtifactHash, Dependency, Directory, File, Symlink},
-	util::{path_exists, rmrf},
-	watcher::Watcher,
+	artifact::{self, Artifact},
+	directory::Directory,
+	file::File,
+	os,
+	reference::Reference,
+	symlink::Symlink,
 	Cli,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use futures::{future::try_join_all, Future, FutureExt};
-use std::{
-	os::unix::prelude::PermissionsExt,
-	path::{Path, PathBuf},
-	pin::Pin,
-	sync::Arc,
-};
+use std::{os::unix::prelude::PermissionsExt, pin::Pin, sync::Arc};
 
-pub type DependencyHandlerFn =
-	dyn Sync + Fn(&Dependency, &Path) -> Pin<Box<dyn Send + Future<Output = Result<()>>>>;
+pub type ReferenceHandlerFn =
+	dyn Fn(&Reference, &os::Path) -> Pin<Box<dyn Send + Future<Output = Result<()>>>> + Sync;
 
 impl Cli {
-	pub async fn checkout(
+	pub async fn check_out(
 		&self,
-		artifact_hash: ArtifactHash,
-		path: &Path,
-		dependency_handler: Option<&'_ DependencyHandlerFn>,
+		artifact_hash: artifact::Hash,
+		path: &os::Path,
+		reference_handler: Option<&'_ ReferenceHandlerFn>,
 	) -> Result<()> {
-		// Create a watcher.
-		let watcher = Watcher::new(self.path(), Arc::clone(&self.inner.file_semaphore));
+		// Check in an existing artifact at the path.
+		let existing_artifact_hash = if os::fs::exists(path).await? {
+			Some(self.check_in(path).await?)
+		} else {
+			None
+		};
 
-		// Call the recursive checkout function.
-		self.checkout_path(&watcher, artifact_hash, path, dependency_handler)
-			.await?;
+		// Check out the artifact recursively.
+		self.check_out_inner(
+			existing_artifact_hash,
+			artifact_hash,
+			path,
+			reference_handler,
+		)
+		.await?;
 
 		Ok(())
 	}
 
-	async fn checkout_path(
+	async fn check_out_inner(
 		&self,
-		watcher: &Watcher,
-		artifact_hash: ArtifactHash,
-		path: &Path,
-		dependency_handler: Option<&'_ DependencyHandlerFn>,
+		existing_artifact_hash: Option<artifact::Hash>,
+		artifact_hash: artifact::Hash,
+		path: &os::Path,
+		reference_handler: Option<&'_ ReferenceHandlerFn>,
 	) -> Result<()> {
+		// If the artifact hash matches the existing artifact hash, then return.
+		if existing_artifact_hash.map_or(false, |existing_artifact_hash| {
+			existing_artifact_hash == artifact_hash
+		}) {
+			return Ok(());
+		}
+
 		// Get the artifact.
 		let artifact = self.get_artifact_local(artifact_hash)?;
 
 		// Call the appropriate function for the artifact's type.
 		match artifact {
 			Artifact::Directory(directory) => {
-				self.checkout_directory(watcher, directory, path, dependency_handler)
-					.await
-					.with_context(|| {
-						format!(
-							"Failed to check out directory \"{artifact_hash}\" to \"{}\"",
-							path.display()
-						)
-					})?;
+				self.check_out_directory(
+					existing_artifact_hash,
+					directory,
+					path,
+					reference_handler,
+				)
+				.await
+				.with_context(|| {
+					let path = path.display();
+					format!(r#"Failed to check out directory "{artifact_hash}" to "{path}"."#)
+				})?;
 			},
 			Artifact::File(file) => {
-				self.checkout_file(watcher, file, path)
+				self.check_out_file(existing_artifact_hash, file, path)
 					.await
 					.with_context(|| {
-						format!(
-							"Failed to check out file \"{artifact_hash}\" to \"{}\"",
-							path.display()
-						)
+						let path = path.display();
+						format!(r#"Failed to check out file "{artifact_hash}" to "{path}"."#)
 					})?;
 			},
 			Artifact::Symlink(symlink) => {
-				self.checkout_symlink(watcher, symlink, path)
+				self.check_out_symlink(existing_artifact_hash, symlink, path)
 					.await
 					.with_context(|| {
-						format!(
-							"Failed to check out symlink \"{artifact_hash}\" to \"{}\"",
-							path.display()
-						)
+						let path = path.display();
+						format!(r#"Failed to check out symlink "{artifact_hash}" to "{path}"."#)
 					})?;
 			},
-			Artifact::Dependency(dependency) => {
-				self.checkout_dependency(watcher, dependency, path, dependency_handler)
-					.await
-					.with_context(|| {
-						format!(
-							"Failed to check out dependency \"{artifact_hash}\" to \"{}\"",
-							path.display()
-						)
-					})?;
+			Artifact::Reference(reference) => {
+				self.check_out_reference(
+					existing_artifact_hash,
+					reference,
+					path,
+					reference_handler,
+				)
+				.await
+				.with_context(|| {
+					let path = path.display();
+					format!(r#"Failed to check out reference "{artifact_hash}" to "{path}"."#)
+				})?;
 			},
 		}
 
@@ -105,28 +121,30 @@ impl Cli {
 	}
 
 	#[async_recursion]
-	async fn checkout_directory(
+	async fn check_out_directory(
 		&self,
-		watcher: &Watcher,
+		existing_artifact_hash: Option<artifact::Hash>,
 		directory: Directory,
-		path: &Path,
-		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
+		path: &os::Path,
+		reference_handler: Option<&'async_recursion ReferenceHandlerFn>,
 	) -> Result<()> {
-		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
-			// If the artifact is already checked out then return.
-			Some((_, Artifact::Directory(local_directory))) if local_directory == directory => {
-				return Ok(());
-			},
+		// Get the artifact for an existing file system object at the path.
+		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
+			Some(self.get_artifact_local(existing_artifact_hash)?)
+		} else {
+			None
+		};
 
-			// If there is already a directory then remove any extraneous entries.
-			Some((_, Artifact::Directory(local_directory))) => {
-				try_join_all(local_directory.entries.keys().map(|entry_name| {
+		// Handle an existing artifact at the path.
+		match &existing_artifact {
+			// If there is already a directory, then remove any extraneous entries.
+			Some(Artifact::Directory(existing_directory)) => {
+				try_join_all(existing_directory.entries.keys().map(|entry_name| {
 					let directory = &directory;
 					async move {
 						if !directory.entries.contains_key(entry_name) {
 							let entry_path = path.join(entry_name);
-							rmrf(&entry_path, None).await?;
+							os::fs::rmrf(&entry_path, None).await?;
 						}
 						Ok::<_, anyhow::Error>(())
 					}
@@ -134,28 +152,46 @@ impl Cli {
 				.await?;
 			},
 
-			// If there is an existing file system object at the path and it is not a directory, then remove it, create a directory, and continue.
+			// If there is an existing artifact at the path and it is not a directory, then remove it, create a directory, and continue.
 			Some(_) => {
-				rmrf(path, None).await?;
+				os::fs::rmrf(path, None).await?;
 				tokio::fs::create_dir(path).await?;
 			},
 
-			// If there is no file system object at this path then create a directory.
+			// If there is no artifact at this path, then create a directory.
 			None => {
 				tokio::fs::create_dir(path).await?;
 			},
 		};
 
-		// Recurse into the children.
+		// Recurse into the entries.
 		try_join_all(
 			directory
 				.entries
 				.into_iter()
-				.map(|(entry_name, entry_hash)| async move {
-					let entry_path = path.join(&entry_name);
-					self.checkout_path(watcher, entry_hash, &entry_path, dependency_handler)
+				.map(|(entry_name, entry_hash)| {
+					let existing_artifact = &existing_artifact;
+					async move {
+						// Retrieve an existing artifact.
+						let existing_artifact_hash = match existing_artifact {
+							Some(Artifact::Directory(existing_directory)) => {
+								existing_directory.entries.get(&entry_name).copied()
+							},
+							_ => None,
+						};
+
+						// Recurse.
+						let entry_path = path.join(&entry_name);
+						self.check_out_inner(
+							existing_artifact_hash,
+							entry_hash,
+							&entry_path,
+							reference_handler,
+						)
 						.await?;
-					Ok::<_, anyhow::Error>(())
+
+						Ok::<_, anyhow::Error>(())
+					}
 				}),
 		)
 		.await?;
@@ -163,25 +199,32 @@ impl Cli {
 		Ok(())
 	}
 
-	async fn checkout_file(&self, watcher: &Watcher, file: File, path: &Path) -> Result<()> {
-		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
-			// If the artifact is already checked out then return.
-			Some((_, Artifact::File(local_file))) if local_file == file => {
-				return Ok(());
-			},
+	async fn check_out_file(
+		&self,
+		existing_artifact_hash: Option<artifact::Hash>,
+		file: File,
+		path: &os::Path,
+	) -> Result<()> {
+		// Get the artifact for an existing file system object at the path.
+		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
+			Some(self.get_artifact_local(existing_artifact_hash)?)
+		} else {
+			None
+		};
 
-			// If there is an existing file system object at the path then remove it and continue.
+		// Handle an existing artifact at the path.
+		match &existing_artifact {
+			// If there is an existing file system object at the path, then remove it and continue.
 			Some(_) => {
-				rmrf(path, None).await?;
+				os::fs::rmrf(path, None).await?;
 			},
 
-			// If there is no file system object at this path then continue.
+			// If there is no file system object at this path, then continue.
 			None => {},
 		};
 
 		// Copy the blob to the path.
-		self.copy_blob_to_path(file.blob, path)
+		self.copy_blob_to_path(file.blob_hash, path)
 			.await
 			.context("Failed to copy the blob.")?;
 
@@ -196,25 +239,27 @@ impl Cli {
 		Ok(())
 	}
 
-	async fn checkout_symlink(
+	async fn check_out_symlink(
 		&self,
-		watcher: &Watcher,
+		existing_artifact_hash: Option<artifact::Hash>,
 		symlink: Symlink,
-		path: &Path,
+		path: &os::Path,
 	) -> Result<()> {
-		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
-			// If the artifact is already checked out then return.
-			Some((_, Artifact::Symlink(local_symlink))) if local_symlink == symlink => {
-				return Ok(());
-			},
+		// Get the artifact for an existing file system object at the path.
+		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
+			Some(self.get_artifact_local(existing_artifact_hash)?)
+		} else {
+			None
+		};
 
-			// If there is an existing file system object at the path then remove it and continue.
+		// Handle an existing artifact at the path.
+		match &existing_artifact {
+			// If there is an existing file system object at the path, then remove it and continue.
 			Some(_) => {
-				rmrf(path, None).await?;
+				os::fs::rmrf(path, None).await?;
 			},
 
-			// If there is no file system object at this path then continue.
+			// If there is no file system object at this path, then continue.
 			None => {},
 		};
 
@@ -225,35 +270,37 @@ impl Cli {
 	}
 
 	#[async_recursion]
-	async fn checkout_dependency(
+	async fn check_out_reference(
 		&self,
-		watcher: &Watcher,
-		dependency: Dependency,
-		path: &Path,
-		dependency_handler: Option<&'async_recursion DependencyHandlerFn>,
+		existing_artifact_hash: Option<artifact::Hash>,
+		reference: Reference,
+		path: &os::Path,
+		reference_handler: Option<&'async_recursion ReferenceHandlerFn>,
 	) -> Result<()> {
-		// Handle an existing file system object at the path.
-		match watcher.get(path).await? {
-			// If the artifact is already checked out then return.
-			Some((_, Artifact::Dependency(local_dependency))) if local_dependency == dependency => {
-				return Ok(());
-			},
+		// Get the artifact for an existing file system object at the path.
+		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
+			Some(self.get_artifact_local(existing_artifact_hash)?)
+		} else {
+			None
+		};
 
-			// If there is an existing file system object at the path then remove it and continue.
+		// Handle an existing artifact at the path.
+		match &existing_artifact {
+			// If there is an existing artifact at the path, then remove it and continue.
 			Some(_) => {
-				rmrf(path, None).await?;
+				os::fs::rmrf(path, None).await?;
 			},
 
-			// If there is no file system object at this path then continue.
+			// If there is no artifact at this path, then continue.
 			None => {},
 		};
 
-		if let Some(dependency_handler) = dependency_handler {
-			// If there is a dependency handler, call it.
-			dependency_handler(&dependency, path).await?;
+		if let Some(reference_handler) = reference_handler {
+			// If there is a reference handler, then call it.
+			reference_handler(&reference, path).await?;
 		} else {
-			// Otherwise, check out the dependency to the path.
-			self.checkout(dependency.artifact, path, None).await?;
+			// Otherwise, check out the reference to the path.
+			self.check_out(reference.artifact_hash, path, None).await?;
 		}
 
 		Ok(())
@@ -263,32 +310,35 @@ impl Cli {
 impl Cli {
 	#[async_recursion]
 	#[must_use]
-	pub async fn checkout_internal(&self, artifact_hash: ArtifactHash) -> Result<PathBuf> {
+	pub async fn check_out_internal(
+		self: &Arc<Self>,
+		artifact_hash: artifact::Hash,
+	) -> Result<os::PathBuf> {
 		// Get the checkout path.
 		let checkout_path = self.checkouts_path().join(artifact_hash.to_string());
 
 		// Perform the checkout if necessary.
-		if !path_exists(&checkout_path).await? {
+		if !os::fs::exists(&checkout_path).await? {
 			// Create a temp path to check out the artifact to.
 			let temp_path = self.temp_path();
 
-			// Create the callback to create dependency artifact checkouts.
-			let dependency_handler = {
-				let cli = self.clone();
-				move |dependency: &Dependency, path: &Path| {
-					let cli = cli.clone();
-					let dependency = dependency.clone();
+			// Create the callback to create reference artifact checkouts.
+			let reference_handler = {
+				let cli = Arc::clone(self);
+				move |reference: &Reference, path: &os::Path| {
+					let cli = Arc::clone(&cli);
+					let reference = reference.clone();
 					let path = path.to_owned();
 					async move {
-						// Get the target by checking out the dependency.
+						// Get the target by checking out the reference.
 						let mut target = cli
-							.checkout_internal(dependency.artifact)
+							.check_out_internal(reference.artifact_hash)
 							.await
-							.context("Failed to check out the dependency.")?;
+							.context("Failed to check out the reference.")?;
 
-						// Add the dependency path to the target.
-						if let Some(dependency_path) = dependency.path {
-							target.push(dependency_path);
+						// Add the reference path to the target.
+						if let Some(reference_path) = reference.path {
+							target.push(reference_path.to_string());
 						}
 
 						// Make the target relative to the symlink path.
@@ -302,7 +352,7 @@ impl Cli {
 						// Create the symlink.
 						tokio::fs::symlink(target, path)
 							.await
-							.context("Failed to write the symlink for the dependency.")?;
+							.context("Failed to write the symlink for the reference.")?;
 
 						Ok::<_, anyhow::Error>(())
 					}
@@ -311,24 +361,24 @@ impl Cli {
 			};
 
 			// Perform the checkout.
-			self.checkout(artifact_hash, &temp_path, Some(&dependency_handler))
+			self.check_out(artifact_hash, &temp_path, Some(&reference_handler))
 				.await
 				.context("Failed to perform the checkout.")?;
 
 			// Move the checkout to the checkouts path.
 			match tokio::fs::rename(&temp_path, &checkout_path).await {
-				Ok(()) => {},
+				Ok(()) => Ok(()),
 
-				// If the error is ENOTEMPTY or EEXIST then we can ignore it because there is already an artifact checkout present.
+				// If the error is ENOTEMPTY or EEXIST, then we can ignore it because there is already an artifact checkout present.
 				Err(error)
-					if matches!(error.raw_os_error(), Some(libc::ENOTEMPTY | libc::EEXIST)) => {},
-
-				Err(error) => {
-					return Err(
-						anyhow!(error).context("Failed to move the checkout to the checkout path.")
-					);
+					if matches!(error.raw_os_error(), Some(libc::ENOTEMPTY | libc::EEXIST)) =>
+				{
+					Ok(())
 				},
-			};
+
+				Err(error) => Err(error),
+			}
+			.context("Failed to move the checkout to the checkout path.")?;
 		}
 
 		Ok(checkout_path)

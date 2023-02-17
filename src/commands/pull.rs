@@ -1,12 +1,11 @@
-use crate::{artifact::ArtifactHash, Cli};
+use crate::{artifact, Cli};
 use anyhow::{Context, Result};
-use clap::Parser;
 use url::Url;
 
-#[derive(Parser, Debug)]
-#[command(about = "Pull an artifact.")]
+/// Pull an artifact.
+#[derive(clap::Args)]
 pub struct Args {
-	pub artifact_hash: ArtifactHash,
+	pub artifact_hash: artifact::Hash,
 	pub url: Url,
 }
 

@@ -1,12 +1,10 @@
-use crate::Cli;
+use crate::{os, Cli};
 use anyhow::{Context, Result};
-use clap::Parser;
-use std::path::PathBuf;
 
-#[derive(Parser)]
-#[command(about = "Update a package's dependencies.")]
+/// Update a package's dependencies.
+#[derive(clap::Args)]
 pub struct Args {
-	path: Option<PathBuf>,
+	path: Option<os::PathBuf>,
 }
 
 impl Cli {
@@ -19,8 +17,8 @@ impl Cli {
 			path.push(path_arg);
 		}
 
-		// Generate the lockfile.
-		self.generate_lockfile(&path, true).await?;
+		// Create the lockfile.
+		self.create_lockfile(&path).await?;
 
 		Ok(())
 	}

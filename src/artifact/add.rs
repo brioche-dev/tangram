@@ -1,38 +1,30 @@
-use super::{Artifact, ArtifactHash};
-use crate::{blob::BlobHash, util::path_exists, Cli};
+use super::{Artifact, Hash};
+use crate::{blob, os, Cli};
 use anyhow::{bail, Result};
 use lmdb::Transaction;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
-pub enum AddArtifactOutcome {
-	Added {
-		artifact_hash: ArtifactHash,
-	},
-	DirectoryMissingEntries {
-		entries: Vec<(String, ArtifactHash)>,
-	},
-	FileMissingBlob {
-		blob_hash: BlobHash,
-	},
-	DependencyMissing {
-		artifact_hash: ArtifactHash,
-	},
+pub enum Outcome {
+	Added { artifact_hash: Hash },
+	DirectoryMissingEntries { entries: Vec<(String, Hash)> },
+	FileMissingBlob { blob_hash: blob::Hash },
+	ReferenceMissingArtifact { artifact_hash: Hash },
 }
 
 impl Cli {
 	/// Add an artifact after ensuring all its references are present.
-	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<ArtifactHash> {
+	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<Hash> {
 		match self.try_add_artifact(artifact).await? {
-			AddArtifactOutcome::Added { artifact_hash } => Ok(artifact_hash),
+			Outcome::Added { artifact_hash } => Ok(artifact_hash),
 			_ => bail!("Failed to add the artifact."),
 		}
 	}
 
 	/// Add an artifact after ensuring all its references are present.
-	pub async fn try_add_artifact(&self, artifact: &Artifact) -> Result<AddArtifactOutcome> {
+	pub async fn try_add_artifact(&self, artifact: &Artifact) -> Result<Outcome> {
 		match artifact {
-			// If the artifact is a directory, ensure all its entries are present.
+			// If the artifact is a directory, then ensure all its entries are present.
 			Artifact::Directory(directory) => {
 				let mut entries = Vec::new();
 				for (entry_name, artifact_hash) in &directory.entries {
@@ -43,30 +35,30 @@ impl Cli {
 					}
 				}
 				if !entries.is_empty() {
-					return Ok(AddArtifactOutcome::DirectoryMissingEntries { entries });
+					return Ok(Outcome::DirectoryMissingEntries { entries });
 				}
 			},
 
-			// If the artifact is a file, ensure its blob is present.
+			// If the artifact is a file, then ensure its blob is present.
 			Artifact::File(file) => {
-				let blob_path = self.blob_path(file.blob);
-				let blob_exists = path_exists(&blob_path).await?;
+				let blob_path = self.blob_path(file.blob_hash);
+				let blob_exists = os::fs::exists(&blob_path).await?;
 				if !blob_exists {
-					return Ok(AddArtifactOutcome::FileMissingBlob {
-						blob_hash: file.blob,
+					return Ok(Outcome::FileMissingBlob {
+						blob_hash: file.blob_hash,
 					});
 				}
 			},
 
-			// If this artifact is a symlink, there is nothing to ensure.
+			// If this artifact is a symlink, then there is nothing to ensure.
 			Artifact::Symlink(_) => {},
 
-			// If this artifact is a dependency, ensure its dependency artifact is present.
-			Artifact::Dependency(dependency) => {
-				let artifact_hash = dependency.artifact;
+			// If this artifact is a reference, then ensure the referenced artifact is present.
+			Artifact::Reference(reference) => {
+				let artifact_hash = reference.artifact_hash;
 				let exists = self.artifact_exists_local(artifact_hash)?;
 				if !exists {
-					return Ok(AddArtifactOutcome::DependencyMissing { artifact_hash });
+					return Ok(Outcome::ReferenceMissingArtifact { artifact_hash });
 				}
 			},
 		}
@@ -78,11 +70,11 @@ impl Cli {
 		let value = artifact.serialize_to_vec();
 
 		// Begin a write transaction.
-		let mut txn = self.inner.database.env.begin_rw_txn()?;
+		let mut txn = self.database.env.begin_rw_txn()?;
 
 		// Add the artifact to the database.
 		match txn.put(
-			self.inner.database.artifacts,
+			self.database.artifacts,
 			&artifact_hash.as_slice(),
 			&value,
 			lmdb::WriteFlags::NO_OVERWRITE,
@@ -94,6 +86,6 @@ impl Cli {
 		// Commit the transaction.
 		txn.commit()?;
 
-		Ok(AddArtifactOutcome::Added { artifact_hash })
+		Ok(Outcome::Added { artifact_hash })
 	}
 }

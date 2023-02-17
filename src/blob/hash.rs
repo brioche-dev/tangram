@@ -1,4 +1,4 @@
-use crate::hash::Hash;
+use crate::hash;
 use derive_more::{Deref, Display, FromStr};
 
 #[derive(
@@ -17,9 +17,9 @@ use derive_more::{Deref, Display, FromStr};
 	serde::Deserialize,
 	serde::Serialize,
 )]
-pub struct BlobHash(pub Hash);
+pub struct Hash(pub hash::Hash);
 
-impl buffalo::Serialize for BlobHash {
+impl buffalo::Serialize for Hash {
 	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
 	where
 		W: std::io::Write,
@@ -28,7 +28,7 @@ impl buffalo::Serialize for BlobHash {
 	}
 }
 
-impl buffalo::Deserialize for BlobHash {
+impl buffalo::Deserialize for Hash {
 	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
 	where
 		R: std::io::Read,

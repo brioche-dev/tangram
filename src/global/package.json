@@ -1,13 +1,16 @@
 {
 	"dependencies": {
+		"@tangramdotdev/eslint-config": "^0.1.2",
 		"esbuild": "^0.17.0",
 		"prettier": "^2.8.1",
 		"typescript": "^4.9.4"
 	},
+	"name": "@tangramdotdev/global",
 	"private": true,
 	"scripts": {
-		"check": "tsc",
-		"fmt": "prettier --write .",
-		"build": "esbuild --minify --bundle --format=iife --outfile=mod.js mod.ts"
-	}
+		"build": "node build.js",
+		"check": "tsc && eslint . && prettier --check .",
+		"fmt": "prettier --write ."
+	},
+	"type": "module"
 }

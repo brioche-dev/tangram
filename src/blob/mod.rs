@@ -1,4 +1,4 @@
-pub use self::hash::BlobHash;
+pub use self::hash::Hash;
 use std::pin::Pin;
 use tokio::io::AsyncRead;
 

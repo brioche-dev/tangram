@@ -1,5 +1,5 @@
-use super::{Artifact, ArtifactHash};
-use crate::hash::Hash;
+use super::{Artifact, Hash};
+use crate::hash;
 use anyhow::{bail, Result};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -11,7 +11,7 @@ impl Artifact {
 		// Read the version.
 		let version = reader.read_u8()?;
 		if version != 0 {
-			bail!(r#"Cannot deserialize artifact with version "{version}"."#);
+			bail!(r#"Cannot deserialize an artifact with version "{version}"."#);
 		}
 
 		// Deserialize the artifact.
@@ -41,15 +41,15 @@ impl Artifact {
 	}
 
 	#[must_use]
-	pub fn serialize_to_vec_and_hash(&self) -> (Vec<u8>, ArtifactHash) {
+	pub fn serialize_to_vec_and_hash(&self) -> (Vec<u8>, Hash) {
 		let data = self.serialize_to_vec();
-		let hash = ArtifactHash(Hash::new(&data));
+		let hash = Hash(hash::Hash::new(&data));
 		(data, hash)
 	}
 
 	#[must_use]
-	pub fn hash(&self) -> ArtifactHash {
+	pub fn hash(&self) -> Hash {
 		let data = self.serialize_to_vec();
-		ArtifactHash(Hash::new(data))
+		Hash(hash::Hash::new(data))
 	}
 }

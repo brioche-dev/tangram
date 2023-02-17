@@ -1,12 +1,10 @@
-use crate::Cli;
+use crate::{os, Cli};
 use anyhow::{Context, Result};
-use clap::Parser;
-use std::path::PathBuf;
 
-#[derive(Parser)]
-#[command(about = "Check in an artifact.")]
+/// Check in an artifact.
+#[derive(clap::Args)]
 pub struct Args {
-	path: Option<PathBuf>,
+	path: Option<os::PathBuf>,
 }
 
 impl Cli {
@@ -19,7 +17,7 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let hash = self.checkin(&path).await?;
+		let hash = self.check_in(&path).await?;
 
 		println!("{hash}");
 

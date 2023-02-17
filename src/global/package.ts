@@ -1,94 +1,93 @@
-import "./syscall";
-import { getArtifact, Artifact, ArtifactHash, addArtifact } from "./artifact";
+import { Artifact, ArtifactHash, addArtifact, getArtifact } from "./artifact";
 
-export let currentPackage = async (): Promise<Package> => {
-	return await getPackage(new PackageHash(syscall("get_current_package_hash")));
+export type PackageInstanceHash = string;
+
+export type PackageInstanceArgs = {
+	package: Artifact;
+	dependencies: Record<string, PackageInstance>;
 };
 
-export type PackageArgs = {
-	source: Artifact;
-	dependencies: { [name: string]: Package };
-};
-
-export let package_ = async (args: PackageArgs): Promise<Package> => {
-	let source = await addArtifact(await args.source);
+export let packageInstance = async (
+	args: PackageInstanceArgs,
+): Promise<PackageInstance> => {
+	let packageHash = await addArtifact(await args.package);
 	let dependencies = Object.fromEntries(
 		await Promise.all(
 			Object.entries(args.dependencies).map(async ([key, value]) => [
 				key,
-				await addPackage(value),
+				await addPackageInstance(value),
 			]),
 		),
 	);
-	return new Package({
-		source,
+	return new PackageInstance({
+		packageHash,
 		dependencies,
 	});
 };
 
-export class PackageHash {
-	#string: string;
-
-	constructor(string: string) {
-		this.#string = string;
-	}
-
-	toString(): string {
-		return this.#string;
-	}
-}
-
-type PackageConstructorArgs = {
-	source: ArtifactHash;
-	dependencies: { [key: string]: PackageHash };
+type PackageInstanceConstructorArgs = {
+	packageHash: ArtifactHash;
+	dependencies: Record<string, PackageInstanceHash>;
 };
 
-export class Package {
-	source: ArtifactHash;
-	dependencies: { [key: string]: PackageHash };
+export class PackageInstance {
+	#packageHash: ArtifactHash;
+	#dependencies: Record<string, PackageInstanceHash>;
 
-	constructor({ source, dependencies }: PackageConstructorArgs) {
-		this.source = source;
-		this.dependencies = dependencies;
+	constructor(args: PackageInstanceConstructorArgs) {
+		this.#packageHash = args.packageHash;
+		this.#dependencies = args.dependencies;
 	}
 
-	serialize(): syscall.Package {
-		let source = this.source.toString();
+	async serialize(): Promise<syscall.PackageInstance> {
+		let packageHash = this.#packageHash;
 		let dependencies = Object.fromEntries(
-			Object.entries(this.dependencies).map(([key, value]) => [
-				key,
-				value.toString(),
-			]),
+			Object.entries(this.#dependencies).map(([key, value]) => [key, value]),
 		);
 		return {
-			source,
+			packageHash,
 			dependencies,
 		};
 	}
 
-	static deserialize(package_: syscall.Package): Package {
-		let source = new ArtifactHash(package_.source);
+	static deserialize(
+		packageInstance: syscall.PackageInstance,
+	): PackageInstance {
+		let packageHash = packageInstance.packageHash;
 		let dependencies = Object.fromEntries(
-			Object.entries(package_.dependencies).map(([key, value]) => [
+			Object.entries(packageInstance.dependencies).map(([key, value]) => [
 				key,
-				new PackageHash(value),
+				value,
 			]),
 		);
-		return new Package({
-			source,
+		return new PackageInstance({
+			packageHash,
 			dependencies,
 		});
 	}
 
-	async getSource(): Promise<Artifact> {
-		return await getArtifact(this.source);
+	async getPackage(): Promise<Artifact> {
+		return await getArtifact(this.#packageHash);
+	}
+
+	async getDependencies(): Promise<Record<string, PackageInstance>> {
+		throw new Error("Unimplemented.");
 	}
 }
 
-export let addPackage = async (package_: Package): Promise<PackageHash> => {
-	return new PackageHash(await syscall("add_package", package_.serialize()));
+export let addPackageInstance = async (
+	packageInstance: PackageInstance,
+): Promise<PackageInstanceHash> => {
+	return await syscall(
+		"add_package_instance",
+		await packageInstance.serialize(),
+	);
 };
 
-export let getPackage = async (hash: PackageHash): Promise<Package> => {
-	return Package.deserialize(await syscall("get_package", hash.toString()));
+export let getPackageInstance = async (
+	hash: PackageInstanceHash,
+): Promise<PackageInstance> => {
+	return PackageInstance.deserialize(
+		await syscall("get_package_instance", hash),
+	);
 };

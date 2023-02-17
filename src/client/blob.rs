@@ -1,14 +1,13 @@
-use std::{pin::Pin, sync::Arc};
-
 use super::Client;
-use crate::blob::BlobHash;
+use crate::blob;
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
+use std::{pin::Pin, sync::Arc};
 use tokio::io::AsyncRead;
 use tokio_util::io::StreamReader;
 
 impl Client {
-	pub async fn add_blob<R>(&self, reader: R, blob_hash: BlobHash) -> Result<BlobHash>
+	pub async fn add_blob<R>(&self, reader: R, blob_hash: blob::Hash) -> Result<blob::Hash>
 	where
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
@@ -41,8 +40,10 @@ impl Client {
 
 		Ok(blob_hash)
 	}
+}
 
-	pub async fn get_blob(&self, blob_hash: BlobHash) -> Result<impl AsyncRead> {
+impl Client {
+	pub async fn get_blob(&self, blob_hash: blob::Hash) -> Result<impl AsyncRead> {
 		// Get a permit.
 		let permit = Arc::clone(&self.socket_semaphore).acquire_owned().await?;
 

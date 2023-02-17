@@ -1,14 +1,14 @@
-use super::{Artifact, ArtifactHash};
+use super::{Artifact, Hash};
 use crate::Cli;
 use anyhow::{bail, Context, Result};
 use lmdb::Transaction;
 
 impl Cli {
-	pub fn artifact_exists_local(&self, artifact_hash: ArtifactHash) -> Result<bool> {
+	pub fn artifact_exists_local(&self, artifact_hash: Hash) -> Result<bool> {
 		// Begin a read transaction.
-		let txn = self.inner.database.env.begin_ro_txn()?;
+		let txn = self.database.env.begin_ro_txn()?;
 
-		let exists = match txn.get(self.inner.database.artifacts, &artifact_hash.as_slice()) {
+		let exists = match txn.get(self.database.artifacts, &artifact_hash.as_slice()) {
 			Ok(_) => Ok::<_, anyhow::Error>(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.into()),
@@ -17,30 +17,34 @@ impl Cli {
 		Ok(exists)
 	}
 
-	pub fn get_artifact_local(&self, hash: ArtifactHash) -> Result<Artifact> {
+	pub fn get_artifact_local(&self, artifact_hash: Hash) -> Result<Artifact> {
 		let artifact = self
-			.try_get_artifact_local(hash)?
-			.with_context(|| format!(r#"Failed to find the artifact with hash "{hash}"."#))?;
+			.try_get_artifact_local(artifact_hash)?
+			.with_context(|| {
+				format!(r#"Failed to find the artifact with hash "{artifact_hash}"."#)
+			})?;
 		Ok(artifact)
 	}
 
 	pub fn get_artifact_local_with_txn<Txn>(
 		&self,
 		txn: &Txn,
-		hash: ArtifactHash,
+		artifact_hash: Hash,
 	) -> Result<Artifact>
 	where
 		Txn: lmdb::Transaction,
 	{
 		let artifact = self
-			.try_get_artifact_local_with_txn(txn, hash)?
-			.with_context(|| format!(r#"Failed to find the artifact with hash "{hash}"."#))?;
+			.try_get_artifact_local_with_txn(txn, artifact_hash)?
+			.with_context(|| {
+				format!(r#"Failed to find the artifact with hash "{artifact_hash}"."#)
+			})?;
 		Ok(artifact)
 	}
 
-	pub fn try_get_artifact_local(&self, hash: ArtifactHash) -> Result<Option<Artifact>> {
+	pub fn try_get_artifact_local(&self, hash: Hash) -> Result<Option<Artifact>> {
 		// Begin a read transaction.
-		let txn = self.inner.database.env.begin_ro_txn()?;
+		let txn = self.database.env.begin_ro_txn()?;
 
 		// Get the artifact.
 		let maybe_artifact = self.try_get_artifact_local_with_txn(&txn, hash)?;
@@ -52,12 +56,12 @@ impl Cli {
 	pub fn try_get_artifact_local_with_txn<Txn>(
 		&self,
 		txn: &Txn,
-		hash: ArtifactHash,
+		hash: Hash,
 	) -> Result<Option<Artifact>>
 	where
 		Txn: lmdb::Transaction,
 	{
-		match txn.get(self.inner.database.artifacts, &hash.as_slice()) {
+		match txn.get(self.database.artifacts, &hash.as_slice()) {
 			Ok(value) => {
 				let value = Artifact::deserialize(value)?;
 				Ok(Some(value))

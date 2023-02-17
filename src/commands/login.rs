@@ -1,27 +1,23 @@
 use crate::{credentials::Credentials, Cli};
 use anyhow::{bail, Context, Result};
-use clap::Parser;
 use std::time::{Duration, Instant};
 
-#[derive(Parser)]
+/// Login to Tangram.
+#[derive(clap::Args)]
 pub struct Args {}
 
 impl Cli {
 	pub async fn command_login(&self, _args: Args) -> Result<()> {
 		// Create a login.
 		let login = self
-			.inner
 			.api_client
 			.create_login()
 			.await
 			.context("Failed to create the login.")?;
 
 		// Open the browser to the login URL.
-		webbrowser::open(login.login_page_url.as_ref())?;
-		eprintln!(
-			"To login, please open your browser to:\n\n{}\n",
-			login.login_page_url
-		);
+		webbrowser::open(login.url.as_ref())?;
+		eprintln!("To login, please open your browser to:\n\n{}\n", login.url);
 
 		// Poll.
 		let start_instant = Instant::now();
@@ -32,7 +28,6 @@ impl Cli {
 				bail!("Login timed out. Please try again.");
 			}
 			let login = self
-				.inner
 				.api_client
 				.get_login(login.id)
 				.await
@@ -45,7 +40,6 @@ impl Cli {
 
 		// Get the user.
 		let user = self
-			.inner
 			.api_client
 			.get_current_user(token)
 			.await

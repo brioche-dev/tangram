@@ -1,40 +1,46 @@
+use crate::os;
 use anyhow::Result;
-use std::path::Path;
 
 pub struct Database {
-	/// This is the LMDB environment.
+	/// The LMDB environment.
 	pub env: lmdb::Environment,
 
-	/// This is the artifacts database.
+	/// The artifacts database maps artifact hashes to artifacts.
 	pub artifacts: lmdb::Database,
 
-	/// This is the packages database.
-	pub packages: lmdb::Database,
+	/// The artifact trackers database maps paths to artifact trackers.
+	pub artifact_trackers: lmdb::Database,
 
-	/// This is the operations database.
+	/// The package instances database maps package instance hashes to package instances.
+	pub package_instances: lmdb::Database,
+
+	/// The operations database maps operation hashes to operations.
 	pub operations: lmdb::Database,
 
-	/// This is the operation children database.
+	/// The operation children database maps operation hashes to multiple operation hashes.
 	pub operation_children: lmdb::Database,
 
-	/// This is the operation outputs database.
+	/// The operation outputs database maps operation hashes to values.
 	pub operation_outputs: lmdb::Database,
 }
 
 impl Database {
-	pub fn new(path: &Path) -> Result<Database> {
-		// Create the env.
+	pub fn open(path: &os::Path) -> Result<Database> {
+		// Open the environment.
 		let mut env_builder = lmdb::Environment::new();
 		env_builder.set_map_size(1_099_511_627_776);
-		env_builder.set_max_dbs(5);
+		env_builder.set_max_dbs(6);
 		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
 		let env = env_builder.open(path)?;
 
 		// Open the artifacts database.
 		let artifacts = env.open_db("artifacts".into())?;
 
-		// Open the packages database.
-		let packages = env.open_db("packages".into())?;
+		// Open the artifact trackers database.
+		let artifact_trackers = env.open_db("paths".into())?;
+
+		// Open the package instances database.
+		let package_instances = env.open_db("package_instances".into())?;
 
 		// Open the operations database.
 		let operations = env.open_db("operations".into())?;
@@ -49,7 +55,8 @@ impl Database {
 		let database = Database {
 			env,
 			artifacts,
-			packages,
+			artifact_trackers,
+			package_instances,
 			operations,
 			operation_children,
 			operation_outputs,

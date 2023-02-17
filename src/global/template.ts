@@ -1,20 +1,14 @@
-import "./syscall";
-import {
-	Artifact,
-	ArtifactHash,
-	addArtifact,
-	getArtifact,
-	isArtifact,
-} from "./artifact";
+import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact";
 import { Placeholder } from "./placeholder";
-import { MaybeArray, MaybePromise } from "./util";
+import { Unresolved, resolve } from "./resolve";
 
-export type TemplateLike = Template | MaybeArray<TemplateComponent>;
+export type TemplateLike = TemplateComponent | Template | Array<TemplateLike>;
 
 export let t = async (
 	strings: TemplateStringsArray,
-	...placeholders: Array<MaybePromise<Template | MaybeArray<TemplateComponent>>>
+	...placeholders: Array<Unresolved<TemplateLike>>
 ): Promise<Template> => {
+	// Collect the strings and placeholders.
 	let components = [];
 	for (let i = 0; i < strings.length - 1; i++) {
 		let string = strings[i];
@@ -23,46 +17,46 @@ export let t = async (
 		components.push(placeholder);
 	}
 	components.push(strings[strings.length - 1]);
+
 	return await template(components);
 };
 
 export let template = async (
-	components: MaybeArray<
-		MaybePromise<Template | MaybeArray<TemplateComponent>>
-	>,
+	templateLike: Unresolved<TemplateLike>,
 ): Promise<Template> => {
-	let resolvedComponents = await Promise.all(
-		Array.isArray(components) ? components : [components],
-	);
-	let flattenedComponents = [];
-	for (let component of resolvedComponents) {
-		if (component instanceof Template) {
-			flattenedComponents.push(...component.components);
-		} else if (Array.isArray(component)) {
-			flattenedComponents.push(...component);
+	// Resolve the input.
+	let resolvedTemplateLike = await resolve(templateLike);
+
+	// Collect all components recursively.
+	let components: Array<TemplateComponent> = [];
+	let collectComponents = (templateLike: TemplateLike) => {
+		if (Array.isArray(templateLike)) {
+			templateLike.forEach(collectComponents);
+		} else if (templateLike instanceof Template) {
+			components.push(...templateLike.components());
 		} else {
-			flattenedComponents.push(component);
+			components.push(templateLike);
 		}
-	}
-	return new Template(flattenedComponents);
+	};
+	collectComponents(resolvedTemplateLike);
+
+	return new Template(components);
+};
+
+export let isTemplate = (value: unknown): value is Template => {
+	return value instanceof Template;
 };
 
 export class Template {
-	components: Array<TemplateComponent>;
+	#components: Array<TemplateComponent>;
 
-	constructor(arg: TemplateLike) {
-		if (arg instanceof Template) {
-			this.components = [...arg.components];
-		} else if (Array.isArray(arg)) {
-			this.components = arg;
-		} else {
-			this.components = [arg];
-		}
+	constructor(components: Array<TemplateComponent>) {
+		this.#components = components;
 	}
 
 	async serialize(): Promise<syscall.Template> {
 		let components = await Promise.all(
-			this.components.map(
+			this.#components.map(
 				async (component) => await serializeTemplateComponent(component),
 			),
 		);
@@ -80,6 +74,14 @@ export class Template {
 			),
 		);
 	}
+
+	components(): Array<TemplateComponent> {
+		return [...this.#components];
+	}
+
+	render(f: (component: TemplateComponent) => string): string {
+		return this.#components.map(f).join("");
+	}
 }
 
 export type TemplateComponent = string | Artifact | Placeholder;
@@ -89,17 +91,17 @@ export let serializeTemplateComponent = async (
 ): Promise<syscall.TemplateComponent> => {
 	if (typeof component === "string") {
 		return {
-			type: "string",
+			kind: "string",
 			value: component,
 		};
 	} else if (isArtifact(component)) {
 		return {
-			type: "artifact",
-			value: (await addArtifact(component)).toString(),
+			kind: "artifact",
+			value: await addArtifact(component),
 		};
 	} else if (component instanceof Placeholder) {
 		return {
-			type: "placeholder",
+			kind: "placeholder",
 			value: await component.serialize(),
 		};
 	} else {
@@ -110,12 +112,12 @@ export let serializeTemplateComponent = async (
 export let deserializeTemplateComponent = async (
 	component: syscall.TemplateComponent,
 ): Promise<TemplateComponent> => {
-	switch (component.type) {
+	switch (component.kind) {
 		case "string": {
 			return await component.value;
 		}
 		case "artifact": {
-			return await getArtifact(new ArtifactHash(component.value));
+			return await getArtifact(component.value);
 		}
 		case "placeholder": {
 			return await Placeholder.deserialize(component.value);

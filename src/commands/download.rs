@@ -3,20 +3,20 @@ use crate::{
 	Cli,
 };
 use anyhow::{Context, Result};
-use clap::Parser;
+use std::sync::Arc;
 use url::Url;
 
-#[derive(Parser)]
-#[command(about = "Run a download operation.")]
+/// Run a download operation.
+#[derive(clap::Args)]
 pub struct Args {
-	#[arg(help = "The URL to download from.")]
+	/// The URL to download from.
 	url: Url,
-	#[arg(long, help = "If the URL points to a tarball, should it be unpacked?")]
+
 	unpack: bool,
 }
 
 impl Cli {
-	pub async fn command_download(&self, args: Args) -> Result<()> {
+	pub async fn command_download(self: &Arc<Self>, args: Args) -> Result<()> {
 		// Create the operation.
 		let operation = Operation::Download(Download {
 			url: args.url,

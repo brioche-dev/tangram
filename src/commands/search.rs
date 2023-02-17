@@ -1,16 +1,16 @@
 use crate::Cli;
 use anyhow::Result;
-use clap::Parser;
 
-#[derive(Parser)]
+/// Search for a package.
+#[derive(clap::Args)]
 pub struct Args {
 	query: String,
 }
 
 impl Cli {
 	pub async fn command_search(&self, args: Args) -> Result<()> {
-		// Search for the package with the given query.
-		let packages = self.inner.api_client.search_packages(&args.query).await?;
+		// Perform the search.
+		let packages = self.api_client.search_packages(&args.query).await?;
 
 		// Print the package names.
 		if packages.is_empty() {

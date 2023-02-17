@@ -1,0 +1,66 @@
+use super::Enum;
+use quote::quote;
+
+impl<'a> Enum<'a> {
+	pub fn serialize(self) -> proc_macro2::TokenStream {
+		// Get the ident.
+		let ident = self.ident;
+
+		// Generate the body.
+		let body = if let Some(into) = self.into {
+			quote! {
+				// Convert the value.
+				let s: #into = self.clone().into();
+
+				// Serialize the value.
+				s.serialize(serializer)?;
+
+				Ok(())
+			}
+		} else {
+			// Get the variant ids.
+			let variant_ids = self
+				.variants
+				.iter()
+				.map(|variant| variant.id)
+				.collect::<Vec<_>>();
+
+			// Get the variant idents.
+			let variant_idents = self
+				.variants
+				.iter()
+				.map(|variant| &variant.ident)
+				.collect::<Vec<_>>();
+
+			quote! {
+				match self {
+					#(#ident::#variant_idents(value) => {
+						// Write the kind.
+						serializer.write_kind(buffalo::Kind::Enum)?;
+
+						// Serialize the variant id.
+						serializer.write_id(#variant_ids)?;
+
+						// Serialize the value.
+						serializer.serialize(value)?;
+					})*
+				};
+				Ok(())
+			}
+		};
+
+		// Generate the code.
+		let code = quote! {
+			impl buffalo::Serialize for #ident {
+				fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
+				where
+					W: std::io::Write,
+				{
+					#body
+				}
+			}
+		};
+
+		code
+	}
+}

@@ -1,43 +1,89 @@
-import "./syscall";
-import { Blob, BlobHash, BlobLike, addBlob, blob, getBlob } from "./blob";
+import { ArtifactHash, getArtifact } from "./artifact";
+import { Blob, BlobHash, addBlob, getBlob } from "./blob";
+import { MaybePromise } from "./resolve";
+import { assert } from "./util";
 
-export type FileOptions = {
+export type FileLike = Uint8Array | string | File;
+
+export let isFileLike = (fileLike: unknown): fileLike is FileLike => {
+	return (
+		fileLike instanceof Uint8Array ||
+		typeof fileLike === "string" ||
+		fileLike instanceof File
+	);
+};
+
+type FileOptions = {
 	executable?: boolean;
 };
 
 export let file = async (
-	blobLike: BlobLike,
+	fileLike: MaybePromise<FileLike>,
 	options?: FileOptions,
 ): Promise<File> => {
-	let blobHash = await addBlob(await blob(blobLike));
-	return new File(blobHash, options);
+	fileLike = await fileLike;
+	let blobHash;
+	let executable;
+	if (fileLike instanceof Uint8Array) {
+		blobHash = await addBlob(fileLike);
+	} else if (typeof fileLike === "string") {
+		blobHash = await addBlob(syscall("encode_utf8", fileLike));
+	} else {
+		blobHash = fileLike.blobHash();
+		executable = fileLike.executable();
+	}
+	executable = options?.executable ?? executable;
+	return new File(blobHash, { executable });
+};
+
+export let isFile = (value: unknown): value is File => {
+	return value instanceof File;
 };
 
 export class File {
-	blob: BlobHash;
-	executable: boolean;
+	#blobHash: BlobHash;
+	#executable: boolean;
 
-	constructor(blob: BlobHash, options?: FileOptions) {
-		this.blob = blob;
-		this.executable = options?.executable ?? false;
+	constructor(blobHash: BlobHash, options?: FileOptions) {
+		this.#blobHash = blobHash;
+		this.#executable = options?.executable ?? false;
+	}
+
+	public static async fromHash(hash: ArtifactHash): Promise<File> {
+		let artifact = await getArtifact(hash);
+		assert(isFile(artifact));
+		return artifact;
 	}
 
 	async serialize(): Promise<syscall.File> {
-		let blob = this.blob.toString();
-		let executable = this.executable;
+		let blobHash = this.#blobHash;
+		let executable = this.#executable;
 		return {
-			blob,
+			blobHash,
 			executable,
 		};
 	}
 
 	static async deserialize(file: syscall.File): Promise<File> {
-		let blob = new BlobHash(file.blob);
+		let blobHash = file.blobHash;
 		let executable = file.executable;
-		return new File(blob, { executable });
+		return new File(blobHash, { executable });
 	}
 
-	async getBlob(): Promise<Blob> {
-		return await getBlob(this.blob);
+	blobHash(): BlobHash {
+		return this.#blobHash;
+	}
+
+	async getBytes(): Promise<Blob> {
+		return await getBlob(this.#blobHash);
+	}
+
+	async getString(): Promise<string> {
+		let bytes = await this.getBytes();
+		return syscall("decode_utf8", bytes);
+	}
+
+	executable(): boolean {
+		return this.#executable;
 	}
 }

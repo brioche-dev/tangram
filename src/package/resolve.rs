@@ -1,0 +1,28 @@
+use super::{Identifier, Specifier};
+use crate::Cli;
+use anyhow::{bail, Result};
+
+impl Cli {
+	#[allow(clippy::unused_async)]
+	pub async fn resolve_package(
+		&self,
+		specifier: &Specifier,
+		referrer: Option<&Identifier>,
+	) -> Result<Identifier> {
+		match specifier {
+			Specifier::Path(specifier_path) => match referrer {
+				Some(Identifier::Path(referrer_path)) => Ok(Identifier::Path(
+					referrer_path.join("..").join(specifier_path),
+				)),
+
+				Some(Identifier::Hash(_)) => {
+					bail!("Cannot resolve a path specifier relative to a hash referrer.")
+				},
+
+				None => Ok(Identifier::Path(specifier_path.clone())),
+			},
+
+			Specifier::Registry(_) => todo!(),
+		}
+	}
+}

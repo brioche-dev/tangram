@@ -1,18 +1,12 @@
-pub use self::{
-	placeholder::Placeholder,
-	template::{Template, TemplateComponent},
-};
-use crate::artifact::ArtifactHash;
+use crate::{artifact, placeholder::Placeholder, template::Template};
 use std::collections::BTreeMap;
 
-mod placeholder;
 mod serialize;
-mod template;
 
 #[derive(
 	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
 )]
-#[serde(tag = "type", content = "value")]
+#[serde(tag = "kind", content = "value")]
 pub enum Value {
 	#[buffalo(id = 0)]
 	#[serde(rename = "null")]
@@ -32,7 +26,7 @@ pub enum Value {
 
 	#[buffalo(id = 4)]
 	#[serde(rename = "artifact")]
-	Artifact(ArtifactHash),
+	Artifact(artifact::Hash),
 
 	#[buffalo(id = 5)]
 	#[serde(rename = "placeholder")]
@@ -93,7 +87,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn as_artifact(&self) -> Option<&ArtifactHash> {
+	pub fn as_artifact(&self) -> Option<&artifact::Hash> {
 		if let Value::Artifact(v) = self {
 			Some(v)
 		} else {
@@ -176,7 +170,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn into_artifact(self) -> Option<ArtifactHash> {
+	pub fn into_artifact(self) -> Option<artifact::Hash> {
 		if let Value::Artifact(v) = self {
 			Some(v)
 		} else {

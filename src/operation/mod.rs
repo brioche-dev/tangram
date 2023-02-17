@@ -1,20 +1,18 @@
-pub use self::{download::Download, hash::OperationHash, process::Process, target::Target};
+pub use self::hash::Hash;
 use crate::Cli;
+pub use crate::{call::Call, download::Download, process::Process};
 use anyhow::{bail, Context, Result};
 
 mod children;
-mod download;
 mod hash;
 mod output;
-mod process;
 mod run;
 mod serialize;
-mod target;
 
 #[derive(
 	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
 )]
-#[serde(tag = "type", content = "value")]
+#[serde(tag = "kind", content = "value")]
 pub enum Operation {
 	#[buffalo(id = 0)]
 	#[serde(rename = "download")]
@@ -25,8 +23,8 @@ pub enum Operation {
 	Process(Process),
 
 	#[buffalo(id = 2)]
-	#[serde(rename = "target")]
-	Target(Target),
+	#[serde(rename = "call")]
+	Call(Call),
 }
 
 impl Operation {
@@ -49,8 +47,8 @@ impl Operation {
 	}
 
 	#[must_use]
-	pub fn as_target(&self) -> Option<&Target> {
-		if let Operation::Target(v) = self {
+	pub fn as_call(&self) -> Option<&Call> {
+		if let Operation::Call(v) = self {
 			Some(v)
 		} else {
 			None
@@ -78,8 +76,8 @@ impl Operation {
 	}
 
 	#[must_use]
-	pub fn into_target(self) -> Option<Target> {
-		if let Operation::Target(v) = self {
+	pub fn into_call(self) -> Option<Call> {
+		if let Operation::Call(v) = self {
 			Some(v)
 		} else {
 			None
@@ -88,18 +86,14 @@ impl Operation {
 }
 
 impl Cli {
-	pub fn get_operation_local(&self, hash: OperationHash) -> Result<Operation> {
+	pub fn get_operation_local(&self, hash: Hash) -> Result<Operation> {
 		let operation = self
 			.try_get_operation_local(hash)?
 			.with_context(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
 		Ok(operation)
 	}
 
-	pub fn get_operation_local_with_txn<Txn>(
-		&self,
-		txn: &Txn,
-		hash: OperationHash,
-	) -> Result<Operation>
+	pub fn get_operation_local_with_txn<Txn>(&self, txn: &Txn, hash: Hash) -> Result<Operation>
 	where
 		Txn: lmdb::Transaction,
 	{
@@ -109,9 +103,9 @@ impl Cli {
 		Ok(operation)
 	}
 
-	pub fn try_get_operation_local(&self, hash: OperationHash) -> Result<Option<Operation>> {
+	pub fn try_get_operation_local(&self, hash: Hash) -> Result<Option<Operation>> {
 		// Begin a read transaction.
-		let txn = self.inner.database.env.begin_ro_txn()?;
+		let txn = self.database.env.begin_ro_txn()?;
 
 		// Get the operation.
 		let maybe_operation = self.try_get_operation_local_with_txn(&txn, hash)?;
@@ -123,12 +117,12 @@ impl Cli {
 	pub fn try_get_operation_local_with_txn<Txn>(
 		&self,
 		txn: &Txn,
-		hash: OperationHash,
+		hash: Hash,
 	) -> Result<Option<Operation>>
 	where
 		Txn: lmdb::Transaction,
 	{
-		match txn.get(self.inner.database.operations, &hash.as_slice()) {
+		match txn.get(self.database.operations, &hash.as_slice()) {
 			Ok(value) => {
 				let value = buffalo::from_slice(value)?;
 				Ok(Some(value))

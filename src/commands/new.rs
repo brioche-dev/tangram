@@ -1,16 +1,16 @@
-use crate::Cli;
+use crate::{os, Cli};
 use anyhow::{Context, Result};
-use clap::Parser;
-use std::path::PathBuf;
 
-#[derive(Parser)]
-#[command(about = "Create a new package.")]
+/// Create a new package.
+#[derive(clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	pub name: Option<String>,
+
 	#[arg(long)]
 	pub version: Option<String>,
-	pub path: Option<PathBuf>,
+
+	pub path: Option<os::PathBuf>,
 }
 
 impl Cli {
@@ -27,15 +27,13 @@ impl Cli {
 			format!(r#"Failed to create the directory at "{}"."#, path.display())
 		})?;
 
-		// Create the init args.
-		let args = super::init::Args {
-			name: args.name,
-			version: args.version,
-			path: args.path,
-		};
-
 		// Init.
-		self.command_init(args).await?;
+		self.command_init(super::init::Args {
+			name: args.name,
+			path: args.path,
+			version: args.version,
+		})
+		.await?;
 
 		Ok(())
 	}

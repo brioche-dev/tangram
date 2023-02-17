@@ -1,0 +1,284 @@
+use crate::{Deserialize, Deserializer, Serialize, Serializer};
+use std::{
+	collections::BTreeMap,
+	io::{Read, Result, Write},
+	sync::Arc,
+};
+
+impl Serialize for () {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_unit()
+	}
+}
+
+impl Deserialize for () {
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.deserialize_unit()
+	}
+}
+
+impl Serialize for bool {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_bool(*self)
+	}
+}
+
+impl Deserialize for bool {
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.deserialize_bool()
+	}
+}
+
+macro_rules! uvarint {
+	($t:ty) => {
+		impl Serialize for $t {
+			fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+			where
+				W: Write,
+			{
+				serializer.serialize_uvarint(*self as u64)
+			}
+		}
+
+		impl Deserialize for $t {
+			fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+			where
+				R: Read,
+			{
+				let value = deserializer.deserialize_uvarint()?;
+				let value = value
+					.try_into()
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+				Ok(value)
+			}
+		}
+	};
+}
+
+uvarint!(u8);
+uvarint!(u16);
+uvarint!(u32);
+uvarint!(u64);
+
+macro_rules! ivarint {
+	($t:ty) => {
+		impl Serialize for $t {
+			fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+			where
+				W: Write,
+			{
+				serializer.serialize_ivarint(*self as i64)
+			}
+		}
+
+		impl Deserialize for $t {
+			fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+			where
+				R: Read,
+			{
+				let value = deserializer.deserialize_ivarint()?;
+				let value = value
+					.try_into()
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+				Ok(value)
+			}
+		}
+	};
+}
+
+ivarint!(i8);
+ivarint!(i16);
+ivarint!(i32);
+ivarint!(i64);
+
+impl Serialize for f32 {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_f32(*self)
+	}
+}
+
+impl Deserialize for f32 {
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.deserialize_f32()
+	}
+}
+
+impl Serialize for f64 {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_f64(*self)
+	}
+}
+
+impl Deserialize for f64 {
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.deserialize_f64()
+	}
+}
+
+impl<const N: usize> Serialize for [u8; N] {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_bytes(self)
+	}
+}
+
+impl<const N: usize> Deserialize for [u8; N] {
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer
+			.deserialize_bytes()?
+			.try_into()
+			.map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Invalid length."))
+	}
+}
+
+impl<T> Serialize for Option<T>
+where
+	T: Serialize,
+{
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_option(self)
+	}
+}
+
+impl<T> Deserialize for Option<T>
+where
+	T: Deserialize,
+{
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.deserialize_option()
+	}
+}
+
+impl Serialize for str {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_string(self)
+	}
+}
+
+impl Serialize for String {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_string(self)
+	}
+}
+
+impl Deserialize for String {
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.deserialize_string()
+	}
+}
+
+impl Serialize for Arc<str> {
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_string(self)
+	}
+}
+
+impl Deserialize for Arc<str> {
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		let value = deserializer.deserialize_string()?;
+		let value = value.into();
+		Ok(value)
+	}
+}
+
+impl<T> Serialize for Vec<T>
+where
+	T: Serialize,
+{
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_array(self.len(), self)
+	}
+}
+
+impl<T> Deserialize for Vec<T>
+where
+	T: Deserialize,
+{
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.deserialize_array()
+	}
+}
+
+impl<K, V> Serialize for BTreeMap<K, V>
+where
+	K: Serialize,
+	V: Serialize,
+{
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize_map(self.len(), self.iter())
+	}
+}
+
+impl<K, V> Deserialize for BTreeMap<K, V>
+where
+	K: Deserialize + Ord,
+	V: Deserialize,
+{
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		let value = deserializer.deserialize_map()?;
+		let value = value.into_iter().collect();
+		Ok(value)
+	}
+}

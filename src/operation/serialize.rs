@@ -1,9 +1,7 @@
+use super::{Hash, Operation};
+use crate::hash;
 use anyhow::{bail, Result};
 use byteorder::{ReadBytesExt, WriteBytesExt};
-
-use crate::hash::Hash;
-
-use super::{Operation, OperationHash};
 
 impl Operation {
 	pub fn deserialize<R>(mut reader: R) -> Result<Operation>
@@ -47,15 +45,15 @@ impl Operation {
 	}
 
 	#[must_use]
-	pub fn serialize_to_vec_and_hash(&self) -> (OperationHash, Vec<u8>) {
+	pub fn serialize_to_vec_and_hash(&self) -> (Hash, Vec<u8>) {
 		let data = self.serialize_to_vec();
-		let hash = OperationHash(Hash::new(&data));
+		let hash = Hash(hash::Hash::new(&data));
 		(hash, data)
 	}
 
 	#[must_use]
-	pub fn hash(&self) -> OperationHash {
+	pub fn hash(&self) -> Hash {
 		let data = self.serialize_to_vec();
-		OperationHash(Hash::new(data))
+		Hash(hash::Hash::new(data))
 	}
 }

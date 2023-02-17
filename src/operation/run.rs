@@ -1,19 +1,20 @@
-use super::{Operation, OperationHash};
+use super::{Hash, Operation};
 use crate::{value::Value, Cli};
 use anyhow::Result;
 use async_recursion::async_recursion;
+use std::sync::Arc;
 
 impl Cli {
-	pub async fn run(&self, operation: &Operation) -> Result<Value> {
-		self.run_inner(operation, None).await
+	pub async fn run(self: &Arc<Self>, operation: &Operation) -> Result<Value> {
+		self.run_with_parent(operation, None).await
 	}
 
 	#[async_recursion]
 	#[must_use]
-	pub async fn run_inner(
-		&self,
+	async fn run_with_parent(
+		self: &Arc<Self>,
 		operation: &Operation,
-		parent_operation_hash: Option<OperationHash>,
+		parent_operation_hash: Option<Hash>,
 	) -> Result<Value> {
 		// Get the operation hash.
 		let operation_hash = operation.hash();
@@ -35,7 +36,7 @@ impl Cli {
 		let output = match operation {
 			Operation::Download(download) => self.run_download(download).await?,
 			Operation::Process(process) => self.run_process(process).await?,
-			Operation::Target(target) => self.run_target(target).await?,
+			Operation::Call(call) => self.run_call(call).await?,
 		};
 
 		// Set the operation output.

@@ -1,12 +1,11 @@
-use crate::{package_specifier::PackageSpecifier, Cli};
+use crate::{package, Cli};
 use anyhow::Result;
-use clap::Parser;
 
-#[derive(Parser)]
-#[command(about = "Add a dependency to a package.")]
+/// Add a dependency to a package.
+#[derive(clap::Args)]
 pub struct Args {
 	#[arg(default_value = ".")]
-	specifier: PackageSpecifier,
+	package_specifier: package::Specifier,
 }
 
 impl Cli {

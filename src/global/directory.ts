@@ -1,4 +1,3 @@
-import "./syscall";
 import {
 	Artifact,
 	ArtifactHash,
@@ -6,22 +5,20 @@ import {
 	getArtifact,
 	isArtifact,
 } from "./artifact";
-import { BlobLike, isBlobLike } from "./blob";
-import { file } from "./file";
+import { file, isFileLike } from "./file";
 import { PathLike, path } from "./path";
-import { MaybePromise } from "./util";
+import { MaybePromise } from "./resolve";
+import { assert } from "./util";
+import { isNullish, nullish } from "./value";
+
+type DirectoryArg = MaybePromise<nullish | Directory | DirectoryObject>;
 
 type DirectoryObject = {
-	[key: string]: MaybePromise<
-		undefined | null | BlobLike | Artifact | DirectoryObject
+	[name: string]: MaybePromise<
+		nullish | Uint8Array | string | Artifact | DirectoryObject
 	>;
 };
 
-type DirectoryArg = MaybePromise<
-	undefined | null | Directory | DirectoryObject
->;
-
-/** Create a directory. */
 export let directory = async (
 	...args: Array<DirectoryArg>
 ): Promise<Directory> => {
@@ -30,15 +27,15 @@ export let directory = async (
 	// Apply each arg.
 	for (let arg of args) {
 		arg = await arg;
-		if (arg === undefined || arg === null) {
-			// If the arg is null then continue.
+		if (isNullish(arg)) {
+			// If the arg is null, then continue.
 		} else if (arg instanceof Directory) {
-			// If the arg is a directory then apply each entry.
+			// If the arg is a directory, then apply each entry.
 			for (let [name, hash] of arg) {
 				entries.set(name, hash);
 			}
 		} else {
-			// If the arg is an object then apply each entry.
+			// If the arg is an object, then apply each entry.
 			for (let [key, value] of Object.entries(arg)) {
 				// Normalize the path and separate the first path component from the trailing path components.
 				let [firstComponent, ...trailingComponents] = path(key)
@@ -46,13 +43,13 @@ export let directory = async (
 					.components();
 
 				// All path components must be normal.
-				if (firstComponent.type !== "normal") {
+				if (firstComponent.kind !== "normal") {
 					throw new Error(`Invalid path component.`);
 				}
 				let name = firstComponent.value;
 
 				if (trailingComponents.length > 0) {
-					// If there are trailing path components then recurse.
+					// If there are trailing path components, then recurse.
 					let trailingPath = path(trailingComponents).toString();
 
 					// Get an existing directory.
@@ -75,11 +72,11 @@ export let directory = async (
 
 					entries.set(name, await addArtifact(child));
 				} else {
-					// If there are no trailing path components then create the artifact specified by the value.
+					// If there are no trailing path components, then create the artifact specified by the value.
 					value = await value;
-					if (value === null) {
+					if (isNullish(value)) {
 						entries.delete(name);
-					} else if (isBlobLike(value)) {
+					} else if (isFileLike(value)) {
 						entries.set(name, await addArtifact(await file(value)));
 					} else if (isArtifact(value)) {
 						entries.set(name, await addArtifact(value));
@@ -94,6 +91,10 @@ export let directory = async (
 	return new Directory(entries);
 };
 
+export let isDirectory = (value: unknown): value is Directory => {
+	return value instanceof Directory;
+};
+
 export class Directory {
 	#entries: Map<string, ArtifactHash>;
 
@@ -101,24 +102,21 @@ export class Directory {
 		this.#entries = entries;
 	}
 
+	static async fromHash(hash: ArtifactHash): Promise<Directory> {
+		let artifact = await getArtifact(hash);
+		assert(isDirectory(artifact));
+		return artifact;
+	}
+
 	async serialize(): Promise<syscall.Directory> {
-		let entries = Object.fromEntries(
-			Array.from(this.#entries.entries()).map(([key, hash]) => {
-				return [key, hash.toString()];
-			}),
-		);
+		let entries = Object.fromEntries(Array.from(this.#entries.entries()));
 		return {
 			entries,
 		};
 	}
 
 	static async deserialize(directory: syscall.Directory): Promise<Directory> {
-		let entries = new Map(
-			Object.entries(directory.entries).map(([key, value]) => {
-				let hash = new ArtifactHash(value);
-				return [key, hash];
-			}),
-		);
+		let entries = new Map(Object.entries(directory.entries));
 		return new Directory(entries);
 	}
 
@@ -129,7 +127,7 @@ export class Directory {
 			.components();
 
 		// All path components must be normal.
-		if (firstComponent.type !== "normal") {
+		if (firstComponent.kind !== "normal") {
 			throw new Error(`Invalid path "${name}".`);
 		}
 
@@ -139,15 +137,10 @@ export class Directory {
 			return null;
 		}
 		let artifact = await getArtifact(hash);
-		if (!isArtifact(artifact)) {
-			throw new Error("Expected an artifact.");
-		}
 
 		if (trailingComponents.length > 0) {
-			// If there are trailing path components then recurse.
-			if (!(artifact instanceof Directory)) {
-				throw new Error("Expected a directory.");
-			}
+			// If there are trailing path components, then recurse.
+			assert(isDirectory(artifact));
 			return await artifact.tryGet(trailingComponents);
 		} else {
 			return artifact;

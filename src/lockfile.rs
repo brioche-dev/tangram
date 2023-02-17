@@ -1,4 +1,4 @@
-use crate::{artifact::ArtifactHash, package::PackageHash};
+use crate::artifact;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -15,8 +15,7 @@ pub struct V1 {
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Dependency {
-	pub hash: PackageHash,
-	pub source: ArtifactHash,
+	pub package: Option<artifact::Hash>,
 	pub dependencies: Option<BTreeMap<String, Dependency>>,
 }
 

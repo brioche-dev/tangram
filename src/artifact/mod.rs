@@ -1,16 +1,11 @@
-pub use self::add::AddArtifactOutcome;
-pub use self::{
-	dependency::Dependency, directory::Directory, file::File, hash::ArtifactHash, symlink::Symlink,
-};
+pub use self::{hash::Hash, tracker::Tracker};
+use crate::{directory::Directory, file::File, reference::Reference, symlink::Symlink};
 
-mod add;
-mod dependency;
-mod directory;
-mod file;
+pub mod add;
 mod get;
 mod hash;
 mod serialize;
-mod symlink;
+pub mod tracker;
 mod util;
 
 #[derive(
@@ -23,7 +18,7 @@ mod util;
 	serde::Deserialize,
 	serde::Serialize,
 )]
-#[serde(tag = "type", content = "value")]
+#[serde(tag = "kind", content = "value")]
 pub enum Artifact {
 	#[buffalo(id = 0)]
 	#[serde(rename = "directory")]
@@ -38,6 +33,6 @@ pub enum Artifact {
 	Symlink(Symlink),
 
 	#[buffalo(id = 3)]
-	#[serde(rename = "dependency")]
-	Dependency(Dependency),
+	#[serde(rename = "reference")]
+	Reference(Reference),
 }

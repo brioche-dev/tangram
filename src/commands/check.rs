@@ -1,35 +1,36 @@
 use crate::{
-	compiler::{Diagnostic, Location, Position},
-	package_specifier::PackageSpecifier,
-	Cli,
+	language::{Diagnostic, Location, Position},
+	module, package, Cli,
 };
 use anyhow::{bail, Result};
-use clap::Parser;
+use std::sync::Arc;
 
-#[derive(Parser)]
-#[command(about = "Check a package for errors.")]
+/// Check a package for errors.
+#[derive(clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	locked: bool,
 
 	#[arg(default_value = ".")]
-	specifier: PackageSpecifier,
+	package_specifier: package::Specifier,
 }
 
 impl Cli {
-	pub async fn command_check(&self, args: Args) -> Result<()> {
-		// If the specifier is a path specifier, first generate its lockfile.
-		if let PackageSpecifier::Path { path } = &args.specifier {
-			self.generate_lockfile(path, args.locked).await?;
-		}
+	pub async fn command_check(self: &Arc<Self>, args: Args) -> Result<()> {
+		// Resolve the package specifier.
+		let package_identifier = self.resolve_package(&args.package_specifier, None).await?;
 
-		// Get the entrypoint module identifier.
-		let module_identifier = self
-			.entrypoint_module_identifier_for_specifier(&args.specifier)
+		// Get the package instance hash.
+		let package_instance_hash = self
+			.create_package_instance(&package_identifier, args.locked)
 			.await?;
 
+		// Create the root module identifier.
+		let root_module_identifier =
+			module::Identifier::for_root_module_in_package_instance(package_instance_hash);
+
 		// Check the package for diagnostics.
-		let diagnostics = self.check(vec![module_identifier]).await?;
+		let diagnostics = self.check(vec![root_module_identifier]).await?;
 
 		// Print the diagnostics.
 		for diagnostics in diagnostics.values() {
@@ -42,7 +43,7 @@ impl Cli {
 				// Print the location if one is available.
 				if let Some(location) = location {
 					let Location {
-						module_identifier: url,
+						module_identifier,
 						range,
 						..
 					} = location;
@@ -50,7 +51,7 @@ impl Cli {
 					let line = line + 1;
 					let character = character + 1;
 
-					println!("{url}:{line}:{character}");
+					println!("{module_identifier}:{line}:{character}");
 				}
 
 				// Print the diagnostic message.

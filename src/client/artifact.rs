@@ -1,10 +1,12 @@
-use crate::artifact::{AddArtifactOutcome, Artifact, ArtifactHash};
+use super::Client;
+use crate::artifact::{self, Artifact};
 use anyhow::{bail, Context, Result};
 
-use super::Client;
-
 impl Client {
-	pub async fn try_get_artifact(&self, artifact_hash: ArtifactHash) -> Result<Option<Artifact>> {
+	pub async fn try_get_artifact(
+		&self,
+		artifact_hash: artifact::Hash,
+	) -> Result<Option<Artifact>> {
 		// Get a permit.
 		let _permit = self.socket_semaphore.acquire().await?;
 
@@ -30,15 +32,10 @@ impl Client {
 
 		Ok(response)
 	}
+}
 
-	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<ArtifactHash> {
-		match self.try_add_artifact(artifact).await? {
-			AddArtifactOutcome::Added { artifact_hash } => Ok(artifact_hash),
-			_ => bail!("Failed to add the artifact."),
-		}
-	}
-
-	pub async fn try_add_artifact(&self, artifact: &Artifact) -> Result<AddArtifactOutcome> {
+impl Client {
+	pub async fn try_add_artifact(&self, artifact: &Artifact) -> Result<artifact::add::Outcome> {
 		// Get a permit.
 		let _permit = self.socket_semaphore.acquire().await?;
 
@@ -61,5 +58,12 @@ impl Client {
 			.context("Failed to read the response body.")?;
 
 		Ok(response)
+	}
+
+	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<artifact::Hash> {
+		match self.try_add_artifact(artifact).await? {
+			artifact::add::Outcome::Added { artifact_hash } => Ok(artifact_hash),
+			_ => bail!("Failed to add the artifact."),
+		}
 	}
 }

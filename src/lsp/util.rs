@@ -1,25 +1,31 @@
-use crate::compiler::ModuleIdentifier;
+use crate::{module, os};
 use anyhow::Result;
-use std::path::Path;
 use url::Url;
 
-pub async fn from_uri(url: Url) -> Result<ModuleIdentifier> {
-	match url.scheme() {
-		"file" => ModuleIdentifier::for_path(Path::new(url.path())).await,
-		_ => url.try_into(),
+impl module::Identifier {
+	pub async fn from_lsp_uri(url: Url) -> Result<module::Identifier> {
+		match url.scheme() {
+			"file" => module::Identifier::for_module_at_path(os::Path::new(url.path())).await,
+			_ => url.try_into(),
+		}
 	}
-}
 
-pub fn to_uri(module_identifier: ModuleIdentifier) -> Url {
-	match module_identifier {
-		ModuleIdentifier::Path {
-			package_path,
-			module_path,
-		} => {
-			let path = package_path.join(module_path);
-			format!("file://{}", path.display()).parse().unwrap()
-		},
+	#[must_use]
+	pub fn to_lsp_uri(&self) -> Url {
+		match self {
+			module::Identifier::Artifact(module::identifier::Artifact {
+				source: module::identifier::Source::Path(package_path),
+				path,
+			})
+			| module::Identifier::Normal(module::identifier::Normal {
+				source: module::identifier::Source::Path(package_path),
+				path,
+			}) => {
+				let path = package_path.join(path.to_string());
+				format!("file://{}", path.display()).parse().unwrap()
+			},
 
-		_ => module_identifier.into(),
+			_ => self.clone().into(),
+		}
 	}
 }

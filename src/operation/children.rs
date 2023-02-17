@@ -1,4 +1,4 @@
-use super::OperationHash;
+use super::Hash;
 use crate::Cli;
 use anyhow::Result;
 use lmdb::{Cursor, Transaction};
@@ -7,15 +7,15 @@ impl Cli {
 	/// Add a run to the database.
 	pub fn add_operation_child(
 		&self,
-		parent_operation_hash: OperationHash,
-		child_operation_hash: OperationHash,
+		parent_operation_hash: Hash,
+		child_operation_hash: Hash,
 	) -> Result<()> {
 		// Begin a write transaction.
-		let mut txn = self.inner.database.env.begin_rw_txn()?;
+		let mut txn = self.database.env.begin_rw_txn()?;
 
 		// Add the child.
 		txn.put(
-			self.inner.database.operation_children,
+			self.database.operation_children,
 			&parent_operation_hash.as_slice(),
 			&child_operation_hash.as_slice(),
 			lmdb::WriteFlags::empty(),
@@ -31,24 +31,22 @@ impl Cli {
 	pub fn get_operation_children_with_txn<Txn>(
 		&self,
 		txn: &Txn,
-		operation_hash: OperationHash,
-	) -> Result<impl Iterator<Item = Result<OperationHash>>>
+		operation_hash: Hash,
+	) -> Result<impl Iterator<Item = Result<Hash>>>
 	where
 		Txn: lmdb::Transaction,
 	{
 		// Open a readonly cursor.
-		let mut cursor = txn.open_ro_cursor(self.inner.database.operation_children)?;
+		let mut cursor = txn.open_ro_cursor(self.database.operation_children)?;
 
 		// Get the children.
 		let children = cursor
 			.iter_dup_of(operation_hash.as_slice())
 			.into_iter()
-			.map(|value| match value {
-				Ok((_, value)) => {
-					let value = buffalo::from_slice(value)?;
-					Ok(value)
-				},
-				Err(error) => Err(error.into()),
+			.map(|value| {
+				let (_, value) = value?;
+				let value = buffalo::from_slice(value)?;
+				Ok(value)
 			});
 
 		Ok(children)

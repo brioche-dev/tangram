@@ -1,21 +1,28 @@
-import "./syscall";
 import { Artifact } from "./artifact";
+import { Call } from "./call";
 import { Download } from "./download";
 import { Process } from "./process";
-import { Target } from "./target";
 import { deserializeValue } from "./value";
 
-export type OperationType = "download" | "process" | "target";
+export type OperationType = "download" | "process" | "call";
 
-export type Operation = Download | Process | Target;
+export type Operation = Download | Process | Call;
 
 export type Output<T extends Operation> = T extends Download
 	? Artifact
 	: T extends Process
 	? Artifact
-	: T extends Target<infer U>
+	: T extends Call<infer U>
 	? U
 	: never;
+
+export let isOperation = (value: unknown): value is Operation => {
+	return (
+		value instanceof Download ||
+		value instanceof Process ||
+		value instanceof Call
+	);
+};
 
 export let run = async <T extends Operation>(
 	operation: T,
@@ -31,17 +38,17 @@ export let serializeOperation = async (
 ): Promise<syscall.Operation> => {
 	if (operation instanceof Download) {
 		return {
-			type: "download",
+			kind: "download",
 			value: await operation.serialize(),
 		};
 	} else if (operation instanceof Process) {
 		return {
-			type: "process",
+			kind: "process",
 			value: await operation.serialize(),
 		};
-	} else if (operation instanceof Target) {
+	} else if (operation instanceof Call) {
 		return {
-			type: "target",
+			kind: "call",
 			value: await operation.serialize(),
 		};
 	} else {
@@ -52,15 +59,15 @@ export let serializeOperation = async (
 export let deserializeOperation = async (
 	operation: syscall.Operation,
 ): Promise<Operation> => {
-	switch (operation.type) {
+	switch (operation.kind) {
 		case "download": {
 			return await Download.deserialize(operation.value);
 		}
 		case "process": {
 			return await Process.deserialize(operation.value);
 		}
-		case "target": {
-			return await Target.deserialize(operation.value);
+		case "call": {
+			return await Call.deserialize(operation.value);
 		}
 	}
 };

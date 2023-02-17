@@ -1,27 +1,16 @@
-use self::{
-	completion::completion,
-	definition::definition,
-	files::{did_change, did_close, did_open},
-	formatting::formatting,
-	hover::hover,
-	initialize::{initialize, shutdown},
-	references::references,
-	rename::rename,
-	virtual_text_document::virtual_text_document,
-};
 use crate::Cli;
 use anyhow::{bail, Context, Result};
 use futures::{future, FutureExt};
 use lsp::{notification::Notification, request::Request};
 use lsp_types as lsp;
-use std::{collections::HashMap, future::Future};
+use std::{collections::HashMap, future::Future, sync::Arc};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
 mod completion;
 mod definition;
 mod diagnostics;
-mod files;
-mod formatting;
+mod document;
+mod format;
 mod hover;
 mod initialize;
 mod jsonrpc;
@@ -35,7 +24,7 @@ type _Receiver = tokio::sync::mpsc::UnboundedReceiver<jsonrpc::Message>;
 type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
 impl Cli {
-	pub async fn run_language_server(&self) -> Result<()> {
+	pub async fn run_language_server(self: &Arc<Self>) -> Result<()> {
 		let mut stdin = tokio::io::BufReader::new(tokio::io::stdin());
 		let mut stdout = tokio::io::BufWriter::new(tokio::io::stdout());
 
@@ -60,7 +49,7 @@ impl Cli {
 			// Read a message.
 			let message = read_incoming_message(&mut stdin).await?;
 
-			// If the message is the exit notification then break.
+			// If the message is the exit notification, then break.
 			if matches!(message,
 				jsonrpc::Message::Notification(jsonrpc::Notification {
 					ref method,
@@ -72,7 +61,7 @@ impl Cli {
 
 			// Spawn a task to handle the message.
 			tokio::spawn({
-				let cli = self.clone();
+				let cli = Arc::clone(self);
 				let sender = outgoing_message_sender.clone();
 				async move {
 					handle_message(&cli, &sender, message).await;
@@ -128,72 +117,80 @@ where
 	Ok(message)
 }
 
-async fn handle_message(cli: &Cli, sender: &Sender, message: jsonrpc::Message) {
+#[allow(clippy::too_many_lines)]
+async fn handle_message(cli: &Arc<Cli>, sender: &Sender, message: jsonrpc::Message) {
 	match message {
 		// Handle a request.
 		jsonrpc::Message::Request(request) => {
 			match request.method.as_str() {
 				lsp::request::Completion::METHOD => {
-					handle_request::<lsp::request::Completion, _, _>(
-						cli, sender, request, completion,
-					)
+					handle_request::<lsp::request::Completion, _, _>(sender, request, |params| {
+						cli.lsp_completion(params)
+					})
 					.boxed()
 				},
 
 				lsp::request::GotoDefinition::METHOD => {
 					handle_request::<lsp::request::GotoDefinition, _, _>(
-						cli, sender, request, definition,
+						sender,
+						request,
+						|params| cli.lsp_definition(params),
 					)
 					.boxed()
 				},
 
 				lsp::request::Formatting::METHOD => {
-					handle_request::<lsp::request::Formatting, _, _>(
-						cli, sender, request, formatting,
-					)
+					handle_request::<lsp::request::Formatting, _, _>(sender, request, |params| {
+						cli.lsp_format(params)
+					})
 					.boxed()
 				},
 
 				lsp::request::HoverRequest::METHOD => {
-					handle_request::<lsp::request::HoverRequest, _, _>(cli, sender, request, hover)
-						.boxed()
+					handle_request::<lsp::request::HoverRequest, _, _>(sender, request, |params| {
+						cli.lsp_hover(params)
+					})
+					.boxed()
 				},
 
 				lsp::request::Initialize::METHOD => {
-					handle_request::<lsp::request::Initialize, _, _>(
-						cli, sender, request, initialize,
-					)
+					handle_request::<lsp::request::Initialize, _, _>(sender, request, |params| {
+						cli.lsp_initialize(params)
+					})
 					.boxed()
 				},
 
 				lsp::request::References::METHOD => {
-					handle_request::<lsp::request::References, _, _>(
-						cli, sender, request, references,
-					)
+					handle_request::<lsp::request::References, _, _>(sender, request, |params| {
+						cli.lsp_references(params)
+					})
 					.boxed()
 				},
 
 				lsp::request::Rename::METHOD => {
-					handle_request::<lsp::request::Rename, _, _>(cli, sender, request, rename)
-						.boxed()
+					handle_request::<lsp::request::Rename, _, _>(sender, request, |params| {
+						cli.lsp_rename(params)
+					})
+					.boxed()
 				},
 
 				lsp::request::Shutdown::METHOD => {
-					handle_request::<lsp::request::Shutdown, _, _>(cli, sender, request, shutdown)
-						.boxed()
+					handle_request::<lsp::request::Shutdown, _, _>(sender, request, |params| {
+						cli.lsp_shutdown(params)
+					})
+					.boxed()
 				},
 
 				self::virtual_text_document::VirtualTextDocument::METHOD => {
 					handle_request::<self::virtual_text_document::VirtualTextDocument, _, _>(
-						cli,
 						sender,
 						request,
-						virtual_text_document,
+						|params| cli.lsp_virtual_text_document(params),
 					)
 					.boxed()
 				},
 
-				// If the request method does not have a handler, send a method not found response.
+				// If the request method does not have a handler, then send a method not found response.
 				_ => {
 					let error = jsonrpc::ResponseError {
 						code: jsonrpc::ResponseErrorCode::MethodNotFound,
@@ -214,35 +211,32 @@ async fn handle_message(cli: &Cli, sender: &Sender, message: jsonrpc::Message) {
 			match notification.method.as_str() {
 				lsp::notification::DidOpenTextDocument::METHOD => {
 					handle_notification::<lsp::notification::DidOpenTextDocument, _, _>(
-						cli,
 						sender,
 						notification,
-						did_open,
+						|sender, params| cli.lsp_did_open(sender, params),
 					)
 					.boxed()
 				},
 
 				lsp::notification::DidChangeTextDocument::METHOD => {
 					handle_notification::<lsp::notification::DidChangeTextDocument, _, _>(
-						cli,
 						sender,
 						notification,
-						did_change,
+						|sender, params| cli.lsp_did_change(sender, params),
 					)
 					.boxed()
 				},
 
 				lsp::notification::DidCloseTextDocument::METHOD => {
 					handle_notification::<lsp::notification::DidCloseTextDocument, _, _>(
-						cli,
 						sender,
 						notification,
-						did_close,
+						|sender, params| cli.lsp_did_close(sender, params),
 					)
 					.boxed()
 				},
 
-				// If the notification method does not have a handler, do nothing.
+				// If the notification method does not have a handler, then do nothing.
 				_ => future::ready(()).boxed(),
 			}
 			.await;
@@ -250,22 +244,14 @@ async fn handle_message(cli: &Cli, sender: &Sender, message: jsonrpc::Message) {
 	}
 }
 
-async fn handle_request<T, F, Fut>(
-	cli: &Cli,
-	sender: &Sender,
-	request: jsonrpc::Request,
-	handler: F,
-) where
+async fn handle_request<T, F, Fut>(sender: &Sender, request: jsonrpc::Request, handler: F)
+where
 	T: lsp::request::Request,
-	F: Fn(Cli, T::Params) -> Fut,
+	F: Fn(T::Params) -> Fut,
 	Fut: Future<Output = Result<T::Result>>,
 {
 	// Deserialize the params.
-	let params = if let Ok(params) =
-		serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
-	{
-		params
-	} else {
+	let Ok(params) = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null)) else {
 		let error = jsonrpc::ResponseError {
 			code: jsonrpc::ResponseErrorCode::InvalidParams,
 			message: "Invalid params.".to_owned(),
@@ -275,7 +261,7 @@ async fn handle_request<T, F, Fut>(
 	};
 
 	// Call the handler.
-	let result = handler(cli.clone(), params).await;
+	let result = handler(params).await;
 
 	// Get the result and error.
 	let (result, error) = match result {
@@ -297,20 +283,19 @@ async fn handle_request<T, F, Fut>(
 	send_response(sender, request.id, result, error);
 }
 
-async fn handle_notification<T, F, Fut>(
-	cli: &Cli,
-	sender: &Sender,
-	request: jsonrpc::Notification,
-	handler: F,
-) where
+async fn handle_notification<T, F, Fut>(sender: &Sender, request: jsonrpc::Notification, handler: F)
+where
 	T: lsp::notification::Notification,
-	F: Fn(Cli, Sender, T::Params) -> Fut,
+	F: Fn(Sender, T::Params) -> Fut,
 	Fut: Future<Output = Result<()>>,
 {
 	let params = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
 		.context("Failed to deserialize the request params.")
 		.unwrap();
-	handler(cli.clone(), sender.clone(), params).await.ok();
+	let result = handler(sender.clone(), params).await;
+	if let Err(error) = result {
+		eprintln!("{error}");
+	}
 }
 
 pub fn send_response<T>(

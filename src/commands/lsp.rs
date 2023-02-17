@@ -1,12 +1,12 @@
 use crate::Cli;
-use clap::Parser;
+use std::sync::Arc;
 
-#[derive(Parser)]
-#[command(about = "Run the language server.")]
+/// Run the language server.
+#[derive(clap::Args)]
 pub struct Args {}
 
 impl Cli {
-	pub async fn command_lsp(&self, _args: Args) -> anyhow::Result<()> {
+	pub async fn command_lsp(self: &Arc<Self>, _args: Args) -> anyhow::Result<()> {
 		// Run the language server.
 		self.run_language_server().await?;
 

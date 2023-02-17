@@ -1,0 +1,151 @@
+use super::{Field, Struct};
+
+impl<'a> Struct<'a> {
+	pub fn parse(
+		input: &'a syn::DeriveInput,
+		data: &'a syn::DataStruct,
+	) -> syn::Result<Struct<'a>> {
+		// Initialize the attrs.
+		let mut into = None;
+		let mut try_from = None;
+
+		// Get the buffalo attr.
+		let attr = input
+			.attrs
+			.iter()
+			.find(|attr| attr.path.is_ident("buffalo"));
+
+		if let Some(attr) = attr {
+			// Parse the buffalo attr as a list.
+			let meta = attr.parse_meta()?;
+			let syn::Meta::List(list) = meta else {
+				return Err(syn::Error::new_spanned(
+					attr,
+					"The buffalo attribute must contain a list.",
+				));
+			};
+
+			// Parse the list items.
+			for item in list.nested.iter() {
+				match item {
+					// Handle the "into" key.
+					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
+						if item.path.is_ident("into") =>
+					{
+						// Get the value as a string literal.
+						let syn::Lit::Str(value) = &item.lit else {
+							return Err(syn::Error::new_spanned(
+								item,
+								r#"The value for the attribute "into" must be a string."#,
+							));
+						};
+
+						// Parse the value as a type.
+						let value = value.parse()?;
+
+						into = Some(value);
+					},
+
+					// Handle the "try_from" key.
+					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
+						if item.path.is_ident("try_from") =>
+					{
+						// Get the value as a string literal.
+						let syn::Lit::Str(value) = &item.lit else {
+							return Err(syn::Error::new_spanned(
+								item,
+								r#"The value for the attribute "try_from" must be a string."#,
+							));
+						};
+
+						// Parse the value as a type.
+						let value = value.parse()?;
+
+						try_from = Some(value);
+					},
+
+					_ => {},
+				}
+			}
+		}
+
+		// Parse the fields.
+		let mut fields = data
+			.fields
+			.iter()
+			.map(Field::parse)
+			.collect::<syn::Result<Vec<_>>>()?;
+
+		// Sort the fields by id.
+		fields.sort_by_key(|field| field.id);
+
+		// Create the struct.
+		let struct_ = Struct {
+			visibility: &input.vis,
+			ident: &input.ident,
+			into,
+			try_from,
+			fields,
+		};
+
+		Ok(struct_)
+	}
+}
+
+impl<'a> Field<'a> {
+	pub fn parse(field: &'a syn::Field) -> syn::Result<Field<'a>> {
+		// Initialize the attrs.
+		let mut id = None;
+
+		// Get the ident.
+		let ident = field.ident.as_ref();
+
+		// Get the buffalo attr.
+		let attr = field
+			.attrs
+			.iter()
+			.find(|attr| attr.path.is_ident("buffalo"));
+
+		// Parse the list items.
+		if let Some(attr) = attr {
+			let meta = attr.parse_meta()?;
+			let syn::Meta::List(list) = meta else {
+				return Err(syn::Error::new_spanned(
+					attr,
+					"The buffalo attribute must contain a list.",
+				))
+			};
+
+			for item in list.nested.iter() {
+				match item {
+					// Handle the "id" key.
+					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
+						if item.path.is_ident("id") =>
+					{
+						// Get the value as an integer literal.
+						let syn::Lit::Int(value) = &item.lit else {
+							return Err(syn::Error::new_spanned(
+								item,
+								r#"The value for the attribute "id" must be an integer."#,
+							));
+						};
+
+						// Parse the value as an integer.
+						let value = value.base10_parse().map_err(|_| {
+							syn::Error::new_spanned(
+								item,
+								r#"The value for the attribute "id" must be an integer."#,
+							)
+						})?;
+
+						id = Some(value);
+					},
+
+					_ => {},
+				}
+			}
+		}
+
+		Ok(Field { id, ident })
+	}
+}

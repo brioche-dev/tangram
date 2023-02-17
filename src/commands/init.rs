@@ -1,17 +1,17 @@
-use crate::Cli;
+use crate::{os, Cli};
 use anyhow::{bail, Context, Result};
-use clap::Parser;
 use indoc::formatdoc;
-use std::path::PathBuf;
 
-#[derive(Parser)]
-#[command(about = "Initialize a new package.")]
+/// Initialize a new package.
+#[derive(clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	pub name: Option<String>,
+
 	#[arg(long)]
 	pub version: Option<String>,
-	pub path: Option<PathBuf>,
+
+	pub path: Option<os::PathBuf>,
 }
 
 impl Cli {
@@ -58,12 +58,10 @@ impl Cli {
 		let mut files = Vec::new();
 
 		files.push((
-			path.join("tangram.json"),
+			path.join("tangram.tg"),
 			formatdoc!(
 				r#"
-					{{
-						"dependencies": {{}}
-					}}
+					// Write your code here.
 				"#,
 			),
 		));

@@ -1,63 +1,55 @@
 use crate::{
-	operation::{Operation, Target},
-	package_specifier::PackageSpecifier,
-	system::System,
-	util::path_exists,
+	function::Function,
+	operation::{Call, Operation},
+	os, package,
+	path::Path,
 	Cli,
 };
 use anyhow::{bail, Context, Result};
-use clap::Parser;
-use std::{os::unix::process::CommandExt, path::PathBuf};
+use std::{os::unix::process::CommandExt, sync::Arc};
 
-#[derive(Parser, Debug)]
+#[derive(clap::Args)]
 #[command(
 	about = "Build a package and run an executable from its output.",
 	trailing_var_arg = true
 )]
 pub struct Args {
 	#[arg(long)]
-	pub executable_path: Option<PathBuf>,
+	pub executable_path: Option<Path>,
 	#[arg(long)]
 	pub locked: bool,
 	#[arg(long)]
-	pub target: Option<String>,
+	pub export: Option<String>,
+
 	#[arg(default_value = ".")]
-	pub specifier: PackageSpecifier,
+	pub package_specifier: package::Specifier,
+
 	pub trailing_args: Vec<String>,
-	#[arg(long)]
-	pub system: Option<System>,
 }
 
 impl Cli {
-	pub async fn command_run(&self, args: Args) -> Result<()> {
-		// Get the package hash.
-		let package_hash = self
-			.package_hash_for_specifier(&args.specifier, false)
-			.await
-			.context("Failed to get the hash for the specifier.")?;
+	pub async fn command_run(self: &Arc<Self>, args: Args) -> Result<()> {
+		// Resolve the package specifier.
+		let package_identifier = self.resolve_package(&args.package_specifier, None).await?;
 
-		// Get the package manifest.
-		let manifest = self.get_package_manifest(package_hash).await?;
+		// Get the package instance hash.
+		let package_instance_hash = self
+			.create_package_instance(&package_identifier, args.locked)
+			.await?;
 
-		// Get the executable path.
-		let executable_path = if let Some(executable_path) = args.executable_path {
-			executable_path
-		} else {
-			let package_name = manifest.name.as_ref().context("Could not determine the path of the executable. Please give your package a name or provide the --executable-path argument.")?;
-			PathBuf::from("bin").join(package_name)
-		};
-
-		// Get the target name.
-		let name = args.target.unwrap_or_else(|| "default".to_owned());
-
-		// Create the target args.
-		let target_args = self.create_target_args(args.system)?;
+		// Get the export name.
+		let name = args.export.unwrap_or_else(|| "default".to_owned());
 
 		// Create the operation.
-		let operation = Operation::Target(Target {
-			package: package_hash,
+		let function = Function {
+			package_instance_hash,
 			name,
-			args: target_args,
+		};
+		let context = self.create_default_context()?;
+		let operation = Operation::Call(Call {
+			function,
+			context,
+			args: vec![],
 		});
 
 		// Run the operation.
@@ -72,13 +64,16 @@ impl Cli {
 			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = self.checkout_internal(output_artifact_hash).await?;
+		let artifact_path = self.check_out_internal(output_artifact_hash).await?;
+
+		// Get the executable path.
+		let executable_path = args.executable_path.unwrap_or_else(|| Path::from("run"));
 
 		// Get the path to the executable.
-		let executable_path = artifact_path.join(executable_path);
+		let executable_path = artifact_path.join(executable_path.to_string());
 
 		// Verify the executable path exists.
-		if !path_exists(&executable_path).await? {
+		if !os::fs::exists(&executable_path).await? {
 			bail!(
 				r#"No executable found at path "{}"."#,
 				executable_path.display()

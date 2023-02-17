@@ -1,0 +1,68 @@
+use super::Enum;
+use quote::quote;
+
+impl<'a> Enum<'a> {
+	pub fn deserialize(self) -> proc_macro2::TokenStream {
+		// Get the ident.
+		let ident = self.ident;
+
+		// Generate the body.
+		let body = if let Some(try_from) = self.try_from {
+			quote! {
+				let value = #try_from::deserialize(deserializer)?;
+				let value = value.try_into().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+				Ok(value)
+			}
+		} else {
+			// Get the variant ids.
+			let variant_ids = self
+				.variants
+				.iter()
+				.map(|variant| variant.id)
+				.collect::<Vec<_>>();
+
+			// Get the variant idents.
+			let variant_idents = self
+				.variants
+				.iter()
+				.map(|variant| &variant.ident)
+				.collect::<Vec<_>>();
+
+			quote! {
+				// Read the kind.
+				deserializer.ensure_kind(buffalo::Kind::Enum)?;
+
+				// Read the variant id.
+				let variant_id = deserializer.read_id()?;
+
+				// Deserialize the value.
+				let value = match variant_id {
+					// Deserialize the variant's value.
+					#(#variant_ids => #ident::#variant_idents(deserializer.deserialize()?),)*
+
+					// Skip over variants with unknown ids.
+					_ => {
+						buffalo::Value::deserialize(deserializer)?;
+						return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unexpected variant id."));
+					},
+				};
+
+				Ok(value)
+			}
+		};
+
+		// Generate the code.
+		let code = quote! {
+			impl buffalo::Deserialize for #ident {
+				fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
+				where
+					R: std::io::Read,
+				{
+					#body
+				}
+			}
+		};
+
+		code
+	}
+}

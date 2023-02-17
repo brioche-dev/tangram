@@ -1,32 +1,29 @@
 import { Artifact } from "./artifact";
-import { Dependency } from "./dependency";
 import { Directory } from "./directory";
 import { File } from "./file";
 import { Placeholder } from "./placeholder";
+import { Reference } from "./reference";
 import { Symlink } from "./symlink";
 import { Template } from "./template";
-import { MaybePromise } from "./util";
-import { Value } from "./value";
+import { Value, nullish } from "./value";
 
 export type Unresolved<T extends Value> = T extends
-	| undefined
-	| null
+	| nullish
 	| boolean
 	| number
 	| string
 	| Artifact
 	| Placeholder
 	| Template
-	? MaybePromise<T>
+	? MaybeThunk<MaybePromise<T>>
 	: T extends Array<infer U extends Value>
-	? MaybePromise<Array<Unresolved<U>>>
+	? MaybeThunk<MaybePromise<Array<Unresolved<U>>>>
 	: T extends { [key: string]: Value }
-	? MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>
+	? MaybeThunk<MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>>
 	: never;
 
 export type Resolved<T extends Unresolved<Value>> = T extends
-	| undefined
-	| null
+	| nullish
 	| boolean
 	| number
 	| string
@@ -38,40 +35,52 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	? Array<Resolved<U>>
 	: T extends { [key: string]: Unresolved<Value> }
 	? { [K in keyof T]: Resolved<T[K]> }
+	: T extends (() => infer U extends Unresolved<Value>)
+	? Resolved<U>
 	: T extends Promise<infer U extends Unresolved<Value>>
 	? Resolved<U>
 	: never;
 
+export type MaybeThunk<T> = T | (() => T);
+
+export type MaybePromise<T> = T | PromiseLike<T>;
+
+export type MaybeArray<T> = T | Array<T>;
+
 export let resolve = async <T extends Unresolved<Value>>(
 	value: T,
 ): Promise<Resolved<T>> => {
-	let awaitedValue = await value;
+	value = await value;
 	if (
-		awaitedValue === undefined ||
-		awaitedValue === null ||
-		typeof awaitedValue === "boolean" ||
-		typeof awaitedValue === "number" ||
-		typeof awaitedValue === "string" ||
-		awaitedValue instanceof Directory ||
-		awaitedValue instanceof File ||
-		awaitedValue instanceof Symlink ||
-		awaitedValue instanceof Dependency ||
-		awaitedValue instanceof Placeholder ||
-		awaitedValue instanceof Template
+		value === undefined ||
+		value === null ||
+		typeof value === "boolean" ||
+		typeof value === "number" ||
+		typeof value === "string" ||
+		value instanceof Directory ||
+		value instanceof File ||
+		value instanceof Symlink ||
+		value instanceof Reference ||
+		value instanceof Placeholder ||
+		value instanceof Template
 	) {
-		return awaitedValue as unknown as Resolved<T>;
-	} else if (Array.isArray(awaitedValue)) {
+		return value as unknown as Resolved<T>;
+	} else if (Array.isArray(value)) {
 		return (await Promise.all(
-			awaitedValue.map((value) => resolve(value)),
+			value.map((value) => resolve(value)),
 		)) as Resolved<T>;
-	} else {
+	} else if (typeof value === "object") {
 		return Object.fromEntries(
 			await Promise.all(
-				Object.entries(awaitedValue).map(async ([key, value]) => [
+				Object.entries(value).map(async ([key, value]) => [
 					key,
 					await resolve(value),
 				]),
 			),
 		) as Resolved<T>;
+	} else if (typeof value === "function") {
+		return (await resolve(value())) as Resolved<T>;
+	} else {
+		throw new Error("Invalid value to resolve.");
 	}
 };

@@ -1,13 +1,11 @@
-use crate::{artifact::ArtifactHash, Cli};
+use crate::{artifact, os, Cli};
 use anyhow::{Context, Result};
-use clap::Parser;
-use std::path::PathBuf;
 
-#[derive(Parser)]
-#[command(about = "Check out an artifact.")]
+/// Check out an artifact.
+#[derive(clap::Args)]
 pub struct Args {
-	artifact_hash: ArtifactHash,
-	path: Option<PathBuf>,
+	artifact_hash: artifact::Hash,
+	path: Option<os::PathBuf>,
 }
 
 impl Cli {
@@ -22,7 +20,7 @@ impl Cli {
 		};
 
 		// Perform the checkout.
-		self.checkout(args.artifact_hash, &path, None)
+		self.check_out(args.artifact_hash, &path, None)
 			.await
 			.context("Failed to perform the checkout.")?;
 

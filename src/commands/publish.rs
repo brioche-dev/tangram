@@ -1,17 +1,15 @@
-use crate::{client::Client, Cli};
+use crate::{client::Client, os, package, Cli};
 use anyhow::{Context, Result};
-use clap::Parser;
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
-#[derive(Parser)]
+/// Publish a package.
+#[derive(clap::Args)]
 pub struct Args {
-	#[arg(long)]
-	locked: bool,
-	package: Option<PathBuf>,
+	package: Option<os::PathBuf>,
 }
 
 impl Cli {
-	pub async fn command_publish(&self, args: Args) -> Result<()> {
+	pub async fn command_publish(self: &Arc<Self>, args: Args) -> Result<()> {
 		// Get the path.
 		let mut path =
 			std::env::current_dir().context("Failed to determine the current directory.")?;
@@ -20,27 +18,23 @@ impl Cli {
 		}
 
 		// Check in the package.
-		let package_hash = self.checkin_package(&path, args.locked).await?;
-
-		// Get the package.
-		let package = self.get_package_local(package_hash)?;
+		let package::checkin::Output { package_hash, .. } = self.check_in_package(&path).await?;
 
 		// Create a client.
 		let client = Client::new(
-			self.inner.api_client.url.clone(),
+			self.api_client.url.clone(),
 			None,
-			Arc::clone(&self.inner.socket_semaphore),
+			Arc::clone(&self.socket_semaphore),
 		);
 
-		// Push the package source to the registry.
-		self.push(&client, package.source)
+		// Push the package to the registry.
+		self.push(&client, package_hash)
 			.await
 			.context("Failed to push the package.")?;
 
 		// Publish the package.
-		self.inner
-			.api_client
-			.publish_package(package.source)
+		self.api_client
+			.publish_package(package_hash)
 			.await
 			.context("Failed to publish the package.")?;
 

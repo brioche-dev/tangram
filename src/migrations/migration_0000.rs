@@ -1,23 +1,26 @@
+use crate::os;
 use anyhow::Result;
-use std::path::Path;
 
-pub async fn migrate(path: &Path) -> Result<()> {
+pub async fn migrate(path: &os::Path) -> Result<()> {
 	// Create the database file.
 	let path = path.to_owned();
 	tokio::fs::File::create(&path.join("database.mdb")).await?;
 
-	// Create the env.
+	// Open the environment.
 	let database_path = path.join("database.mdb");
 	let mut env_builder = lmdb::Environment::new();
-	env_builder.set_max_dbs(5);
+	env_builder.set_max_dbs(6);
 	env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
 	let env = env_builder.open(&database_path)?;
 
 	// Create the artifacts database.
 	env.create_db("artifacts".into(), lmdb::DatabaseFlags::empty())?;
 
-	// Create the packages database.
-	env.create_db("packages".into(), lmdb::DatabaseFlags::empty())?;
+	// Create the paths database.
+	env.create_db("paths".into(), lmdb::DatabaseFlags::empty())?;
+
+	// Create the package instances database.
+	env.create_db("package_instances".into(), lmdb::DatabaseFlags::empty())?;
 
 	// Create the operations database.
 	env.create_db("operations".into(), lmdb::DatabaseFlags::empty())?;

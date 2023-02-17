@@ -1,7 +1,9 @@
-import "./syscall";
-
 export let placeholder = (name: string): Placeholder => {
 	return new Placeholder(name);
+};
+
+export let isPlaceholder = (value: unknown): value is Placeholder => {
+	return value instanceof Placeholder;
 };
 
 export class Placeholder {

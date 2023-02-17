@@ -6,7 +6,7 @@
 
 Tangram is a programmable build system and package manager in which all dependencies are specified explicitly and pinned with a lockfile. You get the exact same versions of every package on every machine, so your builds are **simple**, **reproducible**, **cacheable**, and **distributable**.
 
-- **Simple.** Write your builds in JSON, JavaScript, or TypeScript.
+- **Simple.** Write your builds in TypeScript with autocomplete and type checking.
 - **Reproducible.** Stop debugging errors caused by inconsistent package versions.
 - **Cacheable.** Stop building the same thing over and over again.
 - **Distributable.** Transparently offload your builds to a cluster or the cloud.
@@ -30,16 +30,16 @@ curl https://install.tangram.dev | sh
 
 ### Build a shell.
 
-Create a `tangram.json` file at the root of your project and add some dependencies.
+Create a `tangram.tg` file at the root of your project and add some dependencies.
 
 ```json
 {
-	"dependencies": {
-		"nodejs": "16.15.1",
-		"postgresql": "14.4",
-		"python": "3.10.4",
-		"ripgrep": "13.0.0"
-	}
+  "dependencies": {
+    "nodejs": "16.15.1",
+    "postgresql": "14.4",
+    "python": "3.10.4",
+    "ripgrep": "13.0.0"
+  }
 }
 ```
 

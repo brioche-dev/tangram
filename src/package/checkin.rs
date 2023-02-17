@@ -1,107 +1,108 @@
-use super::{Package, PackageHash};
-use crate::{artifact::ArtifactHash, lockfile::Lockfile, Cli};
-use anyhow::{Context, Result};
-use std::path::Path;
-use tokio::io::AsyncReadExt;
+use crate::{
+	artifact::{self, Artifact},
+	directory::Directory,
+	module, os, package, Cli,
+};
+use anyhow::Result;
+use std::sync::Arc;
+
+pub struct Output {
+	pub package_hash: artifact::Hash,
+	pub dependency_specifiers: Vec<package::Specifier>,
+}
 
 impl Cli {
-	/// Check in a package at the specified path.
-	pub async fn checkin_package(&self, path: &Path, locked: bool) -> Result<PackageHash> {
-		// Check in the path.
-		let package_source_hash = self
-			.checkin(path)
-			.await
-			.context("Failed to check in the package.")?;
+	/// Check in the package at the specified path.
+	#[allow(clippy::unused_async)]
+	pub async fn check_in_package(self: &Arc<Self>, path: &os::Path) -> Result<Output> {
+		// Create a queue of modules to visit.
+		let root_module_identifier = module::Identifier::for_root_module_in_package_at_path(path);
+		let mut module_identifier_queue = vec![root_module_identifier];
 
-		// Generate the lockfile if necessary.
-		if !locked {
-			self.generate_lockfile(path, locked)
-				.await
-				.with_context(|| {
-					format!(
-						r#"Failed to generate the lockfile for the package at path "{}"."#,
-						path.display(),
-					)
-				})?;
+		// Create the package.
+		let mut directory = Directory::new();
+
+		// Track the dependency package specifiers.
+		let mut dependency_specifiers = Vec::new();
+
+		// Visit each module.
+		while let Some(module_identifier) = module_identifier_queue.pop() {
+			let (module::Identifier::Normal(module::identifier::Normal {
+				source: module::identifier::Source::Path(package_path),
+				path: module_path,
+			})
+			| module::Identifier::Artifact(module::identifier::Artifact {
+				source: module::identifier::Source::Path(package_path),
+				path: module_path,
+			})) = &module_identifier else {
+				continue;
+			};
+
+			// Check in the artifact at the imported path.
+			let imported_artifact_hash = self
+				.check_in(&package_path.join(module_path.to_string()))
+				.await?;
+
+			// Add the imported artifact to the directory.
+			self.directory_add(&mut directory, module_path, imported_artifact_hash)
+				.await?;
+
+			// If the module is a normal module, then explore its imports.
+			if let module::Identifier::Normal(module::identifier::Normal { path, .. }) =
+				&module_identifier
+			{
+				// Load the module.
+				let module_text = self.load_module(&module_identifier).await?;
+
+				// Get the module's imports.
+				let module_specifiers = self.imports(&module_text).await?;
+
+				// Handle each module specifier.
+				for module_specifier in module_specifiers {
+					// Resolve.
+
+					match module_specifier {
+						// If the module is specified with a path, then add the resolved module to the queue.
+						module::Specifier::Path(specifier_path) => {
+							let resolved_module_identifier =
+								Self::resolve_module_with_path_specifier(
+									&specifier_path,
+									&module_identifier,
+								)
+								.await?;
+							module_identifier_queue.push(resolved_module_identifier);
+						},
+
+						// If the module is specified with a package, then add the specifier to the list of dependencies.
+						module::Specifier::Package(package_specifier) => {
+							// If the specifier is a path specifier, then resolve it relative to the package root.
+							let package_specifier = match package_specifier {
+								package::Specifier::Path(specifier_path) => {
+									let specifier_path =
+										specifier_path.display().to_string().into();
+									let resolved_path = path.join(&specifier_path).normalize();
+									package::Specifier::Path(resolved_path.to_string().into())
+								},
+
+								package::Specifier::Registry(_) => package_specifier,
+							};
+
+							dependency_specifiers.push(package_specifier);
+						},
+					};
+				}
+			}
 		}
 
-		// Read the lockfile.
-		let lockfile_path = path.join("tangram.lock");
-		let lockfile = tokio::fs::read(&lockfile_path)
-			.await
-			.context("Failed to read the lockfile.")?;
-		let lockfile: Lockfile =
-			serde_json::from_slice(&lockfile).context("Failed to deserialize the lockfile.")?;
+		// Add the artifact.
+		let package_hash = self.add_artifact(&Artifact::Directory(directory)).await?;
 
-		// Create the package.
-		let dependencies = lockfile
-			.as_v1()
-			.context("Expected V1 Lockfile.")?
-			.dependencies
-			.iter()
-			.map(|(name, entry)| (name.clone(), entry.hash))
-			.collect();
-		let package = Package {
-			source: package_source_hash,
-			dependencies,
+		// Create the output.
+		let output = Output {
+			package_hash,
+			dependency_specifiers,
 		};
 
-		// Add the package to the database.
-		let package_hash = self.add_package(&package)?;
-
-		Ok(package_hash)
-	}
-
-	/// Check in a package with the specified source artifact hash.
-	pub async fn checkin_package_from_artifact_hash(
-		&self,
-		package_source_hash: ArtifactHash,
-	) -> Result<PackageHash> {
-		// Get the path.
-		let mut path = self.checkouts_path();
-		path.push(package_source_hash.to_string());
-
-		// Get the package artifact.
-		let package_artifact = self.get_artifact_local(package_source_hash)?;
-
-		// Get the package directory.
-		let artifact_directory = package_artifact.as_directory().unwrap();
-
-		// Get the lockfile artifact.
-		let lockfile_artifact_hash = artifact_directory.entries.get("tangram.lock").unwrap();
-		let lockfile_artifact = self.get_artifact_local(*lockfile_artifact_hash)?;
-
-		// Get the lockfile blob.
-		let mut lockfile_blob = self
-			.get_blob(lockfile_artifact.as_file().unwrap().blob)
-			.await?;
-
-		// Read the lockfile
-		let mut lockfile = Vec::new();
-		lockfile_blob
-			.read_to_end(&mut lockfile)
-			.await
-			.context("Failed to read the lockfile.")?;
-		let lockfile: Lockfile =
-			serde_json::from_slice(&lockfile).context("Failed to deserialize the lockfile.")?;
-
-		// Create the package.
-		let dependencies = lockfile
-			.as_v1()
-			.context("Expected V1 Lockfile.")?
-			.dependencies
-			.iter()
-			.map(|(name, entry)| (name.clone(), entry.hash))
-			.collect();
-
-		let package = Package {
-			source: package_source_hash,
-			dependencies,
-		};
-
-		// Add the package to the database.
-		let package_hash = self.add_package(&package)?;
-
-		Ok(package_hash)
+		Ok(output)
 	}
 }

@@ -1,5 +1,4 @@
-use anyhow::{anyhow, bail, Result};
-use num_traits::{FromPrimitive, ToPrimitive};
+use anyhow::{bail, Result};
 
 #[derive(
 	Clone,
@@ -9,11 +8,14 @@ use num_traits::{FromPrimitive, ToPrimitive};
 	Ord,
 	PartialEq,
 	PartialOrd,
+	buffalo::Deserialize,
+	buffalo::Serialize,
 	num_derive::FromPrimitive,
 	num_derive::ToPrimitive,
 	serde::Deserialize,
 	serde::Serialize,
 )]
+#[buffalo(into = "String", try_from = "String")]
 pub enum System {
 	#[serde(rename = "amd64_linux", alias = "x86_64_linux")]
 	Amd64Linux = 0,
@@ -45,28 +47,6 @@ impl System {
 	}
 }
 
-impl buffalo::Serialize for System {
-	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
-	where
-		W: std::io::Write,
-	{
-		let value = self.to_u8().unwrap();
-		serializer.serialize_uvarint(value.into())
-	}
-}
-
-impl buffalo::Deserialize for System {
-	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
-	where
-		R: std::io::Read,
-	{
-		let value = deserializer.deserialize_uvarint()?;
-		let value = System::from_u64(value)
-			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Invalid system."))?;
-		Ok(value)
-	}
-}
-
 impl std::fmt::Display for System {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let system = match self {
@@ -75,20 +55,36 @@ impl std::fmt::Display for System {
 			System::Amd64Macos => "amd64_macos",
 			System::Arm64Macos => "arm64_macos",
 		};
-		write!(f, "{system}")
+		write!(f, "{system}")?;
+		Ok(())
 	}
 }
 
 impl std::str::FromStr for System {
 	type Err = anyhow::Error;
+
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s {
-			"amd64_linux" => Ok(System::Amd64Linux),
-			"arm64_linux" => Ok(System::Arm64Linux),
-			"amd64_macos" => Ok(System::Amd64Macos),
-			"arm64_macos" => Ok(System::Arm64Macos),
-			"host" => Ok(System::host()?),
-			_ => Err(anyhow!("Unrecognized system {s}")),
-		}
+		let system = match s {
+			"amd64_linux" => System::Amd64Linux,
+			"arm64_linux" => System::Arm64Linux,
+			"amd64_macos" => System::Amd64Macos,
+			"arm64_macos" => System::Arm64Macos,
+			_ => bail!(r#"Invalid system "{s}"."#),
+		};
+		Ok(system)
+	}
+}
+
+impl TryFrom<String> for System {
+	type Error = anyhow::Error;
+
+	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
+		value.parse()
+	}
+}
+
+impl From<System> for String {
+	fn from(value: System) -> Self {
+		value.to_string()
 	}
 }

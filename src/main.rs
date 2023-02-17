@@ -1,11 +1,10 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
-#![allow(clippy::module_name_repetitions)]
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
-use tangram::{Args, Cli};
+use std::sync::Arc;
 use tracing_subscriber::prelude::*;
 
 #[tokio::main]
@@ -19,13 +18,22 @@ async fn main() -> Result<()> {
 	setup_tracing();
 
 	// Parse the arguments.
-	let args = Args::parse();
+	let args = tangram::Args::parse();
+
+	// Get the path.
+	let path = if let Some(path) = args.path.clone() {
+		path
+	} else {
+		tangram::os::dirs::home_directory_path()
+			.context("Failed to find the user home directory.")?
+			.join(".tangram")
+	};
 
 	// Create the CLI.
-	let cli = Cli::new(args.path.clone()).await?;
+	let cli = Arc::new(tangram::Cli::new(path).await?);
 
 	// Run the command.
-	cli.run_command(args).await?;
+	cli.command(args).await?;
 
 	Ok(())
 }
@@ -42,7 +50,7 @@ fn setup_tracing() {
 		None
 	};
 
-	// If tracing is enabled, create and initialize the subscriber.
+	// If tracing is enabled, then create and initialize the subscriber.
 	if let Some(env_layer) = env_layer {
 		let format_layer = tracing_subscriber::fmt::layer()
 			.pretty()

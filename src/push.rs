@@ -1,8 +1,4 @@
-use crate::{
-	artifact::{AddArtifactOutcome, ArtifactHash},
-	client::Client,
-	Cli,
-};
+use crate::{artifact, client::Client, Cli};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
@@ -11,7 +7,7 @@ impl Cli {
 	/// Push an artifact to a remote server.
 	#[async_recursion]
 	#[must_use]
-	pub async fn push(&self, client: &Client, artifact_hash: ArtifactHash) -> Result<()> {
+	pub async fn push(&self, client: &Client, artifact_hash: artifact::Hash) -> Result<()> {
 		// Get the artifact.
 		let artifact = self.get_artifact_local(artifact_hash)?;
 
@@ -20,11 +16,11 @@ impl Cli {
 
 		// Handle the outcome.
 		match outcome {
-			// If the artifact was added, we are done.
-			AddArtifactOutcome::Added { .. } => return Ok(()),
+			// If the artifact was added, then we are done.
+			artifact::add::Outcome::Added { .. } => return Ok(()),
 
-			// If this artifact is a directory and there were missing entries, recurse to push them.
-			AddArtifactOutcome::DirectoryMissingEntries { entries } => {
+			// If this artifact is a directory and there were missing entries, then recurse to push them.
+			artifact::add::Outcome::DirectoryMissingEntries { entries } => {
 				try_join_all(entries.into_iter().map(|(_, hash)| async move {
 					self.push(client, hash).await?;
 					Ok::<_, anyhow::Error>(())
@@ -32,9 +28,9 @@ impl Cli {
 				.await?;
 			},
 
-			// If this artifact is a file and the blob is missing, push it.
-			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
-				let _permit = self.inner.file_semaphore.acquire().await?;
+			// If this artifact is a file and the blob is missing, then push it.
+			artifact::add::Outcome::FileMissingBlob { blob_hash } => {
+				let _permit = self.file_semaphore.acquire().await?;
 
 				// Get the blob.
 				let blob = self
@@ -49,15 +45,15 @@ impl Cli {
 					.context("Failed to add the blob.")?;
 			},
 
-			// If this artifact is a dependency that is missing, push it.
-			AddArtifactOutcome::DependencyMissing { artifact_hash } => {
+			// If this artifact is a reference whose artifact is missing, then push it.
+			artifact::add::Outcome::ReferenceMissingArtifact { artifact_hash } => {
 				self.push(client, artifact_hash).await?;
 			},
 		};
 
 		// Attempt to push the artifact again. At this point, there should not be any missing entries or a missing blob.
 		let outcome = client.try_add_artifact(&artifact).await?;
-		if !matches!(outcome, AddArtifactOutcome::Added { .. }) {
+		if !matches!(outcome, artifact::add::Outcome::Added { .. }) {
 			bail!("An unexpected error occurred.");
 		}
 

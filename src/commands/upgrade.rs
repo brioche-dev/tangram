@@ -1,20 +1,17 @@
 use crate::Cli;
-use anyhow::{Context, Result};
-use clap::Parser;
+use anyhow::Result;
+use std::os::unix::process::CommandExt;
 
-#[derive(Parser)]
-#[command(about = "Upgrade tangram to the latest version.")]
+/// Upgrade tangram to the latest version.
+#[derive(clap::Args)]
 pub struct Args {}
 
 impl Cli {
+	#[allow(clippy::unused_async)]
 	pub async fn command_upgrade(&self, _args: Args) -> Result<()> {
-		tokio::process::Command::new("sh")
+		Err(std::process::Command::new("sh")
 			.args(["-c", "curl https://tangram.dev/install.sh | sh"])
-			.spawn()
-			.context("Failed to spawn the install script.")?
-			.wait()
-			.await
-			.context("Failed to run the install script.")?;
-		Ok(())
+			.exec()
+			.into())
 	}
 }

@@ -1,20 +1,13 @@
-import "./syscall";
-import {
-	Artifact,
-	ArtifactHash,
-	addArtifact,
-	getArtifact,
-	isArtifact,
-} from "./artifact";
-import { Dependency } from "./dependency";
+import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact";
 import { Directory } from "./directory";
 import { File } from "./file";
 import { Placeholder } from "./placeholder";
+import { Reference } from "./reference";
 import { Symlink } from "./symlink";
 import { Template } from "./template";
 
 export type Value =
-	| (undefined | null)
+	| nullish
 	| boolean
 	| number
 	| string
@@ -23,6 +16,12 @@ export type Value =
 	| Template
 	| Array<Value>
 	| { [key: string]: Value };
+
+export type nullish = undefined | null;
+
+export let isNullish = (value: unknown): value is nullish => {
+	return value === undefined || value === null;
+};
 
 export let isValue = (value: unknown): value is Value => {
 	return (
@@ -34,9 +33,10 @@ export let isValue = (value: unknown): value is Value => {
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||
-		value instanceof Dependency ||
+		value instanceof Reference ||
 		value instanceof Template ||
 		Array.isArray(value) ||
+		value instanceof Map ||
 		typeof value === "object"
 	);
 };
@@ -46,37 +46,37 @@ export let serializeValue = async <T extends Value>(
 ): Promise<syscall.Value> => {
 	if (value === undefined || value === null) {
 		return {
-			type: "null",
+			kind: "null",
 			value,
 		};
 	} else if (typeof value === "boolean") {
 		return {
-			type: "bool",
+			kind: "bool",
 			value,
 		};
 	} else if (typeof value === "number") {
 		return {
-			type: "number",
+			kind: "number",
 			value,
 		};
 	} else if (typeof value === "string") {
 		return {
-			type: "string",
+			kind: "string",
 			value,
 		};
 	} else if (isArtifact(value)) {
 		return {
-			type: "artifact",
-			value: (await addArtifact(value)).toString(),
+			kind: "artifact",
+			value: await addArtifact(value),
 		};
 	} else if (value instanceof Placeholder) {
 		return {
-			type: "placeholder",
+			kind: "placeholder",
 			value: await value.serialize(),
 		};
 	} else if (value instanceof Template) {
 		return {
-			type: "template",
+			kind: "template",
 			value: await value.serialize(),
 		};
 	} else if (Array.isArray(value)) {
@@ -84,7 +84,7 @@ export let serializeValue = async <T extends Value>(
 			value.map((value) => serializeValue(value)),
 		);
 		return {
-			type: "array",
+			kind: "array",
 			value: serializedValue,
 		};
 	} else if (typeof value === "object") {
@@ -97,7 +97,7 @@ export let serializeValue = async <T extends Value>(
 			),
 		);
 		return {
-			type: "map",
+			kind: "map",
 			value: serializedValue,
 		};
 	} else {
@@ -106,7 +106,7 @@ export let serializeValue = async <T extends Value>(
 };
 
 export let deserializeValue = async (value: syscall.Value): Promise<Value> => {
-	switch (value.type) {
+	switch (value.kind) {
 		case "null": {
 			return value.value;
 		}
@@ -120,7 +120,7 @@ export let deserializeValue = async (value: syscall.Value): Promise<Value> => {
 			return value.value;
 		}
 		case "artifact": {
-			return await getArtifact(new ArtifactHash(value.value));
+			return await getArtifact(value.value);
 		}
 		case "placeholder": {
 			return await Placeholder.deserialize(value.value);

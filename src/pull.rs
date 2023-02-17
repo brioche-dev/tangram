@@ -1,4 +1,4 @@
-use crate::{artifact::AddArtifactOutcome, artifact::ArtifactHash, client::Client, Cli};
+use crate::{artifact, client::Client, Cli};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
@@ -7,7 +7,7 @@ impl Cli {
 	/// Pull an artifact from a remote server.
 	#[async_recursion]
 	#[must_use]
-	pub async fn pull(&self, client: &Client, artifact_hash: ArtifactHash) -> Result<()> {
+	pub async fn pull(&self, client: &Client, artifact_hash: artifact::Hash) -> Result<()> {
 		// Get the artifact.
 		let artifact = client
 			.try_get_artifact(artifact_hash)
@@ -19,9 +19,9 @@ impl Cli {
 
 		// Handle the outcome.
 		match outcome {
-			AddArtifactOutcome::Added { .. } => return Ok(()),
+			artifact::add::Outcome::Added { .. } => return Ok(()),
 
-			AddArtifactOutcome::DirectoryMissingEntries { entries } => {
+			artifact::add::Outcome::DirectoryMissingEntries { entries } => {
 				// Pull the missing entries.
 				try_join_all(entries.into_iter().map(|(_, artifact_hash)| async move {
 					self.pull(client, artifact_hash).await?;
@@ -30,21 +30,21 @@ impl Cli {
 				.await?;
 			},
 
-			AddArtifactOutcome::FileMissingBlob { blob_hash } => {
+			artifact::add::Outcome::FileMissingBlob { blob_hash } => {
 				// Pull the blob.
 				let blob = client.get_blob(blob_hash).await?;
 				self.add_blob(blob).await?;
 			},
 
-			AddArtifactOutcome::DependencyMissing { artifact_hash } => {
-				// Pull the missing dependency.
+			artifact::add::Outcome::ReferenceMissingArtifact { artifact_hash } => {
+				// Pull the missing referenced artifact.
 				self.pull(client, artifact_hash).await?;
 			},
 		};
 
 		// Attempt to add the artifact again. At this point, there should not be any missing entries or a missing blob.
 		let outcome = self.try_add_artifact(&artifact).await?;
-		if !matches!(outcome, AddArtifactOutcome::Added { .. }) {
+		if !matches!(outcome, artifact::add::Outcome::Added { .. }) {
 			bail!("An unexpected error occurred.");
 		}
 

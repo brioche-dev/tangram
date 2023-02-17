@@ -13,7 +13,8 @@ pub struct ParseIdError;
 
 impl std::fmt::Display for ParseIdError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "Failed to parse ID.")
+		write!(f, "Failed to parse ID.")?;
+		Ok(())
 	}
 }
 
@@ -33,7 +34,8 @@ impl std::str::FromStr for Id {
 
 impl std::fmt::Display for Id {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{:032x?}", self.0)
+		write!(f, "{:032x?}", self.0)?;
+		Ok(())
 	}
 }
 

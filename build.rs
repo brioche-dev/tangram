@@ -1,25 +1,30 @@
-use std::path::PathBuf;
-
 static V8_INIT: std::sync::Once = std::sync::Once::new();
 
 fn main() {
-	// Initialize v8.
+	// Get the out dir path.
+	let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+
+	// Initialize V8.
 	V8_INIT.call_once(|| {
 		let platform = v8::new_default_platform(0, false).make_shared();
 		v8::V8::initialize_platform(platform);
 		v8::V8::initialize();
 	});
 
-	// Create the compiler snapshot.
-	println!("cargo-rerun-if-changed=src/compiler/mod.js");
-	snapshot(include_str!("src/compiler/mod.js"), "compiler.heapsnapshot");
+	// // Create the language service snapshot.
+	// println!("cargo-rerun-if-changed=assets/language_service.js");
+	// let path = out_dir_path.join("language_service.heapsnapshot");
+	// let snapshot = create_snapshot(include_str!("assets/language_service.js"));
+	// std::fs::write(path, snapshot).unwrap();
 
-	// Create the runtime snapshot.
-	println!("cargo-rerun-if-changed=src/global/mod.js");
-	snapshot(include_str!("src/global/mod.js"), "runtime.heapsnapshot");
+	// Create the runtime global snapshot.
+	println!("cargo-rerun-if-changed=assets/global.js");
+	let path = out_dir_path.join("global.heapsnapshot");
+	let snapshot = create_snapshot(include_str!("assets/global.js"));
+	std::fs::write(path, snapshot).unwrap();
 }
 
-fn snapshot(code: &str, name: &str) {
+fn create_snapshot(code: &str) -> v8::StartupData {
 	// Create the isolate.
 	let mut isolate = v8::Isolate::snapshot_creator(None);
 
@@ -38,11 +43,6 @@ fn snapshot(code: &str, name: &str) {
 	drop(context_scope);
 	drop(handle_scope);
 
-	// Take a snapshot.
-	let snapshot = isolate.create_blob(v8::FunctionCodeHandling::Keep).unwrap();
-
-	// Write the snapshot.
-	let out_dir_path = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-	let snapshot_path = out_dir_path.join(name);
-	std::fs::write(snapshot_path, snapshot).unwrap();
+	// Take the snapshot.
+	isolate.create_blob(v8::FunctionCodeHandling::Keep).unwrap()
 }

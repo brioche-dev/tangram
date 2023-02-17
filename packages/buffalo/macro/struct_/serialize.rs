@@ -1,0 +1,68 @@
+use super::Struct;
+use num::ToPrimitive;
+use quote::quote;
+
+impl<'a> Struct<'a> {
+	pub fn serialize(self) -> proc_macro2::TokenStream {
+		// Get the ident.
+		let ident = self.ident;
+
+		// Generate the body.
+		let body = if let Some(into) = self.into {
+			quote! {
+				// Convert the value.
+				let s: #into = self.clone().into();
+
+				// Serialize the value.
+				s.serialize(serializer)?;
+
+				Ok(())
+			}
+		} else {
+			// Get the len.
+			let len = self.fields.len().to_u8().unwrap();
+
+			// Get the field ids.
+			let field_ids = self.fields.iter().map(|field| field.id).collect::<Vec<_>>();
+
+			// Get the field idents.
+			let field_idents = self
+				.fields
+				.iter()
+				.map(|field| &field.ident)
+				.collect::<Vec<_>>();
+
+			quote! {
+				// Write the kind.
+				serializer.write_kind(buffalo::Kind::Struct)?;
+
+				// Write the number of fields.
+				serializer.write_uvarint(#len as u64)?;
+
+				// Write the fields.
+				#(
+					// Write the field id.
+					serializer.write_id(#field_ids)?;
+					// Write the field value.
+					serializer.serialize(&self.#field_idents)?;
+				)*;
+
+				Ok(())
+			}
+		};
+
+		// Generate the code.
+		let code = quote! {
+			impl buffalo::Serialize for #ident {
+				fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
+				where
+					W: std::io::Write,
+				{
+					#body
+				}
+			}
+		};
+
+		code
+	}
+}

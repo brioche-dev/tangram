@@ -1,6 +1,5 @@
-use crate::{util::path_exists, Cli};
+use crate::{os, Cli};
 use anyhow::Result;
-use std::path::Path;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
@@ -13,8 +12,8 @@ impl Cli {
 		Self::read_credentials_from_path(&self.credentials_path()).await
 	}
 
-	pub async fn read_credentials_from_path(path: &Path) -> Result<Option<Credentials>> {
-		if !path_exists(path).await? {
+	pub async fn read_credentials_from_path(path: &os::Path) -> Result<Option<Credentials>> {
+		if !os::fs::exists(path).await? {
 			return Ok(None);
 		}
 		let credentials = tokio::fs::read(&path).await?;
@@ -26,7 +25,10 @@ impl Cli {
 		Self::write_credentials_to_path(&self.credentials_path(), credentials).await
 	}
 
-	pub async fn write_credentials_to_path(path: &Path, credentials: &Credentials) -> Result<()> {
+	pub async fn write_credentials_to_path(
+		path: &os::Path,
+		credentials: &Credentials,
+	) -> Result<()> {
 		let credentials = serde_json::to_string(credentials)?;
 		tokio::fs::write(path, &credentials).await?;
 		Ok(())
