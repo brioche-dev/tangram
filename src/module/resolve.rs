@@ -1,4 +1,5 @@
 use super::{
+	dependency,
 	identifier::{self, Lib, Source},
 	Identifier, Specifier,
 };
@@ -16,8 +17,8 @@ impl Cli {
 			Specifier::Path(path) => {
 				Self::resolve_module_with_path_specifier(path, referrer).await?
 			},
-			Specifier::Package(package_specifier) => {
-				self.resolve_module_with_package_specifier(package_specifier, referrer)
+			Specifier::Dependency(dependency_specifier) => {
+				self.resolve_module_with_dependency_specifier(dependency_specifier, referrer)
 					.await?
 			},
 		};
@@ -33,7 +34,9 @@ impl Cli {
 	) -> Result<Identifier> {
 		match referrer {
 			Identifier::Normal(referrer) => {
-				let path = referrer.path.parent().join(specifier).normalize();
+				let mut path = referrer.path.clone();
+				path.parent();
+				path.join(specifier.clone());
 
 				// If the path ends in `.tg`, then it specifies a normal module. Otherwise, it specifies an artifact module.
 				if path.extension() == Some("tg") {
@@ -54,87 +57,80 @@ impl Cli {
 			},
 
 			Identifier::Lib(referrer) => {
-				let path = referrer.path.parent().join(specifier).normalize();
+				let mut path = referrer.path.clone();
+				path.parent();
+				path.join(specifier.clone());
 				Ok(Identifier::Lib(Lib { path }))
 			},
 		}
 	}
 
-	async fn resolve_module_with_package_specifier(
+	async fn resolve_module_with_dependency_specifier(
 		&self,
-		specifier: &package::Specifier,
+		specifier: &dependency::Specifier,
 		referrer: &Identifier,
 	) -> Result<Identifier> {
+		// Convert the module dependency specifier to a package dependency specifier.
+		let specifier = specifier.to_package_dependency_specifier(referrer)?;
+
 		match referrer {
 			Identifier::Normal(identifier::Normal {
 				source: Source::Path(package_path),
-				path,
+				..
 			}) => {
-				self.resolve_module_with_package_path_specifier(specifier, package_path, path)
-					.await
-			},
-
-			Identifier::Normal(identifier::Normal {
-				source: Source::Instance(package_instance_hash),
-				path,
-			}) => {
-				self.resolve_module_with_package_instance_specifier(
-					specifier,
-					*package_instance_hash,
-					path,
+				self.resolve_module_with_dependency_specifier_from_path_referrer(
+					&specifier,
+					package_path,
 				)
 				.await
 			},
 
-			_ => bail!(r#"Cannot resolve package from referrer "{referrer}"."#),
+			Identifier::Normal(identifier::Normal {
+				source: Source::Instance(package_instance_hash),
+				..
+			}) => {
+				self.resolve_module_with_dependency_specifier_from_instance_referrer(
+					&specifier,
+					*package_instance_hash,
+				)
+				.await
+			},
+
+			_ => bail!(r#"Cannot resolve a package specifier from referrer "{referrer}"."#),
 		}
 	}
 
 	#[allow(clippy::unused_async)]
-	async fn resolve_module_with_package_path_specifier(
+	async fn resolve_module_with_dependency_specifier_from_path_referrer(
 		&self,
-		specifier: &package::Specifier,
+		specifier: &package::dependency::Specifier,
 		referrer_package_path: &os::Path,
-		referrer_path: &Path,
 	) -> Result<Identifier> {
 		match specifier {
-			package::Specifier::Path(path) => {
-				let package_path = referrer_package_path
-					.join(referrer_path.to_string())
-					.join("..")
-					.join(path);
+			package::dependency::Specifier::Path(specifier_path) => {
+				let specifier_path: os::PathBuf = specifier_path.clone().into();
+				let package_path = referrer_package_path.join(specifier_path);
 				let identifier = Identifier::for_root_module_in_package_at_path(&package_path);
 				Ok(identifier)
 			},
 
-			package::Specifier::Registry(_) => todo!(),
+			package::dependency::Specifier::Registry(_) => todo!(),
 		}
 	}
 
 	#[allow(clippy::unused_async)]
-	async fn resolve_module_with_package_instance_specifier(
+	async fn resolve_module_with_dependency_specifier_from_instance_referrer(
 		&self,
-		specifier: &package::Specifier,
+		specifier: &package::dependency::Specifier,
 		referrer_package_instance_hash: package::instance::Hash,
-		referrer_path: &Path,
 	) -> Result<Identifier> {
-		// Get the specifier name.
-		let specifier_name = match specifier {
-			package::Specifier::Path(specifier_path) => {
-				let specifier_path = specifier_path.display().to_string().into();
-				referrer_path.join(&specifier_path).normalize().to_string()
-			},
-
-			package::Specifier::Registry(specifier) => specifier.to_string(),
-		};
-
-		// Get the referrer.
+		// Get the referrer package.
 		let referrer = self.get_package_instance_local(referrer_package_instance_hash)?;
 
 		// Get the specifier's package instance hash from the referrer's dependencies.
 		let specifier_package_instance_hash = referrer
 			.dependencies
-			.get(&specifier_name)
+			.get(specifier)
 			.context("Expected the referrer's dependencies to contain the specifier.")?;
 
 		// Create the module identifier.

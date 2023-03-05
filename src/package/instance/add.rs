@@ -1,5 +1,5 @@
 use super::{Hash, Instance};
-use crate::{artifact, Cli};
+use crate::{artifact, package::dependency, Cli};
 use anyhow::{bail, Result};
 use lmdb::Transaction;
 
@@ -14,7 +14,9 @@ pub enum Outcome {
 	MissingPackage { package_hash: artifact::Hash },
 
 	/// Some dependencies were missing.
-	MissingDependencies { dependencies: Vec<(String, Hash)> },
+	MissingDependencies {
+		dependencies: Vec<(dependency::Specifier, Hash)>,
+	},
 }
 
 impl Cli {

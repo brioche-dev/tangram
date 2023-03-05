@@ -11,9 +11,11 @@ impl Cli {
 	) -> Result<Identifier> {
 		match specifier {
 			Specifier::Path(specifier_path) => match referrer {
-				Some(Identifier::Path(referrer_path)) => Ok(Identifier::Path(
-					referrer_path.join("..").join(specifier_path),
-				)),
+				Some(Identifier::Path(referrer_path)) => {
+					let path = referrer_path.join(specifier_path);
+					let path = tokio::fs::canonicalize(&path).await?;
+					Ok(Identifier::Path(path))
+				},
 
 				Some(Identifier::Hash(_)) => {
 					bail!("Cannot resolve a path specifier relative to a hash referrer.")

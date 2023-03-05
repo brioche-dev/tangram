@@ -1,18 +1,33 @@
+use super::dependency;
 use crate::os;
 use anyhow::Result;
 
-/// A reference to a package, either checked out to a path or in the registry.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
+/// A reference to a package, either at a path or from the registry.
+#[derive(
+	Clone,
+	Debug,
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	buffalo::Serialize,
+	buffalo::Deserialize,
+	serde::Serialize,
+	serde::Deserialize,
+)]
+#[serde(into = "String", try_from = "String")]
+#[buffalo(into = "String", try_from = "String")]
 pub enum Specifier {
-	/// A reference to a package checked out to a path.
+	/// A reference to a package at a path.
 	Path(os::PathBuf),
 
-	/// A reference to a package in the registry.
+	/// A reference to a package from the registry.
 	Registry(Registry),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Registry {
 	/// The name of the package.
 	name: String,
@@ -26,17 +41,13 @@ impl std::str::FromStr for Specifier {
 
 	fn from_str(value: &str) -> Result<Specifier> {
 		if value.starts_with('/') || value.starts_with('.') {
-			// If the string starts with `/` or `.`, then it is a path specifier.
-
-			// Parse the string as a path specifier.
-			let path = os::PathBuf::from_str(value)?;
-			Ok(Specifier::Path(path))
+			// If the string starts with `/` or `.`, then parse the string as a path.
+			let specifier = value.parse()?;
+			Ok(Specifier::Path(specifier))
 		} else {
-			// Parse the string as a registry specifier.
-			let mut components = value.split('@');
-			let name = components.next().unwrap().to_owned();
-			let version = components.next().map(ToOwned::to_owned);
-			Ok(Specifier::Registry(Registry { name, version }))
+			// Otherwise, parse the string as a registry specifier.
+			let specifier = value.parse()?;
+			Ok(Specifier::Registry(specifier))
 		}
 	}
 }
@@ -45,14 +56,27 @@ impl std::fmt::Display for Specifier {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
 			Specifier::Path(path) => {
-				write!(f, "{}", path.display())?;
+				let path = path.display();
+				write!(f, "{path}")?;
 				Ok(())
 			},
+
 			Specifier::Registry(specifier) => {
 				write!(f, "{specifier}")?;
 				Ok(())
 			},
 		}
+	}
+}
+
+impl std::str::FromStr for Registry {
+	type Err = anyhow::Error;
+
+	fn from_str(value: &str) -> Result<Registry> {
+		let mut components = value.split('@');
+		let name = components.next().unwrap().to_owned();
+		let version = components.next().map(ToOwned::to_owned);
+		Ok(Registry { name, version })
 	}
 }
 
@@ -64,6 +88,29 @@ impl std::fmt::Display for Registry {
 			write!(f, "@{version}")?;
 		}
 		Ok(())
+	}
+}
+
+impl TryFrom<String> for Specifier {
+	type Error = anyhow::Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
+	}
+}
+
+impl From<Specifier> for String {
+	fn from(value: Specifier) -> Self {
+		value.to_string()
+	}
+}
+
+impl From<dependency::Specifier> for Specifier {
+	fn from(value: dependency::Specifier) -> Self {
+		match value {
+			dependency::Specifier::Path(path) => Specifier::Path(path.into()),
+			dependency::Specifier::Registry(specifier) => Specifier::Registry(specifier),
+		}
 	}
 }
 

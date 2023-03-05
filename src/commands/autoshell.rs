@@ -98,7 +98,8 @@ impl Cli {
 		}
 
 		for path in autoshells {
-			println!("{}", path.display());
+			let path = path.display();
+			println!("{path}");
 		}
 
 		Ok(())

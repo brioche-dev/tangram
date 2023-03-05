@@ -32,7 +32,8 @@ impl Cli {
 			},
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
 				tokio::fs::create_dir_all(&path).await.with_context(|| {
-					format!(r#"Failed to create the directory at "{}"."#, path.display())
+					let path = path.display();
+					format!(r#"Failed to create the directory at "{path}"."#)
 				})?;
 			},
 			Err(error) => return Err(error.into()),

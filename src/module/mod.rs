@@ -2,6 +2,7 @@ pub use self::{
 	document::Document, identifier::Identifier, specifier::Specifier, tracker::Tracker,
 };
 
+pub mod dependency;
 pub mod document;
 pub mod identifier;
 pub mod load;

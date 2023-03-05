@@ -8,12 +8,12 @@ use anyhow::{bail, Result};
 	Ord,
 	PartialEq,
 	PartialOrd,
-	buffalo::Deserialize,
-	buffalo::Serialize,
 	num_derive::FromPrimitive,
 	num_derive::ToPrimitive,
-	serde::Deserialize,
 	serde::Serialize,
+	serde::Deserialize,
+	buffalo::Serialize,
+	buffalo::Deserialize,
 )]
 #[buffalo(into = "String", try_from = "String")]
 pub enum System {

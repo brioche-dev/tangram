@@ -1,4 +1,5 @@
 pub use self::hash::Hash;
+use super::dependency;
 use crate::artifact;
 use std::collections::BTreeMap;
 
@@ -22,5 +23,5 @@ pub struct Instance {
 	pub package_hash: artifact::Hash,
 
 	#[buffalo(id = 1)]
-	pub dependencies: BTreeMap<String, Hash>,
+	pub dependencies: BTreeMap<dependency::Specifier, Hash>,
 }

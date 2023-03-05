@@ -10,10 +10,10 @@ pub mod writer;
 	Debug,
 	PartialEq,
 	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
 	serde::Serialize,
+	serde::Deserialize,
+	buffalo::Serialize,
+	buffalo::Deserialize,
 )]
 #[serde(into = "String", try_from = "String")]
 #[buffalo(into = "String", try_from = "String")]

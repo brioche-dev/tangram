@@ -4,9 +4,20 @@ use url::Url;
 
 /// A unique identifier for a module.
 #[derive(
-	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
+	Clone,
+	PartialOrd,
+	Ord,
+	PartialEq,
+	Eq,
+	Hash,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	buffalo::Serialize,
+	buffalo::Deserialize,
 )]
 #[serde(into = "Url", try_from = "Url")]
+#[buffalo(into = "Url", try_from = "Url")]
 pub enum Identifier {
 	// A normal module.
 	Normal(Normal),
@@ -73,7 +84,7 @@ impl Identifier {
 	) -> Identifier {
 		Identifier::Normal(Normal {
 			source: Source::Instance(package_instance_hash),
-			path: ROOT_MODULE_FILE_NAME.into(),
+			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		})
 	}
 
@@ -81,13 +92,13 @@ impl Identifier {
 	pub fn for_root_module_in_package_at_path(package_path: &os::Path) -> Identifier {
 		Identifier::Normal(Normal {
 			source: Source::Path(package_path.to_owned()),
-			path: ROOT_MODULE_FILE_NAME.into(),
+			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		})
 	}
 }
 
 impl Identifier {
-	pub async fn for_module_at_path(path: &os::Path) -> Result<Identifier> {
+	pub async fn for_path(path: &os::Path) -> Result<Identifier> {
 		// Find the package path by searching the path's ancestors for a root module.
 		let mut found = false;
 		let mut package_path = path.to_owned();
@@ -98,7 +109,8 @@ impl Identifier {
 			}
 		}
 		if !found {
-			bail!("Could not find package for path {}", path.display());
+			let path = path.display();
+			bail!(r#"Could not find the package for path "{path}"."#,);
 		}
 
 		// Get the module path by stripping the package path.
@@ -110,7 +122,8 @@ impl Identifier {
 			.into_string()
 			.ok()
 			.context("The module path was not valid UTF-8.")?
-			.into();
+			.parse()
+			.context("The module path was not a valid path.")?;
 
 		// Create the module identifier.
 		let module_identifier = Identifier::Normal(Normal {
@@ -179,7 +192,8 @@ impl TryFrom<Url> for Identifier {
 					.path()
 					.strip_prefix('/')
 					.context(r#"The path must begin with a "/"."#)?
-					.into();
+					.parse()
+					.context("Invalid path.")?;
 
 				Identifier::Lib(Lib { path })
 			},
@@ -225,32 +239,16 @@ impl std::str::FromStr for Identifier {
 	}
 }
 
-// impl Identifier {
-// 	/// Parse an identifier from a TypeScript file name.
-// 	pub fn from_typescript_file_name(string: &str) -> Result<Identifier> {
-// 		if let Some(path) = string.strip_prefix("/tangram/lib/") {
-// 			Ok(Identifier::Lib(Lib { path: path.into() }))
-// 		} else if let Some(string) = string.strip_prefix("/tangram/") {
-// 			let string = string
-// 				.strip_suffix(".ts")
-// 				.context("Invalid TypeScript file name.")?;
-// 			let bytes = hex::decode(string).context("Failed to decode the identifier.")?;
-// 			let identifier =
-// 				serde_json::from_slice(&bytes).context("Failed to decode the identifier.")?;
-// 			Ok(identifier)
-// 		} else {
-// 			bail!("Invalid TypeScript file name.");
-// 		}
-// 	}
+impl TryFrom<String> for Identifier {
+	type Error = anyhow::Error;
 
-// 	/// Create a TypeScript file name from this identifier.
-// 	#[must_use]
-// 	pub fn to_typescript_file_name(&self) -> String {
-// 		if let Identifier::Lib(Lib { path }) = self {
-// 			format!("/tangram/lib/{path}")
-// 		} else {
-// 			let path = hex::encode(serde_json::to_string(self).unwrap());
-// 			format!("/tangram/{path}.ts")
-// 		}
-// 	}
-// }
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
+	}
+}
+
+impl From<Identifier> for String {
+	fn from(value: Identifier) -> Self {
+		value.to_string()
+	}
+}

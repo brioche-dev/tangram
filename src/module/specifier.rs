@@ -1,5 +1,7 @@
-use crate::{package, path::Path};
+use super::dependency;
+use crate::path::Path;
 use anyhow::{bail, Context};
+use url::Url;
 
 /// An import specifier in a Tangram TypeScript module.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -8,8 +10,8 @@ pub enum Specifier {
 	/// A module specifier that refers to an artifact module or a normal module in the current package, such as `import "./src"` or `import "./module.tg"`.
 	Path(Path),
 
-	/// A module specifier that refers to a package, such as `import "tangram:std"`. See [`package::Specifier`].
-	Package(package::Specifier),
+	/// A module specifier that refers to a dependency, such as `import "tangram:std"`. See [`dependency::Specifier`].
+	Dependency(dependency::Specifier),
 }
 
 impl std::fmt::Display for Specifier {
@@ -19,7 +21,7 @@ impl std::fmt::Display for Specifier {
 				write!(f, "{path}")?;
 			},
 
-			Specifier::Package(specifier) => {
+			Specifier::Dependency(specifier) => {
 				write!(f, "{specifier}")?;
 			},
 		}
@@ -33,24 +35,25 @@ impl std::str::FromStr for Specifier {
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		if value.starts_with('/') || value.starts_with('.') {
 			// If the string starts with `/` or `.`, then parse the string as a path.
-			let path = Path::from(value);
+			let path = value.parse().context("Failed to parse the path.")?;
 			Ok(Specifier::Path(path))
 		} else {
 			// Otherwise, parse the string as a URL.
-			let url = url::Url::parse(value)
+			let url: Url = value
+				.parse()
 				.with_context(|| format!(r#"Failed to parse the string "{value}" as a URL."#))?;
 
 			match url.scheme() {
 				// Handle the `tangram` scheme.
 				"tangram" => {
 					// Parse the URL's path as a package specifier.
-					let package_specifier = url.path().parse().with_context(|| {
+					let dependency_specifier = url.path().parse().with_context(|| {
 						format!(
-							r#"Failed to parse the path "{}" as a package specifier."#,
+							r#"Failed to parse the path "{}" as a module dependency specifier."#,
 							url.path()
 						)
 					})?;
-					Ok(Specifier::Package(package_specifier))
+					Ok(Specifier::Dependency(dependency_specifier))
 				},
 
 				// All other schemes are invalid.

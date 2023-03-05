@@ -5,7 +5,7 @@ use url::Url;
 impl module::Identifier {
 	pub async fn from_lsp_uri(url: Url) -> Result<module::Identifier> {
 		match url.scheme() {
-			"file" => module::Identifier::for_module_at_path(os::Path::new(url.path())).await,
+			"file" => module::Identifier::for_path(os::Path::new(url.path())).await,
 			_ => url.try_into(),
 		}
 	}
@@ -22,7 +22,8 @@ impl module::Identifier {
 				path,
 			}) => {
 				let path = package_path.join(path.to_string());
-				format!("file://{}", path.display()).parse().unwrap()
+				let path = path.display();
+				format!("file://{path}").parse().unwrap()
 			},
 
 			_ => self.clone().into(),

@@ -17,7 +17,9 @@ impl Deserialize for Url {
 		R: Read,
 	{
 		let value = deserializer.deserialize_string()?;
-		let url = Url::parse(&value).map_err(|error| Error::new(ErrorKind::Other, error))?;
+		let url: Url = value
+			.parse()
+			.map_err(|error| Error::new(ErrorKind::Other, error))?;
 		Ok(url)
 	}
 }

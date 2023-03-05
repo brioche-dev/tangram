@@ -1,9 +1,12 @@
-pub use self::component::Component;
-use crate::path;
+pub use self::{component::Component, subpath::Subpath};
+use crate::os;
+use anyhow::bail;
 use itertools::Itertools;
 
 pub mod component;
+pub mod subpath;
 
+/// A relative path that is always normalized.
 #[derive(
 	Clone,
 	Debug,
@@ -27,93 +30,119 @@ pub struct Path {
 impl Path {
 	#[must_use]
 	pub fn new() -> Path {
-		Path::default()
-	}
-
-	#[must_use]
-	pub fn parent(&self) -> Path {
-		let mut components = self.components.clone();
-		components.push(Component::ParentDir);
-		Path { components }
+		Path {
+			components: Vec::new(),
+		}
 	}
 
 	pub fn push(&mut self, component: Component) {
-		self.components.push(component);
-	}
-
-	#[must_use]
-	pub fn join(&self, other: &Path) -> Path {
-		let components = self
-			.components
-			.iter()
-			.chain(other.components.iter())
-			.cloned()
-			.collect();
-		Path { components }
-	}
-
-	#[must_use]
-	pub fn normalize(&self) -> Path {
-		let mut normalized_path = Path::new();
-
-		for component in &self.components {
-			match component {
-				Component::CurrentDir => {
-					// Skip current dir components.
-				},
-
-				Component::ParentDir => {
-					if normalized_path
-						.components
-						.iter()
-						.all(|component| matches!(component, Component::ParentDir))
-					{
-						// If the normalized path is zero or more parent dir components, then add a parent dir component.
-						normalized_path.push(Component::ParentDir);
-					} else {
-						// Otherwise, remove the last component.
-						normalized_path.components.pop();
-					}
-				},
-
-				Component::Normal(name) => {
-					// Add the component.
-					normalized_path.push(Component::Normal(name.clone()));
-				},
-			}
+		match component {
+			Component::ParentDir => {
+				if self
+					.components
+					.last()
+					.map_or(true, |component| matches!(component, Component::ParentDir))
+				{
+					self.components.push(Component::ParentDir);
+				} else {
+					self.components.pop();
+				}
+			},
+			Component::Normal(_) => {
+				self.components.push(component);
+			},
 		}
-
-		normalized_path
 	}
 
-	#[must_use]
-	pub fn file_name(&self) -> Option<&str> {
-		self.components.last()?.as_normal()
+	pub fn parent(&mut self) {
+		self.push(Component::ParentDir);
+	}
+
+	pub fn join(&mut self, other: Path) {
+		for component in other.components {
+			self.push(component);
+		}
 	}
 
 	#[must_use]
 	pub fn extension(&self) -> Option<&str> {
-		self.components.last()?.as_normal()?.split('.').last()
+		self.components
+			.last()
+			.and_then(Component::as_normal)
+			.and_then(|name| name.split('/').last())
+	}
+
+	pub fn into_subpath(self) -> Result<Subpath, Path> {
+		todo!()
 	}
 }
 
-impl From<&str> for Path {
-	fn from(value: &str) -> Self {
-		let components = value
-			.split('/')
-			.map(|component| match component {
-				"." => Component::CurrentDir,
-				".." => Component::ParentDir,
-				component => Component::Normal(component.to_owned()),
-			})
-			.collect();
-		Path { components }
+impl std::str::FromStr for Path {
+	type Err = anyhow::Error;
+
+	fn from_str(string: &str) -> Result<Self, Self::Err> {
+		// Absolute paths are not allowed.
+		if string.starts_with('/') {
+			bail!("Absolute paths are not allowed.");
+		}
+
+		// Create the path.
+		let mut path = Path {
+			components: Vec::new(),
+		};
+
+		// Split the string by the path separator and handle each component.
+		for string in string.split('/') {
+			match string {
+				"" => {
+					bail!("Empty path components are not allowed.");
+				},
+
+				// Ignore current dir components.
+				"." => {},
+
+				// Handle parent dir components.
+				".." => path.push(Component::ParentDir),
+
+				// Handle normal components.
+				string => path.push(Component::Normal(string.to_owned())),
+			}
+		}
+
+		Ok(path)
 	}
 }
 
-impl From<String> for Path {
-	fn from(value: String) -> Self {
-		value.as_str().into()
+impl std::fmt::Display for Path {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		// Join the components with the path separator.
+		let string = self.components.iter().map(Component::as_str).join("/");
+
+		match self.components.as_slice() {
+			// If the path is empty, then write ".".
+			[] => {
+				write!(f, ".")?;
+			},
+
+			// If the path starts with a normal component, then write "./" before the path.
+			[Component::Normal(_), ..] => {
+				write!(f, "./{string}")?;
+			},
+
+			// If the path starts with a parent dir component, then just write the path.
+			[Component::ParentDir, ..] => {
+				write!(f, "{string}")?;
+			},
+		}
+		Ok(())
+	}
+}
+
+impl TryFrom<String> for Path {
+	type Error = anyhow::Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
 	}
 }
 
@@ -123,21 +152,18 @@ impl From<Path> for String {
 	}
 }
 
-impl std::fmt::Display for Path {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let string = self
-			.components
-			.iter()
-			.map(path::component::Component::as_str)
-			.join("/");
-		write!(f, "{string}")?;
-		Ok(())
+impl From<Path> for os::PathBuf {
+	fn from(value: Path) -> Self {
+		value.to_string().into()
 	}
 }
 
 impl FromIterator<Component> for Path {
 	fn from_iter<T: IntoIterator<Item = Component>>(iter: T) -> Self {
-		let components = iter.into_iter().collect();
-		Path { components }
+		let mut path = Path::new();
+		for component in iter {
+			path.push(component);
+		}
+		path
 	}
 }

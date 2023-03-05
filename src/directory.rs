@@ -46,7 +46,7 @@ impl Cli {
 			.first()
 			.context("Expected the path to have at least one component.")?
 			.as_normal()
-			.context("Expected the path to have all normal components.")?;
+			.context("Expected the path component to be a normal component.")?;
 
 		// Collect the trailing path.
 		let trailing_path: Path = path.components.iter().skip(1).cloned().collect();
@@ -82,7 +82,7 @@ impl Cli {
 		for component in &path.components {
 			let name = component
 				.as_normal()
-				.context("Expected the path to have all normal components.")?;
+				.context("Expected the path component to be a normal component.")?;
 			artifact_hash = self
 				.get_artifact_local(artifact_hash)?
 				.into_directory()

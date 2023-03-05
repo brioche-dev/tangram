@@ -18,7 +18,8 @@ impl Cli {
 	pub async fn read_config_from_path(path: &os::Path) -> Result<Option<Config>> {
 		let config: Option<Config> = if os::fs::exists(path).await? {
 			let config = tokio::fs::read(&path).await.with_context(|| {
-				format!(r#"Failed to read the config from "{}"."#, path.display())
+				let path = path.display();
+				format!(r#"Failed to read the config from "{path}"."#)
 			})?;
 			let config = serde_json::from_slice(&config)?;
 			Some(config)
@@ -34,9 +35,10 @@ impl Cli {
 
 	pub async fn write_config_to_path(path: &os::Path, config: &Config) -> Result<()> {
 		let bytes = serde_json::to_vec(config)?;
-		tokio::fs::write(&path, &bytes)
-			.await
-			.with_context(|| format!(r#"Failed to write the config to "{}"."#, path.display()))?;
+		tokio::fs::write(&path, &bytes).await.with_context(|| {
+			let path = path.display();
+			format!(r#"Failed to write the config to "{path}"."#)
+		})?;
 		Ok(())
 	}
 }

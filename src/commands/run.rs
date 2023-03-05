@@ -67,7 +67,9 @@ impl Cli {
 		let artifact_path = self.check_out_internal(output_artifact_hash).await?;
 
 		// Get the executable path.
-		let executable_path = args.executable_path.unwrap_or_else(|| Path::from("run"));
+		let executable_path = args
+			.executable_path
+			.unwrap_or_else(|| "run".parse().unwrap());
 
 		// Get the path to the executable.
 		let executable_path = artifact_path.join(executable_path.to_string());

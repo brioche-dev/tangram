@@ -1,14 +1,15 @@
+use super::dependency;
 use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
-	module, os, package, Cli,
+	module, os, Cli,
 };
 use anyhow::Result;
 use std::sync::Arc;
 
 pub struct Output {
 	pub package_hash: artifact::Hash,
-	pub dependency_specifiers: Vec<package::Specifier>,
+	pub dependency_specifiers: Vec<dependency::Specifier>,
 }
 
 impl Cli {
@@ -22,7 +23,7 @@ impl Cli {
 		// Create the package.
 		let mut directory = Directory::new();
 
-		// Track the dependency package specifiers.
+		// Track the dependency specifiers.
 		let mut dependency_specifiers = Vec::new();
 
 		// Visit each module.
@@ -48,9 +49,7 @@ impl Cli {
 				.await?;
 
 			// If the module is a normal module, then explore its imports.
-			if let module::Identifier::Normal(module::identifier::Normal { path, .. }) =
-				&module_identifier
-			{
+			if let module::Identifier::Normal(_) = &module_identifier {
 				// Load the module.
 				let module_text = self.load_module(&module_identifier).await?;
 
@@ -58,35 +57,24 @@ impl Cli {
 				let module_specifiers = self.imports(&module_text).await?;
 
 				// Handle each module specifier.
-				for module_specifier in module_specifiers {
-					// Resolve.
+				for specifier in module_specifiers {
+					// Resolve the specifier.
+					let resolved_module_identifier =
+						self.resolve_module(&specifier, &module_identifier).await?;
 
-					match module_specifier {
-						// If the module is specified with a path, then add the resolved module to the queue.
-						module::Specifier::Path(specifier_path) => {
-							let resolved_module_identifier =
-								Self::resolve_module_with_path_specifier(
-									&specifier_path,
-									&module_identifier,
-								)
-								.await?;
+					match specifier {
+						// If the module is specified with a path, then add the resolved module identifier to the queue.
+						module::Specifier::Path(_) => {
 							module_identifier_queue.push(resolved_module_identifier);
 						},
 
 						// If the module is specified with a package, then add the specifier to the list of dependencies.
-						module::Specifier::Package(package_specifier) => {
-							// If the specifier is a path specifier, then resolve it relative to the package root.
-							let package_specifier = match package_specifier {
-								package::Specifier::Path(specifier_path) => {
-									let specifier_path =
-										specifier_path.display().to_string().into();
-									let resolved_path = path.join(&specifier_path).normalize();
-									package::Specifier::Path(resolved_path.to_string().into())
-								},
+						module::Specifier::Dependency(dependency_specifier) => {
+							// Convert the module dependency specifier to a package dependency specifier.
+							let package_specifier = dependency_specifier
+								.to_package_dependency_specifier(&module_identifier)?;
 
-								package::Specifier::Registry(_) => package_specifier,
-							};
-
+							// Add the package specifier to the list of dependencies.
 							dependency_specifiers.push(package_specifier);
 						},
 					};

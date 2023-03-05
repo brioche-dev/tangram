@@ -52,19 +52,9 @@ export class Path {
 		return [...this.#components];
 	}
 
-	parent(): Path | undefined {
-		// Get the path's components.
-		let components = this.components();
-
-		// If the path is empty, then return undefined.
-		if (components.length === 0) {
-			return undefined;
-		}
-
-		// Return a new path with the last component omitted.
-		components.pop();
-		let result = path(components);
-
+	parent(): Path {
+		let result = path(this);
+		result.push({ kind: "parent_dir" });
 		return result;
 	}
 
@@ -84,6 +74,7 @@ export class Path {
 					// Skip current dir components.
 					break;
 				}
+
 				case "parent_dir": {
 					if (
 						components.every((component) => component.kind === "parent_dir")
@@ -96,6 +87,7 @@ export class Path {
 					}
 					break;
 				}
+
 				case "normal": {
 					components.push(component);
 					break;
@@ -113,10 +105,12 @@ export class Path {
 					components.push(".");
 					break;
 				}
+
 				case "parent_dir": {
 					components.push("..");
 					break;
 				}
+
 				case "normal": {
 					components.push(component.value);
 					break;

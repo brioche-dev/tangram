@@ -166,17 +166,16 @@ impl Cli {
 		})?;
 		drop(permit);
 
-		// Create the artifact.
-		let target_path = os::path::normalize(&path.join("..").join(&target));
+		// Create the artifact. A symlink is a reference if the result of canonicalizing its path joined with its target points into the checkouts directory.
+		let target_path = tokio::fs::canonicalize(&path.join("..").join(&target)).await?;
 		let artifact = if let Ok(target) = target_path.strip_prefix(&self.checkouts_path()) {
-			// A symlink is a reference if the result of canonicalizing its path joined with its target points into the checkouts directory.
-
 			// Convert the target to a path.
 			let target: Path = target
 				.as_os_str()
 				.to_str()
 				.context("The symlink target was not valid UTF-8.")?
-				.into();
+				.parse()
+				.context("The target is not a valid path.")?;
 
 			// Get the path components.
 			let mut components = target.components.iter().peekable();
