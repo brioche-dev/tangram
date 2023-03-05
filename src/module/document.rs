@@ -1,5 +1,5 @@
 use super::Identifier;
-use crate::{language::Range, Cli};
+use crate::{language::Range, Instance};
 use anyhow::{bail, Result};
 
 /// A module that is open and editable.
@@ -10,7 +10,7 @@ pub struct Document {
 	pub text: String,
 }
 
-impl Cli {
+impl Instance {
 	/// Open a document.
 	pub async fn open_document(&self, module_identifier: &Identifier, version: i32, text: String) {
 		// Create the document.
@@ -79,7 +79,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	pub async fn get_document_or_module_version(
 		&self,
 		module_identifier: &Identifier,

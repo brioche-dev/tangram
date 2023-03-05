@@ -1,9 +1,9 @@
 use super::Hash;
-use crate::{value::Value, Cli};
+use crate::{value::Value, Instance};
 use anyhow::Result;
 use lmdb::Transaction;
 
-impl Cli {
+impl Instance {
 	/// Get the output for an operation from the database.
 	pub fn get_operation_output(&self, operation_hash: Hash) -> Result<Option<Value>> {
 		// Begin a read transaction.

@@ -1,9 +1,6 @@
-use crate::{
-	operation::{Download, Operation},
-	Cli,
-};
+use crate::Cli;
 use anyhow::{Context, Result};
-use std::sync::Arc;
+use tangram::operation::{Download, Operation};
 use url::Url;
 
 /// Run a download operation.
@@ -16,7 +13,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_download(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn command_download(&self, args: Args) -> Result<()> {
 		// Create the operation.
 		let operation = Operation::Download(Download {
 			url: args.url,
@@ -27,6 +24,7 @@ impl Cli {
 
 		// Run the operation.
 		let output = self
+			.tg
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;

@@ -1,6 +1,7 @@
 use anyhow::bail;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(into = "String", try_from = "String")]
 pub enum Algorithm {
 	Sha256,
 	Blake3,
@@ -30,16 +31,16 @@ impl std::str::FromStr for Algorithm {
 	}
 }
 
+impl From<Algorithm> for String {
+	fn from(value: Algorithm) -> Self {
+		value.to_string()
+	}
+}
+
 impl TryFrom<String> for Algorithm {
 	type Error = anyhow::Error;
 
 	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl From<Algorithm> for String {
-	fn from(value: Algorithm) -> Self {
-		value.to_string()
 	}
 }

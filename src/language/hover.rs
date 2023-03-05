@@ -1,9 +1,9 @@
 use super::{service, Position};
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
-impl Cli {
+impl Instance {
 	pub async fn hover(
 		self: &Arc<Self>,
 		module_identifier: module::Identifier,

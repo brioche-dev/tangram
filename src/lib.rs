@@ -2,23 +2,18 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 
-pub use self::commands::Args;
 use self::{
 	constants::{FILE_SEMAPHORE_SIZE, SOCKET_SEMAPHORE_SIZE},
 	database::Database,
 	id::Id,
 	language::service::RequestSender,
 	lock::Lock,
-	system::System,
-	value::Value,
 };
 use anyhow::Result;
-use std::{
-	collections::{BTreeMap, HashMap},
-	sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use tokio_util::task::LocalPoolHandle;
+use url::Url;
 
 pub mod api;
 pub mod artifact;
@@ -29,13 +24,11 @@ pub mod checkout;
 pub mod checksum;
 pub mod clean;
 pub mod client;
-pub mod commands;
-pub mod config;
 pub mod constants;
-pub mod credentials;
 pub mod database;
 pub mod directory;
 pub mod download;
+pub mod error;
 pub mod file;
 pub mod function;
 pub mod hash;
@@ -62,44 +55,50 @@ pub mod system;
 pub mod template;
 pub mod value;
 
-pub struct Cli {
-	/// The directory where the CLI stores its data.
+pub struct Instance {
+	/// The directory where all data is stored.
 	path: os::PathBuf,
 
-	/// The lock used to acquire shared and exclusive access to the path.
+	/// A lock used to acquire shared and exclusive access to the path.
 	lock: Lock<()>,
 
 	/// The database used to store artifacts, packages, and operations.
 	database: Database,
 
-	/// The semaphore used to prevent the CLI from opening too many files simultaneously.
+	/// A semaphore used to prevent opening too many files simultaneously.
 	file_semaphore: Arc<Semaphore>,
 
-	/// The semaphore used to prevent the CLI from opening too many sockets simultaneously.
+	/// A semaphore used to prevent opening too many sockets simultaneously.
 	socket_semaphore: Arc<Semaphore>,
 
-	/// The HTTP client for download operations.
+	/// An HTTP client for download operations.
 	http_client: reqwest::Client,
 
-	/// A handle to the tokio runtime the CLI was created on.
+	/// A handle to the main tokio runtime.
 	runtime_handle: tokio::runtime::Handle,
 
 	/// A local pool for running `!Send` futures.
 	local_pool_handle: LocalPoolHandle,
 
-	/// The channel to send requests to the language service.
+	/// A channel to send requests to the language service.
 	language_service_request_sender: std::sync::Mutex<Option<RequestSender>>,
 
-	/// A map that tracks documents.
+	/// A map that tracks changes to modules in memory.
 	documents:
 		tokio::sync::RwLock<HashMap<module::Identifier, module::Document, fnv::FnvBuildHasher>>,
 
-	/// A map that tracks changes to modules.
+	/// A map that tracks changes to modules on disk.
 	module_trackers:
 		tokio::sync::RwLock<HashMap<module::Identifier, module::Tracker, fnv::FnvBuildHasher>>,
 
 	/// A client for communicating with the API.
 	api_client: api::Client,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Options {
+	pub api_url: Option<Url>,
+	pub api_token: Option<String>,
 }
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
@@ -119,30 +118,14 @@ fn initialize_v8() {
 	v8::V8::initialize();
 }
 
-impl Cli {
-	pub async fn new(path: os::PathBuf) -> Result<Cli> {
+impl Instance {
+	pub async fn new(path: os::PathBuf, options: Options) -> Result<Instance> {
 		// Initialize V8.
 		V8_INIT.call_once(initialize_v8);
 
 		// Create the lock.
 		let lock_path = path.join("lock");
 		let lock = Lock::new(&lock_path, ());
-
-		// Read the config.
-		let config = Self::read_config_from_path(&path.join("config.json")).await?;
-
-		// Read the credentials.
-		let credentials = Self::read_credentials_from_path(&path.join("credentials.json")).await?;
-
-		// Resolve the API URL.
-		let api_url = config
-			.as_ref()
-			.and_then(|config| config.api_url.as_ref())
-			.cloned();
-		let api_url = api_url.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
-
-		// Get the token.
-		let token = credentials.map(|credentials| credentials.token);
 
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
@@ -180,10 +163,14 @@ impl Cli {
 		let module_trackers = tokio::sync::RwLock::new(HashMap::default());
 
 		// Create the API Client.
+		let api_url = options
+			.api_url
+			.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
+		let token = options.api_token;
 		let api_client = api::Client::new(api_url, token);
 
-		// Create the CLI.
-		let cli = Cli {
+		// Create the instance.
+		let instance = Instance {
 			path,
 			lock,
 			database,
@@ -198,11 +185,11 @@ impl Cli {
 			api_client,
 		};
 
-		Ok(cli)
+		Ok(instance)
 	}
 }
 
-impl Cli {
+impl Instance {
 	pub async fn try_lock_shared(&self) -> Result<Option<lock::SharedGuard<()>>> {
 		self.lock.try_lock_shared().await
 	}
@@ -220,9 +207,9 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	#[must_use]
-	fn path(&self) -> &os::Path {
+	pub fn path(&self) -> &os::Path {
 		&self.path
 	}
 
@@ -234,16 +221,6 @@ impl Cli {
 	#[must_use]
 	fn checkouts_path(&self) -> os::PathBuf {
 		self.path().join("checkouts")
-	}
-
-	#[must_use]
-	fn config_path(&self) -> os::PathBuf {
-		self.path().join("config.json")
-	}
-
-	#[must_use]
-	fn credentials_path(&self) -> os::PathBuf {
-		self.path().join("credentials.json")
 	}
 
 	#[must_use]
@@ -262,11 +239,8 @@ impl Cli {
 	}
 }
 
-impl Cli {
-	pub fn create_default_context(&self) -> Result<BTreeMap<String, Value>> {
-		let host = System::host()?;
-		let host = Value::String(host.to_string());
-		let context = [("host".to_owned(), host)].into();
-		Ok(context)
+impl Instance {
+	pub fn api_client(&self) -> &api::Client {
+		&self.api_client
 	}
 }

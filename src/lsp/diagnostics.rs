@@ -1,10 +1,10 @@
 use super::{send_notification, Sender};
-use crate::Cli;
+use crate::Instance;
 use anyhow::Result;
 use lsp_types as lsp;
 use std::sync::Arc;
 
-impl Cli {
+impl Instance {
 	pub async fn lsp_update_diagnostics(self: &Arc<Self>, sender: &Sender) -> Result<()> {
 		// Perform the check.
 		let diagnostics = self.diagnostics().await?;

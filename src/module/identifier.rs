@@ -135,6 +135,22 @@ impl Identifier {
 	}
 }
 
+impl From<Identifier> for Url {
+	fn from(value: Identifier) -> Self {
+		match value {
+			Identifier::Normal(value) => {
+				let data = hex::encode(serde_json::to_string(&value).unwrap());
+				format!("tangram://normal/{data}.ts").parse().unwrap()
+			},
+			Identifier::Artifact(value) => {
+				let data = hex::encode(serde_json::to_string(&value).unwrap());
+				format!("tangram://artifact/{data}.ts").parse().unwrap()
+			},
+			Identifier::Lib(Lib { path }) => format!("tangram://lib/{path}").parse().unwrap(),
+		}
+	}
+}
+
 impl TryFrom<Url> for Identifier {
 	type Error = anyhow::Error;
 
@@ -205,22 +221,6 @@ impl TryFrom<Url> for Identifier {
 	}
 }
 
-impl From<Identifier> for Url {
-	fn from(value: Identifier) -> Self {
-		match value {
-			Identifier::Normal(value) => {
-				let data = hex::encode(serde_json::to_string(&value).unwrap());
-				format!("tangram://normal/{data}.ts").parse().unwrap()
-			},
-			Identifier::Artifact(value) => {
-				let data = hex::encode(serde_json::to_string(&value).unwrap());
-				format!("tangram://artifact/{data}.ts").parse().unwrap()
-			},
-			Identifier::Lib(Lib { path }) => format!("tangram://lib/{path}").parse().unwrap(),
-		}
-	}
-}
-
 impl std::fmt::Display for Identifier {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let url: Url = self.clone().into();
@@ -239,16 +239,16 @@ impl std::str::FromStr for Identifier {
 	}
 }
 
+impl From<Identifier> for String {
+	fn from(value: Identifier) -> Self {
+		value.to_string()
+	}
+}
+
 impl TryFrom<String> for Identifier {
 	type Error = anyhow::Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl From<Identifier> for String {
-	fn from(value: Identifier) -> Self {
-		value.to_string()
 	}
 }

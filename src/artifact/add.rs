@@ -1,5 +1,5 @@
 use super::{Artifact, Hash};
-use crate::{blob, os, Cli};
+use crate::{blob, os, Instance};
 use anyhow::{bail, Result};
 use lmdb::Transaction;
 
@@ -12,7 +12,7 @@ pub enum Outcome {
 	ReferenceMissingArtifact { artifact_hash: Hash },
 }
 
-impl Cli {
+impl Instance {
 	/// Add an artifact after ensuring all its references are present.
 	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<Hash> {
 		match self.try_add_artifact(artifact).await? {

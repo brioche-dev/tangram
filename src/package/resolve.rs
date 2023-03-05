@@ -1,8 +1,8 @@
 use super::{Identifier, Specifier};
-use crate::Cli;
+use crate::Instance;
 use anyhow::{bail, Result};
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn resolve_package(
 		&self,

@@ -1,5 +1,6 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
+use tangram::os;
 
 /// Check in an artifact.
 #[derive(clap::Args)]
@@ -17,9 +18,9 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let hash = self.check_in(&path).await?;
+		let artifact_hash = self.tg.check_in(&path).await?;
 
-		println!("{hash}");
+		println!("{artifact_hash}");
 
 		Ok(())
 	}

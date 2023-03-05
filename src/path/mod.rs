@@ -77,6 +77,31 @@ impl Path {
 	}
 }
 
+impl std::fmt::Display for Path {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		// Join the components with the path separator.
+		let string = self.components.iter().map(Component::as_str).join("/");
+
+		match self.components.as_slice() {
+			// If the path is empty, then write ".".
+			[] => {
+				write!(f, ".")?;
+			},
+
+			// If the path starts with a normal component, then write "./" before the path.
+			[Component::Normal(_), ..] => {
+				write!(f, "./{string}")?;
+			},
+
+			// If the path starts with a parent dir component, then just write the path.
+			[Component::ParentDir, ..] => {
+				write!(f, "{string}")?;
+			},
+		}
+		Ok(())
+	}
+}
+
 impl std::str::FromStr for Path {
 	type Err = anyhow::Error;
 
@@ -113,28 +138,9 @@ impl std::str::FromStr for Path {
 	}
 }
 
-impl std::fmt::Display for Path {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		// Join the components with the path separator.
-		let string = self.components.iter().map(Component::as_str).join("/");
-
-		match self.components.as_slice() {
-			// If the path is empty, then write ".".
-			[] => {
-				write!(f, ".")?;
-			},
-
-			// If the path starts with a normal component, then write "./" before the path.
-			[Component::Normal(_), ..] => {
-				write!(f, "./{string}")?;
-			},
-
-			// If the path starts with a parent dir component, then just write the path.
-			[Component::ParentDir, ..] => {
-				write!(f, "{string}")?;
-			},
-		}
-		Ok(())
+impl From<Path> for String {
+	fn from(value: Path) -> Self {
+		value.to_string()
 	}
 }
 
@@ -143,12 +149,6 @@ impl TryFrom<String> for Path {
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl From<Path> for String {
-	fn from(value: Path) -> Self {
-		value.to_string()
 	}
 }
 

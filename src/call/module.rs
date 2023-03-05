@@ -2,7 +2,7 @@ use super::{
 	context::{await_value, Module, State},
 	isolate::THREAD_LOCAL_ISOLATE,
 };
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::{bail, Context, Result};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
@@ -75,8 +75,8 @@ fn load_module<'s>(
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the CLI.
-	let cli = Arc::clone(context.get_slot::<Arc<Cli>>(scope).unwrap());
+	// Get the instance.
+	let tg = Arc::clone(context.get_slot::<Arc<Instance>>(scope).unwrap());
 
 	// Get the state.
 	let state = Rc::clone(context.get_slot::<Rc<State>>(scope).unwrap());
@@ -117,18 +117,18 @@ fn load_module<'s>(
 
 	// Load the module.
 	let (sender, receiver) = std::sync::mpsc::channel();
-	cli.runtime_handle.spawn({
-		let cli = Arc::clone(&cli);
+	tg.runtime_handle.spawn({
+		let tg = Arc::clone(&tg);
 		let module_identifier = module_identifier.clone();
 		async move {
 			// Load the module.
-			let text = match cli.load_module(&module_identifier).await {
+			let text = match tg.load_module(&module_identifier).await {
 				Ok(text) => text,
 				Err(error) => return sender.send(Err(error)).unwrap(),
 			};
 
 			// Transpile the module.
-			let output = match cli.transpile(text.clone()).await {
+			let output = match tg.transpile(text.clone()).await {
 				Ok(transpile_output) => transpile_output,
 				Err(error) => return sender.send(Err(error)).unwrap(),
 			};
@@ -199,8 +199,8 @@ fn resolve_module_callback_inner<'s>(
 	// Get a scope for the callback.
 	let mut scope = unsafe { v8::CallbackScope::new(context) };
 
-	// Get the CLI.
-	let cli = Arc::clone(context.get_slot::<Arc<Cli>>(&mut scope).unwrap());
+	// Get the instance.
+	let tg = Arc::clone(context.get_slot::<Arc<Instance>>(&mut scope).unwrap());
 
 	// Get the state.
 	let state = Rc::clone(context.get_slot::<Rc<State>>(&mut scope).unwrap());
@@ -226,12 +226,12 @@ fn resolve_module_callback_inner<'s>(
 
 	// Resolve.
 	let (sender, receiver) = std::sync::mpsc::channel();
-	cli.runtime_handle.spawn({
-		let cli = Arc::clone(&cli);
+	tg.runtime_handle.spawn({
+		let tg = Arc::clone(&tg);
 		let specifier = specifier.clone();
 		let referrer = referrer.clone();
 		async move {
-			let module_identifier = cli.resolve_module(&specifier, &referrer).await;
+			let module_identifier = tg.resolve_module(&specifier, &referrer).await;
 			sender.send(module_identifier).unwrap();
 		}
 	});

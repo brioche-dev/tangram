@@ -1,9 +1,9 @@
 use super::{Blob, Hash};
-use crate::{os, Cli};
+use crate::{os, Instance};
 use anyhow::{Context, Result};
 use tokio::io::AsyncRead;
 
-impl Cli {
+impl Instance {
 	pub async fn get_blob(&self, blob_hash: Hash) -> Result<impl AsyncRead> {
 		let blob = self
 			.try_get_blob(blob_hash)

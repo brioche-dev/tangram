@@ -1,9 +1,9 @@
 use super::{Artifact, Hash};
-use crate::Cli;
+use crate::Instance;
 use anyhow::{bail, Context, Result};
 use lmdb::Transaction;
 
-impl Cli {
+impl Instance {
 	pub fn artifact_exists_local(&self, artifact_hash: Hash) -> Result<bool> {
 		// Begin a read transaction.
 		let txn = self.database.env.begin_ro_txn()?;

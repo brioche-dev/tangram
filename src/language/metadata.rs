@@ -1,9 +1,9 @@
 use super::service;
-use crate::{metadata::Metadata, Cli};
+use crate::{metadata::Metadata, Instance};
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn metadata(self: &Arc<Self>, text: &str) -> Result<Metadata> {
 		// Create the language service request.

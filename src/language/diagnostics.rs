@@ -1,5 +1,5 @@
 use super::{service, Location};
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::{bail, Result};
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -20,7 +20,7 @@ pub enum Severity {
 	Hint,
 }
 
-impl Cli {
+impl Instance {
 	pub async fn diagnostics(
 		self: &Arc<Self>,
 	) -> Result<BTreeMap<module::Identifier, Vec<Diagnostic>>> {

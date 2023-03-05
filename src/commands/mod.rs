@@ -1,8 +1,8 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::Result;
 use either::Either;
 use futures::FutureExt;
-use std::sync::Arc;
+use tangram::os;
 
 mod add;
 mod autoshell;
@@ -39,11 +39,10 @@ mod upgrade;
 	version = env!("CARGO_PKG_VERSION"),
 )]
 pub struct Args {
-	#[arg(
-		long,
-		help = "The path where Tangram should store its data. The default is `$HOME/.tangram`."
-	)]
+	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
+	#[arg(long)]
 	pub path: Option<os::PathBuf>,
+
 	#[command(subcommand)]
 	pub command: Command,
 }
@@ -79,30 +78,30 @@ pub enum Command {
 
 impl Cli {
 	/// Run a command.
-	pub async fn command(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn run(&self, args: Args) -> Result<()> {
 		// Acquire an appropriate lock for the subcommand.
 		let _lock = match args.command {
 			Command::Clean(_) => {
-				if let Some(lock) = self.try_lock_exclusive().await? {
+				if let Some(lock) = self.tg.try_lock_exclusive().await? {
 					Either::Left(lock)
 				} else {
 					eprintln!("Waiting on an exclusive lock to the tangram path.");
-					Either::Left(self.lock_exclusive().await?)
+					Either::Left(self.tg.lock_exclusive().await?)
 				}
 			},
 			_ => {
-				if let Some(lock) = self.try_lock_shared().await? {
+				if let Some(lock) = self.tg.try_lock_shared().await? {
 					Either::Right(lock)
 				} else {
 					eprintln!("Waiting on a shared lock to the tangram path.");
-					Either::Right(self.lock_shared().await?)
+					Either::Right(self.tg.lock_shared().await?)
 				}
 			},
 		};
 
 		// Run the subcommand.
 		match args.command {
-			Command::Add(args) => self.command_add(args).boxed(),
+			Command::Add(args) => self.run_add(args).boxed(),
 			Command::Autoshell(args) => self.command_autoshell(args).boxed(),
 			Command::Build(args) => self.command_build(args).boxed(),
 			Command::Check(args) => self.command_check(args).boxed(),

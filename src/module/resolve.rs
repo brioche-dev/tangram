@@ -3,10 +3,10 @@ use super::{
 	identifier::{self, Lib, Source},
 	Identifier, Specifier,
 };
-use crate::{os, package, path::Path, Cli};
+use crate::{os, package, path::Path, Instance};
 use anyhow::{bail, Context, Result};
 
-impl Cli {
+impl Instance {
 	/// Resolve a specifier relative to a referrer.
 	pub async fn resolve_module(
 		&self,
@@ -26,7 +26,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn resolve_module_with_path_specifier(
 		specifier: &Path,

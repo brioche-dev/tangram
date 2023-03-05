@@ -1,9 +1,9 @@
-use crate::{
-	language::{Diagnostic, Location, Position},
-	module, package, Cli,
-};
+use crate::Cli;
 use anyhow::{bail, Result};
-use std::sync::Arc;
+use tangram::{
+	language::{Diagnostic, Location, Position},
+	module, package,
+};
 
 /// Check a package for errors.
 #[derive(clap::Args)]
@@ -16,12 +16,16 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_check(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// Resolve the package specifier.
-		let package_identifier = self.resolve_package(&args.package_specifier, None).await?;
+		let package_identifier = self
+			.tg
+			.resolve_package(&args.package_specifier, None)
+			.await?;
 
 		// Get the package instance hash.
 		let package_instance_hash = self
+			.tg
 			.create_package_instance(&package_identifier, args.locked)
 			.await?;
 
@@ -30,7 +34,7 @@ impl Cli {
 			module::Identifier::for_root_module_in_package_instance(package_instance_hash);
 
 		// Check the package for diagnostics.
-		let diagnostics = self.check(vec![root_module_identifier]).await?;
+		let diagnostics = self.tg.check(vec![root_module_identifier]).await?;
 
 		// Print the diagnostics.
 		for diagnostics in diagnostics.values() {

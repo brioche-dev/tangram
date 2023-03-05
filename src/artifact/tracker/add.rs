@@ -1,10 +1,10 @@
 use super::Tracker;
-use crate::{os, Cli};
+use crate::{os, Instance};
 use anyhow::Result;
 use lmdb::Transaction;
 use std::os::unix::prelude::OsStrExt;
 
-impl Cli {
+impl Instance {
 	/// Add an artifact tracker.
 	pub fn add_artifact_tracker(&self, path: &os::Path, artifact_tracker: &Tracker) -> Result<()> {
 		// Serialize the artifact tracker.

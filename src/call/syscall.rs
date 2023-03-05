@@ -5,12 +5,13 @@ use super::{
 use crate::{
 	artifact::{self, Artifact},
 	blob,
+	checksum::{self, Checksum},
 	language::Position,
 	module,
 	operation::Operation,
 	package,
 	value::Value,
-	Cli,
+	Instance,
 };
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
@@ -45,6 +46,7 @@ fn syscall_inner<'s>(
 	// Invoke the syscall.
 	match name.as_str() {
 		"log" => syscall_sync(scope, args, syscall_log),
+		"checksum" => syscall_sync(scope, args, syscall_checksum),
 		"encode_utf8" => syscall_sync(scope, args, syscall_encode_utf8),
 		"decode_utf8" => syscall_sync(scope, args, syscall_decode_utf8),
 		"add_blob" => syscall_async(scope, args, syscall_add_blob),
@@ -73,6 +75,19 @@ fn syscall_log(_scope: &mut v8::HandleScope, _state: Rc<State>, args: (String,))
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_checksum(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (checksum::Algorithm, serde_v8::ZeroCopyBuf),
+) -> Result<Checksum> {
+	let (algorithm, bytes) = args;
+	let mut checksum_writer = checksum::Writer::new(algorithm);
+	checksum_writer.update(&bytes);
+	let checksum = checksum_writer.finalize();
+	Ok(checksum)
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_encode_utf8(
 	_scope: &mut v8::HandleScope,
 	_state: Rc<State>,
@@ -95,57 +110,60 @@ fn syscall_decode_utf8(
 	Ok(string)
 }
 
-async fn syscall_add_blob(cli: Arc<Cli>, args: (serde_v8::ZeroCopyBuf,)) -> Result<blob::Hash> {
+async fn syscall_add_blob(tg: Arc<Instance>, args: (serde_v8::ZeroCopyBuf,)) -> Result<blob::Hash> {
 	let (blob,) = args;
-	let blob_hash = cli.add_blob(blob.as_ref()).await?;
+	let blob_hash = tg.add_blob(blob.as_ref()).await?;
 	Ok(blob_hash)
 }
 
-async fn syscall_get_blob(cli: Arc<Cli>, args: (blob::Hash,)) -> Result<serde_v8::ZeroCopyBuf> {
+async fn syscall_get_blob(tg: Arc<Instance>, args: (blob::Hash,)) -> Result<serde_v8::ZeroCopyBuf> {
 	let (blob_hash,) = args;
-	let mut blob = cli.get_blob(blob_hash).await?;
+	let mut blob = tg.get_blob(blob_hash).await?;
 	let mut bytes = Vec::new();
 	tokio::io::copy(&mut blob, &mut bytes).await?;
 	let output = serde_v8::ZeroCopyBuf::ToV8(Some(bytes.into_boxed_slice()));
 	Ok(output)
 }
 
-async fn syscall_add_artifact(cli: Arc<Cli>, args: (Artifact,)) -> Result<artifact::Hash> {
+async fn syscall_add_artifact(tg: Arc<Instance>, args: (Artifact,)) -> Result<artifact::Hash> {
 	let (artifact,) = args;
-	let artifact_hash = cli.add_artifact(&artifact).await?;
+	let artifact_hash = tg.add_artifact(&artifact).await?;
 	Ok(artifact_hash)
 }
 
 #[allow(clippy::unused_async)]
-async fn syscall_get_artifact(cli: Arc<Cli>, args: (artifact::Hash,)) -> Result<Option<Artifact>> {
+async fn syscall_get_artifact(
+	tg: Arc<Instance>,
+	args: (artifact::Hash,),
+) -> Result<Option<Artifact>> {
 	let (artifact_hash,) = args;
-	let artifact = cli.try_get_artifact_local(artifact_hash)?;
+	let artifact = tg.try_get_artifact_local(artifact_hash)?;
 	Ok(artifact)
 }
 
 #[allow(clippy::unused_async)]
 async fn syscall_add_package_instance(
-	cli: Arc<Cli>,
+	tg: Arc<Instance>,
 	args: (package::instance::Instance,),
 ) -> Result<package::instance::Hash> {
 	let (package,) = args;
-	let package_instance_hash = cli.add_package_instance(&package)?;
+	let package_instance_hash = tg.add_package_instance(&package)?;
 	Ok(package_instance_hash)
 }
 
 #[allow(clippy::unused_async)]
 async fn syscall_get_package_instance(
-	cli: Arc<Cli>,
+	tg: Arc<Instance>,
 	args: (package::instance::Hash,),
 ) -> Result<Option<package::instance::Instance>> {
 	let (package_instance_hash,) = args;
-	let package = cli.try_get_package_instance_local(package_instance_hash)?;
+	let package = tg.try_get_package_instance_local(package_instance_hash)?;
 	Ok(package)
 }
 
-async fn syscall_run(cli: Arc<Cli>, args: (Operation,)) -> Result<Value> {
+async fn syscall_run(tg: Arc<Instance>, args: (Operation,)) -> Result<Value> {
 	let (operation,) = args;
-	let output = cli.run(&operation).await?;
+	let output = tg.run(&operation).await?;
 	Ok(output)
 }
 
@@ -342,14 +360,14 @@ fn syscall_async<'s, A, T, F, Fut>(
 where
 	A: serde::de::DeserializeOwned,
 	T: serde::Serialize,
-	F: FnOnce(Arc<Cli>, A) -> Fut + 'static,
+	F: FnOnce(Arc<Instance>, A) -> Fut + 'static,
 	Fut: Future<Output = Result<T>>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the CLI.
-	let cli = Arc::clone(context.get_slot::<Arc<Cli>>(scope).unwrap());
+	// Get the instance.
+	let tg = Arc::clone(context.get_slot::<Arc<Instance>>(scope).unwrap());
 
 	// Get the state.
 	let state = Rc::clone(context.get_slot::<Rc<State>>(scope).unwrap());
@@ -369,7 +387,7 @@ where
 
 	// Create the future.
 	let future = Box::pin(async move {
-		let result = syscall_async_inner(context.clone(), cli, args, f).await;
+		let result = syscall_async_inner(context.clone(), tg, args, f).await;
 		FutureOutput {
 			context,
 			promise_resolver,
@@ -385,14 +403,14 @@ where
 
 async fn syscall_async_inner<A, T, F, Fut>(
 	context: v8::Global<v8::Context>,
-	cli: Arc<Cli>,
+	tg: Arc<Instance>,
 	args: v8::Global<v8::Array>,
 	f: F,
 ) -> Result<v8::Global<v8::Value>>
 where
 	A: serde::de::DeserializeOwned,
 	T: serde::Serialize,
-	F: FnOnce(Arc<Cli>, A) -> Fut + 'static,
+	F: FnOnce(Arc<Instance>, A) -> Fut + 'static,
 	Fut: Future<Output = Result<T>>,
 {
 	// Deserialize the args.
@@ -408,7 +426,7 @@ where
 	};
 
 	// Call the function.
-	let value = f(cli, args).await?;
+	let value = f(tg, args).await?;
 
 	// Serialize the value.
 	let value = {

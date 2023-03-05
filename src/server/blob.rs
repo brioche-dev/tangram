@@ -1,9 +1,9 @@
 use super::{error::bad_request, error::not_found};
-use crate::{blob, Cli};
+use crate::{blob, Instance};
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
 
-impl Cli {
+impl Instance {
 	pub async fn handle_add_blob_request(
 		&self,
 		request: http::Request<hyper::Body>,

@@ -75,16 +75,16 @@ impl std::str::FromStr for System {
 	}
 }
 
+impl From<System> for String {
+	fn from(value: System) -> Self {
+		value.to_string()
+	}
+}
+
 impl TryFrom<String> for System {
 	type Error = anyhow::Error;
 
 	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl From<System> for String {
-	fn from(value: System) -> Self {
-		value.to_string()
 	}
 }

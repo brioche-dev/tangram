@@ -1,5 +1,6 @@
-use crate::{artifact, os, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
+use tangram::{artifact, os};
 
 /// Check out an artifact.
 #[derive(clap::Args)]
@@ -20,7 +21,8 @@ impl Cli {
 		};
 
 		// Perform the checkout.
-		self.check_out(args.artifact_hash, &path, None)
+		self.tg
+			.check_out(args.artifact_hash, &path, None)
 			.await
 			.context("Failed to perform the checkout.")?;
 

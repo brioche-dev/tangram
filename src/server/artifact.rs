@@ -1,8 +1,8 @@
 use super::error::bad_request;
-use crate::Cli;
+use crate::Instance;
 use anyhow::{bail, Context, Result};
 
-impl Cli {
+impl Instance {
 	pub async fn handle_add_artifact_request(
 		&self,
 		request: http::Request<hyper::Body>,

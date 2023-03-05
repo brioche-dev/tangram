@@ -29,22 +29,6 @@ pub enum Specifier {
 	Registry(Registry),
 }
 
-impl std::str::FromStr for Specifier {
-	type Err = anyhow::Error;
-
-	fn from_str(value: &str) -> Result<Specifier> {
-		if value.starts_with('.') {
-			// If the string starts with `.`, then parse the string as a path.
-			let specifier = value.parse()?;
-			Ok(Specifier::Path(specifier))
-		} else {
-			// Otherwise, parse the string as a registry specifier.
-			let specifier = value.parse()?;
-			Ok(Specifier::Registry(specifier))
-		}
-	}
-}
-
 impl std::fmt::Display for Specifier {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
@@ -61,17 +45,33 @@ impl std::fmt::Display for Specifier {
 	}
 }
 
-impl TryFrom<String> for Specifier {
-	type Error = anyhow::Error;
+impl std::str::FromStr for Specifier {
+	type Err = anyhow::Error;
 
-	fn try_from(value: String) -> Result<Self, Self::Error> {
-		value.parse()
+	fn from_str(value: &str) -> Result<Specifier> {
+		if value.starts_with('.') {
+			// If the string starts with `.`, then parse the string as a path.
+			let specifier = value.parse()?;
+			Ok(Specifier::Path(specifier))
+		} else {
+			// Otherwise, parse the string as a registry specifier.
+			let specifier = value.parse()?;
+			Ok(Specifier::Registry(specifier))
+		}
 	}
 }
 
 impl From<Specifier> for String {
 	fn from(value: Specifier) -> Self {
 		value.to_string()
+	}
+}
+
+impl TryFrom<String> for Specifier {
+	type Error = anyhow::Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
 	}
 }
 

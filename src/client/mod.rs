@@ -1,4 +1,4 @@
-use crate::Cli;
+use crate::Instance;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use url::Url;
@@ -6,7 +6,7 @@ use url::Url;
 mod artifact;
 mod blob;
 
-impl Cli {
+impl Instance {
 	#[must_use]
 	pub fn create_client(&self, url: Url, token: Option<String>) -> Client {
 		Client::new(url, token, Arc::clone(&self.socket_semaphore))

@@ -1,5 +1,6 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
+use tangram::os;
 
 /// Create a new package.
 #[derive(clap::Args)]

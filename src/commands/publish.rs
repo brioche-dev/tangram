@@ -1,6 +1,6 @@
-use crate::{client::Client, os, package, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
-use std::sync::Arc;
+use tangram::{os, package};
 
 /// Publish a package.
 #[derive(clap::Args)]
@@ -9,7 +9,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_publish(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn command_publish(&self, args: Args) -> Result<()> {
 		// Get the path.
 		let mut path =
 			std::env::current_dir().context("Failed to determine the current directory.")?;
@@ -18,22 +18,23 @@ impl Cli {
 		}
 
 		// Check in the package.
-		let package::checkin::Output { package_hash, .. } = self.check_in_package(&path).await?;
+		let package::checkin::Output { package_hash, .. } = self.tg.check_in_package(&path).await?;
 
 		// Create a client.
-		let client = Client::new(
-			self.api_client.url.clone(),
-			None,
-			Arc::clone(&self.socket_semaphore),
+		let client = self.tg.create_client(
+			self.tg.api_client().url.clone(),
+			self.tg.api_client().token.clone(),
 		);
 
 		// Push the package to the registry.
-		self.push(&client, package_hash)
+		self.tg
+			.push(&client, package_hash)
 			.await
 			.context("Failed to push the package.")?;
 
 		// Publish the package.
-		self.api_client
+		self.tg
+			.api_client()
 			.publish_package(package_hash)
 			.await
 			.context("Failed to publish the package.")?;

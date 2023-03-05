@@ -4,13 +4,13 @@ use crate::{
 	operation::{self, Operation},
 	os, package, template,
 	value::Value,
-	Cli,
+	Instance,
 };
 use anyhow::{Context, Result};
 use lmdb::{Cursor, Transaction};
 use std::collections::{HashSet, VecDeque};
 
-impl Cli {
+impl Instance {
 	pub async fn clean(&self, roots: Vec<operation::Hash>) -> Result<()> {
 		// Create marks to track marked artifacts, blobs, operations, and package instances.
 		let mut marks = Marks::default();
@@ -64,7 +64,7 @@ enum QueueItem {
 	PackageInstance(package::instance::Hash),
 }
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::too_many_lines)]
 	fn mark(&self, marks: &mut Marks, roots: Vec<operation::Hash>) -> Result<()> {
 		let txn = self.database.env.begin_ro_txn()?;
@@ -214,7 +214,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	fn sweep_artifacts(&self, marks: &Marks) -> Result<()> {
 		// Open a read/write transaction.
 		let mut txn = self.database.env.begin_rw_txn()?;

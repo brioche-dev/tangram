@@ -1,13 +1,13 @@
-use crate::{
-	function::Function,
-	operation::{Call, Operation},
-	os, package, Cli,
-};
+use crate::Cli;
 use anyhow::{Context, Result};
 use futures::FutureExt;
 use indoc::indoc;
 use itertools::Itertools;
-use std::sync::Arc;
+use tangram::{
+	function::Function,
+	operation::{Call, Operation},
+	os, package,
+};
 
 /// Manage autoshell paths.
 #[derive(clap::Args)]
@@ -50,7 +50,7 @@ pub struct HookArgs {
 }
 
 impl Cli {
-	pub async fn command_autoshell(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn command_autoshell(&self, args: Args) -> Result<()> {
 		match args.command {
 			Command::Add(args) => self.command_autoshell_add(args).boxed(),
 			Command::List(args) => self.command_autoshell_list(args).boxed(),
@@ -133,7 +133,7 @@ impl Cli {
 		Ok(())
 	}
 
-	async fn command_autoshell_hook(self: &Arc<Self>, _args: HookArgs) -> Result<()> {
+	async fn command_autoshell_hook(&self, _args: HookArgs) -> Result<()> {
 		// Read the config.
 		let config = self.read_config().await?.unwrap_or_default();
 
@@ -167,6 +167,7 @@ impl Cli {
 		// Get the package instance hash for this package.
 		let package_identifier = package::Identifier::Path(autoshell_path.clone());
 		let package_instance_hash = self
+			.tg
 			.create_package_instance(&package_identifier, false)
 			.await?;
 
@@ -175,7 +176,7 @@ impl Cli {
 			package_instance_hash,
 			name: "shell".into(),
 		};
-		let context = self.create_default_context()?;
+		let context = Self::create_default_context()?;
 		let operation = Operation::Call(Call {
 			function,
 			context,
@@ -184,6 +185,7 @@ impl Cli {
 
 		// Run the operation.
 		let output = self
+			.tg
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;
@@ -194,7 +196,7 @@ impl Cli {
 			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = self.check_out_internal(output_artifact_hash).await?;
+		let artifact_path = self.tg.check_out_internal(output_artifact_hash).await?;
 
 		// Get the path to the executable.
 		let shell_activate_script_path = artifact_path.join("activate");

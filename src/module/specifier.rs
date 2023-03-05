@@ -63,16 +63,16 @@ impl std::str::FromStr for Specifier {
 	}
 }
 
+impl From<Specifier> for String {
+	fn from(value: Specifier) -> Self {
+		value.to_string()
+	}
+}
+
 impl TryFrom<String> for Specifier {
 	type Error = anyhow::Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl From<Specifier> for String {
-	fn from(value: Specifier) -> Self {
-		value.to_string()
 	}
 }

@@ -1,5 +1,5 @@
 use self::syscall::syscall;
-use crate::Cli;
+use crate::Instance;
 use anyhow::{anyhow, Context, Result};
 use std::sync::{Arc, Weak};
 
@@ -57,7 +57,7 @@ pub type RequestReceiver = tokio::sync::mpsc::UnboundedReceiver<(Request, Respon
 pub type ResponseSender = tokio::sync::oneshot::Sender<Result<Response>>;
 pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
-impl Cli {
+impl Instance {
 	pub async fn language_service_request(self: &Arc<Self>, request: Request) -> Result<Response> {
 		// Spawn the language service if necessary.
 		let request_sender = self
@@ -71,8 +71,8 @@ impl Cli {
 
 				// Spawn a thread to run the language service.
 				std::thread::spawn({
-					let cli = Arc::downgrade(self);
-					move || run_language_service(cli, request_receiver)
+					let tg = Arc::downgrade(self);
+					move || run_language_service(tg, request_receiver)
 				});
 
 				request_sender
@@ -101,7 +101,7 @@ impl Cli {
 // const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
 
 /// Run the language service.
-fn run_language_service(cli: Weak<Cli>, mut request_receiver: RequestReceiver) {
+fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
 	let params = v8::CreateParams::default();
 	let mut isolate = v8::Isolate::new(params);
@@ -123,8 +123,8 @@ fn run_language_service(cli: Weak<Cli>, mut request_receiver: RequestReceiver) {
 	let script = v8::Script::compile(&mut context_scope, source, None).unwrap();
 	script.run(&mut context_scope).unwrap();
 
-	// Set the CLI on the context.
-	context.set_slot(&mut context_scope, cli);
+	// Set the instance on the context.
+	context.set_slot(&mut context_scope, tg);
 
 	// Add the syscall function to the global.
 	let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();

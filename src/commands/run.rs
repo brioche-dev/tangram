@@ -1,12 +1,12 @@
-use crate::{
+use crate::Cli;
+use anyhow::{bail, Context, Result};
+use std::os::unix::process::CommandExt;
+use tangram::{
 	function::Function,
 	operation::{Call, Operation},
 	os, package,
 	path::Path,
-	Cli,
 };
-use anyhow::{bail, Context, Result};
-use std::{os::unix::process::CommandExt, sync::Arc};
 
 #[derive(clap::Args)]
 #[command(
@@ -28,12 +28,16 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_run(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn command_run(&self, args: Args) -> Result<()> {
 		// Resolve the package specifier.
-		let package_identifier = self.resolve_package(&args.package_specifier, None).await?;
+		let package_identifier = self
+			.tg
+			.resolve_package(&args.package_specifier, None)
+			.await?;
 
 		// Get the package instance hash.
 		let package_instance_hash = self
+			.tg
 			.create_package_instance(&package_identifier, args.locked)
 			.await?;
 
@@ -45,7 +49,7 @@ impl Cli {
 			package_instance_hash,
 			name,
 		};
-		let context = self.create_default_context()?;
+		let context = Self::create_default_context()?;
 		let operation = Operation::Call(Call {
 			function,
 			context,
@@ -54,6 +58,7 @@ impl Cli {
 
 		// Run the operation.
 		let output = self
+			.tg
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;
@@ -64,7 +69,7 @@ impl Cli {
 			.context("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = self.check_out_internal(output_artifact_hash).await?;
+		let artifact_path = self.tg.check_out_internal(output_artifact_hash).await?;
 
 		// Get the executable path.
 		let executable_path = args

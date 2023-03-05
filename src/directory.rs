@@ -1,11 +1,11 @@
 use crate::{
 	artifact::{self, Artifact},
 	path::Path,
-	Cli,
+	Instance,
 };
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(
 	Clone,
@@ -31,12 +31,12 @@ impl Directory {
 	}
 }
 
-impl Cli {
+impl Directory {
 	#[allow(clippy::unused_async)]
 	#[async_recursion]
-	pub async fn directory_add(
-		&self,
-		directory: &mut Directory,
+	pub async fn add(
+		&mut self,
+		tg: &Arc<Instance>,
 		path: &Path,
 		artifact_hash: artifact::Hash,
 	) -> Result<()> {
@@ -55,24 +55,29 @@ impl Cli {
 			artifact_hash
 		} else {
 			// Get or create a child directory.
-			let mut child = if let Some(child_hash) = directory.entries.get(name) {
-				self.get_artifact_local(*child_hash)?
+			let mut child = if let Some(child_hash) = self.entries.get(name) {
+				tg.get_artifact_local(*child_hash)?
 					.into_directory()
 					.context("Expected the existing entry to be a directory.")?
 			} else {
 				Directory::new()
 			};
-			self.directory_add(&mut child, &trailing_path, artifact_hash)
-				.await?;
-			self.add_artifact(&Artifact::Directory(child)).await?
+
+			// Recurse.
+			child.add(tg, &trailing_path, artifact_hash).await?;
+
+			// Add this artifact.
+			tg.add_artifact(&Artifact::Directory(child)).await?
 		};
 
 		// Add the artifact.
-		directory.entries.insert(name.to_owned(), artifact_hash);
+		self.entries.insert(name.to_owned(), artifact_hash);
 
 		Ok(())
 	}
+}
 
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn directory_get(
 		&self,

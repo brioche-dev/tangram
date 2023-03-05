@@ -3,14 +3,14 @@ use crate::{
 	checksum::{self, Checksum},
 	os,
 	value::Value,
-	Cli,
+	Instance,
 };
 use anyhow::{bail, Context, Result};
 use futures::{Stream, StreamExt, TryStreamExt};
 use std::sync::{Arc, Mutex};
 use tokio_util::io::{StreamReader, SyncIoBridge};
 
-impl Cli {
+impl Instance {
 	pub async fn run_download(&self, download: &Download) -> Result<Value> {
 		// Acquire a file permit.
 		let _file_permit = self.file_semaphore.acquire().await?;
@@ -88,7 +88,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	async fn download_simple<S>(&self, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,

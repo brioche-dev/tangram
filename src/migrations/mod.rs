@@ -1,10 +1,10 @@
-use crate::{os, Cli};
+use crate::{os, Instance};
 use anyhow::{bail, Context, Result};
 use futures::FutureExt;
 
 mod migration_0000;
 
-impl Cli {
+impl Instance {
 	pub async fn migrate(path: &os::Path) -> Result<()> {
 		let migrations = vec![migration_0000::migrate(path).boxed()];
 

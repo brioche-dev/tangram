@@ -1,5 +1,6 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::Result;
+use tangram::os;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
@@ -8,7 +9,11 @@ pub struct Credentials {
 }
 
 impl Cli {
-	pub async fn read_credentials(&self) -> Result<Option<Credentials>> {
+	pub fn credentials_path(&self) -> os::PathBuf {
+		self.tg.path().join("credentials.json")
+	}
+
+	pub async fn _read_credentials(&self) -> Result<Option<Credentials>> {
 		Self::read_credentials_from_path(&self.credentials_path()).await
 	}
 

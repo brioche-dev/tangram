@@ -11,7 +11,7 @@ impl Cli {
 		let roots = Vec::new();
 
 		// Clean.
-		self.clean(roots).await?;
+		self.tg.clean(roots).await?;
 
 		Ok(())
 	}

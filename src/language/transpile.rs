@@ -1,4 +1,4 @@
-use crate::Cli;
+use crate::Instance;
 use anyhow::{Context, Result};
 
 #[derive(Debug, serde::Deserialize)]
@@ -8,7 +8,7 @@ pub struct Output {
 	pub source_map_string: String,
 }
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn transpile(&self, text: String) -> Result<Output> {
 		// Parse the code.

@@ -1,10 +1,10 @@
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::Result;
 use lsp_types as lsp;
 use std::{collections::HashMap, sync::Arc};
 use url::Url;
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::similar_names)]
 	pub async fn lsp_rename(
 		self: &Arc<Self>,

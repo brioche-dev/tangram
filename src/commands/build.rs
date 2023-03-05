@@ -1,10 +1,10 @@
-use crate::{
+use crate::Cli;
+use anyhow::{Context, Result};
+use tangram::{
 	function::Function,
 	operation::{Call, Operation},
-	package, Cli,
+	package,
 };
-use anyhow::{Context, Result};
-use std::sync::Arc;
 
 /// Call a function.
 #[derive(clap::Args)]
@@ -20,12 +20,16 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_build(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn command_build(&self, args: Args) -> Result<()> {
 		// Resolve the package specifier.
-		let package_identifier = self.resolve_package(&args.package_specifier, None).await?;
+		let package_identifier = self
+			.tg
+			.resolve_package(&args.package_specifier, None)
+			.await?;
 
 		// Create the package instance.
 		let package_instance_hash = self
+			.tg
 			.create_package_instance(&package_identifier, args.locked)
 			.await
 			.context("Failed to create the package instance.")?;
@@ -35,7 +39,7 @@ impl Cli {
 			package_instance_hash,
 			name: args.name,
 		};
-		let context = self.create_default_context()?;
+		let context = Self::create_default_context()?;
 		let operation = Operation::Call(Call {
 			function,
 			context,
@@ -44,6 +48,7 @@ impl Cli {
 
 		// Run the operation.
 		let output = self
+			.tg
 			.run(&operation)
 			.await
 			.context("Failed to run the operation.")?;

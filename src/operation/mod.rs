@@ -1,5 +1,5 @@
 pub use self::hash::Hash;
-use crate::Cli;
+use crate::Instance;
 pub use crate::{call::Call, download::Download, process::Process};
 use anyhow::{bail, Context, Result};
 
@@ -85,7 +85,7 @@ impl Operation {
 	}
 }
 
-impl Cli {
+impl Instance {
 	pub fn get_operation_local(&self, hash: Hash) -> Result<Operation> {
 		let operation = self
 			.try_get_operation_local(hash)?

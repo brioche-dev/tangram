@@ -1,9 +1,9 @@
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::Result;
 use lsp_types as lsp;
 use std::sync::Arc;
 
-impl Cli {
+impl Instance {
 	pub async fn lsp_definition(
 		self: &Arc<Self>,
 		params: lsp::GotoDefinitionParams,

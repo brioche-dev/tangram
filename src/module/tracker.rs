@@ -1,5 +1,5 @@
 use super::Identifier;
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::Result;
 use std::time::SystemTime;
 
@@ -9,7 +9,7 @@ pub struct Tracker {
 	pub modified: SystemTime,
 }
 
-impl Cli {
+impl Instance {
 	/// Add a module tracker.
 	pub async fn add_module_tracker(
 		&self,
@@ -28,7 +28,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	/// Get a module's version.
 	pub async fn get_module_version(&self, module_identifier: &module::Identifier) -> Result<i32> {
 		match module_identifier {

@@ -1,9 +1,9 @@
 use super::{service, Diagnostic};
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::{bail, Result};
 use std::{collections::BTreeMap, sync::Arc};
 
-impl Cli {
+impl Instance {
 	/// Get all diagnostics for the provided module identifiers.
 	pub async fn check(
 		self: &Arc<Self>,

@@ -1,9 +1,8 @@
 use super::{Hash, Instance};
-use crate::Cli;
 use anyhow::{bail, Context, Result};
 use lmdb::Transaction;
 
-impl Cli {
+impl crate::Instance {
 	/// Get a package instance from the database. This method returns an error if the package instance is not found.
 	pub fn package_instance_exists_local(&self, package_instance_hash: Hash) -> Result<bool> {
 		// Begin a read transaction.
@@ -41,7 +40,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl crate::Instance {
 	pub fn get_package_instance_local(&self, hash: Hash) -> Result<Instance> {
 		let package_instance = self
 			.try_get_package_instance_local(hash)?

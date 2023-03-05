@@ -1,5 +1,6 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
+use tangram::os;
 
 /// Check for outdated dependencies.
 #[derive(clap::Args)]

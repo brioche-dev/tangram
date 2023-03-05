@@ -1,10 +1,10 @@
 use super::Tracker;
-use crate::{os, Cli};
+use crate::{os, Instance};
 use anyhow::{bail, Result};
 use lmdb::Transaction;
 use std::os::unix::prelude::OsStrExt;
 
-impl Cli {
+impl Instance {
 	/// Get an artifact tracker.
 	pub fn get_artifact_tracker(&self, path: &os::Path) -> Result<Option<Tracker>> {
 		// Begin a read transaction.

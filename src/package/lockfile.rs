@@ -1,8 +1,8 @@
-use crate::{os, Cli};
+use crate::{os, Instance};
 use anyhow::Result;
 use async_recursion::async_recursion;
 
-impl Cli {
+impl Instance {
 	/// Create a lockfile for the specified package.
 	#[async_recursion]
 	#[must_use]

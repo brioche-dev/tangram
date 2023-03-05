@@ -1,9 +1,9 @@
 use super::Hash;
-use crate::{os, Cli};
+use crate::{os, Instance};
 use anyhow::{bail, Result};
 use tokio::io::AsyncWrite;
 
-impl Cli {
+impl Instance {
 	pub async fn copy_blob_to_path(&self, blob_hash: Hash, path: &os::Path) -> Result<()> {
 		// Get the blob path.
 		let blob_path = self.blob_path(blob_hash);

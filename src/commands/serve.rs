@@ -1,9 +1,6 @@
 use crate::Cli;
 use anyhow::{Context, Result};
-use std::{
-	net::{IpAddr, SocketAddr},
-	sync::Arc,
-};
+use std::net::{IpAddr, SocketAddr};
 
 /// Run a server.
 #[derive(clap::Args)]
@@ -15,10 +12,10 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_serve(self: &Arc<Self>, args: Args) -> Result<()> {
+	pub async fn command_serve(&self, args: Args) -> Result<()> {
 		// Serve!
 		let addr = SocketAddr::new(args.host, args.port);
-		self.serve(addr).await.context("Failed to serve.")?;
+		self.tg.serve(addr).await.context("Failed to serve.")?;
 
 		Ok(())
 	}

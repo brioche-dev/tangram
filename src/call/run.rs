@@ -1,18 +1,18 @@
 use super::{isolate::THREAD_LOCAL_ISOLATE, Call};
-use crate::{module, value::Value, Cli};
+use crate::{module, value::Value, Instance};
 use anyhow::{bail, Context, Result};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-impl Cli {
+impl Instance {
 	// Run a call.
 	pub async fn run_call(self: &Arc<Self>, call: &Call) -> Result<Value> {
 		// Run the call on the local pool because it is a `!Send` future.
 		let output = self
 			.local_pool_handle
 			.spawn_pinned({
-				let cli = Arc::clone(self);
+				let tg = Arc::clone(self);
 				let call = call.clone();
-				move || async move { run_call_inner(cli, &call).await }
+				move || async move { run_call_inner(tg, &call).await }
 			})
 			.await
 			.context("Failed to join the task.")?
@@ -23,9 +23,9 @@ impl Cli {
 }
 
 #[allow(clippy::await_holding_refcell_ref)]
-async fn run_call_inner(cli: Arc<Cli>, call: &Call) -> Result<Value> {
+async fn run_call_inner(tg: Arc<Instance>, call: &Call) -> Result<Value> {
 	// Create the context.
-	let context = super::context::new(Arc::clone(&cli));
+	let context = super::context::new(Arc::clone(&tg));
 
 	// Create the module identifier.
 	let module_identifier = module::Identifier::for_root_module_in_package_instance(

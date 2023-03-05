@@ -2,7 +2,7 @@ use super::dependency;
 use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
-	module, os, Cli,
+	module, os, Instance,
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ pub struct Output {
 	pub dependency_specifiers: Vec<dependency::Specifier>,
 }
 
-impl Cli {
+impl Instance {
 	/// Check in the package at the specified path.
 	#[allow(clippy::unused_async)]
 	pub async fn check_in_package(self: &Arc<Self>, path: &os::Path) -> Result<Output> {
@@ -45,7 +45,8 @@ impl Cli {
 				.await?;
 
 			// Add the imported artifact to the directory.
-			self.directory_add(&mut directory, module_path, imported_artifact_hash)
+			directory
+				.add(self, module_path, imported_artifact_hash)
 				.await?;
 
 			// If the module is a normal module, then explore its imports.

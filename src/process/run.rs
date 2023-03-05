@@ -1,10 +1,10 @@
 use super::Process;
-use crate::{os, system::System, template::Path, value::Value, Cli};
+use crate::{os, system::System, template::Path, value::Value, Instance};
 use anyhow::{bail, Context, Result};
 use futures::{future::try_join_all, FutureExt};
 use std::{collections::HashSet, sync::Arc};
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::too_many_lines)]
 	pub async fn run_process(self: &Arc<Self>, process: &Process) -> Result<Value> {
 		// Create the output temp path.

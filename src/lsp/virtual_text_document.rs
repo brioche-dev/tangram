@@ -1,4 +1,4 @@
-use crate::Cli;
+use crate::Instance;
 use anyhow::Result;
 use lsp_types as lsp;
 
@@ -16,7 +16,7 @@ pub struct Params {
 	pub text_document: lsp::TextDocumentIdentifier,
 }
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn lsp_virtual_text_document(&self, params: Params) -> Result<Option<String>> {
 		// Get the module identifier.

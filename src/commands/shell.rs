@@ -1,6 +1,6 @@
-use crate::{package, path::Path, Cli};
+use crate::Cli;
 use anyhow::Result;
-use std::sync::Arc;
+use tangram::{package, path::Path};
 
 #[derive(clap::Args)]
 #[command(
@@ -22,7 +22,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_shell(self: &Arc<Self>, mut args: Args) -> Result<()> {
+	pub async fn command_shell(&self, mut args: Args) -> Result<()> {
 		// Set the default export name to "shell".
 		args.export = args.export.or_else(|| Some("shell".to_owned()));
 

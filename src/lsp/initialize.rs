@@ -1,8 +1,8 @@
-use crate::Cli;
+use crate::Instance;
 use anyhow::Result;
 use lsp_types as lsp;
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn lsp_initialize(
 		&self,

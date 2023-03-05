@@ -1,5 +1,5 @@
 use super::{Hash, Instance};
-use crate::{artifact, package::dependency, Cli};
+use crate::{artifact, package::dependency};
 use anyhow::{bail, Result};
 use lmdb::Transaction;
 
@@ -19,7 +19,7 @@ pub enum Outcome {
 	},
 }
 
-impl Cli {
+impl crate::Instance {
 	/// Add a pacakge after ensuring all its references are present.
 	pub fn try_add_package_instance(&self, package_instance: &Instance) -> Result<Outcome> {
 		// Ensure the package is present.
@@ -70,7 +70,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl crate::Instance {
 	pub fn add_package_instance(&self, package_instance: &Instance) -> Result<Hash> {
 		match self.try_add_package_instance(package_instance)? {
 			Outcome::Added { hash } => Ok(hash),

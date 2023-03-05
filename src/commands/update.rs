@@ -1,5 +1,6 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
+use tangram::os;
 
 /// Update a package's dependencies.
 #[derive(clap::Args)]
@@ -18,7 +19,7 @@ impl Cli {
 		}
 
 		// Create the lockfile.
-		self.create_lockfile(&path).await?;
+		self.tg.create_lockfile(&path).await?;
 
 		Ok(())
 	}

@@ -3,14 +3,14 @@ use crate::{
 	artifact::{self, Artifact},
 	hash, os, package,
 	path::Path,
-	Cli,
+	Instance,
 };
 use anyhow::{bail, Context, Result};
 use include_dir::include_dir;
 use indoc::formatdoc;
 use tokio::io::AsyncReadExt;
 
-impl Cli {
+impl Instance {
 	/// Load a module with the given module identifier.
 	pub async fn load_module(&self, module_identifier: &Identifier) -> Result<String> {
 		match module_identifier {
@@ -37,7 +37,7 @@ fn load_lib_module(module_identifier: &identifier::Lib) -> Result<String> {
 	Ok(text.to_owned())
 }
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	async fn load_artifact_module(&self, identifier: &identifier::Artifact) -> Result<String> {
 		// Get the artifact hash.
@@ -99,7 +99,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	async fn load_normal_module(&self, identifier: &identifier::Normal) -> Result<String> {
 		match &identifier.source {
 			identifier::Source::Path(package_path) => {

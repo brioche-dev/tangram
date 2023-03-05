@@ -1,10 +1,10 @@
 use super::{Hash, Operation};
-use crate::{value::Value, Cli};
+use crate::{value::Value, Instance};
 use anyhow::Result;
 use async_recursion::async_recursion;
 use std::sync::Arc;
 
-impl Cli {
+impl Instance {
 	pub async fn run(self: &Arc<Self>, operation: &Operation) -> Result<Value> {
 		self.run_with_parent(operation, None).await
 	}

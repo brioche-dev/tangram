@@ -7,7 +7,7 @@ use crate::{
 	path::Path,
 	reference::Reference,
 	symlink::Symlink,
-	Cli,
+	Instance,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
@@ -17,7 +17,7 @@ use std::{
 	os::unix::prelude::{MetadataExt, PermissionsExt},
 };
 
-impl Cli {
+impl Instance {
 	#[async_recursion]
 	pub async fn check_in(&self, path: &os::Path) -> Result<artifact::Hash> {
 		// Get the metadata for the file system object at the path.

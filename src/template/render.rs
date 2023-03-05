@@ -1,7 +1,7 @@
 use super::{Component, Template};
 use crate::{
 	artifact::{self, Artifact},
-	os, Cli,
+	os, Instance,
 };
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
@@ -43,7 +43,7 @@ impl Extend<Output> for Output {
 	}
 }
 
-impl Cli {
+impl Instance {
 	#[must_use]
 	#[async_recursion]
 	pub async fn render(
@@ -116,7 +116,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	/// Return all artifacts an artifact references recursively.
 	fn collect_referenced_artifact_hashes(
 		&self,

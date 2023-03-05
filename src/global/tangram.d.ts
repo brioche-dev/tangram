@@ -26,6 +26,11 @@ declare namespace tg {
 
 	export type ChecksumAlgorithm = "blake3" | "sha256";
 
+	export let checksum: (
+		algorithm: ChecksumAlgorithm,
+		bytes: Uint8Array | string,
+	) => Checksum;
+
 	// Context.
 
 	class Context {

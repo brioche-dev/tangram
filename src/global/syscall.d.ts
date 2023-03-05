@@ -1,5 +1,11 @@
 declare function syscall(syscall: "log", value: string): void;
 
+declare function syscall(
+	syscall: "checksum",
+	algorithm: syscall.ChecksumAlgorithm,
+	bytes: Uint8Array | string,
+): syscall.Checksum;
+
 declare function syscall(syscall: "encode_utf8", string: string): Uint8Array;
 
 declare function syscall(syscall: "decode_utf8", bytes: Uint8Array): string;
@@ -175,6 +181,10 @@ declare namespace syscall {
 		packageHash: ArtifactHash;
 		dependencies: Record<string, PackageInstanceHash>;
 	};
+
+	export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
+
+	export type ChecksumAlgorithm = "blake3" | "sha256";
 
 	export type nullish = undefined | null;
 }

@@ -1,5 +1,6 @@
-use crate::{package, Cli};
+use crate::Cli;
 use anyhow::Result;
+use tangram::package;
 
 /// Format the files in a package.
 #[derive(clap::Args)]

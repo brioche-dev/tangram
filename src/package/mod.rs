@@ -1,5 +1,4 @@
 pub use self::{identifier::Identifier, instance::Instance, specifier::Specifier};
-use crate::Cli;
 use anyhow::Result;
 use async_recursion::async_recursion;
 use std::{collections::BTreeMap, sync::Arc};
@@ -12,7 +11,7 @@ mod lockfile;
 mod resolve;
 pub mod specifier;
 
-impl Cli {
+impl crate::Instance {
 	#[allow(clippy::unused_async, clippy::only_used_in_recursion)]
 	#[async_recursion]
 	pub async fn create_package_instance(

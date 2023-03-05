@@ -1,5 +1,5 @@
 use super::{service, Position};
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
@@ -9,7 +9,7 @@ pub struct Entry {
 	pub name: String,
 }
 
-impl Cli {
+impl Instance {
 	pub async fn completion(
 		self: &Arc<Self>,
 		module_identifier: module::Identifier,

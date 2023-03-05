@@ -1,5 +1,6 @@
-use crate::{package, Cli};
+use crate::Cli;
 use anyhow::Result;
+use tangram::package;
 
 /// Add a dependency to a package.
 #[derive(clap::Args)]
@@ -10,7 +11,7 @@ pub struct Args {
 
 impl Cli {
 	#[allow(clippy::unused_async)]
-	pub async fn command_add(&self, _args: Args) -> Result<()> {
+	pub async fn run_add(&self, _args: Args) -> Result<()> {
 		Ok(())
 	}
 }

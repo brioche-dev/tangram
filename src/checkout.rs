@@ -5,7 +5,7 @@ use crate::{
 	os,
 	reference::Reference,
 	symlink::Symlink,
-	Cli,
+	Instance,
 };
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
@@ -15,7 +15,7 @@ use std::{os::unix::prelude::PermissionsExt, pin::Pin, sync::Arc};
 pub type ReferenceHandlerFn =
 	dyn Fn(&Reference, &os::Path) -> Pin<Box<dyn Send + Future<Output = Result<()>>>> + Sync;
 
-impl Cli {
+impl Instance {
 	pub async fn check_out(
 		&self,
 		artifact_hash: artifact::Hash,
@@ -307,7 +307,7 @@ impl Cli {
 	}
 }
 
-impl Cli {
+impl Instance {
 	#[async_recursion]
 	#[must_use]
 	pub async fn check_out_internal(
@@ -324,14 +324,14 @@ impl Cli {
 
 			// Create the callback to create reference artifact checkouts.
 			let reference_handler = {
-				let cli = Arc::clone(self);
+				let tg = Arc::clone(self);
 				move |reference: &Reference, path: &os::Path| {
-					let cli = Arc::clone(&cli);
+					let tg = Arc::clone(&tg);
 					let reference = reference.clone();
 					let path = path.to_owned();
 					async move {
 						// Get the target by checking out the reference.
-						let mut target = cli
+						let mut target = tg
 							.check_out_internal(reference.artifact_hash)
 							.await
 							.context("Failed to check out the reference.")?;

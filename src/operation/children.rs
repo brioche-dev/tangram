@@ -1,9 +1,9 @@
 use super::Hash;
-use crate::Cli;
+use crate::Instance;
 use anyhow::Result;
 use lmdb::{Cursor, Transaction};
 
-impl Cli {
+impl Instance {
 	/// Add a run to the database.
 	pub fn add_operation_child(
 		&self,

@@ -50,16 +50,16 @@ impl std::str::FromStr for Checksum {
 	}
 }
 
+impl From<Checksum> for String {
+	fn from(value: Checksum) -> Self {
+		value.to_string()
+	}
+}
+
 impl TryFrom<String> for Checksum {
 	type Error = anyhow::Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl From<Checksum> for String {
-	fn from(value: Checksum) -> Self {
-		value.to_string()
 	}
 }

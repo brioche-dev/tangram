@@ -1,5 +1,5 @@
 use super::{isolate::THREAD_LOCAL_ISOLATE, syscall::syscall};
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::{anyhow, Result};
 use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
 use sourcemap::SourceMap;
@@ -26,7 +26,7 @@ pub struct FutureOutput {
 	pub result: Result<v8::Global<v8::Value>>,
 }
 
-pub fn new(cli: Arc<Cli>) -> v8::Global<v8::Context> {
+pub fn new(tg: Arc<Instance>) -> v8::Global<v8::Context> {
 	// Create the context.
 	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
 	let mut isolate = isolate.borrow_mut();
@@ -34,8 +34,8 @@ pub fn new(cli: Arc<Cli>) -> v8::Global<v8::Context> {
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-	// Set the CLI on the context.
-	context.set_slot(&mut context_scope, cli);
+	// Set the instance on the context.
+	context.set_slot(&mut context_scope, tg);
 
 	// Create the state.
 	let state = Rc::new(State {

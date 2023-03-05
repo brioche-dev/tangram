@@ -1,9 +1,9 @@
 use super::service;
-use crate::{module, Cli};
+use crate::{module, Instance};
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn imports(self: &Arc<Self>, text: &str) -> Result<Vec<module::Specifier>> {
 		// Create the language service request.

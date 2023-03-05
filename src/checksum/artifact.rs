@@ -1,9 +1,9 @@
 use super::{Algorithm, Checksum, Writer};
-use crate::{artifact, Cli};
+use crate::{artifact, Instance};
 use anyhow::Result;
 use async_recursion::async_recursion;
 
-impl Cli {
+impl Instance {
 	#[allow(clippy::unused_async)]
 	pub async fn compute_artifact_checksum(
 		&self,

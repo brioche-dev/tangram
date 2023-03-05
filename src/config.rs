@@ -1,5 +1,6 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
+use tangram::os;
 use url::Url;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -11,6 +12,10 @@ pub struct Config {
 }
 
 impl Cli {
+	pub fn config_path(&self) -> os::PathBuf {
+		self.tg.path().join("config.json")
+	}
+
 	pub async fn read_config(&self) -> Result<Option<Config>> {
 		Self::read_config_from_path(&self.config_path()).await
 	}

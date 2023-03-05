@@ -1,6 +1,7 @@
-use crate::{os, Cli};
+use crate::Cli;
 use anyhow::{bail, Context, Result};
 use indoc::formatdoc;
+use tangram::os;
 
 /// Initialize a new package.
 #[derive(clap::Args)]

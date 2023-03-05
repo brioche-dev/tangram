@@ -1,10 +1,10 @@
 use super::Hash;
-use crate::{hash::Writer, Cli};
+use crate::{hash::Writer, Instance};
 use anyhow::Result;
 use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
 
-impl Cli {
+impl Instance {
 	pub async fn add_blob(&self, reader: impl AsyncRead + Unpin) -> Result<Hash> {
 		// Get a file permit.
 		let permit = self.file_semaphore.acquire().await.unwrap();

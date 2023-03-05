@@ -1,9 +1,9 @@
 use super::service;
-use crate::Cli;
+use crate::Instance;
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
-impl Cli {
+impl Instance {
 	pub async fn format(self: &Arc<Self>, text: String) -> Result<String> {
 		// Create the language service request.
 		let request = service::Request::Format(service::format::Request { text });
@@ -22,25 +22,25 @@ impl Cli {
 
 #[cfg(test)]
 mod tests {
-	use crate::Cli;
+	use crate::{Instance, Options};
 	use once_cell::sync::Lazy;
 	use std::sync::Arc;
 	use tokio::sync::Semaphore;
 
-	static TEST_CLI_SEMAPHORE: Lazy<Arc<Semaphore>> = Lazy::new(|| Arc::new(Semaphore::new(1)));
+	static SEMAPHORE: Lazy<Arc<Semaphore>> = Lazy::new(|| Arc::new(Semaphore::new(1)));
 
 	macro_rules! test {
 		($before:expr, $after:expr$(,)?) => {
-			// Get a test CLI permit.
-			let _permit = TEST_CLI_SEMAPHORE.clone().acquire_owned().await.unwrap();
+			// Get a permit.
+			let _permit = SEMAPHORE.clone().acquire_owned().await.unwrap();
 
-			// Create the CLI.
+			// Create the instance.
 			let temp_dir = tempfile::TempDir::new().unwrap();
 			let path = temp_dir.path().to_owned();
-			let cli = Arc::new(Cli::new(path).await.unwrap());
+			let tg = Arc::new(Instance::new(path, Options::default()).await.unwrap());
 
 			// Test.
-			let left = cli.format(indoc::indoc!($before).to_owned()).await.unwrap();
+			let left = tg.format(indoc::indoc!($before).to_owned()).await.unwrap();
 			let right = indoc::indoc!($after);
 			pretty_assertions::assert_eq!(left, right);
 		};

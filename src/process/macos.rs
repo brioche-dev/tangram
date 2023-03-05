@@ -6,7 +6,7 @@
 //!
 //! Helpful reference: <https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf>.
 
-use crate::{system::System, template::Path, Cli};
+use crate::{system::System, template::Path, Instance};
 use anyhow::{bail, Context, Result};
 use indoc::writedoc;
 use libc::{c_char, c_int, c_void};
@@ -17,7 +17,7 @@ use std::{
 	os::unix::prelude::OsStrExt,
 };
 
-impl Cli {
+impl Instance {
 	pub async fn run_process_macos(
 		&self,
 		_system: System,

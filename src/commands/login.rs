@@ -10,7 +10,8 @@ impl Cli {
 	pub async fn command_login(&self, _args: Args) -> Result<()> {
 		// Create a login.
 		let login = self
-			.api_client
+			.tg
+			.api_client()
 			.create_login()
 			.await
 			.context("Failed to create the login.")?;
@@ -28,7 +29,8 @@ impl Cli {
 				bail!("Login timed out. Please try again.");
 			}
 			let login = self
-				.api_client
+				.tg
+				.api_client()
 				.get_login(login.id)
 				.await
 				.context("Failed to get the login.")?;
@@ -40,7 +42,8 @@ impl Cli {
 
 		// Get the user.
 		let user = self
-			.api_client
+			.tg
+			.api_client()
 			.get_current_user(token)
 			.await
 			.context("Failed to get the current user.")?;

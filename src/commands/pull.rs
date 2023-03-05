@@ -1,5 +1,6 @@
-use crate::{artifact, Cli};
+use crate::Cli;
 use anyhow::{Context, Result};
+use tangram::artifact;
 use url::Url;
 
 /// Pull an artifact.
@@ -12,10 +13,11 @@ pub struct Args {
 impl Cli {
 	pub async fn command_pull(&self, args: Args) -> Result<()> {
 		// Create a client.
-		let client = self.create_client(args.url, None);
+		let client = self.tg.create_client(args.url, None);
 
 		// Pull.
-		self.pull(&client, args.artifact_hash)
+		self.tg
+			.pull(&client, args.artifact_hash)
 			.await
 			.context("Failed to pull.")?;
 

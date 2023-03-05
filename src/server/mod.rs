@@ -1,4 +1,4 @@
-use crate::Cli;
+use crate::Instance;
 use anyhow::Result;
 use futures::FutureExt;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
@@ -7,21 +7,21 @@ mod artifact;
 mod blob;
 mod error;
 
-impl Cli {
+impl Instance {
 	pub async fn serve(self: &Arc<Self>, addr: SocketAddr) -> Result<()> {
-		let cli = Arc::clone(self);
+		let tg = Arc::clone(self);
 		hyper::Server::try_bind(&addr)
 			.map(|server| {
 				tracing::info!("🚀 Serving on {}.", addr);
 				server
 			})?
 			.serve(hyper::service::make_service_fn(move |_| {
-				let cli = Arc::clone(&cli);
+				let tg = Arc::clone(&tg);
 				async move {
 					Ok::<_, Infallible>(hyper::service::service_fn(move |request| {
-						let cli = Arc::clone(&cli);
+						let tg = Arc::clone(&tg);
 						async move {
-							let response = cli.handle_request(request).await;
+							let response = tg.handle_request(request).await;
 							Ok::<_, Infallible>(response)
 						}
 					}))
