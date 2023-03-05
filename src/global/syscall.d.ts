@@ -45,19 +45,6 @@ declare function syscall(
 	operation: syscall.Operation,
 ): Promise<syscall.Value>;
 
-declare function syscall(syscall: "get_context_keys"): Array<string>;
-
-declare function syscall(
-	syscall: "get_context_value",
-	key: string,
-): syscall.Value;
-
-declare function syscall(
-	syscall: "set_context_value",
-	key: string,
-	value: syscall.Value,
-): void;
-
 declare function syscall(
 	syscall: "get_current_package_instance_hash",
 ): syscall.PackageInstanceHash;

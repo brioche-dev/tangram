@@ -1,10 +1,9 @@
-pub use self::{component::Component, subpath::Subpath};
+pub use self::component::Component;
 use crate::os;
 use anyhow::bail;
 use itertools::Itertools;
 
 pub mod component;
-pub mod subpath;
 
 /// A relative path that is always normalized.
 #[derive(
@@ -70,10 +69,6 @@ impl Path {
 			.last()
 			.and_then(Component::as_normal)
 			.and_then(|name| name.split('/').last())
-	}
-
-	pub fn into_subpath(self) -> Result<Subpath, Path> {
-		todo!()
 	}
 }
 

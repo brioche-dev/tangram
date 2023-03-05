@@ -36,7 +36,6 @@ tempfile = "3.4.0"
 anyhow = { version = "1", features = ["backtrace"] }
 async-recursion = "1"
 blake3 = "1"
-bstr = "1"
 buffalo = { workspace = true }
 byteorder = "1.4.3"
 bytes = "=1.2.1"
@@ -49,11 +48,9 @@ filetime = "0.2"
 flate2 = "1"
 fnv = "1"
 futures = "0.3"
-futures-util = "0.3"
 hex = { version = "0.4", features = ["serde"] }
 http = "0.2"
 hyper = { version = "0.14.24", features = ["full"] }
-hyper-rustls = "0.23"
 include_dir = "0.7"
 indoc = "2"
 insta = "1.28"
@@ -70,12 +67,10 @@ rand = "0.8"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
-serde_urlencoded = "0.7.1"
 serde_v8 = "0.84.0"
 sha2 = "0.10.6"
 sourcemap = "6"
 tar = "0.4"
-thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["fs"] }
 tokio-util = { version = "0.7", features = ["full"] }

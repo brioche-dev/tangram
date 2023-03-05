@@ -1,7 +1,7 @@
 use super::{isolate::THREAD_LOCAL_ISOLATE, Call};
 use crate::{module, value::Value, Instance};
-use anyhow::{bail, Context, Result};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use anyhow::{Context, Result};
+use std::{rc::Rc, sync::Arc};
 
 impl Instance {
 	// Run a call.
@@ -49,48 +49,36 @@ async fn run_call_inner(tg: Arc<Instance>, call: &Call) -> Result<Value> {
 	let namespace = module.get_module_namespace();
 	let namespace = namespace.to_object(&mut context_scope).unwrap();
 
-	// Get the export.
-	let export_name_string = v8::String::new(&mut context_scope, &call.function.name).unwrap();
-	let export: v8::Local<v8::Function> = namespace
-		.get(&mut context_scope, export_name_string.into())
+	// Get the function.
+	let function_name_string = v8::String::new(&mut context_scope, &call.function.name).unwrap();
+	let function: v8::Local<v8::Function> = namespace
+		.get(&mut context_scope, function_name_string.into())
 		.context("Failed to get the export.")?
 		.try_into()
 		.context("The export must be an object.")?;
-
-	// Get the receiver and function.
 	let run_string = v8::String::new(&mut context_scope, "run").unwrap();
-	let (receiver, function): (v8::Local<v8::Value>, v8::Local<v8::Function>) = if let Some(run) =
-		export
-			.get(&mut context_scope, run_string.into())
-			.filter(|run| !run.is_undefined())
-	{
-		let receiver = export.into();
-		let run = run
-			.try_into()
-			.context(r#"The value for the key "run" must be a function."#)?;
-		(receiver, run)
-	} else {
-		bail!(r#"The export must be a tangram function."#);
-	};
+	let run: v8::Local<v8::Function> = function
+		.get(&mut context_scope, run_string.into())
+		.context(r#"The export must be a tangram function."#)?
+		.try_into()
+		.context(r#"The value for the key "run" must be a function."#)?;
 
-	// Set the tangram context.
-	context.set_slot(
-		&mut context_scope,
-		Rc::new(RefCell::new(call.context.clone())),
-	);
+	// Serialize the context to v8.
+	let serialized_context = serde_v8::to_v8(&mut context_scope, &call.context)
+		.context("Failed to serialize the context.")?;
 
 	// Serialize the args to v8.
-	let args = call
-		.args
-		.iter()
-		.map(|arg| {
-			let arg = serde_v8::to_v8(&mut context_scope, arg)?;
-			Ok(arg)
-		})
-		.collect::<Result<Vec<_>>>()?;
+	let serialized_args =
+		serde_v8::to_v8(&mut context_scope, &call.args).context("Failed to serialize the args.")?;
 
 	// Call the function.
-	let output = function.call(&mut context_scope, receiver, &args).unwrap();
+	let output = run
+		.call(
+			&mut context_scope,
+			function.into(),
+			&[serialized_args, serialized_context],
+		)
+		.unwrap();
 
 	// Make the output and context global.
 	let output = v8::Global::new(&mut context_scope, output);

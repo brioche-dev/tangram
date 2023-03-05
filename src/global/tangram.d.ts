@@ -33,13 +33,7 @@ declare namespace tg {
 
 	// Context.
 
-	class Context {
-		entries: () => Promise<Array<[string, Value]>>;
-		get: (key: string) => Promise<Value | undefined>;
-		set: (key: string, value: Value) => Promise<void>;
-	}
-
-	export let context: Context;
+	export let context: Map<string, Value>;
 
 	// Directory.
 

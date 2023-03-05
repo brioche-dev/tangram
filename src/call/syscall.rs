@@ -16,7 +16,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use num::ToPrimitive;
-use std::{cell::RefCell, collections::BTreeMap, future::Future, rc::Rc, sync::Arc};
+use std::{future::Future, rc::Rc, sync::Arc};
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn syscall(
@@ -60,9 +60,6 @@ fn syscall_inner<'s>(
 			syscall_sync(scope, args, syscall_get_current_package_instance_hash)
 		},
 		"get_current_export_name" => syscall_sync(scope, args, syscall_get_current_export_name),
-		"get_context_keys" => syscall_sync(scope, args, syscall_get_context_keys),
-		"get_context_value" => syscall_sync(scope, args, syscall_get_context_value),
-		"set_context_value" => syscall_sync(scope, args, syscall_set_context_value),
 		_ => bail!(r#"Unknown syscall "{name}"."#),
 	}
 }
@@ -245,78 +242,6 @@ fn get_module_identifier_and_position(
 	let character = stack_frame.get_column().to_u32().unwrap() - 1;
 	let position = Position { line, character };
 	(module_identifier, position)
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_get_context_keys(
-	scope: &mut v8::HandleScope,
-	_state: Rc<State>,
-	_args: (),
-) -> Result<Vec<String>> {
-	// Get the context.
-	let context = scope.get_current_context();
-
-	// Get the context map.
-	let context = Rc::clone(
-		context
-			.get_slot::<Rc<RefCell<BTreeMap<String, Value>>>>(scope)
-			.unwrap(),
-	);
-
-	// Get the keys.
-	let keys = context.borrow().keys().cloned().collect();
-
-	Ok(keys)
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_get_context_value(
-	scope: &mut v8::HandleScope,
-	_state: Rc<State>,
-	args: (String,),
-) -> Result<Option<Value>> {
-	// Get the key.
-	let (key,) = args;
-
-	// Get the context.
-	let context = scope.get_current_context();
-
-	// Get the context map.
-	let context = Rc::clone(
-		context
-			.get_slot::<Rc<RefCell<BTreeMap<String, Value>>>>(scope)
-			.unwrap(),
-	);
-
-	// Get the value.
-	let value = context.borrow().get(&key).cloned();
-
-	Ok(value)
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_set_context_value(
-	scope: &mut v8::HandleScope,
-	_state: Rc<State>,
-	args: (String, Value),
-) -> Result<()> {
-	// Get the key.
-	let (key, value) = args;
-
-	// Get the context.
-	let context = scope.get_current_context();
-
-	// Get the context map.
-	let context = Rc::clone(
-		context
-			.get_slot::<Rc<RefCell<BTreeMap<String, Value>>>>(scope)
-			.unwrap(),
-	);
-
-	// Set the value.
-	context.borrow_mut().insert(key, value);
-
-	Ok(())
 }
 
 fn syscall_sync<'s, A, T, F>(

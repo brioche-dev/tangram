@@ -90,12 +90,20 @@ export class Function<
 		});
 	}
 
-	async run(...serializedArgs: Array<syscall.Value>): Promise<syscall.Value> {
+	async run(
+		serializedArgs: Array<syscall.Value>,
+		serializedContext: { [key: string]: syscall.Value },
+	): Promise<syscall.Value> {
 		// Ensure the implementation is available.
 		assert(
 			this.implementation,
 			"This function does not have an implementation.",
 		);
+
+		// Deserialize and set the context.
+		for (let [key, value] of Object.entries(serializedContext)) {
+			context.set(key, await deserializeValue(value));
+		}
 
 		// Deserialize the args.
 		let args = (await Promise.all(serializedArgs.map(deserializeValue))) as A;
