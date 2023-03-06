@@ -2,12 +2,13 @@ use super::{identifier, Identifier};
 use crate::{
 	artifact::{self, Artifact},
 	hash, os, package,
-	path::Path,
+	path::{self, Path},
 	Instance,
 };
 use anyhow::{bail, Context, Result};
 use include_dir::include_dir;
 use indoc::formatdoc;
+use itertools::Itertools;
 use tokio::io::AsyncReadExt;
 
 impl Instance {
@@ -25,7 +26,15 @@ const TANGRAM_D_TS: &str = include_str!("../global/tangram.d.ts");
 const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/lib");
 
 fn load_lib_module(module_identifier: &identifier::Lib) -> Result<String> {
-	let path = module_identifier.path.to_string();
+	// Collect the path components.
+	let path = module_identifier
+		.path
+		.components
+		.iter()
+		.map(path::Component::as_str)
+		.join("/");
+
+	// Get the module text.
 	let text = match path.as_str() {
 		"tangram.d.ts" => TANGRAM_D_TS,
 		_ => LIB
@@ -34,6 +43,7 @@ fn load_lib_module(module_identifier: &identifier::Lib) -> Result<String> {
 			.contents_utf8()
 			.context("Failed to read the file as UTF-8.")?,
 	};
+
 	Ok(text.to_owned())
 }
 
