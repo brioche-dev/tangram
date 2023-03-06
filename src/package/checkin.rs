@@ -4,8 +4,8 @@ use crate::{
 	directory::Directory,
 	module, os, Instance,
 };
-use anyhow::Result;
-use std::sync::Arc;
+use anyhow::{bail, Result};
+use std::{collections::HashSet, sync::Arc};
 
 pub struct Output {
 	pub package_hash: artifact::Hash,
@@ -16,9 +16,10 @@ impl Instance {
 	/// Check in the package at the specified path.
 	#[allow(clippy::unused_async)]
 	pub async fn check_in_package(self: &Arc<Self>, path: &os::Path) -> Result<Output> {
-		// Create a queue of modules to visit.
+		// Create a queue of modules to visit and a visited set.
 		let root_module_identifier = module::Identifier::for_root_module_in_package_at_path(path);
-		let mut module_identifier_queue = vec![root_module_identifier];
+		let mut queue = vec![root_module_identifier];
+		let mut visited: HashSet<module::Identifier> = HashSet::default();
 
 		// Create the package.
 		let mut directory = Directory::new();
@@ -27,7 +28,11 @@ impl Instance {
 		let mut dependency_specifiers = Vec::new();
 
 		// Visit each module.
-		while let Some(module_identifier) = module_identifier_queue.pop() {
+		while let Some(module_identifier) = queue.pop() {
+			// Add the module to the visited set.
+			visited.insert(module_identifier.clone());
+
+			// Get the package path and module path from the module identifier.
 			let (module::Identifier::Normal(module::identifier::Normal {
 				source: module::identifier::Source::Path(package_path),
 				path: module_path,
@@ -36,7 +41,7 @@ impl Instance {
 				source: module::identifier::Source::Path(package_path),
 				path: module_path,
 			})) = &module_identifier else {
-				continue;
+				bail!("Invalid module identifier.");
 			};
 
 			// Check in the artifact at the imported path.
@@ -64,9 +69,11 @@ impl Instance {
 						self.resolve_module(&specifier, &module_identifier).await?;
 
 					match specifier {
-						// If the module is specified with a path, then add the resolved module identifier to the queue.
+						// If the module is specified with a path, then add the resolved module identifier to the queue if it has not been visited.
 						module::Specifier::Path(_) => {
-							module_identifier_queue.push(resolved_module_identifier);
+							if !visited.contains(&resolved_module_identifier) {
+								queue.push(resolved_module_identifier);
+							}
 						},
 
 						// If the module is specified with a package, then add the specifier to the list of dependencies.
