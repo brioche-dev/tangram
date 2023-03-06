@@ -121,6 +121,23 @@ declare namespace tg {
 	) => (...args: { [K in keyof A]: Unresolved<A[K]> }) => Promise<R>;
 	export { function_ as function };
 
+	// Artifact type guards.
+
+	/** Check if a value is an `Artifact`. */
+	export let isArtifact: (value: unknown) => value is Artifact;
+
+	/** Check if a value is a `Directory`. */
+	export let isDirectory: (value: unknown) => value is Directory;
+
+	/** Check if a value is a `File`. */
+	export let isFile: (value: unknown) => value is File;
+
+	/** Check if a value is a `Placeholder`. */
+	export let isPlaceholder: (value: unknown) => value is Placeholder;
+
+	/** Check if a value is a `Reference`. */
+	export let isReference: (value: unknown) => value is Reference;
+
 	// Log.
 
 	/** Write to the log. */

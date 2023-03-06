@@ -1,3 +1,4 @@
+import { isArtifact } from "./artifact";
 import { context } from "./context";
 import { Directory, directory, isDirectory } from "./directory";
 import { download } from "./download";
@@ -29,6 +30,7 @@ let tg = {
 	download,
 	file,
 	function: function_,
+	isArtifact,
 	isDirectory,
 	isFile,
 	isPath,
