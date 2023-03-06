@@ -68,7 +68,7 @@ impl Path {
 		self.components
 			.last()
 			.and_then(Component::as_normal)
-			.and_then(|name| name.split('/').last())
+			.and_then(|name| name.split('.').last())
 	}
 }
 
