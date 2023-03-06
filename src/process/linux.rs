@@ -1,8 +1,8 @@
-use crate::{system::System, template::Path, Cli};
+use crate::{system::System, template::Path, Instance};
 use anyhow::{bail, Context, Result};
 use std::collections::{BTreeMap, HashSet};
 
-impl Cli {
+impl Instance {
 	pub async fn run_process_linux(
 		&self,
 		_system: System,
