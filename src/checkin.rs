@@ -167,7 +167,8 @@ impl Instance {
 		drop(permit);
 
 		// Create the artifact. A symlink is a reference if the result of canonicalizing its path joined with its target points into the checkouts directory.
-		let target_path = tokio::fs::canonicalize(&path.join("..").join(&target)).await?;
+		let parent_path = path.parent().unwrap();
+		let target_path = tokio::fs::canonicalize(&parent_path.join(&target)).await?;
 		let artifact = if let Ok(target) = target_path.strip_prefix(&self.checkouts_path()) {
 			// Convert the target to a path.
 			let target: Path = target
