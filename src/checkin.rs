@@ -1,6 +1,7 @@
 use crate::{
 	artifact::{self, Artifact},
 	blob,
+	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
 	file::File,
 	hash, os,
@@ -62,11 +63,19 @@ impl Instance {
 			.context("Failed to read the directory.")?;
 		let mut entry_names = Vec::new();
 		while let Some(entry) = read_dir.next_entry().await? {
+			// Get the entry's file name.
 			let file_name = entry
 				.file_name()
 				.to_str()
 				.context("All file names must be valid UTF-8.")?
 				.to_owned();
+
+			// Ignore a referenced artifacts directory.
+			if file_name == REFERENCED_ARTIFACTS_DIRECTORY_NAME {
+				continue;
+			}
+
+			// Add the file name to the entry names.
 			entry_names.push(file_name);
 		}
 		drop(read_dir);
@@ -117,10 +126,18 @@ impl Instance {
 		let blob_hash = blob::Hash(hash_writer.finalize());
 		drop(file);
 
-		// Copy the file to the blobs directory.
+		// Copy the file to the temp path.
 		let temp_path = self.temp_path();
 		let blob_path = self.blob_path(blob_hash);
 		tokio::fs::copy(path, &temp_path).await?;
+
+		// Make the temp file readonly.
+		let metadata = tokio::fs::metadata(&temp_path).await?;
+		let mut permissions = metadata.permissions();
+		permissions.set_readonly(true);
+		tokio::fs::set_permissions(&temp_path, permissions).await?;
+
+		// Move the file to the blobs directory.
 		tokio::fs::rename(&temp_path, &blob_path).await?;
 
 		// Drop the file system permit.

@@ -32,16 +32,21 @@ impl crate::Instance {
 		// Create the dependencies.
 		let mut dependencies = BTreeMap::default();
 		for dependency_specifier in dependency_specifiers {
-			let dependency_identifier = self
+			// Get the dependency package identifier.
+			let dependency_package_identifier = self
 				.resolve_package(
 					&dependency_specifier.clone().into(),
 					Some(package_identifier),
 				)
 				.await?;
-			let dependency_instance = self
-				.create_package_instance(&dependency_identifier, locked)
+
+			// Create the dependency package instance.
+			let dependency_package_instance = self
+				.create_package_instance(&dependency_package_identifier, locked)
 				.await?;
-			dependencies.insert(dependency_specifier, dependency_instance);
+
+			// Add the dependency package instance to the dependencies map.
+			dependencies.insert(dependency_specifier, dependency_package_instance);
 		}
 
 		// Create the package instance.

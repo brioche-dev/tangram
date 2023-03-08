@@ -4,12 +4,8 @@ use crate::{
 	os, Instance,
 };
 use anyhow::{bail, Context, Result};
-use async_recursion::async_recursion;
 use futures::future::try_join_all;
-use std::{
-	collections::{BTreeMap, HashSet},
-	sync::Arc,
-};
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone, Debug, Default)]
 pub struct Output {
@@ -44,10 +40,8 @@ impl Extend<Output> for Output {
 }
 
 impl Instance {
-	#[must_use]
-	#[async_recursion]
 	pub async fn render(
-		self: &Arc<Self>,
+		&self,
 		template: &Template,
 		placeholder_values: &BTreeMap<String, Path>,
 	) -> Result<Output> {

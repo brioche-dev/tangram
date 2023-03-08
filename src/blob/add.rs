@@ -30,6 +30,12 @@ impl Instance {
 		// Drop the file permit.
 		drop(permit);
 
+		// Make the temp file readonly.
+		let metadata = tokio::fs::metadata(&temp_path).await?;
+		let mut permissions = metadata.permissions();
+		permissions.set_readonly(true);
+		tokio::fs::set_permissions(&temp_path, permissions).await?;
+
 		// Move the temp file to the blobs path.
 		let blob_path = self.blob_path(blob_hash);
 		tokio::fs::rename(&temp_path, &blob_path).await?;

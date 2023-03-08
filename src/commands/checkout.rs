@@ -22,7 +22,7 @@ impl Cli {
 
 		// Perform the checkout.
 		self.tg
-			.check_out(args.artifact_hash, &path, None)
+			.check_out_external(args.artifact_hash, &path)
 			.await
 			.context("Failed to perform the checkout.")?;
 

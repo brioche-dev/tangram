@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use tangram::{
 	function::Function,
 	operation::{Call, Operation},
-	package,
+	os, package,
 };
 
 /// Call a function.
@@ -17,6 +17,9 @@ pub struct Args {
 
 	#[arg(default_value = "default")]
 	name: String,
+
+	#[arg(long)]
+	checkout: bool,
 }
 
 impl Cli {
@@ -55,6 +58,16 @@ impl Cli {
 
 		// Print the output.
 		println!("{output:?}");
+
+		// Check out the output if requested.
+		if args.checkout {
+			let artifact_hash = output
+				.as_artifact()
+				.context("Expected the output to be an artifact.")?;
+			self.tg
+				.check_out_external(*artifact_hash, os::Path::new("output"))
+				.await?;
+		}
 
 		Ok(())
 	}

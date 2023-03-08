@@ -100,8 +100,7 @@ impl Instance {
 		// Generate the code.
 		let code = formatdoc!(
 			r#"
-				// @ts-ignore
-				export default await {ty}.fromHash("{artifact_hash}")
+				export default await ({ty} as any).fromHash("{artifact_hash}") as {ty}
 			"#
 		);
 
