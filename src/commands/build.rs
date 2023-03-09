@@ -19,7 +19,7 @@ pub struct Args {
 	name: String,
 
 	#[arg(long)]
-	checkout: bool,
+	checkout: Option<os::PathBuf>,
 }
 
 impl Cli {
@@ -61,21 +61,11 @@ impl Cli {
 		println!("{output:?}");
 
 		// Check out the output if requested.
-		if args.checkout {
+		if let Some(path) = args.checkout {
 			let artifact_hash = output
 				.as_artifact()
 				.context("Expected the output to be an artifact.")?;
-			self.tg
-				.check_out_external(*artifact_hash, os::Path::new("output"))
-				.await?;
-			futures::future::try_join_all(vec![
-				self.tg.check_out_internal(*artifact_hash),
-				self.tg.check_out_internal(*artifact_hash),
-				self.tg.check_out_internal(*artifact_hash),
-				self.tg.check_out_internal(*artifact_hash),
-				self.tg.check_out_internal(*artifact_hash),
-			])
-			.await?;
+			self.tg.check_out_external(*artifact_hash, &path).await?;
 		}
 
 		Ok(())
