@@ -6,8 +6,9 @@ use self::{
 	constants::{FILE_SEMAPHORE_SIZE, SOCKET_SEMAPHORE_SIZE},
 	database::Database,
 	id::Id,
-	language::service::RequestSender,
 	lock::Lock,
+	util::task_map::TaskMap,
+	value::Value,
 };
 use anyhow::Result;
 use std::{collections::HashMap, sync::Arc};
@@ -53,6 +54,7 @@ pub mod server;
 pub mod symlink;
 pub mod system;
 pub mod template;
+pub mod util;
 pub mod value;
 
 pub struct Instance {
@@ -81,7 +83,14 @@ pub struct Instance {
 	local_pool_handle: LocalPoolHandle,
 
 	/// A channel to send requests to the language service.
-	language_service_request_sender: std::sync::Mutex<Option<RequestSender>>,
+	language_service_request_sender: std::sync::Mutex<Option<language::service::RequestSender>>,
+
+	/// A task map that deduplicates internal checkouts.
+	internal_checkouts_task_map:
+		std::sync::Mutex<Option<Arc<TaskMap<artifact::Hash, os::PathBuf>>>>,
+
+	/// A task map that deduplicates operations.
+	operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Value>>>>,
 
 	/// A map that tracks changes to modules in memory.
 	documents:
@@ -156,6 +165,12 @@ impl Instance {
 		// Create the language service request sender.
 		let language_service_request_sender = std::sync::Mutex::new(None);
 
+		// Create the internal checkouts task map.
+		let internal_checkouts_task_map = std::sync::Mutex::new(None);
+
+		// Create the operations task map.
+		let operations_task_map = std::sync::Mutex::new(None);
+
 		// Create the documents map.
 		let documents = tokio::sync::RwLock::new(HashMap::default());
 
@@ -180,6 +195,8 @@ impl Instance {
 			runtime_handle,
 			local_pool_handle,
 			language_service_request_sender,
+			internal_checkouts_task_map,
+			operations_task_map,
 			documents,
 			module_trackers,
 			api_client,

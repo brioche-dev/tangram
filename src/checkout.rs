@@ -6,23 +6,59 @@ use crate::{
 	os,
 	reference::Reference,
 	symlink::Symlink,
+	util::task_map::TaskMap,
 	Instance,
 };
 use anyhow::{Context, Result};
 use async_recursion::async_recursion;
-use futures::future::try_join_all;
-use std::os::unix::prelude::PermissionsExt;
+use futures::{future::try_join_all, FutureExt};
+use std::{os::unix::prelude::PermissionsExt, sync::Arc};
 
 impl Instance {
-	pub async fn check_out_internal(&self, artifact_hash: artifact::Hash) -> Result<os::PathBuf> {
+	pub async fn check_out_internal(
+		self: &Arc<Self>,
+		artifact_hash: artifact::Hash,
+	) -> Result<os::PathBuf> {
+		// Get the internal checkouts task map.
+		let internal_checkouts_task_map = self
+			.internal_checkouts_task_map
+			.lock()
+			.unwrap()
+			.get_or_insert_with(|| {
+				Arc::new(TaskMap::new(Box::new({
+					let tg = Arc::clone(self);
+					move |artifact_hash| {
+						let tg = Arc::clone(&tg);
+						async move { tg.check_out_internal_inner(artifact_hash).await.unwrap() }
+							.boxed()
+					}
+				})))
+			})
+			.clone();
+
+		// Perform the checkout.
+		let path = internal_checkouts_task_map.run(artifact_hash).await;
+
+		Ok(path)
+	}
+
+	pub async fn check_out_internal_inner(
+		&self,
+		artifact_hash: artifact::Hash,
+	) -> Result<os::PathBuf> {
 		// Compute the checkout's path in the checkouts directory.
 		let path = self.checkouts_path().join(artifact_hash.to_string());
+
+		// If the path exists, then the artifact is already checked out.
+		if os::fs::exists(&path).await? {
+			return Ok(path);
+		}
 
 		// Create a temp path.
 		let temp_path = self.temp_path();
 
 		// Perform the checkout to the temp path.
-		self.check_out_internal_inner(artifact_hash, &temp_path)
+		self.check_out_internal_inner_inner(artifact_hash, &temp_path)
 			.await?;
 
 		// Make the file system object writeable.
@@ -67,7 +103,7 @@ impl Instance {
 	}
 
 	#[async_recursion]
-	pub async fn check_out_internal_inner(
+	async fn check_out_internal_inner_inner(
 		&self,
 		artifact_hash: artifact::Hash,
 		path: &os::Path,
@@ -84,7 +120,7 @@ impl Instance {
 				try_join_all(directory.entries.into_iter().map(
 					|(entry_name, entry_hash)| async move {
 						let entry_path = path.join(&entry_name);
-						self.check_out_internal_inner(entry_hash, &entry_path)
+						self.check_out_internal_inner_inner(entry_hash, &entry_path)
 							.await?;
 						Ok::<_, anyhow::Error>(())
 					},
@@ -115,7 +151,7 @@ impl Instance {
 			Artifact::Reference(reference) => {
 				// Check out the referenced artifact.
 				let referenced_artifact_checkout_path = self
-					.check_out_internal(reference.artifact_hash)
+					.check_out_internal_inner(reference.artifact_hash)
 					.await
 					.context("Failed to check out the referenced artifact.")?;
 

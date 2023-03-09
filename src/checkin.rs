@@ -70,7 +70,7 @@ impl Instance {
 				.context("All file names must be valid UTF-8.")?
 				.to_owned();
 
-			// Ignore a referenced artifacts directory.
+			// Ignore the entry if it is the referenced artifacts directory.
 			if file_name == REFERENCED_ARTIFACTS_DIRECTORY_NAME {
 				continue;
 			}

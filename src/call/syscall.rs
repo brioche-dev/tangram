@@ -160,7 +160,8 @@ async fn syscall_get_package_instance(
 
 async fn syscall_run(tg: Arc<Instance>, args: (Operation,)) -> Result<Value> {
 	let (operation,) = args;
-	let output = tg.run(&operation).await?;
+	let operation_hash = tg.add_operation(&operation)?;
+	let output = tg.run(operation_hash).await?;
 	Ok(output)
 }
 

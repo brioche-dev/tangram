@@ -5,7 +5,10 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use futures::future::try_join_all;
-use std::collections::{BTreeMap, HashSet};
+use std::{
+	collections::{BTreeMap, HashSet},
+	sync::Arc,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct Output {
@@ -41,7 +44,7 @@ impl Extend<Output> for Output {
 
 impl Instance {
 	pub async fn render(
-		&self,
+		self: &Arc<Self>,
 		template: &Template,
 		placeholder_values: &BTreeMap<String, Path>,
 	) -> Result<Output> {

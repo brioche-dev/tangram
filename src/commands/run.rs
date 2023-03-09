@@ -55,11 +55,12 @@ impl Cli {
 			context,
 			args: vec![],
 		});
+		let operation_hash = self.tg.add_operation(&operation)?;
 
 		// Run the operation.
 		let output = self
 			.tg
-			.run(&operation)
+			.run(operation_hash)
 			.await
 			.context("Failed to run the operation.")?;
 

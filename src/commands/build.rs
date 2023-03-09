@@ -48,11 +48,12 @@ impl Cli {
 			context,
 			args: vec![],
 		});
+		let operation_hash = self.tg.add_operation(&operation)?;
 
 		// Run the operation.
 		let output = self
 			.tg
-			.run(&operation)
+			.run(operation_hash)
 			.await
 			.context("Failed to run the operation.")?;
 
@@ -67,6 +68,14 @@ impl Cli {
 			self.tg
 				.check_out_external(*artifact_hash, os::Path::new("output"))
 				.await?;
+			futures::future::try_join_all(vec![
+				self.tg.check_out_internal(*artifact_hash),
+				self.tg.check_out_internal(*artifact_hash),
+				self.tg.check_out_internal(*artifact_hash),
+				self.tg.check_out_internal(*artifact_hash),
+				self.tg.check_out_internal(*artifact_hash),
+			])
+			.await?;
 		}
 
 		Ok(())
