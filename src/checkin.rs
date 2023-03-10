@@ -183,12 +183,19 @@ impl Instance {
 		})?;
 		drop(permit);
 
-		// Create the artifact. A symlink is a reference if the result of canonicalizing its path joined with its target points into the checkouts directory.
-		let parent_path = path.parent().unwrap();
-		let target_path = tokio::fs::canonicalize(&parent_path.join(&target)).await?;
-		let artifact = if let Ok(target) = target_path.strip_prefix(&self.checkouts_path()) {
+		// Create the artifact. A symlink is a reference if the result of canonicalizing its path's parent joined with its target points into the checkouts directory.
+		let target_in_checkouts_path = tokio::fs::canonicalize(&path.join("..").join(&target))
+			.await
+			.ok()
+			.and_then(|canonicalized_target| {
+				let target_in_checkouts_path = canonicalized_target
+					.strip_prefix(&self.checkouts_path())
+					.ok()?;
+				Some(target_in_checkouts_path.to_owned())
+			});
+		let artifact = if let Some(target_in_checkouts_path) = target_in_checkouts_path {
 			// Convert the target to a path.
-			let target: Path = target
+			let target: Path = target_in_checkouts_path
 				.as_os_str()
 				.to_str()
 				.context("The symlink target was not valid UTF-8.")?
