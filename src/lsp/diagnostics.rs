@@ -1,6 +1,5 @@
 use super::{send_notification, Sender};
-use crate::Instance;
-use anyhow::Result;
+use crate::{error::Result, Instance};
 use lsp_types as lsp;
 use std::sync::Arc;
 

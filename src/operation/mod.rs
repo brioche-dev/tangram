@@ -9,19 +9,23 @@ mod output;
 mod run;
 mod serialize;
 
+/// An operation.
 #[derive(
 	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
 )]
 #[serde(tag = "kind", content = "value")]
 pub enum Operation {
+	/// A download operation.
 	#[buffalo(id = 0)]
 	#[serde(rename = "download")]
 	Download(Download),
 
+	/// A process operation.
 	#[buffalo(id = 1)]
 	#[serde(rename = "process")]
 	Process(Process),
 
+	/// A call operation.
 	#[buffalo(id = 2)]
 	#[serde(rename = "call")]
 	Call(Call),

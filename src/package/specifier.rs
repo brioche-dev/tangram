@@ -1,6 +1,5 @@
 use super::dependency;
-use crate::os;
-use anyhow::Result;
+use crate::{error::Result, os};
 
 /// A reference to a package, either at a path or from the registry.
 #[derive(

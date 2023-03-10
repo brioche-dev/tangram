@@ -1,6 +1,8 @@
 use super::{Blob, Hash};
-use crate::{os, Instance};
-use anyhow::{Context, Result};
+use crate::{
+	error::{Context, Result},
+	os, Instance,
+};
 use tokio::io::AsyncRead;
 
 impl Instance {

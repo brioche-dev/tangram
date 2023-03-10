@@ -1,6 +1,8 @@
 use super::error::bad_request;
-use crate::Instance;
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	Instance,
+};
 
 impl Instance {
 	pub async fn handle_add_artifact_request(

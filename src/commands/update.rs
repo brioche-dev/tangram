@@ -1,6 +1,8 @@
 use crate::Cli;
-use anyhow::{Context, Result};
-use tangram::os;
+use tangram::{
+	error::{Context, Result},
+	os,
+};
 
 /// Update a package's dependencies.
 #[derive(clap::Args)]

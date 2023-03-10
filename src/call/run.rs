@@ -1,6 +1,10 @@
 use super::{isolate::THREAD_LOCAL_ISOLATE, Call};
-use crate::{module, value::Value, Instance};
-use anyhow::{Context, Result};
+use crate::{
+	error::{Context, Result},
+	module,
+	value::Value,
+	Instance,
+};
 use std::{rc::Rc, sync::Arc};
 
 impl Instance {

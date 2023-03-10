@@ -41,13 +41,13 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	},
 
 	getScriptFileNames: () => {
-		return syscall("documents");
+		return syscall("get_documents");
 	},
 
 	getScriptSnapshot: (fileName) => {
 		let text;
 		try {
-			text = syscall("load", fileName);
+			text = syscall("load_module", fileName);
 		} catch {
 			return undefined;
 		}
@@ -55,13 +55,13 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	},
 
 	getScriptVersion: (fileName) => {
-		return syscall("version", fileName);
+		return syscall("get_module_version", fileName);
 	},
 
 	getSourceFile: (fileName, languageVersion) => {
 		let text;
 		try {
-			text = syscall("load", fileName);
+			text = syscall("load_module", fileName);
 		} catch {
 			return undefined;
 		}
@@ -81,7 +81,7 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 		return specifiers.map((specifier) => {
 			let resolvedFileName;
 			try {
-				resolvedFileName = syscall("resolve", specifier, referrer);
+				resolvedFileName = syscall("resolve_module", specifier, referrer);
 			} catch {
 				return undefined;
 			}

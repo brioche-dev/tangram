@@ -1,6 +1,8 @@
 use super::{Hash, Operation};
-use crate::Instance;
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	Instance,
+};
 
 impl Instance {
 	pub fn get_operation_local(&self, hash: Hash) -> Result<Operation> {

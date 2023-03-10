@@ -1,5 +1,7 @@
-use crate::Instance;
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	Instance,
+};
 use futures::{future, FutureExt};
 use lsp::{notification::Notification, request::Request};
 use lsp_types as lsp;

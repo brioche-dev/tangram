@@ -1,6 +1,8 @@
 use super::Client;
-use crate::blob;
-use anyhow::{Context, Result};
+use crate::{
+	blob,
+	error::{Context, Result},
+};
 use futures::TryStreamExt;
 use std::{pin::Pin, sync::Arc};
 use tokio::io::AsyncRead;

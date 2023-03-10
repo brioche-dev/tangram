@@ -2,6 +2,7 @@ use crate::{
 	artifact::{self, Artifact},
 	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
+	error::{Context, Result},
 	file::File,
 	os,
 	reference::Reference,
@@ -9,7 +10,6 @@ use crate::{
 	util::task_map::TaskMap,
 	Instance,
 };
-use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use futures::{future::try_join_all, FutureExt};
 use std::{os::unix::prelude::PermissionsExt, sync::Arc};
@@ -61,11 +61,11 @@ impl Instance {
 		self.check_out_internal_inner_inner(artifact_hash, &temp_path)
 			.await?;
 
-		// Make the file system object writeable.
-		let metadata = tokio::fs::metadata(&temp_path).await?;
-		let mut permissions = metadata.permissions();
-		permissions.set_readonly(false);
-		tokio::fs::set_permissions(&temp_path, permissions).await?;
+		// If the file system object is a directory, then make it writeable.
+		let artifact = self.get_artifact_local(artifact_hash)?;
+		if matches!(&artifact, Artifact::Directory(_)) {
+			tokio::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o755)).await?;
+		}
 
 		// Move the checkout from the temp path to the path in the checkouts directory.
 		match tokio::fs::rename(&temp_path, &path).await {
@@ -80,11 +80,11 @@ impl Instance {
 		}
 		.context("Failed to move the checkout to the checkout path.")?;
 
-		// Make the file system object readonly.
-		let metadata = tokio::fs::metadata(&path).await?;
-		let mut permissions = metadata.permissions();
-		permissions.set_readonly(true);
-		tokio::fs::set_permissions(&path, permissions).await?;
+		// If the file system object is a directory, then make it readonly.
+		let artifact = self.get_artifact_local(artifact_hash)?;
+		if matches!(&artifact, Artifact::Directory(_)) {
+			tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o555)).await?;
+		}
 
 		// Clear the file system object's timestamps.
 		tokio::task::spawn_blocking({
@@ -111,20 +111,23 @@ impl Instance {
 		// Get the artifact.
 		let artifact = self.get_artifact_local(artifact_hash)?;
 
-		match artifact {
+		match &artifact {
 			Artifact::Directory(directory) => {
 				// Create the directory.
 				tokio::fs::create_dir(path).await?;
 
 				// Recurse into the entries.
-				try_join_all(directory.entries.into_iter().map(
-					|(entry_name, entry_hash)| async move {
-						let entry_path = path.join(&entry_name);
-						self.check_out_internal_inner_inner(entry_hash, &entry_path)
-							.await?;
-						Ok::<_, anyhow::Error>(())
-					},
-				))
+				try_join_all(
+					directory
+						.entries
+						.iter()
+						.map(|(entry_name, entry_hash)| async move {
+							let entry_path = path.join(entry_name);
+							self.check_out_internal_inner_inner(*entry_hash, &entry_path)
+								.await?;
+							Ok::<_, anyhow::Error>(())
+						}),
+				)
 				.await?;
 			},
 
@@ -133,19 +136,11 @@ impl Instance {
 				self.copy_blob_to_path(file.blob_hash, path)
 					.await
 					.context("Failed to copy the blob.")?;
-
-				// Make the file executable if necessary.
-				if file.executable {
-					let metadata = tokio::fs::metadata(&path).await?;
-					let mut permissions = metadata.permissions();
-					permissions.set_mode(0o755);
-					tokio::fs::set_permissions(&path, permissions).await?;
-				}
 			},
 
 			Artifact::Symlink(symlink) => {
 				// Create the symlink.
-				tokio::fs::symlink(symlink.target, path).await?;
+				tokio::fs::symlink(&symlink.target, path).await?;
 			},
 
 			Artifact::Reference(reference) => {
@@ -157,7 +152,7 @@ impl Instance {
 
 				// Compute the referenced path.
 				let mut referenced_path = referenced_artifact_checkout_path;
-				if let Some(reference_path) = reference.path {
+				if let Some(reference_path) = &reference.path {
 					referenced_path.push(reference_path.to_string());
 				}
 
@@ -175,11 +170,15 @@ impl Instance {
 			},
 		};
 
-		// Make the file system object readonly.
-		let metadata = tokio::fs::metadata(&path).await?;
-		let mut permissions = metadata.permissions();
-		permissions.set_readonly(true);
-		tokio::fs::set_permissions(&path, permissions).await?;
+		// Set the permissions.
+		let mode = match &artifact {
+			Artifact::Directory(_) => Some(0o555),
+			Artifact::File(file) => Some(if file.executable { 0o555 } else { 0o444 }),
+			Artifact::Symlink(_) | Artifact::Reference(_) => None,
+		};
+		if let Some(mode) = mode {
+			tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).await?;
+		}
 
 		// Clear the file system object's timestamps.
 		tokio::task::spawn_blocking({
@@ -405,14 +404,6 @@ impl Instance {
 		self.copy_blob_to_path(file.blob_hash, path)
 			.await
 			.context("Failed to copy the blob.")?;
-
-		// Make the file executable if necessary.
-		if file.executable {
-			let metadata = tokio::fs::metadata(&path).await?;
-			let mut permissions = metadata.permissions();
-			permissions.set_mode(0o755);
-			tokio::fs::set_permissions(&path, permissions).await?;
-		}
 
 		Ok(())
 	}

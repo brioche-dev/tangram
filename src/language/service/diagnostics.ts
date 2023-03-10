@@ -17,7 +17,7 @@ export type Severity = "error" | "warning" | "information" | "hint";
 
 export let handle = (_request: Request): Response => {
 	// Get the module identifiers of all documents.
-	let moduleIdentifiers = syscall("documents");
+	let moduleIdentifiers = syscall("get_documents");
 
 	// Collect the diagnostics.
 	let diagnostics: Record<string, Array<Diagnostic>> = {};

@@ -1,6 +1,8 @@
 use super::{Artifact, Hash};
-use crate::Instance;
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	Instance,
+};
 use lmdb::Transaction;
 
 impl Instance {

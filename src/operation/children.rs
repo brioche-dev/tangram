@@ -1,6 +1,5 @@
 use super::Hash;
-use crate::Instance;
-use anyhow::Result;
+use crate::{error::Result, Instance};
 use lmdb::{Cursor, Transaction};
 
 impl Instance {
@@ -40,14 +39,11 @@ impl Instance {
 		let mut cursor = txn.open_ro_cursor(self.database.operation_children)?;
 
 		// Get the children.
-		let children = cursor
-			.iter_dup_of(operation_hash.as_slice())
-			.into_iter()
-			.map(|value| {
-				let (_, value) = value?;
-				let value = buffalo::from_slice(value)?;
-				Ok(value)
-			});
+		let children = cursor.iter_dup_of(operation_hash.as_slice()).map(|value| {
+			let (_, value) = value?;
+			let value = buffalo::from_slice(value)?;
+			Ok(value)
+		});
 
 		Ok(children)
 	}

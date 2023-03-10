@@ -1,6 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
-use tangram::package;
+use tangram::{error::Result, package};
 
 /// Remove a dependency from a package.
 #[derive(clap::Args)]

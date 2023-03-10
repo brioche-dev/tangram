@@ -1,6 +1,8 @@
 use super::{Hash, Instance};
-use crate::hash;
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	hash,
+};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 impl Instance {

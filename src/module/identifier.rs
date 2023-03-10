@@ -1,5 +1,9 @@
-use crate::{constants::ROOT_MODULE_FILE_NAME, os, package, path::Path};
-use anyhow::{bail, ensure, Context, Result};
+use crate::{
+	constants::ROOT_MODULE_FILE_NAME,
+	error::{bail, ensure, Context, Result},
+	os, package,
+	path::Path,
+};
 use url::Url;
 
 /// A unique identifier for a module.

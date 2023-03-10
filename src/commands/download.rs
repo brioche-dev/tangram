@@ -1,6 +1,8 @@
 use crate::Cli;
-use anyhow::{Context, Result};
-use tangram::operation::{Download, Operation};
+use tangram::{
+	error::{Context, Result},
+	operation::{Download, Operation},
+};
 use url::Url;
 
 /// Run a download operation.

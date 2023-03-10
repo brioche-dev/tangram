@@ -1,5 +1,9 @@
-use crate::{system::System, template::Path, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	system::System,
+	template::Path,
+	Instance,
+};
 use std::collections::{BTreeMap, HashSet};
 
 impl Instance {

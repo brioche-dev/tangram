@@ -2,8 +2,10 @@ use super::{
 	context::{await_value, Module, State},
 	isolate::THREAD_LOCAL_ISOLATE,
 };
-use crate::{module, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	module, Instance,
+};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::{rc::Rc, sync::Arc};
@@ -236,7 +238,7 @@ fn resolve_module_callback_inner<'s>(
 		}
 	});
 	let module_identifier = receiver.recv().unwrap().with_context(|| {
-		format!(r#"Failed to resolve specifier {specifier:?} relative to referrer "{referrer:?}"."#)
+		format!(r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer}"."#)
 	})?;
 
 	// Load.

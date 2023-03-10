@@ -1,6 +1,8 @@
 use super::Hash;
-use crate::{os, Instance};
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	os, Instance,
+};
 use tokio::io::AsyncWrite;
 
 impl Instance {

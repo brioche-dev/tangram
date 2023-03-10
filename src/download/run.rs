@@ -1,11 +1,11 @@
-use super::{ArchiveFormat, CompressionFormat, Download};
+use super::{unpack, Download};
 use crate::{
 	checksum::{self, Checksum},
+	error::{bail, Context, Result},
 	os,
 	value::Value,
 	Instance,
 };
-use anyhow::{bail, Context, Result};
 use futures::{Stream, StreamExt, TryStreamExt};
 use std::sync::{Arc, Mutex};
 use tokio_util::io::{StreamReader, SyncIoBridge};
@@ -18,8 +18,15 @@ impl Instance {
 		// Acquire a socket permit.
 		let _socket_permit = self.socket_semaphore.acquire().await?;
 
-		// Get the archive format.
-		let archive_format = ArchiveFormat::for_path(os::Path::new(download.url.path()));
+		// Get the unpack format.
+		let unpack_format = if download.unpack {
+			Some(
+				unpack::Format::for_path(os::Path::new(download.url.path()))
+					.context("Failed to determine the unpack format.")?,
+			)
+		} else {
+			None
+		};
 
 		// Send the request.
 		let response = self
@@ -52,17 +59,17 @@ impl Instance {
 			})
 		};
 
-		let artifact = match (download.unpack, archive_format) {
-			(_, None) | (false, _) => self.download_simple(stream).await?,
+		let artifact = match unpack_format {
+			None => self.download_simple(stream).await?,
 
-			(true, Some(ArchiveFormat::Tar(compression_format))) => {
-				self.download_tar_unpack(stream, compression_format).await?
+			Some(unpack::Format::Tar(compression)) => {
+				self.download_tar(stream, compression).await?
 			},
 
-			(true, Some(ArchiveFormat::Zip)) => self.download_zip_unpack(stream).await?,
+			Some(unpack::Format::Zip) => self.download_zip(stream).await?,
 		};
 
-		// Verify the checksum.
+		// If the download is not unsafe, then verify the checksum.
 		if !download.is_unsafe {
 			// Finalize the checksum.
 			let checksum_writer = Arc::try_unwrap(checksum_writer)
@@ -73,14 +80,12 @@ impl Instance {
 
 			// Ensure a checksum was provided.
 			let Some(expected) = download.checksum.clone() else {
-				bail!(r#"No checksum was provided. The checksum was "{actual:?}"."#);
+				bail!(r#"No checksum was provided. The checksum was "{actual}"."#);
 			};
 
 			// Verify the checksum.
 			if expected != actual {
-				bail!(
-					r#"The checksum did not match. Expected "{expected:?}" but got "{actual:?}"."#
-				);
+				bail!(r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#);
 			}
 		}
 
@@ -119,10 +124,10 @@ impl Instance {
 		Ok(artifact)
 	}
 
-	async fn download_tar_unpack<S>(
+	async fn download_tar<S>(
 		&self,
 		stream: S,
-		compression_format: Option<CompressionFormat>,
+		compression: Option<unpack::Compression>,
 	) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
@@ -137,21 +142,23 @@ impl Instance {
 			let temp_path = temp_path.clone();
 			move || -> Result<_> {
 				let archive_reader = std::io::BufReader::new(reader);
-				let archive_reader: Box<dyn std::io::Read + Send> = match compression_format {
+				let archive_reader: Box<dyn std::io::Read + Send> = match compression {
 					None => Box::new(archive_reader),
-					Some(CompressionFormat::Bz2) => {
+					Some(unpack::Compression::Bz2) => {
 						Box::new(bzip2::read::BzDecoder::new(archive_reader))
 					},
-					Some(CompressionFormat::Gz) => {
+					Some(unpack::Compression::Gz) => {
 						Box::new(flate2::read::GzDecoder::new(archive_reader))
 					},
-					Some(CompressionFormat::Lz) => {
+					Some(unpack::Compression::Lz) => {
 						Box::new(lz4_flex::frame::FrameDecoder::new(archive_reader))
 					},
-					Some(CompressionFormat::Xz) => {
+					Some(unpack::Compression::Xz) => {
 						Box::new(xz::read::XzDecoder::new(archive_reader))
 					},
-					Some(CompressionFormat::Zstd) => Box::new(zstd::Decoder::new(archive_reader)?),
+					Some(unpack::Compression::Zstd) => {
+						Box::new(zstd::Decoder::new(archive_reader)?)
+					},
 				};
 				let mut archive = tar::Archive::new(archive_reader);
 				archive.set_preserve_permissions(false);
@@ -180,7 +187,7 @@ impl Instance {
 		Ok(artifact)
 	}
 
-	async fn download_zip_unpack<S>(&self, stream: S) -> Result<Value>
+	async fn download_zip<S>(&self, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
@@ -234,34 +241,5 @@ impl Instance {
 		let artifact = Value::Artifact(artifact_hash);
 
 		Ok(artifact)
-	}
-}
-
-impl ArchiveFormat {
-	#[allow(clippy::case_sensitive_file_extension_comparisons)]
-	#[must_use]
-	pub fn for_path(path: &os::Path) -> Option<ArchiveFormat> {
-		let path = path.to_str().unwrap();
-		if path.ends_with(".tar.bz2") || path.ends_with(".tbz2") {
-			Some(ArchiveFormat::Tar(Some(CompressionFormat::Bz2)))
-		} else if path.ends_with(".tar.gz") || path.ends_with(".tgz") {
-			Some(ArchiveFormat::Tar(Some(CompressionFormat::Gz)))
-		} else if path.ends_with(".tar.lz") || path.ends_with(".tlz") {
-			Some(ArchiveFormat::Tar(Some(CompressionFormat::Lz)))
-		} else if path.ends_with(".tar.xz") || path.ends_with(".txz") {
-			Some(ArchiveFormat::Tar(Some(CompressionFormat::Xz)))
-		} else if path.ends_with(".tar.zstd")
-			|| path.ends_with(".tzstd")
-			|| path.ends_with(".tar.zst")
-			|| path.ends_with(".tzst")
-		{
-			Some(ArchiveFormat::Tar(Some(CompressionFormat::Zstd)))
-		} else if path.ends_with(".tar") {
-			Some(ArchiveFormat::Tar(None))
-		} else if path.ends_with(".zip") {
-			Some(ArchiveFormat::Zip)
-		} else {
-			None
-		}
 	}
 }

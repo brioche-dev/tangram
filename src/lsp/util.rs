@@ -1,5 +1,4 @@
-use crate::{module, os};
-use anyhow::Result;
+use crate::{error::Result, module, os};
 use url::Url;
 
 impl module::Identifier {

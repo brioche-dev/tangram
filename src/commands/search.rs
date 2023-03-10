@@ -1,5 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
+use tangram::error::Result;
 
 /// Search for a package.
 #[derive(clap::Args)]

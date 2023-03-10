@@ -1,6 +1,6 @@
 use crate::{credentials::Credentials, Cli};
-use anyhow::{bail, Context, Result};
 use std::time::{Duration, Instant};
+use tangram::error::{bail, Context, Result};
 
 /// Login to Tangram.
 #[derive(clap::Args)]

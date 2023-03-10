@@ -1,6 +1,9 @@
 use super::{error::bad_request, error::not_found};
-use crate::{blob, Instance};
-use anyhow::{bail, Result};
+use crate::{
+	blob,
+	error::{bail, Result},
+	Instance,
+};
 use futures::TryStreamExt;
 
 impl Instance {

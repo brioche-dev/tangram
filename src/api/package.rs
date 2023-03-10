@@ -1,6 +1,5 @@
 use super::Client;
-use crate::artifact;
-use anyhow::Result;
+use crate::{artifact, error::Result};
 
 impl Client {
 	pub async fn publish_package(&self, artifact_hash: artifact::Hash) -> Result<()> {

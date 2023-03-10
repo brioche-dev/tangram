@@ -1,6 +1,9 @@
 use crate::Cli;
-use anyhow::{Context, Result};
-use tangram::{artifact, os};
+use tangram::{
+	artifact,
+	error::{Context, Result},
+	os,
+};
 
 /// Check out an artifact.
 #[derive(clap::Args)]

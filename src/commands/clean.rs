@@ -1,5 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
+use tangram::error::Result;
 
 /// Remove unused artifacts.
 #[derive(clap::Args)]

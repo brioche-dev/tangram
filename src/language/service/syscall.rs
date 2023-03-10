@@ -1,5 +1,7 @@
-use crate::{module, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	module, Instance,
+};
 use itertools::Itertools;
 use std::sync::Weak;
 
@@ -29,16 +31,16 @@ fn syscall_inner<'s>(
 
 	// Invoke the syscall.
 	match name.as_str() {
-		"documents" => syscall_sync(scope, args, syscall_documents),
-		"load" => syscall_sync(scope, args, syscall_load),
+		"get_documents" => syscall_sync(scope, args, syscall_get_documents),
+		"load_module" => syscall_sync(scope, args, syscall_load_module),
 		"log" => syscall_sync(scope, args, syscall_log),
-		"resolve" => syscall_sync(scope, args, syscall_resolve),
-		"version" => syscall_sync(scope, args, syscall_version),
+		"resolve_module" => syscall_sync(scope, args, syscall_resolve_module),
+		"get_module_version" => syscall_sync(scope, args, syscall_get_module_version),
 		_ => bail!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
-fn syscall_load(
+fn syscall_load_module(
 	tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (module::Identifier,),
@@ -60,7 +62,7 @@ fn syscall_log(_tg: &Instance, _scope: &mut v8::HandleScope, args: (String,)) ->
 	Ok(())
 }
 
-fn syscall_documents(
+fn syscall_get_documents(
 	tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	_args: (),
@@ -72,7 +74,7 @@ fn syscall_documents(
 	})
 }
 
-fn syscall_resolve(
+fn syscall_resolve_module(
 	tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (module::Specifier, module::Identifier),
@@ -84,14 +86,14 @@ fn syscall_resolve(
 			.await
 			.with_context(|| {
 				format!(
-					r#"Failed to resolve specifier "{specifier:?}" relative to referrer "{referrer:?}"."#
+					r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer}"."#
 				)
 			})?;
 		Ok(module_identifier)
 	})
 }
 
-fn syscall_version(
+fn syscall_get_module_version(
 	tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (module::Identifier,),

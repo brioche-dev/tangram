@@ -5,12 +5,12 @@
 use self::{
 	constants::{FILE_SEMAPHORE_SIZE, SOCKET_SEMAPHORE_SIZE},
 	database::Database,
+	error::Result,
 	id::Id,
 	lock::Lock,
 	util::task_map::TaskMap,
 	value::Value,
 };
-use anyhow::Result;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use tokio_util::task::LocalPoolHandle;
@@ -53,6 +53,7 @@ pub mod reference;
 pub mod server;
 pub mod symlink;
 pub mod system;
+// pub mod temp;
 pub mod template;
 pub mod util;
 pub mod value;
@@ -82,7 +83,7 @@ pub struct Instance {
 	/// A local pool for running `!Send` futures.
 	local_pool_handle: LocalPoolHandle,
 
-	/// A channel to send requests to the language service.
+	/// A channel sender to send requests to the language service.
 	language_service_request_sender: std::sync::Mutex<Option<language::service::RequestSender>>,
 
 	/// A task map that deduplicates internal checkouts.
@@ -239,6 +240,11 @@ impl Instance {
 	fn checkouts_path(&self) -> os::PathBuf {
 		self.path().join("checkouts")
 	}
+
+	// #[must_use]
+	// fn logs_path(&self) -> os::PathBuf {
+	// 	self.path().join("logs")
+	// }
 
 	#[must_use]
 	fn temps_path(&self) -> os::PathBuf {

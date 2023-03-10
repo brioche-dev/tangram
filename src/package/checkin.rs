@@ -2,9 +2,9 @@ use super::dependency;
 use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
+	error::{bail, Result},
 	module, os, Instance,
 };
-use anyhow::{bail, Result};
 use std::{collections::HashSet, sync::Arc};
 
 pub struct Output {

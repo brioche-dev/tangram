@@ -3,6 +3,7 @@ use crate::{
 	blob,
 	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
+	error::{bail, Context, Result},
 	file::File,
 	hash, os,
 	path::Path,
@@ -10,7 +11,6 @@ use crate::{
 	symlink::Symlink,
 	Instance,
 };
-use anyhow::{anyhow, bail, Context, Result};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 use std::{
@@ -229,7 +229,8 @@ impl Instance {
 			let target = target
 				.into_os_string()
 				.into_string()
-				.map_err(|_| anyhow!("The symlink target was not valid UTF-8."))?;
+				.ok()
+				.context("The symlink target was not valid UTF-8.")?;
 
 			Artifact::Symlink(Symlink { target })
 		};

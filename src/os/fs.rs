@@ -1,5 +1,7 @@
-use crate::os;
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	os,
+};
 use std::fs::Metadata;
 
 pub async fn exists(path: &os::Path) -> Result<bool> {

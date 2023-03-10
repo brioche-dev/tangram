@@ -1,6 +1,5 @@
 use super::Hash;
-use crate::{value::Value, Instance};
-use anyhow::Result;
+use crate::{error::Result, value::Value, Instance};
 use lmdb::Transaction;
 
 impl Instance {

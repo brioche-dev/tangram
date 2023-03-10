@@ -1,6 +1,8 @@
 use super::Client;
-use crate::artifact::{self, Artifact};
-use anyhow::{bail, Context, Result};
+use crate::{
+	artifact::{self, Artifact},
+	error::{bail, Context, Result},
+};
 
 impl Client {
 	pub async fn try_get_artifact(

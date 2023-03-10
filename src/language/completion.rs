@@ -1,6 +1,8 @@
 use super::{service, Position};
-use crate::{module, Instance};
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	module, Instance,
+};
 use std::sync::Arc;
 
 #[derive(Debug, serde::Deserialize)]

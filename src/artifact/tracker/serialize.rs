@@ -1,5 +1,5 @@
 use super::Tracker;
-use anyhow::{bail, Result};
+use crate::error::{bail, Result};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 impl Tracker {

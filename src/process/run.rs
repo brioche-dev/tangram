@@ -1,6 +1,12 @@
 use super::Process;
-use crate::{os, system::System, template::Path, value::Value, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	os,
+	system::System,
+	template::Path,
+	value::Value,
+	Instance,
+};
 use futures::{future::try_join_all, FutureExt};
 use std::{collections::HashSet, sync::Arc};
 

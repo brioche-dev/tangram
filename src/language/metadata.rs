@@ -1,6 +1,9 @@
 use super::service;
-use crate::{metadata::Metadata, Instance};
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	metadata::Metadata,
+	Instance,
+};
 use std::sync::Arc;
 
 impl Instance {

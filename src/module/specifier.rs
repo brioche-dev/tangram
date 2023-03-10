@@ -1,6 +1,8 @@
 use super::dependency;
-use crate::path::Path;
-use anyhow::{bail, Context};
+use crate::{
+	error::{bail, Context},
+	path::Path,
+};
 use url::Url;
 
 /// An import specifier in a Tangram TypeScript module.

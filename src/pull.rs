@@ -1,5 +1,9 @@
-use crate::{artifact, client::Client, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	artifact,
+	client::Client,
+	error::{bail, Context, Result},
+	Instance,
+};
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
 

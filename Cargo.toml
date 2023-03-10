@@ -34,6 +34,7 @@ tempfile = "3.4.0"
 
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
+async-compression = { version = "0.3.15", features = ["tokio", "zstd"] }
 async-recursion = "1"
 blake3 = "1"
 buffalo = { workspace = true }

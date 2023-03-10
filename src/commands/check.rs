@@ -1,6 +1,6 @@
 use crate::Cli;
-use anyhow::{bail, Result};
 use tangram::{
+	error::{bail, Result},
 	language::{Diagnostic, Location, Position},
 	module, package,
 };

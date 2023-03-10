@@ -1,5 +1,4 @@
-use crate::os;
-use anyhow::Result;
+use crate::{error::Result, os};
 
 pub async fn migrate(path: &os::Path) -> Result<()> {
 	// Create the database file.
@@ -41,6 +40,10 @@ pub async fn migrate(path: &os::Path) -> Result<()> {
 	// Create the checkouts directory.
 	let checkouts_path = path.join("checkouts");
 	tokio::fs::create_dir_all(&checkouts_path).await?;
+
+	// Create the logs directory.
+	let logs_path = path.join("logs");
+	tokio::fs::create_dir_all(&logs_path).await?;
 
 	// Create the temps directory.
 	let temps_path = path.join("temps");

@@ -3,10 +3,14 @@
 #![allow(clippy::missing_panics_doc)]
 
 use self::commands::Args;
-use anyhow::{Context, Result};
 use clap::Parser;
 use std::{collections::BTreeMap, sync::Arc};
-use tangram::{system::System, value::Value, Instance};
+use tangram::{
+	error::{Context, Result},
+	system::System,
+	value::Value,
+	Instance,
+};
 use tracing_subscriber::prelude::*;
 
 mod commands;

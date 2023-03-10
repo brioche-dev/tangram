@@ -1,5 +1,4 @@
-use crate::os;
-use anyhow::Result;
+use crate::{error::Result, os};
 
 pub struct Database {
 	/// The LMDB environment.

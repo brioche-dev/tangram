@@ -1,6 +1,5 @@
 use super::{Hash, Operation};
-use crate::{util::task_map::TaskMap, value::Value, Instance};
-use anyhow::Result;
+use crate::{error::Result, util::task_map::TaskMap, value::Value, Instance};
 use async_recursion::async_recursion;
 use futures::FutureExt;
 use std::sync::Arc;

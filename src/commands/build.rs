@@ -1,6 +1,6 @@
 use crate::Cli;
-use anyhow::{Context, Result};
 use tangram::{
+	error::{Context, Result},
 	function::Function,
 	operation::{Call, Operation},
 	os, package,
@@ -43,10 +43,11 @@ impl Cli {
 			name: args.name,
 		};
 		let context = Self::create_default_context()?;
+		let args_ = Vec::new();
 		let operation = Operation::Call(Call {
 			function,
 			context,
-			args: vec![],
+			args: args_,
 		});
 		let operation_hash = self.tg.add_operation(&operation)?;
 
@@ -67,6 +68,14 @@ impl Cli {
 				.context("Expected the output to be an artifact.")?;
 			self.tg.check_out_external(*artifact_hash, &path).await?;
 		}
+
+		self.tg
+			.check_out_internal(
+				"3a517547ab139a39c02781b86bddafc11fa093ab124b6ac32b7e3e1beb682317"
+					.parse()
+					.unwrap(),
+			)
+			.await?;
 
 		Ok(())
 	}

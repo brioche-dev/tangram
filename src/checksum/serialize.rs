@@ -1,5 +1,5 @@
 use super::{Algorithm, Checksum};
-use anyhow::Context;
+use crate::error::Context;
 
 impl std::fmt::Display for Checksum {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -1,4 +1,4 @@
-use anyhow::bail;
+use crate::error::bail;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]

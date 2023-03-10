@@ -1,9 +1,9 @@
 use crate::Cli;
-use anyhow::{Context, Result};
 use futures::FutureExt;
 use indoc::indoc;
 use itertools::Itertools;
 use tangram::{
+	error::{Context, Result},
 	function::Function,
 	operation::{Call, Operation},
 	os, package,
@@ -177,10 +177,11 @@ impl Cli {
 			name: "shell".into(),
 		};
 		let context = Self::create_default_context()?;
+		let args = Vec::new();
 		let operation = Operation::Call(Call {
 			function,
 			context,
-			args: vec![],
+			args,
 		});
 		let operation_hash = self.tg.add_operation(&operation)?;
 

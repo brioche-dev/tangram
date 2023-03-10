@@ -1,5 +1,7 @@
-use crate::Instance;
-use anyhow::{Context, Result};
+use crate::{
+	error::{Context, Result},
+	Instance,
+};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

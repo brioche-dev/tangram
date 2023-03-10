@@ -1,5 +1,7 @@
-use crate::{os, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	os, Instance,
+};
 use futures::FutureExt;
 
 mod migration_0000;

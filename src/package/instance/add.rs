@@ -1,6 +1,9 @@
 use super::{Hash, Instance};
-use crate::{artifact, package::dependency};
-use anyhow::{bail, Result};
+use crate::{
+	artifact,
+	error::{bail, Result},
+	package::dependency,
+};
 use lmdb::Transaction;
 
 /// The outcome of adding a package instance.

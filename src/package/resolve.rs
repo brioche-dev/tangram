@@ -1,6 +1,8 @@
 use super::{Identifier, Specifier};
-use crate::Instance;
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	Instance,
+};
 
 impl Instance {
 	#[allow(clippy::unused_async)]

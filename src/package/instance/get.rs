@@ -1,5 +1,5 @@
 use super::{Hash, Instance};
-use anyhow::{bail, Context, Result};
+use crate::error::{bail, Context, Result};
 use lmdb::Transaction;
 
 impl crate::Instance {

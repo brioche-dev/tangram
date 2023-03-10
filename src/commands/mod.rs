@@ -1,8 +1,7 @@
 use crate::Cli;
-use anyhow::Result;
 use either::Either;
 use futures::FutureExt;
-use tangram::os;
+use tangram::{error::Result, os};
 
 mod add;
 mod autoshell;
@@ -60,6 +59,7 @@ pub enum Command {
 	Download(self::download::Args),
 	Fmt(self::fmt::Args),
 	Init(self::init::Args),
+	// Log(self::log::Args),
 	Login(self::login::Args),
 	Lsp(self::lsp::Args),
 	New(self::new::Args),
@@ -101,7 +101,7 @@ impl Cli {
 
 		// Run the subcommand.
 		match args.command {
-			Command::Add(args) => self.run_add(args).boxed(),
+			Command::Add(args) => self.command_add(args).boxed(),
 			Command::Autoshell(args) => self.command_autoshell(args).boxed(),
 			Command::Build(args) => self.command_build(args).boxed(),
 			Command::Check(args) => self.command_check(args).boxed(),
@@ -112,6 +112,7 @@ impl Cli {
 			Command::Download(args) => self.command_download(args).boxed(),
 			Command::Fmt(args) => self.command_fmt(args).boxed(),
 			Command::Init(args) => self.command_init(args).boxed(),
+			// Command::Log(args) => self.command_log(args).boxed(),
 			Command::Login(args) => self.command_login(args).boxed(),
 			Command::Lsp(args) => self.command_lsp(args).boxed(),
 			Command::New(args) => self.command_new(args).boxed(),

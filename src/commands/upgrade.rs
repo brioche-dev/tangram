@@ -1,6 +1,6 @@
 use crate::Cli;
-use anyhow::Result;
 use std::os::unix::process::CommandExt;
+use tangram::error::Result;
 
 /// Upgrade tangram to the latest version.
 #[derive(clap::Args)]

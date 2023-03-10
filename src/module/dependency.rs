@@ -1,9 +1,9 @@
 use super::{identifier, Identifier};
 use crate::{
+	error::{bail, Result},
 	package::{self, specifier::Registry},
 	path::Path,
 };
-use anyhow::{bail, Result};
 
 /// A reference from a module to a dependency, either at a path or from the registry.
 #[derive(

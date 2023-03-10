@@ -1,6 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
-use tangram::{module, package};
+use tangram::{error::Result, module, package};
 
 /// Print the docs for a package.
 #[derive(clap::Args)]

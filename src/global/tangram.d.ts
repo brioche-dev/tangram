@@ -69,7 +69,7 @@ declare namespace tg {
 		url: string;
 
 		/** Pass true to choose the format automatically based on the extension in the URL. */
-		unpack?: boolean | UnpackFormat | nullish;
+		unpack?: boolean | nullish;
 
 		checksum?: Checksum | nullish;
 
@@ -82,6 +82,7 @@ declare namespace tg {
 		| ".lz"
 		| ".xz"
 		| ".zstd"
+		| ".tar"
 		| ".tar.bz2"
 		| ".tar.gz"
 		| ".tar.lz"

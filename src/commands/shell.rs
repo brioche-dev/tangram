@@ -1,6 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
-use tangram::{package, path::Path};
+use tangram::{error::Result, package, path::Path};
 
 #[derive(clap::Args)]
 #[command(

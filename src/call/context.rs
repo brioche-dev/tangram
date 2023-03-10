@@ -1,6 +1,8 @@
 use super::{isolate::THREAD_LOCAL_ISOLATE, syscall::syscall};
-use crate::{module, Instance};
-use anyhow::{anyhow, Result};
+use crate::{
+	error::{Error, Result},
+	module, Instance,
+};
 use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, sync::Arc, task::Poll};
@@ -149,7 +151,7 @@ pub fn await_value_inner(
 			v8::PromiseState::Rejected => {
 				let exception = promise.result(&mut context_scope);
 				let exception = super::exception::render(&mut context_scope, &state, exception);
-				Poll::Ready(Err(anyhow!("{exception}")))
+				Poll::Ready(Err(Error::msg(exception)))
 			},
 		},
 	}

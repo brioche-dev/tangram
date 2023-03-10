@@ -1,12 +1,13 @@
 use crate::{
 	artifact::{self, Artifact},
-	blob, hash,
+	blob,
+	error::{Context, Result},
+	hash,
 	operation::{self, Operation},
 	os, package, template,
 	value::Value,
 	Instance,
 };
-use anyhow::{Context, Result};
 use lmdb::{Cursor, Transaction};
 use std::collections::{HashSet, VecDeque};
 

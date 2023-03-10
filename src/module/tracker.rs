@@ -1,6 +1,5 @@
 use super::Identifier;
-use crate::{module, Instance};
-use anyhow::Result;
+use crate::{error::Result, module, Instance};
 use std::time::SystemTime;
 
 /// Tracks a module's version as it changes.

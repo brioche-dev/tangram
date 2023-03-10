@@ -1,6 +1,5 @@
 use super::Client;
-use crate::id::Id;
-use anyhow::Result;
+use crate::{error::Result, id::Id};
 use url::Url;
 
 pub struct User {

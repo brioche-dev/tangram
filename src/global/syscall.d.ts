@@ -137,6 +137,20 @@ declare namespace syscall {
 		unsafe: boolean;
 	};
 
+	export type UnpackFormat =
+		| ".bz2"
+		| ".gz"
+		| ".lz"
+		| ".xz"
+		| ".zstd"
+		| ".tar"
+		| ".tar.bz2"
+		| ".tar.gz"
+		| ".tar.lz"
+		| ".tar.xz"
+		| ".tar.zstd"
+		| ".zip";
+
 	export type Process = {
 		system: System;
 		env: Record<string, Template>;

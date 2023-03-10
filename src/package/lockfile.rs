@@ -1,5 +1,4 @@
-use crate::{os, Instance};
-use anyhow::Result;
+use crate::{error::Result, os, Instance};
 use async_recursion::async_recursion;
 
 impl Instance {

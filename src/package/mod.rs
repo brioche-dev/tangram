@@ -1,5 +1,5 @@
 pub use self::{identifier::Identifier, instance::Instance, specifier::Specifier};
-use anyhow::Result;
+use crate::error::Result;
 use async_recursion::async_recursion;
 use std::{collections::BTreeMap, sync::Arc};
 

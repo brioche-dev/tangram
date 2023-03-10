@@ -1,6 +1,8 @@
 use crate::Cli;
-use anyhow::{Context, Result};
-use tangram::artifact;
+use tangram::{
+	artifact,
+	error::{Context, Result},
+};
 use url::Url;
 
 /// Push an artifact.

@@ -1,6 +1,5 @@
 pub use self::component::Component;
-use crate::os;
-use anyhow::bail;
+use crate::{error::bail, os};
 use itertools::Itertools;
 
 pub mod component;

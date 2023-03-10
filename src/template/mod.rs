@@ -1,6 +1,5 @@
 pub use self::render::{Output, Path};
-use crate::artifact;
-use crate::placeholder::Placeholder;
+use crate::{artifact, placeholder::Placeholder};
 
 mod render;
 mod unrender;

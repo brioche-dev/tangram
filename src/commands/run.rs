@@ -1,7 +1,7 @@
 use crate::Cli;
-use anyhow::{bail, Context, Result};
 use std::os::unix::process::CommandExt;
 use tangram::{
+	error::{bail, Context, Result},
 	function::Function,
 	operation::{Call, Operation},
 	os, package,
@@ -50,10 +50,11 @@ impl Cli {
 			name,
 		};
 		let context = Self::create_default_context()?;
+		let args_ = Vec::new();
 		let operation = Operation::Call(Call {
 			function,
 			context,
-			args: vec![],
+			args: args_,
 		});
 		let operation_hash = self.tg.add_operation(&operation)?;
 

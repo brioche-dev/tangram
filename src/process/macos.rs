@@ -6,8 +6,12 @@
 //!
 //! Helpful reference: <https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf>.
 
-use crate::{system::System, template::Path, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	system::System,
+	template::Path,
+	Instance,
+};
 use indoc::writedoc;
 use libc::{c_char, c_int, c_void};
 use std::{

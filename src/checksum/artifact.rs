@@ -1,6 +1,5 @@
 use super::{Algorithm, Checksum, Writer};
-use crate::{artifact, Instance};
-use anyhow::Result;
+use crate::{artifact, error::Result, Instance};
 use async_recursion::async_recursion;
 
 impl Instance {

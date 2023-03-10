@@ -1,5 +1,4 @@
-use crate::{language::Range, module, Instance};
-use anyhow::Result;
+use crate::{error::Result, language::Range, module, Instance};
 use lsp_types as lsp;
 use std::sync::Arc;
 

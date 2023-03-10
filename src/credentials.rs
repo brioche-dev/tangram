@@ -1,6 +1,5 @@
 use crate::Cli;
-use anyhow::Result;
-use tangram::os;
+use tangram::{error::Result, os};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {

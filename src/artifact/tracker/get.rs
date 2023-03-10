@@ -1,6 +1,8 @@
 use super::Tracker;
-use crate::{os, Instance};
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	os, Instance,
+};
 use lmdb::Transaction;
 use std::os::unix::prelude::OsStrExt;
 

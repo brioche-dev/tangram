@@ -3,8 +3,12 @@ use super::{
 	identifier::{self, Lib, Source},
 	Identifier, Specifier,
 };
-use crate::{os, package, path::Path, Instance};
-use anyhow::{bail, Context, Result};
+use crate::{
+	error::{bail, Context, Result},
+	os, package,
+	path::Path,
+	Instance,
+};
 
 impl Instance {
 	/// Resolve a specifier relative to a referrer.

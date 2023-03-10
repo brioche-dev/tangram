@@ -1,6 +1,9 @@
 use super::Identifier;
-use crate::{language::Range, Instance};
-use anyhow::{bail, Result};
+use crate::{
+	error::{bail, Result},
+	language::Range,
+	Instance,
+};
 
 /// A module that is open and editable.
 pub struct Document {

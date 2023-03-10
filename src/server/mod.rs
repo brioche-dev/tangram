@@ -1,5 +1,4 @@
-use crate::Instance;
-use anyhow::Result;
+use crate::{error::Result, Instance};
 use futures::FutureExt;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
@@ -45,7 +44,7 @@ impl Instance {
 				tracing::error!(?error, backtrace = %error.backtrace());
 				http::Response::builder()
 					.status(http::StatusCode::INTERNAL_SERVER_ERROR)
-					.body(hyper::Body::from(format!("{error:?}")))
+					.body(hyper::Body::from("Internal server error."))
 					.unwrap()
 			},
 		}

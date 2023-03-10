@@ -1,6 +1,8 @@
 use self::syscall::syscall;
-use crate::Instance;
-use anyhow::{anyhow, Context, Result};
+use crate::{
+	error::{Context, Error, Result},
+	Instance,
+};
 use std::sync::{Arc, Weak};
 
 pub mod check;
@@ -171,7 +173,7 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 			let exception = try_catch_scope.exception().unwrap();
 			let mut scope = v8::HandleScope::new(&mut try_catch_scope);
 			let exception = self::exception::render(&mut scope, exception);
-			response_sender.send(Err(anyhow!("{exception}"))).unwrap();
+			response_sender.send(Err(Error::msg(exception))).unwrap();
 			continue;
 		}
 

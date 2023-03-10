@@ -6,6 +6,7 @@ use crate::{
 	artifact::{self, Artifact},
 	blob,
 	checksum::{self, Checksum},
+	error::{bail, Context, Result},
 	language::Position,
 	module,
 	operation::Operation,
@@ -13,7 +14,6 @@ use crate::{
 	value::Value,
 	Instance,
 };
-use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use num::ToPrimitive;
 use std::{future::Future, rc::Rc, sync::Arc};

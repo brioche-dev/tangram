@@ -1,6 +1,9 @@
 use super::{Artifact, Hash};
-use crate::{blob, os, Instance};
-use anyhow::{bail, Result};
+use crate::{
+	blob,
+	error::{bail, Result},
+	os, Instance,
+};
 use lmdb::Transaction;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

@@ -1,11 +1,11 @@
 use super::{identifier, Identifier};
 use crate::{
 	artifact::{self, Artifact},
+	error::{bail, Context, Result},
 	hash, os, package,
 	path::{self, Path},
 	Instance,
 };
-use anyhow::{bail, Context, Result};
 use include_dir::include_dir;
 use indoc::formatdoc;
 use itertools::Itertools;

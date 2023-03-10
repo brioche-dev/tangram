@@ -1,6 +1,5 @@
 use super::Hash;
-use crate::{hash::Writer, Instance};
-use anyhow::Result;
+use crate::{error::Result, hash::Writer, Instance};
 use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
 

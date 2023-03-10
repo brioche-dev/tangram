@@ -1,6 +1,8 @@
 use crate::Cli;
-use anyhow::{Context, Result};
-use tangram::{os, package};
+use tangram::{
+	error::{Context, Result},
+	os, package,
+};
 
 /// Publish a package.
 #[derive(clap::Args)]

@@ -1,6 +1,6 @@
+use crate::error::Result;
 pub use crate::package::specifier::Registry;
 use crate::path::Path;
-use anyhow::Result;
 
 /// A reference from a package to a dependency, either at a path or from the registry.
 #[derive(

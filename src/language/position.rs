@@ -1,4 +1,4 @@
-/// A `Position` represents a position in a string, indexed by a line and character offset (both zero-indexed). This type maps cleanly to the `Position` type in the Language Server Protocol. For maximum compatibility with the Language Server Protocol, character offsets use UTF-16 code units.
+/// A position in a string, identified by zero-indexed line and character offsets. This type maps cleanly to the `Position` type in the Language Server Protocol. For maximum compatibility with the Language Server Protocol, character offsets use UTF-16 code units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Position {
@@ -71,7 +71,7 @@ impl Position {
 	#[must_use]
 	pub fn to_byte_index_in_string(self, string: &str) -> usize {
 		self.try_to_byte_index_in_string(string).unwrap_or_else(|| {
-			panic!("Position {self:?} is out of bounds of string.");
+			panic!(r#"Position "{self:?}" is out of bounds of the string."#);
 		})
 	}
 

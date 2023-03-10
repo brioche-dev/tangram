@@ -1,9 +1,9 @@
 use super::{Component, Template};
 use crate::{
 	artifact::{self, Artifact},
+	error::{bail, Context, Result},
 	os, Instance,
 };
-use anyhow::{bail, Context, Result};
 use futures::future::try_join_all;
 use std::{
 	collections::{BTreeMap, HashSet},

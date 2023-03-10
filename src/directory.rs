@@ -1,9 +1,9 @@
 use crate::{
 	artifact::{self, Artifact},
+	error::{Context, Result},
 	path::Path,
 	Instance,
 };
-use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use std::{collections::BTreeMap, sync::Arc};
 
