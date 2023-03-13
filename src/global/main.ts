@@ -1,4 +1,5 @@
 import { isArtifact } from "./artifact";
+import { checksum } from "./checksum";
 import { context } from "./context";
 import { Directory, directory, isDirectory } from "./directory";
 import { download } from "./download";
@@ -25,6 +26,7 @@ let tg = {
 	Reference,
 	Symlink,
 	Template,
+	checksum,
 	context,
 	directory,
 	download,
