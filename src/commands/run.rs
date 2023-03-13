@@ -1,10 +1,10 @@
 use crate::Cli;
 use std::os::unix::process::CommandExt;
 use tangram::{
-	error::{bail, Context, Result},
+	error::{Context, Result},
 	function::Function,
 	operation::{Call, Operation},
-	os, package,
+	package,
 	path::Path,
 };
 
@@ -81,16 +81,8 @@ impl Cli {
 		// Get the path to the executable.
 		let executable_path = artifact_path.join(executable_path.to_string());
 
-		// Verify the executable path exists.
-		if !os::fs::exists(&executable_path).await? {
-			bail!(
-				r#"No executable found at path "{}"."#,
-				executable_path.display()
-			);
-		}
-
 		// Exec the process.
-		Err(std::process::Command::new(&executable_path)
+		Err(std::process::Command::new(executable_path)
 			.args(args.trailing_args)
 			.exec()
 			.into())

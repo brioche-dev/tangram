@@ -1,11 +1,11 @@
 {
-  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
 	"fileTypes": [".tg"],
 	"name": "Tangram TypeScript",
-	"scopeName": "source.tg",
 	"patterns": [
 		{
 			"include": "source.ts"
 		}
-	]
+	],
+	"scopeName": "source.tg"
 }

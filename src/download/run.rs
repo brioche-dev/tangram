@@ -2,7 +2,7 @@ use super::{unpack, Download};
 use crate::{
 	checksum::{self, Checksum},
 	error::{bail, Context, Result},
-	os,
+	util::fs,
 	value::Value,
 	Instance,
 };
@@ -21,7 +21,7 @@ impl Instance {
 		// Get the unpack format.
 		let unpack_format = if download.unpack {
 			Some(
-				unpack::Format::for_path(os::Path::new(download.url.path()))
+				unpack::Format::for_path(fs::Path::new(download.url.path()))
 					.context("Failed to determine the unpack format.")?,
 			)
 		} else {
@@ -177,7 +177,7 @@ impl Instance {
 			.context("Failed to check in the temp path.")?;
 
 		// Remove the temp path.
-		os::fs::rmrf(&temp_path, None)
+		crate::util::fs::rmrf(&temp_path)
 			.await
 			.context("Failed to remove the temp path.")?;
 
@@ -233,7 +233,7 @@ impl Instance {
 			.context("Failed to check in the .")?;
 
 		// Remove the unpack temp path.
-		os::fs::rmrf(&unpack_temp_path, None)
+		crate::util::fs::rmrf(&unpack_temp_path)
 			.await
 			.context("Failed to remove the unpack temp path.")?;
 

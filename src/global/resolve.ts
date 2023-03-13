@@ -65,7 +65,7 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Template
 	) {
 		return value as unknown as Resolved<T>;
-	} else if (Array.isArray(value)) {
+	} else if (value instanceof Array) {
 		return (await Promise.all(
 			value.map((value) => resolve(value)),
 		)) as Resolved<T>;

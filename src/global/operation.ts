@@ -4,7 +4,9 @@ import { Download } from "./download";
 import { Process } from "./process";
 import { deserializeValue } from "./value";
 
-export type OperationType = "download" | "process" | "call";
+export type OperationHash = string;
+
+export type OperationKind = "download" | "process" | "call";
 
 export type Operation = Download | Process | Call;
 
@@ -27,10 +29,20 @@ export let isOperation = (value: unknown): value is Operation => {
 export let run = async <T extends Operation>(
 	operation: T,
 ): Promise<Output<T>> => {
-	let operationSerialized = await serializeOperation(operation);
-	let outputSerialized = await syscall("run", operationSerialized);
+	let operationHash = await addOperation(operation);
+	let outputSerialized = await syscall("run", operationHash);
 	let output = await deserializeValue(outputSerialized);
 	return output as Output<T>;
+};
+
+export let addOperation = async (
+	operation: Operation,
+): Promise<OperationHash> => {
+	return await syscall("add_operation", await serializeOperation(operation));
+};
+
+export let getArtifact = async (hash: OperationHash): Promise<Operation> => {
+	return await deserializeOperation(await syscall("get_operation", hash));
 };
 
 export let serializeOperation = async (

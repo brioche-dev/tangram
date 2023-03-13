@@ -1,7 +1,7 @@
 use crate::Cli;
 use either::Either;
 use futures::FutureExt;
-use tangram::{error::Result, os};
+use tangram::{error::Result, util::fs};
 
 mod add;
 mod autoshell;
@@ -40,7 +40,7 @@ mod upgrade;
 pub struct Args {
 	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
 	#[arg(long)]
-	pub path: Option<os::PathBuf>,
+	pub path: Option<fs::PathBuf>,
 
 	#[command(subcommand)]
 	pub command: Command,

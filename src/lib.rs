@@ -8,7 +8,7 @@ use self::{
 	error::Result,
 	id::Id,
 	lock::Lock,
-	util::task_map::TaskMap,
+	util::{fs, task_map::TaskMap},
 	value::Value,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -37,12 +37,12 @@ pub mod id;
 pub mod language;
 pub mod lock;
 pub mod lockfile;
+pub mod log;
 pub mod lsp;
 pub mod metadata;
 pub mod migrations;
 pub mod module;
 pub mod operation;
-pub mod os;
 pub mod package;
 pub mod path;
 pub mod placeholder;
@@ -53,14 +53,14 @@ pub mod reference;
 pub mod server;
 pub mod symlink;
 pub mod system;
-// pub mod temp;
+pub mod temp;
 pub mod template;
 pub mod util;
 pub mod value;
 
 pub struct Instance {
 	/// The directory where all data is stored.
-	path: os::PathBuf,
+	path: fs::PathBuf,
 
 	/// A lock used to acquire shared and exclusive access to the path.
 	lock: Lock<()>,
@@ -88,7 +88,7 @@ pub struct Instance {
 
 	/// A task map that deduplicates internal checkouts.
 	internal_checkouts_task_map:
-		std::sync::Mutex<Option<Arc<TaskMap<artifact::Hash, os::PathBuf>>>>,
+		std::sync::Mutex<Option<Arc<TaskMap<artifact::Hash, fs::PathBuf>>>>,
 
 	/// A task map that deduplicates operations.
 	operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Value>>>>,
@@ -129,7 +129,7 @@ fn initialize_v8() {
 }
 
 impl Instance {
-	pub async fn new(path: os::PathBuf, options: Options) -> Result<Instance> {
+	pub async fn new(path: fs::PathBuf, options: Options) -> Result<Instance> {
 		// Initialize V8.
 		V8_INIT.call_once(initialize_v8);
 
@@ -227,37 +227,42 @@ impl Instance {
 
 impl Instance {
 	#[must_use]
-	pub fn path(&self) -> &os::Path {
+	pub fn path(&self) -> &fs::Path {
 		&self.path
 	}
 
 	#[must_use]
-	fn blobs_path(&self) -> os::PathBuf {
+	fn blobs_path(&self) -> fs::PathBuf {
 		self.path().join("blobs")
 	}
 
 	#[must_use]
-	fn checkouts_path(&self) -> os::PathBuf {
+	fn checkouts_path(&self) -> fs::PathBuf {
 		self.path().join("checkouts")
 	}
 
 	// #[must_use]
-	// fn logs_path(&self) -> os::PathBuf {
-	// 	self.path().join("logs")
+	// fn database_path(&self) -> fs::PathBuf {
+	// 	self.path().join("database.mdb")
 	// }
 
 	#[must_use]
-	fn temps_path(&self) -> os::PathBuf {
+	fn logs_path(&self) -> fs::PathBuf {
+		self.path().join("logs")
+	}
+
+	#[must_use]
+	fn temps_path(&self) -> fs::PathBuf {
 		self.path().join("temps")
 	}
 
 	#[must_use]
-	fn blob_path(&self, blob_hash: blob::Hash) -> os::PathBuf {
+	fn blob_path(&self, blob_hash: blob::Hash) -> fs::PathBuf {
 		self.blobs_path().join(blob_hash.to_string())
 	}
 
 	#[must_use]
-	fn temp_path(&self) -> os::PathBuf {
+	fn temp_path(&self) -> fs::PathBuf {
 		self.temps_path().join(Id::generate().to_string())
 	}
 }

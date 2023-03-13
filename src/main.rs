@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
 	let path = if let Some(path) = args.path.clone() {
 		path
 	} else {
-		tangram::os::dirs::home_directory_path()
+		tangram::util::dirs::home_directory_path()
 			.context("Failed to find the user home directory.")?
 			.join(".tangram")
 	};

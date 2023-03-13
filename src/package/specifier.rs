@@ -1,5 +1,8 @@
 use super::dependency;
-use crate::{error::Result, os};
+use crate::{
+	error::{Error, Result},
+	util::fs,
+};
 
 /// A reference to a package, either at a path or from the registry.
 #[derive(
@@ -18,7 +21,7 @@ use crate::{error::Result, os};
 #[buffalo(into = "String", try_from = "String")]
 pub enum Specifier {
 	/// A reference to a package at a path.
-	Path(os::PathBuf),
+	Path(fs::PathBuf),
 
 	/// A reference to a package from the registry.
 	Registry(Registry),
@@ -53,7 +56,7 @@ impl std::fmt::Display for Specifier {
 }
 
 impl std::str::FromStr for Specifier {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(value: &str) -> Result<Specifier> {
 		if value.starts_with('/') || value.starts_with('.') {
@@ -75,7 +78,7 @@ impl From<Specifier> for String {
 }
 
 impl TryFrom<String> for Specifier {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
@@ -94,7 +97,7 @@ impl std::fmt::Display for Registry {
 }
 
 impl std::str::FromStr for Registry {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(value: &str) -> Result<Registry> {
 		let mut components = value.split('@');
@@ -136,7 +139,7 @@ mod tests {
 		let path_specifiers = [".", "./", "./hello"];
 		for path_specifier in path_specifiers {
 			let left: Specifier = path_specifier.parse().unwrap();
-			let right = Specifier::Path(os::PathBuf::from(path_specifier));
+			let right = Specifier::Path(fs::PathBuf::from(path_specifier));
 			assert_eq!(left, right);
 		}
 	}

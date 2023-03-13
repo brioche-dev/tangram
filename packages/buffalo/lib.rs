@@ -6,8 +6,6 @@ pub use self::{deserializer::Deserializer, kind::Kind, serializer::Serializer, v
 pub use buffalo_macro::{Deserialize, Serialize};
 use std::io::{Read, Result, Write};
 
-#[cfg(feature = "camino")]
-mod camino;
 pub mod deserializer;
 pub mod kind;
 pub mod serializer;

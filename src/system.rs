@@ -1,4 +1,4 @@
-use crate::error::{bail, Result};
+use crate::error::{bail, Error, Result};
 
 #[derive(
 	Clone,
@@ -61,7 +61,7 @@ impl std::fmt::Display for System {
 }
 
 impl std::str::FromStr for System {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		let system = match s {
@@ -82,7 +82,7 @@ impl From<System> for String {
 }
 
 impl TryFrom<String> for System {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
 		value.parse()

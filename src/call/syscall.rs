@@ -9,7 +9,7 @@ use crate::{
 	error::{bail, Context, Result},
 	language::Position,
 	module,
-	operation::Operation,
+	operation::{self, Operation},
 	package,
 	value::Value,
 	Instance,
@@ -55,6 +55,8 @@ fn syscall_inner<'s>(
 		"get_artifact" => syscall_async(scope, args, syscall_get_artifact),
 		"add_package_instance" => syscall_async(scope, args, syscall_add_package_instance),
 		"get_package_instance" => syscall_async(scope, args, syscall_get_package_instance),
+		"add_operation" => syscall_async(scope, args, syscall_add_operation),
+		"get_operation" => syscall_async(scope, args, syscall_get_operation),
 		"run" => syscall_async(scope, args, syscall_run),
 		"get_current_package_instance_hash" => {
 			syscall_sync(scope, args, syscall_get_current_package_instance_hash)
@@ -141,10 +143,10 @@ async fn syscall_get_artifact(
 #[allow(clippy::unused_async)]
 async fn syscall_add_package_instance(
 	tg: Arc<Instance>,
-	args: (package::instance::Instance,),
+	args: (package::Instance,),
 ) -> Result<package::instance::Hash> {
-	let (package,) = args;
-	let package_instance_hash = tg.add_package_instance(&package)?;
+	let (package_instance,) = args;
+	let package_instance_hash = tg.add_package_instance(&package_instance)?;
 	Ok(package_instance_hash)
 }
 
@@ -152,15 +154,31 @@ async fn syscall_add_package_instance(
 async fn syscall_get_package_instance(
 	tg: Arc<Instance>,
 	args: (package::instance::Hash,),
-) -> Result<Option<package::instance::Instance>> {
+) -> Result<Option<package::Instance>> {
 	let (package_instance_hash,) = args;
 	let package = tg.try_get_package_instance_local(package_instance_hash)?;
 	Ok(package)
 }
 
-async fn syscall_run(tg: Arc<Instance>, args: (Operation,)) -> Result<Value> {
+#[allow(clippy::unused_async)]
+async fn syscall_add_operation(tg: Arc<Instance>, args: (Operation,)) -> Result<operation::Hash> {
 	let (operation,) = args;
 	let operation_hash = tg.add_operation(&operation)?;
+	Ok(operation_hash)
+}
+
+#[allow(clippy::unused_async)]
+async fn syscall_get_operation(
+	tg: Arc<Instance>,
+	args: (operation::Hash,),
+) -> Result<Option<Operation>> {
+	let (operation_hash,) = args;
+	let operation = tg.try_get_operation_local(operation_hash)?;
+	Ok(operation)
+}
+
+async fn syscall_run(tg: Arc<Instance>, args: (operation::Hash,)) -> Result<Value> {
+	let (operation_hash,) = args;
 	let output = tg.run(operation_hash).await?;
 	Ok(output)
 }

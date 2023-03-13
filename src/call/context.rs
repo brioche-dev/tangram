@@ -136,7 +136,7 @@ pub fn await_value_inner(
 	match v8::Local::<v8::Promise>::try_from(value) {
 		Err(_) => {
 			let value = v8::Global::new(&mut context_scope, value);
-			Poll::Ready(Ok::<_, anyhow::Error>(value))
+			Poll::Ready(Ok::<_, Error>(value))
 		},
 
 		Ok(promise) => match promise.state() {

@@ -1,8 +1,9 @@
 use crate::{
 	constants::ROOT_MODULE_FILE_NAME,
-	error::{bail, ensure, Context, Result},
-	os, package,
+	error::{bail, ensure, Context, Error, Result},
+	package,
 	path::Path,
+	util::fs,
 };
 use url::Url;
 
@@ -74,7 +75,7 @@ pub struct Lib {
 pub enum Source {
 	/// A module in a package at a path.
 	#[serde(rename = "path")]
-	Path(os::PathBuf),
+	Path(fs::PathBuf),
 
 	/// A module in a package instance.
 	#[serde(rename = "instance")]
@@ -93,7 +94,7 @@ impl Identifier {
 	}
 
 	#[must_use]
-	pub fn for_root_module_in_package_at_path(package_path: &os::Path) -> Identifier {
+	pub fn for_root_module_in_package_at_path(package_path: &fs::Path) -> Identifier {
 		Identifier::Normal(Normal {
 			source: Source::Path(package_path.to_owned()),
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
@@ -102,12 +103,12 @@ impl Identifier {
 }
 
 impl Identifier {
-	pub async fn for_path(path: &os::Path) -> Result<Identifier> {
+	pub async fn for_path(path: &fs::Path) -> Result<Identifier> {
 		// Find the package path by searching the path's ancestors for a root module.
 		let mut found = false;
 		let mut package_path = path.to_owned();
 		while package_path.pop() {
-			if os::fs::exists(&package_path.join(ROOT_MODULE_FILE_NAME)).await? {
+			if crate::util::fs::exists(&package_path.join(ROOT_MODULE_FILE_NAME)).await? {
 				found = true;
 				break;
 			}
@@ -156,7 +157,7 @@ impl From<Identifier> for Url {
 }
 
 impl TryFrom<Url> for Identifier {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: Url) -> Result<Self, Self::Error> {
 		// Ensure the scheme is "tangram".
@@ -234,7 +235,7 @@ impl std::fmt::Display for Identifier {
 }
 
 impl std::str::FromStr for Identifier {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		let url: Url = s.parse()?;
@@ -250,7 +251,7 @@ impl From<Identifier> for String {
 }
 
 impl TryFrom<String> for Identifier {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()

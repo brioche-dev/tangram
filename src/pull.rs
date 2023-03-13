@@ -1,7 +1,7 @@
 use crate::{
 	artifact,
 	client::Client,
-	error::{bail, Context, Result},
+	error::{bail, Context, Error, Result},
 	Instance,
 };
 use async_recursion::async_recursion;
@@ -29,7 +29,7 @@ impl Instance {
 				// Pull the missing entries.
 				try_join_all(entries.into_iter().map(|(_, artifact_hash)| async move {
 					self.pull(client, artifact_hash).await?;
-					Ok::<_, anyhow::Error>(())
+					Ok::<_, Error>(())
 				}))
 				.await?;
 			},

@@ -1,5 +1,5 @@
 use crate::Cli;
-use tangram::{error::Result, os};
+use tangram::{error::Result, util::fs};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
@@ -8,7 +8,7 @@ pub struct Credentials {
 }
 
 impl Cli {
-	pub fn credentials_path(&self) -> os::PathBuf {
+	pub fn credentials_path(&self) -> fs::PathBuf {
 		self.tg.path().join("credentials.json")
 	}
 
@@ -16,11 +16,12 @@ impl Cli {
 		Self::read_credentials_from_path(&self.credentials_path()).await
 	}
 
-	pub async fn read_credentials_from_path(path: &os::Path) -> Result<Option<Credentials>> {
-		if !os::fs::exists(path).await? {
-			return Ok(None);
-		}
-		let credentials = tokio::fs::read(&path).await?;
+	pub async fn read_credentials_from_path(path: &fs::Path) -> Result<Option<Credentials>> {
+		let credentials = match tokio::fs::read(&path).await {
+			Ok(credentials) => credentials,
+			Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+			Err(error) => return Err(error.into()),
+		};
 		let credentials = serde_json::from_slice(&credentials)?;
 		Ok(credentials)
 	}
@@ -30,7 +31,7 @@ impl Cli {
 	}
 
 	pub async fn write_credentials_to_path(
-		path: &os::Path,
+		path: &fs::Path,
 		credentials: &Credentials,
 	) -> Result<()> {
 		let credentials = serde_json::to_string(credentials)?;

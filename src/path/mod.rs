@@ -1,5 +1,8 @@
 pub use self::component::Component;
-use crate::{error::bail, os};
+use crate::{
+	error::{bail, Error},
+	util::fs,
+};
 use itertools::Itertools;
 
 pub mod component;
@@ -97,7 +100,7 @@ impl std::fmt::Display for Path {
 }
 
 impl std::str::FromStr for Path {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(string: &str) -> Result<Self, Self::Err> {
 		// Absolute paths are not allowed.
@@ -139,14 +142,14 @@ impl From<Path> for String {
 }
 
 impl TryFrom<String> for Path {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
 	}
 }
 
-impl From<Path> for os::PathBuf {
+impl From<Path> for fs::PathBuf {
 	fn from(value: Path) -> Self {
 		value.to_string().into()
 	}

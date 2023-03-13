@@ -2,7 +2,7 @@ use super::{Artifact, Hash};
 use crate::{
 	blob,
 	error::{bail, Result},
-	os, Instance,
+	Instance,
 };
 use lmdb::Transaction;
 
@@ -45,7 +45,7 @@ impl Instance {
 			// If the artifact is a file, then ensure its blob is present.
 			Artifact::File(file) => {
 				let blob_path = self.blob_path(file.blob_hash);
-				let blob_exists = os::fs::exists(&blob_path).await?;
+				let blob_exists = crate::util::fs::exists(&blob_path).await?;
 				if !blob_exists {
 					return Ok(Outcome::FileMissingBlob {
 						blob_hash: file.blob_hash,

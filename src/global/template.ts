@@ -30,7 +30,7 @@ export let template = async (
 	// Collect all components recursively.
 	let components: Array<TemplateComponent> = [];
 	let collectComponents = (templateLike: TemplateLike) => {
-		if (Array.isArray(templateLike)) {
+		if (templateLike instanceof Array) {
 			templateLike.forEach(collectComponents);
 		} else if (templateLike instanceof Template) {
 			components.push(...templateLike.components());

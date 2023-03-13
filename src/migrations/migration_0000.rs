@@ -1,6 +1,6 @@
-use crate::{error::Result, os};
+use crate::{error::Result, util::fs};
 
-pub async fn migrate(path: &os::Path) -> Result<()> {
+pub async fn migrate(path: &fs::Path) -> Result<()> {
 	// Create the database file.
 	let path = path.to_owned();
 	tokio::fs::File::create(&path.join("database.mdb")).await?;

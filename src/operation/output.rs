@@ -1,5 +1,9 @@
 use super::Hash;
-use crate::{error::Result, value::Value, Instance};
+use crate::{
+	error::{Error, Result},
+	value::Value,
+	Instance,
+};
 use lmdb::Transaction;
 
 impl Instance {
@@ -12,7 +16,7 @@ impl Instance {
 		let output = match txn.get(self.database.operation_outputs, &operation_hash.as_slice()) {
 			Ok(value) => {
 				let value = Value::deserialize(value)?;
-				Ok::<_, anyhow::Error>(Some(value))
+				Ok::<_, Error>(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),
 			Err(error) => Err(error.into()),

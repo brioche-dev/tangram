@@ -2,23 +2,26 @@ use crate::{
 	artifact::{self, Artifact},
 	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
-	error::{Context, Result},
+	error::{Context, Error, Result},
 	file::File,
-	os,
 	reference::Reference,
 	symlink::Symlink,
+	util::fs,
 	util::task_map::TaskMap,
 	Instance,
 };
 use async_recursion::async_recursion;
 use futures::{future::try_join_all, FutureExt};
-use std::{os::unix::prelude::PermissionsExt, sync::Arc};
+use std::{
+	os::unix::prelude::PermissionsExt,
+	sync::{Arc, Weak},
+};
 
 impl Instance {
 	pub async fn check_out_internal(
 		self: &Arc<Self>,
 		artifact_hash: artifact::Hash,
-	) -> Result<os::PathBuf> {
+	) -> Result<fs::PathBuf> {
 		// Get the internal checkouts task map.
 		let internal_checkouts_task_map = self
 			.internal_checkouts_task_map
@@ -26,11 +29,14 @@ impl Instance {
 			.unwrap()
 			.get_or_insert_with(|| {
 				Arc::new(TaskMap::new(Box::new({
-					let tg = Arc::clone(self);
+					let tg = Arc::downgrade(self);
 					move |artifact_hash| {
-						let tg = Arc::clone(&tg);
-						async move { tg.check_out_internal_inner(artifact_hash).await.unwrap() }
-							.boxed()
+						let tg = Weak::clone(&tg);
+						async move {
+							let tg = Weak::upgrade(&tg).unwrap();
+							tg.check_out_internal_inner(artifact_hash).await.unwrap()
+						}
+						.boxed()
 					}
 				})))
 			})
@@ -45,12 +51,12 @@ impl Instance {
 	pub async fn check_out_internal_inner(
 		&self,
 		artifact_hash: artifact::Hash,
-	) -> Result<os::PathBuf> {
+	) -> Result<fs::PathBuf> {
 		// Compute the checkout's path in the checkouts directory.
 		let path = self.checkouts_path().join(artifact_hash.to_string());
 
 		// If the path exists, then the artifact is already checked out.
-		if os::fs::exists(&path).await? {
+		if crate::util::fs::exists(&path).await? {
 			return Ok(path);
 		}
 
@@ -64,7 +70,8 @@ impl Instance {
 		// If the file system object is a directory, then make it writeable.
 		let artifact = self.get_artifact_local(artifact_hash)?;
 		if matches!(&artifact, Artifact::Directory(_)) {
-			tokio::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o755)).await?;
+			let permissions = std::fs::Permissions::from_mode(0o755);
+			tokio::fs::set_permissions(&temp_path, permissions).await?;
 		}
 
 		// Move the checkout from the temp path to the path in the checkouts directory.
@@ -80,10 +87,11 @@ impl Instance {
 		}
 		.context("Failed to move the checkout to the checkout path.")?;
 
-		// If the file system object is a directory, then make it readonly.
+		// If the file system object is a directory, then make it readonly after moving it to the checkouts directory.
 		let artifact = self.get_artifact_local(artifact_hash)?;
 		if matches!(&artifact, Artifact::Directory(_)) {
-			tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o555)).await?;
+			let permissions = std::fs::Permissions::from_mode(0o555);
+			tokio::fs::set_permissions(&path, permissions).await?;
 		}
 
 		// Clear the file system object's timestamps.
@@ -93,7 +101,7 @@ impl Instance {
 				let epoch = filetime::FileTime::from_unix_time(0, 0);
 				filetime::set_symlink_file_times(path, epoch, epoch)
 					.context("Failed to set the file system object's timestamps.")?;
-				Ok::<_, anyhow::Error>(())
+				Ok::<_, Error>(())
 			}
 		})
 		.await
@@ -106,7 +114,7 @@ impl Instance {
 	async fn check_out_internal_inner_inner(
 		&self,
 		artifact_hash: artifact::Hash,
-		path: &os::Path,
+		path: &fs::Path,
 	) -> Result<()> {
 		// Get the artifact.
 		let artifact = self.get_artifact_local(artifact_hash)?;
@@ -125,7 +133,7 @@ impl Instance {
 							let entry_path = path.join(entry_name);
 							self.check_out_internal_inner_inner(*entry_hash, &entry_path)
 								.await?;
-							Ok::<_, anyhow::Error>(())
+							Ok::<_, Error>(())
 						}),
 				)
 				.await?;
@@ -177,7 +185,8 @@ impl Instance {
 			Artifact::Symlink(_) | Artifact::Reference(_) => None,
 		};
 		if let Some(mode) = mode {
-			tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).await?;
+			let permissions = std::fs::Permissions::from_mode(mode);
+			tokio::fs::set_permissions(&path, permissions).await?;
 		}
 
 		// Clear the file system object's timestamps.
@@ -187,7 +196,7 @@ impl Instance {
 				let epoch = filetime::FileTime::from_unix_time(0, 0);
 				filetime::set_symlink_file_times(path, epoch, epoch)
 					.context("Failed to set the file system object's timestamps.")?;
-				Ok::<_, anyhow::Error>(())
+				Ok::<_, Error>(())
 			}
 		})
 		.await
@@ -201,10 +210,10 @@ impl Instance {
 	pub async fn check_out_external(
 		&self,
 		artifact_hash: artifact::Hash,
-		path: &os::Path,
+		path: &fs::Path,
 	) -> Result<()> {
 		// Check in an existing artifact at the path.
-		let existing_artifact_hash = if os::fs::exists(path).await? {
+		let existing_artifact_hash = if crate::util::fs::exists(path).await? {
 			Some(self.check_in(path).await?)
 		} else {
 			None
@@ -219,10 +228,10 @@ impl Instance {
 
 	async fn check_out_external_inner(
 		&self,
-		root_path: &os::Path,
+		root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		artifact_hash: artifact::Hash,
-		path: &os::Path,
+		path: &fs::Path,
 	) -> Result<()> {
 		// If the artifact hash matches the existing artifact hash, then return.
 		if existing_artifact_hash.map_or(false, |existing_artifact_hash| {
@@ -297,11 +306,11 @@ impl Instance {
 	#[async_recursion]
 	async fn check_out_directory(
 		&self,
-		root_path: &os::Path,
+		root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		_artifact_hash: artifact::Hash,
 		directory: Directory,
-		path: &os::Path,
+		path: &fs::Path,
 	) -> Result<()> {
 		// Get the artifact for an existing file system object at the path.
 		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
@@ -319,9 +328,9 @@ impl Instance {
 					async move {
 						if !directory.entries.contains_key(entry_name) {
 							let entry_path = path.join(entry_name);
-							os::fs::rmrf(&entry_path, None).await?;
+							crate::util::fs::rmrf(&entry_path).await?;
 						}
-						Ok::<_, anyhow::Error>(())
+						Ok::<_, Error>(())
 					}
 				}))
 				.await?;
@@ -329,7 +338,7 @@ impl Instance {
 
 			// If there is an existing artifact at the path and it is not a directory, then remove it, create a directory, and continue.
 			Some(_) => {
-				os::fs::rmrf(path, None).await?;
+				crate::util::fs::rmrf(path).await?;
 				tokio::fs::create_dir_all(path).await?;
 			},
 
@@ -365,7 +374,7 @@ impl Instance {
 						)
 						.await?;
 
-						Ok::<_, anyhow::Error>(())
+						Ok::<_, Error>(())
 					}
 				}),
 		)
@@ -376,11 +385,11 @@ impl Instance {
 
 	async fn check_out_file(
 		&self,
-		_root_path: &os::Path,
+		_root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		_artifact_hash: artifact::Hash,
 		file: File,
-		path: &os::Path,
+		path: &fs::Path,
 	) -> Result<()> {
 		// Get the artifact for an existing file system object at the path.
 		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
@@ -393,7 +402,7 @@ impl Instance {
 		match &existing_artifact {
 			// If there is an existing file system object at the path, then remove it and continue.
 			Some(_) => {
-				os::fs::rmrf(path, None).await?;
+				crate::util::fs::rmrf(path).await?;
 			},
 
 			// If there is no file system object at this path, then continue.
@@ -405,16 +414,22 @@ impl Instance {
 			.await
 			.context("Failed to copy the blob.")?;
 
+		// Make the file executable if necessary.
+		if file.executable {
+			let permissions = std::fs::Permissions::from_mode(0o755);
+			tokio::fs::set_permissions(path, permissions).await?;
+		}
+
 		Ok(())
 	}
 
 	async fn check_out_symlink(
 		&self,
-		_root_path: &os::Path,
+		_root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		_artifact_hash: artifact::Hash,
 		symlink: Symlink,
-		path: &os::Path,
+		path: &fs::Path,
 	) -> Result<()> {
 		// Get the artifact for an existing file system object at the path.
 		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
@@ -427,7 +442,7 @@ impl Instance {
 		match &existing_artifact {
 			// If there is an existing file system object at the path, then remove it and continue.
 			Some(_) => {
-				os::fs::rmrf(path, None).await?;
+				crate::util::fs::rmrf(path).await?;
 			},
 
 			// If there is no file system object at this path, then continue.
@@ -443,11 +458,11 @@ impl Instance {
 	#[async_recursion]
 	async fn check_out_reference(
 		&self,
-		root_path: &os::Path,
+		root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		artifact_hash: artifact::Hash,
 		reference: Reference,
-		path: &os::Path,
+		path: &fs::Path,
 	) -> Result<()> {
 		// Get the artifact for an existing file system object at the path.
 		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
@@ -460,7 +475,7 @@ impl Instance {
 		match &existing_artifact {
 			// If there is an existing artifact at the path, then remove it and continue.
 			Some(_) => {
-				os::fs::rmrf(path, None).await?;
+				crate::util::fs::rmrf(path).await?;
 			},
 
 			// If there is no artifact at this path, then continue.
@@ -475,7 +490,7 @@ impl Instance {
 			referenced_artifacts_path.join(artifact_hash.to_string());
 
 		// Check out the referenced artifact if necessary.
-		if !os::fs::exists(&referenced_artifact_checkout_path).await? {
+		if !crate::util::fs::exists(&referenced_artifact_checkout_path).await? {
 			// Create the referenced artifact checkout path's parent directory if necessary.
 			tokio::fs::create_dir_all(&referenced_artifact_checkout_path).await?;
 

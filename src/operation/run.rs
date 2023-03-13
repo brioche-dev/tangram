@@ -2,7 +2,7 @@ use super::{Hash, Operation};
 use crate::{error::Result, util::task_map::TaskMap, value::Value, Instance};
 use async_recursion::async_recursion;
 use futures::FutureExt;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 impl Instance {
 	pub async fn run(self: &Arc<Self>, operation_hash: Hash) -> Result<Value> {
@@ -13,10 +13,14 @@ impl Instance {
 			.unwrap()
 			.get_or_insert_with(|| {
 				Arc::new(TaskMap::new(Box::new({
-					let tg = Arc::clone(self);
+					let tg = Arc::downgrade(self);
 					move |operation_hash| {
-						let tg = Arc::clone(&tg);
-						async move { tg.run_inner(operation_hash, None).await.unwrap() }.boxed()
+						let tg = Weak::clone(&tg);
+						async move {
+							let tg = Weak::upgrade(&tg).unwrap();
+							tg.run_inner(operation_hash, None).await.unwrap()
+						}
+						.boxed()
 					}
 				})))
 			})

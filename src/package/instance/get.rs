@@ -1,5 +1,5 @@
 use super::{Hash, Instance};
-use crate::error::{bail, Context, Result};
+use crate::error::{bail, Context, Error, Result};
 use lmdb::Transaction;
 
 impl crate::Instance {
@@ -12,7 +12,7 @@ impl crate::Instance {
 			self.database.package_instances,
 			&package_instance_hash.as_slice(),
 		) {
-			Ok(_) => Ok::<_, anyhow::Error>(true),
+			Ok(_) => Ok::<_, Error>(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.into()),
 		}?;

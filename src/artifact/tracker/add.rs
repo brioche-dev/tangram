@@ -1,11 +1,11 @@
 use super::Tracker;
-use crate::{error::Result, os, Instance};
+use crate::{error::Result, util::fs, Instance};
 use lmdb::Transaction;
 use std::os::unix::prelude::OsStrExt;
 
 impl Instance {
 	/// Add an artifact tracker.
-	pub fn add_artifact_tracker(&self, path: &os::Path, artifact_tracker: &Tracker) -> Result<()> {
+	pub fn add_artifact_tracker(&self, path: &fs::Path, artifact_tracker: &Tracker) -> Result<()> {
 		// Serialize the artifact tracker.
 		let value = artifact_tracker.serialize_to_vec();
 

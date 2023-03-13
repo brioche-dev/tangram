@@ -2,8 +2,9 @@ use super::{identifier, Identifier};
 use crate::{
 	artifact::{self, Artifact},
 	error::{bail, Context, Result},
-	hash, os, package,
+	hash, package,
 	path::{self, Path},
+	util::fs,
 	Instance,
 };
 use include_dir::include_dir;
@@ -77,13 +78,14 @@ impl Instance {
 			identifier::Source::Instance(package_instance_hash) => {
 				// Get the package.
 				let package_instance = self.get_package_instance_local(*package_instance_hash)?;
-				let package_hash = package_instance.package_hash;
-
-				// Get the entry.
-				let artifact_hash = self.directory_get(package_hash, &identifier.path).await?;
+				let package = self.get_artifact_local(package_instance.package_hash)?;
 
 				// Get the artifact.
-				let artifact = self.get_artifact_local(artifact_hash)?;
+				let artifact = package
+					.as_directory()
+					.context("A package must be a directory.")?
+					.get(self, &identifier.path)
+					.await?;
 
 				// Get the type.
 				let ty = match artifact {
@@ -93,7 +95,7 @@ impl Instance {
 					Artifact::Reference(_) => "tg.Reference",
 				};
 
-				(ty, artifact_hash)
+				(ty, artifact.hash())
 			},
 		};
 
@@ -124,7 +126,7 @@ impl Instance {
 
 	async fn load_normal_module_from_path(
 		&self,
-		package_path: &os::Path,
+		package_path: &fs::Path,
 		path: &Path,
 	) -> Result<String> {
 		// Construct the path to the module.
@@ -146,16 +148,20 @@ impl Instance {
 	) -> Result<String> {
 		// Get the package.
 		let package_instance = self.get_package_instance_local(package_instance_hash)?;
-		let package_hash = package_instance.package_hash;
+		let package = self.get_artifact_local(package_instance.package_hash)?;
 
-		// Get the module artifact in the package.
-		let module_artifact_hash = self.directory_get(package_hash, path).await?;
-		let module_artifact = self.get_artifact_local(module_artifact_hash)?;
-		let module_file = module_artifact.into_file().context("Expected a file.")?;
+		// Get the module.
+		let module = package
+			.as_directory()
+			.context("Expected a package to be a directory.")?
+			.get(self, path)
+			.await?
+			.into_file()
+			.context("Expected a file.")?;
 
 		// Read the module.
 		let mut text = String::new();
-		self.get_blob(module_file.blob_hash)
+		self.get_blob(module.blob_hash)
 			.await?
 			.read_to_string(&mut text)
 			.await?;

@@ -1,4 +1,4 @@
-use crate::blob;
+use crate::{blob, error::Result, Instance};
 
 #[derive(
 	Clone,
@@ -17,4 +17,10 @@ pub struct File {
 
 	#[buffalo(id = 1)]
 	pub executable: bool,
+}
+
+impl File {
+	pub fn read_to_string(&self, _tg: &Instance) -> Result<String> {
+		todo!()
+	}
 }

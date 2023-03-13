@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::{Error, Result};
 pub use crate::package::specifier::Registry;
 use crate::path::Path;
 
@@ -27,7 +27,7 @@ pub enum Specifier {
 }
 
 impl std::str::FromStr for Specifier {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(value: &str) -> Result<Specifier> {
 		if value.starts_with('.') {
@@ -59,7 +59,7 @@ impl std::fmt::Display for Specifier {
 }
 
 impl TryFrom<String> for Specifier {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()

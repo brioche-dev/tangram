@@ -1,25 +1,29 @@
 use crate::{
 	error::{bail, Context, Result},
-	os, Instance,
+	util::fs,
+	Instance,
 };
 use futures::FutureExt;
 
 mod migration_0000;
 
 impl Instance {
-	pub async fn migrate(path: &os::Path) -> Result<()> {
+	pub async fn migrate(path: &fs::Path) -> Result<()> {
 		let migrations = vec![migration_0000::migrate(path).boxed()];
 
-		// Get the version from the version file.
-		let version_file_path = path.join("version");
-		let version_file_exists = os::fs::exists(&version_file_path).await?;
-		let version: Option<usize> = if version_file_exists {
-			let version = tokio::fs::read_to_string(path.join("version"))
-				.await?
-				.trim()
-				.parse()
-				.context("Failed to read the path format version.")?;
-			Some(version)
+		// Read the version from the version file.
+		let version = match tokio::fs::read_to_string(path.join("version")).await {
+			Ok(version) => Some(version),
+			Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+			Err(error) => return Err(error.into()),
+		};
+		let version = if let Some(version) = version {
+			Some(
+				version
+					.trim()
+					.parse::<usize>()
+					.context("Failed to read the path format version.")?,
+			)
 		} else {
 			None
 		};

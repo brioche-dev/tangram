@@ -3,12 +3,14 @@ use crate::{
 	blob,
 	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
+	error::Error,
 	error::{bail, Context, Result},
 	file::File,
-	hash, os,
+	hash,
 	path::Path,
 	reference::Reference,
 	symlink::Symlink,
+	util::fs,
 	Instance,
 };
 use async_recursion::async_recursion;
@@ -20,7 +22,7 @@ use std::{
 
 impl Instance {
 	#[async_recursion]
-	pub async fn check_in(&self, path: &os::Path) -> Result<artifact::Hash> {
+	pub async fn check_in(&self, path: &fs::Path) -> Result<artifact::Hash> {
 		// Get the metadata for the file system object at the path.
 		let metadata = tokio::fs::symlink_metadata(path).await?;
 
@@ -53,7 +55,7 @@ impl Instance {
 
 	async fn check_in_directory(
 		&self,
-		path: &os::Path,
+		path: &fs::Path,
 		_metadata: &Metadata,
 	) -> Result<artifact::Hash> {
 		// Read the contents of the directory.
@@ -85,7 +87,7 @@ impl Instance {
 		let entries = try_join_all(entry_names.into_iter().map(|entry_name| async {
 			let entry_path = path.join(&entry_name);
 			let artifact_hash = self.check_in(&entry_path).await?;
-			Ok::<_, anyhow::Error>((entry_name, artifact_hash))
+			Ok::<_, Error>((entry_name, artifact_hash))
 		}))
 		.await?
 		.into_iter()
@@ -100,7 +102,7 @@ impl Instance {
 		Ok(artifact_hash)
 	}
 
-	async fn check_in_file(&self, path: &os::Path, metadata: &Metadata) -> Result<artifact::Hash> {
+	async fn check_in_file(&self, path: &fs::Path, metadata: &Metadata) -> Result<artifact::Hash> {
 		// If there is an artifact tracker whose timestamp matches the file at the path, then return the tracked artifact hash.
 		if let Some(artifact_tracker) = self.get_artifact_tracker(path)? {
 			let timestamp = std::time::Duration::new(
@@ -170,7 +172,7 @@ impl Instance {
 
 	async fn check_in_symlink(
 		&self,
-		path: &os::Path,
+		path: &fs::Path,
 		_metadata: &Metadata,
 	) -> Result<artifact::Hash> {
 		// Read the symlink.

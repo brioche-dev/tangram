@@ -74,6 +74,10 @@ export class File {
 		return this.#blobHash;
 	}
 
+	executable(): boolean {
+		return this.#executable;
+	}
+
 	async getBytes(): Promise<Blob> {
 		return await getBlob(this.#blobHash);
 	}
@@ -81,9 +85,5 @@ export class File {
 	async getString(): Promise<string> {
 		let bytes = await this.getBytes();
 		return syscall("decode_utf8", bytes);
-	}
-
-	executable(): boolean {
-		return this.#executable;
 	}
 }

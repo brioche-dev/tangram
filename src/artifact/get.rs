@@ -1,6 +1,6 @@
 use super::{Artifact, Hash};
 use crate::{
-	error::{bail, Context, Result},
+	error::{Context, Error, Result},
 	Instance,
 };
 use lmdb::Transaction;
@@ -11,7 +11,7 @@ impl Instance {
 		let txn = self.database.env.begin_ro_txn()?;
 
 		let exists = match txn.get(self.database.artifacts, &artifact_hash.as_slice()) {
-			Ok(_) => Ok::<_, anyhow::Error>(true),
+			Ok(_) => Ok::<_, Error>(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.into()),
 		}?;
@@ -69,7 +69,7 @@ impl Instance {
 				Ok(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => bail!(error),
+			Err(error) => Err(error.into()),
 		}
 	}
 }

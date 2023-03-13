@@ -3,7 +3,9 @@ use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
 	error::{bail, Result},
-	module, os, Instance,
+	module,
+	util::fs,
+	Instance,
 };
 use std::{collections::HashSet, sync::Arc};
 
@@ -15,7 +17,7 @@ pub struct Output {
 impl Instance {
 	/// Check in the package at the specified path.
 	#[allow(clippy::unused_async)]
-	pub async fn check_in_package(self: &Arc<Self>, path: &os::Path) -> Result<Output> {
+	pub async fn check_in_package(self: &Arc<Self>, path: &fs::Path) -> Result<Output> {
 		// Create a queue of modules to visit and a visited set.
 		let root_module_identifier = module::Identifier::for_root_module_in_package_at_path(path);
 		let mut queue = vec![root_module_identifier];

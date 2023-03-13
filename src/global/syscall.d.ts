@@ -41,8 +41,18 @@ declare function syscall(
 ): Promise<syscall.PackageInstance>;
 
 declare function syscall(
-	syscall: "run",
+	syscall: "add_operation",
 	operation: syscall.Operation,
+): Promise<syscall.OperationHash>;
+
+declare function syscall(
+	syscall: "get_operation",
+	hash: syscall.OperationHash,
+): Promise<syscall.Operation>;
+
+declare function syscall(
+	syscall: "run",
+	hash: syscall.OperationHash,
 ): Promise<syscall.Value>;
 
 declare function syscall(
@@ -82,17 +92,6 @@ declare namespace syscall {
 		path: string | nullish;
 	};
 
-	export type ValueType =
-		| "null"
-		| "bool"
-		| "number"
-		| "string"
-		| "artifact"
-		| "placeholder"
-		| "template"
-		| "array"
-		| "map";
-
 	export type Value =
 		| { kind: "null"; value: nullish }
 		| { kind: "bool"; value: boolean }
@@ -112,18 +111,12 @@ declare namespace syscall {
 		components: Array<TemplateComponent>;
 	};
 
-	export type TemplateComponentType =
-		| "string"
-		| "artifact"
-		| "placeholder"
-		| "template";
-
 	export type TemplateComponent =
 		| { kind: "string"; value: string }
 		| { kind: "artifact"; value: ArtifactHash }
 		| { kind: "placeholder"; value: Placeholder };
 
-	export type OperationType = "call" | "download" | "process";
+	export type OperationHash = string;
 
 	export type Operation =
 		| { kind: "call"; value: Call }

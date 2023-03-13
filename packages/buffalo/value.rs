@@ -49,38 +49,38 @@ impl Serialize for Value {
 		match self {
 			Value::Unit(_) => {
 				serializer.serialize_unit()?;
-			}
+			},
 			Value::Bool(value) => {
 				serializer.serialize_bool(*value)?;
-			}
+			},
 			Value::UVarint(value) => {
 				serializer.serialize_uvarint(*value)?;
-			}
+			},
 			Value::IVarint(value) => {
 				serializer.serialize_ivarint(*value)?;
-			}
+			},
 			Value::F32(value) => {
 				serializer.serialize_f32(*value)?;
-			}
+			},
 			Value::F64(value) => {
 				serializer.serialize_f64(*value)?;
-			}
+			},
 			Value::String(value) => {
 				serializer.serialize_string(value)?;
-			}
+			},
 			Value::Bytes(value) => {
 				serializer.serialize_bytes(value)?;
-			}
+			},
 			Value::Option(value) => {
 				serializer.serialize_option(value)?;
-			}
+			},
 			Value::Array(value) => {
 				serializer.serialize_array(value.len(), value)?;
-			}
+			},
 			Value::Map(value) => {
 				serializer
 					.serialize_map(value.len(), value.iter().map(|(key, value)| (key, value)))?;
-			}
+			},
 			Value::Struct(value) => {
 				serializer.write_kind(Kind::Struct)?;
 				serializer.write_len(value.fields.len())?;
@@ -88,12 +88,12 @@ impl Serialize for Value {
 					serializer.write_id(field.id)?;
 					serializer.serialize(&field.value)?;
 				}
-			}
+			},
 			Value::Enum(value) => {
 				serializer.write_kind(Kind::Enum)?;
 				serializer.write_id(value.id)?;
 				serializer.serialize(&value.value)?;
-			}
+			},
 		}
 		Ok(())
 	}
@@ -127,13 +127,13 @@ impl Deserialize for Value {
 					fields.push(Field { id, value });
 				}
 				Value::Struct(Struct { fields })
-			}
+			},
 			Kind::Enum => {
 				deserializer.ensure_kind(Kind::Enum)?;
 				let id = deserializer.read_id()?;
 				let value = deserializer.deserialize()?;
 				Value::Enum(Enum { id, value })
-			}
+			},
 		};
 		Ok(value)
 	}

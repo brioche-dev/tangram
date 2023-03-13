@@ -1,10 +1,10 @@
-use crate::{error::Result, module, os};
+use crate::{error::Result, module, util::fs};
 use url::Url;
 
 impl module::Identifier {
 	pub async fn from_lsp_uri(url: Url) -> Result<module::Identifier> {
 		match url.scheme() {
-			"file" => module::Identifier::for_path(os::Path::new(url.path())).await,
+			"file" => module::Identifier::for_path(fs::Path::new(url.path())).await,
 			_ => url.try_into(),
 		}
 	}

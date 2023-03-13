@@ -2,7 +2,7 @@ use crate::Cli;
 use indoc::formatdoc;
 use tangram::{
 	error::{bail, Context, Result},
-	os,
+	util::fs,
 };
 
 /// Initialize a new package.
@@ -14,7 +14,7 @@ pub struct Args {
 	#[arg(long)]
 	pub version: Option<String>,
 
-	pub path: Option<os::PathBuf>,
+	pub path: Option<fs::PathBuf>,
 }
 
 impl Cli {

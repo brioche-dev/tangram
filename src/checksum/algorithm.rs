@@ -1,4 +1,4 @@
-use crate::error::bail;
+use crate::error::{bail, Error};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]
@@ -19,7 +19,7 @@ impl std::fmt::Display for Algorithm {
 }
 
 impl std::str::FromStr for Algorithm {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		let system = match s {
@@ -38,7 +38,7 @@ impl From<Algorithm> for String {
 }
 
 impl TryFrom<String> for Algorithm {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
 		value.parse()

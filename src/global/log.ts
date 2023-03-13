@@ -51,7 +51,7 @@ let stringifyObject = (value: object | null, visited: Set<unknown>): string => {
 	// Add the value to the visited set.
 	visited.add(value);
 
-	if (Array.isArray(value)) {
+	if (value instanceof Array) {
 		// Handle an array.
 		return `[${value
 			.map((value) => stringifyInner(value, visited))

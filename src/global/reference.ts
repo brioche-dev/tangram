@@ -62,12 +62,16 @@ export class Reference {
 		});
 	}
 
-	async getArtifact(): Promise<Artifact> {
-		let artifact = await getArtifact(this.#artifactHash);
-		return artifact;
+	artifactHash(): ArtifactHash {
+		return this.#artifactHash;
 	}
 
 	path(): Path | nullish {
 		return this.#path;
+	}
+
+	async getArtifact(): Promise<Artifact> {
+		let artifact = await getArtifact(this.#artifactHash);
+		return artifact;
 	}
 }

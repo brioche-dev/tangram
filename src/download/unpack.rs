@@ -1,6 +1,6 @@
 use crate::{
 	error::{bail, Error},
-	os,
+	util::fs,
 };
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -101,7 +101,7 @@ impl TryFrom<String> for Format {
 impl Format {
 	#[allow(clippy::case_sensitive_file_extension_comparisons)]
 	#[must_use]
-	pub fn for_path(path: &os::Path) -> Option<Format> {
+	pub fn for_path(path: &fs::Path) -> Option<Format> {
 		let path = path.to_str().unwrap();
 		if path.ends_with(".tar.bz2") || path.ends_with(".tbz2") {
 			Some(Format::Tar(Some(Compression::Bz2)))

@@ -1,14 +1,15 @@
 use super::Tracker;
 use crate::{
 	error::{bail, Result},
-	os, Instance,
+	util::fs,
+	Instance,
 };
 use lmdb::Transaction;
 use std::os::unix::prelude::OsStrExt;
 
 impl Instance {
 	/// Get an artifact tracker.
-	pub fn get_artifact_tracker(&self, path: &os::Path) -> Result<Option<Tracker>> {
+	pub fn get_artifact_tracker(&self, path: &fs::Path) -> Result<Option<Tracker>> {
 		// Begin a read transaction.
 		let txn = self.database.env.begin_ro_txn()?;
 

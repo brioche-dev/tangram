@@ -2,14 +2,14 @@ use crate::Cli;
 use tangram::{
 	artifact,
 	error::{Context, Result},
-	os,
+	util::fs,
 };
 
 /// Check out an artifact.
 #[derive(clap::Args)]
 pub struct Args {
 	artifact_hash: artifact::Hash,
-	path: Option<os::PathBuf>,
+	path: Option<fs::PathBuf>,
 }
 
 impl Cli {

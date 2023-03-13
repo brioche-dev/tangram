@@ -16,8 +16,6 @@ declare var t: (
 declare namespace tg {
 	// Artifact.
 
-	export type ArtifactKind = "directory" | "file" | "symlink" | "reference";
-
 	export type Artifact = Directory | File | Symlink | Reference;
 
 	// Checksum.
@@ -147,8 +145,6 @@ declare namespace tg {
 	// Path.
 
 	export type PathLike = string | Array<PathComponent> | Path;
-
-	export type PathComponentKind = "current_dir" | "parent_dir" | "normal";
 
 	export type PathComponent =
 		| { kind: "current_dir" }

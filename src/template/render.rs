@@ -1,8 +1,9 @@
 use super::{Component, Template};
 use crate::{
 	artifact::{self, Artifact},
-	error::{bail, Context, Result},
-	os, Instance,
+	error::{bail, Context, Error, Result},
+	util::fs,
+	Instance,
 };
 use futures::future::try_join_all;
 use std::{
@@ -18,8 +19,8 @@ pub struct Output {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Path {
-	pub host_path: os::PathBuf,
-	pub guest_path: os::PathBuf,
+	pub host_path: fs::PathBuf,
+	pub guest_path: fs::PathBuf,
 	pub read: bool,
 	pub write: bool,
 	pub create: bool,
@@ -92,7 +93,7 @@ impl Instance {
 							})
 							.collect();
 
-						Ok::<_, anyhow::Error>(Output { string, paths })
+						Ok::<_, Error>(Output { string, paths })
 					},
 
 					Component::Placeholder(placeholder) => {
@@ -102,7 +103,7 @@ impl Instance {
 						let string = placeholder_value.guest_path.display().to_string();
 						let mut paths = HashSet::default();
 						paths.insert(placeholder_value);
-						Ok::<_, anyhow::Error>(Output { string, paths })
+						Ok::<_, Error>(Output { string, paths })
 					},
 				}
 			}))

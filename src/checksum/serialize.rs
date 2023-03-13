@@ -1,5 +1,5 @@
 use super::{Algorithm, Checksum};
-use crate::error::Context;
+use crate::error::{Context, Error};
 
 impl std::fmt::Display for Checksum {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -16,7 +16,7 @@ impl std::fmt::Display for Checksum {
 }
 
 impl std::str::FromStr for Checksum {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		// Split on a ":".
@@ -57,7 +57,7 @@ impl From<Checksum> for String {
 }
 
 impl TryFrom<String> for Checksum {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()

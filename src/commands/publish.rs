@@ -1,13 +1,14 @@
 use crate::Cli;
 use tangram::{
 	error::{Context, Result},
-	os, package,
+	package,
+	util::fs,
 };
 
 /// Publish a package.
 #[derive(clap::Args)]
 pub struct Args {
-	package: Option<os::PathBuf>,
+	package: Option<fs::PathBuf>,
 }
 
 impl Cli {

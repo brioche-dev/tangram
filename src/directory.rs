@@ -75,28 +75,25 @@ impl Directory {
 
 		Ok(())
 	}
-}
 
-impl Instance {
 	#[allow(clippy::unused_async)]
-	pub async fn directory_get(
-		&self,
-		mut artifact_hash: artifact::Hash,
-		path: &Path,
-	) -> Result<artifact::Hash> {
+	pub async fn get(&self, tg: &Instance, path: &Path) -> Result<Artifact> {
+		let mut artifact = Artifact::Directory(self.clone());
 		for component in &path.components {
 			let name = component
 				.as_normal()
-				.context("Expected the path component to be a normal component.")?;
-			artifact_hash = self
-				.get_artifact_local(artifact_hash)?
-				.into_directory()
+				.context("Expected the path component to be normal.")?;
+			let artifact_hash = artifact
+				.as_directory()
 				.context("Expected a directory.")?
 				.entries
 				.get(name)
 				.copied()
 				.with_context(|| format!(r#"Failed to find the child at path "{path}"."#))?;
+			artifact = tg
+				.get_artifact_local(artifact_hash)
+				.context("Failed to get the artifact.")?;
 		}
-		Ok(artifact_hash)
+		Ok(artifact)
 	}
 }

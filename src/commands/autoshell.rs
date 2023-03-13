@@ -6,7 +6,8 @@ use tangram::{
 	error::{Context, Result},
 	function::Function,
 	operation::{Call, Operation},
-	os, package,
+	package,
+	util::fs,
 };
 
 /// Manage autoshell paths.
@@ -31,7 +32,7 @@ pub enum Command {
 /// Add an autoshell path.
 #[derive(clap::Args)]
 pub struct AddArgs {
-	path: Option<os::PathBuf>,
+	path: Option<fs::PathBuf>,
 }
 
 /// List all autoshell paths.
@@ -41,7 +42,7 @@ pub struct ListArgs {}
 /// Remove an autoshell path.
 #[derive(clap::Args)]
 pub struct RemoveArgs {
-	path: Option<os::PathBuf>,
+	path: Option<fs::PathBuf>,
 }
 
 #[derive(clap::Args)]

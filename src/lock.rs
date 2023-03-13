@@ -1,4 +1,4 @@
-use crate::{error::Result, os};
+use crate::{error::Result, util::fs};
 use std::{
 	cell::UnsafeCell,
 	sync::{Arc, Weak},
@@ -6,7 +6,7 @@ use std::{
 use tokio::sync::RwLock;
 
 pub struct Lock<T> {
-	pub path: os::PathBuf,
+	pub path: fs::PathBuf,
 	pub value: UnsafeCell<T>,
 	pub shared_lock_file: Arc<RwLock<Option<Weak<tokio::fs::File>>>>,
 }
@@ -25,7 +25,7 @@ pub struct ExclusiveGuard<'a, T> {
 }
 
 impl<T> Lock<T> {
-	pub fn new(path: &os::Path, value: T) -> Lock<T> {
+	pub fn new(path: &fs::Path, value: T) -> Lock<T> {
 		let shared_lock_file = Arc::new(RwLock::new(None));
 		Lock {
 			path: path.to_owned(),
@@ -172,7 +172,7 @@ impl<'a, T> ExclusiveGuard<'a, T> {
 mod sys {
 	use crate::{
 		error::{bail, Error, Result},
-		os::errno::errno,
+		util::errno::errno,
 	};
 	use libc::{flock, EWOULDBLOCK, LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN};
 	use std::os::unix::io::AsRawFd;

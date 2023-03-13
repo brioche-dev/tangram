@@ -35,7 +35,7 @@ export let isValue = (value: unknown): value is Value => {
 		value instanceof Symlink ||
 		value instanceof Reference ||
 		value instanceof Template ||
-		Array.isArray(value) ||
+		value instanceof Array ||
 		value instanceof Map ||
 		typeof value === "object"
 	);
@@ -79,7 +79,7 @@ export let serializeValue = async <T extends Value>(
 			kind: "template",
 			value: await value.serialize(),
 		};
-	} else if (Array.isArray(value)) {
+	} else if (value instanceof Array) {
 		let serializedValue = await Promise.all(
 			value.map((value) => serializeValue(value)),
 		);

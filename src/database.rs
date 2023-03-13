@@ -1,4 +1,4 @@
-use crate::{error::Result, os};
+use crate::{error::Result, util::fs};
 
 pub struct Database {
 	/// The LMDB environment.
@@ -24,7 +24,7 @@ pub struct Database {
 }
 
 impl Database {
-	pub fn open(path: &os::Path) -> Result<Database> {
+	pub fn open(path: &fs::Path) -> Result<Database> {
 		// Open the environment.
 		let mut env_builder = lmdb::Environment::new();
 		env_builder.set_map_size(1_099_511_627_776);

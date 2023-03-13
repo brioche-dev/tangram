@@ -11,11 +11,11 @@ fn main() {
 		v8::V8::initialize();
 	});
 
-	// // Create the language service snapshot.
-	// println!("cargo-rerun-if-changed=assets/language_service.js");
-	// let path = out_dir_path.join("language_service.heapsnapshot");
-	// let snapshot = create_snapshot(include_str!("assets/language_service.js"));
-	// std::fs::write(path, snapshot).unwrap();
+	// Create the language service snapshot.
+	println!("cargo-rerun-if-changed=assets/language_service.js");
+	let path = out_dir_path.join("language_service.heapsnapshot");
+	let snapshot = create_snapshot(include_str!("assets/language_service.js"));
+	std::fs::write(path, snapshot).unwrap();
 
 	// Create the runtime global snapshot.
 	println!("cargo-rerun-if-changed=assets/global.js");

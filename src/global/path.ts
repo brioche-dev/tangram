@@ -41,7 +41,7 @@ export class Path {
 					});
 				}
 			}
-		} else if (Array.isArray(path)) {
+		} else if (path instanceof Array) {
 			this.#components = path;
 		} else {
 			this.#components = path.components();

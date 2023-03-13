@@ -4,7 +4,7 @@ use crate::{
 	error::{Context, Result},
 	hash,
 	operation::{self, Operation},
-	os, package, template,
+	package, template,
 	value::Value,
 	Instance,
 };
@@ -256,7 +256,7 @@ impl Instance {
 				.context("Failed to parse the entry in the checkouts directory as a hash.")?;
 			let artifact_hash = artifact::Hash(artifact_hash);
 			if !marks.contains_artifact(artifact_hash) {
-				os::fs::rmrf(&entry.path(), None)
+				crate::util::fs::rmrf(&entry.path())
 					.await
 					.context("Failed to remove the artifact.")?;
 			}

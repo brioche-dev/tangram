@@ -1,5 +1,5 @@
 use super::Hash;
-use crate::{error::Result, hash::Writer, Instance};
+use crate::{error::Result, hash::Writer, temp::Temp, Instance};
 use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio_stream::StreamExt;
 
@@ -8,9 +8,9 @@ impl Instance {
 		// Get a file permit.
 		let permit = self.file_semaphore.acquire().await.unwrap();
 
-		// Create a temp file to read the blob into.
-		let temp_path = self.temp_path();
-		let mut temp_file = tokio::fs::File::create(&temp_path).await?;
+		// Create a temp to read the blob into.
+		let temp = Temp::new(self);
+		let mut temp_file = tokio::fs::File::create(temp.path()).await?;
 
 		// Compute the hash of the bytes in the reader and write the bytes to the temp file.
 		let mut stream = tokio_util::io::ReaderStream::new(reader);
@@ -29,15 +29,15 @@ impl Instance {
 		// Drop the file permit.
 		drop(permit);
 
-		// Make the temp file readonly.
-		let metadata = tokio::fs::metadata(&temp_path).await?;
+		// Make the temp readonly.
+		let metadata = tokio::fs::metadata(temp.path()).await?;
 		let mut permissions = metadata.permissions();
 		permissions.set_readonly(true);
-		tokio::fs::set_permissions(&temp_path, permissions).await?;
+		tokio::fs::set_permissions(temp.path(), permissions).await?;
 
-		// Move the temp file to the blobs path.
+		// Move the temp to the blobs path.
 		let blob_path = self.blob_path(blob_hash);
-		tokio::fs::rename(&temp_path, &blob_path).await?;
+		tokio::fs::rename(temp.path(), &blob_path).await?;
 
 		Ok(blob_hash)
 	}

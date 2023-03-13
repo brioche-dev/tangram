@@ -1,6 +1,6 @@
 use super::dependency;
 use crate::{
-	error::{bail, Context},
+	error::{bail, Context, Error},
 	path::Path,
 };
 use url::Url;
@@ -32,7 +32,7 @@ impl std::fmt::Display for Specifier {
 }
 
 impl std::str::FromStr for Specifier {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		if value.starts_with('/') || value.starts_with('.') {
@@ -72,7 +72,7 @@ impl From<Specifier> for String {
 }
 
 impl TryFrom<String> for Specifier {
-	type Error = anyhow::Error;
+	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()

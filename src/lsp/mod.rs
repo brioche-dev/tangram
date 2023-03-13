@@ -1,5 +1,5 @@
 use crate::{
-	error::{bail, Context, Result},
+	error::{bail, Context, Error, Result},
 	Instance,
 };
 use futures::{future, FutureExt};
@@ -43,7 +43,7 @@ impl Instance {
 				stdout.write_all(body.as_bytes()).await?;
 				stdout.flush().await?;
 			}
-			Ok::<_, anyhow::Error>(())
+			Ok::<_, Error>(())
 		});
 
 		// Read incoming messages.

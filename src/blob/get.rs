@@ -1,7 +1,7 @@
-use super::{Blob, Hash};
+use super::{reader::Reader, Hash};
 use crate::{
 	error::{Context, Result},
-	os, Instance,
+	Instance,
 };
 use tokio::io::AsyncRead;
 
@@ -10,7 +10,7 @@ impl Instance {
 		let blob = self
 			.try_get_blob(blob_hash)
 			.await?
-			.with_context(|| format!(r#"Failed to get blob with hash "{blob_hash}"."#))?;
+			.with_context(|| format!(r#"Failed to get the blob with hash "{blob_hash}"."#))?;
 		Ok(blob)
 	}
 
@@ -18,19 +18,18 @@ impl Instance {
 		// Get the blob path.
 		let path = self.blob_path(blob_hash);
 
-		// Check if the blob exists.
-		if !os::fs::exists(&path).await? {
-			return Ok(None);
-		}
-
 		// Acquire a permit for the blob.
 		let permit = self.file_semaphore.clone().acquire_owned().await?;
 
 		// Open the blob file.
-		let file = tokio::fs::File::open(path).await?;
+		let file = match tokio::fs::File::open(path).await {
+			Ok(file) => file,
+			Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+			Err(error) => return Err(error.into()),
+		};
 
-		// Create the blob.
-		let blob = Blob { file, permit };
+		// Create the blob reader.
+		let blob = Reader { file, permit };
 
 		Ok(Some(blob))
 	}

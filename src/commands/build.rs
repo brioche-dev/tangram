@@ -3,7 +3,8 @@ use tangram::{
 	error::{Context, Result},
 	function::Function,
 	operation::{Call, Operation},
-	os, package,
+	package,
+	util::fs,
 };
 
 /// Call a function.
@@ -19,7 +20,7 @@ pub struct Args {
 	name: String,
 
 	#[arg(long)]
-	checkout: Option<os::PathBuf>,
+	checkout: Option<fs::PathBuf>,
 }
 
 impl Cli {
@@ -68,14 +69,6 @@ impl Cli {
 				.context("Expected the output to be an artifact.")?;
 			self.tg.check_out_external(*artifact_hash, &path).await?;
 		}
-
-		self.tg
-			.check_out_internal(
-				"3a517547ab139a39c02781b86bddafc11fa093ab124b6ac32b7e3e1beb682317"
-					.parse()
-					.unwrap(),
-			)
-			.await?;
 
 		Ok(())
 	}

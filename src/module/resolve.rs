@@ -5,8 +5,9 @@ use super::{
 };
 use crate::{
 	error::{bail, Context, Result},
-	os, package,
+	package,
 	path::Path,
+	util::fs,
 	Instance,
 };
 
@@ -108,11 +109,11 @@ impl Instance {
 	async fn resolve_module_with_dependency_specifier_from_path_referrer(
 		&self,
 		specifier: &package::dependency::Specifier,
-		referrer_package_path: &os::Path,
+		referrer_package_path: &fs::Path,
 	) -> Result<Identifier> {
 		match specifier {
 			package::dependency::Specifier::Path(specifier_path) => {
-				let specifier_path: os::PathBuf = specifier_path.clone().into();
+				let specifier_path: fs::PathBuf = specifier_path.clone().into();
 				let package_path = referrer_package_path.join(specifier_path);
 				let identifier = Identifier::for_root_module_in_package_at_path(&package_path);
 				Ok(identifier)

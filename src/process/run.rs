@@ -1,7 +1,6 @@
 use super::Process;
 use crate::{
-	error::{bail, Context, Result},
-	os,
+	error::{bail, Context, Error, Result},
 	system::System,
 	template::Path,
 	value::Value,
@@ -35,7 +34,7 @@ impl Instance {
 			try_join_all(process.env.iter().map({
 				|(key, value)| async move {
 					let value = self.render(value, placeholder_values).await?;
-					Ok::<_, anyhow::Error>((key, value))
+					Ok::<_, Error>((key, value))
 				}
 			}))
 			.await?
@@ -50,7 +49,7 @@ impl Instance {
 			try_join_all(process.args.iter().map({
 				|value| async move {
 					let value = self.render(value, placeholder_values).await?;
-					Ok::<_, anyhow::Error>(value)
+					Ok::<_, Error>(value)
 				}
 			}))
 			.await?
@@ -98,7 +97,7 @@ impl Instance {
 				}
 				#[cfg(not(target_os = "linux"))]
 				{
-					anyhow::bail!("A Linux process cannot run on a non-Linux host.");
+					bail!("A Linux process cannot run on a non-Linux host.");
 				}
 			},
 			System::Amd64Macos | System::Arm64Macos => {
@@ -116,7 +115,7 @@ impl Instance {
 				}
 				#[cfg(not(target_os = "macos"))]
 				{
-					anyhow::bail!("A macOS process cannot run on a non-macOS host.");
+					bail!("A macOS process cannot run on a non-macOS host.");
 				}
 			},
 		}
@@ -129,7 +128,7 @@ impl Instance {
 			.context("Failed to check in the output.")?;
 
 		// Remove the output temp path.
-		os::fs::rmrf(&output_temp_path, None)
+		crate::util::fs::rmrf(&output_temp_path)
 			.await
 			.context("Failed to remove the output temp path.")?;
 

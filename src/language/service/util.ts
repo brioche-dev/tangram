@@ -31,7 +31,7 @@ export let visit = (
 			let child: TSESTree.Node | Array<TSESTree.Node> | undefined = (
 				node as any
 			)[key];
-			if (Array.isArray(child)) {
+			if (child instanceof Array) {
 				for (let item of child) {
 					visit(item, visitor);
 				}
