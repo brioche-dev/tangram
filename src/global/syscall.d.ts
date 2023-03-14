@@ -31,6 +31,11 @@ declare function syscall(
 ): Promise<syscall.Artifact>;
 
 declare function syscall(
+	syscall: "get_artifact_hash",
+	hash: syscall.Artifact,
+): syscall.ArtifactHash;
+
+declare function syscall(
 	syscall: "add_package_instance",
 	packageInstance: syscall.PackageInstance,
 ): Promise<syscall.PackageInstanceHash>;

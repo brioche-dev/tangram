@@ -53,6 +53,7 @@ fn syscall_inner<'s>(
 		"get_blob" => syscall_async(scope, args, syscall_get_blob),
 		"add_artifact" => syscall_async(scope, args, syscall_add_artifact),
 		"get_artifact" => syscall_async(scope, args, syscall_get_artifact),
+		"get_artifact_hash" => syscall_sync(scope, args, syscall_get_artifact_hash),
 		"add_package_instance" => syscall_async(scope, args, syscall_add_package_instance),
 		"get_package_instance" => syscall_async(scope, args, syscall_get_package_instance),
 		"add_operation" => syscall_async(scope, args, syscall_add_operation),
@@ -127,6 +128,17 @@ async fn syscall_get_blob(tg: Arc<Instance>, args: (blob::Hash,)) -> Result<serd
 async fn syscall_add_artifact(tg: Arc<Instance>, args: (Artifact,)) -> Result<artifact::Hash> {
 	let (artifact,) = args;
 	let artifact_hash = tg.add_artifact(&artifact).await?;
+	Ok(artifact_hash)
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_get_artifact_hash(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (Artifact,),
+) -> Result<artifact::Hash> {
+	let (artifact,) = args;
+	let artifact_hash = artifact.hash();
 	Ok(artifact_hash)
 }
 
