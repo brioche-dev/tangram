@@ -7,15 +7,15 @@ export let isPlaceholder = (value: unknown): value is Placeholder => {
 };
 
 export class Placeholder {
-	name: string;
+	#name: string;
 
 	constructor(name: string) {
-		this.name = name;
+		this.#name = name;
 	}
 
 	async serialize(): Promise<syscall.Placeholder> {
 		return {
-			name: this.name,
+			name: this.#name,
 		};
 	}
 
@@ -24,5 +24,9 @@ export class Placeholder {
 	): Promise<Placeholder> {
 		let name = placeholder.name;
 		return new Placeholder(name);
+	}
+
+	name(): string {
+		return this.#name;
 	}
 }
