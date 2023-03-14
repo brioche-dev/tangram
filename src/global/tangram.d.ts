@@ -137,6 +137,9 @@ declare namespace tg {
 	/** Check if a value is a `Reference`. */
 	export let isReference: (value: unknown) => value is Reference;
 
+	/** Check if a value is a `Template`. */
+	export let isTemplate: (value: unknown) => value is Template;
+
 	// Log.
 
 	/** Write to the log. */
