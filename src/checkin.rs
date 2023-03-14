@@ -10,6 +10,7 @@ use crate::{
 	path::Path,
 	reference::Reference,
 	symlink::Symlink,
+	temp::Temp,
 	util::fs,
 	Instance,
 };
@@ -129,18 +130,16 @@ impl Instance {
 		drop(file);
 
 		// Copy the file to the temp path.
-		let temp_path = self.temp_path();
-		let blob_path = self.blob_path(blob_hash);
-		tokio::fs::copy(path, &temp_path).await?;
+		let temp = Temp::new(self);
+		let blob_path = self.blobs_path().join(blob_hash.to_string());
+		tokio::fs::copy(path, temp.path()).await?;
 
-		// Make the temp file readonly.
-		let metadata = tokio::fs::metadata(&temp_path).await?;
-		let mut permissions = metadata.permissions();
-		permissions.set_readonly(true);
-		tokio::fs::set_permissions(&temp_path, permissions).await?;
+		// Set the permissions.
+		let permissions = std::fs::Permissions::from_mode(0o644);
+		tokio::fs::set_permissions(temp.path(), permissions).await?;
 
 		// Move the file to the blobs directory.
-		tokio::fs::rename(&temp_path, &blob_path).await?;
+		tokio::fs::rename(temp.path(), &blob_path).await?;
 
 		// Drop the file system permit.
 		drop(permit);

@@ -9,6 +9,7 @@
 use crate::{
 	error::{bail, Context, Result},
 	system::System,
+	temp::Temp,
 	template::Path,
 	Instance,
 };
@@ -31,20 +32,20 @@ impl Instance {
 		mut paths: HashSet<Path, fnv::FnvBuildHasher>,
 		network_enabled: bool,
 	) -> Result<()> {
-		// Create a temp path for the root directory.
-		let root_directory_path = self.temp_path();
+		// Create a temp for the root directory.
+		let root_directory_temp = Temp::new(self);
 
 		// Add the root directory to the paths.
 		paths.insert(Path {
-			host_path: root_directory_path.clone(),
-			guest_path: root_directory_path.clone(),
+			host_path: root_directory_temp.path().to_owned(),
+			guest_path: root_directory_temp.path().to_owned(),
 			read: true,
 			write: true,
 			create: true,
 		});
 
 		// Add the home directory to the root directory.
-		let home_directory_path = root_directory_path.join("Users").join("tangram");
+		let home_directory_path = root_directory_temp.path().join("Users").join("tangram");
 		tokio::fs::create_dir_all(&home_directory_path).await?;
 
 		// Add the working directory to the home directory.
@@ -81,9 +82,6 @@ impl Instance {
 			.wait()
 			.await
 			.context("Failed to wait for the process to exit.")?;
-
-		// Remove the root directory.
-		tokio::fs::remove_dir_all(root_directory_path).await?;
 
 		// Error if the process did not exit successfully.
 		if !status.success() {

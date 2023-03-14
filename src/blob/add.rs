@@ -8,7 +8,7 @@ impl Instance {
 		// Get a file permit.
 		let permit = self.file_semaphore.acquire().await.unwrap();
 
-		// Create a temp to read the blob into.
+		// Create a temp file to read the blob into.
 		let temp = Temp::new(self);
 		let mut temp_file = tokio::fs::File::create(temp.path()).await?;
 
@@ -29,14 +29,8 @@ impl Instance {
 		// Drop the file permit.
 		drop(permit);
 
-		// Make the temp readonly.
-		let metadata = tokio::fs::metadata(temp.path()).await?;
-		let mut permissions = metadata.permissions();
-		permissions.set_readonly(true);
-		tokio::fs::set_permissions(temp.path(), permissions).await?;
-
 		// Move the temp to the blobs path.
-		let blob_path = self.blob_path(blob_hash);
+		let blob_path = self.blobs_path().join(blob_hash.to_string());
 		tokio::fs::rename(temp.path(), &blob_path).await?;
 
 		Ok(blob_hash)

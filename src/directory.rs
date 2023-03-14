@@ -1,6 +1,6 @@
 use crate::{
 	artifact::{self, Artifact},
-	error::{Context, Result},
+	error::{Context, Error, Result},
 	path::Path,
 	Instance,
 };
@@ -76,24 +76,42 @@ impl Directory {
 		Ok(())
 	}
 
-	#[allow(clippy::unused_async)]
 	pub async fn get(&self, tg: &Instance, path: &Path) -> Result<Artifact> {
+		match self.try_get(tg, path).await {
+			Ok(Some(artifact)) => Ok(artifact),
+			Ok(None) => Err(Error::msg("Expected an artifact.")),
+			Err(error) => Err(error),
+		}
+	}
+
+	#[allow(clippy::unused_async)]
+	pub async fn try_get(&self, tg: &Instance, path: &Path) -> Result<Option<Artifact>> {
+		// Track the current artifact.
 		let mut artifact = Artifact::Directory(self.clone());
+
+		// Handle each path component.
 		for component in &path.components {
+			// Get the path component name or return an error for an invalid path.
 			let name = component
 				.as_normal()
 				.context("Expected the path component to be normal.")?;
-			let artifact_hash = artifact
-				.as_directory()
-				.context("Expected a directory.")?
-				.entries
-				.get(name)
-				.copied()
-				.with_context(|| format!(r#"Failed to find the child at path "{path}"."#))?;
+
+			// The artifact must be a directory.
+			let Some(directory) = artifact.as_directory() else {
+				return Ok(None);
+			};
+
+			// Get the entry for the file name.
+			let Some(artifact_hash) = directory.entries.get(name).copied() else {
+				return Ok(None);
+			};
+
+			// Get the artifact.
 			artifact = tg
 				.get_artifact_local(artifact_hash)
 				.context("Failed to get the artifact.")?;
 		}
-		Ok(artifact)
+
+		Ok(Some(artifact))
 	}
 }

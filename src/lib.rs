@@ -6,7 +6,6 @@ use self::{
 	constants::{FILE_SEMAPHORE_SIZE, SOCKET_SEMAPHORE_SIZE},
 	database::Database,
 	error::Result,
-	id::Id,
 	lock::Lock,
 	util::{fs, task_map::TaskMap},
 	value::Value,
@@ -246,24 +245,14 @@ impl Instance {
 	// 	self.path().join("database.mdb")
 	// }
 
-	#[must_use]
-	fn logs_path(&self) -> fs::PathBuf {
-		self.path().join("logs")
-	}
+	// #[must_use]
+	// fn logs_path(&self) -> fs::PathBuf {
+	// 	self.path().join("logs")
+	// }
 
 	#[must_use]
 	fn temps_path(&self) -> fs::PathBuf {
 		self.path().join("temps")
-	}
-
-	#[must_use]
-	fn blob_path(&self, blob_hash: blob::Hash) -> fs::PathBuf {
-		self.blobs_path().join(blob_hash.to_string())
-	}
-
-	#[must_use]
-	fn temp_path(&self) -> fs::PathBuf {
-		self.temps_path().join(Id::generate().to_string())
 	}
 }
 

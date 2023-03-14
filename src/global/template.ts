@@ -9,14 +9,17 @@ export let t = async (
 	...placeholders: Array<Unresolved<TemplateLike>>
 ): Promise<Template> => {
 	// Collect the strings and placeholders.
-	let components = [];
+	let components: Array<Unresolved<TemplateLike>> = [];
 	for (let i = 0; i < strings.length - 1; i++) {
-		let string = strings[i];
-		let placeholder = placeholders[i];
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		let string = strings[i]!;
 		components.push(string);
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		let placeholder = placeholders[i]!;
 		components.push(placeholder);
 	}
-	components.push(strings[strings.length - 1]);
+	// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+	components.push(strings[strings.length - 1]!);
 
 	return await template(components);
 };

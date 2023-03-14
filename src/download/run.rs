@@ -2,6 +2,7 @@ use super::{unpack, Download};
 use crate::{
 	checksum::{self, Checksum},
 	error::{bail, Context, Result},
+	temp::Temp,
 	util::fs,
 	value::Value,
 	Instance,
@@ -98,25 +99,20 @@ impl Instance {
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
-		// Create a temp path.
-		let temp_path = self.temp_path();
+		// Create a temp.
+		let temp = Temp::new(self);
 
-		// Read the stream to the temp path.
+		// Read the stream to the temp.
 		let mut reader = StreamReader::new(stream);
-		let mut file = tokio::fs::File::create(&temp_path).await?;
+		let mut file = tokio::fs::File::create(temp.path()).await?;
 		tokio::io::copy(&mut reader, &mut file).await?;
 		drop(file);
 
-		// Check in the temp path.
+		// Check in the temp.
 		let artifact_hash = self
-			.check_in(&temp_path)
+			.check_in(temp.path())
 			.await
 			.context("Failed to check in the temp path.")?;
-
-		// Remove the temp path.
-		tokio::fs::remove_file(&temp_path)
-			.await
-			.context("Failed to remove the temp path.")?;
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);
@@ -132,14 +128,14 @@ impl Instance {
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
-		// Create a temp path.
-		let temp_path = self.temp_path();
+		// Create a temp.
+		let temp = Temp::new(self);
 
 		// Stream and unpack simultaneously in a blocking task.
 		tokio::task::spawn_blocking({
 			let reader = StreamReader::new(stream);
 			let reader = SyncIoBridge::new(reader);
-			let temp_path = temp_path.clone();
+			let temp_path = temp.path().to_owned();
 			move || -> Result<_> {
 				let archive_reader = std::io::BufReader::new(reader);
 				let archive_reader: Box<dyn std::io::Read + Send> = match compression {
@@ -163,23 +159,18 @@ impl Instance {
 				let mut archive = tar::Archive::new(archive_reader);
 				archive.set_preserve_permissions(false);
 				archive.set_unpack_xattrs(false);
-				archive.unpack(&temp_path)?;
+				archive.unpack(temp_path)?;
 				Ok(())
 			}
 		})
 		.await
 		.unwrap()?;
 
-		// Check in the temp path.
+		// Check in the temp.
 		let artifact_hash = self
-			.check_in(&temp_path)
+			.check_in(temp.path())
 			.await
 			.context("Failed to check in the temp path.")?;
-
-		// Remove the temp path.
-		crate::util::fs::rmrf(&temp_path)
-			.await
-			.context("Failed to remove the temp path.")?;
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);
@@ -191,22 +182,22 @@ impl Instance {
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
-		// Create a temp path.
-		let temp_path = self.temp_path();
+		// Create a temp.
+		let temp = Temp::new(self);
 
 		// Read the stream to the temp path.
 		let mut reader = StreamReader::new(stream);
-		let mut file = tokio::fs::File::create(&temp_path).await?;
+		let mut file = tokio::fs::File::create(temp.path()).await?;
 		tokio::io::copy(&mut reader, &mut file).await?;
 		drop(file);
 
-		// Create a temp path to unpack to.
-		let unpack_temp_path = self.temp_path();
+		// Create a temp to unpack to.
+		let unpack_temp = Temp::new(self);
 
 		// Unpack in a blocking task.
 		tokio::task::spawn_blocking({
-			let temp_path = temp_path.clone();
-			let unpack_temp_path = unpack_temp_path.clone();
+			let temp_path = temp.path().to_owned();
+			let unpack_temp_path = unpack_temp.path().to_owned();
 			move || -> Result<_> {
 				let archive_file =
 					std::fs::File::open(&temp_path).context("Failed to open the zip archive.")?;
@@ -221,21 +212,11 @@ impl Instance {
 		.await
 		.unwrap()?;
 
-		// Remove the temp path.
-		tokio::fs::remove_file(&temp_path)
-			.await
-			.context("Failed to remove the temp path.")?;
-
 		// Check in the unpack temp path.
 		let artifact_hash = self
-			.check_in(&unpack_temp_path)
+			.check_in(unpack_temp.path())
 			.await
 			.context("Failed to check in the .")?;
-
-		// Remove the unpack temp path.
-		crate::util::fs::rmrf(&unpack_temp_path)
-			.await
-			.context("Failed to remove the unpack temp path.")?;
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);

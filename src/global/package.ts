@@ -10,7 +10,7 @@ export type PackageInstanceArgs = {
 export let packageInstance = async (
 	args: PackageInstanceArgs,
 ): Promise<PackageInstance> => {
-	let packageHash = await addArtifact(await args.package);
+	let packageHash = await addArtifact(args.package);
 	let dependencies = Object.fromEntries(
 		await Promise.all(
 			Object.entries(args.dependencies).map(async ([key, value]) => [

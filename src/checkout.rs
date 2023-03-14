@@ -6,6 +6,7 @@ use crate::{
 	file::File,
 	reference::Reference,
 	symlink::Symlink,
+	temp::Temp,
 	util::fs,
 	util::task_map::TaskMap,
 	Instance,
@@ -60,22 +61,15 @@ impl Instance {
 			return Ok(path);
 		}
 
-		// Create a temp path.
-		let temp_path = self.temp_path();
+		// Create a temp.
+		let temp = Temp::new(self);
 
 		// Perform the checkout to the temp path.
-		self.check_out_internal_inner_inner(artifact_hash, &temp_path)
+		self.check_out_internal_inner_inner(artifact_hash, temp.path())
 			.await?;
 
-		// If the file system object is a directory, then make it writeable.
-		let artifact = self.get_artifact_local(artifact_hash)?;
-		if matches!(&artifact, Artifact::Directory(_)) {
-			let permissions = std::fs::Permissions::from_mode(0o755);
-			tokio::fs::set_permissions(&temp_path, permissions).await?;
-		}
-
 		// Move the checkout from the temp path to the path in the checkouts directory.
-		match tokio::fs::rename(&temp_path, &path).await {
+		match tokio::fs::rename(temp.path(), &path).await {
 			Ok(()) => Ok(()),
 
 			// If the error is ENOTEMPTY or EEXIST, then we can ignore it because there is already an artifact checkout present.
@@ -86,13 +80,6 @@ impl Instance {
 			Err(error) => Err(error),
 		}
 		.context("Failed to move the checkout to the checkout path.")?;
-
-		// If the file system object is a directory, then make it readonly after moving it to the checkouts directory.
-		let artifact = self.get_artifact_local(artifact_hash)?;
-		if matches!(&artifact, Artifact::Directory(_)) {
-			let permissions = std::fs::Permissions::from_mode(0o555);
-			tokio::fs::set_permissions(&path, permissions).await?;
-		}
 
 		// Clear the file system object's timestamps.
 		tokio::task::spawn_blocking({
@@ -144,6 +131,12 @@ impl Instance {
 				self.copy_blob_to_path(file.blob_hash, path)
 					.await
 					.context("Failed to copy the blob.")?;
+
+				// Make the file executable if necessary.
+				if file.executable {
+					let permissions = std::fs::Permissions::from_mode(0o755);
+					tokio::fs::set_permissions(path, permissions).await?;
+				}
 			},
 
 			Artifact::Symlink(symlink) => {
@@ -177,17 +170,6 @@ impl Instance {
 					.context("Failed to write the symlink for the reference.")?;
 			},
 		};
-
-		// Set the permissions.
-		let mode = match &artifact {
-			Artifact::Directory(_) => Some(0o555),
-			Artifact::File(file) => Some(if file.executable { 0o555 } else { 0o444 }),
-			Artifact::Symlink(_) | Artifact::Reference(_) => None,
-		};
-		if let Some(mode) = mode {
-			let permissions = std::fs::Permissions::from_mode(mode);
-			tokio::fs::set_permissions(&path, permissions).await?;
-		}
 
 		// Clear the file system object's timestamps.
 		tokio::task::spawn_blocking({

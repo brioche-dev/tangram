@@ -37,10 +37,11 @@ export let directory = async (
 		} else {
 			// If the arg is an object, then apply each entry.
 			for (let [key, value] of Object.entries(arg)) {
-				// Normalize the path and separate the first path component from the trailing path components.
-				let [firstComponent, ...trailingComponents] = path(key)
-					.normalize()
-					.components();
+				// Separate the first path component from the trailing path components.
+				let [firstComponent, ...trailingComponents] = path(key).components();
+				if (firstComponent === undefined) {
+					throw new Error("The path must have at least one component.");
+				}
 
 				// All path components must be normal.
 				if (firstComponent.kind !== "normal") {
@@ -120,37 +121,24 @@ export class Directory {
 		return new Directory(entries);
 	}
 
-	async tryGet(name: PathLike): Promise<Artifact | null> {
-		// Normalize the path and separate the first path component from the trailing path components.
-		let [firstComponent, ...trailingComponents] = path(name)
-			.normalize()
-			.components();
-
-		// All path components must be normal.
-		if (firstComponent.kind !== "normal") {
-			throw new Error(`Invalid path "${name}".`);
-		}
-
-		// Get the next entry.
-		let hash = this.#entries.get(firstComponent.value);
-		if (!hash) {
-			return null;
-		}
-		let artifact = await getArtifact(hash);
-
-		if (trailingComponents.length > 0) {
-			// If there are trailing path components, then recurse.
-			assert(isDirectory(artifact));
-			return await artifact.tryGet(trailingComponents);
-		} else {
-			return artifact;
-		}
-	}
-
 	async get(name: PathLike): Promise<Artifact> {
 		let artifact = await this.tryGet(name);
-		if (artifact === null) {
-			throw new Error(`Failed to get directory entry "${name}".`);
+		assert(artifact !== null, `Failed to get directory entry "${name}".`);
+		return artifact;
+	}
+
+	async tryGet(pathLike: PathLike): Promise<Artifact | null> {
+		let artifact: Artifact = this;
+		for (let component of path(pathLike).components()) {
+			assert(component.kind === "normal");
+			if (!(artifact instanceof Directory)) {
+				return null;
+			}
+			let hash = artifact.#entries.get(component.value);
+			if (!hash) {
+				return null;
+			}
+			artifact = await getArtifact(hash);
 		}
 		return artifact;
 	}
@@ -158,7 +146,7 @@ export class Directory {
 	async getEntries(): Promise<Record<string, Artifact>> {
 		let entries: Record<string, Artifact> = {};
 		for await (let [name, artifact] of this) {
-			entries[name] = await artifact;
+			entries[name] = artifact;
 		}
 		return entries;
 	}

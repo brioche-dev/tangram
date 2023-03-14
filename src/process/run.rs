@@ -2,6 +2,7 @@ use super::Process;
 use crate::{
 	error::{bail, Context, Error, Result},
 	system::System,
+	temp::Temp,
 	template::Path,
 	value::Value,
 	Instance,
@@ -12,15 +13,15 @@ use std::{collections::HashSet, sync::Arc};
 impl Instance {
 	#[allow(clippy::too_many_lines)]
 	pub async fn run_process(self: &Arc<Self>, process: &Process) -> Result<Value> {
-		// Create the output temp path.
-		let output_temp_path = self.temp_path();
+		// Create a temp for the output.
+		let output_temp = Temp::new(self);
 
 		// Create the placeholder values for rendering templates.
 		let placeholder_values = [(
 			"output".to_owned(),
 			Path {
-				host_path: output_temp_path.clone(),
-				guest_path: output_temp_path.clone(),
+				host_path: output_temp.path().to_owned(),
+				guest_path: output_temp.path().to_owned(),
 				read: true,
 				write: true,
 				create: true,
@@ -123,14 +124,9 @@ impl Instance {
 
 		// Check in the output temp path.
 		let output_hash = self
-			.check_in(&output_temp_path)
+			.check_in(output_temp.path())
 			.await
 			.context("Failed to check in the output.")?;
-
-		// Remove the output temp path.
-		crate::util::fs::rmrf(&output_temp_path)
-			.await
-			.context("Failed to remove the output temp path.")?;
 
 		// Verify the checksum if one was provided.
 		if let Some(expected) = process.checksum.clone() {
@@ -145,9 +141,9 @@ impl Instance {
 			}
 		}
 
-		// Create the artifact value.
-		let artifact = Value::Artifact(output_hash);
+		// Create the output.
+		let output = Value::Artifact(output_hash);
 
-		Ok(artifact)
+		Ok(output)
 	}
 }

@@ -85,14 +85,14 @@ impl std::fmt::Display for Path {
 				write!(f, ".")?;
 			},
 
-			// If the path starts with a normal component, then write "./" before the path.
-			[Component::Normal(_), ..] => {
-				write!(f, "./{string}")?;
-			},
-
 			// If the path starts with a parent dir component, then just write the path.
 			[Component::ParentDir, ..] => {
 				write!(f, "{string}")?;
+			},
+
+			// If the path starts with a normal component, then write "./" before the path.
+			[Component::Normal(_), ..] => {
+				write!(f, "./{string}")?;
 			},
 		}
 		Ok(())
@@ -103,18 +103,21 @@ impl std::str::FromStr for Path {
 	type Err = Error;
 
 	fn from_str(string: &str) -> Result<Self, Self::Err> {
-		// Absolute paths are not allowed.
-		if string.starts_with('/') {
-			bail!("Absolute paths are not allowed.");
-		}
-
 		// Create the path.
 		let mut path = Path {
 			components: Vec::new(),
 		};
 
-		// Split the string by the path separator and handle each component.
-		for string in string.split('/') {
+		// Absolute paths are not allowed.
+		if string.starts_with('/') {
+			bail!("Absolute paths are not allowed.");
+		}
+
+		// Split the string by the path separator.
+		let components = string.split('/');
+
+		// Push each component.
+		for string in components {
 			match string {
 				"" => {
 					bail!("Empty path components are not allowed.");

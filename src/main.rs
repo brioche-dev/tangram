@@ -23,11 +23,6 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-	// Enable backtraces when debug assertions are enabled.
-	if cfg!(debug_assertions) && std::env::var_os("RUST_BACKTRACE").is_none() {
-		std::env::set_var("RUST_BACKTRACE", "1");
-	}
-
 	// Setup tracing.
 	setup_tracing();
 

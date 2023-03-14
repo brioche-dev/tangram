@@ -16,7 +16,7 @@ impl Instance {
 
 	pub async fn try_get_blob(&self, blob_hash: Hash) -> Result<Option<impl AsyncRead>> {
 		// Get the blob path.
-		let path = self.blob_path(blob_hash);
+		let path = self.blobs_path().join(blob_hash.to_string());
 
 		// Acquire a permit for the blob.
 		let permit = self.file_semaphore.clone().acquire_owned().await?;

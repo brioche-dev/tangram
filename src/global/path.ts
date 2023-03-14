@@ -1,9 +1,8 @@
 export type PathLike = string | Array<PathComponent> | Path;
 
-export type PathComponentKind = "current_dir" | "parent_dir" | "normal";
+export type PathComponentKind = "parent_dir" | "normal";
 
 export type PathComponent =
-	| { kind: "current_dir" }
 	| { kind: "parent_dir" }
 	| { kind: "normal"; value: string };
 
@@ -18,20 +17,24 @@ export let isPath = (value: unknown): value is Path => {
 export class Path {
 	#components: Array<PathComponent>;
 
-	constructor(path: PathLike) {
-		if (typeof path === "string") {
+	constructor(pathLike: PathLike) {
+		if (typeof pathLike === "string") {
 			// Create the components.
 			this.#components = [];
 
-			// Split the string by the path separator.
-			let components = path.split("/");
+			if (pathLike.startsWith("/")) {
+				throw new Error("Absolute paths are not allowed.");
+			}
 
-			// Add each component.
+			// Split the string by the path separator.
+			let components = pathLike.split("/");
+
+			// Push each component.
 			for (let component of components) {
 				if (component === "") {
-					// Ignore extra separators.
+					throw new Error("Empty path components are not allowed.");
 				} else if (component === ".") {
-					this.#components.push({ kind: "current_dir" });
+					// Ignore current dir components.
 				} else if (component === "..") {
 					this.#components.push({ kind: "parent_dir" });
 				} else {
@@ -41,15 +44,19 @@ export class Path {
 					});
 				}
 			}
-		} else if (path instanceof Array) {
-			this.#components = path;
+		} else if (pathLike instanceof Array) {
+			this.#components = pathLike;
 		} else {
-			this.#components = path.components();
+			this.#components = pathLike.components();
 		}
 	}
 
 	components(): Array<PathComponent> {
 		return [...this.#components];
+	}
+
+	push(component: PathComponent) {
+		this.#components.push(component);
 	}
 
 	parent(): Path {
@@ -58,65 +65,35 @@ export class Path {
 		return result;
 	}
 
-	push(component: PathComponent) {
-		this.#components.push(component);
-	}
-
 	join(other: PathLike): Path {
-		return path([...this.components(), ...path(other).components()]);
-	}
-
-	normalize(): Path {
-		let components: Array<PathComponent> = [];
-		for (let component of this.components()) {
-			switch (component.kind) {
-				case "current_dir": {
-					// Skip current dir components.
-					break;
-				}
-
-				case "parent_dir": {
-					if (
-						components.every((component) => component.kind === "parent_dir")
-					) {
-						// If the normalized path is zero or more parent dir components, then add a parent dir component.
-						components.push(component);
-					} else {
-						// Otherwise, remove the last component.
-						components.pop();
-					}
-					break;
-				}
-
-				case "normal": {
-					components.push(component);
-					break;
-				}
-			}
+		let result = path(this);
+		for (let component of path(other).components()) {
+			result.push(component);
 		}
-		return path(components);
+		return result;
 	}
 
 	toString(): string {
-		let components = [];
-		for (let component of this.components()) {
-			switch (component.kind) {
-				case "current_dir": {
-					components.push(".");
-					break;
+		let string = this.#components
+			.map((component) => {
+				switch (component.kind) {
+					case "parent_dir": {
+						return "..";
+					}
+					case "normal": {
+						return component.value;
+					}
 				}
+			})
+			.join("/");
 
-				case "parent_dir": {
-					components.push("..");
-					break;
-				}
-
-				case "normal": {
-					components.push(component.value);
-					break;
-				}
-			}
+		let firstComponent = this.#components[0];
+		if (firstComponent === undefined) {
+			return ".";
+		} else if (firstComponent.kind === "parent_dir") {
+			return string;
+		} else {
+			return `./${string}`;
 		}
-		return components.join("/");
 	}
 }

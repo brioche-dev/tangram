@@ -95,7 +95,7 @@
 	},
 	"scripts": {
 		"build": "esbuild --bundle --outfile=extension.js --format=cjs --sourcemap --platform=node --external:vscode src/extension.ts",
-		"check": "tsc && eslint",
+		"check": "tsc && eslint && prettier --check .",
 		"package": "vsce package --no-dependencies --no-update-package-json --no-git-tag-version",
 		"vscode:prepublish": "npm run build"
 	},
