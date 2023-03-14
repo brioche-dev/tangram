@@ -26,6 +26,12 @@ export let getArtifact = async (hash: ArtifactHash): Promise<Artifact> => {
 	return await deserializeArtifact(await syscall("get_artifact", hash));
 };
 
+export let getArtifactHash = async (
+	artifact: Artifact,
+): Promise<ArtifactHash> => {
+	return syscall("get_artifact_hash", await serializeArtifact(artifact));
+};
+
 export let serializeArtifact = async (
 	artifact: Artifact,
 ): Promise<syscall.Artifact> => {

@@ -47,6 +47,9 @@ declare namespace tg {
 	export let directory: (...args: Array<DirectoryArg>) => Promise<Directory>;
 
 	export class Directory {
+		/** Get the hash of this `Directory` artifact. This hash covers all child and ancestor artifacts. */
+		hash(): Promise<string>;
+
 		/** Try to get the child at the specified path. This method returns `null` if the path does not exist. */
 		tryGet(name: PathLike): Promise<Artifact | null>;
 
@@ -102,6 +105,9 @@ declare namespace tg {
 	export let file: (fileLike: FileLike, options?: FileOptions) => Promise<File>;
 
 	export class File {
+		/** Get the hash of this `File` artifact. This hash covers the contents of the file. */
+		hash(): Promise<string>;
+
 		/** Get this file's contents as a `Uint8Array`. */
 		getBytes(): Promise<Uint8Array>;
 
@@ -215,6 +221,9 @@ declare namespace tg {
 	export let reference: (args: ReferenceArgs) => Promise<Reference>;
 
 	export class Reference {
+		/** Get the hash of this `Reference` artifact. This hash covers the referenced artifact plus the reference's path. */
+		hash(): Promise<string>;
+
 		/** Get this reference's artifact. */
 		getArtifact(): Promise<Artifact>;
 
@@ -296,6 +305,9 @@ declare namespace tg {
 	export let symlink: (target: string) => Symlink;
 
 	export class Symlink {
+		/** Get the hash of this `Symlink` artifact. This hash only covers the symlink itself, not the filesystem object it targets. */
+		hash(): Promise<string>;
+
 		/** Get this symlink's target. */
 		target(): string;
 	}

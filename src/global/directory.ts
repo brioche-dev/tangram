@@ -3,6 +3,7 @@ import {
 	ArtifactHash,
 	addArtifact,
 	getArtifact,
+	getArtifactHash,
 	isArtifact,
 } from "./artifact";
 import { file, isFileLike } from "./file";
@@ -119,6 +120,10 @@ export class Directory {
 	static async deserialize(directory: syscall.Directory): Promise<Directory> {
 		let entries = new Map(Object.entries(directory.entries));
 		return new Directory(entries);
+	}
+
+	hash(): Promise<ArtifactHash> {
+		return getArtifactHash(this);
 	}
 
 	async get(name: PathLike): Promise<Artifact> {

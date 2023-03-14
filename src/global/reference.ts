@@ -1,4 +1,10 @@
-import { Artifact, ArtifactHash, addArtifact, getArtifact } from "./artifact";
+import {
+	Artifact,
+	ArtifactHash,
+	addArtifact,
+	getArtifact,
+	getArtifactHash,
+} from "./artifact";
 import { Path, PathLike, path } from "./path";
 import { MaybePromise } from "./resolve";
 import { assert } from "./util";
@@ -60,6 +66,10 @@ export class Reference {
 			artifactHash,
 			path: path_,
 		});
+	}
+
+	hash(): Promise<ArtifactHash> {
+		return getArtifactHash(this);
 	}
 
 	artifactHash(): ArtifactHash {

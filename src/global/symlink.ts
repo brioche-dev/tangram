@@ -1,4 +1,4 @@
-import { ArtifactHash, getArtifact } from "./artifact";
+import { ArtifactHash, getArtifact, getArtifactHash } from "./artifact";
 import { assert } from "./util";
 
 export let symlink = (target: string): Symlink => {
@@ -30,6 +30,10 @@ export class Symlink {
 
 	static async deserialize(symlink: syscall.Symlink): Promise<Symlink> {
 		return new Symlink(symlink.target);
+	}
+
+	hash(): Promise<ArtifactHash> {
+		return getArtifactHash(this);
 	}
 
 	target(): string {

@@ -1,4 +1,4 @@
-import { ArtifactHash, getArtifact } from "./artifact";
+import { ArtifactHash, getArtifact, getArtifactHash } from "./artifact";
 import { Blob, BlobHash, addBlob, getBlob } from "./blob";
 import { MaybePromise } from "./resolve";
 import { assert } from "./util";
@@ -68,6 +68,10 @@ export class File {
 		let blobHash = file.blobHash;
 		let executable = file.executable;
 		return new File(blobHash, { executable });
+	}
+
+	hash(): Promise<ArtifactHash> {
+		return getArtifactHash(this);
 	}
 
 	blobHash(): BlobHash {
