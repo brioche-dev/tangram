@@ -56,7 +56,16 @@ export class Path {
 	}
 
 	push(component: PathComponent) {
-		this.#components.push(component);
+		if (component.kind === "parent_dir") {
+			let lastComponent = this.#components.at(-1);
+			if (lastComponent === undefined || lastComponent.kind === "parent_dir") {
+				this.#components.push(component);
+			} else {
+				this.#components.pop();
+			}
+		} else {
+			this.#components.push(component);
+		}
 	}
 
 	parent(): Path {
