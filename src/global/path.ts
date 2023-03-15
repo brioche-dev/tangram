@@ -36,9 +36,9 @@ export class Path {
 				} else if (component === ".") {
 					// Ignore current dir components.
 				} else if (component === "..") {
-					this.#components.push({ kind: "parent_dir" });
+					this.push({ kind: "parent_dir" });
 				} else {
-					this.#components.push({
+					this.push({
 						kind: "normal",
 						value: component,
 					});
