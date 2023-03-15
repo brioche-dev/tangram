@@ -23,11 +23,12 @@ pub fn render(
 		for i in 0..stack_trace.get_frame_count() {
 			// Get the module identifier, line, and column.
 			let stack_trace_frame = stack_trace.get_frame(scope, i).unwrap();
-			let module_identifier = stack_trace_frame
+			let module_identifier_script_name = stack_trace_frame
 				.get_script_name(scope)
-				.unwrap()
-				.to_rust_string_lossy(scope)
-				.parse()
+				.map(|script_name| script_name.to_rust_string_lossy(scope));
+			let module_identifier = module_identifier_script_name
+				.map(|name| -> Result<crate::module::Identifier, _> { name.parse() })
+				.transpose()
 				.unwrap();
 			let line = stack_trace_frame.get_line_number().to_u32().unwrap() - 1;
 			let column = stack_trace_frame.get_column().to_u32().unwrap() - 1;
@@ -37,7 +38,7 @@ pub fn render(
 				.modules
 				.borrow()
 				.iter()
-				.find(|module| module.module_identifier == module_identifier)
+				.find(|module| Some(&module.module_identifier) == module_identifier.as_ref())
 				.and_then(|module| module.source_map.as_ref())
 				.map_or((line, column), |source_map| {
 					let token = source_map.lookup_token(line, column).unwrap();
@@ -47,7 +48,10 @@ pub fn render(
 				});
 
 			// Write the module identifier, line, and column.
-			write!(string, "{module_identifier}:{}:{}", line + 1, column + 1).unwrap();
+			let module_label = module_identifier
+				.map(|identifier| identifier.to_string())
+				.unwrap_or_else(|| format!("[unknown]"));
+			write!(string, "{module_label}:{}:{}", line + 1, column + 1).unwrap();
 
 			// Add a newline if this is not the last frame.
 			if i < stack_trace.get_frame_count() - 1 {
