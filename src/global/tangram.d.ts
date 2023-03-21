@@ -63,6 +63,9 @@ declare namespace tg {
 		/** Get this directory's entries. */
 		getEntries(): Promise<Record<string, Artifact>>;
 
+		/** Iterate over the names and hashes of this directory's entries. */
+		[Symbol.iterator](): Iterator<[string, ArtifactHash]>;
+
 		/** Iterate over this directory's entries. */
 		[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]>;
 	}
