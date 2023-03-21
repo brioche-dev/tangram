@@ -18,6 +18,10 @@ declare namespace tg {
 
 	export type Artifact = Directory | File | Symlink | Reference;
 
+	// Artifact hash.
+
+	export type ArtifactHash = string;
+
 	// Checksum.
 
 	export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
@@ -48,7 +52,7 @@ declare namespace tg {
 
 	export class Directory {
 		/** Get the hash of this `Directory` artifact. This hash covers all child and ancestor artifacts. */
-		hash(): Promise<string>;
+		hash(): Promise<ArtifactHash>;
 
 		/** Try to get the child at the specified path. This method returns `null` if the path does not exist. */
 		tryGet(name: PathLike): Promise<Artifact | null>;
@@ -106,7 +110,7 @@ declare namespace tg {
 
 	export class File {
 		/** Get the hash of this `File` artifact. This hash covers the contents of the file. */
-		hash(): Promise<string>;
+		hash(): Promise<ArtifactHash>;
 
 		/** Get this file's contents as a `Uint8Array`. */
 		getBytes(): Promise<Uint8Array>;
@@ -222,7 +226,7 @@ declare namespace tg {
 
 	export class Reference {
 		/** Get the hash of this `Reference` artifact. This hash covers the referenced artifact plus the reference's path. */
-		hash(): Promise<string>;
+		hash(): Promise<ArtifactHash>;
 
 		/** Get this reference's artifact. */
 		getArtifact(): Promise<Artifact>;
@@ -306,7 +310,7 @@ declare namespace tg {
 
 	export class Symlink {
 		/** Get the hash of this `Symlink` artifact. This hash only covers the symlink itself, not the filesystem object it targets. */
-		hash(): Promise<string>;
+		hash(): Promise<ArtifactHash>;
 
 		/** Get this symlink's target. */
 		target(): string;
