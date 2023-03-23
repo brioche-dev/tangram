@@ -1,6 +1,6 @@
 use super::{Artifact, Hash};
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	hash,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
@@ -13,7 +13,7 @@ impl Artifact {
 		// Read the version.
 		let version = reader.read_u8()?;
 		if version != 0 {
-			bail!(r#"Cannot deserialize an artifact with version "{version}"."#);
+			return_error!(r#"Cannot deserialize an artifact with version "{version}"."#);
 		}
 
 		// Deserialize the artifact.

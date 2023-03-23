@@ -1,7 +1,9 @@
+pub use self::error::Error;
 use crate::{function::Function, value::Value};
 use std::collections::BTreeMap;
 
 mod context;
+mod error;
 mod exception;
 mod isolate;
 mod module;

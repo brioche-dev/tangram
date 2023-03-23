@@ -1,7 +1,7 @@
 use super::{error::bad_request, error::not_found};
 use crate::{
 	blob,
-	error::{bail, Result},
+	error::{return_error, Result},
 	Instance,
 };
 use futures::TryStreamExt;
@@ -14,7 +14,7 @@ impl Instance {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "blobs", blob_hash] = path_components.as_slice() else {
-			bail!("Unexpected path.")
+			return_error!("Unexpected path.")
 		};
 		if blob_hash.parse::<blob::Hash>().is_err() {
 			return Ok(bad_request());
@@ -47,7 +47,7 @@ impl Instance {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "blobs", blob_hash] = path_components.as_slice() else {
-			bail!("Unexpected path.")
+			return_error!("Unexpected path.")
 		};
 		let blob_hash: blob::Hash = match blob_hash.parse() {
 			Ok(client_blob_hash) => client_blob_hash,

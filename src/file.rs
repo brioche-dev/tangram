@@ -1,4 +1,5 @@
 use crate::{blob, error::Result, Instance};
+use tokio::io::AsyncReadExt;
 
 #[derive(
 	Clone,
@@ -20,7 +21,10 @@ pub struct File {
 }
 
 impl File {
-	pub fn read_to_string(&self, _tg: &Instance) -> Result<String> {
-		todo!()
+	pub async fn read_to_string(&self, tg: &Instance) -> Result<String> {
+		let mut blob = tg.get_blob(self.blob_hash).await?;
+		let mut string = String::new();
+		blob.read_to_string(&mut string).await?;
+		Ok(string)
 	}
 }

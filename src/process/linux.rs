@@ -1,5 +1,5 @@
 use crate::{
-	error::{bail, Context, Result},
+	error::{return_error, Context, Result},
 	system::System,
 	temp::Temp,
 	template::Path,
@@ -53,7 +53,7 @@ impl Instance {
 
 		// Error if the process did not exit successfully.
 		if !status.success() {
-			bail!("The process did not exit successfully.");
+			return_error!("The process did not exit successfully.");
 		}
 
 		Ok(())

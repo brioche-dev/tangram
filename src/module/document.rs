@@ -1,6 +1,6 @@
 use super::Identifier;
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	language::Range,
 	Instance,
 };
@@ -62,7 +62,7 @@ impl Instance {
 
 		// Get the document.
 		let Some(document) = documents.get_mut(identifier) else {
-			bail!(r#"Could not find a document for the module identifier "{identifier}"."#);
+			return_error!(r#"Could not find a document for the module identifier "{identifier}"."#);
 		};
 
 		// Convert the range to bytes.

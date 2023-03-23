@@ -21,7 +21,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "tg"
-path = "src/main.rs"
+path = "src/cli/main.rs"
 
 [build-dependencies]
 v8 = "0.64.0"
@@ -33,7 +33,6 @@ proptest = "1.1.0"
 tempfile = "3.4.0"
 
 [dependencies]
-anyhow = { version = "1", features = ["backtrace"] }
 async-compression = { version = "0.3.15", features = ["tokio", "zstd"] }
 async-recursion = "1"
 blake3 = "1"
@@ -72,6 +71,7 @@ serde_v8 = "0.85.0"
 sha2 = "0.10.6"
 sourcemap = "6"
 tar = "0.4"
+thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["fs"] }
 tokio-util = { version = "0.7", features = ["full"] }

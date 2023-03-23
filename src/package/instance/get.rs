@@ -1,5 +1,5 @@
 use super::{Hash, Instance};
-use crate::error::{bail, Context, Error, Result};
+use crate::error::{Error, Result, WrapErr};
 use lmdb::Transaction;
 
 impl crate::Instance {
@@ -35,7 +35,7 @@ impl crate::Instance {
 				Ok(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => bail!(error),
+			Err(error) => Err(error.into()),
 		}
 	}
 }
@@ -44,7 +44,7 @@ impl crate::Instance {
 	pub fn get_package_instance_local(&self, hash: Hash) -> Result<Instance> {
 		let package_instance = self
 			.try_get_package_instance_local(hash)?
-			.with_context(|| {
+			.wrap_err_with(|| {
 				format!(r#"Failed to find the package instance with hash "{hash}"."#)
 			})?;
 		Ok(package_instance)
@@ -60,7 +60,7 @@ impl crate::Instance {
 	{
 		let package_instance = self
 			.try_get_package_instance_local_with_txn(txn, hash)?
-			.with_context(|| format!(r#"Failed to find the package with hash "{hash}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to find the package with hash "{hash}"."#))?;
 		Ok(package_instance)
 	}
 

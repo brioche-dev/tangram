@@ -1,8 +1,12 @@
-pub use self::hash::Hash;
+pub use self::{
+	error::{Error, Result},
+	hash::Hash,
+};
 pub use crate::{call::Call, download::Download, process::Process};
 
 mod add;
 mod children;
+mod error;
 mod get;
 mod hash;
 mod output;

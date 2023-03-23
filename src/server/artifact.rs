@@ -1,6 +1,6 @@
 use super::error::bad_request;
 use crate::{
-	error::{bail, Context, Result},
+	error::{return_error, Error, Result, WrapErr},
 	Instance,
 };
 
@@ -12,19 +12,22 @@ impl Instance {
 		// Read and deserialize the request body.
 		let body = hyper::body::to_bytes(request.into_body())
 			.await
-			.context("Failed to read the request body.")?;
-		let artifact =
-			serde_json::from_slice(&body).context("Failed to deserialize the request body.")?;
+			.map_err(Error::other)
+			.wrap_err("Failed to read the request body.")?;
+		let artifact = serde_json::from_slice(&body)
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the request body.")?;
 
 		// Add the artifact.
 		let outcome = self
 			.try_add_artifact(&artifact)
 			.await
-			.context("Failed to add the artifact.")?;
+			.wrap_err("Failed to add the artifact.")?;
 
 		// Create the response.
-		let body =
-			serde_json::to_vec(&outcome).context("Failed to serialize the response body.")?;
+		let body = serde_json::to_vec(&outcome)
+			.map_err(Error::other)
+			.wrap_err("Failed to serialize the response body.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(hyper::Body::from(body))
@@ -41,7 +44,7 @@ impl Instance {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "artifacts", hash] = path_components.as_slice() else {
-			bail!("Unexpected path.");
+			return_error!("Unexpected path.");
 		};
 		let Ok(hash) = hash.parse() else { return Ok(bad_request()) };
 
@@ -49,8 +52,9 @@ impl Instance {
 		let artifact = self.try_get_artifact_local(hash)?;
 
 		// Create the response.
-		let body =
-			serde_json::to_vec(&artifact).context("Failed to serialize the response body.")?;
+		let body = serde_json::to_vec(&artifact)
+			.map_err(Error::other)
+			.wrap_err("Failed to serialize the response body.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(hyper::Body::from(body))

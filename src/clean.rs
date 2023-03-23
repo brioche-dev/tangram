@@ -1,7 +1,7 @@
 use crate::{
 	artifact::{self, Artifact},
 	blob,
-	error::{Context, Result},
+	error::{Error, Result, WrapErr},
 	hash,
 	operation::{self, Operation},
 	package, template,
@@ -18,41 +18,41 @@ impl Instance {
 
 		// Mark the artifacts, blobs, operations, and package instances.
 		self.mark(&mut marks, roots)
-			.context("Failed to perform the mark phase.")?;
+			.wrap_err("Failed to perform the mark phase.")?;
 
 		// Sweep the artifacts.
 		self.sweep_artifacts(&marks)
-			.context("Failed to sweep the artifacts.")?;
+			.wrap_err("Failed to sweep the artifacts.")?;
 
 		// Sweep the checkouts directory.
 		self.sweep_checkouts_directory(&marks)
 			.await
-			.context("Failed to sweep the checkouts directory.")?;
+			.wrap_err("Failed to sweep the checkouts directory.")?;
 
 		// Sweep the blobs.
 		self.sweep_blobs(&marks)
 			.await
-			.context("Failed to sweep the blobs.")?;
+			.wrap_err("Failed to sweep the blobs.")?;
 
 		// Sweep the operations.
 		self.sweep_operations(&marks)
-			.context("Failed to sweep the operations.")?;
+			.wrap_err("Failed to sweep the operations.")?;
 
 		// Sweep the operation children.
 		self.sweep_operation_children(&marks)
-			.context("Failed to sweep the operation children.")?;
+			.wrap_err("Failed to sweep the operation children.")?;
 
 		// Sweep the package instances.
 		self.sweep_package_instances(&marks)
-			.context("Failed to sweep the package instances.")?;
+			.wrap_err("Failed to sweep the package instances.")?;
 
 		// Delete all temps.
 		tokio::fs::remove_dir_all(&self.temps_path())
 			.await
-			.context("Failed to delete the temps directory.")?;
+			.wrap_err("Failed to delete the temps directory.")?;
 		tokio::fs::create_dir_all(&self.temps_path())
 			.await
-			.context("Failed to recreate the temps directory.")?;
+			.wrap_err("Failed to recreate the temps directory.")?;
 
 		Ok(())
 	}
@@ -226,7 +226,7 @@ impl Instance {
 		// Delete all artifacts that are not marked.
 		for entry in cursor.iter() {
 			let (hash, _) = entry?;
-			let hash = hash.try_into()?;
+			let hash = hash.try_into().map_err(Error::other)?;
 			let hash = artifact::Hash(hash::Hash(hash));
 			if !marks.contains_artifact(hash) {
 				cursor.del(lmdb::WriteFlags::empty())?;
@@ -246,19 +246,20 @@ impl Instance {
 		// Delete all entries in the checkouts directory that are not marked.
 		let mut read_dir = tokio::fs::read_dir(self.checkouts_path())
 			.await
-			.context("Failed to read the checkouts directory.")?;
+			.wrap_err("Failed to read the checkouts directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
 			let artifact_hash: hash::Hash = entry
 				.file_name()
 				.to_str()
-				.context("Failed to parse the file name as a string.")?
+				.wrap_err("Failed to parse the file name as a string.")?
 				.parse()
-				.context("Failed to parse the entry in the checkouts directory as a hash.")?;
+				.map_err(Error::other)
+				.wrap_err("Failed to parse the entry in the checkouts directory as a hash.")?;
 			let artifact_hash = artifact::Hash(artifact_hash);
 			if !marks.contains_artifact(artifact_hash) {
 				crate::util::fs::rmrf(&entry.path())
 					.await
-					.context("Failed to remove the artifact.")?;
+					.wrap_err("Failed to remove the artifact.")?;
 			}
 		}
 		Ok(())
@@ -268,19 +269,20 @@ impl Instance {
 		// Delete all blobs that are not not marked.
 		let mut read_dir = tokio::fs::read_dir(self.blobs_path())
 			.await
-			.context("Failed to read the blobs directory.")?;
+			.wrap_err("Failed to read the blobs directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
 			let blob_hash: hash::Hash = entry
 				.file_name()
 				.to_str()
-				.context("Failed to parse the file name as a string.")?
+				.wrap_err("Failed to parse the file name as a string.")?
 				.parse()
-				.context("Failed to parse the entry in the blobs directory as a hash.")?;
+				.map_err(Error::other)
+				.wrap_err("Failed to parse the entry in the blobs directory as a hash.")?;
 			let blob_hash = blob::Hash(blob_hash);
 			if !marks.contains_blob(blob_hash) {
 				tokio::fs::remove_file(&entry.path())
 					.await
-					.context("Failed to remove the blob.")?;
+					.wrap_err("Failed to remove the blob.")?;
 			}
 		}
 		Ok(())
@@ -296,7 +298,7 @@ impl Instance {
 		// Delete all operations that are not marked.
 		for entry in cursor.iter() {
 			let (hash, _) = entry?;
-			let hash = hash.try_into()?;
+			let hash = hash.try_into().map_err(Error::other)?;
 			let hash = operation::Hash(hash::Hash(hash));
 			if !marks.contains_operation(hash) {
 				cursor.del(lmdb::WriteFlags::empty())?;
@@ -322,7 +324,7 @@ impl Instance {
 		// Delete all operations that are not marked.
 		for entry in cursor.iter() {
 			let (hash, _) = entry?;
-			let hash = hash.try_into()?;
+			let hash = hash.try_into().map_err(Error::other)?;
 			let hash = operation::Hash(hash::Hash(hash));
 			if !marks.contains_operation(hash) {
 				cursor.del(lmdb::WriteFlags::empty())?;
@@ -348,7 +350,7 @@ impl Instance {
 		// Delete all packages that are not marked.
 		for entry in cursor.iter() {
 			let (hash, _) = entry?;
-			let hash = hash.try_into()?;
+			let hash = hash.try_into().map_err(Error::other)?;
 			let hash = package::instance::Hash(hash::Hash(hash));
 			if !marks.contains_package(hash) {
 				cursor.del(lmdb::WriteFlags::empty())?;

@@ -1,5 +1,5 @@
 use super::Tracker;
-use crate::error::{bail, Result};
+use crate::error::{return_error, Result};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 impl Tracker {
@@ -10,7 +10,7 @@ impl Tracker {
 		// Read the version.
 		let version = reader.read_u8()?;
 		if version != 0 {
-			bail!(r#"Cannot deserialize an artifact tracker with version "{version}"."#);
+			return_error!(r#"Cannot deserialize an artifact tracker with version "{version}"."#);
 		}
 
 		// Deserialize the artifact tracker.

@@ -3,7 +3,7 @@ use super::{
 	isolate::THREAD_LOCAL_ISOLATE,
 };
 use crate::{
-	error::{bail, Context, Result},
+	error::{Error, Result, WrapErr},
 	module, Instance,
 };
 use num::ToPrimitive;
@@ -33,9 +33,8 @@ pub async fn evaluate(
 	let output = module.instantiate_module(&mut try_catch_scope, resolve_module_callback);
 	if try_catch_scope.has_caught() {
 		let exception = try_catch_scope.exception().unwrap();
-		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
-		let exception = super::exception::render(&mut scope, &state, exception);
-		bail!("{exception}");
+		let error = Error::from_exception(&mut try_catch_scope, &state, exception);
+		return Err(error);
 	}
 	output.unwrap();
 	drop(try_catch_scope);
@@ -45,8 +44,8 @@ pub async fn evaluate(
 	let module_output = module.evaluate(&mut try_catch_scope);
 	if try_catch_scope.has_caught() {
 		let exception = try_catch_scope.exception().unwrap();
-		let exception = super::exception::render(&mut try_catch_scope, &state, exception);
-		bail!("{exception}");
+		let error = Error::from_exception(&mut try_catch_scope, &state, exception);
+		return Err(error);
 	}
 	let module_output = module_output.unwrap();
 	drop(try_catch_scope);
@@ -63,7 +62,7 @@ pub async fn evaluate(
 	// Await the module output.
 	let output = await_value(context.clone(), output)
 		.await
-		.context("Failed to evaluate the module.")?;
+		.wrap_err("Failed to evaluate the module.")?;
 
 	// Return the module.
 	Ok((module, output))
@@ -136,16 +135,17 @@ fn load_module<'s>(
 			};
 
 			// Send the output.
-			let output = (text, output.transpiled_text, output.source_map_string);
+			let output = (text, output.transpiled_text, output.source_map);
 			sender.send(Ok(output)).unwrap();
 		}
 	});
 	let (text, transpiled_text, source_map) = receiver
 		.recv()
 		.unwrap()
-		.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
-	let source_map =
-		SourceMap::from_slice(source_map.as_bytes()).context("Failed to parse the source map.")?;
+		.wrap_err_with(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
+	let source_map = SourceMap::from_slice(source_map.as_bytes())
+		.map_err(Error::other)
+		.wrap_err("Failed to parse the source map.")?;
 
 	// Compile the module.
 	let mut try_catch_scope = v8::TryCatch::new(scope);
@@ -154,9 +154,8 @@ fn load_module<'s>(
 	let module = v8::script_compiler::compile_module(&mut try_catch_scope, source);
 	if try_catch_scope.has_caught() {
 		let exception = try_catch_scope.exception().unwrap();
-		let mut scope = v8::HandleScope::new(&mut try_catch_scope);
-		let exception = super::exception::render(&mut scope, &state, exception);
-		bail!("{exception}");
+		let error = Error::from_exception(&mut try_catch_scope, &state, exception);
+		return Err(error);
 	}
 	let module = module.unwrap();
 	drop(try_catch_scope);
@@ -185,8 +184,8 @@ fn resolve_module_callback<'s>(
 	match resolve_module_callback_inner(context, specifier, import_assertions, referrer) {
 		Ok(value) => Some(value),
 		Err(error) => {
-			let error = v8::String::new(&mut scope, &error.to_string()).unwrap();
-			scope.throw_exception(error.into());
+			let exception = error.to_exception(&mut scope);
+			scope.throw_exception(exception);
 			None
 		},
 	}
@@ -218,7 +217,7 @@ fn resolve_module_callback_inner<'s>(
 		.borrow()
 		.iter()
 		.find(|module| module.identity_hash == referrer_identity_hash)
-		.with_context(|| {
+		.wrap_err_with(|| {
 			format!(
 				r#"Unable to find the referrer module with identity hash "{referrer_identity_hash}"."#
 			)
@@ -237,13 +236,13 @@ fn resolve_module_callback_inner<'s>(
 			sender.send(module_identifier).unwrap();
 		}
 	});
-	let module_identifier = receiver.recv().unwrap().with_context(|| {
+	let module_identifier = receiver.recv().unwrap().wrap_err_with(|| {
 		format!(r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer}"."#)
 	})?;
 
 	// Load.
 	let module = load_module(&mut scope, &module_identifier)
-		.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
+		.wrap_err_with(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
 
 	Ok(module)
 }

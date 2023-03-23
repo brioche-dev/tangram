@@ -2,7 +2,7 @@ use super::dependency;
 use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
-	error::{bail, Result},
+	error::{return_error, Result},
 	module,
 	util::fs,
 	Instance,
@@ -43,7 +43,7 @@ impl Instance {
 				source: module::identifier::Source::Path(package_path),
 				path: module_path,
 			})) = &module_identifier else {
-				bail!("Invalid module identifier.");
+				return_error!("Invalid module identifier.");
 			};
 
 			// Check in the artifact at the imported path.
@@ -94,6 +94,10 @@ impl Instance {
 
 		// Add the artifact.
 		let package_hash = self.add_artifact(&Artifact::Directory(directory)).await?;
+
+		// Add a package tracker.
+		self.add_package_tracker(package_hash, path.to_owned())
+			.await;
 
 		// Create the output.
 		let output = Output {

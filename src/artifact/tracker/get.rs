@@ -1,9 +1,5 @@
 use super::Tracker;
-use crate::{
-	error::{bail, Result},
-	util::fs,
-	Instance,
-};
+use crate::{error::Result, util::fs, Instance};
 use lmdb::Transaction;
 use std::os::unix::prelude::OsStrExt;
 
@@ -23,7 +19,7 @@ impl Instance {
 				Ok(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => bail!(error),
+			Err(error) => Err(error.into()),
 		}
 	}
 }

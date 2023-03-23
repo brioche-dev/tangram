@@ -1,4 +1,4 @@
-use crate::error::{bail, Error};
+use crate::error::{return_error, Error};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]
@@ -25,7 +25,7 @@ impl std::str::FromStr for Algorithm {
 		let system = match s {
 			"sha256" => Algorithm::Sha256,
 			"blake3" => Algorithm::Blake3,
-			_ => bail!(r#"Invalid algorithm "{s}"."#),
+			_ => return_error!(r#"Invalid algorithm "{s}"."#),
 		};
 		Ok(system)
 	}

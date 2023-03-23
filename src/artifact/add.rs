@@ -1,7 +1,7 @@
 use super::{Artifact, Hash};
 use crate::{
 	blob,
-	error::{bail, Result},
+	error::{Error, Result},
 	Instance,
 };
 use lmdb::Transaction;
@@ -20,7 +20,7 @@ impl Instance {
 	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<Hash> {
 		match self.try_add_artifact(artifact).await? {
 			Outcome::Added { artifact_hash } => Ok(artifact_hash),
-			_ => bail!("Failed to add the artifact."),
+			_ => Err(Error::message("Failed to add the artifact.")),
 		}
 	}
 

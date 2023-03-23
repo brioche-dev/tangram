@@ -1,5 +1,5 @@
 use crate::{
-	error::{Context, Result},
+	error::{Result, WrapErr},
 	Instance,
 };
 
@@ -7,7 +7,7 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 pub struct Output {
 	pub transpiled_text: String,
-	pub source_map_string: String,
+	pub source_map: String,
 }
 
 impl Instance {
@@ -22,7 +22,8 @@ impl Instance {
 			scope_analysis: true,
 			maybe_syntax: None,
 		})
-		.with_context(|| "Failed to parse the module.")?;
+		.ok()
+		.wrap_err("Failed to parse the module.")?;
 
 		// Transpile the code.
 		let output = parsed_source
@@ -30,15 +31,16 @@ impl Instance {
 				inline_source_map: false,
 				..Default::default()
 			})
-			.with_context(|| "Failed to transpile the module.")?;
+			.ok()
+			.wrap_err("Failed to transpile the module.")?;
 
 		// Get the transpiled text and source map.
 		let transpiled_text = output.text;
-		let source_map_string = output.source_map.context("Expected a source map.")?;
+		let source_map = output.source_map.wrap_err("Expected a source map.")?;
 
 		Ok(Output {
 			transpiled_text,
-			source_map_string,
+			source_map,
 		})
 	}
 }

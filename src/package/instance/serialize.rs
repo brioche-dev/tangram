@@ -1,6 +1,6 @@
 use super::{Hash, Instance};
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	hash,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
@@ -14,7 +14,7 @@ impl Instance {
 		// Read the version.
 		let version = reader.read_u8()?;
 		if version != 0 {
-			bail!(r#"Cannot deserialize a package instance with version "{version}"."#);
+			return_error!(r#"Cannot deserialize a package instance with version "{version}"."#);
 		}
 
 		// Deserialize the package instance.

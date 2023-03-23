@@ -1,5 +1,5 @@
 use super::{Algorithm, Checksum};
-use crate::error::{Context, Error};
+use crate::error::{Error, WrapErr};
 
 impl std::fmt::Display for Checksum {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -25,21 +25,21 @@ impl std::str::FromStr for Checksum {
 		// Parse the algorithm.
 		let algorithm = components
 			.next()
-			.context(r#"The string must have a ":"."#)?
+			.wrap_err(r#"The string must have a ":"."#)?
 			.parse()
-			.context("Invalid algorithm.")?;
+			.wrap_err("Invalid algorithm.")?;
 
 		// Parse the bytes.
 		let bytes = hex::decode(
 			components
 				.next()
-				.context(r#"The string must have a ":"."#)?,
+				.wrap_err(r#"The string must have a ":"."#)?,
 		)
 		.ok()
-		.context("Invalid bytes.")?
+		.wrap_err("Invalid bytes.")?
 		.try_into()
 		.ok()
-		.context("Invalid bytes.")?;
+		.wrap_err("Invalid bytes.")?;
 
 		let checksum = match algorithm {
 			Algorithm::Sha256 => Checksum::Sha256(bytes),

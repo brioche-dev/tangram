@@ -1,6 +1,6 @@
 use super::service;
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	module, Instance,
 };
 use std::sync::Arc;
@@ -18,7 +18,7 @@ impl Instance {
 		let response = self.language_service_request(request).await?;
 
 		// Get the response.
-		let service::Response::Doc(response) = response else { bail!("Unexpected response type.") };
+		let service::Response::Doc(response) = response else { return_error!("Unexpected response type.") };
 
 		Ok(response.doc)
 	}

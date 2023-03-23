@@ -1,6 +1,6 @@
 use super::Process;
 use crate::{
-	error::{bail, Context, Error, Result},
+	error::{return_error, Error, Result, WrapErr},
 	system::System,
 	temp::Temp,
 	template::Path,
@@ -58,7 +58,6 @@ impl Instance {
 
 		// Collect the paths and get the strings for the env, command, and args.
 		let mut paths = HashSet::default();
-
 		let env = env
 			.into_iter()
 			.map(|(key, value)| {
@@ -66,10 +65,8 @@ impl Instance {
 				(key.to_string(), value.string)
 			})
 			.collect();
-
 		paths.extend(command.paths);
 		let command = command.string;
-
 		let args = args
 			.into_iter()
 			.map(|value| {
@@ -98,7 +95,7 @@ impl Instance {
 				}
 				#[cfg(not(target_os = "linux"))]
 				{
-					bail!("A Linux process cannot run on a non-Linux host.");
+					return_error!("A Linux process cannot run on a non-Linux host.");
 				}
 			},
 			System::Amd64Macos | System::Arm64Macos => {
@@ -116,26 +113,26 @@ impl Instance {
 				}
 				#[cfg(not(target_os = "macos"))]
 				{
-					bail!("A macOS process cannot run on a non-macOS host.");
+					return_error!("A macOS process cannot run on a non-macOS host.");
 				}
 			},
 		}
 		.await?;
 
-		// Check in the output temp path.
+		// Check in the output temp.
 		let output_hash = self
 			.check_in(output_temp.path())
 			.await
-			.context("Failed to check in the output.")?;
+			.wrap_err("Failed to check in the output.")?;
 
 		// Verify the checksum if one was provided.
 		if let Some(expected) = process.checksum.clone() {
 			let actual = self
 				.compute_artifact_checksum(output_hash, expected.algorithm())
 				.await
-				.context("Failed to compute the checksum.")?;
+				.wrap_err("Failed to compute the checksum.")?;
 			if expected != actual {
-				bail!(
+				return_error!(
 					r#"The checksum did not match. Expected "{expected:?}" but got "{actual:?}"."#
 				);
 			}

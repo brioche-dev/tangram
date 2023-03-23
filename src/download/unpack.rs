@@ -1,5 +1,5 @@
 use crate::{
-	error::{bail, Error},
+	error::{return_error, Error},
 	util::fs,
 };
 
@@ -50,7 +50,7 @@ impl std::str::FromStr for Format {
 		} else if s == ".zip" {
 			Ok(Format::Zip)
 		} else {
-			bail!("Invalid unpack format.");
+			return_error!("Invalid unpack format.");
 		}
 	}
 }
@@ -79,7 +79,7 @@ impl std::str::FromStr for Compression {
 			".lz" => Ok(Compression::Lz),
 			".xz" => Ok(Compression::Xz),
 			".zstd" => Ok(Compression::Zstd),
-			_ => bail!("Invalid compression format."),
+			_ => return_error!("Invalid compression format."),
 		}
 	}
 }

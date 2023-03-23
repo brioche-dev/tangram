@@ -1,7 +1,7 @@
 use crate::{
 	artifact,
 	client::Client,
-	error::{bail, Context, Error, Result},
+	error::{Error, Result, WrapErr},
 	Instance,
 };
 use async_recursion::async_recursion;
@@ -16,7 +16,7 @@ impl Instance {
 		let artifact = client
 			.try_get_artifact(artifact_hash)
 			.await?
-			.with_context(|| format!(r#"Unable to find artifact with hash "{artifact_hash}""#))?;
+			.wrap_err_with(|| format!(r#"Unable to find artifact with hash "{artifact_hash}""#))?;
 
 		// Try to add the artifact.
 		let outcome = self.try_add_artifact(&artifact).await?;
@@ -49,7 +49,7 @@ impl Instance {
 		// Attempt to add the artifact again. At this point, there should not be any missing entries or a missing blob.
 		let outcome = self.try_add_artifact(&artifact).await?;
 		if !matches!(outcome, artifact::add::Outcome::Added { .. }) {
-			bail!("An unexpected error occurred.");
+			return Err(Error::message("An unexpected error occurred."));
 		}
 
 		Ok(())

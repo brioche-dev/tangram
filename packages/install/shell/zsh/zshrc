@@ -4,7 +4,8 @@ export TANGRAM_ZSHRC_INSTALLED=1
 
 # Create the chpwd hook.
 function tangram_chpwd {
-  source <(tg autoshell hook zsh)
+  type _tangram_deactivate &> /dev/null && _tangram_deactivate
+  source <(tg env zsh)
 }
 
 # Install the hook.

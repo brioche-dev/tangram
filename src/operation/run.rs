@@ -4,6 +4,14 @@ use async_recursion::async_recursion;
 use futures::FutureExt;
 use std::sync::{Arc, Weak};
 
+impl Operation {
+	pub async fn run(&self, tg: &Arc<Instance>) -> crate::Result<Value> {
+		let operation_hash = tg.add_operation(self)?;
+		let value = tg.run(operation_hash).await?;
+		Ok(value)
+	}
+}
+
 impl Instance {
 	pub async fn run(self: &Arc<Self>, operation_hash: Hash) -> Result<Value> {
 		// Get the operations task map.
@@ -18,7 +26,7 @@ impl Instance {
 						let tg = Weak::clone(&tg);
 						async move {
 							let tg = Weak::upgrade(&tg).unwrap();
-							tg.run_inner(operation_hash, None).await.unwrap()
+							tg.run_inner(operation_hash, None).await
 						}
 						.boxed()
 					}
@@ -27,7 +35,7 @@ impl Instance {
 			.clone();
 
 		// Run the operation.
-		let value = operations_task_map.run(operation_hash).await;
+		let value = operations_task_map.run(operation_hash).await?;
 
 		Ok(value)
 	}
@@ -35,7 +43,7 @@ impl Instance {
 	#[async_recursion]
 	#[must_use]
 	async fn run_inner(
-		self: &Arc<Self>,
+		self: Arc<Self>,
 		operation_hash: Hash,
 		parent_operation_hash: Option<Hash>,
 	) -> Result<Value> {

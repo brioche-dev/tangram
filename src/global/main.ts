@@ -1,11 +1,14 @@
+import { array } from "./array";
 import { isArtifact } from "./artifact";
 import { checksum } from "./checksum";
 import { context } from "./context";
 import { Directory, directory, isDirectory } from "./directory";
 import { download } from "./download";
+import { prepareStackTrace } from "./error";
 import { File, file, isFile } from "./file";
 import { function_ } from "./function";
 import { log } from "./log";
+import { map } from "./map";
 import { Path, isPath, path } from "./path";
 import { Placeholder, isPlaceholder, placeholder } from "./placeholder";
 import { output, process } from "./process";
@@ -14,10 +17,32 @@ import { resolve } from "./resolve";
 import { Symlink, isSymlink, symlink } from "./symlink";
 import { Template, isTemplate, t, template } from "./template";
 
+// Create the `syscall` global.
+let syscall = async (...args: Array<any>) => {
+	try {
+		return await (globalThis as any).syscallInner(...args);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
+Object.defineProperties(globalThis, {
+	syscall: { value: syscall },
+});
+
+// Set `Error.prepareStackTrace`.
+Object.defineProperties(Error, {
+	prepareStackTrace: { value: prepareStackTrace },
+});
+
+// Create the console global.
 let console = {
 	log,
 };
+Object.defineProperties(globalThis, {
+	console: { value: console },
+});
 
+// Create the tg global.
 let tg = {
 	Directory,
 	File,
@@ -26,6 +51,7 @@ let tg = {
 	Reference,
 	Symlink,
 	Template,
+	array,
 	checksum,
 	context,
 	directory,
@@ -41,6 +67,7 @@ let tg = {
 	isSymlink,
 	isTemplate,
 	log,
+	map,
 	output,
 	path,
 	placeholder,
@@ -50,9 +77,7 @@ let tg = {
 	symlink,
 	template,
 };
-
 Object.defineProperties(globalThis, {
-	console: { value: console },
 	t: { value: t },
 	tg: { value: tg },
 });

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Set the tangram version.
+# Set the Tangram version.
 version="0.1.0"
 
 # Exit if any command fails.
@@ -71,7 +71,7 @@ esac
 # Define the URL.
 url=https://github.com/tangramdotdev/tangram/releases/download/v${version}/tangram_${host}.tar.gz
 
-# Create the tangram path if it does not exist.
+# Create the Tangram path if it does not exist.
 if [ ! -d "${tangram_path}" ]; then
 	mkdir -p "${tangram_path}"
 fi
@@ -79,7 +79,7 @@ fi
 # Download the tarball to the tarball path.
 curl --fail --progress-bar --output "${tarball_path}" "${url}"
 
-# Untar the tarball into the tangram path.
+# Untar the tarball into the Tangram path.
 tar -C "${tangram_path}" -xf "${tarball_path}"
 
 # Remove the tarball.
@@ -132,7 +132,7 @@ case "${shell}" in
 		;;
 
 	*)
-		warning "The tangram shell integration was not installed. You will need to add \"${tangram_path}\" to \$PATH manually, and features like autoshells that require shell integration will not work as expected."
+		warning "The Tangram shell integration was not installed. You will need to add \"${tangram_path}\" to \$PATH manually, and features like autoenvs that require shell integration will not work as expected."
 		;;
 esac
 

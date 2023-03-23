@@ -1,6 +1,6 @@
 use super::service;
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	Instance,
 };
 use std::sync::Arc;
@@ -15,7 +15,7 @@ impl Instance {
 
 		// Get the response.
 		let service::Response::Format(response) = response else {
- 			bail!("Unexpected response type.");
+ 			return_error!("Unexpected response type.");
  		};
 
 		Ok(response.text)

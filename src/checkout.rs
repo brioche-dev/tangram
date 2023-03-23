@@ -2,7 +2,7 @@ use crate::{
 	artifact::{self, Artifact},
 	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
-	error::{Context, Error, Result},
+	error::{Error, Result, WrapErr},
 	file::File,
 	reference::Reference,
 	symlink::Symlink,
@@ -35,7 +35,7 @@ impl Instance {
 						let tg = Weak::clone(&tg);
 						async move {
 							let tg = Weak::upgrade(&tg).unwrap();
-							tg.check_out_internal_inner(artifact_hash).await.unwrap()
+							tg.check_out_internal_inner(artifact_hash).await
 						}
 						.boxed()
 					}
@@ -44,7 +44,7 @@ impl Instance {
 			.clone();
 
 		// Perform the checkout.
-		let path = internal_checkouts_task_map.run(artifact_hash).await;
+		let path = internal_checkouts_task_map.run(artifact_hash).await?;
 
 		Ok(path)
 	}
@@ -79,7 +79,7 @@ impl Instance {
 
 			Err(error) => Err(error),
 		}
-		.context("Failed to move the checkout to the checkout path.")?;
+		.wrap_err("Failed to move the checkout to the checkout path.")?;
 
 		// Clear the file system object's timestamps.
 		tokio::task::spawn_blocking({
@@ -87,7 +87,7 @@ impl Instance {
 			move || {
 				let epoch = filetime::FileTime::from_unix_time(0, 0);
 				filetime::set_symlink_file_times(path, epoch, epoch)
-					.context("Failed to set the file system object's timestamps.")?;
+					.wrap_err("Failed to set the file system object's timestamps.")?;
 				Ok::<_, Error>(())
 			}
 		})
@@ -130,7 +130,7 @@ impl Instance {
 				// Copy the blob to the path.
 				self.copy_blob_to_path(file.blob_hash, path)
 					.await
-					.context("Failed to copy the blob.")?;
+					.wrap_err("Failed to copy the blob.")?;
 
 				// Make the file executable if necessary.
 				if file.executable {
@@ -149,7 +149,7 @@ impl Instance {
 				let referenced_artifact_checkout_path = self
 					.check_out_internal_inner(reference.artifact_hash)
 					.await
-					.context("Failed to check out the referenced artifact.")?;
+					.wrap_err("Failed to check out the referenced artifact.")?;
 
 				// Compute the referenced path.
 				let mut referenced_path = referenced_artifact_checkout_path;
@@ -160,14 +160,14 @@ impl Instance {
 				// Compute the symlink target by taking the diff of the path's parent and the referenced path.
 				let parent_path = path
 					.parent()
-					.context("Expected the path to have a parent.")?;
+					.wrap_err("Expected the path to have a parent.")?;
 				let target = pathdiff::diff_paths(&referenced_path, parent_path)
-					.context("Could not resolve the symlink target relative to the path.")?;
+					.wrap_err("Could not resolve the symlink target relative to the path.")?;
 
 				// Create the symlink.
 				tokio::fs::symlink(target, path)
 					.await
-					.context("Failed to write the symlink for the reference.")?;
+					.wrap_err("Failed to write the symlink for the reference.")?;
 			},
 		};
 
@@ -177,7 +177,7 @@ impl Instance {
 			move || {
 				let epoch = filetime::FileTime::from_unix_time(0, 0);
 				filetime::set_symlink_file_times(path, epoch, epoch)
-					.context("Failed to set the file system object's timestamps.")?;
+					.wrap_err("Failed to set the file system object's timestamps.")?;
 				Ok::<_, Error>(())
 			}
 		})
@@ -236,7 +236,7 @@ impl Instance {
 					path,
 				)
 				.await
-				.with_context(|| {
+				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to check out directory "{artifact_hash}" to "{path}"."#)
 				})?;
@@ -245,7 +245,7 @@ impl Instance {
 			Artifact::File(file) => {
 				self.check_out_file(root_path, existing_artifact_hash, artifact_hash, file, path)
 					.await
-					.with_context(|| {
+					.wrap_err_with(|| {
 						let path = path.display();
 						format!(r#"Failed to check out file "{artifact_hash}" to "{path}"."#)
 					})?;
@@ -260,7 +260,7 @@ impl Instance {
 					path,
 				)
 				.await
-				.with_context(|| {
+				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to check out symlink "{artifact_hash}" to "{path}"."#)
 				})?;
@@ -275,7 +275,7 @@ impl Instance {
 					path,
 				)
 				.await
-				.with_context(|| {
+				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to check out reference "{artifact_hash}" to "{path}"."#)
 				})?;
@@ -394,7 +394,7 @@ impl Instance {
 		// Copy the blob to the path.
 		self.copy_blob_to_path(file.blob_hash, path)
 			.await
-			.context("Failed to copy the blob.")?;
+			.wrap_err("Failed to copy the blob.")?;
 
 		// Make the file executable if necessary.
 		if file.executable {
@@ -484,7 +484,7 @@ impl Instance {
 				&referenced_artifact_checkout_path,
 			)
 			.await
-			.context("Failed to check out the referenced artifact.")?;
+			.wrap_err("Failed to check out the referenced artifact.")?;
 		}
 
 		// Compute the referenced path.
@@ -496,14 +496,14 @@ impl Instance {
 		// Compute the symlink target by taking the diff of the path's parent and the referenced path.
 		let parent_path = path
 			.parent()
-			.context("Expected the path to have a parent.")?;
+			.wrap_err("Expected the path to have a parent.")?;
 		let target = pathdiff::diff_paths(&referenced_path, parent_path)
-			.context("Could not resolve the symlink target relative to the path.")?;
+			.wrap_err("Could not resolve the symlink target relative to the path.")?;
 
 		// Create the symlink.
 		tokio::fs::symlink(target, path)
 			.await
-			.context("Failed to write the symlink for the reference.")?;
+			.wrap_err("Failed to write the symlink for the reference.")?;
 
 		Ok(())
 	}

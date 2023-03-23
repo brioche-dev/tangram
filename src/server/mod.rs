@@ -1,4 +1,7 @@
-use crate::{error::Result, Instance};
+use crate::{
+	error::{Error, Result},
+	Instance,
+};
 use futures::FutureExt;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
@@ -9,11 +12,9 @@ mod error;
 impl Instance {
 	pub async fn serve(self: &Arc<Self>, addr: SocketAddr) -> Result<()> {
 		let tg = Arc::clone(self);
-		hyper::Server::try_bind(&addr)
-			.map(|server| {
-				tracing::info!("🚀 Serving on {}.", addr);
-				server
-			})?
+		let server = hyper::Server::try_bind(&addr).map_err(Error::other)?;
+		tracing::info!("🚀 Serving on {}.", addr);
+		server
 			.serve(hyper::service::make_service_fn(move |_| {
 				let tg = Arc::clone(&tg);
 				async move {
@@ -26,7 +27,8 @@ impl Instance {
 					}))
 				}
 			}))
-			.await?;
+			.await
+			.map_err(Error::other)?;
 		Ok(())
 	}
 
@@ -41,7 +43,7 @@ impl Instance {
 				.body(hyper::Body::from("Not found."))
 				.unwrap(),
 			Err(error) => {
-				tracing::error!(?error, backtrace = %error.backtrace());
+				tracing::error!(?error);
 				http::Response::builder()
 					.status(http::StatusCode::INTERNAL_SERVER_ERROR)
 					.body(hyper::Body::from("Internal server error."))
@@ -73,7 +75,7 @@ impl Instance {
 			(_, _) => None,
 		};
 		let response = if let Some(response) = response {
-			Some(response.await?)
+			Some(response.await.map_err(Error::other)?)
 		} else {
 			None
 		};

@@ -1,7 +1,7 @@
 use crate::{
 	artifact,
 	client::Client,
-	error::{bail, Context, Error, Result},
+	error::{return_error, Error, Result, WrapErr},
 	Instance,
 };
 use async_recursion::async_recursion;
@@ -34,19 +34,19 @@ impl Instance {
 
 			// If this artifact is a file and the blob is missing, then push it.
 			artifact::add::Outcome::FileMissingBlob { blob_hash } => {
-				let _permit = self.file_semaphore.acquire().await?;
+				let _permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 
 				// Get the blob.
 				let blob = self
 					.get_blob(blob_hash)
 					.await
-					.context("Failed to get the blob.")?;
+					.wrap_err("Failed to get the blob.")?;
 
 				// Add the blob.
 				client
 					.add_blob(blob, blob_hash)
 					.await
-					.context("Failed to add the blob.")?;
+					.wrap_err("Failed to add the blob.")?;
 			},
 
 			// If this artifact is a reference whose artifact is missing, then push it.
@@ -58,7 +58,7 @@ impl Instance {
 		// Attempt to push the artifact again. At this point, there should not be any missing entries or a missing blob.
 		let outcome = client.try_add_artifact(&artifact).await?;
 		if !matches!(outcome, artifact::add::Outcome::Added { .. }) {
-			bail!("An unexpected error occurred.");
+			return_error!("An unexpected error occurred.");
 		}
 
 		Ok(())

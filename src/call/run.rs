@@ -1,6 +1,6 @@
-use super::{isolate::THREAD_LOCAL_ISOLATE, Call};
+use super::{context::State, isolate::THREAD_LOCAL_ISOLATE, Call};
 use crate::{
-	error::{Context, Result},
+	error::{Error, Result, WrapErr},
 	module,
 	value::Value,
 	Instance,
@@ -19,8 +19,8 @@ impl Instance {
 				move || async move { run_call_inner(tg, &call).await }
 			})
 			.await
-			.context("Failed to join the task.")?
-			.unwrap();
+			.map_err(Error::other)
+			.wrap_err("Failed to join the task.")??;
 
 		Ok(output)
 	}
@@ -46,49 +46,68 @@ async fn run_call_inner(tg: Arc<Instance>, call: &Call) -> Result<Value> {
 	let context = v8::Local::new(&mut handle_scope, context.clone());
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
+	// Get the state.
+	let state = Rc::clone(context.get_slot::<Rc<State>>(&mut context_scope).unwrap());
+
+	// Create a try catch scope.
+	let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
+
 	// Move the module to the context.
-	let module = v8::Local::new(&mut context_scope, module);
+	let module = v8::Local::new(&mut try_catch_scope, module);
 
 	// Get the module namespace.
-	let namespace = module.get_module_namespace();
-	let namespace = namespace.to_object(&mut context_scope).unwrap();
-
-	// Get the function.
-	let function_name_string = v8::String::new(&mut context_scope, &call.function.name).unwrap();
-	let function: v8::Local<v8::Function> = namespace
-		.get(&mut context_scope, function_name_string.into())
-		.context("Failed to get the export.")?
-		.try_into()
-		.context("The export must be an object.")?;
-	let run_string = v8::String::new(&mut context_scope, "run").unwrap();
-	let run: v8::Local<v8::Function> = function
-		.get(&mut context_scope, run_string.into())
-		.context(r#"The export must be a tangram function."#)?
-		.try_into()
-		.context(r#"The value for the key "run" must be a function."#)?;
-
-	// Serialize the context to v8.
-	let serialized_context = serde_v8::to_v8(&mut context_scope, &call.context)
-		.context("Failed to serialize the context.")?;
-
-	// Serialize the args to v8.
-	let serialized_args =
-		serde_v8::to_v8(&mut context_scope, &call.args).context("Failed to serialize the args.")?;
-
-	// Call the function.
-	let output = run
-		.call(
-			&mut context_scope,
-			function.into(),
-			&[serialized_args, serialized_context],
-		)
+	let namespace = module
+		.get_module_namespace()
+		.to_object(&mut try_catch_scope)
 		.unwrap();
 
+	// Get the function.
+	let function_name_string = v8::String::new(&mut try_catch_scope, &call.function.name).unwrap();
+	let function: v8::Local<v8::Function> = namespace
+		.get(&mut try_catch_scope, function_name_string.into())
+		.wrap_err("Failed to get the export.")?
+		.try_into()
+		.map_err(Error::other)
+		.wrap_err("The export must be an object.")?;
+	let run_string = v8::String::new(&mut try_catch_scope, "run").unwrap();
+	let run: v8::Local<v8::Function> = function
+		.get(&mut try_catch_scope, run_string.into())
+		.wrap_err(r#"The export must be a tangram function."#)?
+		.try_into()
+		.map_err(Error::other)
+		.wrap_err(r#"The value for the key "run" must be a function."#)?;
+
+	// Serialize the context to v8.
+	let serialized_context = serde_v8::to_v8(&mut try_catch_scope, &call.context)
+		.map_err(Error::other)
+		.wrap_err("Failed to serialize the context.")?;
+
+	// Serialize the args to v8.
+	let serialized_args = serde_v8::to_v8(&mut try_catch_scope, &call.args)
+		.map_err(Error::other)
+		.wrap_err("Failed to serialize the args.")?;
+
+	// Call the function.
+	let output = run.call(
+		&mut try_catch_scope,
+		function.into(),
+		&[serialized_context, serialized_args],
+	);
+
+	// Handle an exception.
+	if try_catch_scope.has_caught() {
+		let exception = try_catch_scope.exception().unwrap();
+		let error = Error::from_exception(&mut try_catch_scope, &state, exception);
+		return Err(error);
+	}
+	let output = output.unwrap();
+
 	// Make the output and context global.
-	let output = v8::Global::new(&mut context_scope, output);
-	let context = v8::Global::new(&mut context_scope, context);
+	let output = v8::Global::new(&mut try_catch_scope, output);
+	let context = v8::Global::new(&mut try_catch_scope, context);
 
 	// Exit the context.
+	drop(try_catch_scope);
 	drop(context_scope);
 	drop(handle_scope);
 	drop(isolate);
@@ -107,7 +126,7 @@ async fn run_call_inner(tg: Arc<Instance>, call: &Call) -> Result<Value> {
 	let output = v8::Local::new(&mut context_scope, output);
 
 	// Deserialize the output from v8.
-	let output = serde_v8::from_v8(&mut context_scope, output)?;
+	let output = serde_v8::from_v8(&mut context_scope, output).map_err(Error::other)?;
 
 	// Exit the context.
 	drop(context_scope);

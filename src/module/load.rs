@@ -1,7 +1,7 @@
 use super::{identifier, Identifier};
 use crate::{
 	artifact::{self, Artifact},
-	error::{bail, Context, Result},
+	error::{return_error, Result, WrapErr},
 	hash, package,
 	path::{self, Path},
 	util::fs,
@@ -10,7 +10,6 @@ use crate::{
 use include_dir::include_dir;
 use indoc::formatdoc;
 use itertools::Itertools;
-use tokio::io::AsyncReadExt;
 
 impl Instance {
 	/// Load a module with the given module identifier.
@@ -40,9 +39,9 @@ fn load_lib_module(module_identifier: &identifier::Lib) -> Result<String> {
 		"tangram.d.ts" => TANGRAM_D_TS,
 		_ => LIB
 			.get_file(&path)
-			.with_context(|| format!(r#"Could not find a lib with the path "{path}"."#))?
+			.wrap_err_with(|| format!(r#"Could not find a lib with the path "{path}"."#))?
 			.contents_utf8()
-			.context("Failed to read the file as UTF-8.")?,
+			.wrap_err("Failed to read the file as UTF-8.")?,
 	};
 
 	Ok(text.to_owned())
@@ -69,7 +68,7 @@ impl Instance {
 				} else if metadata.is_symlink() {
 					"tg.Symlink"
 				} else {
-					bail!("The path must point to a directory, file, or symlink.")
+					return_error!("The path must point to a directory, file, or symlink.")
 				};
 
 				(ty, artifact_hash)
@@ -83,7 +82,7 @@ impl Instance {
 				// Get the artifact.
 				let artifact = package
 					.as_directory()
-					.context("A package must be a directory.")?
+					.wrap_err("A package must be a directory.")?
 					.get(self, &identifier.path)
 					.await?;
 
@@ -133,7 +132,7 @@ impl Instance {
 		let path = package_path.join(path.to_string());
 
 		// Read the file from disk.
-		let text = tokio::fs::read_to_string(&path).await.with_context(|| {
+		let text = tokio::fs::read_to_string(&path).await.wrap_err_with(|| {
 			let path = path.display();
 			format!(r#"Failed to load the module at path "{path}"."#)
 		})?;
@@ -153,18 +152,14 @@ impl Instance {
 		// Get the module.
 		let module = package
 			.as_directory()
-			.context("Expected a package to be a directory.")?
+			.wrap_err("Expected a package to be a directory.")?
 			.get(self, path)
 			.await?
 			.into_file()
-			.context("Expected a file.")?;
+			.wrap_err("Expected a file.")?;
 
 		// Read the module.
-		let mut text = String::new();
-		self.get_blob(module.blob_hash)
-			.await?
-			.read_to_string(&mut text)
-			.await?;
+		let text = module.read_to_string(self).await?;
 
 		Ok(text)
 	}

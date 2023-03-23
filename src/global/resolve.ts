@@ -15,11 +15,11 @@ export type Unresolved<T extends Value> = T extends
 	| Artifact
 	| Placeholder
 	| Template
-	? MaybeThunk<MaybePromise<T>>
+	? MaybePromise<T>
 	: T extends Array<infer U extends Value>
-	? MaybeThunk<MaybePromise<Array<Unresolved<U>>>>
+	? MaybePromise<Array<Unresolved<U>>>
 	: T extends { [key: string]: Value }
-	? MaybeThunk<MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>>
+	? MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>
 	: never;
 
 export type Resolved<T extends Unresolved<Value>> = T extends
@@ -35,8 +35,6 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	? Array<Resolved<U>>
 	: T extends { [key: string]: Unresolved<Value> }
 	? { [K in keyof T]: Resolved<T[K]> }
-	: T extends (() => infer U extends Unresolved<Value>)
-	? Resolved<U>
 	: T extends Promise<infer U extends Unresolved<Value>>
 	? Resolved<U>
 	: never;
@@ -78,8 +76,6 @@ export let resolve = async <T extends Unresolved<Value>>(
 				]),
 			),
 		) as Resolved<T>;
-	} else if (typeof value === "function") {
-		return (await resolve(value())) as Resolved<T>;
 	} else {
 		throw new Error("Invalid value to resolve.");
 	}

@@ -1,6 +1,6 @@
 use super::{reader::Reader, Hash};
 use crate::{
-	error::{Context, Result},
+	error::{Error, Result, WrapErr},
 	Instance,
 };
 use tokio::io::AsyncRead;
@@ -10,7 +10,7 @@ impl Instance {
 		let blob = self
 			.try_get_blob(blob_hash)
 			.await?
-			.with_context(|| format!(r#"Failed to get the blob with hash "{blob_hash}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to get the blob with hash "{blob_hash}"."#))?;
 		Ok(blob)
 	}
 
@@ -19,7 +19,12 @@ impl Instance {
 		let path = self.blobs_path().join(blob_hash.to_string());
 
 		// Acquire a permit for the blob.
-		let permit = self.file_semaphore.clone().acquire_owned().await?;
+		let permit = self
+			.file_semaphore
+			.clone()
+			.acquire_owned()
+			.await
+			.map_err(Error::other)?;
 
 		// Open the blob file.
 		let file = match tokio::fs::File::open(path).await {

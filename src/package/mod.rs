@@ -1,5 +1,5 @@
 pub use self::{identifier::Identifier, instance::Instance, specifier::Specifier};
-use crate::error::Result;
+use crate::error::{Result, WrapErr};
 use async_recursion::async_recursion;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -10,12 +10,13 @@ pub mod instance;
 mod lockfile;
 mod resolve;
 pub mod specifier;
+pub mod tracker;
 
 impl crate::Instance {
 	#[allow(clippy::unused_async, clippy::only_used_in_recursion)]
 	#[async_recursion]
 	pub async fn create_package_instance(
-		self: &Arc<Self>,
+		self: Arc<Self>,
 		package_identifier: &Identifier,
 		locked: bool,
 	) -> Result<instance::Hash> {
@@ -24,7 +25,10 @@ impl crate::Instance {
 			package_hash,
 			dependency_specifiers,
 		} = match package_identifier {
-			Identifier::Path(path) => self.check_in_package(path).await?,
+			Identifier::Path(path) => self
+				.check_in_package(path)
+				.await
+				.wrap_err("Failed to check in the package.")?,
 
 			Identifier::Hash(_) => todo!(),
 		};
@@ -41,7 +45,7 @@ impl crate::Instance {
 				.await?;
 
 			// Create the dependency package instance.
-			let dependency_package_instance = self
+			let dependency_package_instance = Arc::clone(&self)
 				.create_package_instance(&dependency_package_identifier, locked)
 				.await?;
 

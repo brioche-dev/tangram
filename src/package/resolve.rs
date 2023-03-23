@@ -1,6 +1,6 @@
 use super::{Identifier, Specifier};
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	Instance,
 };
 
@@ -20,7 +20,7 @@ impl Instance {
 				},
 
 				Some(Identifier::Hash(_)) => {
-					bail!("Cannot resolve a path specifier relative to a hash referrer.")
+					return_error!("Cannot resolve a path specifier relative to a hash referrer.")
 				},
 
 				None => Ok(Identifier::Path(specifier_path.clone())),

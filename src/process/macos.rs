@@ -7,7 +7,7 @@
 //! Helpful reference: <https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf>.
 
 use crate::{
-	error::{bail, Context, Result},
+	error::{return_error, Error, Result, WrapErr},
 	system::System,
 	temp::Temp,
 	template::Path,
@@ -75,17 +75,17 @@ impl Instance {
 		};
 
 		// Spawn the child.
-		let mut child = command.spawn().context("Failed to spawn the process.")?;
+		let mut child = command.spawn().wrap_err("Failed to spawn the process.")?;
 
 		// Wait for the child to exit.
 		let status = child
 			.wait()
 			.await
-			.context("Failed to wait for the process to exit.")?;
+			.wrap_err("Failed to wait for the process to exit.")?;
 
 		// Error if the process did not exit successfully.
 		if !status.success() {
-			bail!("The process did not exit successfully.");
+			return_error!("The process did not exit successfully.");
 		}
 
 		Ok(())
@@ -256,7 +256,7 @@ fn pre_exec(paths: &HashSet<Path, fnv::FnvBuildHasher>, network_enabled: bool) -
 		let message = unsafe { CStr::from_ptr(error) };
 		let message = message.to_string_lossy();
 		unsafe { sandbox_free_error(error) };
-		bail!(message);
+		return Err(Error::message(message));
 	}
 
 	Ok(())

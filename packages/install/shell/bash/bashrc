@@ -4,7 +4,8 @@ export TANGRAM_BASHRC_INSTALLED=1
 
 # Create the chpwd hook.
 function tangram_chpwd {
-  source <(tg autoshell hook bash)
+  type _tangram_deactivate &> /dev/null && _tangram_deactivate
+  source <(tg env bash)
 }
 
 # Install the hook.

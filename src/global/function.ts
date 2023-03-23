@@ -9,7 +9,7 @@ export let function_ = <
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 >(
-	implementation: (...args: A) => MaybePromise<R>,
+	f: (...args: A) => MaybePromise<R>,
 ): Function<A, R> => {
 	// Get the function's package instance hash and name.
 	let packageInstanceHash = syscall("get_current_package_instance_hash");
@@ -18,7 +18,7 @@ export let function_ = <
 	return new Function({
 		packageInstanceHash,
 		name,
-		implementation,
+		f,
 	});
 };
 
@@ -29,7 +29,7 @@ export let isFunction = (value: unknown): value is Function => {
 type FunctionConstructorArgs<A extends Array<Value>, R extends Value> = {
 	packageInstanceHash: PackageInstanceHash;
 	name: string;
-	implementation?: (...args: A) => MaybePromise<R>;
+	f?: (...args: A) => MaybePromise<R>;
 };
 
 export interface Function<
@@ -45,14 +45,14 @@ export class Function<
 > extends globalThis.Function {
 	packageInstanceHash: PackageInstanceHash;
 	name: string;
-	implementation?: (...args: A) => MaybePromise<R>;
+	f?: (...args: A) => MaybePromise<R>;
 
 	constructor(args: FunctionConstructorArgs<A, R>) {
 		super();
 
 		this.packageInstanceHash = args.packageInstanceHash;
 		this.name = args.name;
-		this.implementation = args.implementation;
+		this.f = args.f;
 
 		// Proxy this object so that it is callable.
 		return new Proxy(this, {
@@ -81,7 +81,7 @@ export class Function<
 	}
 
 	async _call(...args: A): Promise<R> {
-		let context_ = new Map(await context.entries());
+		let context_ = new Map(context);
 		let resolvedArgs = await Promise.all(args.map(resolve));
 		return await call({
 			function: this,
@@ -91,15 +91,9 @@ export class Function<
 	}
 
 	async run(
-		serializedArgs: Array<syscall.Value>,
 		serializedContext: { [key: string]: syscall.Value },
+		serializedArgs: Array<syscall.Value>,
 	): Promise<syscall.Value> {
-		// Ensure the implementation is available.
-		assert(
-			this.implementation,
-			"This function does not have an implementation.",
-		);
-
 		// Deserialize and set the context.
 		for (let [key, value] of Object.entries(serializedContext)) {
 			context.set(key, await deserializeValue(value));
@@ -108,8 +102,9 @@ export class Function<
 		// Deserialize the args.
 		let args = (await Promise.all(serializedArgs.map(deserializeValue))) as A;
 
-		// Call the implementation.
-		let output = await this.implementation(...args);
+		// Call the function.
+		assert(this.f);
+		let output = await this.f(...args);
 
 		// Serialize the output.
 		let serializedOutput = await serializeValue(output);

@@ -1,6 +1,6 @@
 use super::{identifier, Identifier};
 use crate::{
-	error::{bail, Error, Result},
+	error::{return_error, Error, Result},
 	package::{self, specifier::Registry},
 	path::Path,
 };
@@ -86,7 +86,7 @@ impl Specifier {
 			| Identifier::Artifact(identifier::Artifact { path, .. }) => path,
 
 			Identifier::Lib(_) => {
-				bail!("Cannot convert a module dependency specifier to a package dependency specifier relative to a library module.");
+				return_error!("Cannot convert a module dependency specifier to a package dependency specifier relative to a library module.");
 			},
 		};
 

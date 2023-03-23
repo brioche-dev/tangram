@@ -165,7 +165,7 @@ declare namespace syscall {
 
 	export type Call = {
 		function: Function;
-		context: { [key: string]: Value };
+		context: Record<string, Value>;
 		args: Array<Value>;
 	};
 

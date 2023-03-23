@@ -61,7 +61,7 @@ impl std::str::FromStr for Specifier {
 	fn from_str(value: &str) -> Result<Specifier> {
 		if value.starts_with('/') || value.starts_with('.') {
 			// If the string starts with `/` or `.`, then parse the string as a path.
-			let specifier = value.parse()?;
+			let specifier = value.parse().map_err(Error::other)?;
 			Ok(Specifier::Path(specifier))
 		} else {
 			// Otherwise, parse the string as a registry specifier.

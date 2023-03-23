@@ -1,5 +1,9 @@
 use super::Hash;
-use crate::{error::Result, util::fs, Instance};
+use crate::{
+	error::{Error, Result},
+	util::fs,
+	Instance,
+};
 use tokio::io::AsyncWrite;
 
 impl Instance {
@@ -8,7 +12,7 @@ impl Instance {
 		let blob_path = self.blobs_path().join(blob_hash.to_string());
 
 		// Acquire a permit and copy the file.
-		let permit = self.file_semaphore.acquire().await?;
+		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 		tokio::fs::copy(blob_path, path).await?;
 		drop(permit);
 

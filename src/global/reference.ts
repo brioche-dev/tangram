@@ -10,6 +10,8 @@ import { MaybePromise } from "./resolve";
 import { assert } from "./util";
 import { isNullish, nullish } from "./value";
 
+// export type ReferenceLike = TemplateLike | Reference;
+
 type ReferenceArgs = {
 	artifact: MaybePromise<Artifact>;
 	path?: PathLike | nullish;

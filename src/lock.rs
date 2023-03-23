@@ -171,7 +171,7 @@ impl<'a, T> ExclusiveGuard<'a, T> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod sys {
 	use crate::{
-		error::{bail, Error, Result},
+		error::{Error, Result},
 		util::errno::errno,
 	};
 	use libc::{flock, EWOULDBLOCK, LOCK_EX, LOCK_NB, LOCK_SH, LOCK_UN};
@@ -184,8 +184,7 @@ mod sys {
 			0 => Ok(true),
 			_ if errno() == EWOULDBLOCK => Ok(false),
 			_ => {
-				bail!(Error::from(std::io::Error::last_os_error())
-					.context("The flock syscall failed."))
+				Err(Error::from(std::io::Error::last_os_error()).wrap("The flock syscall failed."))
 			},
 		}
 	}
@@ -197,8 +196,7 @@ mod sys {
 			0 => Ok(true),
 			_ if errno() == EWOULDBLOCK => Ok(false),
 			_ => {
-				bail!(Error::from(std::io::Error::last_os_error())
-					.context("The flock syscall failed."))
+				Err(Error::from(std::io::Error::last_os_error()).wrap("The flock syscall failed."))
 			},
 		}
 	}
@@ -209,7 +207,9 @@ mod sys {
 			.await
 			.unwrap();
 		if ret != 0 {
-			bail!(Error::from(std::io::Error::last_os_error()).context("The flock syscall failed."));
+			return Err(
+				Error::from(std::io::Error::last_os_error()).wrap("The flock syscall failed.")
+			);
 		}
 		Ok(())
 	}
@@ -220,7 +220,9 @@ mod sys {
 			.await
 			.unwrap();
 		if ret != 0 {
-			bail!(Error::from(std::io::Error::last_os_error()).context("The flock syscall failed."));
+			return Err(
+				Error::from(std::io::Error::last_os_error()).wrap("The flock syscall failed.")
+			);
 		}
 		Ok(())
 	}
@@ -229,7 +231,9 @@ mod sys {
 		let fd = file.as_raw_fd();
 		let ret = unsafe { flock(fd, LOCK_UN) };
 		if ret != 0 {
-			bail!(Error::from(std::io::Error::last_os_error()).context("The flock syscall failed."));
+			return Err(
+				Error::from(std::io::Error::last_os_error()).wrap("The flock syscall failed.")
+			);
 		}
 		Ok(())
 	}

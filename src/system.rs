@@ -1,4 +1,4 @@
-use crate::error::{bail, Error, Result};
+use crate::error::{return_error, Error, Result};
 
 #[derive(
 	Clone,
@@ -41,7 +41,7 @@ impl System {
 		} else if cfg!(all(target_arch = "aarch64", target_os = "macos")) {
 			System::Arm64Macos
 		} else {
-			bail!("Unsupported host system.");
+			return_error!("Unsupported host system.");
 		};
 		Ok(host)
 	}
@@ -69,7 +69,7 @@ impl std::str::FromStr for System {
 			"arm64_linux" => System::Arm64Linux,
 			"amd64_macos" => System::Amd64Macos,
 			"arm64_macos" => System::Arm64Macos,
-			_ => bail!(r#"Invalid system "{s}"."#),
+			_ => return_error!(r#"Invalid system "{s}"."#),
 		};
 		Ok(system)
 	}

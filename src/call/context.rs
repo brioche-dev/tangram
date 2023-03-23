@@ -117,9 +117,8 @@ pub fn await_value_inner(
 			},
 			Err(error) => {
 				// Reject the promise.
-				let error = v8::String::new(&mut context_scope, &error.to_string()).unwrap();
-				let error = v8::Local::new(&mut context_scope, error);
-				promise_resolver.reject(&mut context_scope, error.into());
+				let exception = error.to_exception(&mut context_scope);
+				promise_resolver.reject(&mut context_scope, exception);
 			},
 		};
 	}
@@ -150,8 +149,8 @@ pub fn await_value_inner(
 
 			v8::PromiseState::Rejected => {
 				let exception = promise.result(&mut context_scope);
-				let exception = super::exception::render(&mut context_scope, &state, exception);
-				Poll::Ready(Err(Error::msg(exception)))
+				let error = Error::from_exception(&mut context_scope, &state, exception);
+				Poll::Ready(Err(error))
 			},
 		},
 	}

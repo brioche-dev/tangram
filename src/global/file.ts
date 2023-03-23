@@ -82,12 +82,12 @@ export class File {
 		return this.#executable;
 	}
 
-	async getBytes(): Promise<Blob> {
+	async blob(): Promise<Blob> {
 		return await getBlob(this.#blobHash);
 	}
 
-	async getString(): Promise<string> {
-		let bytes = await this.getBytes();
+	async text(): Promise<string> {
+		let bytes = await this.blob();
 		return syscall("decode_utf8", bytes);
 	}
 }

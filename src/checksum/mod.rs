@@ -18,16 +18,16 @@ pub mod writer;
 #[serde(into = "String", try_from = "String")]
 #[buffalo(into = "String", try_from = "String")]
 pub enum Checksum {
-	Sha256([u8; 32]),
 	Blake3([u8; 32]),
+	Sha256([u8; 32]),
 }
 
 impl Checksum {
 	#[must_use]
 	pub fn algorithm(&self) -> Algorithm {
 		match self {
-			Self::Sha256(_) => Algorithm::Sha256,
 			Self::Blake3(_) => Algorithm::Blake3,
+			Self::Sha256(_) => Algorithm::Sha256,
 		}
 	}
 }

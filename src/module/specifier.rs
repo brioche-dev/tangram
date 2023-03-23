@@ -1,6 +1,6 @@
 use super::dependency;
 use crate::{
-	error::{bail, Context, Error},
+	error::{return_error, Error, WrapErr},
 	path::Path,
 };
 use url::Url;
@@ -37,29 +37,27 @@ impl std::str::FromStr for Specifier {
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		if value.starts_with('/') || value.starts_with('.') {
 			// If the string starts with `/` or `.`, then parse the string as a path.
-			let path = value.parse().context("Failed to parse the path.")?;
+			let path = value.parse().wrap_err("Failed to parse the path.")?;
 			Ok(Specifier::Path(path))
 		} else {
 			// Otherwise, parse the string as a URL.
 			let url: Url = value
 				.parse()
-				.with_context(|| format!(r#"Failed to parse the string "{value}" as a URL."#))?;
+				.map_err(Error::other)
+				.wrap_err_with(|| format!(r#"Failed to parse the string "{value}" as a URL."#))?;
 
-			match url.scheme() {
-				// Handle the `tangram` scheme.
-				"tangram" => {
-					// Parse the URL's path as a package specifier.
-					let dependency_specifier = url.path().parse().with_context(|| {
+			if url.scheme() == "tangram" {
+				// Parse the URL's path as a package specifier.
+				let dependency_specifier =
+					url.path().parse().map_err(Error::other).wrap_err_with(|| {
 						format!(
 							r#"Failed to parse the path "{}" as a module dependency specifier."#,
 							url.path()
 						)
 					})?;
-					Ok(Specifier::Dependency(dependency_specifier))
-				},
-
-				// All other schemes are invalid.
-				_ => bail!(r#"The URL "{url}" has an invalid scheme."#),
+				Ok(Specifier::Dependency(dependency_specifier))
+			} else {
+				return_error!(r#"The URL "{url}" has an invalid scheme."#)
 			}
 		}
 	}

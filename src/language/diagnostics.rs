@@ -1,6 +1,6 @@
 use super::{service, Location};
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	module, Instance,
 };
 use std::{collections::BTreeMap, sync::Arc};
@@ -33,7 +33,7 @@ impl Instance {
 		let response = self.language_service_request(request).await?;
 
 		// Get the response.
-		let service::Response::Diagnostics(response) = response else { bail!("Unexpected response type.") };
+		let service::Response::Diagnostics(response) = response else { return_error!("Unexpected response type.") };
 
 		// Get the result the response.
 		let service::diagnostics::Response { diagnostics } = response;

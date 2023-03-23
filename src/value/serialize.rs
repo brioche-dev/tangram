@@ -1,5 +1,5 @@
 use super::Value;
-use crate::error::{bail, Result};
+use crate::error::{return_error, Result};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 impl Value {
@@ -10,7 +10,7 @@ impl Value {
 		// Read the version.
 		let version = reader.read_u8()?;
 		if version != 0 {
-			bail!(r#"Cannot deserialize value with version "{version}"."#);
+			return_error!(r#"Cannot deserialize value with version "{version}"."#);
 		}
 
 		// Deserialize the value.

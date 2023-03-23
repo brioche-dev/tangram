@@ -3,8 +3,7 @@ use crate::{
 	blob,
 	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
-	error::Error,
-	error::{bail, Context, Result},
+	error::{return_error, Error, Result, WrapErr},
 	file::File,
 	hash,
 	path::Path,
@@ -31,24 +30,26 @@ impl Instance {
 		let artifact_hash = if metadata.is_dir() {
 			self.check_in_directory(path, &metadata)
 				.await
-				.with_context(|| {
+				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to cache the directory at path "{path}"."#)
 				})?
 		} else if metadata.is_file() {
-			self.check_in_file(path, &metadata).await.with_context(|| {
-				let path = path.display();
-				format!(r#"Failed to check in the file at path "{path}"."#)
-			})?
+			self.check_in_file(path, &metadata)
+				.await
+				.wrap_err_with(|| {
+					let path = path.display();
+					format!(r#"Failed to check in the file at path "{path}"."#)
+				})?
 		} else if metadata.is_symlink() {
 			self.check_in_symlink(path, &metadata)
 				.await
-				.with_context(|| {
+				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to cache the symlink at path "{path}"."#)
 				})?
 		} else {
-			bail!("The path must point to a directory, file, or symlink.")
+			return_error!("The path must point to a directory, file, or symlink.")
 		};
 
 		Ok(artifact_hash)
@@ -60,17 +61,17 @@ impl Instance {
 		_metadata: &Metadata,
 	) -> Result<artifact::Hash> {
 		// Read the contents of the directory.
-		let permit = self.file_semaphore.acquire().await.unwrap();
+		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 		let mut read_dir = tokio::fs::read_dir(path)
 			.await
-			.context("Failed to read the directory.")?;
+			.wrap_err("Failed to read the directory.")?;
 		let mut entry_names = Vec::new();
 		while let Some(entry) = read_dir.next_entry().await? {
 			// Get the entry's file name.
 			let file_name = entry
 				.file_name()
 				.to_str()
-				.context("All file names must be valid UTF-8.")?
+				.wrap_err("All file names must be valid UTF-8.")?
 				.to_owned();
 
 			// Ignore the entry if it is the referenced artifacts directory.
@@ -120,7 +121,7 @@ impl Instance {
 		}
 
 		// Get a file system permit.
-		let permit = self.file_semaphore.acquire().await.unwrap();
+		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 
 		// Compute the file's blob hash.
 		let mut file = tokio::fs::File::open(path).await?;
@@ -175,8 +176,8 @@ impl Instance {
 		_metadata: &Metadata,
 	) -> Result<artifact::Hash> {
 		// Read the symlink.
-		let permit = self.file_semaphore.acquire().await.unwrap();
-		let target = tokio::fs::read_link(path).await.with_context(|| {
+		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
+		let target = tokio::fs::read_link(path).await.wrap_err_with(|| {
 			format!(
 				r#"Failed to read the symlink at path "{}"."#,
 				path.display()
@@ -199,9 +200,9 @@ impl Instance {
 			let target: Path = target_in_checkouts_path
 				.as_os_str()
 				.to_str()
-				.context("The symlink target was not valid UTF-8.")?
+				.wrap_err("The symlink target was not valid UTF-8.")?
 				.parse()
-				.context("The target is not a valid path.")?;
+				.wrap_err("The target is not a valid path.")?;
 
 			// Get the path components.
 			let mut components = target.components.iter().peekable();
@@ -209,10 +210,11 @@ impl Instance {
 			// Parse the hash from the first component.
 			let artifact_hash: artifact::Hash = components
 				.next()
-				.context("Invalid symlink.")?
+				.wrap_err("Invalid symlink.")?
 				.as_str()
 				.parse()
-				.context("Failed to parse the path component as a hash.")?;
+				.map_err(Error::other)
+				.wrap_err("Failed to parse the path component as a hash.")?;
 
 			// Collect the remaining components to get the path within the referenced artifact.
 			let path = if components.peek().is_some() {
@@ -231,13 +233,16 @@ impl Instance {
 				.into_os_string()
 				.into_string()
 				.ok()
-				.context("The symlink target was not valid UTF-8.")?;
+				.wrap_err("The symlink target was not valid UTF-8.")?;
 
 			Artifact::Symlink(Symlink { target })
 		};
 
 		// Add the artifact.
-		let artifact_hash = self.add_artifact(&artifact).await?;
+		let artifact_hash = self
+			.add_artifact(&artifact)
+			.await
+			.wrap_err("Failed to add the artifact.")?;
 
 		Ok(artifact_hash)
 	}

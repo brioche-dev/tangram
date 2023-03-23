@@ -6,7 +6,7 @@ use crate::{
 	artifact::{self, Artifact},
 	blob,
 	checksum::{self, Checksum},
-	error::{bail, Context, Result},
+	error::{return_error, Error, Result, WrapErr},
 	language::Position,
 	module,
 	operation::{self, Operation},
@@ -17,6 +17,7 @@ use crate::{
 use itertools::Itertools;
 use num::ToPrimitive;
 use std::{future::Future, rc::Rc, sync::Arc};
+use tokio::io::AsyncReadExt;
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn syscall(
@@ -26,11 +27,14 @@ pub fn syscall(
 ) {
 	match syscall_inner(scope, &args) {
 		Ok(value) => {
+			// Set the return value.
 			return_value.set(value);
 		},
+
 		Err(error) => {
-			let error = v8::String::new(scope, &error.to_string()).unwrap();
-			scope.throw_exception(error.into());
+			// Throw the exception.
+			let exception = error.to_exception(scope);
+			scope.throw_exception(exception);
 		},
 	}
 }
@@ -40,8 +44,9 @@ fn syscall_inner<'s>(
 	args: &v8::FunctionCallbackArguments,
 ) -> Result<v8::Local<'s, v8::Value>> {
 	// Get the syscall name.
-	let name: String =
-		serde_v8::from_v8(scope, args.get(0)).context("Failed to deserialize the syscall name.")?;
+	let name: String = serde_v8::from_v8(scope, args.get(0))
+		.map_err(Error::other)
+		.wrap_err("Failed to deserialize the syscall name.")?;
 
 	// Invoke the syscall.
 	match name.as_str() {
@@ -63,7 +68,7 @@ fn syscall_inner<'s>(
 			syscall_sync(scope, args, syscall_get_current_package_instance_hash)
 		},
 		"get_current_export_name" => syscall_sync(scope, args, syscall_get_current_export_name),
-		_ => bail!(r#"Unknown syscall "{name}"."#),
+		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
@@ -106,7 +111,9 @@ fn syscall_decode_utf8(
 ) -> Result<String> {
 	let (bytes,) = args;
 	let bytes = bytes::Bytes::from(bytes);
-	let string = String::from_utf8(bytes.into()).context("Failed to decode the bytes as UTF-8.")?;
+	let string = String::from_utf8(bytes.into())
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the bytes as UTF-8.")?;
 	Ok(string)
 }
 
@@ -120,7 +127,7 @@ async fn syscall_get_blob(tg: Arc<Instance>, args: (blob::Hash,)) -> Result<serd
 	let (blob_hash,) = args;
 	let mut blob = tg.get_blob(blob_hash).await?;
 	let mut bytes = Vec::new();
-	tokio::io::copy(&mut blob, &mut bytes).await?;
+	blob.read_to_end(&mut bytes).await?;
 	let output = serde_v8::ZeroCopyBuf::ToV8(Some(bytes.into_boxed_slice()));
 	Ok(output)
 }
@@ -206,7 +213,7 @@ fn syscall_get_current_package_instance_hash(
 
 	// Get the package instance hash.
 	let module::Identifier::Normal(module::identifier::Normal { source : module::identifier::Source::Instance(package_instance_hash), .. }) = module_identifier else {
-		bail!("The module identifier must be a normal module whose source is a package instance.");
+		return_error!("The module identifier must be a normal module whose source is a package instance.");
 	};
 
 	Ok(package_instance_hash)
@@ -251,7 +258,7 @@ fn syscall_get_current_export_name(
 	} else if line.starts_with("export let") {
 		line.split_whitespace().nth(2).unwrap().to_owned()
 	} else {
-		bail!("Invalid usage of tg.function.");
+		return_error!("Invalid usage of tg.function.");
 	};
 
 	Ok(name)
@@ -296,13 +303,17 @@ where
 	let args = v8::Array::new_with_elements(scope, args.as_slice());
 
 	// Deserialize the args.
-	let args = serde_v8::from_v8(scope, args.into()).context("Failed to deserialize the args.")?;
+	let args = serde_v8::from_v8(scope, args.into())
+		.map_err(Error::other)
+		.wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
 	let value = f(scope, state, args)?;
 
 	// Serialize the value.
-	let value = serde_v8::to_v8(scope, &value).context("Failed to serialize the value.")?;
+	let value = serde_v8::to_v8(scope, &value)
+		.map_err(Error::other)
+		.wrap_err("Failed to serialize the value.")?;
 
 	Ok(value)
 }
@@ -378,7 +389,8 @@ where
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 		let args = v8::Local::new(&mut context_scope, args);
 		serde_v8::from_v8(&mut context_scope, args.into())
-			.context("Failed to deserialize the args.")?
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the args.")?
 	};
 
 	// Call the function.
@@ -391,8 +403,9 @@ where
 		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
 		let context = v8::Local::new(&mut handle_scope, &context);
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-		let value =
-			serde_v8::to_v8(&mut context_scope, value).context("Failed to serialize the value.")?;
+		let value = serde_v8::to_v8(&mut context_scope, value)
+			.map_err(Error::other)
+			.wrap_err("Failed to serialize the value.")?;
 		v8::Global::new(&mut context_scope, value)
 	};
 

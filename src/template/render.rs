@@ -1,7 +1,7 @@
 use super::{Component, Template};
 use crate::{
 	artifact::{self, Artifact},
-	error::{bail, Context, Error, Result},
+	error::{return_error, Error, Result, WrapErr},
 	util::fs,
 	Instance,
 };
@@ -64,7 +64,7 @@ impl Instance {
 						// Get the host path as a string.
 						let string = artifact_host_path
 							.to_str()
-							.context("The path must be valid UTF-8.")?
+							.wrap_err("The path must be valid UTF-8.")?
 							.to_owned();
 
 						// Collect all referenced artifact hashes and paths.
@@ -98,7 +98,7 @@ impl Instance {
 
 					Component::Placeholder(placeholder) => {
 						let Some(placeholder_value) = placeholder_values.get(&placeholder.name).cloned() else {
-							bail!(r#"Invalid placeholder "{}"."#, placeholder.name);
+							return_error!(r#"Invalid placeholder "{}"."#, placeholder.name);
 						};
 						let string = placeholder_value.guest_path.display().to_string();
 						let mut paths = HashSet::default();

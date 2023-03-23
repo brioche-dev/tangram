@@ -1,6 +1,6 @@
 use super::{Hash, Operation};
 use crate::{
-	error::{bail, Context, Result},
+	error::{Result, WrapErr},
 	Instance,
 };
 
@@ -8,7 +8,7 @@ impl Instance {
 	pub fn get_operation_local(&self, hash: Hash) -> Result<Operation> {
 		let operation = self
 			.try_get_operation_local(hash)?
-			.with_context(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
 		Ok(operation)
 	}
 
@@ -18,7 +18,7 @@ impl Instance {
 	{
 		let operation = self
 			.try_get_operation_local_with_txn(txn, hash)?
-			.with_context(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
 		Ok(operation)
 	}
 
@@ -47,7 +47,7 @@ impl Instance {
 				Ok(Some(value))
 			},
 			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => bail!(error),
+			Err(error) => Err(error.into()),
 		}
 	}
 }

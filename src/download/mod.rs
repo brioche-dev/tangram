@@ -1,6 +1,8 @@
+pub use self::error::Error;
 use crate::checksum::Checksum;
 use url::Url;
 
+mod error;
 mod run;
 mod unpack;
 

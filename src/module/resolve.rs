@@ -4,7 +4,7 @@ use super::{
 	Identifier, Specifier,
 };
 use crate::{
-	error::{bail, Context, Result},
+	error::{return_error, Result, WrapErr},
 	package,
 	path::Path,
 	util::fs,
@@ -58,7 +58,7 @@ impl Instance {
 			},
 
 			Identifier::Artifact(_) => {
-				bail!("Artifact modules cannot have imports.");
+				return_error!("Artifact modules cannot have imports.");
 			},
 
 			Identifier::Lib(referrer) => {
@@ -101,7 +101,7 @@ impl Instance {
 				.await
 			},
 
-			_ => bail!(r#"Cannot resolve a package specifier from referrer "{referrer}"."#),
+			_ => return_error!(r#"Cannot resolve a package specifier from referrer "{referrer}"."#),
 		}
 	}
 
@@ -136,7 +136,7 @@ impl Instance {
 		let specifier_package_instance_hash = referrer
 			.dependencies
 			.get(specifier)
-			.context("Expected the referrer's dependencies to contain the specifier.")?;
+			.wrap_err("Expected the referrer's dependencies to contain the specifier.")?;
 
 		// Create the module identifier.
 		let module_identifier =

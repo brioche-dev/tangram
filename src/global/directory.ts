@@ -126,32 +126,35 @@ export class Directory {
 		return getArtifactHash(this);
 	}
 
-	async get(name: PathLike): Promise<Artifact> {
-		let artifact = await this.tryGet(name);
-		assert(artifact !== null, `Failed to get directory entry "${name}".`);
+	async get(pathLike: PathLike): Promise<Artifact> {
+		let artifact = await this.tryGet(pathLike);
+		assert(
+			artifact !== undefined,
+			`Failed to get directory entry "${pathLike}".`,
+		);
 		return artifact;
 	}
 
-	async tryGet(pathLike: PathLike): Promise<Artifact | null> {
+	async tryGet(pathLike: PathLike): Promise<Artifact | undefined> {
 		let artifact: Artifact = this;
 		for (let component of path(pathLike).components()) {
 			assert(component.kind === "normal");
 			if (!(artifact instanceof Directory)) {
-				return null;
+				return undefined;
 			}
 			let hash = artifact.#entries.get(component.value);
 			if (!hash) {
-				return null;
+				return undefined;
 			}
 			artifact = await getArtifact(hash);
 		}
 		return artifact;
 	}
 
-	async getEntries(): Promise<Record<string, Artifact>> {
-		let entries: Record<string, Artifact> = {};
+	async entries(): Promise<Map<string, Artifact>> {
+		let entries = new Map();
 		for await (let [name, artifact] of this) {
-			entries[name] = artifact;
+			entries.set(name, artifact);
 		}
 		return entries;
 	}

@@ -1,6 +1,6 @@
 use crate::{
 	artifact::{self, Artifact},
-	error::{Context, Error, Result},
+	error::{Error, Result, WrapErr},
 	path::Path,
 	Instance,
 };
@@ -44,9 +44,9 @@ impl Directory {
 		let name = path
 			.components
 			.first()
-			.context("Expected the path to have at least one component.")?
+			.wrap_err("Expected the path to have at least one component.")?
 			.as_normal()
-			.context("Expected the path component to be a normal component.")?;
+			.wrap_err("Expected the path component to be a normal component.")?;
 
 		// Collect the trailing path.
 		let trailing_path: Path = path.components.iter().skip(1).cloned().collect();
@@ -58,7 +58,7 @@ impl Directory {
 			let mut child = if let Some(child_hash) = self.entries.get(name) {
 				tg.get_artifact_local(*child_hash)?
 					.into_directory()
-					.context("Expected the existing entry to be a directory.")?
+					.wrap_err("Expected the existing entry to be a directory.")?
 			} else {
 				Directory::new()
 			};
@@ -79,7 +79,7 @@ impl Directory {
 	pub async fn get(&self, tg: &Instance, path: &Path) -> Result<Artifact> {
 		match self.try_get(tg, path).await {
 			Ok(Some(artifact)) => Ok(artifact),
-			Ok(None) => Err(Error::msg("Expected an artifact.")),
+			Ok(None) => Err(Error::message("Expected an artifact.")),
 			Err(error) => Err(error),
 		}
 	}
@@ -94,7 +94,7 @@ impl Directory {
 			// Get the path component name or return an error for an invalid path.
 			let name = component
 				.as_normal()
-				.context("Expected the path component to be normal.")?;
+				.wrap_err("Expected the path component to be normal.")?;
 
 			// The artifact must be a directory.
 			let Some(directory) = artifact.as_directory() else {
@@ -109,7 +109,7 @@ impl Directory {
 			// Get the artifact.
 			artifact = tg
 				.get_artifact_local(artifact_hash)
-				.context("Failed to get the artifact.")?;
+				.wrap_err("Failed to get the artifact.")?;
 		}
 
 		Ok(Some(artifact))

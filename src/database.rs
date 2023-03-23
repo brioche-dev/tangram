@@ -37,7 +37,7 @@ impl Database {
 		let artifacts = env.open_db("artifacts".into())?;
 
 		// Open the artifact trackers database.
-		let artifact_trackers = env.open_db("paths".into())?;
+		let artifact_trackers = env.open_db("artifact_trackers".into())?;
 
 		// Open the package instances database.
 		let package_instances = env.open_db("package_instances".into())?;

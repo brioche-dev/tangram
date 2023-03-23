@@ -1,5 +1,5 @@
 use crate::{
-	error::{bail, Context, Error, Result},
+	error::{return_error, Error, Result, WrapErr},
 	Instance,
 };
 use futures::{future, FutureExt};
@@ -37,7 +37,7 @@ impl Instance {
 		// Create a task to send outgoing messages.
 		let outgoing_message_task = tokio::spawn(async move {
 			while let Some(outgoing_message) = outgoing_message_receiver.recv().await {
-				let body = serde_json::to_string(&outgoing_message)?;
+				let body = serde_json::to_string(&outgoing_message).map_err(Error::other)?;
 				let head = format!("Content-Length: {}\r\n\r\n", body.len());
 				stdout.write_all(head.as_bytes()).await?;
 				stdout.write_all(body.as_bytes()).await?;
@@ -89,32 +89,35 @@ where
 		let n = reader
 			.read_line(&mut line)
 			.await
-			.context("Failed to read a line.")?;
+			.wrap_err("Failed to read a line.")?;
 		if n == 0 {
 			break;
 		}
 		if !line.ends_with("\r\n") {
-			bail!("Unexpected line ending.");
+			return_error!("Unexpected line ending.");
 		}
 		let line = &line[..line.len() - 2];
 		if line.is_empty() {
 			break;
 		}
 		let mut components = line.split(": ");
-		let key = components.next().context("Expected a header name.")?;
-		let value = components.next().context("Expected a header value.")?;
+		let key = components.next().wrap_err("Expected a header name.")?;
+		let value = components.next().wrap_err("Expected a header value.")?;
 		headers.insert(key.to_owned(), value.to_owned());
 	}
 
 	// Read and deserialize the message.
 	let content_length: usize = headers
 		.get("Content-Length")
-		.context("Expected a Content-Length header.")?
+		.wrap_err("Expected a Content-Length header.")?
 		.parse()
-		.context("Failed to parse the Content-Length header value.")?;
+		.map_err(Error::other)
+		.wrap_err("Failed to parse the Content-Length header value.")?;
 	let mut message: Vec<u8> = vec![0; content_length];
 	reader.read_exact(&mut message).await?;
-	let message = serde_json::from_slice(&message).context("Failed to deserialize the message.")?;
+	let message = serde_json::from_slice(&message)
+		.map_err(Error::other)
+		.wrap_err("Failed to deserialize the message.")?;
 
 	Ok(message)
 }
@@ -250,7 +253,7 @@ async fn handle_request<T, F, Fut>(sender: &Sender, request: jsonrpc::Request, h
 where
 	T: lsp::request::Request,
 	F: Fn(T::Params) -> Fut,
-	Fut: Future<Output = Result<T::Result>>,
+	Fut: Future<Output = crate::error::Result<T::Result>>,
 {
 	// Deserialize the params.
 	let Ok(params) = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null)) else {
@@ -289,10 +292,11 @@ async fn handle_notification<T, F, Fut>(sender: &Sender, request: jsonrpc::Notif
 where
 	T: lsp::notification::Notification,
 	F: Fn(Sender, T::Params) -> Fut,
-	Fut: Future<Output = Result<()>>,
+	Fut: Future<Output = crate::error::Result<()>>,
 {
 	let params = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
-		.context("Failed to deserialize the request params.")
+		.map_err(Error::other)
+		.wrap_err("Failed to deserialize the request params.")
 		.unwrap();
 	let result = handler(sender.clone(), params).await;
 	if let Err(error) = result {

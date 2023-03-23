@@ -36,7 +36,6 @@ export let isValue = (value: unknown): value is Value => {
 		value instanceof Reference ||
 		value instanceof Template ||
 		value instanceof Array ||
-		value instanceof Map ||
 		typeof value === "object"
 	);
 };

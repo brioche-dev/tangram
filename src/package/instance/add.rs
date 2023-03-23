@@ -1,7 +1,7 @@
 use super::{Hash, Instance};
 use crate::{
 	artifact,
-	error::{bail, Result},
+	error::{return_error, Result},
 	package::dependency,
 };
 use lmdb::Transaction;
@@ -23,7 +23,16 @@ pub enum Outcome {
 }
 
 impl crate::Instance {
-	/// Add a pacakge after ensuring all its references are present.
+	/// Add a package instance.
+	pub fn add_package_instance(&self, package_instance: &Instance) -> Result<Hash> {
+		if let Outcome::Added { hash } = self.try_add_package_instance(package_instance)? {
+			Ok(hash)
+		} else {
+			return_error!("Failed to add the package instance.")
+		}
+	}
+
+	/// Attempt to add a package instance.
 	pub fn try_add_package_instance(&self, package_instance: &Instance) -> Result<Outcome> {
 		// Ensure the package is present.
 		let exists = self.artifact_exists_local(package_instance.package_hash)?;
@@ -70,14 +79,5 @@ impl crate::Instance {
 		txn.commit()?;
 
 		Ok(Outcome::Added { hash })
-	}
-}
-
-impl crate::Instance {
-	pub fn add_package_instance(&self, package_instance: &Instance) -> Result<Hash> {
-		match self.try_add_package_instance(package_instance)? {
-			Outcome::Added { hash } => Ok(hash),
-			_ => bail!("Failed to add the package instance."),
-		}
 	}
 }

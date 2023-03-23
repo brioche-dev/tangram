@@ -1,7 +1,7 @@
 use super::Client;
 use crate::{
 	blob,
-	error::{Context, Result},
+	error::{Error, Result, WrapErr},
 };
 use futures::TryStreamExt;
 use std::{pin::Pin, sync::Arc};
@@ -14,7 +14,11 @@ impl Client {
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
 		// Get a permit.
-		let _permit = self.socket_semaphore.acquire().await?;
+		let _permit = self
+			.socket_semaphore
+			.acquire()
+			.await
+			.map_err(Error::other)?;
 
 		// Create a stream for the body.
 		let stream = tokio_util::io::ReaderStream::new(reader);
@@ -36,9 +40,11 @@ impl Client {
 		// Read the response.
 		let response = response.bytes().await?;
 		let blob_hash = String::from_utf8(response.to_vec())
-			.context("Failed to read the response as UTF-8.")?
+			.map_err(Error::other)
+			.wrap_err("Failed to read the response as UTF-8.")?
 			.parse()
-			.context("Failed to parse the blob hash.")?;
+			.map_err(Error::other)
+			.wrap_err("Failed to parse the blob hash.")?;
 
 		Ok(blob_hash)
 	}
@@ -47,7 +53,10 @@ impl Client {
 impl Client {
 	pub async fn get_blob(&self, blob_hash: blob::Hash) -> Result<impl AsyncRead> {
 		// Get a permit.
-		let permit = Arc::clone(&self.socket_semaphore).acquire_owned().await?;
+		let permit = Arc::clone(&self.socket_semaphore)
+			.acquire_owned()
+			.await
+			.map_err(Error::other)?;
 
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");

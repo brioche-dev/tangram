@@ -1,6 +1,6 @@
 use crate::{
 	constants::ROOT_MODULE_FILE_NAME,
-	error::{bail, ensure, Context, Error, Result},
+	error::{return_error, Error, Result, WrapErr},
 	package,
 	path::Path,
 	util::fs,
@@ -115,7 +115,7 @@ impl Identifier {
 		}
 		if !found {
 			let path = path.display();
-			bail!(r#"Could not find the package for path "{path}"."#,);
+			return_error!(r#"Could not find the package for path "{path}"."#,);
 		}
 
 		// Get the module path by stripping the package path.
@@ -126,9 +126,9 @@ impl Identifier {
 			.into_os_string()
 			.into_string()
 			.ok()
-			.context("The module path was not valid UTF-8.")?
+			.wrap_err("The module path was not valid UTF-8.")?
 			.parse()
-			.context("The module path was not a valid path.")?;
+			.wrap_err("The module path was not a valid path.")?;
 
 		// Create the module identifier.
 		let module_identifier = Identifier::Normal(Normal {
@@ -161,12 +161,11 @@ impl TryFrom<Url> for Identifier {
 
 	fn try_from(value: Url) -> Result<Self, Self::Error> {
 		// Ensure the scheme is "tangram".
-		ensure!(
-			value.scheme() == "tangram",
-			"The URL has an invalid scheme."
-		);
+		if value.scheme() != "tangram" {
+			return_error!("The URL has an invalid scheme.");
+		}
 
-		let domain = value.domain().context("The URL must have a domain.")?;
+		let domain = value.domain().wrap_err("The URL must have a domain.")?;
 
 		let identifier = match domain {
 			"normal" => {
@@ -174,16 +173,19 @@ impl TryFrom<Url> for Identifier {
 				let path = value
 					.path()
 					.strip_prefix('/')
-					.context(r#"The path must begin with a "/"."#)?
+					.wrap_err(r#"The path must begin with a "/"."#)?
 					.strip_suffix(".ts")
-					.context(r#"The path must end in ".ts"."#)?;
+					.wrap_err(r#"The path must end in ".ts"."#)?;
 
 				// Deserialize the path as hex.
-				let data = hex::decode(path).context("Failed to deserialize the path as hex.")?;
+				let data = hex::decode(path)
+					.map_err(Error::other)
+					.wrap_err("Failed to deserialize the path as hex.")?;
 
 				// Deserialize the data.
 				let identifier = serde_json::from_slice(&data)
-					.context("Failed to deserialize the identifier.")?;
+					.map_err(Error::other)
+					.wrap_err("Failed to deserialize the identifier.")?;
 
 				Identifier::Normal(identifier)
 			},
@@ -193,16 +195,19 @@ impl TryFrom<Url> for Identifier {
 				let path = value
 					.path()
 					.strip_prefix('/')
-					.context(r#"The path must begin with a "/"."#)?
+					.wrap_err(r#"The path must begin with a "/"."#)?
 					.strip_suffix(".ts")
-					.context(r#"The path must end in ".ts"."#)?;
+					.wrap_err(r#"The path must end in ".ts"."#)?;
 
 				// Deserialize the path as hex.
-				let data = hex::decode(path).context("Failed to deserialize the path as hex.")?;
+				let data = hex::decode(path)
+					.map_err(Error::other)
+					.wrap_err("Failed to deserialize the path as hex.")?;
 
 				// Deserialize the data.
 				let identifier = serde_json::from_slice(&data)
-					.context("Failed to deserialize the identifier.")?;
+					.map_err(Error::other)
+					.wrap_err("Failed to deserialize the identifier.")?;
 
 				Identifier::Artifact(identifier)
 			},
@@ -212,14 +217,15 @@ impl TryFrom<Url> for Identifier {
 				let path = value
 					.path()
 					.strip_prefix('/')
-					.context(r#"The path must begin with a "/"."#)?
+					.wrap_err(r#"The path must begin with a "/"."#)?
 					.parse()
-					.context("Invalid path.")?;
+					.map_err(Error::other)
+					.wrap_err("Invalid path.")?;
 
 				Identifier::Lib(Lib { path })
 			},
 
-			_ => bail!("The URL has an invalid domain."),
+			_ => return_error!("The URL has an invalid domain."),
 		};
 
 		Ok(identifier)
@@ -238,7 +244,7 @@ impl std::str::FromStr for Identifier {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let url: Url = s.parse()?;
+		let url: Url = s.parse().map_err(Error::other)?;
 		let module_identifier = url.try_into()?;
 		Ok(module_identifier)
 	}

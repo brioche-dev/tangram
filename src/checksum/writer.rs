@@ -2,26 +2,26 @@ use super::{Algorithm, Checksum};
 
 #[derive(Debug)]
 pub enum Writer {
-	Sha256(sha2::Sha256),
 	Blake3(Box<blake3::Hasher>),
+	Sha256(sha2::Sha256),
 }
 
 impl Writer {
 	#[must_use]
 	pub fn new(algorithm: Algorithm) -> Writer {
 		match algorithm {
-			Algorithm::Sha256 => Writer::Sha256(sha2::Sha256::default()),
 			Algorithm::Blake3 => Writer::Blake3(Box::new(blake3::Hasher::new())),
+			Algorithm::Sha256 => Writer::Sha256(sha2::Sha256::default()),
 		}
 	}
 
 	pub fn update(&mut self, data: impl AsRef<[u8]>) {
 		match self {
-			Writer::Sha256(sha256) => {
-				sha2::Digest::update(sha256, data);
-			},
 			Writer::Blake3(hasher) => {
 				hasher.update(data.as_ref());
+			},
+			Writer::Sha256(sha256) => {
+				sha2::Digest::update(sha256, data);
 			},
 		}
 	}
@@ -29,13 +29,13 @@ impl Writer {
 	#[must_use]
 	pub fn finalize(self) -> Checksum {
 		match self {
-			Writer::Sha256(sha256) => {
-				let value = sha2::Digest::finalize(sha256);
-				Checksum::Sha256(value.into())
-			},
 			Writer::Blake3(hasher) => {
 				let value = hasher.finalize();
 				Checksum::Blake3(value.into())
+			},
+			Writer::Sha256(sha256) => {
+				let value = sha2::Digest::finalize(sha256);
+				Checksum::Sha256(value.into())
 			},
 		}
 	}

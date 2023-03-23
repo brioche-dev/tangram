@@ -8,25 +8,11 @@ impl Id {
 	}
 }
 
-#[derive(Debug)]
-pub struct ParseIdError;
-
-impl std::fmt::Display for ParseIdError {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "Failed to parse ID.")?;
-		Ok(())
-	}
-}
-
-impl std::error::Error for ParseIdError {}
-
 impl std::str::FromStr for Id {
-	type Err = ParseIdError;
+	type Err = std::num::ParseIntError;
+
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		if s.len() != 32 {
-			return Err(ParseIdError);
-		}
-		let id = u128::from_str_radix(s, 16).map_err(|_| ParseIdError)?;
+		let id = u128::from_str_radix(s, 16)?;
 		let id = Id(id);
 		Ok(id)
 	}

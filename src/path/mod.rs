@@ -1,8 +1,5 @@
 pub use self::component::Component;
-use crate::{
-	error::{bail, Error},
-	util::fs,
-};
+use crate::{error::Error, util::fs};
 use itertools::Itertools;
 
 pub mod component;
@@ -79,22 +76,9 @@ impl std::fmt::Display for Path {
 		// Join the components with the path separator.
 		let string = self.components.iter().map(Component::as_str).join("/");
 
-		match self.components.as_slice() {
-			// If the path is empty, then write ".".
-			[] => {
-				write!(f, ".")?;
-			},
+		// Write the string.
+		write!(f, "{string}")?;
 
-			// If the path starts with a parent dir component, then just write the path.
-			[Component::ParentDir, ..] => {
-				write!(f, "{string}")?;
-			},
-
-			// If the path starts with a normal component, then write "./" before the path.
-			[Component::Normal(_), ..] => {
-				write!(f, "./{string}")?;
-			},
-		}
 		Ok(())
 	}
 }
@@ -108,23 +92,14 @@ impl std::str::FromStr for Path {
 			components: Vec::new(),
 		};
 
-		// Absolute paths are not allowed.
-		if string.starts_with('/') {
-			bail!("Absolute paths are not allowed.");
-		}
-
 		// Split the string by the path separator.
 		let components = string.split('/');
 
 		// Push each component.
 		for string in components {
 			match string {
-				"" => {
-					bail!("Empty path components are not allowed.");
-				},
-
-				// Ignore current dir components.
-				"." => {},
+				// Ignore empty and current dir components.
+				"" | "." => {},
 
 				// Handle parent dir components.
 				".." => path.push(Component::ParentDir),

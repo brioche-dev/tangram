@@ -1,10 +1,5 @@
 /// <reference lib="es2022" />
 
-declare let console: {
-	/** Write to the log. */
-	log: (...args: Array<unknown>) => void;
-};
-
 /**
  * Create a Tangram template with a JavaScript tagged template.
  */
@@ -14,13 +9,22 @@ declare var t: (
 ) => Promise<tg.Template>;
 
 declare namespace tg {
+	// Array.
+
+	export type MaybeArray<T> = T | Array<T>;
+
+	export type ArrayLike<T> = Iterable<T>;
+
+	export let array: <T>(value: ArrayLike<T>) => Array<T>;
+
 	// Artifact.
 
+	// eslint-disable-next-line
+	const artifactHashSymbol: unique symbol;
+
+	export type ArtifactHash = string & { [artifactHashSymbol]: unknown };
+
 	export type Artifact = Directory | File | Symlink | Reference;
-
-	// Artifact hash.
-
-	export type ArtifactHash = string;
 
 	// Checksum.
 
@@ -51,17 +55,17 @@ declare namespace tg {
 	export let directory: (...args: Array<DirectoryArg>) => Promise<Directory>;
 
 	export class Directory {
-		/** Get the hash of this `Directory` artifact. This hash covers all child and ancestor artifacts. */
+		/** Get this directory's artifact hash. */
 		hash(): Promise<ArtifactHash>;
 
-		/** Try to get the child at the specified path. This method returns `null` if the path does not exist. */
-		tryGet(name: PathLike): Promise<Artifact | null>;
+		/** Try to get the child at the specified path. This method returns `undefined` if the path does not exist. */
+		tryGet(pathLike: PathLike): Promise<Artifact | undefined>;
 
 		/** Get the child at the specified path. This method throws an error if the path does not exist. */
-		get(name: PathLike): Promise<Artifact>;
+		get(pathLike: PathLike): Promise<Artifact>;
 
 		/** Get this directory's entries. */
-		getEntries(): Promise<Record<string, Artifact>>;
+		entries(): Promise<Map<string, Artifact>>;
 
 		/** Iterate over the names and hashes of this directory's entries. */
 		[Symbol.iterator](): Iterator<[string, ArtifactHash]>;
@@ -112,25 +116,37 @@ declare namespace tg {
 	export let file: (fileLike: FileLike, options?: FileOptions) => Promise<File>;
 
 	export class File {
-		/** Get the hash of this `File` artifact. This hash covers the contents of the file. */
+		/** Get the this file's artifact hash. */
 		hash(): Promise<ArtifactHash>;
 
 		/** Get this file's contents as a `Uint8Array`. */
-		getBytes(): Promise<Uint8Array>;
+		blob(): Promise<Uint8Array>;
 
 		/** Get this file's contents as a string. This method throws an error if the contents are not valid UTF-8. */
-		getString(): Promise<string>;
+		text(): Promise<string>;
 
-		/** Get this file's executable flag. */
+		/** Get this file's executable bit. */
 		executable(): boolean;
 	}
 
 	// Function.
 
+	export interface Function<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	> {
+		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
+	}
+
+	export class Function<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	> extends globalThis.Function {}
+
 	/** Create a Tangram function. */
 	let function_: <A extends Array<Value>, R extends Value>(
 		f: (...args: A) => MaybePromise<R>,
-	) => (...args: { [K in keyof A]: Unresolved<A[K]> }) => Promise<R>;
+	) => Function<A, R>;
 	export { function_ as function };
 
 	// Artifact type guards.
@@ -158,6 +174,12 @@ declare namespace tg {
 	/** Write to the log. */
 	export let log: (...args: Array<unknown>) => void;
 
+	// Map.
+
+	export type MapLike<K extends string, V> = Record<K, V> | Map<K, V>;
+
+	export let map: <K extends string, V>(value: MapLike<K, V>) => Map<K, V>;
+
 	// Path.
 
 	export type PathLike = string | Array<PathComponent> | Path;
@@ -180,9 +202,6 @@ declare namespace tg {
 		/** Join this path with another path. */
 		join(other: PathLike): Path;
 
-		/** Normalize this path to produce a path with no redundant `.` and `..` components. Note that normalization does not follow symlinks. */
-		normalize(): Path;
-
 		/** Render this path to a string. */
 		toString(): string;
 	}
@@ -204,6 +223,7 @@ declare namespace tg {
 		env?: Record<string, TemplateLike> | nullish;
 		command: TemplateLike;
 		args?: Array<TemplateLike> | nullish;
+		checksum?: Checksum | nullish;
 		unsafe?: boolean | nullish;
 	};
 
@@ -228,11 +248,11 @@ declare namespace tg {
 	export let reference: (args: ReferenceArgs) => Promise<Reference>;
 
 	export class Reference {
-		/** Get the hash of this `Reference` artifact. This hash covers the referenced artifact plus the reference's path. */
+		/** Get this reference's artifact hash. */
 		hash(): Promise<ArtifactHash>;
 
 		/** Get this reference's artifact. */
-		getArtifact(): Promise<Artifact>;
+		artifact(): Promise<Artifact>;
 
 		/** Get this reference's path. */
 		path(): Path | nullish;
@@ -257,11 +277,11 @@ declare namespace tg {
 		| Artifact
 		| Placeholder
 		| Template
-		? MaybeThunk<MaybePromise<T>>
+		? MaybePromise<T>
 		: T extends Array<infer U extends Value>
-		? MaybeThunk<MaybePromise<Array<Unresolved<U>>>>
+		? MaybePromise<Array<Unresolved<U>>>
 		: T extends { [key: string]: Value }
-		? MaybeThunk<MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>>
+		? MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>
 		: never;
 
 	/**
@@ -289,8 +309,6 @@ declare namespace tg {
 		? Array<Resolved<U>>
 		: T extends { [key: string]: Unresolved<Value> }
 		? { [K in keyof T]: Resolved<T[K]> }
-		: T extends (() => infer U extends Unresolved<Value>)
-		? Resolved<U>
 		: T extends Promise<infer U extends Unresolved<Value>>
 		? Resolved<U>
 		: never;
@@ -304,34 +322,18 @@ declare namespace tg {
 
 	export type MaybePromise<T> = T | PromiseLike<T>;
 
-	export type MaybeArray<T> = T | Array<T>;
-
 	// Symlink.
 
 	/** Create a symlink. */
 	export let symlink: (target: string) => Symlink;
 
 	export class Symlink {
-		/** Get the hash of this `Symlink` artifact. This hash only covers the symlink itself, not the filesystem object it targets. */
+		/** Get this symlink's artifact hash. */
 		hash(): Promise<ArtifactHash>;
 
 		/** Get this symlink's target. */
 		target(): string;
 	}
-
-	// Task.
-
-	type TaskArgs = {
-		shell?: Function;
-		pre?: MaybeArray<Task>;
-		post?: MaybeArray<Task>;
-		interpreter?: string;
-		script: string;
-	};
-
-	class Task {}
-
-	export let task: (args: string | TaskArgs) => Task;
 
 	// Template.
 
@@ -367,4 +369,22 @@ declare namespace tg {
 		| { [key: string]: Value };
 
 	export type nullish = undefined | null;
+}
+
+declare let console: {
+	/** Write to the log. */
+	log: (...args: Array<unknown>) => void;
+};
+
+interface JSON {
+	/**
+	 * Converts a JavaScript Object Notation (JSON) string into an object.
+	 * @param text A valid JSON string.
+	 * @param reviver A function that transforms the results. This function is called for each member of the object.
+	 * If a member contains nested objects, the nested objects are transformed before the parent object is.
+	 */
+	parse(
+		text: string,
+		reviver?: (this: any, key: string, value: any) => any,
+	): unknown;
 }

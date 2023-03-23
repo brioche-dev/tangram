@@ -1,5 +1,5 @@
 use crate::{
-	error::{bail, Context, Result},
+	error::{return_error, Error, Result, WrapErr},
 	util::fs,
 	Instance,
 };
@@ -22,7 +22,8 @@ impl Instance {
 				version
 					.trim()
 					.parse::<usize>()
-					.context("Failed to read the path format version.")?,
+					.map_err(Error::other)
+					.wrap_err("Failed to read the path format version.")?,
 			)
 		} else {
 			None
@@ -32,7 +33,7 @@ impl Instance {
 		if let Some(version) = version {
 			if version >= migrations.len() {
 				let path = path.display();
-				bail!(
+				return_error!(
 					r#"The path "{path}" has run migrations from a newer version of Tangram. Please run `tg upgrade` to upgrade to the latest version of Tangram."#
 				);
 			}

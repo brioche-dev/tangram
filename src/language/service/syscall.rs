@@ -1,5 +1,5 @@
 use crate::{
-	error::{bail, Context, Result},
+	error::{return_error, Error, Result, WrapErr},
 	module, Instance,
 };
 use itertools::Itertools;
@@ -13,11 +13,14 @@ pub fn syscall(
 ) {
 	match syscall_inner(scope, &args) {
 		Ok(value) => {
+			// Set the return value.
 			return_value.set(value);
 		},
+
 		Err(error) => {
-			let error = v8::String::new(scope, &error.to_string()).unwrap();
-			scope.throw_exception(error.into());
+			// Throw an exception.
+			let exception = error.to_exception(scope);
+			scope.throw_exception(exception);
 		},
 	}
 }
@@ -36,7 +39,7 @@ fn syscall_inner<'s>(
 		"log" => syscall_sync(scope, args, syscall_log),
 		"resolve_module" => syscall_sync(scope, args, syscall_resolve_module),
 		"get_module_version" => syscall_sync(scope, args, syscall_get_module_version),
-		_ => bail!(r#"Unknown syscall "{name}"."#),
+		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
@@ -50,7 +53,7 @@ fn syscall_load_module(
 		let text = tg
 			.load_document_or_module(&module_identifier)
 			.await
-			.with_context(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
 		Ok(text)
 	})
 }
@@ -84,7 +87,7 @@ fn syscall_resolve_module(
 		let module_identifier = tg
 			.resolve_module(&specifier, &referrer)
 			.await
-			.with_context(|| {
+			.wrap_err_with(|| {
 				format!(
 					r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer}"."#
 				)
@@ -132,13 +135,17 @@ where
 	let args = v8::Array::new_with_elements(scope, args.as_slice());
 
 	// Deserialize the args.
-	let args = serde_v8::from_v8(scope, args.into()).context("Failed to deserialize the args.")?;
+	let args = serde_v8::from_v8(scope, args.into())
+		.map_err(Error::other)
+		.wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
 	let value = f(&tg, scope, args)?;
 
 	// Serialize the value.
-	let value = serde_v8::to_v8(scope, &value).context("Failed to serialize the value.")?;
+	let value = serde_v8::to_v8(scope, &value)
+		.map_err(Error::other)
+		.wrap_err("Failed to serialize the value.")?;
 
 	Ok(value)
 }

@@ -1,6 +1,6 @@
 use super::{Artifact, Hash};
 use crate::{
-	error::{Context, Error, Result},
+	error::{Error, Result, WrapErr},
 	Instance,
 };
 use lmdb::Transaction;
@@ -22,7 +22,7 @@ impl Instance {
 	pub fn get_artifact_local(&self, artifact_hash: Hash) -> Result<Artifact> {
 		let artifact = self
 			.try_get_artifact_local(artifact_hash)?
-			.with_context(|| {
+			.wrap_err_with(|| {
 				format!(r#"Failed to find the artifact with hash "{artifact_hash}"."#)
 			})?;
 		Ok(artifact)
@@ -38,7 +38,7 @@ impl Instance {
 	{
 		let artifact = self
 			.try_get_artifact_local_with_txn(txn, artifact_hash)?
-			.with_context(|| {
+			.wrap_err_with(|| {
 				format!(r#"Failed to find the artifact with hash "{artifact_hash}"."#)
 			})?;
 		Ok(artifact)

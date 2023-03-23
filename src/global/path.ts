@@ -22,19 +22,13 @@ export class Path {
 			// Create the components.
 			this.#components = [];
 
-			if (pathLike.startsWith("/")) {
-				throw new Error("Absolute paths are not allowed.");
-			}
-
 			// Split the string by the path separator.
 			let components = pathLike.split("/");
 
 			// Push each component.
 			for (let component of components) {
-				if (component === "") {
-					throw new Error("Empty path components are not allowed.");
-				} else if (component === ".") {
-					// Ignore current dir components.
+				if (component === "" || component === ".") {
+					// Ignore empty and current dir components.
 				} else if (component === "..") {
 					this.push({ kind: "parent_dir" });
 				} else {
@@ -83,7 +77,7 @@ export class Path {
 	}
 
 	toString(): string {
-		let string = this.#components
+		return this.#components
 			.map((component) => {
 				switch (component.kind) {
 					case "parent_dir": {
@@ -95,14 +89,5 @@ export class Path {
 				}
 			})
 			.join("/");
-
-		let firstComponent = this.#components[0];
-		if (firstComponent === undefined) {
-			return ".";
-		} else if (firstComponent.kind === "parent_dir") {
-			return string;
-		} else {
-			return `./${string}`;
-		}
 	}
 }

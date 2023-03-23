@@ -16,6 +16,7 @@ use tokio_util::task::LocalPoolHandle;
 use url::Url;
 
 pub mod api;
+pub mod archive;
 pub mod artifact;
 pub mod blob;
 pub mod call;
@@ -85,12 +86,18 @@ pub struct Instance {
 	/// A channel sender to send requests to the language service.
 	language_service_request_sender: std::sync::Mutex<Option<language::service::RequestSender>>,
 
+	/// A map that tracks packages on disk.
+	package_trackers:
+		tokio::sync::RwLock<HashMap<artifact::Hash, fs::PathBuf, fnv::FnvBuildHasher>>,
+
 	/// A task map that deduplicates internal checkouts.
+	#[allow(clippy::type_complexity)]
 	internal_checkouts_task_map:
-		std::sync::Mutex<Option<Arc<TaskMap<artifact::Hash, fs::PathBuf>>>>,
+		std::sync::Mutex<Option<Arc<TaskMap<artifact::Hash, Result<fs::PathBuf>>>>>,
 
 	/// A task map that deduplicates operations.
-	operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Value>>>>,
+	#[allow(clippy::type_complexity)]
+	operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Result<Value>>>>>,
 
 	/// A map that tracks changes to modules in memory.
 	documents:
@@ -165,6 +172,9 @@ impl Instance {
 		// Create the language service request sender.
 		let language_service_request_sender = std::sync::Mutex::new(None);
 
+		// Create the package trackers map.
+		let package_trackers = tokio::sync::RwLock::new(HashMap::default());
+
 		// Create the internal checkouts task map.
 		let internal_checkouts_task_map = std::sync::Mutex::new(None);
 
@@ -195,6 +205,7 @@ impl Instance {
 			runtime_handle,
 			local_pool_handle,
 			language_service_request_sender,
+			package_trackers,
 			internal_checkouts_task_map,
 			operations_task_map,
 			documents,

@@ -1,7 +1,7 @@
 use super::{unpack, Download};
 use crate::{
 	checksum::{self, Checksum},
-	error::{bail, Context, Result},
+	error::{return_error, Error, Result, WrapErr},
 	temp::Temp,
 	util::fs,
 	value::Value,
@@ -14,16 +14,20 @@ use tokio_util::io::{StreamReader, SyncIoBridge};
 impl Instance {
 	pub async fn run_download(&self, download: &Download) -> Result<Value> {
 		// Acquire a file permit.
-		let _file_permit = self.file_semaphore.acquire().await?;
+		let _file_permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 
 		// Acquire a socket permit.
-		let _socket_permit = self.socket_semaphore.acquire().await?;
+		let _socket_permit = self
+			.socket_semaphore
+			.acquire()
+			.await
+			.map_err(Error::other)?;
 
 		// Get the unpack format.
 		let unpack_format = if download.unpack {
 			Some(
 				unpack::Format::for_path(fs::Path::new(download.url.path()))
-					.context("Failed to determine the unpack format.")?,
+					.wrap_err("Failed to determine the unpack format.")?,
 			)
 		} else {
 			None
@@ -53,10 +57,10 @@ impl Instance {
 		// Compute the checksum while streaming.
 		let stream = {
 			let checksum_writer = checksum_writer.clone();
-			stream.map(move |value| {
+			stream.map(move |value| -> std::io::Result<_> {
 				let value = value?;
 				checksum_writer.lock().unwrap().update(&value);
-				Ok::<_, std::io::Error>(value)
+				Ok(value)
 			})
 		};
 
@@ -81,12 +85,14 @@ impl Instance {
 
 			// Ensure a checksum was provided.
 			let Some(expected) = download.checksum.clone() else {
-				bail!(r#"No checksum was provided. The checksum was "{actual}"."#);
+				return_error!(r#"No checksum was provided. The checksum was "{actual}"."#);
 			};
 
 			// Verify the checksum.
 			if expected != actual {
-				bail!(r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#);
+				return_error!(
+					r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#
+				);
 			}
 		}
 
@@ -112,7 +118,7 @@ impl Instance {
 		let artifact_hash = self
 			.check_in(temp.path())
 			.await
-			.context("Failed to check in the temp path.")?;
+			.wrap_err("Failed to check in the temp path.")?;
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);
@@ -170,7 +176,7 @@ impl Instance {
 		let artifact_hash = self
 			.check_in(temp.path())
 			.await
-			.context("Failed to check in the temp path.")?;
+			.wrap_err("Failed to check in the temp path.")?;
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);
@@ -200,12 +206,14 @@ impl Instance {
 			let unpack_temp_path = unpack_temp.path().to_owned();
 			move || -> Result<_> {
 				let archive_file =
-					std::fs::File::open(&temp_path).context("Failed to open the zip archive.")?;
+					std::fs::File::open(&temp_path).wrap_err("Failed to open the zip archive.")?;
 				let archive_reader = std::io::BufReader::new(archive_file);
 				let mut zip = zip::ZipArchive::new(archive_reader)
-					.context("Failed to read the zip archive.")?;
+					.map_err(Error::other)
+					.wrap_err("Failed to read the zip archive.")?;
 				zip.extract(&unpack_temp_path)
-					.context("Failed to extract the zip archive.")?;
+					.map_err(Error::other)
+					.wrap_err("Failed to extract the zip archive.")?;
 				Ok(())
 			}
 		})
@@ -216,7 +224,7 @@ impl Instance {
 		let artifact_hash = self
 			.check_in(unpack_temp.path())
 			.await
-			.context("Failed to check in the .")?;
+			.wrap_err("Failed to check in the .")?;
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);

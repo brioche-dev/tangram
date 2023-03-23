@@ -1,6 +1,6 @@
 use self::syscall::syscall;
 use crate::{
-	error::{Context, Error, Result},
+	error::{Error, Result, WrapErr},
 	Instance,
 };
 use std::sync::{Arc, Weak};
@@ -88,13 +88,14 @@ impl Instance {
 		request_sender
 			.send((request, response_sender))
 			.ok()
-			.context("Failed to send the language service request.")?;
+			.wrap_err("Failed to send the language service request.")?;
 
 		// Receive the response.
 		let response = response_receiver
 			.await
-			.context("Failed to receive a response for the language service request.")?
-			.context("The language service returned an error.")?;
+			.ok()
+			.wrap_err("Failed to receive a response for the language service request.")?
+			.wrap_err("The language service returned an error.")?;
 
 		Ok(response)
 	}
@@ -155,7 +156,8 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 
 		// Serialize the request.
 		let request = match serde_v8::to_v8(&mut try_catch_scope, request)
-			.context("Failed to serialize the request.")
+			.map_err(Error::other)
+			.wrap_err("Failed to serialize the request.")
 		{
 			Ok(request) => request,
 			Err(error) => {
@@ -173,14 +175,17 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 			let exception = try_catch_scope.exception().unwrap();
 			let mut scope = v8::HandleScope::new(&mut try_catch_scope);
 			let exception = self::exception::render(&mut scope, exception);
-			response_sender.send(Err(Error::msg(exception))).unwrap();
+			response_sender
+				.send(Err(Error::message(exception)))
+				.unwrap();
 			continue;
 		}
 
 		// Deserialize the response.
 		let response = response.unwrap();
 		let response = match serde_v8::from_v8(&mut try_catch_scope, response)
-			.context("Failed to deserialize the response.")
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the response.")
 		{
 			Ok(response) => response,
 			Err(error) => {

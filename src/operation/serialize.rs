@@ -1,6 +1,6 @@
 use super::{Hash, Operation};
 use crate::{
-	error::{bail, Result},
+	error::{return_error, Result},
 	hash,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
@@ -13,7 +13,7 @@ impl Operation {
 		// Read the version.
 		let version = reader.read_u8()?;
 		if version != 0 {
-			bail!(r#"Cannot deserialize operation with version "{version}"."#);
+			return_error!(r#"Cannot deserialize operation with version "{version}"."#);
 		}
 
 		// Deserialize the operation.
