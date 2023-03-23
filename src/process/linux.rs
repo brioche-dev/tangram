@@ -1,5 +1,5 @@
 use crate::{
-	error::{return_error, Context, Result},
+	error::{return_error, Result, WrapErr},
 	system::System,
 	temp::Temp,
 	template::Path,
@@ -43,13 +43,13 @@ impl Instance {
 		command.args(args);
 
 		// Spawn the child.
-		let mut child = command.spawn().context("Failed to spawn the process.")?;
+		let mut child = command.spawn().wrap_err("Failed to spawn the process.")?;
 
 		// Wait for the child to exit.
 		let status = child
 			.wait()
 			.await
-			.context("Failed to wait for the process to exit.")?;
+			.wrap_err("Failed to wait for the process to exit.")?;
 
 		// Error if the process did not exit successfully.
 		if !status.success() {
