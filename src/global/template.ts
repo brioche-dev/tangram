@@ -1,6 +1,7 @@
 import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact";
 import { Placeholder } from "./placeholder";
 import { Unresolved, resolve } from "./resolve";
+import * as syscall from "./syscall";
 
 export type TemplateLike = TemplateComponent | Template | Array<TemplateLike>;
 

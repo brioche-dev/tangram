@@ -1,11 +1,3 @@
-//! The following command will log sandbox events:
-//!
-//! ```text
-//! log stream --style compact --info --debug  --predicate '(((processID == 0) AND (senderImagePath CONTAINS "/Sandbox")) OR (subsystem == "com.apple.sandbox.reporting"))'
-//! ```
-//!
-//! Helpful reference: <https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf>.
-
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	system::System,
@@ -62,6 +54,7 @@ impl Instance {
 		command.env_clear();
 		command.envs(env);
 		command.env("HOME", &home_directory_path);
+		// command.env("TANGRAM_SOCKET", &socket_path);
 
 		// Set the args.
 		command.args(args);

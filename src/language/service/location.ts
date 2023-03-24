@@ -1,6 +1,7 @@
 import { Range } from "./range";
+import { ModuleIdentifier } from "./syscall";
 
 export type Location = {
-	moduleIdentifier: string;
+	moduleIdentifier: ModuleIdentifier;
 	range: Range;
 };

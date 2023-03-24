@@ -1,6 +1,7 @@
-import { ArtifactHash, getArtifact, getArtifactHash } from "./artifact";
+import { ArtifactHash, getArtifact, serializeArtifact } from "./artifact";
 import { Blob, BlobHash, addBlob, getBlob } from "./blob";
 import { MaybePromise } from "./resolve";
+import * as syscall from "./syscall";
 import { assert } from "./util";
 
 export type FileLike = Uint8Array | string | File;
@@ -27,7 +28,7 @@ export let file = async (
 	if (fileLike instanceof Uint8Array) {
 		blobHash = await addBlob(fileLike);
 	} else if (typeof fileLike === "string") {
-		blobHash = await addBlob(syscall("encode_utf8", fileLike));
+		blobHash = await addBlob(syscall.encodeUtf8(fileLike));
 	} else {
 		blobHash = fileLike.blobHash();
 		executable = fileLike.executable();
@@ -70,8 +71,8 @@ export class File {
 		return new File(blobHash, { executable });
 	}
 
-	hash(): Promise<ArtifactHash> {
-		return getArtifactHash(this);
+	async hash(): Promise<ArtifactHash> {
+		return syscall.addArtifact(await serializeArtifact(this));
 	}
 
 	blobHash(): BlobHash {
@@ -88,6 +89,6 @@ export class File {
 
 	async text(): Promise<string> {
 		let bytes = await this.blob();
-		return syscall("decode_utf8", bytes);
+		return syscall.decodeUtf8(bytes);
 	}
 }

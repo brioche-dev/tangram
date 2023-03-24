@@ -1,9 +1,10 @@
 import { Position } from "./position";
-import { host, languageService } from "./typescript";
+import { ModuleIdentifier } from "./syscall";
+import * as typescript from "./typescript";
 import * as ts from "typescript";
 
 export type Request = {
-	moduleIdentifier: string;
+	moduleIdentifier: ModuleIdentifier;
 	position: Position;
 };
 
@@ -17,8 +18,8 @@ export type CompletionEntry = {
 
 export let handle = (request: Request): Response => {
 	// Get the source file and position.
-	let sourceFile = host.getSourceFile(
-		request.moduleIdentifier,
+	let sourceFile = typescript.host.getSourceFile(
+		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
 		ts.ScriptTarget.ESNext,
 	);
 	if (sourceFile === undefined) {
@@ -31,8 +32,8 @@ export let handle = (request: Request): Response => {
 	);
 
 	// Get the completions.
-	let info = languageService.getCompletionsAtPosition(
-		request.moduleIdentifier,
+	let info = typescript.languageService.getCompletionsAtPosition(
+		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
 		position,
 		undefined,
 	);

@@ -1,4 +1,4 @@
-use crate::module;
+use crate::{module, path::Path};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,4 +10,5 @@ pub struct Request {
 #[serde(rename_all = "camelCase")]
 pub struct Response {
 	pub imports: Vec<module::Specifier>,
+	pub includes: Vec<Path>,
 }

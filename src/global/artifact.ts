@@ -2,6 +2,7 @@ import { Directory } from "./directory";
 import { File } from "./file";
 import { Reference as Reference } from "./reference";
 import { Symlink } from "./symlink";
+import * as syscall from "./syscall";
 
 export type ArtifactHash = string;
 
@@ -19,17 +20,11 @@ export let isArtifact = (value: unknown): value is Artifact => {
 };
 
 export let addArtifact = async (artifact: Artifact): Promise<ArtifactHash> => {
-	return await syscall("add_artifact", await serializeArtifact(artifact));
+	return await syscall.addArtifact(await serializeArtifact(artifact));
 };
 
 export let getArtifact = async (hash: ArtifactHash): Promise<Artifact> => {
-	return await deserializeArtifact(await syscall("get_artifact", hash));
-};
-
-export let getArtifactHash = async (
-	artifact: Artifact,
-): Promise<ArtifactHash> => {
-	return syscall("get_artifact_hash", await serializeArtifact(artifact));
+	return await deserializeArtifact(await syscall.getArtifact(hash));
 };
 
 export let serializeArtifact = async (

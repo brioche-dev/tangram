@@ -11,16 +11,9 @@ impl module::Identifier {
 
 	#[must_use]
 	pub fn to_lsp_uri(&self) -> Url {
-		match self {
-			module::Identifier::Artifact(module::identifier::Artifact {
-				source: module::identifier::Source::Path(package_path),
-				path,
-			})
-			| module::Identifier::Normal(module::identifier::Normal {
-				source: module::identifier::Source::Path(package_path),
-				path,
-			}) => {
-				let path = package_path.join(path.to_string());
+		match &self.source {
+			module::identifier::Source::Path(package_path) => {
+				let path = package_path.join(self.path.to_string());
 				let path = path.display();
 				format!("file://{path}").parse().unwrap()
 			},

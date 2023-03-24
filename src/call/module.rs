@@ -1,6 +1,7 @@
 use super::{
-	context::{await_value, Module, State},
+	context::await_value,
 	isolate::THREAD_LOCAL_ISOLATE,
+	state::{Module, State},
 };
 use crate::{
 	error::{Error, Result, WrapErr},

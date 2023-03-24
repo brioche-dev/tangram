@@ -1,15 +1,17 @@
+use super::full;
+
 /// 400
-pub fn bad_request() -> http::Response<hyper::Body> {
+pub fn bad_request() -> super::Response {
 	http::Response::builder()
 		.status(http::StatusCode::BAD_REQUEST)
-		.body(hyper::Body::from("Bad request."))
+		.body(full("Bad request."))
 		.unwrap()
 }
 
 /// 404
-pub fn not_found() -> http::Response<hyper::Body> {
+pub fn not_found() -> super::Response {
 	http::Response::builder()
 		.status(http::StatusCode::NOT_FOUND)
-		.body(hyper::Body::from("Not found."))
+		.body(full("Bad request."))
 		.unwrap()
 }

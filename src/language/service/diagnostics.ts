@@ -1,12 +1,15 @@
 import { Location } from "./location";
-import { languageService } from "./typescript";
+import * as syscall from "./syscall";
+import { ModuleIdentifier } from "./syscall";
+import * as typescript from "./typescript";
 import * as ts from "typescript";
 
 export type Request = {};
 
 export type Response = {
-	diagnostics: Record<string, Array<Diagnostic>>;
+	diagnostics: Array<Diagnostic>;
 };
+
 export type Diagnostic = {
 	location: Location | null;
 	severity: Severity;
@@ -17,48 +20,24 @@ export type Severity = "error" | "warning" | "information" | "hint";
 
 export let handle = (_request: Request): Response => {
 	// Get the module identifiers of all documents.
-	let moduleIdentifiers = syscall("get_documents");
+	let moduleIdentifiers = syscall.getDocuments();
 
 	// Collect the diagnostics.
-	let diagnostics: Record<string, Array<Diagnostic>> = {};
+	let diagnostics: Array<Diagnostic> = [];
 	for (let moduleIdentifier of moduleIdentifiers) {
-		diagnostics[moduleIdentifier] = [
-			...languageService.getSyntacticDiagnostics(moduleIdentifier),
-			...languageService.getSemanticDiagnostics(moduleIdentifier),
-			...languageService.getSuggestionDiagnostics(moduleIdentifier),
-		].map((diagnostic) => convertDiagnosticFromTypeScript(diagnostic));
+		let fileName = typescript.fileNameFromModuleIdentifier(moduleIdentifier);
+		diagnostics.push(
+			...[
+				...typescript.languageService.getSyntacticDiagnostics(fileName),
+				...typescript.languageService.getSemanticDiagnostics(fileName),
+				...typescript.languageService.getSuggestionDiagnostics(fileName),
+			].map(convertDiagnosticFromTypeScript),
+		);
 	}
 
 	return {
 		diagnostics,
 	};
-};
-
-/** Convert diagnostics from TypeScript. */
-export let convertDiagnosticsFromTypeScript = (
-	diagnostics: Array<ts.Diagnostic>,
-): Record<string, Array<Diagnostic>> => {
-	let output: Record<string, Array<Diagnostic>> = {};
-
-	for (let diagnostic of diagnostics) {
-		// Ignore diagnostics that do not have a file.
-		if (diagnostic.file === undefined) {
-			continue;
-		}
-
-		// Get the module identifier.
-		let moduleIdentifier = diagnostic.file.fileName;
-
-		// Add an entry for this diagnostic's module identifier in the output if necessary.
-		if (output[moduleIdentifier] === undefined) {
-			output[moduleIdentifier] = [];
-		}
-
-		// Add the diagnostic to the output.
-		output[moduleIdentifier]?.push(convertDiagnosticFromTypeScript(diagnostic));
-	}
-
-	return output;
 };
 
 /** Convert a diagnostic from TypeScript. */
@@ -74,7 +53,9 @@ export let convertDiagnosticFromTypeScript = (
 	}
 
 	// Get the diagnostic's module identifier.
-	let moduleIdentifier = diagnostic.file.fileName;
+	let moduleIdentifier = typescript.moduleIdentifierFromFileName(
+		diagnostic.file.fileName,
+	);
 
 	// Get the diagnostic's location.
 	let location = null;

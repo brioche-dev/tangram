@@ -6,9 +6,9 @@ import * as path from "path";
 await esbuild.build({
 	bundle: true,
 	entryPoints: ["main.ts"],
-	outfile: "../../../assets/language_service.js",
-	minify: true,
 	inject: ["node_global.js"],
+	minify: true,
+	outfile: "../../../assets/language_service.js",
 	plugins: [
 		alias({
 			assert: path.resolve("./node_builtins/assert.cjs"),
@@ -23,4 +23,5 @@ await esbuild.build({
 			util: path.resolve("./node_builtins/util.js"),
 		}),
 	],
+	sourcemap: true,
 });

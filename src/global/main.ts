@@ -7,6 +7,7 @@ import { download } from "./download";
 import { prepareStackTrace } from "./error";
 import { File, file, isFile } from "./file";
 import { function_ } from "./function";
+import { include } from "./include";
 import { log } from "./log";
 import { map } from "./map";
 import { Path, isPath, path } from "./path";
@@ -16,18 +17,6 @@ import { Reference, isReference, reference } from "./reference";
 import { resolve } from "./resolve";
 import { Symlink, isSymlink, symlink } from "./symlink";
 import { Template, isTemplate, t, template } from "./template";
-
-// Create the `syscall` global.
-let syscall = async (...args: Array<any>) => {
-	try {
-		return await (globalThis as any).syscallInner(...args);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
-};
-Object.defineProperties(globalThis, {
-	syscall: { value: syscall },
-});
 
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
@@ -58,6 +47,7 @@ let tg = {
 	download,
 	file,
 	function: function_,
+	include,
 	isArtifact,
 	isDirectory,
 	isFile,

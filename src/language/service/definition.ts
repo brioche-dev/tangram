@@ -1,11 +1,12 @@
 import { Location } from "./location";
 import { Position } from "./position";
-import { host, languageService } from "./typescript";
+import { ModuleIdentifier } from "./syscall";
+import * as typescript from "./typescript";
 import { nullish } from "./util";
 import * as ts from "typescript";
 
 export type Request = {
-	moduleIdentifier: string;
+	moduleIdentifier: ModuleIdentifier;
 	position: Position;
 };
 
@@ -15,8 +16,8 @@ export type Response = {
 
 export let handle = (request: Request): Response => {
 	// Get the source file and position.
-	let sourceFile = host.getSourceFile(
-		request.moduleIdentifier,
+	let sourceFile = typescript.host.getSourceFile(
+		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
 		ts.ScriptTarget.ESNext,
 	);
 	if (sourceFile === undefined) {
@@ -29,14 +30,14 @@ export let handle = (request: Request): Response => {
 	);
 
 	// Get the definitions.
-	let definitions = languageService.getDefinitionAtPosition(
-		request.moduleIdentifier,
+	let definitions = typescript.languageService.getDefinitionAtPosition(
+		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
 		position,
 	);
 
 	// Convert the definitions.
 	let locations = definitions?.map((definition) => {
-		let destFile = host.getSourceFile(
+		let destFile = typescript.host.getSourceFile(
 			definition.fileName,
 			ts.ScriptTarget.ESNext,
 		);
@@ -54,7 +55,9 @@ export let handle = (request: Request): Response => {
 		);
 
 		let location = {
-			moduleIdentifier: definition.fileName,
+			moduleIdentifier: typescript.moduleIdentifierFromFileName(
+				definition.fileName,
+			),
 			range: { start, end },
 		};
 

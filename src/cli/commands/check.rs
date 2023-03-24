@@ -40,33 +40,31 @@ impl Cli {
 		let diagnostics = self.tg.check(vec![root_module_identifier]).await?;
 
 		// Print the diagnostics.
-		for diagnostics in diagnostics.values() {
-			for diagnostic in diagnostics {
-				// Get the diagnostic location and message.
-				let Diagnostic {
-					location, message, ..
-				} = diagnostic;
+		for diagnostic in &diagnostics {
+			// Get the diagnostic location and message.
+			let Diagnostic {
+				location, message, ..
+			} = diagnostic;
 
-				// Print the location if one is available.
-				if let Some(location) = location {
-					let Location {
-						module_identifier,
-						range,
-						..
-					} = location;
-					let Position { line, character } = range.start;
-					let line = line + 1;
-					let character = character + 1;
+			// Print the location if one is available.
+			if let Some(location) = location {
+				let Location {
+					module_identifier,
+					range,
+					..
+				} = location;
+				let Position { line, character } = range.start;
+				let line = line + 1;
+				let character = character + 1;
 
-					println!("{module_identifier}:{line}:{character}");
-				}
-
-				// Print the diagnostic message.
-				println!("{message}");
-
-				// Print a newline.
-				println!();
+				println!("{module_identifier}:{line}:{character}");
 			}
+
+			// Print the diagnostic message.
+			println!("{message}");
+
+			// Print a newline.
+			println!();
 		}
 
 		if !diagnostics.is_empty() {

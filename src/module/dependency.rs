@@ -1,8 +1,8 @@
-use super::{identifier, Identifier};
+use super::{identifier::Source, Identifier};
 use crate::{
 	error::{return_error, Error, Result},
 	package::{self, specifier::Registry},
-	path::Path,
+	path::{self, Path},
 };
 
 /// A reference from a module to a dependency, either at a path or from the registry.
@@ -80,20 +80,14 @@ impl Specifier {
 		&self,
 		module_identifier: &Identifier,
 	) -> Result<package::dependency::Specifier> {
-		// Get the module path.
-		let module_path = match module_identifier {
-			Identifier::Normal(identifier::Normal { path, .. })
-			| Identifier::Artifact(identifier::Artifact { path, .. }) => path,
-
-			Identifier::Lib(_) => {
-				return_error!("Cannot convert a module dependency specifier to a package dependency specifier relative to a library module.");
-			},
-		};
+		if matches!(&module_identifier.source, Source::Lib) {
+			return_error!("Cannot convert a module dependency specifier to a package dependency specifier relative to a library module.");
+		}
 
 		match self {
 			Specifier::Path(specifier_path) => {
-				let mut path = module_path.clone();
-				path.parent();
+				let mut path = module_identifier.path.clone();
+				path.push(path::Component::ParentDir);
 				path.join(specifier_path.clone());
 				Ok(package::dependency::Specifier::Path(path))
 			},

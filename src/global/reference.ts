@@ -1,12 +1,7 @@
-import {
-	Artifact,
-	ArtifactHash,
-	addArtifact,
-	getArtifact,
-	getArtifactHash,
-} from "./artifact";
+import { Artifact, ArtifactHash, addArtifact, getArtifact } from "./artifact";
 import { Path, PathLike, path } from "./path";
 import { MaybePromise } from "./resolve";
+import * as syscall from "./syscall";
 import { assert } from "./util";
 import { isNullish, nullish } from "./value";
 
@@ -71,7 +66,7 @@ export class Reference {
 	}
 
 	hash(): Promise<ArtifactHash> {
-		return getArtifactHash(this);
+		return addArtifact(this);
 	}
 
 	artifactHash(): ArtifactHash {

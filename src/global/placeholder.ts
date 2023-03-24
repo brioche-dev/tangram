@@ -1,3 +1,5 @@
+import * as syscall from "./syscall";
+
 export let placeholder = (name: string): Placeholder => {
 	return new Placeholder(name);
 };

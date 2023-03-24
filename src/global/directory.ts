@@ -3,12 +3,12 @@ import {
 	ArtifactHash,
 	addArtifact,
 	getArtifact,
-	getArtifactHash,
 	isArtifact,
 } from "./artifact";
 import { file, isFileLike } from "./file";
 import { PathLike, path } from "./path";
 import { MaybePromise } from "./resolve";
+import * as syscall from "./syscall";
 import { assert } from "./util";
 import { isNullish, nullish } from "./value";
 
@@ -123,7 +123,7 @@ export class Directory {
 	}
 
 	hash(): Promise<ArtifactHash> {
-		return getArtifactHash(this);
+		return addArtifact(this);
 	}
 
 	async get(pathLike: PathLike): Promise<Artifact> {

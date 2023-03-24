@@ -1,6 +1,6 @@
 use super::{
-	context::{FutureOutput, State},
 	isolate::THREAD_LOCAL_ISOLATE,
+	state::{FutureOutput, State},
 };
 use crate::{
 	artifact::{self, Artifact},
@@ -11,6 +11,7 @@ use crate::{
 	module,
 	operation::{self, Operation},
 	package,
+	path::Path,
 	value::Value,
 	Instance,
 };
@@ -51,6 +52,8 @@ fn syscall_inner<'s>(
 	// Invoke the syscall.
 	match name.as_str() {
 		"log" => syscall_sync(scope, args, syscall_log),
+		"caller" => syscall_sync(scope, args, syscall_caller),
+		"include" => syscall_async(scope, args, syscall_include),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
 		"encode_utf8" => syscall_sync(scope, args, syscall_encode_utf8),
 		"decode_utf8" => syscall_sync(scope, args, syscall_decode_utf8),
@@ -58,16 +61,11 @@ fn syscall_inner<'s>(
 		"get_blob" => syscall_async(scope, args, syscall_get_blob),
 		"add_artifact" => syscall_async(scope, args, syscall_add_artifact),
 		"get_artifact" => syscall_async(scope, args, syscall_get_artifact),
-		"get_artifact_hash" => syscall_sync(scope, args, syscall_get_artifact_hash),
 		"add_package_instance" => syscall_async(scope, args, syscall_add_package_instance),
 		"get_package_instance" => syscall_async(scope, args, syscall_get_package_instance),
 		"add_operation" => syscall_async(scope, args, syscall_add_operation),
 		"get_operation" => syscall_async(scope, args, syscall_get_operation),
-		"run" => syscall_async(scope, args, syscall_run),
-		"get_current_package_instance_hash" => {
-			syscall_sync(scope, args, syscall_get_current_package_instance_hash)
-		},
-		"get_current_export_name" => syscall_sync(scope, args, syscall_get_current_export_name),
+		"run_operation" => syscall_async(scope, args, syscall_run_operation),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
@@ -77,6 +75,86 @@ fn syscall_log(_scope: &mut v8::HandleScope, _state: Rc<State>, args: (String,))
 	let (string,) = args;
 	println!("{string}");
 	Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Caller {
+	module_identifier: module::Identifier,
+	position: Position,
+	package_instance_hash: package::instance::Hash,
+	line: String,
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_caller(scope: &mut v8::HandleScope, state: Rc<State>, _args: ()) -> Result<Caller> {
+	// Get the stack frame of the caller's caller.
+	let stack_trace = v8::StackTrace::current_stack_trace(scope, 3).unwrap();
+	let stack_frame = stack_trace.get_frame(scope, 2).unwrap();
+
+	// Get the module identifier and package instance hash.
+	let module_identifier: module::Identifier = stack_frame
+		.get_script_name(scope)
+		.unwrap()
+		.to_rust_string_lossy(scope)
+		.parse()
+		.unwrap();
+	let module::identifier::Source::Instance(package_instance_hash) = &module_identifier.source else {
+		return_error!("The module identifier's source must be a package instance.");
+	};
+	let package_instance_hash = *package_instance_hash;
+
+	// Get the module.
+	let modules = state.modules.borrow();
+	let module = modules
+		.iter()
+		.find(|module| module.module_identifier == module_identifier)
+		.unwrap();
+
+	// Get the position and apply a source map.
+	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
+	let character = stack_frame.get_column().to_u32().unwrap();
+	let position = Position { line, character };
+	let position = module.source_map.as_ref().map_or(position, |source_map| {
+		let token = source_map
+			.lookup_token(position.line, position.character)
+			.unwrap();
+		let line = token.get_src_line();
+		let character = token.get_src_col();
+		Position { line, character }
+	});
+
+	// Get the source line.
+	let line = module
+		.text
+		.lines()
+		.nth(position.line.to_usize().unwrap())
+		.unwrap()
+		.to_owned();
+
+	Ok(Caller {
+		module_identifier,
+		position,
+		package_instance_hash,
+		line,
+	})
+}
+
+async fn syscall_include(tg: Arc<Instance>, args: (Caller, Path)) -> Result<Artifact> {
+	let (caller, path) = args;
+
+	// Get the package.
+	let package_instance = tg.get_package_instance_local(caller.package_instance_hash)?;
+	let package = tg.get_artifact_local(package_instance.package_hash)?;
+
+	// Get the artifact.
+	let artifact = package
+		.as_directory()
+		.wrap_err("A package must be a directory.")?
+		.get(&tg, &path)
+		.await?;
+
+	Ok(artifact)
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
@@ -138,17 +216,6 @@ async fn syscall_add_artifact(tg: Arc<Instance>, args: (Artifact,)) -> Result<ar
 	Ok(artifact_hash)
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_get_artifact_hash(
-	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
-	args: (Artifact,),
-) -> Result<artifact::Hash> {
-	let (artifact,) = args;
-	let artifact_hash = artifact.hash();
-	Ok(artifact_hash)
-}
-
 #[allow(clippy::unused_async)]
 async fn syscall_get_artifact(
 	tg: Arc<Instance>,
@@ -196,90 +263,10 @@ async fn syscall_get_operation(
 	Ok(operation)
 }
 
-async fn syscall_run(tg: Arc<Instance>, args: (operation::Hash,)) -> Result<Value> {
+async fn syscall_run_operation(tg: Arc<Instance>, args: (operation::Hash,)) -> Result<Value> {
 	let (operation_hash,) = args;
-	let output = tg.run(operation_hash).await?;
+	let output = tg.run_operation(operation_hash).await?;
 	Ok(output)
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn syscall_get_current_package_instance_hash(
-	scope: &mut v8::HandleScope,
-	_state: Rc<State>,
-	_args: (),
-) -> Result<package::instance::Hash> {
-	// Get the location.
-	let (module_identifier, _) = get_module_identifier_and_position(scope);
-
-	// Get the package instance hash.
-	let module::Identifier::Normal(module::identifier::Normal { source : module::identifier::Source::Instance(package_instance_hash), .. }) = module_identifier else {
-		return_error!("The module identifier must be a normal module whose source is a package instance.");
-	};
-
-	Ok(package_instance_hash)
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_get_current_export_name(
-	scope: &mut v8::HandleScope,
-	state: Rc<State>,
-	_args: (),
-) -> Result<String> {
-	// Get the location.
-	let (module_identifier, position) = get_module_identifier_and_position(scope);
-
-	// Get the module.
-	let modules = state.modules.borrow();
-	let module = modules
-		.iter()
-		.find(|module| module.module_identifier == module_identifier)
-		.unwrap();
-
-	// Apply a source map if one is available.
-	let position = module.source_map.as_ref().map_or(position, |source_map| {
-		let token = source_map
-			.lookup_token(position.line, position.character)
-			.unwrap();
-		let line = token.get_src_line();
-		let character = token.get_src_col();
-		Position { line, character }
-	});
-
-	// Get the caller's caller's source line.
-	let line = module
-		.text
-		.lines()
-		.nth(position.line.to_usize().unwrap())
-		.unwrap();
-
-	// Get the name.
-	let name = if line.starts_with("export default") {
-		"default".to_owned()
-	} else if line.starts_with("export let") {
-		line.split_whitespace().nth(2).unwrap().to_owned()
-	} else {
-		return_error!("Invalid usage of tg.function.");
-	};
-
-	Ok(name)
-}
-
-fn get_module_identifier_and_position(
-	scope: &mut v8::HandleScope,
-) -> (module::Identifier, Position) {
-	// Get the module identifier, line, and column of the caller's caller.
-	let stack_trace = v8::StackTrace::current_stack_trace(scope, 2).unwrap();
-	let stack_frame = stack_trace.get_frame(scope, 1).unwrap();
-	let module_identifier = stack_frame
-		.get_script_name(scope)
-		.unwrap()
-		.to_rust_string_lossy(scope)
-		.parse()
-		.unwrap();
-	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
-	let character = stack_frame.get_column().to_u32().unwrap() - 1;
-	let position = Position { line, character };
-	(module_identifier, position)
 }
 
 fn syscall_sync<'s, A, T, F>(

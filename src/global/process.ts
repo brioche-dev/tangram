@@ -2,6 +2,7 @@ import { Artifact } from "./artifact";
 import { run } from "./operation";
 import { placeholder } from "./placeholder";
 import { Unresolved, resolve } from "./resolve";
+import * as syscall from "./syscall";
 import { Template, TemplateLike, template } from "./template";
 import { nullish } from "./value";
 

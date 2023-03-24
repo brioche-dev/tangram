@@ -4,6 +4,7 @@ import { File } from "./file";
 import { Placeholder } from "./placeholder";
 import { Reference } from "./reference";
 import { Symlink } from "./symlink";
+import * as syscall from "./syscall";
 import { Template } from "./template";
 
 export type Value =

@@ -1,6 +1,6 @@
 use super::{
-	context::State,
 	error::{StackFrame, StackTrace},
+	state::State,
 };
 use crate::{
 	error::Error,
@@ -29,7 +29,7 @@ impl Error {
 			.get_script_resource_name(scope)
 			.and_then(|resource_name| <v8::Local<v8::String>>::try_from(resource_name).ok())
 		{
-			// parse the resource name as a module identifier.
+			// Parse the resource name as a module identifier.
 			let module_identifier = resource_name.to_rust_string_lossy(scope).parse().unwrap();
 
 			// Get the start and end positions.
@@ -74,14 +74,13 @@ impl Error {
 			}));
 		}
 
-		// At this point, the exception is a native error.
-		let exception = exception.to_object(scope).unwrap();
-
 		// Get the stack trace.
 		let stack_string = v8::String::new(scope, "stack").unwrap();
-		let stack_trace = if let Some(stack) = exception
+		let stack_trace = if let Some(stack) = dbg!(exception
+			.to_object(scope)
+			.unwrap()
 			.get(scope, stack_string.into())
-			.and_then(|value| serde_v8::from_v8::<V8StackTrace>(scope, value).ok())
+			.and_then(|value| serde_v8::from_v8::<V8StackTrace>(scope, value).ok()))
 		{
 			let stack_frames = stack
 				.call_sites
@@ -125,6 +124,8 @@ impl Error {
 		// Get the source.
 		let cause_string = v8::String::new(scope, "cause").unwrap();
 		let source = if let Some(cause) = exception
+			.to_object(scope)
+			.unwrap()
 			.get(scope, cause_string.into())
 			.and_then(|value| value.to_object(scope))
 		{
@@ -144,19 +145,21 @@ impl Error {
 	}
 
 	pub fn to_exception<'s>(&self, scope: &mut v8::HandleScope<'s>) -> v8::Local<'s, v8::Value> {
-		// Create the exception.
-		let message = v8::String::new(scope, "An uncaught exception was thrown.").unwrap();
-		let exception = v8::Exception::error(scope, message);
-		let exception = exception
-			.to_object(scope)
-			.expect("Expected the exception to be an object.");
+		serde_v8::to_v8(scope, self).expect("Failed to serialize the error.")
 
-		// Serialize this error and set it to the `cause` field of the exception.
-		let cause_key = v8::String::new(scope, "cause").unwrap();
-		let cause_value = serde_v8::to_v8(scope, self).expect("Failed to serialize the error.");
-		exception.set(scope, cause_key.into(), cause_value);
+		// // Create the exception.
+		// let message = v8::String::new(scope, "An uncaught exception was thrown.").unwrap();
+		// let exception = v8::Exception::error(scope, message);
+		// let exception = exception
+		// 	.to_object(scope)
+		// 	.expect("Expected the exception to be an object.");
 
-		exception.into()
+		// // Serialize this error and set it to the `cause` field of the exception.
+		// let cause_key = v8::String::new(scope, "cause").unwrap();
+		// let cause_value = serde_v8::to_v8(scope, self).expect("Failed to serialize the error.");
+		// exception.set(scope, cause_key.into(), cause_value);
+
+		// exception.into()
 	}
 }
 
@@ -186,14 +189,14 @@ fn apply_source_map(
 	}
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct V8StackTrace {
 	call_sites: Vec<V8CallSite>,
 }
 
 #[allow(dead_code, clippy::struct_excessive_bools)]
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct V8CallSite {
 	type_name: Option<String>,

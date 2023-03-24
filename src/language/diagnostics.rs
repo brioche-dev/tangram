@@ -1,9 +1,9 @@
 use super::{service, Location};
 use crate::{
 	error::{return_error, Result},
-	module, Instance,
+	Instance,
 };
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,9 +23,7 @@ pub enum Severity {
 }
 
 impl Instance {
-	pub async fn diagnostics(
-		self: &Arc<Self>,
-	) -> Result<BTreeMap<module::Identifier, Vec<Diagnostic>>> {
+	pub async fn diagnostics(self: &Arc<Self>) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Diagnostics(service::diagnostics::Request {});
 

@@ -6,4 +6,5 @@ await esbuild.build({
 	entryPoints: ["main.ts"],
 	minify: true,
 	outfile: "../../assets/global.js",
+	sourcemap: true,
 });

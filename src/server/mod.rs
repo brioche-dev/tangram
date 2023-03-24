@@ -1,5 +1,6 @@
 use crate::{
 	error::{Error, Result},
+	util::http::{full, Request, Response},
 	Instance,
 };
 use futures::FutureExt;
@@ -12,50 +13,49 @@ mod error;
 impl Instance {
 	pub async fn serve(self: &Arc<Self>, addr: SocketAddr) -> Result<()> {
 		let tg = Arc::clone(self);
-		let server = hyper::Server::try_bind(&addr).map_err(Error::other)?;
-		tracing::info!("🚀 Serving on {}.", addr);
-		server
-			.serve(hyper::service::make_service_fn(move |_| {
-				let tg = Arc::clone(&tg);
-				async move {
-					Ok::<_, Infallible>(hyper::service::service_fn(move |request| {
-						let tg = Arc::clone(&tg);
-						async move {
-							let response = tg.handle_request(request).await;
-							Ok::<_, Infallible>(response)
-						}
-					}))
-				}
-			}))
+		let listener = tokio::net::TcpListener::bind(&addr)
 			.await
 			.map_err(Error::other)?;
+		tracing::info!("🚀 Serving on {}.", addr);
+		while let (stream, _) = listener.accept().await? {
+			let tg = Arc::clone(&tg);
+			tokio::spawn(async move {
+				hyper::server::conn::http1::Builder::new()
+					.serve_connection(
+						stream,
+						hyper::service::service_fn(move |request| {
+							let tg = Arc::clone(&tg);
+							async move {
+								let response = tg.handle_request(request).await;
+								Ok::<_, Infallible>(response)
+							}
+						}),
+					)
+					.await
+					.ok()
+			});
+		}
 		Ok(())
 	}
 
-	async fn handle_request(
-		&self,
-		request: http::Request<hyper::Body>,
-	) -> http::Response<hyper::Body> {
+	async fn handle_request(&self, request: Request) -> Response {
 		match self.handle_request_inner(request).await {
 			Ok(Some(response)) => response,
 			Ok(None) => http::Response::builder()
 				.status(http::StatusCode::NOT_FOUND)
-				.body(hyper::Body::from("Not found."))
+				.body(full("Not found."))
 				.unwrap(),
 			Err(error) => {
 				tracing::error!(?error);
 				http::Response::builder()
 					.status(http::StatusCode::INTERNAL_SERVER_ERROR)
-					.body(hyper::Body::from("Internal server error."))
+					.body(full("Internal server error."))
 					.unwrap()
 			},
 		}
 	}
 
-	async fn handle_request_inner(
-		&self,
-		request: http::Request<hyper::Body>,
-	) -> Result<Option<http::Response<hyper::Body>>> {
+	async fn handle_request_inner(&self, request: Request) -> Result<Option<Response>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();

@@ -1,11 +1,12 @@
 {
 	"dependencies": {
-		"@tangramdotdev/eslint-config": "^0.1.1",
+		"@tangramdotdev/eslint-config": "^0.1.0",
+		"@tangramdotdev/eslint-plugin": "^0.1.0",
 		"@typescript-eslint/eslint-plugin": "^5.38.1",
 		"@typescript-eslint/parser": "^5.38.1",
 		"eslint": "^8.29.0",
 		"prettier": "^2.7.1",
-		"typescript": "^4.8.4"
+		"typescript": "^4.9.5"
 	},
 	"workspaces": [
 		"packages/vscode",

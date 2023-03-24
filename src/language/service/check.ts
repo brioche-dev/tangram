@@ -1,32 +1,35 @@
-import { Diagnostic, convertDiagnosticsFromTypeScript } from "./diagnostics";
-import { compilerOptions, host } from "./typescript";
+import { Diagnostic, convertDiagnosticFromTypeScript } from "./diagnostics";
+import { ModuleIdentifier } from "./syscall";
+import * as typescript from "./typescript";
 import * as ts from "typescript";
 
 export type Request = {
-	moduleIdentifiers: Array<string>;
+	moduleIdentifiers: Array<ModuleIdentifier>;
 };
 
 export type Response = {
-	diagnostics: Record<string, Array<Diagnostic>>;
+	diagnostics: Array<Diagnostic>;
 };
 
 export let handle = (request: Request): Response => {
 	// Create a typescript program.
 	let program = ts.createProgram({
-		rootNames: request.moduleIdentifiers,
-		options: compilerOptions,
-		host,
+		rootNames: request.moduleIdentifiers.map(
+			typescript.fileNameFromModuleIdentifier,
+		),
+		options: typescript.compilerOptions,
+		host: typescript.host,
 	});
 
 	// Get the diagnostics and convert them.
-	let diagnostics = convertDiagnosticsFromTypeScript([
+	let diagnostics = [
 		...program.getConfigFileParsingDiagnostics(),
 		...program.getOptionsDiagnostics(),
 		...program.getGlobalDiagnostics(),
 		...program.getDeclarationDiagnostics(),
 		...program.getSyntacticDiagnostics(),
 		...program.getSemanticDiagnostics(),
-	]);
+	].map(convertDiagnosticFromTypeScript);
 
 	return {
 		diagnostics,

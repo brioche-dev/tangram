@@ -1,7 +1,9 @@
+import * as syscall from "./syscall";
+
 /** Write to the log. */
 export let log = (...args: Array<unknown>) => {
 	let string = args.map((arg) => stringify(arg)).join(" ");
-	syscall("log", string);
+	syscall.log(string);
 };
 
 let stringify = (value: unknown): string => {

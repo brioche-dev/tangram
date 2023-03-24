@@ -1,32 +1,14 @@
-use super::{isolate::THREAD_LOCAL_ISOLATE, syscall::syscall};
+use super::{
+	isolate::THREAD_LOCAL_ISOLATE,
+	state::{FutureOutput, State},
+	syscall::syscall,
+};
 use crate::{
 	error::{Error, Result},
-	module, Instance,
+	Instance,
 };
-use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
-use sourcemap::SourceMap;
-use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, sync::Arc, task::Poll};
-
-pub struct State {
-	pub modules: Rc<RefCell<Vec<Module>>>,
-	pub futures: Rc<RefCell<FuturesUnordered<LocalBoxFuture<'static, FutureOutput>>>>,
-}
-
-#[derive(Debug)]
-pub struct Module {
-	pub identity_hash: NonZeroI32,
-	pub module: v8::Global<v8::Module>,
-	pub module_identifier: module::Identifier,
-	pub text: String,
-	pub transpiled_text: Option<String>,
-	pub source_map: Option<SourceMap>,
-}
-
-pub struct FutureOutput {
-	pub context: v8::Global<v8::Context>,
-	pub promise_resolver: v8::Global<v8::PromiseResolver>,
-	pub result: Result<v8::Global<v8::Value>>,
-}
+use futures::{stream::FuturesUnordered, StreamExt};
+use std::{cell::RefCell, future::poll_fn, rc::Rc, sync::Arc, task::Poll};
 
 pub fn new(tg: Arc<Instance>) -> v8::Global<v8::Context> {
 	// Create the context.

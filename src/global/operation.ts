@@ -2,6 +2,7 @@ import { Artifact } from "./artifact";
 import { Call } from "./call";
 import { Download } from "./download";
 import { Process } from "./process";
+import * as syscall from "./syscall";
 import { deserializeValue } from "./value";
 
 export type OperationHash = string;
@@ -30,7 +31,7 @@ export let run = async <T extends Operation>(
 	operation: T,
 ): Promise<Output<T>> => {
 	let operationHash = await addOperation(operation);
-	let outputSerialized = await syscall("run", operationHash);
+	let outputSerialized = await syscall.runOperation(operationHash);
 	let output = await deserializeValue(outputSerialized);
 	return output as Output<T>;
 };
@@ -38,11 +39,11 @@ export let run = async <T extends Operation>(
 export let addOperation = async (
 	operation: Operation,
 ): Promise<OperationHash> => {
-	return await syscall("add_operation", await serializeOperation(operation));
+	return await syscall.addOperation(await serializeOperation(operation));
 };
 
 export let getArtifact = async (hash: OperationHash): Promise<Operation> => {
-	return await deserializeOperation(await syscall("get_operation", hash));
+	return await deserializeOperation(await syscall.getOperation(hash));
 };
 
 export let serializeOperation = async (

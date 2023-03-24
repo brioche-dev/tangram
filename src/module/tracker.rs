@@ -30,17 +30,10 @@ impl Instance {
 impl Instance {
 	/// Get a module's version.
 	pub async fn get_module_version(&self, module_identifier: &module::Identifier) -> Result<i32> {
-		match module_identifier {
-			// A normal or artifact module whose source is a path changes when the file system object at the path changes.
-			module::Identifier::Normal(module::identifier::Normal {
-				source: module::identifier::Source::Path(package_path),
-				path,
-			})
-			| module::Identifier::Artifact(module::identifier::Artifact {
-				source: module::identifier::Source::Path(package_path),
-				path,
-			}) => {
-				let path = package_path.join(path.to_string());
+		match &module_identifier.source {
+			// A module whose source is a path changes when the file system object at the path changes.
+			module::identifier::Source::Path(package_path) => {
+				let path = package_path.join(module_identifier.path.to_string());
 				let mut module_trackers = self.module_trackers.write().await;
 				let version = match module_trackers.get_mut(module_identifier) {
 					// If there is no module tracker, then add one at version 0 and save its modified time.

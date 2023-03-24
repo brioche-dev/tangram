@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
 import { Location } from "./location";
+import { ModuleIdentifier } from "./syscall";
 import { compilerOptions, host } from "./typescript";
+import * as typescript from "./typescript";
 import * as ts from "typescript";
 
 export type Request = {
-	moduleIdentifier: string;
+	moduleIdentifier: ModuleIdentifier;
 };
 
 export type Response = {
@@ -117,14 +119,18 @@ type Parameter = {
 export let handle = (request: Request): Response => {
 	// Create the program and type checker.
 	let program = ts.createProgram({
-		rootNames: [request.moduleIdentifier],
+		rootNames: [
+			typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
+		],
 		options: compilerOptions,
 		host,
 	});
 	let typeChecker = program.getTypeChecker();
 
 	// Get the module's exports.
-	let sourceFile = program.getSourceFile(request.moduleIdentifier)!;
+	let sourceFile = program.getSourceFile(
+		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
+	)!;
 	let symbol = typeChecker.getSymbolAtLocation(sourceFile)!;
 	let moduleExports = typeChecker.getExportsOfModule(symbol);
 

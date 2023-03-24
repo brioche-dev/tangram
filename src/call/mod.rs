@@ -8,6 +8,7 @@ mod exception;
 mod isolate;
 mod module;
 mod run;
+mod state;
 mod syscall;
 
 #[derive(

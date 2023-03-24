@@ -2,6 +2,7 @@ import { call } from "./call";
 import { context } from "./context";
 import { PackageInstanceHash } from "./package";
 import { MaybePromise, Unresolved, resolve } from "./resolve";
+import * as syscall from "./syscall";
 import { assert } from "./util";
 import { Value, deserializeValue, serializeValue } from "./value";
 
@@ -11,9 +12,22 @@ export let function_ = <
 >(
 	f: (...args: A) => MaybePromise<R>,
 ): Function<A, R> => {
-	// Get the function's package instance hash and name.
-	let packageInstanceHash = syscall("get_current_package_instance_hash");
-	let name = syscall("get_current_export_name");
+	// Get the function's caller.
+	let { packageInstanceHash, line } = syscall.caller();
+
+	// Get the function's name.
+	let name;
+	if (line.startsWith("export default ")) {
+		name = "default";
+	} else if (line.startsWith("export let ")) {
+		let exportName = line.match(/^export let ([a-zA-Z0-9]+)\b/)?.at(1);
+		if (!exportName) {
+			throw new Error("Invalid use of tg.function.");
+		}
+		name = exportName;
+	} else {
+		throw new Error("Invalid use of tg.function.");
+	}
 
 	return new Function({
 		packageInstanceHash,

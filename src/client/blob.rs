@@ -20,14 +20,13 @@ impl Client {
 			.await
 			.map_err(Error::other)?;
 
-		// Create a stream for the body.
-		let stream = tokio_util::io::ReaderStream::new(reader);
-		let body = hyper::Body::wrap_stream(stream);
-
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");
 		let mut url = self.url.clone();
 		url.set_path(&path);
+
+		// Create the body.
+		let body = reqwest::Body::wrap_stream(tokio_util::io::ReaderStream::new(reader));
 
 		// Send the request.
 		let response = self

@@ -1,4 +1,5 @@
 import { Artifact, ArtifactHash, addArtifact, getArtifact } from "./artifact";
+import * as syscall from "./syscall";
 
 export type PackageInstanceHash = string;
 
@@ -78,16 +79,11 @@ export class PackageInstance {
 export let addPackageInstance = async (
 	packageInstance: PackageInstance,
 ): Promise<PackageInstanceHash> => {
-	return await syscall(
-		"add_package_instance",
-		await packageInstance.serialize(),
-	);
+	return await syscall.addPackageInstance(await packageInstance.serialize());
 };
 
 export let getPackageInstance = async (
 	hash: PackageInstanceHash,
 ): Promise<PackageInstance> => {
-	return PackageInstance.deserialize(
-		await syscall("get_package_instance", hash),
-	);
+	return PackageInstance.deserialize(await syscall.getPackageInstance(hash));
 };

@@ -34,6 +34,10 @@ fn syscall_inner<'s>(
 
 	// Invoke the syscall.
 	match name.as_str() {
+		"decode_hex" => syscall_sync(scope, args, syscall_decode_hex),
+		"decode_utf8" => syscall_sync(scope, args, syscall_decode_utf8),
+		"encode_hex" => syscall_sync(scope, args, syscall_encode_hex),
+		"encode_utf8" => syscall_sync(scope, args, syscall_encode_utf8),
 		"get_documents" => syscall_sync(scope, args, syscall_get_documents),
 		"load_module" => syscall_sync(scope, args, syscall_load_module),
 		"log" => syscall_sync(scope, args, syscall_log),
@@ -41,6 +45,55 @@ fn syscall_inner<'s>(
 		"get_module_version" => syscall_sync(scope, args, syscall_get_module_version),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_decode_hex(
+	_tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (String,),
+) -> Result<serde_v8::ZeroCopyBuf> {
+	let (hex,) = args;
+	let bytes = hex::decode(hex)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the string as hex.")?;
+	Ok(bytes.into())
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_decode_utf8(
+	_tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (serde_v8::ZeroCopyBuf,),
+) -> Result<String> {
+	let (bytes,) = args;
+	let bytes = bytes::Bytes::from(bytes);
+	let string = String::from_utf8(bytes.into())
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the bytes as UTF-8.")?;
+	Ok(string)
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_encode_hex(
+	_tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (serde_v8::ZeroCopyBuf,),
+) -> Result<String> {
+	let (bytes,) = args;
+	let hex = hex::encode(bytes);
+	Ok(hex)
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_encode_utf8(
+	_tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (String,),
+) -> Result<serde_v8::ZeroCopyBuf> {
+	let (string,) = args;
+	let bytes = string.into_bytes().into();
+	Ok(bytes)
 }
 
 fn syscall_load_module(

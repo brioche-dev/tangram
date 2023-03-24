@@ -1,5 +1,6 @@
 import { Artifact } from "./artifact";
 import { run } from "./operation";
+import * as syscall from "./syscall";
 import { nullish } from "./value";
 
 export type DownloadArgs = {

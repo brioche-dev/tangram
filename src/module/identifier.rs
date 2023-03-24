@@ -9,60 +9,12 @@ use url::Url;
 
 /// A unique identifier for a module.
 #[derive(
-	Clone,
-	PartialOrd,
-	Ord,
-	PartialEq,
-	Eq,
-	Hash,
-	Debug,
-	serde::Serialize,
-	serde::Deserialize,
-	buffalo::Serialize,
-	buffalo::Deserialize,
-)]
-#[serde(into = "Url", try_from = "Url")]
-#[buffalo(into = "Url", try_from = "Url")]
-pub enum Identifier {
-	// A normal module.
-	Normal(Normal),
-
-	// An artifact module.
-	Artifact(Artifact),
-
-	// A library module.
-	Lib(Lib),
-}
-
-// A normal module.
-#[derive(
 	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
 )]
-pub struct Normal {
+pub struct Identifier {
 	/// The module's source.
 	pub source: Source,
 
-	/// The module's path.
-	pub path: Path,
-}
-
-// An artifact module.
-#[derive(
-	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
-)]
-pub struct Artifact {
-	/// The module's source.
-	pub source: Source,
-
-	/// The module's path.
-	pub path: Path,
-}
-
-// A library module.
-#[derive(
-	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
-)]
-pub struct Lib {
 	/// The module's path.
 	pub path: Path,
 }
@@ -73,6 +25,10 @@ pub struct Lib {
 )]
 #[serde(tag = "kind", content = "value")]
 pub enum Source {
+	/// A library module.
+	#[serde(rename = "lib")]
+	Lib,
+
 	/// A module in a package at a path.
 	#[serde(rename = "path")]
 	Path(fs::PathBuf),
@@ -87,18 +43,18 @@ impl Identifier {
 	pub fn for_root_module_in_package_instance(
 		package_instance_hash: package::instance::Hash,
 	) -> Identifier {
-		Identifier::Normal(Normal {
+		Identifier {
 			source: Source::Instance(package_instance_hash),
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
-		})
+		}
 	}
 
 	#[must_use]
 	pub fn for_root_module_in_package_at_path(package_path: &fs::Path) -> Identifier {
-		Identifier::Normal(Normal {
+		Identifier {
 			source: Source::Path(package_path.to_owned()),
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
-		})
+		}
 	}
 }
 
@@ -131,10 +87,10 @@ impl Identifier {
 			.wrap_err("The module path was not a valid path.")?;
 
 		// Create the module identifier.
-		let module_identifier = Identifier::Normal(Normal {
+		let module_identifier = Identifier {
 			source: Source::Path(package_path),
 			path: module_path,
-		});
+		};
 
 		Ok(module_identifier)
 	}
@@ -142,17 +98,8 @@ impl Identifier {
 
 impl From<Identifier> for Url {
 	fn from(value: Identifier) -> Self {
-		match value {
-			Identifier::Normal(value) => {
-				let data = hex::encode(serde_json::to_string(&value).unwrap());
-				format!("tangram://normal/{data}.ts").parse().unwrap()
-			},
-			Identifier::Artifact(value) => {
-				let data = hex::encode(serde_json::to_string(&value).unwrap());
-				format!("tangram://artifact/{data}.ts").parse().unwrap()
-			},
-			Identifier::Lib(Lib { path }) => format!("tangram://lib/{path}").parse().unwrap(),
-		}
+		let data = hex::encode(serde_json::to_string(&value).unwrap());
+		format!("tangram:{data}").parse().unwrap()
 	}
 }
 
@@ -165,68 +112,15 @@ impl TryFrom<Url> for Identifier {
 			return_error!("The URL has an invalid scheme.");
 		}
 
-		let domain = value.domain().wrap_err("The URL must have a domain.")?;
+		// Deserialize the path as hex.
+		let data = hex::decode(value.path())
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the path as hex.")?;
 
-		let identifier = match domain {
-			"normal" => {
-				// Remove the ".ts" extension.
-				let path = value
-					.path()
-					.strip_prefix('/')
-					.wrap_err(r#"The path must begin with a "/"."#)?
-					.strip_suffix(".ts")
-					.wrap_err(r#"The path must end in ".ts"."#)?;
-
-				// Deserialize the path as hex.
-				let data = hex::decode(path)
-					.map_err(Error::other)
-					.wrap_err("Failed to deserialize the path as hex.")?;
-
-				// Deserialize the data.
-				let identifier = serde_json::from_slice(&data)
-					.map_err(Error::other)
-					.wrap_err("Failed to deserialize the identifier.")?;
-
-				Identifier::Normal(identifier)
-			},
-
-			"artifact" => {
-				// Remove the ".ts" extension.
-				let path = value
-					.path()
-					.strip_prefix('/')
-					.wrap_err(r#"The path must begin with a "/"."#)?
-					.strip_suffix(".ts")
-					.wrap_err(r#"The path must end in ".ts"."#)?;
-
-				// Deserialize the path as hex.
-				let data = hex::decode(path)
-					.map_err(Error::other)
-					.wrap_err("Failed to deserialize the path as hex.")?;
-
-				// Deserialize the data.
-				let identifier = serde_json::from_slice(&data)
-					.map_err(Error::other)
-					.wrap_err("Failed to deserialize the identifier.")?;
-
-				Identifier::Artifact(identifier)
-			},
-
-			"lib" => {
-				// Get the path
-				let path = value
-					.path()
-					.strip_prefix('/')
-					.wrap_err(r#"The path must begin with a "/"."#)?
-					.parse()
-					.map_err(Error::other)
-					.wrap_err("Invalid path.")?;
-
-				Identifier::Lib(Lib { path })
-			},
-
-			_ => return_error!("The URL has an invalid domain."),
-		};
+		// Deserialize the data.
+		let identifier = serde_json::from_slice(&data)
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the identifier.")?;
 
 		Ok(identifier)
 	}

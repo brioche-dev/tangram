@@ -2,12 +2,14 @@ pub use self::error::Error;
 use crate::{checksum::Checksum, system::System, template::Template};
 use std::collections::BTreeMap;
 
+mod client;
 mod error;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod run;
+pub mod server;
 
 #[derive(
 	Clone,

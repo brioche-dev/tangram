@@ -1,9 +1,10 @@
 import { Position } from "./position";
-import { host, languageService } from "./typescript";
+import { ModuleIdentifier } from "./syscall";
+import * as typescript from "./typescript";
 import * as ts from "typescript";
 
 export type Request = {
-	moduleIdentifier: string;
+	moduleIdentifier: ModuleIdentifier;
 	position: Position;
 };
 
@@ -13,8 +14,8 @@ export type Response = {
 
 export let handle = (request: Request): Response => {
 	// Get the source file.
-	let sourceFile = host.getSourceFile(
-		request.moduleIdentifier,
+	let sourceFile = typescript.host.getSourceFile(
+		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
 		ts.ScriptTarget.ESNext,
 	);
 	if (sourceFile === undefined) {
@@ -29,8 +30,8 @@ export let handle = (request: Request): Response => {
 	);
 
 	// Get the quick info at the position.
-	let quickInfo = languageService.getQuickInfoAtPosition(
-		request.moduleIdentifier,
+	let quickInfo = typescript.languageService.getQuickInfoAtPosition(
+		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
 		position,
 	);
 

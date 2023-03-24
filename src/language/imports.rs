@@ -1,13 +1,20 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	module, Instance,
+	module,
+	path::Path,
+	Instance,
 };
 use std::sync::Arc;
 
+pub struct Imports {
+	pub imports: Vec<module::Specifier>,
+	pub includes: Vec<Path>,
+}
+
 impl Instance {
 	#[allow(clippy::unused_async)]
-	pub async fn imports(self: &Arc<Self>, text: &str) -> Result<Vec<module::Specifier>> {
+	pub async fn imports(self: &Arc<Self>, text: &str) -> Result<Imports> {
 		// Create the language service request.
 		let request = service::Request::Imports(service::imports::Request {
 			text: text.to_owned(),
@@ -20,8 +27,8 @@ impl Instance {
 		let service::Response::Imports(response) = response else { return_error!("Unexpected response type.") };
 
 		// Get the text from the response.
-		let service::imports::Response { imports } = response;
+		let service::imports::Response { includes, imports } = response;
 
-		Ok(imports)
+		Ok(Imports { imports, includes })
 	}
 }

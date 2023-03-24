@@ -9,7 +9,7 @@ use url::Url;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]
 pub enum Specifier {
-	/// A module specifier that refers to an artifact module or a normal module in the current package, such as `import "./src"` or `import "./module.tg"`.
+	/// A module specifier that refers to a module in the current package, such as `import "./src"` or `import "./module.tg"`.
 	Path(Path),
 
 	/// A module specifier that refers to a dependency, such as `import "tangram:std"`. See [`dependency::Specifier`].

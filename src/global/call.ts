@@ -1,5 +1,6 @@
 import { Function } from "./function";
 import { run } from "./operation";
+import * as syscall from "./syscall";
 import { Value, deserializeValue, nullish, serializeValue } from "./value";
 
 type CallArgs<T extends Value> = {

@@ -1,0 +1,60 @@
+use bytes::Bytes;
+use futures::Stream;
+use http_body::{Body, Frame};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use pin_project::pin_project;
+use std::{
+	pin::Pin,
+	task::{Context, Poll},
+};
+
+pub type Request = http::Request<hyper::body::Incoming>;
+pub type Response = http::Response<ResponseBody>;
+pub type ResponseBody = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync + 'static>>;
+
+pub fn full<T: Into<Bytes>>(chunk: T) -> ResponseBody {
+	Full::new(chunk.into())
+		.map_err(|never| match never {})
+		.boxed()
+}
+
+#[pin_project]
+pub struct BodyStream<B> {
+	#[pin]
+	body: B,
+}
+
+impl<B> BodyStream<B> {
+	pub fn new(body: B) -> BodyStream<B> {
+		BodyStream { body }
+	}
+}
+
+impl<B> Body for BodyStream<B>
+where
+	B: Body,
+{
+	type Data = B::Data;
+	type Error = B::Error;
+
+	fn poll_frame(
+		self: Pin<&mut Self>,
+		cx: &mut Context<'_>,
+	) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+		self.project().body.poll_frame(cx)
+	}
+}
+impl<B> Stream for BodyStream<B>
+where
+	B: Body,
+{
+	type Item = Result<Frame<B::Data>, B::Error>;
+
+	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+		match self.project().body.poll_frame(cx) {
+			Poll::Ready(Some(frame)) => Poll::Ready(Some(frame)),
+			Poll::Ready(None) => Poll::Ready(None),
+			Poll::Pending => Poll::Pending,
+		}
+	}
+}

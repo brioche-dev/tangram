@@ -7,13 +7,13 @@ use std::sync::{Arc, Weak};
 impl Operation {
 	pub async fn run(&self, tg: &Arc<Instance>) -> crate::Result<Value> {
 		let operation_hash = tg.add_operation(self)?;
-		let value = tg.run(operation_hash).await?;
+		let value = tg.run_operation(operation_hash).await?;
 		Ok(value)
 	}
 }
 
 impl Instance {
-	pub async fn run(self: &Arc<Self>, operation_hash: Hash) -> Result<Value> {
+	pub async fn run_operation(self: &Arc<Self>, operation_hash: Hash) -> Result<Value> {
 		// Get the operations task map.
 		let operations_task_map = self
 			.operations_task_map
@@ -26,7 +26,7 @@ impl Instance {
 						let tg = Weak::clone(&tg);
 						async move {
 							let tg = Weak::upgrade(&tg).unwrap();
-							tg.run_inner(operation_hash, None).await
+							tg.run_operation_inner(operation_hash, None).await
 						}
 						.boxed()
 					}
@@ -42,7 +42,7 @@ impl Instance {
 
 	#[async_recursion]
 	#[must_use]
-	async fn run_inner(
+	async fn run_operation_inner(
 		self: Arc<Self>,
 		operation_hash: Hash,
 		parent_operation_hash: Option<Hash>,

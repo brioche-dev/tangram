@@ -1,4 +1,4 @@
-use super::{context::State, isolate::THREAD_LOCAL_ISOLATE, Call};
+use super::{isolate::THREAD_LOCAL_ISOLATE, state::State, Call};
 use crate::{
 	error::{Error, Result, WrapErr},
 	module,

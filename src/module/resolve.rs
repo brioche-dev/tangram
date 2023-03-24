@@ -1,12 +1,8 @@
-use super::{
-	dependency,
-	identifier::{self, Lib, Source},
-	Identifier, Specifier,
-};
+use super::{dependency, identifier::Source, Identifier, Specifier};
 use crate::{
 	error::{return_error, Result, WrapErr},
 	package,
-	path::Path,
+	path::{self, Path},
 	util::fs,
 	Instance,
 };
@@ -37,37 +33,13 @@ impl Instance {
 		specifier: &Path,
 		referrer: &Identifier,
 	) -> Result<Identifier> {
-		match referrer {
-			Identifier::Normal(referrer) => {
-				let mut path = referrer.path.clone();
-				path.parent();
-				path.join(specifier.clone());
-
-				// If the path ends in `.tg`, then it specifies a normal module. Otherwise, it specifies an artifact module.
-				if path.extension() == Some("tg") {
-					Ok(Identifier::Normal(identifier::Normal {
-						source: referrer.source.clone(),
-						path,
-					}))
-				} else {
-					Ok(Identifier::Artifact(identifier::Artifact {
-						source: referrer.source.clone(),
-						path,
-					}))
-				}
-			},
-
-			Identifier::Artifact(_) => {
-				return_error!("Artifact modules cannot have imports.");
-			},
-
-			Identifier::Lib(referrer) => {
-				let mut path = referrer.path.clone();
-				path.parent();
-				path.join(specifier.clone());
-				Ok(Identifier::Lib(Lib { path }))
-			},
-		}
+		let mut path = referrer.path.clone();
+		path.push(path::Component::ParentDir);
+		path.join(specifier.clone());
+		Ok(Identifier {
+			source: referrer.source.clone(),
+			path,
+		})
 	}
 
 	async fn resolve_module_with_dependency_specifier(
@@ -79,10 +51,10 @@ impl Instance {
 		let specifier = specifier.to_package_dependency_specifier(referrer)?;
 
 		match referrer {
-			Identifier::Normal(identifier::Normal {
+			Identifier {
 				source: Source::Path(package_path),
 				..
-			}) => {
+			} => {
 				self.resolve_module_with_dependency_specifier_from_path_referrer(
 					&specifier,
 					package_path,
@@ -90,10 +62,10 @@ impl Instance {
 				.await
 			},
 
-			Identifier::Normal(identifier::Normal {
+			Identifier {
 				source: Source::Instance(package_instance_hash),
 				..
-			}) => {
+			} => {
 				self.resolve_module_with_dependency_specifier_from_instance_referrer(
 					&specifier,
 					*package_instance_hash,

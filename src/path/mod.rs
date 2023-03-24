@@ -52,10 +52,6 @@ impl Path {
 		}
 	}
 
-	pub fn parent(&mut self) {
-		self.push(Component::ParentDir);
-	}
-
 	pub fn join(&mut self, other: Path) {
 		for component in other.components {
 			self.push(component);

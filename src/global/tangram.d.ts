@@ -26,6 +26,9 @@ declare namespace tg {
 
 	export type Artifact = Directory | File | Symlink | Reference;
 
+	/** Check if a value is an `Artifact`. */
+	export let isArtifact: (value: unknown) => value is Artifact;
+
 	// Checksum.
 
 	export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
@@ -53,6 +56,9 @@ declare namespace tg {
 
 	/** Create a directory. */
 	export let directory: (...args: Array<DirectoryArg>) => Promise<Directory>;
+
+	/** Check if a value is a `Directory`. */
+	export let isDirectory: (value: unknown) => value is Directory;
 
 	export class Directory {
 		/** Get this directory's artifact hash. */
@@ -115,6 +121,9 @@ declare namespace tg {
 
 	export let file: (fileLike: FileLike, options?: FileOptions) => Promise<File>;
 
+	/** Check if a value is a `File`. */
+	export let isFile: (value: unknown) => value is File;
+
 	export class File {
 		/** Get the this file's artifact hash. */
 		hash(): Promise<ArtifactHash>;
@@ -149,25 +158,9 @@ declare namespace tg {
 	) => Function<A, R>;
 	export { function_ as function };
 
-	// Artifact type guards.
+	// Include.
 
-	/** Check if a value is an `Artifact`. */
-	export let isArtifact: (value: unknown) => value is Artifact;
-
-	/** Check if a value is a `Directory`. */
-	export let isDirectory: (value: unknown) => value is Directory;
-
-	/** Check if a value is a `File`. */
-	export let isFile: (value: unknown) => value is File;
-
-	/** Check if a value is a `Placeholder`. */
-	export let isPlaceholder: (value: unknown) => value is Placeholder;
-
-	/** Check if a value is a `Reference`. */
-	export let isReference: (value: unknown) => value is Reference;
-
-	/** Check if a value is a `Template`. */
-	export let isTemplate: (value: unknown) => value is Template;
+	export let include: (path: string) => Promise<Artifact>;
 
 	// Log.
 
@@ -211,6 +204,9 @@ declare namespace tg {
 	/** Create a placeholder. */
 	export let placeholder: (name: string) => Placeholder;
 
+	/** Check if a value is a `Placeholder`. */
+	export let isPlaceholder: (value: unknown) => value is Placeholder;
+
 	export class Placeholder {
 		/** Get this placeholder's name. */
 		name(): string;
@@ -246,6 +242,9 @@ declare namespace tg {
 
 	/** Create a reference. */
 	export let reference: (args: ReferenceArgs) => Promise<Reference>;
+
+	/** Check if a value is a `Reference`. */
+	export let isReference: (value: unknown) => value is Reference;
 
 	export class Reference {
 		/** Get this reference's artifact hash. */
@@ -345,6 +344,9 @@ declare namespace tg {
 	export let template: (
 		components: tg.Unresolved<tg.TemplateLike>,
 	) => Promise<Template>;
+
+	/** Check if a value is a `Template`. */
+	export let isTemplate: (value: unknown) => value is Template;
 
 	export class Template {
 		/** Get this template's components. */

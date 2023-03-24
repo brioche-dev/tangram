@@ -13,6 +13,7 @@ pub mod specifier;
 pub mod tracker;
 
 impl crate::Instance {
+	/// Create a package instance.
 	#[allow(clippy::unused_async, clippy::only_used_in_recursion)]
 	#[async_recursion]
 	pub async fn create_package_instance(
