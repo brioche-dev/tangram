@@ -53,10 +53,7 @@ impl Cli {
 			context,
 			args: args_,
 		});
-		let output = operation
-			.run(&self.tg)
-			.await
-			.wrap_err("Failed to run the operation.")?;
+		let output = operation.run(&self.tg).await?;
 
 		// Check out the output if requested.
 		if let Some(path) = args.checkout {

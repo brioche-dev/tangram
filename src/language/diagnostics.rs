@@ -27,8 +27,8 @@ impl Instance {
 		// Create the language service request.
 		let request = service::Request::Diagnostics(service::diagnostics::Request {});
 
-		// Send the language service request and receive the response.
-		let response = self.language_service_request(request).await?;
+		// Handle the language service request.
+		let response = self.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Diagnostics(response) = response else { return_error!("Unexpected response type.") };

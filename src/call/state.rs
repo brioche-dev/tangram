@@ -4,6 +4,7 @@ use sourcemap::SourceMap;
 use std::{cell::RefCell, num::NonZeroI32, rc::Rc};
 
 pub struct State {
+	pub global_source_map: Option<SourceMap>,
 	pub modules: Rc<RefCell<Vec<Module>>>,
 	pub futures: Rc<RefCell<FuturesUnordered<LocalBoxFuture<'static, FutureOutput>>>>,
 }

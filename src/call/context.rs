@@ -1,5 +1,5 @@
 use super::{
-	isolate::THREAD_LOCAL_ISOLATE,
+	isolate::{GLOBAL_SOURCE_MAP, THREAD_LOCAL_ISOLATE},
 	state::{FutureOutput, State},
 	syscall::syscall,
 };
@@ -8,6 +8,7 @@ use crate::{
 	Instance,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
+use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, rc::Rc, sync::Arc, task::Poll};
 
 pub fn new(tg: Arc<Instance>) -> v8::Global<v8::Context> {
@@ -23,6 +24,7 @@ pub fn new(tg: Arc<Instance>) -> v8::Global<v8::Context> {
 
 	// Create the state.
 	let state = Rc::new(State {
+		global_source_map: Some(SourceMap::from_slice(GLOBAL_SOURCE_MAP).unwrap()),
 		modules: Rc::new(RefCell::new(Vec::new())),
 		futures: Rc::new(RefCell::new(FuturesUnordered::new())),
 	});

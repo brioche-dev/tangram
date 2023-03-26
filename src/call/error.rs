@@ -1,4 +1,4 @@
-use crate::language::Location;
+use crate::{language::Position, module};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -26,24 +26,35 @@ pub struct StackFrame {
 	pub location: Option<Location>,
 }
 
+/// A source location.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Location {
+	pub source: Source,
+	pub position: Position,
+}
+
+/// A source.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "value")]
+pub enum Source {
+	#[serde(rename = "global")]
+	Global(Option<String>),
+
+	#[serde(rename = "module")]
+	Module(module::Identifier),
+}
+
 impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		// Write the message.
 		write!(f, "{}", self.message)?;
 
-		// Write the location.
-		if let Some(location) = &self.location {
-			writeln!(f)?;
-			write!(
-				f,
-				"  {}:{}:{}:{}:{}",
-				location.module_identifier,
-				location.range.start.line + 1,
-				location.range.start.character + 1,
-				location.range.end.line + 1,
-				location.range.end.character + 1,
-			)?;
-		}
+		// // Write the location.
+		// if let Some(location) = &self.location {
+		// 	writeln!(f)?;
+		// 	write!(f, "  {location}")?;
+		// }
 
 		// Write the stack trace.
 		if let Some(stack_trace) = &self.stack_trace {
@@ -56,21 +67,46 @@ impl std::fmt::Display for Error {
 
 impl std::fmt::Display for StackTrace {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		for location in self
-			.stack_frames
-			.iter()
-			.filter_map(|stack_frame| stack_frame.location.as_ref())
-		{
+		for stack_frame in &self.stack_frames {
 			writeln!(f)?;
-			write!(
-				f,
-				"  {}:{}:{}:{}:{}",
-				location.module_identifier,
-				location.range.start.line + 1,
-				location.range.start.character + 1,
-				location.range.end.line + 1,
-				location.range.end.character + 1,
-			)?;
+			write!(f, "  {stack_frame}")?;
+		}
+		Ok(())
+	}
+}
+
+impl std::fmt::Display for StackFrame {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		if let Some(location) = &self.location {
+			write!(f, "{location}")?;
+		} else {
+			write!(f, "[unknown]")?;
+		}
+		Ok(())
+	}
+}
+
+impl std::fmt::Display for Location {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let source = &self.source;
+		let line = self.position.line + 1;
+		let character = self.position.character + 1;
+		write!(f, "{source}:{line}:{character}")?;
+		Ok(())
+	}
+}
+
+impl std::fmt::Display for Source {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Source::Global(path) => {
+				let path = path.as_deref().unwrap_or("[unknown]");
+				write!(f, "global:{path}")?;
+			},
+
+			Source::Module(module_identifier) => {
+				write!(f, "{module_identifier}")?;
+			},
 		}
 		Ok(())
 	}

@@ -1,5 +1,5 @@
 use crate::{
-	error::{Error, Result, WrapErr},
+	error::{Error, Result},
 	Cli,
 };
 use tangram::operation::{Download, Operation};
@@ -23,10 +23,7 @@ impl Cli {
 			checksum: None,
 			is_unsafe: true,
 		});
-		let output = operation
-			.run(&self.tg)
-			.await
-			.wrap_err("Failed to run the operation.")?;
+		let output = operation.run(&self.tg).await?;
 
 		// Print the output.
 		let output = serde_json::to_string_pretty(&output).map_err(Error::other)?;

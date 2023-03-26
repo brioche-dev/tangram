@@ -1,16 +1,13 @@
 use super::{
-	error::{StackFrame, StackTrace},
+	error::{Location, Source, StackFrame, StackTrace},
 	state::State,
 };
-use crate::{
-	error::Error,
-	language::{Location, Position, Range},
-	module, operation,
-};
+use crate::{error::Error, language::Position, operation};
 use num::ToPrimitive;
 use std::sync::Arc;
 
 impl Error {
+	#[allow(clippy::too_many_lines)]
 	pub fn from_exception(
 		scope: &mut v8::HandleScope,
 		state: &State,
@@ -23,92 +20,44 @@ impl Error {
 			}
 		}
 
-		// Get the location.
-		let message = v8::Exception::create_message(scope, exception);
-		let location = if let Some(resource_name) = message
-			.get_script_resource_name(scope)
-			.and_then(|resource_name| <v8::Local<v8::String>>::try_from(resource_name).ok())
-		{
-			// Parse the resource name as a module identifier.
-			let module_identifier = resource_name.to_rust_string_lossy(scope).parse().unwrap();
-
-			// Get the start and end positions.
-			let line = message.get_line_number(scope).unwrap().to_u32().unwrap() - 1;
-			let start_character = message.get_start_column().to_u32().unwrap();
-			let end_character = message.get_end_column().to_u32().unwrap();
-			let start = Position {
-				line,
-				character: start_character,
-			};
-			let start = apply_source_map(state, Some(&module_identifier), start);
-			let end = Position {
-				line,
-				character: end_character,
-			};
-			let end = apply_source_map(state, Some(&module_identifier), end);
-
-			// Create the range.
-			let range = Range { start, end };
-
-			// Create the location.
-			Some(Location {
-				module_identifier,
-				range,
-			})
-		} else {
-			None
-		};
-
 		// Get the message.
 		let message = v8::Exception::create_message(scope, exception)
 			.get(scope)
 			.to_rust_string_lossy(scope);
 
-		// If the exception is not a native error, then stringify it.
-		if !exception.is_native_error() {
-			return Error::Operation(operation::Error::Call(super::Error {
-				message,
-				location,
-				stack_trace: None,
-				source: None,
-			}));
-		}
+		// Get the location.
+		let exception_message = v8::Exception::create_message(scope, exception);
+		let resource_name = exception_message
+			.get_script_resource_name(scope)
+			.and_then(|resource_name| <v8::Local<v8::String>>::try_from(resource_name).ok())
+			.map(|resource_name| resource_name.to_rust_string_lossy(scope));
+		let line = exception_message
+			.get_line_number(scope)
+			.unwrap()
+			.to_u32()
+			.unwrap() - 1;
+		let character = exception_message.get_start_column().to_u32().unwrap();
+		let position = Position { line, character };
+		let location = get_location(state, resource_name.as_deref(), position);
 
 		// Get the stack trace.
 		let stack_string = v8::String::new(scope, "stack").unwrap();
-		let stack_trace = if let Some(stack) = dbg!(exception
-			.to_object(scope)
-			.unwrap()
-			.get(scope, stack_string.into())
-			.and_then(|value| serde_v8::from_v8::<V8StackTrace>(scope, value).ok()))
+		let stack_trace = if let Some(stack) = exception
+			.is_native_error()
+			.then(|| exception.to_object(scope).unwrap())
+			.and_then(|exception| exception.get(scope, stack_string.into()))
+			.and_then(|value| serde_v8::from_v8::<V8StackTrace>(scope, value).ok())
 		{
 			let stack_frames = stack
 				.call_sites
 				.iter()
 				.map(|call_site| {
 					// Get the location.
-					let location = if let Some(module_identifier) = call_site
-						.file_name
-						.as_ref()
-						.and_then(|file_name| file_name.parse().ok())
-					{
-						// Get the position.
-						let line = call_site.line_number.unwrap().to_u32().unwrap() - 1;
-						let character = call_site.column_number.unwrap().to_u32().unwrap();
-						let position = Position { line, character };
-						let position = apply_source_map(state, Some(&module_identifier), position);
-
-						// Create the location.
-						Some(Location {
-							module_identifier,
-							range: Range {
-								start: position,
-								end: position,
-							},
-						})
-					} else {
-						None
-					};
+					let file_name = call_site.file_name.as_deref();
+					let line = call_site.line_number.unwrap().to_u32().unwrap() - 1;
+					let character = call_site.column_number.unwrap().to_u32().unwrap();
+					let position = Position { line, character };
+					let location = get_location(state, file_name, position);
 
 					// Create the stack frame.
 					StackFrame { location }
@@ -124,9 +73,9 @@ impl Error {
 		// Get the source.
 		let cause_string = v8::String::new(scope, "cause").unwrap();
 		let source = if let Some(cause) = exception
-			.to_object(scope)
-			.unwrap()
-			.get(scope, cause_string.into())
+			.is_native_error()
+			.then(|| exception.to_object(scope).unwrap())
+			.and_then(|exception| exception.get(scope, cause_string.into()))
 			.and_then(|value| value.to_object(scope))
 		{
 			let error = Error::from_exception(scope, state, cause.into());
@@ -146,46 +95,71 @@ impl Error {
 
 	pub fn to_exception<'s>(&self, scope: &mut v8::HandleScope<'s>) -> v8::Local<'s, v8::Value> {
 		serde_v8::to_v8(scope, self).expect("Failed to serialize the error.")
-
-		// // Create the exception.
-		// let message = v8::String::new(scope, "An uncaught exception was thrown.").unwrap();
-		// let exception = v8::Exception::error(scope, message);
-		// let exception = exception
-		// 	.to_object(scope)
-		// 	.expect("Expected the exception to be an object.");
-
-		// // Serialize this error and set it to the `cause` field of the exception.
-		// let cause_key = v8::String::new(scope, "cause").unwrap();
-		// let cause_value = serde_v8::to_v8(scope, self).expect("Failed to serialize the error.");
-		// exception.set(scope, cause_key.into(), cause_value);
-
-		// exception.into()
 	}
 }
 
-fn apply_source_map(
-	state: &State,
-	module_identifier: Option<&module::Identifier>,
-	position: Position,
-) -> Position {
-	let modules = state.modules.borrow();
-	if let Some(source_map) = module_identifier
-		.and_then(|module_identifier| {
-			modules
-				.iter()
-				.find(|module| module.module_identifier == *module_identifier)
-		})
-		.and_then(|module| module.source_map.as_ref())
+fn get_location(state: &State, file_name: Option<&str>, position: Position) -> Option<Location> {
+	if file_name.map_or(false, |resource_name| resource_name == "[global]") {
+		// If the file name is "[global]", then create a location whose source is a module.
+
+		// Apply the global source map if it is available.
+		let location = if let Some(global_source_map) = state.global_source_map.as_ref() {
+			let token = global_source_map
+				.lookup_token(position.line, position.character)
+				.unwrap();
+			let path = token
+				.get_source()
+				.unwrap()
+				.strip_prefix("../")
+				.unwrap()
+				.to_owned();
+			let position = Position {
+				line: token.get_src_line(),
+				character: token.get_src_col(),
+			};
+			Location {
+				source: Source::Global(Some(path)),
+				position,
+			}
+		} else {
+			Location {
+				source: Source::Global(None),
+				position,
+			}
+		};
+
+		Some(location)
+	} else if let Some(module_identifier) =
+		file_name.and_then(|resource_name| resource_name.parse().ok())
 	{
-		let token = source_map
-			.lookup_token(position.line, position.character)
-			.unwrap();
-		Position {
-			line: token.get_src_line(),
-			character: token.get_src_col(),
-		}
+		// If the file name is a module identifier, then create a location whose source is a module.
+
+		// Apply a source map if one is available.
+		let modules = state.modules.borrow();
+		let position = if let Some(source_map) = modules
+			.iter()
+			.find(|module| module.module_identifier == module_identifier)
+			.and_then(|module| module.source_map.as_ref())
+		{
+			let token = source_map
+				.lookup_token(position.line, position.character)
+				.unwrap();
+			Position {
+				line: token.get_src_line(),
+				character: token.get_src_col(),
+			}
+		} else {
+			position
+		};
+
+		// Create the location.
+		Some(Location {
+			source: Source::Module(module_identifier),
+			position,
+		})
 	} else {
-		position
+		// Otherwise, the location cannot be determined.
+		None
 	}
 }
 

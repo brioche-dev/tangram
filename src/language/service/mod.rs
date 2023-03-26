@@ -10,7 +10,7 @@ pub mod completion;
 pub mod definition;
 pub mod diagnostics;
 pub mod doc;
-pub mod exception;
+pub mod error;
 pub mod format;
 pub mod hover;
 pub mod imports;
@@ -60,7 +60,10 @@ pub type ResponseSender = tokio::sync::oneshot::Sender<Result<Response>>;
 pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Instance {
-	pub async fn language_service_request(self: &Arc<Self>, request: Request) -> Result<Response> {
+	pub async fn handle_language_service_request(
+		self: &Arc<Self>,
+		request: Request,
+	) -> Result<Response> {
 		// Spawn the language service if necessary.
 		let request_sender = self
 			.language_service_request_sender
@@ -101,30 +104,18 @@ impl Instance {
 	}
 }
 
-// const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
+const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
 
 /// Run the language service.
 fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
-	let params = v8::CreateParams::default();
+	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);
 
 	// Create the context.
 	let mut handle_scope = v8::HandleScope::new(&mut isolate);
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-
-	// Run the script.
-	let source = v8::String::new(
-		&mut context_scope,
-		include_str!(concat!(
-			env!("CARGO_MANIFEST_DIR"),
-			"/assets/language_service.js"
-		)),
-	)
-	.unwrap();
-	let script = v8::Script::compile(&mut context_scope, source, None).unwrap();
-	script.run(&mut context_scope).unwrap();
 
 	// Set the instance on the context.
 	context.set_slot(&mut context_scope, tg);
@@ -173,11 +164,8 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 		// Handle a js exception.
 		if try_catch_scope.has_caught() {
 			let exception = try_catch_scope.exception().unwrap();
-			let mut scope = v8::HandleScope::new(&mut try_catch_scope);
-			let exception = self::exception::render(&mut scope, exception);
-			response_sender
-				.send(Err(Error::message(exception)))
-				.unwrap();
+			// let error = Error::from_exception(&mut try_catch_scope, state, exception);
+			response_sender.send(Err(todo!())).unwrap();
 			continue;
 		}
 

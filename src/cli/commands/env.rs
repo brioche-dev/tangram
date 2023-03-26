@@ -57,10 +57,7 @@ impl Cli {
 			context,
 			args,
 		});
-		let output = operation
-			.run(&self.tg)
-			.await
-			.wrap_err("Failed to run the operation.")?;
+		let output = operation.run(&self.tg).await?;
 
 		// Get the output artifact.
 		let output_artifact_hash = output
