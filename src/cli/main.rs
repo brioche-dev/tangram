@@ -135,7 +135,8 @@ fn setup_tracing() {
 	if let Some(env_layer) = env_layer {
 		let format_layer = tracing_subscriber::fmt::layer()
 			.compact()
-			.with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW);
+			.with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW)
+			.with_writer(std::io::stderr);
 		let subscriber = tracing_subscriber::registry()
 			.with(env_layer)
 			.with(format_layer)
