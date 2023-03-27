@@ -31,5 +31,7 @@ export let handle = (request: Request): Response => {
 		...program.getSemanticDiagnostics(),
 	].map(convertDiagnosticFromTypeScript);
 
-	throw new Error("This is an error in check.ts.");
+	return {
+		diagnostics,
+	};
 };
