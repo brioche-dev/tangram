@@ -51,7 +51,7 @@ impl Instance {
 			.await
 			.wrap_err("Failed to wait for the process to exit.")?;
 
-		// Error if the process did not exit successfully.
+		// Return an error if the process did not exit successfully.
 		if !status.success() {
 			return_error!("The process did not exit successfully.");
 		}
