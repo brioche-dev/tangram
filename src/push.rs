@@ -34,8 +34,6 @@ impl Instance {
 
 			// If the blob is missing, then push it.
 			artifact::add::Outcome::MissingBlob { blob_hash } => {
-				let _permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
-
 				// Get the blob.
 				let blob = self
 					.get_blob(blob_hash)

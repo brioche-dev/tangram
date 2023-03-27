@@ -112,15 +112,14 @@ impl Instance {
 			}
 		}
 
-		// Get a file system permit.
-		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
-
 		// Compute the file's blob hash.
+		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 		let mut file = tokio::fs::File::open(path).await?;
 		let mut hash_writer = hash::Writer::new();
 		tokio::io::copy(&mut file, &mut hash_writer).await?;
 		let blob_hash = blob::Hash(hash_writer.finalize());
 		drop(file);
+		drop(permit);
 
 		// Copy the file to the temp path.
 		let temp = Temp::new(self);
@@ -133,9 +132,6 @@ impl Instance {
 
 		// Move the file to the blobs directory.
 		tokio::fs::rename(temp.path(), &blob_path).await?;
-
-		// Drop the file system permit.
-		drop(permit);
 
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;

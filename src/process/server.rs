@@ -71,6 +71,9 @@ impl Server {
 			(http::Method::POST, ["v1", "checkin"]) => {
 				Some(self.handle_checkin_request(request).boxed())
 			},
+			(http::Method::POST, ["v1", "checkout"]) => {
+				Some(self.handle_checkout_request(request).boxed())
+			},
 			(_, _) => None,
 		};
 		let response = if let Some(response) = response {
@@ -82,6 +85,10 @@ impl Server {
 	}
 
 	async fn handle_checkin_request(&self, request: Request) -> Result<Response> {
+		todo!()
+	}
+
+	async fn handle_checkout_request(&self, request: Request) -> Result<Response> {
 		todo!()
 	}
 }

@@ -107,12 +107,8 @@ fn get_location(state: &State, file_name: Option<&str>, position: Position) -> O
 			let token = global_source_map
 				.lookup_token(position.line, position.character)
 				.unwrap();
-			let path = token
-				.get_source()
-				.unwrap()
-				.strip_prefix("../")
-				.unwrap()
-				.to_owned();
+			let path = token.get_source().unwrap();
+			let path = path.strip_prefix("../").unwrap().to_owned();
 			let position = Position {
 				line: token.get_src_line(),
 				character: token.get_src_col(),

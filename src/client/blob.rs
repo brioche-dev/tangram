@@ -13,13 +13,6 @@ impl Client {
 	where
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
-		// Get a permit.
-		let _permit = self
-			.socket_semaphore
-			.acquire()
-			.await
-			.map_err(Error::other)?;
-
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");
 		let mut url = self.url.clone();
