@@ -3,6 +3,7 @@ import * as completion from "./completion";
 import * as definition from "./definition";
 import * as diagnostics from "./diagnostics";
 import * as doc from "./doc";
+import { prepareStackTrace } from "./error";
 import * as format from "./format";
 import * as hover from "./hover";
 import * as imports from "./imports";
@@ -10,6 +11,11 @@ import * as metadata from "./metadata";
 import * as references from "./references";
 import * as rename from "./rename";
 import * as transpile from "./transpile";
+
+// Set `Error.prepareStackTrace`.
+Object.defineProperties(Error, {
+	prepareStackTrace: { value: prepareStackTrace },
+});
 
 type Request =
 	| { kind: "check"; request: check.Request }

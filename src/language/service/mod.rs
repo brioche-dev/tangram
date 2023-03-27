@@ -11,6 +11,7 @@ pub mod definition;
 pub mod diagnostics;
 pub mod doc;
 pub mod error;
+mod exception;
 pub mod format;
 pub mod hover;
 pub mod imports;
@@ -164,8 +165,9 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 		// Handle a js exception.
 		if try_catch_scope.has_caught() {
 			let exception = try_catch_scope.exception().unwrap();
-			// let error = Error::from_exception(&mut try_catch_scope, state, exception);
-			response_sender.send(Err(todo!())).unwrap();
+			let error =
+				self::Error::from_language_service_exception(&mut try_catch_scope, exception);
+			response_sender.send(Err(error)).unwrap();
 			continue;
 		}
 

@@ -50,12 +50,6 @@ impl std::fmt::Display for Error {
 		// Write the message.
 		write!(f, "{}", self.message)?;
 
-		// // Write the location.
-		// if let Some(location) = &self.location {
-		// 	writeln!(f)?;
-		// 	write!(f, "  {location}")?;
-		// }
-
 		// Write the stack trace.
 		if let Some(stack_trace) = &self.stack_trace {
 			write!(f, "{stack_trace}")?;

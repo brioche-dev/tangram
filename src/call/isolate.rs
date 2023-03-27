@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::Rc};
 
 pub const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/global.heapsnapshot"));
 
-pub const GLOBAL_SOURCE_MAP: &[u8] = include_bytes!("../../assets/global.js.map");
+pub const SOURCE_MAP: &[u8] =
+	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/global.js.map"));
 
 thread_local! {
 	pub static THREAD_LOCAL_ISOLATE: Rc<RefCell<v8::OwnedIsolate>> = {

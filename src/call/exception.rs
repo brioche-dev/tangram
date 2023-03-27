@@ -93,7 +93,10 @@ impl Error {
 		}))
 	}
 
-	pub fn to_exception<'s>(&self, scope: &mut v8::HandleScope<'s>) -> v8::Local<'s, v8::Value> {
+	pub fn to_language_service_exception<'s>(
+		&self,
+		scope: &mut v8::HandleScope<'s>,
+	) -> v8::Local<'s, v8::Value> {
 		serde_v8::to_v8(scope, self).expect("Failed to serialize the error.")
 	}
 }

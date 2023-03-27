@@ -23,11 +23,11 @@ pub enum Error {
 	#[serde(rename = "operation")]
 	Operation(#[from] operation::Error),
 
-	// /// A language service error.
-	// #[error(transparent)]
-	// #[serde(rename = "language_service")]
-	// LanguageService(#[from] language::service::error::Error),
-	//
+	/// A language service error.
+	#[error(transparent)]
+	#[serde(rename = "language_service")]
+	LanguageService(#[from] language::service::error::Error),
+
 	/// Any other error.
 	#[error("{message}")]
 	#[serde(rename = "other")]

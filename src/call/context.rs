@@ -1,5 +1,5 @@
 use super::{
-	isolate::{GLOBAL_SOURCE_MAP, THREAD_LOCAL_ISOLATE},
+	isolate::{SOURCE_MAP, THREAD_LOCAL_ISOLATE},
 	state::{FutureOutput, State},
 	syscall::syscall,
 };
@@ -24,7 +24,7 @@ pub fn new(tg: Arc<Instance>) -> v8::Global<v8::Context> {
 
 	// Create the state.
 	let state = Rc::new(State {
-		global_source_map: Some(SourceMap::from_slice(GLOBAL_SOURCE_MAP).unwrap()),
+		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 		modules: Rc::new(RefCell::new(Vec::new())),
 		futures: Rc::new(RefCell::new(FuturesUnordered::new())),
 	});

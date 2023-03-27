@@ -19,7 +19,7 @@ pub fn syscall(
 
 		Err(error) => {
 			// Throw an exception.
-			let exception = error.to_exception(scope);
+			let exception = error.to_language_service_exception(scope);
 			scope.throw_exception(exception);
 		},
 	}

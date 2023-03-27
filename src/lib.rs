@@ -122,7 +122,10 @@ fn initialize_v8() {
 	// Set the ICU data.
 	#[repr(C, align(16))]
 	struct IcuData([u8; 10_541_264]);
-	static ICU_DATA: IcuData = IcuData(*include_bytes!("../assets/icudtl.dat"));
+	static ICU_DATA: IcuData = IcuData(*include_bytes!(concat!(
+		env!("CARGO_MANIFEST_DIR"),
+		"/assets/icudtl.dat"
+	)));
 	v8::icu::set_common_data_72(&ICU_DATA.0).unwrap();
 
 	// Initialize the platform.
