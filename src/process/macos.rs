@@ -1,9 +1,11 @@
-use super::server::Server;
+use super::{
+	run::{Mode, Path},
+	server::Server,
+};
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	system::System,
 	temp::Temp,
-	template::{Mode, Path},
 	Instance,
 };
 use indoc::writedoc;
@@ -20,8 +22,8 @@ impl Instance {
 	pub async fn run_process_macos(
 		self: &Arc<Self>,
 		_system: System,
-		env: BTreeMap<String, String>,
 		command: String,
+		env: BTreeMap<String, String>,
 		args: Vec<String>,
 		mut paths: HashSet<Path, fnv::FnvBuildHasher>,
 		network_enabled: bool,

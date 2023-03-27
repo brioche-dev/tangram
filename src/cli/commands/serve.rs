@@ -2,7 +2,10 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use std::net::{IpAddr, SocketAddr};
+use std::{
+	net::{IpAddr, SocketAddr},
+	sync::Arc,
+};
 
 /// Run a server.
 #[derive(clap::Args)]
@@ -15,9 +18,15 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_serve(&self, args: Args) -> Result<()> {
-		// Serve!
+		// Create the server.
 		let addr = SocketAddr::new(args.host, args.port);
-		self.tg.serve(addr).await.wrap_err("Failed to serve.")?;
+		let server = tangram::server::Server::new(Arc::clone(&self.tg));
+
+		// Run the server.
+		server
+			.serve(addr)
+			.await
+			.wrap_err("Failed to run the server.")?;
 
 		Ok(())
 	}

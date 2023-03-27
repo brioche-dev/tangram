@@ -124,7 +124,7 @@ impl Instance {
 
 		// Copy the file to the temp path.
 		let temp = Temp::new(self);
-		let blob_path = self.blobs_path().join(blob_hash.to_string());
+		let blob_path = self.blob_path(blob_hash);
 		tokio::fs::copy(path, temp.path()).await?;
 
 		// Set the permissions.

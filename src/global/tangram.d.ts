@@ -244,8 +244,8 @@ declare namespace tg {
 
 	type ProcessArgs = {
 		system: System;
-		env?: Record<string, TemplateLike> | nullish;
 		command: TemplateLike;
+		env?: Record<string, TemplateLike> | nullish;
 		args?: Array<TemplateLike> | nullish;
 		checksum?: Checksum | nullish;
 		unsafe?: boolean | nullish;

@@ -27,10 +27,10 @@ pub struct Process {
 	pub system: System,
 
 	#[buffalo(id = 1)]
-	pub env: BTreeMap<String, Template>,
+	pub command: Template,
 
 	#[buffalo(id = 2)]
-	pub command: Template,
+	pub env: BTreeMap<String, Template>,
 
 	#[buffalo(id = 3)]
 	pub args: Vec<Template>,

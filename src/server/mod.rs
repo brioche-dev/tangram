@@ -10,23 +10,32 @@ mod artifact;
 mod blob;
 mod error;
 
-impl Instance {
-	pub async fn serve(self: &Arc<Self>, addr: SocketAddr) -> Result<()> {
-		let tg = Arc::clone(self);
+#[derive(Clone)]
+pub struct Server {
+	tg: Arc<Instance>,
+}
+
+impl Server {
+	pub fn new(tg: Arc<Instance>) -> Self {
+		Self { tg }
+	}
+
+	pub async fn serve(self, addr: SocketAddr) -> Result<()> {
 		let listener = tokio::net::TcpListener::bind(&addr)
 			.await
 			.map_err(Error::other)?;
 		tracing::info!("🚀 Serving on {}.", addr);
-		while let (stream, _) = listener.accept().await? {
-			let tg = Arc::clone(&tg);
+		loop {
+			let (stream, _) = listener.accept().await?;
+			let server = self.clone();
 			tokio::spawn(async move {
 				hyper::server::conn::http1::Builder::new()
 					.serve_connection(
 						stream,
 						hyper::service::service_fn(move |request| {
-							let tg = Arc::clone(&tg);
+							let server = server.clone();
 							async move {
-								let response = tg.handle_request(request).await;
+								let response = server.handle_request(request).await;
 								Ok::<_, Infallible>(response)
 							}
 						}),
@@ -35,7 +44,6 @@ impl Instance {
 					.ok()
 			});
 		}
-		Ok(())
 	}
 
 	async fn handle_request(&self, request: Request) -> Response {

@@ -30,7 +30,7 @@ impl Instance {
 		drop(permit);
 
 		// Move the temp to the blobs path.
-		let blob_path = self.blobs_path().join(blob_hash.to_string());
+		let blob_path = self.blob_path(blob_hash);
 		tokio::fs::rename(temp.path(), &blob_path).await?;
 
 		Ok(blob_hash)

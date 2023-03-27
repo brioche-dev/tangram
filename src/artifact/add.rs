@@ -45,7 +45,7 @@ impl Instance {
 			// If the artifact is a file, then ensure its blob is present and its references are present.
 			Artifact::File(file) => {
 				// Ensure the blob is present.
-				let blob_path = self.blobs_path().join(file.blob_hash.to_string());
+				let blob_path = self.blob_path(file.blob_hash);
 				let blob_exists = crate::util::fs::exists(&blob_path).await?;
 				if !blob_exists {
 					return Ok(Outcome::MissingBlob {

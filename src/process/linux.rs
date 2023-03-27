@@ -11,8 +11,8 @@ impl Instance {
 	pub async fn run_process_linux(
 		&self,
 		_system: System,
-		env: BTreeMap<String, String>,
 		command: String,
+		env: BTreeMap<String, String>,
 		args: Vec<String>,
 		_paths: HashSet<Path, fnv::FnvBuildHasher>,
 		_network_enabled: bool,

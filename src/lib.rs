@@ -246,8 +246,18 @@ impl Instance {
 	}
 
 	#[must_use]
+	fn blob_path(&self, blob_hash: blob::Hash) -> fs::PathBuf {
+		self.blobs_path().join(blob_hash.to_string())
+	}
+
+	#[must_use]
 	fn checkouts_path(&self) -> fs::PathBuf {
 		self.path().join("checkouts")
+	}
+
+	#[must_use]
+	fn checkout_path(&self, artifact_hash: artifact::Hash) -> fs::PathBuf {
+		self.checkouts_path().join(artifact_hash.to_string())
 	}
 
 	// #[must_use]

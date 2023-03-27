@@ -1,11 +1,8 @@
-use super::{error::bad_request, full};
-use crate::{
-	error::{return_error, Error, Result, WrapErr},
-	Instance,
-};
+use super::{error::bad_request, full, Server};
+use crate::error::{return_error, Error, Result, WrapErr};
 use http_body_util::BodyExt;
 
-impl Instance {
+impl Server {
 	pub async fn handle_add_artifact_request(
 		&self,
 		request: super::Request,
@@ -24,6 +21,7 @@ impl Instance {
 
 		// Add the artifact.
 		let outcome = self
+			.tg
 			.try_add_artifact(&artifact)
 			.await
 			.wrap_err("Failed to add the artifact.")?;
@@ -53,7 +51,7 @@ impl Instance {
 		let Ok(hash) = hash.parse() else { return Ok(bad_request()) };
 
 		// Get the artifact.
-		let artifact = self.try_get_artifact_local(hash)?;
+		let artifact = self.tg.try_get_artifact_local(hash)?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&artifact)

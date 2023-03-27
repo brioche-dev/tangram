@@ -9,7 +9,7 @@ use tokio::io::AsyncWrite;
 impl Instance {
 	pub async fn copy_blob_to_path(&self, blob_hash: Hash, path: &fs::Path) -> Result<()> {
 		// Get the blob path.
-		let blob_path = self.blobs_path().join(blob_hash.to_string());
+		let blob_path = self.blob_path(blob_hash);
 
 		// Acquire a permit and copy the file.
 		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
@@ -24,7 +24,7 @@ impl Instance {
 		W: AsyncWrite + Unpin,
 	{
 		// Get the blob path.
-		let path = self.blobs_path().join(blob_hash.to_string());
+		let path = self.blob_path(blob_hash);
 
 		// Open the file.
 		let mut file = tokio::fs::File::open(path).await?;

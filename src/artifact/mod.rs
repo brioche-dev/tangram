@@ -4,6 +4,7 @@ use crate::{directory::Directory, file::File, symlink::Symlink};
 pub mod add;
 mod get;
 mod hash;
+mod references;
 mod serialize;
 pub mod tracker;
 mod util;

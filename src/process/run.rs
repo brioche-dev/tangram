@@ -3,75 +3,87 @@ use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	system::System,
 	temp::Temp,
-	template::{Mode, Path},
+	template::Template,
+	util::fs,
 	value::Value,
 	Instance,
 };
 use futures::{future::try_join_all, FutureExt};
 use std::{collections::HashSet, sync::Arc};
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Path {
+	pub host_path: fs::PathBuf,
+	pub guest_path: fs::PathBuf,
+	pub mode: Mode,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum Mode {
+	Readonly,
+	ReadWrite,
+}
+
 impl Instance {
 	#[allow(clippy::too_many_lines)]
 	pub async fn run_process(self: &Arc<Self>, process: &Process) -> Result<Value> {
 		// Create a temp for the output.
 		let output_temp = Temp::new(self);
-
-		// Create the placeholder values for rendering templates.
-		let placeholder_values = [(
-			"output".to_owned(),
-			Path {
-				host_path: output_temp.path().to_owned(),
-				guest_path: output_temp.path().to_owned(),
-				mode: Mode::ReadWrite,
-			},
-		)]
-		.into();
-
-		// Render the env templates.
-		let env = {
-			let placeholder_values = &placeholder_values;
-			try_join_all(process.env.iter().map({
-				|(key, value)| async move {
-					let value = self.render(value, placeholder_values).await?;
-					Ok::<_, Error>((key, value))
-				}
-			}))
-			.await?
-		};
+		let output_temp_path = output_temp.path();
 
 		// Render the command template.
-		let command = self.render(&process.command, &placeholder_values).await?;
+		let command = render(self, &process.command, output_temp_path).await?;
+
+		// Render the env templates.
+		let env = try_join_all(process.env.iter().map(|(key, value)| async move {
+			let key = key.clone();
+			let value = render(self, value, output_temp_path).await?;
+			Ok::<_, Error>((key, value))
+		}))
+		.await?
+		.into_iter()
+		.collect();
 
 		// Render the args templates.
-		let args = {
-			let placeholder_values = &placeholder_values;
-			try_join_all(process.args.iter().map({
-				|value| async move {
-					let value = self.render(value, placeholder_values).await?;
-					Ok::<_, Error>(value)
-				}
+		let args = try_join_all(
+			process
+				.args
+				.iter()
+				.map(|arg| render(self, arg, output_temp_path)),
+		)
+		.await?;
+
+		// Collect the references.
+		let mut references = Vec::new();
+		process.command.collect_references(self, &mut references)?;
+		for value in process.env.values() {
+			value.collect_references(self, &mut references)?;
+		}
+		for arg in &process.args {
+			arg.collect_references(self, &mut references)?;
+		}
+
+		// Check out the references and collect the paths
+		let mut paths: HashSet<Path, fnv::FnvBuildHasher> =
+			try_join_all(references.into_iter().map(|artifact_hash| async move {
+				let path = self.check_out_internal(artifact_hash).await?;
+				let path = Path {
+					host_path: path.clone(),
+					guest_path: path,
+					mode: Mode::Readonly,
+				};
+				Ok::<_, Error>(path)
 			}))
 			.await?
-		};
+			.into_iter()
+			.collect();
 
-		// Collect the paths and get the strings for the env, command, and args.
-		let mut paths = HashSet::default();
-		let env = env
-			.into_iter()
-			.map(|(key, value)| {
-				paths.extend(value.paths);
-				(key.to_string(), value.string)
-			})
-			.collect();
-		paths.extend(command.paths);
-		let command = command.string;
-		let args = args
-			.into_iter()
-			.map(|value| {
-				paths.extend(value.paths);
-				value.string
-			})
-			.collect();
+		// Add the output path to the paths.
+		paths.insert(Path {
+			host_path: output_temp_path.to_owned(),
+			guest_path: output_temp_path.to_owned(),
+			mode: Mode::ReadWrite,
+		});
 
 		// Enable networking if the process has a checksum or is unsafe.
 		let network_enabled = process.checksum.is_some() || process.is_unsafe;
@@ -83,8 +95,8 @@ impl Instance {
 				{
 					self.run_process_linux(
 						process.system,
-						env,
 						command,
+						env,
 						args,
 						paths,
 						network_enabled,
@@ -101,8 +113,8 @@ impl Instance {
 				{
 					self.run_process_macos(
 						process.system,
-						env,
 						command,
+						env,
 						args,
 						paths,
 						network_enabled,
@@ -141,4 +153,26 @@ impl Instance {
 
 		Ok(output)
 	}
+}
+
+async fn render(tg: &Instance, template: &Template, output_path: &fs::Path) -> Result<String> {
+	template
+		.render(|component| async move {
+			match component {
+				crate::template::Component::String(string) => Ok(string.into()),
+				crate::template::Component::Artifact(artifact_hash) => Ok(tg
+					.checkout_path(*artifact_hash)
+					.into_os_string()
+					.into_string()
+					.unwrap()
+					.into()),
+				crate::template::Component::Placeholder(placeholder) => {
+					if placeholder.name != "output" {
+						return_error!(r#"Invalid placeholder "{}"."#, placeholder.name);
+					}
+					Ok(output_path.as_os_str().to_str().unwrap().into())
+				},
+			}
+		})
+		.await
 }

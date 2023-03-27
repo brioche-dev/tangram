@@ -1,14 +1,13 @@
-use super::{error::bad_request, error::not_found, full};
+use super::{error::bad_request, error::not_found, full, Server};
 use crate::{
 	blob,
 	error::{return_error, Result},
 	util::http::BodyStream,
-	Instance,
 };
 use futures::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
 
-impl Instance {
+impl Server {
 	pub async fn handle_add_blob_request(
 		&self,
 		request: super::Request,
@@ -30,7 +29,7 @@ impl Instance {
 		);
 
 		// Add the blob.
-		let hash = self.add_blob(body).await?;
+		let hash = self.tg.add_blob(body).await?;
 
 		// Create the response.
 		let body = hash.to_string();
@@ -57,7 +56,7 @@ impl Instance {
 		};
 
 		// Get the blob.
-		let Some(file) = self.try_get_blob(blob_hash).await? else { return Ok(not_found()) };
+		let Some(file) = self.tg.try_get_blob(blob_hash).await? else { return Ok(not_found()) };
 
 		// Create the stream for the file.
 		let body = StreamBody::new(

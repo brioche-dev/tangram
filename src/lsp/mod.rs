@@ -25,6 +25,10 @@ mod virtual_text_document;
 type _Receiver = tokio::sync::mpsc::UnboundedReceiver<jsonrpc::Message>;
 type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
+pub struct Server {
+	tg: Arc<Instance>,
+}
+
 impl Instance {
 	pub async fn run_lsp(self: &Arc<Self>) -> Result<()> {
 		let mut stdin = tokio::io::BufReader::new(tokio::io::stdin());
