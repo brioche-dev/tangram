@@ -25,7 +25,7 @@ impl Instance {
 		match outcome {
 			artifact::add::Outcome::Added { .. } => return Ok(()),
 
-			artifact::add::Outcome::DirectoryMissingEntries { entries } => {
+			artifact::add::Outcome::MissingEntries { entries } => {
 				// Pull the missing entries.
 				try_join_all(entries.into_iter().map(|(_, artifact_hash)| async move {
 					self.pull(client, artifact_hash).await?;
@@ -34,15 +34,19 @@ impl Instance {
 				.await?;
 			},
 
-			artifact::add::Outcome::FileMissingBlob { blob_hash } => {
+			artifact::add::Outcome::MissingBlob { blob_hash } => {
 				// Pull the blob.
 				let blob = client.get_blob(blob_hash).await?;
 				self.add_blob(blob).await?;
 			},
 
-			artifact::add::Outcome::ReferenceMissingArtifact { artifact_hash } => {
-				// Pull the missing referenced artifact.
-				self.pull(client, artifact_hash).await?;
+			artifact::add::Outcome::MissingReferences { artifact_hashes } => {
+				// Pull the missing references.
+				try_join_all(artifact_hashes.into_iter().map(|artifact_hash| async move {
+					self.pull(client, artifact_hash).await?;
+					Ok::<_, Error>(())
+				}))
+				.await?;
 			},
 		};
 

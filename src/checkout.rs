@@ -1,12 +1,12 @@
 use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
-	error::{Error, Result, WrapErr},
+	error::{return_error, Error, Result, WrapErr},
 	file::File,
 	symlink::Symlink,
 	temp::Temp,
-	util::fs,
-	util::task_map::TaskMap,
+	template,
+	util::{fs, task_map::TaskMap},
 	Instance,
 };
 use async_recursion::async_recursion;
@@ -145,7 +145,48 @@ impl Instance {
 			},
 
 			Artifact::Symlink(symlink) => {
-				todo!()
+				// Render the symlink target.
+				let target = symlink
+					.target
+					.render(|component| async move {
+						match component {
+							template::Component::String(string) => Ok(string.into()),
+
+							template::Component::Artifact(artifact_hash) => {
+								// Check out the artifact.
+								let artifact_path =
+									self.check_out_internal_inner(*artifact_hash).await?;
+
+								// Resolve the symlink target relative to the path.
+								let artifact_target_path = pathdiff::diff_paths(
+									artifact_path,
+									path.parent().unwrap(),
+								)
+								.wrap_err(
+									"Could not resolve the symlink target relative to the path.",
+								)?;
+
+								// Convert the path to a string.
+								let string = artifact_target_path
+									.into_os_string()
+									.into_string()
+									.unwrap()
+									.into();
+
+								Ok(string)
+							},
+
+							template::Component::Placeholder(_) => Err(Error::message(
+								"Symlink target template contains a placeholder.",
+							)),
+						}
+					})
+					.await?;
+
+				// Create the symlink.
+				tokio::fs::symlink(target, path)
+					.await
+					.wrap_err("Failed to write the symlink for the reference.")?;
 			},
 		};
 
@@ -347,6 +388,11 @@ impl Instance {
 		if file.executable {
 			let permissions = std::fs::Permissions::from_mode(0o755);
 			tokio::fs::set_permissions(path, permissions).await?;
+		}
+
+		// Check that the file has no references.
+		if !file.references.is_empty() {
+			return_error!(r#"Cannot check out a file with references."#);
 		}
 
 		Ok(())

@@ -1,8 +1,9 @@
-use super::Artifact;
+use super::Hash;
 use crate::{error::Result, Instance};
 
-impl Artifact {
-	pub async fn vendor(tg: &Instance) -> Result<Artifact> {
-		todo!()
+impl Instance {
+	// TODO: Implement this.
+	pub async fn vendor(&self, artifact_hash: Hash) -> Result<Hash> {
+		Ok(artifact_hash)
 	}
 }

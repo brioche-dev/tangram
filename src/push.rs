@@ -23,8 +23,8 @@ impl Instance {
 			// If the artifact was added, then we are done.
 			artifact::add::Outcome::Added { .. } => return Ok(()),
 
-			// If this artifact is a directory and there were missing entries, then recurse to push them.
-			artifact::add::Outcome::DirectoryMissingEntries { entries } => {
+			// If there were missing entries, then recurse to push them.
+			artifact::add::Outcome::MissingEntries { entries } => {
 				try_join_all(entries.into_iter().map(|(_, hash)| async move {
 					self.push(client, hash).await?;
 					Ok::<_, Error>(())
@@ -32,8 +32,8 @@ impl Instance {
 				.await?;
 			},
 
-			// If this artifact is a file and the blob is missing, then push it.
-			artifact::add::Outcome::FileMissingBlob { blob_hash } => {
+			// If the blob is missing, then push it.
+			artifact::add::Outcome::MissingBlob { blob_hash } => {
 				let _permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 
 				// Get the blob.
@@ -49,9 +49,13 @@ impl Instance {
 					.wrap_err("Failed to add the blob.")?;
 			},
 
-			// If this artifact is a reference whose artifact is missing, then push it.
-			artifact::add::Outcome::ReferenceMissingArtifact { artifact_hash } => {
-				self.push(client, artifact_hash).await?;
+			// If there are missing references, then recurse to push them.
+			artifact::add::Outcome::MissingReferences { artifact_hashes } => {
+				try_join_all(artifact_hashes.into_iter().map(|hash| async move {
+					self.push(client, hash).await?;
+					Ok::<_, Error>(())
+				}))
+				.await?;
 			},
 		};
 

@@ -140,11 +140,14 @@ impl Instance {
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
 
+		// TODO: Read the file's references from its xattrs.
+		let references = Vec::new();
+
 		// Create the artifact.
 		let artifact = Artifact::File(File {
 			blob_hash,
 			executable,
-			references: Vec::new(),
+			references,
 		});
 
 		// Add the artifact.

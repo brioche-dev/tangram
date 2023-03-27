@@ -10,9 +10,9 @@ use lmdb::Transaction;
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum Outcome {
 	Added { artifact_hash: Hash },
-	DirectoryMissingEntries { entries: Vec<(String, Hash)> },
-	FileMissingBlob { blob_hash: blob::Hash },
-	ReferenceMissingArtifact { artifact_hash: Hash },
+	MissingEntries { entries: Vec<(String, Hash)> },
+	MissingBlob { blob_hash: blob::Hash },
+	MissingReferences { artifact_hashes: Vec<Hash> },
 }
 
 impl Instance {
@@ -38,24 +38,55 @@ impl Instance {
 					}
 				}
 				if !entries.is_empty() {
-					return Ok(Outcome::DirectoryMissingEntries { entries });
+					return Ok(Outcome::MissingEntries { entries });
 				}
 			},
 
 			// If the artifact is a file, then ensure its blob is present and its references are present.
 			Artifact::File(file) => {
+				// Ensure the blob is present.
 				let blob_path = self.blobs_path().join(file.blob_hash.to_string());
 				let blob_exists = crate::util::fs::exists(&blob_path).await?;
 				if !blob_exists {
-					return Ok(Outcome::FileMissingBlob {
+					return Ok(Outcome::MissingBlob {
 						blob_hash: file.blob_hash,
 					});
 				}
-				todo!()
+
+				// Ensure the references are present.
+				let mut missing_references = Vec::new();
+				for artifact_hash in &file.references {
+					let artifact_hash = *artifact_hash;
+					let exists = self.artifact_exists_local(artifact_hash)?;
+					if !exists {
+						missing_references.push(artifact_hash);
+					}
+				}
+				if !missing_references.is_empty() {
+					return Ok(Outcome::MissingReferences {
+						artifact_hashes: missing_references,
+					});
+				}
 			},
 
 			// If this artifact is a symlink, then ensure the artifacts referenced by its template are present.
-			Artifact::Symlink(_) => todo!(),
+			Artifact::Symlink(symlink) => {
+				let mut missing_references = Vec::new();
+				for component in &symlink.target.components {
+					if let crate::template::Component::Artifact(artifact_hash) = component {
+						let artifact_hash = *artifact_hash;
+						let exists = self.artifact_exists_local(artifact_hash)?;
+						if !exists {
+							missing_references.push(artifact_hash);
+						}
+					}
+				}
+				if !missing_references.is_empty() {
+					return Ok(Outcome::MissingReferences {
+						artifact_hashes: missing_references,
+					});
+				}
+			},
 		}
 
 		// Hash the artifact.

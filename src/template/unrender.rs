@@ -8,6 +8,7 @@ use crate::{
 };
 
 impl Instance {
+	// TODO: This implementation only supports paths, not arbitrary strings.
 	#[allow(clippy::unused_async)]
 	pub async fn unrender(&self, path: fs::PathBuf) -> Result<Template> {
 		let template = if let Ok(path) = path.strip_prefix(self.checkouts_path()) {
