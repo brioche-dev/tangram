@@ -9,6 +9,7 @@ use std::{rc::Rc, sync::Arc};
 
 impl Instance {
 	// Run a call.
+	#[tracing::instrument(skip(self), ret)]
 	pub async fn run_call(self: &Arc<Self>, call: &Call) -> Result<Value> {
 		// Run the call on the local pool because it is a `!Send` future.
 		let output = self
@@ -27,6 +28,7 @@ impl Instance {
 }
 
 #[allow(clippy::await_holding_refcell_ref)]
+#[tracing::instrument(skip_all)]
 async fn run_call_inner(tg: Arc<Instance>, call: &Call) -> Result<Value> {
 	// Create the context.
 	let context = super::context::new(Arc::clone(&tg));

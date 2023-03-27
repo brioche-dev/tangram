@@ -6,7 +6,7 @@ use crate::{
 use std::time::{Duration, Instant};
 
 /// Login to Tangram.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {}
 
 impl Cli {

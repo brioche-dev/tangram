@@ -26,6 +26,7 @@ impl Instance {
 	}
 
 	/// Set the output for an operation in the database.
+	#[tracing::instrument(skip(self))]
 	pub fn set_operation_output(&self, operation_hash: Hash, value: &Value) -> Result<()> {
 		// Begin a write transaction.
 		let mut txn = self.database.env.begin_rw_txn()?;

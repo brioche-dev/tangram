@@ -10,7 +10,7 @@ use tangram::{
 	path::Path,
 };
 
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 #[command(
 	about = "Build a package and run an executable from its output.",
 	trailing_var_arg = true

@@ -1,7 +1,7 @@
 use crate::{error::Result, Cli};
 use tangram::{package, path::Path};
 
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 #[command(
 	about = r#"Build a package's "shell" export and run it."#,
 	trailing_var_arg = true

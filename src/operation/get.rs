@@ -22,6 +22,7 @@ impl Instance {
 		Ok(operation)
 	}
 
+	#[tracing::instrument(level = "debug", skip(self))]
 	pub fn try_get_operation_local(&self, hash: Hash) -> Result<Option<Operation>> {
 		// Begin a read transaction.
 		let txn = self.database.env.begin_ro_txn()?;
@@ -33,6 +34,7 @@ impl Instance {
 	}
 
 	/// Try to get an operation from the database with the given transaction.
+	#[tracing::instrument(level = "debug", skip(self, txn))]
 	pub fn try_get_operation_local_with_txn<Txn>(
 		&self,
 		txn: &Txn,

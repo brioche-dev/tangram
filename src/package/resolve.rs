@@ -6,6 +6,7 @@ use crate::{
 
 impl Instance {
 	#[allow(clippy::unused_async)]
+	#[tracing::instrument(skip(self), ret)]
 	pub async fn resolve_package(
 		&self,
 		specifier: &Specifier,

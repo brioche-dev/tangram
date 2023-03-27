@@ -2,7 +2,7 @@ use crate::{error::Result, Cli};
 use tangram::operation;
 
 /// Get the log for an operation.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	/// The hash of the operation to get logs from.
 	pub operation_hash: operation::Hash,

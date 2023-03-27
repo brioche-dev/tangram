@@ -8,7 +8,7 @@ use std::{
 };
 
 /// Run a server.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(long, default_value = "0.0.0.0")]
 	host: IpAddr,

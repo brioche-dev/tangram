@@ -18,10 +18,12 @@ impl Cli {
 		self.tg.path().join("config.json")
 	}
 
+	#[tracing::instrument(level = "debug", skip_all)]
 	pub async fn read_config(&self) -> Result<Option<Config>> {
 		Self::read_config_from_path(&self.config_path()).await
 	}
 
+	#[tracing::instrument(level = "debug")]
 	pub async fn read_config_from_path(path: &fs::Path) -> Result<Option<Config>> {
 		let config = match tokio::fs::read(&path).await {
 			Ok(config) => config,

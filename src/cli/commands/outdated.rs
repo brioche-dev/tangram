@@ -5,7 +5,7 @@ use crate::{
 use tangram::util::fs;
 
 /// Check for outdated dependencies.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	path: Option<fs::PathBuf>,
 }

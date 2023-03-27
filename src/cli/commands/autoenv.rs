@@ -6,13 +6,13 @@ use futures::FutureExt;
 use tangram::util::fs;
 
 /// Manage autoenv paths.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[command(subcommand)]
 	command: Command,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Debug, clap::Subcommand)]
 pub enum Command {
 	/// List autoenv paths.
 	List(ListArgs),
@@ -25,22 +25,22 @@ pub enum Command {
 }
 
 /// List autoenv paths.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct ListArgs {}
 
 /// Add an autoenv path.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct AddArgs {
 	path: Option<fs::PathBuf>,
 }
 
 /// Remove an autoenv path.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct RemoveArgs {
 	path: Option<fs::PathBuf>,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct HookArgs {
 	shell: String,
 }

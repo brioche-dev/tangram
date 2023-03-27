@@ -5,7 +5,7 @@ use crate::{
 use tangram::{artifact, util::fs};
 
 /// Check out an artifact.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	artifact_hash: artifact::Hash,
 	path: Option<fs::PathBuf>,

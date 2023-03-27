@@ -33,7 +33,7 @@ mod shell;
 mod update;
 mod upgrade;
 
-#[derive(clap::Parser)]
+#[derive(Debug, clap::Parser)]
 #[command(
 	about = env!("CARGO_PKG_DESCRIPTION"),
 	disable_help_subcommand = true,
@@ -50,7 +50,7 @@ pub struct Args {
 	pub command: Command,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Debug, clap::Subcommand)]
 pub enum Command {
 	Add(self::add::Args),
 	Autoenv(self::autoenv::Args),
@@ -85,6 +85,7 @@ pub enum Command {
 
 impl Cli {
 	/// Run a command.
+	#[tracing::instrument(skip_all)]
 	pub async fn run(&self, args: Args) -> Result<()> {
 		// Acquire an appropriate lock for the subcommand.
 		let _lock = match args.command {
@@ -105,6 +106,8 @@ impl Cli {
 				}
 			},
 		};
+
+		tracing::debug!("Acquired lock.");
 
 		// Run the subcommand.
 		match args.command {

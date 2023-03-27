@@ -6,7 +6,7 @@ use indoc::formatdoc;
 use tangram::util::fs;
 
 /// Initialize a new package.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	pub name: Option<String>,

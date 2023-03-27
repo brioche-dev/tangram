@@ -2,7 +2,7 @@ use crate::{error::Result, Cli};
 use tangram::package;
 
 /// Remove a dependency from a package.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(default_value = ".")]
 	package_specifier: package::Specifier,

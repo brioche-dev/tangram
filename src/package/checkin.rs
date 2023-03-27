@@ -17,6 +17,7 @@ pub struct Output {
 impl Instance {
 	/// Check in the package at the specified path.
 	#[allow(clippy::unused_async)]
+	#[tracing::instrument(skip(self))]
 	pub async fn check_in_package(self: &Arc<Self>, path: &fs::Path) -> Result<Output> {
 		// Create a queue of modules to visit and a visited set.
 		let root_module_identifier = module::Identifier::for_root_module_in_package_at_path(path);
@@ -31,6 +32,8 @@ impl Instance {
 
 		// Visit each module.
 		while let Some(module_identifier) = queue.pop() {
+			tracing::debug!(?module_identifier, "Visiting module.");
+
 			// Add the module to the visited set.
 			visited.insert(module_identifier.clone());
 
@@ -98,6 +101,8 @@ impl Instance {
 
 		// Add the artifact.
 		let package_hash = self.add_artifact(&Artifact::Directory(directory)).await?;
+
+		tracing::debug!(?package_hash, "Added package artifact.");
 
 		// Add a package tracker.
 		self.add_package_tracker(package_hash, path.to_owned())

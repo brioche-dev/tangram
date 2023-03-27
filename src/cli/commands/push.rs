@@ -6,7 +6,7 @@ use tangram::artifact;
 use url::Url;
 
 /// Push an artifact.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	pub artifact_hash: artifact::Hash,
 	pub url: Url,

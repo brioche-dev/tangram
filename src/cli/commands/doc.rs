@@ -5,7 +5,7 @@ use crate::{
 use tangram::{module, package};
 
 /// Print the docs for a package.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	locked: bool,

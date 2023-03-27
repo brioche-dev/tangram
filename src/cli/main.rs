@@ -19,6 +19,9 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+	// Setup tracing.
+	setup_tracing();
+
 	// Run the main function.
 	let result = main_inner().await;
 
@@ -44,12 +47,12 @@ async fn main() {
 	}
 }
 
+#[tracing::instrument(name = "main")]
 async fn main_inner() -> Result<()> {
-	// Setup tracing.
-	setup_tracing();
-
 	// Parse the arguments.
 	let args = Args::parse();
+
+	tracing::debug!(?args, "Running command.");
 
 	// Get the path.
 	let path = if let Some(path) = args.path.clone() {
@@ -60,8 +63,12 @@ async fn main_inner() -> Result<()> {
 			.join(".tangram")
 	};
 
+	tracing::debug!(?path, "Got path.");
+
 	// Read the config.
 	let config = Cli::read_config_from_path(&path.join("config.json")).await?;
+
+	tracing::debug!(?config, "Read config.");
 
 	// Read the credentials.
 	let credentials = Cli::read_credentials_from_path(&path.join("credentials.json")).await?;
@@ -74,6 +81,8 @@ async fn main_inner() -> Result<()> {
 
 	// Get the token.
 	let api_token = credentials.map(|credentials| credentials.token);
+
+	tracing::debug!(?api_url, has_token = api_token.is_some(), "Got API config.");
 
 	// Create the options.
 	let options = tangram::Options { api_url, api_token };
@@ -97,19 +106,26 @@ fn setup_tracing() {
 			tracing_subscriber::filter::EnvFilter::try_from_env("TANGRAM_TRACING").unwrap();
 		Some(filter)
 	} else if cfg!(debug_assertions) {
-		Some(tracing_subscriber::EnvFilter::new("[]=off,tangram=info"))
+		Some(tracing_subscriber::EnvFilter::new("[]=info"))
 	} else {
 		None
 	};
 
-	// If tracing is enabled, then create and initialize the subscriber.
+	let tracer = opentelemetry_jaeger::new_agent_pipeline()
+		.with_service_name("tangram")
+		.install_simple()
+		.expect("Failed to set up OpenTelemtry pipeline.");
+	let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+	// If tracing is enabled, create and initialize the subscriber.
 	if let Some(env_layer) = env_layer {
 		let format_layer = tracing_subscriber::fmt::layer()
-			.pretty()
+			.compact()
 			.with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW);
 		let subscriber = tracing_subscriber::registry()
 			.with(env_layer)
-			.with(format_layer);
+			.with(format_layer)
+			.with(otel_layer);
 		subscriber.init();
 	}
 }

@@ -1,7 +1,7 @@
 use crate::{error::Result, Cli};
 
 /// Upgrade to the latest version of tangram.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {}
 
 impl Cli {

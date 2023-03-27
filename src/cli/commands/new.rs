@@ -5,7 +5,7 @@ use crate::{
 use tangram::util::fs;
 
 /// Create a new package.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	pub name: Option<String>,

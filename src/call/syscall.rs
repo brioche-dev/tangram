@@ -19,6 +19,7 @@ use itertools::Itertools;
 use num::ToPrimitive;
 use std::{future::Future, rc::Rc, sync::Arc};
 use tokio::io::AsyncReadExt;
+use tracing::Instrument;
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn syscall(
@@ -340,14 +341,16 @@ where
 	let args = v8::Global::new(scope, args);
 
 	// Create the future.
-	let future = Box::pin(async move {
+	let future = async move {
 		let result = syscall_async_inner(context.clone(), tg, args, f).await;
 		FutureOutput {
 			context,
 			promise_resolver,
 			result,
 		}
-	});
+	};
+	let future = future.instrument(tracing::info_span!("syscall_async"));
+	let future = Box::pin(future);
 
 	// Add the future to the context's future set.
 	state.futures.borrow_mut().push(future);

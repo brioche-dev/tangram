@@ -16,6 +16,7 @@ impl crate::Instance {
 	/// Create a package instance.
 	#[allow(clippy::unused_async, clippy::only_used_in_recursion)]
 	#[async_recursion]
+	#[tracing::instrument(skip(self), ret)]
 	pub async fn create_package_instance(
 		self: Arc<Self>,
 		package_identifier: &Identifier,

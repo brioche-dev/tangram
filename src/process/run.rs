@@ -26,10 +26,13 @@ pub enum Mode {
 
 impl Instance {
 	#[allow(clippy::too_many_lines)]
+	#[tracing::instrument(skip(self), ret)]
 	pub async fn run_process(self: &Arc<Self>, process: &Process) -> Result<Value> {
 		// Create a temp for the output.
 		let output_temp = Temp::new(self);
 		let output_temp_path = output_temp.path();
+
+		tracing::debug!(output_temp_path = ?output_temp.path(), "Prepareing to run process.");
 
 		// Render the command template.
 		let command = render(self, &process.command, output_temp_path).await?;
@@ -129,11 +132,15 @@ impl Instance {
 		}
 		.await?;
 
+		tracing::debug!(output_temp_path = ?output_temp.path(), "Checking in the output.");
+
 		// Check in the output temp.
 		let output_hash = self
 			.check_in(output_temp.path())
 			.await
 			.wrap_err("Failed to check in the output.")?;
+
+		tracing::info!(output_hash = ?output_hash, "Checked in process output.");
 
 		// Verify the checksum if one was provided.
 		if let Some(expected) = process.checksum.clone() {
@@ -146,6 +153,8 @@ impl Instance {
 					r#"The checksum did not match. Expected "{expected:?}" but got "{actual:?}"."#
 				);
 			}
+
+			tracing::debug!("Validated checksum");
 		}
 
 		// Create the output.

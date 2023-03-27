@@ -10,7 +10,7 @@ use tangram::{
 };
 
 /// Call a function.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	locked: bool,

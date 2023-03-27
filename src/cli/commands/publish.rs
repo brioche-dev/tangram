@@ -5,7 +5,7 @@ use crate::{
 use tangram::{package, util::fs};
 
 /// Publish a package.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	package: Option<fs::PathBuf>,
 }

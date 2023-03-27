@@ -8,7 +8,7 @@ use tangram::{
 };
 
 /// Check a package for errors.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(long)]
 	locked: bool,

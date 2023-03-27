@@ -9,7 +9,7 @@ use tangram::{
 	package,
 };
 
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {}
 
 impl Cli {

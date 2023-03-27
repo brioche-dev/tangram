@@ -1,7 +1,7 @@
 use crate::{error::Result, Cli};
 
 /// Search for a package.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	query: String,
 }

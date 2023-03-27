@@ -1,7 +1,7 @@
 use crate::{error::Result, Cli};
 
 /// Remove unused artifacts.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {}
 
 impl Cli {

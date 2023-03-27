@@ -12,9 +12,12 @@ use std::sync::{Arc, Mutex};
 use tokio_util::io::{StreamReader, SyncIoBridge};
 
 impl Instance {
+	#[tracing::instrument(skip_all, fields(url = %download.url, unpack = download.unpack, is_unsafe = download.is_unsafe))]
 	pub async fn run_download(&self, download: &Download) -> Result<Value> {
 		// Acquire a file permit.
 		let _file_permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
+
+		tracing::debug!("Acquired file permit.");
 
 		// Acquire a socket permit.
 		let _socket_permit = self
@@ -22,6 +25,8 @@ impl Instance {
 			.acquire()
 			.await
 			.map_err(Error::other)?;
+
+		tracing::debug!("Acquired socket permit.");
 
 		// Get the unpack format.
 		let unpack_format = if download.unpack {
@@ -32,6 +37,8 @@ impl Instance {
 		} else {
 			None
 		};
+
+		tracing::info!(?download.url, ?unpack_format, "Downloading artifact.");
 
 		// Send the request.
 		let response = self
@@ -74,6 +81,8 @@ impl Instance {
 			Some(unpack::Format::Zip) => self.download_zip(stream).await?,
 		};
 
+		tracing::info!(?download.url, "Downloaded artifact.");
+
 		// If the download is not unsafe, then verify the checksum.
 		if !download.is_unsafe {
 			// Finalize the checksum.
@@ -94,6 +103,8 @@ impl Instance {
 					r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#
 				);
 			}
+
+			tracing::debug!("Validated checksums.");
 		}
 
 		Ok(artifact)
@@ -101,12 +112,15 @@ impl Instance {
 }
 
 impl Instance {
+	#[tracing::instrument(skip_all)]
 	async fn download_simple<S>(&self, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp.
 		let temp = Temp::new(self);
+
+		tracing::debug!(temp_path = ?temp.path(), "Performing simple download.");
 
 		// Read the stream to the temp.
 		let mut reader = StreamReader::new(stream);
@@ -120,12 +134,15 @@ impl Instance {
 			.await
 			.wrap_err("Failed to check in the temp path.")?;
 
+		tracing::debug!(?artifact_hash, "Checked in simple download.");
+
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);
 
 		Ok(artifact)
 	}
 
+	#[tracing::instrument(skip_all)]
 	async fn download_tar<S>(
 		&self,
 		stream: S,
@@ -137,12 +154,17 @@ impl Instance {
 		// Create a temp.
 		let temp = Temp::new(self);
 
+		tracing::debug!(temp_path = ?temp.path(), ?compression, "Performing tar download.");
+
 		// Stream and unpack simultaneously in a blocking task.
 		tokio::task::spawn_blocking({
 			let reader = StreamReader::new(stream);
 			let reader = SyncIoBridge::new(reader);
 			let temp_path = temp.path().to_owned();
+			let span = tracing::info_span!("download_tar_spawn_blocking");
 			move || -> Result<_> {
+				let _enter = span.enter();
+				tracing::debug!("Started tar task.");
 				let archive_reader = std::io::BufReader::new(reader);
 				let archive_reader: Box<dyn std::io::Read + Send> = match compression {
 					None => Box::new(archive_reader),
@@ -166,6 +188,7 @@ impl Instance {
 				archive.set_preserve_permissions(false);
 				archive.set_unpack_xattrs(false);
 				archive.unpack(temp_path)?;
+				tracing::debug!("Finished tar task.");
 				Ok(())
 			}
 		})
@@ -177,6 +200,8 @@ impl Instance {
 			.check_in(temp.path())
 			.await
 			.wrap_err("Failed to check in the temp path.")?;
+
+		tracing::debug!(?artifact_hash, "Checked in tar download.");
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);
@@ -190,6 +215,8 @@ impl Instance {
 	{
 		// Create a temp.
 		let temp = Temp::new(self);
+
+		tracing::debug!(temp_path = ?temp.path(), "Performing zip download.");
 
 		// Read the stream to the temp path.
 		let mut reader = StreamReader::new(stream);
@@ -224,7 +251,9 @@ impl Instance {
 		let artifact_hash = self
 			.check_in(unpack_temp.path())
 			.await
-			.wrap_err("Failed to check in the .")?;
+			.wrap_err("Failed to check in the temp path.")?;
+
+		tracing::debug!(?artifact_hash, "Checked in zip download.");
 
 		// Create the artifact value.
 		let artifact = Value::Artifact(artifact_hash);

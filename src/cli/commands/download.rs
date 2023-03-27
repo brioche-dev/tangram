@@ -6,7 +6,7 @@ use tangram::operation::{Download, Operation};
 use url::Url;
 
 /// Run a download operation.
-#[derive(clap::Args)]
+#[derive(Debug, clap::Args)]
 pub struct Args {
 	/// The URL to download from.
 	url: Url,

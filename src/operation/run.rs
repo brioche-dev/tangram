@@ -13,6 +13,7 @@ impl Operation {
 }
 
 impl Instance {
+	#[tracing::instrument(skip(self), ret)]
 	pub async fn run_operation(self: &Arc<Self>, operation_hash: Hash) -> Result<Value> {
 		// Get the operations task map.
 		let operations_task_map = self
@@ -42,6 +43,7 @@ impl Instance {
 
 	#[async_recursion]
 	#[must_use]
+	#[tracing::instrument(skip(self), ret)]
 	async fn run_operation_inner(
 		self: Arc<Self>,
 		operation_hash: Hash,
@@ -60,8 +62,11 @@ impl Instance {
 
 		// If the operation has already run, then return its output.
 		if let Some(output) = output {
+			tracing::debug!("Operation already ran.");
 			return Ok(output);
 		}
+
+		tracing::debug!("Running operation.");
 
 		// Run the operation.
 		let output = match &operation {
