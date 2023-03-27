@@ -27,6 +27,7 @@ pub enum Error {
 	// #[error(transparent)]
 	// #[serde(rename = "language_service")]
 	// LanguageService(#[from] language::service::error::Error),
+	//
 	/// Any other error.
 	#[error("{message}")]
 	#[serde(rename = "other")]

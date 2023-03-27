@@ -3,10 +3,9 @@ use crate::{
 	error::{Error, Result, WrapErr},
 	Instance,
 };
-use tokio::io::AsyncRead;
 
 impl Instance {
-	pub async fn get_blob(&self, blob_hash: Hash) -> Result<impl AsyncRead> {
+	pub async fn get_blob(&self, blob_hash: Hash) -> Result<Reader> {
 		let blob = self
 			.try_get_blob(blob_hash)
 			.await?
@@ -14,7 +13,7 @@ impl Instance {
 		Ok(blob)
 	}
 
-	pub async fn try_get_blob(&self, blob_hash: Hash) -> Result<Option<impl AsyncRead>> {
+	pub async fn try_get_blob(&self, blob_hash: Hash) -> Result<Option<Reader>> {
 		// Get the blob path.
 		let path = self.blob_path(blob_hash);
 

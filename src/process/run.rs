@@ -88,8 +88,30 @@ impl Instance {
 			mode: Mode::ReadWrite,
 		});
 
-		// Enable networking if the process has a checksum or is unsafe.
-		let network_enabled = process.checksum.is_some() || process.is_unsafe;
+		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
+		let enable_unsafe = process.checksum.is_some() || process.is_unsafe;
+
+		// Verify the safety constraints.
+		if !enable_unsafe {
+			if process.network {
+				return_error!("Network access is not allowed is safe processes.");
+			}
+			if !process.host_paths.is_empty() {
+				return_error!("Host paths are not allowed in safe processes.");
+			}
+		}
+
+		// Handle the network flag.
+		let network_enabled = process.network;
+
+		// Handle the host paths.
+		for host_path in &process.host_paths {
+			paths.insert(Path {
+				host_path: host_path.into(),
+				guest_path: host_path.into(),
+				mode: Mode::Readonly,
+			});
+		}
 
 		// Run the process.
 		match process.system {

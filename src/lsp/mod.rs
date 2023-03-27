@@ -25,12 +25,17 @@ mod virtual_text_document;
 type _Receiver = tokio::sync::mpsc::UnboundedReceiver<jsonrpc::Message>;
 type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
+#[derive(Clone)]
 pub struct Server {
 	tg: Arc<Instance>,
 }
 
-impl Instance {
-	pub async fn run_lsp(self: &Arc<Self>) -> Result<()> {
+impl Server {
+	pub fn new(tg: Arc<Instance>) -> Self {
+		Self { tg }
+	}
+
+	pub async fn serve(self) -> Result<()> {
 		let mut stdin = tokio::io::BufReader::new(tokio::io::stdin());
 		let mut stdout = tokio::io::BufWriter::new(tokio::io::stdout());
 
@@ -67,10 +72,10 @@ impl Instance {
 
 			// Spawn a task to handle the message.
 			tokio::spawn({
-				let tg = Arc::clone(self);
+				let server = self.clone();
 				let sender = outgoing_message_sender.clone();
 				async move {
-					handle_message(&tg, &sender, message).await;
+					handle_message(&server, &sender, message).await;
 				}
 			});
 		}
@@ -127,14 +132,14 @@ where
 }
 
 #[allow(clippy::too_many_lines)]
-async fn handle_message(tg: &Arc<Instance>, sender: &Sender, message: jsonrpc::Message) {
+async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Message) {
 	match message {
 		// Handle a request.
 		jsonrpc::Message::Request(request) => {
 			match request.method.as_str() {
 				lsp::request::Completion::METHOD => {
 					handle_request::<lsp::request::Completion, _, _>(sender, request, |params| {
-						tg.lsp_completion(params)
+						server.completion(params)
 					})
 					.boxed()
 				},
@@ -143,49 +148,49 @@ async fn handle_message(tg: &Arc<Instance>, sender: &Sender, message: jsonrpc::M
 					handle_request::<lsp::request::GotoDefinition, _, _>(
 						sender,
 						request,
-						|params| tg.lsp_definition(params),
+						|params| server.definition(params),
 					)
 					.boxed()
 				},
 
 				lsp::request::Formatting::METHOD => {
 					handle_request::<lsp::request::Formatting, _, _>(sender, request, |params| {
-						tg.lsp_format(params)
+						server.format(params)
 					})
 					.boxed()
 				},
 
 				lsp::request::HoverRequest::METHOD => {
 					handle_request::<lsp::request::HoverRequest, _, _>(sender, request, |params| {
-						tg.lsp_hover(params)
+						server.hover(params)
 					})
 					.boxed()
 				},
 
 				lsp::request::Initialize::METHOD => {
 					handle_request::<lsp::request::Initialize, _, _>(sender, request, |params| {
-						tg.lsp_initialize(params)
+						server.initialize(params)
 					})
 					.boxed()
 				},
 
 				lsp::request::References::METHOD => {
 					handle_request::<lsp::request::References, _, _>(sender, request, |params| {
-						tg.lsp_references(params)
+						server.references(params)
 					})
 					.boxed()
 				},
 
 				lsp::request::Rename::METHOD => {
 					handle_request::<lsp::request::Rename, _, _>(sender, request, |params| {
-						tg.lsp_rename(params)
+						server.rename(params)
 					})
 					.boxed()
 				},
 
 				lsp::request::Shutdown::METHOD => {
 					handle_request::<lsp::request::Shutdown, _, _>(sender, request, |params| {
-						tg.lsp_shutdown(params)
+						server.shutdown(params)
 					})
 					.boxed()
 				},
@@ -194,7 +199,7 @@ async fn handle_message(tg: &Arc<Instance>, sender: &Sender, message: jsonrpc::M
 					handle_request::<self::virtual_text_document::VirtualTextDocument, _, _>(
 						sender,
 						request,
-						|params| tg.lsp_virtual_text_document(params),
+						|params| server.virtual_text_document(params),
 					)
 					.boxed()
 				},
@@ -222,7 +227,7 @@ async fn handle_message(tg: &Arc<Instance>, sender: &Sender, message: jsonrpc::M
 					handle_notification::<lsp::notification::DidOpenTextDocument, _, _>(
 						sender,
 						notification,
-						|sender, params| tg.lsp_did_open(sender, params),
+						|sender, params| server.did_open(sender, params),
 					)
 					.boxed()
 				},
@@ -231,7 +236,7 @@ async fn handle_message(tg: &Arc<Instance>, sender: &Sender, message: jsonrpc::M
 					handle_notification::<lsp::notification::DidChangeTextDocument, _, _>(
 						sender,
 						notification,
-						|sender, params| tg.lsp_did_change(sender, params),
+						|sender, params| server.did_change(sender, params),
 					)
 					.boxed()
 				},
@@ -240,7 +245,7 @@ async fn handle_message(tg: &Arc<Instance>, sender: &Sender, message: jsonrpc::M
 					handle_notification::<lsp::notification::DidCloseTextDocument, _, _>(
 						sender,
 						notification,
-						|sender, params| tg.lsp_did_close(sender, params),
+						|sender, params| server.did_close(sender, params),
 					)
 					.boxed()
 				},

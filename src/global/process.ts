@@ -1,4 +1,5 @@
 import { Artifact } from "./artifact";
+import { Checksum } from "./checksum";
 import { run } from "./operation";
 import { placeholder } from "./placeholder";
 import { Unresolved, resolve } from "./resolve";
@@ -11,7 +12,10 @@ type ProcessArgs = {
 	command: TemplateLike;
 	env?: Record<string, TemplateLike> | nullish;
 	args?: Array<TemplateLike> | nullish;
+	checksum?: Checksum | nullish;
 	unsafe?: boolean | nullish;
+	network?: boolean | nullish;
+	hostPaths?: Array<string> | nullish;
 };
 
 type System = "amd64_linux" | "arm64_linux" | "amd64_macos" | "arm64_macos";
@@ -33,13 +37,19 @@ export let process = async (
 	let args_ = await Promise.all(
 		(resolvedArgs.args ?? []).map(async (arg) => await template(arg)),
 	);
+	let checksum = resolvedArgs.checksum ?? null;
 	let unsafe = resolvedArgs.unsafe ?? false;
+	let network = resolvedArgs.network ?? false;
+	let hostPaths = resolvedArgs.hostPaths ?? [];
 	return await new Process({
 		system,
 		env,
 		command,
 		args: args_,
+		checksum,
 		unsafe,
+		network,
+		hostPaths,
 	}).run();
 };
 
@@ -50,7 +60,10 @@ export type ProcessConstructorArgs = {
 	command: Template;
 	env: Record<string, Template>;
 	args: Array<Template>;
+	checksum: Checksum | nullish;
 	unsafe: boolean;
+	network: boolean;
+	hostPaths: Array<string>;
 };
 
 export class Process {
@@ -58,14 +71,20 @@ export class Process {
 	#command: Template;
 	#env: Record<string, Template>;
 	#args: Array<Template>;
+	#checksum: Checksum | nullish;
 	#unsafe: boolean;
+	#network: boolean;
+	#hostPaths: Array<string>;
 
 	constructor(args: ProcessConstructorArgs) {
 		this.#system = args.system;
 		this.#command = args.command;
 		this.#env = args.env;
 		this.#args = args.args;
+		this.#checksum = args.checksum;
 		this.#unsafe = args.unsafe;
+		this.#network = args.network;
+		this.#hostPaths = args.hostPaths;
 	}
 
 	async serialize(): Promise<syscall.Process> {
@@ -80,13 +99,19 @@ export class Process {
 			),
 		);
 		let args = await Promise.all(this.#args.map((arg) => arg.serialize()));
+		let checksum = this.#checksum;
 		let unsafe = this.#unsafe;
+		let network = this.#network;
+		let hostPaths = this.#hostPaths;
 		return {
 			system,
 			command,
 			env,
 			args,
+			checksum,
 			unsafe,
+			network,
+			hostPaths,
 		};
 	}
 
@@ -104,13 +129,19 @@ export class Process {
 		let args = await Promise.all(
 			process.args.map((arg) => Template.deserialize(arg)),
 		);
+		let checksum = process.checksum;
 		let unsafe = process.unsafe;
+		let network = process.network;
+		let hostPaths = process.hostPaths;
 		return new Process({
 			system,
 			command,
 			env,
 			args,
+			checksum,
 			unsafe,
+			network,
+			hostPaths,
 		});
 	}
 

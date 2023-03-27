@@ -1,4 +1,5 @@
 import { Artifact } from "./artifact";
+import { Checksum } from "./checksum";
 import { run } from "./operation";
 import * as syscall from "./syscall";
 import { nullish } from "./value";
@@ -6,7 +7,7 @@ import { nullish } from "./value";
 export type DownloadArgs = {
 	url: string;
 	unpack?: boolean | nullish;
-	checksum?: string | nullish;
+	checksum?: Checksum | nullish;
 	unsafe?: boolean | nullish;
 };
 
@@ -21,7 +22,7 @@ export let isDownload = (value: unknown): value is Download => {
 export class Download {
 	#url: string;
 	#unpack: boolean;
-	#checksum: string | nullish;
+	#checksum: Checksum | nullish;
 	#unsafe: boolean;
 
 	constructor(args: DownloadArgs) {

@@ -1,9 +1,10 @@
-use crate::{error::Result, Instance};
+use super::Server;
+use crate::error::Result;
 use lsp_types as lsp;
 
-impl Instance {
+impl Server {
 	#[allow(clippy::unused_async)]
-	pub async fn lsp_initialize(
+	pub async fn initialize(
 		&self,
 		_params: lsp::InitializeParams,
 	) -> Result<lsp::InitializeResult> {
@@ -29,7 +30,7 @@ impl Instance {
 	}
 
 	#[allow(clippy::unused_async)]
-	pub async fn lsp_shutdown(&self, _params: ()) -> Result<()> {
+	pub async fn shutdown(&self, _params: ()) -> Result<()> {
 		Ok(())
 	}
 }

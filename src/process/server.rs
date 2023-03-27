@@ -15,6 +15,7 @@ pub struct Server {
 }
 
 impl Server {
+	#[must_use]
 	pub fn new(tg: Weak<Instance>) -> Self {
 		Self { tg }
 	}

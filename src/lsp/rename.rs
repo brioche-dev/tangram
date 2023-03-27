@@ -1,14 +1,12 @@
-use crate::{error::Result, module, Instance};
+use super::Server;
+use crate::{error::Result, module};
 use lsp_types as lsp;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 use url::Url;
 
-impl Instance {
+impl Server {
 	#[allow(clippy::similar_names)]
-	pub async fn lsp_rename(
-		self: &Arc<Self>,
-		params: lsp::RenameParams,
-	) -> Result<Option<lsp::WorkspaceEdit>> {
+	pub async fn rename(&self, params: lsp::RenameParams) -> Result<Option<lsp::WorkspaceEdit>> {
 		// Get the module identifier.
 		let module_identifier =
 			module::Identifier::from_lsp_uri(params.text_document_position.text_document.uri)
@@ -19,7 +17,7 @@ impl Instance {
 		let new_text = &params.new_name;
 
 		// Get the references.
-		let locations = self.rename(module_identifier, position.into()).await?;
+		let locations = self.tg.rename(module_identifier, position.into()).await?;
 
 		// If there are no references, then return None.
 		let Some(locations) = locations else {
@@ -31,6 +29,7 @@ impl Instance {
 		for location in locations {
 			// Get the version.
 			let version = self
+				.tg
 				.get_document_or_module_version(&location.module_identifier)
 				.await
 				.ok();

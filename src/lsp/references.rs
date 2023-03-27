@@ -1,10 +1,10 @@
-use crate::{error::Result, module, Instance};
+use super::Server;
+use crate::{error::Result, module};
 use lsp_types as lsp;
-use std::sync::Arc;
 
-impl Instance {
-	pub async fn lsp_references(
-		self: &Arc<Self>,
+impl Server {
+	pub async fn references(
+		&self,
 		params: lsp::ReferenceParams,
 	) -> Result<Option<Vec<lsp::Location>>> {
 		// Get the module identifier.
@@ -16,7 +16,10 @@ impl Instance {
 		let position = params.text_document_position.position;
 
 		// Get the references.
-		let locations = self.references(module_identifier, position.into()).await?;
+		let locations = self
+			.tg
+			.references(module_identifier, position.into())
+			.await?;
 		let Some(locations) = locations else {
 			return Ok(None);
 		};

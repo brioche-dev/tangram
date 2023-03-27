@@ -17,7 +17,7 @@ impl Artifact {
 			},
 
 			Artifact::Symlink(symlink) => {
-				symlink.target.collect_references(tg, references);
+				symlink.target.collect_references(tg, references)?;
 			},
 		};
 

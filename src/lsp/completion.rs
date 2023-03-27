@@ -1,10 +1,10 @@
-use crate::{error::Result, module, Instance};
+use super::Server;
+use crate::{error::Result, module};
 use lsp_types as lsp;
-use std::sync::Arc;
 
-impl Instance {
-	pub async fn lsp_completion(
-		self: &Arc<Self>,
+impl Server {
+	pub async fn completion(
+		&self,
 		params: lsp::CompletionParams,
 	) -> Result<Option<lsp::CompletionResponse>> {
 		// Get the module identifier.
@@ -16,7 +16,10 @@ impl Instance {
 		let position = params.text_document_position.position;
 
 		// Get the completion entries.
-		let entries = self.completion(module_identifier, position.into()).await?;
+		let entries = self
+			.tg
+			.completion(module_identifier, position.into())
+			.await?;
 		let Some(entries) = entries else {
 			return Ok(None);
 		};

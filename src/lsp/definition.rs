@@ -1,10 +1,10 @@
-use crate::{error::Result, module, Instance};
+use super::Server;
+use crate::{error::Result, module};
 use lsp_types as lsp;
-use std::sync::Arc;
 
-impl Instance {
-	pub async fn lsp_definition(
-		self: &Arc<Self>,
+impl Server {
+	pub async fn definition(
+		&self,
 		params: lsp::GotoDefinitionParams,
 	) -> Result<Option<lsp::GotoDefinitionResponse>> {
 		// Get the module identifier.
@@ -17,7 +17,10 @@ impl Instance {
 		let position = params.text_document_position_params.position;
 
 		// Get the definitions.
-		let locations = self.definition(module_identifier, position.into()).await?;
+		let locations = self
+			.tg
+			.definition(module_identifier, position.into())
+			.await?;
 
 		let Some(locations) = locations else {
 			return Ok(None);

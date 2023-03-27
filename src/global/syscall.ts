@@ -57,7 +57,7 @@ export type Operation =
 export type Download = {
 	url: string;
 	unpack: boolean;
-	checksum: string | nullish;
+	checksum: Checksum | nullish;
 	unsafe: boolean;
 };
 
@@ -80,7 +80,10 @@ export type Process = {
 	env: Record<string, Template>;
 	command: Template;
 	args: Array<Template>;
+	checksum: Checksum | nullish;
 	unsafe: boolean;
+	network: boolean;
+	hostPaths: Array<string>;
 };
 
 export type System =

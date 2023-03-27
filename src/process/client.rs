@@ -1,10 +1,7 @@
 use crate::{
 	artifact,
 	error::{Error, Result},
-	util::{
-		fs,
-		http::{Request, Response},
-	},
+	util::{fs, http::Request},
 };
 
 pub struct Client {

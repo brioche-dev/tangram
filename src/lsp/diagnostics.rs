@@ -1,12 +1,12 @@
-use super::{send_notification, Sender};
-use crate::{error::Result, language::Diagnostic, module, Instance};
+use super::{send_notification, Sender, Server};
+use crate::{error::Result, language::Diagnostic, module};
 use lsp_types as lsp;
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
-impl Instance {
-	pub async fn lsp_update_diagnostics(self: &Arc<Self>, sender: &Sender) -> Result<()> {
+impl Server {
+	pub async fn update_diagnostics(&self, sender: &Sender) -> Result<()> {
 		// Perform the check.
-		let diagnostics = self.diagnostics().await?;
+		let diagnostics = self.tg.diagnostics().await?;
 
 		// Collect the diagnostics by module identifier.
 		let mut diagnostics_map: BTreeMap<module::Identifier, Vec<Diagnostic>> = BTreeMap::new();
@@ -22,6 +22,7 @@ impl Instance {
 		// Publish the diagnostics.
 		for (module_identifier, diagnostics) in diagnostics_map {
 			let version = self
+				.tg
 				.get_document_or_module_version(&module_identifier)
 				.await
 				.ok();

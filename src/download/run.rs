@@ -14,11 +14,14 @@ use tokio_util::io::{StreamReader, SyncIoBridge};
 impl Instance {
 	#[tracing::instrument(skip_all, fields(url = %download.url, unpack = download.unpack, is_unsafe = download.is_unsafe))]
 	pub async fn run_download(&self, download: &Download) -> Result<Value> {
+<<<<<<< HEAD
 		// Acquire a file permit.
 		let _file_permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 
 		tracing::debug!("Acquired file permit.");
 
+=======
+>>>>>>> 5ebaaff (Implement hostPaths for processes and move out the LSP and server to its own struct.)
 		// Acquire a socket permit.
 		let _socket_permit = self
 			.socket_semaphore

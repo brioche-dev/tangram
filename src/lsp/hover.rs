@@ -1,12 +1,9 @@
-use crate::{error::Result, module, Instance};
+use super::Server;
+use crate::{error::Result, module};
 use lsp_types as lsp;
-use std::sync::Arc;
 
-impl Instance {
-	pub async fn lsp_hover(
-		self: &Arc<Self>,
-		params: lsp::HoverParams,
-	) -> Result<Option<lsp::Hover>> {
+impl Server {
+	pub async fn hover(&self, params: lsp::HoverParams) -> Result<Option<lsp::Hover>> {
 		// Get the module identifier.
 		let module_identifier = module::Identifier::from_lsp_uri(
 			params.text_document_position_params.text_document.uri,
@@ -17,7 +14,7 @@ impl Instance {
 		let position = params.text_document_position_params.position;
 
 		// Get the hover info.
-		let hover = self.hover(module_identifier, position.into()).await?;
+		let hover = self.tg.hover(module_identifier, position.into()).await?;
 		let Some(hover) = hover else {
 			return Ok(None);
 		};
