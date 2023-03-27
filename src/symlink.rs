@@ -1,3 +1,5 @@
+use crate::template::Template;
+
 #[derive(
 	Clone,
 	Debug,
@@ -10,5 +12,5 @@
 )]
 pub struct Symlink {
 	#[buffalo(id = 0)]
-	pub target: String,
+	pub target: Template,
 }

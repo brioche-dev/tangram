@@ -24,10 +24,32 @@ declare namespace tg {
 
 	export type ArtifactHash = string & { [artifactHashSymbol]: unknown };
 
-	export type Artifact = Directory | File | Symlink | Reference;
+	export type Artifact = Directory | File | Symlink;
 
 	/** Check if a value is an `Artifact`. */
 	export let isArtifact: (value: unknown) => value is Artifact;
+
+	// Blob.
+
+	export type BlobHash = string;
+
+	export type BlobLike = Uint8Array | string | Blob;
+
+	export let isBlobLike: (value: unknown) => value is BlobLike;
+
+	/** Create a blob. */
+	export let blob: (blobLike: MaybePromise<BlobLike>) => Promise<Blob>;
+
+	export class Blob {
+		/** Get this blob's hash. */
+		hash(): BlobHash;
+
+		/** Get this blob's contents as a `Uint8Array`. */
+		bytes(): Promise<Uint8Array>;
+
+		/** Get this blob's contents as a string. */
+		text(): Promise<string>;
+	}
 
 	// Checksum.
 
@@ -113,13 +135,19 @@ declare namespace tg {
 
 	// File.
 
-	export type FileLike = Uint8Array | string | File;
+	export type FileLike = BlobLike | File;
 
-	type FileOptions = {
+	export let isFileLike: (value: unknown) => value is FileLike;
+
+	export type FileArg = MaybePromise<BlobLike | File | FileObject>;
+
+	export type FileObject = {
+		blob: MaybePromise<BlobLike>;
 		executable?: boolean;
+		references?: Array<MaybePromise<Artifact>>;
 	};
 
-	export let file: (fileLike: FileLike, options?: FileOptions) => Promise<File>;
+	export let file: (arg: FileArg) => Promise<File>;
 
 	/** Check if a value is a `File`. */
 	export let isFile: (value: unknown) => value is File;
@@ -231,31 +259,7 @@ declare namespace tg {
 
 	export let process: (args: Unresolved<ProcessArgs>) => Promise<Artifact>;
 
-	export let output: tg.Placeholder;
-
-	// Reference.
-
-	type ReferenceArgs = {
-		artifact: Unresolved<Artifact>;
-		path?: PathLike | nullish;
-	};
-
-	/** Create a reference. */
-	export let reference: (args: ReferenceArgs) => Promise<Reference>;
-
-	/** Check if a value is a `Reference`. */
-	export let isReference: (value: unknown) => value is Reference;
-
-	export class Reference {
-		/** Get this reference's artifact hash. */
-		hash(): Promise<ArtifactHash>;
-
-		/** Get this reference's artifact. */
-		artifact(): Promise<Artifact>;
-
-		/** Get this reference's path. */
-		path(): Path | nullish;
-	}
+	export let output: Placeholder;
 
 	// Resolve.
 
@@ -324,14 +328,14 @@ declare namespace tg {
 	// Symlink.
 
 	/** Create a symlink. */
-	export let symlink: (target: string) => Symlink;
+	export let symlink: (target: Unresolved<TemplateLike>) => Promise<Symlink>;
 
 	export class Symlink {
 		/** Get this symlink's artifact hash. */
 		hash(): Promise<ArtifactHash>;
 
 		/** Get this symlink's target. */
-		target(): string;
+		target(): Template;
 	}
 
 	// Template.
@@ -342,7 +346,7 @@ declare namespace tg {
 
 	/** Create a template. */
 	export let template: (
-		components: tg.Unresolved<tg.TemplateLike>,
+		components: Unresolved<TemplateLike>,
 	) => Promise<Template>;
 
 	/** Check if a value is a `Template`. */

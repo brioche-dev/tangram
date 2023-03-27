@@ -1,21 +1,19 @@
 import { Directory } from "./directory";
 import { File } from "./file";
-import { Reference as Reference } from "./reference";
 import { Symlink } from "./symlink";
 import * as syscall from "./syscall";
 
 export type ArtifactHash = string;
 
-export type ArtifactKind = "directory" | "file" | "symlink" | "reference";
+export type ArtifactKind = "directory" | "file" | "symlink";
 
-export type Artifact = Directory | File | Symlink | Reference;
+export type Artifact = Directory | File | Symlink;
 
 export let isArtifact = (value: unknown): value is Artifact => {
 	return (
 		value instanceof Directory ||
 		value instanceof File ||
-		value instanceof Symlink ||
-		value instanceof Reference
+		value instanceof Symlink
 	);
 };
 
@@ -45,11 +43,6 @@ export let serializeArtifact = async (
 			kind: "symlink",
 			value: await artifact.serialize(),
 		};
-	} else if (artifact instanceof Reference) {
-		return {
-			kind: "reference",
-			value: await artifact.serialize(),
-		};
 	} else {
 		throw new Error("Unknown artifact type");
 	}
@@ -67,9 +60,6 @@ export let deserializeArtifact = async (
 		}
 		case "symlink": {
 			return await Symlink.deserialize(artifact.value);
-		}
-		case "reference": {
-			return await Reference.deserialize(artifact.value);
 		}
 	}
 };

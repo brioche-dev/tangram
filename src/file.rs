@@ -1,4 +1,4 @@
-use crate::{blob, error::Result, Instance};
+use crate::{artifact, blob, error::Result, Instance};
 use tokio::io::AsyncReadExt;
 
 #[derive(
@@ -18,6 +18,9 @@ pub struct File {
 
 	#[buffalo(id = 1)]
 	pub executable: bool,
+
+	#[buffalo(id = 2)]
+	pub references: Vec<artifact::Hash>,
 }
 
 impl File {

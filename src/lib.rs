@@ -49,7 +49,6 @@ pub mod placeholder;
 pub mod process;
 pub mod pull;
 pub mod push;
-pub mod reference;
 pub mod server;
 pub mod symlink;
 pub mod system;

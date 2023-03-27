@@ -1,8 +1,12 @@
-import { ArtifactHash, addArtifact, getArtifact } from "./artifact";
+import { ArtifactHash, addArtifact } from "./artifact";
+import { Unresolved } from "./resolve";
 import * as syscall from "./syscall";
-import { assert } from "./util";
+import { Template, TemplateLike, template } from "./template";
 
-export let symlink = (target: string): Symlink => {
+export let symlink = async (
+	target: Unresolved<TemplateLike>,
+): Promise<Symlink> => {
+	target = await template(target);
 	return new Symlink(target);
 };
 
@@ -11,33 +15,29 @@ export let isSymlink = (value: unknown): value is Symlink => {
 };
 
 export class Symlink {
-	#target: string;
+	#target: Template;
 
-	constructor(target: string) {
+	constructor(target: Template) {
 		this.#target = target;
 	}
 
-	static async fromHash(hash: ArtifactHash): Promise<Symlink> {
-		let artifact = await getArtifact(hash);
-		assert(isSymlink(artifact));
-		return artifact;
-	}
-
 	async serialize(): Promise<syscall.Symlink> {
+		let target = await this.#target.serialize();
 		return {
-			target: this.#target,
+			target,
 		};
 	}
 
 	static async deserialize(symlink: syscall.Symlink): Promise<Symlink> {
-		return new Symlink(symlink.target);
+		let target = await Template.deserialize(symlink.target);
+		return new Symlink(target);
 	}
 
-	hash(): Promise<ArtifactHash> {
-		return addArtifact(this);
+	async hash(): Promise<ArtifactHash> {
+		return await addArtifact(this);
 	}
 
-	target(): string {
+	target(): Template {
 		return this.#target;
 	}
 }

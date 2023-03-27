@@ -1,5 +1,5 @@
 pub use self::{hash::Hash, tracker::Tracker};
-use crate::{directory::Directory, file::File, reference::Reference, symlink::Symlink};
+use crate::{directory::Directory, file::File, symlink::Symlink};
 
 pub mod add;
 mod get;
@@ -7,6 +7,7 @@ mod hash;
 mod serialize;
 pub mod tracker;
 mod util;
+mod vendor;
 
 #[derive(
 	Clone,
@@ -31,8 +32,4 @@ pub enum Artifact {
 	#[buffalo(id = 2)]
 	#[serde(rename = "symlink")]
 	Symlink(Symlink),
-
-	#[buffalo(id = 3)]
-	#[serde(rename = "reference")]
-	Reference(Reference),
 }

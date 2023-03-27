@@ -42,7 +42,7 @@ impl Instance {
 				}
 			},
 
-			// If the artifact is a file, then ensure its blob is present.
+			// If the artifact is a file, then ensure its blob is present and its references are present.
 			Artifact::File(file) => {
 				let blob_path = self.blobs_path().join(file.blob_hash.to_string());
 				let blob_exists = crate::util::fs::exists(&blob_path).await?;
@@ -51,19 +51,11 @@ impl Instance {
 						blob_hash: file.blob_hash,
 					});
 				}
+				todo!()
 			},
 
-			// If this artifact is a symlink, then there is nothing to ensure.
-			Artifact::Symlink(_) => {},
-
-			// If this artifact is a reference, then ensure the referenced artifact is present.
-			Artifact::Reference(reference) => {
-				let artifact_hash = reference.artifact_hash;
-				let exists = self.artifact_exists_local(artifact_hash)?;
-				if !exists {
-					return Ok(Outcome::ReferenceMissingArtifact { artifact_hash });
-				}
-			},
+			// If this artifact is a symlink, then ensure the artifacts referenced by its template are present.
+			Artifact::Symlink(_) => todo!(),
 		}
 
 		// Hash the artifact.

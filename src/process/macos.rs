@@ -2,7 +2,7 @@ use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	system::System,
 	temp::Temp,
-	template::Path,
+	template::{Mode, Path},
 	Instance,
 };
 use indoc::writedoc;
@@ -31,9 +31,7 @@ impl Instance {
 		paths.insert(Path {
 			host_path: root_directory_temp.path().to_owned(),
 			guest_path: root_directory_temp.path().to_owned(),
-			read: true,
-			write: true,
-			create: true,
+			mode: Mode::ReadWrite,
 		});
 
 		// Add the home directory to the root directory.
@@ -204,30 +202,18 @@ fn pre_exec(paths: &HashSet<Path, fnv::FnvBuildHasher>, network_enabled: bool) -
 
 	// Allow access to the paths in the path set.
 	for entry in paths {
-		if entry.read || entry.write || entry.create {
-			writedoc!(
-				profile,
-				r#"
-					(allow process-exec* (subpath {0}))
-					(allow file-read* (path-ancestors {0}))
-				"#,
-				escape(entry.host_path.as_os_str().as_bytes())
-			)
-			.unwrap();
-		}
+		writedoc!(
+			profile,
+			r#"
+				(allow process-exec* (subpath {0}))
+				(allow file-read* (path-ancestors {0}))
+				(allow file-read* (subpath {0}))
+			"#,
+			escape(entry.host_path.as_os_str().as_bytes())
+		)
+		.unwrap();
 
-		if entry.read {
-			writedoc!(
-				profile,
-				r#"
-					(allow file-read* (subpath {0}))
-				"#,
-				escape(entry.host_path.as_os_str().as_bytes())
-			)
-			.unwrap();
-		}
-
-		if entry.write {
+		if entry.mode == Mode::ReadWrite {
 			writedoc!(
 				profile,
 				r#"

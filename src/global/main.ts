@@ -1,5 +1,6 @@
 import { array } from "./array";
 import { isArtifact } from "./artifact";
+import { Blob, blob, isBlobLike } from "./blob";
 import { checksum } from "./checksum";
 import { context } from "./context";
 import { Directory, directory, isDirectory } from "./directory";
@@ -13,7 +14,6 @@ import { map } from "./map";
 import { Path, isPath, path } from "./path";
 import { Placeholder, isPlaceholder, placeholder } from "./placeholder";
 import { output, process } from "./process";
-import { Reference, isReference, reference } from "./reference";
 import { resolve } from "./resolve";
 import { Symlink, isSymlink, symlink } from "./symlink";
 import { Template, isTemplate, t, template } from "./template";
@@ -33,14 +33,15 @@ Object.defineProperties(globalThis, {
 
 // Create the tg global.
 let tg = {
+	Blob,
 	Directory,
 	File,
 	Path,
 	Placeholder,
-	Reference,
 	Symlink,
 	Template,
 	array,
+	blob,
 	checksum,
 	context,
 	directory,
@@ -49,11 +50,11 @@ let tg = {
 	function: function_,
 	include,
 	isArtifact,
+	isBlobLike,
 	isDirectory,
 	isFile,
 	isPath,
 	isPlaceholder,
-	isReference,
 	isSymlink,
 	isTemplate,
 	log,
@@ -62,7 +63,6 @@ let tg = {
 	path,
 	placeholder,
 	process,
-	reference,
 	resolve,
 	symlink,
 	template,

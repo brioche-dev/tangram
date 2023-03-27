@@ -2,7 +2,6 @@ import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact";
 import { Directory } from "./directory";
 import { File } from "./file";
 import { Placeholder } from "./placeholder";
-import { Reference } from "./reference";
 import { Symlink } from "./symlink";
 import * as syscall from "./syscall";
 import { Template } from "./template";
@@ -34,7 +33,6 @@ export let isValue = (value: unknown): value is Value => {
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||
-		value instanceof Reference ||
 		value instanceof Template ||
 		value instanceof Array ||
 		typeof value === "object"

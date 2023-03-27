@@ -2,7 +2,6 @@ import { Artifact } from "./artifact";
 import { Directory } from "./directory";
 import { File } from "./file";
 import { Placeholder } from "./placeholder";
-import { Reference } from "./reference";
 import { Symlink } from "./symlink";
 import { Template } from "./template";
 import { Value, nullish } from "./value";
@@ -58,7 +57,6 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||
-		value instanceof Reference ||
 		value instanceof Placeholder ||
 		value instanceof Template
 	) {

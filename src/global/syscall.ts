@@ -3,8 +3,7 @@ export type ArtifactHash = string;
 export type Artifact =
 	| { kind: "directory"; value: Directory }
 	| { kind: "file"; value: File }
-	| { kind: "symlink"; value: Symlink }
-	| { kind: "reference"; value: Reference };
+	| { kind: "symlink"; value: Symlink };
 
 export type BlobHash = string;
 
@@ -17,15 +16,11 @@ export type Directory = {
 export type File = {
 	blobHash: BlobHash;
 	executable: boolean;
+	references: Array<ArtifactHash>;
 };
 
 export type Symlink = {
-	target: string;
-};
-
-export type Reference = {
-	artifactHash: ArtifactHash;
-	path: string | nullish;
+	target: Template;
 };
 
 export type Value =

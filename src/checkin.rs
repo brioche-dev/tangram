@@ -1,13 +1,10 @@
 use crate::{
 	artifact::{self, Artifact},
 	blob,
-	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
 	error::{return_error, Error, Result, WrapErr},
 	file::File,
 	hash,
-	path::Path,
-	reference::Reference,
 	symlink::Symlink,
 	temp::Temp,
 	util::fs,
@@ -73,11 +70,6 @@ impl Instance {
 				.to_str()
 				.wrap_err("All file names must be valid UTF-8.")?
 				.to_owned();
-
-			// Ignore the entry if it is the referenced artifacts directory.
-			if file_name == REFERENCED_ARTIFACTS_DIRECTORY_NAME {
-				continue;
-			}
 
 			// Add the file name to the entry names.
 			entry_names.push(file_name);
@@ -152,6 +144,7 @@ impl Instance {
 		let artifact = Artifact::File(File {
 			blob_hash,
 			executable,
+			references: Vec::new(),
 		});
 
 		// Add the artifact.
@@ -175,7 +168,7 @@ impl Instance {
 		path: &fs::Path,
 		_metadata: &Metadata,
 	) -> Result<artifact::Hash> {
-		// Read the symlink.
+		// Read the target from the symlink.
 		let permit = self.file_semaphore.acquire().await.map_err(Error::other)?;
 		let target = tokio::fs::read_link(path).await.wrap_err_with(|| {
 			format!(
@@ -185,58 +178,11 @@ impl Instance {
 		})?;
 		drop(permit);
 
-		// Create the artifact. A symlink is a reference if the result of canonicalizing its path's parent joined with its target points into the checkouts directory.
-		let target_in_checkouts_path = tokio::fs::canonicalize(&path.join("..").join(&target))
-			.await
-			.ok()
-			.and_then(|canonicalized_target| {
-				let target_in_checkouts_path = canonicalized_target
-					.strip_prefix(&self.checkouts_path())
-					.ok()?;
-				Some(target_in_checkouts_path.to_owned())
-			});
-		let artifact = if let Some(target_in_checkouts_path) = target_in_checkouts_path {
-			// Convert the target to a path.
-			let target: Path = target_in_checkouts_path
-				.as_os_str()
-				.to_str()
-				.wrap_err("The symlink target was not valid UTF-8.")?
-				.parse()
-				.wrap_err("The target is not a valid path.")?;
+		// Unrender the target.
+		let target = self.unrender(target).await?;
 
-			// Get the path components.
-			let mut components = target.components.iter().peekable();
-
-			// Parse the hash from the first component.
-			let artifact_hash: artifact::Hash = components
-				.next()
-				.wrap_err("Invalid symlink.")?
-				.as_str()
-				.parse()
-				.map_err(Error::other)
-				.wrap_err("Failed to parse the path component as a hash.")?;
-
-			// Collect the remaining components to get the path within the referenced artifact.
-			let path = if components.peek().is_some() {
-				Some(components.cloned().collect())
-			} else {
-				None
-			};
-
-			Artifact::Reference(Reference {
-				artifact_hash,
-				path,
-			})
-		} else {
-			// Convert the target to a string.
-			let target = target
-				.into_os_string()
-				.into_string()
-				.ok()
-				.wrap_err("The symlink target was not valid UTF-8.")?;
-
-			Artifact::Symlink(Symlink { target })
-		};
+		// Create the artifact.
+		let artifact = Artifact::Symlink(Symlink { target });
 
 		// Add the artifact.
 		let artifact_hash = self

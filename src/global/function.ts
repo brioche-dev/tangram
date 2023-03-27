@@ -84,10 +84,10 @@ export class Function<
 	}
 
 	static async deserialize<A extends Array<Value>, R extends Value>(
-		reference: syscall.Function,
+		function_: syscall.Function,
 	): Promise<Function<A, R>> {
-		let packageInstanceHash = reference.packageInstanceHash;
-		let name = reference.name;
+		let packageInstanceHash = function_.packageInstanceHash;
+		let name = function_.name;
 		return new Function({
 			packageInstanceHash,
 			name,

@@ -1,10 +1,8 @@
 use crate::{
 	artifact::{self, Artifact},
-	constants::REFERENCED_ARTIFACTS_DIRECTORY_NAME,
 	directory::Directory,
 	error::{Error, Result, WrapErr},
 	file::File,
-	reference::Reference,
 	symlink::Symlink,
 	temp::Temp,
 	util::fs,
@@ -137,37 +135,17 @@ impl Instance {
 					let permissions = std::fs::Permissions::from_mode(0o755);
 					tokio::fs::set_permissions(path, permissions).await?;
 				}
+
+				// Check out the references.
+				try_join_all(file.references.iter().map(|artifact_hash| async move {
+					self.check_out_internal_inner(*artifact_hash).await?;
+					Ok::<_, Error>(())
+				}))
+				.await?;
 			},
 
 			Artifact::Symlink(symlink) => {
-				// Create the symlink.
-				tokio::fs::symlink(&symlink.target, path).await?;
-			},
-
-			Artifact::Reference(reference) => {
-				// Check out the referenced artifact.
-				let referenced_artifact_checkout_path = self
-					.check_out_internal_inner(reference.artifact_hash)
-					.await
-					.wrap_err("Failed to check out the referenced artifact.")?;
-
-				// Compute the referenced path.
-				let mut referenced_path = referenced_artifact_checkout_path;
-				if let Some(reference_path) = &reference.path {
-					referenced_path.push(reference_path.to_string());
-				}
-
-				// Compute the symlink target by taking the diff of the path's parent and the referenced path.
-				let parent_path = path
-					.parent()
-					.wrap_err("Expected the path to have a parent.")?;
-				let target = pathdiff::diff_paths(&referenced_path, parent_path)
-					.wrap_err("Could not resolve the symlink target relative to the path.")?;
-
-				// Create the symlink.
-				tokio::fs::symlink(target, path)
-					.await
-					.wrap_err("Failed to write the symlink for the reference.")?;
+				todo!()
 			},
 		};
 
@@ -202,7 +180,7 @@ impl Instance {
 		};
 
 		// Check out the artifact recursively.
-		self.check_out_external_inner(path, existing_artifact_hash, artifact_hash, path)
+		self.check_out_external_inner(existing_artifact_hash, artifact_hash, path)
 			.await?;
 
 		Ok(())
@@ -210,7 +188,6 @@ impl Instance {
 
 	async fn check_out_external_inner(
 		&self,
-		root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		artifact_hash: artifact::Hash,
 		path: &fs::Path,
@@ -228,22 +205,16 @@ impl Instance {
 		// Call the appropriate function for the artifact's type.
 		match artifact {
 			Artifact::Directory(directory) => {
-				self.check_out_directory(
-					root_path,
-					existing_artifact_hash,
-					artifact_hash,
-					directory,
-					path,
-				)
-				.await
-				.wrap_err_with(|| {
-					let path = path.display();
-					format!(r#"Failed to check out directory "{artifact_hash}" to "{path}"."#)
-				})?;
+				self.check_out_directory(existing_artifact_hash, artifact_hash, directory, path)
+					.await
+					.wrap_err_with(|| {
+						let path = path.display();
+						format!(r#"Failed to check out directory "{artifact_hash}" to "{path}"."#)
+					})?;
 			},
 
 			Artifact::File(file) => {
-				self.check_out_file(root_path, existing_artifact_hash, artifact_hash, file, path)
+				self.check_out_file(existing_artifact_hash, artifact_hash, file, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -252,33 +223,12 @@ impl Instance {
 			},
 
 			Artifact::Symlink(symlink) => {
-				self.check_out_symlink(
-					root_path,
-					existing_artifact_hash,
-					artifact_hash,
-					symlink,
-					path,
-				)
-				.await
-				.wrap_err_with(|| {
-					let path = path.display();
-					format!(r#"Failed to check out symlink "{artifact_hash}" to "{path}"."#)
-				})?;
-			},
-
-			Artifact::Reference(reference) => {
-				self.check_out_reference(
-					root_path,
-					existing_artifact_hash,
-					artifact_hash,
-					reference,
-					path,
-				)
-				.await
-				.wrap_err_with(|| {
-					let path = path.display();
-					format!(r#"Failed to check out reference "{artifact_hash}" to "{path}"."#)
-				})?;
+				self.check_out_symlink(existing_artifact_hash, artifact_hash, symlink, path)
+					.await
+					.wrap_err_with(|| {
+						let path = path.display();
+						format!(r#"Failed to check out symlink "{artifact_hash}" to "{path}"."#)
+					})?;
 			},
 		}
 
@@ -288,7 +238,6 @@ impl Instance {
 	#[async_recursion]
 	async fn check_out_directory(
 		&self,
-		root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		_artifact_hash: artifact::Hash,
 		directory: Directory,
@@ -349,7 +298,6 @@ impl Instance {
 						// Recurse.
 						let entry_path = path.join(&entry_name);
 						self.check_out_external_inner(
-							root_path,
 							existing_artifact_hash,
 							entry_hash,
 							&entry_path,
@@ -367,7 +315,6 @@ impl Instance {
 
 	async fn check_out_file(
 		&self,
-		_root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		_artifact_hash: artifact::Hash,
 		file: File,
@@ -407,7 +354,6 @@ impl Instance {
 
 	async fn check_out_symlink(
 		&self,
-		_root_path: &fs::Path,
 		existing_artifact_hash: Option<artifact::Hash>,
 		_artifact_hash: artifact::Hash,
 		symlink: Symlink,
@@ -431,79 +377,21 @@ impl Instance {
 			None => {},
 		};
 
-		// Create the symlink.
-		tokio::fs::symlink(symlink.target, path).await?;
-
-		Ok(())
-	}
-
-	#[async_recursion]
-	async fn check_out_reference(
-		&self,
-		root_path: &fs::Path,
-		existing_artifact_hash: Option<artifact::Hash>,
-		artifact_hash: artifact::Hash,
-		reference: Reference,
-		path: &fs::Path,
-	) -> Result<()> {
-		// Get the artifact for an existing file system object at the path.
-		let existing_artifact = if let Some(existing_artifact_hash) = existing_artifact_hash {
-			Some(self.get_artifact_local(existing_artifact_hash)?)
-		} else {
-			None
-		};
-
-		// Handle an existing artifact at the path.
-		match &existing_artifact {
-			// If there is an existing artifact at the path, then remove it and continue.
-			Some(_) => {
-				crate::util::fs::rmrf(path).await?;
-			},
-
-			// If there is no artifact at this path, then continue.
-			None => {},
-		};
-
-		// Create the referenced artifacts path.
-		let referenced_artifacts_path = root_path.join(REFERENCED_ARTIFACTS_DIRECTORY_NAME);
-
-		// Get the referenced artifact checkout path.
-		let referenced_artifact_checkout_path =
-			referenced_artifacts_path.join(artifact_hash.to_string());
-
-		// Check out the referenced artifact if necessary.
-		if !crate::util::fs::exists(&referenced_artifact_checkout_path).await? {
-			// Create the referenced artifact checkout path's parent directory if necessary.
-			tokio::fs::create_dir_all(&referenced_artifact_checkout_path).await?;
-
-			// Perform the checkout.
-			self.check_out_external_inner(
-				root_path,
-				None,
-				reference.artifact_hash,
-				&referenced_artifact_checkout_path,
-			)
-			.await
-			.wrap_err("Failed to check out the referenced artifact.")?;
-		}
-
-		// Compute the referenced path.
-		let mut referenced_path = referenced_artifact_checkout_path;
-		if let Some(reference_path) = reference.path {
-			referenced_path.push(reference_path.to_string());
-		}
-
-		// Compute the symlink target by taking the diff of the path's parent and the referenced path.
-		let parent_path = path
-			.parent()
-			.wrap_err("Expected the path to have a parent.")?;
-		let target = pathdiff::diff_paths(&referenced_path, parent_path)
-			.wrap_err("Could not resolve the symlink target relative to the path.")?;
+		// Render the target.
+		let target = symlink
+			.target
+			.render(|component| async move {
+				match component {
+					crate::template::Component::String(string) => Ok(string.into()),
+					_ => Err(Error::message(
+						"Cannot check out a symlink whose target has non-string components.",
+					)),
+				}
+			})
+			.await?;
 
 		// Create the symlink.
-		tokio::fs::symlink(target, path)
-			.await
-			.wrap_err("Failed to write the symlink for the reference.")?;
+		tokio::fs::symlink(target, path).await?;
 
 		Ok(())
 	}

@@ -5,7 +5,8 @@ import {
 	getArtifact,
 	isArtifact,
 } from "./artifact";
-import { file, isFileLike } from "./file";
+import { BlobLike, isBlobLike } from "./blob";
+import { file } from "./file";
 import { PathLike, path } from "./path";
 import { MaybePromise } from "./resolve";
 import * as syscall from "./syscall";
@@ -15,9 +16,7 @@ import { isNullish, nullish } from "./value";
 type DirectoryArg = MaybePromise<nullish | Directory | DirectoryObject>;
 
 type DirectoryObject = {
-	[name: string]: MaybePromise<
-		nullish | Uint8Array | string | Artifact | DirectoryObject
-	>;
+	[name: string]: MaybePromise<nullish | BlobLike | Artifact | DirectoryObject>;
 };
 
 export let directory = async (
@@ -78,7 +77,7 @@ export let directory = async (
 					value = await value;
 					if (isNullish(value)) {
 						entries.delete(name);
-					} else if (isFileLike(value)) {
+					} else if (isBlobLike(value)) {
 						entries.set(name, await addArtifact(await file(value)));
 					} else if (isArtifact(value)) {
 						entries.set(name, await addArtifact(value));
@@ -102,12 +101,6 @@ export class Directory {
 
 	constructor(entries: Map<string, ArtifactHash>) {
 		this.#entries = entries;
-	}
-
-	static async fromHash(hash: ArtifactHash): Promise<Directory> {
-		let artifact = await getArtifact(hash);
-		assert(isDirectory(artifact));
-		return artifact;
 	}
 
 	async serialize(): Promise<syscall.Directory> {

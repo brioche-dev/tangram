@@ -3,7 +3,7 @@ use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	system::System,
 	temp::Temp,
-	template::Path,
+	template::{Mode, Path},
 	value::Value,
 	Instance,
 };
@@ -22,9 +22,7 @@ impl Instance {
 			Path {
 				host_path: output_temp.path().to_owned(),
 				guest_path: output_temp.path().to_owned(),
-				read: true,
-				write: true,
-				create: true,
+				mode: Mode::ReadWrite,
 			},
 		)]
 		.into();

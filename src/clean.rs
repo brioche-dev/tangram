@@ -90,14 +90,11 @@ impl Instance {
 						Artifact::File(file) => {
 							// Mark the blob.
 							marks.mark_blob(file.blob_hash);
+
+							todo!()
 						},
 
-						Artifact::Symlink(_) => {},
-
-						Artifact::Reference(reference) => {
-							// Add the artifact to the queue.
-							queue.push_back(QueueItem::Artifact(reference.artifact_hash));
-						},
+						Artifact::Symlink(_) => todo!(),
 					}
 				},
 

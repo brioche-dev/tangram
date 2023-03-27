@@ -1,5 +1,5 @@
 use super::Artifact;
-use crate::{directory::Directory, file::File, reference::Reference, symlink::Symlink};
+use crate::{directory::Directory, file::File, symlink::Symlink};
 
 impl Artifact {
 	#[must_use]
@@ -23,15 +23,6 @@ impl Artifact {
 	#[must_use]
 	pub fn as_symlink(&self) -> Option<&Symlink> {
 		if let Artifact::Symlink(v) = self {
-			Some(v)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
-	pub fn as_reference(&self) -> Option<&Reference> {
-		if let Artifact::Reference(v) = self {
 			Some(v)
 		} else {
 			None
@@ -61,15 +52,6 @@ impl Artifact {
 	#[must_use]
 	pub fn into_symlink(self) -> Option<Symlink> {
 		if let Artifact::Symlink(v) = self {
-			Some(v)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
-	pub fn into_reference(self) -> Option<Reference> {
-		if let Artifact::Reference(v) = self {
 			Some(v)
 		} else {
 			None

@@ -21,9 +21,13 @@ pub struct Output {
 pub struct Path {
 	pub host_path: fs::PathBuf,
 	pub guest_path: fs::PathBuf,
-	pub read: bool,
-	pub write: bool,
-	pub create: bool,
+	pub mode: Mode,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum Mode {
+	Readonly,
+	ReadWrite,
 }
 
 impl FromIterator<Output> for Output {
@@ -87,9 +91,7 @@ impl Instance {
 							.map(|host_path| Path {
 								host_path: host_path.clone(),
 								guest_path: host_path,
-								read: true,
-								write: false,
-								create: false,
+								mode: Mode::Readonly,
 							})
 							.collect();
 
@@ -135,18 +137,9 @@ impl Instance {
 				}
 			},
 
-			Artifact::File(_) | Artifact::Symlink(_) => {},
+			Artifact::File(_) => todo!(),
 
-			Artifact::Reference(dependency) => {
-				// Add this reference's artifact to the referenced artifact hashes.
-				referenced_artifact_hashes.push(dependency.artifact_hash);
-
-				// Recurse into the referenced artifact.
-				self.collect_referenced_artifact_hashes(
-					dependency.artifact_hash,
-					referenced_artifact_hashes,
-				)?;
-			},
+			Artifact::Symlink(_) => todo!(),
 		};
 
 		Ok(())
