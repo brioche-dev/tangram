@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use futures::Stream;
-use http_body::{Body, Frame};
+use http_body::Frame;
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use pin_project::pin_project;
 use std::{
@@ -8,11 +8,11 @@ use std::{
 	task::{Context, Poll},
 };
 
-pub type Request = http::Request<hyper::body::Incoming>;
-pub type Response = http::Response<ResponseBody>;
-pub type ResponseBody = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync + 'static>>;
+// Rename: Outgoing/Incoming Response/Request.
+pub type Outgoing = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync + 'static>>;
+pub use hyper::body::Incoming;
 
-pub fn full<T: Into<Bytes>>(chunk: T) -> ResponseBody {
+pub fn full<T: Into<Bytes>>(chunk: T) -> Outgoing {
 	Full::new(chunk.into())
 		.map_err(|never| match never {})
 		.boxed()
@@ -30,9 +30,9 @@ impl<B> BodyStream<B> {
 	}
 }
 
-impl<B> Body for BodyStream<B>
+impl<B> http_body::Body for BodyStream<B>
 where
-	B: Body,
+	B: http_body::Body,
 {
 	type Data = B::Data;
 	type Error = B::Error;
@@ -46,7 +46,7 @@ where
 }
 impl<B> Stream for BodyStream<B>
 where
-	B: Body,
+	B: http_body::Body,
 {
 	type Item = Result<Frame<B::Data>, B::Error>;
 
