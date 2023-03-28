@@ -101,16 +101,11 @@ async fn main_inner() -> Result<()> {
 
 fn setup_tracing() {
 	// Create the env layer.
-	let env_layer = if std::env::var("TANGRAM_TRACING").is_ok() {
-		let filter =
-			tracing_subscriber::filter::EnvFilter::try_from_env("TANGRAM_TRACING").unwrap();
-		Some(filter)
-	} else if cfg!(debug_assertions) {
-		Some(tracing_subscriber::EnvFilter::new("[]=info"))
-	} else {
-		None
-	};
+	let tracing_env_filter = std::env::var("TANGRAM_TRACING").ok();
+	let env_layer = tracing_env_filter
+		.map(|env_filter| tracing_subscriber::filter::EnvFilter::try_new(env_filter).unwrap());
 
+	// Creat the OpenTelemetry layer.
 	let jaeger_endpoint = std::env::var("TANGRAM_OPENTELEMETRY_JAEGER").ok();
 	let otel_layer = jaeger_endpoint.map(|endpoint| {
 		#[cfg(feature = "opentelemetry")]
@@ -126,6 +121,7 @@ fn setup_tracing() {
 
 		#[cfg(not(feature = "opentelemetry"))]
 		{
+			let _ = endpoint;
 			eprintln!("TANGRAM_OPENTELEMETRY_JAEGER is set, but the opentelemetry feature is not enabled.");
 			tracing_subscriber::layer::Identity::new()
 		}
