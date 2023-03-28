@@ -104,12 +104,12 @@ fn setup_tracing() {
 
 	// Creat the OpenTelemetry layer.
 	let jaeger_endpoint = std::env::var("TANGRAM_OPENTELEMETRY_JAEGER").ok();
-	let otel_layer = jaeger_endpoint.map(|_| {
+	let otel_layer = jaeger_endpoint.map(|jaeger_endpoint| {
 		#[cfg(feature = "opentelemetry")]
 		{
 			let tracer = opentelemetry_jaeger::new_agent_pipeline()
 				.with_service_name("tangram")
-				.with_endpoint(endpoint)
+				.with_endpoint(jaeger_endpoint)
 				.install_simple()
 				.expect("Failed to set up OpenTelemtry pipeline.");
 			tracing_opentelemetry::layer().with_tracer(tracer)
@@ -117,7 +117,7 @@ fn setup_tracing() {
 
 		#[cfg(not(feature = "opentelemetry"))]
 		{
-			let _ = endpoint;
+			let _ = jaeger_endpoint;
 			eprintln!("TANGRAM_OPENTELEMETRY_JAEGER is set, but the opentelemetry feature is not enabled.");
 			tracing_subscriber::layer::Identity::new()
 		}
