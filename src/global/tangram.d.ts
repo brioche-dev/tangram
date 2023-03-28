@@ -157,7 +157,7 @@ declare namespace tg {
 		hash(): Promise<ArtifactHash>;
 
 		/** Get this file's contents as a `Uint8Array`. */
-		blob(): Promise<Uint8Array>;
+		bytes(): Promise<Uint8Array>;
 
 		/** Get this file's contents as a string. This method throws an error if the contents are not valid UTF-8. */
 		text(): Promise<string>;

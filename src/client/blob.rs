@@ -44,7 +44,7 @@ impl Client {
 
 impl Client {
 	pub async fn get_blob(&self, blob_hash: blob::Hash) -> Result<impl AsyncRead> {
-		// Get a permit.
+		// Get a socket permit.
 		let permit = Arc::clone(&self.socket_semaphore)
 			.acquire_owned()
 			.await
