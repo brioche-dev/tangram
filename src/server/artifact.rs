@@ -1,12 +1,15 @@
 use super::{error::bad_request, full, Server};
-use crate::error::{return_error, Error, Result, WrapErr};
+use crate::{
+	error::{return_error, Error, Result, WrapErr},
+	util::http::{Incoming, Outgoing},
+};
 use http_body_util::BodyExt;
 
 impl Server {
 	pub async fn handle_add_artifact_request(
 		&self,
-		request: super::Request,
-	) -> Result<super::Response> {
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
 		// Read and deserialize the request body.
 		let body = request
 			.into_body()
@@ -41,8 +44,8 @@ impl Server {
 	#[allow(clippy::unused_async)]
 	pub async fn handle_get_artifact_request(
 		&self,
-		request: super::Request,
-	) -> Result<super::Response> {
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "artifacts", hash] = path_components.as_slice() else {

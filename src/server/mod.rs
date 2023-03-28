@@ -1,6 +1,6 @@
 use crate::{
 	error::{Error, Result},
-	util::http::{full, Request, Response},
+	util::http::{full, Incoming, Outgoing},
 	Instance,
 };
 use futures::FutureExt;
@@ -46,7 +46,7 @@ impl Server {
 		}
 	}
 
-	async fn handle_request(&self, request: Request) -> Response {
+	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
 		match self.handle_request_inner(request).await {
 			Ok(Some(response)) => response,
 			Ok(None) => http::Response::builder()
@@ -63,7 +63,7 @@ impl Server {
 		}
 	}
 
-	async fn handle_request_inner(&self, request: Request) -> Result<Option<Response>> {
+	async fn handle_request_inner(&self, request: http::Request<Incoming>) -> Result<Option<http::Response<Outgoing>>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();

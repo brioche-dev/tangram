@@ -1,7 +1,9 @@
+use crate::util::http::Outgoing;
+
 use super::full;
 
 /// 400
-pub fn bad_request() -> super::Response {
+pub fn bad_request() -> http::Response<Outgoing> {
 	http::Response::builder()
 		.status(http::StatusCode::BAD_REQUEST)
 		.body(full("Bad request."))
@@ -9,7 +11,7 @@ pub fn bad_request() -> super::Response {
 }
 
 /// 404
-pub fn not_found() -> super::Response {
+pub fn not_found() -> http::Response<Outgoing> {
 	http::Response::builder()
 		.status(http::StatusCode::NOT_FOUND)
 		.body(full("Bad request."))

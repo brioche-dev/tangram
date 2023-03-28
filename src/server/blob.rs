@@ -2,7 +2,7 @@ use super::{error::bad_request, error::not_found, full, Server};
 use crate::{
 	blob,
 	error::{return_error, Result},
-	util::http::BodyStream,
+	util::http::{BodyStream, Incoming, Outgoing},
 };
 use futures::TryStreamExt;
 use http_body_util::{BodyExt, StreamBody};
@@ -10,8 +10,8 @@ use http_body_util::{BodyExt, StreamBody};
 impl Server {
 	pub async fn handle_add_blob_request(
 		&self,
-		request: super::Request,
-	) -> Result<super::Response> {
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "blobs", blob_hash] = path_components.as_slice() else {
@@ -43,8 +43,8 @@ impl Server {
 
 	pub async fn handle_get_blob_request(
 		&self,
-		request: super::Request,
-	) -> Result<super::Response> {
+		request: http::Request<Incoming>
+	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "blobs", blob_hash] = path_components.as_slice() else {

@@ -1,12 +1,14 @@
 use crate::{
-	error::{Error, Result},
+	artifact,
+	error::{Error, Result, WrapErr},
 	util::{
 		fs,
-		http::{full, Request, Response},
+		http::{full, Incoming, Outgoing},
 	},
 	Instance,
 };
 use futures::FutureExt;
+use http_body_util::BodyExt;
 use std::{convert::Infallible, sync::Weak};
 
 #[derive(Clone)]
@@ -46,7 +48,7 @@ impl Server {
 		}
 	}
 
-	async fn handle_request(&self, request: Request) -> Response {
+	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
 		match self.handle_request_inner(request).await {
 			Ok(Some(response)) => response,
 			Ok(None) => http::Response::builder()
@@ -63,7 +65,7 @@ impl Server {
 		}
 	}
 
-	async fn handle_request_inner(&self, request: Request) -> Result<Option<Response>> {
+	async fn handle_request_inner(&self, request: http::Request<Incoming>) -> Result<Option<http::Response<Outgoing>>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
@@ -73,6 +75,9 @@ impl Server {
 			},
 			(http::Method::POST, ["v1", "checkout"]) => {
 				Some(self.handle_checkout_request(request).boxed())
+			},
+			(http::Method::POST, ["v1", "unrender"]) => {
+				Some(self.handle_unrender_request(request).boxed())
 			},
 			(_, _) => None,
 		};
@@ -84,11 +89,111 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_checkin_request(&self, request: Request) -> Result<Response> {
-		todo!()
+	async fn handle_checkin_request(&self, request: http::Request<Incoming>) -> Result<http::Response<Outgoing>> {
+		// Read the request body.
+		let body = request
+			.into_body()
+			.collect()
+			.await
+			.map_err(Error::other)
+			.wrap_err("Failed to read the request body.")?
+			.to_bytes();
+
+		// Deserialize the path from the body.
+		let path: fs::PathBuf = serde_json::from_slice(&body)
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the request body.")?;
+
+		// Perform the check in.
+		let hash = self
+			.tg
+			.upgrade()
+			.unwrap()
+			.check_in(&path)
+			.await
+			.wrap_err("Failed to check in the path.")?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&hash)
+			.map_err(Error::other)
+			.wrap_err("Failed to serialize the response body.")?;
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(full(body))
+			.unwrap();
+
+		Ok(response)
 	}
 
-	async fn handle_checkout_request(&self, request: Request) -> Result<Response> {
-		todo!()
+	async fn handle_checkout_request(&self, request: http::Request<Incoming>) -> Result<http::Response<Outgoing>> {
+		// Read the request body.
+		let body = request
+			.into_body()
+			.collect()
+			.await
+			.map_err(Error::other)
+			.wrap_err("Filed to read the request body.")?
+			.to_bytes();
+
+		// Deserialize the hash.
+		let hash: artifact::Hash = serde_json::from_slice(&body)
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the request body.")?;
+
+		// Perform an external checkout.
+		let path = self
+			.tg
+			.upgrade()
+			.unwrap()
+			.check_out_internal(hash)
+			.await
+			.wrap_err("Failed to check in the path.")?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&path)
+			.map_err(Error::other)
+			.wrap_err("Failed to serialize the response body.")?;
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(full(body))
+			.unwrap();
+
+		Ok(response)
+	}
+
+	async fn handle_unrender_request(&self, request: http::Request<Incoming>) -> Result<http::Response<Outgoing>> {
+		// Read the request body.
+		let body = request
+			.into_body()
+			.collect()
+			.await
+			.map_err(Error::other)
+			.wrap_err("Failed to read the request body.")?
+			.to_bytes();
+
+		// Deserialize the string to un-render.
+		let string: String = serde_json::from_slice(&body)
+			.map_err(Error::other)
+			.wrap_err("Failed to deserialize the request body.")?;
+
+		// Unrender the template from the string.
+		let template = self
+			.tg
+			.upgrade()
+			.unwrap()
+			.unrender(string.into())
+			.await
+			.wrap_err("Failed to check in the path.")?;
+
+		// Create the
+		let body = serde_json::to_vec(&template)
+			.map_err(Error::other)
+			.wrap_err("Failed to serialize the response body.")?;
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(full(body))
+			.unwrap();
+
+		Ok(response)
 	}
 }
