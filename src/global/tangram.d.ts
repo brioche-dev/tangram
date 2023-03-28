@@ -249,6 +249,8 @@ declare namespace tg {
 		args?: Array<TemplateLike> | nullish;
 		checksum?: Checksum | nullish;
 		unsafe?: boolean | nullish;
+		network?: boolean | nullish;
+		hostPaths?: Array<string> | nullish;
 	};
 
 	export type System =
