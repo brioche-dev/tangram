@@ -58,12 +58,14 @@ impl Instance {
 
 		// Collect the references.
 		let mut references = Vec::new();
-		process.command.collect_references(self, &mut references)?;
+		process
+			.command
+			.collect_recursive_references_into(self, &mut references)?;
 		for value in process.env.values() {
-			value.collect_references(self, &mut references)?;
+			value.collect_recursive_references_into(self, &mut references)?;
 		}
 		for arg in &process.args {
-			arg.collect_references(self, &mut references)?;
+			arg.collect_recursive_references_into(self, &mut references)?;
 		}
 
 		// Check out the references and collect the paths
