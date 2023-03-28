@@ -1,5 +1,5 @@
 use super::error::{Location, StackFrame, StackTrace};
-use crate::{error::Error, language::Position, operation};
+use crate::{error::Error, language::Position};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::sync::Arc;

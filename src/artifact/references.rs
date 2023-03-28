@@ -19,7 +19,7 @@ impl Artifact {
 			Artifact::File(file) => {
 				for reference in &file.references {
 					let reference = tg.get_artifact_local(*reference)?;
-					reference.collect_recursive_references_into(tg, references);
+					reference.collect_recursive_references_into(tg, references)?;
 				}
 			},
 

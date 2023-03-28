@@ -25,25 +25,22 @@ async fn main() {
 	// Run the main function.
 	let result = main_inner().await;
 
-	// Handle the result.
-	match result {
-		Ok(_) => {},
-		Err(error) => {
-			// Print the error trace.
-			eprintln!("An error occurred.");
-			let mut error: &dyn std::error::Error = &error;
-			loop {
-				eprintln!("{error}");
-				if let Some(source) = error.source() {
-					error = source;
-				} else {
-					break;
-				}
+	// If an error occurred, print the error trace and exit with a non-zero status code.
+	if let Err(error) = result {
+		// Print the error trace.
+		eprintln!("An error occurred.");
+		let mut error: &dyn std::error::Error = &error;
+		loop {
+			eprintln!("{error}");
+			if let Some(source) = error.source() {
+				error = source;
+			} else {
+				break;
 			}
+		}
 
-			// Exit with a non-zero status code.
-			std::process::exit(1);
-		},
+		// Exit with a non-zero status code.
+		std::process::exit(1);
 	}
 }
 
@@ -107,10 +104,9 @@ fn setup_tracing() {
 
 	// Creat the OpenTelemetry layer.
 	let jaeger_endpoint = std::env::var("TANGRAM_OPENTELEMETRY_JAEGER").ok();
-	let otel_layer = jaeger_endpoint.map(|endpoint| {
+	let otel_layer = jaeger_endpoint.map(|_| {
 		#[cfg(feature = "opentelemetry")]
 		{
-			// Create a new layer if
 			let tracer = opentelemetry_jaeger::new_agent_pipeline()
 				.with_service_name("tangram")
 				.with_endpoint(endpoint)
