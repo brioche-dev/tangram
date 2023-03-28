@@ -45,6 +45,7 @@ pub enum Component {
 }
 
 impl Template {
+	#[must_use]
 	pub fn new(components: Vec<Component>) -> Self {
 		Self { components }
 	}

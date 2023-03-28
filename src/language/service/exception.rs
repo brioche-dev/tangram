@@ -40,7 +40,6 @@ impl Error {
 				.iter()
 				.map(|call_site| {
 					// Get the location.
-					let file_name = call_site.file_name.as_deref();
 					let line = call_site.line_number.unwrap().to_u32().unwrap() - 1;
 					let character = call_site.column_number.unwrap().to_u32().unwrap();
 					let position = Position { line, character };
