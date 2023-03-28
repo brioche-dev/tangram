@@ -43,7 +43,7 @@ impl Server {
 
 	pub async fn handle_get_blob_request(
 		&self,
-		request: http::Request<Incoming>
+		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();

@@ -1,15 +1,19 @@
+use super::server::Server;
 use crate::{
 	error::{return_error, Result, WrapErr},
+	process::run::Path,
 	system::System,
 	temp::Temp,
-	process::run::Path,
 	Instance,
 };
-use std::collections::{BTreeMap, HashSet};
+use std::{
+	collections::{BTreeMap, HashSet},
+	sync::Arc,
+};
 
 impl Instance {
 	pub async fn run_process_linux(
-		&self,
+		self: &Arc<Self>,
 		_system: System,
 		command: String,
 		env: BTreeMap<String, String>,
@@ -28,6 +32,18 @@ impl Instance {
 		let working_directory_path = home_directory_path.join("work");
 		tokio::fs::create_dir_all(&working_directory_path).await?;
 
+		// Create the socket path.
+		let socket_path = root_directory.path().join("socket");
+
+		// Start the server.
+		let server = Server::new(Arc::downgrade(self));
+		let server_task = tokio::spawn({
+			let socket_path = socket_path.clone();
+			async move {
+				server.serve(&socket_path).await.unwrap();
+			}
+		});
+
 		// Create the command.
 		let mut command = tokio::process::Command::new(&command);
 
@@ -38,6 +54,7 @@ impl Instance {
 		command.env_clear();
 		command.envs(env);
 		command.env("HOME", &home_directory_path);
+		command.env("TANGRAM_SOCKET", &socket_path);
 
 		// Set the args.
 		command.args(args);
@@ -50,6 +67,10 @@ impl Instance {
 			.wait()
 			.await
 			.wrap_err("Failed to wait for the process to exit.")?;
+
+		// Stop the server.
+		server_task.abort();
+		server_task.await.ok();
 
 		// Return an error if the process did not exit successfully.
 		if !status.success() {

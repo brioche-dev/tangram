@@ -65,7 +65,10 @@ impl Server {
 		}
 	}
 
-	async fn handle_request_inner(&self, request: http::Request<Incoming>) -> Result<Option<http::Response<Outgoing>>> {
+	async fn handle_request_inner(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<Option<http::Response<Outgoing>>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
@@ -89,7 +92,10 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_checkin_request(&self, request: http::Request<Incoming>) -> Result<http::Response<Outgoing>> {
+	async fn handle_checkin_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
 		// Read the request body.
 		let body = request
 			.into_body()
@@ -125,7 +131,10 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_checkout_request(&self, request: http::Request<Incoming>) -> Result<http::Response<Outgoing>> {
+	async fn handle_checkout_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
 		// Read the request body.
 		let body = request
 			.into_body()
@@ -161,7 +170,10 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_unrender_request(&self, request: http::Request<Incoming>) -> Result<http::Response<Outgoing>> {
+	async fn handle_unrender_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
 		// Read the request body.
 		let body = request
 			.into_body()

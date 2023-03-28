@@ -2,7 +2,7 @@ pub use self::error::Error;
 use crate::{checksum::Checksum, system::System, template::Template};
 use std::collections::BTreeMap;
 
-mod client;
+pub mod client;
 mod error;
 #[cfg(target_os = "linux")]
 mod linux;

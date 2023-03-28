@@ -63,7 +63,10 @@ impl Server {
 		}
 	}
 
-	async fn handle_request_inner(&self, request: http::Request<Incoming>) -> Result<Option<http::Response<Outgoing>>> {
+	async fn handle_request_inner(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<Option<http::Response<Outgoing>>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
