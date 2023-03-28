@@ -87,9 +87,11 @@ impl Instance {
 			// Handle each include.
 			for path in imports.includes {
 				// Check in the artifact at the included path.
-				let mut included_artifact_path = module_identifier.path.clone();
-				included_artifact_path.push(path::Component::ParentDir);
-				included_artifact_path.join(path.clone());
+				let included_artifact_path = module_identifier
+					.path
+					.clone()
+					.join([path::Component::ParentDir])
+					.join(path.clone());
 				let included_artifact_hash = self
 					.check_in(&package_path.join(included_artifact_path.to_string()))
 					.await?;

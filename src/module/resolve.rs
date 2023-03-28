@@ -33,9 +33,11 @@ impl Instance {
 		specifier: &Path,
 		referrer: &Identifier,
 	) -> Result<Identifier> {
-		let mut path = referrer.path.clone();
-		path.push(path::Component::ParentDir);
-		path.join(specifier.clone());
+		let path = referrer
+			.path
+			.clone()
+			.join([path::Component::ParentDir])
+			.join(specifier.clone());
 		Ok(Identifier {
 			source: referrer.source.clone(),
 			path,

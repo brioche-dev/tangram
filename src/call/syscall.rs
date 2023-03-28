@@ -67,6 +67,7 @@ fn syscall_inner<'s>(
 		"add_operation" => syscall_async(scope, args, syscall_add_operation),
 		"get_operation" => syscall_async(scope, args, syscall_get_operation),
 		"run_operation" => syscall_async(scope, args, syscall_run_operation),
+		"vendor" => syscall_async(scope, args, syscall_vendor),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
@@ -268,6 +269,12 @@ async fn syscall_run_operation(tg: Arc<Instance>, args: (operation::Hash,)) -> R
 	let (operation_hash,) = args;
 	let output = tg.run_operation(operation_hash).await?;
 	Ok(output)
+}
+
+async fn syscall_vendor(tg: Arc<Instance>, args: (artifact::Hash,)) -> Result<artifact::Hash> {
+	let (artifact_hash,) = args;
+	let vendored_hash = tg.vendor(artifact_hash).await?;
+	Ok(vendored_hash)
 }
 
 fn syscall_sync<'s, A, T, F>(

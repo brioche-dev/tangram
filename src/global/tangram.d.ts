@@ -377,6 +377,11 @@ declare namespace tg {
 		| { [key: string]: Value };
 
 	export type nullish = undefined | null;
+
+	// Vendor.
+
+	/** Vendor an artifact. The returned artifact will be fully relocatable, with all references inlined and resolved to relative paths. */
+	export let vendor: (artifact: Unresolved<Directory>) => Promise<Directory>;
 }
 
 declare let console: {

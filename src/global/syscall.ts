@@ -187,6 +187,11 @@ declare global {
 		syscall: "run_operation",
 		hash: OperationHash,
 	): Promise<Value>;
+
+	function syscall(
+		syscall: "vendor",
+		hash: ArtifactHash,
+	): Promise<ArtifactHash>;
 }
 
 export let log = (value: string) => {
@@ -316,6 +321,14 @@ export let getOperation = async (hash: OperationHash): Promise<Operation> => {
 export let runOperation = async (hash: OperationHash): Promise<Value> => {
 	try {
 		return await syscall("run_operation", hash);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
+
+export let vendor = async (hash: ArtifactHash): Promise<ArtifactHash> => {
+	try {
+		return await syscall("vendor", hash);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}

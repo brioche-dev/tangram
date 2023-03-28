@@ -17,6 +17,7 @@ import { output, process } from "./process";
 import { resolve } from "./resolve";
 import { Symlink, isSymlink, symlink } from "./symlink";
 import { Template, isTemplate, t, template } from "./template";
+import { vendor } from "./vendor";
 
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
@@ -66,6 +67,7 @@ let tg = {
 	resolve,
 	symlink,
 	template,
+	vendor,
 };
 Object.defineProperties(globalThis, {
 	t: { value: t },

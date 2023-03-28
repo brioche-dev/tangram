@@ -86,9 +86,11 @@ impl Specifier {
 
 		match self {
 			Specifier::Path(specifier_path) => {
-				let mut path = module_identifier.path.clone();
-				path.push(path::Component::ParentDir);
-				path.join(specifier_path.clone());
+				let path = module_identifier
+					.path
+					.clone()
+					.join([path::Component::ParentDir])
+					.join(specifier_path.clone());
 				Ok(package::dependency::Specifier::Path(path))
 			},
 
