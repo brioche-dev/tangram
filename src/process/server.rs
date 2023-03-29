@@ -189,11 +189,10 @@ impl Server {
 			.wrap_err("Failed to deserialize the request body.")?;
 
 		// Unrender the template from the string.
-		let template = self
-			.tg
-			.upgrade()
-			.unwrap()
-			.unrender(string.into())
+		let tg = self.tg.upgrade().unwrap();
+		let checkouts_path = tg.checkouts_path();
+		let template = tg
+			.unrender(&checkouts_path, &string)
 			.await
 			.wrap_err("Failed to check in the path.")?;
 

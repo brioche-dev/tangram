@@ -1,4 +1,4 @@
-pub use self::{hash::Hash, tracker::Tracker};
+pub use self::{hash::Hash, hash::STRING_LENGTH as HASH_STRING_LENGTH, tracker::Tracker};
 use crate::{directory::Directory, file::File, symlink::Symlink};
 
 pub mod add;

@@ -1,6 +1,8 @@
 use crate::hash;
 use derive_more::{Deref, Display, FromStr};
 
+pub const STRING_LENGTH: usize = 64;
+
 #[derive(
 	Clone,
 	Copy,

@@ -64,3 +64,11 @@ impl From<&str> for Template {
 		value.to_owned().into()
 	}
 }
+
+impl FromIterator<Component> for Template {
+	fn from_iter<I: IntoIterator<Item = Component>>(iter: I) -> Self {
+		Template {
+			components: iter.into_iter().collect(),
+		}
+	}
+}
