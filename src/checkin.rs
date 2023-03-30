@@ -21,7 +21,10 @@ impl Instance {
 	#[async_recursion]
 	pub async fn check_in(&self, path: &fs::Path) -> Result<artifact::Hash> {
 		// Get the metadata for the file system object at the path.
-		let metadata = tokio::fs::symlink_metadata(path).await?;
+		let metadata = tokio::fs::symlink_metadata(path).await.wrap_err_with(|| {
+			let path = path.display();
+			format!(r#"Failed to get the metadata for the path "{path}"."#)
+		})?;
 
 		// Call the appropriate function for the file system object at the path.
 		let artifact_hash = if metadata.is_dir() {

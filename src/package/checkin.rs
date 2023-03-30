@@ -2,7 +2,7 @@ use super::dependency;
 use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
-	error::{return_error, Result},
+	error::{return_error, Result, WrapErr},
 	module, path,
 	util::fs,
 	Instance,
@@ -43,9 +43,14 @@ impl Instance {
 			};
 
 			// Check in the artifact at the imported path.
+			let imported_artifact_path = package_path.join(module_identifier.path.to_string());
 			let imported_artifact_hash = self
-				.check_in(&package_path.join(module_identifier.path.to_string()))
-				.await?;
+				.check_in(&imported_artifact_path)
+				.await
+				.wrap_err_with(|| {
+					let imported_artifact_path = imported_artifact_path.display();
+					format!(r#"Failed to check in the module at path "{imported_artifact_path}"."#)
+				})?;
 
 			// Add the imported artifact to the directory.
 			directory
@@ -53,10 +58,13 @@ impl Instance {
 				.await?;
 
 			// Load the module.
-			let module_text = self.load_module(&module_identifier).await?;
+			let module_text = self
+				.load_module(&module_identifier)
+				.await
+				.wrap_err_with(|| format!(r#"Failed to load the module "{module_identifier}"."#))?;
 
 			// Get the module's imports.
-			let imports = self.imports(&module_text).await?;
+			let imports = self.imports(&module_text).await.wrap_err_with(|| "Haha")?;
 
 			// Handle each import.
 			for specifier in imports.imports {
