@@ -14,3 +14,10 @@ pub struct Symlink {
 	#[buffalo(id = 0)]
 	pub target: Template,
 }
+
+impl Symlink {
+	#[must_use]
+	pub fn new(target: Template) -> Self {
+		Self { target }
+	}
+}

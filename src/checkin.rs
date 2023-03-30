@@ -88,7 +88,7 @@ impl Instance {
 		.collect();
 
 		// Create the artifact.
-		let artifact = Artifact::Directory(Directory { entries });
+		let artifact = Artifact::Directory(Directory::new(entries));
 
 		// Add the artifact.
 		let artifact_hash = self.add_artifact(&artifact).await?;
@@ -140,11 +140,7 @@ impl Instance {
 		let references = Vec::new();
 
 		// Create the artifact.
-		let artifact = Artifact::File(File {
-			blob_hash,
-			executable,
-			references,
-		});
+		let artifact = Artifact::File(File::new(blob_hash, executable, references));
 
 		// Add the artifact.
 		let artifact_hash = self.add_artifact(&artifact).await?;

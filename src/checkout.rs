@@ -110,34 +110,31 @@ impl Instance {
 				tokio::fs::create_dir(path).await?;
 
 				// Recurse into the entries.
-				try_join_all(
-					directory
-						.entries
-						.iter()
-						.map(|(entry_name, entry_hash)| async move {
-							let entry_path = path.join(entry_name);
-							self.check_out_internal_inner_inner(*entry_hash, &entry_path)
-								.await?;
-							Ok::<_, Error>(())
-						}),
-				)
+				try_join_all(directory.entries().iter().map(
+					|(entry_name, entry_hash)| async move {
+						let entry_path = path.join(entry_name);
+						self.check_out_internal_inner_inner(*entry_hash, &entry_path)
+							.await?;
+						Ok::<_, Error>(())
+					},
+				))
 				.await?;
 			},
 
 			Artifact::File(file) => {
 				// Copy the blob to the path.
-				self.copy_blob_to_path(file.blob_hash, path)
+				self.copy_blob_to_path(file.blob_hash(), path)
 					.await
 					.wrap_err("Failed to copy the blob.")?;
 
 				// Make the file executable if necessary.
-				if file.executable {
+				if file.executable() {
 					let permissions = std::fs::Permissions::from_mode(0o755);
 					tokio::fs::set_permissions(path, permissions).await?;
 				}
 
 				// Check out the references.
-				try_join_all(file.references.iter().map(|artifact_hash| async move {
+				try_join_all(file.references().iter().map(|artifact_hash| async move {
 					self.check_out_internal_inner(*artifact_hash).await?;
 					Ok::<_, Error>(())
 				}))
@@ -295,10 +292,10 @@ impl Instance {
 		match &existing_artifact {
 			// If there is already a directory, then remove any extraneous entries.
 			Some(Artifact::Directory(existing_directory)) => {
-				try_join_all(existing_directory.entries.keys().map(|entry_name| {
+				try_join_all(existing_directory.entries().keys().map(|entry_name| {
 					let directory = &directory;
 					async move {
-						if !directory.entries.contains_key(entry_name) {
+						if !directory.entries().contains_key(entry_name) {
 							let entry_path = path.join(entry_name);
 							crate::util::fs::rmrf(&entry_path).await?;
 						}
@@ -321,34 +318,25 @@ impl Instance {
 		};
 
 		// Recurse into the entries.
-		try_join_all(
-			directory
-				.entries
-				.into_iter()
-				.map(|(entry_name, entry_hash)| {
-					let existing_artifact = &existing_artifact;
-					async move {
-						// Retrieve an existing artifact.
-						let existing_artifact_hash = match existing_artifact {
-							Some(Artifact::Directory(existing_directory)) => {
-								existing_directory.entries.get(&entry_name).copied()
-							},
-							_ => None,
-						};
+		try_join_all(directory.entries().iter().map(|(entry_name, entry_hash)| {
+			let existing_artifact = &existing_artifact;
+			async move {
+				// Retrieve an existing artifact.
+				let existing_artifact_hash = match existing_artifact {
+					Some(Artifact::Directory(existing_directory)) => {
+						existing_directory.entries().get(entry_name).copied()
+					},
+					_ => None,
+				};
 
-						// Recurse.
-						let entry_path = path.join(&entry_name);
-						self.check_out_external_inner(
-							existing_artifact_hash,
-							entry_hash,
-							&entry_path,
-						)
-						.await?;
+				// Recurse.
+				let entry_path = path.join(entry_name);
+				self.check_out_external_inner(existing_artifact_hash, *entry_hash, &entry_path)
+					.await?;
 
-						Ok::<_, Error>(())
-					}
-				}),
-		)
+				Ok::<_, Error>(())
+			}
+		}))
 		.await?;
 
 		Ok(())
@@ -380,18 +368,18 @@ impl Instance {
 		};
 
 		// Copy the blob to the path.
-		self.copy_blob_to_path(file.blob_hash, path)
+		self.copy_blob_to_path(file.blob_hash(), path)
 			.await
 			.wrap_err("Failed to copy the blob.")?;
 
 		// Make the file executable if necessary.
-		if file.executable {
+		if file.executable() {
 			let permissions = std::fs::Permissions::from_mode(0o755);
 			tokio::fs::set_permissions(path, permissions).await?;
 		}
 
 		// Check that the file has no references.
-		if !file.references.is_empty() {
+		if !file.references().is_empty() {
 			return_error!(r#"Cannot check out a file with references."#);
 		}
 

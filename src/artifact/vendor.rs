@@ -2,8 +2,11 @@ use super::{Artifact, Hash};
 use crate::{
 	directory::Directory,
 	error::{Error, Result},
+	file::File,
 	path::{self, Path},
-	return_error, template, Instance,
+	return_error,
+	symlink::Symlink,
+	template, Instance,
 };
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
@@ -57,11 +60,10 @@ impl Instance {
 			.into_iter()
 			.map(|artifact_hash| (artifact_hash.to_string(), artifact_hash))
 			.collect();
-		let artifact = self
-			.add_artifact(&Artifact::Directory(Directory { entries }))
-			.await?;
+		let artifact = Artifact::Directory(Directory::new(entries));
+		let artifact_hash = self.add_artifact(&artifact).await?;
 		vendored_artifact
-			.add(self, &TANGRAM_ARTIFACTS_PATH, artifact)
+			.add(self, &TANGRAM_ARTIFACTS_PATH, artifact_hash)
 			.await?;
 
 		// Add the vendored artifact.
@@ -85,41 +87,37 @@ impl Instance {
 		// Create the vendored artifact.
 		let vendored_artifact = match artifact {
 			// If the artifact is a directory, then recurse to vendor its entries.
-			Artifact::Directory(mut directory) => {
-				directory.entries =
-					try_join_all(directory.entries.into_iter().map(|(name, hash)| {
-						let tg = Arc::clone(self);
-						async move {
-							// Create the path for the entry.
-							let path = artifact_path
-								.clone()
-								.join([path::Component::Normal(name.clone())]);
+			Artifact::Directory(directory) => {
+				let entries = try_join_all(directory.entries().iter().map(|(name, hash)| {
+					let tg = Arc::clone(self);
+					async move {
+						// Create the path for the entry.
+						let path = artifact_path
+							.clone()
+							.join([path::Component::Normal(name.clone())]);
 
-							// Vendor the entry.
-							let vendored_entry_hash = tg.vendor_inner(hash, &path).await?;
+						// Vendor the entry.
+						let vendored_entry_hash = tg.vendor_inner(*hash, &path).await?;
 
-							Ok::<_, Error>((name, vendored_entry_hash))
-						}
-					}))
-					.await?
-					.into_iter()
-					.collect();
+						Ok::<_, Error>((name.clone(), vendored_entry_hash))
+					}
+				}))
+				.await?
+				.into_iter()
+				.collect();
 
-				Artifact::Directory(directory)
+				Artifact::Directory(Directory::new(entries))
 			},
 
 			// If the artifact is a file, then clear its references.
-			Artifact::File(mut file) => {
-				// Clear the file's references.
-				file.references.clear();
-
-				Artifact::File(file)
+			Artifact::File(file) => {
+				Artifact::File(File::new(file.blob_hash(), file.executable(), vec![]))
 			},
 
 			// If the artifact is a file, then render its target to refer to the artifacts path.
-			Artifact::Symlink(mut symlink) => {
+			Artifact::Symlink(symlink) => {
 				// Render the target.
-				symlink.target = symlink
+				let target = symlink
 					.target
 					.render(|component| async move {
 						match component {
@@ -147,7 +145,7 @@ impl Instance {
 					.await?
 					.into();
 
-				Artifact::Symlink(symlink)
+				Artifact::Symlink(Symlink::new(target))
 			},
 		};
 

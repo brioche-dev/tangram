@@ -30,7 +30,7 @@ impl Instance {
 			// If the artifact is a directory, then ensure all its entries are present.
 			Artifact::Directory(directory) => {
 				let mut entries = Vec::new();
-				for (entry_name, artifact_hash) in &directory.entries {
+				for (entry_name, artifact_hash) in directory.entries() {
 					let artifact_hash = *artifact_hash;
 					let exists = self.artifact_exists_local(artifact_hash)?;
 					if !exists {
@@ -45,17 +45,17 @@ impl Instance {
 			// If the artifact is a file, then ensure its blob is present and its references are present.
 			Artifact::File(file) => {
 				// Ensure the blob is present.
-				let blob_path = self.blob_path(file.blob_hash);
+				let blob_path = self.blob_path(file.blob_hash());
 				let blob_exists = crate::util::fs::exists(&blob_path).await?;
 				if !blob_exists {
 					return Ok(Outcome::MissingBlob {
-						blob_hash: file.blob_hash,
+						blob_hash: file.blob_hash(),
 					});
 				}
 
 				// Ensure the references are present.
 				let mut missing_references = Vec::new();
-				for artifact_hash in &file.references {
+				for artifact_hash in file.references() {
 					let artifact_hash = *artifact_hash;
 					let exists = self.artifact_exists_local(artifact_hash)?;
 					if !exists {

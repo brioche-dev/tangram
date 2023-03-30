@@ -82,16 +82,16 @@ impl Instance {
 					match artifact {
 						Artifact::Directory(directory) => {
 							// Add the entries to the queue.
-							for artifact_hash in directory.entries.into_values() {
-								queue.push_back(QueueItem::Artifact(artifact_hash));
+							for artifact_hash in directory.entries().values() {
+								queue.push_back(QueueItem::Artifact(*artifact_hash));
 							}
 						},
 
 						Artifact::File(file) => {
 							// Mark the blob.
-							marks.mark_blob(file.blob_hash);
+							marks.mark_blob(file.blob_hash());
 
-							for artifact_hash in &file.references {
+							for artifact_hash in file.references() {
 								queue.push_back(QueueItem::Artifact(*artifact_hash));
 							}
 						},

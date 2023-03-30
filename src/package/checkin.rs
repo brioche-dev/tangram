@@ -25,7 +25,7 @@ impl Instance {
 		let mut visited: HashSet<module::Identifier> = HashSet::default();
 
 		// Create the package.
-		let mut directory = Directory::new();
+		let mut directory = Directory::default();
 
 		// Track the dependency specifiers.
 		let mut dependency_specifiers = Vec::new();

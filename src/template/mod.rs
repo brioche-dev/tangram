@@ -7,6 +7,7 @@ mod unrender;
 #[derive(
 	Clone,
 	Debug,
+	Default,
 	PartialEq,
 	Eq,
 	buffalo::Deserialize,

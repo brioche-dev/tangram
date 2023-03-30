@@ -11,14 +11,14 @@ impl Artifact {
 	) -> Result<()> {
 		match self {
 			Artifact::Directory(directory) => {
-				for entry_hash in directory.entries.values() {
+				for entry_hash in directory.entries().values() {
 					let entry = tg.get_artifact_local(*entry_hash)?;
 					entry.collect_recursive_references_into(tg, references)?;
 				}
 			},
 
 			Artifact::File(file) => {
-				for reference in &file.references {
+				for reference in file.references() {
 					let reference = tg.get_artifact_local(*reference)?;
 					reference.collect_recursive_references_into(tg, references)?;
 				}

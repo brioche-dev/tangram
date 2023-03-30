@@ -67,7 +67,8 @@ mod tests {
 	use tempfile::TempDir;
 
 	async fn create_test_artifact(tg: &Instance, content: &str) -> (artifact::Hash, String) {
-		let artifact = Artifact::File(File::new(tg.add_blob(content.as_bytes()).await.unwrap()));
+		let blob_hash = tg.add_blob(content.as_bytes()).await.unwrap();
+		let artifact = Artifact::File(File::new(blob_hash, false, vec![]));
 		let artifact_hash = tg.add_artifact(&artifact).await.unwrap();
 		let artifact_path = tg.artifact_path(artifact_hash);
 		(artifact_hash, artifact_path.to_str().unwrap().to_owned())

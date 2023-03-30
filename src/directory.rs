@@ -20,18 +20,22 @@ use std::{collections::BTreeMap, sync::Arc};
 )]
 pub struct Directory {
 	#[buffalo(id = 0)]
-	pub entries: BTreeMap<String, artifact::Hash>,
+	entries: BTreeMap<String, artifact::Hash>,
 }
 
 impl Directory {
 	/// Create a new directory.
 	#[must_use]
-	pub fn new() -> Directory {
-		Directory::default()
+	pub fn new(entries: BTreeMap<String, artifact::Hash>) -> Directory {
+		Directory { entries }
 	}
-}
 
-impl Directory {
+	/// Get the entries.
+	#[must_use]
+	pub fn entries(&self) -> &BTreeMap<String, artifact::Hash> {
+		&self.entries
+	}
+
 	#[allow(clippy::unused_async)]
 	#[async_recursion]
 	pub async fn add(
@@ -60,7 +64,7 @@ impl Directory {
 					.into_directory()
 					.wrap_err("Expected the existing entry to be a directory.")?
 			} else {
-				Directory::new()
+				Directory::default()
 			};
 
 			// Recurse.
