@@ -21,8 +21,8 @@ pub struct Args {
 	#[arg(default_value = "default")]
 	name: String,
 
-	#[arg(long)]
-	checkout: Option<fs::PathBuf>,
+	#[arg(short, long)]
+	output: Option<fs::PathBuf>,
 }
 
 impl Cli {
@@ -56,11 +56,15 @@ impl Cli {
 		let output = operation.run(&self.tg).await?;
 
 		// Check out the output if requested.
-		if let Some(path) = args.checkout {
+		if let Some(output_path) = args.output {
 			let artifact_hash = output
 				.as_artifact()
+				.copied()
 				.wrap_err("Expected the output to be an artifact.")?;
-			self.tg.check_out_external(*artifact_hash, &path).await?;
+			let artifact_hash = self.tg.vendor(artifact_hash).await?;
+			self.tg
+				.check_out_external(artifact_hash, &output_path)
+				.await?;
 		}
 
 		// Print the output.

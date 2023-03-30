@@ -178,11 +178,11 @@ impl Instance {
 		drop(permit);
 
 		// Unrender the target.
-		let checkouts_path = self.checkouts_path();
+		let artifacts_path = self.artifacts_path();
 		let target = target
 			.to_str()
 			.wrap_err("The symlink target must be valid UTF-8.")?;
-		let target = self.unrender(&checkouts_path, target).await?;
+		let target = self.unrender(&artifacts_path, target).await?;
 
 		// Create the artifact.
 		let artifact = Artifact::Symlink(Symlink { target });

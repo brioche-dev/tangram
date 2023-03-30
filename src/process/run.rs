@@ -57,7 +57,7 @@ impl Instance {
 		.await?;
 
 		// Collect the references.
-		let mut references = Vec::new();
+		let mut references = HashSet::default();
 		process
 			.command
 			.collect_recursive_references_into(self, &mut references)?;

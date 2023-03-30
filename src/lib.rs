@@ -254,13 +254,13 @@ impl Instance {
 	}
 
 	#[must_use]
-	fn checkouts_path(&self) -> fs::PathBuf {
-		self.path().join("checkouts")
+	fn artifacts_path(&self) -> fs::PathBuf {
+		self.path().join("artifacts")
 	}
 
 	#[must_use]
 	fn checkout_path(&self, artifact_hash: artifact::Hash) -> fs::PathBuf {
-		self.checkouts_path().join(artifact_hash.to_string())
+		self.artifacts_path().join(artifact_hash.to_string())
 	}
 
 	// #[must_use]

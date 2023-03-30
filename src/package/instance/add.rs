@@ -55,11 +55,8 @@ impl crate::Instance {
 			return Ok(Outcome::MissingDependencies { dependencies });
 		}
 
-		// Hash the package instance.
-		let hash = package_instance.hash();
-
-		// Serialize the package instance.
-		let value = package_instance.serialize_to_vec();
+		// Serialize and hash the package instance.
+		let (value, hash) = package_instance.serialize_to_vec_and_hash();
 
 		// Begin a write transaction.
 		let mut txn = self.database.env.begin_rw_txn()?;

@@ -89,11 +89,8 @@ impl Instance {
 			},
 		}
 
-		// Hash the artifact.
-		let artifact_hash = artifact.hash();
-
-		// Serialize the artifact.
-		let value = artifact.serialize_to_vec();
+		// Serialize and hash the artifact.
+		let (value, hash) = artifact.serialize_to_vec_and_hash();
 
 		// Begin a write transaction.
 		let mut txn = self.database.env.begin_rw_txn()?;
@@ -101,7 +98,7 @@ impl Instance {
 		// Add the artifact to the database.
 		match txn.put(
 			self.database.artifacts,
-			&artifact_hash.as_slice(),
+			&hash.as_slice(),
 			&value,
 			lmdb::WriteFlags::NO_OVERWRITE,
 		) {
@@ -112,6 +109,8 @@ impl Instance {
 		// Commit the transaction.
 		txn.commit()?;
 
-		Ok(Outcome::Added { artifact_hash })
+		Ok(Outcome::Added {
+			artifact_hash: hash,
+		})
 	}
 }

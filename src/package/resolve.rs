@@ -27,7 +27,10 @@ impl Instance {
 				None => Ok(Identifier::Path(specifier_path.clone())),
 			},
 
-			Specifier::Registry(_) => todo!(),
+			Specifier::Registry(_) => {
+				// TODO: Ask the API for the package hash.
+				todo!()
+			},
 		}
 	}
 }

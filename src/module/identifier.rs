@@ -33,6 +33,10 @@ pub enum Source {
 	#[serde(rename = "path")]
 	Path(fs::PathBuf),
 
+	// /// A module in a package with a hash.
+	// #[serde(rename = "hash")]
+	// Hash(package::Hash),
+	//
 	/// A module in a package instance.
 	#[serde(rename = "instance")]
 	Instance(package::instance::Hash),

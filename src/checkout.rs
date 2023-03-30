@@ -51,8 +51,8 @@ impl Instance {
 		&self,
 		artifact_hash: artifact::Hash,
 	) -> Result<fs::PathBuf> {
-		// Compute the checkout's path in the checkouts directory.
-		let path = self.checkouts_path().join(artifact_hash.to_string());
+		// Compute the checkout's path in the artifacts directory.
+		let path = self.artifacts_path().join(artifact_hash.to_string());
 
 		// If the path exists, then the artifact is already checked out.
 		if crate::util::fs::exists(&path).await? {
@@ -66,7 +66,7 @@ impl Instance {
 		self.check_out_internal_inner_inner(artifact_hash, temp.path())
 			.await?;
 
-		// Move the checkout from the temp path to the path in the checkouts directory.
+		// Move the checkout from the temp path to the path in the artifacts directory.
 		match tokio::fs::rename(temp.path(), &path).await {
 			Ok(()) => Ok(()),
 

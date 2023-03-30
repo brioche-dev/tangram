@@ -9,9 +9,9 @@ use crate::{
 
 impl Instance {
 	#[allow(clippy::unused_async)]
-	pub async fn unrender(&self, checkouts_path: &fs::Path, string: &str) -> Result<Template> {
-		// Convert the path to a string.
-		let checkouts_path = checkouts_path
+	pub async fn unrender(&self, artifacts_path: &fs::Path, string: &str) -> Result<Template> {
+		// Convert the artifacts path to a string.
+		let artifacts_path = artifacts_path
 			.to_str()
 			.wrap_err("Checkouts path is not valid UTF-8.")?;
 
@@ -23,7 +23,7 @@ impl Instance {
 		//
 		// Each "gap" in the iterator should become an artifact component. The first element is always an arbitrary string literal, and every other element should start with a forward slash followed by an artifact hash (and anything after the artifact hash is an extra string literal component). The end result will be the following template components:
 		// > [String("foo "), Artifact("a1b2c3"), String(" bar")]
-		let string_parts = string.split(checkouts_path);
+		let string_parts = string.split(artifacts_path);
 
 		// Iterate over each part of the string.
 		let mut components = vec![];
@@ -109,7 +109,7 @@ mod tests {
 
 		fn artifact_path(&self, artifact: artifact::Hash) -> String {
 			self.tg
-				.checkouts_path()
+				.artifacts_path()
 				.join(artifact.to_string())
 				.to_str()
 				.expect("Invalid UTF-8 path.")
@@ -120,12 +120,12 @@ mod tests {
 	#[tokio::test]
 	async fn test_unrender_artifact_path() -> Result<()> {
 		let test = TestInstance::new().await;
-		let checkouts_path = test.tg.checkouts_path();
+		let artifacts_path = test.tg.artifacts_path();
 
 		let artifact = test.make_artifact("foo").await;
 		let artifact_path = test.artifact_path(artifact);
 
-		let template_unrendered = test.tg.unrender(&checkouts_path, &artifact_path).await?;
+		let template_unrendered = test.tg.unrender(&artifacts_path, &artifact_path).await?;
 		let template = template::Template::from_iter([template::Component::Artifact(artifact)]);
 		assert_eq!(template_unrendered, template);
 
@@ -134,12 +134,12 @@ mod tests {
 	#[tokio::test]
 	async fn test_unrender_artifact_subpath() -> Result<()> {
 		let test = TestInstance::new().await;
-		let checkouts_path = test.tg.checkouts_path();
+		let artifacts_path = test.tg.artifacts_path();
 
 		let artifact = test.make_artifact("foo").await;
 		let artifact_subpath = format!("{}/fizz/buzz", test.artifact_path(artifact));
 
-		let template_unrendered = test.tg.unrender(&checkouts_path, &artifact_subpath).await?;
+		let template_unrendered = test.tg.unrender(&artifacts_path, &artifact_subpath).await?;
 		let template = template::Template::from_iter([
 			template::Component::Artifact(artifact),
 			template::Component::String("/fizz/buzz".into()),
@@ -152,11 +152,11 @@ mod tests {
 	#[tokio::test]
 	async fn test_unrender_arbitrary_path() -> Result<()> {
 		let test = TestInstance::new().await;
-		let checkouts_path = test.tg.checkouts_path();
+		let artifacts_path = test.tg.artifacts_path();
 
 		let template_unrendered = test
 			.tg
-			.unrender(&checkouts_path, "/etc/resolv.conf")
+			.unrender(&artifacts_path, "/etc/resolv.conf")
 			.await?;
 		let template =
 			template::Template::from_iter([template::Component::String("/etc/resolv.conf".into())]);
@@ -168,14 +168,14 @@ mod tests {
 	#[tokio::test]
 	async fn test_unrender_mixed_paths() -> Result<()> {
 		let test = TestInstance::new().await;
-		let checkouts_path = test.tg.checkouts_path();
+		let artifacts_path = test.tg.artifacts_path();
 
 		let artifact = test.make_artifact("foo").await;
 		let artifact_path = test.artifact_path(artifact);
 
 		let template_unrendered = test
 			.tg
-			.unrender(&checkouts_path, &format!("foo {artifact_path} bar"))
+			.unrender(&artifacts_path, &format!("foo {artifact_path} bar"))
 			.await?;
 		let template = template::Template::from_iter([
 			template::Component::String("foo ".into()),
@@ -190,7 +190,7 @@ mod tests {
 	#[tokio::test]
 	async fn test_unrender_command_with_path_like_variable() -> Result<()> {
 		let test = TestInstance::new().await;
-		let checkouts_path = test.tg.checkouts_path();
+		let artifacts_path = test.tg.artifacts_path();
 
 		let artifact1 = test.make_artifact("foo").await;
 		let artifact1_path = test.artifact_path(artifact1);
@@ -204,7 +204,7 @@ mod tests {
 		let template_unrendered = test
 			.tg
 			.unrender(
-				&checkouts_path,
+				&artifacts_path,
 				&format!("PATH={artifact1_path}:{artifact2_path}:/bin gcc {artifact3_path}"),
 			)
 			.await?;

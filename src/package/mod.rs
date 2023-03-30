@@ -32,7 +32,13 @@ impl crate::Instance {
 				.await
 				.wrap_err("Failed to check in the package.")?,
 
-			Identifier::Hash(_) => todo!(),
+			Identifier::Hash(package_hash) => {
+				checkin::Output {
+					package_hash: *package_hash,
+					// TODO: Get the dependency specifiers from the package.
+					dependency_specifiers: todo!(),
+				}
+			},
 		};
 
 		// Create the dependencies.

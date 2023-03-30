@@ -24,10 +24,10 @@ impl Instance {
 		self.sweep_artifacts(&marks)
 			.wrap_err("Failed to sweep the artifacts.")?;
 
-		// Sweep the checkouts directory.
-		self.sweep_checkouts_directory(&marks)
+		// Sweep the artifacts directory.
+		self.sweep_artifacts_directory(&marks)
 			.await
-			.wrap_err("Failed to sweep the checkouts directory.")?;
+			.wrap_err("Failed to sweep the artifacts directory.")?;
 
 		// Sweep the blobs.
 		self.sweep_blobs(&marks)
@@ -243,11 +243,11 @@ impl Instance {
 		Ok(())
 	}
 
-	async fn sweep_checkouts_directory(&self, marks: &Marks) -> Result<()> {
-		// Delete all entries in the checkouts directory that are not marked.
-		let mut read_dir = tokio::fs::read_dir(self.checkouts_path())
+	async fn sweep_artifacts_directory(&self, marks: &Marks) -> Result<()> {
+		// Delete all entries in the artifacts directory that are not marked.
+		let mut read_dir = tokio::fs::read_dir(self.artifacts_path())
 			.await
-			.wrap_err("Failed to read the checkouts directory.")?;
+			.wrap_err("Failed to read the artifacts directory.")?;
 		while let Some(entry) = read_dir.next_entry().await? {
 			let artifact_hash: hash::Hash = entry
 				.file_name()
@@ -255,7 +255,7 @@ impl Instance {
 				.wrap_err("Failed to parse the file name as a string.")?
 				.parse()
 				.map_err(Error::other)
-				.wrap_err("Failed to parse the entry in the checkouts directory as a hash.")?;
+				.wrap_err("Failed to parse the entry in the artifacts directory as a hash.")?;
 			let artifact_hash = artifact::Hash(artifact_hash);
 			if !marks.contains_artifact(artifact_hash) {
 				crate::util::fs::rmrf(&entry.path())

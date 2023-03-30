@@ -190,9 +190,9 @@ impl Server {
 
 		// Unrender the template from the string.
 		let tg = self.tg.upgrade().unwrap();
-		let checkouts_path = tg.checkouts_path();
+		let artifacts_path = tg.artifacts_path();
 		let template = tg
-			.unrender(&checkouts_path, &string)
+			.unrender(&artifacts_path, &string)
 			.await
 			.wrap_err("Failed to check in the path.")?;
 
