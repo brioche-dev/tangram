@@ -139,8 +139,19 @@ impl Instance {
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
 
-		// TODO: Read the file's references from its xattrs.
-		let references = Vec::new();
+		// Read the file's references from its xattrs, swallowing any errors that occur so that an invalid xattr doesn't cause a failure.
+		#[derive(serde::Deserialize)]
+		struct Attributes {
+			references: Vec<artifact::Hash>,
+		}
+		let attribute_name = "user.tangram.attributes";
+		let attributes: Option<Attributes> = xattr::get(path, attribute_name)
+			.ok()
+			.flatten()
+			.map(|attribute_bytes| serde_json::from_slice(&attribute_bytes).ok())
+			.flatten();
+
+		let references = attributes.map(|a| a.references).unwrap_or(Vec::new());
 
 		// Create the artifact.
 		let artifact = Artifact::File(File::new(blob_hash, executable, references));
