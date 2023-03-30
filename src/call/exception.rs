@@ -54,11 +54,14 @@ impl Error {
 				.map(|call_site| {
 					// Get the location.
 					let file_name = call_site.file_name.as_deref();
-					let line = call_site.line_number.unwrap().to_u32().unwrap() - 1;
-					let character = call_site.column_number.unwrap().to_u32().unwrap();
+					let line: u32 = call_site.line_number?.saturating_sub(1);
+					let character: u32 = call_site.column_number?;
 					let position = Position { line, character };
-					let location = get_location(state, file_name, position);
+					let location = get_location(state, file_name, position)?;
 
+					Some(location)
+				})
+				.map(|location| {
 					// Create the stack frame.
 					StackFrame { location }
 				})
