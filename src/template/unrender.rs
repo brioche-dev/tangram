@@ -15,19 +15,9 @@ impl Instance {
 			.to_str()
 			.wrap_err("Checkouts path is not valid UTF-8.")?;
 
-		// Split the string using the checkouts path as a separator. For example, given the following string:
-		// > "foo /home/tangram/.checkouts/a1b2c3 bar"
-		//
-		// ...we'll end up with an iterator like this:
-		// > ["foo ", "/a1b2c3 bar"]
-		//
-		// Each "gap" in the iterator should become an artifact component. The first element is always an arbitrary string literal, and every other element should start with a forward slash followed by an artifact hash (and anything after the artifact hash is an extra string literal component). The end result will be the following template components:
-		// > [String("foo "), Artifact("a1b2c3"), String(" bar")]
-		let string_parts = string.split(artifacts_path);
-
 		// Iterate over each part of the string.
 		let mut components = vec![];
-		for (i, part) in string_parts.enumerate() {
+		for (i, part) in string.split(artifacts_path).enumerate() {
 			// The first part is a literal component, so add it as-is.
 			if i == 0 {
 				if !part.is_empty() {
@@ -68,147 +58,108 @@ impl Instance {
 
 #[cfg(test)]
 mod tests {
+	use crate::{
+		artifact::{self, Artifact},
+		error::Result,
+		file::File,
+		template, Instance, Options,
+	};
 	use tempfile::TempDir;
 
-	use crate::{artifact, error::Result, file, template, Instance, Options};
-
-	struct TestInstance {
-		tg: Instance,
-
-		#[allow(dead_code)]
-		temp_dir: TempDir,
-	}
-
-	impl TestInstance {
-		async fn new() -> Self {
-			let temp_dir = TempDir::new().expect("Failed to create temporary directory.");
-			let tg = Instance::new(temp_dir.path().to_owned(), Options::default())
-				.await
-				.expect("Failed to create tg instance.");
-
-			Self { tg, temp_dir }
-		}
-
-		async fn make_artifact(&self, content: &str) -> artifact::Hash {
-			let blob_hash = self
-				.tg
-				.add_blob(content.as_bytes())
-				.await
-				.expect("Failed to add blob.");
-			let artifact = artifact::Artifact::File(file::File {
-				blob_hash,
-				executable: false,
-				references: vec![],
-			});
-
-			self.tg
-				.add_artifact(&artifact)
-				.await
-				.expect("Failed to add artifact.")
-		}
-
-		fn artifact_path(&self, artifact: artifact::Hash) -> String {
-			self.tg
-				.artifacts_path()
-				.join(artifact.to_string())
-				.to_str()
-				.expect("Invalid UTF-8 path.")
-				.to_owned()
-		}
+	async fn create_test_artifact(tg: &Instance, content: &str) -> (artifact::Hash, String) {
+		let artifact = Artifact::File(File::new(tg.add_blob(content.as_bytes()).await.unwrap()));
+		let artifact_hash = tg.add_artifact(&artifact).await.unwrap();
+		let artifact_path = tg.artifact_path(artifact_hash);
+		(artifact_hash, artifact_path.to_str().unwrap().to_owned())
 	}
 
 	#[tokio::test]
 	async fn test_unrender_artifact_path() -> Result<()> {
-		let test = TestInstance::new().await;
-		let artifacts_path = test.tg.artifacts_path();
+		let temp_dir = TempDir::new().unwrap();
+		let temp_path = temp_dir.path().to_owned();
+		let tg = Instance::new(temp_path, Options::default()).await?;
 
-		let artifact = test.make_artifact("foo").await;
-		let artifact_path = test.artifact_path(artifact);
+		let (artifact_hash, artifact_path) = create_test_artifact(&tg, "foo").await;
 
-		let template_unrendered = test.tg.unrender(&artifacts_path, &artifact_path).await?;
-		let template = template::Template::from_iter([template::Component::Artifact(artifact)]);
+		let template_unrendered = tg.unrender(&tg.artifacts_path(), &artifact_path).await?;
+		let template =
+			template::Template::from_iter([template::Component::Artifact(artifact_hash)]);
 		assert_eq!(template_unrendered, template);
 
 		Ok(())
 	}
+
 	#[tokio::test]
 	async fn test_unrender_artifact_subpath() -> Result<()> {
-		let test = TestInstance::new().await;
-		let artifacts_path = test.tg.artifacts_path();
+		let temp_dir = TempDir::new().unwrap();
+		let temp_path = temp_dir.path().to_owned();
+		let tg = Instance::new(temp_path, Options::default()).await?;
 
-		let artifact = test.make_artifact("foo").await;
-		let artifact_subpath = format!("{}/fizz/buzz", test.artifact_path(artifact));
+		let (artifact_hash, artifact_path) = create_test_artifact(&tg, "foo").await;
 
-		let template_unrendered = test.tg.unrender(&artifacts_path, &artifact_subpath).await?;
-		let template = template::Template::from_iter([
-			template::Component::Artifact(artifact),
+		let string = format!("{artifact_path}/fizz/buzz");
+
+		let left = tg.unrender(&tg.artifacts_path(), &string).await?;
+		let right = template::Template::from_iter([
+			template::Component::Artifact(artifact_hash),
 			template::Component::String("/fizz/buzz".into()),
 		]);
-		assert_eq!(template_unrendered, template);
+		assert_eq!(left, right);
 
 		Ok(())
 	}
 
 	#[tokio::test]
 	async fn test_unrender_arbitrary_path() -> Result<()> {
-		let test = TestInstance::new().await;
-		let artifacts_path = test.tg.artifacts_path();
+		let temp_dir = TempDir::new().unwrap();
+		let temp_path = temp_dir.path().to_owned();
+		let tg = Instance::new(temp_path, Options::default()).await?;
 
-		let template_unrendered = test
-			.tg
-			.unrender(&artifacts_path, "/etc/resolv.conf")
-			.await?;
-		let template =
+		let string = "/etc/resolv.conf";
+
+		let left = tg.unrender(&tg.artifacts_path(), string).await?;
+		let right =
 			template::Template::from_iter([template::Component::String("/etc/resolv.conf".into())]);
-		assert_eq!(template_unrendered, template);
+		assert_eq!(left, right);
 
 		Ok(())
 	}
 
 	#[tokio::test]
 	async fn test_unrender_mixed_paths() -> Result<()> {
-		let test = TestInstance::new().await;
-		let artifacts_path = test.tg.artifacts_path();
+		let temp_dir = TempDir::new().unwrap();
+		let temp_path = temp_dir.path().to_owned();
+		let tg = Instance::new(temp_path, Options::default()).await?;
 
-		let artifact = test.make_artifact("foo").await;
-		let artifact_path = test.artifact_path(artifact);
+		let (artifact, artifact_path) = create_test_artifact(&tg, "foo").await;
 
-		let template_unrendered = test
-			.tg
-			.unrender(&artifacts_path, &format!("foo {artifact_path} bar"))
-			.await?;
-		let template = template::Template::from_iter([
+		let string = format!("foo {artifact_path} bar");
+
+		let left = tg.unrender(&tg.artifacts_path(), &string).await?;
+		let right = template::Template::from_iter([
 			template::Component::String("foo ".into()),
 			template::Component::Artifact(artifact),
 			template::Component::String(" bar".into()),
 		]);
-		assert_eq!(template_unrendered, template);
+		assert_eq!(left, right);
 
 		Ok(())
 	}
 
 	#[tokio::test]
 	async fn test_unrender_command_with_path_like_variable() -> Result<()> {
-		let test = TestInstance::new().await;
-		let artifacts_path = test.tg.artifacts_path();
+		let temp_dir = TempDir::new().unwrap();
+		let temp_path = temp_dir.path().to_owned();
+		let tg = Instance::new(temp_path, Options::default()).await?;
 
-		let artifact1 = test.make_artifact("foo").await;
-		let artifact1_path = test.artifact_path(artifact1);
+		let (artifact1, artifact1_path) = create_test_artifact(&tg, "foo").await;
+		let (artifact2, artifact2_path) = create_test_artifact(&tg, "bar").await;
+		let (artifact3, artifact3_path) = create_test_artifact(&tg, "baz").await;
 
-		let artifact2 = test.make_artifact("bar").await;
-		let artifact2_path = test.artifact_path(artifact2);
+		let string = format!("PATH={artifact1_path}:{artifact2_path}:/bin gcc {artifact3_path}");
 
-		let artifact3 = test.make_artifact("baz").await;
-		let artifact3_path = test.artifact_path(artifact3);
-
-		let template_unrendered = test
-			.tg
-			.unrender(
-				&artifacts_path,
-				&format!("PATH={artifact1_path}:{artifact2_path}:/bin gcc {artifact3_path}"),
-			)
-			.await?;
-		let template = template::Template::from_iter([
+		let left = tg.unrender(&tg.artifacts_path(), &string).await?;
+		let right = template::Template::from_iter([
 			template::Component::String("PATH=".into()),
 			template::Component::Artifact(artifact1),
 			template::Component::String(":".into()),
@@ -216,7 +167,7 @@ mod tests {
 			template::Component::String(":/bin gcc ".into()),
 			template::Component::Artifact(artifact3),
 		]);
-		assert_eq!(template_unrendered, template);
+		assert_eq!(left, right);
 
 		Ok(())
 	}

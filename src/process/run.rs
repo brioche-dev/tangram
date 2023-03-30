@@ -194,7 +194,7 @@ async fn render(tg: &Instance, template: &Template, output_path: &fs::Path) -> R
 			match component {
 				crate::template::Component::String(string) => Ok(string.into()),
 				crate::template::Component::Artifact(artifact_hash) => Ok(tg
-					.checkout_path(*artifact_hash)
+					.artifact_path(*artifact_hash)
 					.into_os_string()
 					.into_string()
 					.unwrap()

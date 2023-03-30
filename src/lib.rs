@@ -244,37 +244,42 @@ impl Instance {
 	}
 
 	#[must_use]
-	fn blobs_path(&self) -> fs::PathBuf {
-		self.path().join("blobs")
-	}
-
-	#[must_use]
-	fn blob_path(&self, blob_hash: blob::Hash) -> fs::PathBuf {
-		self.blobs_path().join(blob_hash.to_string())
-	}
-
-	#[must_use]
-	fn artifacts_path(&self) -> fs::PathBuf {
+	pub fn artifacts_path(&self) -> fs::PathBuf {
 		self.path().join("artifacts")
 	}
 
 	#[must_use]
-	fn checkout_path(&self, artifact_hash: artifact::Hash) -> fs::PathBuf {
+	pub fn artifact_path(&self, artifact_hash: artifact::Hash) -> fs::PathBuf {
 		self.artifacts_path().join(artifact_hash.to_string())
 	}
 
-	// #[must_use]
-	// fn database_path(&self) -> fs::PathBuf {
-	// 	self.path().join("database.mdb")
-	// }
-
-	// #[must_use]
-	// fn logs_path(&self) -> fs::PathBuf {
-	// 	self.path().join("logs")
-	// }
+	#[must_use]
+	pub fn blobs_path(&self) -> fs::PathBuf {
+		self.path().join("blobs")
+	}
 
 	#[must_use]
-	fn temps_path(&self) -> fs::PathBuf {
+	pub fn blob_path(&self, blob_hash: blob::Hash) -> fs::PathBuf {
+		self.blobs_path().join(blob_hash.to_string())
+	}
+
+	#[must_use]
+	pub fn database_path(&self) -> fs::PathBuf {
+		self.path().join("database.mdb")
+	}
+
+	#[must_use]
+	pub fn logs_path(&self) -> fs::PathBuf {
+		self.path().join("logs")
+	}
+
+	#[must_use]
+	pub fn log_path(&self, operation_hash: operation::Hash) -> fs::PathBuf {
+		self.logs_path().join(operation_hash.to_string())
+	}
+
+	#[must_use]
+	pub fn temps_path(&self) -> fs::PathBuf {
 		self.path().join("temps")
 	}
 }

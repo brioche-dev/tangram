@@ -24,6 +24,15 @@ pub struct File {
 }
 
 impl File {
+	#[must_use]
+	pub fn new(blob_hash: blob::Hash) -> Self {
+		Self {
+			blob_hash,
+			executable: false,
+			references: Vec::new(),
+		}
+	}
+
 	pub async fn read_to_string(&self, tg: &Instance) -> Result<String> {
 		let mut blob = tg.get_blob(self.blob_hash).await?;
 		let mut string = String::new();
