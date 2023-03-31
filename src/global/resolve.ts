@@ -1,10 +1,10 @@
-import { Artifact } from "./artifact";
-import { Directory } from "./directory";
-import { File } from "./file";
-import { Placeholder } from "./placeholder";
-import { Symlink } from "./symlink";
-import { Template } from "./template";
-import { Value, nullish } from "./value";
+import { Artifact } from "./artifact.ts";
+import { Directory } from "./directory.ts";
+import { File } from "./file.ts";
+import { Placeholder } from "./placeholder.ts";
+import { Symlink } from "./symlink.ts";
+import { Template } from "./template.ts";
+import { Value, nullish } from "./value.ts";
 
 export type Unresolved<T extends Value> = T extends
 	| nullish

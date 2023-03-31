@@ -4,14 +4,14 @@ import {
 	addArtifact,
 	getArtifact,
 	isArtifact,
-} from "./artifact";
-import { BlobLike, isBlobLike } from "./blob";
-import { file } from "./file";
-import { PathLike, path } from "./path";
-import { MaybePromise } from "./resolve";
-import * as syscall from "./syscall";
-import { assert } from "./util";
-import { isNullish, nullish } from "./value";
+} from "./artifact.ts";
+import { BlobLike, isBlobLike } from "./blob.ts";
+import { file } from "./file.ts";
+import { PathLike, path } from "./path.ts";
+import { MaybePromise } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
+import { assert } from "./util.ts";
+import { isNullish, nullish } from "./value.ts";
 
 type DirectoryArg = MaybePromise<nullish | Directory | DirectoryObject>;
 

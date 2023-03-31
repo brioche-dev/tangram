@@ -1,16 +1,16 @@
-import * as check from "./check";
-import * as completion from "./completion";
-import * as definition from "./definition";
-import * as diagnostics from "./diagnostics";
-import * as doc from "./doc";
-import { prepareStackTrace } from "./error";
-import * as format from "./format";
-import * as hover from "./hover";
-import * as imports from "./imports";
-import * as metadata from "./metadata";
-import * as references from "./references";
-import * as rename from "./rename";
-import * as transpile from "./transpile";
+import * as check from "./check.ts";
+import * as completion from "./completion.ts";
+import * as definition from "./definition.ts";
+import * as diagnostics from "./diagnostics.ts";
+import * as doc from "./doc.ts";
+import { prepareStackTrace } from "./error.ts";
+import * as format from "./format.ts";
+import * as hover from "./hover.ts";
+import * as imports from "./imports.ts";
+import * as metadata from "./metadata.ts";
+import * as references from "./references.ts";
+import * as rename from "./rename.ts";
+import * as transpile from "./transpile.ts";
 
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {

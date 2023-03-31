@@ -1,14 +1,14 @@
-import { addArtifact, getArtifact } from "./artifact";
-import { Directory, isDirectory } from "./directory";
-import { Unresolved, resolve } from "./resolve";
-import * as syscall from "./syscall";
+import { addArtifact, getArtifact } from "./artifact.ts";
+import { Directory, isDirectory } from "./directory.ts";
+import { Unresolved, resolve } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
 
-export let vendor = async (
+export let bundle = async (
 	artifact: Unresolved<Directory>,
 ): Promise<Directory> => {
 	let resolvedArtifact = await resolve(artifact);
 	let hash = await addArtifact(resolvedArtifact);
-	let vendoredHash = await syscall.vendor(hash);
+	let vendoredHash = await syscall.bundle(hash);
 	let vendoredArtifact = await getArtifact(vendoredHash);
 
 	if (!isDirectory(vendoredArtifact)) {

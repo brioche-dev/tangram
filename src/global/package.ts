@@ -1,5 +1,10 @@
-import { Artifact, ArtifactHash, addArtifact, getArtifact } from "./artifact";
-import * as syscall from "./syscall";
+import {
+	Artifact,
+	ArtifactHash,
+	addArtifact,
+	getArtifact,
+} from "./artifact.ts";
+import * as syscall from "./syscall.ts";
 
 export type PackageInstanceHash = string;
 

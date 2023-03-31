@@ -1,5 +1,5 @@
-import { Range } from "./range";
-import { ModuleIdentifier } from "./syscall";
+import { Range } from "./range.ts";
+import { ModuleIdentifier } from "./syscall.ts";
 
 export type Location = {
 	moduleIdentifier: ModuleIdentifier;

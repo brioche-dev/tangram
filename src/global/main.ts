@@ -1,23 +1,23 @@
-import { array } from "./array";
-import { isArtifact } from "./artifact";
-import { Blob, blob, isBlobLike } from "./blob";
-import { checksum } from "./checksum";
-import { context } from "./context";
-import { Directory, directory, isDirectory } from "./directory";
-import { download } from "./download";
-import { prepareStackTrace } from "./error";
-import { File, file, isFile } from "./file";
-import { function_ } from "./function";
-import { include } from "./include";
-import { log } from "./log";
-import { map } from "./map";
-import { Path, isPath, path } from "./path";
-import { Placeholder, isPlaceholder, placeholder } from "./placeholder";
-import { output, process } from "./process";
-import { resolve } from "./resolve";
-import { Symlink, isSymlink, symlink } from "./symlink";
-import { Template, isTemplate, t, template } from "./template";
-import { vendor } from "./vendor";
+import { array } from "./array.ts";
+import { isArtifact } from "./artifact.ts";
+import { Blob, blob, isBlobLike } from "./blob.ts";
+import { bundle } from "./bundle.ts";
+import { checksum } from "./checksum.ts";
+import { context } from "./context.ts";
+import { Directory, directory, isDirectory } from "./directory.ts";
+import { download } from "./download.ts";
+import { prepareStackTrace } from "./error.ts";
+import { File, file, isFile } from "./file.ts";
+import { function_ } from "./function.ts";
+import { include } from "./include.ts";
+import { log } from "./log.ts";
+import { map } from "./map.ts";
+import { Path, isPath, path } from "./path.ts";
+import { Placeholder, isPlaceholder, placeholder } from "./placeholder.ts";
+import { output, process } from "./process.ts";
+import { resolve } from "./resolve.ts";
+import { Symlink, isSymlink, symlink } from "./symlink.ts";
+import { Template, isTemplate, t, template } from "./template.ts";
 
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
@@ -43,6 +43,7 @@ let tg = {
 	Template,
 	array,
 	blob,
+	bundle,
 	checksum,
 	context,
 	directory,
@@ -67,7 +68,6 @@ let tg = {
 	resolve,
 	symlink,
 	template,
-	vendor,
 };
 Object.defineProperties(globalThis, {
 	t: { value: t },

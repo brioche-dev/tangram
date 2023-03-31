@@ -21,7 +21,7 @@ static TANGRAM_ARTIFACTS_PATH: Lazy<Path> = Lazy::new(|| {
 });
 
 impl Instance {
-	pub async fn vendor(self: &Arc<Self>, artifact_hash: Hash) -> Result<Hash> {
+	pub async fn bundle(self: &Arc<Self>, artifact_hash: Hash) -> Result<Hash> {
 		// Get the artifact.
 		let artifact = self.get_artifact_local(artifact_hash)?;
 

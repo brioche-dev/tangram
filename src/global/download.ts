@@ -1,8 +1,8 @@
-import { Artifact } from "./artifact";
-import { Checksum } from "./checksum";
-import { run } from "./operation";
-import * as syscall from "./syscall";
-import { nullish } from "./value";
+import { Artifact } from "./artifact.ts";
+import { Checksum } from "./checksum.ts";
+import { run } from "./operation.ts";
+import * as syscall from "./syscall.ts";
+import { nullish } from "./value.ts";
 
 export type DownloadArgs = {
 	url: string;

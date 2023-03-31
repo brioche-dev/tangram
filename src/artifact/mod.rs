@@ -2,13 +2,13 @@ pub use self::{hash::Hash, hash::STRING_LENGTH as HASH_STRING_LENGTH, tracker::T
 use crate::{directory::Directory, file::File, symlink::Symlink};
 
 pub mod add;
+mod bundle;
 mod get;
 mod hash;
 mod references;
 mod serialize;
 pub mod tracker;
 mod util;
-mod vendor;
 
 #[derive(
 	Clone,

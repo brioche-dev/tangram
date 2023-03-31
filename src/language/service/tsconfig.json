@@ -1,8 +1,9 @@
 {
 	"compilerOptions": {
+		"allowImportingTsExtensions": true,
 		"lib": ["esnext"],
 		"module": "esnext",
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"noEmit": true,
 		"noUncheckedIndexedAccess": true,
 		"strict": true,

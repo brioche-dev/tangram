@@ -1,7 +1,7 @@
-import { Diagnostic, convertDiagnosticFromTypeScript } from "./diagnostics";
-import { ModuleIdentifier } from "./syscall";
-import * as typescript from "./typescript";
-import * as ts from "typescript";
+import { Diagnostic, convertDiagnosticFromTypeScript } from "./diagnostics.ts";
+import { ModuleIdentifier } from "./syscall.ts";
+import * as typescript from "./typescript.ts";
+import ts from "typescript";
 
 export type Request = {
 	moduleIdentifiers: Array<ModuleIdentifier>;

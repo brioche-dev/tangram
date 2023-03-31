@@ -1,7 +1,7 @@
-import { Function } from "./function";
-import { run } from "./operation";
-import * as syscall from "./syscall";
-import { Value, deserializeValue, nullish, serializeValue } from "./value";
+import { Function } from "./function.ts";
+import { run } from "./operation.ts";
+import * as syscall from "./syscall.ts";
+import { Value, deserializeValue, nullish, serializeValue } from "./value.ts";
 
 type CallArgs<T extends Value> = {
 	function: Function<any, T>;

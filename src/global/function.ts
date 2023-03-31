@@ -1,10 +1,10 @@
-import { call } from "./call";
-import { context } from "./context";
-import { PackageInstanceHash } from "./package";
-import { MaybePromise, Unresolved, resolve } from "./resolve";
-import * as syscall from "./syscall";
-import { assert } from "./util";
-import { Value, deserializeValue, serializeValue } from "./value";
+import { call } from "./call.ts";
+import { context } from "./context.ts";
+import { PackageInstanceHash } from "./package.ts";
+import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
+import { assert } from "./util.ts";
+import { Value, deserializeValue, serializeValue } from "./value.ts";
 
 export let function_ = <
 	A extends Array<Value> = Array<Value>,

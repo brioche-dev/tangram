@@ -1,7 +1,7 @@
-import { ArtifactHash, addArtifact } from "./artifact";
-import { Unresolved } from "./resolve";
-import * as syscall from "./syscall";
-import { Template, TemplateLike, template } from "./template";
+import { ArtifactHash, addArtifact } from "./artifact.ts";
+import { Unresolved } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
+import { Template, TemplateLike, template } from "./template.ts";
 
 export let symlink = async (
 	target: Unresolved<TemplateLike>,

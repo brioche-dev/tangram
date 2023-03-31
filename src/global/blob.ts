@@ -1,5 +1,5 @@
-import { MaybePromise } from "./resolve";
-import * as syscall from "./syscall";
+import { MaybePromise } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
 
 export type BlobHash = string;
 

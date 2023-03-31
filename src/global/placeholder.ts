@@ -1,4 +1,4 @@
-import * as syscall from "./syscall";
+import * as syscall from "./syscall.ts";
 
 export let placeholder = (name: string): Placeholder => {
 	return new Placeholder(name);

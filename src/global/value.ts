@@ -1,10 +1,10 @@
-import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact";
-import { Directory } from "./directory";
-import { File } from "./file";
-import { Placeholder } from "./placeholder";
-import { Symlink } from "./symlink";
-import * as syscall from "./syscall";
-import { Template } from "./template";
+import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact.ts";
+import { Directory } from "./directory.ts";
+import { File } from "./file.ts";
+import { Placeholder } from "./placeholder.ts";
+import { Symlink } from "./symlink.ts";
+import * as syscall from "./syscall.ts";
+import { Template } from "./template.ts";
 
 export type Value =
 	| nullish

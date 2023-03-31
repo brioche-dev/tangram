@@ -61,7 +61,6 @@ impl Cli {
 				.as_artifact()
 				.copied()
 				.wrap_err("Expected the output to be an artifact.")?;
-			let artifact_hash = self.tg.vendor(artifact_hash).await?;
 			self.tg
 				.check_out_external(artifact_hash, &output_path)
 				.await?;

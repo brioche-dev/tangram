@@ -3,10 +3,10 @@ import {
 	ArtifactHash,
 	getArtifact,
 	serializeArtifact,
-} from "./artifact";
-import { Blob, BlobHash, BlobLike, blob, getBlob, isBlobLike } from "./blob";
-import { MaybePromise } from "./resolve";
-import * as syscall from "./syscall";
+} from "./artifact.ts";
+import { Blob, BlobHash, BlobLike, blob, getBlob, isBlobLike } from "./blob.ts";
+import { MaybePromise } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
 
 export type FileLike = BlobLike | File;
 

@@ -4,10 +4,13 @@ use std::collections::HashSet;
 
 impl Template {
 	// Collect a template's references.
-	pub fn collect_references_into(&self, references: &mut Vec<artifact::Hash>) {
+	pub fn collect_references_into(
+		&self,
+		references: &mut HashSet<artifact::Hash, hash::BuildHasher>,
+	) {
 		for component in &self.components {
 			if let Component::Artifact(artifact_hash) = component {
-				references.push(*artifact_hash);
+				references.insert(*artifact_hash);
 			}
 		}
 	}

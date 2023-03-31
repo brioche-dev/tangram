@@ -1,11 +1,11 @@
-import { Artifact } from "./artifact";
-import { Checksum } from "./checksum";
-import { run } from "./operation";
-import { placeholder } from "./placeholder";
-import { Unresolved, resolve } from "./resolve";
-import * as syscall from "./syscall";
-import { Template, TemplateLike, template } from "./template";
-import { nullish } from "./value";
+import { Artifact } from "./artifact.ts";
+import { Checksum } from "./checksum.ts";
+import { run } from "./operation.ts";
+import { placeholder } from "./placeholder.ts";
+import { Unresolved, resolve } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
+import { Template, TemplateLike, template } from "./template.ts";
+import { nullish } from "./value.ts";
 
 type ProcessArgs = {
 	system: System;

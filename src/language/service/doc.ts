@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
-import { Location } from "./location";
-import { ModuleIdentifier } from "./syscall";
-import { compilerOptions, host } from "./typescript";
-import * as typescript from "./typescript";
-import * as ts from "typescript";
+import { Location } from "./location.ts";
+import { ModuleIdentifier } from "./syscall.ts";
+import { compilerOptions, host } from "./typescript.ts";
+import * as typescript from "./typescript.ts";
+import ts from "typescript";
 
 export type Request = {
 	moduleIdentifier: ModuleIdentifier;

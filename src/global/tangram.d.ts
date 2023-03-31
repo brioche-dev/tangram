@@ -50,6 +50,11 @@ declare namespace tg {
 		text(): Promise<string>;
 	}
 
+	// Bundle.
+
+	/** Bundle an artifact. */
+	export let bundle: (artifact: Unresolved<Directory>) => Promise<Directory>;
+
 	// Checksum.
 
 	export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
@@ -382,11 +387,6 @@ declare namespace tg {
 		| { [key: string]: Value };
 
 	export type nullish = undefined | null;
-
-	// Vendor.
-
-	/** Vendor an artifact. The returned artifact will be fully relocatable, with all references inlined and resolved to relative paths. */
-	export let vendor: (artifact: Unresolved<Directory>) => Promise<Directory>;
 }
 
 declare let console: {

@@ -1,7 +1,7 @@
-import { Directory } from "./directory";
-import { File } from "./file";
-import { Symlink } from "./symlink";
-import * as syscall from "./syscall";
+import { Directory } from "./directory.ts";
+import { File } from "./file.ts";
+import { Symlink } from "./symlink.ts";
+import * as syscall from "./syscall.ts";
 
 export type ArtifactHash = string;
 

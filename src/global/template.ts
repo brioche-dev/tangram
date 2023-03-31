@@ -1,7 +1,7 @@
-import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact";
-import { Placeholder } from "./placeholder";
-import { Unresolved, resolve } from "./resolve";
-import * as syscall from "./syscall";
+import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact.ts";
+import { Placeholder } from "./placeholder.ts";
+import { Unresolved, resolve } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
 
 export type TemplateLike = TemplateComponent | Template | Array<TemplateLike>;
 

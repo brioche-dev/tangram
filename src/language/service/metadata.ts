@@ -1,4 +1,4 @@
-import { assert, visit } from "./util";
+import { assert, visit } from "./util.ts";
 import { TSESTree, parse } from "@typescript-eslint/typescript-estree";
 
 export type Request = {

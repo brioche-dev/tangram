@@ -1,7 +1,7 @@
 use super::Identifier;
 pub use crate::package::specifier::Registry;
 use crate::{
-	error::{return_error, Error, Result, WrapErr},
+	error::{Error, Result, WrapErr},
 	module,
 	path::Path,
 };
@@ -95,11 +95,6 @@ impl crate::Instance {
 		while let Some(module_identifier) = queue.pop() {
 			// Add the module to the visited set.
 			visited.insert(module_identifier.clone());
-
-			// Get the package path from the module identifier.
-			let module::identifier::Source::Package(package_path) = &module_identifier.source else {
-				return_error!("Invalid module identifier.");
-			};
 
 			// Load the module.
 			let module_text = self

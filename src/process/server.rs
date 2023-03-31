@@ -183,12 +183,12 @@ impl Server {
 			.wrap_err("Failed to read the request body.")?
 			.to_bytes();
 
-		// Deserialize the string to un-render.
+		// Deserialize the string.
 		let string: String = serde_json::from_slice(&body)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the request body.")?;
 
-		// Unrender the template from the string.
+		// Unrender the string.
 		let tg = self.tg.upgrade().unwrap();
 		let artifacts_path = tg.artifacts_path();
 		let template = tg
@@ -196,7 +196,7 @@ impl Server {
 			.await
 			.wrap_err("Failed to check in the path.")?;
 
-		// Create the
+		// Create the response.
 		let body = serde_json::to_vec(&template)
 			.map_err(Error::other)
 			.wrap_err("Failed to serialize the response body.")?;

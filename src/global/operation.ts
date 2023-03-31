@@ -1,9 +1,9 @@
-import { Artifact } from "./artifact";
-import { Call } from "./call";
-import { Download } from "./download";
-import { Process } from "./process";
-import * as syscall from "./syscall";
-import { deserializeValue } from "./value";
+import { Artifact } from "./artifact.ts";
+import { Call } from "./call.ts";
+import { Download } from "./download.ts";
+import { Process } from "./process.ts";
+import * as syscall from "./syscall.ts";
+import { deserializeValue } from "./value.ts";
 
 export type OperationHash = string;
 

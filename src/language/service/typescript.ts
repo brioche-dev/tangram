@@ -1,6 +1,6 @@
-import * as syscall from "./syscall";
-import { ModuleIdentifier } from "./syscall";
-import * as ts from "typescript";
+import * as syscall from "./syscall.ts";
+import { ModuleIdentifier } from "./syscall.ts";
+import ts from "typescript";
 
 // Create the TypeScript compiler options.
 export let compilerOptions: ts.CompilerOptions = {

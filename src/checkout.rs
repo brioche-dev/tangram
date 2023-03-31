@@ -206,7 +206,7 @@ impl Instance {
 
 impl Instance {
 	pub async fn check_out_external(
-		&self,
+		self: &Arc<Self>,
 		artifact_hash: artifact::Hash,
 		path: &fs::Path,
 	) -> Result<()> {
@@ -216,6 +216,12 @@ impl Instance {
 		} else {
 			None
 		};
+
+		// Bundle the artifact.
+		let artifact_hash = self
+			.bundle(artifact_hash)
+			.await
+			.wrap_err("Failed to bundle the artifact.")?;
 
 		// Check out the artifact recursively.
 		self.check_out_external_inner(existing_artifact_hash, artifact_hash, path)

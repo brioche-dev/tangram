@@ -1,8 +1,7 @@
-import { Location } from "./location";
-import * as syscall from "./syscall";
-import { ModuleIdentifier } from "./syscall";
-import * as typescript from "./typescript";
-import * as ts from "typescript";
+import { Location } from "./location.ts";
+import * as syscall from "./syscall.ts";
+import * as typescript from "./typescript.ts";
+import ts from "typescript";
 
 export type Request = {};
 

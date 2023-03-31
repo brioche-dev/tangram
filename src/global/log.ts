@@ -1,4 +1,4 @@
-import * as syscall from "./syscall";
+import * as syscall from "./syscall.ts";
 
 /** Write to the log. */
 export let log = (...args: Array<unknown>) => {
