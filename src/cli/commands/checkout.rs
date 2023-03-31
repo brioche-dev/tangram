@@ -7,8 +7,11 @@ use tangram::{artifact, util::fs};
 /// Check out an artifact.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	artifact_hash: artifact::Hash,
-	path: Option<fs::PathBuf>,
+	/// The hash of the artifact to check out.
+	pub artifact_hash: artifact::Hash,
+
+	/// The path to check out the artifact to.
+	pub path: Option<fs::PathBuf>,
 }
 
 impl Cli {

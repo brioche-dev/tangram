@@ -7,7 +7,7 @@ use tangram::{package, util::fs};
 /// Publish a package.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	package: Option<fs::PathBuf>,
+	pub package: Option<fs::PathBuf>,
 }
 
 impl Cli {

@@ -17,6 +17,11 @@ use std::{
 	os::unix::prelude::{MetadataExt, PermissionsExt},
 };
 
+#[derive(serde::Deserialize)]
+struct Attributes {
+	references: Vec<artifact::Hash>,
+}
+
 impl Instance {
 	#[async_recursion]
 	pub async fn check_in(&self, path: &fs::Path) -> Result<artifact::Hash> {
@@ -139,19 +144,12 @@ impl Instance {
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
 
-		// Read the file's references from its xattrs, swallowing any errors that occur so that an invalid xattr doesn't cause a failure.
-		#[derive(serde::Deserialize)]
-		struct Attributes {
-			references: Vec<artifact::Hash>,
-		}
-		let attribute_name = "user.tangram.attributes";
-		let attributes: Option<Attributes> = xattr::get(path, attribute_name)
+		// Read the file's references from its xattrs.
+		let attributes: Option<Attributes> = xattr::get(path, "user.tangram")
 			.ok()
 			.flatten()
-			.map(|attribute_bytes| serde_json::from_slice(&attribute_bytes).ok())
-			.flatten();
-
-		let references = attributes.map(|a| a.references).unwrap_or(Vec::new());
+			.and_then(|attributes| serde_json::from_slice(&attributes).ok());
+		let references = attributes.map_or_else(Vec::new, |a| a.references);
 
 		// Create the artifact.
 		let artifact = Artifact::File(File::new(blob_hash, executable, references));

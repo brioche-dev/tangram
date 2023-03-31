@@ -3,7 +3,7 @@ use crate::{error::Result, Cli};
 /// Search for a package.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	query: String,
+	pub query: String,
 }
 
 impl Cli {

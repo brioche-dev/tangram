@@ -1,36 +1,33 @@
+use super::{PackageArgs, RunArgs};
 use crate::{error::Result, Cli};
-use tangram::{package, path::Path};
+use tangram::package;
 
+/// Build a package's "shell" export and run it.
 #[derive(Debug, clap::Args)]
-#[command(
-	about = r#"Build a package's "shell" export and run it."#,
-	trailing_var_arg = true
-)]
+#[command(trailing_var_arg = true)]
 pub struct Args {
-	#[arg(long)]
-	pub executable_path: Option<Path>,
-	#[arg(long)]
-	pub locked: bool,
-	#[arg(long)]
-	pub export: Option<String>,
+	/// The package to build.
+	#[arg(short, long, default_value = ".")]
+	pub package: package::Specifier,
 
-	#[arg(default_value = ".")]
-	pub package_specifier: package::Specifier,
+	#[command(flatten)]
+	pub package_args: PackageArgs,
 
+	#[command(flatten)]
+	pub run_args: RunArgs,
+
+	/// Arguments to pass to the executable.
 	pub trailing_args: Vec<String>,
 }
 
 impl Cli {
-	pub async fn command_shell(&self, mut args: Args) -> Result<()> {
-		// Set the default export name to "shell".
-		args.export = args.export.or_else(|| Some("shell".to_owned()));
-
+	pub async fn command_shell(&self, args: Args) -> Result<()> {
 		// Create the run args.
 		let args = super::run::Args {
-			executable_path: args.executable_path,
-			locked: args.locked,
-			export: args.export,
-			package_specifier: args.package_specifier,
+			package: args.package,
+			package_args: args.package_args,
+			run_args: args.run_args,
+			export: "shell".to_owned(),
 			trailing_args: args.trailing_args,
 		};
 

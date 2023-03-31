@@ -7,7 +7,7 @@ use tangram::util::fs;
 /// Update a package's dependencies.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	path: Option<fs::PathBuf>,
+	pub path: Option<fs::PathBuf>,
 }
 
 impl Cli {

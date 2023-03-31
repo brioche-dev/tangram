@@ -9,6 +9,7 @@ use url::Url;
 #[derive(Debug, clap::Args)]
 pub struct Args {
 	pub artifact_hash: artifact::Hash,
+
 	pub url: Url,
 }
 

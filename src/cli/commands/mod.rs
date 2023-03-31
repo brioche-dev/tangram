@@ -1,7 +1,7 @@
 use crate::{error::Result, Cli};
 use either::Either;
 use futures::FutureExt;
-use tangram::util::fs;
+use tangram::{path::Path, util::fs};
 
 mod add;
 mod autoenv;
@@ -30,6 +30,7 @@ mod run;
 mod search;
 mod serve;
 mod shell;
+mod tree;
 mod update;
 mod upgrade;
 
@@ -79,8 +80,23 @@ pub enum Command {
 	Search(self::search::Args),
 	Serve(self::serve::Args),
 	Shell(self::shell::Args),
+	Tree(self::tree::Args),
 	Update(self::update::Args),
 	Upgrade(self::upgrade::Args),
+}
+
+#[derive(Debug, clap::Args)]
+pub struct PackageArgs {
+	/// If this flag is set, the package's lockfile will not be updated before building.
+	#[arg(long)]
+	pub locked: bool,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct RunArgs {
+	/// The path to the executable in the artifact to run.
+	#[arg(long)]
+	pub executable_path: Option<Path>,
 }
 
 impl Cli {
@@ -138,6 +154,7 @@ impl Cli {
 			Command::Search(args) => self.command_search(args).boxed(),
 			Command::Serve(args) => self.command_serve(args).boxed(),
 			Command::Shell(args) => self.command_shell(args).boxed(),
+			Command::Tree(args) => self.command_tree(args).boxed(),
 			Command::Update(args) => self.command_update(args).boxed(),
 			Command::Upgrade(args) => self.command_upgrade(args).boxed(),
 		}

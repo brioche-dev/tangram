@@ -7,7 +7,8 @@ use tangram::util::fs;
 /// Check in an artifact.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	path: Option<fs::PathBuf>,
+	/// The path to check in.
+	pub path: Option<fs::PathBuf>,
 }
 
 impl Cli {

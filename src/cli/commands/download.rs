@@ -8,10 +8,11 @@ use url::Url;
 /// Run a download operation.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	/// The URL to download from.
-	url: Url,
+	#[arg(long)]
+	pub unpack: bool,
 
-	unpack: bool,
+	/// The URL to download from.
+	pub url: Url,
 }
 
 impl Cli {

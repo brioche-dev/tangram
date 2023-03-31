@@ -1,3 +1,4 @@
+use super::PackageArgs;
 use crate::{
 	error::{Error, Result, WrapErr},
 	Cli,
@@ -12,39 +13,36 @@ use tangram::{
 /// Call a function.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	#[arg(long)]
-	locked: bool,
+	#[arg(short, long, default_value = ".")]
+	pub package: package::Specifier,
 
-	#[arg(default_value = ".")]
-	package_specifier: package::Specifier,
+	#[command(flatten)]
+	pub package_args: PackageArgs,
 
 	#[arg(default_value = "default")]
-	name: String,
+	pub export: String,
 
 	#[arg(short, long)]
-	output: Option<fs::PathBuf>,
+	pub output: Option<fs::PathBuf>,
 }
 
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
 		// Resolve the package specifier.
-		let package_identifier = self
-			.tg
-			.resolve_package(&args.package_specifier, None)
-			.await?;
+		let package_identifier = self.tg.resolve_package(&args.package, None).await?;
 
 		// Create the package instance.
 		let package_instance_hash = self
 			.tg
 			.clone()
-			.create_package_instance(&package_identifier, args.locked)
+			.create_package_instance(&package_identifier, args.package_args.locked)
 			.await
 			.wrap_err("Failed to create the package instance.")?;
 
 		// Run the operation.
 		let function = Function {
 			package_instance_hash,
-			name: args.name,
+			name: args.export,
 		};
 		let context = Self::create_default_context()?;
 		let args_ = Vec::new();

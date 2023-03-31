@@ -11,9 +11,10 @@ use std::{
 #[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(long, default_value = "0.0.0.0")]
-	host: IpAddr,
+	pub host: IpAddr,
+
 	#[arg(long, default_value = "8080")]
-	port: u16,
+	pub port: u16,
 }
 
 impl Cli {

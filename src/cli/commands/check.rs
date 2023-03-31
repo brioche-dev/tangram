@@ -1,3 +1,4 @@
+use super::PackageArgs;
 use crate::{
 	error::{return_error, Result},
 	Cli,
@@ -10,26 +11,23 @@ use tangram::{
 /// Check a package for errors.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	#[arg(long)]
-	locked: bool,
+	#[arg(short, long, default_value = ".")]
+	pub package: package::Specifier,
 
-	#[arg(default_value = ".")]
-	package_specifier: package::Specifier,
+	#[command(flatten)]
+	pub package_args: PackageArgs,
 }
 
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// Resolve the package specifier.
-		let package_identifier = self
-			.tg
-			.resolve_package(&args.package_specifier, None)
-			.await?;
+		let package_identifier = self.tg.resolve_package(&args.package, None).await?;
 
-		// Get the package instance hash.
+		// Create the package instance.
 		let package_instance_hash = self
 			.tg
 			.clone()
-			.create_package_instance(&package_identifier, args.locked)
+			.create_package_instance(&package_identifier, args.package_args.locked)
 			.await?;
 
 		// Create the root module identifier.

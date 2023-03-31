@@ -5,7 +5,7 @@ use tangram::package;
 #[derive(Debug, clap::Args)]
 pub struct Args {
 	#[arg(default_value = ".")]
-	package_specifier: package::Specifier,
+	pub package: package::Specifier,
 }
 
 impl Cli {
