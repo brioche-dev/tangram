@@ -101,7 +101,7 @@ fn syscall_caller(scope: &mut v8::HandleScope, state: Rc<State>, _args: ()) -> R
 		.to_rust_string_lossy(scope)
 		.parse()
 		.unwrap();
-	let module::identifier::Source::Instance(package_instance_hash) = &module_identifier.source else {
+	let module::identifier::Source::PackageInstance(package_instance_hash) = &module_identifier.source else {
 		return_error!("The module identifier's source must be a package instance.");
 	};
 	let package_instance_hash = *package_instance_hash;

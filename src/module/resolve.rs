@@ -15,14 +15,16 @@ impl Instance {
 		referrer: &Identifier,
 	) -> Result<Identifier> {
 		let identifier = match specifier {
-			Specifier::Path(path) => {
-				Self::resolve_module_with_path_specifier(path, referrer).await?
+			Specifier::Path(path_specifier) => {
+				Self::resolve_module_with_path_specifier(path_specifier, referrer).await?
 			},
+
 			Specifier::Dependency(dependency_specifier) => {
 				self.resolve_module_with_dependency_specifier(dependency_specifier, referrer)
 					.await?
 			},
 		};
+
 		Ok(identifier)
 	}
 }
@@ -54,10 +56,10 @@ impl Instance {
 
 		match referrer {
 			Identifier {
-				source: Source::Path(package_path),
+				source: Source::Package(package_path),
 				..
 			} => {
-				self.resolve_module_with_dependency_specifier_from_path_referrer(
+				self.resolve_module_with_dependency_specifier_from_package_referrer(
 					&specifier,
 					package_path,
 				)
@@ -65,10 +67,10 @@ impl Instance {
 			},
 
 			Identifier {
-				source: Source::Instance(package_instance_hash),
+				source: Source::PackageInstance(package_instance_hash),
 				..
 			} => {
-				self.resolve_module_with_dependency_specifier_from_instance_referrer(
+				self.resolve_module_with_dependency_specifier_from_package_instance_referrer(
 					&specifier,
 					*package_instance_hash,
 				)
@@ -80,25 +82,29 @@ impl Instance {
 	}
 
 	#[allow(clippy::unused_async)]
-	async fn resolve_module_with_dependency_specifier_from_path_referrer(
+	async fn resolve_module_with_dependency_specifier_from_package_referrer(
 		&self,
 		specifier: &package::dependency::Specifier,
-		referrer_package_path: &fs::Path,
+		referrer_package_identifier: &package::Identifier,
 	) -> Result<Identifier> {
-		match specifier {
-			package::dependency::Specifier::Path(specifier_path) => {
+		match (specifier, referrer_package_identifier) {
+			(
+				package::dependency::Specifier::Path(specifier_path),
+				package::Identifier::Path(referrer_package_path),
+			) => {
 				let specifier_path: fs::PathBuf = specifier_path.clone().into();
 				let package_path = referrer_package_path.join(specifier_path);
-				let identifier = Identifier::for_root_module_in_package_at_path(&package_path);
-				Ok(identifier)
+				let package_identifier = package::Identifier::Path(package_path);
+				let module_identifier = Identifier::for_root_module_in_package(package_identifier);
+				Ok(module_identifier)
 			},
 
-			package::dependency::Specifier::Registry(_) => todo!(),
+			_ => todo!(),
 		}
 	}
 
 	#[allow(clippy::unused_async)]
-	async fn resolve_module_with_dependency_specifier_from_instance_referrer(
+	async fn resolve_module_with_dependency_specifier_from_package_instance_referrer(
 		&self,
 		specifier: &package::dependency::Specifier,
 		referrer_package_instance_hash: package::instance::Hash,

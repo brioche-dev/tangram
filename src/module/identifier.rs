@@ -25,38 +25,34 @@ pub struct Identifier {
 )]
 #[serde(tag = "kind", content = "value")]
 pub enum Source {
-	/// A library module.
+	/// A module in the library.
 	#[serde(rename = "lib")]
 	Lib,
 
-	/// A module in a package at a path.
-	#[serde(rename = "path")]
-	Path(fs::PathBuf),
+	/// A module in a package.
+	#[serde(rename = "package")]
+	Package(package::Identifier),
 
-	// /// A module in a package with a hash.
-	// #[serde(rename = "hash")]
-	// Hash(package::Hash),
-	//
 	/// A module in a package instance.
-	#[serde(rename = "instance")]
-	Instance(package::instance::Hash),
+	#[serde(rename = "package_instance")]
+	PackageInstance(package::instance::Hash),
 }
 
 impl Identifier {
 	#[must_use]
-	pub fn for_root_module_in_package_instance(
-		package_instance_hash: package::instance::Hash,
-	) -> Identifier {
+	pub fn for_root_module_in_package(package_identifier: package::Identifier) -> Identifier {
 		Identifier {
-			source: Source::Instance(package_instance_hash),
+			source: Source::Package(package_identifier),
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		}
 	}
 
 	#[must_use]
-	pub fn for_root_module_in_package_at_path(package_path: &fs::Path) -> Identifier {
+	pub fn for_root_module_in_package_instance(
+		package_instance_hash: package::instance::Hash,
+	) -> Identifier {
 		Identifier {
-			source: Source::Path(package_path.to_owned()),
+			source: Source::PackageInstance(package_instance_hash),
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		}
 	}
@@ -90,9 +86,12 @@ impl Identifier {
 			.parse()
 			.wrap_err("The module path was not a valid path.")?;
 
+		// Create the source.
+		let source = Source::Package(package::Identifier::Path(package_path));
+
 		// Create the module identifier.
 		let module_identifier = Identifier {
-			source: Source::Path(package_path),
+			source,
 			path: module_path,
 		};
 
@@ -102,7 +101,10 @@ impl Identifier {
 
 impl From<Identifier> for Url {
 	fn from(value: Identifier) -> Self {
+		// Serialize and encode the identifier.
 		let data = hex::encode(serde_json::to_string(&value).unwrap());
+
+		// Create the URL.
 		format!("tangram:{data}").parse().unwrap()
 	}
 }
@@ -116,12 +118,12 @@ impl TryFrom<Url> for Identifier {
 			return_error!("The URL has an invalid scheme.");
 		}
 
-		// Deserialize the path as hex.
+		// Decode.
 		let data = hex::decode(value.path())
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the path as hex.")?;
 
-		// Deserialize the data.
+		// Deserialize.
 		let identifier = serde_json::from_slice(&data)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the identifier.")?;

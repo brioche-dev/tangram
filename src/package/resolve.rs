@@ -28,8 +28,7 @@ impl Instance {
 			},
 
 			Specifier::Registry(_) => {
-				// TODO: Ask the API for the package hash.
-				todo!("Tried to resolve registry module {specifier}.")
+				todo!()
 			},
 		}
 	}

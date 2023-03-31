@@ -21,7 +21,6 @@ declare namespace tg {
 
 	// eslint-disable-next-line
 	const artifactHashSymbol: unique symbol;
-
 	export type ArtifactHash = string & { [artifactHashSymbol]: unknown };
 
 	export type Artifact = Directory | File | Symlink;
@@ -156,6 +155,9 @@ declare namespace tg {
 		/** Get the this file's artifact hash. */
 		hash(): Promise<ArtifactHash>;
 
+		/** Get this file's blob. */
+		blob(): Blob;
+
 		/** Get this file's contents as a `Uint8Array`. */
 		bytes(): Promise<Uint8Array>;
 
@@ -164,6 +166,9 @@ declare namespace tg {
 
 		/** Get this file's executable bit. */
 		executable(): boolean;
+
+		/** Get this file's references. */
+		references(): Promise<Array<Artifact>>;
 	}
 
 	// Function.

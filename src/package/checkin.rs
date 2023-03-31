@@ -1,8 +1,8 @@
-use super::dependency;
+use super::{dependency, Identifier};
 use crate::{
 	artifact::{self, Artifact},
 	directory::Directory,
-	error::{return_error, Result, WrapErr},
+	error::{Result, WrapErr},
 	module, path,
 	util::fs,
 	Instance,
@@ -18,9 +18,11 @@ impl Instance {
 	/// Check in the package at the specified path.
 	#[allow(clippy::unused_async)]
 	#[tracing::instrument(skip(self))]
-	pub async fn check_in_package(self: &Arc<Self>, path: &fs::Path) -> Result<Output> {
+	pub async fn check_in_package(self: &Arc<Self>, package_path: &fs::Path) -> Result<Output> {
 		// Create a queue of modules to visit and a visited set.
-		let root_module_identifier = module::Identifier::for_root_module_in_package_at_path(path);
+		let root_module_identifier = module::Identifier::for_root_module_in_package(
+			Identifier::Path(package_path.to_owned()),
+		);
 		let mut queue = vec![root_module_identifier];
 		let mut visited: HashSet<module::Identifier> = HashSet::default();
 
@@ -36,11 +38,6 @@ impl Instance {
 
 			// Add the module to the visited set.
 			visited.insert(module_identifier.clone());
-
-			// Get the package path from the module identifier.
-			let module::identifier::Source::Path(package_path) = &module_identifier.source else {
-				return_error!("Invalid module identifier.");
-			};
 
 			// Check in the artifact at the imported path.
 			let imported_artifact_path = package_path.join(module_identifier.path.to_string());
@@ -64,17 +61,21 @@ impl Instance {
 				.wrap_err_with(|| format!(r#"Failed to load the module "{module_identifier}"."#))?;
 
 			// Get the module's imports.
-			let imports = self.imports(&module_text).await.wrap_err_with(|| "Haha")?;
+			let imports = self
+				.imports(&module_text)
+				.await
+				.wrap_err_with(|| "Failed to get the module's imports.")?;
 
 			// Handle each import.
 			for specifier in imports.imports {
-				// Resolve the specifier.
-				let resolved_module_identifier =
-					self.resolve_module(&specifier, &module_identifier).await?;
-
 				match specifier {
 					// If the module is specified with a path, then add the resolved module identifier to the queue if it has not been visited.
 					module::Specifier::Path(_) => {
+						// Resolve the specifier.
+						let resolved_module_identifier =
+							self.resolve_module(&specifier, &module_identifier).await?;
+
+						// Add the resolved module identifier to the queue if it has not been visited.
 						if !visited.contains(&resolved_module_identifier) {
 							queue.push(resolved_module_identifier);
 						}
@@ -115,7 +116,7 @@ impl Instance {
 		tracing::debug!(?package_hash, "Added package artifact.");
 
 		// Add a package tracker.
-		self.add_package_tracker(package_hash, path.to_owned())
+		self.add_package_tracker(package_hash, package_path.to_owned())
 			.await;
 
 		// Create the output.

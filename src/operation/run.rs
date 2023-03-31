@@ -58,7 +58,7 @@ impl Instance {
 		}
 
 		// Attempt to get the operation output.
-		let output = self.get_operation_output(operation_hash)?;
+		let output = self.get_operation_output_local(operation_hash)?;
 
 		// If the operation has already run, then return its output.
 		if let Some(output) = output {

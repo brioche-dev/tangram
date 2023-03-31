@@ -1,4 +1,4 @@
-use crate::{error::Result, module, util::fs};
+use crate::{error::Result, module, package, util::fs};
 use url::Url;
 
 impl module::Identifier {
@@ -12,7 +12,7 @@ impl module::Identifier {
 	#[must_use]
 	pub fn to_lsp_uri(&self) -> Url {
 		match &self.source {
-			module::identifier::Source::Path(package_path) => {
+			module::identifier::Source::Package(package::Identifier::Path(package_path)) => {
 				let path = package_path.join(self.path.to_string());
 				let path = path.display();
 				format!("file://{path}").parse().unwrap()

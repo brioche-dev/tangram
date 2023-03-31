@@ -1,5 +1,5 @@
 use super::Identifier;
-use crate::{error::Result, module, Instance};
+use crate::{error::Result, module, package, Instance};
 use std::time::SystemTime;
 
 /// Tracks a module's version as it changes.
@@ -31,8 +31,8 @@ impl Instance {
 	/// Get a module's version.
 	pub async fn get_module_version(&self, module_identifier: &module::Identifier) -> Result<i32> {
 		match &module_identifier.source {
-			// A module whose source is a path changes when the file system object at the path changes.
-			module::identifier::Source::Path(package_path) => {
+			// A module whose source is a package at a path changes when the file system object at the path changes.
+			module::identifier::Source::Package(package::Identifier::Path(package_path)) => {
 				let path = package_path.join(module_identifier.path.to_string());
 				let mut module_trackers = self.module_trackers.write().await;
 				let version = match module_trackers.get_mut(module_identifier) {

@@ -8,7 +8,7 @@ use lmdb::Transaction;
 
 impl Instance {
 	/// Get the output for an operation from the database.
-	pub fn get_operation_output(&self, operation_hash: Hash) -> Result<Option<Value>> {
+	pub fn get_operation_output_local(&self, operation_hash: Hash) -> Result<Option<Value>> {
 		// Begin a read transaction.
 		let txn = self.database.env.begin_ro_txn()?;
 

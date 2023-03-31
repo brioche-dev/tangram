@@ -1,5 +1,6 @@
 use super::{identifier::Source, Identifier};
 use crate::{
+	artifact,
 	error::{Result, WrapErr},
 	package,
 	path::Path,
@@ -13,13 +14,18 @@ impl Instance {
 	pub async fn load_module(&self, module_identifier: &Identifier) -> Result<String> {
 		match &module_identifier.source {
 			Source::Lib => load_module_from_lib(&module_identifier.path),
-			Source::Path(package_path) => {
-				self.load_module_from_path(package_path, &module_identifier.path)
+
+			Source::Package(package_identifier) => {
+				self.load_module_from_package(package_identifier, &module_identifier.path)
 					.await
 			},
-			Source::Instance(package_instance_hash) => {
-				self.load_module_from_instance(*package_instance_hash, &module_identifier.path)
-					.await
+
+			Source::PackageInstance(package_instance_hash) => {
+				self.load_module_from_package_instance(
+					*package_instance_hash,
+					&module_identifier.path,
+				)
+				.await
 			},
 		}
 	}
@@ -44,7 +50,29 @@ fn load_module_from_lib(path: &Path) -> Result<String> {
 }
 
 impl Instance {
-	async fn load_module_from_path(&self, package_path: &fs::Path, path: &Path) -> Result<String> {
+	async fn load_module_from_package(
+		&self,
+		package_identifier: &package::Identifier,
+		path: &Path,
+	) -> Result<String> {
+		match package_identifier {
+			package::Identifier::Path(package_path) => {
+				self.load_module_from_package_at_path(package_path, path)
+					.await
+			},
+
+			package::Identifier::Hash(package_hash) => {
+				self.load_module_from_package_with_hash(*package_hash, path)
+					.await
+			},
+		}
+	}
+
+	async fn load_module_from_package_at_path(
+		&self,
+		package_path: &fs::Path,
+		path: &Path,
+	) -> Result<String> {
 		// Construct the path to the module.
 		let path = package_path.join(path.to_string());
 
@@ -57,7 +85,30 @@ impl Instance {
 		Ok(text)
 	}
 
-	async fn load_module_from_instance(
+	async fn load_module_from_package_with_hash(
+		&self,
+		package_hash: artifact::Hash,
+		path: &Path,
+	) -> Result<String> {
+		// Get the package.
+		let package = self.get_artifact_local(package_hash)?;
+
+		// Get the module.
+		let module = package
+			.as_directory()
+			.wrap_err("Expected a package to be a directory.")?
+			.get(self, path)
+			.await?
+			.into_file()
+			.wrap_err("Expected a file.")?;
+
+		// Read the module.
+		let text = module.read_to_string(self).await?;
+
+		Ok(text)
+	}
+
+	async fn load_module_from_package_instance(
 		&self,
 		package_instance_hash: package::instance::Hash,
 		path: &Path,
