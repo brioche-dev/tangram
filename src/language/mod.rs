@@ -1,5 +1,6 @@
 pub use self::{
 	diagnostics::{Diagnostic, Severity},
+	doc::Doc,
 	location::Location,
 	position::Position,
 	range::Range,

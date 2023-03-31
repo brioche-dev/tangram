@@ -16,7 +16,7 @@ type Metadata = {
 
 export let handle = (request: Request): Response => {
 	// Parse the text.
-	let ast = parse("export let metadata = { name: 'hi' };");
+	let ast = parse(request.text);
 
 	// Extract the metadata.
 	let metadata: Metadata = {};
