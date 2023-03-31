@@ -34,10 +34,6 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 		return "/lib/tangram.d.ts";
 	},
 
-	getDefaultLibLocation: () => {
-		return "/lib";
-	},
-
 	getNewLine: () => {
 		return "\n";
 	},
@@ -112,11 +108,14 @@ export let languageService = ts.createLanguageService(host);
 export let fileNameFromModuleIdentifier = (
 	moduleIdentifier: ModuleIdentifier,
 ): string => {
-	let data = syscall.encodeHex(
-		syscall.encodeUtf8(JSON.stringify(moduleIdentifier)),
-	);
-	let fileName = `/${data}.ts`;
-	return fileName;
+	if (moduleIdentifier.source.kind === "lib") {
+		return `/lib/${moduleIdentifier.path}`;
+	} else {
+		let data = syscall.encodeHex(
+			syscall.encodeUtf8(JSON.stringify(moduleIdentifier)),
+		);
+		return `/${data}.ts`;
+	}
 };
 
 /** Convert a TypeScript file name to a module identifier. */
