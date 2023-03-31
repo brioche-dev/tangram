@@ -10,6 +10,7 @@ use tangram::{
 	operation::{Call, Operation},
 	package,
 	path::Path,
+	util::fs,
 };
 
 /// Build a package and run an executable from its output.
@@ -73,19 +74,17 @@ impl Cli {
 
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {
-			executable_path
+			// Resolve the argument as a path relative to the artifact.
+			artifact_path.join(fs::PathBuf::from(executable_path))
 		} else {
 			match artifact {
-				// If the artifact is a file or symlink, then the executable path should be empty.
-				Artifact::File(_) | Artifact::Symlink(_) => Path::new(),
+				// If the artifact is a file or symlink, then the executable path should be the artifact itself.
+				Artifact::File(_) | Artifact::Symlink(_) => artifact_path,
 
 				// If the artifact is a directory, then the executable path should be "run".
-				Artifact::Directory(_) => "run".parse().unwrap(),
+				Artifact::Directory(_) => artifact_path.join("run"),
 			}
 		};
-
-		// Get the path to the executable.
-		let executable_path = artifact_path.join(executable_path.to_string());
 
 		// Exec the process.
 		Err(std::process::Command::new(executable_path)
