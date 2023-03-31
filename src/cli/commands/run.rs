@@ -9,7 +9,6 @@ use tangram::{
 	function::Function,
 	operation::{Call, Operation},
 	package,
-	path::Path,
 	util::fs,
 };
 

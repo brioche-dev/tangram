@@ -1,5 +1,4 @@
 use crate::{
-	artifact::Hash,
 	error::{return_error, Error, Result, WrapErr},
 	module, Instance,
 };
