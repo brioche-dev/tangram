@@ -6,6 +6,36 @@ use crate::{
 use lmdb::Transaction;
 
 impl Instance {
+	pub async fn get_artifact(&self, artifact_hash: Hash) -> Result<Artifact> {
+		let artifact = self
+			.try_get_artifact(artifact_hash)
+			.await?
+			.wrap_err_with(|| {
+				format!(r#"Failed to find the artifact with hash "{artifact_hash}"."#)
+			})?;
+		Ok(artifact)
+	}
+
+	pub async fn try_get_artifact(&self, artifact_hash: Hash) -> Result<Option<Artifact>> {
+		// Attempt to get the artifact from the database.
+		if let Some(artifact) = self.try_get_artifact_local(artifact_hash)? {
+			return Ok(Some(artifact));
+		}
+
+		// Attempt to get the artifact from the API.
+		let artifact = self
+			.api_instance_client()
+			.try_get_artifact(artifact_hash)
+			.await
+			.ok()
+			.flatten();
+		if let Some(artifact) = artifact {
+			return Ok(Some(artifact));
+		}
+
+		Ok(None)
+	}
+
 	pub fn artifact_exists_local(&self, artifact_hash: Hash) -> Result<bool> {
 		// Begin a read transaction.
 		let txn = self.database.env.begin_ro_txn()?;

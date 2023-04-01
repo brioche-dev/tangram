@@ -1,5 +1,8 @@
 use super::Client;
-use crate::{error::Result, id::Id};
+use crate::{
+	error::{Error, Result},
+	id::Id,
+};
 use url::Url;
 
 pub struct User {
@@ -17,6 +20,13 @@ pub struct Login {
 
 impl Client {
 	pub async fn create_login(&self) -> Result<Login> {
+		// Get a permit.
+		let _permit = self
+			.socket_semaphore
+			.acquire()
+			.await
+			.map_err(Error::other)?;
+
 		// Send the request.
 		let mut url = self.url.clone();
 		url.set_path("/v1/logins/");
@@ -34,6 +44,13 @@ impl Client {
 
 impl Client {
 	pub async fn get_login(&self, id: Id) -> Result<Login> {
+		// Get a permit.
+		let _permit = self
+			.socket_semaphore
+			.acquire()
+			.await
+			.map_err(Error::other)?;
+
 		// Send the request.
 		let mut url = self.url.clone();
 		url.set_path(&format!("/v1/logins/{id}"));
@@ -58,6 +75,13 @@ struct GetCurrentUserResponse {
 
 impl Client {
 	pub async fn get_current_user(&self, token: String) -> Result<User> {
+		// Get a permit.
+		let _permit = self
+			.socket_semaphore
+			.acquire()
+			.await
+			.map_err(Error::other)?;
+
 		// Send the request.
 		let mut url = self.url.clone();
 		url.set_path("/v1/user");

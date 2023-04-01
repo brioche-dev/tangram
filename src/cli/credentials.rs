@@ -1,5 +1,5 @@
 use crate::{error::Error, Cli, Result};
-use tangram::util::fs;
+use tangram::util::{dirs::user_config_directory_path, fs};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
@@ -8,12 +8,14 @@ pub struct Credentials {
 }
 
 impl Cli {
-	pub fn credentials_path(&self) -> fs::PathBuf {
-		self.tg.path().join("credentials.json")
+	pub fn credentials_path() -> Result<fs::PathBuf> {
+		Ok(user_config_directory_path()?
+			.join("tangram")
+			.join("credentials.json"))
 	}
 
-	pub async fn _read_credentials(&self) -> Result<Option<Credentials>> {
-		Self::read_credentials_from_path(&self.credentials_path()).await
+	pub async fn read_credentials() -> Result<Option<Credentials>> {
+		Self::read_credentials_from_path(&Self::credentials_path()?).await
 	}
 
 	pub async fn read_credentials_from_path(path: &fs::Path) -> Result<Option<Credentials>> {
@@ -26,8 +28,8 @@ impl Cli {
 		Ok(credentials)
 	}
 
-	pub async fn write_credentials(&self, credentials: &Credentials) -> Result<()> {
-		Self::write_credentials_to_path(&self.credentials_path(), credentials).await
+	pub async fn write_credentials(credentials: &Credentials) -> Result<()> {
+		Self::write_credentials_to_path(&Self::credentials_path()?, credentials).await
 	}
 
 	pub async fn write_credentials_to_path(

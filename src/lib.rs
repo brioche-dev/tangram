@@ -10,6 +10,7 @@ use self::{
 	util::{fs, task_map::TaskMap},
 	value::Value,
 };
+use client::Client;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use tokio_util::task::LocalPoolHandle;
@@ -194,7 +195,7 @@ impl Instance {
 			.api_url
 			.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
 		let token = options.api_token;
-		let api_client = api::Client::new(api_url, token);
+		let api_client = api::Client::new(api_url, token, Arc::clone(&socket_semaphore));
 
 		// Create the instance.
 		let instance = Instance {
@@ -287,5 +288,9 @@ impl Instance {
 impl Instance {
 	pub fn api_client(&self) -> &api::Client {
 		&self.api_client
+	}
+
+	pub fn api_instance_client(&self) -> &Client {
+		self.api_client.instance_client()
 	}
 }

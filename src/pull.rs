@@ -50,7 +50,7 @@ impl Instance {
 			},
 		};
 
-		// Attempt to add the artifact again. At this point, there should not be any missing entries or a missing blob.
+		// Attempt to add the artifact again. At this point, there should not be any missing entries, blobs, or references.
 		let outcome = self.try_add_artifact(&artifact).await?;
 		if !matches!(outcome, artifact::add::Outcome::Added { .. }) {
 			return Err(Error::message("An unexpected error occurred."));

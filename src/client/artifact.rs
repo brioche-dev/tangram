@@ -5,6 +5,16 @@ use crate::{
 };
 
 impl Client {
+	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<artifact::Hash> {
+		if let artifact::add::Outcome::Added { artifact_hash } =
+			self.try_add_artifact(artifact).await?
+		{
+			Ok(artifact_hash)
+		} else {
+			return_error!("Failed to add the artifact.")
+		}
+	}
+
 	pub async fn try_get_artifact(
 		&self,
 		artifact_hash: artifact::Hash,
@@ -68,15 +78,5 @@ impl Client {
 			.wrap_err("Failed to read the response body.")?;
 
 		Ok(response)
-	}
-
-	pub async fn add_artifact(&self, artifact: &Artifact) -> Result<artifact::Hash> {
-		if let artifact::add::Outcome::Added { artifact_hash } =
-			self.try_add_artifact(artifact).await?
-		{
-			Ok(artifact_hash)
-		} else {
-			return_error!("Failed to add the artifact.")
-		}
 	}
 }

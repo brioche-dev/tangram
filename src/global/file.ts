@@ -1,10 +1,10 @@
 import {
 	Artifact,
 	ArtifactHash,
+	addArtifact,
 	getArtifact,
-	serializeArtifact,
 } from "./artifact.ts";
-import { Blob, BlobHash, BlobLike, blob, getBlob, isBlobLike } from "./blob.ts";
+import { Blob, BlobHash, BlobLike, blob, isBlobLike } from "./blob.ts";
 import { MaybePromise } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 
@@ -85,7 +85,7 @@ export class File {
 	}
 
 	async hash(): Promise<ArtifactHash> {
-		return syscall.addArtifact(await serializeArtifact(this));
+		return await addArtifact(this);
 	}
 
 	blobHash(): BlobHash {

@@ -56,7 +56,7 @@ impl Cli {
 			email: user.email,
 			token: user.token,
 		};
-		self.write_credentials(&credentials).await?;
+		Self::write_credentials(&credentials).await?;
 
 		eprintln!("You have successfully logged in.");
 

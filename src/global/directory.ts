@@ -115,15 +115,15 @@ export class Directory {
 		return new Directory(entries);
 	}
 
-	hash(): Promise<ArtifactHash> {
-		return addArtifact(this);
+	async hash(): Promise<ArtifactHash> {
+		return await addArtifact(this);
 	}
 
 	async get(pathLike: PathLike): Promise<Artifact> {
 		let artifact = await this.tryGet(pathLike);
 		assert(
 			artifact !== undefined,
-			`Failed to get directory entry "${pathLike}".`,
+			`Failed to get the directory entry "${pathLike}".`,
 		);
 		return artifact;
 	}

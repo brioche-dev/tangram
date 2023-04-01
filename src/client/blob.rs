@@ -13,6 +13,12 @@ impl Client {
 	where
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
+		// Get a socket permit.
+		let _permit = Arc::clone(&self.socket_semaphore)
+			.acquire_owned()
+			.await
+			.map_err(Error::other)?;
+
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");
 		let mut url = self.url.clone();

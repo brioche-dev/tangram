@@ -72,7 +72,7 @@ impl Cli {
 			.wrap_err("Failed to canonicalize the path.")?;
 
 		// Read the config.
-		let mut config = self.read_config().await?.unwrap_or_default();
+		let mut config = Self::read_config().await?.unwrap_or_default();
 
 		// Add the autoenv.
 		let mut autoenvs = config.autoenvs.unwrap_or_default();
@@ -80,7 +80,7 @@ impl Cli {
 		config.autoenvs = Some(autoenvs);
 
 		// Write the config.
-		self.write_config(&config).await?;
+		Self::write_config(&config).await?;
 
 		Ok(())
 	}
@@ -91,7 +91,7 @@ impl Cli {
 			std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 
 		// Read the config.
-		let config = self.read_config().await?.unwrap_or_default();
+		let config = Self::read_config().await?.unwrap_or_default();
 
 		// Get the autoenv path for the working directory path.
 		let Some(autoenv_paths) = config.autoenvs.as_ref() else {
@@ -116,7 +116,7 @@ impl Cli {
 
 	async fn command_autoenv_list(&self, _args: ListArgs) -> Result<()> {
 		// Read the config.
-		let config = self.read_config().await?.unwrap_or_default();
+		let config = Self::read_config().await?.unwrap_or_default();
 
 		// List the autoenvs.
 		let autoenvs = config.autoenvs.unwrap_or_default();
@@ -145,7 +145,7 @@ impl Cli {
 			.wrap_err("Failed to canonicalize the path.")?;
 
 		// Read the config.
-		let mut config = self.read_config().await?.unwrap_or_default();
+		let mut config = Self::read_config().await?.unwrap_or_default();
 
 		// Remove the autoenv.
 		if let Some(mut autoenvs) = config.autoenvs {
@@ -156,7 +156,7 @@ impl Cli {
 		}
 
 		// Write the config.
-		self.write_config(&config).await?;
+		Self::write_config(&config).await?;
 
 		Ok(())
 	}

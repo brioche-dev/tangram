@@ -63,12 +63,12 @@ async fn main_inner() -> Result<()> {
 	tracing::debug!(?path, "Got path.");
 
 	// Read the config.
-	let config = Cli::read_config_from_path(&path.join("config.json")).await?;
+	let config = Cli::read_config().await?;
 
 	tracing::debug!(?config, "Read config.");
 
 	// Read the credentials.
-	let credentials = Cli::read_credentials_from_path(&path.join("credentials.json")).await?;
+	let credentials = Cli::read_credentials().await?;
 
 	// Resolve the API URL.
 	let api_url = config

@@ -118,7 +118,7 @@ export let deserializeTemplateComponent = async (
 ): Promise<TemplateComponent> => {
 	switch (component.kind) {
 		case "string": {
-			return await component.value;
+			return component.value;
 		}
 		case "artifact": {
 			return await getArtifact(component.value);

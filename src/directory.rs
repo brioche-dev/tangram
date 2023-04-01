@@ -1,6 +1,6 @@
 use crate::{
 	artifact::{self, Artifact},
-	error::{Error, Result, WrapErr},
+	error::{error, Result, WrapErr},
 	path::Path,
 	Instance,
 };
@@ -83,7 +83,7 @@ impl Directory {
 	pub async fn get(&self, tg: &Instance, path: &Path) -> Result<Artifact> {
 		match self.try_get(tg, path).await {
 			Ok(Some(artifact)) => Ok(artifact),
-			Ok(None) => Err(Error::message("Expected an artifact.")),
+			Ok(None) => Err(error!(r#"Failed to get path "{path}"."#)),
 			Err(error) => Err(error),
 		}
 	}
@@ -112,7 +112,8 @@ impl Directory {
 
 			// Get the artifact.
 			artifact = tg
-				.get_artifact_local(artifact_hash)
+				.get_artifact(artifact_hash)
+				.await
 				.wrap_err("Failed to get the artifact.")?;
 		}
 

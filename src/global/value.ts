@@ -65,7 +65,7 @@ export let serializeValue = async <T extends Value>(
 	} else if (isArtifact(value)) {
 		return {
 			kind: "artifact",
-			value: await addArtifact(value),
+			value: await value.hash(),
 		};
 	} else if (value instanceof Placeholder) {
 		return {

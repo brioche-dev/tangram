@@ -2,7 +2,7 @@ use crate::{
 	error::{Error, Result, WrapErr},
 	Cli,
 };
-use tangram::util::fs;
+use tangram::util::{dirs::user_config_directory_path, fs};
 use url::Url;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -14,13 +14,15 @@ pub struct Config {
 }
 
 impl Cli {
-	pub fn config_path(&self) -> fs::PathBuf {
-		self.tg.path().join("config.json")
+	pub fn config_path() -> Result<fs::PathBuf> {
+		Ok(user_config_directory_path()?
+			.join("tangram")
+			.join("config.json"))
 	}
 
 	#[tracing::instrument(level = "debug", skip_all)]
-	pub async fn read_config(&self) -> Result<Option<Config>> {
-		Self::read_config_from_path(&self.config_path()).await
+	pub async fn read_config() -> Result<Option<Config>> {
+		Self::read_config_from_path(&Self::config_path()?).await
 	}
 
 	#[tracing::instrument(level = "debug")]
@@ -36,8 +38,8 @@ impl Cli {
 		Ok(config)
 	}
 
-	pub async fn write_config(&self, config: &Config) -> Result<()> {
-		Self::write_config_to_path(&self.config_path(), config).await
+	pub async fn write_config(config: &Config) -> Result<()> {
+		Self::write_config_to_path(&Self::config_path()?, config).await
 	}
 
 	pub async fn write_config_to_path(path: &fs::Path, config: &Config) -> Result<()> {

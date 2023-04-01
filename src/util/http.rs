@@ -8,11 +8,10 @@ use std::{
 	task::{Context, Poll},
 };
 
-// Rename: Outgoing/Incoming Response/Request.
+pub type Incoming = hyper::body::Incoming;
 pub type Outgoing = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync + 'static>>;
-pub use hyper::body::Incoming;
 
-pub fn full<T: Into<Bytes>>(chunk: T) -> Outgoing {
+pub fn full(chunk: impl Into<Bytes>) -> Outgoing {
 	Full::new(chunk.into())
 		.map_err(|never| match never {})
 		.boxed()

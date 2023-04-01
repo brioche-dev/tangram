@@ -7,20 +7,15 @@ use tangram::{package, util::fs};
 /// Publish a package.
 #[derive(Debug, clap::Args)]
 pub struct Args {
-	pub package: Option<fs::PathBuf>,
+	#[arg(short, long, default_value = ".")]
+	pub package: fs::PathBuf,
 }
 
 impl Cli {
 	pub async fn command_publish(&self, args: Args) -> Result<()> {
-		// Get the path.
-		let mut path =
-			std::env::current_dir().wrap_err("Failed to determine the current directory.")?;
-		if let Some(path_arg) = args.package {
-			path.push(path_arg);
-		}
-
 		// Check in the package.
-		let package::checkin::Output { package_hash, .. } = self.tg.check_in_package(&path).await?;
+		let package::checkin::Output { package_hash, .. } =
+			self.tg.check_in_package(&args.package).await?;
 
 		// Create a client.
 		let client = self.tg.create_client(

@@ -1,9 +1,4 @@
-import {
-	Artifact,
-	ArtifactHash,
-	addArtifact,
-	getArtifact,
-} from "./artifact.ts";
+import { Artifact, ArtifactHash, getArtifact } from "./artifact.ts";
 import * as syscall from "./syscall.ts";
 
 export type PackageInstanceHash = string;
@@ -16,7 +11,7 @@ export type PackageInstanceArgs = {
 export let packageInstance = async (
 	args: PackageInstanceArgs,
 ): Promise<PackageInstance> => {
-	let packageHash = await addArtifact(args.package);
+	let packageHash = await args.package.hash();
 	let dependencies = Object.fromEntries(
 		await Promise.all(
 			Object.entries(args.dependencies).map(async ([key, value]) => [
