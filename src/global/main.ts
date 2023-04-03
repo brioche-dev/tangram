@@ -1,5 +1,5 @@
 import { array } from "./array.ts";
-import { isArtifact } from "./artifact.ts";
+import { isArtifact, getArtifact } from "./artifact.ts";
 import { Blob, blob, isBlobLike } from "./blob.ts";
 import { bundle } from "./bundle.ts";
 import { checksum } from "./checksum.ts";
@@ -50,6 +50,7 @@ let tg = {
 	download,
 	file,
 	function: function_,
+	getArtifact,
 	include,
 	isArtifact,
 	isBlobLike,
