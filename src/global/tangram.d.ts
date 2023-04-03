@@ -28,7 +28,7 @@ declare namespace tg {
 	/** Check if a value is an `Artifact`. */
 	export let isArtifact: (value: unknown) => value is Artifact;
 
-	let getArtifact: (hash: ArtifactHash) => Artifact;
+	export let getArtifact: (hash: ArtifactHash) => Artifact;
 
 	// Blob.
 
