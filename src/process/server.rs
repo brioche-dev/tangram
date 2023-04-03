@@ -119,10 +119,20 @@ impl Server {
 			.await
 			.wrap_err("Failed to check in the path.")?;
 
+		// Make sure that the checked-in artifact is available to the process.
+		let _ = self
+			.tg
+			.upgrade()
+			.unwrap()
+			.check_out_internal(hash)
+			.await
+			.expect("Failed to checkout artifact after checkin.");
+
 		// Create the response.
 		let body = serde_json::to_vec(&hash)
 			.map_err(Error::other)
 			.wrap_err("Failed to serialize the response body.")?;
+
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(full(body))
