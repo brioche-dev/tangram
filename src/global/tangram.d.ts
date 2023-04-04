@@ -344,6 +344,9 @@ declare namespace tg {
 	/** Create a symlink. */
 	export let symlink: (target: Unresolved<TemplateLike>) => Promise<Symlink>;
 
+	/** Check if a value is a `Symlink`. */
+	export let isSymlink: (value: unknown) => value is Symlink;
+
 	export class Symlink {
 		/** Get this symlink's artifact hash. */
 		hash(): Promise<ArtifactHash>;
