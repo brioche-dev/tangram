@@ -5,6 +5,7 @@ use crate::{
 
 /// Check for outdated dependencies.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {}
 
 impl Cli {

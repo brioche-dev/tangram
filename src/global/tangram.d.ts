@@ -1,49 +1,37 @@
-/// <reference lib="es2022" />
-
-/**
- * Create a Tangram template with a JavaScript tagged template.
- */
-declare var t: (
-	strings: TemplateStringsArray,
-	...placeholders: Array<tg.Unresolved<tg.TemplateLike>>
-) => Promise<tg.Template>;
+/// <reference lib="es2023" />
 
 declare namespace tg {
-	// Array.
-
-	export type MaybeArray<T> = T | Array<T>;
-
-	export type ArrayLike<T> = Iterable<T>;
-
-	export let array: <T>(value: ArrayLike<T>) => Array<T>;
-
 	// Artifact.
-
-	// eslint-disable-next-line
-	const artifactHashSymbol: unique symbol;
-	export type ArtifactHash = string & { [artifactHashSymbol]: unknown };
 
 	export type Artifact = Directory | File | Symlink;
 
-	/** Check if a value is an `Artifact`. */
-	export let isArtifact: (value: unknown) => value is Artifact;
+	export namespace Artifact {
+		export type Hash = string;
 
-	export let getArtifact: (hash: ArtifactHash) => Artifact;
+		/** Check if a value is an `Artifact`. */
+		export let isArtifact: (value: unknown) => value is Artifact;
+
+		/* Get an artifact by its hash. */
+		export let get: (hash: Hash) => Promise<Artifact>;
+	}
 
 	// Blob.
 
-	export type BlobHash = string;
+	export namespace Blob {
+		export type Arg = Uint8Array | string | Blob;
 
-	export type BlobLike = Uint8Array | string | Blob;
-
-	export let isBlobLike: (value: unknown) => value is BlobLike;
+		export type Hash = string;
+	}
 
 	/** Create a blob. */
-	export let blob: (blobLike: MaybePromise<BlobLike>) => Promise<Blob>;
+	export let blob: (arg: Unresolved<Blob.Arg>) => Promise<Blob>;
 
 	export class Blob {
-		/** Get this blob's hash. */
-		hash(): BlobHash;
+		/** Check if a value is a `Blob`. */
+		static isBlob: (value: unknown) => value is Blob;
+
+		/* Get this blob's hash. */
+		hash(): Blob.Hash;
 
 		/** Get this blob's contents as a `Uint8Array`. */
 		bytes(): Promise<Uint8Array>;
@@ -52,75 +40,86 @@ declare namespace tg {
 		text(): Promise<string>;
 	}
 
-	// Bundle.
+	// Call.
 
-	/** Bundle an artifact. */
-	export let bundle: (artifact: Unresolved<Directory>) => Promise<Directory>;
+	export namespace Call {
+		type Arg<A extends Array<Value>, R extends Value> = {
+			function: Function<A, R>;
+			env?: Record<string, Value> | nullish;
+			args: A;
+		};
+	}
+
+	/** Call a Tangram function. */
+	export let call: <A extends Array<Value>, R extends Value>(
+		arg: Call.Arg<A, R>,
+	) => Promise<R>;
 
 	// Checksum.
 
-	export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
+	export type Checksum = string;
 
-	export type ChecksumAlgorithm = "blake3" | "sha256";
-
-	export let checksum: (
-		algorithm: ChecksumAlgorithm,
-		bytes: Uint8Array | string,
-	) => Checksum;
-
-	// Context.
-
-	export let context: Map<string, Value>;
+	export namespace Checksum {
+		export type Algorithm = "blake3" | "sha256";
+	}
 
 	// Directory.
 
-	type DirectoryArg = MaybePromise<nullish | Directory | DirectoryObject>;
+	export namespace Directory {
+		type Arg = nullish | Directory | ArgObject;
 
-	type DirectoryObject = {
-		[key: string]: MaybePromise<
-			nullish | Uint8Array | string | Artifact | DirectoryObject
-		>;
-	};
+		type ArgObject = { [key: string]: ArgObjectValue };
+
+		type ArgObjectValue = nullish | Blob.Arg | Artifact | ArgObject;
+	}
 
 	/** Create a directory. */
-	export let directory: (...args: Array<DirectoryArg>) => Promise<Directory>;
+	export let directory: (
+		...args: Array<Unresolved<Directory.Arg>>
+	) => Promise<Directory>;
 
-	/** Check if a value is a `Directory`. */
-	export let isDirectory: (value: unknown) => value is Directory;
-
+	/** A directory. */
 	export class Directory {
-		/** Get this directory's artifact hash. */
-		hash(): Promise<ArtifactHash>;
+		/** Check if a value is a `Directory`. */
+		static isDirectory: (value: unknown) => value is Directory;
 
-		/** Try to get the child at the specified path. This method returns `undefined` if the path does not exist. */
-		tryGet(pathLike: PathLike): Promise<Artifact | undefined>;
+		/* Get this directory's hash. */
+		hash(): Artifact.Hash;
 
 		/** Get the child at the specified path. This method throws an error if the path does not exist. */
-		get(pathLike: PathLike): Promise<Artifact>;
+		get(arg: Path.Arg): Promise<Artifact>;
+
+		/** Try to get the child at the specified path. This method returns `undefined` if the path does not exist. */
+		tryGet(arg: Path.Arg): Promise<Artifact | undefined>;
 
 		/** Get this directory's entries. */
 		entries(): Promise<Map<string, Artifact>>;
 
-		/** Iterate over the names and hashes of this directory's entries. */
-		[Symbol.iterator](): Iterator<[string, ArtifactHash]>;
+		/** Bundle this directory. */
+		bundle: () => Promise<Directory>;
 
-		/** Iterate over this directory's entries. */
+		/** Walk this directory's recursive entries. */
+		walk(): AsyncIterableIterator<[Path, Artifact]>;
+
+		/** An async iterator of this directory's entries. */
 		[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]>;
 	}
 
 	// Download.
 
-	type DownloadArgs = {
-		/** The URL to download from. */
-		url: string;
+	export namespace Download {
+		export type Arg = {
+			/** The URL to download from. */
+			url: string;
 
-		/** Pass true to choose the format automatically based on the extension in the URL. */
-		unpack?: boolean | nullish;
+			/** Pass true to choose the format automatically based on the extension in the URL. */
+			unpack?: boolean | nullish;
 
-		checksum?: Checksum | nullish;
+			checksum?: Checksum | nullish;
 
-		unsafe?: boolean | nullish;
-	};
+			unsafe?: boolean | nullish;
+		};
+	}
 
 	export type UnpackFormat =
 		| ".bz2"
@@ -136,31 +135,68 @@ declare namespace tg {
 		| ".tar.zstd"
 		| ".zip";
 
-	/** Download an artifact from a URL. */
-	export let download: (args: DownloadArgs) => Promise<Artifact>;
+	/** Download an artifact. */
+	export let download: (arg: Download.Arg) => Promise<Artifact>;
+
+	// Encoding.
+
+	export namespace base64 {
+		export let encode: (value: Uint8Array) => string;
+		export let decode: (value: string) => Uint8Array;
+	}
+
+	export namespace hex {
+		export let encode: (value: Uint8Array) => string;
+		export let decode: (value: string) => Uint8Array;
+	}
+
+	export namespace json {
+		export let encode: (value: any) => string;
+		export let decode: (value: string) => unknown;
+	}
+
+	export namespace toml {
+		export let encode: (value: any) => string;
+		export let decode: (value: string) => unknown;
+	}
+
+	export namespace utf8 {
+		export let encode: (value: string) => Uint8Array;
+		export let decode: (value: Uint8Array) => string;
+	}
+
+	export namespace yaml {
+		export let encode: (value: any) => string;
+		export let decode: (value: string) => unknown;
+	}
+
+	// Env.
+
+	export let env: {
+		/** Get the env value with the provided key. This function returns `undefined` if the key is not set in the env. */
+		get: (key: string) => Value | undefined;
+	};
 
 	// File.
 
-	export type FileLike = BlobLike | File;
+	export namespace File {
+		export type Arg = Blob.Arg | File | ArgObject;
 
-	export let isFileLike: (value: unknown) => value is FileLike;
+		export type ArgObject = {
+			blob: Blob.Arg;
+			executable?: boolean;
+			references?: Array<Artifact>;
+		};
+	}
 
-	export type FileArg = MaybePromise<BlobLike | File | FileObject>;
-
-	export type FileObject = {
-		blob: MaybePromise<BlobLike>;
-		executable?: boolean;
-		references?: Array<MaybePromise<Artifact>>;
-	};
-
-	export let file: (arg: FileArg) => Promise<File>;
-
-	/** Check if a value is a `File`. */
-	export let isFile: (value: unknown) => value is File;
+	export let file: (arg: Unresolved<File.Arg>) => Promise<File>;
 
 	export class File {
-		/** Get the this file's artifact hash. */
-		hash(): Promise<ArtifactHash>;
+		/** Check if a value is a `File`. */
+		static isFile: (value: unknown) => value is File;
+
+		/* Get this file's hash. */
+		hash(): Artifact.Hash;
 
 		/** Get this file's blob. */
 		blob(): Blob;
@@ -180,26 +216,26 @@ declare namespace tg {
 
 	// Function.
 
-	export interface Function<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	> {
-		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
-	}
-
-	export class Function<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	> extends globalThis.Function {}
-
 	/** Create a Tangram function. */
 	let function_: <A extends Array<Value>, R extends Value>(
 		f: (...args: A) => MaybePromise<R>,
 	) => Function<A, R>;
 	export { function_ as function };
 
+	export type Function<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	> = {
+		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
+	};
+
+	export let Function: {
+		isFunction: (value: unknown) => value is Function<any, any>;
+	};
+
 	// Include.
 
+	/** Include an artifact from a package, at a path relative to the module this function is called from. The path must be a string literal so that it can be statically analyzed. */
 	export let include: (path: string) => Promise<Artifact>;
 
 	// Log.
@@ -207,36 +243,41 @@ declare namespace tg {
 	/** Write to the log. */
 	export let log: (...args: Array<unknown>) => void;
 
-	// Map.
-
-	export type MapLike<K extends string, V> = Record<K, V> | Map<K, V>;
-
-	export let map: <K extends string, V>(value: MapLike<K, V>) => Map<K, V>;
-
 	// Path.
 
-	export type PathLike = string | Array<PathComponent> | Path;
-
-	export type PathComponent =
-		| { kind: "current_dir" }
-		| { kind: "parent_dir" }
-		| { kind: "normal"; value: string };
+	export namespace Path {
+		export type Arg = nullish | string | Path.Component | Path | Array<Arg>;
+	}
 
 	/** Create a path. */
-	export let path: (path: PathLike) => Path;
+	export let path: (...args: Array<Path.Arg>) => Path;
 
 	export class Path {
-		/** Get this paths's components. */
-		components(): Array<PathComponent>;
-
-		/** Get this path's parent path. */
-		parent(): Path | undefined;
+		/** Get this path's components. */
+		components(): Array<Path.Component>;
 
 		/** Join this path with another path. */
-		join(other: PathLike): Path;
+		join(other: Path.Arg): Path;
+
+		/** Create a path to this path from `src`. */
+		diff(src: Path.Arg): Path;
 
 		/** Render this path to a string. */
 		toString(): string;
+	}
+
+	export namespace Path {
+		export type Component =
+			| { kind: "parent" }
+			| { kind: "normal"; value: string };
+
+		export namespace Component {
+			/** Check if a value is a `Path.Component`. */
+			export let isPathComponent: (value: unknown) => value is Path.Component;
+
+			/** Check if two path components are equal. */
+			export let equal: (a: Path.Component, b: Path.Component) => boolean;
+		}
 	}
 
 	// Placeholder.
@@ -244,41 +285,53 @@ declare namespace tg {
 	/** Create a placeholder. */
 	export let placeholder: (name: string) => Placeholder;
 
-	/** Check if a value is a `Placeholder`. */
-	export let isPlaceholder: (value: unknown) => value is Placeholder;
-
+	/** A placeholder. */
 	export class Placeholder {
+		/** Check if a value is a `Placeholder`. */
+		static isPlaceholder: (value: unknown) => value is Placeholder;
+
 		/** Get this placeholder's name. */
 		name(): string;
 	}
 
 	// Process.
 
-	type ProcessArgs = {
-		system: System;
-		command: TemplateLike;
-		env?: Record<string, TemplateLike> | nullish;
-		args?: Array<TemplateLike> | nullish;
-		checksum?: Checksum | nullish;
-		unsafe?: boolean | nullish;
-		network?: boolean | nullish;
-		hostPaths?: Array<string> | nullish;
-	};
+	export namespace Process {
+		export type Arg = {
+			/** The system to run the process on. */
+			system: System;
 
-	export type System =
-		| "amd64_linux"
-		| "arm64_linux"
-		| "amd64_macos"
-		| "arm64_macos";
+			/** The command to run. */
+			executable: Template.Arg;
 
-	export let process: (args: Unresolved<ProcessArgs>) => Promise<Artifact>;
+			/** The environment variables to set for the process. */
+			env?: Record<string, Template.Arg> | nullish;
+
+			/** The command line arguments to pass to the process. */
+			args?: Array<Template.Arg> | nullish;
+
+			/** A checksum for the process's output. If set, then unsafe options can be used. */
+			checksum?: Checksum | nullish;
+
+			/** Use this flag to enable unsafe options without providing a checksum. */
+			unsafe?: boolean | nullish;
+
+			/** Whether to enable network access. Because this is an unsafe option, you must either provide a checksum for the process's output or set `unsafe` to `true`. */
+			network?: boolean | nullish;
+
+			/** Paths on the host to mount in the sandbox the process runs in. Because this is an unsafe option, you must either provide a checksum for the process's output or set `unsafe` to `true`. */
+			hostPaths?: Array<string> | nullish;
+		};
+	}
+
+	export let process: (arg: Unresolved<Process.Arg>) => Promise<Artifact>;
 
 	export let output: Placeholder;
 
 	// Resolve.
 
 	/**
-	 * This computed type takes a type `T` that extends `Value` and returns the union of all possible types that will return `T` by calling `resolve`. Here are some examples:
+	 * This computed type takes a type `T` and returns the union of all possible types that will return `T` by calling `resolve`. Here are some examples:
 	 *
 	 * ```
 	 * Unresolved<string> = MaybePromise<string>
@@ -286,23 +339,28 @@ declare namespace tg {
 	 * Unresolved<Array<{ key: string }>> = MaybePromise<Array<MaybePromise<{ key: MaybePromise<string> }>>>
 	 * ```
 	 */
-	export type Unresolved<T extends Value> = T extends
-		| nullish
-		| boolean
-		| number
-		| string
-		| Artifact
-		| Placeholder
-		| Template
-		? MaybePromise<T>
-		: T extends Array<infer U extends Value>
-		? MaybePromise<Array<Unresolved<U>>>
-		: T extends { [key: string]: Value }
-		? MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>
-		: never;
+	export type Unresolved<T extends Value> = MaybePromise<
+		T extends
+			| nullish
+			| boolean
+			| number
+			| string
+			| Uint8Array
+			| Path
+			| Blob
+			| Artifact
+			| Placeholder
+			| Template
+			? T
+			: T extends Array<infer U extends Value>
+			? Array<Unresolved<U>>
+			: T extends { [key: string]: Value }
+			? { [K in keyof T]: Unresolved<T[K]> }
+			: never
+	>;
 
 	/**
-	 * This computed type performs the inverse operation of `Unresolved`. It takes a type and returns the output of calling `resolve`. Here are some examples:
+	 * This computed type performs the inverse operation of `Unresolved`. It takes a type and returns the output of calling `resolve` on a value of that type. Here are some examples:
 	 *
 	 * ```
 	 * Resolved<string> = string
@@ -318,6 +376,9 @@ declare namespace tg {
 		| boolean
 		| number
 		| string
+		| Uint8Array
+		| Path
+		| Blob
 		| Artifact
 		| Placeholder
 		| Template
@@ -330,61 +391,127 @@ declare namespace tg {
 		? Resolved<U>
 		: never;
 
-	/** Resolve all deeply nested thunks and promises in an unresolved value. */
+	/** Resolve all deeply nested promises in an unresolved value. */
 	export let resolve: <T extends Unresolved<Value>>(
 		value: T,
 	) => Promise<Resolved<T>>;
 
-	export type MaybeThunk<T> = T | (() => T);
-
-	export type MaybePromise<T> = T | PromiseLike<T>;
+	export type MaybePromise<T> = T | Promise<T>;
 
 	// Symlink.
 
-	/** Create a symlink. */
-	export let symlink: (target: Unresolved<TemplateLike>) => Promise<Symlink>;
+	export namespace Symlink {
+		type Arg = Path.Arg | Artifact | Template | ArgObject;
 
-	/** Check if a value is a `Symlink`. */
-	export let isSymlink: (value: unknown) => value is Symlink;
+		type ArgObject = {
+			artifact?: Artifact | nullish;
+			path?: Path.Arg | nullish;
+		};
+	}
+
+	/** Create a symlink. */
+	export let symlink: (target: Unresolved<Symlink.Arg>) => Promise<Symlink>;
 
 	export class Symlink {
-		/** Get this symlink's artifact hash. */
-		hash(): Promise<ArtifactHash>;
+		/** Check if a value is a `Symlink`. */
+		static isSymlink: (value: unknown) => value is Symlink;
+
+		/* Get this symlink's hash. */
+		hash(): Artifact.Hash;
 
 		/** Get this symlink's target. */
 		target(): Template;
+
+		/** Get this symlink's artifact. */
+		artifact(): Artifact | undefined;
+
+		/** Get this symlink's path. */
+		path(): Path;
+
+		/** Resolve this symlink to the directory or file it refers to, or return undefined if none is found. */
+		resolve(): Promise<Directory | File | undefined>;
+	}
+
+	// System.
+
+	export namespace System {
+		export type Arg = System | ArgObject;
+
+		export type ArgObject = {
+			arch: System.Arch;
+			os: System.Os;
+		};
+	}
+
+	/** Create a system. */
+	export let system: (arg: System.Arg) => System;
+
+	export type System =
+		| "amd64_linux"
+		| "arm64_linux"
+		| "amd64_macos"
+		| "arm64_macos";
+
+	export namespace System {
+		export type Arch = "amd64" | "arm64";
+
+		export type Os = "linux" | "macos";
+
+		/** Check if a value is a `System`. */
+		export let isSystem: (value: unknown) => value is System;
+
+		/** Get a system's arch. */
+		export let arch: (value: System) => Arch;
+
+		/** Get a system's OS. */
+		export let os: (value: System) => Os;
 	}
 
 	// Template.
 
-	export type TemplateComponent = string | Artifact | Placeholder;
-
-	export type TemplateLike = TemplateComponent | Template | Array<TemplateLike>;
+	export namespace Template {
+		export type Arg = Template.Component | Path | Template | Array<Arg>;
+	}
 
 	/** Create a template. */
 	export let template: (
-		components: Unresolved<TemplateLike>,
+		...args: Array<Unresolved<Template.Arg | nullish>>
 	) => Promise<Template>;
 
-	/** Check if a value is a `Template`. */
-	export let isTemplate: (value: unknown) => value is Template;
-
 	export class Template {
-		/** Get this template's components. */
-		components(): Array<TemplateComponent>;
+		/** Check if a value is a `Template`. */
+		static isTemplate: (value: unknown) => value is Template;
 
-		/** Render this template using the provided function that renders each component to a string. */
-		render(f: (component: TemplateComponent) => string): string;
+		/** Join an array of templates with a separator. */
+		static join(
+			separator: Template.Arg,
+			...args: Array<Template.Arg | nullish>
+		): Promise<Template>;
+
+		/** Get this template's components. */
+		components(): Array<Template.Component>;
+	}
+
+	export namespace Template {
+		export type Component = string | Artifact | Placeholder;
+
+		export namespace Component {
+			/** Check if a value is a `Template.Component`. */
+			export let isTemplateComponent: (value: unknown) => value is Component;
+		}
 	}
 
 	// Value.
 
-	/** A `Value` is the union of all types that can serve as arguments or return values of Tangram functions. */
+	/** A `Value` is the union of all types that can be used as arguments or return values of Tangram functions. */
 	export type Value =
 		| nullish
 		| boolean
 		| number
 		| string
+		| Uint8Array
+		| Path
+		| Blob
 		| Artifact
 		| Placeholder
 		| Template
@@ -392,7 +519,19 @@ declare namespace tg {
 		| { [key: string]: Value };
 
 	export type nullish = undefined | null;
+
+	export namespace nullish {
+		export let isNullish: (value: unknown) => value is nullish;
+	}
 }
+
+/**
+ * Create a Tangram template with a JavaScript tagged template.
+ */
+declare var t: (
+	strings: TemplateStringsArray,
+	...placeholders: Array<tg.Unresolved<tg.Template.Arg | tg.nullish>>
+) => Promise<tg.Template>;
 
 declare let console: {
 	/** Write to the log. */

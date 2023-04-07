@@ -1,43 +1,173 @@
-import { ArtifactHash, addArtifact } from "./artifact.ts";
-import { Unresolved } from "./resolve.ts";
+import { Artifact } from "./artifact.ts";
+import { assert } from "./assert.ts";
+import { Directory } from "./directory.ts";
+import { File } from "./file.ts";
+import { Path, path } from "./path.ts";
+import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
-import { Template, TemplateLike, template } from "./template.ts";
+import { Template, t } from "./template.ts";
+import { nullish } from "./value.ts";
 
-export let symlink = async (
-	target: Unresolved<TemplateLike>,
-): Promise<Symlink> => {
-	target = await template(target);
-	return new Symlink(target);
+export namespace Symlink {
+	export type Arg = string | Path | Artifact | Template | ArgObject;
+
+	export type ArgObject = {
+		artifact?: Artifact | nullish;
+		path?: string | Path | nullish;
+	};
+}
+
+export let symlink = async (arg: Unresolved<Symlink.Arg>): Promise<Symlink> => {
+	// Resolve the arg.
+	let resolvedArg = await resolve(arg);
+
+	// Get the artifact and path.
+	let artifact: Artifact | nullish;
+	let path_: string | nullish;
+	if (typeof resolvedArg === "string") {
+		path_ = resolvedArg;
+	} else if (Path.isPath(resolvedArg)) {
+		path_ = resolvedArg.toString();
+	} else if (Artifact.isArtifact(resolvedArg)) {
+		artifact = resolvedArg;
+	} else if (resolvedArg instanceof Template) {
+		assert(resolvedArg.components().length <= 2);
+		let [firstComponent, secondComponent] = resolvedArg.components();
+		if (typeof firstComponent === "string" && secondComponent === undefined) {
+			path_ = firstComponent;
+		} else if (
+			Artifact.isArtifact(firstComponent) &&
+			secondComponent === undefined
+		) {
+			artifact = firstComponent;
+		} else if (
+			Artifact.isArtifact(firstComponent) &&
+			typeof secondComponent === "string"
+		) {
+			artifact = firstComponent;
+			assert(secondComponent.startsWith("/"));
+			path_ = secondComponent.slice(1);
+		} else {
+			throw new Error("Invalid template.");
+		}
+	} else if (resolvedArg instanceof Symlink) {
+		return resolvedArg;
+	} else if (typeof resolvedArg === "object") {
+		artifact = resolvedArg.artifact;
+		let resolvedArgPath = resolvedArg.path;
+		if (typeof resolvedArgPath === "string") {
+			path_ = resolvedArgPath;
+		} else if (Path.isPath(resolvedArgPath)) {
+			path_ = resolvedArgPath.toString();
+		}
+	}
+
+	// Create the target.
+	let target;
+	if (artifact !== undefined && path_ !== undefined) {
+		target = await t`${artifact}/${path_}`;
+	} else if (artifact !== undefined && path_ === undefined) {
+		target = await t`${artifact}`;
+	} else if (artifact === undefined && path_ !== undefined) {
+		target = await t`${path_}`;
+	} else {
+		target = await t``;
+	}
+
+	return Symlink.fromSyscall(await syscall.symlink.new(target.toSyscall()));
 };
 
-export let isSymlink = (value: unknown): value is Symlink => {
-	return value instanceof Symlink;
+type ConstructorArgs = {
+	hash: Artifact.Hash;
+	target: Template;
 };
 
 export class Symlink {
+	#hash: Artifact.Hash;
 	#target: Template;
 
-	constructor(target: Template) {
-		this.#target = target;
+	constructor(args: ConstructorArgs) {
+		this.#hash = args.hash;
+		this.#target = args.target;
 	}
 
-	async serialize(): Promise<syscall.Symlink> {
-		let target = await this.#target.serialize();
+	static isSymlink(value: unknown): value is Symlink {
+		return value instanceof Symlink;
+	}
+
+	toSyscall(): syscall.Symlink {
+		let hash = this.#hash;
+		let target = this.#target.toSyscall();
 		return {
+			hash,
 			target,
 		};
 	}
 
-	static async deserialize(symlink: syscall.Symlink): Promise<Symlink> {
-		let target = await Template.deserialize(symlink.target);
-		return new Symlink(target);
+	static fromSyscall(symlink: syscall.Symlink): Symlink {
+		let hash = symlink.hash;
+		let target = Template.fromSyscall(symlink.target);
+		return new Symlink({
+			hash,
+			target,
+		});
 	}
 
-	async hash(): Promise<ArtifactHash> {
-		return await addArtifact(this);
+	hash(): Artifact.Hash {
+		return this.#hash;
 	}
 
 	target(): Template {
 		return this.#target;
+	}
+
+	artifact(): Artifact | undefined {
+		let firstComponent = this.#target.components().at(0);
+		if (Artifact.isArtifact(firstComponent)) {
+			return firstComponent;
+		} else {
+			return undefined;
+		}
+	}
+
+	path(): Path {
+		let [firstComponent, secondComponent] = this.#target.components();
+		if (typeof firstComponent === "string" && secondComponent === undefined) {
+			return path(firstComponent);
+		} else if (
+			Artifact.isArtifact(firstComponent) &&
+			secondComponent === undefined
+		) {
+			return path();
+		} else if (
+			Artifact.isArtifact(firstComponent) &&
+			typeof secondComponent === "string"
+		) {
+			return path(secondComponent);
+		} else {
+			throw new Error("Invalid template.");
+		}
+	}
+
+	async resolve(): Promise<Directory | File | undefined> {
+		let result: Artifact = this;
+		while (Symlink.isSymlink(result)) {
+			let artifact = result.artifact();
+			let path = result.path();
+			if (Directory.isDirectory(artifact)) {
+				result = await artifact.get(path);
+			} else if (File.isFile(artifact)) {
+				assert(path.components().length === 0);
+				result = artifact;
+			} else if (Symlink.isSymlink(artifact)) {
+				assert(path.components().length === 0);
+				result = artifact;
+			} else {
+				throw new Error(
+					"Cannot resolve a symlink without an artifact in its target.",
+				);
+			}
+		}
+		return result;
 	}
 }

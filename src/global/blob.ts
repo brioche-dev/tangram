@@ -1,55 +1,66 @@
-import { MaybePromise } from "./resolve.ts";
+import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 
-export type BlobHash = string;
+export namespace Blob {
+	export type Arg = Uint8Array | string | Blob;
 
-export type BlobLike = Uint8Array | string | Blob;
+	export type Hash = string;
+}
 
-export let isBlobLike = (value: unknown): value is BlobLike => {
-	return (
-		value instanceof Uint8Array ||
-		typeof value === "string" ||
-		value instanceof Blob
-	);
+export let blob = async (arg: Unresolved<Blob.Arg>): Promise<Blob> => {
+	let resolvedArg = await resolve(arg);
+	let bytes: Uint8Array | string;
+	if (resolvedArg instanceof Uint8Array || typeof resolvedArg === "string") {
+		bytes = resolvedArg;
+	} else {
+		return resolvedArg;
+	}
+	return Blob.fromSyscall(await syscall.blob.new(bytes));
 };
 
-export let blob = async (blobLike: MaybePromise<BlobLike>): Promise<Blob> => {
-	blobLike = await blobLike;
-	if (blobLike instanceof Uint8Array) {
-		return new Blob(await addBlob(blobLike));
-	} else if (typeof blobLike === "string") {
-		let bytes = syscall.encodeUtf8(blobLike);
-		return new Blob(await addBlob(bytes));
-	} else {
-		return blobLike;
-	}
+type ConstructorArg = {
+	hash: Blob.Hash;
 };
 
 export class Blob {
-	#hash: BlobHash;
+	#hash: Blob.Hash;
 
-	constructor(hash: BlobHash) {
-		this.#hash = hash;
+	constructor(arg: ConstructorArg) {
+		this.#hash = arg.hash;
 	}
 
-	hash(): BlobHash {
+	static isBlobArg(value: unknown): value is Blob.Arg {
+		return (
+			value instanceof Uint8Array ||
+			typeof value === "string" ||
+			value instanceof Blob
+		);
+	}
+
+	static isBlob(value: unknown): value is Blob {
+		return value instanceof Blob;
+	}
+
+	toSyscall(): syscall.Blob {
+		return {
+			hash: this.#hash,
+		};
+	}
+
+	static fromSyscall(value: syscall.Blob): Blob {
+		let hash = value.hash;
+		return new Blob({ hash });
+	}
+
+	hash(): Blob.Hash {
 		return this.#hash;
 	}
 
 	async bytes(): Promise<Uint8Array> {
-		return await getBlob(this.#hash);
+		return await syscall.blob.bytes(this.toSyscall());
 	}
 
 	async text(): Promise<string> {
-		let bytes = await this.bytes();
-		return syscall.decodeUtf8(bytes);
+		return await syscall.blob.text(this.toSyscall());
 	}
 }
-
-export let addBlob = async (bytes: Uint8Array): Promise<BlobHash> => {
-	return await syscall.addBlob(bytes);
-};
-
-export let getBlob = async (hash: BlobHash): Promise<Uint8Array> => {
-	return await syscall.getBlob(hash);
-};

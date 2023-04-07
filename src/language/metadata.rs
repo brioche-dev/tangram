@@ -1,21 +1,22 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	metadata::Metadata,
-	Instance,
+	instance::Instance,
+	module::Module,
+	package,
 };
 use std::sync::Arc;
 
-impl Instance {
+impl Module {
 	#[allow(clippy::unused_async)]
-	pub async fn metadata(self: &Arc<Self>, text: &str) -> Result<Metadata> {
+	pub async fn metadata(tg: &Arc<Instance>, text: &str) -> Result<package::Metadata> {
 		// Create the language service request.
 		let request = service::Request::Metadata(service::metadata::Request {
 			text: text.to_owned(),
 		});
 
 		// Handle the language service request.
-		let response = self.handle_language_service_request(request).await?;
+		let response = tg.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Metadata(response) = response else { return_error!("Unexpected response type.") };

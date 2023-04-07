@@ -4,6 +4,7 @@ use tangram::package;
 
 /// Build a package's "env" export and run it.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 #[command(trailing_var_arg = true)]
 pub struct Args {
 	/// The package to build.
@@ -27,7 +28,7 @@ impl Cli {
 			package: args.package,
 			package_args: args.package_args,
 			run_args: args.run_args,
-			export: "env".to_owned(),
+			function: "env".to_owned(),
 			trailing_args: args.trailing_args,
 		};
 

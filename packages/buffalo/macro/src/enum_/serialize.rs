@@ -1,4 +1,5 @@
 use super::Enum;
+use itertools::Itertools;
 use quote::quote;
 
 impl<'a> Enum<'a> {
@@ -19,18 +20,14 @@ impl<'a> Enum<'a> {
 			}
 		} else {
 			// Get the variant ids.
-			let variant_ids = self
-				.variants
-				.iter()
-				.map(|variant| variant.id)
-				.collect::<Vec<_>>();
+			let variant_ids = self.variants.iter().map(|variant| variant.id).collect_vec();
 
 			// Get the variant idents.
 			let variant_idents = self
 				.variants
 				.iter()
 				.map(|variant| &variant.ident)
-				.collect::<Vec<_>>();
+				.collect_vec();
 
 			quote! {
 				match self {

@@ -1,6 +1,5 @@
 use super::error::{Location, StackFrame, StackTrace};
 use crate::{error::Error, language::Position};
-use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::sync::Arc;
 
@@ -40,8 +39,8 @@ impl Error {
 				.iter()
 				.map(|call_site| {
 					// Get the location.
-					let line = call_site.line_number.unwrap().to_u32().unwrap() - 1;
-					let character = call_site.column_number.unwrap().to_u32().unwrap();
+					let line = call_site.line_number? - 1;
+					let character = call_site.column_number?;
 					let position = Position { line, character };
 
 					// Apply the source map if it is available.
@@ -67,11 +66,9 @@ impl Error {
 						}
 					};
 
-					// Create the stack frame.
-					StackFrame {
-						location: Some(location),
-					}
+					Some(location)
 				})
+				.map(|location| StackFrame { location })
 				.collect();
 
 			// Create the stack trace.
@@ -100,10 +97,6 @@ impl Error {
 			stack_trace,
 			source,
 		})
-	}
-
-	pub fn to_exception<'s>(&self, scope: &mut v8::HandleScope<'s>) -> v8::Local<'s, v8::Value> {
-		serde_v8::to_v8(scope, self).expect("Failed to serialize the error.")
 	}
 }
 

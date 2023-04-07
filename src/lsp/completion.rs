@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{error::Result, module};
+use crate::{error::Result, module::Module};
 use lsp_types as lsp;
 
 impl Server {
@@ -7,19 +7,15 @@ impl Server {
 		&self,
 		params: lsp::CompletionParams,
 	) -> Result<Option<lsp::CompletionResponse>> {
-		// Get the module identifier.
-		let module_identifier =
-			module::Identifier::from_lsp_uri(params.text_document_position.text_document.uri)
-				.await?;
+		// Get the module.
+		let module =
+			Module::from_lsp(&self.tg, params.text_document_position.text_document.uri).await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
 
 		// Get the completion entries.
-		let entries = self
-			.tg
-			.completion(module_identifier, position.into())
-			.await?;
+		let entries = module.completion(&self.tg, position.into()).await?;
 		let Some(entries) = entries else {
 			return Ok(None);
 		};

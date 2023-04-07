@@ -1,10 +1,10 @@
+import { assert } from "./assert.ts";
 import { call } from "./call.ts";
-import { context } from "./context.ts";
-import { PackageInstanceHash } from "./package.ts";
+import { env } from "./env.ts";
+import { PackageInstance } from "./package.ts";
 import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
-import { assert } from "./util.ts";
-import { Value, deserializeValue, serializeValue } from "./value.ts";
+import { Value } from "./value.ts";
 
 export let function_ = <
 	A extends Array<Value> = Array<Value>,
@@ -13,7 +13,11 @@ export let function_ = <
 	f: (...args: A) => MaybePromise<R>,
 ): Function<A, R> => {
 	// Get the function's caller.
-	let { packageInstanceHash, line } = syscall.caller();
+	let { module, line } = syscall.caller();
+
+	// Get the function's package instance hash.
+	assert(module.kind === "normal");
+	let packageInstanceHash = module.value.packageInstanceHash;
 
 	// Get the function's name.
 	let name;
@@ -36,12 +40,8 @@ export let function_ = <
 	});
 };
 
-export let isFunction = (value: unknown): value is Function => {
-	return value instanceof Function;
-};
-
-type FunctionConstructorArgs<A extends Array<Value>, R extends Value> = {
-	packageInstanceHash: PackageInstanceHash;
+type ConstructorArgs<A extends Array<Value>, R extends Value> = {
+	packageInstanceHash: PackageInstance.Hash;
 	name: string;
 	f?: (...args: A) => MaybePromise<R>;
 };
@@ -57,11 +57,11 @@ export class Function<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 > extends globalThis.Function {
-	packageInstanceHash: PackageInstanceHash;
+	packageInstanceHash: PackageInstance.Hash;
 	name: string;
 	f?: (...args: A) => MaybePromise<R>;
 
-	constructor(args: FunctionConstructorArgs<A, R>) {
+	constructor(args: ConstructorArgs<A, R>) {
 		super();
 
 		this.packageInstanceHash = args.packageInstanceHash;
@@ -70,11 +70,21 @@ export class Function<
 
 		// Proxy this object so that it is callable.
 		return new Proxy(this, {
-			apply: (target, _, args) => target._call(...(args as A)),
+			apply: async (target, _, args) => {
+				let resolvedArgs = await Promise.all(args.map(resolve));
+				return await call({
+					function: target,
+					args: resolvedArgs as A,
+				});
+			},
 		});
 	}
 
-	async serialize(): Promise<syscall.Function> {
+	static isFunction(value: unknown): value is Function {
+		return value instanceof Function;
+	}
+
+	toSyscall(): syscall.Function {
 		let packageInstanceHash = this.packageInstanceHash;
 		let name = this.name?.toString();
 		return {
@@ -83,9 +93,9 @@ export class Function<
 		};
 	}
 
-	static async deserialize<A extends Array<Value>, R extends Value>(
+	static fromSyscall<A extends Array<Value>, R extends Value>(
 		function_: syscall.Function,
-	): Promise<Function<A, R>> {
+	): Function<A, R> {
 		let packageInstanceHash = function_.packageInstanceHash;
 		let name = function_.name;
 		return new Function({
@@ -94,35 +104,22 @@ export class Function<
 		});
 	}
 
-	async _call(...args: A): Promise<R> {
-		let context_ = new Map(context);
-		let resolvedArgs = await Promise.all(args.map(resolve));
-		return await call({
-			function: this,
-			context: context_,
-			args: resolvedArgs,
-		});
-	}
-
 	async run(
-		serializedContext: { [key: string]: syscall.Value },
-		serializedArgs: Array<syscall.Value>,
+		syscallEnv: { [key: string]: syscall.Value },
+		syscallArgs: Array<syscall.Value>,
 	): Promise<syscall.Value> {
-		// Deserialize and set the context.
-		for (let [key, value] of Object.entries(serializedContext)) {
-			context.set(key, await deserializeValue(value));
+		// Set the env.
+		for (let [key, value] of Object.entries(syscallEnv)) {
+			env.set(key, Value.fromSyscall(value));
 		}
 
-		// Deserialize the args.
-		let args = (await Promise.all(serializedArgs.map(deserializeValue))) as A;
+		// Get the args.
+		let args = syscallArgs.map(Value.fromSyscall) as A;
 
 		// Call the function.
 		assert(this.f);
 		let output = await this.f(...args);
 
-		// Serialize the output.
-		let serializedOutput = await serializeValue(output);
-
-		return serializedOutput;
+		return Value.toSyscall(output);
 	}
 }

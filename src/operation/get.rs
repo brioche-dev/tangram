@@ -1,55 +1,54 @@
 use super::{Hash, Operation};
 use crate::{
 	error::{Result, WrapErr},
-	Instance,
+	instance::Instance,
+	value::Value,
 };
 
-impl Instance {
-	pub fn get_operation_local(&self, hash: Hash) -> Result<Operation> {
-		let operation = self
-			.try_get_operation_local(hash)?
-			.wrap_err_with(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
+impl Operation {
+	pub async fn get(tg: &Instance, hash: Hash) -> Result<Self> {
+		let operation = Self::try_get(tg, hash)
+			.await?
+			.wrap_err_with(|| format!(r#"Failed to get the operation with hash "{hash}"."#))?;
 		Ok(operation)
 	}
 
-	pub fn get_operation_local_with_txn<Txn>(&self, txn: &Txn, hash: Hash) -> Result<Operation>
-	where
-		Txn: lmdb::Transaction,
-	{
-		let operation = self
-			.try_get_operation_local_with_txn(txn, hash)?
-			.wrap_err_with(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
-		Ok(operation)
-	}
-
-	#[tracing::instrument(level = "debug", skip(self))]
-	pub fn try_get_operation_local(&self, hash: Hash) -> Result<Option<Operation>> {
-		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
-
-		// Get the operation.
-		let maybe_operation = self.try_get_operation_local_with_txn(&txn, hash)?;
-
-		Ok(maybe_operation)
-	}
-
-	/// Try to get an operation from the database with the given transaction.
-	#[tracing::instrument(level = "debug", skip(self, txn))]
-	pub fn try_get_operation_local_with_txn<Txn>(
-		&self,
-		txn: &Txn,
-		hash: Hash,
-	) -> Result<Option<Operation>>
-	where
-		Txn: lmdb::Transaction,
-	{
-		match txn.get(self.database.operations, &hash.as_slice()) {
-			Ok(value) => {
-				let value = Operation::deserialize(value)?;
-				Ok(Some(value))
-			},
-			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => Err(error.into()),
+	pub async fn try_get(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
+		// Attempt to get the operation from the database.
+		if let Some(operation) = Self::try_get_local(tg, hash).await? {
+			return Ok(Some(operation));
 		}
+		Ok(None)
+	}
+
+	pub async fn get_local(tg: &Instance, hash: Hash) -> Result<Self> {
+		let operation = Self::try_get_local(tg, hash)
+			.await?
+			.wrap_err_with(|| format!(r#"Failed to find the operation with hash "{hash}"."#))?;
+		Ok(operation)
+	}
+
+	pub async fn try_get_local(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
+		// Get the serialized operation from the database.
+		let Some(operation) = tg.database.try_get_operation(hash).await? else {
+			return Ok(None);
+		};
+
+		// Create the operation from the serialized operation.
+		let operation = Self::from_data(tg, hash, operation).await?;
+
+		Ok(Some(operation))
+	}
+
+	pub async fn get_operation_output(tg: &Instance, hash: Hash) -> Result<Option<Value>> {
+		// Get the serialized operation output from the database.
+		let Some(output) = tg.database.get_operation_output(hash).await? else {
+			return Ok(None);
+		};
+
+		// Create the output from the serialized output.
+		let output = Value::from_data(tg, output).await?;
+
+		Ok(Some(output))
 	}
 }

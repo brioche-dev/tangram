@@ -1,7 +1,8 @@
 use bytes::Bytes;
 use futures::Stream;
-use http_body::Frame;
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
+pub use http_body_util::StreamBody;
+use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
+use hyper::body::{Body, Frame};
 use pin_project::pin_project;
 use std::{
 	pin::Pin,
@@ -11,10 +12,13 @@ use std::{
 pub type Incoming = hyper::body::Incoming;
 pub type Outgoing = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
+#[must_use]
+pub fn empty() -> Outgoing {
+	Empty::new().map_err(|_| unreachable!()).boxed()
+}
+
 pub fn full(chunk: impl Into<Bytes>) -> Outgoing {
-	Full::new(chunk.into())
-		.map_err(|never| match never {})
-		.boxed()
+	Full::new(chunk.into()).map_err(|_| unreachable!()).boxed()
 }
 
 #[pin_project]
@@ -29,9 +33,9 @@ impl<B> BodyStream<B> {
 	}
 }
 
-impl<B> http_body::Body for BodyStream<B>
+impl<B> Body for BodyStream<B>
 where
-	B: http_body::Body,
+	B: Body,
 {
 	type Data = B::Data;
 	type Error = B::Error;
@@ -45,7 +49,7 @@ where
 }
 impl<B> Stream for BodyStream<B>
 where
-	B: http_body::Body,
+	B: Body,
 {
 	type Item = Result<Frame<B::Data>, B::Error>;
 

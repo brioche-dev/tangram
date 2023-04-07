@@ -1,62 +1,47 @@
-use crate::{artifact, placeholder::Placeholder};
+pub use self::{component::Component, data::Data};
 
+mod component;
+mod data;
 mod references;
 mod render;
 mod unrender;
 
-#[derive(
-	Clone,
-	Debug,
-	Default,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
 pub struct Template {
-	#[buffalo(id = 0)]
-	pub components: Vec<Component>,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-#[serde(tag = "kind", content = "value")]
-pub enum Component {
-	#[buffalo(id = 0)]
-	#[serde(rename = "string")]
-	String(String),
-
-	#[buffalo(id = 1)]
-	#[serde(rename = "artifact")]
-	Artifact(artifact::Hash),
-
-	#[buffalo(id = 2)]
-	#[serde(rename = "placeholder")]
-	Placeholder(Placeholder),
+	components: Vec<Component>,
 }
 
 impl Template {
 	#[must_use]
-	pub fn new(components: Vec<Component>) -> Self {
-		Self { components }
+	pub fn empty() -> Self {
+		Self { components: vec![] }
+	}
+
+	pub fn new(template: impl Into<Self>) -> Self {
+		template.into()
+	}
+
+	#[must_use]
+	pub fn components(&self) -> &[Component] {
+		&self.components
+	}
+}
+
+impl From<Vec<Component>> for Template {
+	fn from(value: Vec<Component>) -> Self {
+		Template { components: value }
+	}
+}
+
+impl From<Component> for Template {
+	fn from(value: Component) -> Self {
+		vec![value].into()
 	}
 }
 
 impl From<String> for Template {
 	fn from(value: String) -> Self {
-		Template {
-			components: vec![Component::String(value)],
-		}
+		vec![Component::String(value)].into()
 	}
 }
 
@@ -67,9 +52,9 @@ impl From<&str> for Template {
 }
 
 impl FromIterator<Component> for Template {
-	fn from_iter<I: IntoIterator<Item = Component>>(iter: I) -> Self {
+	fn from_iter<I: IntoIterator<Item = Component>>(value: I) -> Self {
 		Template {
-			components: iter.into_iter().collect(),
+			components: value.into_iter().collect(),
 		}
 	}
 }

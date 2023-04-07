@@ -7,13 +7,14 @@ use std::os::unix::process::CommandExt;
 use tangram::{
 	artifact::Artifact,
 	function::Function,
-	operation::{Call, Operation},
-	package,
+	operation::Call,
+	package::{self, Package},
 	util::fs,
 };
 
 /// Build a package and run an executable from its output.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 #[command(trailing_var_arg = true)]
 pub struct Args {
 	/// The package to build.
@@ -26,9 +27,9 @@ pub struct Args {
 	#[command(flatten)]
 	pub run_args: RunArgs,
 
-	/// The export to build.
+	/// The name of the function to call.
 	#[arg(default_value = "default")]
-	pub export: String,
+	pub function: String,
 
 	/// Arguments to pass to the executable.
 	pub trailing_args: Vec<String>,
@@ -36,40 +37,31 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
-		// Resolve the package specifier.
-		let package_identifier = self.tg.resolve_package(&args.package, None).await?;
+		// Get the package.
+		let package = Package::with_specifier(&self.tg, args.package).await?;
 
 		// Create the package instance.
-		let package_instance_hash = self
-			.tg
-			.clone()
-			.create_package_instance(&package_identifier, args.package_args.locked)
-			.await?;
+		let package_instance = package
+			.instantiate(&self.tg)
+			.await
+			.wrap_err("Failed to create the package instance.")?;
 
 		// Run the operation.
-		let function = Function {
-			package_instance_hash,
-			name: args.export,
-		};
-		let context = Self::create_default_context()?;
+		let function = Function::new(&package_instance, args.function);
+		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let operation = Operation::Call(Call {
-			function,
-			context,
-			args: args_,
-		});
-		let output = operation.run(&self.tg).await?;
+		let call = Call::new(&self.tg, function, env, args_)
+			.await
+			.wrap_err("Failed to create the call.")?;
+		let output = call.run(&self.tg).await?;
 
 		// Get the output artifact.
-		let artifact_hash = output
+		let artifact = output
 			.into_artifact()
 			.wrap_err("Expected the output to be an artifact.")?;
 
-		// Get the artifact.
-		let artifact = self.tg.get_artifact_local(artifact_hash)?;
-
 		// Check out the artifact.
-		let artifact_path = self.tg.check_out_internal(artifact_hash).await?;
+		let artifact_path = artifact.check_out_internal(&self.tg).await?;
 
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {
@@ -86,9 +78,9 @@ impl Cli {
 		};
 
 		// Exec the process.
-		Err(std::process::Command::new(executable_path)
+		let error = std::process::Command::new(executable_path)
 			.args(args.trailing_args)
-			.exec()
-			.into())
+			.exec();
+		Err(error.into())
 	}
 }

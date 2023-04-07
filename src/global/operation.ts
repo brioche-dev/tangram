@@ -1,86 +1,62 @@
-import { Artifact } from "./artifact.ts";
+import { unreachable } from "./assert.ts";
 import { Call } from "./call.ts";
 import { Download } from "./download.ts";
 import { Process } from "./process.ts";
 import * as syscall from "./syscall.ts";
-import { deserializeValue } from "./value.ts";
 
-export type OperationHash = string;
+export type Operation = Call | Download | Process;
 
-export type OperationKind = "download" | "process" | "call";
+export namespace Operation {
+	export type Hash = string;
 
-export type Operation = Download | Process | Call;
+	export type Kind = "download" | "process" | "call";
 
-export type Output<T extends Operation> = T extends Download
-	? Artifact
-	: T extends Process
-	? Artifact
-	: T extends Call<infer U>
-	? U
-	: never;
+	export let isOperation = (value: unknown): value is Operation => {
+		return (
+			value instanceof Call ||
+			value instanceof Download ||
+			value instanceof Process
+		);
+	};
 
-export let isOperation = (value: unknown): value is Operation => {
-	return (
-		value instanceof Download ||
-		value instanceof Process ||
-		value instanceof Call
-	);
-};
-
-export let run = async <T extends Operation>(
-	operation: T,
-): Promise<Output<T>> => {
-	let operationHash = await addOperation(operation);
-	let outputSerialized = await syscall.runOperation(operationHash);
-	let output = await deserializeValue(outputSerialized);
-	return output as Output<T>;
-};
-
-export let addOperation = async (
-	operation: Operation,
-): Promise<OperationHash> => {
-	return await syscall.addOperation(await serializeOperation(operation));
-};
-
-export let getArtifact = async (hash: OperationHash): Promise<Operation> => {
-	return await deserializeOperation(await syscall.getOperation(hash));
-};
-
-export let serializeOperation = async (
-	operation: Operation,
-): Promise<syscall.Operation> => {
-	if (operation instanceof Download) {
-		return {
-			kind: "download",
-			value: await operation.serialize(),
-		};
-	} else if (operation instanceof Process) {
-		return {
-			kind: "process",
-			value: await operation.serialize(),
-		};
-	} else if (operation instanceof Call) {
-		return {
-			kind: "call",
-			value: await operation.serialize(),
-		};
-	} else {
-		throw new Error("Cannot serialize operation.");
-	}
-};
-
-export let deserializeOperation = async (
-	operation: syscall.Operation,
-): Promise<Operation> => {
-	switch (operation.kind) {
-		case "download": {
-			return await Download.deserialize(operation.value);
+	export let toSyscall = (operation: Operation): syscall.Operation => {
+		if (operation instanceof Download) {
+			return {
+				kind: "download",
+				value: operation.toSyscall(),
+			};
+		} else if (operation instanceof Process) {
+			return {
+				kind: "process",
+				value: operation.toSyscall(),
+			};
+		} else if (operation instanceof Call) {
+			return {
+				kind: "call",
+				value: operation.toSyscall(),
+			};
+		} else {
+			return unreachable();
 		}
-		case "process": {
-			return await Process.deserialize(operation.value);
+	};
+
+	export let fromSyscall = (
+		hash: Operation.Hash,
+		operation: syscall.Operation,
+	): Operation => {
+		switch (operation.kind) {
+			case "download": {
+				return Download.fromSyscall(operation.value);
+			}
+			case "process": {
+				return Process.fromSyscall(operation.value);
+			}
+			case "call": {
+				return Call.fromSyscall(operation.value);
+			}
+			default: {
+				return unreachable();
+			}
 		}
-		case "call": {
-			return await Call.deserialize(operation.value);
-		}
-	}
-};
+	};
+}

@@ -1,3 +1,4 @@
+import * as analyze from "./analyze.ts";
 import * as check from "./check.ts";
 import * as completion from "./completion.ts";
 import * as definition from "./definition.ts";
@@ -6,7 +7,6 @@ import * as doc from "./doc.ts";
 import { prepareStackTrace } from "./error.ts";
 import * as format from "./format.ts";
 import * as hover from "./hover.ts";
-import * as imports from "./imports.ts";
 import * as metadata from "./metadata.ts";
 import * as references from "./references.ts";
 import * as rename from "./rename.ts";
@@ -18,6 +18,7 @@ Object.defineProperties(Error, {
 });
 
 type Request =
+	| { kind: "analyze"; request: analyze.Request }
 	| { kind: "check"; request: check.Request }
 	| { kind: "completion"; request: completion.Request }
 	| { kind: "definition"; request: definition.Request }
@@ -25,13 +26,13 @@ type Request =
 	| { kind: "doc"; request: doc.Request }
 	| { kind: "format"; request: format.Request }
 	| { kind: "hover"; request: hover.Request }
-	| { kind: "imports"; request: imports.Request }
 	| { kind: "metadata"; request: metadata.Request }
 	| { kind: "references"; request: references.Request }
 	| { kind: "rename"; request: rename.Request }
 	| { kind: "transpile"; request: transpile.Request };
 
 type Response =
+	| { kind: "analyze"; response: analyze.Response }
 	| { kind: "check"; response: check.Response }
 	| { kind: "completion"; response: completion.Response }
 	| { kind: "definition"; response: definition.Response }
@@ -39,7 +40,6 @@ type Response =
 	| { kind: "doc"; response: doc.Response }
 	| { kind: "format"; response: format.Response }
 	| { kind: "hover"; response: hover.Response }
-	| { kind: "imports"; response: imports.Response }
 	| { kind: "metadata"; response: metadata.Response }
 	| { kind: "references"; response: references.Response }
 	| { kind: "rename"; response: rename.Response }
@@ -47,6 +47,10 @@ type Response =
 
 let handle = ({ kind, request }: Request): Response => {
 	switch (kind) {
+		case "analyze": {
+			let response = analyze.handle(request);
+			return { kind: "analyze", response };
+		}
 		case "check": {
 			let response = check.handle(request);
 			return { kind: "check", response };
@@ -74,10 +78,6 @@ let handle = ({ kind, request }: Request): Response => {
 		case "hover": {
 			let response = hover.handle(request);
 			return { kind: "hover", response };
-		}
-		case "imports": {
-			let response = imports.handle(request);
-			return { kind: "imports", response };
 		}
 		case "metadata": {
 			let response = metadata.handle(request);

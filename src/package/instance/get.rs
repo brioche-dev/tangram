@@ -1,76 +1,50 @@
 use super::{Hash, Instance};
-use crate::error::{Error, Result, WrapErr};
-use lmdb::Transaction;
+use crate::error::{Result, WrapErr};
 
-impl crate::Instance {
-	/// Get a package instance from the database. This method returns an error if the package instance is not found.
-	pub fn package_instance_exists_local(&self, package_instance_hash: Hash) -> Result<bool> {
-		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
-
-		let exists = match txn.get(
-			self.database.package_instances,
-			&package_instance_hash.as_slice(),
-		) {
-			Ok(_) => Ok::<_, Error>(true),
-			Err(lmdb::Error::NotFound) => Ok(false),
-			Err(error) => Err(error.into()),
-		}?;
-
-		Ok(exists)
+impl Instance {
+	pub async fn get(tg: &crate::instance::Instance, hash: Hash) -> Result<Self> {
+		let package_instance = Self::try_get(tg, hash).await?.wrap_err_with(|| {
+			format!(r#"Failed to get the package instance with hash "{hash}"."#)
+		})?;
+		Ok(package_instance)
 	}
 
-	/// Try to get a package instance from the database with the given transaction.
-	pub fn try_get_package_instance_local_with_txn<Txn>(
-		&self,
-		txn: &Txn,
-		hash: Hash,
-	) -> Result<Option<Instance>>
-	where
-		Txn: lmdb::Transaction,
-	{
-		match txn.get(self.database.package_instances, &hash.as_slice()) {
-			Ok(value) => {
-				let value = Instance::deserialize(value)?;
-				Ok(Some(value))
-			},
-			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => Err(error.into()),
+	pub async fn try_get(tg: &crate::instance::Instance, hash: Hash) -> Result<Option<Self>> {
+		// Attempt to get the package instance from the database.
+		if let Some(package_instance) = Self::try_get_local(tg, hash).await? {
+			return Ok(Some(package_instance));
 		}
-	}
-}
 
-impl crate::Instance {
-	pub fn get_package_instance_local(&self, hash: Hash) -> Result<Instance> {
-		let package_instance = self
-			.try_get_package_instance_local(hash)?
-			.wrap_err_with(|| {
-				format!(r#"Failed to find the package instance with hash "{hash}"."#)
-			})?;
+		// // Attempt to get the package instance from the API.
+		// let package_instance = tg
+		// 	.api_instance_client()
+		// 	.try_get_package_instance(hash)
+		// 	.await
+		// 	.ok()
+		// 	.flatten();
+		// if let Some(package_instance) = package_instance {
+		// 	return Ok(Some(package_instance));
+		// }
+
+		Ok(None)
+	}
+
+	pub async fn get_local(tg: &crate::instance::Instance, hash: Hash) -> Result<Self> {
+		let package_instance = Self::try_get_local(tg, hash).await?.wrap_err_with(|| {
+			format!(r#"Failed to find the package instance with hash "{hash}"."#)
+		})?;
 		Ok(package_instance)
 	}
 
-	pub fn get_package_instance_local_with_txn<Txn>(
-		&self,
-		txn: &Txn,
-		hash: Hash,
-	) -> Result<Instance>
-	where
-		Txn: lmdb::Transaction,
-	{
-		let package_instance = self
-			.try_get_package_instance_local_with_txn(txn, hash)?
-			.wrap_err_with(|| format!(r#"Failed to find the package with hash "{hash}"."#))?;
-		Ok(package_instance)
-	}
+	pub async fn try_get_local(tg: &crate::instance::Instance, hash: Hash) -> Result<Option<Self>> {
+		// Get the serialized package instance from the database.
+		let Some(package_instance) = tg.database.try_get_package_instance(hash).await? else {
+			return Ok(None);
+		};
 
-	pub fn try_get_package_instance_local(&self, hash: Hash) -> Result<Option<Instance>> {
-		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
+		// Create the package instance from the serialized package instance.
+		let package_instance = Self::from_data(tg, hash, package_instance).await?;
 
-		// Get the package instance.
-		let maybe_package_instance = self.try_get_package_instance_local_with_txn(&txn, hash)?;
-
-		Ok(maybe_package_instance)
+		Ok(Some(package_instance))
 	}
 }

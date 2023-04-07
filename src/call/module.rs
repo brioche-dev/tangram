@@ -1,11 +1,12 @@
 use super::{
 	context::await_value,
 	isolate::THREAD_LOCAL_ISOLATE,
-	state::{Module, State},
+	state::{self, State},
 };
 use crate::{
 	error::{Error, Result, WrapErr},
-	module, Instance,
+	instance::Instance,
+	module::{self, Module},
 };
 use num::ToPrimitive;
 use sourcemap::SourceMap;
@@ -14,7 +15,7 @@ use std::{rc::Rc, sync::Arc};
 #[allow(clippy::await_holding_refcell_ref)]
 pub async fn evaluate(
 	context: v8::Global<v8::Context>,
-	module_identifier: &module::Identifier,
+	module: &Module,
 ) -> Result<(v8::Global<v8::Module>, v8::Global<v8::Value>)> {
 	// Enter the context.
 	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
@@ -24,31 +25,32 @@ pub async fn evaluate(
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
 	// Get the state.
-	let state = Rc::clone(context.get_slot::<Rc<State>>(&mut context_scope).unwrap());
+	let state = context
+		.get_slot::<Rc<State>>(&mut context_scope)
+		.unwrap()
+		.clone();
 
 	// Load the module.
-	let module = load_module(&mut context_scope, module_identifier)?;
+	let module = load_module(&mut context_scope, module)?;
 
 	// Instantiate the module.
 	let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
 	let output = module.instantiate_module(&mut try_catch_scope, resolve_module_callback);
-	if try_catch_scope.has_caught() {
+	if output.is_none() {
 		let exception = try_catch_scope.exception().unwrap();
 		let error = Error::from_exception(&mut try_catch_scope, &state, exception);
 		return Err(error);
 	}
-	output.unwrap();
 	drop(try_catch_scope);
 
 	// Evaluate the module.
 	let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
 	let module_output = module.evaluate(&mut try_catch_scope);
-	if try_catch_scope.has_caught() {
+	let Some(module_output) = module_output else {
 		let exception = try_catch_scope.exception().unwrap();
 		let error = Error::from_exception(&mut try_catch_scope, &state, exception);
 		return Err(error);
-	}
-	let module_output = module_output.unwrap();
+	};
 	drop(try_catch_scope);
 
 	let context = v8::Global::new(&mut context_scope, context);
@@ -72,30 +74,30 @@ pub async fn evaluate(
 /// Load a module.
 fn load_module<'s>(
 	scope: &mut v8::HandleScope<'s>,
-	module_identifier: &module::Identifier,
+	module: &module::Module,
 ) -> Result<v8::Local<'s, v8::Module>> {
 	// Get the context.
 	let context = scope.get_current_context();
 
 	// Get the instance.
-	let tg = Arc::clone(context.get_slot::<Arc<Instance>>(scope).unwrap());
+	let tg = context.get_slot::<Arc<Instance>>(scope).unwrap().clone();
 
 	// Get the state.
-	let state = Rc::clone(context.get_slot::<Rc<State>>(scope).unwrap());
+	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 
 	// Return a cached module if this module has already been loaded.
 	if let Some(module) = state
 		.modules
 		.borrow()
 		.iter()
-		.find(|module| &module.module_identifier == module_identifier)
+		.find(|cached_module| &cached_module.module == module)
 	{
-		let module = v8::Local::new(scope, &module.module);
+		let module = v8::Local::new(scope, &module.v8_module);
 		return Ok(module);
 	}
 
 	// Define the module's origin.
-	let resource_name = v8::String::new(scope, &module_identifier.to_string()).unwrap();
+	let resource_name = v8::String::new(scope, &module.to_string()).unwrap();
 	let resource_line_offset = 0;
 	let resource_column_offset = 0;
 	let resource_is_shared_cross_origin = false;
@@ -120,17 +122,17 @@ fn load_module<'s>(
 	// Load the module.
 	let (sender, receiver) = std::sync::mpsc::channel();
 	tg.runtime_handle.spawn({
-		let tg = Arc::clone(&tg);
-		let module_identifier = module_identifier.clone();
+		let tg = tg.clone();
+		let module = module.clone();
 		async move {
 			// Load the module.
-			let text = match tg.load_module(&module_identifier).await {
+			let text = match module.load(&tg).await {
 				Ok(text) => text,
 				Err(error) => return sender.send(Err(error)).unwrap(),
 			};
 
 			// Transpile the module.
-			let output = match tg.transpile(text.clone()).await {
+			let output = match Module::transpile(text.clone()).await {
 				Ok(transpile_output) => transpile_output,
 				Err(error) => return sender.send(Err(error)).unwrap(),
 			};
@@ -143,7 +145,7 @@ fn load_module<'s>(
 	let (text, transpiled_text, source_map) = receiver
 		.recv()
 		.unwrap()
-		.wrap_err_with(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
+		.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
 	let source_map = SourceMap::from_slice(source_map.as_bytes())
 		.map_err(Error::other)
 		.wrap_err("Failed to parse the source map.")?;
@@ -152,26 +154,25 @@ fn load_module<'s>(
 	let mut try_catch_scope = v8::TryCatch::new(scope);
 	let source = v8::String::new(&mut try_catch_scope, &transpiled_text).unwrap();
 	let source = v8::script_compiler::Source::new(source, Some(&origin));
-	let module = v8::script_compiler::compile_module(&mut try_catch_scope, source);
-	if try_catch_scope.has_caught() {
+	let v8_module = v8::script_compiler::compile_module(&mut try_catch_scope, source);
+	let Some(v8_module) = v8_module else {
 		let exception = try_catch_scope.exception().unwrap();
 		let error = Error::from_exception(&mut try_catch_scope, &state, exception);
 		return Err(error);
-	}
-	let module = module.unwrap();
+	};
 	drop(try_catch_scope);
 
 	// Cache the module.
-	state.modules.borrow_mut().push(Module {
-		identity_hash: module.get_identity_hash(),
-		module: v8::Global::new(scope, module),
-		module_identifier: module_identifier.clone(),
+	state.modules.borrow_mut().push(state::Module {
+		v8_identity_hash: v8_module.get_identity_hash(),
+		v8_module: v8::Global::new(scope, v8_module),
+		module: module.clone(),
 		text,
 		transpiled_text: Some(transpiled_text),
 		source_map: Some(source_map),
 	});
 
-	Ok(module)
+	Ok(v8_module)
 }
 
 /// Implement V8's module resolution callback.
@@ -202,10 +203,13 @@ fn resolve_module_callback_inner<'s>(
 	let mut scope = unsafe { v8::CallbackScope::new(context) };
 
 	// Get the instance.
-	let tg = Arc::clone(context.get_slot::<Arc<Instance>>(&mut scope).unwrap());
+	let tg = context
+		.get_slot::<Arc<Instance>>(&mut scope)
+		.unwrap()
+		.clone();
 
 	// Get the state.
-	let state = Rc::clone(context.get_slot::<Rc<State>>(&mut scope).unwrap());
+	let state = context.get_slot::<Rc<State>>(&mut scope).unwrap().clone();
 
 	// Get the specifier.
 	let specifier = specifier.to_rust_string_lossy(&mut scope);
@@ -217,33 +221,32 @@ fn resolve_module_callback_inner<'s>(
 		.modules
 		.borrow()
 		.iter()
-		.find(|module| module.identity_hash == referrer_identity_hash)
+		.find(|module| module.v8_identity_hash == referrer_identity_hash)
 		.wrap_err_with(|| {
 			format!(
 				r#"Unable to find the referrer module with identity hash "{referrer_identity_hash}"."#
 			)
 		})?
-		.module_identifier
+		.module
 		.clone();
 
 	// Resolve.
 	let (sender, receiver) = std::sync::mpsc::channel();
 	tg.runtime_handle.spawn({
-		let tg = Arc::clone(&tg);
+		let tg = tg.clone();
 		let specifier = specifier.clone();
 		let referrer = referrer.clone();
 		async move {
-			let module_identifier = tg.resolve_module(&specifier, &referrer).await;
-			sender.send(module_identifier).unwrap();
+			let module = referrer.resolve(&tg, &specifier).await;
+			sender.send(module).unwrap();
 		}
 	});
-	let module_identifier = receiver.recv().unwrap().wrap_err_with(|| {
+	let module = receiver.recv().unwrap().wrap_err_with(|| {
 		format!(r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer}"."#)
 	})?;
 
 	// Load.
-	let module = load_module(&mut scope, &module_identifier)
-		.wrap_err_with(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
+	let module = load_module(&mut scope, &module).wrap_err(r#"Failed to load the module."#)?;
 
 	Ok(module)
 }

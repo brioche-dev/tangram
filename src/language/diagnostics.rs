@@ -1,7 +1,8 @@
 use super::{service, Location};
 use crate::{
 	error::{return_error, Result},
-	Instance,
+	instance::Instance,
+	module::Module,
 };
 use std::sync::Arc;
 
@@ -22,13 +23,13 @@ pub enum Severity {
 	Hint,
 }
 
-impl Instance {
-	pub async fn diagnostics(self: &Arc<Self>) -> Result<Vec<Diagnostic>> {
+impl Module {
+	pub async fn diagnostics(tg: &Arc<Instance>) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Diagnostics(service::diagnostics::Request {});
 
 		// Handle the language service request.
-		let response = self.handle_language_service_request(request).await?;
+		let response = tg.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Diagnostics(response) = response else { return_error!("Unexpected response type.") };

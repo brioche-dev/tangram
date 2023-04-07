@@ -17,16 +17,16 @@ use crate::error::{return_error, Error, Result};
 )]
 #[buffalo(into = "String", try_from = "String")]
 pub enum System {
-	#[serde(rename = "amd64_linux", alias = "x86_64_linux")]
+	#[serde(rename = "amd64_linux")]
 	Amd64Linux = 0,
 
-	#[serde(rename = "arm64_linux", alias = "aarch64_linux")]
+	#[serde(rename = "arm64_linux")]
 	Arm64Linux = 1,
 
-	#[serde(rename = "amd64_macos", alias = "x86_64_macos")]
+	#[serde(rename = "amd64_macos")]
 	Amd64Macos = 2,
 
-	#[serde(rename = "arm64_macos", alias = "aarch64_macos")]
+	#[serde(rename = "arm64_macos")]
 	Arm64Macos = 3,
 }
 

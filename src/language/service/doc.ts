@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
 import { Location } from "./location.ts";
-import { ModuleIdentifier } from "./syscall.ts";
+import { Module } from "./syscall.ts";
 import { compilerOptions, host } from "./typescript.ts";
 import * as typescript from "./typescript.ts";
 import ts from "typescript";
 
 export type Request = {
-	moduleIdentifier: ModuleIdentifier;
+	module: Module;
 };
 
 export type Response = {
@@ -960,9 +960,7 @@ let convertLocation = (node: ts.Node): Location => {
 	let start = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart());
 	let end = ts.getLineAndCharacterOfPosition(sourceFile, node.getEnd());
 	return {
-		moduleIdentifier: typescript.moduleIdentifierFromFileName(
-			sourceFile.fileName,
-		),
+		module: typescript.moduleFromFileName(sourceFile.fileName),
 		range: {
 			start,
 			end,
@@ -1258,9 +1256,7 @@ let isExported = (node: ts.Node): boolean => {
 export let handle = (request: Request): Response => {
 	// Create the program and type checker.
 	let program = ts.createProgram({
-		rootNames: [
-			typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
-		],
+		rootNames: [typescript.fileNameFromModule(request.module)],
 		options: compilerOptions,
 		host,
 	});
@@ -1268,7 +1264,7 @@ export let handle = (request: Request): Response => {
 
 	// Get the module's exports.
 	let sourceFile = program.getSourceFile(
-		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
+		typescript.fileNameFromModule(request.module),
 	)!;
 	let symbol = typeChecker.getSymbolAtLocation(sourceFile)!;
 	let moduleExports = typeChecker.getExportsOfModule(symbol);

@@ -28,7 +28,7 @@ export let activate = async (context: vscode.ExtensionContext) => {
 	// Start the language client.
 	languageClient.start();
 
-	// Register a command to restart the tangram language server.
+	// Register a command to restart the Tangram language server.
 	let restartCommand = vscode.commands.registerCommand(
 		"tangram.restartLanguageServer",
 		async () => {

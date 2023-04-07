@@ -1,58 +1,60 @@
-use crate::{artifact, placeholder::Placeholder, template::Template};
+pub use self::data::Data;
+use crate::{
+	artifact::Artifact, blob::Blob, path::Path, placeholder::Placeholder, template::Template,
+};
 use std::collections::BTreeMap;
 
-mod serialize;
+mod data;
 
-#[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
-)]
-#[serde(tag = "kind", content = "value")]
+/// A value.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Value {
-	#[buffalo(id = 0)]
-	#[serde(rename = "null")]
+	/// A null value.
 	Null(()),
 
-	#[buffalo(id = 1)]
-	#[serde(rename = "bool")]
+	/// A boolean value.
 	Bool(bool),
 
-	#[buffalo(id = 2)]
-	#[serde(rename = "number")]
+	/// A number value.
 	Number(f64),
 
-	#[buffalo(id = 3)]
-	#[serde(rename = "string")]
+	/// A string value.
 	String(String),
 
-	#[buffalo(id = 4)]
-	#[serde(rename = "artifact")]
-	Artifact(artifact::Hash),
+	/// A bytes value.
+	Bytes(Vec<u8>),
 
-	#[buffalo(id = 5)]
-	#[serde(rename = "placeholder")]
+	/// A path value.
+	Path(Path),
+
+	/// A blob value.
+	Blob(Blob),
+
+	/// An artifact value.
+	Artifact(Artifact),
+
+	/// A placeholder value.
 	Placeholder(Placeholder),
 
-	#[buffalo(id = 6)]
-	#[serde(rename = "template")]
+	/// A template value.
 	Template(Template),
 
-	#[buffalo(id = 7)]
-	#[serde(rename = "array")]
+	/// An array value.
 	Array(Array),
 
-	#[buffalo(id = 8)]
-	#[serde(rename = "map")]
-	Map(Map),
+	/// An object value.
+	Object(Object),
 }
 
 pub type Array = Vec<Value>;
 
-pub type Map = BTreeMap<String, Value>;
+pub type Object = BTreeMap<String, Value>;
 
 impl Value {
 	#[must_use]
 	pub fn as_null(&self) -> Option<&()> {
-		if let Value::Null(v) = self {
+		if let Self::Null(v) = self {
 			Some(v)
 		} else {
 			None
@@ -61,7 +63,7 @@ impl Value {
 
 	#[must_use]
 	pub fn as_bool(&self) -> Option<&bool> {
-		if let Value::Bool(v) = self {
+		if let Self::Bool(v) = self {
 			Some(v)
 		} else {
 			None
@@ -70,7 +72,7 @@ impl Value {
 
 	#[must_use]
 	pub fn as_number(&self) -> Option<&f64> {
-		if let Value::Number(v) = self {
+		if let Self::Number(v) = self {
 			Some(v)
 		} else {
 			None
@@ -79,7 +81,7 @@ impl Value {
 
 	#[must_use]
 	pub fn as_string(&self) -> Option<&str> {
-		if let Value::String(v) = self {
+		if let Self::String(v) = self {
 			Some(v)
 		} else {
 			None
@@ -87,8 +89,8 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn as_artifact(&self) -> Option<&artifact::Hash> {
-		if let Value::Artifact(v) = self {
+	pub fn as_artifact(&self) -> Option<&Artifact> {
+		if let Self::Artifact(v) = self {
 			Some(v)
 		} else {
 			None
@@ -97,7 +99,7 @@ impl Value {
 
 	#[must_use]
 	pub fn as_placeholder(&self) -> Option<&Placeholder> {
-		if let Value::Placeholder(v) = self {
+		if let Self::Placeholder(v) = self {
 			Some(v)
 		} else {
 			None
@@ -106,7 +108,7 @@ impl Value {
 
 	#[must_use]
 	pub fn as_template(&self) -> Option<&Template> {
-		if let Value::Template(v) = self {
+		if let Self::Template(v) = self {
 			Some(v)
 		} else {
 			None
@@ -115,7 +117,7 @@ impl Value {
 
 	#[must_use]
 	pub fn as_array(&self) -> Option<&Array> {
-		if let Value::Array(v) = self {
+		if let Self::Array(v) = self {
 			Some(v)
 		} else {
 			None
@@ -123,8 +125,8 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn as_map(&self) -> Option<&Map> {
-		if let Value::Map(v) = self {
+	pub fn as_object(&self) -> Option<&Object> {
+		if let Self::Object(v) = self {
 			Some(v)
 		} else {
 			None
@@ -135,7 +137,7 @@ impl Value {
 impl Value {
 	#[must_use]
 	pub fn into_null(self) -> Option<()> {
-		if let Value::Null(v) = self {
+		if let Self::Null(v) = self {
 			Some(v)
 		} else {
 			None
@@ -144,7 +146,7 @@ impl Value {
 
 	#[must_use]
 	pub fn into_bool(self) -> Option<bool> {
-		if let Value::Bool(v) = self {
+		if let Self::Bool(v) = self {
 			Some(v)
 		} else {
 			None
@@ -153,7 +155,7 @@ impl Value {
 
 	#[must_use]
 	pub fn into_number(self) -> Option<f64> {
-		if let Value::Number(v) = self {
+		if let Self::Number(v) = self {
 			Some(v)
 		} else {
 			None
@@ -162,7 +164,7 @@ impl Value {
 
 	#[must_use]
 	pub fn into_string(self) -> Option<String> {
-		if let Value::String(v) = self {
+		if let Self::String(v) = self {
 			Some(v)
 		} else {
 			None
@@ -170,8 +172,8 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn into_artifact(self) -> Option<artifact::Hash> {
-		if let Value::Artifact(v) = self {
+	pub fn into_artifact(self) -> Option<Artifact> {
+		if let Self::Artifact(v) = self {
 			Some(v)
 		} else {
 			None
@@ -180,7 +182,7 @@ impl Value {
 
 	#[must_use]
 	pub fn into_placeholder(self) -> Option<Placeholder> {
-		if let Value::Placeholder(v) = self {
+		if let Self::Placeholder(v) = self {
 			Some(v)
 		} else {
 			None
@@ -189,7 +191,7 @@ impl Value {
 
 	#[must_use]
 	pub fn into_template(self) -> Option<Template> {
-		if let Value::Template(v) = self {
+		if let Self::Template(v) = self {
 			Some(v)
 		} else {
 			None
@@ -198,7 +200,7 @@ impl Value {
 
 	#[must_use]
 	pub fn into_array(self) -> Option<Array> {
-		if let Value::Array(v) = self {
+		if let Self::Array(v) = self {
 			Some(v)
 		} else {
 			None
@@ -206,8 +208,8 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn into_map(self) -> Option<Map> {
-		if let Value::Map(v) = self {
+	pub fn into_object(self) -> Option<Object> {
+		if let Self::Object(v) = self {
 			Some(v)
 		} else {
 			None

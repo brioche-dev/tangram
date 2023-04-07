@@ -2,6 +2,7 @@ use crate::{error::Result, Cli};
 
 /// Search for a package.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	pub query: String,
 }

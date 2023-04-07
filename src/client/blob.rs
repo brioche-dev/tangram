@@ -4,7 +4,6 @@ use crate::{
 	error::{Error, Result, WrapErr},
 };
 use futures::TryStreamExt;
-use std::{pin::Pin, sync::Arc};
 use tokio::io::AsyncRead;
 use tokio_util::io::StreamReader;
 
@@ -13,12 +12,6 @@ impl Client {
 	where
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
-		// Get a socket permit.
-		let _permit = Arc::clone(&self.socket_semaphore)
-			.acquire_owned()
-			.await
-			.map_err(Error::other)?;
-
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");
 		let mut url = self.url.clone();
@@ -50,12 +43,6 @@ impl Client {
 
 impl Client {
 	pub async fn get_blob(&self, blob_hash: blob::Hash) -> Result<impl AsyncRead> {
-		// Get a socket permit.
-		let permit = Arc::clone(&self.socket_semaphore)
-			.acquire_owned()
-			.await
-			.map_err(Error::other)?;
-
 		// Build the URL.
 		let path = format!("/v1/blobs/{blob_hash}");
 		let mut url = self.url.clone();
@@ -74,32 +61,8 @@ impl Client {
 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
 
 		// Create an async reader from the body.
-		let body = StreamReader::new(body);
+		let reader = StreamReader::new(body);
 
-		Ok(AsyncReaderWithPermit {
-			reader: body,
-			permit,
-		})
-	}
-}
-
-pub struct AsyncReaderWithPermit<R>
-where
-	R: AsyncRead,
-{
-	pub reader: R,
-	pub permit: tokio::sync::OwnedSemaphorePermit,
-}
-
-impl<R> AsyncRead for AsyncReaderWithPermit<R>
-where
-	R: AsyncRead + Unpin,
-{
-	fn poll_read(
-		mut self: std::pin::Pin<&mut Self>,
-		cx: &mut std::task::Context<'_>,
-		buf: &mut tokio::io::ReadBuf<'_>,
-	) -> std::task::Poll<std::io::Result<()>> {
-		Pin::new(&mut self.reader).poll_read(cx, buf)
+		Ok(reader)
 	}
 }

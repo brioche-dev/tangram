@@ -1,4 +1,4 @@
-use crate::{language::Position, module};
+use crate::{language::Position, module::Module};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -36,13 +36,11 @@ pub struct Location {
 
 /// A source.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "kind", content = "value")]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Source {
-	#[serde(rename = "global")]
 	Global(Option<String>),
 
-	#[serde(rename = "module")]
-	Module(module::Identifier),
+	Module(Module),
 }
 
 impl std::fmt::Display for Error {
@@ -98,8 +96,8 @@ impl std::fmt::Display for Source {
 				write!(f, "global:{path}")?;
 			},
 
-			Source::Module(module_identifier) => {
-				write!(f, "{module_identifier}")?;
+			Source::Module(module) => {
+				write!(f, "{module}")?;
 			},
 		}
 		Ok(())

@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{error::Result, module};
+use crate::{error::Result, module::Module};
 use lsp_types as lsp;
 use std::collections::HashMap;
 use url::Url;
@@ -7,17 +7,16 @@ use url::Url;
 impl Server {
 	#[allow(clippy::similar_names)]
 	pub async fn rename(&self, params: lsp::RenameParams) -> Result<Option<lsp::WorkspaceEdit>> {
-		// Get the module identifier.
-		let module_identifier =
-			module::Identifier::from_lsp_uri(params.text_document_position.text_document.uri)
-				.await?;
+		// Get the module.
+		let module =
+			Module::from_lsp(&self.tg, params.text_document_position.text_document.uri).await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
 		let new_text = &params.new_name;
 
 		// Get the references.
-		let locations = self.tg.rename(module_identifier, position.into()).await?;
+		let locations = module.rename(&self.tg, position.into()).await?;
 
 		// If there are no references, then return None.
 		let Some(locations) = locations else {
@@ -28,14 +27,10 @@ impl Server {
 		let mut document_changes = HashMap::<Url, lsp::TextDocumentEdit>::new();
 		for location in locations {
 			// Get the version.
-			let version = self
-				.tg
-				.get_document_or_module_version(&location.module_identifier)
-				.await
-				.ok();
+			let version = location.module.version(&self.tg).await?;
 
 			// Create the URI.
-			let uri = location.module_identifier.to_lsp_uri();
+			let uri = location.module.to_lsp();
 
 			if document_changes.get_mut(&uri).is_none() {
 				document_changes.insert(
@@ -43,7 +38,7 @@ impl Server {
 					lsp::TextDocumentEdit {
 						text_document: lsp::OptionalVersionedTextDocumentIdentifier {
 							uri: uri.clone(),
-							version,
+							version: Some(version),
 						},
 						edits: Vec::<lsp::OneOf<lsp::TextEdit, lsp::AnnotatedTextEdit>>::new(),
 					},

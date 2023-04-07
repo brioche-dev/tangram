@@ -3,11 +3,12 @@ use tangram::package;
 
 /// Build a package and run an executable from its output.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 #[command(trailing_var_arg = true)]
 pub struct Args {
-	/// The export to build.
+	/// The name of the function to call.
 	#[arg(short, long, default_value = "default")]
-	pub export: String,
+	pub function: String,
 
 	#[command(flatten)]
 	pub package_args: super::PackageArgs,
@@ -28,7 +29,7 @@ impl Cli {
 			package: args.package,
 			package_args: args.package_args,
 			run_args: args.run_args,
-			export: args.export,
+			function: args.function,
 			trailing_args: args.trailing_args,
 		};
 

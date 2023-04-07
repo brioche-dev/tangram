@@ -43,7 +43,7 @@ type CallSite = {
 	getColumnNumber(): number | undefined;
 
 	/** If this function was created using a call to eval returns a string representing the location where eval was called. **/
-	getEvalOrigin(): any | undefined;
+	getEvalOrigin(): unknown | undefined;
 
 	/** does this call take place in code defined by a call to eval? **/
 	isEval(): boolean;

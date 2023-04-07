@@ -1,5 +1,5 @@
 import * as syscall from "./syscall.ts";
-import { ModuleIdentifier } from "./syscall.ts";
+import { Module as Module } from "./syscall.ts";
 import ts from "typescript";
 
 // Create the TypeScript compiler options.
@@ -31,7 +31,7 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	},
 
 	getDefaultLibFileName: () => {
-		return "/lib/tangram.d.ts";
+		return "/library/tangram.d.ts";
 	},
 
 	getNewLine: () => {
@@ -39,13 +39,13 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	},
 
 	getScriptFileNames: () => {
-		return syscall.getDocuments().map(fileNameFromModuleIdentifier);
+		return syscall.documents().map(fileNameFromModule);
 	},
 
 	getScriptSnapshot: (fileName) => {
 		let text;
 		try {
-			text = syscall.loadModule(moduleIdentifierFromFileName(fileName));
+			text = syscall.module_.load(moduleFromFileName(fileName));
 		} catch {
 			return undefined;
 		}
@@ -53,13 +53,13 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	},
 
 	getScriptVersion: (fileName) => {
-		return syscall.getModuleVersion(moduleIdentifierFromFileName(fileName));
+		return syscall.module_.version(moduleFromFileName(fileName));
 	},
 
 	getSourceFile: (fileName, languageVersion) => {
 		let text;
 		try {
-			text = syscall.loadModule(moduleIdentifierFromFileName(fileName));
+			text = syscall.module_.load(moduleFromFileName(fileName));
 		} catch {
 			return undefined;
 		}
@@ -79,11 +79,8 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 		return specifiers.map((specifier) => {
 			let resolvedFileName;
 			try {
-				resolvedFileName = fileNameFromModuleIdentifier(
-					syscall.resolveModule(
-						specifier,
-						moduleIdentifierFromFileName(referrer),
-					),
+				resolvedFileName = fileNameFromModule(
+					syscall.module_.resolve(moduleFromFileName(referrer), specifier),
 				);
 			} catch {
 				return undefined;
@@ -104,31 +101,25 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 // Create the TypeScript language service.
 export let languageService = ts.createLanguageService(host);
 
-/** Convert a module identifier to a TypeScript file name. */
-export let fileNameFromModuleIdentifier = (
-	moduleIdentifier: ModuleIdentifier,
-): string => {
-	if (moduleIdentifier.source.kind === "lib") {
-		return `/lib/${moduleIdentifier.path}`;
+/** Convert a module to a TypeScript file name. */
+export let fileNameFromModule = (module_: Module): string => {
+	if (module_.kind === "library") {
+		return `/library/${module_.value.modulePath}`;
 	} else {
-		let data = syscall.encodeHex(
-			syscall.encodeUtf8(JSON.stringify(moduleIdentifier)),
-		);
+		let data = syscall.hex.encode(syscall.utf8.encode(JSON.stringify(module_)));
 		return `/${data}.ts`;
 	}
 };
 
-/** Convert a TypeScript file name to a module identifier. */
-export let moduleIdentifierFromFileName = (
-	fileName: string,
-): ModuleIdentifier => {
-	let moduleIdentifier;
-	if (fileName.startsWith("/lib/")) {
-		let path = fileName.slice(5);
-		moduleIdentifier = { source: { kind: "lib" as const }, path };
+/** Convert a TypeScript file name to a module. */
+export let moduleFromFileName = (fileName: string): Module => {
+	let module_: Module;
+	if (fileName.startsWith("/library/")) {
+		let path = fileName.slice(9);
+		module_ = { kind: "library", value: { modulePath: path } };
 	} else {
 		let data = fileName.slice(1, -3);
-		moduleIdentifier = JSON.parse(syscall.decodeUtf8(syscall.decodeHex(data)));
+		module_ = JSON.parse(syscall.utf8.decode(syscall.hex.decode(data)));
 	}
-	return moduleIdentifier;
+	return module_;
 };

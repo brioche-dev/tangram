@@ -1,12 +1,12 @@
 import { Location } from "./location.ts";
 import { Position } from "./position.ts";
-import { ModuleIdentifier } from "./syscall.ts";
+import { Module } from "./syscall.ts";
 import * as typescript from "./typescript.ts";
 import { nullish } from "./util.ts";
 import ts from "typescript";
 
 export type Request = {
-	moduleIdentifier: ModuleIdentifier;
+	module: Module;
 	position: Position;
 };
 
@@ -17,7 +17,7 @@ export type Response = {
 export let handle = (request: Request): Response => {
 	// Get the source file and position.
 	let sourceFile = typescript.host.getSourceFile(
-		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
+		typescript.fileNameFromModule(request.module),
 		ts.ScriptTarget.ESNext,
 	);
 	if (sourceFile === undefined) {
@@ -31,7 +31,7 @@ export let handle = (request: Request): Response => {
 
 	// Get the rename locations.
 	let renameLocations = typescript.languageService.findRenameLocations(
-		typescript.fileNameFromModuleIdentifier(request.moduleIdentifier),
+		typescript.fileNameFromModule(request.module),
 		position,
 		false,
 		false,
@@ -56,9 +56,7 @@ export let handle = (request: Request): Response => {
 			renameLocation.textSpan.start + renameLocation.textSpan.length,
 		);
 		let location = {
-			moduleIdentifier: typescript.moduleIdentifierFromFileName(
-				renameLocation.fileName,
-			),
+			module: typescript.moduleFromFileName(renameLocation.fileName),
 			range: { start, end },
 		};
 		return location;

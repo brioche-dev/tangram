@@ -3,7 +3,7 @@ use crate::{language::Diagnostic, module};
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
-	pub module_identifiers: Vec<module::Identifier>,
+	pub modules: Vec<module::Module>,
 }
 
 #[derive(Debug, serde::Deserialize)]

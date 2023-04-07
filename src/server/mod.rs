@@ -1,9 +1,10 @@
 use crate::{
 	error::{Error, Result},
+	instance::Instance,
 	util::http::{full, Incoming, Outgoing},
-	Instance,
 };
 use futures::FutureExt;
+use itertools::Itertools;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
 mod artifact;
@@ -69,7 +70,7 @@ impl Server {
 	) -> Result<Option<http::Response<Outgoing>>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
-		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
+		let path_components = path.split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
 			(http::Method::GET, ["v1", "blobs", _]) => {
 				Some(self.handle_get_blob_request(request).boxed())
@@ -80,7 +81,7 @@ impl Server {
 			(http::Method::GET, ["v1", "artifacts", _]) => {
 				Some(self.handle_get_artifact_request(request).boxed())
 			},
-			(http::Method::POST, ["v1", "artifacts", ""]) => {
+			(http::Method::POST, ["v1", "artifacts", _]) => {
 				Some(self.handle_add_artifact_request(request).boxed())
 			},
 			(_, _) => None,

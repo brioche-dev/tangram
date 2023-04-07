@@ -1,6 +1,6 @@
 use crate::{
 	error::{Result, WrapErr},
-	Instance,
+	module::Module,
 };
 
 #[derive(Debug, serde::Deserialize)]
@@ -10,9 +10,9 @@ pub struct Output {
 	pub source_map: String,
 }
 
-impl Instance {
+impl Module {
 	#[allow(clippy::unused_async)]
-	pub async fn transpile(&self, text: String) -> Result<Output> {
+	pub async fn transpile(text: String) -> Result<Output> {
 		// Parse the code.
 		let parsed_source = deno_ast::parse_module(deno_ast::ParseParams {
 			specifier: "module".to_owned(),

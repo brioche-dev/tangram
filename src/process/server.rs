@@ -1,14 +1,16 @@
 use crate::{
-	artifact,
+	artifact::Artifact,
 	error::{Error, Result, WrapErr},
+	instance::Instance,
+	template::Template,
 	util::{
 		fs,
 		http::{full, Incoming, Outgoing},
 	},
-	Instance,
 };
 use futures::FutureExt;
 use http_body_util::BodyExt;
+use itertools::Itertools;
 use std::{convert::Infallible, sync::Weak};
 
 #[derive(Clone)]
@@ -71,7 +73,7 @@ impl Server {
 	) -> Result<Option<http::Response<Outgoing>>> {
 		let method = request.method().clone();
 		let path = request.uri().path().to_owned();
-		let path_components = path.split('/').skip(1).collect::<Vec<_>>();
+		let path_components = path.split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
 			(http::Method::POST, ["v1", "checkin"]) => {
 				Some(self.handle_checkin_request(request).boxed())
@@ -96,6 +98,8 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
+		let tg = self.tg.upgrade().unwrap();
+
 		// Read the request body.
 		let body = request
 			.into_body()
@@ -110,26 +114,19 @@ impl Server {
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the request body.")?;
 
-		// Perform the check in.
-		let hash = self
-			.tg
-			.upgrade()
-			.unwrap()
-			.check_in(&path)
+		// Check in the artifact.
+		let artifact = Artifact::check_in(&tg, &path)
 			.await
 			.wrap_err("Failed to check in the path.")?;
 
-		// Make sure that the checked-in artifact is available to the process.
-		let _ = self
-			.tg
-			.upgrade()
-			.unwrap()
-			.check_out_internal(hash)
+		// Perform an internal checkout of the artifact.
+		artifact
+			.check_out_internal(&tg)
 			.await
 			.expect("Failed to checkout artifact after checkin.");
 
 		// Create the response.
-		let body = serde_json::to_vec(&hash)
+		let body = serde_json::to_vec(&artifact.hash())
 			.map_err(Error::other)
 			.wrap_err("Failed to serialize the response body.")?;
 
@@ -145,6 +142,8 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
+		let tg = self.tg.upgrade().unwrap();
+
 		// Read the request body.
 		let body = request
 			.into_body()
@@ -155,18 +154,18 @@ impl Server {
 			.to_bytes();
 
 		// Deserialize the hash.
-		let hash: artifact::Hash = serde_json::from_slice(&body)
+		let hash = serde_json::from_slice(&body)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the request body.")?;
 
-		// Perform an external checkout.
-		let path = self
-			.tg
-			.upgrade()
-			.unwrap()
-			.check_out_internal(hash)
+		// Get the artifact.
+		let artifact = Artifact::get(&tg, hash).await?;
+
+		// Perform the internal checkout.
+		let path = artifact
+			.check_out_internal(&tg)
 			.await
-			.wrap_err("Failed to check in the path.")?;
+			.wrap_err("Failed to check out the artifact.")?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&path)
@@ -184,6 +183,8 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
+		let tg = self.tg.upgrade().unwrap();
+
 		// Read the request body.
 		let body = request
 			.into_body()
@@ -199,10 +200,8 @@ impl Server {
 			.wrap_err("Failed to deserialize the request body.")?;
 
 		// Unrender the string.
-		let tg = self.tg.upgrade().unwrap();
 		let artifacts_path = tg.artifacts_path();
-		let template = tg
-			.unrender(&artifacts_path, &string)
+		let template = Template::unrender(&tg, &artifacts_path, &string)
 			.await
 			.wrap_err("Failed to check in the path.")?;
 

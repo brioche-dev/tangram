@@ -1,10 +1,42 @@
-pub use self::{identifier::Identifier, instance::Instance, specifier::Specifier};
+pub use self::{instance::Instance, metadata::Metadata, specifier::Specifier};
+use crate::{artifact::Artifact, error::Result, util::fs};
+use std::sync::Arc;
 
+/// The file name of the root module in a package.
+pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
+
+mod analyze;
 pub mod checkin;
 pub mod dependency;
-pub mod identifier;
 pub mod instance;
-mod lockfile;
-mod resolve;
+mod instantiate;
+pub mod metadata;
 pub mod specifier;
-pub mod tracker;
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Package {
+	artifact: Artifact,
+	path: Option<fs::PathBuf>,
+}
+
+impl Package {
+	#[must_use]
+	pub fn new(artifact: Artifact, path: Option<fs::PathBuf>) -> Self {
+		Self { artifact, path }
+	}
+
+	pub async fn with_specifier(
+		tg: &Arc<crate::instance::Instance>,
+		specifier: Specifier,
+	) -> Result<Self> {
+		match specifier {
+			Specifier::Path(path) => Ok(Self::check_in(tg, &path).await?),
+			Specifier::Registry(_) => todo!(),
+		}
+	}
+
+	#[must_use]
+	pub fn artifact(&self) -> &Artifact {
+		&self.artifact
+	}
+}

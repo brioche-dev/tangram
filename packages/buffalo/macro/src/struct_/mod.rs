@@ -13,4 +13,5 @@ pub struct Struct<'a> {
 pub struct Field<'a> {
 	pub id: Option<u8>,
 	pub ident: Option<&'a syn::Ident>,
+	pub skip: bool,
 }

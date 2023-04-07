@@ -1,48 +1,54 @@
 import { Artifact } from "./artifact.ts";
+import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Path } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import { Template } from "./template.ts";
 import { Value, nullish } from "./value.ts";
 
-export type Unresolved<T extends Value> = T extends
-	| nullish
-	| boolean
-	| number
-	| string
-	| Artifact
-	| Placeholder
-	| Template
-	? MaybePromise<T>
-	: T extends Array<infer U extends Value>
-	? MaybePromise<Array<Unresolved<U>>>
-	: T extends { [key: string]: Value }
-	? MaybePromise<{ [K in keyof T]: Unresolved<T[K]> }>
-	: never;
+export type Unresolved<T extends Value> = MaybePromise<
+	T extends
+		| nullish
+		| boolean
+		| number
+		| string
+		| Uint8Array
+		| Path
+		| Blob
+		| Artifact
+		| Placeholder
+		| Template
+		? T
+		: T extends Array<infer U extends Value>
+		? Array<Unresolved<U>>
+		: T extends { [key: string]: Value }
+		? { [K in keyof T]: Unresolved<T[K]> }
+		: never
+>;
 
 export type Resolved<T extends Unresolved<Value>> = T extends
 	| nullish
 	| boolean
 	| number
 	| string
+	| Uint8Array
+	| Path
+	| Blob
 	| Artifact
 	| Placeholder
 	| Template
 	? T
+	: T extends Promise<infer U extends Unresolved<Value>>
+	? Resolved<U>
 	: T extends Array<infer U extends Unresolved<Value>>
 	? Array<Resolved<U>>
 	: T extends { [key: string]: Unresolved<Value> }
 	? { [K in keyof T]: Resolved<T[K]> }
-	: T extends Promise<infer U extends Unresolved<Value>>
-	? Resolved<U>
 	: never;
 
-export type MaybeThunk<T> = T | (() => T);
-
-export type MaybePromise<T> = T | PromiseLike<T>;
-
-export type MaybeArray<T> = T | Array<T>;
+export type MaybePromise<T> = T | Promise<T>;
 
 export let resolve = async <T extends Unresolved<Value>>(
 	value: T,
@@ -54,6 +60,9 @@ export let resolve = async <T extends Unresolved<Value>>(
 		typeof value === "boolean" ||
 		typeof value === "number" ||
 		typeof value === "string" ||
+		value instanceof Uint8Array ||
+		value instanceof Path ||
+		value instanceof Blob ||
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||

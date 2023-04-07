@@ -1,17 +1,18 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	Instance,
+	instance::Instance,
+	module::Module,
 };
 use std::sync::Arc;
 
-impl Instance {
-	pub async fn format(self: &Arc<Self>, text: String) -> Result<String> {
+impl Module {
+	pub async fn format(tg: &Arc<Instance>, text: String) -> Result<String> {
 		// Create the language service request.
 		let request = service::Request::Format(service::format::Request { text });
 
 		// Handle the language service request.
-		let response = self.handle_language_service_request(request).await?;
+		let response = tg.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Format(response) = response else {
@@ -24,7 +25,8 @@ impl Instance {
 
 #[cfg(test)]
 mod tests {
-	use crate::{Instance, Options};
+	use crate::instance::{Instance, Options};
+	use crate::module::Module;
 	use once_cell::sync::Lazy;
 	use std::sync::Arc;
 	use tokio::sync::Semaphore;
@@ -42,7 +44,9 @@ mod tests {
 			let tg = Arc::new(Instance::new(path, Options::default()).await.unwrap());
 
 			// Test.
-			let left = tg.format(indoc::indoc!($before).to_owned()).await.unwrap();
+			let left = Module::format(&tg, indoc::indoc!($before).to_owned())
+				.await
+				.unwrap();
 			let right = indoc::indoc!($after);
 			pretty_assertions::assert_eq!(left, right);
 		};

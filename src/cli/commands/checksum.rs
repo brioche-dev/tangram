@@ -6,6 +6,7 @@ use tangram::checksum;
 
 /// Compute a checksum.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	/// The checksum algorithm to use.
 	#[arg(short, long)]

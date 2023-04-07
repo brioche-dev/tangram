@@ -1,5 +1,4 @@
-use crate::hash;
-use derive_more::{Deref, Display, FromStr};
+use derive_more::{Deref, Display, From, FromStr, Into};
 
 #[derive(
 	Clone,
@@ -9,30 +8,17 @@ use derive_more::{Deref, Display, FromStr};
 	Deref,
 	Display,
 	Eq,
+	From,
 	FromStr,
 	Hash,
+	Into,
 	Ord,
 	PartialEq,
 	PartialOrd,
-	serde::Deserialize,
+	buffalo::Serialize,
+	buffalo::Deserialize,
 	serde::Serialize,
+	serde::Deserialize,
 )]
-pub struct Hash(pub hash::Hash);
-
-impl buffalo::Serialize for Hash {
-	fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
-	where
-		W: std::io::Write,
-	{
-		serializer.serialize(&self.0)
-	}
-}
-
-impl buffalo::Deserialize for Hash {
-	fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
-	where
-		R: std::io::Read,
-	{
-		Ok(Self(deserializer.deserialize()?))
-	}
-}
+#[buffalo(into = "crate::hash::Hash", try_from = "crate::hash::Hash")]
+pub struct Hash(pub crate::hash::Hash);

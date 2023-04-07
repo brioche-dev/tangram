@@ -1,40 +1,51 @@
-import {
-	Artifact,
-	ArtifactHash,
-	addArtifact,
-	getArtifact,
-	isArtifact,
-} from "./artifact.ts";
-import { BlobLike, isBlobLike } from "./blob.ts";
-import { file } from "./file.ts";
-import { PathLike, path } from "./path.ts";
-import { MaybePromise } from "./resolve.ts";
+import { Artifact } from "./artifact.ts";
+import { assert } from "./assert.ts";
+import { Blob } from "./blob.ts";
+import { File, file } from "./file.ts";
+import { Path, path } from "./path.ts";
+import { Unresolved, resolve } from "./resolve.ts";
+import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
-import { assert } from "./util.ts";
-import { isNullish, nullish } from "./value.ts";
+import { nullish } from "./value.ts";
 
-type DirectoryArg = MaybePromise<nullish | Directory | DirectoryObject>;
+export namespace Directory {
+	export type Arg = nullish | Directory | ArgObject;
 
-type DirectoryObject = {
-	[name: string]: MaybePromise<nullish | BlobLike | Artifact | DirectoryObject>;
-};
+	export type ArgObject = { [name: string]: ArgObjectValue };
+
+	export type ArgObjectValue = nullish | Blob.Arg | Artifact | ArgObject;
+
+	export type ConstructorArg = {
+		hash: Artifact.Hash;
+		entries: Map<string, Artifact.Hash>;
+	};
+}
 
 export let directory = async (
-	...args: Array<DirectoryArg>
+	...args: Array<Unresolved<Directory.Arg>>
 ): Promise<Directory> => {
-	let entries: Map<string, ArtifactHash> = new Map();
+	// Create the entries.
+	let entries: Map<string, Artifact> = new Map();
 
 	// Apply each arg.
-	for (let arg of args) {
-		arg = await arg;
-		if (isNullish(arg)) {
+	for (let arg of await Promise.all(args.map(resolve))) {
+		if (nullish.isNullish(arg)) {
 			// If the arg is null, then continue.
 		} else if (arg instanceof Directory) {
 			// If the arg is a directory, then apply each entry.
-			for (let [name, hash] of arg) {
-				entries.set(name, hash);
+			for (let [name, entry] of await arg.entries()) {
+				// Get an existing entry.
+				let existingEntry = entries.get(name);
+
+				// Merge the existing entry with the entry if they are both directories.
+				if (existingEntry instanceof Directory && entry instanceof Directory) {
+					entry = await directory(existingEntry, entry);
+				}
+
+				// Set the entry.
+				entries.set(name, entry);
 			}
-		} else {
+		} else if (typeof arg === "object") {
 			// If the arg is an object, then apply each entry.
 			for (let [key, value] of Object.entries(arg)) {
 				// Separate the first path component from the trailing path components.
@@ -49,88 +60,95 @@ export let directory = async (
 				}
 				let name = firstComponent.value;
 
+				// Get an existing entry.
+				let existingEntry = entries.get(name);
+
+				// Remove the entry if it is not a directory.
+				if (!(existingEntry instanceof Directory)) {
+					existingEntry = undefined;
+				}
+
 				if (trailingComponents.length > 0) {
 					// If there are trailing path components, then recurse.
 					let trailingPath = path(trailingComponents).toString();
 
-					// Get an existing directory.
-					let entryHash = entries.get(name);
-					let entry;
-					if (entryHash !== undefined) {
-						// Get the entry artifact.
-						entry = await getArtifact(entryHash);
-
-						// Ensure the entry is a directory.
-						if (!(entry instanceof Directory)) {
-							entry = undefined;
-						}
-					}
-
 					// Merge the entry with the trailing path.
-					let child = await directory(entry, {
+					let newEntry = await directory(existingEntry, {
 						[trailingPath]: value,
 					});
 
-					entries.set(name, await addArtifact(child));
+					// Add the entry.
+					entries.set(name, newEntry);
 				} else {
 					// If there are no trailing path components, then create the artifact specified by the value.
-					value = await value;
-					if (isNullish(value)) {
+					if (nullish.isNullish(value)) {
 						entries.delete(name);
-					} else if (isBlobLike(value)) {
-						entries.set(name, await addArtifact(await file(value)));
-					} else if (isArtifact(value)) {
-						entries.set(name, await addArtifact(value));
+					} else if (Blob.isBlobArg(value)) {
+						let newEntry = await file(value);
+						entries.set(name, newEntry);
+					} else if (File.isFile(value) || Symlink.isSymlink(value)) {
+						entries.set(name, value);
 					} else {
-						entries.set(name, await addArtifact(await directory(value)));
+						let newEntry = await directory(existingEntry, value);
+						entries.set(name, newEntry);
 					}
 				}
 			}
 		}
 	}
 
-	return new Directory(entries);
-};
-
-export let isDirectory = (value: unknown): value is Directory => {
-	return value instanceof Directory;
+	// Create the directory.
+	return Directory.fromSyscall(
+		await syscall.directory.new(
+			new Map(
+				Array.from(entries, ([name, entry]) => [
+					name,
+					Artifact.toSyscall(entry),
+				]),
+			),
+		),
+	);
 };
 
 export class Directory {
-	#entries: Map<string, ArtifactHash>;
+	#hash: Artifact.Hash;
+	#entries: Map<string, Artifact.Hash>;
 
-	constructor(entries: Map<string, ArtifactHash>) {
-		this.#entries = entries;
+	constructor(arg: Directory.ConstructorArg) {
+		this.#hash = arg.hash;
+		this.#entries = arg.entries;
 	}
 
-	async serialize(): Promise<syscall.Directory> {
-		let entries = Object.fromEntries(Array.from(this.#entries.entries()));
+	static isDirectory(value: unknown): value is Directory {
+		return value instanceof Directory;
+	}
+
+	toSyscall(): syscall.Directory {
 		return {
-			entries,
+			hash: this.#hash,
+			entries: Object.fromEntries(this.#entries),
 		};
 	}
 
-	static async deserialize(directory: syscall.Directory): Promise<Directory> {
+	static fromSyscall(directory: syscall.Directory): Directory {
+		let hash = directory.hash;
 		let entries = new Map(Object.entries(directory.entries));
-		return new Directory(entries);
+		return new Directory({ hash, entries });
 	}
 
-	async hash(): Promise<ArtifactHash> {
-		return await addArtifact(this);
+	hash(): Artifact.Hash {
+		return this.#hash;
 	}
 
-	async get(pathLike: PathLike): Promise<Artifact> {
-		let artifact = await this.tryGet(pathLike);
-		assert(
-			artifact !== undefined,
-			`Failed to get the directory entry "${pathLike}".`,
-		);
+	async get(arg: Path.Arg): Promise<Artifact> {
+		let artifact = await this.tryGet(arg);
+		assert(artifact, `Failed to get the directory entry "${arg}".`);
 		return artifact;
 	}
 
-	async tryGet(pathLike: PathLike): Promise<Artifact | undefined> {
+	async tryGet(arg: Path.Arg): Promise<Artifact | undefined> {
 		let artifact: Artifact = this;
-		for (let component of path(pathLike).components()) {
+		for (let component of path(arg).components()) {
 			assert(component.kind === "normal");
 			if (!(artifact instanceof Directory)) {
 				return undefined;
@@ -139,7 +157,7 @@ export class Directory {
 			if (!hash) {
 				return undefined;
 			}
-			artifact = await getArtifact(hash);
+			artifact = await Artifact.get(hash);
 		}
 		return artifact;
 	}
@@ -152,7 +170,26 @@ export class Directory {
 		return entries;
 	}
 
-	*[Symbol.iterator](): Iterator<[string, ArtifactHash]> {
+	async bundle(): Promise<Directory> {
+		let bundledArtifact = Artifact.fromSyscall(
+			await syscall.artifact.bundle(Artifact.toSyscall(this)),
+		);
+		assert(Directory.isDirectory(bundledArtifact));
+		return bundledArtifact;
+	}
+
+	async *walk(): AsyncIterableIterator<[Path, Artifact]> {
+		for await (let [name, artifact] of this) {
+			yield [path(name), artifact];
+			if (Directory.isDirectory(artifact)) {
+				for await (let [entryName, entryArtifact] of artifact.walk()) {
+					yield [path(name).join(entryName), entryArtifact];
+				}
+			}
+		}
+	}
+
+	*[Symbol.iterator](): Iterator<[string, Artifact.Hash]> {
 		for (let [name, entry] of this.#entries) {
 			yield [name, entry];
 		}

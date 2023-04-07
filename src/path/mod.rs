@@ -1,8 +1,5 @@
 pub use self::component::Component;
-use crate::{
-	error::{Error, Result},
-	util::fs,
-};
+use crate::util::fs;
 use itertools::Itertools;
 
 mod component;
@@ -18,34 +15,41 @@ mod diff;
 	Ord,
 	PartialEq,
 	PartialOrd,
-	serde::Serialize,
-	serde::Deserialize,
 	buffalo::Serialize,
 	buffalo::Deserialize,
+	serde::Serialize,
+	serde::Deserialize,
 )]
-#[serde(into = "String", try_from = "String")]
 #[buffalo(into = "String", try_from = "String")]
+#[serde(into = "String", try_from = "String")]
 pub struct Path {
-	pub components: Vec<Component>,
+	components: Vec<Component>,
 }
 
 impl Path {
 	#[must_use]
-	pub fn new() -> Path {
-		Path {
-			components: Vec::new(),
-		}
+	pub fn empty() -> Path {
+		Path { components: vec![] }
+	}
+
+	pub fn new(path: impl Into<Self>) -> Self {
+		path.into()
+	}
+
+	#[must_use]
+	pub fn components(&self) -> &[Component] {
+		&self.components
 	}
 
 	pub fn push(&mut self, component: Component) {
 		match component {
-			Component::ParentDir => {
+			Component::Parent => {
 				if self
 					.components
 					.last()
-					.map_or(true, |component| matches!(component, Component::ParentDir))
+					.map_or(true, |component| matches!(component, Component::Parent))
 				{
-					self.components.push(Component::ParentDir);
+					self.components.push(Component::Parent);
 				} else {
 					self.components.pop();
 				}
@@ -57,11 +61,23 @@ impl Path {
 	}
 
 	#[must_use]
-	pub fn join(mut self, other: impl IntoIterator<Item = Component>) -> Self {
-		for component in other {
+	pub fn join(mut self, other: impl Into<Self>) -> Self {
+		for component in other.into() {
 			self.push(component);
 		}
 		self
+	}
+
+	#[must_use]
+	pub fn is_empty(&self) -> bool {
+		self.components.is_empty()
+	}
+
+	#[must_use]
+	pub fn has_parent_components(&self) -> bool {
+		self.components()
+			.first()
+			.map_or(false, component::Component::is_parent)
 	}
 
 	#[must_use]
@@ -85,17 +101,15 @@ impl std::fmt::Display for Path {
 	}
 }
 
-impl std::str::FromStr for Path {
-	type Err = Error;
-
-	fn from_str(string: &str) -> Result<Self, Self::Err> {
+impl From<&str> for Path {
+	fn from(value: &str) -> Self {
 		// Create the path.
 		let mut path = Path {
 			components: Vec::new(),
 		};
 
 		// Split the string by the path separator.
-		let components = string.split('/');
+		let components = value.split('/');
 
 		// Push each component.
 		for string in components {
@@ -104,14 +118,14 @@ impl std::str::FromStr for Path {
 				"" | "." => {},
 
 				// Handle parent dir components.
-				".." => path.push(Component::ParentDir),
+				".." => path.push(Component::Parent),
 
 				// Handle normal components.
 				string => path.push(Component::Normal(string.to_owned())),
 			}
 		}
 
-		Ok(path)
+		path
 	}
 }
 
@@ -121,17 +135,15 @@ impl From<Path> for String {
 	}
 }
 
-impl TryFrom<String> for Path {
-	type Error = Error;
-
-	fn try_from(value: String) -> Result<Self, Self::Error> {
-		value.parse()
+impl From<String> for Path {
+	fn from(value: String) -> Self {
+		value.as_str().into()
 	}
 }
 
-impl From<Path> for fs::PathBuf {
-	fn from(value: Path) -> Self {
-		value.to_string().into()
+impl From<&String> for Path {
+	fn from(value: &String) -> Self {
+		value.as_str().into()
 	}
 }
 
@@ -146,10 +158,24 @@ impl IntoIterator for Path {
 
 impl FromIterator<Component> for Path {
 	fn from_iter<T: IntoIterator<Item = Component>>(iter: T) -> Self {
-		let mut path = Path::new();
+		let mut path = Path::empty();
 		for component in iter {
 			path.push(component);
 		}
 		path
+	}
+}
+
+impl From<Component> for Path {
+	fn from(value: Component) -> Self {
+		Path {
+			components: vec![value],
+		}
+	}
+}
+
+impl From<Path> for fs::PathBuf {
+	fn from(value: Path) -> Self {
+		value.to_string().into()
 	}
 }

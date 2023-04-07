@@ -135,3 +135,20 @@ macro_rules! return_error {
 
 #[allow(clippy::module_name_repetitions)]
 pub use return_error;
+
+pub struct Trace(pub Error);
+
+impl std::fmt::Display for Trace {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let mut error: &dyn std::error::Error = &self.0;
+		loop {
+			writeln!(f, "{error}")?;
+			if let Some(source) = error.source() {
+				error = source;
+			} else {
+				break;
+			}
+		}
+		Ok(())
+	}
+}

@@ -1,10 +1,11 @@
 use self::syscall::syscall;
 use crate::{
 	error::{Error, Result, WrapErr},
-	Instance,
+	instance::Instance,
 };
 use std::sync::{Arc, Weak};
 
+pub mod analyze;
 pub mod check;
 pub mod completion;
 pub mod definition;
@@ -14,7 +15,6 @@ pub mod error;
 mod exception;
 pub mod format;
 pub mod hover;
-pub mod imports;
 pub mod metadata;
 pub mod references;
 pub mod rename;
@@ -24,6 +24,7 @@ pub mod transpile;
 #[derive(Debug, serde::Serialize)]
 #[serde(tag = "kind", content = "request", rename_all = "snake_case")]
 pub enum Request {
+	Analyze(analyze::Request),
 	Check(check::Request),
 	Completion(completion::Request),
 	Definition(definition::Request),
@@ -31,7 +32,6 @@ pub enum Request {
 	Doc(doc::Request),
 	Format(format::Request),
 	Hover(hover::Request),
-	Imports(imports::Request),
 	Metadata(metadata::Request),
 	References(references::Request),
 	Rename(rename::Request),
@@ -41,6 +41,7 @@ pub enum Request {
 #[derive(Debug, serde::Deserialize)]
 #[serde(tag = "kind", content = "response", rename_all = "snake_case")]
 pub enum Response {
+	Analyze(analyze::Response),
 	Check(check::Response),
 	Completion(completion::Response),
 	Definition(definition::Response),
@@ -48,7 +49,6 @@ pub enum Response {
 	Doc(doc::Response),
 	Format(format::Response),
 	Hover(hover::Response),
-	Imports(imports::Response),
 	Metadata(metadata::Response),
 	References(references::Response),
 	Rename(rename::Response),
@@ -163,16 +163,15 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 		let response = handle_function.call(&mut try_catch_scope, receiver, &[request]);
 
 		// Handle a js exception.
-		if try_catch_scope.has_caught() {
+		let Some(response) = response else {
 			let exception = try_catch_scope.exception().unwrap();
 			let error =
 				self::Error::from_language_service_exception(&mut try_catch_scope, exception);
 			response_sender.send(Err(error)).unwrap();
 			continue;
-		}
+		};
 
 		// Deserialize the response.
-		let response = response.unwrap();
 		let response = match serde_v8::from_v8(&mut try_catch_scope, response)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the response.")

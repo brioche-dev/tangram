@@ -1,6 +1,9 @@
-import { Artifact, addArtifact, getArtifact, isArtifact } from "./artifact.ts";
+import { Artifact } from "./artifact.ts";
+import { unreachable } from "./assert.ts";
+import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Path, path } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
@@ -11,6 +14,9 @@ export type Value =
 	| boolean
 	| number
 	| string
+	| Uint8Array
+	| Path
+	| Blob
 	| Artifact
 	| Placeholder
 	| Template
@@ -19,127 +25,152 @@ export type Value =
 
 export type nullish = undefined | null;
 
-export let isNullish = (value: unknown): value is nullish => {
-	return value === undefined || value === null;
-};
+export namespace nullish {
+	export let isNullish = (value: unknown): value is nullish => {
+		return value === undefined || value === null;
+	};
+}
 
-export let isValue = (value: unknown): value is Value => {
-	return (
-		value === undefined ||
-		value === null ||
-		typeof value === "boolean" ||
-		typeof value === "number" ||
-		typeof value === "string" ||
-		value instanceof Directory ||
-		value instanceof File ||
-		value instanceof Symlink ||
-		value instanceof Template ||
-		value instanceof Array ||
-		typeof value === "object"
-	);
-};
-
-export let serializeValue = async <T extends Value>(
-	value: T,
-): Promise<syscall.Value> => {
-	if (value === undefined || value === null) {
-		return {
-			kind: "null",
-			value,
-		};
-	} else if (typeof value === "boolean") {
-		return {
-			kind: "bool",
-			value,
-		};
-	} else if (typeof value === "number") {
-		return {
-			kind: "number",
-			value,
-		};
-	} else if (typeof value === "string") {
-		return {
-			kind: "string",
-			value,
-		};
-	} else if (isArtifact(value)) {
-		return {
-			kind: "artifact",
-			value: await value.hash(),
-		};
-	} else if (value instanceof Placeholder) {
-		return {
-			kind: "placeholder",
-			value: await value.serialize(),
-		};
-	} else if (value instanceof Template) {
-		return {
-			kind: "template",
-			value: await value.serialize(),
-		};
-	} else if (value instanceof Array) {
-		let serializedValue = await Promise.all(
-			value.map((value) => serializeValue(value)),
+export let Value = {
+	isValue: (value: unknown): value is Value => {
+		return (
+			value === undefined ||
+			value === null ||
+			typeof value === "boolean" ||
+			typeof value === "number" ||
+			typeof value === "string" ||
+			value instanceof Uint8Array ||
+			value instanceof Path ||
+			value instanceof Blob ||
+			value instanceof Directory ||
+			value instanceof File ||
+			value instanceof Symlink ||
+			value instanceof Placeholder ||
+			value instanceof Template ||
+			value instanceof Array ||
+			typeof value === "object"
 		);
-		return {
-			kind: "array",
-			value: serializedValue,
-		};
-	} else if (typeof value === "object") {
-		let serializedValue = Object.fromEntries(
-			await Promise.all(
-				Object.entries(value).map(async ([key, value]) => [
+	},
+
+	toSyscall: <T extends Value>(value: T): syscall.Value => {
+		if (value === undefined || value === null) {
+			return {
+				kind: "null",
+				value,
+			};
+		} else if (typeof value === "boolean") {
+			return {
+				kind: "bool",
+				value,
+			};
+		} else if (typeof value === "number") {
+			return {
+				kind: "number",
+				value,
+			};
+		} else if (typeof value === "string") {
+			return {
+				kind: "string",
+				value,
+			};
+		} else if (value instanceof Uint8Array) {
+			return {
+				kind: "bytes",
+				value,
+			};
+		} else if (value instanceof Path) {
+			return {
+				kind: "path",
+				value: value.toSyscall(),
+			};
+		} else if (value instanceof Blob) {
+			return {
+				kind: "blob",
+				value: value.toSyscall(),
+			};
+		} else if (Artifact.isArtifact(value)) {
+			return {
+				kind: "artifact",
+				value: Artifact.toSyscall(value),
+			};
+		} else if (value instanceof Placeholder) {
+			return {
+				kind: "placeholder",
+				value: value.toSyscall(),
+			};
+		} else if (value instanceof Template) {
+			return {
+				kind: "template",
+				value: value.toSyscall(),
+			};
+		} else if (value instanceof Array) {
+			let syscallValue = value.map((value) => Value.toSyscall(value));
+			return {
+				kind: "array",
+				value: syscallValue,
+			};
+		} else if (typeof value === "object") {
+			let syscallValue = Object.fromEntries(
+				Object.entries(value).map(([key, value]) => [
 					key,
-					await serializeValue(value),
+					Value.toSyscall(value),
 				]),
-			),
-		);
-		return {
-			kind: "map",
-			value: serializedValue,
-		};
-	} else {
-		throw new Error("Failed to serialize the value.");
-	}
-};
+			);
+			return {
+				kind: "object",
+				value: syscallValue,
+			};
+		} else {
+			return unreachable();
+		}
+	},
 
-export let deserializeValue = async (value: syscall.Value): Promise<Value> => {
-	switch (value.kind) {
-		case "null": {
-			return value.value;
-		}
-		case "bool": {
-			return value.value;
-		}
-		case "number": {
-			return value.value;
-		}
-		case "string": {
-			return value.value;
-		}
-		case "artifact": {
-			return await getArtifact(value.value);
-		}
-		case "placeholder": {
-			return await Placeholder.deserialize(value.value);
-		}
-		case "template": {
-			return await Template.deserialize(value.value);
-		}
-		case "array": {
-			return await Promise.all(
-				value.value.map((value) => deserializeValue(value)),
-			);
-		}
-		case "map": {
-			return Object.fromEntries(
-				await Promise.all(
-					Object.entries(value.value).map(async ([key, value]) => [
+	fromSyscall: (value: syscall.Value): Value => {
+		switch (value.kind) {
+			case "null": {
+				return value.value;
+			}
+			case "bool": {
+				return value.value;
+			}
+			case "number": {
+				return value.value;
+			}
+			case "string": {
+				return value.value;
+			}
+			case "bytes": {
+				return value.value;
+			}
+			case "path": {
+				return Path.fromSyscall(value.value);
+			}
+			case "blob": {
+				return Blob.fromSyscall(value.value);
+			}
+			case "artifact": {
+				return Artifact.fromSyscall(value.value);
+			}
+			case "placeholder": {
+				return Placeholder.fromSyscall(value.value);
+			}
+			case "template": {
+				return Template.fromSyscall(value.value);
+			}
+			case "array": {
+				return value.value.map((value) => Value.fromSyscall(value));
+			}
+			case "object": {
+				return Object.fromEntries(
+					Object.entries(value.value).map(([key, value]) => [
 						key,
-						await deserializeValue(value),
+						Value.fromSyscall(value),
 					]),
-				),
-			);
+				);
+			}
+			default: {
+				return unreachable();
+			}
 		}
-	}
+	},
 };

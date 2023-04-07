@@ -1,4 +1,10 @@
 use crate::{error::Result, util::fs};
+use tokio::io::AsyncWriteExt;
+
+pub(crate) const ENV_AMD64_LINUX: &[u8] = include_bytes!("../../assets/env_amd64_linux");
+pub(crate) const ENV_ARM64_LINUX: &[u8] = include_bytes!("../../assets/env_arm64_linux");
+pub(crate) const SH_AMD64_LINUX: &[u8] = include_bytes!("../../assets/sh_amd64_linux");
+pub(crate) const SH_ARM64_LINUX: &[u8] = include_bytes!("../../assets/sh_arm64_linux");
 
 pub async fn migrate(path: &fs::Path) -> Result<()> {
 	// Create the database file.
@@ -48,6 +54,33 @@ pub async fn migrate(path: &fs::Path) -> Result<()> {
 	// Create the temps directory.
 	let temps_path = path.join("temps");
 	tokio::fs::create_dir_all(&temps_path).await?;
+
+	// david edit: fill this with bb_arm64_linux, bb_x86_linux, etc. don't ifdef
+
+	// Create the assets directory.
+	let assets_path = path.join("assets");
+	tokio::fs::create_dir_all(&assets_path).await?;
+
+	// Add `env` and `sh` to the assets.
+	let mut opts = tokio::fs::OpenOptions::new();
+	opts.create(true).write(true).mode(0o777);
+
+	opts.open(assets_path.join("env_amd64_linux"))
+		.await?
+		.write_all(ENV_AMD64_LINUX)
+		.await?;
+	opts.open(assets_path.join("env_arm64_linux"))
+		.await?
+		.write_all(ENV_ARM64_LINUX)
+		.await?;
+	opts.open(assets_path.join("sh_amd64_linux"))
+		.await?
+		.write_all(SH_AMD64_LINUX)
+		.await?;
+	opts.open(assets_path.join("sh_arm64_linux"))
+		.await?
+		.write_all(SH_ARM64_LINUX)
+		.await?;
 
 	Ok(())
 }

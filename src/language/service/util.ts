@@ -6,10 +6,10 @@ export let isNullish = (value: unknown): value is nullish => {
 	return value === undefined || value === null;
 };
 
-export let assert: (condition: any, message?: string) => asserts condition = (
-	condition,
-	message,
-) => {
+export let assert: (
+	condition: unknown,
+	message?: string,
+) => asserts condition = (condition, message) => {
 	if (!condition) {
 		message = message ?? "Failed assertion.";
 		throw new Error(message);

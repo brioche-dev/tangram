@@ -1,36 +1,113 @@
-pub use self::{hash::Hash, hash::STRING_LENGTH as HASH_STRING_LENGTH, tracker::Tracker};
+pub use self::{data::Data, hash::Hash, tracker::Tracker};
 use crate::{directory::Directory, file::File, symlink::Symlink};
 
-pub mod add;
 mod bundle;
+mod checkin;
+mod checkout;
+mod checksum;
+mod data;
 mod get;
 mod hash;
 mod references;
-mod serialize;
-pub mod tracker;
-mod util;
+mod tracker;
 
-#[derive(
-	Clone,
-	Debug,
-	PartialEq,
-	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-#[serde(tag = "kind", content = "value")]
+/// An artifact.
+#[derive(Clone, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Artifact {
-	#[buffalo(id = 0)]
-	#[serde(rename = "directory")]
+	/// A directory.
 	Directory(Directory),
 
-	#[buffalo(id = 1)]
-	#[serde(rename = "file")]
+	/// A file.
 	File(File),
 
-	#[buffalo(id = 2)]
-	#[serde(rename = "symlink")]
+	/// A symlink.
 	Symlink(Symlink),
+}
+
+impl From<Directory> for Artifact {
+	fn from(directory: Directory) -> Self {
+		Self::Directory(directory)
+	}
+}
+
+impl From<File> for Artifact {
+	fn from(file: File) -> Self {
+		Self::File(file)
+	}
+}
+
+impl From<Symlink> for Artifact {
+	fn from(symlink: Symlink) -> Self {
+		Self::Symlink(symlink)
+	}
+}
+
+impl Artifact {
+	#[must_use]
+	pub fn as_directory(&self) -> Option<&Directory> {
+		if let Artifact::Directory(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_file(&self) -> Option<&File> {
+		if let Artifact::File(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_symlink(&self) -> Option<&Symlink> {
+		if let Artifact::Symlink(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+}
+
+impl Artifact {
+	#[must_use]
+	pub fn into_directory(self) -> Option<Directory> {
+		if let Artifact::Directory(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_file(self) -> Option<File> {
+		if let Artifact::File(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_symlink(self) -> Option<Symlink> {
+		if let Artifact::Symlink(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+}
+
+impl Artifact {
+	#[must_use]
+	pub fn hash(&self) -> Hash {
+		match self {
+			Self::Directory(directory) => directory.hash(),
+			Self::File(file) => file.hash(),
+			Self::Symlink(symlink) => symlink.hash(),
+		}
+	}
 }

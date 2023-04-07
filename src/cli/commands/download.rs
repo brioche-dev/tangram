@@ -2,11 +2,12 @@ use crate::{
 	error::{Error, Result},
 	Cli,
 };
-use tangram::operation::{Download, Operation};
+use tangram::operation::Download;
 use url::Url;
 
 /// Run a download operation.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(long)]
 	pub unpack: bool,
@@ -18,13 +19,12 @@ pub struct Args {
 impl Cli {
 	pub async fn command_download(&self, args: Args) -> Result<()> {
 		// Run the operation.
-		let operation = Operation::Download(Download {
-			url: args.url,
-			unpack: args.unpack,
-			checksum: None,
-			is_unsafe: true,
-		});
-		let output = operation.run(&self.tg).await?;
+		let download = Download::builder(args.url)
+			.unpack(args.unpack)
+			.is_unsafe(true)
+			.build(&self.tg)
+			.await?;
+		let output = download.run(&self.tg).await?;
 
 		// Print the output.
 		let output = serde_json::to_string_pretty(&output).map_err(Error::other)?;

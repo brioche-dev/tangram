@@ -6,12 +6,6 @@ export interface VirtualTextDocumentParams {
 	textDocument: vscodeLanguageClient.TextDocumentIdentifier;
 }
 
-let virtualTextDocument = new vscodeLanguageClient.RequestType<
-	VirtualTextDocumentParams,
-	string,
-	void
->("tangram/virtualTextDocument");
-
 export class TangramTextDocumentContentProvider
 	implements vscode.TextDocumentContentProvider
 {
@@ -22,11 +16,17 @@ export class TangramTextDocumentContentProvider
 		token: vscode.CancellationToken,
 	): vscode.ProviderResult<string> {
 		if (!this.client.languageClient) {
-			throw new Error("Tangram language server has not started.");
+			throw new Error("The Tangram language server has not started.");
 		}
 
+		let virtualTextDocumentRequest = new vscodeLanguageClient.RequestType<
+			VirtualTextDocumentParams,
+			string,
+			void
+		>("tangram/virtualTextDocument");
+
 		return this.client.languageClient.sendRequest(
-			virtualTextDocument,
+			virtualTextDocumentRequest,
 			{ textDocument: { uri: uri.toString() } },
 			token,
 		);

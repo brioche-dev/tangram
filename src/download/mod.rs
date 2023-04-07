@@ -1,25 +1,39 @@
-pub use self::error::Error;
-use crate::checksum::Checksum;
+pub use self::{builder::Builder, data::Data, error::Error};
+use crate::{checksum::Checksum, operation};
 use url::Url;
 
+mod builder;
+mod data;
 mod error;
+mod new;
 mod run;
 mod unpack;
 
-#[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Download {
-	#[buffalo(id = 0)]
-	pub url: Url,
+	/// The hash.
+	hash: operation::Hash,
 
-	#[buffalo(id = 1)]
-	pub unpack: bool,
+	/// The URL to download from.
+	url: Url,
 
-	#[buffalo(id = 2)]
-	pub checksum: Option<Checksum>,
+	/// Whether to unpack the downloaded file.
+	#[serde(default)]
+	unpack: bool,
 
-	#[buffalo(id = 3)]
+	/// A checksum of the downloaded file.
+	#[serde(default)]
+	checksum: Option<Checksum>,
+
+	/// If this flag is set, then the download will succeed without a checksum.
 	#[serde(default, rename = "unsafe")]
-	pub is_unsafe: bool,
+	is_unsafe: bool,
+}
+
+impl Download {
+	/// Get the hash.
+	#[must_use]
+	pub fn hash(&self) -> operation::Hash {
+		self.hash
+	}
 }

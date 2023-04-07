@@ -9,7 +9,7 @@ use url::Url;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]
 pub enum Specifier {
-	/// A module specifier that refers to a module in the current package, such as `import "./src"` or `import "./module.tg"`.
+	/// A module specifier that refers to a module in the current package, such as `import "./module.tg"`.
 	Path(Path),
 
 	/// A module specifier that refers to a dependency, such as `import "tangram:std"`. See [`dependency::Specifier`].
@@ -37,7 +37,13 @@ impl std::str::FromStr for Specifier {
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		if value.starts_with('/') || value.starts_with('.') {
 			// If the string starts with `/` or `.`, then parse the string as a path.
-			let path = value.parse().wrap_err("Failed to parse the path.")?;
+			let path: Path = value.into();
+
+			// Ensure the path has a ".tg" extension.
+			if path.extension() != Some("tg") {
+				return_error!(r#"The path "{path}" does not have a ".tg" extension."#);
+			}
+
 			Ok(Specifier::Path(path))
 		} else {
 			// Otherwise, parse the string as a URL.

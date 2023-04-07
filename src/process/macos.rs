@@ -1,12 +1,13 @@
 use super::{
-	run::{Mode, Path},
+	run::{Kind, Mode, Path},
 	server::Server,
+	Process,
 };
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
+	instance::Instance,
 	system::System,
 	temp::Temp,
-	Instance,
 };
 use indoc::writedoc;
 use libc::{c_char, c_int, c_void};
@@ -18,24 +19,25 @@ use std::{
 	sync::Arc,
 };
 
-impl Instance {
-	pub async fn run_process_macos(
-		self: &Arc<Self>,
+impl Process {
+	pub async fn run_macos(
+		tg: &Arc<Instance>,
 		_system: System,
-		command: String,
+		executable: String,
 		env: BTreeMap<String, String>,
 		args: Vec<String>,
 		mut paths: HashSet<Path, fnv::FnvBuildHasher>,
 		network_enabled: bool,
 	) -> Result<()> {
 		// Create a temp for the root directory.
-		let root_directory_temp = Temp::new(self);
+		let root_directory_temp = Temp::new(tg);
 
 		// Add the root directory to the paths.
 		paths.insert(Path {
 			host_path: root_directory_temp.path().to_owned(),
 			guest_path: root_directory_temp.path().to_owned(),
 			mode: Mode::ReadWrite,
+			kind: Kind::Directory,
 		});
 
 		// Add the home directory to the root directory.
@@ -50,7 +52,7 @@ impl Instance {
 		let socket_path = root_directory_temp.path().join("socket");
 
 		// Start the server.
-		let server = Server::new(Arc::downgrade(self));
+		let server = Server::new(Arc::downgrade(tg));
 		let server_task = tokio::spawn({
 			let socket_path = socket_path.clone();
 			async move {
@@ -59,7 +61,7 @@ impl Instance {
 		});
 
 		// Create the command.
-		let mut command = tokio::process::Command::new(&command);
+		let mut command = tokio::process::Command::new(&executable);
 
 		// Set the working directory.
 		command.current_dir(&working_directory_path);
@@ -169,7 +171,7 @@ fn pre_exec(paths: &HashSet<Path, fnv::FnvBuildHasher>, network_enabled: bool) -
 			)
 
 			;; Support Rosetta.
-			(allow file-read-metadata file-test-existence
+			(allow file-read* file-test-existence
 				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
 			)
 

@@ -96,6 +96,7 @@ impl<'a> Field<'a> {
 	pub fn parse(field: &'a syn::Field) -> syn::Result<Field<'a>> {
 		// Initialize the attrs.
 		let mut id = None;
+		let mut skip = false;
 
 		// Get the ident.
 		let ident = field.ident.as_ref();
@@ -141,11 +142,16 @@ impl<'a> Field<'a> {
 						id = Some(value);
 					},
 
+					// Handle the "skip" key.
+					syn::NestedMeta::Meta(syn::Meta::Path(path)) if path.is_ident("skip") => {
+						skip = true;
+					},
+
 					_ => {},
 				}
 			}
 		}
 
-		Ok(Field { id, ident })
+		Ok(Field { id, ident, skip })
 	}
 }

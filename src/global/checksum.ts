@@ -1,12 +1,5 @@
-import * as syscall from "./syscall.ts";
+export type Checksum = `${Checksum.Algorithm}${":" | "-"}${string}`;
 
-export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
-
-export type ChecksumAlgorithm = "blake3" | "sha256";
-
-export let checksum = (
-	algorithm: ChecksumAlgorithm,
-	bytes: Uint8Array | string,
-): Checksum => {
-	return syscall.checksum(algorithm, bytes);
-};
+export namespace Checksum {
+	export type Algorithm = "blake3" | "sha256";
+}

@@ -1,21 +1,19 @@
 use super::{service, Diagnostic};
 use crate::{
 	error::{return_error, Result},
-	module, Instance,
+	instance::Instance,
+	module::Module,
 };
 use std::sync::Arc;
 
-impl Instance {
-	/// Get all diagnostics for the provided module identifiers.
-	pub async fn check(
-		self: &Arc<Self>,
-		module_identifiers: Vec<module::Identifier>,
-	) -> Result<Vec<Diagnostic>> {
+impl Module {
+	/// Get all diagnostics for the provided modules.
+	pub async fn check(tg: &Arc<Instance>, modules: Vec<Module>) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
-		let request = service::Request::Check(service::check::Request { module_identifiers });
+		let request = service::Request::Check(service::check::Request { modules });
 
 		// Handle the language service request.
-		let response = self.handle_language_service_request(request).await?;
+		let response = tg.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Check(response) = response else { return_error!("Unexpected response type.") };

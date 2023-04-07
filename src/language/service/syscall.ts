@@ -1,99 +1,65 @@
-export type ModuleIdentifier = {
-	source: ModuleIdentifierSource;
-	path: string;
+export type Module =
+	| { kind: "library"; value: LibraryModule }
+	| { kind: "document"; value: DocumentModule }
+	| { kind: "normal"; value: NormalModule };
+
+export type LibraryModule = {
+	modulePath: string;
 };
 
-export type ModuleIdentifierSource =
-	| { kind: "lib" }
-	| { kind: "path"; value: string }
-	| { kind: "instance"; value: string };
+export type DocumentModule = {
+	packagePath: string;
+	modulePath: string;
+};
+
+export type NormalModule = {
+	packageInstanceHash: string;
+	modulePath: string;
+};
+
+declare global {
+	/** Get the modules for all documents. */
+	function syscall(name: "documents"): Array<Module>;
+}
+
+export let documents = (): Array<Module> => {
+	try {
+		return syscall("documents");
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
 
 declare global {
 	/** Decode a hex string to bytes. */
-	function syscall(syscall: "decode_hex", hex: string): Uint8Array;
-
-	/** Decode bytes as UTF-8. */
-	function syscall(syscall: "decode_utf8", bytes: Uint8Array): string;
+	function syscall(syscall: "hex_decode", hex: string): Uint8Array;
 
 	/** Encode bytes to a hex string. */
-	function syscall(syscall: "encode_hex", bytes: Uint8Array): string;
-
-	/** Encode a string as UTF-8. */
-	function syscall(syscall: "encode_utf8", string: string): Uint8Array;
-
-	/** Get the module identifiers of all documents. */
-	function syscall(name: "get_documents"): Array<ModuleIdentifier>;
-
-	/** Load the text of a module. */
-	function syscall(
-		name: "load_module",
-		moduleIdentifier: ModuleIdentifier,
-	): string;
-
-	/** Write to the log. */
-	function syscall(name: "log", value: string): void;
-
-	/** Resolve a module specifier from a module identifier. */
-	function syscall(
-		name: "resolve_module",
-		specifier: string,
-		referrer: ModuleIdentifier,
-	): ModuleIdentifier;
-
-	/** Get the version of a module. */
-	function syscall(
-		name: "get_module_version",
-		moduleIdentifier: ModuleIdentifier,
-	): string;
+	function syscall(syscall: "hex_encode", bytes: Uint8Array): string;
 }
 
-export let decodeHex = (hex: string): Uint8Array => {
-	try {
-		return syscall("decode_hex", hex);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
+export let hex = {
+	decode: (hex: string): Uint8Array => {
+		try {
+			return syscall("hex_decode", hex);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	encode: (bytes: Uint8Array): string => {
+		try {
+			return syscall("hex_encode", bytes);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
 };
 
-export let decodeUtf8 = (bytes: Uint8Array): string => {
-	try {
-		return syscall("decode_utf8", bytes);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
-};
-
-export let encodeHex = (bytes: Uint8Array): string => {
-	try {
-		return syscall("encode_hex", bytes);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
-};
-
-export let encodeUtf8 = (string: string): Uint8Array => {
-	try {
-		return syscall("encode_utf8", string);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
-};
-
-export let getDocuments = (): Array<ModuleIdentifier> => {
-	try {
-		return syscall("get_documents");
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
-};
-
-export let loadModule = (moduleIdentifier: ModuleIdentifier): string => {
-	try {
-		return syscall("load_module", moduleIdentifier);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
-};
+declare global {
+	/** Write to the log. */
+	function syscall(name: "log", value: string): void;
+}
 
 export let log = (value: string) => {
 	try {
@@ -103,21 +69,69 @@ export let log = (value: string) => {
 	}
 };
 
-export let resolveModule = (
-	specifier: string,
-	referrer: ModuleIdentifier,
-): ModuleIdentifier => {
-	try {
-		return syscall("resolve_module", specifier, referrer);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
+declare global {
+	/** Load the text of a module. */
+	function syscall(name: "module_load", module: Module): string;
+
+	/** Resolve a specifier from a module. */
+	function syscall(
+		name: "module_resolve",
+		referrer: Module,
+		specifier: string,
+	): Module;
+
+	/** Get the version of a module. */
+	function syscall(name: "module_version", module: Module): string;
+}
+
+export let module_ = {
+	load: (module: Module): string => {
+		try {
+			return syscall("module_load", module);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	resolve: (referrer: Module, specifier: string): Module => {
+		try {
+			return syscall("module_resolve", referrer, specifier);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	version: (module: Module) => {
+		try {
+			return syscall("module_version", module);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
 };
 
-export let getModuleVersion = (moduleIdentifier: ModuleIdentifier) => {
-	try {
-		return syscall("get_module_version", moduleIdentifier);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
+declare global {
+	/** Decode bytes as UTF-8. */
+	function syscall(syscall: "utf8_decode", bytes: Uint8Array): string;
+
+	/** Encode a string as UTF-8. */
+	function syscall(syscall: "utf8_encode", string: string): Uint8Array;
+}
+
+export let utf8 = {
+	decode: (bytes: Uint8Array): string => {
+		try {
+			return syscall("utf8_decode", bytes);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	encode: (string: string): Uint8Array => {
+		try {
+			return syscall("utf8_encode", string);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
 };

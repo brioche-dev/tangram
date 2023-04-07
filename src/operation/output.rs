@@ -1,50 +1,30 @@
-use super::Hash;
+use super::Operation;
 use crate::{
-	error::{Error, Result},
+	error::{Result, WrapErr},
+	instance::Instance,
 	value::Value,
-	Instance,
 };
-use lmdb::Transaction;
 
-impl Instance {
-	/// Get the output for an operation from the database.
-	pub fn get_operation_output_local(&self, operation_hash: Hash) -> Result<Option<Value>> {
-		// Begin a read transaction.
-		let txn = self.database.env.begin_ro_txn()?;
-
-		// Get the output.
-		let output = match txn.get(self.database.operation_outputs, &operation_hash.as_slice()) {
-			Ok(value) => {
-				let value = Value::deserialize(value)?;
-				Ok::<_, Error>(Some(value))
-			},
-			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => Err(error.into()),
-		}?;
-
-		Ok(output)
+impl Operation {
+	pub async fn output(&self, tg: &Instance) -> Result<Option<Value>> {
+		if let Some(output) = tg.database.get_operation_output(self.hash()).await? {
+			let output = Value::from_data(tg, output).await?;
+			return Ok(Some(output));
+		}
+		Ok(None)
 	}
 
-	/// Set the output for an operation in the database.
-	#[tracing::instrument(skip(self))]
-	pub fn set_operation_output(&self, operation_hash: Hash, value: &Value) -> Result<()> {
-		// Begin a write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
-
-		// Serialize the value.
-		let value = value.serialize_to_vec();
-
-		// Add the output to the database.
-		txn.put(
-			self.database.operation_outputs,
-			&operation_hash.as_slice(),
-			&value,
-			lmdb::WriteFlags::empty(),
-		)?;
-
-		// Commit the transaction.
-		txn.commit()?;
-
+	pub async fn set_output(&self, tg: &Instance, value: &Value) -> Result<()> {
+		let hash = self.hash();
+		let data = value.to_data();
+		tg.database
+			.set_operation_output(self.hash(), &data)
+			.await
+			.wrap_err_with(|| {
+				format!(
+					r#"Failed tot set the operation output for the operation with hash "{hash}"."#
+				)
+			})?;
 		Ok(())
 	}
 }

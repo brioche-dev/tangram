@@ -6,19 +6,19 @@ pub use self::{
 	range::Range,
 };
 
-mod check;
-mod completion;
-mod definition;
-mod diagnostics;
-mod doc;
-mod format;
-mod hover;
-mod imports;
-mod location;
-mod metadata;
-mod position;
-mod range;
-mod references;
-mod rename;
+pub mod analyze;
+pub mod check;
+pub mod completion;
+pub mod definition;
+pub mod diagnostics;
+pub mod doc;
+pub mod format;
+pub mod hover;
+pub mod location;
+pub mod metadata;
+pub mod position;
+pub mod range;
+pub mod references;
+pub mod rename;
 pub mod service;
-mod transpile;
+pub mod transpile;

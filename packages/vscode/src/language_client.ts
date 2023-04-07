@@ -21,12 +21,18 @@ export class TangramLanguageClient {
 			return;
 		}
 
+		// Get the tangram configuration.
 		let tangramConfig = vscode.workspace.getConfiguration("tangram");
-		let command = tangramConfig.get<string>("path", "tg");
 
 		let serverOptions: ServerOptions = {
+			command: tangramConfig.get<string>("path", "tg"),
 			args: ["lsp"],
-			command,
+			options: {
+				env: {
+					...process.env,
+					TANGRAM_TRACING: tangramConfig.get<string>("tracing", ""),
+				},
+			},
 		};
 		let clientOptions: LanguageClientOptions = {
 			diagnosticCollectionName: "tangram",

@@ -1,4 +1,5 @@
 use super::Struct;
+use itertools::Itertools;
 use quote::quote;
 
 impl<'a> Struct<'a> {
@@ -9,20 +10,28 @@ impl<'a> Struct<'a> {
 		// Generate the body.
 		let body = if let Some(try_from) = self.try_from {
 			quote! {
-				let value = #try_from::deserialize(deserializer)?;
+				let value = <#try_from>::deserialize(deserializer)?;
 				let value = value.try_into().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
 				Ok(value)
 			}
 		} else {
+			// Get the fields.
+			let fields = self.fields.iter().filter(|field| !field.skip).collect_vec();
+
 			// Get the field ids.
-			let field_ids = self.fields.iter().map(|field| field.id).collect::<Vec<_>>();
+			let field_ids = fields.iter().map(|field| field.id).collect_vec();
 
 			// Get the field idents.
-			let field_idents = self
-				.fields
+			let field_idents = fields.iter().map(|field| &field.ident).collect_vec();
+
+			// Get the skipped fields.
+			let skipped_fields = self.fields.iter().filter(|field| field.skip).collect_vec();
+
+			// Get the field idents.
+			let skipped_field_idents = skipped_fields
 				.iter()
 				.map(|field| &field.ident)
-				.collect::<Vec<_>>();
+				.collect_vec();
 
 			quote! {
 				// Read the kind.
@@ -56,6 +65,7 @@ impl<'a> Struct<'a> {
 				// Create the struct.
 				Ok(#ident {
 					#(#field_idents,)*
+					#(#skipped_field_idents: Default::default(),)*
 				})
 			}
 		};

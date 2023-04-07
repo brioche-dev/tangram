@@ -7,11 +7,10 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An error.
 #[derive(Clone, Debug, Error, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "kind", content = "value")]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Error {
 	/// An error with a message.
 	#[error("{message}\n  {location}")]
-	#[serde(rename = "message")]
 	Message {
 		message: String,
 		location: Location,
@@ -20,17 +19,14 @@ pub enum Error {
 
 	/// An operation error.
 	#[error(transparent)]
-	#[serde(rename = "operation")]
 	Operation(#[from] operation::Error),
 
 	/// A language service error.
 	#[error(transparent)]
-	#[serde(rename = "language_service")]
 	LanguageService(#[from] language::service::error::Error),
 
 	/// Any other error.
 	#[error("{message}")]
-	#[serde(rename = "other")]
 	Other {
 		message: String,
 		source: Option<Arc<Error>>,
@@ -47,10 +43,16 @@ impl Error {
 		}
 	}
 
-	pub fn other(error: impl std::error::Error) -> Error {
-		Error::Other {
+	#[must_use]
+	#[track_caller]
+	pub fn last_os_error() -> Self {
+		Self::other(std::io::Error::last_os_error())
+	}
+
+	pub fn other(error: impl std::error::Error) -> Self {
+		Self::Other {
 			message: error.to_string(),
-			source: error.source().map(|error| Arc::new(Error::other(error))),
+			source: error.source().map(|error| Arc::new(Self::other(error))),
 		}
 	}
 }
@@ -59,25 +61,25 @@ impl From<std::io::Error> for Error {
 	fn from(error: std::io::Error) -> Error {
 		Error::Other {
 			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Error::other(error))),
+			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
 		}
 	}
 }
 
 impl From<lmdb::Error> for Error {
-	fn from(error: lmdb::Error) -> Error {
-		Error::Other {
+	fn from(error: lmdb::Error) -> Self {
+		Self::Other {
 			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Error::other(error))),
+			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
 		}
 	}
 }
 
 impl From<reqwest::Error> for Error {
-	fn from(error: reqwest::Error) -> Error {
-		Error::Other {
+	fn from(error: reqwest::Error) -> Self {
+		Self::Other {
 			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Error::other(error))),
+			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
 		}
 	}
 }
@@ -140,11 +142,11 @@ impl Error {
 
 pub trait WrapErr<T, E>: Sized {
 	#[track_caller]
-	fn wrap_err<C>(self, context: C) -> Result<T, Error>
+	fn wrap_err<M>(self, message: M) -> Result<T, Error>
 	where
-		C: std::fmt::Display,
+		M: std::fmt::Display,
 	{
-		self.wrap_err_with(|| context)
+		self.wrap_err_with(|| message)
 	}
 
 	#[track_caller]

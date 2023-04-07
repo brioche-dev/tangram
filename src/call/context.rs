@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
 	error::{Error, Result},
-	Instance,
+	instance::Instance,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
 use sourcemap::SourceMap;
@@ -30,7 +30,7 @@ pub fn new(tg: Arc<Instance>) -> v8::Global<v8::Context> {
 	});
 
 	// Set the state on the context.
-	context.set_slot(&mut context_scope, Rc::clone(&state));
+	context.set_slot(&mut context_scope, state);
 
 	// Create the syscall function.
 	let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();
@@ -64,7 +64,10 @@ pub fn await_value_inner(
 	let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
 	let context = v8::Local::new(&mut handle_scope, context);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-	let state = Rc::clone(context.get_slot::<Rc<State>>(&mut context_scope).unwrap());
+	let state = context
+		.get_slot::<Rc<State>>(&mut context_scope)
+		.unwrap()
+		.clone();
 	drop(context_scope);
 	let context = v8::Global::new(&mut handle_scope, context);
 	drop(handle_scope);

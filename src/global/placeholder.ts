@@ -4,10 +4,6 @@ export let placeholder = (name: string): Placeholder => {
 	return new Placeholder(name);
 };
 
-export let isPlaceholder = (value: unknown): value is Placeholder => {
-	return value instanceof Placeholder;
-};
-
 export class Placeholder {
 	#name: string;
 
@@ -15,15 +11,17 @@ export class Placeholder {
 		this.#name = name;
 	}
 
-	async serialize(): Promise<syscall.Placeholder> {
+	static isPlaceholder(value: unknown): value is Placeholder {
+		return value instanceof Placeholder;
+	}
+
+	toSyscall(): syscall.Placeholder {
 		return {
 			name: this.#name,
 		};
 	}
 
-	static async deserialize(
-		placeholder: syscall.Placeholder,
-	): Promise<Placeholder> {
+	static fromSyscall(placeholder: syscall.Placeholder): Placeholder {
 		let name = placeholder.name;
 		return new Placeholder(name);
 	}

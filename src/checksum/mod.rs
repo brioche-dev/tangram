@@ -1,7 +1,6 @@
 pub use self::{algorithm::Algorithm, writer::Writer};
 
 pub mod algorithm;
-mod artifact;
 mod serialize;
 pub mod writer;
 

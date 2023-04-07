@@ -1,41 +1,42 @@
-use crate::{
-	error::{Result, WrapErr},
-	Cli,
-};
-use tangram::{package, util::fs};
+use crate::{error::Result, Cli};
+use tangram::util::fs;
 
 /// Publish a package.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
 	pub package: fs::PathBuf,
 }
 
 impl Cli {
-	pub async fn command_publish(&self, args: Args) -> Result<()> {
-		// Check in the package.
-		let package::checkin::Output { package_hash, .. } =
-			self.tg.check_in_package(&args.package).await?;
+	#[allow(clippy::unused_async)]
+	pub async fn command_publish(&self, _args: Args) -> Result<()> {
+		todo!()
 
-		// Create a client.
-		let client = self.tg.create_client(
-			self.tg.api_client().url.clone(),
-			self.tg.api_client().token.clone(),
-		);
+		// // Check in the package.
+		// let package = Package::check_in(&self.tg, &args.package).await?;
 
-		// Push the package to the registry.
-		self.tg
-			.push(&client, package_hash)
-			.await
-			.wrap_err("Failed to push the package.")?;
+		// // Create a client.
+		// let client = Client::new(
+		// 	self.tg.api_client().url.clone(),
+		// 	self.tg.api_client().token.clone(),
+		// );
 
-		// Publish the package.
-		self.tg
-			.api_client()
-			.publish_package(package_hash)
-			.await
-			.wrap_err("Failed to publish the package.")?;
+		// // Push the package to the registry.
+		// let artifact = package.artifact(&self.tg).await?.unwrap();
+		// client
+		// 	.push(&self.tg, artifact)
+		// 	.await
+		// 	.wrap_err("Failed to push the package.")?;
 
-		Ok(())
+		// // Publish the package.
+		// self.tg
+		// 	.api_client()
+		// 	.publish_package()
+		// 	.await
+		// 	.wrap_err("Failed to publish the package.")?;
+
+		// Ok(())
 	}
 }

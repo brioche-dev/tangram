@@ -2,6 +2,7 @@ use crate::{error::Result, Cli};
 
 /// Upgrade to the latest version of tangram.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {}
 
 impl Cli {

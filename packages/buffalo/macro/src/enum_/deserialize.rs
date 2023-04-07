@@ -1,4 +1,5 @@
 use super::Enum;
+use itertools::Itertools;
 use quote::quote;
 
 impl<'a> Enum<'a> {
@@ -9,24 +10,20 @@ impl<'a> Enum<'a> {
 		// Generate the body.
 		let body = if let Some(try_from) = self.try_from {
 			quote! {
-				let value = #try_from::deserialize(deserializer)?;
+				let value = <#try_from>::deserialize(deserializer)?;
 				let value = value.try_into().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
 				Ok(value)
 			}
 		} else {
 			// Get the variant ids.
-			let variant_ids = self
-				.variants
-				.iter()
-				.map(|variant| variant.id)
-				.collect::<Vec<_>>();
+			let variant_ids = self.variants.iter().map(|variant| variant.id).collect_vec();
 
 			// Get the variant idents.
 			let variant_idents = self
 				.variants
 				.iter()
 				.map(|variant| &variant.ident)
-				.collect::<Vec<_>>();
+				.collect_vec();
 
 			quote! {
 				// Read the kind.

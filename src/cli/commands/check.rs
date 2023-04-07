@@ -1,15 +1,17 @@
 use super::PackageArgs;
 use crate::{
-	error::{return_error, Result},
+	error::{return_error, Result, WrapErr},
 	Cli,
 };
 use tangram::{
 	language::{Diagnostic, Location, Position},
-	module, package,
+	module::Module,
+	package::{self, Package},
 };
 
 /// Check a package for errors.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
 	pub package: package::Specifier,
@@ -20,22 +22,22 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
-		// Resolve the package specifier.
-		let package_identifier = self.tg.resolve_package(&args.package, None).await?;
+		// Get the package.
+		let package = Package::with_specifier(&self.tg, args.package)
+			.await
+			.wrap_err("Failed to get the package.")?;
 
 		// Create the package instance.
-		let package_instance_hash = self
-			.tg
-			.clone()
-			.create_package_instance(&package_identifier, args.package_args.locked)
-			.await?;
+		let package_instance = package
+			.instantiate(&self.tg)
+			.await
+			.wrap_err("Failed to create the package instance.")?;
 
-		// Create the root module identifier.
-		let root_module_identifier =
-			module::Identifier::for_root_module_in_package_instance(package_instance_hash);
+		// Get the root module.
+		let root_module = package_instance.root_module();
 
 		// Check the package for diagnostics.
-		let diagnostics = self.tg.check(vec![root_module_identifier]).await?;
+		let diagnostics = Module::check(&self.tg, vec![root_module]).await?;
 
 		// Print the diagnostics.
 		for diagnostic in &diagnostics {
@@ -46,16 +48,12 @@ impl Cli {
 
 			// Print the location if one is available.
 			if let Some(location) = location {
-				let Location {
-					module_identifier,
-					range,
-					..
-				} = location;
+				let Location { module, range, .. } = location;
 				let Position { line, character } = range.start;
 				let line = line + 1;
 				let character = character + 1;
 
-				println!("{module_identifier}:{line}:{character}");
+				println!("{module}:{line}:{character}");
 			}
 
 			// Print the diagnostic message.

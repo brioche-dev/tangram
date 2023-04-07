@@ -30,6 +30,7 @@ mod run;
 mod search;
 mod serve;
 mod shell;
+mod test;
 mod tree;
 mod update;
 mod upgrade;
@@ -40,6 +41,7 @@ mod upgrade;
 	disable_help_subcommand = true,
 	long_version = env!("CARGO_PKG_VERSION"),
 	name = env!("CARGO_CRATE_NAME"),
+	verbatim_doc_comment,
 	version = env!("CARGO_PKG_VERSION"),
 )]
 pub struct Args {
@@ -80,19 +82,22 @@ pub enum Command {
 	Search(self::search::Args),
 	Serve(self::serve::Args),
 	Shell(self::shell::Args),
+	Test(self::test::Args),
 	Tree(self::tree::Args),
 	Update(self::update::Args),
 	Upgrade(self::upgrade::Args),
 }
 
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct PackageArgs {
-	/// If this flag is set, the package's lockfile will not be updated before building.
-	#[arg(long)]
-	pub locked: bool,
+	// /// If this flag is set, the package's lockfile will not be updated before building.
+	// #[arg(long)]
+	// pub locked: bool,
 }
 
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct RunArgs {
 	/// The path to the executable in the artifact to run.
 	#[arg(long)]
@@ -154,6 +159,7 @@ impl Cli {
 			Command::Search(args) => self.command_search(args).boxed(),
 			Command::Serve(args) => self.command_serve(args).boxed(),
 			Command::Shell(args) => self.command_shell(args).boxed(),
+			Command::Test(args) => self.command_test(args).boxed(),
 			Command::Tree(args) => self.command_tree(args).boxed(),
 			Command::Update(args) => self.command_update(args).boxed(),
 			Command::Upgrade(args) => self.command_upgrade(args).boxed(),

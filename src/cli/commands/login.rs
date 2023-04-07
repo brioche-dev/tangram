@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 /// Login to Tangram.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {}
 
 impl Cli {

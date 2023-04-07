@@ -7,21 +7,15 @@ use tangram::util::fs;
 
 /// Initialize a new package.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
-	#[arg(long)]
-	pub name: Option<String>,
-
-	#[arg(long)]
-	pub version: Option<String>,
-
 	pub path: Option<fs::PathBuf>,
 }
 
 impl Cli {
 	pub async fn command_init(&self, args: Args) -> Result<()> {
 		// Get the path.
-		let mut path =
-			std::env::current_dir().wrap_err("Failed to get the current working directory.")?;
+		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 		if let Some(path_arg) = &args.path {
 			path.push(path_arg);
 		}
@@ -42,22 +36,6 @@ impl Cli {
 			Err(error) => return Err(error.into()),
 		};
 
-		// Get the package name. The default package name is the last component of the path.
-		let _name = if let Some(name) = args.name {
-			name
-		} else {
-			let canonicalized_path = tokio::fs::canonicalize(&path).await?;
-			let last_path_component = canonicalized_path.components().last().unwrap();
-			let last_path_component_string = last_path_component
-				.as_os_str()
-				.to_str()
-				.wrap_err("The last component of the path must be valid UTF-8.")?;
-			last_path_component_string.to_owned()
-		};
-
-		// Get the version. The default version is 0.0.0.
-		let _version = args.version.unwrap_or_else(|| String::from("0.0.0"));
-
 		// Define the files to generate.
 		let mut files = Vec::new();
 
@@ -65,7 +43,7 @@ impl Cli {
 			path.join("tangram.tg"),
 			formatdoc!(
 				r#"
-					// Write your code here.
+					export default tg.function(() => "Hello, World!");
 				"#,
 			),
 		));

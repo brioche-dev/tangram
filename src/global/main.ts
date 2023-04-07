@@ -1,23 +1,22 @@
-import { array } from "./array.ts";
-import { isArtifact, getArtifact } from "./artifact.ts";
-import { Blob, blob, isBlobLike } from "./blob.ts";
-import { bundle } from "./bundle.ts";
-import { checksum } from "./checksum.ts";
-import { context } from "./context.ts";
-import { Directory, directory, isDirectory } from "./directory.ts";
+import { Artifact } from "./artifact.ts";
+import { Blob, blob } from "./blob.ts";
+import { call } from "./call.ts";
+import { Directory, directory } from "./directory.ts";
 import { download } from "./download.ts";
+import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
-import { File, file, isFile } from "./file.ts";
-import { function_ } from "./function.ts";
+import { File, file } from "./file.ts";
+import { Function, function_ } from "./function.ts";
 import { include } from "./include.ts";
 import { log } from "./log.ts";
-import { map } from "./map.ts";
-import { Path, isPath, path } from "./path.ts";
-import { Placeholder, isPlaceholder, placeholder } from "./placeholder.ts";
+import { Path, path } from "./path.ts";
+import { Placeholder, placeholder } from "./placeholder.ts";
 import { output, process } from "./process.ts";
 import { resolve } from "./resolve.ts";
-import { Symlink, isSymlink, symlink } from "./symlink.ts";
-import { Template, isTemplate, t, template } from "./template.ts";
+import { Symlink, symlink } from "./symlink.ts";
+import { System, system } from "./system.ts";
+import { Template, t, template } from "./template.ts";
+import { Value, nullish } from "./value.ts";
 
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
@@ -34,43 +33,37 @@ Object.defineProperties(globalThis, {
 
 // Create the tg global.
 let tg = {
+	Artifact,
 	Blob,
 	Directory,
 	File,
+	Function,
 	Path,
 	Placeholder,
 	Symlink,
+	System,
 	Template,
-	array,
+	Value,
 	blob,
-	bundle,
-	checksum,
-	context,
+	call,
 	directory,
 	download,
+	env,
 	file,
 	function: function_,
-	getArtifact,
 	include,
-	isArtifact,
-	isBlobLike,
-	isDirectory,
-	isFile,
-	isPath,
-	isPlaceholder,
-	isSymlink,
-	isTemplate,
 	log,
-	map,
+	nullish,
 	output,
 	path,
 	placeholder,
 	process,
 	resolve,
 	symlink,
+	system,
 	template,
 };
 Object.defineProperties(globalThis, {
-	t: { value: t },
 	tg: { value: tg },
+	t: { value: t },
 });

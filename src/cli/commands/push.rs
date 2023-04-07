@@ -2,11 +2,15 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use tangram::artifact;
+use tangram::{
+	artifact::{self, Artifact},
+	client::Client,
+};
 use url::Url;
 
 /// Push an artifact.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	pub artifact_hash: artifact::Hash,
 
@@ -16,13 +20,16 @@ pub struct Args {
 impl Cli {
 	pub async fn command_push(&self, args: Args) -> Result<()> {
 		// Create a client.
-		let client = self.tg.create_client(args.url, None);
+		let client = Client::new(args.url, None);
 
-		// Push.
-		self.tg
-			.push(&client, args.artifact_hash)
+		// Get the artifact.
+		let artifact = Artifact::get(&self.tg, args.artifact_hash).await?;
+
+		// Push the artifact.
+		client
+			.push(&self.tg, &artifact)
 			.await
-			.wrap_err("Failed to push.")?;
+			.wrap_err("Failed to push the artifact.")?;
 
 		Ok(())
 	}

@@ -1,6 +1,7 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
-	module, Instance,
+	instance::Instance,
+	module::{self, Module},
 };
 use itertools::Itertools;
 use std::sync::Weak;
@@ -19,7 +20,7 @@ pub fn syscall(
 
 		Err(error) => {
 			// Throw an exception.
-			let exception = error.to_language_service_exception(scope);
+			let exception = error.to_exception(scope);
 			scope.throw_exception(exception);
 		},
 	}
@@ -34,21 +35,33 @@ fn syscall_inner<'s>(
 
 	// Invoke the syscall.
 	match name.as_str() {
-		"decode_hex" => syscall_sync(scope, args, syscall_decode_hex),
-		"decode_utf8" => syscall_sync(scope, args, syscall_decode_utf8),
-		"encode_hex" => syscall_sync(scope, args, syscall_encode_hex),
-		"encode_utf8" => syscall_sync(scope, args, syscall_encode_utf8),
-		"get_documents" => syscall_sync(scope, args, syscall_get_documents),
-		"load_module" => syscall_sync(scope, args, syscall_load_module),
+		"documents" => syscall_sync(scope, args, syscall_documents),
+		"hex_decode" => syscall_sync(scope, args, syscall_hex_decode),
+		"hex_encode" => syscall_sync(scope, args, syscall_hex_encode),
 		"log" => syscall_sync(scope, args, syscall_log),
-		"resolve_module" => syscall_sync(scope, args, syscall_resolve_module),
-		"get_module_version" => syscall_sync(scope, args, syscall_get_module_version),
+		"module_load" => syscall_sync(scope, args, syscall_module_load),
+		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
+		"module_version" => syscall_sync(scope, args, syscall_module_version),
+		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
+		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
+fn syscall_documents(
+	tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	_args: (),
+) -> Result<Vec<module::Module>> {
+	tg.runtime_handle.clone().block_on(async move {
+		let documents = tg.documents.read().await;
+		let modules = documents.keys().cloned().map(Module::Document).collect();
+		Ok(modules)
+	})
+}
+
 #[allow(clippy::needless_pass_by_value)]
-fn syscall_decode_hex(
+fn syscall_hex_decode(
 	_tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
@@ -60,8 +73,67 @@ fn syscall_decode_hex(
 	Ok(bytes.into())
 }
 
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_hex_encode(
+	_tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (serde_v8::ZeroCopyBuf,),
+) -> Result<String> {
+	let (bytes,) = args;
+	let hex = hex::encode(bytes);
+	Ok(hex)
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn syscall_log(_tg: &Instance, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
+	let (string,) = args;
+	eprintln!("{string}");
+	Ok(())
+}
+
+fn syscall_module_load(
+	tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (module::Module,),
+) -> Result<String> {
+	let (module,) = args;
+	tg.runtime_handle.clone().block_on(async move {
+		let text = module
+			.load(tg)
+			.await
+			.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
+		Ok(text)
+	})
+}
+
+fn syscall_module_resolve(
+	tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (module::Module, module::Specifier),
+) -> Result<module::Module> {
+	let (module, specifier) = args;
+	tg.runtime_handle.clone().block_on(async move {
+		let module = module.resolve(tg, &specifier).await.wrap_err_with(|| {
+			format!(r#"Failed to resolve specifier "{specifier}" relative to module "{module}"."#)
+		})?;
+		Ok(module)
+	})
+}
+
+fn syscall_module_version(
+	tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (module::Module,),
+) -> Result<String> {
+	let (module,) = args;
+	tg.runtime_handle.clone().block_on(async move {
+		let version = module.version(tg).await?;
+		Ok(version.to_string())
+	})
+}
+
 #[allow(clippy::needless_pass_by_value)]
-fn syscall_decode_utf8(
+fn syscall_utf8_decode(
 	_tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (serde_v8::ZeroCopyBuf,),
@@ -75,18 +147,7 @@ fn syscall_decode_utf8(
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_encode_hex(
-	_tg: &Instance,
-	_scope: &mut v8::HandleScope,
-	args: (serde_v8::ZeroCopyBuf,),
-) -> Result<String> {
-	let (bytes,) = args;
-	let hex = hex::encode(bytes);
-	Ok(hex)
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_encode_utf8(
+fn syscall_utf8_encode(
 	_tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
@@ -94,73 +155,6 @@ fn syscall_encode_utf8(
 	let (string,) = args;
 	let bytes = string.into_bytes().into();
 	Ok(bytes)
-}
-
-fn syscall_load_module(
-	tg: &Instance,
-	_scope: &mut v8::HandleScope,
-	args: (module::Identifier,),
-) -> Result<String> {
-	let (module_identifier,) = args;
-	tg.runtime_handle.clone().block_on(async move {
-		let text = tg
-			.load_document_or_module(&module_identifier)
-			.await
-			.wrap_err_with(|| format!(r#"Failed to load module "{module_identifier}"."#))?;
-		Ok(text)
-	})
-}
-
-#[allow(clippy::unnecessary_wraps)]
-fn syscall_log(_tg: &Instance, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
-	let (string,) = args;
-	eprintln!("{string}");
-	Ok(())
-}
-
-fn syscall_get_documents(
-	tg: &Instance,
-	_scope: &mut v8::HandleScope,
-	_args: (),
-) -> Result<Vec<module::Identifier>> {
-	tg.runtime_handle.clone().block_on(async move {
-		let documents = tg.documents.read().await;
-		let module_identifiers = documents.keys().cloned().collect();
-		Ok(module_identifiers)
-	})
-}
-
-fn syscall_resolve_module(
-	tg: &Instance,
-	_scope: &mut v8::HandleScope,
-	args: (module::Specifier, module::Identifier),
-) -> Result<module::Identifier> {
-	let (specifier, referrer) = args;
-	tg.runtime_handle.clone().block_on(async move {
-		let module_identifier = tg
-			.resolve_module(&specifier, &referrer)
-			.await
-			.wrap_err_with(|| {
-				format!(
-					r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer}"."#
-				)
-			})?;
-		Ok(module_identifier)
-	})
-}
-
-fn syscall_get_module_version(
-	tg: &Instance,
-	_scope: &mut v8::HandleScope,
-	args: (module::Identifier,),
-) -> Result<String> {
-	let (module_identifier,) = args;
-	tg.runtime_handle.clone().block_on(async move {
-		let version = tg
-			.get_document_or_module_version(&module_identifier)
-			.await?;
-		Ok(version.to_string())
-	})
 }
 
 fn syscall_sync<'s, A, T, F>(

@@ -4,22 +4,32 @@ use super::{
 };
 use crate::{
 	artifact::{self, Artifact},
-	blob,
+	blob::Blob,
+	call::Call,
 	checksum::{self, Checksum},
+	directory::Directory,
+	download::Download,
 	error::{return_error, Error, Result, WrapErr},
+	file::File,
+	function::Function,
+	instance::Instance,
 	language::Position,
-	module,
+	module::Module,
 	operation::{self, Operation},
 	package,
 	path::Path,
+	process::Process,
+	symlink::Symlink,
+	system::System,
+	template::Template,
 	value::Value,
-	Instance,
 };
+use base64::{engine::general_purpose, Engine as _};
 use itertools::Itertools;
 use num::ToPrimitive;
-use std::{future::Future, rc::Rc, sync::Arc};
-use tokio::io::AsyncReadExt;
+use std::{collections::BTreeMap, future::Future, rc::Rc, sync::Arc};
 use tracing::Instrument;
+use url::Url;
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn syscall(
@@ -52,82 +62,161 @@ fn syscall_inner<'s>(
 
 	// Invoke the syscall.
 	match name.as_str() {
-		"log" => syscall_sync(scope, args, syscall_log),
+		"artifact_bundle" => syscall_async(scope, args, syscall_artifact_bundle),
+		"artifact_get" => syscall_async(scope, args, syscall_artifact_get),
+		"base64_decode" => syscall_sync(scope, args, syscall_base64_decode),
+		"base64_encode" => syscall_sync(scope, args, syscall_base64_encode),
+		"blob_bytes" => syscall_async(scope, args, syscall_blob_bytes),
+		"blob_new" => syscall_async(scope, args, syscall_blob_new),
+		"blob_text" => syscall_async(scope, args, syscall_blob_text),
+		"call_new" => syscall_async(scope, args, syscall_call_new),
 		"caller" => syscall_sync(scope, args, syscall_caller),
-		"include" => syscall_async(scope, args, syscall_include),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
-		"encode_utf8" => syscall_sync(scope, args, syscall_encode_utf8),
-		"decode_utf8" => syscall_sync(scope, args, syscall_decode_utf8),
-		"add_blob" => syscall_async(scope, args, syscall_add_blob),
-		"get_blob" => syscall_async(scope, args, syscall_get_blob),
-		"add_artifact" => syscall_async(scope, args, syscall_add_artifact),
-		"get_artifact" => syscall_async(scope, args, syscall_get_artifact),
-		"add_package_instance" => syscall_async(scope, args, syscall_add_package_instance),
-		"get_package_instance" => syscall_async(scope, args, syscall_get_package_instance),
-		"add_operation" => syscall_async(scope, args, syscall_add_operation),
-		"get_operation" => syscall_async(scope, args, syscall_get_operation),
-		"run_operation" => syscall_async(scope, args, syscall_run_operation),
-		"bundle" => syscall_async(scope, args, syscall_bundle),
+		"directory_new" => syscall_async(scope, args, syscall_directory_new),
+		"download_new" => syscall_async(scope, args, syscall_download_new),
+		"file_new" => syscall_async(scope, args, syscall_file_new),
+		"hex_decode" => syscall_sync(scope, args, syscall_hex_decode),
+		"hex_encode" => syscall_sync(scope, args, syscall_hex_encode),
+		"include" => syscall_async(scope, args, syscall_include),
+		"json_decode" => syscall_sync(scope, args, syscall_json_decode),
+		"json_encode" => syscall_sync(scope, args, syscall_json_encode),
+		"log" => syscall_sync(scope, args, syscall_log),
+		"operation_get" => syscall_async(scope, args, syscall_operation_get),
+		"operation_run" => syscall_async(scope, args, syscall_operation_run),
+		"process_new" => syscall_async(scope, args, syscall_process_new),
+		"symlink_new" => syscall_async(scope, args, syscall_symlink_new),
+		"toml_decode" => syscall_sync(scope, args, syscall_toml_decode),
+		"toml_encode" => syscall_sync(scope, args, syscall_toml_encode),
+		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
+		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
+		"yaml_decode" => syscall_sync(scope, args, syscall_yaml_decode),
+		"yaml_encode" => syscall_sync(scope, args, syscall_yaml_encode),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
+async fn syscall_artifact_bundle(tg: Arc<Instance>, args: (Artifact,)) -> Result<Artifact> {
+	let (artifact,) = args;
+	let artifact = artifact.bundle(&tg).await?;
+	Ok(artifact)
+}
+
+async fn syscall_artifact_get(tg: Arc<Instance>, args: (artifact::Hash,)) -> Result<Artifact> {
+	let (hash,) = args;
+	let artifact = Artifact::get(&tg, hash).await?;
+	Ok(artifact)
+}
+
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_log(_scope: &mut v8::HandleScope, _state: Rc<State>, args: (String,)) -> Result<()> {
-	let (string,) = args;
-	println!("{string}");
-	Ok(())
+fn syscall_base64_decode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (String,),
+) -> Result<serde_v8::ZeroCopyBuf> {
+	let (value,) = args;
+	let bytes = general_purpose::STANDARD_NO_PAD
+		.decode(value)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the bytes.")?;
+	Ok(bytes.into())
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_base64_encode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (serde_v8::ZeroCopyBuf,),
+) -> Result<String> {
+	let (value,) = args;
+	let encoded = general_purpose::STANDARD_NO_PAD.encode(value);
+	Ok(encoded)
+}
+
+async fn syscall_blob_bytes(tg: Arc<Instance>, args: (Blob,)) -> Result<serde_v8::ZeroCopyBuf> {
+	let (blob,) = args;
+	let bytes = blob.bytes(&tg).await?;
+	Ok(bytes.into())
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum BlobArg {
+	Bytes(serde_v8::ZeroCopyBuf),
+	String(String),
+}
+
+async fn syscall_blob_new(tg: Arc<Instance>, args: (BlobArg,)) -> Result<Blob> {
+	let (bytes,) = args;
+	let bytes = match &bytes {
+		BlobArg::Bytes(bytes) => bytes.as_ref(),
+		BlobArg::String(string) => string.as_bytes(),
+	};
+	let blob = Blob::new(&tg, bytes).await?;
+	Ok(blob)
+}
+
+async fn syscall_blob_text(tg: Arc<Instance>, args: (Blob,)) -> Result<String> {
+	let (blob,) = args;
+	let text = blob.text(&tg).await?;
+	Ok(text)
+}
+
+async fn syscall_call_new(
+	tg: Arc<Instance>,
+	args: (Function, BTreeMap<String, Value>, Vec<Value>),
+) -> Result<Call> {
+	let (function, env, args) = args;
+	let call = Call::new(&tg, function, env, args).await?;
+	Ok(call)
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Caller {
-	module_identifier: module::Identifier,
+	module: Module,
 	position: Position,
-	package_instance_hash: package::instance::Hash,
 	line: String,
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_caller(scope: &mut v8::HandleScope, state: Rc<State>, _args: ()) -> Result<Caller> {
 	// Get the stack frame of the caller's caller.
 	let stack_trace = v8::StackTrace::current_stack_trace(scope, 3).unwrap();
 	let stack_frame = stack_trace.get_frame(scope, 2).unwrap();
 
-	// Get the module identifier and package instance hash.
-	let module_identifier: module::Identifier = stack_frame
+	// Get the module and package instance hash.
+	let module: Module = stack_frame
 		.get_script_name(scope)
 		.unwrap()
 		.to_rust_string_lossy(scope)
 		.parse()
 		.unwrap();
-	let module::identifier::Source::PackageInstance(package_instance_hash) = &module_identifier.source else {
-		return_error!("The module identifier's source must be a package instance.");
-	};
-	let package_instance_hash = *package_instance_hash;
 
 	// Get the module.
 	let modules = state.modules.borrow();
-	let module = modules
+	let source_map_module = modules
 		.iter()
-		.find(|module| module.module_identifier == module_identifier)
+		.find(|source_map_module| source_map_module.module == module)
 		.unwrap();
 
 	// Get the position and apply a source map.
 	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
 	let character = stack_frame.get_column().to_u32().unwrap();
 	let position = Position { line, character };
-	let position = module.source_map.as_ref().map_or(position, |source_map| {
-		let token = source_map
-			.lookup_token(position.line, position.character)
-			.unwrap();
-		let line = token.get_src_line();
-		let character = token.get_src_col();
-		Position { line, character }
-	});
+	let position = source_map_module
+		.source_map
+		.as_ref()
+		.map_or(position, |source_map| {
+			let token = source_map
+				.lookup_token(position.line, position.character)
+				.unwrap();
+			let line = token.get_src_line();
+			let character = token.get_src_col();
+			Position { line, character }
+		});
 
 	// Get the source line.
-	let line = module
+	let line = source_map_module
 		.text
 		.lines()
 		.nth(position.line.to_usize().unwrap())
@@ -135,28 +224,10 @@ fn syscall_caller(scope: &mut v8::HandleScope, state: Rc<State>, _args: ()) -> R
 		.to_owned();
 
 	Ok(Caller {
-		module_identifier,
+		module,
 		position,
-		package_instance_hash,
 		line,
 	})
-}
-
-async fn syscall_include(tg: Arc<Instance>, args: (Caller, Path)) -> Result<Artifact> {
-	let (caller, path) = args;
-
-	// Get the package.
-	let package_instance = tg.get_package_instance_local(caller.package_instance_hash)?;
-	let package = tg.get_artifact_local(package_instance.package_hash)?;
-
-	// Get the artifact.
-	let artifact = package
-		.as_directory()
-		.wrap_err("A package must be a directory.")?
-		.get(&tg, &path)
-		.await?;
-
-	Ok(artifact)
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
@@ -172,19 +243,185 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
+async fn syscall_directory_new(
+	tg: Arc<Instance>,
+	args: (BTreeMap<String, Artifact>,),
+) -> Result<Directory> {
+	let (entries,) = args;
+	let directory = Directory::new(&tg, entries).await?;
+	Ok(directory)
+}
+
+async fn syscall_download_new(
+	tg: Arc<Instance>,
+	args: (Url, bool, Option<Checksum>, bool),
+) -> Result<Download> {
+	let (url, unpack, checksum, is_unsafe) = args;
+	let download = Download::new(&tg, url, unpack, checksum, is_unsafe).await?;
+	Ok(download)
+}
+
+async fn syscall_file_new(tg: Arc<Instance>, args: (Blob, bool, Vec<Artifact>)) -> Result<File> {
+	let (blob, executable, references) = args;
+	let file = File::new(&tg, blob, executable, &references).await?;
+	Ok(file)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_hex_decode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (serde_v8::ZeroCopyBuf,),
+) -> Result<String> {
+	let (hex,) = args;
+	let bytes = hex::decode(hex)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the string as hex.")?;
+	let string = String::from_utf8(bytes)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the bytes as UTF-8.")?;
+	Ok(string)
+}
+
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_encode_utf8(
+fn syscall_hex_encode(
 	_scope: &mut v8::HandleScope,
 	_state: Rc<State>,
 	args: (String,),
 ) -> Result<serde_v8::ZeroCopyBuf> {
-	let (string,) = args;
-	let bytes = string.into_bytes().into();
+	let (bytes,) = args;
+	let hex = hex::encode(bytes);
+	let bytes = hex.into_bytes().into();
 	Ok(bytes)
 }
 
+async fn syscall_include(tg: Arc<Instance>, args: (Caller, Path)) -> Result<Artifact> {
+	let (caller, path) = args;
+
+	// Get the package instance.
+	let package_instance_hash = match caller.module {
+		Module::Normal(module) => module.package_instance_hash,
+		_ => unreachable!(),
+	};
+	let package_instance = package::Instance::get(&tg, package_instance_hash).await?;
+
+	// Get the artifact.
+	let artifact = package_instance
+		.package()
+		.artifact()
+		.as_directory()
+		.wrap_err("A package must be a directory.")?
+		.get(&tg, path)
+		.await?;
+
+	Ok(artifact)
+}
+
 #[allow(clippy::needless_pass_by_value)]
-fn syscall_decode_utf8(
+fn syscall_json_decode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (String,),
+) -> Result<serde_json::Value> {
+	let (json,) = args;
+	let value = serde_json::from_str(&json)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the string as json.")?;
+	Ok(value)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_json_encode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (serde_json::Value,),
+) -> Result<String> {
+	let (value,) = args;
+	let json = serde_json::to_string(&value)
+		.map_err(Error::other)
+		.wrap_err("Failed to encode the value.")?;
+	Ok(json)
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_log(_scope: &mut v8::HandleScope, _state: Rc<State>, args: (String,)) -> Result<()> {
+	let (string,) = args;
+	println!("{string}");
+	Ok(())
+}
+
+async fn syscall_operation_get(tg: Arc<Instance>, args: (operation::Hash,)) -> Result<Operation> {
+	let (hash,) = args;
+	let operation = Operation::get(&tg, hash).await?;
+	Ok(operation)
+}
+
+async fn syscall_operation_run(tg: Arc<Instance>, args: (Operation,)) -> Result<Value> {
+	let (operation,) = args;
+	// TODO: Set the parent operation here.
+	let value = operation.run(&tg).await?;
+	Ok(value)
+}
+
+type ProcessNewArgs = (
+	System,
+	Template,
+	BTreeMap<String, Template>,
+	Vec<Template>,
+	Option<Checksum>,
+	bool,
+	bool,
+	Vec<String>,
+);
+
+async fn syscall_process_new(tg: Arc<Instance>, args: ProcessNewArgs) -> Result<Process> {
+	let (system, executable, env, args, checksum, unsafe_, network, host_paths) = args;
+	let process = Process::builder(system, executable)
+		.env(env)
+		.args(args)
+		.checksum(checksum)
+		.is_unsafe(unsafe_)
+		.network(network)
+		.host_paths(host_paths)
+		.build(&tg)
+		.await?;
+	Ok(process)
+}
+
+async fn syscall_symlink_new(tg: Arc<Instance>, args: (Template,)) -> Result<Symlink> {
+	let (template,) = args;
+	let symlink = Symlink::new(&tg, template).await?;
+	Ok(symlink)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_toml_decode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (String,),
+) -> Result<toml::Value> {
+	let (toml,) = args;
+	let value = toml::from_str(&toml)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the string as toml.")?;
+	Ok(value)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_toml_encode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (toml::Value,),
+) -> Result<String> {
+	let (value,) = args;
+	let toml = toml::to_string(&value)
+		.map_err(Error::other)
+		.wrap_err("Failed to encode the value.")?;
+	Ok(toml)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_utf8_decode(
 	_scope: &mut v8::HandleScope,
 	_state: Rc<State>,
 	args: (serde_v8::ZeroCopyBuf,),
@@ -197,84 +434,41 @@ fn syscall_decode_utf8(
 	Ok(string)
 }
 
-async fn syscall_add_blob(tg: Arc<Instance>, args: (serde_v8::ZeroCopyBuf,)) -> Result<blob::Hash> {
-	let (blob,) = args;
-	let blob_hash = tg.add_blob(blob.as_ref()).await?;
-	Ok(blob_hash)
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_utf8_encode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (String,),
+) -> Result<serde_v8::ZeroCopyBuf> {
+	let (string,) = args;
+	let bytes = string.into_bytes().into();
+	Ok(bytes)
 }
 
-async fn syscall_get_blob(tg: Arc<Instance>, args: (blob::Hash,)) -> Result<serde_v8::ZeroCopyBuf> {
-	let (blob_hash,) = args;
-	let mut blob = tg.get_blob(blob_hash).await?;
-	let mut bytes = Vec::new();
-	blob.read_to_end(&mut bytes).await?;
-	let output = serde_v8::ZeroCopyBuf::ToV8(Some(bytes.into_boxed_slice()));
-	Ok(output)
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_yaml_decode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (String,),
+) -> Result<serde_yaml::Value> {
+	let (yaml,) = args;
+	let value = serde_yaml::from_str(&yaml)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the string as yaml.")?;
+	Ok(value)
 }
 
-async fn syscall_add_artifact(tg: Arc<Instance>, args: (Artifact,)) -> Result<artifact::Hash> {
-	let (artifact,) = args;
-	let artifact_hash = tg.add_artifact(&artifact).await?;
-	Ok(artifact_hash)
-}
-
-#[allow(clippy::unused_async)]
-async fn syscall_get_artifact(
-	tg: Arc<Instance>,
-	args: (artifact::Hash,),
-) -> Result<Option<Artifact>> {
-	let (artifact_hash,) = args;
-	let artifact = tg.try_get_artifact_local(artifact_hash)?;
-	Ok(artifact)
-}
-
-#[allow(clippy::unused_async)]
-async fn syscall_add_package_instance(
-	tg: Arc<Instance>,
-	args: (package::Instance,),
-) -> Result<package::instance::Hash> {
-	let (package_instance,) = args;
-	let package_instance_hash = tg.add_package_instance(&package_instance)?;
-	Ok(package_instance_hash)
-}
-
-#[allow(clippy::unused_async)]
-async fn syscall_get_package_instance(
-	tg: Arc<Instance>,
-	args: (package::instance::Hash,),
-) -> Result<Option<package::Instance>> {
-	let (package_instance_hash,) = args;
-	let package = tg.try_get_package_instance_local(package_instance_hash)?;
-	Ok(package)
-}
-
-#[allow(clippy::unused_async)]
-async fn syscall_add_operation(tg: Arc<Instance>, args: (Operation,)) -> Result<operation::Hash> {
-	let (operation,) = args;
-	let operation_hash = tg.add_operation(&operation)?;
-	Ok(operation_hash)
-}
-
-#[allow(clippy::unused_async)]
-async fn syscall_get_operation(
-	tg: Arc<Instance>,
-	args: (operation::Hash,),
-) -> Result<Option<Operation>> {
-	let (operation_hash,) = args;
-	let operation = tg.try_get_operation_local(operation_hash)?;
-	Ok(operation)
-}
-
-async fn syscall_run_operation(tg: Arc<Instance>, args: (operation::Hash,)) -> Result<Value> {
-	let (operation_hash,) = args;
-	let output = tg.run_operation(operation_hash).await?;
-	Ok(output)
-}
-
-async fn syscall_bundle(tg: Arc<Instance>, args: (artifact::Hash,)) -> Result<artifact::Hash> {
-	let (artifact_hash,) = args;
-	let bundled_hash = tg.bundle(artifact_hash).await?;
-	Ok(bundled_hash)
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_yaml_encode(
+	_scope: &mut v8::HandleScope,
+	_state: Rc<State>,
+	args: (serde_yaml::Value,),
+) -> Result<String> {
+	let (value,) = args;
+	let yaml = serde_yaml::to_string(&value)
+		.map_err(Error::other)
+		.wrap_err("Failed to encode the value.")?;
+	Ok(yaml)
 }
 
 fn syscall_sync<'s, A, T, F>(
@@ -291,7 +485,7 @@ where
 	let context = scope.get_current_context();
 
 	// Get the state.
-	let state = Rc::clone(context.get_slot::<Rc<State>>(scope).unwrap());
+	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
@@ -329,10 +523,10 @@ where
 	let context = scope.get_current_context();
 
 	// Get the instance.
-	let tg = Arc::clone(context.get_slot::<Arc<Instance>>(scope).unwrap());
+	let tg = context.get_slot::<Arc<Instance>>(scope).unwrap().clone();
 
 	// Get the state.
-	let state = Rc::clone(context.get_slot::<Rc<State>>(scope).unwrap());
+	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 
 	// Create the promise.
 	let promise_resolver = v8::PromiseResolver::new(scope).unwrap();

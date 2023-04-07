@@ -11,9 +11,9 @@ pub struct State {
 
 #[derive(Debug)]
 pub struct Module {
-	pub identity_hash: NonZeroI32,
-	pub module: v8::Global<v8::Module>,
-	pub module_identifier: module::Identifier,
+	pub module: module::Module,
+	pub v8_identity_hash: NonZeroI32,
+	pub v8_module: v8::Global<v8::Module>,
 	pub text: String,
 	pub transpiled_text: Option<String>,
 	pub source_map: Option<SourceMap>,

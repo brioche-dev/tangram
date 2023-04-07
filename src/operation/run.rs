@@ -1,33 +1,31 @@
-use super::{Hash, Operation};
-use crate::{error::Result, util::task_map::TaskMap, value::Value, Instance};
-use async_recursion::async_recursion;
+use super::Operation;
+use crate::{
+	error::{Error, Result},
+	instance::Instance,
+	util::task_map::TaskMap,
+	value::Value,
+};
 use futures::FutureExt;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 impl Operation {
-	pub async fn run(&self, tg: &Arc<Instance>) -> crate::Result<Value> {
-		let operation_hash = tg.add_operation(self)?;
-		let value = tg.run_operation(operation_hash).await?;
-		Ok(value)
-	}
-}
-
-impl Instance {
-	#[tracing::instrument(skip(self), ret)]
-	pub async fn run_operation(self: &Arc<Self>, operation_hash: Hash) -> Result<Value> {
+	#[tracing::instrument(skip(tg), ret)]
+	pub async fn run(&self, tg: &Arc<Instance>) -> Result<Value> {
 		// Get the operations task map.
-		let operations_task_map = self
+		let operations_task_map = tg
 			.operations_task_map
 			.lock()
 			.unwrap()
 			.get_or_insert_with(|| {
 				Arc::new(TaskMap::new(Box::new({
-					let tg = Arc::downgrade(self);
+					let tg = Arc::downgrade(tg);
 					move |operation_hash| {
-						let tg = Weak::clone(&tg);
+						let tg = tg.clone();
 						async move {
-							let tg = Weak::upgrade(&tg).unwrap();
-							tg.run_operation_inner(operation_hash, None).await
+							let tg = tg.upgrade().unwrap();
+							let operation = Self::get(&tg, operation_hash).await?;
+							let output = operation.run_inner(&tg, None).await?;
+							Ok::<_, Error>(output)
 						}
 						.boxed()
 					}
@@ -36,47 +34,34 @@ impl Instance {
 			.clone();
 
 		// Run the operation.
-		let value = operations_task_map.run(operation_hash).await?;
+		let value = operations_task_map.run(self.hash()).await?;
 
 		Ok(value)
 	}
 
-	#[async_recursion]
 	#[must_use]
-	#[tracing::instrument(skip(self), ret)]
-	async fn run_operation_inner(
-		self: Arc<Self>,
-		operation_hash: Hash,
-		parent_operation_hash: Option<Hash>,
-	) -> Result<Value> {
-		// Get the operation.
-		let operation = self.get_operation_local(operation_hash)?;
-
-		// Add the operation child.
-		if let Some(parent_operation_hash) = parent_operation_hash {
-			self.add_operation_child(parent_operation_hash, operation_hash)?;
+	#[tracing::instrument(skip(tg), ret)]
+	async fn run_inner(&self, tg: &Arc<Instance>, parent: Option<Operation>) -> Result<Value> {
+		// Add this operation as a child of its parent.
+		if let Some(parent) = parent {
+			self.add_child(tg, &parent).await?;
 		}
 
-		// Attempt to get the operation output.
-		let output = self.get_operation_output_local(operation_hash)?;
-
-		// If the operation has already run, then return its output.
+		// Attempt to get the operation output. If the operation has already run, then return its output.
+		let output = self.output(tg).await?;
 		if let Some(output) = output {
-			tracing::debug!("Operation already ran.");
 			return Ok(output);
 		}
 
-		tracing::debug!("Running operation.");
-
 		// Run the operation.
-		let output = match &operation {
-			Operation::Download(download) => self.run_download(download).await?,
-			Operation::Process(process) => self.run_process(process).await?,
-			Operation::Call(call) => self.run_call(call).await?,
+		let output = match self {
+			Operation::Call(call) => call.run_inner(tg).await?,
+			Operation::Download(download) => download.run_inner(tg).await?,
+			Operation::Process(process) => process.run_inner(tg).await?,
 		};
 
 		// Set the operation output.
-		self.set_operation_output(operation_hash, &output)?;
+		self.set_output(tg, &output).await?;
 
 		Ok(output)
 	}

@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{error::Result, module};
+use crate::{error::Result, module::Module};
 use lsp_types as lsp;
 
 impl Server {
@@ -7,8 +7,9 @@ impl Server {
 		&self,
 		params: lsp::GotoDefinitionParams,
 	) -> Result<Option<lsp::GotoDefinitionResponse>> {
-		// Get the module identifier.
-		let module_identifier = module::Identifier::from_lsp_uri(
+		// Get the module.
+		let module = Module::from_lsp(
+			&self.tg,
 			params.text_document_position_params.text_document.uri,
 		)
 		.await?;
@@ -17,10 +18,7 @@ impl Server {
 		let position = params.text_document_position_params.position;
 
 		// Get the definitions.
-		let locations = self
-			.tg
-			.definition(module_identifier, position.into())
-			.await?;
+		let locations = module.definition(&self.tg, position.into()).await?;
 
 		let Some(locations) = locations else {
 			return Ok(None);
@@ -30,7 +28,7 @@ impl Server {
 		let locations = locations
 			.into_iter()
 			.map(|location| lsp::Location {
-				uri: location.module_identifier.to_lsp_uri(),
+				uri: location.module.to_lsp(),
 				range: location.range.into(),
 			})
 			.collect();

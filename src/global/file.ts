@@ -1,99 +1,107 @@
-import {
-	Artifact,
-	ArtifactHash,
-	addArtifact,
-	getArtifact,
-} from "./artifact.ts";
-import { Blob, BlobHash, BlobLike, blob, isBlobLike } from "./blob.ts";
-import { MaybePromise } from "./resolve.ts";
+import { Artifact } from "./artifact.ts";
+import { Blob, blob } from "./blob.ts";
+import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 
-export type FileLike = BlobLike | File;
+export namespace File {
+	export type Arg = Blob.Arg | File | ArgObject;
 
-export let isFileLike = (value: unknown): value is FileLike => {
-	return isBlobLike(value) || value instanceof File;
-};
+	export type ArgObject = {
+		blob: Blob.Arg;
+		executable?: boolean;
+		references?: Array<Artifact>;
+	};
+}
 
-export type FileArg = MaybePromise<BlobLike | File | FileObject>;
+export let file = async (arg: Unresolved<File.Arg>): Promise<File> => {
+	// Resolve the arg.
+	let resolvedArg = await resolve(arg);
 
-export type FileObject = {
-	blob: MaybePromise<BlobLike>;
-	executable?: boolean;
-	references?: Array<MaybePromise<Artifact>>;
-};
-
-export let file = async (arg: FileArg): Promise<File> => {
-	arg = await arg;
-	if (isBlobLike(arg)) {
-		return new File({
-			blobHash: (await blob(arg)).hash(),
-			executable: false,
-			references: [],
-		});
-	} else if (isFile(arg)) {
-		return arg;
+	// Get the blob, executable, and references.
+	let blob_: Blob;
+	let executable: boolean;
+	let references: Array<Artifact>;
+	if (Blob.isBlobArg(resolvedArg)) {
+		// If the arg is a blob arg, then create a file which is not executable and has no references.
+		blob_ = await blob(resolvedArg);
+		executable = false;
+		references = [];
+	} else if (File.isFile(resolvedArg)) {
+		// If the arg is a file, then return it.
+		return resolvedArg;
 	} else {
-		let blobHash = (await blob(arg.blob)).hash();
-		let executable = arg.executable ?? false;
-		let references = await Promise.all(
-			(arg.references ?? []).map(async (reference) => {
-				reference = await reference;
-				return await reference.hash();
-			}),
-		);
-		return new File({ blobHash, executable, references });
+		// Otherwise, the arg is a file object.
+		blob_ = await blob(resolvedArg.blob);
+		executable = resolvedArg.executable ?? false;
+		references = resolvedArg.references ?? [];
 	}
+
+	// Create the file.
+	return File.fromSyscall(
+		await syscall.file.new(
+			blob_.toSyscall(),
+			executable,
+			references.map((reference) => Artifact.toSyscall(reference)),
+		),
+	);
 };
 
-export let isFile = (value: unknown): value is File => {
-	return value instanceof File;
-};
-
-type FileConstructorArgs = {
-	blobHash: BlobHash;
+type ConstructorArg = {
+	hash: Artifact.Hash;
+	blob: Blob;
 	executable: boolean;
-	references: Array<ArtifactHash>;
+	references: Array<Artifact.Hash>;
 };
 
 export class File {
-	#blobHash: BlobHash;
+	#hash: Artifact.Hash;
+	#blob: Blob;
 	#executable: boolean;
-	#references: Array<ArtifactHash>;
+	#references: Array<Artifact.Hash>;
 
-	constructor(args: FileConstructorArgs) {
-		this.#blobHash = args.blobHash;
-		this.#executable = args.executable;
-		this.#references = args.references;
+	constructor(arg: ConstructorArg) {
+		this.#hash = arg.hash;
+		this.#blob = arg.blob;
+		this.#executable = arg.executable;
+		this.#references = arg.references;
 	}
 
-	async serialize(): Promise<syscall.File> {
-		let blobHash = this.#blobHash;
-		let executable = this.#executable;
-		let references = this.#references;
+	static isFile(value: unknown): value is File {
+		return value instanceof File;
+	}
+
+	toSyscall(): syscall.File {
 		return {
-			blobHash,
-			executable,
-			references,
+			hash: this.#hash,
+			blob: this.#blob.toSyscall(),
+			executable: this.#executable,
+			references: this.#references,
 		};
 	}
 
-	static async deserialize(file: syscall.File): Promise<File> {
-		let blobHash = file.blobHash;
-		let executable = file.executable;
-		let references = file.references;
-		return new File({ blobHash, executable, references });
+	static fromSyscall(value: syscall.File): File {
+		return new File({
+			hash: value.hash,
+			blob: Blob.fromSyscall(value.blob),
+			executable: value.executable,
+			references: value.references,
+		});
 	}
 
-	async hash(): Promise<ArtifactHash> {
-		return await addArtifact(this);
-	}
-
-	blobHash(): BlobHash {
-		return this.#blobHash;
+	hash(): Artifact.Hash {
+		return this.#hash;
 	}
 
 	blob(): Blob {
-		return new Blob(this.#blobHash);
+		return this.#blob;
+	}
+
+	executable(): boolean {
+		return this.#executable;
+	}
+
+	async references(): Promise<Array<Artifact>> {
+		return await Promise.all(this.#references.map(Artifact.get));
 	}
 
 	async bytes(): Promise<Uint8Array> {
@@ -102,13 +110,5 @@ export class File {
 
 	async text(): Promise<string> {
 		return await this.blob().text();
-	}
-
-	executable(): boolean {
-		return this.#executable;
-	}
-
-	async references(): Promise<Array<Artifact>> {
-		return await Promise.all(this.#references.map(getArtifact));
 	}
 }

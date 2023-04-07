@@ -1,47 +1,68 @@
 use super::Process;
 use crate::{
-	error::{return_error, Error, Result, WrapErr},
+	artifact::Artifact,
+	error::{error, return_error, Error, Result, WrapErr},
+	instance::Instance,
+	operation::Operation,
 	system::System,
 	temp::Temp,
 	template::Template,
 	util::fs,
 	value::Value,
-	Instance,
 };
 use futures::{future::try_join_all, FutureExt};
 use std::{collections::HashSet, sync::Arc};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Path {
+	pub kind: Kind,
+	pub mode: Mode,
 	pub host_path: fs::PathBuf,
 	pub guest_path: fs::PathBuf,
-	pub mode: Mode,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum Kind {
+	File,
+	Directory,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Mode {
-	Readonly,
+	ReadOnly,
 	ReadWrite,
 }
 
-impl Instance {
-	#[allow(clippy::too_many_lines)]
-	#[tracing::instrument(skip(self), ret)]
-	pub async fn run_process(self: &Arc<Self>, process: &Process) -> Result<Value> {
-		// Create a temp for the output.
-		let output_temp = Temp::new(self);
-		let output_temp_path = output_temp.path();
+impl Process {
+	#[tracing::instrument(skip(tg), ret)]
+	pub async fn run(&self, tg: &Arc<Instance>) -> Result<Value> {
+		let operation = Operation::Process(self.clone());
+		operation.run(tg).await
+	}
 
-		tracing::debug!(output_temp_path = ?output_temp.path(), "Prepareing to run process.");
+	#[allow(clippy::too_many_lines)]
+	pub(crate) async fn run_inner(&self, tg: &Arc<Instance>) -> Result<Value> {
+		// Create a temp for the output.
+		let output_temp = Temp::new(tg);
+		tokio::fs::create_dir_all(output_temp.path())
+			.await
+			.wrap_err("Failed to create the directory for the output.")?;
+		let output_temp_path = output_temp.path().join("output");
+
+		// Get the system.
+		let system = self.system;
 
 		// Render the command template.
-		let command = render(self, &process.command, output_temp_path).await?;
+		let command = render(tg, &self.executable, &output_temp_path).await?;
 
 		// Render the env templates.
-		let env = try_join_all(process.env.iter().map(|(key, value)| async move {
-			let key = key.clone();
-			let value = render(self, value, output_temp_path).await?;
-			Ok::<_, Error>((key, value))
+		let env = try_join_all(self.env.iter().map(|(key, value)| {
+			let output_temp_path = &output_temp_path;
+			async move {
+				let key = key.clone();
+				let value = render(tg, value, output_temp_path).await?;
+				Ok::<_, Error>((key, value))
+			}
 		}))
 		.await?
 		.into_iter()
@@ -49,33 +70,40 @@ impl Instance {
 
 		// Render the args templates.
 		let args = try_join_all(
-			process
-				.args
+			self.args
 				.iter()
-				.map(|arg| render(self, arg, output_temp_path)),
+				.map(|arg| render(tg, arg, &output_temp_path)),
 		)
 		.await?;
 
 		// Collect the references.
 		let mut references = HashSet::default();
-		process
-			.command
-			.collect_recursive_references_into(self, &mut references)?;
-		for value in process.env.values() {
-			value.collect_recursive_references_into(self, &mut references)?;
+		self.executable
+			.collect_recursive_references(tg, &mut references)
+			.await?;
+		for value in self.env.values() {
+			value
+				.collect_recursive_references(tg, &mut references)
+				.await?;
 		}
-		for arg in &process.args {
-			arg.collect_recursive_references_into(self, &mut references)?;
+		for arg in &self.args {
+			arg.collect_recursive_references(tg, &mut references)
+				.await?;
 		}
 
-		// Check out the references and collect the paths
+		// Check out the references and collect the paths.
 		let mut paths: HashSet<Path, fnv::FnvBuildHasher> =
-			try_join_all(references.into_iter().map(|artifact_hash| async move {
-				let path = self.check_out_internal(artifact_hash).await?;
+			try_join_all(references.into_iter().map(|artifact| async move {
+				let path = artifact.check_out_internal(tg).await?;
+				let kind = match artifact {
+					Artifact::File(_) | Artifact::Symlink(_) => Kind::File,
+					Artifact::Directory(_) => Kind::Directory,
+				};
 				let path = Path {
 					host_path: path.clone(),
 					guest_path: path,
-					mode: Mode::Readonly,
+					mode: Mode::ReadOnly,
+					kind,
 				};
 				Ok::<_, Error>(path)
 			}))
@@ -83,52 +111,57 @@ impl Instance {
 			.into_iter()
 			.collect();
 
-		// Add the output path to the paths.
+		// Add the output temp to the paths.
 		paths.insert(Path {
-			host_path: output_temp_path.to_owned(),
-			guest_path: output_temp_path.to_owned(),
+			host_path: output_temp.path().to_owned(),
+			guest_path: output_temp.path().to_owned(),
 			mode: Mode::ReadWrite,
+			kind: Kind::Directory,
 		});
 
 		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
-		let enable_unsafe = process.checksum.is_some() || process.is_unsafe;
+		let enable_unsafe = self.checksum.is_some() || self.is_unsafe;
 
 		// Verify the safety constraints.
 		if !enable_unsafe {
-			if process.network {
-				return_error!("Network access is not allowed is safe processes.");
+			if self.network {
+				return_error!("Network access is not allowed in safe processes.");
 			}
-			if !process.host_paths.is_empty() {
+			if !self.host_paths.is_empty() {
 				return_error!("Host paths are not allowed in safe processes.");
 			}
 		}
 
 		// Handle the network flag.
-		let network_enabled = process.network;
+		let network_enabled = self.network;
 
 		// Handle the host paths.
-		for host_path in &process.host_paths {
+		for host_path in &self.host_paths {
+			// Determine the path kind.
+			let metadata = tokio::fs::metadata(host_path)
+				.await
+				.wrap_err_with(|| format!("Failed to get metadata for host path {host_path:?}."))?;
+			let kind = if metadata.is_dir() {
+				Kind::Directory
+			} else {
+				Kind::File
+			};
+
+			// Insert the path.
 			paths.insert(Path {
 				host_path: host_path.into(),
 				guest_path: host_path.into(),
-				mode: Mode::Readonly,
+				mode: Mode::ReadOnly,
+				kind,
 			});
 		}
 
 		// Run the process.
-		match process.system {
+		match system {
 			System::Amd64Linux | System::Arm64Linux => {
 				#[cfg(target_os = "linux")]
 				{
-					self.run_process_linux(
-						process.system,
-						command,
-						env,
-						args,
-						paths,
-						network_enabled,
-					)
-					.boxed()
+					Self::run_linux(tg, system, command, env, args, paths, network_enabled).boxed()
 				}
 				#[cfg(not(target_os = "linux"))]
 				{
@@ -138,15 +171,7 @@ impl Instance {
 			System::Amd64Macos | System::Arm64Macos => {
 				#[cfg(target_os = "macos")]
 				{
-					self.run_process_macos(
-						process.system,
-						command,
-						env,
-						args,
-						paths,
-						network_enabled,
-					)
-					.boxed()
+					Self::run_macos(tg, system, command, env, args, paths, network_enabled).boxed()
 				}
 				#[cfg(not(target_os = "macos"))]
 				{
@@ -156,20 +181,19 @@ impl Instance {
 		}
 		.await?;
 
-		tracing::debug!(output_temp_path = ?output_temp.path(), "Checking in the output.");
+		tracing::debug!(output_temp_path = ?output_temp.path(), "Checking in the process output.");
 
 		// Check in the output temp.
-		let output_hash = self
-			.check_in(output_temp.path())
+		let artifact = Artifact::check_in(tg, &output_temp_path)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 
-		tracing::info!(output_hash = ?output_hash, "Checked in process output.");
+		tracing::info!(?artifact, "Checked in the process output.");
 
 		// Verify the checksum if one was provided.
-		if let Some(expected) = process.checksum.clone() {
-			let actual = self
-				.compute_artifact_checksum(output_hash, expected.algorithm())
+		if let Some(expected) = self.checksum.clone() {
+			let actual = artifact
+				.checksum(tg, expected.algorithm())
 				.await
 				.wrap_err("Failed to compute the checksum.")?;
 			if expected != actual {
@@ -178,32 +202,34 @@ impl Instance {
 				);
 			}
 
-			tracing::debug!("Validated checksum");
+			tracing::debug!("Validated the checksum.");
 		}
 
 		// Create the output.
-		let output = Value::Artifact(output_hash);
+		let value = Value::Artifact(artifact);
 
-		Ok(output)
+		Ok(value)
 	}
 }
 
+/// Render a template for a process.
 async fn render(tg: &Instance, template: &Template, output_path: &fs::Path) -> Result<String> {
 	template
 		.render(|component| async move {
 			match component {
 				crate::template::Component::String(string) => Ok(string.into()),
-				crate::template::Component::Artifact(artifact_hash) => Ok(tg
-					.artifact_path(*artifact_hash)
+				crate::template::Component::Artifact(artifact) => Ok(tg
+					.artifact_path(artifact.hash())
 					.into_os_string()
 					.into_string()
 					.unwrap()
 					.into()),
 				crate::template::Component::Placeholder(placeholder) => {
-					if placeholder.name != "output" {
-						return_error!(r#"Invalid placeholder "{}"."#, placeholder.name);
+					if placeholder.name == "output" {
+						Ok(output_path.as_os_str().to_str().unwrap().into())
+					} else {
+						Err(error!(r#"Invalid placeholder "{}"."#, placeholder.name))
 					}
-					Ok(output_path.as_os_str().to_str().unwrap().into())
 				},
 			}
 		})

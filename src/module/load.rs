@@ -1,134 +1,55 @@
-use super::{identifier::Source, Identifier};
+use super::Module;
 use crate::{
-	artifact,
 	error::{Result, WrapErr},
+	instance::Instance,
 	package,
-	path::Path,
-	util::fs,
-	Instance,
 };
 use include_dir::include_dir;
 
-impl Instance {
-	/// Load a module with the given module identifier.
-	pub async fn load_module(&self, module_identifier: &Identifier) -> Result<String> {
-		match &module_identifier.source {
-			Source::Lib => load_module_from_lib(&module_identifier.path),
-
-			Source::Package(package_identifier) => {
-				self.load_module_from_package(package_identifier, &module_identifier.path)
-					.await
-			},
-
-			Source::PackageInstance(package_instance_hash) => {
-				self.load_module_from_package_instance(
-					*package_instance_hash,
-					&module_identifier.path,
-				)
-				.await
-			},
-		}
-	}
-}
-
-const TANGRAM_D_TS: &str = include_str!("../global/tangram.d.ts");
+const TANGRAM_D_TS: &str = include_str!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/src/global/tangram.d.ts"
+));
 const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/lib");
 
-fn load_module_from_lib(path: &Path) -> Result<String> {
-	// Get the module text.
-	let path = path.to_string();
-	let text = match path.as_str() {
-		"tangram.d.ts" => TANGRAM_D_TS,
-		_ => LIB
-			.get_file(&path)
-			.wrap_err_with(|| format!(r#"Could not find a lib with the path "{path}"."#))?
-			.contents_utf8()
-			.wrap_err("Failed to read the file as UTF-8.")?,
-	};
-
-	Ok(text.to_owned())
-}
-
-impl Instance {
-	async fn load_module_from_package(
-		&self,
-		package_identifier: &package::Identifier,
-		path: &Path,
-	) -> Result<String> {
-		match package_identifier {
-			package::Identifier::Path(package_path) => {
-				self.load_module_from_package_at_path(package_path, path)
-					.await
+impl Module {
+	/// Load the module.
+	pub async fn load(&self, tg: &Instance) -> Result<String> {
+		match self {
+			// Load a library module.
+			Self::Library(module) => {
+				let path = module.module_path.to_string();
+				let text = match path.as_str() {
+					"tangram.d.ts" => TANGRAM_D_TS,
+					_ => LIB
+						.get_file(&path)
+						.wrap_err_with(|| {
+							format!(r#"Could not find a library module with the path "{path}"."#)
+						})?
+						.contents_utf8()
+						.wrap_err("Failed to read the file as UTF-8.")?,
+				};
+				Ok(text.to_owned())
 			},
 
-			package::Identifier::Hash(package_hash) => {
-				self.load_module_from_package_with_hash(*package_hash, path)
-					.await
+			// Load a module from a document.
+			Self::Document(document) => document.text(tg).await,
+
+			// Load a module from a package instance.
+			Self::Normal(module) => {
+				// Get the package instance.
+				let package_instance =
+					package::Instance::get(tg, module.package_instance_hash).await?;
+
+				// Load the module.
+				let artifact = package_instance.package().artifact();
+				let directory = artifact.as_directory().unwrap();
+				let entry = directory.get(tg, module.module_path.clone()).await?;
+				let file = entry.into_file().wrap_err("Expected a file.")?;
+				let text = file.blob().text(tg).await?;
+
+				Ok(text)
 			},
 		}
-	}
-
-	async fn load_module_from_package_at_path(
-		&self,
-		package_path: &fs::Path,
-		path: &Path,
-	) -> Result<String> {
-		// Construct the path to the module.
-		let path = package_path.join(path.to_string());
-
-		// Read the file from disk.
-		let text = tokio::fs::read_to_string(&path).await.wrap_err_with(|| {
-			let path = path.display();
-			format!(r#"Failed to load the module at path "{path}"."#)
-		})?;
-
-		Ok(text)
-	}
-
-	async fn load_module_from_package_with_hash(
-		&self,
-		package_hash: artifact::Hash,
-		path: &Path,
-	) -> Result<String> {
-		// Get the package.
-		let package = self.get_artifact_local(package_hash)?;
-
-		// Get the module.
-		let module = package
-			.as_directory()
-			.wrap_err("Expected a package to be a directory.")?
-			.get(self, path)
-			.await?
-			.into_file()
-			.wrap_err("Expected a file.")?;
-
-		// Read the module.
-		let text = module.read_to_string(self).await?;
-
-		Ok(text)
-	}
-
-	async fn load_module_from_package_instance(
-		&self,
-		package_instance_hash: package::instance::Hash,
-		path: &Path,
-	) -> Result<String> {
-		// Get the package.
-		let package_instance = self.get_package_instance_local(package_instance_hash)?;
-		let package = self.get_artifact_local(package_instance.package_hash)?;
-
-		// Get the module.
-		let module = package
-			.as_directory()
-			.wrap_err("Expected a package to be a directory.")?
-			.get(self, path)
-			.await?
-			.into_file()
-			.wrap_err("Expected a file.")?;
-
-		// Read the module.
-		let text = module.read_to_string(self).await?;
-
-		Ok(text)
 	}
 }

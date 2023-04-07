@@ -6,6 +6,7 @@ use tangram::package;
 
 /// Add a dependency to a package.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(default_value = ".")]
 	pub package: package::Specifier,

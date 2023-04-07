@@ -58,7 +58,7 @@ impl Server {
 		// Get the blob.
 		let Some(file) = self.tg.try_get_blob(blob_hash).await? else { return Ok(not_found()) };
 
-		// Create the stream for the file.
+		// Create the body.
 		let body = StreamBody::new(
 			tokio_util::io::ReaderStream::new(file)
 				.map_ok(hyper::body::Frame::data)

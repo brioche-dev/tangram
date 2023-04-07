@@ -8,6 +8,13 @@ impl Id {
 	}
 }
 
+impl std::fmt::Display for Id {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{:032x?}", self.0)?;
+		Ok(())
+	}
+}
+
 impl std::str::FromStr for Id {
 	type Err = std::num::ParseIntError;
 
@@ -15,13 +22,6 @@ impl std::str::FromStr for Id {
 		let id = u128::from_str_radix(s, 16)?;
 		let id = Id(id);
 		Ok(id)
-	}
-}
-
-impl std::fmt::Display for Id {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{:032x?}", self.0)?;
-		Ok(())
 	}
 }
 

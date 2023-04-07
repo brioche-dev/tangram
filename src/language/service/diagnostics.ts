@@ -18,13 +18,13 @@ export type Diagnostic = {
 export type Severity = "error" | "warning" | "information" | "hint";
 
 export let handle = (_request: Request): Response => {
-	// Get the module identifiers of all documents.
-	let moduleIdentifiers = syscall.getDocuments();
+	// Get the modules for all documents.
+	let modules = syscall.documents();
 
 	// Collect the diagnostics.
 	let diagnostics: Array<Diagnostic> = [];
-	for (let moduleIdentifier of moduleIdentifiers) {
-		let fileName = typescript.fileNameFromModuleIdentifier(moduleIdentifier);
+	for (let module_ of modules) {
+		let fileName = typescript.fileNameFromModule(module_);
 		diagnostics.push(
 			...[
 				...typescript.languageService.getSyntacticDiagnostics(fileName),
@@ -43,22 +43,16 @@ export let handle = (_request: Request): Response => {
 export let convertDiagnosticFromTypeScript = (
 	diagnostic: ts.Diagnostic,
 ): Diagnostic => {
-	if (
-		diagnostic.file == undefined ||
-		diagnostic.start === undefined ||
-		diagnostic.length === undefined
-	) {
-		throw new Error("The diagnostic does not have a location.");
-	}
-
-	// Get the diagnostic's module identifier.
-	let moduleIdentifier = typescript.moduleIdentifierFromFileName(
-		diagnostic.file.fileName,
-	);
-
 	// Get the diagnostic's location.
 	let location = null;
-	if (diagnostic.file) {
+	if (
+		diagnostic.file !== undefined &&
+		diagnostic.start !== undefined &&
+		diagnostic.length !== undefined
+	) {
+		// Get the diagnostic's module.
+		let module_ = typescript.moduleFromFileName(diagnostic.file.fileName);
+
 		// Get the diagnostic's range.
 		let start = ts.getLineAndCharacterOfPosition(
 			diagnostic.file,
@@ -71,7 +65,7 @@ export let convertDiagnosticFromTypeScript = (
 		let range = { start, end };
 
 		location = {
-			moduleIdentifier,
+			module: module_,
 			range,
 		};
 	}

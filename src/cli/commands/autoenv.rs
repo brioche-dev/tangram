@@ -8,6 +8,7 @@ use tangram::util::fs;
 
 /// Manage autoenv paths.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	#[command(subcommand)]
 	pub command: Command,
@@ -30,20 +31,24 @@ pub enum Command {
 
 /// Add an autoenv path.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct AddArgs {
 	pub path: Option<fs::PathBuf>,
 }
 
 /// Get the autoenv path for a path.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct GetArgs {}
 
 /// List autoenv paths.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct ListArgs {}
 
 /// Remove an autoenv path.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct RemoveArgs {
 	pub path: Option<fs::PathBuf>,
 }
@@ -62,8 +67,7 @@ impl Cli {
 
 	async fn command_autoenv_add(&self, args: AddArgs) -> Result<()> {
 		// Get the path.
-		let mut path =
-			std::env::current_dir().wrap_err("Failed to get the current working directory.")?;
+		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 		if let Some(path_arg) = &args.path {
 			path.push(path_arg);
 		}
@@ -135,8 +139,7 @@ impl Cli {
 
 	async fn command_autoenv_remove(&self, args: RemoveArgs) -> Result<()> {
 		// Get the path.
-		let mut path =
-			std::env::current_dir().wrap_err("Failed to get the current working directory.")?;
+		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 		if let Some(path_arg) = &args.path {
 			path.push(path_arg);
 		}

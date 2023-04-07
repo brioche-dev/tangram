@@ -1,7 +1,7 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
+	instance::Instance,
 	util::fs,
-	Instance,
 };
 use futures::FutureExt;
 

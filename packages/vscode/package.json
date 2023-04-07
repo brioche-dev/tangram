@@ -17,7 +17,7 @@
 			"properties": {
 				"tangram.enable": {
 					"default": true,
-					"description": "Enable the Tangram extension.",
+					"description": "Enable the Tangram Language Server.",
 					"scope": "window",
 					"type": "boolean"
 				},
@@ -29,12 +29,18 @@
 				},
 				"tangram.trace.server": {
 					"default": "off",
-					"description": "Enable tracing for the Tangram Langauge Server.",
+					"description": "Enable tracing for the Tangram Language Server.",
 					"enum": [
 						"off",
 						"messages",
 						"verbose"
 					],
+					"scope": "window",
+					"type": "string"
+				},
+				"tangram.tracing": {
+					"default": "",
+					"description": "Set the `TANGRAM_TRACING` environment variable for the Tangram Language Server.",
 					"scope": "window",
 					"type": "string"
 				}

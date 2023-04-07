@@ -1,36 +1,42 @@
 use super::{send_notification, Sender, Server};
-use crate::{error::Result, language::Diagnostic, module};
+use crate::{error::Result, language::Diagnostic, module::Module};
 use lsp_types as lsp;
 use std::collections::BTreeMap;
 
 impl Server {
 	pub async fn update_diagnostics(&self, sender: &Sender) -> Result<()> {
-		// Perform the check.
-		let diagnostics = self.tg.diagnostics().await?;
+		// Get the diagnostics.
+		let diagnostics = Module::diagnostics(&self.tg).await?;
 
-		// Collect the diagnostics by module identifier.
-		let mut diagnostics_map: BTreeMap<module::Identifier, Vec<Diagnostic>> = BTreeMap::new();
+		// Clear the existing diagnostics.
+		let mut existing_diagnostics = self.diagnostics.write().await;
+		let mut diagnostics_for_module: BTreeMap<Module, Vec<Diagnostic>> = existing_diagnostics
+			.drain(..)
+			.filter_map(|diagnostic| {
+				let module = diagnostic.location?.module;
+				Some((module, Vec::new()))
+			})
+			.collect();
+
+		// Add the new diagnostics.
+		existing_diagnostics.extend(diagnostics.iter().cloned());
 		for diagnostic in diagnostics {
 			if let Some(location) = &diagnostic.location {
-				diagnostics_map
-					.entry(location.module_identifier.clone())
+				diagnostics_for_module
+					.entry(location.module.clone())
 					.or_insert_with(Vec::new)
 					.push(diagnostic);
 			}
 		}
 
 		// Publish the diagnostics.
-		for (module_identifier, diagnostics) in diagnostics_map {
-			let version = self
-				.tg
-				.get_document_or_module_version(&module_identifier)
-				.await
-				.ok();
+		for (module, diagnostics) in diagnostics_for_module {
+			let version = Some(module.version(&self.tg).await?);
 			let diagnostics = diagnostics.into_iter().map(Into::into).collect();
 			send_notification::<lsp::notification::PublishDiagnostics>(
 				sender,
 				lsp::PublishDiagnosticsParams {
-					uri: module_identifier.to_lsp_uri(),
+					uri: module.to_lsp(),
 					diagnostics,
 					version,
 				},

@@ -54,17 +54,13 @@ impl Error {
 				.map(|call_site| {
 					// Get the location.
 					let file_name = call_site.file_name.as_deref();
-					let line: u32 = call_site.line_number?.saturating_sub(1);
+					let line: u32 = call_site.line_number? - 1;
 					let character: u32 = call_site.column_number?;
 					let position = Position { line, character };
 					let location = get_location(state, file_name, position)?;
-
 					Some(location)
 				})
-				.map(|location| {
-					// Create the stack frame.
-					StackFrame { location }
-				})
+				.map(|location| StackFrame { location })
 				.collect();
 
 			// Create the stack trace.
@@ -96,10 +92,7 @@ impl Error {
 		}))
 	}
 
-	pub fn to_language_service_exception<'s>(
-		&self,
-		scope: &mut v8::HandleScope<'s>,
-	) -> v8::Local<'s, v8::Value> {
+	pub fn to_exception<'s>(&self, scope: &mut v8::HandleScope<'s>) -> v8::Local<'s, v8::Value> {
 		serde_v8::to_v8(scope, self).expect("Failed to serialize the error.")
 	}
 }
@@ -131,17 +124,15 @@ fn get_location(state: &State, file_name: Option<&str>, position: Position) -> O
 		};
 
 		Some(location)
-	} else if let Some(module_identifier) =
-		file_name.and_then(|resource_name| resource_name.parse().ok())
-	{
-		// If the file name is a module identifier, then create a location whose source is a module.
+	} else if let Some(module) = file_name.and_then(|resource_name| resource_name.parse().ok()) {
+		// If the file name is a module, then create a location whose source is a module.
 
 		// Apply a source map if one is available.
 		let modules = state.modules.borrow();
 		let position = if let Some(source_map) = modules
 			.iter()
-			.find(|module| module.module_identifier == module_identifier)
-			.and_then(|module| module.source_map.as_ref())
+			.find(|source_map_module| source_map_module.module == module)
+			.and_then(|source_map_module| source_map_module.source_map.as_ref())
 		{
 			let token = source_map
 				.lookup_token(position.line, position.character)
@@ -156,7 +147,7 @@ fn get_location(state: &State, file_name: Option<&str>, position: Position) -> O
 
 		// Create the location.
 		Some(Location {
-			source: Source::Module(module_identifier),
+			source: Source::Module(module),
 			position,
 		})
 	} else {

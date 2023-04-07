@@ -31,10 +31,10 @@ pub enum Specifier {
 	Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
 pub struct Registry {
-	/// The name of the package.
+	/// The name.
 	name: String,
 
-	/// The package's version.
+	/// The version.
 	version: Option<String>,
 }
 

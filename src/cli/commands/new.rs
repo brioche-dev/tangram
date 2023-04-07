@@ -6,21 +6,15 @@ use tangram::util::fs;
 
 /// Create a new package.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
-	#[arg(long)]
-	pub name: Option<String>,
-
-	#[arg(long)]
-	pub version: Option<String>,
-
 	pub path: Option<fs::PathBuf>,
 }
 
 impl Cli {
 	pub async fn command_new(&self, args: Args) -> Result<()> {
 		// Get the path.
-		let mut path =
-			std::env::current_dir().wrap_err("Failed to get the current working directory.")?;
+		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 		if let Some(path_arg) = &args.path {
 			path.push(path_arg);
 		}
@@ -32,12 +26,8 @@ impl Cli {
 		})?;
 
 		// Init.
-		self.command_init(super::init::Args {
-			name: args.name,
-			path: args.path,
-			version: args.version,
-		})
-		.await?;
+		self.command_init(super::init::Args { path: args.path })
+			.await?;
 
 		Ok(())
 	}

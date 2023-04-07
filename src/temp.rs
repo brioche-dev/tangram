@@ -1,4 +1,4 @@
-use crate::{id::Id, util::fs, Instance};
+use crate::{id::Id, instance::Instance, util::fs};
 
 pub struct Temp<'a> {
 	_tg: &'a Instance,

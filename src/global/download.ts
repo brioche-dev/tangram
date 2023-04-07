@@ -1,39 +1,69 @@
 import { Artifact } from "./artifact.ts";
 import { Checksum } from "./checksum.ts";
-import { run } from "./operation.ts";
+import { Operation } from "./operation.ts";
 import * as syscall from "./syscall.ts";
-import { nullish } from "./value.ts";
+import { Value, nullish } from "./value.ts";
 
-export type DownloadArgs = {
-	url: string;
-	unpack?: boolean | nullish;
-	checksum?: Checksum | nullish;
-	unsafe?: boolean | nullish;
-};
+export namespace Download {
+	export type Arg = {
+		url: string;
+		unpack?: boolean | nullish;
+		checksum?: Checksum | nullish;
+		unsafe?: boolean | nullish;
+	};
 
-export let download = async (args: DownloadArgs): Promise<Artifact> => {
-	return await new Download(args).run();
-};
+	export type ConstructorArg = {
+		hash: Operation.Hash;
+		url: string;
+		unpack?: boolean | nullish;
+		checksum?: Checksum | nullish;
+		unsafe?: boolean | nullish;
+	};
+}
 
-export let isDownload = (value: unknown): value is Download => {
-	return value instanceof Download;
+export let download = async (arg: Download.Arg): Promise<Artifact> => {
+	// Create the download.
+	let download = Download.fromSyscall(
+		await syscall.download.new(
+			arg.url,
+			arg.unpack ?? false,
+			arg.checksum ?? null,
+			arg.unsafe ?? false,
+		),
+	);
+
+	// Run the operation.
+	let output = await download.run();
+
+	return output;
 };
 
 export class Download {
+	#hash: Operation.Hash;
 	#url: string;
 	#unpack: boolean;
 	#checksum: Checksum | nullish;
 	#unsafe: boolean;
 
-	constructor(args: DownloadArgs) {
-		this.#url = args.url;
-		this.#unpack = args.unpack ?? false;
-		this.#checksum = args.checksum ?? null;
-		this.#unsafe = args.unsafe ?? false;
+	constructor(arg: Download.ConstructorArg) {
+		this.#hash = arg.hash;
+		this.#url = arg.url;
+		this.#unpack = arg.unpack ?? false;
+		this.#checksum = arg.checksum ?? null;
+		this.#unsafe = arg.unsafe ?? false;
 	}
 
-	async serialize(): Promise<syscall.Download> {
+	static isDownload(value: unknown): value is Download {
+		return value instanceof Download;
+	}
+
+	hash(): Operation.Hash {
+		return this.#hash;
+	}
+
+	toSyscall(): syscall.Download {
 		return {
+			hash: this.#hash,
 			url: this.#url,
 			unpack: this.#unpack,
 			checksum: this.#checksum,
@@ -41,8 +71,9 @@ export class Download {
 		};
 	}
 
-	static async deserialize(download: syscall.Download): Promise<Download> {
+	static fromSyscall(download: syscall.Download): Download {
 		return new Download({
+			hash: download.hash,
 			url: download.url,
 			unpack: download.unpack,
 			checksum: download.checksum,
@@ -51,6 +82,10 @@ export class Download {
 	}
 
 	async run(): Promise<Artifact> {
-		return await run(this);
+		let outputFromSyscall = await syscall.operation.run(
+			Operation.toSyscall(this),
+		);
+		let output = Value.fromSyscall(outputFromSyscall);
+		return output as Artifact;
 	}
 }

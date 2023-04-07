@@ -1,4 +1,5 @@
 use super::Struct;
+use itertools::Itertools;
 use num::ToPrimitive;
 use quote::quote;
 
@@ -19,18 +20,17 @@ impl<'a> Struct<'a> {
 				Ok(())
 			}
 		} else {
+			// Get the fields.
+			let fields = self.fields.iter().filter(|field| !field.skip).collect_vec();
+
 			// Get the len.
-			let len = self.fields.len().to_u8().unwrap();
+			let len = fields.len().to_u8().unwrap();
 
 			// Get the field ids.
-			let field_ids = self.fields.iter().map(|field| field.id).collect::<Vec<_>>();
+			let field_ids = fields.iter().map(|field| field.id).collect_vec();
 
 			// Get the field idents.
-			let field_idents = self
-				.fields
-				.iter()
-				.map(|field| &field.ident)
-				.collect::<Vec<_>>();
+			let field_idents = fields.iter().map(|field| &field.ident).collect_vec();
 
 			quote! {
 				// Write the kind.

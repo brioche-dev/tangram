@@ -1,5 +1,5 @@
 use super::{Sender, Server};
-use crate::{error::Result, module};
+use crate::{error::Result, module::Module};
 use lsp_types as lsp;
 
 impl Server {
@@ -8,15 +8,15 @@ impl Server {
 		sender: Sender,
 		params: lsp::DidOpenTextDocumentParams,
 	) -> Result<()> {
-		// Get the module identifier.
-		let module_identifier = module::Identifier::from_lsp_uri(params.text_document.uri).await?;
+		// Get the module.
+		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
 
-		// Open a document.
-		let version = params.text_document.version;
-		let text = params.text_document.text;
-		self.tg
-			.open_document(&module_identifier, version, text)
-			.await;
+		// Open the document.
+		if let Module::Document(document) = module {
+			let version = params.text_document.version;
+			let text = params.text_document.text;
+			document.open(&self.tg, version, text).await?;
+		}
 
 		// Update all diagnostics.
 		self.update_diagnostics(&sender).await?;
@@ -29,19 +29,21 @@ impl Server {
 		sender: Sender,
 		params: lsp::DidChangeTextDocumentParams,
 	) -> Result<()> {
-		// Get the module identifier.
-		let module_identifier = module::Identifier::from_lsp_uri(params.text_document.uri).await?;
+		// Get the module.
+		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
 
-		// Apply the changes.
-		for change in params.content_changes {
-			self.tg
-				.update_document(
-					&module_identifier,
-					params.text_document.version,
-					change.range.map(Into::into),
-					change.text,
-				)
-				.await?;
+		if let Module::Document(document) = module {
+			// Apply the changes.
+			for change in params.content_changes {
+				document
+					.update(
+						&self.tg,
+						change.range.map(Into::into),
+						params.text_document.version,
+						change.text,
+					)
+					.await?;
+			}
 		}
 
 		// Update all diagnostics.
@@ -55,11 +57,13 @@ impl Server {
 		sender: Sender,
 		params: lsp::DidCloseTextDocumentParams,
 	) -> Result<()> {
-		// Get the module identifier.
-		let module_identifier = module::Identifier::from_lsp_uri(params.text_document.uri).await?;
+		// Get the module.
+		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
 
-		// Close the document.
-		self.tg.close_document(&module_identifier).await;
+		if let Module::Document(document) = module {
+			// Close the document.
+			document.close(&self.tg).await?;
+		}
 
 		// Update all diagnostics.
 		self.update_diagnostics(&sender).await?;

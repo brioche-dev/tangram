@@ -1,44 +1,42 @@
 use super::{unpack, Download};
 use crate::{
+	artifact::Artifact,
 	checksum::{self, Checksum},
 	error::{return_error, Error, Result, WrapErr},
+	instance::Instance,
+	operation::Operation,
 	temp::Temp,
 	util::fs,
 	value::Value,
-	Instance,
 };
 use futures::{Stream, StreamExt, TryStreamExt};
 use std::sync::{Arc, Mutex};
 use tokio_util::io::{StreamReader, SyncIoBridge};
 
-impl Instance {
-	#[tracing::instrument(skip_all, fields(url = %download.url, unpack = download.unpack, is_unsafe = download.is_unsafe))]
-	pub async fn run_download(&self, download: &Download) -> Result<Value> {
-		// Acquire a socket permit.
-		let _socket_permit = self
-			.socket_semaphore
-			.acquire()
-			.await
-			.map_err(Error::other)?;
+impl Download {
+	#[tracing::instrument(skip(tg))]
+	pub async fn run(&self, tg: &Arc<Instance>) -> Result<Value> {
+		let operation = Operation::Download(self.clone());
+		operation.run(tg).await
+	}
 
-		tracing::debug!("Acquired socket permit.");
-
+	pub(crate) async fn run_inner(&self, tg: &Instance) -> Result<Value> {
 		// Get the unpack format.
-		let unpack_format = if download.unpack {
+		let unpack_format = if self.unpack {
 			Some(
-				unpack::Format::for_path(fs::Path::new(download.url.path()))
+				unpack::Format::for_path(fs::Path::new(self.url.path()))
 					.wrap_err("Failed to determine the unpack format.")?,
 			)
 		} else {
 			None
 		};
 
-		tracing::info!(?download.url, ?unpack_format, "Downloading artifact.");
+		tracing::info!(?self.url, ?unpack_format, "Downloading artifact.");
 
 		// Send the request.
-		let response = self
+		let response = tg
 			.http_client
-			.get(download.url.clone())
+			.get(self.url.clone())
 			.send()
 			.await?
 			.error_for_status()?;
@@ -49,7 +47,7 @@ impl Instance {
 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
 
 		// Create the checksum writer.
-		let algorithm = download
+		let algorithm = self
 			.checksum
 			.as_ref()
 			.map_or(checksum::Algorithm::Sha256, Checksum::algorithm);
@@ -67,19 +65,19 @@ impl Instance {
 		};
 
 		let artifact = match unpack_format {
-			None => self.download_simple(stream).await?,
+			None => Self::download_simple(tg, stream).await?,
 
 			Some(unpack::Format::Tar(compression)) => {
-				self.download_tar(stream, compression).await?
+				Self::download_tar(tg, stream, compression).await?
 			},
 
-			Some(unpack::Format::Zip) => self.download_zip(stream).await?,
+			Some(unpack::Format::Zip) => Self::download_zip(tg, stream).await?,
 		};
 
-		tracing::info!(?download.url, "Downloaded artifact.");
+		tracing::info!(?self.url, "Downloaded artifact.");
 
 		// If the download is not unsafe, then verify the checksum.
-		if !download.is_unsafe {
+		if !self.is_unsafe {
 			// Finalize the checksum.
 			let checksum_writer = Arc::try_unwrap(checksum_writer)
 				.unwrap()
@@ -88,7 +86,7 @@ impl Instance {
 			let actual = checksum_writer.finalize();
 
 			// Ensure a checksum was provided.
-			let Some(expected) = download.checksum.clone() else {
+			let Some(expected) = self.checksum.clone() else {
 				return_error!(r#"No checksum was provided. The checksum was "{actual}"."#);
 			};
 
@@ -104,16 +102,14 @@ impl Instance {
 
 		Ok(artifact)
 	}
-}
 
-impl Instance {
 	#[tracing::instrument(skip_all)]
-	async fn download_simple<S>(&self, stream: S) -> Result<Value>
+	async fn download_simple<S>(tg: &Instance, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp.
-		let temp = Temp::new(self);
+		let temp = Temp::new(tg);
 
 		tracing::debug!(temp_path = ?temp.path(), "Performing simple download.");
 
@@ -124,22 +120,21 @@ impl Instance {
 		drop(file);
 
 		// Check in the temp.
-		let artifact_hash = self
-			.check_in(temp.path())
+		let artifact = Artifact::check_in(tg, temp.path())
 			.await
 			.wrap_err("Failed to check in the temp path.")?;
 
-		tracing::debug!(?artifact_hash, "Checked in simple download.");
+		tracing::debug!(?artifact, "Checked in simple download.");
 
-		// Create the artifact value.
-		let artifact = Value::Artifact(artifact_hash);
+		// Create the value.
+		let value = Value::Artifact(artifact);
 
-		Ok(artifact)
+		Ok(value)
 	}
 
 	#[tracing::instrument(skip_all)]
 	async fn download_tar<S>(
-		&self,
+		tg: &Instance,
 		stream: S,
 		compression: Option<unpack::Compression>,
 	) -> Result<Value>
@@ -147,7 +142,7 @@ impl Instance {
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp.
-		let temp = Temp::new(self);
+		let temp = Temp::new(tg);
 
 		tracing::debug!(temp_path = ?temp.path(), ?compression, "Performing tar download.");
 
@@ -191,25 +186,24 @@ impl Instance {
 		.unwrap()?;
 
 		// Check in the temp.
-		let artifact_hash = self
-			.check_in(temp.path())
+		let artifact = Artifact::check_in(tg, temp.path())
 			.await
 			.wrap_err("Failed to check in the temp path.")?;
 
-		tracing::debug!(?artifact_hash, "Checked in tar download.");
+		tracing::debug!(?artifact, "Checked in tar download.");
 
-		// Create the artifact value.
-		let artifact = Value::Artifact(artifact_hash);
+		// Create the value.
+		let value = Value::Artifact(artifact);
 
-		Ok(artifact)
+		Ok(value)
 	}
 
-	async fn download_zip<S>(&self, stream: S) -> Result<Value>
+	async fn download_zip<S>(tg: &Instance, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp.
-		let temp = Temp::new(self);
+		let temp = Temp::new(tg);
 
 		tracing::debug!(temp_path = ?temp.path(), "Performing zip download.");
 
@@ -220,7 +214,7 @@ impl Instance {
 		drop(file);
 
 		// Create a temp to unpack to.
-		let unpack_temp = Temp::new(self);
+		let unpack_temp = Temp::new(tg);
 
 		// Unpack in a blocking task.
 		tokio::task::spawn_blocking({
@@ -243,16 +237,15 @@ impl Instance {
 		.unwrap()?;
 
 		// Check in the unpack temp path.
-		let artifact_hash = self
-			.check_in(unpack_temp.path())
+		let artifact = Artifact::check_in(tg, unpack_temp.path())
 			.await
 			.wrap_err("Failed to check in the temp path.")?;
 
-		tracing::debug!(?artifact_hash, "Checked in zip download.");
+		tracing::debug!(?artifact, "Checked in zip download.");
 
-		// Create the artifact value.
-		let artifact = Value::Artifact(artifact_hash);
+		// Create the value.
+		let value = Value::Artifact(artifact);
 
-		Ok(artifact)
+		Ok(value)
 	}
 }

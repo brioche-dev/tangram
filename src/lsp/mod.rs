@@ -1,6 +1,7 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
-	Instance,
+	instance::Instance,
+	language::Diagnostic,
 };
 use futures::{future, FutureExt};
 use lsp::{notification::Notification, request::Request};
@@ -16,10 +17,10 @@ mod format;
 mod hover;
 mod initialize;
 mod jsonrpc;
+mod module;
 mod references;
 mod rename;
 mod types;
-mod util;
 mod virtual_text_document;
 
 type _Receiver = tokio::sync::mpsc::UnboundedReceiver<jsonrpc::Message>;
@@ -27,12 +28,17 @@ type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
 #[derive(Clone)]
 pub struct Server {
+	/// The Tangram instance.
 	tg: Arc<Instance>,
+
+	// The published diagnostics.
+	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
 }
 
 impl Server {
 	pub fn new(tg: Arc<Instance>) -> Self {
-		Self { tg }
+		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
+		Self { tg, diagnostics }
 	}
 
 	pub async fn serve(self) -> Result<()> {

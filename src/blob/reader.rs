@@ -3,7 +3,6 @@ use tokio::io::AsyncRead;
 
 pub struct Reader {
 	pub file: tokio::fs::File,
-	pub permit: tokio::sync::OwnedSemaphorePermit,
 }
 
 impl AsyncRead for Reader {

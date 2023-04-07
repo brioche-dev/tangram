@@ -1,6 +1,5 @@
-use crate::util::http::Outgoing;
-
 use super::full;
+use crate::util::http::Outgoing;
 
 /// 400
 pub fn bad_request() -> http::Response<Outgoing> {

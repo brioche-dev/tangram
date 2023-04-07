@@ -4,14 +4,15 @@ use crate::{
 	Cli,
 };
 use tangram::{
+	call::Call,
 	function::Function,
-	operation::{Call, Operation},
-	package,
+	package::{self, Package},
 	util::fs,
 };
 
 /// Call a function.
 #[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
 	pub package: package::Specifier,
@@ -20,7 +21,7 @@ pub struct Args {
 	pub package_args: PackageArgs,
 
 	#[arg(default_value = "default")]
-	pub export: String,
+	pub function: String,
 
 	#[arg(short, long)]
 	pub output: Option<fs::PathBuf>,
@@ -28,40 +29,33 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
-		// Resolve the package specifier.
-		let package_identifier = self.tg.resolve_package(&args.package, None).await?;
+		// Get the package.
+		let package = Package::with_specifier(&self.tg, args.package).await?;
 
 		// Create the package instance.
-		let package_instance_hash = self
-			.tg
-			.clone()
-			.create_package_instance(&package_identifier, args.package_args.locked)
+		let package_instance = package
+			.instantiate(&self.tg)
 			.await
 			.wrap_err("Failed to create the package instance.")?;
 
 		// Run the operation.
-		let function = Function {
-			package_instance_hash,
-			name: args.export,
-		};
-		let context = Self::create_default_context()?;
+		let function = Function::new(&package_instance, args.function);
+		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let operation = Operation::Call(Call {
-			function,
-			context,
-			args: args_,
-		});
-		let output = operation.run(&self.tg).await?;
+		let call = Call::new(&self.tg, function, env, args_)
+			.await
+			.wrap_err("Failed to create the call.")?;
+		let output = call.run(&self.tg).await?;
 
 		// Check out the output if requested.
-		if let Some(output_path) = args.output {
-			let artifact_hash = output
+		if let Some(path) = args.output {
+			let artifact = output
 				.as_artifact()
-				.copied()
 				.wrap_err("Expected the output to be an artifact.")?;
-			self.tg
-				.check_out_external(artifact_hash, &output_path)
-				.await?;
+			artifact
+				.check_out(&self.tg, &path)
+				.await
+				.wrap_err("Failed to check out the artifact.")?;
 		}
 
 		// Print the output.

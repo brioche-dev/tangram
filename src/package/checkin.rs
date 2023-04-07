@@ -1,130 +1,53 @@
-use super::{dependency, Identifier};
-use crate::{
-	artifact::{self, Artifact},
-	directory::Directory,
-	error::{Result, WrapErr},
-	module, path,
-	util::fs,
-	Instance,
-};
-use std::{collections::HashSet, sync::Arc};
+use super::Package;
+use crate::{artifact::Artifact, directory, error::Result, path, util::fs};
+use std::sync::Arc;
 
-pub struct Output {
-	pub package_hash: artifact::Hash,
-	pub dependency_specifiers: Vec<dependency::Specifier>,
-}
+impl Package {
+	/// Check in the package.
+	pub async fn check_in(
+		tg: &Arc<crate::instance::Instance>,
+		package_path: &fs::Path,
+	) -> Result<Self> {
+		// Create a builder for the package directory.
+		let mut directory = directory::Builder::new();
 
-impl Instance {
-	/// Check in the package at the specified path.
-	#[allow(clippy::unused_async)]
-	#[tracing::instrument(skip(self))]
-	pub async fn check_in_package(self: &Arc<Self>, package_path: &fs::Path) -> Result<Output> {
-		// Create a queue of modules to visit and a visited set.
-		let root_module_identifier = module::Identifier::for_root_module_in_package(
-			Identifier::Path(package_path.to_owned()),
-		);
-		let mut queue = vec![root_module_identifier];
-		let mut visited: HashSet<module::Identifier> = HashSet::default();
+		// Add each module and its includes to the package directory.
+		for (path, analyze_output) in Self::analyze_path(tg, package_path).await? {
+			// Get the module's path.
+			let module_path = package_path.join(path.to_string());
 
-		// Create the package.
-		let mut directory = Directory::default();
+			// Add the module to the package directory.
+			let artifact = Artifact::check_in(tg, &module_path).await?;
+			directory = directory.add(tg, path.clone(), artifact).await?;
 
-		// Track the dependency specifiers.
-		let mut dependency_specifiers = Vec::new();
-
-		// Visit each module.
-		while let Some(module_identifier) = queue.pop() {
-			tracing::debug!(?module_identifier, "Visiting module.");
-
-			// Add the module to the visited set.
-			visited.insert(module_identifier.clone());
-
-			// Check in the artifact at the imported path.
-			let imported_artifact_path = package_path.join(module_identifier.path.to_string());
-			let imported_artifact_hash = self
-				.check_in(&imported_artifact_path)
-				.await
-				.wrap_err_with(|| {
-					let imported_artifact_path = imported_artifact_path.display();
-					format!(r#"Failed to check in the module at path "{imported_artifact_path}"."#)
-				})?;
-
-			// Add the imported artifact to the directory.
-			directory
-				.add(self, &module_identifier.path, imported_artifact_hash)
-				.await?;
-
-			// Load the module.
-			let module_text = self
-				.load_module(&module_identifier)
-				.await
-				.wrap_err_with(|| format!(r#"Failed to load the module "{module_identifier}"."#))?;
-
-			// Get the module's imports.
-			let imports = self
-				.imports(&module_text)
-				.await
-				.wrap_err_with(|| "Failed to get the module's imports.")?;
-
-			// Handle each import.
-			for specifier in imports.imports {
-				match specifier {
-					// If the module is specified with a path, then add the resolved module identifier to the queue if it has not been visited.
-					module::Specifier::Path(_) => {
-						// Resolve the specifier.
-						let resolved_module_identifier =
-							self.resolve_module(&specifier, &module_identifier).await?;
-
-						// Add the resolved module identifier to the queue if it has not been visited.
-						if !visited.contains(&resolved_module_identifier) {
-							queue.push(resolved_module_identifier);
-						}
-					},
-
-					// If the module is specified with a package, then add the specifier to the list of dependencies.
-					module::Specifier::Dependency(dependency_specifier) => {
-						// Convert the module dependency specifier to a package dependency specifier.
-						let package_specifier = dependency_specifier
-							.to_package_dependency_specifier(&module_identifier)?;
-
-						// Add the package specifier to the list of dependencies.
-						dependency_specifiers.push(package_specifier);
-					},
-				};
-			}
-
-			// Handle each include.
-			for path in imports.includes {
-				// Check in the artifact at the included path.
-				let included_artifact_path = module_identifier
-					.path
+			// Add the includes to the package directory.
+			for include_path in analyze_output.includes {
+				// Get the included artifact's path in the package.
+				let included_artifact_package_path = path
 					.clone()
-					.join([path::Component::ParentDir])
-					.join(path.clone());
-				let included_artifact_hash = self
-					.check_in(&package_path.join(included_artifact_path.to_string()))
-					.await?;
+					.join(path::Component::Parent)
+					.join(include_path.clone());
+
+				// Get the included artifact's path.
+				let included_artifact_path =
+					package_path.join(included_artifact_package_path.to_string());
+
+				// Check in the artifact at the included path.
+				let included_artifact = Artifact::check_in(tg, &included_artifact_path).await?;
 
 				// Add the included artifact to the directory.
-				directory.add(self, &path, included_artifact_hash).await?;
+				directory = directory
+					.add(tg, included_artifact_package_path, included_artifact)
+					.await?;
 			}
 		}
 
-		// Add the artifact.
-		let package_hash = self.add_artifact(&Artifact::Directory(directory)).await?;
+		// Create the package directory.
+		let directory = directory.build(tg).await?;
 
-		tracing::debug!(?package_hash, "Added package artifact.");
+		// Create the package.
+		let package = Self::new(directory.into(), Some(package_path.to_owned()));
 
-		// Add a package tracker.
-		self.add_package_tracker(package_hash, package_path.to_owned())
-			.await;
-
-		// Create the output.
-		let output = Output {
-			package_hash,
-			dependency_specifiers,
-		};
-
-		Ok(output)
+		Ok(package)
 	}
 }

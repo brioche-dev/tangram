@@ -1,4 +1,4 @@
-use crate::metadata::Metadata;
+use crate::package;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -9,5 +9,5 @@ pub struct Request {
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
-	pub metadata: Metadata,
+	pub metadata: package::Metadata,
 }
