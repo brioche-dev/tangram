@@ -8,75 +8,6 @@ import * as syscall from "./syscall.ts";
 import { Template, t } from "./template.ts";
 import { nullish } from "./value.ts";
 
-export namespace Symlink {
-	export type Arg = string | Path | Artifact | Template | ArgObject;
-
-	export type ArgObject = {
-		artifact?: Artifact | nullish;
-		path?: string | Path | nullish;
-	};
-}
-
-export let symlink = async (arg: Unresolved<Symlink.Arg>): Promise<Symlink> => {
-	// Resolve the arg.
-	let resolvedArg = await resolve(arg);
-
-	// Get the artifact and path.
-	let artifact: Artifact | nullish;
-	let path_: string | nullish;
-	if (typeof resolvedArg === "string") {
-		path_ = resolvedArg;
-	} else if (Path.isPath(resolvedArg)) {
-		path_ = resolvedArg.toString();
-	} else if (Artifact.isArtifact(resolvedArg)) {
-		artifact = resolvedArg;
-	} else if (resolvedArg instanceof Template) {
-		assert(resolvedArg.components().length <= 2);
-		let [firstComponent, secondComponent] = resolvedArg.components();
-		if (typeof firstComponent === "string" && secondComponent === undefined) {
-			path_ = firstComponent;
-		} else if (
-			Artifact.isArtifact(firstComponent) &&
-			secondComponent === undefined
-		) {
-			artifact = firstComponent;
-		} else if (
-			Artifact.isArtifact(firstComponent) &&
-			typeof secondComponent === "string"
-		) {
-			artifact = firstComponent;
-			assert(secondComponent.startsWith("/"));
-			path_ = secondComponent.slice(1);
-		} else {
-			throw new Error("Invalid template.");
-		}
-	} else if (resolvedArg instanceof Symlink) {
-		return resolvedArg;
-	} else if (typeof resolvedArg === "object") {
-		artifact = resolvedArg.artifact;
-		let resolvedArgPath = resolvedArg.path;
-		if (typeof resolvedArgPath === "string") {
-			path_ = resolvedArgPath;
-		} else if (Path.isPath(resolvedArgPath)) {
-			path_ = resolvedArgPath.toString();
-		}
-	}
-
-	// Create the target.
-	let target;
-	if (artifact !== undefined && path_ !== undefined) {
-		target = await t`${artifact}/${path_}`;
-	} else if (artifact !== undefined && path_ === undefined) {
-		target = await t`${artifact}`;
-	} else if (artifact === undefined && path_ !== undefined) {
-		target = await t`${path_}`;
-	} else {
-		target = await t``;
-	}
-
-	return Symlink.fromSyscall(await syscall.symlink.new(target.toSyscall()));
-};
-
 type ConstructorArgs = {
 	hash: Artifact.Hash;
 	target: Template;
@@ -86,12 +17,69 @@ export class Symlink {
 	#hash: Artifact.Hash;
 	#target: Template;
 
+	static async new(arg: Unresolved<Symlink.Arg>): Promise<Symlink> {
+		// Resolve the arg.
+		let resolvedArg = await resolve(arg);
+
+		// Get the artifact and path.
+		let artifact: Artifact | nullish;
+		let path_: string | nullish;
+		if (typeof resolvedArg === "string") {
+			path_ = resolvedArg;
+		} else if (Path.is(resolvedArg)) {
+			path_ = resolvedArg.toString();
+		} else if (Artifact.is(resolvedArg)) {
+			artifact = resolvedArg;
+		} else if (resolvedArg instanceof Template) {
+			assert(resolvedArg.components().length <= 2);
+			let [firstComponent, secondComponent] = resolvedArg.components();
+			if (typeof firstComponent === "string" && secondComponent === undefined) {
+				path_ = firstComponent;
+			} else if (Artifact.is(firstComponent) && secondComponent === undefined) {
+				artifact = firstComponent;
+			} else if (
+				Artifact.is(firstComponent) &&
+				typeof secondComponent === "string"
+			) {
+				artifact = firstComponent;
+				assert(secondComponent.startsWith("/"));
+				path_ = secondComponent.slice(1);
+			} else {
+				throw new Error("Invalid template.");
+			}
+		} else if (resolvedArg instanceof Symlink) {
+			return resolvedArg;
+		} else if (typeof resolvedArg === "object") {
+			artifact = resolvedArg.artifact;
+			let resolvedArgPath = resolvedArg.path;
+			if (typeof resolvedArgPath === "string") {
+				path_ = resolvedArgPath;
+			} else if (Path.is(resolvedArgPath)) {
+				path_ = resolvedArgPath.toString();
+			}
+		}
+
+		// Create the target.
+		let target;
+		if (artifact !== undefined && path_ !== undefined) {
+			target = await t`${artifact}/${path_}`;
+		} else if (artifact !== undefined && path_ === undefined) {
+			target = await t`${artifact}`;
+		} else if (artifact === undefined && path_ !== undefined) {
+			target = await t`${path_}`;
+		} else {
+			target = await t``;
+		}
+
+		return Symlink.fromSyscall(await syscall.symlink.new(target.toSyscall()));
+	}
+
 	constructor(args: ConstructorArgs) {
 		this.#hash = args.hash;
 		this.#target = args.target;
 	}
 
-	static isSymlink(value: unknown): value is Symlink {
+	static is(value: unknown): value is Symlink {
 		return value instanceof Symlink;
 	}
 
@@ -123,7 +111,7 @@ export class Symlink {
 
 	artifact(): Artifact | undefined {
 		let firstComponent = this.#target.components().at(0);
-		if (Artifact.isArtifact(firstComponent)) {
+		if (Artifact.is(firstComponent)) {
 			return firstComponent;
 		} else {
 			return undefined;
@@ -134,13 +122,10 @@ export class Symlink {
 		let [firstComponent, secondComponent] = this.#target.components();
 		if (typeof firstComponent === "string" && secondComponent === undefined) {
 			return path(firstComponent);
-		} else if (
-			Artifact.isArtifact(firstComponent) &&
-			secondComponent === undefined
-		) {
+		} else if (Artifact.is(firstComponent) && secondComponent === undefined) {
 			return path();
 		} else if (
-			Artifact.isArtifact(firstComponent) &&
+			Artifact.is(firstComponent) &&
 			typeof secondComponent === "string"
 		) {
 			return path(secondComponent);
@@ -151,15 +136,15 @@ export class Symlink {
 
 	async resolve(): Promise<Directory | File | undefined> {
 		let result: Artifact = this;
-		while (Symlink.isSymlink(result)) {
+		while (Symlink.is(result)) {
 			let artifact = result.artifact();
 			let path = result.path();
-			if (Directory.isDirectory(artifact)) {
+			if (Directory.is(artifact)) {
 				result = await artifact.get(path);
-			} else if (File.isFile(artifact)) {
+			} else if (File.is(artifact)) {
 				assert(path.components().length === 0);
 				result = artifact;
-			} else if (Symlink.isSymlink(artifact)) {
+			} else if (Symlink.is(artifact)) {
 				assert(path.components().length === 0);
 				result = artifact;
 			} else {
@@ -171,3 +156,14 @@ export class Symlink {
 		return result;
 	}
 }
+
+export namespace Symlink {
+	export type Arg = string | Path | Artifact | Template | ArgObject;
+
+	export type ArgObject = {
+		artifact?: Artifact | nullish;
+		path?: string | Path | nullish;
+	};
+}
+
+export let symlink = Symlink.new;

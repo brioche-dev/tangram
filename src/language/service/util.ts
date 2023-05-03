@@ -2,10 +2,6 @@ import { TSESTree, visitorKeys } from "@typescript-eslint/typescript-estree";
 
 export type nullish = undefined | null;
 
-export let isNullish = (value: unknown): value is nullish => {
-	return value === undefined || value === null;
-};
-
 export let assert: (
 	condition: unknown,
 	message?: string,

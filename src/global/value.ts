@@ -3,7 +3,7 @@ import { unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Path, path } from "./path.ts";
+import { Path } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
@@ -23,16 +23,8 @@ export type Value =
 	| Array<Value>
 	| { [key: string]: Value };
 
-export type nullish = undefined | null;
-
-export namespace nullish {
-	export let isNullish = (value: unknown): value is nullish => {
-		return value === undefined || value === null;
-	};
-}
-
-export let Value = {
-	isValue: (value: unknown): value is Value => {
+export namespace Value {
+	export let is = (value: unknown): value is Value => {
 		return (
 			value === undefined ||
 			value === null ||
@@ -50,9 +42,9 @@ export let Value = {
 			value instanceof Array ||
 			typeof value === "object"
 		);
-	},
+	};
 
-	toSyscall: <T extends Value>(value: T): syscall.Value => {
+	export let toSyscall = <T extends Value>(value: T): syscall.Value => {
 		if (value === undefined || value === null) {
 			return {
 				kind: "null",
@@ -88,7 +80,7 @@ export let Value = {
 				kind: "blob",
 				value: value.toSyscall(),
 			};
-		} else if (Artifact.isArtifact(value)) {
+		} else if (Artifact.is(value)) {
 			return {
 				kind: "artifact",
 				value: Artifact.toSyscall(value),
@@ -123,9 +115,9 @@ export let Value = {
 		} else {
 			return unreachable();
 		}
-	},
+	};
 
-	fromSyscall: (value: syscall.Value): Value => {
+	export let fromSyscall = (value: syscall.Value): Value => {
 		switch (value.kind) {
 			case "null": {
 				return value.value;
@@ -172,5 +164,13 @@ export let Value = {
 				return unreachable();
 			}
 		}
-	},
-};
+	};
+}
+
+export type nullish = undefined | null;
+
+export namespace nullish {
+	export let is = (value: unknown): value is nullish => {
+		return value === undefined || value === null;
+	};
+}

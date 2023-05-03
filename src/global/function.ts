@@ -1,47 +1,13 @@
 import { assert } from "./assert.ts";
 import { call } from "./call.ts";
 import { env } from "./env.ts";
-import { PackageInstance } from "./package.ts";
+import { Package } from "./package.ts";
 import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Value } from "./value.ts";
 
-export let function_ = <
-	A extends Array<Value> = Array<Value>,
-	R extends Value = Value,
->(
-	f: (...args: A) => MaybePromise<R>,
-): Function<A, R> => {
-	// Get the function's caller.
-	let { module, line } = syscall.caller();
-
-	// Get the function's package instance hash.
-	assert(module.kind === "normal");
-	let packageInstanceHash = module.value.packageInstanceHash;
-
-	// Get the function's name.
-	let name;
-	if (line.startsWith("export default ")) {
-		name = "default";
-	} else if (line.startsWith("export let ")) {
-		let exportName = line.match(/^export let ([a-zA-Z0-9]+)\b/)?.at(1);
-		if (!exportName) {
-			throw new Error("Invalid use of tg.function.");
-		}
-		name = exportName;
-	} else {
-		throw new Error("Invalid use of tg.function.");
-	}
-
-	return new Function({
-		packageInstanceHash,
-		name,
-		f,
-	});
-};
-
 type ConstructorArgs<A extends Array<Value>, R extends Value> = {
-	packageInstanceHash: PackageInstance.Hash;
+	packageInstanceHash: Package.Instance.Hash;
 	name: string;
 	f?: (...args: A) => MaybePromise<R>;
 };
@@ -57,9 +23,40 @@ export class Function<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 > extends globalThis.Function {
-	packageInstanceHash: PackageInstance.Hash;
+	packageInstanceHash: Package.Instance.Hash;
 	name: string;
 	f?: (...args: A) => MaybePromise<R>;
+
+	static new<A extends Array<Value> = Array<Value>, R extends Value = Value>(
+		f: (...args: A) => MaybePromise<R>,
+	): Function<A, R> {
+		// Get the function's caller.
+		let { module, line } = syscall.stackFrame(1);
+
+		// Get the function's package instance hash.
+		assert(module.kind === "normal");
+		let packageInstanceHash = module.value.packageInstanceHash;
+
+		// Get the function's name.
+		let name;
+		if (line.startsWith("export default ")) {
+			name = "default";
+		} else if (line.startsWith("export let ")) {
+			let exportName = line.match(/^export let ([a-zA-Z0-9]+)\b/)?.at(1);
+			if (!exportName) {
+				throw new Error("Invalid use of tg.function.");
+			}
+			name = exportName;
+		} else {
+			throw new Error("Invalid use of tg.function.");
+		}
+
+		return new Function({
+			packageInstanceHash,
+			name,
+			f,
+		});
+	}
 
 	constructor(args: ConstructorArgs<A, R>) {
 		super();
@@ -80,7 +77,7 @@ export class Function<
 		});
 	}
 
-	static isFunction(value: unknown): value is Function {
+	static is(value: unknown): value is Function {
 		return value instanceof Function;
 	}
 
@@ -123,3 +120,5 @@ export class Function<
 		return Value.toSyscall(output);
 	}
 }
+
+export let function_ = Function.new;

@@ -4,38 +4,22 @@ import { Operation } from "./operation.ts";
 import * as syscall from "./syscall.ts";
 import { Value, nullish } from "./value.ts";
 
-export namespace Download {
-	export type Arg = {
-		url: string;
-		unpack?: boolean | nullish;
-		checksum?: Checksum | nullish;
-		unsafe?: boolean | nullish;
-	};
-
-	export type ConstructorArg = {
-		hash: Operation.Hash;
-		url: string;
-		unpack?: boolean | nullish;
-		checksum?: Checksum | nullish;
-		unsafe?: boolean | nullish;
-	};
-}
-
 export let download = async (arg: Download.Arg): Promise<Artifact> => {
 	// Create the download.
-	let download = Download.fromSyscall(
-		await syscall.download.new(
-			arg.url,
-			arg.unpack ?? false,
-			arg.checksum ?? null,
-			arg.unsafe ?? false,
-		),
-	);
+	let download = await Download.new(arg);
 
 	// Run the operation.
 	let output = await download.run();
 
 	return output;
+};
+
+type ConstructorArg = {
+	hash: Operation.Hash;
+	url: string;
+	unpack?: boolean | nullish;
+	checksum?: Checksum | nullish;
+	unsafe?: boolean | nullish;
 };
 
 export class Download {
@@ -45,7 +29,18 @@ export class Download {
 	#checksum: Checksum | nullish;
 	#unsafe: boolean;
 
-	constructor(arg: Download.ConstructorArg) {
+	static async new(arg: Download.Arg): Promise<Download> {
+		return Download.fromSyscall(
+			await syscall.download.new(
+				arg.url,
+				arg.unpack ?? false,
+				arg.checksum ?? null,
+				arg.unsafe ?? false,
+			),
+		);
+	}
+
+	constructor(arg: ConstructorArg) {
 		this.#hash = arg.hash;
 		this.#url = arg.url;
 		this.#unpack = arg.unpack ?? false;
@@ -53,7 +48,7 @@ export class Download {
 		this.#unsafe = arg.unsafe ?? false;
 	}
 
-	static isDownload(value: unknown): value is Download {
+	static is(value: unknown): value is Download {
 		return value instanceof Download;
 	}
 
@@ -88,4 +83,13 @@ export class Download {
 		let output = Value.fromSyscall(outputFromSyscall);
 		return output as Artifact;
 	}
+}
+
+export namespace Download {
+	export type Arg = {
+		url: string;
+		unpack?: boolean | nullish;
+		checksum?: Checksum | nullish;
+		unsafe?: boolean | nullish;
+	};
 }

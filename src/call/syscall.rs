@@ -70,7 +70,6 @@ fn syscall_inner<'s>(
 		"blob_new" => syscall_async(scope, args, syscall_blob_new),
 		"blob_text" => syscall_async(scope, args, syscall_blob_text),
 		"call_new" => syscall_async(scope, args, syscall_call_new),
-		"caller" => syscall_sync(scope, args, syscall_caller),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
 		"directory_new" => syscall_async(scope, args, syscall_directory_new),
 		"download_new" => syscall_async(scope, args, syscall_download_new),
@@ -84,6 +83,7 @@ fn syscall_inner<'s>(
 		"operation_get" => syscall_async(scope, args, syscall_operation_get),
 		"operation_run" => syscall_async(scope, args, syscall_operation_run),
 		"process_new" => syscall_async(scope, args, syscall_process_new),
+		"stack_frame" => syscall_sync(scope, args, syscall_stack_frame),
 		"symlink_new" => syscall_async(scope, args, syscall_symlink_new),
 		"toml_decode" => syscall_sync(scope, args, syscall_toml_decode),
 		"toml_encode" => syscall_sync(scope, args, syscall_toml_encode),
@@ -170,66 +170,6 @@ async fn syscall_call_new(
 	Ok(call)
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Caller {
-	module: Module,
-	position: Position,
-	line: String,
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_caller(scope: &mut v8::HandleScope, state: Rc<State>, _args: ()) -> Result<Caller> {
-	// Get the stack frame of the caller's caller.
-	let stack_trace = v8::StackTrace::current_stack_trace(scope, 3).unwrap();
-	let stack_frame = stack_trace.get_frame(scope, 2).unwrap();
-
-	// Get the module and package instance hash.
-	let module: Module = stack_frame
-		.get_script_name(scope)
-		.unwrap()
-		.to_rust_string_lossy(scope)
-		.parse()
-		.unwrap();
-
-	// Get the module.
-	let modules = state.modules.borrow();
-	let source_map_module = modules
-		.iter()
-		.find(|source_map_module| source_map_module.module == module)
-		.unwrap();
-
-	// Get the position and apply a source map.
-	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
-	let character = stack_frame.get_column().to_u32().unwrap();
-	let position = Position { line, character };
-	let position = source_map_module
-		.source_map
-		.as_ref()
-		.map_or(position, |source_map| {
-			let token = source_map
-				.lookup_token(position.line, position.character)
-				.unwrap();
-			let line = token.get_src_line();
-			let character = token.get_src_col();
-			Position { line, character }
-		});
-
-	// Get the source line.
-	let line = source_map_module
-		.text
-		.lines()
-		.nth(position.line.to_usize().unwrap())
-		.unwrap()
-		.to_owned();
-
-	Ok(Caller {
-		module,
-		position,
-		line,
-	})
-}
-
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
@@ -295,7 +235,7 @@ fn syscall_hex_encode(
 	Ok(bytes)
 }
 
-async fn syscall_include(tg: Arc<Instance>, args: (Caller, Path)) -> Result<Artifact> {
+async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Path)) -> Result<Artifact> {
 	let (caller, path) = args;
 
 	// Get the package instance.
@@ -386,6 +326,71 @@ async fn syscall_process_new(tg: Arc<Instance>, args: ProcessNewArgs) -> Result<
 		.build(&tg)
 		.await?;
 	Ok(process)
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StackFrame {
+	module: Module,
+	position: Position,
+	line: String,
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn syscall_stack_frame(
+	scope: &mut v8::HandleScope,
+	state: Rc<State>,
+	args: (usize,),
+) -> Result<StackFrame> {
+	// Get the stack frame at the index.
+	let (index,) = args;
+	let stack_trace = v8::StackTrace::current_stack_trace(scope, index + 1).unwrap();
+	let stack_frame = stack_trace.get_frame(scope, index).unwrap();
+
+	// Get the module and package instance hash.
+	let module: Module = stack_frame
+		.get_script_name(scope)
+		.unwrap()
+		.to_rust_string_lossy(scope)
+		.parse()
+		.unwrap();
+
+	// Get the module.
+	let modules = state.modules.borrow();
+	let source_map_module = modules
+		.iter()
+		.find(|source_map_module| source_map_module.module == module)
+		.unwrap();
+
+	// Get the position and apply a source map.
+	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
+	let character = stack_frame.get_column().to_u32().unwrap();
+	let position = Position { line, character };
+	let position = source_map_module
+		.source_map
+		.as_ref()
+		.map_or(position, |source_map| {
+			let token = source_map
+				.lookup_token(position.line, position.character)
+				.unwrap();
+			let line = token.get_src_line();
+			let character = token.get_src_col();
+			Position { line, character }
+		});
+
+	// Get the source line.
+	let line = source_map_module
+		.text
+		.lines()
+		.nth(position.line.to_usize().unwrap())
+		.unwrap()
+		.to_owned();
+
+	Ok(StackFrame {
+		module,
+		position,
+		line,
+	})
 }
 
 async fn syscall_symlink_new(tg: Arc<Instance>, args: (Template,)) -> Result<Symlink> {

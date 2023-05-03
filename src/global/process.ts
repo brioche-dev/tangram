@@ -8,55 +8,11 @@ import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
 import { Value, nullish } from "./value.ts";
 
-export namespace Process {
-	export type Arg = {
-		system: System;
-		executable: Template.Arg;
-		env?: Record<string, Template.Arg> | nullish;
-		args?: Array<Template.Arg> | nullish;
-		checksum?: Checksum | nullish;
-		unsafe?: boolean | nullish;
-		network?: boolean | nullish;
-		hostPaths?: Array<string> | nullish;
-	};
-}
-
 export let process = async (
 	arg: Unresolved<Process.Arg>,
 ): Promise<Artifact> => {
-	// Resolve the args.
-	let resolvedArg = await resolve(arg);
-
 	// Create the process.
-	let system = resolvedArg.system;
-	let executable = await template(resolvedArg.executable);
-	let env = Object.fromEntries(
-		await Promise.all(
-			Object.entries(resolvedArg.env ?? {}).map(async ([key, value]) => [
-				key,
-				await template(value),
-			]),
-		),
-	);
-	let args_ = await Promise.all(
-		(resolvedArg.args ?? []).map(async (arg) => await template(arg)),
-	);
-	let checksum = resolvedArg.checksum ?? null;
-	let unsafe = resolvedArg.unsafe ?? false;
-	let network = resolvedArg.network ?? false;
-	let hostPaths = resolvedArg.hostPaths ?? [];
-	let process = Process.fromSyscall(
-		await syscall.process.new(
-			system,
-			executable.toSyscall(),
-			env,
-			args_.map((arg) => arg.toSyscall()),
-			checksum,
-			unsafe,
-			network,
-			hostPaths,
-		),
-	);
+	let process = await Process.new(arg);
 
 	// Run the process.
 	let output = await process.run();
@@ -66,7 +22,7 @@ export let process = async (
 
 export let output = placeholder("output");
 
-export type ConstructorArgs = {
+type ConstructorArgs = {
 	hash: Operation.Hash;
 	system: System;
 	executable: Template;
@@ -88,6 +44,42 @@ export class Process {
 	#unsafe: boolean;
 	#network: boolean;
 	#hostPaths: Array<string>;
+
+	static async new(arg: Unresolved<Process.Arg>): Promise<Process> {
+		// Resolve the args.
+		let resolvedArg = await resolve(arg);
+
+		// Create the process.
+		let system = resolvedArg.system;
+		let executable = await template(resolvedArg.executable);
+		let env = Object.fromEntries(
+			await Promise.all(
+				Object.entries(resolvedArg.env ?? {}).map(async ([key, value]) => [
+					key,
+					await template(value),
+				]),
+			),
+		);
+		let args_ = await Promise.all(
+			(resolvedArg.args ?? []).map(async (arg) => await template(arg)),
+		);
+		let checksum = resolvedArg.checksum ?? null;
+		let unsafe = resolvedArg.unsafe ?? false;
+		let network = resolvedArg.network ?? false;
+		let hostPaths = resolvedArg.hostPaths ?? [];
+		return Process.fromSyscall(
+			await syscall.process.new(
+				system,
+				executable.toSyscall(),
+				env,
+				args_.map((arg) => arg.toSyscall()),
+				checksum,
+				unsafe,
+				network,
+				hostPaths,
+			),
+		);
+	}
 
 	constructor(args: ConstructorArgs) {
 		this.#hash = args.hash;
@@ -165,4 +157,17 @@ export class Process {
 		let output = Value.fromSyscall(outputFromSyscall);
 		return output as Artifact;
 	}
+}
+
+export namespace Process {
+	export type Arg = {
+		system: System;
+		executable: Template.Arg;
+		env?: Record<string, Template.Arg> | nullish;
+		args?: Array<Template.Arg> | nullish;
+		checksum?: Checksum | nullish;
+		unsafe?: boolean | nullish;
+		network?: boolean | nullish;
+		hostPaths?: Array<string> | nullish;
+	};
 }

@@ -3,31 +3,11 @@ import { Operation } from "./operation.ts";
 import * as syscall from "./syscall.ts";
 import { Value, nullish } from "./value.ts";
 
-export namespace Call {
-	export type Arg<A extends Array<Value>, R extends Value> = {
-		function: Function<A, R>;
-		env?: Record<string, Value> | nullish;
-		args: A;
-	};
-}
-
 export let call = async <A extends Array<Value>, R extends Value>(
 	arg: Call.Arg<A, R>,
 ): Promise<R> => {
-	// Get the function, env, and args.
-	let function_ = arg.function.toSyscall();
-	let env = Object.fromEntries(
-		Object.entries(arg.env ?? {}).map(([key, value]) => [
-			key,
-			Value.toSyscall(value),
-		]),
-	);
-	let args_ = (arg.args ?? []).map((arg) => Value.toSyscall(arg));
-
 	// Create the call.
-	let call: Call<A, R> = Call.fromSyscall(
-		await syscall.call.new(function_, env, args_),
-	);
+	let call = await Call.new(arg);
 
 	// Run the operation.
 	let output = await call.run();
@@ -48,6 +28,27 @@ export class Call<A extends Array<Value> = [], R extends Value = Value> {
 	#env: Map<string, Value>;
 	#args: Array<Value>;
 
+	static async new<A extends Array<Value>, R extends Value>(
+		arg: Call.Arg<A, R>,
+	): Promise<Call<A, R>> {
+		// Get the function, env, and args.
+		let function_ = arg.function.toSyscall();
+		let env = Object.fromEntries(
+			Object.entries(arg.env ?? {}).map(([key, value]) => [
+				key,
+				Value.toSyscall(value),
+			]),
+		);
+		let args_ = (arg.args ?? []).map((arg) => Value.toSyscall(arg));
+
+		// Create the call.
+		let call: Call<A, R> = Call.fromSyscall(
+			await syscall.call.new(function_, env, args_),
+		);
+
+		return call;
+	}
+
 	constructor(args: ConstructorArgs<R>) {
 		this.#hash = args.hash;
 		this.#function = args.function;
@@ -55,7 +56,7 @@ export class Call<A extends Array<Value> = [], R extends Value = Value> {
 		this.#args = args.args;
 	}
 
-	static isCall(value: unknown): value is Call<any, any> {
+	static is(value: unknown): value is Call<any, any> {
 		return value instanceof Call;
 	}
 
@@ -108,4 +109,12 @@ export class Call<A extends Array<Value> = [], R extends Value = Value> {
 		let output = Value.fromSyscall(outputFromSyscall);
 		return output as R;
 	}
+}
+
+export namespace Call {
+	export type Arg<A extends Array<Value>, R extends Value> = {
+		function: Function<A, R>;
+		env?: Record<string, Value> | nullish;
+		args: A;
+	};
 }

@@ -9,7 +9,7 @@ export type Artifact = Directory | File | Symlink;
 export namespace Artifact {
 	export type Hash = string;
 
-	export let isArtifact = (value: unknown): value is Artifact => {
+	export let is = (value: unknown): value is Artifact => {
 		return (
 			value instanceof Directory ||
 			value instanceof File ||

@@ -1,68 +1,55 @@
 import * as syscall from "./syscall.ts";
 import { nullish } from "./value.ts";
 
-export namespace Path {
-	export type Arg = string | Path.Component | Path | Array<Arg>;
-}
-
-export let path = (...args: Array<Path.Arg>): Path => {
-	// Collect the components.
-	let components: Array<Path.Component> = [];
-	let collectComponents = (arg: Path.Arg | nullish) => {
-		if (typeof arg === "string") {
-			// Push each component.
-			for (let component of arg.split("/")) {
-				if (component === "" || component === ".") {
-					// Ignore empty and current dir components.
-				} else if (component === "..") {
-					components.push({ kind: "parent" });
-				} else {
-					components.push({
-						kind: "normal",
-						value: component,
-					});
-				}
-			}
-		} else if (Path.Component.isPathComponent(arg)) {
-			components.push(arg);
-		} else if (arg instanceof Path) {
-			components.push(...arg.components());
-		} else if (arg instanceof Array) {
-			for (let component of arg) {
-				collectComponents(component);
-			}
-		}
-	};
-	for (let arg of args) {
-		collectComponents(arg);
-	}
-
-	// Create the path.
-	let path_ = new Path();
-	for (let component of components) {
-		path_.push(component);
-	}
-
-	return path_;
-};
-
 export class Path {
 	#components: Array<Path.Component>;
+
+	static new(...args: Array<Path.Arg>): Path {
+		// Collect the components.
+		let components: Array<Path.Component> = [];
+		let collectComponents = (arg: Path.Arg | nullish) => {
+			if (typeof arg === "string") {
+				// Push each component.
+				for (let component of arg.split("/")) {
+					if (component === "" || component === ".") {
+						// Ignore empty and current dir components.
+					} else if (component === "..") {
+						components.push({ kind: "parent" });
+					} else {
+						components.push({
+							kind: "normal",
+							value: component,
+						});
+					}
+				}
+			} else if (Path.Component.is(arg)) {
+				components.push(arg);
+			} else if (arg instanceof Path) {
+				components.push(...arg.components());
+			} else if (arg instanceof Array) {
+				for (let component of arg) {
+					collectComponents(component);
+				}
+			}
+		};
+		for (let arg of args) {
+			collectComponents(arg);
+		}
+
+		// Create the path.
+		let path_ = new Path();
+		for (let component of components) {
+			path_.push(component);
+		}
+
+		return path_;
+	}
 
 	constructor(components: Array<Path.Component> = []) {
 		this.#components = components;
 	}
 
-	static isPathArg(value: unknown): value is Path.Arg {
-		return (
-			typeof value === "string" ||
-			Path.Component.isPathComponent(value) ||
-			value instanceof Path ||
-			(value instanceof Array && value.every(Path.isPathArg))
-		);
-	}
-
-	static isPath(value: unknown): value is Path {
+	static is(value: unknown): value is Path {
 		return value instanceof Path;
 	}
 
@@ -158,7 +145,7 @@ export namespace Path {
 		| { kind: "normal"; value: string };
 
 	export namespace Component {
-		export let isPathComponent = (value: unknown): value is Path.Component => {
+		export let is = (value: unknown): value is Path.Component => {
 			return (
 				typeof value === "object" &&
 				value !== null &&
@@ -177,3 +164,20 @@ export namespace Path {
 		};
 	}
 }
+
+export namespace Path {
+	export type Arg = string | Path.Component | Path | Array<Arg>;
+
+	export namespace Arg {
+		export let is = (value: unknown): value is Path.Arg => {
+			return (
+				typeof value === "string" ||
+				Path.Component.is(value) ||
+				value instanceof Path ||
+				(value instanceof Array && value.every(Path.Arg.is))
+			);
+		};
+	}
+}
+
+export let path = Path.new;

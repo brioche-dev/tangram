@@ -130,7 +130,7 @@ export type ChecksumAlgorithm = "blake3" | "sha256";
 
 export type nullish = undefined | null;
 
-export type Caller = {
+export type StackFrame = {
 	module: Module;
 	position: Position;
 	line: string;
@@ -277,12 +277,19 @@ export let call = {
 };
 
 declare global {
-	function syscall(syscall: "caller"): Caller;
+	function syscall(
+		syscall: "checksum",
+		algorithm: ChecksumAlgorithm,
+		bytes: Uint8Array,
+	): Checksum;
 }
 
-export let caller = (): Caller => {
+export let checksum = (
+	algorithm: ChecksumAlgorithm,
+	bytes: Uint8Array,
+): Checksum => {
 	try {
-		return syscall("caller");
+		return syscall("checksum", algorithm, bytes);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}
@@ -382,17 +389,17 @@ export let hex = {
 declare global {
 	function syscall(
 		syscall: "include",
-		caller: Caller,
+		stackFrame: StackFrame,
 		path: string,
 	): Promise<Artifact>;
 }
 
 export let include = async (
-	caller: Caller,
+	stackFrame: StackFrame,
 	path: string,
 ): Promise<Artifact> => {
 	try {
-		return await syscall("include", caller, path);
+		return await syscall("include", stackFrame, path);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}
@@ -507,6 +514,18 @@ export let process = {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
+};
+
+declare global {
+	function syscall(syscall: "stack_frame", index: number): StackFrame;
+}
+
+export let stackFrame = (index: number): StackFrame => {
+	try {
+		return syscall("stack_frame", index + 1);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
 };
 
 declare global {

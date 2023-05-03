@@ -11,7 +11,7 @@ export namespace Operation {
 
 	export type Kind = "download" | "process" | "call";
 
-	export let isOperation = (value: unknown): value is Operation => {
+	export let is = (value: unknown): value is Operation => {
 		return (
 			value instanceof Call ||
 			value instanceof Download ||

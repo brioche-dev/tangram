@@ -1,3 +1,5 @@
-export namespace PackageInstance {
-	export type Hash = string;
+export namespace Package {
+	export namespace Instance {
+		export type Hash = string;
+	}
 }

@@ -1,15 +1,20 @@
 /// <reference lib="es2023" />
 
 declare namespace tg {
-	// Artifact.
-
 	export type Artifact = Directory | File | Symlink;
 
 	export namespace Artifact {
+		/** An artifact hash. */
 		export type Hash = string;
 
 		/** Check if a value is an `Artifact`. */
-		export let isArtifact: (value: unknown) => value is Artifact;
+		export let is: (value: unknown) => value is Artifact;
+
+		// /** Expect that a value is an `Artifact`. */
+		// export let expect: (value: unknown) => Artifact;
+
+		// /** Assert that a value is an `Artifact`. */
+		// export let assert: (value: unknown) => asserts value is Artifact;
 
 		/* Get an artifact by its hash. */
 		export let get: (hash: Hash) => Promise<Artifact>;
@@ -17,18 +22,15 @@ declare namespace tg {
 
 	// Blob.
 
-	export namespace Blob {
-		export type Arg = Uint8Array | string | Blob;
-
-		export type Hash = string;
-	}
-
 	/** Create a blob. */
 	export let blob: (arg: Unresolved<Blob.Arg>) => Promise<Blob>;
 
 	export class Blob {
+		/** Create a blob. */
+		static new(arg: Unresolved<Blob.Arg>): Promise<Blob>;
+
 		/** Check if a value is a `Blob`. */
-		static isBlob: (value: unknown) => value is Blob;
+		static is(value: unknown): value is Blob;
 
 		/* Get this blob's hash. */
 		hash(): Blob.Hash;
@@ -40,9 +42,20 @@ declare namespace tg {
 		text(): Promise<string>;
 	}
 
+	export namespace Blob {
+		export type Hash = string;
+
+		export type Arg = Uint8Array | string | Blob;
+	}
+
 	// Call.
 
-	export namespace Call {
+	/** Call a Tangram function. */
+	export let call: <A extends Array<Value>, R extends Value>(
+		arg: call.Arg<A, R>,
+	) => Promise<R>;
+
+	export namespace call {
 		type Arg<A extends Array<Value>, R extends Value> = {
 			function: Function<A, R>;
 			env?: Record<string, Value> | nullish;
@@ -50,28 +63,23 @@ declare namespace tg {
 		};
 	}
 
-	/** Call a Tangram function. */
-	export let call: <A extends Array<Value>, R extends Value>(
-		arg: Call.Arg<A, R>,
-	) => Promise<R>;
-
 	// Checksum.
+
+	export let checksum: (
+		algorithm: Checksum.Algorithm,
+		bytes: Uint8Array,
+	) => Checksum;
 
 	export type Checksum = string;
 
 	export namespace Checksum {
 		export type Algorithm = "blake3" | "sha256";
+
+		export let new_: (algorithm: Algorithm, bytes: Uint8Array) => Checksum;
+		export { new_ as new };
 	}
 
 	// Directory.
-
-	export namespace Directory {
-		type Arg = nullish | Directory | ArgObject;
-
-		type ArgObject = { [key: string]: ArgObjectValue };
-
-		type ArgObjectValue = nullish | Blob.Arg | Artifact | ArgObject;
-	}
 
 	/** Create a directory. */
 	export let directory: (
@@ -80,8 +88,13 @@ declare namespace tg {
 
 	/** A directory. */
 	export class Directory {
+		/** Create a directory. */
+		static new: (
+			...args: Array<Unresolved<Directory.Arg>>
+		) => Promise<Directory>;
+
 		/** Check if a value is a `Directory`. */
-		static isDirectory: (value: unknown) => value is Directory;
+		static is: (value: unknown) => value is Directory;
 
 		/* Get this directory's hash. */
 		hash(): Artifact.Hash;
@@ -103,6 +116,14 @@ declare namespace tg {
 
 		/** An async iterator of this directory's entries. */
 		[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]>;
+	}
+
+	export namespace Directory {
+		type Arg = nullish | Directory | ArgObject;
+
+		type ArgObject = { [key: string]: ArgObjectValue };
+
+		type ArgObjectValue = nullish | Blob.Arg | Artifact | ArgObject;
 	}
 
 	// Download.
@@ -179,21 +200,14 @@ declare namespace tg {
 
 	// File.
 
-	export namespace File {
-		export type Arg = Blob.Arg | File | ArgObject;
-
-		export type ArgObject = {
-			blob: Blob.Arg;
-			executable?: boolean;
-			references?: Array<Artifact>;
-		};
-	}
-
 	export let file: (arg: Unresolved<File.Arg>) => Promise<File>;
 
 	export class File {
+		/** Create a file. */
+		static new: (arg: Unresolved<File.Arg>) => Promise<File>;
+
 		/** Check if a value is a `File`. */
-		static isFile: (value: unknown) => value is File;
+		static is: (value: unknown) => value is File;
 
 		/* Get this file's hash. */
 		hash(): Artifact.Hash;
@@ -214,6 +228,16 @@ declare namespace tg {
 		references(): Promise<Array<Artifact>>;
 	}
 
+	export namespace File {
+		export type Arg = Blob.Arg | File | ArgObject;
+
+		export type ArgObject = {
+			blob: Blob.Arg;
+			executable?: boolean;
+			references?: Array<Artifact>;
+		};
+	}
+
 	// Function.
 
 	/** Create a Tangram function. */
@@ -229,9 +253,10 @@ declare namespace tg {
 		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
 	};
 
-	export let Function: {
-		isFunction: (value: unknown) => value is Function<any, any>;
-	};
+	export namespace Function {
+		/** Check if a value is a `Function`. */
+		export let is: (value: unknown) => value is Function<any, any>;
+	}
 
 	// Include.
 
@@ -245,14 +270,16 @@ declare namespace tg {
 
 	// Path.
 
-	export namespace Path {
-		export type Arg = nullish | string | Path.Component | Path | Array<Arg>;
-	}
-
 	/** Create a path. */
 	export let path: (...args: Array<Path.Arg>) => Path;
 
 	export class Path {
+		/** Create a new path. */
+		static new: (...args: Array<Path.Arg>) => Path;
+
+		/** Check if a value is a `Path`. */
+		static is: (value: unknown) => value is Path;
+
 		/** Get this path's components. */
 		components(): Array<Path.Component>;
 
@@ -267,13 +294,15 @@ declare namespace tg {
 	}
 
 	export namespace Path {
+		export type Arg = nullish | string | Path.Component | Path | Array<Arg>;
+
 		export type Component =
 			| { kind: "parent" }
 			| { kind: "normal"; value: string };
 
 		export namespace Component {
 			/** Check if a value is a `Path.Component`. */
-			export let isPathComponent: (value: unknown) => value is Path.Component;
+			export let is: (value: unknown) => value is Path.Component;
 
 			/** Check if two path components are equal. */
 			export let equal: (a: Path.Component, b: Path.Component) => boolean;
@@ -287,8 +316,11 @@ declare namespace tg {
 
 	/** A placeholder. */
 	export class Placeholder {
+		/** Create a new placeholder. */
+		static new: (name: string) => Placeholder;
+
 		/** Check if a value is a `Placeholder`. */
-		static isPlaceholder: (value: unknown) => value is Placeholder;
+		static is: (value: unknown) => value is Placeholder;
 
 		/** Get this placeholder's name. */
 		name(): string;
@@ -324,6 +356,7 @@ declare namespace tg {
 		};
 	}
 
+	/** Run a process. */
 	export let process: (arg: Unresolved<Process.Arg>) => Promise<Artifact>;
 
 	export let output: Placeholder;
@@ -400,21 +433,15 @@ declare namespace tg {
 
 	// Symlink.
 
-	export namespace Symlink {
-		type Arg = Path.Arg | Artifact | Template | ArgObject;
-
-		type ArgObject = {
-			artifact?: Artifact | nullish;
-			path?: Path.Arg | nullish;
-		};
-	}
-
 	/** Create a symlink. */
 	export let symlink: (target: Unresolved<Symlink.Arg>) => Promise<Symlink>;
 
 	export class Symlink {
+		/** Create a symlink. */
+		static new: (target: Unresolved<Symlink.Arg>) => Promise<Symlink>;
+
 		/** Check if a value is a `Symlink`. */
-		static isSymlink: (value: unknown) => value is Symlink;
+		static is: (value: unknown) => value is Symlink;
 
 		/* Get this symlink's hash. */
 		hash(): Artifact.Hash;
@@ -430,6 +457,15 @@ declare namespace tg {
 
 		/** Resolve this symlink to the directory or file it refers to, or return undefined if none is found. */
 		resolve(): Promise<Directory | File | undefined>;
+	}
+
+	export namespace Symlink {
+		type Arg = Path.Arg | Artifact | Template | ArgObject;
+
+		type ArgObject = {
+			artifact?: Artifact | nullish;
+			path?: Path.Arg | nullish;
+		};
 	}
 
 	// System.
@@ -457,8 +493,12 @@ declare namespace tg {
 
 		export type Os = "linux" | "macos";
 
+		/** Create a system. */
+		let new_: (arg: System.Arg) => System;
+		export { new_ as new };
+
 		/** Check if a value is a `System`. */
-		export let isSystem: (value: unknown) => value is System;
+		export let is: (value: unknown) => value is System;
 
 		/** Get a system's arch. */
 		export let arch: (value: System) => Arch;
@@ -469,23 +509,21 @@ declare namespace tg {
 
 	// Template.
 
-	export namespace Template {
-		export type Arg = Template.Component | Path | Template | Array<Arg>;
-	}
-
 	/** Create a template. */
 	export let template: (
-		...args: Array<Unresolved<Template.Arg | nullish>>
+		...args: Array<Unresolved<Template.Arg>>
 	) => Promise<Template>;
 
 	export class Template {
+		static new(...args: Array<Unresolved<Template.Arg>>): Promise<Template>;
+
 		/** Check if a value is a `Template`. */
-		static isTemplate: (value: unknown) => value is Template;
+		static is: (value: unknown) => value is Template;
 
 		/** Join an array of templates with a separator. */
 		static join(
 			separator: Template.Arg,
-			...args: Array<Template.Arg | nullish>
+			...args: Array<Template.Arg>
 		): Promise<Template>;
 
 		/** Get this template's components. */
@@ -493,11 +531,23 @@ declare namespace tg {
 	}
 
 	export namespace Template {
+		export type Arg =
+			| nullish
+			| Template.Component
+			| Path
+			| Template
+			| Array<Arg>;
+
+		export namespace Arg {
+			/** Check if a value is a `Template.Arg`. */
+			export let is: (value: unknown) => value is Arg;
+		}
+
 		export type Component = string | Artifact | Placeholder;
 
 		export namespace Component {
 			/** Check if a value is a `Template.Component`. */
-			export let isTemplateComponent: (value: unknown) => value is Component;
+			export let is: (value: unknown) => value is Component;
 		}
 	}
 
@@ -518,17 +568,22 @@ declare namespace tg {
 		| Array<Value>
 		| { [key: string]: Value };
 
+	export namespace Value {
+		/** Check if a value is a `Value`. */
+		export let is: (value: unknown) => value is Value;
+	}
+
 	export type nullish = undefined | null;
 
 	export namespace nullish {
-		export let isNullish: (value: unknown) => value is nullish;
+		export let is: (value: unknown) => value is nullish;
 	}
 }
 
 /**
  * Create a Tangram template with a JavaScript tagged template.
  */
-declare var t: (
+declare let t: (
 	strings: TemplateStringsArray,
 	...placeholders: Array<tg.Unresolved<tg.Template.Arg | tg.nullish>>
 ) => Promise<tg.Template>;
@@ -537,16 +592,3 @@ declare let console: {
 	/** Write to the log. */
 	log: (...args: Array<unknown>) => void;
 };
-
-interface JSON {
-	/**
-	 * Converts a JavaScript Object Notation (JSON) string into an object.
-	 * @param text A valid JSON string.
-	 * @param reviver A function that transforms the results. This function is called for each member of the object.
-	 * If a member contains nested objects, the nested objects are transformed before the parent object is.
-	 */
-	parse(
-		text: string,
-		reviver?: (this: any, key: string, value: any) => any,
-	): unknown;
-}
