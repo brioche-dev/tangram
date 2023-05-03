@@ -113,6 +113,7 @@ export type Call = {
 
 export type Function = {
 	packageInstanceHash: PackageInstanceHash;
+	modulePath: string;
 	name: string;
 };
 

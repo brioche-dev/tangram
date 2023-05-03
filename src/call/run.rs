@@ -2,6 +2,7 @@ use super::{isolate::THREAD_LOCAL_ISOLATE, state::State, Call};
 use crate::{
 	error::{Error, Result, WrapErr},
 	instance::Instance,
+	module::{self, Module},
 	operation::Operation,
 	value::Value,
 };
@@ -37,7 +38,10 @@ impl Call {
 		let context = super::context::new(tg.clone());
 
 		// Get the module.
-		let module = self.function.package_instance(&tg).await?.root_module();
+		let module = Module::Normal(module::Normal {
+			package_instance_hash: self.function.package_instance_hash,
+			module_path: self.function.module_path.clone(),
+		});
 
 		// Evaluate the module.
 		let (module, _) = super::module::evaluate(context.clone(), &module).await?;

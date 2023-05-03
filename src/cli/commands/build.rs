@@ -6,7 +6,7 @@ use crate::{
 use tangram::{
 	call::Call,
 	function::Function,
-	package::{self, Package},
+	package::{self, Package, ROOT_MODULE_FILE_NAME},
 	util::fs,
 };
 
@@ -39,7 +39,11 @@ impl Cli {
 			.wrap_err("Failed to create the package instance.")?;
 
 		// Run the operation.
-		let function = Function::new(&package_instance, args.function);
+		let function = Function::new(
+			&package_instance,
+			ROOT_MODULE_FILE_NAME.into(),
+			args.function,
+		);
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
 		let call = Call::new(&self.tg, function, env, args_)

@@ -2,12 +2,14 @@ import { assert } from "./assert.ts";
 import { call } from "./call.ts";
 import { env } from "./env.ts";
 import { Package } from "./package.ts";
+import { Path, path } from "./path.ts";
 import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Value } from "./value.ts";
 
 type ConstructorArgs<A extends Array<Value>, R extends Value> = {
 	packageInstanceHash: Package.Instance.Hash;
+	modulePath: Path.Arg;
 	name: string;
 	f?: (...args: A) => MaybePromise<R>;
 };
@@ -24,6 +26,7 @@ export class Function<
 	R extends Value = Value,
 > extends globalThis.Function {
 	packageInstanceHash: Package.Instance.Hash;
+	modulePath: Path;
 	name: string;
 	f?: (...args: A) => MaybePromise<R>;
 
@@ -36,6 +39,7 @@ export class Function<
 		// Get the function's package instance hash.
 		assert(module.kind === "normal");
 		let packageInstanceHash = module.value.packageInstanceHash;
+		let modulePath = module.value.modulePath;
 
 		// Get the function's name.
 		let name;
@@ -53,6 +57,7 @@ export class Function<
 
 		return new Function({
 			packageInstanceHash,
+			modulePath,
 			name,
 			f,
 		});
@@ -62,6 +67,7 @@ export class Function<
 		super();
 
 		this.packageInstanceHash = args.packageInstanceHash;
+		this.modulePath = path(args.modulePath);
 		this.name = args.name;
 		this.f = args.f;
 
@@ -83,9 +89,11 @@ export class Function<
 
 	toSyscall(): syscall.Function {
 		let packageInstanceHash = this.packageInstanceHash;
-		let name = this.name?.toString();
+		let modulePath = this.modulePath.toString();
+		let name = this.name;
 		return {
 			packageInstanceHash,
+			modulePath,
 			name,
 		};
 	}
@@ -94,9 +102,11 @@ export class Function<
 		function_: syscall.Function,
 	): Function<A, R> {
 		let packageInstanceHash = function_.packageInstanceHash;
+		let modulePath = function_.modulePath;
 		let name = function_.name;
 		return new Function({
 			packageInstanceHash,
+			modulePath,
 			name,
 		});
 	}
