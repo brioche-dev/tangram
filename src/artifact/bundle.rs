@@ -1,7 +1,7 @@
 use super::Artifact;
 use crate::{
-	directory::Directory,
-	error::{return_error, Error, Result, WrapErr},
+	directory::{Directory, self},
+	error::{return_error, Error, Result},
 	file::File,
 	instance::Instance,
 	path::{self, Path},
@@ -28,8 +28,26 @@ impl Artifact {
 			return Ok(self.clone());
 		}
 
-		// Bundle the artifact at the empty path.
+		// Bundle the artifact, stripping any references recursively.
 		let artifact = self.bundle_inner(tg, &Path::empty()).await?;
+
+		// Add the bundled artifact at the correct path.
+		let artifact = match artifact {
+			// If the artifact is a directory, bundle it to the empty path.
+			Artifact::Directory(artifact) => artifact,
+
+			// If the artifact is an executable file, bundle it at .tangram/run.
+			Artifact::File(artifact) if artifact.executable() => {
+				directory::Builder::new()
+					.add(tg, ".tangram/run", artifact)
+					.await?
+					.build(tg)
+					.await?
+			},
+
+			// Return an error otherwise.
+			_ => return_error!("The artifact must be a directory or an executable file."),
+		};
 
 		// Create the references directory by bundling each reference at `.tangram/artifacts/HASH`.
 		let entries = references
@@ -50,12 +68,11 @@ impl Artifact {
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
 			.await?;
+
 		let directory = Directory::new(tg, entries).await?;
 
 		// Add the references directory to the artifact at `.tangram/artifacts`.
 		let artifact = artifact
-			.into_directory()
-			.wrap_err("The artifact must be a directory.")?
 			.builder(tg)
 			.await?
 			.add(tg, TANGRAM_ARTIFACTS_PATH.clone(), directory)
