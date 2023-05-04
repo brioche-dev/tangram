@@ -1,7 +1,7 @@
-export function prepareStackTrace(
+export let prepareStackTrace = (
 	_error: unknown,
 	structuredStackTrace: Array<CallSite>,
-) {
+) => {
 	let callSites = structuredStackTrace.map((callSite) => {
 		return {
 			typeName: callSite.getTypeName(),
@@ -20,7 +20,7 @@ export function prepareStackTrace(
 		};
 	});
 	return { callSites };
-}
+};
 
 /** This type is derived from <https://v8.dev/docs/stack-trace-api#customizing-stack-traces>. */
 type CallSite = {

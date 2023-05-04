@@ -53,11 +53,21 @@ pub struct Normal {
 
 impl From<Module> for Url {
 	fn from(value: Module) -> Self {
-		// Serialize and encode the identifier.
+		// Serialize and encode the module.
 		let data = hex::encode(serde_json::to_string(&value).unwrap());
 
+		let path = match value {
+			Module::Library(library) => format!("/{}", library.module_path),
+			Module::Document(document) => format!(
+				"/{}/{}",
+				document.package_path.display(),
+				document.module_path
+			),
+			Module::Normal(normal) => format!("/{}", normal.module_path),
+		};
+
 		// Create the URL.
-		format!("tangram:{data}.tg").parse().unwrap()
+		format!("tangram://{data}{path}").parse().unwrap()
 	}
 }
 
@@ -70,21 +80,18 @@ impl TryFrom<Url> for Module {
 			return_error!("The URL has an invalid scheme.");
 		}
 
-		// Strip the ".tg" extension.
-		let path = value
-			.path()
-			.strip_suffix(".tg")
-			.wrap_err("The URL has an invalid extension.")?;
+		// Get the domain.
+		let data = value.domain().wrap_err("The URL must have a domain.")?;
 
 		// Decode.
-		let data = hex::decode(path)
+		let data = hex::decode(data)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the path as hex.")?;
 
 		// Deserialize.
 		let module = serde_json::from_slice(&data)
 			.map_err(Error::other)
-			.wrap_err("Failed to deserialize the identifier.")?;
+			.wrap_err("Failed to deserialize the module.")?;
 
 		Ok(module)
 	}
