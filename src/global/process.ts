@@ -52,7 +52,7 @@ export class Process {
 		// Create the process.
 		let system = resolvedArg.system;
 		let executable = await template(resolvedArg.executable);
-		let env = Object.fromEntries(
+		let env: Record<string, Template> = Object.fromEntries(
 			await Promise.all(
 				Object.entries(resolvedArg.env ?? {}).map(async ([key, value]) => [
 					key,
@@ -60,9 +60,11 @@ export class Process {
 				]),
 			),
 		);
+		let syscallEnv = Object.fromEntries(Object.entries(env).map(([key, value]) => [key, value.toSyscall()]));
 		let args_ = await Promise.all(
 			(resolvedArg.args ?? []).map(async (arg) => await template(arg)),
 		);
+		let syscallArgs = args_.map((arg) => arg.toSyscall());
 		let checksum = resolvedArg.checksum ?? null;
 		let unsafe = resolvedArg.unsafe ?? false;
 		let network = resolvedArg.network ?? false;
@@ -71,8 +73,8 @@ export class Process {
 			await syscall.process.new(
 				system,
 				executable.toSyscall(),
-				env,
-				args_.map((arg) => arg.toSyscall()),
+				syscallEnv,
+				syscallArgs,
 				checksum,
 				unsafe,
 				network,

@@ -19,6 +19,7 @@ impl Template {
 		references: &mut HashSet<Artifact, fnv::FnvBuildHasher>,
 	) -> Result<()> {
 		for artifact in self.references() {
+			references.insert(artifact.clone());
 			artifact
 				.collect_recursive_references(tg, references)
 				.await?;
