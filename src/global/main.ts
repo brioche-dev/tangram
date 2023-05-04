@@ -14,6 +14,7 @@ import { Placeholder, placeholder } from "./placeholder.ts";
 import { output, process } from "./process.ts";
 import { resolve } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
+import { base64, hex, json, toml, utf8, yaml } from "./syscall.ts";
 import { System, system } from "./system.ts";
 import { Template, t, template } from "./template.ts";
 import { Value, nullish } from "./value.ts";
@@ -44,6 +45,7 @@ let tg = {
 	System,
 	Template,
 	Value,
+	base64,
 	blob,
 	call,
 	directory,
@@ -51,7 +53,9 @@ let tg = {
 	env,
 	file,
 	function: function_,
+	hex,
 	include,
+	json,
 	log,
 	nullish,
 	output,
@@ -60,8 +64,11 @@ let tg = {
 	process,
 	resolve,
 	symlink,
+	toml,
 	system,
 	template,
+	utf8,
+	yaml
 };
 Object.defineProperties(globalThis, {
 	tg: { value: tg },
