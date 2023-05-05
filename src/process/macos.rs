@@ -52,7 +52,7 @@ impl Process {
 		let socket_path = root_directory_temp.path().join("socket");
 
 		// Start the server.
-		let server = Server::new(Arc::downgrade(tg));
+		let server = Server::new(Arc::downgrade(tg), paths.iter().cloned().collect());
 		let server_task = tokio::spawn({
 			let socket_path = socket_path.clone();
 			async move {

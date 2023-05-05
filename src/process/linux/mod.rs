@@ -98,7 +98,7 @@ impl Process {
 		env.insert(String::from("TANGRAM_SOCKET"), "/socket".to_owned());
 
 		// Start the server.
-		let server = Server::new(Arc::downgrade(tg));
+		let server = Server::new(Arc::downgrade(tg), paths.iter().cloned().collect());
 		let server_task = tokio::spawn({
 			let socket_path = socket_path.clone();
 			async move {

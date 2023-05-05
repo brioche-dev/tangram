@@ -1,6 +1,7 @@
+use super::run;
 use crate::{
 	artifact::Artifact,
-	error::{Error, Result, WrapErr},
+	error::{error, Error, Result, WrapErr},
 	instance::Instance,
 	template::Template,
 	util::{
@@ -16,12 +17,13 @@ use std::{convert::Infallible, sync::Weak};
 #[derive(Clone)]
 pub struct Server {
 	tg: Weak<Instance>,
+	mounts: Vec<run::Path>,
 }
 
 impl Server {
 	#[must_use]
-	pub fn new(tg: Weak<Instance>) -> Self {
-		Self { tg }
+	pub fn new(tg: Weak<Instance>, mounts: Vec<run::Path>) -> Self {
+		Self { tg, mounts }
 	}
 
 	pub async fn serve(self, path: &fs::Path) -> Result<()> {
@@ -110,12 +112,15 @@ impl Server {
 			.to_bytes();
 
 		// Deserialize the path from the body.
-		let path: fs::PathBuf = serde_json::from_slice(&body)
+		let guest_path: fs::PathBuf = serde_json::from_slice(&body)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the request body.")?;
 
+		// Get the corresponding host path.
+		let host_path = self.get_host_path(&guest_path)?;
+
 		// Check in the artifact.
-		let artifact = Artifact::check_in(&tg, &path)
+		let artifact = Artifact::check_in(&tg, &host_path)
 			.await
 			.wrap_err("Failed to check in the path.")?;
 
@@ -162,15 +167,20 @@ impl Server {
 		let artifact = Artifact::get(&tg, hash).await?;
 
 		// Perform the internal checkout.
-		let path = artifact
+		let host_path = artifact
 			.check_out_internal(&tg)
 			.await
 			.wrap_err("Failed to check out the artifact.")?;
 
+		// Convert to a guest path.
+		// TODO: How do we make sure this path is mounted in the sandbox, after the sandbox has spawned?
+		let guest_path = self.get_guest_path(&host_path)?;
+
 		// Create the response.
-		let body = serde_json::to_vec(&path)
+		let body = serde_json::to_vec(&guest_path)
 			.map_err(Error::other)
 			.wrap_err("Failed to serialize the response body.")?;
+
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(full(body))
@@ -215,5 +225,33 @@ impl Server {
 			.unwrap();
 
 		Ok(response)
+	}
+
+	// TODO: verify this works as expected.
+	fn get_guest_path(&self, host_path: &std::path::Path) -> Result<std::path::PathBuf> {
+		let mount = self
+			.mounts
+			.iter()
+			.find(|mount| host_path.starts_with(&mount.host_path))
+			.ok_or_else(|| {
+				error!("Failed to find find corresponding host path for {host_path:#?}.")
+			})?;
+
+		let subpath = pathdiff::diff_paths(host_path, &mount.host_path).unwrap();
+		Ok(mount.guest_path.join(subpath))
+	}
+
+	// TODO: verify this works as expected.
+	fn get_host_path(&self, guest_path: &std::path::Path) -> Result<std::path::PathBuf> {
+		let mount = self
+			.mounts
+			.iter()
+			.find(|mount| guest_path.starts_with(&mount.guest_path))
+			.ok_or_else(|| {
+				error!("Failed to find find corresponding host path for {guest_path:#?}.")
+			})?;
+
+		let subpath = pathdiff::diff_paths(guest_path, &mount.guest_path).unwrap();
+		Ok(mount.host_path.join(subpath))
 	}
 }
