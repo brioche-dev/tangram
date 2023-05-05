@@ -64,11 +64,11 @@ let tg = {
 	process,
 	resolve,
 	symlink,
-	toml,
 	system,
 	template,
+	toml,
 	utf8,
-	yaml
+	yaml,
 };
 Object.defineProperties(globalThis, {
 	tg: { value: tg },

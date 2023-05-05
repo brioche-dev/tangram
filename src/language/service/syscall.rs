@@ -38,6 +38,8 @@ fn syscall_inner<'s>(
 		"documents" => syscall_sync(scope, args, syscall_documents),
 		"hex_decode" => syscall_sync(scope, args, syscall_hex_decode),
 		"hex_encode" => syscall_sync(scope, args, syscall_hex_encode),
+		"json_decode" => syscall_sync(scope, args, syscall_json_decode),
+		"json_encode" => syscall_sync(scope, args, syscall_json_encode),
 		"log" => syscall_sync(scope, args, syscall_log),
 		"module_load" => syscall_sync(scope, args, syscall_module_load),
 		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
@@ -82,6 +84,32 @@ fn syscall_hex_encode(
 	let (bytes,) = args;
 	let hex = hex::encode(bytes);
 	Ok(hex)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_json_decode(
+	_tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (String,),
+) -> Result<serde_json::Value> {
+	let (json,) = args;
+	let value = serde_json::from_str(&json)
+		.map_err(Error::other)
+		.wrap_err("Failed to decode the string as json.")?;
+	Ok(value)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn syscall_json_encode(
+	_tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (serde_json::Value,),
+) -> Result<String> {
+	let (value,) = args;
+	let json = serde_json::to_string(&value)
+		.map_err(Error::other)
+		.wrap_err("Failed to encode the value.")?;
+	Ok(json)
 }
 
 #[allow(clippy::unnecessary_wraps)]

@@ -57,6 +57,32 @@ export let hex = {
 };
 
 declare global {
+	/** Decode a json string to a value. */
+	function syscall(syscall: "json_decode", value: string): unknown;
+
+	/** Encode a value to a json string. */
+	function syscall(syscall: "json_encode", value: any): string;
+}
+
+export let json = {
+	decode: (value: string): unknown => {
+		try {
+			return syscall("json_decode", value);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	encode: (value: any): string => {
+		try {
+			return syscall("json_encode", value);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+};
+
+declare global {
 	/** Write to the log. */
 	function syscall(name: "log", value: string): void;
 }

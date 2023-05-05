@@ -76,15 +76,15 @@ impl Cli {
 				// If the artifact is a file or symlink, then the executable path should be the artifact itself.
 				Artifact::File(_) | Artifact::Symlink(_) => artifact_path,
 
-				// If the artifact is a directory, then the executable path should be "run".
-				Artifact::Directory(_) => artifact_path.join("run"),
+				// If the artifact is a directory, then the executable path should be `.tangram/run`.
+				Artifact::Directory(_) => artifact_path.join(".tangram/run"),
 			}
 		};
 
 		// Exec the process.
-		let error = std::process::Command::new(executable_path)
+		Err(std::process::Command::new(executable_path)
 			.args(args.trailing_args)
-			.exec();
-		Err(error.into())
+			.exec()
+			.into())
 	}
 }

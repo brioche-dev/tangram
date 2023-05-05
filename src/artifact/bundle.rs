@@ -1,7 +1,7 @@
 use super::Artifact;
 use crate::{
-	directory::{Directory, self},
-	error::{return_error, Error, Result},
+	directory::{self, Directory},
+	error::{return_error, Error, Result, WrapErr},
 	file::File,
 	instance::Instance,
 	path::{self, Path},
@@ -14,6 +14,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashSet;
 
 static TANGRAM_ARTIFACTS_PATH: Lazy<Path> = Lazy::new(|| Path::new(".tangram/artifacts"));
+static TANGRAM_RUN_PATH: Lazy<Path> = Lazy::new(|| Path::new(".tangram/run"));
 
 impl Artifact {
 	/// Bundle an artifact with all of its recursive references at `.tangram/artifacts`.
@@ -28,26 +29,25 @@ impl Artifact {
 			return Ok(self.clone());
 		}
 
-		// Bundle the artifact, stripping any references recursively.
-		let artifact = self.bundle_inner(tg, &Path::empty()).await?;
+		// Create the bundle directory
+		let artifact = match self {
+			// If the artifact is a directory, use it as is.
+			Artifact::Directory(directory) => Artifact::Directory(directory.clone()),
 
-		// Add the bundled artifact at the correct path.
-		let artifact = match artifact {
-			// If the artifact is a directory, bundle it to the empty path.
-			Artifact::Directory(artifact) => artifact,
+			// If the artifact is an executable file, create a directory and place the executable at `.tangram/run`.
+			Artifact::File(file) if file.executable() => directory::Builder::new()
+				.add(tg, TANGRAM_RUN_PATH.clone(), file.clone())
+				.await?
+				.build(tg)
+				.await?
+				.into(),
 
-			// If the artifact is an executable file, bundle it at .tangram/run.
-			Artifact::File(artifact) if artifact.executable() => {
-				directory::Builder::new()
-					.add(tg, ".tangram/run", artifact)
-					.await?
-					.build(tg)
-					.await?
-			},
-
-			// Return an error otherwise.
+			// Otherwise, return an error.
 			_ => return_error!("The artifact must be a directory or an executable file."),
 		};
+
+		// Bundle the artifact, stripping any references recursively.
+		let artifact = artifact.bundle_inner(tg, &Path::empty()).await?;
 
 		// Create the references directory by bundling each reference at `.tangram/artifacts/HASH`.
 		let entries = references
@@ -73,6 +73,8 @@ impl Artifact {
 
 		// Add the references directory to the artifact at `.tangram/artifacts`.
 		let artifact = artifact
+			.into_directory()
+			.wrap_err("The artifact must be a directory.")?
 			.builder(tg)
 			.await?
 			.add(tg, TANGRAM_ARTIFACTS_PATH.clone(), directory)

@@ -449,12 +449,6 @@ declare namespace tg {
 		/** Get this symlink's target. */
 		target(): Template;
 
-		/** Get this symlink's artifact. */
-		artifact(): Artifact | undefined;
-
-		/** Get this symlink's path. */
-		path(): Path;
-
 		/** Resolve this symlink to the directory or file it refers to, or return undefined if none is found. */
 		resolve(): Promise<Directory | File | undefined>;
 	}

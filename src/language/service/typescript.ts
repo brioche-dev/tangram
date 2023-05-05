@@ -7,6 +7,7 @@ export let compilerOptions: ts.CompilerOptions = {
 	isolatedModules: true,
 	module: ts.ModuleKind.ESNext,
 	noEmit: true,
+	noUncheckedIndexedAccess: true,
 	skipLibCheck: true,
 	strict: true,
 	target: ts.ScriptTarget.ESNext,
@@ -106,7 +107,9 @@ export let fileNameFromModule = (module_: Module): string => {
 	if (module_.kind === "library") {
 		return `/library/${module_.value.modulePath}`;
 	} else {
-		let data = syscall.hex.encode(syscall.utf8.encode(JSON.stringify(module_)));
+		let data = syscall.hex.encode(
+			syscall.utf8.encode(syscall.json.encode(module_)),
+		);
 		return `/${data}.ts`;
 	}
 };
@@ -119,7 +122,9 @@ export let moduleFromFileName = (fileName: string): Module => {
 		module_ = { kind: "library", value: { modulePath: path } };
 	} else {
 		let data = fileName.slice(1, -3);
-		module_ = JSON.parse(syscall.utf8.decode(syscall.hex.decode(data)));
+		module_ = syscall.json.decode(
+			syscall.utf8.decode(syscall.hex.decode(data)),
+		) as Module;
 	}
 	return module_;
 };
