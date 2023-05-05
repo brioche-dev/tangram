@@ -62,6 +62,13 @@
 				"language": "tangram-typescript",
 				"path": "./tangram-typescript.tmLanguage.json",
 				"scopeName": "source.tg"
+			},
+			{
+				"scopeName": "documentation.injection.tg",
+				"path": "./tangram-jsdoc-injection.tmLanguage.json",
+				"injectTo": [
+					"source.tg"
+				]
 			}
 		],
 		"languages": [

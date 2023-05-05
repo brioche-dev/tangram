@@ -33,5 +33,33 @@
 		["\"", "\""],
 		["`", "`"],
 		["<", ">"]
+	],
+	"onEnterRules": [
+		// Insert " * " following an opening "/**" and before a closing "*/".
+		{
+			"beforeText": "^\\s*/\\*\\*(?!/)([^\\*]|\\*(?!/))*$",
+			"afterText": "^\\s*\\*/$",
+			"action": {
+				"indent": "indentOutdent",
+				"appendText": " * "
+			}
+		},
+		// Insert "* " following on opneing "/**" without the closing "*/".
+		{
+			"beforeText": "^\\s*/\\*\\*(?!/)([^\\*]|\\*(?!/))*$",
+			"action": {
+				"indent": "none",
+				"appendText": " * "
+			}
+		},
+		// Insert "* " following a " * " line.
+		{
+			"beforeText": "^(\\t|[ ])*[ ]\\*([ ]([^\\*]|\\*(?!/))*)?$",
+			"previousLineText": "(?=^(\\s*(/\\*\\*|\\*)).*)(?=(?!(\\s*\\*/)))",
+			"action": {
+				"indent": "none",
+				"appendText": "* "
+			}
+		},
 	]
 }
