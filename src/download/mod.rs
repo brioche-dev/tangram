@@ -27,7 +27,7 @@ pub struct Download {
 
 	/// If this flag is set, then the download will succeed without a checksum.
 	#[serde(default, rename = "unsafe")]
-	is_unsafe: bool,
+	unsafe_: bool,
 }
 
 impl Download {

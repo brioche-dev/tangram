@@ -21,7 +21,7 @@ impl Cli {
 		// Run the operation.
 		let download = Download::builder(args.url)
 			.unpack(args.unpack)
-			.is_unsafe(true)
+			.unsafe_(true)
 			.build(&self.tg)
 			.await?;
 		let output = download.run(&self.tg).await?;

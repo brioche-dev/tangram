@@ -4,7 +4,6 @@ import { Path } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
-import { nullish } from "./value.ts";
 
 export let t = async (
 	strings: TemplateStringsArray,
@@ -178,7 +177,7 @@ export namespace Template {
 }
 
 export namespace Template {
-	export type Arg = nullish | Component | Path | Template | Array<Arg>;
+	export type Arg = undefined | Component | Path | Template | Array<Arg>;
 
 	export namespace Arg {
 		export let is = (value: unknown): value is Template.Arg => {

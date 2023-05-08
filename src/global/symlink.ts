@@ -6,7 +6,6 @@ import { Path, path } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Template, t } from "./template.ts";
-import { nullish } from "./value.ts";
 
 type ConstructorArgs = {
 	hash: Artifact.Hash;
@@ -22,8 +21,8 @@ export class Symlink {
 		let resolvedArg = await resolve(arg);
 
 		// Get the artifact and path.
-		let artifact: Artifact | nullish;
-		let path_: string | nullish;
+		let artifact: Artifact | undefined;
+		let path_: string | undefined;
 		if (typeof resolvedArg === "string") {
 			path_ = resolvedArg;
 		} else if (Path.is(resolvedArg)) {
@@ -71,7 +70,9 @@ export class Symlink {
 			target = await t``;
 		}
 
-		return Symlink.fromSyscall(await syscall.symlink.new(target.toSyscall()));
+		return Symlink.fromSyscall(
+			await syscall.symlink.new({ target: target.toSyscall() }),
+		);
 	}
 
 	constructor(args: ConstructorArgs) {
@@ -161,8 +162,8 @@ export namespace Symlink {
 	export type Arg = string | Path | Artifact | Template | ArgObject;
 
 	export type ArgObject = {
-		artifact?: Artifact | nullish;
-		path?: string | Path | nullish;
+		artifact?: Artifact;
+		path?: string | Path;
 	};
 }
 

@@ -2,7 +2,6 @@ import { Location } from "./location.ts";
 import { Position } from "./position.ts";
 import { Module } from "./syscall.ts";
 import * as typescript from "./typescript.ts";
-import { nullish } from "./util.ts";
 import ts from "typescript";
 
 export type Request = {
@@ -11,7 +10,7 @@ export type Request = {
 };
 
 export type Response = {
-	locations: Array<Location> | nullish;
+	locations?: Array<Location>;
 };
 
 export let handle = (request: Request): Response => {

@@ -41,7 +41,7 @@ pub struct Process {
 
 	/// If this flag is set, then unsafe options can be used without a checksum.
 	#[serde(default, rename = "unsafe")]
-	is_unsafe: bool,
+	unsafe_: bool,
 
 	/// If this flag is set, then the process will have access to the network. This is an unsafe option.
 	#[serde(default)]
@@ -91,8 +91,8 @@ impl Process {
 
 	/// If this flag is set, then unsafe options can be used without a checksum.
 	#[must_use]
-	pub fn is_unsafe(&self) -> bool {
-		self.is_unsafe
+	pub fn unsafe_(&self) -> bool {
+		self.unsafe_
 	}
 
 	/// If this flag is set, then the process will have access to the network. This is an unsafe option.

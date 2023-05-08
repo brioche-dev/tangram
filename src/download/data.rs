@@ -18,7 +18,7 @@ pub struct Data {
 
 	#[buffalo(id = 3)]
 	#[serde(default, rename = "unsafe")]
-	pub is_unsafe: bool,
+	pub unsafe_: bool,
 }
 
 impl super::Download {
@@ -28,7 +28,7 @@ impl super::Download {
 			url: self.url.clone(),
 			unpack: self.unpack,
 			checksum: self.checksum.clone(),
-			is_unsafe: self.is_unsafe,
+			unsafe_: self.unsafe_,
 		}
 	}
 
@@ -39,7 +39,7 @@ impl super::Download {
 			url: data.url,
 			unpack: data.unpack,
 			checksum: data.checksum,
-			is_unsafe: data.is_unsafe,
+			unsafe_: data.unsafe_,
 		}
 	}
 }

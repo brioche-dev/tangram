@@ -77,7 +77,7 @@ impl Download {
 		tracing::info!(?self.url, "Downloaded artifact.");
 
 		// If the download is not unsafe, then verify the checksum.
-		if !self.is_unsafe {
+		if !self.unsafe_ {
 			// Finalize the checksum.
 			let checksum_writer = Arc::try_unwrap(checksum_writer)
 				.unwrap()

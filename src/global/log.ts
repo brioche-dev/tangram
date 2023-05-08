@@ -7,10 +7,10 @@ export let log = (...args: Array<unknown>) => {
 };
 
 let stringify = (value: unknown): string => {
-	return stringifyInner(value, new Set());
+	return stringifyInner(value, new WeakSet());
 };
 
-let stringifyInner = (value: unknown, visited: Set<unknown>): string => {
+let stringifyInner = (value: unknown, visited: WeakSet<object>): string => {
 	switch (typeof value) {
 		case "string": {
 			return `"${value}"`;
@@ -25,7 +25,11 @@ let stringifyInner = (value: unknown, visited: Set<unknown>): string => {
 			return "undefined";
 		}
 		case "object": {
-			return stringifyObject(value, visited);
+			if (value === null) {
+				return "null";
+			} else {
+				return stringifyObject(value, visited);
+			}
 		}
 		case "function": {
 			return `[function ${value.name ?? "(anonymous)"}]`;
@@ -39,12 +43,7 @@ let stringifyInner = (value: unknown, visited: Set<unknown>): string => {
 	}
 };
 
-let stringifyObject = (value: object | null, visited: Set<unknown>): string => {
-	// Handle null.
-	if (value === null) {
-		return "null";
-	}
-
+let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	// If the value is in the visited set, then indicate that this is a circular reference.
 	if (visited.has(value)) {
 		return "[circular]";

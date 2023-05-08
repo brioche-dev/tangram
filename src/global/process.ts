@@ -6,7 +6,7 @@ import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
-import { Value, nullish } from "./value.ts";
+import { Value } from "./value.ts";
 
 export let process = async (
 	arg: Unresolved<Process.Arg>,
@@ -28,7 +28,7 @@ type ConstructorArgs = {
 	executable: Template;
 	env: Record<string, Template>;
 	args: Array<Template>;
-	checksum: Checksum | nullish;
+	checksum?: Checksum;
 	unsafe: boolean;
 	network: boolean;
 	hostPaths: Array<string>;
@@ -40,7 +40,7 @@ export class Process {
 	#executable: Template;
 	#env: Record<string, Template>;
 	#args: Array<Template>;
-	#checksum: Checksum | nullish;
+	#checksum?: Checksum;
 	#unsafe: boolean;
 	#network: boolean;
 	#hostPaths: Array<string>;
@@ -60,26 +60,29 @@ export class Process {
 				]),
 			),
 		);
-		let syscallEnv = Object.fromEntries(Object.entries(env).map(([key, value]) => [key, value.toSyscall()]));
-		let args_ = await Promise.all(
-			(resolvedArg.args ?? []).map(async (arg) => await template(arg)),
+		let env_ = Object.fromEntries(
+			Object.entries(env).map(([key, value]) => [key, value.toSyscall()]),
 		);
-		let syscallArgs = args_.map((arg) => arg.toSyscall());
-		let checksum = resolvedArg.checksum ?? null;
+		let args_ = await Promise.all(
+			(resolvedArg.args ?? []).map(async (arg) =>
+				(await template(arg)).toSyscall(),
+			),
+		);
+		let checksum = resolvedArg.checksum ?? undefined;
 		let unsafe = resolvedArg.unsafe ?? false;
 		let network = resolvedArg.network ?? false;
 		let hostPaths = resolvedArg.hostPaths ?? [];
 		return Process.fromSyscall(
-			await syscall.process.new(
+			await syscall.process.new({
 				system,
-				executable.toSyscall(),
-				syscallEnv,
-				syscallArgs,
+				executable: executable.toSyscall(),
+				env: env_,
+				args: args_,
 				checksum,
 				unsafe,
 				network,
 				hostPaths,
-			),
+			}),
 		);
 	}
 
@@ -165,11 +168,11 @@ export namespace Process {
 	export type Arg = {
 		system: System;
 		executable: Template.Arg;
-		env?: Record<string, Template.Arg> | nullish;
-		args?: Array<Template.Arg> | nullish;
-		checksum?: Checksum | nullish;
-		unsafe?: boolean | nullish;
-		network?: boolean | nullish;
-		hostPaths?: Array<string> | nullish;
+		env?: Record<string, Template.Arg>;
+		args?: Array<Template.Arg>;
+		checksum?: Checksum;
+		unsafe?: boolean;
+		network?: boolean;
+		hostPaths?: Array<string>;
 	};
 }

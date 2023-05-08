@@ -1,6 +1,5 @@
 import { assert } from "./assert.ts";
-import { call } from "./call.ts";
-import { env } from "./env.ts";
+import { call, env } from "./call.ts";
 import { Package } from "./package.ts";
 import { Path, path } from "./path.ts";
 import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
@@ -116,9 +115,11 @@ export class Function<
 		syscallArgs: Array<syscall.Value>,
 	): Promise<syscall.Value> {
 		// Set the env.
-		for (let [key, value] of Object.entries(syscallEnv)) {
-			env.set(key, Value.fromSyscall(value));
-		}
+		env.value = Object.fromEntries(
+			Object.entries(syscallEnv).map(([key, value]) => {
+				return [key, Value.fromSyscall(value)];
+			}),
+		);
 
 		// Get the args.
 		let args = syscallArgs.map(Value.fromSyscall) as A;

@@ -58,7 +58,7 @@ declare namespace tg {
 	export namespace call {
 		type Arg<A extends Array<Value>, R extends Value> = {
 			function: Function<A, R>;
-			env?: Record<string, Value> | nullish;
+			env?: Record<string, Value>;
 			args: A;
 		};
 	}
@@ -119,11 +119,11 @@ declare namespace tg {
 	}
 
 	export namespace Directory {
-		type Arg = nullish | Directory | ArgObject;
+		type Arg = undefined | Directory | ArgObject;
 
 		type ArgObject = { [key: string]: ArgObjectValue };
 
-		type ArgObjectValue = nullish | Blob.Arg | Artifact | ArgObject;
+		type ArgObjectValue = undefined | Blob.Arg | Artifact | ArgObject;
 	}
 
 	// Download.
@@ -134,11 +134,11 @@ declare namespace tg {
 			url: string;
 
 			/** Pass true to choose the format automatically based on the extension in the URL. */
-			unpack?: boolean | nullish;
+			unpack?: boolean;
 
-			checksum?: Checksum | nullish;
+			checksum?: Checksum;
 
-			unsafe?: boolean | nullish;
+			unsafe?: boolean;
 		};
 	}
 
@@ -194,8 +194,7 @@ declare namespace tg {
 	// Env.
 
 	export let env: {
-		/** Get the env value with the provided key. This function returns `undefined` if the key is not set in the env. */
-		get: (key: string) => Value | undefined;
+		get: () => Record<string, Value>;
 	};
 
 	// File.
@@ -294,7 +293,7 @@ declare namespace tg {
 	}
 
 	export namespace Path {
-		export type Arg = nullish | string | Path.Component | Path | Array<Arg>;
+		export type Arg = undefined | string | Path.Component | Path | Array<Arg>;
 
 		export type Component =
 			| { kind: "parent" }
@@ -337,22 +336,22 @@ declare namespace tg {
 			executable: Template.Arg;
 
 			/** The environment variables to set for the process. */
-			env?: Record<string, Template.Arg> | nullish;
+			env?: Record<string, Template.Arg>;
 
 			/** The command line arguments to pass to the process. */
-			args?: Array<Template.Arg> | nullish;
+			args?: Array<Template.Arg>;
 
 			/** A checksum for the process's output. If set, then unsafe options can be used. */
-			checksum?: Checksum | nullish;
+			checksum?: Checksum;
 
 			/** Use this flag to enable unsafe options without providing a checksum. */
-			unsafe?: boolean | nullish;
+			unsafe?: boolean;
 
 			/** Whether to enable network access. Because this is an unsafe option, you must either provide a checksum for the process's output or set `unsafe` to `true`. */
-			network?: boolean | nullish;
+			network?: boolean;
 
 			/** Paths on the host to mount in the sandbox the process runs in. Because this is an unsafe option, you must either provide a checksum for the process's output or set `unsafe` to `true`. */
-			hostPaths?: Array<string> | nullish;
+			hostPaths?: Array<string>;
 		};
 	}
 
@@ -374,7 +373,7 @@ declare namespace tg {
 	 */
 	export type Unresolved<T extends Value> = MaybePromise<
 		T extends
-			| nullish
+			| undefined
 			| boolean
 			| number
 			| string
@@ -405,7 +404,7 @@ declare namespace tg {
 	 * ```
 	 */
 	export type Resolved<T extends Unresolved<Value>> = T extends
-		| nullish
+		| undefined
 		| boolean
 		| number
 		| string
@@ -457,8 +456,8 @@ declare namespace tg {
 		type Arg = Path.Arg | Artifact | Template | ArgObject;
 
 		type ArgObject = {
-			artifact?: Artifact | nullish;
-			path?: Path.Arg | nullish;
+			artifact?: Artifact;
+			path?: Path.Arg;
 		};
 	}
 
@@ -526,7 +525,7 @@ declare namespace tg {
 
 	export namespace Template {
 		export type Arg =
-			| nullish
+			| undefined
 			| Template.Component
 			| Path
 			| Template
@@ -549,7 +548,7 @@ declare namespace tg {
 
 	/** A `Value` is the union of all types that can be used as arguments or return values of Tangram functions. */
 	export type Value =
-		| nullish
+		| undefined
 		| boolean
 		| number
 		| string
@@ -566,12 +565,6 @@ declare namespace tg {
 		/** Check if a value is a `Value`. */
 		export let is: (value: unknown) => value is Value;
 	}
-
-	export type nullish = undefined | null;
-
-	export namespace nullish {
-		export let is: (value: unknown) => value is nullish;
-	}
 }
 
 /**
@@ -579,7 +572,7 @@ declare namespace tg {
  */
 declare let t: (
 	strings: TemplateStringsArray,
-	...placeholders: Array<tg.Unresolved<tg.Template.Arg | tg.nullish>>
+	...placeholders: Array<tg.Unresolved<tg.Template.Arg>>
 ) => Promise<tg.Template>;
 
 declare let console: {

@@ -13,7 +13,7 @@ pub struct Builder {
 	url: Url,
 	unpack: Option<bool>,
 	checksum: Option<Checksum>,
-	is_unsafe: Option<bool>,
+	unsafe_: Option<bool>,
 }
 
 impl Builder {
@@ -23,7 +23,7 @@ impl Builder {
 			url,
 			unpack: None,
 			checksum: None,
-			is_unsafe: None,
+			unsafe_: None,
 		}
 	}
 
@@ -40,8 +40,8 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn is_unsafe(mut self, is_unsafe: bool) -> Self {
-		self.is_unsafe = Some(is_unsafe);
+	pub fn unsafe_(mut self, unsafe_: bool) -> Self {
+		self.unsafe_ = Some(unsafe_);
 		self
 	}
 
@@ -49,8 +49,8 @@ impl Builder {
 		let url = self.url;
 		let unpack = self.unpack.unwrap_or(false);
 		let checksum = self.checksum;
-		let is_unsafe = self.is_unsafe.unwrap_or(false);
-		let download = Download::new(tg, url, unpack, checksum, is_unsafe).await?;
+		let unsafe_ = self.unsafe_.unwrap_or(false);
+		let download = Download::new(tg, url, unpack, checksum, unsafe_).await?;
 		Ok(download)
 	}
 }

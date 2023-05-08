@@ -10,7 +10,7 @@ import * as syscall from "./syscall.ts";
 import { Template } from "./template.ts";
 
 export type Value =
-	| nullish
+	| undefined
 	| boolean
 	| number
 	| string
@@ -27,7 +27,6 @@ export namespace Value {
 	export let is = (value: unknown): value is Value => {
 		return (
 			value === undefined ||
-			value === null ||
 			typeof value === "boolean" ||
 			typeof value === "number" ||
 			typeof value === "string" ||
@@ -45,10 +44,9 @@ export namespace Value {
 	};
 
 	export let toSyscall = <T extends Value>(value: T): syscall.Value => {
-		if (value === undefined || value === null) {
+		if (value === undefined) {
 			return {
 				kind: "null",
-				value,
 			};
 		} else if (typeof value === "boolean") {
 			return {
@@ -120,7 +118,7 @@ export namespace Value {
 	export let fromSyscall = (value: syscall.Value): Value => {
 		switch (value.kind) {
 			case "null": {
-				return value.value;
+				return undefined;
 			}
 			case "bool": {
 				return value.value;
@@ -164,13 +162,5 @@ export namespace Value {
 				return unreachable();
 			}
 		}
-	};
-}
-
-export type nullish = undefined | null;
-
-export namespace nullish {
-	export let is = (value: unknown): value is nullish => {
-		return value === undefined || value === null;
 	};
 }

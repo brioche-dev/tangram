@@ -29,7 +29,7 @@ export type Symlink = {
 };
 
 export type Value =
-	| { kind: "null"; value: nullish }
+	| { kind: "null" }
 	| { kind: "bool"; value: boolean }
 	| { kind: "number"; value: number }
 	| { kind: "string"; value: string }
@@ -68,7 +68,7 @@ export type Download = {
 	hash: OperationHash;
 	url: string;
 	unpack: boolean;
-	checksum: Checksum | nullish;
+	checksum?: Checksum;
 	unsafe: boolean;
 };
 
@@ -92,7 +92,7 @@ export type Process = {
 	executable: Template;
 	env: Record<string, Template>;
 	args: Array<Template>;
-	checksum: Checksum | nullish;
+	checksum?: Checksum;
 	unsafe: boolean;
 	network: boolean;
 	hostPaths: Array<string>;
@@ -128,8 +128,6 @@ export type PackageInstance = {
 export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
 
 export type ChecksumAlgorithm = "blake3" | "sha256";
-
-export type nullish = undefined | null;
 
 export type StackFrame = {
 	module: Module;
@@ -255,22 +253,19 @@ export let blob = {
 };
 
 declare global {
-	function syscall(
-		syscall: "call_new",
-		function_: Function,
-		env: Record<string, Value>,
-		args: Array<Value>,
-	): Promise<Call>;
+	type CallArg = {
+		function: Function;
+		env: Record<string, Value>;
+		args: Array<Value>;
+	};
+
+	function syscall(syscall: "call_new", arg: CallArg): Promise<Call>;
 }
 
 export let call = {
-	new: async (
-		function_: Function,
-		env: Record<string, Value>,
-		args: Array<Value>,
-	): Promise<Call> => {
+	new: async (arg: CallArg): Promise<Call> => {
 		try {
-			return await syscall("call_new", function_, env, args);
+			return await syscall("call_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -297,24 +292,23 @@ export let checksum = (
 };
 
 declare global {
+	type DownloadArg = {
+		url: string;
+		unpack: boolean;
+		checksum?: Checksum;
+		unsafe: boolean;
+	};
+
 	function syscall(
 		syscall: "download_new",
-		url: string,
-		unpack: boolean,
-		checksum: Checksum | nullish,
-		unsafe: boolean,
+		arg: DownloadArg,
 	): Promise<Download>;
 }
 
 export let download = {
-	new: async (
-		url: string,
-		unpack: boolean,
-		checksum: Checksum | nullish,
-		unsafe: boolean,
-	): Promise<Download> => {
+	new: async (arg: DownloadArg): Promise<Download> => {
 		try {
-			return await syscall("download_new", url, unpack, checksum, unsafe);
+			return await syscall("download_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -322,16 +316,20 @@ export let download = {
 };
 
 declare global {
+	type DirectoryArg = {
+		entries: Record<string, Artifact>;
+	};
+
 	function syscall(
 		syscall: "directory_new",
-		entries: Map<string, Artifact>,
+		arg: DirectoryArg,
 	): Promise<Directory>;
 }
 
 export let directory = {
-	new: async (entries: Map<string, Artifact>): Promise<Directory> => {
+	new: async (arg: DirectoryArg): Promise<Directory> => {
 		try {
-			return await syscall("directory_new", entries);
+			return await syscall("directory_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -339,22 +337,19 @@ export let directory = {
 };
 
 declare global {
-	function syscall(
-		syscall: "file_new",
-		blob: Blob,
-		executable: boolean,
-		references: Array<Artifact>,
-	): Promise<File>;
+	type FileArg = {
+		blob: Blob;
+		executable: boolean;
+		references: Array<Artifact>;
+	};
+
+	function syscall(syscall: "file_new", arg: FileArg): Promise<File>;
 }
 
 export let file = {
-	new: async (
-		blob: Blob,
-		executable: boolean,
-		references: Array<Artifact>,
-	): Promise<File> => {
+	new: async (arg: FileArg): Promise<File> => {
 		try {
-			return await syscall("file_new", blob, executable, references);
+			return await syscall("file_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -475,42 +470,24 @@ export let operation = {
 };
 
 declare global {
-	function syscall(
-		syscall: "process_new",
-		system: System,
-		executable: Template,
-		env?: Record<string, Template> | nullish,
-		args?: Array<Template> | nullish,
-		checksum?: Checksum | nullish,
-		unsafe?: boolean | nullish,
-		network?: boolean | nullish,
-		hostPaths?: Array<string> | nullish,
-	): Promise<Process>;
+	type ProcessArg = {
+		system: System;
+		executable: Template;
+		env?: Record<string, Template>;
+		args?: Array<Template>;
+		checksum?: Checksum;
+		unsafe?: boolean;
+		network?: boolean;
+		hostPaths?: Array<string>;
+	};
+
+	function syscall(syscall: "process_new", arg: ProcessArg): Promise<Process>;
 }
 
 export let process = {
-	new: async (
-		system: System,
-		executable: Template,
-		env: Record<string, Template>,
-		args: Array<Template>,
-		checksum: Checksum | nullish,
-		unsafe: boolean,
-		network: boolean,
-		hostPaths: Array<string>,
-	): Promise<Process> => {
+	new: async (arg: ProcessArg): Promise<Process> => {
 		try {
-			return await syscall(
-				"process_new",
-				system,
-				executable,
-				env,
-				args,
-				checksum,
-				unsafe,
-				network,
-				hostPaths,
-			);
+			return await syscall("process_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -530,13 +507,15 @@ export let stackFrame = (index: number): StackFrame => {
 };
 
 declare global {
-	function syscall(syscall: "symlink_new", target: Template): Promise<Symlink>;
+	type SymlinkArg = { target: Template };
+
+	function syscall(syscall: "symlink_new", arg: SymlinkArg): Promise<Symlink>;
 }
 
 export let symlink = {
-	new: async (target: Template): Promise<Symlink> => {
+	new: async (arg: SymlinkArg): Promise<Symlink> => {
 		try {
-			return await syscall("symlink_new", target);
+			return await syscall("symlink_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}

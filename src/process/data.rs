@@ -33,8 +33,8 @@ pub struct Data {
 	pub checksum: Option<Checksum>,
 
 	#[buffalo(id = 5)]
-	#[serde(default, rename = "unsafe")]
-	pub is_unsafe: bool,
+	#[serde(default)]
+	pub unsafe_: bool,
 
 	#[buffalo(id = 6)]
 	#[serde(default)]
@@ -60,7 +60,7 @@ impl super::Process {
 			.collect();
 		let args = self.args.iter().map(Template::to_data).collect();
 		let checksum = self.checksum.clone();
-		let is_unsafe = self.is_unsafe;
+		let unsafe_ = self.unsafe_;
 		let network = self.network;
 		let host_paths = self.host_paths.clone();
 		Data {
@@ -69,7 +69,7 @@ impl super::Process {
 			env,
 			args,
 			checksum,
-			is_unsafe,
+			unsafe_,
 			network,
 			host_paths,
 		}
@@ -92,7 +92,7 @@ impl super::Process {
 		)
 		.await?;
 		let checksum = data.checksum;
-		let is_unsafe = data.is_unsafe;
+		let unsafe_ = data.unsafe_;
 		let network = data.network;
 		let host_paths = data.host_paths;
 		Ok(Self {
@@ -102,7 +102,7 @@ impl super::Process {
 			env,
 			args,
 			checksum,
-			is_unsafe,
+			unsafe_,
 			network,
 			host_paths,
 		})

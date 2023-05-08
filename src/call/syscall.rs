@@ -161,12 +161,16 @@ async fn syscall_blob_text(tg: Arc<Instance>, args: (Blob,)) -> Result<String> {
 	Ok(text)
 }
 
-async fn syscall_call_new(
-	tg: Arc<Instance>,
-	args: (Function, BTreeMap<String, Value>, Vec<Value>),
-) -> Result<Call> {
-	let (function, env, args) = args;
-	let call = Call::new(&tg, function, env, args).await?;
+#[derive(Clone, Debug, serde::Deserialize)]
+struct CallArg {
+	function: Function,
+	env: BTreeMap<String, Value>,
+	args: Vec<Value>,
+}
+
+async fn syscall_call_new(tg: Arc<Instance>, args: (CallArg,)) -> Result<Call> {
+	let (arg,) = args;
+	let call = Call::new(&tg, arg.function, arg.env, arg.args).await?;
 	Ok(call)
 }
 
@@ -183,27 +187,41 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
-async fn syscall_directory_new(
-	tg: Arc<Instance>,
-	args: (BTreeMap<String, Artifact>,),
-) -> Result<Directory> {
-	let (entries,) = args;
-	let directory = Directory::new(&tg, entries).await?;
+#[derive(Clone, Debug, serde::Deserialize)]
+struct DirectoryArg {
+	entries: BTreeMap<String, Artifact>,
+}
+
+async fn syscall_directory_new(tg: Arc<Instance>, args: (DirectoryArg,)) -> Result<Directory> {
+	let (arg,) = args;
+	let directory = Directory::new(&tg, arg.entries).await?;
 	Ok(directory)
 }
 
-async fn syscall_download_new(
-	tg: Arc<Instance>,
-	args: (Url, bool, Option<Checksum>, bool),
-) -> Result<Download> {
-	let (url, unpack, checksum, is_unsafe) = args;
-	let download = Download::new(&tg, url, unpack, checksum, is_unsafe).await?;
+#[derive(Clone, Debug, serde::Deserialize)]
+struct DownloadArg {
+	url: Url,
+	unpack: bool,
+	checksum: Option<Checksum>,
+	unsafe_: bool,
+}
+
+async fn syscall_download_new(tg: Arc<Instance>, args: (DownloadArg,)) -> Result<Download> {
+	let (arg,) = args;
+	let download = Download::new(&tg, arg.url, arg.unpack, arg.checksum, arg.unsafe_).await?;
 	Ok(download)
 }
 
-async fn syscall_file_new(tg: Arc<Instance>, args: (Blob, bool, Vec<Artifact>)) -> Result<File> {
-	let (blob, executable, references) = args;
-	let file = File::new(&tg, blob, executable, &references).await?;
+#[derive(Clone, Debug, serde::Deserialize)]
+struct FileArg {
+	blob: Blob,
+	executable: bool,
+	references: Vec<Artifact>,
+}
+
+async fn syscall_file_new(tg: Arc<Instance>, args: (FileArg,)) -> Result<File> {
+	let (arg,) = args;
+	let file = File::new(&tg, arg.blob, arg.executable, &arg.references).await?;
 	Ok(file)
 }
 
@@ -236,10 +254,10 @@ fn syscall_hex_encode(
 }
 
 async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Path)) -> Result<Artifact> {
-	let (caller, path) = args;
+	let (stack_frame, path) = args;
 
 	// Get the package instance.
-	let package_instance_hash = match caller.module {
+	let package_instance_hash = match stack_frame.module {
 		Module::Normal(module) => module.package_instance_hash,
 		_ => unreachable!(),
 	};
@@ -303,26 +321,28 @@ async fn syscall_operation_run(tg: Arc<Instance>, args: (Operation,)) -> Result<
 	Ok(value)
 }
 
-type ProcessNewArgs = (
-	System,
-	Template,
-	BTreeMap<String, Template>,
-	Vec<Template>,
-	Option<Checksum>,
-	bool,
-	bool,
-	Vec<String>,
-);
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProcessArg {
+	system: System,
+	executable: Template,
+	env: BTreeMap<String, Template>,
+	args: Vec<Template>,
+	checksum: Option<Checksum>,
+	unsafe_: bool,
+	network: bool,
+	host_paths: Vec<String>,
+}
 
-async fn syscall_process_new(tg: Arc<Instance>, args: ProcessNewArgs) -> Result<Process> {
-	let (system, executable, env, args, checksum, unsafe_, network, host_paths) = args;
-	let process = Process::builder(system, executable)
-		.env(env)
-		.args(args)
-		.checksum(checksum)
-		.is_unsafe(unsafe_)
-		.network(network)
-		.host_paths(host_paths)
+async fn syscall_process_new(tg: Arc<Instance>, args: (ProcessArg,)) -> Result<Process> {
+	let (arg,) = args;
+	let process = Process::builder(arg.system, arg.executable)
+		.env(arg.env)
+		.args(arg.args)
+		.checksum(arg.checksum)
+		.unsafe_(arg.unsafe_)
+		.network(arg.network)
+		.host_paths(arg.host_paths)
 		.build(&tg)
 		.await?;
 	Ok(process)
@@ -393,9 +413,14 @@ fn syscall_stack_frame(
 	})
 }
 
-async fn syscall_symlink_new(tg: Arc<Instance>, args: (Template,)) -> Result<Symlink> {
-	let (template,) = args;
-	let symlink = Symlink::new(&tg, template).await?;
+#[derive(Clone, Debug, serde::Deserialize)]
+struct SymlinkArg {
+	target: Template,
+}
+
+async fn syscall_symlink_new(tg: Arc<Instance>, args: (SymlinkArg,)) -> Result<Symlink> {
+	let (arg,) = args;
+	let symlink = Symlink::new(&tg, arg.target).await?;
 	Ok(symlink)
 }
 

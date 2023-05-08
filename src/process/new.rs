@@ -14,7 +14,7 @@ impl Process {
 		env: BTreeMap<String, Template>,
 		args: Vec<Template>,
 		checksum: Option<Checksum>,
-		is_unsafe: bool,
+		unsafe_: bool,
 		network: bool,
 		host_paths: Vec<String>,
 	) -> Result<Self> {
@@ -31,7 +31,7 @@ impl Process {
 			env: env_,
 			args: args_,
 			checksum: checksum.clone(),
-			is_unsafe,
+			unsafe_,
 			network,
 			host_paths: host_paths.clone(),
 		});
@@ -52,7 +52,7 @@ impl Process {
 			env,
 			args,
 			checksum,
-			is_unsafe,
+			unsafe_,
 			network,
 			host_paths,
 		};

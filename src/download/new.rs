@@ -8,14 +8,14 @@ impl Download {
 		url: Url,
 		unpack: bool,
 		checksum: Option<Checksum>,
-		is_unsafe: bool,
+		unsafe_: bool,
 	) -> Result<Self> {
 		// Create the operation data.
 		let data = operation::Data::Download(Data {
 			url: url.clone(),
 			unpack,
 			checksum: checksum.clone(),
-			is_unsafe,
+			unsafe_,
 		});
 
 		// Serialize and hash the data.
@@ -32,7 +32,7 @@ impl Download {
 			url,
 			unpack,
 			checksum,
-			is_unsafe,
+			unsafe_,
 		};
 
 		Ok(download)

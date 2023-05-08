@@ -18,7 +18,7 @@ pub struct Builder {
 	env: BTreeMap<String, Template>,
 	args: Vec<Template>,
 	checksum: Option<Checksum>,
-	is_unsafe: bool,
+	unsafe_: bool,
 	network: bool,
 	host_paths: Vec<String>,
 }
@@ -32,7 +32,7 @@ impl Builder {
 			env: BTreeMap::new(),
 			args: Vec::new(),
 			checksum: None,
-			is_unsafe: false,
+			unsafe_: false,
 			network: false,
 			host_paths: Vec::new(),
 		}
@@ -69,8 +69,8 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn is_unsafe(mut self, is_unsafe: bool) -> Self {
-		self.is_unsafe = is_unsafe;
+	pub fn unsafe_(mut self, unsafe_: bool) -> Self {
+		self.unsafe_ = unsafe_;
 		self
 	}
 
@@ -94,7 +94,7 @@ impl Builder {
 			self.env,
 			self.args,
 			self.checksum,
-			self.is_unsafe,
+			self.unsafe_,
 			self.network,
 			self.host_paths,
 		)

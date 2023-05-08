@@ -64,11 +64,11 @@
 				"scopeName": "source.tg"
 			},
 			{
-				"scopeName": "documentation.injection.tg",
-				"path": "./tangram-jsdoc-injection.tmLanguage.json",
 				"injectTo": [
 					"source.tg"
-				]
+				],
+				"path": "./tangram-jsdoc-injection.tmLanguage.json",
+				"scopeName": "documentation.injection.tg"
 			}
 		],
 		"languages": [

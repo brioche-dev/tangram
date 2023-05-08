@@ -6,11 +6,11 @@ import { Path } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import { Template } from "./template.ts";
-import { Value, nullish } from "./value.ts";
+import { Value } from "./value.ts";
 
 export type Unresolved<T extends Value> = MaybePromise<
 	T extends
-		| nullish
+		| undefined
 		| boolean
 		| number
 		| string
@@ -29,7 +29,7 @@ export type Unresolved<T extends Value> = MaybePromise<
 >;
 
 export type Resolved<T extends Unresolved<Value>> = T extends
-	| nullish
+	| undefined
 	| boolean
 	| number
 	| string
@@ -56,7 +56,6 @@ export let resolve = async <T extends Unresolved<Value>>(
 	value = await value;
 	if (
 		value === undefined ||
-		value === null ||
 		typeof value === "boolean" ||
 		typeof value === "number" ||
 		typeof value === "string" ||

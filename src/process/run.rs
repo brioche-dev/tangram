@@ -120,7 +120,7 @@ impl Process {
 		});
 
 		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
-		let enable_unsafe = self.checksum.is_some() || self.is_unsafe;
+		let enable_unsafe = self.checksum.is_some() || self.unsafe_;
 
 		// Verify the safety constraints.
 		if !enable_unsafe {

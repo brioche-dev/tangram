@@ -6,7 +6,6 @@ import { Path, path } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
-import { nullish } from "./value.ts";
 
 type ConstructorArg = {
 	hash: Artifact.Hash;
@@ -25,8 +24,8 @@ export class Directory {
 
 		// Apply each arg.
 		for (let arg of await Promise.all(args.map(resolve))) {
-			if (nullish.is(arg)) {
-				// If the arg is null, then continue.
+			if (arg === undefined) {
+				// If the arg is undefined, then continue.
 			} else if (arg instanceof Directory) {
 				// If the arg is a directory, then apply each entry.
 				for (let [name, entry] of await arg.entries()) {
@@ -80,7 +79,7 @@ export class Directory {
 						entries.set(name, newEntry);
 					} else {
 						// If there are no trailing path components, then create the artifact specified by the value.
-						if (nullish.is(value)) {
+						if (value === undefined) {
 							entries.delete(name);
 						} else if (Blob.Arg.is(value)) {
 							let newEntry = await file(value);
@@ -98,14 +97,14 @@ export class Directory {
 
 		// Create the directory.
 		return Directory.fromSyscall(
-			await syscall.directory.new(
-				new Map(
+			await syscall.directory.new({
+				entries: Object.fromEntries(
 					Array.from(entries, ([name, entry]) => [
 						name,
 						Artifact.toSyscall(entry),
 					]),
 				),
-			),
+			}),
 		);
 	}
 
@@ -198,11 +197,11 @@ export class Directory {
 }
 
 export namespace Directory {
-	export type Arg = nullish | Directory | ArgObject;
+	export type Arg = undefined | Directory | ArgObject;
 
 	export type ArgObject = { [name: string]: ArgObjectValue };
 
-	export type ArgObjectValue = nullish | Blob.Arg | Artifact | ArgObject;
+	export type ArgObjectValue = undefined | Blob.Arg | Artifact | ArgObject;
 }
 
 export let directory = Directory.new;

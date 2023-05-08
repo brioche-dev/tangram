@@ -1,5 +1,4 @@
 import * as syscall from "./syscall.ts";
-import { nullish } from "./value.ts";
 
 export class Path {
 	#components: Array<Path.Component>;
@@ -7,7 +6,7 @@ export class Path {
 	static new(...args: Array<Path.Arg>): Path {
 		// Collect the components.
 		let components: Array<Path.Component> = [];
-		let collectComponents = (arg: Path.Arg | nullish) => {
+		let collectComponents = (arg: Path.Arg) => {
 			if (typeof arg === "string") {
 				// Push each component.
 				for (let component of arg.split("/")) {

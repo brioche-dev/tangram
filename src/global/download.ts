@@ -2,7 +2,7 @@ import { Artifact } from "./artifact.ts";
 import { Checksum } from "./checksum.ts";
 import { Operation } from "./operation.ts";
 import * as syscall from "./syscall.ts";
-import { Value, nullish } from "./value.ts";
+import { Value } from "./value.ts";
 
 export let download = async (arg: Download.Arg): Promise<Artifact> => {
 	// Create the download.
@@ -17,26 +17,26 @@ export let download = async (arg: Download.Arg): Promise<Artifact> => {
 type ConstructorArg = {
 	hash: Operation.Hash;
 	url: string;
-	unpack?: boolean | nullish;
-	checksum?: Checksum | nullish;
-	unsafe?: boolean | nullish;
+	unpack?: boolean;
+	checksum?: Checksum;
+	unsafe?: boolean;
 };
 
 export class Download {
 	#hash: Operation.Hash;
 	#url: string;
 	#unpack: boolean;
-	#checksum: Checksum | nullish;
+	#checksum?: Checksum;
 	#unsafe: boolean;
 
 	static async new(arg: Download.Arg): Promise<Download> {
 		return Download.fromSyscall(
-			await syscall.download.new(
-				arg.url,
-				arg.unpack ?? false,
-				arg.checksum ?? null,
-				arg.unsafe ?? false,
-			),
+			await syscall.download.new({
+				url: arg.url,
+				unpack: arg.unpack ?? false,
+				checksum: arg.checksum ?? undefined,
+				unsafe: arg.unsafe ?? false,
+			}),
 		);
 	}
 
@@ -44,7 +44,7 @@ export class Download {
 		this.#hash = arg.hash;
 		this.#url = arg.url;
 		this.#unpack = arg.unpack ?? false;
-		this.#checksum = arg.checksum ?? null;
+		this.#checksum = arg.checksum ?? undefined;
 		this.#unsafe = arg.unsafe ?? false;
 	}
 
@@ -88,8 +88,8 @@ export class Download {
 export namespace Download {
 	export type Arg = {
 		url: string;
-		unpack?: boolean | nullish;
-		checksum?: Checksum | nullish;
-		unsafe?: boolean | nullish;
+		unpack?: boolean;
+		checksum?: Checksum;
+		unsafe?: boolean;
 	};
 }

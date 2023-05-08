@@ -1,9 +1,8 @@
 import { Artifact } from "./artifact.ts";
 import { Blob, blob } from "./blob.ts";
-import { call } from "./call.ts";
+import { call, env } from "./call.ts";
 import { Directory, directory } from "./directory.ts";
 import { download } from "./download.ts";
-import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
 import { Function, function_ } from "./function.ts";
@@ -17,7 +16,7 @@ import { Symlink, symlink } from "./symlink.ts";
 import { base64, hex, json, toml, utf8, yaml } from "./syscall.ts";
 import { System, system } from "./system.ts";
 import { Template, t, template } from "./template.ts";
-import { Value, nullish } from "./value.ts";
+import { Value } from "./value.ts";
 
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
@@ -57,7 +56,6 @@ let tg = {
 	include,
 	json,
 	log,
-	nullish,
 	output,
 	path,
 	placeholder,
