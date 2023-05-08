@@ -137,6 +137,23 @@ impl Process {
 
 		// Handle the host paths.
 		for host_path in &self.host_paths {
+			// Check if any existing mount point is a parent of this path and skip adding it.
+			// Note: This operation is potentially expensive if there are many hostpaths. However, the assumption is that there are only a handful and this loop will only iterate a few times.
+			let parent = paths.iter().find(|existing| {
+				std::path::PathBuf::from(host_path).starts_with(&existing.host_path)
+			});
+			if parent.is_some() {
+				continue;
+			}
+
+			// Check if this path is a parent of any mounts that have already been added, and if so remove the child.
+			let child = paths
+				.iter()
+				.find(|existing| existing.host_path.starts_with(host_path));
+			if let Some(child) = child.cloned() {
+				paths.remove(&child);
+			}
+
 			// Determine the path kind.
 			let metadata = tokio::fs::metadata(host_path)
 				.await
