@@ -162,6 +162,7 @@ async fn syscall_blob_text(tg: Arc<Instance>, args: (Blob,)) -> Result<String> {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CallArg {
 	function: Function,
 	env: BTreeMap<String, Value>,
@@ -188,6 +189,7 @@ fn syscall_checksum(
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DirectoryArg {
 	entries: BTreeMap<String, Artifact>,
 }
@@ -199,6 +201,7 @@ async fn syscall_directory_new(tg: Arc<Instance>, args: (DirectoryArg,)) -> Resu
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DownloadArg {
 	url: Url,
 	unpack: bool,
@@ -213,6 +216,7 @@ async fn syscall_download_new(tg: Arc<Instance>, args: (DownloadArg,)) -> Result
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct FileArg {
 	blob: Blob,
 	executable: bool,
@@ -414,6 +418,7 @@ fn syscall_stack_frame(
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SymlinkArg {
 	target: Template,
 }

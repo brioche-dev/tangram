@@ -12,7 +12,6 @@ use std::collections::BTreeMap;
 #[derive(
 	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
 )]
-#[serde(rename_all = "camelCase")]
 pub struct Data {
 	#[buffalo(id = 0)]
 	pub system: System,
@@ -33,7 +32,7 @@ pub struct Data {
 	pub checksum: Option<Checksum>,
 
 	#[buffalo(id = 5)]
-	#[serde(default)]
+	#[serde(default, rename = "unsafe")]
 	pub unsafe_: bool,
 
 	#[buffalo(id = 6)]
