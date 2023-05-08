@@ -3,7 +3,7 @@ use crate::{
 	artifact::Artifact,
 	error::{error, Error, Result, WrapErr},
 	instance::Instance,
-	template::Template,
+	template::{self, Template},
 	util::{
 		fs,
 		http::{full, Incoming, Outgoing},
@@ -164,7 +164,46 @@ impl Server {
 		let artifacts_path = tg.artifacts_path();
 		let template = Template::unrender(&tg, &artifacts_path, &string)
 			.await
-			.wrap_err("Failed to check in the path.")?;
+			.wrap_err("Failed to unrender the template.")?;
+
+		// The internal representation of Template is opaque to processes, so we serialize using the structure that is deserialized by the client.
+		#[derive(serde::Serialize)]
+		struct TemplateInProcess {
+			components: Vec<ComponentInProcess>,
+		}
+
+		#[derive(serde::Serialize)]
+		#[serde(tag = "kind", content = "value")]
+		enum ComponentInProcess {
+			#[serde(rename = "string")]
+			String(String),
+
+			#[serde(rename = "artifact")]
+			Artifact(crate::artifact::Hash),
+
+			#[serde(rename = "placeholder")]
+			Placeholder { name: String },
+		}
+
+		let template = TemplateInProcess {
+			components: template
+				.components()
+				.iter()
+				.map(|c| match c {
+					template::Component::Artifact(artifact) => {
+						ComponentInProcess::Artifact(artifact.hash())
+					},
+					template::Component::String(string) => {
+						ComponentInProcess::String(string.clone())
+					},
+					template::Component::Placeholder(placeholder) => {
+						ComponentInProcess::Placeholder {
+							name: placeholder.name.clone(),
+						}
+					},
+				})
+				.collect(),
+		};
 
 		// Create the response.
 		let body = serde_json::to_vec(&template)
