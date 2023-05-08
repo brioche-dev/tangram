@@ -71,7 +71,7 @@ impl Process {
 		#[cfg(target_arch = "aarch64")]
 		let sh_name = "sh_arm64_linux";
 
-		// TODO: move dedublication logic one level up to host path merging.
+		// TODO: move deduplication logic one level up to host path merging.
 		// Mount /bin/sh from ~/.tangram/assets
 		if paths
 			.iter()
@@ -93,7 +93,7 @@ impl Process {
 		let env_name = "env_arm64_linux";
 
 		// Mount /bin/sh from ~/.tangram/assets
-		// TODO: move dedublication logic one level up to host path merging.
+		// TODO: move deduplication logic one level up to host path merging.
 		if paths
 			.iter()
 			.find(|p: &&run::Path| {
