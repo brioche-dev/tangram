@@ -71,13 +71,20 @@ impl Process {
 		#[cfg(target_arch = "aarch64")]
 		let sh_name = "sh_arm64_linux";
 
+		// TODO: move dedublication logic one level up to host path merging.
 		// Mount /bin/sh from ~/.tangram/assets
-		paths.insert(run::Path {
-			kind: run::Kind::File,
-			host_path: tg.path().join("assets").join(sh_name),
-			guest_path: "/bin/sh".into(),
-			mode: run::Mode::ReadOnly,
-		});
+		if paths
+			.iter()
+			.find(|p: &&run::Path| std::path::PathBuf::from("/bin/sh").starts_with(&p.guest_path))
+			.is_none()
+		{
+			paths.insert(run::Path {
+				kind: run::Kind::File,
+				host_path: tg.path().join("assets").join(sh_name),
+				guest_path: "/bin/sh".into(),
+				mode: run::Mode::ReadOnly,
+			});
+		}
 
 		// Get the right name of the /usr/bin/env to use.
 		#[cfg(target_arch = "x86_64")]
@@ -86,12 +93,21 @@ impl Process {
 		let env_name = "env_arm64_linux";
 
 		// Mount /bin/sh from ~/.tangram/assets
-		paths.insert(run::Path {
-			kind: run::Kind::File,
-			host_path: tg.path().join("assets").join(env_name),
-			guest_path: "/usr/bin/env".into(),
-			mode: run::Mode::ReadOnly,
-		});
+		// TODO: move dedublication logic one level up to host path merging.
+		if paths
+			.iter()
+			.find(|p: &&run::Path| {
+				std::path::PathBuf::from("/usr/bin/env").starts_with(&p.guest_path)
+			})
+			.is_none()
+		{
+			paths.insert(run::Path {
+				kind: run::Kind::File,
+				host_path: tg.path().join("assets").join(env_name),
+				guest_path: "/usr/bin/env".into(),
+				mode: run::Mode::ReadOnly,
+			});
+		}
 
 		// Create the socket path, and set the TANGRAM_SOCKET environment variable.
 		let socket_path = root_directory.path().join("socket");
