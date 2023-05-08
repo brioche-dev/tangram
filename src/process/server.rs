@@ -80,9 +80,6 @@ impl Server {
 			(http::Method::POST, ["v1", "checkin"]) => {
 				Some(self.handle_checkin_request(request).boxed())
 			},
-			(http::Method::POST, ["v1", "checkout"]) => {
-				Some(self.handle_checkout_request(request).boxed())
-			},
 			(http::Method::POST, ["v1", "unrender"]) => {
 				Some(self.handle_unrender_request(request).boxed())
 			},
@@ -143,52 +140,6 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_checkout_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		let tg = self.tg.upgrade().unwrap();
-
-		// Read the request body.
-		let body = request
-			.into_body()
-			.collect()
-			.await
-			.map_err(Error::other)
-			.wrap_err("Filed to read the request body.")?
-			.to_bytes();
-
-		// Deserialize the hash.
-		let hash = serde_json::from_slice(&body)
-			.map_err(Error::other)
-			.wrap_err("Failed to deserialize the request body.")?;
-
-		// Get the artifact.
-		let artifact = Artifact::get(&tg, hash).await?;
-
-		// Perform the internal checkout.
-		let host_path = artifact
-			.check_out_internal(&tg)
-			.await
-			.wrap_err("Failed to check out the artifact.")?;
-
-		// Convert to a guest path.
-		// TODO: How do we make sure this path is mounted in the sandbox, after the sandbox has spawned?
-		let guest_path = self.get_guest_path(&host_path)?;
-
-		// Create the response.
-		let body = serde_json::to_vec(&guest_path)
-			.map_err(Error::other)
-			.wrap_err("Failed to serialize the response body.")?;
-
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(full(body))
-			.unwrap();
-
-		Ok(response)
-	}
-
 	async fn handle_unrender_request(
 		&self,
 		request: http::Request<Incoming>,
@@ -227,21 +178,6 @@ impl Server {
 		Ok(response)
 	}
 
-	// TODO: verify this works as expected.
-	fn get_guest_path(&self, host_path: &std::path::Path) -> Result<std::path::PathBuf> {
-		let mount = self
-			.mounts
-			.iter()
-			.find(|mount| host_path.starts_with(&mount.host_path))
-			.ok_or_else(|| {
-				error!("Failed to find find corresponding host path for {host_path:#?}.")
-			})?;
-
-		let subpath = pathdiff::diff_paths(host_path, &mount.host_path).unwrap();
-		Ok(mount.guest_path.join(subpath))
-	}
-
-	// TODO: verify this works as expected.
 	fn get_host_path(&self, guest_path: &std::path::Path) -> Result<std::path::PathBuf> {
 		let mount = self
 			.mounts
