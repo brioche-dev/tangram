@@ -56,7 +56,7 @@ impl Process {
 		let command = render(tg, &self.executable, &output_temp_path).await?;
 
 		// Render the env templates.
-		let env = try_join_all(self.env.iter().map(|(key, value)| {
+		let mut env: std::collections::BTreeMap<String, String> = try_join_all(self.env.iter().map(|(key, value)| {
 			let output_temp_path = &output_temp_path;
 			async move {
 				let key = key.clone();
@@ -67,6 +67,9 @@ impl Process {
 		.await?
 		.into_iter()
 		.collect();
+
+		// Add the TG_PLACEHOLDER_OUTPUT variable.
+		env.insert("TANGRAM_PLACEHOLDER_OUTPUT".to_string(), output_temp_path.display().to_string());
 
 		// Render the args templates.
 		let args = try_join_all(
