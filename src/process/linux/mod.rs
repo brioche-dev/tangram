@@ -65,45 +65,29 @@ impl Process {
 			mode: run::Mode::ReadWrite,
 		});
 
-		// Get the right name of the /bin/sh to use.
+		// Mount /bin/sh from ~/.tangram/assets
 		#[cfg(target_arch = "x86_64")]
-		let sh_name = "sh_amd64_linux";
+		let sh_path = "assets/sh_amd64_linux";
 		#[cfg(target_arch = "aarch64")]
-		let sh_name = "sh_arm64_linux";
+		let sh_path = "assets/sh_arm64_linux";
+		add_default_path_to_mounts(tg, &mut paths, run::Kind::File, sh_path, "/bin/sh");
 
-		// Mount /bin/sh from the assets directory.
-		if paths
-			.iter()
-			.find(|path| std::path::PathBuf::from("/bin/sh").starts_with(&path.guest_path))
-			.is_none()
-		{
-			paths.insert(run::Path {
-				kind: run::Kind::File,
-				host_path: tg.path().join("assets").join(sh_name),
-				guest_path: "/bin/sh".into(),
-				mode: run::Mode::ReadOnly,
-			});
-		}
-
-		// Get the right name of the /usr/bin/env to use.
+		// Mount /usr/bin/env from ~/.tangram/assets
 		#[cfg(target_arch = "x86_64")]
-		let env_name = "env_amd64_linux";
+		let env_path = "assets/env_amd64_linux";
 		#[cfg(target_arch = "aarch64")]
-		let env_name = "env_arm64_linux";
+		let env_path = "assets/env_arm64_linux";
+		add_default_path_to_mounts(tg, &mut paths, run::Kind::File, env_path, "/usr/bin/env");
 
-		// Mount /usr/bin/env from the assets directory.
-		if paths
-			.iter()
-			.find(|path| std::path::PathBuf::from("/usr/bin/env").starts_with(&path.guest_path))
-			.is_none()
-		{
-			paths.insert(run::Path {
-				kind: run::Kind::File,
-				host_path: tg.path().join("assets").join(env_name),
-				guest_path: "/usr/bin/env".into(),
-				mode: run::Mode::ReadOnly,
-			});
-		}
+		// Mount the artifacts directory from ~/.tangram/artifacts
+		let artifacts_path = "artifacts";
+		add_default_path_to_mounts(
+			tg,
+			&mut paths,
+			run::Kind::Directory,
+			artifacts_path,
+			"/.tangram/artifacts",
+		);
 
 		// Create the socket path, and set the TANGRAM_SOCKET environment variable.
 		let socket_path = root_directory.path().join("socket");
@@ -163,6 +147,38 @@ impl Process {
 			}
 		}
 	}
+}
+
+// Given a sub_path within the ~/.tangram directory, add it to the mounts' at guest_path if there isn't already a mount that contains it.
+fn add_default_path_to_mounts(
+	tg: &Arc<Instance>,
+	mounts: &mut HashSet<run::Path, fnv::FnvBuildHasher>,
+	kind: run::Kind,
+	sub_path: impl AsRef<std::path::Path>,
+	guest_path: impl AsRef<std::path::Path>,
+) {
+	let subpath = sub_path.as_ref();
+	let guest_path = guest_path.as_ref();
+
+	// Check if an ancestor directory is already in the mounts list that contains guest_path.
+	let ancestor_dir_exists_in_mounts = mounts
+		.iter()
+		.find(|p| guest_path.starts_with(&p.guest_path))
+		.is_some();
+
+	// Skip adding the path if there is already a path in the mounts that contains guest_path.
+	if ancestor_dir_exists_in_mounts {
+		return;
+	}
+
+	// Add to the mounts list.
+	let host_path = tg.path().join(subpath);
+	mounts.insert(run::Path {
+		kind,
+		host_path,
+		guest_path: guest_path.to_owned(),
+		mode: run::Mode::ReadOnly,
+	});
 }
 
 struct SandboxContext<'a> {
