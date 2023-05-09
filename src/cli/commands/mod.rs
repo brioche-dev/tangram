@@ -1,7 +1,8 @@
 use crate::{error::Result, Cli};
 use either::Either;
 use futures::FutureExt;
-use tangram::{path::Path, util::fs};
+use std::path::PathBuf;
+use tangram::path::Subpath;
 
 mod add;
 mod autoenv;
@@ -47,7 +48,7 @@ mod upgrade;
 pub struct Args {
 	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
 	#[arg(long)]
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 
 	#[command(subcommand)]
 	pub command: Command,
@@ -101,7 +102,7 @@ pub struct PackageArgs {
 pub struct RunArgs {
 	/// The path to the executable in the artifact to run.
 	#[arg(long)]
-	pub executable_path: Option<Path>,
+	pub executable_path: Option<Subpath>,
 }
 
 impl Cli {

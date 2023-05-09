@@ -2,19 +2,20 @@ use crate::{
 	error::{Error, Result, WrapErr},
 	Cli,
 };
-use tangram::util::{dirs::user_config_directory_path, fs};
+use std::path::{Path, PathBuf};
+use tangram::util::dirs::user_config_directory_path;
 use url::Url;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Config {
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub autoenvs: Option<Vec<fs::PathBuf>>,
+	pub autoenvs: Option<Vec<PathBuf>>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub api_url: Option<Url>,
 }
 
 impl Cli {
-	pub fn config_path() -> Result<fs::PathBuf> {
+	pub fn config_path() -> Result<PathBuf> {
 		Ok(user_config_directory_path()?
 			.join("tangram")
 			.join("config.json"))
@@ -26,7 +27,7 @@ impl Cli {
 	}
 
 	#[tracing::instrument(level = "debug")]
-	pub async fn read_config_from_path(path: &fs::Path) -> Result<Option<Config>> {
+	pub async fn read_config_from_path(path: &Path) -> Result<Option<Config>> {
 		let config = match tokio::fs::read(&path).await {
 			Ok(config) => config,
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -42,7 +43,7 @@ impl Cli {
 		Self::write_config_to_path(&Self::config_path()?, config).await
 	}
 
-	pub async fn write_config_to_path(path: &fs::Path, config: &Config) -> Result<()> {
+	pub async fn write_config_to_path(path: &Path, config: &Config) -> Result<()> {
 		let bytes = serde_json::to_vec(config).map_err(Error::other)?;
 		tokio::fs::write(&path, &bytes)
 			.await

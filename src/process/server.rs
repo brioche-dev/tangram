@@ -3,37 +3,38 @@ use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
 	template::Template,
-	util::{
-		fs,
-		http::{full, Incoming, Outgoing},
-	},
+	util::http::{full, Incoming, Outgoing},
 };
 use futures::FutureExt;
 use http_body_util::BodyExt;
 use itertools::Itertools;
-use std::{convert::Infallible, sync::Weak};
+use std::{
+	convert::Infallible,
+	path::{Path, PathBuf},
+	sync::Weak,
+};
 
 #[derive(Clone)]
 pub struct Server {
 	tg: Weak<Instance>,
-	_artifacts_directory_host_path: fs::PathBuf,
-	artifacts_directory_guest_path: fs::PathBuf,
-	working_directory_host_path: fs::PathBuf,
-	working_directory_guest_path: fs::PathBuf,
-	output_host_path: fs::PathBuf,
-	output_guest_path: fs::PathBuf,
+	_artifacts_directory_host_path: PathBuf,
+	artifacts_directory_guest_path: PathBuf,
+	working_directory_host_path: PathBuf,
+	working_directory_guest_path: PathBuf,
+	output_host_path: PathBuf,
+	output_guest_path: PathBuf,
 }
 
 impl Server {
 	#[must_use]
 	pub fn new(
 		tg: Weak<Instance>,
-		artifacts_directory_host_path: fs::PathBuf,
-		artifacts_directory_guest_path: fs::PathBuf,
-		working_directory_host_path: fs::PathBuf,
-		working_directory_guest_path: fs::PathBuf,
-		output_host_path: fs::PathBuf,
-		output_guest_path: fs::PathBuf,
+		artifacts_directory_host_path: PathBuf,
+		artifacts_directory_guest_path: PathBuf,
+		working_directory_host_path: PathBuf,
+		working_directory_guest_path: PathBuf,
+		output_host_path: PathBuf,
+		output_guest_path: PathBuf,
 	) -> Self {
 		Self {
 			tg,
@@ -46,7 +47,7 @@ impl Server {
 		}
 	}
 
-	pub async fn serve(self, path: &fs::Path) -> Result<()> {
+	pub async fn serve(self, path: &Path) -> Result<()> {
 		// Bind the server's socket.
 		let listener = tokio::net::UnixListener::bind(path)?;
 
@@ -129,7 +130,7 @@ impl Server {
 			.to_bytes();
 
 		// Deserialize the path from the body.
-		let guest_path: fs::PathBuf = serde_json::from_slice(&body)
+		let guest_path: PathBuf = serde_json::from_slice(&body)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the request body.")?;
 

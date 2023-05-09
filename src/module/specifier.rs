@@ -1,7 +1,7 @@
 use super::dependency;
 use crate::{
 	error::{return_error, Error, WrapErr},
-	path::Path,
+	path::Relpath,
 };
 use url::Url;
 
@@ -10,7 +10,7 @@ use url::Url;
 #[serde(into = "String", try_from = "String")]
 pub enum Specifier {
 	/// A module specifier that refers to a module in the current package, such as `import "./module.tg"`.
-	Path(Path),
+	Path(Relpath),
 
 	/// A module specifier that refers to a dependency, such as `import "tangram:std"`. See [`dependency::Specifier`].
 	Dependency(dependency::Specifier),
@@ -36,15 +36,15 @@ impl std::str::FromStr for Specifier {
 
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		if value.starts_with('/') || value.starts_with('.') {
-			// If the string starts with `/` or `.`, then parse the string as a path.
-			let path: Path = value.into();
+			// If the string starts with `/` or `.`, then parse the string as a relpath.
+			let relpath: Relpath = value.parse()?;
 
 			// Ensure the path has a ".tg" extension.
-			if path.extension() != Some("tg") {
-				return_error!(r#"The path "{path}" does not have a ".tg" extension."#);
+			if relpath.extension() != Some("tg") {
+				return_error!(r#"The path "{relpath}" does not have a ".tg" extension."#);
 			}
 
-			Ok(Specifier::Path(path))
+			Ok(Specifier::Path(relpath))
 		} else {
 			// Otherwise, parse the string as a URL.
 			let url: Url = value

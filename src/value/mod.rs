@@ -1,6 +1,10 @@
 pub use self::data::Data;
 use crate::{
-	artifact::Artifact, blob::Blob, path::Path, placeholder::Placeholder, template::Template,
+	artifact::Artifact,
+	blob::Blob,
+	path::{Relpath, Subpath},
+	placeholder::Placeholder,
+	template::Template,
 };
 use std::collections::BTreeMap;
 
@@ -25,8 +29,11 @@ pub enum Value {
 	/// A bytes value.
 	Bytes(Vec<u8>),
 
-	/// A path value.
-	Path(Path),
+	/// A subpath value.
+	Subpath(Subpath),
+
+	/// A relpath value.
+	Relpath(Relpath),
 
 	/// A blob value.
 	Blob(Blob),

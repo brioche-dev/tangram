@@ -1,7 +1,7 @@
 use super::{Instance, Package};
 use crate::{
 	error::{Result, WrapErr},
-	module, path,
+	module,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -31,7 +31,8 @@ impl Package {
 						module::dependency::Specifier::Path(path) => {
 							let path = module_path
 								.clone()
-								.join(path::Component::Parent)
+								.into_relpath()
+								.parent()
 								.join(path.clone());
 							super::dependency::Specifier::Path(path)
 						},

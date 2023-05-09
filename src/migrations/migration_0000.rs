@@ -1,4 +1,5 @@
-use crate::{error::Result, util::fs};
+use crate::error::Result;
+use std::path::Path;
 use tokio::io::AsyncWriteExt;
 
 pub(crate) const ENV_AMD64_LINUX: &[u8] = include_bytes!("../../assets/env_amd64_linux");
@@ -6,7 +7,7 @@ pub(crate) const ENV_ARM64_LINUX: &[u8] = include_bytes!("../../assets/env_arm64
 pub(crate) const SH_AMD64_LINUX: &[u8] = include_bytes!("../../assets/sh_amd64_linux");
 pub(crate) const SH_ARM64_LINUX: &[u8] = include_bytes!("../../assets/sh_arm64_linux");
 
-pub async fn migrate(path: &fs::Path) -> Result<()> {
+pub async fn migrate(path: &Path) -> Result<()> {
 	// Create the database file.
 	let path = path.to_owned();
 	tokio::fs::File::create(&path.join("database.mdb")).await?;

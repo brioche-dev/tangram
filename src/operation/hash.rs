@@ -10,7 +10,6 @@ use derive_more::{Deref, Display, From, FromStr, Into};
 	Eq,
 	From,
 	FromStr,
-	Hash,
 	Into,
 	Ord,
 	PartialEq,
@@ -22,3 +21,9 @@ use derive_more::{Deref, Display, From, FromStr, Into};
 )]
 #[buffalo(into = "crate::hash::Hash", try_from = "crate::hash::Hash")]
 pub struct Hash(pub crate::hash::Hash);
+
+impl std::hash::Hash for Hash {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		self.0.hash(state);
+	}
+}

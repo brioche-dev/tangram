@@ -1,7 +1,7 @@
 pub use crate::package::specifier::Registry;
 use crate::{
 	error::{Error, Result},
-	path::Path,
+	path::Relpath,
 };
 
 /// A reference from a package to a dependency, either at a path or from the registry.
@@ -22,7 +22,7 @@ use crate::{
 #[buffalo(into = "String", try_from = "String")]
 pub enum Specifier {
 	/// A reference to a dependency at a path.
-	Path(Path),
+	Path(Relpath),
 
 	/// A reference to a dependency from the registry.
 	Registry(Registry),
@@ -34,7 +34,7 @@ impl std::str::FromStr for Specifier {
 	fn from_str(value: &str) -> Result<Specifier> {
 		if value.starts_with('.') {
 			// If the string starts with `.`, then parse the string as a path.
-			let specifier = value.into();
+			let specifier = value.parse()?;
 			Ok(Specifier::Path(specifier))
 		} else {
 			// Otherwise, parse the string as a registry specifier.

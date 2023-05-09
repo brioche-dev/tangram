@@ -2,10 +2,8 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use tangram::{
-	artifact::{self, Artifact},
-	util::fs,
-};
+use std::path::PathBuf;
+use tangram::artifact::{self, Artifact};
 
 /// Check out an artifact.
 #[derive(Debug, clap::Args)]
@@ -15,7 +13,7 @@ pub struct Args {
 	pub artifact_hash: artifact::Hash,
 
 	/// The path to check out the artifact to.
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 }
 
 impl Cli {

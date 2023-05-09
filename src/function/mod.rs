@@ -1,5 +1,5 @@
 pub use self::data::Data;
-use crate::{error::Result, instance::Instance, package, path::Path};
+use crate::{error::Result, instance::Instance, package, path::Subpath};
 
 mod data;
 
@@ -11,7 +11,7 @@ pub struct Function {
 	pub package_instance_hash: package::instance::Hash,
 
 	/// The path to module where the function is defined.
-	pub module_path: Path,
+	pub module_path: Subpath,
 
 	/// The name of the function.
 	pub name: String,
@@ -19,7 +19,7 @@ pub struct Function {
 
 impl Function {
 	#[must_use]
-	pub fn new(package_instance: &package::Instance, module_path: Path, name: String) -> Self {
+	pub fn new(package_instance: &package::Instance, module_path: Subpath, name: String) -> Self {
 		Self {
 			package_instance_hash: package_instance.hash(),
 			module_path,

@@ -44,7 +44,7 @@ impl Module {
 				// Load the module.
 				let artifact = package_instance.package().artifact();
 				let directory = artifact.as_directory().unwrap();
-				let entry = directory.get(tg, module.module_path.clone()).await?;
+				let entry = directory.get(tg, &module.module_path).await?;
 				let file = entry.into_file().wrap_err("Expected a file.")?;
 				let text = file.blob().text(tg).await?;
 

@@ -4,7 +4,7 @@
 
 # Tangram
 
-Tangram is a programmable build system and package manager in which all dependencies are specified explicitly and pinned with a lockfile. You get the exact same versions of every package on every machine, so your builds are **simple**, **reproducible**, **cacheable**, and **distributable**.
+Tangram is a programmable build system and package manager that makes your builds **simple**, **reproducible**, **cacheable**, and **distributable**.
 
 - **Simple.** Write your builds in TypeScript with autocomplete and type checking.
 - **Reproducible.** Stop debugging errors caused by inconsistent package versions.

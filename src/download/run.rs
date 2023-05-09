@@ -6,11 +6,13 @@ use crate::{
 	instance::Instance,
 	operation::Operation,
 	temp::Temp,
-	util::fs,
 	value::Value,
 };
 use futures::{Stream, StreamExt, TryStreamExt};
-use std::sync::{Arc, Mutex};
+use std::{
+	path::Path,
+	sync::{Arc, Mutex},
+};
 use tokio_util::io::{StreamReader, SyncIoBridge};
 
 impl Download {
@@ -24,7 +26,7 @@ impl Download {
 		// Get the unpack format.
 		let unpack_format = if self.unpack {
 			Some(
-				unpack::Format::for_path(fs::Path::new(self.url.path()))
+				unpack::Format::for_path(Path::new(self.url.path()))
 					.wrap_err("Failed to determine the unpack format.")?,
 			)
 		} else {

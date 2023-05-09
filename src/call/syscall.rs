@@ -17,7 +17,7 @@ use crate::{
 	module::Module,
 	operation::{self, Operation},
 	package,
-	path::Path,
+	path::Relpath,
 	process::Process,
 	symlink::Symlink,
 	system::System,
@@ -250,15 +250,21 @@ fn syscall_hex_encode(
 	Ok(bytes)
 }
 
-async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Path)) -> Result<Artifact> {
+async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Relpath)) -> Result<Artifact> {
 	let (stack_frame, path) = args;
 
-	// Get the package instance.
-	let package_instance_hash = match stack_frame.module {
-		Module::Normal(module) => module.package_instance_hash,
-		_ => unreachable!(),
-	};
-	let package_instance = package::Instance::get(&tg, package_instance_hash).await?;
+	// Get the package instance and module path.
+	let Module::Normal(module) = stack_frame.module else { unreachable!() };
+	let package_instance = package::Instance::get(&tg, module.package_instance_hash).await?;
+	let module_path = module.module_path;
+
+	// Get the path to the artifact.
+	let artifact_path = module_path
+		.into_relpath()
+		.parent()
+		.join(path)
+		.try_into_subpath()
+		.wrap_err("Invalid path.")?;
 
 	// Get the artifact.
 	let artifact = package_instance
@@ -266,8 +272,9 @@ async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Path)) -> Result<
 		.artifact()
 		.as_directory()
 		.wrap_err("A package must be a directory.")?
-		.get(&tg, path)
-		.await?;
+		.get(&tg, &artifact_path)
+		.await
+		.wrap_err("Failed to get the artifact.")?;
 
 	Ok(artifact)
 }

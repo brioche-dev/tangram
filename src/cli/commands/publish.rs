@@ -1,12 +1,12 @@
 use crate::{error::Result, Cli};
-use tangram::util::fs;
+use std::path::PathBuf;
 
 /// Publish a package.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: fs::PathBuf,
+	pub package: PathBuf,
 }
 
 impl Cli {

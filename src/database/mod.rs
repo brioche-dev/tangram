@@ -1,13 +1,11 @@
 use crate::{
 	artifact,
 	error::{Error, Result},
-	operation, package,
-	util::fs,
-	value,
+	operation, package, value,
 };
 use itertools::Itertools;
 use lmdb::{Cursor, Transaction};
-use std::os::unix::prelude::OsStrExt;
+use std::{os::unix::prelude::OsStrExt, path::Path};
 
 pub struct Database {
 	/// The LMDB environment.
@@ -33,7 +31,7 @@ pub struct Database {
 }
 
 impl Database {
-	pub fn open(path: &fs::Path) -> Result<Database> {
+	pub fn open(path: &Path) -> Result<Database> {
 		// Open the environment.
 		let mut env_builder = lmdb::Environment::new();
 		env_builder.set_map_size(1_099_511_627_776);
@@ -119,7 +117,7 @@ impl Database {
 	/// Add an artifact tracker.
 	pub fn add_artifact_tracker(
 		&self,
-		path: &fs::Path,
+		path: &Path,
 		artifact_tracker: &artifact::Tracker,
 	) -> Result<()> {
 		// Serialize the artifact tracker.
@@ -147,7 +145,7 @@ impl Database {
 	}
 
 	/// Get an artifact tracker.
-	pub fn try_get_artifact_tracker(&self, path: &fs::Path) -> Result<Option<artifact::Tracker>> {
+	pub fn try_get_artifact_tracker(&self, path: &Path) -> Result<Option<artifact::Tracker>> {
 		// Begin a read transaction.
 		let txn = self.env.begin_ro_txn()?;
 

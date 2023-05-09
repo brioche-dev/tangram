@@ -3,7 +3,7 @@ use crate::{
 	blob::{self, Blob},
 	error::{return_error, Error, Result},
 	instance::Instance,
-	path::Path,
+	path::{Relpath, Subpath},
 	placeholder::{self, Placeholder},
 	template::{self, Template},
 };
@@ -33,24 +33,27 @@ pub enum Data {
 	Bytes(Vec<u8>),
 
 	#[buffalo(id = 5)]
-	Path(Path),
+	Subpath(Subpath),
 
 	#[buffalo(id = 6)]
-	Blob(blob::Hash),
+	Relpath(Relpath),
 
 	#[buffalo(id = 7)]
-	Artifact(artifact::Hash),
+	Blob(blob::Hash),
 
 	#[buffalo(id = 8)]
-	Placeholder(placeholder::Data),
+	Artifact(artifact::Hash),
 
 	#[buffalo(id = 9)]
-	Template(template::Data),
+	Placeholder(placeholder::Data),
 
 	#[buffalo(id = 10)]
-	Array(Array),
+	Template(template::Data),
 
 	#[buffalo(id = 11)]
+	Array(Array),
+
+	#[buffalo(id = 12)]
 	Object(Object),
 }
 
@@ -97,7 +100,8 @@ impl super::Value {
 			Self::Number(number) => Data::Number(*number),
 			Self::String(string) => Data::String(string.clone()),
 			Self::Bytes(bytes) => Data::Bytes(bytes.clone()),
-			Self::Path(path) => Data::Path(path.clone()),
+			Self::Subpath(path) => Data::Subpath(path.clone()),
+			Self::Relpath(path) => Data::Relpath(path.clone()),
 			Self::Blob(blob) => Data::Blob(blob.hash()),
 			Self::Artifact(artifact) => Data::Artifact(artifact.hash()),
 			Self::Placeholder(placeholder) => Data::Placeholder(placeholder.to_data()),
@@ -119,7 +123,8 @@ impl super::Value {
 			Data::Number(number) => Ok(Self::Number(number)),
 			Data::String(string) => Ok(Self::String(string)),
 			Data::Bytes(bytes) => Ok(Self::Bytes(bytes)),
-			Data::Path(path) => Ok(Self::Path(path)),
+			Data::Subpath(path) => Ok(Self::Subpath(path)),
+			Data::Relpath(path) => Ok(Self::Relpath(path)),
 			Data::Blob(value) => {
 				let blob = Blob::with_hash(value);
 				Ok(Self::Blob(blob))

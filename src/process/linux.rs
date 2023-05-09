@@ -6,7 +6,6 @@ use crate::{
 	operation, process,
 	system::System,
 	temp::Temp,
-	util::fs,
 	value::Value,
 };
 use indoc::formatdoc;
@@ -14,6 +13,7 @@ use itertools::Itertools;
 use std::{
 	ffi::CString,
 	os::{fd::AsRawFd, unix::ffi::OsStrExt},
+	path::{Path, PathBuf},
 	sync::Arc,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -67,7 +67,7 @@ impl Process {
 		// Create the host and guest paths for the output parent directory.
 		let output_parent_directory_host_path = output_temp.path().to_owned();
 		let output_parent_directory_guest_path =
-			fs::PathBuf::from(format!("/.tangram/temps/{}", output_temp.id()));
+			PathBuf::from(format!("/.tangram/temps/{}", output_temp.id()));
 		tokio::fs::create_dir_all(&output_parent_directory_host_path)
 			.await
 			.wrap_err("Failed to create the output parent directory.")?;
@@ -78,12 +78,12 @@ impl Process {
 
 		// Create the host and guest paths for the artifacts directory.
 		let artifacts_directory_host_path = tg.artifacts_path();
-		let artifacts_directory_guest_path = fs::PathBuf::from(ARTIFACTS_DIRECTORY_GUEST_PATH);
+		let artifacts_directory_guest_path = PathBuf::from(ARTIFACTS_DIRECTORY_GUEST_PATH);
 
 		// Create the host and guest paths for the home directory.
 		let home_directory_host_path =
 			root_host_path.join(HOME_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
-		let _home_directory_guest_path = fs::PathBuf::from(HOME_DIRECTORY_GUEST_PATH);
+		let _home_directory_guest_path = PathBuf::from(HOME_DIRECTORY_GUEST_PATH);
 		tokio::fs::create_dir_all(&home_directory_host_path)
 			.await
 			.wrap_err(r#"Failed to create the home directory."#)?;
@@ -91,14 +91,14 @@ impl Process {
 		// Create the host and guest paths for the working directory.
 		let working_directory_host_path =
 			root_host_path.join(WORKING_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
-		let working_directory_guest_path = fs::PathBuf::from(WORKING_DIRECTORY_GUEST_PATH);
+		let working_directory_guest_path = PathBuf::from(WORKING_DIRECTORY_GUEST_PATH);
 		tokio::fs::create_dir_all(&working_directory_host_path)
 			.await
 			.wrap_err(r#"Failed to create the working directory."#)?;
 
 		// Render the executable, env, and args.
 		let (executable, mut env, args) = self.render(
-			fs::Path::new(ARTIFACTS_DIRECTORY_GUEST_PATH),
+			Path::new(ARTIFACTS_DIRECTORY_GUEST_PATH),
 			&output_guest_path,
 		)?;
 
@@ -233,8 +233,8 @@ impl Process {
 		let mut mounts = Vec::new();
 
 		// Add /dev to the mounts.
-		let dev_host_path = fs::Path::new("/dev");
-		let dev_guest_path = fs::Path::new("/dev");
+		let dev_host_path = Path::new("/dev");
+		let dev_guest_path = Path::new("/dev");
 		let dev_source_path = dev_host_path;
 		let dev_target_path = root_host_path.join(dev_guest_path.strip_prefix("/").unwrap());
 		tokio::fs::create_dir_all(&dev_target_path)
@@ -252,8 +252,8 @@ impl Process {
 		});
 
 		// Add /proc to the mounts.
-		let proc_host_path = fs::Path::new("/proc");
-		let proc_guest_path = fs::Path::new("/proc");
+		let proc_host_path = Path::new("/proc");
+		let proc_guest_path = Path::new("/proc");
 		let proc_source_path = proc_host_path;
 		let proc_target_path = root_host_path.join(proc_guest_path.strip_prefix("/").unwrap());
 		tokio::fs::create_dir_all(&proc_target_path)
@@ -271,8 +271,8 @@ impl Process {
 		});
 
 		// Add /tmp to the mounts.
-		let tmp_host_path = fs::Path::new("/tmp");
-		let tmp_guest_path = fs::Path::new("/tmp");
+		let tmp_host_path = Path::new("/tmp");
+		let tmp_guest_path = Path::new("/tmp");
 		let tmp_source_path = tmp_host_path;
 		let tmp_target_path = root_host_path.join(tmp_guest_path.strip_prefix("/").unwrap());
 		tokio::fs::create_dir_all(&tmp_target_path)
@@ -291,7 +291,7 @@ impl Process {
 
 		// Add /usr/bin/env to the mounts.
 		let usr_bin_env_host_path = env_host_path;
-		let usr_bin_env_guest_path = fs::Path::new("/usr/bin/env");
+		let usr_bin_env_guest_path = Path::new("/usr/bin/env");
 		let usr_bin_env_source_path = usr_bin_env_host_path;
 		let usr_bin_env_target_path =
 			root_host_path.join(usr_bin_env_guest_path.strip_prefix("/").unwrap());
@@ -316,7 +316,7 @@ impl Process {
 
 		// Add /bin/sh to the mounts.
 		let bin_sh_host_path = sh_host_path;
-		let bin_sh_guest_path = fs::Path::new("/bin/sh");
+		let bin_sh_guest_path = Path::new("/bin/sh");
 		let bin_sh_source_path = bin_sh_host_path;
 		let bin_sh_target_path = root_host_path.join(bin_sh_guest_path.strip_prefix("/").unwrap());
 		tokio::fs::create_dir_all(bin_sh_target_path.parent().unwrap())
@@ -338,8 +338,8 @@ impl Process {
 
 		// Add the host paths to the mounts.
 		for host_path in &self.host_paths {
-			let host_path = fs::Path::new(host_path);
-			let guest_path = fs::Path::new(host_path);
+			let host_path = Path::new(host_path);
+			let guest_path = Path::new(host_path);
 			let source_path = host_path;
 			let target_path = root_host_path.join(guest_path.strip_prefix("/").unwrap());
 			tokio::fs::create_dir_all(&target_path)

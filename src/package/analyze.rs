@@ -3,22 +3,22 @@ use crate::{
 	error::{Result, WrapErr},
 	language,
 	module::{self, Module},
-	path::{self, Path},
-	util::fs,
+	path::Subpath,
 };
 use std::{
 	collections::{HashMap, VecDeque},
+	path::Path,
 	sync::Arc,
 };
 
 impl Package {
 	pub(crate) async fn analyze_path(
 		tg: &Arc<crate::instance::Instance>,
-		package_path: &fs::Path,
-	) -> Result<HashMap<Path, language::analyze::Output, fnv::FnvBuildHasher>> {
+		package_path: &Path,
+	) -> Result<HashMap<Subpath, language::analyze::Output, fnv::FnvBuildHasher>> {
 		// Create a queue of paths to visit and a visited set.
 		let mut output = HashMap::default();
-		let mut queue = VecDeque::from(vec![Path::from(ROOT_MODULE_FILE_NAME)]);
+		let mut queue = VecDeque::from(vec![Subpath::try_from(ROOT_MODULE_FILE_NAME).unwrap()]);
 
 		while let Some(path) = queue.pop_front() {
 			// Get the module's text.
@@ -40,8 +40,11 @@ impl Package {
 				if let module::Specifier::Path(specifier) = specifier {
 					let path = path
 						.clone()
-						.join(path::Component::Parent)
-						.join(specifier.to_string());
+						.into_relpath()
+						.parent()
+						.join(specifier.clone())
+						.try_into_subpath()
+						.wrap_err("Failed to resolve the module path.")?;
 					if !output.contains_key(&path) {
 						queue.push_back(path);
 					}
@@ -55,10 +58,10 @@ impl Package {
 	pub(crate) async fn analyze(
 		&self,
 		tg: &Arc<crate::instance::Instance>,
-	) -> Result<HashMap<Path, language::analyze::Output, fnv::FnvBuildHasher>> {
+	) -> Result<HashMap<Subpath, language::analyze::Output, fnv::FnvBuildHasher>> {
 		// Create a queue of paths to visit and a visited set.
 		let mut output = HashMap::default();
-		let mut queue = VecDeque::from(vec![Path::from(ROOT_MODULE_FILE_NAME)]);
+		let mut queue = VecDeque::from(vec![Subpath::try_from(ROOT_MODULE_FILE_NAME).unwrap()]);
 
 		while let Some(path) = queue.pop_front() {
 			// Get the module's text.
@@ -66,7 +69,7 @@ impl Package {
 				.artifact()
 				.as_directory()
 				.unwrap()
-				.get(tg, path.clone())
+				.get(tg, &path.clone())
 				.await?
 				.into_file()
 				.unwrap()
@@ -85,8 +88,11 @@ impl Package {
 				if let module::Specifier::Path(specifier) = specifier {
 					let path = path
 						.clone()
-						.join(path::Component::Parent)
-						.join(specifier.to_string());
+						.into_relpath()
+						.parent()
+						.join(specifier.clone())
+						.try_into_subpath()
+						.wrap_err("Invalid specifier.")?;
 					if !output.contains_key(&path) {
 						queue.push_back(path);
 					}

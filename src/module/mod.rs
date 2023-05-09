@@ -3,7 +3,7 @@ use crate::{
 	document::Document,
 	error::{return_error, Error, Result, WrapErr},
 	package,
-	path::Path,
+	path::Subpath,
 };
 use url::Url;
 
@@ -36,7 +36,7 @@ pub enum Module {
 #[serde(rename_all = "camelCase")]
 pub struct Library {
 	/// The module's path.
-	pub module_path: Path,
+	pub module_path: Subpath,
 }
 
 #[derive(
@@ -48,7 +48,7 @@ pub struct Normal {
 	pub package_instance_hash: package::instance::Hash,
 
 	/// The module's path.
-	pub module_path: Path,
+	pub module_path: Subpath,
 }
 
 impl From<Module> for Url {

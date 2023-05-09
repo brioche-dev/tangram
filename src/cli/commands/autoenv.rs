@@ -4,7 +4,7 @@ use crate::{
 };
 use futures::FutureExt;
 use itertools::Itertools;
-use tangram::util::fs;
+use std::path::PathBuf;
 
 /// Manage autoenv paths.
 #[derive(Debug, clap::Args)]
@@ -33,7 +33,7 @@ pub enum Command {
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct AddArgs {
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 }
 
 /// Get the autoenv path for a path.
@@ -50,7 +50,7 @@ pub struct ListArgs {}
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct RemoveArgs {
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 }
 
 impl Cli {

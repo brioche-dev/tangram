@@ -5,13 +5,13 @@ use crate::{
 	operation::Operation,
 	system::System,
 	template::Template,
-	util::fs,
 	value::Value,
 };
 use futures::{future::try_join_all, FutureExt};
 use itertools::Itertools;
 use std::{
 	collections::{BTreeMap, HashSet},
+	path::Path,
 	sync::Arc,
 };
 
@@ -39,8 +39,8 @@ impl Process {
 
 	pub(crate) fn render(
 		&self,
-		artifacts_directory_guest_path: &fs::Path,
-		output_guest_path: &fs::Path,
+		artifacts_directory_guest_path: &Path,
+		output_guest_path: &Path,
 	) -> Result<(String, BTreeMap<String, String>, Vec<String>)> {
 		// Create a closure that renders a template.
 		let render = |template: &Template| {

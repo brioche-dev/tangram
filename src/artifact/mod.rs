@@ -12,7 +12,7 @@ mod references;
 mod tracker;
 
 /// An artifact.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Artifact {
 	/// A directory.
@@ -109,5 +109,11 @@ impl Artifact {
 			Self::File(file) => file.hash(),
 			Self::Symlink(symlink) => symlink.hash(),
 		}
+	}
+}
+
+impl std::hash::Hash for Artifact {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		self.hash().hash(state);
 	}
 }

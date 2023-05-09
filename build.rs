@@ -1,10 +1,10 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
 
 fn main() {
 	// Get the out dir path.
-	let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+	let out_dir_path = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
 
 	// Initialize V8.
 	V8_INIT.call_once(|| {

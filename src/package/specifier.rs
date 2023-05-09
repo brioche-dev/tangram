@@ -1,8 +1,6 @@
 use super::dependency;
-use crate::{
-	error::{Error, Result},
-	util::fs,
-};
+use crate::error::{Error, Result};
+use std::path::PathBuf;
 
 /// A reference to a package, either at a path or from the registry.
 #[derive(
@@ -21,7 +19,7 @@ use crate::{
 #[buffalo(into = "String", try_from = "String")]
 pub enum Specifier {
 	/// A reference to a package at a path.
-	Path(fs::PathBuf),
+	Path(PathBuf),
 
 	/// A reference to a package from the registry.
 	Registry(Registry),
@@ -139,7 +137,7 @@ mod tests {
 		let path_specifiers = [".", "./", "./hello"];
 		for path_specifier in path_specifiers {
 			let left: Specifier = path_specifier.parse().unwrap();
-			let right = Specifier::Path(fs::PathBuf::from(path_specifier));
+			let right = Specifier::Path(PathBuf::from(path_specifier));
 			assert_eq!(left, right);
 		}
 	}

@@ -9,10 +9,14 @@ use crate::{
 	error::Result,
 	hash, language, operation,
 	package::{self, Package},
-	util::{fs, task_map::TaskMap},
+	util::task_map::TaskMap,
 	value::Value,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{
+	collections::HashMap,
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 use tokio_util::task::LocalPoolHandle;
 use url::Url;
 
@@ -37,7 +41,7 @@ pub struct Instance {
 	/// A task map that deduplicates internal checkouts.
 	#[allow(clippy::type_complexity)]
 	pub(crate) internal_checkouts_task_map:
-		std::sync::Mutex<Option<Arc<TaskMap<Artifact, Result<fs::PathBuf>>>>>,
+		std::sync::Mutex<Option<Arc<TaskMap<Artifact, Result<PathBuf>>>>>,
 
 	/// A channel sender to send requests to the language service.
 	pub(crate) language_service_request_sender:
@@ -58,7 +62,7 @@ pub struct Instance {
 	pub(crate) packages: std::sync::RwLock<HashMap<Package, package::Specifier, hash::BuildHasher>>,
 
 	/// The path to the directory where the instance stores its data.
-	pub(crate) path: fs::PathBuf,
+	pub(crate) path: PathBuf,
 
 	/// A handle to the main tokio runtime.
 	pub(crate) runtime_handle: tokio::runtime::Handle,
@@ -91,7 +95,7 @@ fn initialize_v8() {
 }
 
 impl Instance {
-	pub async fn new(path: fs::PathBuf, options: Options) -> Result<Instance> {
+	pub async fn new(path: PathBuf, options: Options) -> Result<Instance> {
 		// Initialize V8.
 		V8_INIT.call_once(initialize_v8);
 
@@ -181,52 +185,52 @@ impl Instance {
 
 impl Instance {
 	#[must_use]
-	pub fn path(&self) -> &fs::Path {
+	pub fn path(&self) -> &Path {
 		&self.path
 	}
 
 	#[must_use]
-	pub fn artifacts_path(&self) -> fs::PathBuf {
+	pub fn artifacts_path(&self) -> PathBuf {
 		self.path().join("artifacts")
 	}
 
 	#[must_use]
-	pub fn artifact_path(&self, artifact_hash: artifact::Hash) -> fs::PathBuf {
+	pub fn artifact_path(&self, artifact_hash: artifact::Hash) -> PathBuf {
 		self.artifacts_path().join(artifact_hash.to_string())
 	}
 
 	#[must_use]
-	pub fn assets_path(&self) -> fs::PathBuf {
+	pub fn assets_path(&self) -> PathBuf {
 		self.path().join("assets")
 	}
 
 	#[must_use]
-	pub fn blobs_path(&self) -> fs::PathBuf {
+	pub fn blobs_path(&self) -> PathBuf {
 		self.path().join("blobs")
 	}
 
 	#[must_use]
-	pub fn blob_path(&self, blob_hash: blob::Hash) -> fs::PathBuf {
+	pub fn blob_path(&self, blob_hash: blob::Hash) -> PathBuf {
 		self.blobs_path().join(blob_hash.to_string())
 	}
 
 	#[must_use]
-	pub fn database_path(&self) -> fs::PathBuf {
+	pub fn database_path(&self) -> PathBuf {
 		self.path().join("database.mdb")
 	}
 
 	#[must_use]
-	pub fn logs_path(&self) -> fs::PathBuf {
+	pub fn logs_path(&self) -> PathBuf {
 		self.path().join("logs")
 	}
 
 	#[must_use]
-	pub fn log_path(&self, operation_hash: operation::Hash) -> fs::PathBuf {
+	pub fn log_path(&self, operation_hash: operation::Hash) -> PathBuf {
 		self.logs_path().join(operation_hash.to_string())
 	}
 
 	#[must_use]
-	pub fn temps_path(&self) -> fs::PathBuf {
+	pub fn temps_path(&self) -> PathBuf {
 		self.path().join("temps")
 	}
 }

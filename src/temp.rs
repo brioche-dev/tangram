@@ -1,9 +1,10 @@
-use crate::{id::Id, instance::Instance, util::fs};
+use crate::{id::Id, instance::Instance};
+use std::path::{Path, PathBuf};
 
 pub struct Temp<'a> {
 	_tg: &'a Instance,
 	id: Id,
-	path: fs::PathBuf,
+	path: PathBuf,
 }
 
 impl<'a> Temp<'a> {
@@ -19,7 +20,7 @@ impl<'a> Temp<'a> {
 	}
 
 	#[must_use]
-	pub fn path(&self) -> &fs::Path {
+	pub fn path(&self) -> &Path {
 		&self.path
 	}
 }

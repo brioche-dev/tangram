@@ -3,14 +3,14 @@ use crate::{
 	error::{return_error, Result},
 	instance::Instance,
 	module::{self, Module},
-	path::Path,
+	path::Relpath,
 };
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Output {
 	pub imports: Vec<module::Specifier>,
-	pub includes: Vec<Path>,
+	pub includes: Vec<Relpath>,
 }
 
 impl Module {

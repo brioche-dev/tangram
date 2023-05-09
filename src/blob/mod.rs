@@ -4,6 +4,7 @@ use crate::{
 	error::{Error, Result, WrapErr},
 	instance::Instance,
 };
+use std::path::PathBuf;
 use tokio::io::AsyncReadExt;
 
 mod copy;
@@ -11,7 +12,7 @@ mod hash;
 mod new;
 mod reader;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Blob {
 	hash: Hash,
 }
@@ -27,7 +28,7 @@ impl Blob {
 		self.hash
 	}
 
-	pub fn path(&self, tg: &Instance) -> std::path::PathBuf {
+	pub fn path(&self, tg: &Instance) -> PathBuf {
 		tg.blob_path(self.hash)
 	}
 

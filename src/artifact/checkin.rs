@@ -9,11 +9,10 @@ use crate::{
 	symlink::Symlink,
 	temp::Temp,
 	template::Template,
-	util::fs,
 };
 use async_recursion::async_recursion;
 use futures::future::try_join_all;
-use std::{fs::Metadata, os::unix::prelude::PermissionsExt};
+use std::{fs::Metadata, os::unix::prelude::PermissionsExt, path::Path};
 
 #[derive(serde::Deserialize)]
 struct Attributes {
@@ -22,7 +21,7 @@ struct Attributes {
 
 impl Artifact {
 	#[async_recursion]
-	pub async fn check_in(tg: &Instance, path: &fs::Path) -> Result<Self> {
+	pub async fn check_in(tg: &Instance, path: &Path) -> Result<Self> {
 		// Get the metadata for the file system object at the path.
 		let metadata = tokio::fs::symlink_metadata(path).await.wrap_err_with(|| {
 			let path = path.display();
@@ -58,11 +57,7 @@ impl Artifact {
 		Ok(artifact)
 	}
 
-	async fn check_in_directory(
-		tg: &Instance,
-		path: &fs::Path,
-		_metadata: &Metadata,
-	) -> Result<Self> {
+	async fn check_in_directory(tg: &Instance, path: &Path, _metadata: &Metadata) -> Result<Self> {
 		// Read the contents of the directory.
 		let mut read_dir = tokio::fs::read_dir(path)
 			.await
@@ -97,7 +92,7 @@ impl Artifact {
 		Ok(directory.into())
 	}
 
-	async fn check_in_file(tg: &Instance, path: &fs::Path, metadata: &Metadata) -> Result<Self> {
+	async fn check_in_file(tg: &Instance, path: &Path, metadata: &Metadata) -> Result<Self> {
 		// // If there is an artifact tracker whose timestamp matches the file at the path, then return the tracked artifact hash.
 		// if let Some(artifact_tracker) = tg.get_artifact_tracker(path)? {
 		// 	let timestamp = std::time::Duration::new(
@@ -168,11 +163,7 @@ impl Artifact {
 		Ok(file.into())
 	}
 
-	async fn check_in_symlink(
-		tg: &Instance,
-		path: &fs::Path,
-		_metadata: &Metadata,
-	) -> Result<Self> {
+	async fn check_in_symlink(tg: &Instance, path: &Path, _metadata: &Metadata) -> Result<Self> {
 		// Read the target from the symlink.
 		let target = tokio::fs::read_link(path).await.wrap_err_with(|| {
 			format!(

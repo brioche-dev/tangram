@@ -6,7 +6,7 @@ mod references;
 mod render;
 mod unrender;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct Template {
 	components: Vec<Component>,
 }

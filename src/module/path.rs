@@ -1,8 +1,9 @@
 use super::Module;
-use crate::{error::Result, instance::Instance, package, util::fs};
+use crate::{error::Result, instance::Instance, package};
+use std::path::PathBuf;
 
 impl Module {
-	pub async fn path(&self, tg: &Instance) -> Result<Option<fs::PathBuf>> {
+	pub async fn path(&self, tg: &Instance) -> Result<Option<PathBuf>> {
 		match self {
 			Module::Library(_) => Ok(None),
 

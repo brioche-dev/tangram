@@ -27,7 +27,7 @@ impl Cli {
 		args.run_args.executable_path = Some(
 			args.run_args
 				.executable_path
-				.unwrap_or_else(|| ".tangram/env".into()),
+				.unwrap_or_else(|| ".tangram/env".parse().unwrap()),
 		);
 
 		// Create the run args.

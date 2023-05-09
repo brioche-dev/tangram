@@ -1,11 +1,11 @@
 use crate::{error::Result, return_error, Cli};
-use tangram::util::fs;
+use std::path::PathBuf;
 
 /// Update a package's dependencies.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 }
 
 impl Cli {

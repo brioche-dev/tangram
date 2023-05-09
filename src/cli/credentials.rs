@@ -1,5 +1,6 @@
 use crate::{error::Error, Cli, Result};
-use tangram::util::{dirs::user_config_directory_path, fs};
+use std::path::{Path, PathBuf};
+use tangram::util::dirs::user_config_directory_path;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
@@ -8,7 +9,7 @@ pub struct Credentials {
 }
 
 impl Cli {
-	pub fn credentials_path() -> Result<fs::PathBuf> {
+	pub fn credentials_path() -> Result<PathBuf> {
 		Ok(user_config_directory_path()?
 			.join("tangram")
 			.join("credentials.json"))
@@ -18,7 +19,7 @@ impl Cli {
 		Self::read_credentials_from_path(&Self::credentials_path()?).await
 	}
 
-	pub async fn read_credentials_from_path(path: &fs::Path) -> Result<Option<Credentials>> {
+	pub async fn read_credentials_from_path(path: &Path) -> Result<Option<Credentials>> {
 		let credentials = match tokio::fs::read(&path).await {
 			Ok(credentials) => credentials,
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -32,10 +33,7 @@ impl Cli {
 		Self::write_credentials_to_path(&Self::credentials_path()?, credentials).await
 	}
 
-	pub async fn write_credentials_to_path(
-		path: &fs::Path,
-		credentials: &Credentials,
-	) -> Result<()> {
+	pub async fn write_credentials_to_path(path: &Path, credentials: &Credentials) -> Result<()> {
 		let credentials = serde_json::to_string(credentials).map_err(Error::other)?;
 		tokio::fs::write(path, &credentials)
 			.await

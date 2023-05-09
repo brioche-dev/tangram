@@ -3,13 +3,13 @@ use crate::{
 	Cli,
 };
 use indoc::formatdoc;
-use tangram::util::fs;
+use std::path::PathBuf;
 
 /// Initialize a new package.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 }
 
 impl Cli {

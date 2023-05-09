@@ -3,7 +3,6 @@ use crate::{
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
 	package::{self, ROOT_MODULE_FILE_NAME},
-	path,
 };
 
 impl Module {
@@ -14,8 +13,11 @@ impl Module {
 				let module_path = module
 					.module_path
 					.clone()
-					.join(path::Component::Parent)
-					.join(specifier.clone());
+					.into_relpath()
+					.parent()
+					.join(specifier.clone())
+					.try_into_subpath()
+					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Library(Library { module_path }))
 			},
 
@@ -29,15 +31,11 @@ impl Module {
 				let module_path = document
 					.module_path
 					.clone()
-					.join(path::Component::Parent)
-					.join(specifier.clone());
-
-				// Ensure that the module path is within the package.
-				if module_path.has_parent_components() {
-					return_error!(
-						r#"Cannot resolve a path specifier to a module outside of the package."#
-					);
-				}
+					.into_relpath()
+					.parent()
+					.join(specifier.clone())
+					.try_into_subpath()
+					.wrap_err("Failed to resolve the module path.")?;
 
 				// Ensure that the module exists.
 				let path = package_path.join(module_path.to_string());
@@ -61,7 +59,8 @@ impl Module {
 				let specifier = document
 					.module_path
 					.clone()
-					.join(path::Component::Parent)
+					.into_relpath()
+					.parent()
 					.join(specifier.clone());
 
 				// Resolve the package path.
@@ -69,7 +68,7 @@ impl Module {
 				let package_path = tokio::fs::canonicalize(package_path).await?;
 
 				// The module path is the root module.
-				let module_path = ROOT_MODULE_FILE_NAME.into();
+				let module_path = ROOT_MODULE_FILE_NAME.parse().unwrap();
 
 				Ok(Self::Document(
 					Document::new(tg, package_path, module_path).await?,
@@ -84,8 +83,11 @@ impl Module {
 				let module_path = module
 					.module_path
 					.clone()
-					.join(path::Component::Parent)
-					.join(specifier.clone());
+					.into_relpath()
+					.parent()
+					.join(specifier.clone())
+					.try_into_subpath()
+					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Normal(super::Normal {
 					package_instance_hash: module.package_instance_hash,
 					module_path,
@@ -99,7 +101,8 @@ impl Module {
 						let path = module
 							.module_path
 							.clone()
-							.join(path::Component::Parent)
+							.into_relpath()
+							.parent()
 							.join(specifier.clone());
 						package::dependency::Specifier::Path(path)
 					},

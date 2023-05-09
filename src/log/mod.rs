@@ -1,10 +1,10 @@
-// use crate::{error::Result, operation, util::fs, Instance};
+// use crate::{error::Result, operation, Instance};
 // use async_compression::tokio::{bufread::ZstdDecoder, write::ZstdEncoder};
 // use tokio::io::AsyncRead;
 
 // pub struct Writer {
 // 	operation_hash: operation::Hash,
-// 	temp_path: fs::PathBuf,
+// 	temp_path: PathBuf,
 // 	task: tokio::task::JoinHandle<Result<()>>,
 // 	writer: tokio::io::DuplexStream,
 // }

@@ -1,6 +1,8 @@
 /// <reference lib="es2023" />
 
 declare namespace tg {
+	// Artifact.
+
 	export type Artifact = Directory | File | Symlink;
 
 	export namespace Artifact {

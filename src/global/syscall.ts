@@ -34,7 +34,8 @@ export type Value =
 	| { kind: "number"; value: number }
 	| { kind: "string"; value: string }
 	| { kind: "bytes"; value: Uint8Array }
-	| { kind: "path"; value: Path }
+	| { kind: "subpath"; value: Subpath }
+	| { kind: "relpath"; value: Relpath }
 	| { kind: "blob"; value: Blob }
 	| { kind: "artifact"; value: Artifact }
 	| { kind: "placeholder"; value: Placeholder }
@@ -42,7 +43,9 @@ export type Value =
 	| { kind: "array"; value: Array<Value> }
 	| { kind: "object"; value: Record<string, Value> };
 
-export type Path = string;
+export type Subpath = string;
+
+export type Relpath = string;
 
 export type Placeholder = {
 	name: string;

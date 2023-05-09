@@ -4,17 +4,22 @@ use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	file::File,
 	instance::Instance,
+	path::Subpath,
 	symlink::Symlink,
 	temp::Temp,
 	template,
-	util::{fs, task_map::TaskMap},
+	util::task_map::TaskMap,
 };
 use async_recursion::async_recursion;
 use futures::{future::try_join_all, FutureExt};
-use std::{os::unix::prelude::PermissionsExt, sync::Arc};
+use std::{
+	os::unix::prelude::PermissionsExt,
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 
 impl Artifact {
-	pub async fn check_out_internal(&self, tg: &Arc<Instance>) -> Result<fs::PathBuf> {
+	pub async fn check_out_internal(&self, tg: &Arc<Instance>) -> Result<PathBuf> {
 		// Get the internal checkouts task map.
 		let internal_checkouts_task_map = tg
 			.internal_checkouts_task_map
@@ -41,12 +46,12 @@ impl Artifact {
 		Ok(path)
 	}
 
-	async fn check_out_internal_inner(&self, tg: &Instance) -> Result<fs::PathBuf> {
+	async fn check_out_internal_inner(&self, tg: &Instance) -> Result<PathBuf> {
 		// Compute the checkout's path in the artifacts directory.
 		let path = tg.artifact_path(self.hash());
 
 		// If the path exists, then the artifact is already checked out.
-		if crate::util::fs::exists(&path).await? {
+		if tokio::fs::try_exists(&path).await? {
 			return Ok(path);
 		}
 
@@ -86,7 +91,7 @@ impl Artifact {
 	}
 
 	#[async_recursion]
-	async fn check_out_internal_inner_inner(&self, tg: &Instance, path: &fs::Path) -> Result<()> {
+	async fn check_out_internal_inner_inner(&self, tg: &Instance, path: &Path) -> Result<()> {
 		match self {
 			Artifact::Directory(directory) => {
 				// Create the directory.
@@ -193,7 +198,7 @@ impl Artifact {
 }
 
 impl Artifact {
-	pub async fn check_out(&self, tg: &Arc<Instance>, path: &fs::Path) -> Result<()> {
+	pub async fn check_out(&self, tg: &Arc<Instance>, path: &Path) -> Result<()> {
 		// Bundle the artifact.
 		let artifact = self
 			.bundle(tg)
@@ -201,7 +206,7 @@ impl Artifact {
 			.wrap_err("Failed to bundle the artifact.")?;
 
 		// Check in an existing artifact at the path.
-		let existing_artifact = if crate::util::fs::exists(path).await? {
+		let existing_artifact = if tokio::fs::try_exists(path).await? {
 			Some(Self::check_in(tg, path).await?)
 		} else {
 			None
@@ -219,7 +224,7 @@ impl Artifact {
 		&self,
 		tg: &Instance,
 		existing_artifact: Option<&Artifact>,
-		path: &fs::Path,
+		path: &Path,
 	) -> Result<()> {
 		// If the artifact is the same as the existing artifact, then return.
 		if existing_artifact.map_or(false, |existing_artifact| {
@@ -269,7 +274,7 @@ impl Artifact {
 		tg: &Instance,
 		existing_artifact: Option<&'async_recursion Artifact>,
 		directory: &Directory,
-		path: &fs::Path,
+		path: &Path,
 	) -> Result<()> {
 		// Handle an existing artifact at the path.
 		match &existing_artifact {
@@ -309,6 +314,7 @@ impl Artifact {
 						// Retrieve an existing artifact.
 						let existing_artifact = match existing_artifact {
 							Some(Artifact::Directory(existing_directory)) => {
+								let name: Subpath = name.parse().wrap_err("Invalid entry name.")?;
 								existing_directory.try_get(tg, &name).await?
 							},
 							_ => None,
@@ -333,7 +339,7 @@ impl Artifact {
 		tg: &Instance,
 		existing_artifact: Option<&Artifact>,
 		file: &File,
-		path: &fs::Path,
+		path: &Path,
 	) -> Result<()> {
 		// Handle an existing artifact at the path.
 		match &existing_artifact {
@@ -370,7 +376,7 @@ impl Artifact {
 		_tg: &Instance,
 		existing_artifact: Option<&Artifact>,
 		symlink: &Symlink,
-		path: &fs::Path,
+		path: &Path,
 	) -> Result<()> {
 		// Handle an existing artifact at the path.
 		match &existing_artifact {

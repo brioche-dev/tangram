@@ -2,13 +2,13 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use tangram::util::fs;
+use std::path::PathBuf;
 
 /// Create a new package.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 }
 
 impl Cli {

@@ -184,7 +184,8 @@ impl Instance {
 					| Value::Number(_)
 					| Value::String(_)
 					| Value::Bytes(_)
-					| Value::Path(_)
+					| Value::Subpath(_)
+					| Value::Relpath(_)
 					| Value::Placeholder(_) => {},
 
 					Value::Blob(blob) => {

@@ -3,10 +3,12 @@ use crate::{
 	instance::Instance,
 	language::Range,
 	package::ROOT_MODULE_FILE_NAME,
-	path::Path,
-	util::fs,
+	path::Subpath,
 };
-use std::time::SystemTime;
+use std::{
+	path::{Path, PathBuf},
+	time::SystemTime,
+};
 
 /// A document.
 #[derive(
@@ -15,10 +17,10 @@ use std::time::SystemTime;
 #[serde(rename_all = "camelCase")]
 pub struct Document {
 	/// The path to the package.
-	pub package_path: fs::PathBuf,
+	pub package_path: PathBuf,
 
 	/// The module path.
-	pub module_path: Path,
+	pub module_path: Subpath,
 }
 
 /// A document's state.
@@ -52,7 +54,7 @@ pub struct Opened {
 }
 
 impl Document {
-	pub async fn new(tg: &Instance, package_path: fs::PathBuf, module_path: Path) -> Result<Self> {
+	pub async fn new(tg: &Instance, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
 		let path = package_path.join(module_path.to_string());
 
 		// Create the document.
@@ -78,12 +80,12 @@ impl Document {
 		Ok(document)
 	}
 
-	pub async fn for_path(tg: &Instance, path: &fs::Path) -> Result<Self> {
+	pub async fn for_path(tg: &Instance, path: &Path) -> Result<Self> {
 		// Find the package path by searching the path's ancestors for a root module.
 		let mut found = false;
 		let mut package_path = path.to_owned();
 		while package_path.pop() {
-			if crate::util::fs::exists(&package_path.join(ROOT_MODULE_FILE_NAME)).await? {
+			if tokio::fs::try_exists(&package_path.join(ROOT_MODULE_FILE_NAME)).await? {
 				found = true;
 				break;
 			}
@@ -94,7 +96,7 @@ impl Document {
 		}
 
 		// Get the module path by stripping the package path.
-		let module_path: Path = path
+		let module_path: Subpath = path
 			.strip_prefix(&package_path)
 			.unwrap()
 			.to_owned()
@@ -102,7 +104,8 @@ impl Document {
 			.into_string()
 			.ok()
 			.wrap_err("The module path was not valid UTF-8.")?
-			.into();
+			.parse()
+			.wrap_err("Failed to parse the module path.")?;
 
 		// Create the document.
 		let document = Self::new(tg, package_path, module_path).await?;
@@ -169,7 +172,7 @@ impl Document {
 
 	/// Get the document's path.
 	#[must_use]
-	pub fn path(&self) -> fs::PathBuf {
+	pub fn path(&self) -> PathBuf {
 		self.package_path.join(self.module_path.to_string())
 	}
 

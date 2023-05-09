@@ -12,7 +12,7 @@ mod get;
 mod hash;
 mod new;
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Instance {
 	/// The package instance's hash.
@@ -55,7 +55,7 @@ impl Instance {
 	pub fn root_module(&self) -> Module {
 		Module::Normal(module::Normal {
 			package_instance_hash: self.hash,
-			module_path: ROOT_MODULE_FILE_NAME.into(),
+			module_path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		})
 	}
 }

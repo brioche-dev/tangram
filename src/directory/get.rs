@@ -3,12 +3,11 @@ use crate::{
 	artifact::Artifact,
 	error::{Result, WrapErr},
 	instance::Instance,
-	path::{self, Path},
-	return_error,
+	path::Subpath,
 };
 
 impl Directory {
-	pub async fn get(&self, tg: &Instance, path: impl Into<Path>) -> Result<Artifact> {
+	pub async fn get(&self, tg: &Instance, path: &Subpath) -> Result<Artifact> {
 		let artifact = self
 			.try_get(tg, path)
 			.await?
@@ -16,21 +15,12 @@ impl Directory {
 		Ok(artifact)
 	}
 
-	pub async fn try_get(&self, tg: &Instance, path: impl Into<Path>) -> Result<Option<Artifact>> {
-		// Get the path.
-		let path = path.into();
-		if let Some(path::Component::Parent) = path.components().first() {
-			return_error!("Invalid path.");
-		}
-
+	pub async fn try_get(&self, tg: &Instance, path: &Subpath) -> Result<Option<Artifact>> {
 		// Track the current artifact.
 		let mut artifact = Artifact::Directory(self.clone());
 
 		// Handle each path component.
-		for component in path.components() {
-			// Get the component name.
-			let name = component.as_normal().unwrap();
-
+		for name in path.components() {
 			// The artifact must be a directory.
 			let Some(directory) = artifact.as_directory() else {
 				return Ok(None);

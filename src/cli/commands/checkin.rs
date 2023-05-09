@@ -2,14 +2,15 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use tangram::{artifact::Artifact, util::fs};
+use std::path::PathBuf;
+use tangram::artifact::Artifact;
 
 /// Check in an artifact.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	/// The path to check in.
-	pub path: Option<fs::PathBuf>,
+	pub path: Option<PathBuf>,
 }
 
 impl Cli {

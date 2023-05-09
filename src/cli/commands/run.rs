@@ -3,13 +3,12 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use std::os::unix::process::CommandExt;
+use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram::{
 	artifact::Artifact,
 	function::Function,
 	operation::Call,
 	package::{self, Package, ROOT_MODULE_FILE_NAME},
-	util::fs,
 };
 
 /// Build a package and run an executable from its output.
@@ -49,7 +48,7 @@ impl Cli {
 		// Run the operation.
 		let function = Function::new(
 			&package_instance,
-			ROOT_MODULE_FILE_NAME.into(),
+			ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			args.function,
 		);
 		let env = Self::create_default_env()?;
@@ -70,7 +69,7 @@ impl Cli {
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {
 			// Resolve the argument as a path relative to the artifact.
-			artifact_path.join(fs::PathBuf::from(executable_path))
+			artifact_path.join(PathBuf::from(executable_path))
 		} else {
 			match artifact {
 				// If the artifact is a file or symlink, then the executable path should be the artifact itself.

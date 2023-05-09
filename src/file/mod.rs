@@ -12,7 +12,7 @@ mod data;
 mod new;
 
 /// A file.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct File {
 	/// The file's hash.
 	hash: artifact::Hash,

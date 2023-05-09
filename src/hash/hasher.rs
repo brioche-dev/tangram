@@ -1,4 +1,4 @@
-use byteorder::{LittleEndian, NativeEndian, ReadBytesExt};
+use byteorder::{NativeEndian, ReadBytesExt};
 
 #[derive(Default)]
 pub struct Hasher(Option<u64>);
@@ -9,12 +9,9 @@ impl std::hash::Hasher for Hasher {
 	}
 
 	fn write(&mut self, mut bytes: &[u8]) {
-		if bytes.len() == 8 {
-			assert_eq!(bytes.read_u64::<NativeEndian>().unwrap(), 32);
-		} else if bytes.len() == 32 {
-			self.0 = Some(bytes.read_u64::<LittleEndian>().unwrap());
-		} else {
-			panic!("Unexpected value to hash.");
-		}
+		assert!(self.0.is_none());
+		assert_eq!(bytes.len(), 32);
+		let value = bytes.read_u64::<NativeEndian>().unwrap();
+		self.0 = Some(value);
 	}
 }

@@ -3,11 +3,11 @@ use crate::{
 	error::{Error, Result, WrapErr},
 	Cli,
 };
+use std::path::PathBuf;
 use tangram::{
 	call::Call,
 	function::Function,
 	package::{self, Package, ROOT_MODULE_FILE_NAME},
-	util::fs,
 };
 
 /// Call a function.
@@ -24,7 +24,7 @@ pub struct Args {
 	pub function: String,
 
 	#[arg(short, long)]
-	pub output: Option<fs::PathBuf>,
+	pub output: Option<PathBuf>,
 }
 
 impl Cli {
@@ -41,7 +41,7 @@ impl Cli {
 		// Run the operation.
 		let function = Function::new(
 			&package_instance,
-			ROOT_MODULE_FILE_NAME.into(),
+			ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			args.function,
 		);
 		let env = Self::create_default_env()?;

@@ -1,9 +1,10 @@
 use super::{Component, Template};
-use crate::{artifact::Artifact, error::Result, instance::Instance, util::fs};
+use crate::{artifact::Artifact, error::Result, instance::Instance};
+use std::path::Path;
 
 impl Template {
 	#[allow(clippy::unused_async)]
-	pub async fn unrender(tg: &Instance, path: &fs::Path, string: &str) -> Result<Template> {
+	pub async fn unrender(tg: &Instance, path: &Path, string: &str) -> Result<Template> {
 		// Create the regex.
 		let path = path.to_str().unwrap().to_owned();
 		let regex = format!(r"{path}/([0-9a-f]{{64}})");
@@ -58,7 +59,7 @@ mod tests {
 	use tempfile::TempDir;
 
 	#[tokio::test]
-	async fn test_unrender_artifact_path() -> Result<()> {
+	async fn test_unrender_artifact() -> Result<()> {
 		let temp_dir = TempDir::new().unwrap();
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
@@ -84,7 +85,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn test_unrender_artifact_subpath() -> Result<()> {
+	async fn test_unrender_artifact_path() -> Result<()> {
 		let temp_dir = TempDir::new().unwrap();
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
@@ -113,7 +114,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn test_unrender_arbitrary_path() -> Result<()> {
+	async fn test_unrender_path() -> Result<()> {
 		let temp_dir = TempDir::new().unwrap();
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
@@ -128,7 +129,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn test_unrender_mixed_paths() -> Result<()> {
+	async fn test_unrender_multiple() -> Result<()> {
 		let temp_dir = TempDir::new().unwrap();
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
@@ -159,7 +160,7 @@ mod tests {
 
 	#[tokio::test]
 	#[allow(clippy::similar_names)]
-	async fn test_unrender_command_with_path_like_variable() -> Result<()> {
+	async fn test_unrender_command_with_path_environment_variable() -> Result<()> {
 		let temp_dir = TempDir::new().unwrap();
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);

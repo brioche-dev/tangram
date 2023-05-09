@@ -4,7 +4,7 @@ use crate::{artifact, template::Template};
 mod data;
 mod new;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct Symlink {
 	hash: artifact::Hash,
 	target: Template,

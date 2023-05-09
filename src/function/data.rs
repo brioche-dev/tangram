@@ -1,4 +1,4 @@
-use crate::{package, path::Path};
+use crate::{package, path::Subpath};
 
 #[derive(
 	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
@@ -9,7 +9,7 @@ pub struct Data {
 	pub package_instance_hash: package::instance::Hash,
 
 	#[buffalo(id = 1)]
-	pub module_path: Path,
+	pub module_path: Subpath,
 
 	#[buffalo(id = 2)]
 	pub name: String,

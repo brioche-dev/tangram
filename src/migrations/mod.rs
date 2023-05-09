@@ -1,14 +1,14 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
-	util::fs,
 };
 use futures::FutureExt;
+use std::path::Path;
 
 mod migration_0000;
 
 impl Instance {
-	pub async fn migrate(path: &fs::Path) -> Result<()> {
+	pub async fn migrate(path: &Path) -> Result<()> {
 		let migrations = vec![migration_0000::migrate(path).boxed()];
 
 		// Read the version from the version file.

@@ -1,9 +1,10 @@
 use super::Blob;
-use crate::{error::Result, instance::Instance, util::fs};
+use crate::{error::Result, instance::Instance};
+use std::path::Path;
 use tokio::io::AsyncWrite;
 
 impl Blob {
-	pub async fn copy_to_path(&self, tg: &Instance, path: &fs::Path) -> Result<()> {
+	pub async fn copy_to_path(&self, tg: &Instance, path: &Path) -> Result<()> {
 		tokio::fs::copy(self.path(tg), path).await?;
 		Ok(())
 	}

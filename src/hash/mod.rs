@@ -10,7 +10,6 @@ pub mod writer;
 	Default,
 	Eq,
 	From,
-	Hash,
 	Into,
 	Ord,
 	PartialEq,
@@ -83,6 +82,12 @@ impl From<Hash> for String {
 impl rand::distributions::Distribution<Hash> for rand::distributions::Standard {
 	fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Hash {
 		Hash(rng.gen())
+	}
+}
+
+impl std::hash::Hash for Hash {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		state.write(&self.0);
 	}
 }
 
