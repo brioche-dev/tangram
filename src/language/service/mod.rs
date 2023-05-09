@@ -19,6 +19,7 @@ pub mod metadata;
 pub mod references;
 pub mod rename;
 mod syscall;
+pub mod symbols;
 pub mod transpile;
 
 #[derive(Debug, serde::Serialize)]
@@ -35,6 +36,7 @@ pub enum Request {
 	Metadata(metadata::Request),
 	References(references::Request),
 	Rename(rename::Request),
+	Symbols(symbols::Request),
 	Transpile(transpile::Request),
 }
 
@@ -52,6 +54,7 @@ pub enum Response {
 	Metadata(metadata::Response),
 	References(references::Response),
 	Rename(rename::Response),
+	Symbols(symbols::Response),
 	Transpile(transpile::Response),
 }
 

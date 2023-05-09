@@ -20,6 +20,7 @@ mod jsonrpc;
 mod module;
 mod references;
 mod rename;
+mod symbols;
 mod types;
 mod virtual_text_document;
 
@@ -147,6 +148,15 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 					handle_request::<lsp::request::Completion, _, _>(sender, request, |params| {
 						server.completion(params)
 					})
+					.boxed()
+				},
+
+				lsp::request::DocumentSymbolRequest::METHOD => {
+					handle_request::<lsp::request::DocumentSymbolRequest, _, _>(
+						sender,
+						request,
+						|params| server.symbols(params),
+					)
 					.boxed()
 				},
 

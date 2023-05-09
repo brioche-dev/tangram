@@ -21,4 +21,5 @@ pub mod range;
 pub mod references;
 pub mod rename;
 pub mod service;
+pub mod symbols;
 pub mod transpile;
