@@ -29,7 +29,7 @@ export type Symlink = {
 };
 
 export type Value =
-	| { kind: "null" }
+	| { kind: "null"; value: null }
 	| { kind: "bool"; value: boolean }
 	| { kind: "number"; value: number }
 	| { kind: "string"; value: string }

@@ -47,6 +47,7 @@ export namespace Value {
 		if (value === undefined) {
 			return {
 				kind: "null",
+				value: null,
 			};
 		} else if (typeof value === "boolean") {
 			return {
