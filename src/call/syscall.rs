@@ -138,18 +138,11 @@ async fn syscall_blob_bytes(tg: Arc<Instance>, args: (Blob,)) -> Result<serde_v8
 	Ok(bytes.into())
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(untagged)]
-enum BlobArg {
-	Bytes(serde_v8::ZeroCopyBuf),
-	String(String),
-}
-
-async fn syscall_blob_new(tg: Arc<Instance>, args: (BlobArg,)) -> Result<Blob> {
+async fn syscall_blob_new(tg: Arc<Instance>, args: (serde_v8::StringOrBuffer,)) -> Result<Blob> {
 	let (bytes,) = args;
 	let bytes = match &bytes {
-		BlobArg::Bytes(bytes) => bytes.as_ref(),
-		BlobArg::String(string) => string.as_bytes(),
+		serde_v8::StringOrBuffer::String(string) => string.as_bytes(),
+		serde_v8::StringOrBuffer::Buffer(buffer) => buffer.as_ref(),
 	};
 	let blob = Blob::new(&tg, bytes).await?;
 	Ok(blob)

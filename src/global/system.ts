@@ -27,6 +27,15 @@ export namespace System {
 
 	export type Os = "linux" | "macos";
 
+	export let is = (value: unknown): value is System => {
+		return (
+			value === "amd64_linux" ||
+			value === "arm64_linux" ||
+			value === "amd64_macos" ||
+			value === "arm64_macos"
+		);
+	};
+
 	export let arch = (system: System): Arch => {
 		switch (system) {
 			case "amd64_linux":

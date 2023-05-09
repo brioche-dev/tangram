@@ -71,11 +71,10 @@ impl Process {
 		#[cfg(target_arch = "aarch64")]
 		let sh_name = "sh_arm64_linux";
 
-		// TODO: move deduplication logic one level up to host path merging.
-		// Mount /bin/sh from ~/.tangram/assets
+		// Mount /bin/sh from the assets directory.
 		if paths
 			.iter()
-			.find(|p: &&run::Path| std::path::PathBuf::from("/bin/sh").starts_with(&p.guest_path))
+			.find(|path| std::path::PathBuf::from("/bin/sh").starts_with(&path.guest_path))
 			.is_none()
 		{
 			paths.insert(run::Path {
@@ -92,13 +91,10 @@ impl Process {
 		#[cfg(target_arch = "aarch64")]
 		let env_name = "env_arm64_linux";
 
-		// Mount /bin/sh from ~/.tangram/assets
-		// TODO: move deduplication logic one level up to host path merging.
+		// Mount /usr/bin/env from the assets directory.
 		if paths
 			.iter()
-			.find(|p: &&run::Path| {
-				std::path::PathBuf::from("/usr/bin/env").starts_with(&p.guest_path)
-			})
+			.find(|path| std::path::PathBuf::from("/usr/bin/env").starts_with(&path.guest_path))
 			.is_none()
 		{
 			paths.insert(run::Path {

@@ -47,7 +47,7 @@ export class Call<A extends Array<Value> = [], R extends Value = Value> {
 		// Get the function, env, and args.
 		let function_ = arg.function.toSyscall();
 		let env_ = Object.fromEntries(
-			Object.entries(arg.env ?? {}).map(([key, value]) => [
+			Object.entries(arg.env ?? env.get()).map(([key, value]) => [
 				key,
 				Value.toSyscall(value),
 			]),
