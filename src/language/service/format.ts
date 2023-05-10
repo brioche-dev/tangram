@@ -1,9 +1,9 @@
-// // @ts-ignore
-// import templateIndent from "./template_ident";
-// // @ts-ignore
-// import * as tangramEslintPlugin from "@tangramdotdev/eslint-plugin";
-// import * as typescriptEslintParser from "@typescript-eslint/parser";
-// import * as eslint from "eslint";
+// @ts-ignore
+import templateIndent from "./template_ident";
+// @ts-ignore
+import * as tangramEslintPlugin from "@tangramdotdev/eslint-plugin";
+import * as typescriptEslintParser from "@typescript-eslint/parser";
+import * as eslint from "eslint";
 import * as prettier from "prettier";
 // @ts-ignore
 import prettierTypescriptPlugin from "prettier/esm/parser-typescript.mjs";
@@ -24,30 +24,30 @@ let prettierOptions: prettier.Options = {
 	plugins: [prettierTypescriptPlugin],
 };
 
-// // Create an ESLint linter.
-// let linter = new eslint.Linter();
+// Create an ESLint linter.
+let linter = new eslint.Linter();
 
-// // Use the TypeScript ESLint parser.
-// linter.defineParser(
-// 	"@typescript-eslint/parser",
-// 	typescriptEslintParser as eslint.Linter.ParserModule,
-// );
+// Use the TypeScript ESLint parser.
+linter.defineParser(
+	"@typescript-eslint/parser",
+	typescriptEslintParser as eslint.Linter.ParserModule,
+);
 
-// // Define the tangram rules.
-// linter.defineRules({
-// 	"@tangramdotdev/sort-imports": tangramEslintPlugin.rules["sort-imports"],
-// 	"@tangramdotdev/template-indent": templateIndent,
-// });
+// Define the tangram rules.
+linter.defineRules({
+	"@tangramdotdev/sort-imports": tangramEslintPlugin.rules["sort-imports"],
+	"@tangramdotdev/template-indent": templateIndent,
+});
 
-// // Create the ESLint options.
-// let eslintOptions: eslint.Linter.Config = {
-// 	rules: {
-// 		"@tangramdotdev/sort-imports": "warn",
-// 		"@tangramdotdev/template-indent": "warn",
-// 		semi: "warn",
-// 	},
-// 	parser: "@typescript-eslint/parser",
-// };
+// Create the ESLint options.
+let eslintOptions: eslint.Linter.Config = {
+	rules: {
+		"@tangramdotdev/sort-imports": "warn",
+		"@tangramdotdev/template-indent": "warn",
+		semi: "warn",
+	},
+	parser: "@typescript-eslint/parser",
+};
 
 export let handle = (request: Request): Response => {
 	let text = request.text;
@@ -59,14 +59,13 @@ export let handle = (request: Request): Response => {
 		// Ignore errors.
 	}
 
-	// try {
-	// 	// Run ESLint and fix any errors.
-	// 	let eslintOutput = linter.verifyAndFix(text, eslintOptions);
-	// 	text = eslintOutput.output;
-	// } catch (e) {
-	// 	console.log(e);
-	// 	// Ignore errors.
-	// }
+	try {
+		// Run ESLint and fix any errors.
+		let eslintOutput = linter.verifyAndFix(text, eslintOptions);
+		text = eslintOutput.output;
+	} catch (e) {
+		// Ignore errors.
+	}
 
 	return { text };
 };

@@ -14,10 +14,12 @@ fn main() {
 	});
 
 	// Create the language service snapshot.
-	println!("cargo-rerun-if-changed=assets/language_service.js");
-	let path = out_dir_path.join("language_service.heapsnapshot");
-	let snapshot = create_snapshot("assets/language_service.js");
-	std::fs::write(path, snapshot).unwrap();
+	// Snapshotting is skipped for the language_service due to bugs in eslint/v8.
+	//
+	// println!("cargo-rerun-if-changed=assets/language_service.js");
+	// let path = out_dir_path.join("language_service.heapsnapshot");
+	// let snapshot = create_snapshot("assets/language_service.js");
+	// std::fs::write(path, snapshot).unwrap();
 
 	// Create the runtime global snapshot.
 	println!("cargo-rerun-if-changed=assets/global.js");
