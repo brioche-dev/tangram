@@ -125,7 +125,7 @@ let getKind = (tsKind: string): Kind => {
 		case "type":
 			return "class";
 		case "enum":
-			return "class";
+			return "enum";
 		case "var":
 			return "variable";
 		case "local var":
