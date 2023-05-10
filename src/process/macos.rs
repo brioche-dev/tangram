@@ -39,6 +39,15 @@ impl Process {
 			mode: Mode::ReadWrite,
 			kind: Kind::Directory,
 		});
+
+		// Add the aritfacts directory to the paths.
+		paths.insert(Path {
+			host_path: tg.artifacts_path(),
+			guest_path: tg.artifacts_path(),
+			mode: Mode::ReadOnly,
+			kind: Kind::Directory,
+		});
+
 		// Add the home directory to the root directory.
 		let home_directory_path = root_directory_temp.path().join("Users").join("tangram");
 		tokio::fs::create_dir_all(&home_directory_path).await?;
