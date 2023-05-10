@@ -163,8 +163,7 @@ fn add_default_path_to_mounts(
 	// Check if an ancestor directory is already in the mounts list that contains guest_path.
 	let ancestor_dir_exists_in_mounts = mounts
 		.iter()
-		.find(|p| guest_path.starts_with(&p.guest_path))
-		.is_some();
+		.any(|p| guest_path.starts_with(&p.guest_path));
 
 	// Skip adding the path if there is already a path in the mounts that contains guest_path.
 	if ancestor_dir_exists_in_mounts {
@@ -173,12 +172,14 @@ fn add_default_path_to_mounts(
 
 	// Add to the mounts list.
 	let host_path = tg.path().join(subpath);
-	mounts.insert(run::Path {
+	let mount = run::Path {
 		kind,
 		host_path,
 		guest_path: guest_path.to_owned(),
 		mode: run::Mode::ReadOnly,
-	});
+	};
+
+	mounts.insert(mount);
 }
 
 struct SandboxContext<'a> {

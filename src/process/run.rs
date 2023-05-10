@@ -52,30 +52,44 @@ impl Process {
 		// Get the system.
 		let system = self.system;
 
+		// Get the path to the artifacts directory, as visible by the guest.
+		let artifacts_directory = if cfg!(target_os = "macos") {
+			tg.artifacts_path()
+		} else if cfg!(target_os = "linux") {
+			"/.tangram/artifacts".into()
+		} else {
+			unreachable!()
+		};
+
 		// Render the command template.
-		let command = render(tg, &self.executable, &output_temp_path).await?;
+		let command = render(&self.executable, &artifacts_directory, &output_temp_path).await?;
 
 		// Render the env templates.
-		let mut env: std::collections::BTreeMap<String, String> = try_join_all(self.env.iter().map(|(key, value)| {
-			let output_temp_path = &output_temp_path;
-			async move {
-				let key = key.clone();
-				let value = render(tg, value, output_temp_path).await?;
-				Ok::<_, Error>((key, value))
-			}
-		}))
-		.await?
-		.into_iter()
-		.collect();
+		let mut env: std::collections::BTreeMap<String, String> =
+			try_join_all(self.env.iter().map(|(key, value)| {
+				let artifacts_directory = &artifacts_directory;
+				let output_temp_path = &output_temp_path;
+				async move {
+					let key = key.clone();
+					let value = render(value, artifacts_directory, output_temp_path).await?;
+					Ok::<_, Error>((key, value))
+				}
+			}))
+			.await?
+			.into_iter()
+			.collect();
 
 		// Add the TG_PLACEHOLDER_OUTPUT variable.
-		env.insert("TANGRAM_PLACEHOLDER_OUTPUT".to_string(), output_temp_path.display().to_string());
+		env.insert(
+			"TANGRAM_PLACEHOLDER_OUTPUT".to_string(),
+			output_temp_path.display().to_string(),
+		);
 
 		// Render the args templates.
 		let args = try_join_all(
 			self.args
 				.iter()
-				.map(|arg| render(tg, arg, &output_temp_path)),
+				.map(|arg| render(arg, &artifacts_directory, &output_temp_path)),
 		)
 		.await?;
 
@@ -94,25 +108,14 @@ impl Process {
 				.await?;
 		}
 
-		// Check out the references and collect the paths.
-		let mut paths: HashSet<Path, fnv::FnvBuildHasher> =
-			try_join_all(references.into_iter().map(|artifact| async move {
-				let path = artifact.check_out_internal(tg).await?;
-				let kind = match artifact {
-					Artifact::File(_) | Artifact::Symlink(_) => Kind::File,
-					Artifact::Directory(_) => Kind::Directory,
-				};
-				let path = Path {
-					host_path: path.clone(),
-					guest_path: path,
-					mode: Mode::ReadOnly,
-					kind,
-				};
-				Ok::<_, Error>(path)
-			}))
-			.await?
-			.into_iter()
-			.collect();
+		// Check out the references.
+		try_join_all(references.into_iter().map(|artifact| async move {
+			let _ = artifact.check_out_internal(tg).await?;
+			Ok::<_, Error>(())
+		}))
+		.await?;
+
+		let mut paths: HashSet<Path, fnv::FnvBuildHasher> = HashSet::default();
 
 		// Add the output temp to the paths.
 		paths.insert(Path {
@@ -233,13 +236,17 @@ impl Process {
 }
 
 /// Render a template for a process.
-async fn render(tg: &Instance, template: &Template, output_path: &fs::Path) -> Result<String> {
+async fn render(
+	template: &Template,
+	artifacts_directory: &std::path::Path,
+	output_path: &fs::Path,
+) -> Result<String> {
 	template
 		.render(|component| async move {
 			match component {
 				crate::template::Component::String(string) => Ok(string.into()),
-				crate::template::Component::Artifact(artifact) => Ok(tg
-					.artifact_path(artifact.hash())
+				crate::template::Component::Artifact(artifact) => Ok(artifacts_directory
+					.join(artifact.hash().to_string())
 					.into_os_string()
 					.into_string()
 					.unwrap()
