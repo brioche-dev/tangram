@@ -16,6 +16,7 @@ pub struct Response {
 }
 
 #[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Symbol {
     pub name:String,
     pub detail: Option<String>,

@@ -23,7 +23,6 @@ export type Symbol = {
 };
 
 export type Kind =
-	| "unknown"
 	| "file"
 	| "module"
 	| "namespace"
@@ -53,9 +52,10 @@ export type Kind =
 export type Tag = "deprecated";
 
 export let handle = (request: Request): Response => {
-	// Get the source file and position.
+	// Get the module's filename and source.
+	let fileName = typescript.fileNameFromModule(request.module);
 	let sourceFile = typescript.host.getSourceFile(
-		typescript.fileNameFromModule(request.module),
+		fileName,
 		ts.ScriptTarget.ESNext,
 	);
 
@@ -63,36 +63,39 @@ export let handle = (request: Request): Response => {
 		throw new Error();
 	}
 
-	let symbols = [];
-
 	// Get the navigation tree for this file.
-	let navigationTree = typescript.languageService.getNavigationTree(sourceFile);
+	let navigationTree = typescript.languageService.getNavigationTree(fileName);
 
 	// Get the symbols by walking the navigation tree.
-	let symbols = [walk(navigationTree)];
+	let root = walk(sourceFile, navigationTree);
 
-	return { symbols }
+	// Drop the root and return the symbols directly. The item returned by getNavigationTree is guaranteed to be a module.
+	return { symbols: root.children };
 };
 
-// https://github.com/microsoft/TypeScript/blob/59d3a381807bb4247a36a24be7e41553ebe6d8b5/src/services/types.ts#L826
-export let walk = (file: string, tree: typescript.NavigationTree): Symbol => {
+export let walk = (
+	sourceFile: ts.SourceFile,
+	tree: ts.NavigationTree,
+): Symbol => {
 	let name = tree.text;
 
 	// Find the range of this symbol and its selectionRange.
-	let span = tree
-		.span
-		.reduce((acc, span) => {
-			acc.start = Math.min(acc.start, span.start);
-			acc.end = Math.max(acc.end, span.end);
-		});
-	let range = spanToRange(file, span);
-	let selectionRange = spanToRange(file, tree.nameSpan ?? span);
+	let startPosition = Math.min(...tree.spans.map((span) => span.start));
+	let endPosition = Math.max(
+		...tree.spans.map((span) => span.start + span.length),
+	);
+
+	// Convert text spans to ranges.
+	let range = {
+		start: ts.getLineAndCharacterOfPosition(sourceFile, startPosition),
+		end: ts.getLineAndCharacterOfPosition(sourceFile, endPosition),
+	};
 
 	// Parse the symbol kind from the nav tree.
 	let kind = getKind(tree.kind);
 
 	// Collect the nested children.
-	let children = tree.children?.map(walk);
+	let children = tree.childItems?.map((child) => walk(sourceFile, child));
 
 	return {
 		name,
@@ -100,97 +103,57 @@ export let walk = (file: string, tree: typescript.NavigationTree): Symbol => {
 		tags: [], // TODO: deprecation tags.
 		detail: null, // TODO: symbol details.
 		range,
-		selectionRange,
-		children,
+		// TODO: improve this using tree.nameSpan.
+		selectionRange: range,
+		children: children ?? null,
 	};
 };
 
-// https://github.com/microsoft/TypeScript/blob/59d3a381807bb4247a36a24be7e41553ebe6d8b5/src/services/types.ts#L1559
-let getKind = (tsKind:string): Kind => {
-	switch(tsKind) {
-		case "script": {
-			kind = "file";
-			break;
-		}
-		case "module": {
-			kind = "module";
-			break;
-		}
-		case "class": {
-			kind = "class";
-			break;
-		}
-		case "local class": {
-			kind = "class";
-			break;
-		}
-		case "interface": {
-			kind = "interface";
-			break;
-		}
-		case "type": {
-			kind = "class";
-			break;
-		}
-		case "enum": {
-			kind = "class";
-			break;
-		}
-		case "var": {
-			kind = "variable";
-			break;
-		}
-		case "local var": {
-			kind = "variable";
-			break;
-		}
-		case "function": {
-			kind = "function";
-			break;
-		}
-		case "local function": {
-			kind = "function";
-			break;
-		}
-		case "method": {
-			kind = "method";
-			break;
-		}
-		case "getter": {
-			kind = "method";
-			break;
-		}
-		case "setter": {
-			kind = "method";
-			break;
-		}
-		case "property": {
-			kind = "property";
-			break;
-		}
-		case "accessor": {
-			kind = "property";
-			break;
-		}
-		case "constructor": {
-			kind = "constructor";
-			break;
-		}
-		case "parameter": {
-			kind = "variable";
-			break;
-		}
-		case "type parameter": {
-			kind = "typeParameter";
-			break;
-		}
-		case "external module": {
-			kind = "module";
-			break;
-		}
-		default: {
-			kind = "unknown";
-			break;
-		}
+// Map the "kind" field from NavigationTree to a variant that is meaningful to LSP.
+let getKind = (tsKind: string): Kind => {
+	switch (tsKind) {
+		case "script":
+			return "file";
+		case "module":
+			return "module";
+		case "class":
+			return "class";
+		case "local class":
+			return "class";
+		case "interface":
+			return "interface";
+		case "type":
+			return "class";
+		case "enum":
+			return "class";
+		case "var":
+			return "variable";
+		case "local var":
+			return "variable";
+		case "function":
+			return "function";
+		case "local function":
+			return "function";
+		case "method":
+			return "method";
+		case "getter":
+			return "method";
+		case "setter":
+			return "method";
+		case "property":
+			return "property";
+		case "accessor":
+			return "property";
+		case "constructor":
+			return "constructor";
+		case "parameter":
+			return "variable";
+		case "type parameter":
+			return "typeParameter";
+		case "external module":
+			return "module";
+		// Default to a variable. TODO: handle unknown symbol kinds in a better way.
+		default:
+			return "variable";
 	}
-}
+};

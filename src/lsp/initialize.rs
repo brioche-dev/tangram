@@ -22,7 +22,7 @@ impl Server {
 				definition_provider: Some(lsp::OneOf::Left(true)),
 				references_provider: Some(lsp::OneOf::Left(true)),
 				document_formatting_provider: Some(lsp::OneOf::Left(true)),
-				// document_symbol_provider: Some(lsp::OneOf::Left(true)),
+				document_symbol_provider: Some(lsp::OneOf::Left(true)),
 				rename_provider: Some(lsp::OneOf::Left(true)),
 
 				..Default::default()

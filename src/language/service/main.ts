@@ -10,6 +10,7 @@ import * as hover from "./hover.ts";
 import * as metadata from "./metadata.ts";
 import * as references from "./references.ts";
 import * as rename from "./rename.ts";
+import * as symbols from "./symbols.ts";
 import * as transpile from "./transpile.ts";
 
 // Set `Error.prepareStackTrace`.
@@ -29,6 +30,7 @@ type Request =
 	| { kind: "metadata"; request: metadata.Request }
 	| { kind: "references"; request: references.Request }
 	| { kind: "rename"; request: rename.Request }
+	| { kind: "symbols"; request: symbols.Request }
 	| { kind: "transpile"; request: transpile.Request };
 
 type Response =
@@ -43,6 +45,7 @@ type Response =
 	| { kind: "metadata"; response: metadata.Response }
 	| { kind: "references"; response: references.Response }
 	| { kind: "rename"; response: rename.Response }
+	| { kind: "symbols"; response: symbols.Response }
 	| { kind: "transpile"; response: transpile.Response };
 
 let handle = ({ kind, request }: Request): Response => {
@@ -90,6 +93,10 @@ let handle = ({ kind, request }: Request): Response => {
 		case "rename": {
 			let response = rename.handle(request);
 			return { kind: "rename", response };
+		}
+		case "symbols": {
+			let response = symbols.handle(request);
+			return { kind: "symbols", response };
 		}
 		case "transpile": {
 			let response = transpile.handle(request);
