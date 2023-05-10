@@ -1,4 +1,4 @@
-use super::{PackageArgs, RunArgs};
+use super::PackageArgs;
 use crate::{error::Result, Cli};
 use tangram::package;
 
@@ -14,26 +14,22 @@ pub struct Args {
 	#[command(flatten)]
 	pub package_args: PackageArgs,
 
-	#[command(flatten)]
-	pub run_args: RunArgs,
-
-	/// Arguments to pass to the executable.
-	pub trailing_args: Vec<String>,
+	#[arg(default_value = "test")]
+	pub function: String,
 }
 
 impl Cli {
 	pub async fn command_test(&self, args: Args) -> Result<()> {
-		// Create the run args.
-		let args = super::run::Args {
+		// Create the build args.
+		let args = super::build::Args {
 			package: args.package,
 			package_args: args.package_args,
-			run_args: args.run_args,
-			function: "test".to_owned(),
-			trailing_args: args.trailing_args,
+			function: args.function,
+			output: None,
 		};
 
-		// Run!
-		self.command_run(args).await?;
+		// Build!
+		self.command_build(args).await?;
 
 		Ok(())
 	}

@@ -47,7 +47,7 @@ impl Process {
 		tokio::fs::create_dir_all(output_temp.path())
 			.await
 			.wrap_err("Failed to create the directory for the output.")?;
-		let output_temp_path = output_temp.path().join("output");
+		let output_path = output_temp.path().join("output");
 
 		// Get the system.
 		let system = self.system;
@@ -62,13 +62,13 @@ impl Process {
 		};
 
 		// Render the command template.
-		let command = render(&self.executable, &artifacts_directory, &output_temp_path).await?;
+		let command = render(&self.executable, &artifacts_directory, &output_path).await?;
 
 		// Render the env templates.
 		let mut env: std::collections::BTreeMap<String, String> =
 			try_join_all(self.env.iter().map(|(key, value)| {
 				let artifacts_directory = &artifacts_directory;
-				let output_temp_path = &output_temp_path;
+				let output_temp_path = &output_path;
 				async move {
 					let key = key.clone();
 					let value = render(value, artifacts_directory, output_temp_path).await?;
@@ -79,17 +79,17 @@ impl Process {
 			.into_iter()
 			.collect();
 
-		// Add the TG_PLACEHOLDER_OUTPUT variable.
+		// Set `TG_PLACEHOLDER_OUTPUT`.
 		env.insert(
 			"TANGRAM_PLACEHOLDER_OUTPUT".to_string(),
-			output_temp_path.display().to_string(),
+			output_path.display().to_string(),
 		);
 
 		// Render the args templates.
 		let args = try_join_all(
 			self.args
 				.iter()
-				.map(|arg| render(arg, &artifacts_directory, &output_temp_path)),
+				.map(|arg| render(arg, &artifacts_directory, &output_path)),
 		)
 		.await?;
 
@@ -110,7 +110,7 @@ impl Process {
 
 		// Check out the references.
 		try_join_all(references.into_iter().map(|artifact| async move {
-			let _ = artifact.check_out_internal(tg).await?;
+			artifact.check_out_internal(tg).await?;
 			Ok::<_, Error>(())
 		}))
 		.await?;
@@ -144,7 +144,7 @@ impl Process {
 		// Handle the host paths.
 		for host_path in &self.host_paths {
 			// Check if any existing mount point is a parent of this path and skip adding it.
-			// Note: This operation is potentially expensive if there are many hostpaths. However, the assumption is that there are only a handful and this loop will only iterate a few times.
+			// Note: This operation is potentially expensive if there are many host paths. However, the assumption is that there are only a handful and this loop will only iterate a few times.
 			let parent = paths.iter().find(|existing| {
 				std::path::PathBuf::from(host_path).starts_with(&existing.host_path)
 			});
@@ -204,10 +204,10 @@ impl Process {
 		}
 		.await?;
 
-		tracing::debug!(output_temp_path = ?output_temp.path(), "Checking in the process output.");
+		tracing::debug!(?output_path, "Checking in the process output.");
 
 		// Check in the output temp.
-		let artifact = Artifact::check_in(tg, &output_temp_path)
+		let artifact = Artifact::check_in(tg, &output_path)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 

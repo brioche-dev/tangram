@@ -1,4 +1,9 @@
+import { Directory } from "./directory.ts";
+import { File } from "./file.ts";
+import { Placeholder } from "./placeholder.ts";
+import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
+import { Template } from "./template.ts";
 
 /** Write to the log. */
 export let log = (...args: Array<unknown>) => {
@@ -32,10 +37,10 @@ let stringifyInner = (value: unknown, visited: WeakSet<object>): string => {
 			}
 		}
 		case "function": {
-			return `[function ${value.name ?? "(anonymous)"}]`;
+			return `(function "${value.name ?? "(anonymous)"}")`;
 		}
 		case "symbol": {
-			return "[symbol]";
+			return "(symbol)";
 		}
 		case "bigint": {
 			return value.toString();
@@ -46,7 +51,7 @@ let stringifyInner = (value: unknown, visited: WeakSet<object>): string => {
 let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	// If the value is in the visited set, then indicate that this is a circular reference.
 	if (visited.has(value)) {
-		return "[circular]";
+		return "(circular)";
 	}
 
 	// Add the value to the visited set.
@@ -62,7 +67,27 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		return value.stack ?? "";
 	} else if (value instanceof Promise) {
 		// Handle a promise.
-		return "[promise]";
+		return "(promise)";
+	} else if (value instanceof Directory) {
+		return `(tg.directory ${value.hash()})`;
+	} else if (value instanceof File) {
+		return `(tg.file ${value.hash()})`;
+	} else if (value instanceof Symlink) {
+		return `(tg.symlink ${value.hash()})`;
+	} else if (value instanceof Placeholder) {
+		return `(tg.placeholder "${value.name()}")`;
+	} else if (value instanceof Template) {
+		let string = value
+			.components()
+			.map((component) => {
+				if (typeof component === "string") {
+					return component;
+				} else {
+					return `\${${stringifyInner(component, visited)}}`;
+				}
+			})
+			.join("");
+		return `(tg.template "${string}")`;
 	} else {
 		// Handle any other object.
 		let constructorName = "";
