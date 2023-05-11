@@ -137,6 +137,11 @@ export let module_ = {
 };
 
 declare global {
+	/** Get the package hash for the module. */
+	function syscall(name: "package_hash_for_module", module: Module): string;
+}
+
+declare global {
 	/** Decode bytes as UTF-8. */
 	function syscall(syscall: "utf8_decode", bytes: Uint8Array): string;
 

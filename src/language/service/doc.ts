@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
-import { Location } from "./location.ts";
+import { Range } from "./range.ts";
 import { Module } from "./syscall.ts";
 import { compilerOptions, host } from "./typescript.ts";
 import * as typescript from "./typescript.ts";
@@ -18,7 +18,32 @@ type Doc = {
 	exports: Array<Export>;
 };
 
-type Export = TypeExport | VariableExport | ExportAssignment;
+type Location = {
+	module: DocModule;
+	range: Range;
+};
+
+type DocModule =
+	| { kind: "library"; value: Library }
+	| { kind: "normal"; value: NormalDocModule };
+
+type Library = {
+	modulePath: string;
+};
+
+type NormalDocModule = {
+	packageHash: string;
+	modulePath: string;
+};
+
+type Export =
+	| TypeExport
+	| VariableExport
+	| FunctionExport
+	| ClassExport
+	| NamespaceExport
+	| EnumExport
+	| InterfaceExport;
 
 type TypeExport = {
 	kind: "type";
@@ -37,10 +62,52 @@ type VariableExport = {
 	comment: Comment;
 };
 
-type ExportAssignment = {
-	kind: "export_assignment";
-	type: Type;
+type FunctionExport = {
+	kind: "function";
+	location: Location;
 	name: string;
+	type: Type;
+};
+
+type ClassExport = {
+	kind: "class";
+	location: Location;
+	name: string;
+	properties: Array<PropertyType>;
+	constructor_?: Constructor;
+};
+
+type Constructor = {
+	kind: "constructor";
+	parameters: Array<Parameter>;
+	return: Type;
+};
+
+type NamespaceExport = {
+	kind: "namespace";
+	location: Location;
+	name: string;
+	exports: Array<Export>;
+};
+
+type EnumExport = {
+	kind: "enum";
+	location: Location;
+	name: string;
+	members: Array<EnumMember>;
+};
+
+type EnumMember = {
+	name: string;
+	value: StringLiteralType | NumberLiteralType | UnknownLiteralType;
+};
+
+type InterfaceExport = {
+	kind: "interface";
+	name: string;
+	location: Location;
+	// TODO
+	members: Array<any>;
 };
 
 type Type =
@@ -155,6 +222,8 @@ type IndexSignature = {
 type PropertyType = {
 	name: string;
 	type: Type;
+	static?: boolean;
+	private?: boolean;
 };
 
 type FunctionType = {
@@ -238,34 +307,249 @@ type Comment = {
 	tags: Array<{ name: string; comment: string }>;
 };
 
-let convertExport = (
+let convertSymbol = (
 	typeChecker: ts.TypeChecker,
 	moduleExport: ts.Symbol,
-): Export => {
-	let declaration = moduleExport.declarations![0]!;
-	if (ts.isTypeAliasDeclaration(declaration)) {
-		return convertTypeAliasDeclaration(typeChecker, moduleExport, declaration);
-	} else if (ts.isVariableDeclaration(declaration)) {
-		return convertVariableDeclaration(typeChecker, moduleExport, declaration);
-	} else if (ts.isExportSpecifier(declaration)) {
-		return convertExportSpecifier(typeChecker, moduleExport, declaration);
-	} else if (ts.isExportAssignment(declaration)) {
-		return convertExportAssignment(typeChecker, moduleExport, declaration);
-	} else {
-		syscall("log", ts.SyntaxKind[declaration.kind]);
-		throw new Error();
+): Array<Export> => {
+	let exports: Array<Export> = [];
+
+	// Get the flags.
+	let symbolFlags = moduleExport.getFlags();
+
+	// Namespace Module.
+	if (ts.SymbolFlags.NamespaceModule & symbolFlags) {
+		exports.push(convertModuleSymbol(typeChecker, moduleExport));
 	}
+
+	// Value Module.
+	if (ts.SymbolFlags.ValueModule & symbolFlags) {
+		exports.push(convertModuleSymbol(typeChecker, moduleExport));
+	}
+
+	// Class.
+	if (ts.SymbolFlags.Class & symbolFlags) {
+		exports.push(convertClassSymbol(typeChecker, moduleExport));
+	}
+
+	// Variable.
+	if (ts.SymbolFlags.Variable & symbolFlags) {
+		exports.push(convertVariableSymbol(typeChecker, moduleExport));
+	}
+
+	// Function.
+	if (ts.SymbolFlags.Function & symbolFlags) {
+		exports.push(convertFunctionSymbol(typeChecker, moduleExport));
+	}
+
+	// TypeAlias.
+	if (ts.SymbolFlags.TypeAlias & symbolFlags) {
+		exports.push(convertTypeAliasSymbol(typeChecker, moduleExport));
+	}
+
+	// Alias.
+	if (ts.SymbolFlags.Alias & symbolFlags) {
+		exports.push(...convertAliasSymbol(typeChecker, moduleExport));
+	}
+
+	// Enum.
+	if (ts.SymbolFlags.Enum & symbolFlags) {
+		exports.push(convertEnumSymbol(typeChecker, moduleExport));
+	}
+
+	// Interface.
+	if (
+		ts.SymbolFlags.Interface & symbolFlags &&
+		!(ts.SymbolFlags.Class & symbolFlags)
+	) {
+		exports.push(convertInterfaceSymbol(typeChecker, moduleExport));
+	}
+
+	// Handle default export Property as Variable.
+	if (
+		ts.SymbolFlags.Property & moduleExport.flags &&
+		moduleExport.getName() == "default"
+	) {
+		exports.push(convertVariableSymbol(typeChecker, moduleExport));
+	}
+
+	return exports;
 };
 
-let convertTypeAliasDeclaration = (
+// A NamespaceModule is a namespace that contains ONLY types.
+// A ValueModule is a module that contains values.
+let convertModuleSymbol = (
 	typeChecker: ts.TypeChecker,
 	symbol: ts.Symbol,
-	declaration: ts.TypeAliasDeclaration,
+): NamespaceExport => {
+	// Convert the exports of the namespace.
+	let exports: Array<Export> = [];
+	let namespaceExports = typeChecker.getExportsOfModule(symbol);
+	for (let namespaceExport of namespaceExports) {
+		let flags = namespaceExport.getFlags();
+		if (flags & ts.SymbolFlags.ModuleMember) {
+			exports.push(...convertSymbol(typeChecker, namespaceExport));
+		}
+	}
+
+	// Get a location for one of the namespace declarations.
+	let declaration = symbol
+		.getDeclarations()
+		?.find((d): d is ts.ModuleDeclaration => ts.isModuleDeclaration(d));
+	if (!declaration) {
+		throw new Error("");
+	}
+
+	return {
+		kind: "namespace",
+		name: symbol.getName(),
+		location: convertLocation(declaration),
+		exports,
+	};
+};
+
+let convertClassSymbol = (
+	typeChecker: ts.TypeChecker,
+	symbol: ts.Symbol,
+): ClassExport => {
+	// Get the class declaration.
+	let declaration = symbol
+		.getDeclarations()
+		?.find((d) => ts.isClassDeclaration(d));
+	if (!declaration) {
+		throw new Error("");
+	}
+
+	let properties: Array<PropertyType> = [];
+
+	// Get the instance type properties of the class.
+	let instanceType = typeChecker.getDeclaredTypeOfSymbol(symbol);
+	for (let instanceProperty of typeChecker.getPropertiesOfType(instanceType)) {
+		properties.push(convertPropertySymbol(typeChecker, instanceProperty));
+	}
+
+	// Get the static properties of the class.
+	let staticType = typeChecker.getTypeOfSymbolAtLocation(symbol, declaration);
+	for (let staticProperty of typeChecker.getPropertiesOfType(staticType)) {
+		// Ignore prototype.
+		if (staticProperty.flags & ts.SymbolFlags.Prototype) continue;
+		properties.push(convertPropertySymbol(typeChecker, staticProperty));
+	}
+
+	// Get the constructor signature if there is one.
+	let constructSignature = staticType.getConstructSignatures()[0]!;
+	let constructor: Constructor | undefined;
+	if (constructSignature.getDeclaration()) {
+		let parameters = constructSignature.getParameters().map((parameter) => {
+			let parameterType = typeChecker.getTypeOfSymbol(parameter);
+			let declaration: ts.ParameterDeclaration | undefined =
+				parameter.valueDeclaration as ts.ParameterDeclaration;
+			let optional = false;
+			if (declaration) {
+				if (ts.isParameter(declaration) && declaration.questionToken) {
+					optional = true;
+				}
+			}
+			let comment = ts.displayPartsToString(
+				parameter.getDocumentationComment(typeChecker),
+			);
+			return {
+				name: parameter.getName(),
+				type: declaration?.type
+					? convertTypeNode(typeChecker, declaration.type)
+					: convertType(typeChecker, parameterType),
+				optional,
+				comment,
+			};
+		});
+
+		constructor = {
+			kind: "constructor",
+			parameters,
+			return: convertType(typeChecker, constructSignature.getReturnType()),
+		};
+	}
+
+	return {
+		name: symbol.getName(),
+		kind: "class",
+		location: convertLocation(declaration),
+		properties,
+		constructor_: constructor,
+	};
+};
+
+let convertVariableSymbol = (
+	typeChecker: ts.TypeChecker,
+	symbol: ts.Symbol,
+): VariableExport => {
+	// Get the declaration.
+	let declaration = symbol.getDeclarations()?.[0];
+	if (!declaration) {
+		throw new Error("");
+	}
+
+	// Convert the declaration.
+	let type: Type;
+	if (ts.isVariableDeclaration(declaration) && declaration.type) {
+		type = convertTypeNode(typeChecker, declaration.type);
+	} else {
+		type = convertType(typeChecker, typeChecker.getTypeOfSymbol(symbol));
+	}
+
+	return {
+		kind: "variable",
+		name: symbol.getName(),
+		location: convertLocation(declaration),
+		type,
+		comment: convertComment(typeChecker, symbol),
+	};
+};
+
+let convertFunctionSymbol = (
+	typeChecker: ts.TypeChecker,
+	symbol: ts.Symbol,
+): FunctionExport => {
+	// Get the declaration.
+	let declaration = symbol
+		.getDeclarations()
+		?.find((d): d is ts.FunctionDeclaration => ts.isFunctionDeclaration(d));
+	if (!declaration) {
+		throw new Error("");
+	}
+
+	// Convert the declaration.
+	let type: Type;
+	if (declaration.type) {
+		type = convertTypeNode(typeChecker, declaration.type);
+	} else {
+		type = convertType(typeChecker, typeChecker.getTypeOfSymbol(symbol));
+	}
+	return {
+		kind: "function",
+		location: convertLocation(declaration),
+		name: symbol.getName(),
+		type,
+	};
+};
+
+let convertTypeAliasSymbol = (
+	typeChecker: ts.TypeChecker,
+	symbol: ts.Symbol,
 ): TypeExport => {
+	// Get the declaration.
+	let declaration = symbol
+		.getDeclarations()
+		?.find((d): d is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(d));
+	if (!declaration) {
+		throw new Error("");
+	}
+
+	// Convert the declaration.
 	let type = convertTypeNode(typeChecker, declaration.type);
 	let typeParameters = declaration.typeParameters?.map((typeParameter) =>
 		convertTypeParameterNode(typeChecker, typeParameter),
 	);
+
 	return {
 		kind: "type",
 		name: symbol.getName(),
@@ -276,50 +560,116 @@ let convertTypeAliasDeclaration = (
 	};
 };
 
-let convertVariableDeclaration = (
+let convertAliasSymbol = (
 	typeChecker: ts.TypeChecker,
 	symbol: ts.Symbol,
-	declaration: ts.VariableDeclaration,
-): VariableExport => {
-	let type: Type;
-	if (declaration.type) {
-		type = convertTypeNode(typeChecker, declaration.type);
-	} else {
-		type = convertType(typeChecker, typeChecker.getTypeOfSymbol(symbol));
+): Array<Export> => {
+	let originalName = symbol.getName();
+	let exports = convertSymbol(
+		typeChecker,
+		getAliasedSymbolIfAliased(typeChecker, symbol),
+	).map((e) => {
+		return { ...e, name: originalName };
+	});
+	return exports;
+};
+
+let convertEnumSymbol = (
+	typeChecker: ts.TypeChecker,
+	symbol: ts.Symbol,
+): EnumExport => {
+	let enumExports = typeChecker.getExportsOfModule(symbol);
+	let members: Array<EnumMember> = [];
+	for (let enumExport of enumExports) {
+		if (enumExport.flags & ts.SymbolFlags.EnumMember) {
+			members.push(convertEnumMemberSymbol(typeChecker, enumExport));
+		}
 	}
+	let declaration = symbol.declarations![0]!;
 	return {
-		kind: "variable",
+		kind: "enum",
 		name: symbol.getName(),
 		location: convertLocation(declaration),
-		type,
-		comment: convertComment(typeChecker, symbol),
+		members,
 	};
 };
 
-let convertExportSpecifier = (
+let convertInterfaceSymbol = (
 	typeChecker: ts.TypeChecker,
 	symbol: ts.Symbol,
-	_declaration: ts.ExportSpecifier,
-): Export => {
-	let originalName = symbol.getName();
-	let e = convertExport(
-		typeChecker,
-		getAliasedSymbolIfAliased(typeChecker, symbol),
-	);
-	e.name = originalName;
-	return e;
+): InterfaceExport => {
+	// Get the declaration.
+	let declaration = symbol
+		.getDeclarations()
+		?.find((d) => ts.isInterfaceDeclaration(d));
+	if (!declaration) {
+		throw new Error("");
+	}
+
+	// Get the instance type.
+	let instanceType = typeChecker.getDeclaredTypeOfSymbol(symbol);
+
+	// Get the members.
+	let members = typeChecker
+		.getPropertiesOfType(instanceType)
+		.map((property) => {
+			return convertPropertySymbol(typeChecker, property);
+		});
+
+	return {
+		kind: "interface",
+		name: symbol.getName(),
+		location: convertLocation(declaration),
+		members,
+	};
 };
 
-let convertExportAssignment = (
+let convertEnumMemberSymbol = (
 	typeChecker: ts.TypeChecker,
 	symbol: ts.Symbol,
-	_declaration: ts.ExportAssignment,
-): Export => {
-	let type = typeChecker.getTypeOfSymbol(symbol);
+): EnumMember => {
+	// Get the declaration.
+	let declaration = symbol.getDeclarations()![0]! as ts.EnumMember;
+
+	// Get the constant value.
+	let constantValue = typeChecker.getConstantValue(declaration);
+
+	// Convert the value.
+	let value: StringLiteralType | NumberLiteralType | UnknownLiteralType;
+	if (typeof constantValue == "string") {
+		value = {
+			kind: "string",
+			value: constantValue,
+		};
+	} else if (typeof constantValue == "number") {
+		value = {
+			kind: "number",
+			value: constantValue,
+		};
+	} else {
+		value = {
+			kind: "unknown",
+			value: "unknown",
+		};
+	}
+
 	return {
-		kind: "export_assignment",
-		type: convertType(typeChecker, type),
 		name: symbol.getName(),
+		value,
+	};
+};
+
+let convertPropertySymbol = (
+	typeChecker: ts.TypeChecker,
+	property: ts.Symbol,
+): PropertyType => {
+	let flags = ts.getCombinedModifierFlags(property.valueDeclaration!);
+	let type = convertType(typeChecker, typeChecker.getTypeOfSymbol(property));
+	return {
+		name: property.getName(),
+		type,
+		static: (flags & ts.ModifierFlags.Static) !== 0,
+		private: (flags & ts.ModifierFlags.Private) !== 0,
 	};
 };
 
@@ -394,7 +744,7 @@ let convertType = (typeChecker: ts.TypeChecker, type: ts.Type): Type => {
 	} else if (node.kind === ts.SyntaxKind.IndexedAccessType) {
 		return convertIndexedAccessType(typeChecker, type as ts.IndexedAccessType);
 	} else {
-		syscall("log", ts.SyntaxKind[node.kind]);
+		console.log(ts.SyntaxKind[node.kind]);
 		return { kind: "_unknown", value: typeChecker.typeToString(type) };
 	}
 };
@@ -469,9 +819,8 @@ let convertFunctionType = (
 	typeChecker: ts.TypeChecker,
 	type: ts.Type,
 ): FunctionType => {
-	let callSignature = type.getCallSignatures()[0]!;
-
-	let parameters = callSignature.getParameters().map((parameter) => {
+	let signature = type.getCallSignatures()[0]!;
+	let parameters = signature.getParameters().map((parameter) => {
 		let parameterType = typeChecker.getTypeOfSymbol(parameter);
 		let declaration: ts.ParameterDeclaration | undefined =
 			parameter.valueDeclaration as ts.ParameterDeclaration;
@@ -495,26 +844,22 @@ let convertFunctionType = (
 	});
 
 	let typeParameters: Array<TypeParameter> = [];
-	let callSignatureTypeParameters = callSignature.getTypeParameters();
+	let callSignatureTypeParameters = signature.getTypeParameters();
 	if (callSignatureTypeParameters) {
 		typeParameters = callSignatureTypeParameters.map((typeParameter) =>
 			convertTypeParameter(typeChecker, typeParameter),
 		);
 	}
 
-	let declaration = callSignature.getDeclaration() as ts.SignatureDeclaration;
+	let declaration = signature.getDeclaration() as ts.SignatureDeclaration;
 	let returnType: Type;
-	let predicate = typeChecker.getTypePredicateOfSignature(callSignature);
+	let predicate = typeChecker.getTypePredicateOfSignature(signature);
 	if (predicate) {
 		returnType = convertTypePredicate(typeChecker, predicate);
 	} else if (declaration.type) {
 		returnType = convertTypeNode(typeChecker, declaration.type);
 	} else {
-		returnType = convertType(typeChecker, callSignature.getReturnType());
-		// returnType = {
-		// 	kind: "_unknown",
-		// 	value: typeChecker.typeToString(callSignature.getReturnType()),
-		// };
+		returnType = convertType(typeChecker, signature.getReturnType());
 	}
 
 	return {
@@ -959,8 +1304,23 @@ let convertLocation = (node: ts.Node): Location => {
 	let sourceFile = node.getSourceFile();
 	let start = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart());
 	let end = ts.getLineAndCharacterOfPosition(sourceFile, node.getEnd());
+	let module_ = typescript.moduleFromFileName(sourceFile.fileName);
+	let docModule: DocModule;
+	if (module_.kind == "library") {
+		docModule = module_;
+	} else if (module_.kind == "normal") {
+		docModule = {
+			kind: "normal",
+			value: {
+				modulePath: module_.value.modulePath,
+				packageHash: syscall("package_hash_for_module", module_),
+			},
+		};
+	} else {
+		throw new Error("Invalid module kind.");
+	}
 	return {
-		module: typescript.moduleFromFileName(sourceFile.fileName),
+		module: docModule,
 		range: {
 			start,
 			end,
@@ -995,7 +1355,7 @@ function getAliasedSymbolIfAliased(
 }
 
 let stringify = (doc: Doc) => {
-	let exports_ = [];
+	let exports_: Array<string> = [];
 	for (let export_ of doc.exports) {
 		exports_.push(stringifyExport(export_));
 	}
@@ -1252,7 +1612,6 @@ let isExported = (node: ts.Node): boolean => {
 		0
 	);
 };
-
 export let handle = (request: Request): Response => {
 	// Create the program and type checker.
 	let program = ts.createProgram({
@@ -1270,9 +1629,9 @@ export let handle = (request: Request): Response => {
 	let moduleExports = typeChecker.getExportsOfModule(symbol);
 
 	// Convert the exports.
-	let exports = [];
+	let exports: Array<Export> = [];
 	for (let moduleExport of moduleExports) {
-		exports.push(convertExport(typeChecker, moduleExport));
+		exports.push(...convertSymbol(typeChecker, moduleExport));
 	}
 
 	// Create the doc.
