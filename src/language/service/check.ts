@@ -1,6 +1,11 @@
-import { Diagnostic, convertDiagnosticFromTypeScript } from "./diagnostics.ts";
+import {
+	Diagnostic,
+	convertDiagnosticFromTypeScript,
+	getLinterDiagnosticsForFile,
+} from "./diagnostics.ts";
 import { Module } from "./syscall.ts";
 import * as typescript from "./typescript.ts";
+
 import ts from "typescript";
 
 export type Request = {
@@ -29,7 +34,12 @@ export let handle = (request: Request): Response => {
 		...program.getSemanticDiagnostics(),
 	].map(convertDiagnosticFromTypeScript);
 
+	let linterDiagnostics = program
+		.getSourceFiles()
+		.map((source) => getLinterDiagnosticsForFile(source))
+		.flat();
+
 	return {
-		diagnostics,
+		diagnostics: [...diagnostics, ...linterDiagnostics],
 	};
 };

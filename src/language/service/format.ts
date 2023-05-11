@@ -49,6 +49,8 @@ let eslintOptions: eslint.Linter.Config = {
 	parser: "@typescript-eslint/parser",
 };
 
+export let getLints = (text: string) => linter.verify(text, eslintOptions);
+
 export let handle = (request: Request): Response => {
 	let text = request.text;
 

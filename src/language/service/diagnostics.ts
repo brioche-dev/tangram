@@ -1,3 +1,4 @@
+import * as format from "./format.ts";
 import { Location } from "./location.ts";
 import * as syscall from "./syscall.ts";
 import * as typescript from "./typescript.ts";
@@ -25,6 +26,15 @@ export let handle = (_request: Request): Response => {
 	let diagnostics: Array<Diagnostic> = [];
 	for (let module_ of modules) {
 		let fileName = typescript.fileNameFromModule(module_);
+		let sourceFile = typescript.host.getSourceFile(
+			fileName,
+			ts.ScriptTarget.ESNext,
+		);
+
+		if (sourceFile) {
+			diagnostics.push(...getLinterDiagnosticsForFile(sourceFile, module_));
+		}
+
 		diagnostics.push(
 			...[
 				...typescript.languageService.getSyntacticDiagnostics(fileName),
@@ -112,4 +122,31 @@ export let convertDiagnosticFromTypeScript = (
 		severity,
 		message,
 	};
+};
+
+export let getLinterDiagnosticsForFile = (
+	sourceFile: ts.SourceFile,
+	module_?: syscall.Module,
+) => {
+	// Get the lints for the source file's text.
+	let lintMessages = format.getLints(sourceFile.text);
+
+	// Convert to diagnostics.
+	let diagnostics = lintMessages.map(
+		({ column, line, endColumn, endLine, message }): Diagnostic => {
+			let range = {
+				start: { line, character: column },
+				end: { line: endLine ?? line, character: endColumn ?? column },
+			};
+
+			let location = {
+				module: module_ ?? typescript.moduleFromFileName(sourceFile.fileName),
+				range,
+			};
+
+			return { location, severity: "warning", message };
+		},
+	);
+
+	return diagnostics;
 };
