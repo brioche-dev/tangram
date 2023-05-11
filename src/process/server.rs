@@ -161,7 +161,11 @@ impl Server {
 			.wrap_err("Failed to deserialize the request body.")?;
 
 		// Unrender the string.
-		let artifacts_path = tg.artifacts_path();
+		let artifacts_path = if cfg!(target_os = "macos") {
+			tg.artifacts_path()
+		} else {
+			"/.tangram/artifacts".into()
+		};
 		let template = Template::unrender(&tg, &artifacts_path, &string)
 			.await
 			.wrap_err("Failed to unrender the template.")?
