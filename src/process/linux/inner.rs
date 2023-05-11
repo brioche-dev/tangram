@@ -9,12 +9,12 @@ use std::{
 	os::unix::ffi::OsStrExt,
 };
 
-pub extern "C" fn inner_child_callback(arg: *mut c_void) -> libc::c_int {
-	let ctx = unsafe { &mut *(arg as *mut SandboxContext) };
-	unsafe { inner_child_main(ctx) }
+pub extern "C" fn child_callback(arg: *mut c_void) -> libc::c_int {
+	let ctx = unsafe { &mut *arg.cast::<crate::process::linux::SandboxContext<'_>>() };
+	unsafe { child_main(ctx) }
 }
 
-unsafe fn inner_child_main(ctx: &mut SandboxContext) -> i32 {
+unsafe fn child_main(ctx: &mut SandboxContext) -> i32 {
 	// Ask to be SIGKILLed if the parent process exits.
 	let ret = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
 	if ret == -1 {

@@ -119,8 +119,8 @@ impl Process {
 		// Prepare the sandbox context, and execute the process in the sandbox.
 		let exit: ExitStatus = tokio::task::spawn_blocking(move || unsafe {
 			prepare_context_and_exec_child(
-				root_directory_path,
-				working_directory_guest_path,
+				&root_directory_path,
+				&working_directory_guest_path,
 				command,
 				env,
 				args,
@@ -161,9 +161,8 @@ fn add_default_path_to_mounts(
 	let guest_path = guest_path.as_ref();
 
 	// Check if an ancestor directory is already in the mounts list that contains guest_path.
-	let ancestor_dir_exists_in_mounts = mounts
-		.iter()
-		.any(|p| guest_path.starts_with(&p.guest_path));
+	let ancestor_dir_exists_in_mounts =
+		mounts.iter().any(|p| guest_path.starts_with(&p.guest_path));
 
 	// Skip adding the path if there is already a path in the mounts that contains guest_path.
 	if ancestor_dir_exists_in_mounts {
@@ -218,10 +217,10 @@ struct SandboxContext<'a> {
 	pub envp: &'a [*const c_char],
 }
 
-/// Prepare the SandboxContext, and exec.
+/// Prepare the `SandboxContext`, and exec.
 unsafe fn prepare_context_and_exec_child(
-	chroot_path: fs::PathBuf,
-	working_directory: fs::PathBuf,
+	chroot_path: &fs::Path,
+	working_directory: &fs::Path,
 	executable: String,
 	env: BTreeMap<String, String>,
 	args: Vec<String>,
@@ -308,8 +307,8 @@ unsafe fn prepare_context_and_exec_child(
 
 	// Spawn the outer child with clone, unsharing its user namespace.
 	let outer_child_pid = libc::clone(
-		outer::outer_child_callback,
-		top_stack_addr(&mut ctx.outer_child_stack),
+		outer::child_callback,
+		top_stack_addr(ctx.outer_child_stack),
 		libc::CLONE_NEWUSER,
 		&mut ctx as *mut _ as *mut c_void,
 	);
@@ -413,7 +412,7 @@ enum ExitStatus {
 
 fn waitpid(pid: libc::pid_t) -> std::io::Result<ExitStatus> {
 	let mut wait_status: libc::c_int = 0;
-	if unsafe { libc::waitpid(pid, &mut wait_status as *mut _, libc::__WALL) } == -1 {
+	if unsafe { libc::waitpid(pid, std::ptr::addr_of_mut!(wait_status), libc::__WALL) } == -1 {
 		return Err(std::io::Error::last_os_error());
 	}
 
@@ -585,7 +584,7 @@ fn copy_file(source: impl std::fmt::Display, dest: impl std::fmt::Display) -> st
 	// Close the source file.
 	let ret = unsafe { libc::close(source_fd) };
 	if ret == -1 {
-		let _ = unsafe { libc::close(dest_fd) };
+		unsafe { libc::close(dest_fd) };
 		return Err(std::io::Error::last_os_error());
 	}
 

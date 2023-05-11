@@ -1,11 +1,11 @@
 use super::{c_void, crash, crash_errno, socket_send, top_stack_addr, waitpid, SandboxContext};
 
-pub extern "C" fn outer_child_callback(arg: *mut c_void) -> libc::c_int {
-	let ctx = unsafe { &mut *(arg as *mut SandboxContext) };
-	unsafe { outer_child_main(ctx) }
+pub extern "C" fn child_callback(arg: *mut c_void) -> libc::c_int {
+	let ctx = unsafe { &mut *arg.cast::<crate::process::linux::SandboxContext<'_>>() };
+	unsafe { child_main(ctx) }
 }
 
-unsafe fn outer_child_main(ctx: &mut SandboxContext) -> i32 {
+unsafe fn child_main(ctx: &mut SandboxContext) -> i32 {
 	// Ask to be SIGKILL'd if the parent process exits.
 	let ret = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
 	if ret == -1 {
@@ -37,8 +37,8 @@ unsafe fn outer_child_main(ctx: &mut SandboxContext) -> i32 {
 
 	// Spawn the inner child.
 	let inner_child_pid: libc::pid_t = libc::clone(
-		super::inner::inner_child_callback,
-		top_stack_addr(&mut ctx.inner_child_stack),
+		super::inner::child_callback,
+		top_stack_addr(ctx.inner_child_stack),
 		libc::CLONE_NEWNS | libc::CLONE_NEWPID | network_clone_flags,
 		ctx as *mut _ as *mut c_void,
 	);

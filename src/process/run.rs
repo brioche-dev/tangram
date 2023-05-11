@@ -47,7 +47,19 @@ impl Process {
 		tokio::fs::create_dir_all(output_temp.path())
 			.await
 			.wrap_err("Failed to create the directory for the output.")?;
-		let output_path = output_temp.path().join("output");
+		let output_temp_path = output_temp.path().join("output");
+		let output_temp_path = if cfg!(target_os = "macos") {
+			output_temp_path
+		} else if cfg!(target_os = "linux") {
+			let stripped = output_temp_path
+				.strip_prefix(tg.path())
+				.map_err(|_| {
+					error!("Unable to strip Tangram directory from process output temp directory")
+				})?;
+			fs::PathBuf::from("/.tangram").join(stripped)
+		} else {
+			unreachable!()
+		};
 
 		// Get the system.
 		let system = self.system;
@@ -62,13 +74,13 @@ impl Process {
 		};
 
 		// Render the command template.
-		let command = render(&self.executable, &artifacts_directory, &output_path).await?;
+		let command = render(&self.executable, &artifacts_directory, &output_temp_path).await?;
 
 		// Render the env templates.
 		let mut env: std::collections::BTreeMap<String, String> =
 			try_join_all(self.env.iter().map(|(key, value)| {
 				let artifacts_directory = &artifacts_directory;
-				let output_temp_path = &output_path;
+				let output_temp_path = &output_temp_path;
 				async move {
 					let key = key.clone();
 					let value = render(value, artifacts_directory, output_temp_path).await?;
@@ -82,14 +94,14 @@ impl Process {
 		// Set `TG_PLACEHOLDER_OUTPUT`.
 		env.insert(
 			"TANGRAM_PLACEHOLDER_OUTPUT".to_string(),
-			output_path.display().to_string(),
+			output_temp_path.display().to_string(),
 		);
 
 		// Render the args templates.
 		let args = try_join_all(
 			self.args
 				.iter()
-				.map(|arg| render(arg, &artifacts_directory, &output_path)),
+				.map(|arg| render(arg, &artifacts_directory, &output_temp_path)),
 		)
 		.await?;
 
@@ -120,7 +132,7 @@ impl Process {
 		// Add the output temp to the paths.
 		paths.insert(Path {
 			host_path: output_temp.path().to_owned(),
-			guest_path: output_temp.path().to_owned(),
+			guest_path: output_temp_path.clone(),
 			mode: Mode::ReadWrite,
 			kind: Kind::Directory,
 		});
@@ -204,10 +216,10 @@ impl Process {
 		}
 		.await?;
 
-		tracing::debug!(?output_path, "Checking in the process output.");
+		tracing::debug!(?output_temp_path, "Checking in the process output.");
 
 		// Check in the output temp.
-		let artifact = Artifact::check_in(tg, &output_path)
+		let artifact = Artifact::check_in(tg, &output_temp_path)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 

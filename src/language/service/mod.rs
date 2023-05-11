@@ -18,8 +18,8 @@ pub mod hover;
 pub mod metadata;
 pub mod references;
 pub mod rename;
-mod syscall;
 pub mod symbols;
+mod syscall;
 pub mod transpile;
 
 #[derive(Debug, serde::Serialize)]
@@ -110,7 +110,10 @@ impl Instance {
 
 // Snapshotting the language_service is disabled due to bugs in eslint and v8.
 // const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
-const LANGUAGE_SERVICE_JS: &str= include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/language_service.js"));
+const LANGUAGE_SERVICE_JS: &str = include_str!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/language_service.js"
+));
 
 /// Run the language service.
 fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceiver) {
@@ -148,7 +151,6 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 	);
 	let script = v8::Script::compile(&mut context_scope, code, Some(&origin)).unwrap();
 	script.run(&mut context_scope).unwrap();
-
 
 	// Set the instance on the context.
 	context.set_slot(&mut context_scope, tg);

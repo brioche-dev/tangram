@@ -25,9 +25,9 @@ impl<'a> Temp<'a> {
 
 impl<'a> Drop for Temp<'a> {
 	fn drop(&mut self) {
-		let path = self.path.clone();
-		tokio::task::spawn(async move {
-			crate::util::fs::rmrf(&path).await.ok();
-		});
+		// let path = self.path.clone();
+		// tokio::task::spawn(async move {
+		// 	crate::util::fs::rmrf(&path).await.ok();
+		// });
 	}
 }
