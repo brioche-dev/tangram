@@ -68,6 +68,9 @@ export class Template {
 		}
 		components = normalizedComponents;
 
+		// Remove leading indentation.
+		components = stripIndentation(components);
+
 		return new Template(components);
 	}
 
@@ -192,3 +195,69 @@ export namespace Template {
 }
 
 export let template = Template.new;
+
+// Compute the minimum indentation level of a string. Returns undefined if the string is on one line.
+let minIndentLevel = (s: string): string | undefined => {
+	let lines: Array<string> = s.split("\n");
+
+	if (lines.length == 1) {
+		return undefined;
+	}
+
+	// Strip lines with only whitespace.
+	lines = lines.filter((line) => {
+		let matches = /^\s*$/.exec(line);
+		return !matches;
+	});
+
+	// Find lines with zero or more leading whitespaces and find the leading whitespace of minimum length.
+	lines = lines
+		.map((line) => {
+			let matches = /^\s*/.exec(line);
+			return matches?.map((s) => s) ?? [];
+		})
+		.flat();
+
+	if (lines.length == 0) {
+		return undefined;
+	} else {
+		return lines.reduce((acc, str) => {
+			let l1 = acc?.length ?? 0;
+			let l2 = str?.length ?? 0;
+			return l1 < l2 ? acc : str;
+		});
+	}
+};
+
+// Remove the leading indentation from string components in a template.
+// Note: does not handle mixed tab/spaces for indentation.
+let stripIndentation = (
+	components: Array<Template.Component>,
+): Array<Template.Component> => {
+	let minIndent: string | undefined = undefined;
+
+	// Compute the minimum indentation level.
+	for (let component of components) {
+		if (typeof component === "string") {
+			let indent = minIndentLevel(component);
+			if (indent && !minIndent) {
+				minIndent = indent;
+			} else if (indent && minIndent && indent.length < minIndent.length) {
+				minIndent = indent;
+			}
+		}
+	}
+
+	// If there was some indentation, replace all occurrences of it.
+	if (minIndent) {
+		components = components.map((component) => {
+			if (typeof component === "string") {
+				return component.replaceAll(`\n${minIndent}`, "\n");
+			} else {
+				return component;
+			}
+		});
+	}
+
+	return components;
+};
