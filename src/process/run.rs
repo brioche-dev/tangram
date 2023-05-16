@@ -1,4 +1,7 @@
-use super::Process;
+use super::{
+	mount::{self, Mount},
+	Process,
+};
 use crate::{
 	artifact::Artifact,
 	error::{error, return_error, Error, Result, WrapErr},
@@ -11,27 +14,8 @@ use crate::{
 	value::Value,
 };
 use futures::{future::try_join_all, FutureExt};
+use itertools::Itertools;
 use std::{collections::HashSet, sync::Arc};
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Path {
-	pub kind: Kind,
-	pub mode: Mode,
-	pub host_path: fs::PathBuf,
-	pub guest_path: fs::PathBuf,
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum Kind {
-	File,
-	Directory,
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum Mode {
-	ReadOnly,
-	ReadWrite,
-}
 
 impl Process {
 	#[tracing::instrument(skip(tg), ret)]
@@ -44,26 +28,24 @@ impl Process {
 	pub(crate) async fn run_inner(&self, tg: &Arc<Instance>) -> Result<Value> {
 		// Create a temp for the output.
 		let output_temp = Temp::new(tg);
-		tokio::fs::create_dir_all(output_temp.path())
-			.await
-			.wrap_err("Failed to create the directory for the output.")?;
-		let output_temp_path_host = output_temp.path().join("output");
-		let output_temp_path_guest = if cfg!(target_os = "macos") {
-			output_temp_path_host.clone()
+		let output_temp_host_path = output_temp.path().to_owned();
+		let output_temp_guest_path = if cfg!(target_os = "macos") {
+			output_temp_host_path.clone()
 		} else if cfg!(target_os = "linux") {
-			let stripped = output_temp_path_host.strip_prefix(tg.path()).map_err(|_| {
-				error!("Unable to strip Tangram directory from process output temp directory")
-			})?;
-			fs::PathBuf::from("/.tangram").join(stripped)
+			fs::PathBuf::from(format!("/.tangram/temps/{}", output_temp.id()))
 		} else {
 			unreachable!()
 		};
 
-		// Get the system.
-		let system = self.system;
+		// Create a directory for the output.
+		let output_host_path = output_temp_host_path.join("output");
+		let output_guest_path = output_temp_guest_path.join("output");
+		tokio::fs::create_dir_all(&output_temp_host_path)
+			.await
+			.wrap_err("Failed to create the directory for the output.")?;
 
-		// Get the path to the artifacts directory, as visible by the guest.
-		let artifacts_directory = if cfg!(target_os = "macos") {
+		// Get the artifacts guest path.
+		let artifacts_guest_path = if cfg!(target_os = "macos") {
 			tg.artifacts_path()
 		} else if cfg!(target_os = "linux") {
 			"/.tangram/artifacts".into()
@@ -71,56 +53,60 @@ impl Process {
 			unreachable!()
 		};
 
-		// Render the command template.
-		let command = render(
-			&self.executable,
-			&artifacts_directory,
-			&output_temp_path_guest,
-		)
-		.await?;
+		// Create a closure that renders a template.
+		let render = |template: &Template| {
+			template.render_sync(|component| match component {
+				crate::template::Component::String(string) => Ok(string.into()),
+				crate::template::Component::Artifact(artifact) => Ok(artifacts_guest_path
+					.join(artifact.hash().to_string())
+					.into_os_string()
+					.into_string()
+					.unwrap()
+					.into()),
+				crate::template::Component::Placeholder(placeholder) => {
+					if placeholder.name == "output" {
+						Ok(output_guest_path.as_os_str().to_str().unwrap().into())
+					} else {
+						Err(error!(r#"Invalid placeholder "{}"."#, placeholder.name))
+					}
+				},
+			})
+		};
 
-		// Render the env templates.
-		let mut env: std::collections::BTreeMap<String, String> =
-			try_join_all(self.env.iter().map(|(key, value)| {
-				let artifacts_directory = &artifacts_directory;
-				let output_temp_path = &output_temp_path_guest;
-				async move {
-					let key = key.clone();
-					let value = render(value, artifacts_directory, output_temp_path).await?;
-					Ok::<_, Error>((key, value))
-				}
-			}))
-			.await?
-			.into_iter()
-			.collect();
+		// Get the system.
+		let system = self.system;
+
+		// Render the command template.
+		let command = render(&self.executable)?;
+
+		// Render the env.
+		let mut env: std::collections::BTreeMap<String, String> = self
+			.env
+			.iter()
+			.map(|(key, value)| {
+				let key = key.clone();
+				let value = render(value)?;
+				Ok::<_, Error>((key, value))
+			})
+			.try_collect()?;
 
 		// Set `TG_PLACEHOLDER_OUTPUT`.
 		env.insert(
-			"TANGRAM_PLACEHOLDER_OUTPUT".to_string(),
-			output_temp_path_guest.display().to_string(),
+			"TANGRAM_PLACEHOLDER_OUTPUT".to_owned(),
+			output_guest_path.to_str().unwrap().to_owned(),
 		);
 
-		// Render the args templates.
-		let args = try_join_all(
-			self.args
-				.iter()
-				.map(|arg| render(arg, &artifacts_directory, &output_temp_path_guest)),
-		)
-		.await?;
+		// Render the args.
+		let args: Vec<String> = self.args.iter().map(render).try_collect()?;
 
 		// Collect the references.
 		let mut references = HashSet::default();
-		self.executable
-			.collect_recursive_references(tg, &mut references)
-			.await?;
+		self.executable.collect_references(&mut references);
 		for value in self.env.values() {
-			value
-				.collect_recursive_references(tg, &mut references)
-				.await?;
+			value.collect_references(&mut references);
 		}
 		for arg in &self.args {
-			arg.collect_recursive_references(tg, &mut references)
-				.await?;
+			arg.collect_references(&mut references);
 		}
 
 		// Check out the references.
@@ -130,14 +116,15 @@ impl Process {
 		}))
 		.await?;
 
-		let mut paths: HashSet<Path, fnv::FnvBuildHasher> = HashSet::default();
+		// Create the mounts.
+		let mut mounts: HashSet<Mount, fnv::FnvBuildHasher> = HashSet::default();
 
-		// Add the output temp to the paths.
-		paths.insert(Path {
-			host_path: output_temp_path_host.parent().unwrap().to_owned(),
-			guest_path: output_temp_path_guest.parent().unwrap().to_owned(),
-			mode: Mode::ReadWrite,
-			kind: Kind::Directory,
+		// Add the output temp path to the mounts.
+		mounts.insert(Mount {
+			host_path: output_temp_host_path.parent().unwrap().to_owned(),
+			guest_path: output_temp_guest_path.parent().unwrap().to_owned(),
+			mode: mount::Mode::ReadWrite,
+			kind: mount::Kind::Directory,
 		});
 
 		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
@@ -158,71 +145,82 @@ impl Process {
 
 		// Handle the host paths.
 		for host_path in &self.host_paths {
-			// Check if any existing mount point is a parent of this path and skip adding it.
-			// Note: This operation is potentially expensive if there are many host paths. However, the assumption is that there are only a handful and this loop will only iterate a few times.
-			let parent = paths.iter().find(|existing| {
+			// If any existing mount's host path is a parent of this host path, then continue.
+			let parent = mounts.iter().find(|existing| {
 				std::path::PathBuf::from(host_path).starts_with(&existing.host_path)
 			});
 			if parent.is_some() {
 				continue;
 			}
 
-			// Check if this path is a parent of any mounts that have already been added, and if so remove the child.
-			let child = paths
+			// If this host path is a parent of any existing mount's host path, then remove the existing mount.
+			let child = mounts
 				.iter()
 				.find(|existing| existing.host_path.starts_with(host_path));
 			if let Some(child) = child.cloned() {
-				paths.remove(&child);
+				mounts.remove(&child);
 			}
 
-			// Determine the path kind.
-			let metadata = tokio::fs::metadata(host_path)
-				.await
-				.wrap_err_with(|| format!("Failed to get metadata for host path {host_path:?}."))?;
+			// Determine the kind.
+			let metadata = tokio::fs::metadata(host_path).await.wrap_err_with(|| {
+				format!(r#"Failed to get the metadata for the host path "{host_path}"."#)
+			})?;
 			let kind = if metadata.is_dir() {
-				Kind::Directory
+				mount::Kind::Directory
 			} else {
-				Kind::File
+				mount::Kind::File
 			};
 
-			// Insert the path.
-			paths.insert(Path {
+			// Insert the mount.
+			mounts.insert(Mount {
 				host_path: host_path.into(),
 				guest_path: host_path.into(),
-				mode: Mode::ReadOnly,
+				mode: mount::Mode::ReadOnly,
 				kind,
 			});
 		}
 
 		// Run the process.
 		match system {
-			System::Amd64Linux | System::Arm64Linux => {
-				#[cfg(target_os = "linux")]
-				{
-					Self::run_linux(tg, system, command, env, args, paths, network_enabled).boxed()
-				}
-				#[cfg(not(target_os = "linux"))]
-				{
-					return_error!("A Linux process cannot run on a non-Linux host.");
-				}
+			#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+			System::Amd64Linux => Self::run_linux(
+				tg,
+				artifacts_guest_path,
+				system,
+				command,
+				env,
+				args,
+				mounts,
+				network_enabled,
+			)
+			.boxed(),
+
+			#[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+			System::Arm64Linux => Self::run_linux(
+				tg,
+				artifacts_guest_path,
+				system,
+				command,
+				env,
+				args,
+				mounts,
+				network_enabled,
+			)
+			.boxed(),
+
+			#[cfg(target_os = "macos")]
+			System::Amd64MacOs | System::Arm64MacOs => {
+				Self::run_macos(tg, system, command, env, args, mounts, network_enabled).boxed()
 			},
-			System::Amd64Macos | System::Arm64Macos => {
-				#[cfg(target_os = "macos")]
-				{
-					Self::run_macos(tg, system, command, env, args, paths, network_enabled).boxed()
-				}
-				#[cfg(not(target_os = "macos"))]
-				{
-					return_error!("A macOS process cannot run on a non-macOS host.");
-				}
-			},
+
+			_ => return_error!(r#"This machine cannot run a process for system "{system}"."#),
 		}
 		.await?;
 
-		tracing::debug!(?output_temp_path_host, "Checking in the process output.");
+		tracing::debug!(?output_host_path, "Checking in the process output.");
 
-		// Check in the output temp.
-		let artifact = Artifact::check_in(tg, &output_temp_path_host)
+		// Check in the output.
+		let artifact = Artifact::check_in(tg, &output_host_path)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 
@@ -248,32 +246,4 @@ impl Process {
 
 		Ok(value)
 	}
-}
-
-/// Render a template for a process.
-async fn render(
-	template: &Template,
-	artifacts_directory: &std::path::Path,
-	output_path: &fs::Path,
-) -> Result<String> {
-	template
-		.render(|component| async move {
-			match component {
-				crate::template::Component::String(string) => Ok(string.into()),
-				crate::template::Component::Artifact(artifact) => Ok(artifacts_directory
-					.join(artifact.hash().to_string())
-					.into_os_string()
-					.into_string()
-					.unwrap()
-					.into()),
-				crate::template::Component::Placeholder(placeholder) => {
-					if placeholder.name == "output" {
-						Ok(output_path.as_os_str().to_str().unwrap().into())
-					} else {
-						Err(error!(r#"Invalid placeholder "{}"."#, placeholder.name))
-					}
-				},
-			}
-		})
-		.await
 }

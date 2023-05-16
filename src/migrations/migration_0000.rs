@@ -61,10 +61,9 @@ pub async fn migrate(path: &fs::Path) -> Result<()> {
 	let assets_path = path.join("assets");
 	tokio::fs::create_dir_all(&assets_path).await?;
 
-	// Add `env` and `sh` to the assets.
+	// Add `env` and `sh` to the assets directory.
 	let mut opts = tokio::fs::OpenOptions::new();
-	opts.create(true).write(true).mode(0o777);
-
+	opts.create(true).write(true).mode(0o755);
 	opts.open(assets_path.join("env_amd64_linux"))
 		.await?
 		.write_all(ENV_AMD64_LINUX)

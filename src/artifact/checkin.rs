@@ -177,7 +177,7 @@ impl Artifact {
 		let target = tokio::fs::read_link(path).await.wrap_err_with(|| {
 			format!(
 				r#"Failed to read the symlink at path "{}"."#,
-				path.display()
+				path.display(),
 			)
 		})?;
 

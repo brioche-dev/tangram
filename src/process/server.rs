@@ -1,4 +1,4 @@
-use super::run;
+use super::mount::Mount;
 use crate::{
 	artifact::Artifact,
 	error::{error, Error, Result, WrapErr},
@@ -17,13 +17,18 @@ use std::{convert::Infallible, sync::Weak};
 #[derive(Clone)]
 pub struct Server {
 	tg: Weak<Instance>,
-	mounts: Vec<run::Path>,
+	artifacts_guest_path: fs::PathBuf,
+	mounts: Vec<Mount>,
 }
 
 impl Server {
 	#[must_use]
-	pub fn new(tg: Weak<Instance>, mounts: Vec<run::Path>) -> Self {
-		Self { tg, mounts }
+	pub fn new(tg: Weak<Instance>, artifacts_guest_path: fs::PathBuf, mounts: Vec<Mount>) -> Self {
+		Self {
+			tg,
+			artifacts_guest_path,
+			mounts,
+		}
 	}
 
 	pub async fn serve(self, path: &fs::Path) -> Result<()> {
@@ -161,12 +166,7 @@ impl Server {
 			.wrap_err("Failed to deserialize the request body.")?;
 
 		// Unrender the string.
-		let artifacts_path = if cfg!(target_os = "macos") {
-			tg.artifacts_path()
-		} else {
-			"/.tangram/artifacts".into()
-		};
-		let template = Template::unrender(&tg, &artifacts_path, &string)
+		let template = Template::unrender(&tg, &self.artifacts_guest_path, &string)
 			.await
 			.wrap_err("Failed to unrender the template.")?
 			.to_data();

@@ -2,7 +2,7 @@ use crate::{id::Id, instance::Instance, util::fs};
 
 pub struct Temp<'a> {
 	_tg: &'a Instance,
-	_id: Id,
+	id: Id,
 	path: fs::PathBuf,
 }
 
@@ -10,11 +10,12 @@ impl<'a> Temp<'a> {
 	pub fn new(tg: &'a Instance) -> Temp<'a> {
 		let id = Id::generate();
 		let path = tg.temps_path().join(id.to_string());
-		Temp {
-			_tg: tg,
-			_id: id,
-			path,
-		}
+		Temp { _tg: tg, id, path }
+	}
+
+	#[must_use]
+	pub fn id(&self) -> Id {
+		self.id
 	}
 
 	#[must_use]

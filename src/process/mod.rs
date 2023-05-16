@@ -9,6 +9,7 @@ mod error;
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+mod mount;
 mod new;
 mod run;
 mod server;
@@ -101,7 +102,7 @@ impl Process {
 		self.network
 	}
 
-	/// Get a set of paths on the host's file system to expose to the process. This is an unsafe option.
+	/// A set of paths on the host's file system to expose to the process. This is an unsafe option.
 	#[must_use]
 	pub fn host_paths(&self) -> &[String] {
 		&self.host_paths

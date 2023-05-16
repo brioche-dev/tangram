@@ -196,6 +196,11 @@ impl Instance {
 	}
 
 	#[must_use]
+	pub fn assets_path(&self) -> fs::PathBuf {
+		self.path().join("assets")
+	}
+
+	#[must_use]
 	pub fn blobs_path(&self) -> fs::PathBuf {
 		self.path().join("blobs")
 	}

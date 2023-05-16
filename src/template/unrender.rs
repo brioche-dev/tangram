@@ -5,7 +5,7 @@ impl Template {
 	#[allow(clippy::unused_async)]
 	pub async fn unrender(tg: &Instance, path: &fs::Path, string: &str) -> Result<Template> {
 		// Create the regex.
-		let path = path.display().to_string();
+		let path = path.to_str().unwrap().to_owned();
 		let regex = format!(r"{path}/([0-9a-f]{{64}})");
 		let regex = regex::Regex::new(&regex).unwrap();
 
@@ -70,8 +70,9 @@ mod tests {
 		let artifact_path = artifact
 			.check_out_internal(&tg)
 			.await?
-			.display()
-			.to_string();
+			.to_str()
+			.unwrap()
+			.to_owned();
 
 		let string = artifact_path;
 
@@ -95,8 +96,9 @@ mod tests {
 		let artifact_path = artifact
 			.check_out_internal(&tg)
 			.await?
-			.display()
-			.to_string();
+			.to_str()
+			.unwrap()
+			.to_owned();
 
 		let string = format!("{artifact_path}/fizz/buzz");
 
@@ -138,8 +140,9 @@ mod tests {
 		let artifact_path = artifact
 			.check_out_internal(&tg)
 			.await?
-			.display()
-			.to_string();
+			.to_str()
+			.unwrap()
+			.to_owned();
 
 		let string = format!("foo {artifact_path} bar");
 
@@ -165,19 +168,34 @@ mod tests {
 			.build(&tg)
 			.await?
 			.into();
-		let foo_path = foo.check_out_internal(&tg).await?.display().to_string();
+		let foo_path = foo
+			.check_out_internal(&tg)
+			.await?
+			.to_str()
+			.unwrap()
+			.to_owned();
 
 		let bar: Artifact = File::builder(Blob::new(&tg, "bar".as_bytes()).await?)
 			.build(&tg)
 			.await?
 			.into();
-		let bar_path = bar.check_out_internal(&tg).await?.display().to_string();
+		let bar_path = bar
+			.check_out_internal(&tg)
+			.await?
+			.to_str()
+			.unwrap()
+			.to_owned();
 
 		let baz: Artifact = File::builder(Blob::new(&tg, "baz".as_bytes()).await?)
 			.build(&tg)
 			.await?
 			.into();
-		let baz_path = baz.check_out_internal(&tg).await?.display().to_string();
+		let baz_path = baz
+			.check_out_internal(&tg)
+			.await?
+			.to_str()
+			.unwrap()
+			.to_owned();
 
 		let string = format!("PATH={foo_path}:{bar_path}:/bin gcc {baz_path}");
 

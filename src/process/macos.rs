@@ -1,16 +1,15 @@
 use super::{
-	run::{Kind, Mode, Path},
+	mount::{self, Mount},
 	server::Server,
 	Process,
 };
 use crate::{
-	error::{return_error, Error, Result, WrapErr},
+	error::{return_error, Result, WrapErr},
 	instance::Instance,
 	system::System,
 	temp::Temp,
 };
 use indoc::writedoc;
-use libc::{c_char, c_int, c_void};
 use std::{
 	collections::{BTreeMap, HashSet},
 	ffi::{CStr, CString},
@@ -19,50 +18,223 @@ use std::{
 	sync::Arc,
 };
 
+/// The home directory guest path.
+const HOME_DIRECTORY_GUEST_PATH: &str = "/home/tangram";
+
+/// The socket guest path.
+const SOCKET_GUEST_PATH: &str = "/socket";
+
+/// The working directory guest path.
+const WORKING_DIRECTORY_GUEST_PATH: &str = "/home/tangram/work";
+
 impl Process {
+	#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 	pub async fn run_macos(
 		tg: &Arc<Instance>,
 		_system: System,
 		executable: String,
-		env: BTreeMap<String, String>,
+		mut env: BTreeMap<String, String>,
 		args: Vec<String>,
-		mut paths: HashSet<Path, fnv::FnvBuildHasher>,
+		mut mounts: HashSet<Mount, fnv::FnvBuildHasher>,
 		network_enabled: bool,
 	) -> Result<()> {
-		// Create a temp for the root directory.
-		let root_directory_temp = Temp::new(tg);
+		// Create a temp for the root.
+		let root_temp = Temp::new(tg);
+		let root_host_path = root_temp.path().to_owned();
+		std::fs::create_dir_all(&root_host_path)
+			.wrap_err("Failed to create the root directory.")?;
 
-		// Add the root directory to the paths.
-		paths.insert(Path {
-			host_path: root_directory_temp.path().to_owned(),
-			guest_path: root_directory_temp.path().to_owned(),
-			mode: Mode::ReadWrite,
-			kind: Kind::Directory,
+		// Add the root directory to the mounts.
+		mounts.insert(Mount {
+			host_path: root_host_path.clone(),
+			guest_path: root_host_path.clone(),
+			mode: mount::Mode::ReadWrite,
+			kind: mount::Kind::Directory,
 		});
 
-		// Add the aritfacts directory to the paths.
-		paths.insert(Path {
+		// Add the aritfacts directory to the mounts.
+		mounts.insert(Mount {
 			host_path: tg.artifacts_path(),
 			guest_path: tg.artifacts_path(),
-			mode: Mode::ReadOnly,
-			kind: Kind::Directory,
+			mode: mount::Mode::ReadOnly,
+			kind: mount::Kind::Directory,
 		});
 
-		// Add the home directory to the root directory.
-		let home_directory_path = root_directory_temp.path().join("Users").join("tangram");
-		tokio::fs::create_dir_all(&home_directory_path).await?;
+		// Create the home directory.
+		let home_directory_host_path =
+			root_host_path.join(HOME_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
+		tokio::fs::create_dir_all(&home_directory_host_path).await?;
 
-		// Add the working directory to the home directory.
-		let working_directory_path = home_directory_path.join("work");
-		tokio::fs::create_dir_all(&working_directory_path).await?;
+		// Create the working directory.
+		let working_directory_host_path =
+			root_host_path.join(WORKING_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
+		tokio::fs::create_dir_all(&working_directory_host_path).await?;
 
-		// Create the socket path.
-		let socket_path = root_directory_temp.path().join("socket");
+		// Set `$HOME`.
+		env.insert(
+			"HOME".to_owned(),
+			home_directory_host_path.to_str().unwrap().to_owned(),
+		);
+
+		// Create the socket path and set `$TANGRAM_SOCKET`.
+		let socket_host_path = root_host_path.join(SOCKET_GUEST_PATH.strip_prefix('/').unwrap());
+		env.insert(
+			"TANGRAM_SOCKET".to_owned(),
+			socket_host_path.to_str().unwrap().to_owned(),
+		);
+
+		// Create the sandbox profile.
+		let mut profile = String::new();
+
+		// Write the default profile.
+		writedoc!(
+			profile,
+			r#"
+				(version 1)
+
+				;; Deny everything by default.
+				(deny default)
+
+				;; Allow most system operations.
+				(allow syscall*)
+				(allow system-socket)
+				(allow mach*)
+				(allow ipc*)
+				(allow sysctl*)
+
+				;; Allow most process operations, except for `process-exec`. `process-exec` will let you execute binaries without having been granted the corresponding `file-read*` permission.
+				(allow process-fork process-info*)
+
+				;; Allow limited exploration of the root.
+				(allow file-read-data (literal "/"))
+				(allow file-read-metadata
+					(literal "/Library")
+					(literal "/System")
+					(literal "/Users")
+					(literal "/Volumes")
+					(literal "/etc")
+				)
+
+				;; Allow writing to common devices.
+				(allow file-read* file-write-data file-ioctl
+					(literal "/dev/null")
+					(literal "/dev/zero")
+					(literal "/dev/dtracehelper")
+				)
+
+				;; Allow reading and writing temporary files.
+				(allow file-write* file-read*
+					(subpath "/tmp")
+					(subpath "/private/tmp")
+					(subpath "/private/var")
+					(subpath "/var")
+				)
+
+				;; Allow reading some system devices and files.
+				(allow file-read*
+					(literal "/dev/autofs_nowait")
+					(literal "/dev/random")
+					(literal "/dev/urandom")
+					(literal "/private/etc/protocols")
+					(literal "/private/etc/services")
+					(literal "/private/etc/localtime")
+				)
+
+				;; Allow /bin/sh and /usr/bin/env to execute.
+				(allow process-exec
+					(literal "/bin/bash")
+					(literal "/bin/sh")
+					(literal "/usr/bin/env")
+				)
+
+				;; Support Rosetta.
+				(allow file-read* file-test-existence
+					(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
+				)
+
+				;; Allow accessing the dyld shared cache.
+				(allow file-read* process-exec
+					(literal "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld")
+					(subpath "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld")
+				)
+
+				;; Allow bash to create and use file descriptors for pipes.
+				(allow file-read* file-write* file-ioctl process-exec
+					(literal "/dev/fd")
+					(subpath "/dev/fd")
+				)
+			"#
+		).unwrap();
+
+		// Write the network profile.
+		if network_enabled {
+			writedoc!(
+				profile,
+				r#"
+					;; Allow network access.
+					(allow network*)
+
+					;; Allow reading network preference files.
+					(allow file-read*
+						(literal "/Library/Preferences/com.apple.networkd.plist")
+						(literal "/private/var/db/com.apple.networkextension.tracker-info")
+						(literal "/private/var/db/nsurlstoraged/dafsaData.bin")
+					)
+					(allow user-preference-read (preference-domain "com.apple.CFNetwork"))
+				"#
+			)
+			.unwrap();
+		} else {
+			writedoc!(
+				profile,
+				r#"
+					;; Disable global network access.
+					(deny network*)
+
+					;; Allow network access to localhost and Unix sockets
+					(allow network* (remote ip "localhost:*"))
+					(allow network* (remote unix-socket))
+				"#
+			)
+			.unwrap();
+		}
+
+		// Write the profile for the mounts.
+		for mount in &mounts {
+			writedoc!(
+				profile,
+				r#"
+					(allow process-exec* (subpath {0}))
+					(allow file-read* (path-ancestors {0}))
+					(allow file-read* (subpath {0}))
+				"#,
+				escape(mount.host_path.as_os_str().as_bytes())
+			)
+			.unwrap();
+
+			if mount.mode == mount::Mode::ReadWrite {
+				writedoc!(
+					profile,
+					r#"
+						(allow file-write* (subpath {0}))
+					"#,
+					escape(mount.host_path.as_os_str().as_bytes())
+				)
+				.unwrap();
+			}
+		}
+
+		// Make the profile a C string.
+		let profile = CString::new(profile).unwrap();
 
 		// Start the server.
-		let server = Server::new(Arc::downgrade(tg), paths.iter().cloned().collect());
+		let server = Server::new(
+			Arc::downgrade(tg),
+			tg.artifacts_path(),
+			mounts.iter().cloned().collect(),
+		);
 		let server_task = tokio::spawn({
-			let socket_path = socket_path.clone();
+			let socket_path = socket_host_path.clone();
 			async move {
 				server.serve(&socket_path).await.unwrap();
 			}
@@ -72,13 +244,11 @@ impl Process {
 		let mut command = tokio::process::Command::new(&executable);
 
 		// Set the working directory.
-		command.current_dir(&working_directory_path);
+		command.current_dir(&working_directory_host_path);
 
 		// Set the envs.
 		command.env_clear();
 		command.envs(env);
-		command.env("HOME", &home_directory_path);
-		command.env("TANGRAM_SOCKET", &socket_path);
 
 		// Set the args.
 		command.args(args);
@@ -86,8 +256,19 @@ impl Process {
 		// Set up the sandbox.
 		unsafe {
 			command.pre_exec(move || {
-				pre_exec(&paths, network_enabled)
-					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+				// Call `sandbox_init`.
+				let error = std::ptr::null_mut::<*const libc::c_char>();
+				let ret = sandbox_init(profile.as_ptr(), 0, error);
+
+				// Handle an error from `sandbox_init`.
+				if ret != 0 {
+					let error = *error;
+					let _message = CStr::from_ptr(error);
+					sandbox_free_error(error);
+					return Err(std::io::Error::from(std::io::ErrorKind::Other));
+				}
+
+				Ok(())
 			})
 		};
 
@@ -113,167 +294,13 @@ impl Process {
 	}
 }
 
-#[allow(clippy::too_many_lines)]
-fn pre_exec(paths: &HashSet<Path, fnv::FnvBuildHasher>, network_enabled: bool) -> Result<()> {
-	let mut profile = String::new();
-
-	// Add the default policy.
-	writedoc!(
-		profile,
-		r#"
-			(version 1)
-
-			;; Deny everything by default.
-			(deny default)
-
-			;; Allow most system operations.
-			(allow syscall*)
-			(allow system-socket)
-			(allow mach*)
-			(allow ipc*)
-			(allow sysctl*)
-
-			;; Allow most process operations, except for `process-exec`. `process-exec` will let you execute binaries without having been granted the corresponding `file-read*` permission.
-			(allow process-fork process-info*)
-
-			;; Allow limited exploration of the root.
-			(allow file-read-data (literal "/"))
-			(allow file-read-metadata
-				(literal "/Library")
-				(literal "/System")
-				(literal "/Users")
-				(literal "/Volumes")
-				(literal "/etc")
-			)
-
-			;; Allow writing to common devices.
-			(allow file-read* file-write-data file-ioctl
-				(literal "/dev/null")
-				(literal "/dev/zero")
-				(literal "/dev/dtracehelper")
-			)
-
-			;; Allow reading and writing temporary files.
-			(allow file-write* file-read*
-				(subpath "/tmp")
-				(subpath "/private/tmp")
-				(subpath "/private/var")
-				(subpath "/var")
-			)
-
-			;; Allow reading some system devices and files.
-			(allow file-read*
-				(literal "/dev/autofs_nowait")
-				(literal "/dev/random")
-				(literal "/dev/urandom")
-				(literal "/private/etc/protocols")
-				(literal "/private/etc/services")
-				(literal "/private/etc/localtime")
-			)
-
-			;; Allow /bin/sh and /usr/bin/env to execute.
-			(allow process-exec
-				(literal "/bin/bash")
-				(literal "/bin/sh")
-				(literal "/usr/bin/env")
-			)
-
-			;; Support Rosetta.
-			(allow file-read* file-test-existence
-				(literal "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
-			)
-
-			;; Allow accessing the dyld shared cache.
-			(allow file-read* process-exec
-				(literal "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld")
-				(subpath "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld")
-			)
-
-			;; Allow bash to create and use file descriptors for pipes.
-			(allow file-read* file-write* file-ioctl process-exec
-				(literal "/dev/fd")
-				(subpath "/dev/fd")
-			)
-		"#
-	).unwrap();
-
-	// Add the network policy.
-	if network_enabled {
-		writedoc!(
-			profile,
-			r#"
-				;; Allow network access.
-				(allow network*)
-
-				;; Allow reading network preference files.
-				(allow file-read*
-					(literal "/Library/Preferences/com.apple.networkd.plist")
-					(literal "/private/var/db/com.apple.networkextension.tracker-info")
-					(literal "/private/var/db/nsurlstoraged/dafsaData.bin")
-				)
-				(allow user-preference-read (preference-domain "com.apple.CFNetwork"))
-			"#
-		)
-		.unwrap();
-	} else {
-		writedoc!(
-			profile,
-			r#"
-				;; Disable global network access.
-				(deny network*)
-
-				;; Allow network access to localhost and Unix sockets
-				(allow network* (remote ip "localhost:*"))
-				(allow network* (remote unix-socket))
-			"#
-		)
-		.unwrap();
-	}
-
-	// Allow access to the paths in the path set.
-	for entry in paths {
-		writedoc!(
-			profile,
-			r#"
-				(allow process-exec* (subpath {0}))
-				(allow file-read* (path-ancestors {0}))
-				(allow file-read* (subpath {0}))
-			"#,
-			escape(entry.host_path.as_os_str().as_bytes())
-		)
-		.unwrap();
-
-		if entry.mode == Mode::ReadWrite {
-			writedoc!(
-				profile,
-				r#"
-					(allow file-write* (subpath {0}))
-				"#,
-				escape(entry.host_path.as_os_str().as_bytes())
-			)
-			.unwrap();
-		}
-	}
-
-	// Call `sandbox_init`.
-	let profile = CString::new(profile).unwrap();
-	let mut error: *const c_char = std::ptr::null();
-	let ret = unsafe { sandbox_init(profile.as_ptr(), 0, &mut error) };
-
-	// Handle an error from `sandbox_init`.
-	if ret != 0 {
-		let message = unsafe { CStr::from_ptr(error) };
-		let message = message.to_string_lossy();
-		unsafe { sandbox_free_error(error) };
-		return Err(Error::message(message));
-	}
-
-	Ok(())
-}
-
 extern "C" {
-	fn sandbox_init(profile: *const c_char, flags: u64, errorbuf: *mut *const c_char) -> c_int;
-	fn sandbox_free_error(errorbuf: *const c_char) -> c_void;
+	fn sandbox_init(
+		profile: *const libc::c_char,
+		flags: u64,
+		errorbuf: *mut *const libc::c_char,
+	) -> libc::c_int;
+	fn sandbox_free_error(errorbuf: *const libc::c_char) -> libc::c_void;
 }
 
 /// Escape a string using the string literal syntax rules for `TinyScheme`. See <https://github.com/dchest/tinyscheme/blob/master/Manual.txt#L130>.

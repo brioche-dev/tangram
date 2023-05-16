@@ -12,6 +12,15 @@ impl Template {
 			.collect()
 	}
 
+	/// Collect a template's references.
+	pub fn collect_references(&self, references: &mut HashSet<Artifact, fnv::FnvBuildHasher>) {
+		for component in &self.components {
+			if let Some(artifact) = component.as_artifact() {
+				references.insert(artifact.clone());
+			}
+		}
+	}
+
 	/// Collect a template's recursive references.
 	pub async fn collect_recursive_references(
 		&self,
