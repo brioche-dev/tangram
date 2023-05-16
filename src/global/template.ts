@@ -255,10 +255,6 @@ let stripLeadingWhitespace = (
 			if (typeof component === "string") {
 				return component
 					.split("\n")
-					.filter((line) => {
-						let matches = /^\s*$/.exec(line);
-						return !matches;
-					})
 					.map((line) => {
 						if (line.startsWith(indent)) {
 							line = line.replace(indent, "");
