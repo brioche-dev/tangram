@@ -5,7 +5,6 @@ use tangram::package;
 /// Build a package's "test" export and run it.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
-#[command(trailing_var_arg = true)]
 pub struct Args {
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
