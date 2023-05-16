@@ -69,7 +69,7 @@ export class Template {
 		components = normalizedComponents;
 
 		// Remove leading indentation.
-		components = stripIndentation(components);
+		components = stripLeadingWhitespace(components);
 
 		return new Template(components);
 	}
@@ -229,9 +229,9 @@ let minIndentLevel = (s: string): string | undefined => {
 	}
 };
 
-// Remove the leading indentation from string components in a template.
+// Remove the leading whitespace from string components in a template, including empty lines and any leading indentation.
 // Note: does not handle mixed tab/spaces for indentation.
-let stripIndentation = (
+let stripLeadingWhitespace = (
 	components: Array<Template.Component>,
 ): Array<Template.Component> => {
 	let minIndent: string | undefined = undefined;
@@ -250,9 +250,22 @@ let stripIndentation = (
 
 	// If there was some indentation, replace all occurrences of it.
 	if (minIndent) {
+		let indent = minIndent; // Needed for type narrowing.
 		components = components.map((component) => {
 			if (typeof component === "string") {
-				return component.replaceAll(`\n${minIndent}`, "\n");
+				return component
+					.split("\n")
+					.filter((line) => {
+						let matches = /^\s*$/.exec(line);
+						return !matches;
+					})
+					.map((line) => {
+						if (line.startsWith(indent)) {
+							line = line.replace(indent, "");
+						}
+						return line;
+					})
+					.join("\n");
 			} else {
 				return component;
 			}
