@@ -1,7 +1,6 @@
-use super::mount::Mount;
 use crate::{
 	artifact::Artifact,
-	error::{error, Error, Result, WrapErr},
+	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
 	template::Template,
 	util::{
@@ -17,17 +16,33 @@ use std::{convert::Infallible, sync::Weak};
 #[derive(Clone)]
 pub struct Server {
 	tg: Weak<Instance>,
-	artifacts_guest_path: fs::PathBuf,
-	mounts: Vec<Mount>,
+	_artifacts_directory_host_path: fs::PathBuf,
+	artifacts_directory_guest_path: fs::PathBuf,
+	working_directory_host_path: fs::PathBuf,
+	working_directory_guest_path: fs::PathBuf,
+	output_host_path: fs::PathBuf,
+	output_guest_path: fs::PathBuf,
 }
 
 impl Server {
 	#[must_use]
-	pub fn new(tg: Weak<Instance>, artifacts_guest_path: fs::PathBuf, mounts: Vec<Mount>) -> Self {
+	pub fn new(
+		tg: Weak<Instance>,
+		artifacts_directory_host_path: fs::PathBuf,
+		artifacts_directory_guest_path: fs::PathBuf,
+		working_directory_host_path: fs::PathBuf,
+		working_directory_guest_path: fs::PathBuf,
+		output_host_path: fs::PathBuf,
+		output_guest_path: fs::PathBuf,
+	) -> Self {
 		Self {
 			tg,
-			artifacts_guest_path,
-			mounts,
+			_artifacts_directory_host_path: artifacts_directory_host_path,
+			artifacts_directory_guest_path,
+			working_directory_host_path,
+			working_directory_guest_path,
+			output_host_path,
+			output_guest_path,
 		}
 	}
 
@@ -118,8 +133,15 @@ impl Server {
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the request body.")?;
 
-		// Get the corresponding host path.
-		let host_path = self.get_host_path(&guest_path)?;
+		// Get the host path.
+		let host_path =
+			if let Ok(path) = guest_path.strip_prefix(&self.working_directory_guest_path) {
+				self.working_directory_host_path.join(path)
+			} else if let Ok(path) = guest_path.strip_prefix(&self.output_guest_path) {
+				self.output_host_path.join(path)
+			} else {
+				return_error!("The path is not in the artifacts, working, or output directories.");
+			};
 
 		// Check in the artifact.
 		let artifact = Artifact::check_in(&tg, &host_path)
@@ -166,7 +188,7 @@ impl Server {
 			.wrap_err("Failed to deserialize the request body.")?;
 
 		// Unrender the string.
-		let template = Template::unrender(&tg, &self.artifacts_guest_path, &string)
+		let template = Template::unrender(&tg, &self.artifacts_directory_guest_path, &string)
 			.await
 			.wrap_err("Failed to unrender the template.")?
 			.to_data();
@@ -181,18 +203,5 @@ impl Server {
 			.unwrap();
 
 		Ok(response)
-	}
-
-	fn get_host_path(&self, guest_path: &std::path::Path) -> Result<std::path::PathBuf> {
-		let mount = self
-			.mounts
-			.iter()
-			.find(|mount| guest_path.starts_with(&mount.guest_path))
-			.ok_or_else(|| {
-				error!("Failed to find find corresponding host path for {guest_path:#?}.")
-			})?;
-
-		let subpath = pathdiff::diff_paths(guest_path, &mount.guest_path).unwrap();
-		Ok(mount.host_path.join(subpath))
 	}
 }

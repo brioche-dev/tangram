@@ -1,20 +1,8 @@
-import { assert } from "./assert.ts";
+import { env } from "./env.ts";
 import { Function } from "./function.ts";
 import { Operation } from "./operation.ts";
 import * as syscall from "./syscall.ts";
 import { Value } from "./value.ts";
-
-type Env = {
-	value?: Record<string, Value>;
-	get(): Record<string, Value>;
-};
-
-export let env: Env = {
-	get() {
-		assert(this.value);
-		return this.value;
-	},
-};
 
 export let call = async <A extends Array<Value>, R extends Value>(
 	arg: Call.Arg<A, R>,

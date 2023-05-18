@@ -1,5 +1,6 @@
 import { assert } from "./assert.ts";
-import { call, env } from "./call.ts";
+import { call } from "./call.ts";
+import { env } from "./env.ts";
 import { Package } from "./package.ts";
 import { Path, path } from "./path.ts";
 import { MaybePromise, Unresolved, resolve } from "./resolve.ts";

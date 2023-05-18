@@ -1,8 +1,9 @@
 import { Artifact } from "./artifact.ts";
 import { Blob, blob } from "./blob.ts";
-import { call, env } from "./call.ts";
+import { call } from "./call.ts";
 import { Directory, directory } from "./directory.ts";
 import { download } from "./download.ts";
+import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
 import { Function, function_ } from "./function.ts";

@@ -744,7 +744,6 @@ let convertType = (typeChecker: ts.TypeChecker, type: ts.Type): Type => {
 	} else if (node.kind === ts.SyntaxKind.IndexedAccessType) {
 		return convertIndexedAccessType(typeChecker, type as ts.IndexedAccessType);
 	} else {
-		console.log(ts.SyntaxKind[node.kind]);
 		return { kind: "_unknown", value: typeChecker.typeToString(type) };
 	}
 };

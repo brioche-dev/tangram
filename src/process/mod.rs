@@ -9,7 +9,6 @@ mod error;
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-mod mount;
 mod new;
 mod run;
 mod server;

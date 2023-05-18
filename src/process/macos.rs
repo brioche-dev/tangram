@@ -1,86 +1,100 @@
-use super::{
-	mount::{self, Mount},
-	server::Server,
-	Process,
-};
+use super::Process;
 use crate::{
+	artifact::Artifact,
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
-	system::System,
+	process::Server,
 	temp::Temp,
+	value::Value,
 };
 use indoc::writedoc;
 use std::{
-	collections::{BTreeMap, HashSet},
 	ffi::{CStr, CString},
 	fmt::Write,
 	os::unix::prelude::OsStrExt,
 	sync::Arc,
 };
 
-/// The home directory guest path.
-const HOME_DIRECTORY_GUEST_PATH: &str = "/home/tangram";
-
-/// The socket guest path.
-const SOCKET_GUEST_PATH: &str = "/socket";
-
-/// The working directory guest path.
-const WORKING_DIRECTORY_GUEST_PATH: &str = "/home/tangram/work";
-
 impl Process {
 	#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
-	pub async fn run_macos(
-		tg: &Arc<Instance>,
-		_system: System,
-		executable: String,
-		mut env: BTreeMap<String, String>,
-		args: Vec<String>,
-		mut mounts: HashSet<Mount, fnv::FnvBuildHasher>,
-		network_enabled: bool,
-	) -> Result<()> {
+	pub async fn run_inner_macos(&self, tg: &Arc<Instance>) -> Result<Value> {
+		// Check out the references.
+		self.check_out_references(tg)
+			.await
+			.wrap_err("Failed to check out the references.")?;
+
 		// Create a temp for the root.
 		let root_temp = Temp::new(tg);
-		let root_host_path = root_temp.path().to_owned();
-		std::fs::create_dir_all(&root_host_path)
+		let root_path = root_temp.path().to_owned();
+		tokio::fs::create_dir_all(&root_path)
+			.await
 			.wrap_err("Failed to create the root directory.")?;
 
-		// Add the root directory to the mounts.
-		mounts.insert(Mount {
-			host_path: root_host_path.clone(),
-			guest_path: root_host_path.clone(),
-			mode: mount::Mode::ReadWrite,
-			kind: mount::Kind::Directory,
-		});
+		// Create a temp for the output.
+		let output_temp = Temp::new(tg);
 
-		// Add the aritfacts directory to the mounts.
-		mounts.insert(Mount {
-			host_path: tg.artifacts_path(),
-			guest_path: tg.artifacts_path(),
-			mode: mount::Mode::ReadOnly,
-			kind: mount::Kind::Directory,
-		});
+		// Create the output parent directory.
+		let output_parent_directory_path = output_temp.path().to_owned();
+		tokio::fs::create_dir_all(&output_parent_directory_path)
+			.await
+			.wrap_err("Failed to create the output parent directory.")?;
+
+		// Create the output path.
+		let output_path = output_parent_directory_path.join("output");
+
+		// Get the path for the artifacts directory.
+		let artifacts_directory_path = tg.artifacts_path();
 
 		// Create the home directory.
-		let home_directory_host_path =
-			root_host_path.join(HOME_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
-		tokio::fs::create_dir_all(&home_directory_host_path).await?;
+		let home_directory_path = root_path.join("Users/tangram");
+		tokio::fs::create_dir_all(&home_directory_path)
+			.await
+			.wrap_err("Failed to create the home directory.")?;
 
 		// Create the working directory.
-		let working_directory_host_path =
-			root_host_path.join(WORKING_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
-		tokio::fs::create_dir_all(&working_directory_host_path).await?;
+		let working_directory_path = root_path.join("Users/tangram/work");
+		tokio::fs::create_dir_all(&working_directory_path)
+			.await
+			.wrap_err("Failed to create the working directory.")?;
+
+		// Render the executable, env, and args.
+		let (executable, mut env, args) = self.render(&artifacts_directory_path, &output_path)?;
+
+		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
+		let enable_unsafe = self.checksum.is_some() || self.unsafe_;
+
+		// Verify the safety constraints.
+		if !enable_unsafe {
+			if self.network {
+				return_error!("Network access is not allowed in safe processes.");
+			}
+			if !self.host_paths.is_empty() {
+				return_error!("Host paths are not allowed in safe processes.");
+			}
+		}
+
+		// Handle the network flag.
+		let network_enabled = self.network;
+
+		// Create the socket path.
+		let socket_path = root_path.join("socket");
 
 		// Set `$HOME`.
 		env.insert(
 			"HOME".to_owned(),
-			home_directory_host_path.to_str().unwrap().to_owned(),
+			home_directory_path.to_str().unwrap().to_owned(),
 		);
 
-		// Create the socket path and set `$TANGRAM_SOCKET`.
-		let socket_host_path = root_host_path.join(SOCKET_GUEST_PATH.strip_prefix('/').unwrap());
+		// Set `$TG_PLACEHOLDER_OUTPUT`.
+		env.insert(
+			"TANGRAM_PLACEHOLDER_OUTPUT".to_owned(),
+			output_path.to_str().unwrap().to_owned(),
+		);
+
+		// Set `$TANGRAM_SOCKET`.
 		env.insert(
 			"TANGRAM_SOCKET".to_owned(),
-			socket_host_path.to_str().unwrap().to_owned(),
+			socket_path.to_str().unwrap().to_owned(),
 		);
 
 		// Create the sandbox profile.
@@ -140,11 +154,11 @@ impl Process {
 					(literal "/private/etc/localtime")
 				)
 
-				;; Allow /bin/sh and /usr/bin/env to execute.
+				;; Allow executing /usr/bin/env and /bin/sh.
 				(allow process-exec
-					(literal "/bin/bash")
-					(literal "/bin/sh")
 					(literal "/usr/bin/env")
+					(literal "/bin/sh")
+					(literal "/bin/bash")
 				)
 
 				;; Support Rosetta.
@@ -199,8 +213,8 @@ impl Process {
 			.unwrap();
 		}
 
-		// Write the profile for the mounts.
-		for mount in &mounts {
+		// Allow read access to the host paths.
+		for host_path in &self.host_paths {
 			writedoc!(
 				profile,
 				r#"
@@ -208,21 +222,48 @@ impl Process {
 					(allow file-read* (path-ancestors {0}))
 					(allow file-read* (subpath {0}))
 				"#,
-				escape(mount.host_path.as_os_str().as_bytes())
+				escape(host_path.as_bytes())
 			)
 			.unwrap();
-
-			if mount.mode == mount::Mode::ReadWrite {
-				writedoc!(
-					profile,
-					r#"
-						(allow file-write* (subpath {0}))
-					"#,
-					escape(mount.host_path.as_os_str().as_bytes())
-				)
-				.unwrap();
-			}
 		}
+
+		// Allow read access to the artifacts directory.
+		writedoc!(
+			profile,
+			r#"
+				(allow process-exec* (subpath {0}))
+				(allow file-read* (path-ancestors {0}))
+				(allow file-read* (subpath {0}))
+			"#,
+			escape(artifacts_directory_path.as_os_str().as_bytes())
+		)
+		.unwrap();
+
+		// Allow write access to the home directory.
+		writedoc!(
+			profile,
+			r#"
+				(allow process-exec* (subpath {0}))
+				(allow file-read* (path-ancestors {0}))
+				(allow file-read* (subpath {0}))
+				(allow file-write* (subpath {0}))
+			"#,
+			escape(home_directory_path.as_os_str().as_bytes())
+		)
+		.unwrap();
+
+		// Allow write access to the output parent directory.
+		writedoc!(
+			profile,
+			r#"
+				(allow process-exec* (subpath {0}))
+				(allow file-read* (path-ancestors {0}))
+				(allow file-read* (subpath {0}))
+				(allow file-write* (subpath {0}))
+			"#,
+			escape(output_parent_directory_path.as_os_str().as_bytes())
+		)
+		.unwrap();
 
 		// Make the profile a C string.
 		let profile = CString::new(profile).unwrap();
@@ -230,11 +271,15 @@ impl Process {
 		// Start the server.
 		let server = Server::new(
 			Arc::downgrade(tg),
-			tg.artifacts_path(),
-			mounts.iter().cloned().collect(),
+			artifacts_directory_path.clone(),
+			artifacts_directory_path.clone(),
+			working_directory_path.clone(),
+			working_directory_path.clone(),
+			output_path.clone(),
+			output_path.clone(),
 		);
 		let server_task = tokio::spawn({
-			let socket_path = socket_host_path.clone();
+			let socket_path = socket_path.clone();
 			async move {
 				server.serve(&socket_path).await.unwrap();
 			}
@@ -244,7 +289,7 @@ impl Process {
 		let mut command = tokio::process::Command::new(&executable);
 
 		// Set the working directory.
-		command.current_dir(&working_directory_host_path);
+		command.current_dir(&working_directory_path);
 
 		// Set the envs.
 		command.env_clear();
@@ -290,7 +335,34 @@ impl Process {
 			return_error!("The process did not exit successfully.");
 		}
 
-		Ok(())
+		tracing::debug!(?output_path, "Checking in the process output.");
+
+		// Check in the output.
+		let artifact = Artifact::check_in(tg, &output_path)
+			.await
+			.wrap_err("Failed to check in the output.")?;
+
+		tracing::info!(?artifact, "Checked in the process output.");
+
+		// Verify the checksum if one was provided.
+		if let Some(expected) = self.checksum.clone() {
+			let actual = artifact
+				.checksum(tg, expected.algorithm())
+				.await
+				.wrap_err("Failed to compute the checksum.")?;
+			if expected != actual {
+				return_error!(
+					r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#
+				);
+			}
+
+			tracing::debug!("Validated the checksum.");
+		}
+
+		// Create the output.
+		let value = Value::Artifact(artifact);
+
+		Ok(value)
 	}
 }
 
