@@ -119,7 +119,7 @@ impl Cli {
 	fn create_default_env() -> Result<BTreeMap<String, Value>> {
 		let host = System::host()?;
 		let host = Value::String(host.to_string());
-		let env = [("host".to_owned(), host)].into();
+		let env = [("system".to_owned(), host)].into();
 		Ok(env)
 	}
 }
