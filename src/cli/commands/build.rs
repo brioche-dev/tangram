@@ -5,7 +5,6 @@ use crate::{
 };
 use std::path::PathBuf;
 use tangram::{
-	call::Call,
 	function::Function,
 	package::{self, Package, ROOT_MODULE_FILE_NAME},
 };
@@ -38,18 +37,23 @@ impl Cli {
 			.await
 			.wrap_err("Failed to create the package instance.")?;
 
-		// Run the operation.
-		let function = Function::new(
-			&package_instance,
-			ROOT_MODULE_FILE_NAME.parse().unwrap(),
-			args.function,
-		);
+		// Call the function.
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let call = Call::new(&self.tg, function, env, args_)
+		let function = Function::new(
+			&self.tg,
+			package_instance,
+			ROOT_MODULE_FILE_NAME.parse().unwrap(),
+			args.function,
+			env,
+			args_,
+		)
+		.await
+		.wrap_err("Failed to create the function.")?;
+		let output = function
+			.call(&self.tg)
 			.await
-			.wrap_err("Failed to create the call.")?;
-		let output = call.run(&self.tg).await?;
+			.wrap_err("The function call failed.")?;
 
 		// Check out the output if requested.
 		if let Some(path) = args.output {

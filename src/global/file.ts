@@ -1,7 +1,12 @@
 import { Artifact } from "./artifact.ts";
+import { assert as assert_ } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
+
+export let file = async (arg: Unresolved<File.Arg>) => {
+	return await File.new(arg);
+};
 
 type ConstructorArg = {
 	hash: Artifact.Hash;
@@ -62,6 +67,15 @@ export class File {
 		return value instanceof File;
 	}
 
+	static expect(value: unknown): File {
+		assert_(File.is(value));
+		return value;
+	}
+
+	static assert(value: unknown): asserts value is File {
+		assert_(File.is(value));
+	}
+
 	toSyscall(): syscall.File {
 		return {
 			hash: this.#hash,
@@ -114,5 +128,3 @@ export namespace File {
 		references?: Array<Artifact>;
 	};
 }
-
-export let file = File.new;

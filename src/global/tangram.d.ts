@@ -3,6 +3,7 @@
 declare namespace tg {
 	// Artifact.
 
+	/** An artifact. */
 	export type Artifact = Directory | File | Symlink;
 
 	export namespace Artifact {
@@ -12,11 +13,11 @@ declare namespace tg {
 		/** Check if a value is an `Artifact`. */
 		export let is: (value: unknown) => value is Artifact;
 
-		// /** Expect that a value is an `Artifact`. */
-		// export let expect: (value: unknown) => Artifact;
+		/** Expect that a value is an `Artifact`. */
+		export let expect: (value: unknown) => Artifact;
 
-		// /** Assert that a value is an `Artifact`. */
-		// export let assert: (value: unknown) => asserts value is Artifact;
+		/** Assert that a value is an `Artifact`. */
+		export let assert: (value: unknown) => asserts value is Artifact;
 
 		/* Get an artifact by its hash. */
 		export let get: (hash: Hash) => Promise<Artifact>;
@@ -34,6 +35,12 @@ declare namespace tg {
 		/** Check if a value is a `Blob`. */
 		static is(value: unknown): value is Blob;
 
+		/** Expect that a value is a `Blob`. */
+		static expect: (value: unknown) => Blob;
+
+		/** Assert that a value is a `Blob`. */
+		static assert: (value: unknown) => asserts value is Blob;
+
 		/* Get this blob's hash. */
 		hash(): Blob.Hash;
 
@@ -50,23 +57,9 @@ declare namespace tg {
 		export type Arg = Uint8Array | string | Blob;
 	}
 
-	// Call.
-
-	/** Call a Tangram function. */
-	export let call: <A extends Array<Value>, R extends Value>(
-		arg: call.Arg<A, R>,
-	) => Promise<R>;
-
-	export namespace call {
-		type Arg<A extends Array<Value>, R extends Value> = {
-			function: Function<A, R>;
-			env?: Record<string, Value>;
-			args: A;
-		};
-	}
-
 	// Checksum.
 
+	/** Compute the checksum of the provided bytes. */
 	export let checksum: (
 		algorithm: Checksum.Algorithm,
 		bytes: Uint8Array,
@@ -98,25 +91,31 @@ declare namespace tg {
 		/** Check if a value is a `Directory`. */
 		static is: (value: unknown) => value is Directory;
 
+		/** Expect that a value is a `Directory`. */
+		static expect: (value: unknown) => Directory;
+
+		/** Assert that a value is a `Directory`. */
+		static assert: (value: unknown) => asserts value is Directory;
+
 		/* Get this directory's hash. */
 		hash(): Artifact.Hash;
 
 		/** Get the child at the specified path. This method throws an error if the path does not exist. */
-		get(arg: Path.Arg): Promise<Artifact>;
+		get(arg: Subpath.Arg): Promise<Artifact>;
 
 		/** Try to get the child at the specified path. This method returns `undefined` if the path does not exist. */
-		tryGet(arg: Path.Arg): Promise<Artifact | undefined>;
+		tryGet(arg: Subpath.Arg): Promise<Artifact | undefined>;
 
 		/** Get this directory's entries. */
 		entries(): Promise<Map<string, Artifact>>;
 
-		/** Bundle this directory. */
+		/** Bundle this directory with all its recursive references. */
 		bundle: () => Promise<Directory>;
 
-		/** Walk this directory's recursive entries. */
-		walk(): AsyncIterableIterator<[Path, Artifact]>;
+		/** Get an iterator of this directory's recursive entries. */
+		walk(): AsyncIterableIterator<[Subpath, Artifact]>;
 
-		/** An async iterator of this directory's entries. */
+		/** Get an async iterator of this directory's entries. */
 		[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]>;
 	}
 
@@ -127,39 +126,6 @@ declare namespace tg {
 
 		type ArgObjectValue = undefined | Blob.Arg | Artifact | ArgObject;
 	}
-
-	// Download.
-
-	export namespace Download {
-		export type Arg = {
-			/** The URL to download from. */
-			url: string;
-
-			/** Pass true to choose the format automatically based on the extension in the URL. */
-			unpack?: boolean;
-
-			checksum?: Checksum;
-
-			unsafe?: boolean;
-		};
-	}
-
-	export type UnpackFormat =
-		| ".bz2"
-		| ".gz"
-		| ".lz"
-		| ".xz"
-		| ".zstd"
-		| ".tar"
-		| ".tar.bz2"
-		| ".tar.gz"
-		| ".tar.lz"
-		| ".tar.xz"
-		| ".tar.zstd"
-		| ".zip";
-
-	/** Download an artifact. */
-	export let download: (arg: Download.Arg) => Promise<Artifact>;
 
 	// Encoding.
 
@@ -174,12 +140,12 @@ declare namespace tg {
 	}
 
 	export namespace json {
-		export let encode: (value: any) => string;
+		export let encode: (value: unknown) => string;
 		export let decode: (value: string) => unknown;
 	}
 
 	export namespace toml {
-		export let encode: (value: any) => string;
+		export let encode: (value: unknown) => string;
 		export let decode: (value: string) => unknown;
 	}
 
@@ -189,7 +155,7 @@ declare namespace tg {
 	}
 
 	export namespace yaml {
-		export let encode: (value: any) => string;
+		export let encode: (value: unknown) => string;
 		export let decode: (value: string) => unknown;
 	}
 
@@ -201,14 +167,22 @@ declare namespace tg {
 
 	// File.
 
+	/** Create a file. */
 	export let file: (arg: Unresolved<File.Arg>) => Promise<File>;
 
+	/** A file. */
 	export class File {
 		/** Create a file. */
 		static new: (arg: Unresolved<File.Arg>) => Promise<File>;
 
 		/** Check if a value is a `File`. */
 		static is: (value: unknown) => value is File;
+
+		/** Expect that a value is a `File`. */
+		static expect: (value: unknown) => File;
+
+		/** Assert that a value is a `File`. */
+		static assert: (value: unknown) => asserts value is File;
 
 		/* Get this file's hash. */
 		hash(): Artifact.Hash;
@@ -242,26 +216,74 @@ declare namespace tg {
 	// Function.
 
 	/** Create a Tangram function. */
-	let function_: <A extends Array<Value>, R extends Value>(
-		f: (...args: A) => MaybePromise<R>,
-	) => Function<A, R>;
-	export { function_ as function };
-
-	export type Function<
+	let function_: <
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
-	> = {
+	>(
+		f: (...args: A) => MaybePromise<R>,
+	) => Promise<Function<A, R>>;
+	export { function_ as function };
+
+	/** Call a Tangram function. */
+	export let call: <
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	>(
+		arg: Function.Arg<A, R>,
+	) => Promise<R>;
+
+	export interface Function<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	> {
+		/** Call this function. */
 		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
-	};
+	}
+
+	export class Function<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	> extends globalThis.Function {
+		/** Create a new function. */
+		static new<A extends Array<Value> = Array<Value>, R extends Value = Value>(
+			f: (...args: A) => MaybePromise<R>,
+		): Promise<Function<A, R>>;
+
+		/** Check if a value is a `Function`. */
+		static is(value: unknown): value is Function;
+
+		/** Expect that a value is a `Function`. */
+		static expect(value: unknown): Function;
+
+		/** Assert that a value is a `Function`. */
+		static assert(value: unknown): asserts value is Function;
+
+		/** Get this function's hash. */
+		hash(): Operation.Hash;
+
+		// /** Call this function. */
+		// call(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
+	}
 
 	export namespace Function {
-		/** Check if a value is a `Function`. */
-		export let is: (value: unknown) => value is Function<any, any>;
+		export type Arg<
+			A extends Array<Value> = Array<Value>,
+			R extends Value = Value,
+		> = ((...args: A) => MaybePromise<R>) | ArgObject<A, R>;
+
+		export type ArgObject<
+			A extends Array<Value> = Array<Value>,
+			R extends Value = Value,
+		> = {
+			function: Function<A, R>;
+			env?: Record<string, Value>;
+			args: A;
+		};
 	}
 
 	// Include.
 
-	/** Include an artifact from a package, at a path relative to the module this function is called from. The path must be a string literal so that it can be statically analyzed. */
+	/** Include an artifact at a path relative to the module this function is called from. The path must be a string literal so that it can be statically analyzed. */
 	export let include: (path: string) => Promise<Artifact>;
 
 	// Log.
@@ -269,45 +291,79 @@ declare namespace tg {
 	/** Write to the log. */
 	export let log: (...args: Array<unknown>) => void;
 
+	// Operation.
+
+	export type Operation = Command | Function | Resource;
+
+	export namespace Operation {
+		export type Hash = string;
+	}
+
 	// Path.
 
-	/** Create a path. */
-	export let path: (...args: Array<Path.Arg>) => Path;
+	/** Create a relative path. */
+	export let relpath: (...args: Array<Relpath.Arg>) => Relpath;
 
-	export class Path {
-		/** Create a new path. */
-		static new: (...args: Array<Path.Arg>) => Path;
+	/** A relative path. */
+	export class Relpath {
+		/** Create a new relpath. */
+		static new: (...args: Array<Relpath.Arg>) => Relpath;
 
-		/** Check if a value is a `Path`. */
-		static is: (value: unknown) => value is Path;
+		/** Check if a value is a `Relpath`. */
+		static is: (value: unknown) => value is Relpath;
 
-		/** Get this path's components. */
-		components(): Array<Path.Component>;
+		/** Expect that a value is a `Relpath`. */
+		static expect: (value: unknown) => Relpath;
 
-		/** Join this path with another path. */
-		join(other: Path.Arg): Path;
+		/** Assert that a value is a `Relpath`. */
+		static assert: (value: unknown) => asserts value is Relpath;
 
-		/** Create a path to this path from `src`. */
-		diff(src: Path.Arg): Path;
+		/** Get this relpath's parents. */
+		parents(): number;
 
-		/** Render this path to a string. */
+		/** Get this relpath's subpath. */
+		subpath(): Subpath;
+
+		/** Join this relpath with another relpath. */
+		join(other: Relpath.Arg): Relpath;
+
+		/** Render this relpath to a string. */
 		toString(): string;
 	}
 
-	export namespace Path {
-		export type Arg = undefined | string | Path.Component | Path | Array<Arg>;
+	export namespace Relpath {
+		export type Arg = undefined | string | Subpath | Relpath | Array<Arg>;
+	}
 
-		export type Component =
-			| { kind: "parent" }
-			| { kind: "normal"; value: string };
+	/** Create a subpath. */
+	export let subpath: (...args: Array<Subpath.Arg>) => Subpath;
 
-		export namespace Component {
-			/** Check if a value is a `Path.Component`. */
-			export let is: (value: unknown) => value is Path.Component;
+	/** A subpath. */
+	export class Subpath {
+		/** Create a new subpath. */
+		static new: (...args: Array<Subpath.Arg>) => Subpath;
 
-			/** Check if two path components are equal. */
-			export let equal: (a: Path.Component, b: Path.Component) => boolean;
-		}
+		/** Check if a value is a `Subpath`. */
+		static is: (value: unknown) => value is Subpath;
+
+		/** Expect that a value is a `Subpath`. */
+		static expect: (value: unknown) => Subpath;
+
+		/** Assert that a value is a `Subpath`. */
+		static assert: (value: unknown) => asserts value is Subpath;
+
+		/** Get this subpath's components. */
+		components(): Array<string>;
+
+		/** Join this subpath with another subpath. */
+		join(other: Subpath.Arg): Subpath;
+
+		/** Render this subpath to a string. */
+		toString(): string;
+	}
+
+	export namespace Subpath {
+		export type Arg = undefined | string | Subpath | Array<Arg>;
 	}
 
 	// Placeholder.
@@ -323,44 +379,76 @@ declare namespace tg {
 		/** Check if a value is a `Placeholder`. */
 		static is: (value: unknown) => value is Placeholder;
 
+		/** Expect that a value is a `Placeholder`. */
+		static expect: (value: unknown) => Placeholder;
+
+		/** Assert that a value is a `Placeholder`. */
+		static assert: (value: unknown) => asserts value is Placeholder;
+
 		/** Get this placeholder's name. */
 		name(): string;
 	}
 
-	// Process.
+	// Command.
 
-	export namespace Process {
+	/** Create a command. */
+	export let command: (arg: Unresolved<Command.Arg>) => Promise<Command>;
+
+	/** Run a command. */
+	export let run: (
+		arg: Unresolved<Command.Arg>,
+	) => Promise<Artifact | undefined>;
+
+	export let output: Placeholder;
+
+	/** A command. */
+	export class Command {
+		/** Create a command. */
+		static new: (target: Unresolved<Command.Arg>) => Promise<Command>;
+
+		/** Check if a value is a `Command`. */
+		static is: (value: unknown) => value is Command;
+
+		/** Expect that a value is a `Command`. */
+		static expect: (value: unknown) => Command;
+
+		/** Assert that a value is a `Command`. */
+		static assert: (value: unknown) => asserts value is Command;
+
+		/** Get this command's hash. */
+		hash(): Operation.Hash;
+
+		/** Run this command. */
+		run(): Promise<Artifact | undefined>;
+	}
+
+	export namespace Command {
 		export type Arg = {
-			/** The system to run the process on. */
+			/** The system to run the command on. */
 			system: System;
 
-			/** The command to run. */
+			/** The executable to run. */
 			executable: Template.Arg;
 
-			/** The environment variables to set for the process. */
+			/** The environment variables to set for the command. */
 			env?: Record<string, Template.Arg>;
 
-			/** The command line arguments to pass to the process. */
+			/** The command line arguments to pass to the command. */
 			args?: Array<Template.Arg>;
 
-			/** A checksum for the process's output. If set, then unsafe options can be used. */
+			/** A checksum for the command's output. If a checksum is provided, then unsafe options can be used. */
 			checksum?: Checksum;
 
 			/** Use this flag to enable unsafe options without providing a checksum. */
 			unsafe?: boolean;
 
-			/** Whether to enable network access. Because this is an unsafe option, you must either provide a checksum for the process's output or set `unsafe` to `true`. */
+			/** Whether to enable network access. Because this is an unsafe option, you must either provide a checksum for the command's output or set `unsafe` to `true`. */
 			network?: boolean;
 
-			/** Paths on the host to mount in the sandbox the process runs in. Because this is an unsafe option, you must either provide a checksum for the process's output or set `unsafe` to `true`. */
+			/** Paths on the host to mount in the sandbox the command runs in. Because this is an unsafe option, you must either provide a checksum for the command's output or set `unsafe` to `true`. */
 			hostPaths?: Array<string>;
 		};
 	}
-
-	/** Run a process. */
-	export let process: (arg: Unresolved<Process.Arg>) => Promise<Artifact>;
-
-	export let output: Placeholder;
 
 	// Resolve.
 
@@ -380,7 +468,8 @@ declare namespace tg {
 			| number
 			| string
 			| Uint8Array
-			| Path
+			| Relpath
+			| Subpath
 			| Blob
 			| Artifact
 			| Placeholder
@@ -411,7 +500,8 @@ declare namespace tg {
 		| number
 		| string
 		| Uint8Array
-		| Path
+		| Relpath
+		| Subpath
 		| Blob
 		| Artifact
 		| Placeholder
@@ -432,6 +522,76 @@ declare namespace tg {
 
 	export type MaybePromise<T> = T | Promise<T>;
 
+	// Resource.
+
+	/** Create a resource. */
+	export let resource: (arg: Resource.Arg) => Promise<Resource>;
+
+	/** Download a resource. */
+	export let download: (arg: Resource.Arg) => Promise<Artifact>;
+
+	export class Resource {
+		/** Create a symlink. */
+		static new: (target: Unresolved<Resource.Arg>) => Promise<Resource>;
+
+		/** Check if a value is a `Resource`. */
+		static is: (value: unknown) => value is Resource;
+
+		/** Expect that a value is a `Resource`. */
+		static expect: (value: unknown) => Resource;
+
+		/** Assert that a value is a `Resource`. */
+		static assert: (value: unknown) => asserts value is Resource;
+
+		/** Get this resource's hash. */
+		hash(): Operation.Hash;
+
+		/** Get this resource's URL. */
+		url(): string;
+
+		/** Get whether this resource should be unpacked. */
+		unpack(): boolean;
+
+		/** Get this resource's checksum. */
+		checksum(): Checksum | undefined;
+
+		/** Get whether this resource is unsafe. */
+		unsafe(): boolean;
+
+		/** Download this resource. */
+		download(): Promise<Artifact>;
+	}
+
+	export namespace Resource {
+		export type Arg = {
+			/** The resource's URL. */
+			url: string;
+
+			/** Whether to unpack the archive downloaded from the URL. */
+			unpack?: boolean;
+
+			/** The checksum to verify the resource. */
+			checksum?: Checksum;
+
+			/** Whether the resource should be downloaded without verifying its checksum. */
+			unsafe?: boolean;
+		};
+
+		export type UnpackFormat =
+			| ".bz2"
+			| ".gz"
+			| ".lz"
+			| ".xz"
+			| ".zstd"
+			| ".tar"
+			| ".tar.bz2"
+			| ".tar.gz"
+			| ".tar.lz"
+			| ".tar.xz"
+			| ".tar.zstd"
+			| ".zip";
+	}
+
 	// Symlink.
 
 	/** Create a symlink. */
@@ -444,6 +604,12 @@ declare namespace tg {
 		/** Check if a value is a `Symlink`. */
 		static is: (value: unknown) => value is Symlink;
 
+		/** Expect that a value is a `Symlink`. */
+		static expect: (value: unknown) => Symlink;
+
+		/** Assert that a value is a `Symlink`. */
+		static assert: (value: unknown) => asserts value is Symlink;
+
 		/* Get this symlink's hash. */
 		hash(): Artifact.Hash;
 
@@ -455,24 +621,15 @@ declare namespace tg {
 	}
 
 	export namespace Symlink {
-		type Arg = Path.Arg | Artifact | Template | ArgObject;
+		type Arg = Relpath.Arg | Artifact | Template | ArgObject;
 
 		type ArgObject = {
 			artifact?: Artifact;
-			path?: Path.Arg;
+			path?: Subpath.Arg;
 		};
 	}
 
 	// System.
-
-	export namespace System {
-		export type Arg = System | ArgObject;
-
-		export type ArgObject = {
-			arch: System.Arch;
-			os: System.Os;
-		};
-	}
 
 	/** Create a system. */
 	export let system: (arg: System.Arg) => System;
@@ -488,12 +645,25 @@ declare namespace tg {
 
 		export type Os = "linux" | "macos";
 
+		export type Arg = System | ArgObject;
+
+		export type ArgObject = {
+			arch: System.Arch;
+			os: System.Os;
+		};
+
 		/** Create a system. */
 		let new_: (arg: System.Arg) => System;
 		export { new_ as new };
 
 		/** Check if a value is a `System`. */
 		export let is: (value: unknown) => value is System;
+
+		/** Expect that a value is a `System`. */
+		export let expect: (value: unknown) => System;
+
+		/** Assert that a value is a `System`. */
+		export let assert: (value: unknown) => asserts value is System;
 
 		/** Get a system's arch. */
 		export let arch: (value: System) => Arch;
@@ -515,6 +685,12 @@ declare namespace tg {
 		/** Check if a value is a `Template`. */
 		static is: (value: unknown) => value is Template;
 
+		/** Expect that a value is a `Template`. */
+		static expect: (value: unknown) => Template;
+
+		/** Assert that a value is a `Template`. */
+		static assert: (value: unknown) => asserts value is Template;
+
 		/** Join an array of templates with a separator. */
 		static join(
 			separator: Template.Arg,
@@ -529,20 +705,35 @@ declare namespace tg {
 		export type Arg =
 			| undefined
 			| Template.Component
-			| Path
+			| Relpath
+			| Subpath
 			| Template
 			| Array<Arg>;
 
 		export namespace Arg {
 			/** Check if a value is a `Template.Arg`. */
-			export let is: (value: unknown) => value is Arg;
+			export let is: (value: unknown) => value is Template.Arg;
+
+			/** Expect that a value is a `Template.Arg`. */
+			export let expect: (value: unknown) => Template.Arg;
+
+			/** Assert that a value is a `Template.Arg`. */
+			export let assert: (value: unknown) => asserts value is Template.Arg;
 		}
 
 		export type Component = string | Artifact | Placeholder;
 
 		export namespace Component {
 			/** Check if a value is a `Template.Component`. */
-			export let is: (value: unknown) => value is Component;
+			export let is: (value: unknown) => value is Template.Component;
+
+			/** Expect that a value is a `Template.Component`. */
+			export let expect: (value: unknown) => Template.Component;
+
+			/** Assert that a value is a `Template.Component`. */
+			export let assert: (
+				value: unknown,
+			) => asserts value is Template.Component;
 		}
 	}
 
@@ -555,17 +746,25 @@ declare namespace tg {
 		| number
 		| string
 		| Uint8Array
-		| Path
+		| Relpath
+		| Subpath
 		| Blob
 		| Artifact
 		| Placeholder
 		| Template
+		| Operation
 		| Array<Value>
 		| { [key: string]: Value };
 
 	export namespace Value {
 		/** Check if a value is a `Value`. */
 		export let is: (value: unknown) => value is Value;
+
+		/** Expect that a value is a `Value`. */
+		export let expect: (value: unknown) => Value;
+
+		/** Assert that a value is a `Value`. */
+		export let assert: (value: unknown) => asserts value is Value;
 	}
 }
 

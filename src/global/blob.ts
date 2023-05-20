@@ -1,5 +1,10 @@
+import { assert as assert_ } from "./assert.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
+
+export let blob = async (arg: Blob.Arg) => {
+	return await Blob.new(arg);
+};
 
 type ConstructorArg = {
 	hash: Blob.Hash;
@@ -25,6 +30,15 @@ export class Blob {
 
 	static is(value: unknown): value is Blob {
 		return value instanceof Blob;
+	}
+
+	static expect(value: unknown): Blob {
+		assert_(Blob.is(value));
+		return value;
+	}
+
+	static assert(value: unknown): asserts value is Blob {
+		assert_(Blob.is(value));
 	}
 
 	toSyscall(): syscall.Blob {
@@ -62,9 +76,16 @@ export namespace Blob {
 				value instanceof Blob
 			);
 		};
+
+		export let expect = (value: unknown): Arg => {
+			assert_(is(value));
+			return value;
+		};
+
+		export let assert = (value: unknown): asserts value is Arg => {
+			assert_(is(value));
+		};
 	}
 
 	export type Hash = string;
 }
-
-export let blob = Blob.new;

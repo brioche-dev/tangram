@@ -2,6 +2,7 @@ pub use self::data::Data;
 use crate::{
 	artifact::Artifact,
 	blob::Blob,
+	operation::Operation,
 	path::{Relpath, Subpath},
 	placeholder::Placeholder,
 	template::Template,
@@ -29,11 +30,11 @@ pub enum Value {
 	/// A bytes value.
 	Bytes(Vec<u8>),
 
-	/// A subpath value.
-	Subpath(Subpath),
-
 	/// A relpath value.
 	Relpath(Relpath),
+
+	/// A subpath value.
+	Subpath(Subpath),
 
 	/// A blob value.
 	Blob(Blob),
@@ -46,6 +47,9 @@ pub enum Value {
 
 	/// A template value.
 	Template(Template),
+
+	/// An operation value.
+	Operation(Operation),
 
 	/// An array value.
 	Array(Array),
@@ -96,6 +100,42 @@ impl Value {
 	}
 
 	#[must_use]
+	pub fn as_bytes(&self) -> Option<&[u8]> {
+		if let Self::Bytes(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_relpath(&self) -> Option<&Relpath> {
+		if let Self::Relpath(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_subpath(&self) -> Option<&Subpath> {
+		if let Self::Subpath(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_blob(&self) -> Option<&Blob> {
+		if let Self::Blob(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
 	pub fn as_artifact(&self) -> Option<&Artifact> {
 		if let Self::Artifact(v) = self {
 			Some(v)
@@ -116,6 +156,15 @@ impl Value {
 	#[must_use]
 	pub fn as_template(&self) -> Option<&Template> {
 		if let Self::Template(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_operation(&self) -> Option<&Operation> {
+		if let Self::Operation(v) = self {
 			Some(v)
 		} else {
 			None
@@ -179,6 +228,42 @@ impl Value {
 	}
 
 	#[must_use]
+	pub fn into_bytes(self) -> Option<Vec<u8>> {
+		if let Self::Bytes(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_relpath(self) -> Option<Relpath> {
+		if let Self::Relpath(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_subpath(self) -> Option<Subpath> {
+		if let Self::Subpath(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_blob(self) -> Option<Blob> {
+		if let Self::Blob(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
 	pub fn into_artifact(self) -> Option<Artifact> {
 		if let Self::Artifact(v) = self {
 			Some(v)
@@ -199,6 +284,15 @@ impl Value {
 	#[must_use]
 	pub fn into_template(self) -> Option<Template> {
 		if let Self::Template(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn into_operation(self) -> Option<Operation> {
+		if let Self::Operation(v) = self {
 			Some(v)
 		} else {
 			None

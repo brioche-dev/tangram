@@ -1,10 +1,10 @@
-use super::Hash;
+use super::{Hash, Operation};
 use crate::{
-	call::{self, Call},
-	download::{self, Download},
+	command::{self, Command},
 	error::{return_error, Result},
+	function::{self, Function},
 	instance::Instance,
-	process::{self, Process},
+	resource::{self, Resource},
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -14,13 +14,13 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Data {
 	#[buffalo(id = 0)]
-	Call(call::Data),
+	Command(command::Data),
 
 	#[buffalo(id = 1)]
-	Download(download::Data),
+	Function(function::Data),
 
 	#[buffalo(id = 2)]
-	Process(process::Data),
+	Resource(resource::Data),
 }
 
 impl Data {
@@ -54,21 +54,21 @@ impl Data {
 	}
 }
 
-impl super::Operation {
+impl Operation {
 	#[must_use]
 	pub fn to_data(&self) -> Data {
 		match self {
-			Self::Call(call) => Data::Call(call.to_data()),
-			Self::Download(download) => Data::Download(download.to_data()),
-			Self::Process(process) => Data::Process(process.to_data()),
+			Self::Command(command) => Data::Command(command.to_data()),
+			Self::Function(function) => Data::Function(function.to_data()),
+			Self::Resource(resource) => Data::Resource(resource.to_data()),
 		}
 	}
 
 	pub async fn from_data(tg: &Instance, hash: Hash, data: Data) -> Result<Self> {
 		let operation = match data {
-			Data::Call(data) => Self::Call(Call::from_data(tg, hash, data).await?),
-			Data::Download(data) => Self::Download(Download::from_data(hash, data)),
-			Data::Process(data) => Self::Process(Process::from_data(tg, hash, data).await?),
+			Data::Command(data) => Self::Command(Command::from_data(tg, hash, data).await?),
+			Data::Function(data) => Self::Function(Function::from_data(tg, hash, data).await?),
+			Data::Resource(data) => Self::Resource(Resource::from_data(hash, data)),
 		};
 		Ok(operation)
 	}

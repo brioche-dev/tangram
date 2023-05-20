@@ -1,6 +1,8 @@
 import * as syscall from "./syscall.ts";
 
-export type Checksum = `${Checksum.Algorithm}${":" | "-"}${string}`;
+export let checksum = Checksum.new;
+
+export type Checksum = string;
 
 export declare namespace Checksum {
 	let new_: (algorithm: Checksum.Algorithm, bytes: Uint8Array) => Checksum;
@@ -18,5 +20,3 @@ export namespace Checksum {
 	};
 	Checksum.new = new_;
 }
-
-export let checksum = Checksum.new;

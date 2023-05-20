@@ -16,7 +16,7 @@ impl Package {
 		let mut directory = directory::Builder::new();
 
 		// Add each module and its includes to the package directory.
-		for (module_path, analyze_output) in Self::analyze_path(tg, package_path).await? {
+		for (module_path, analyze_output) in Self::analyze_path(package_path).await? {
 			// Get the module's path.
 			let path = package_path.join(module_path.to_string());
 

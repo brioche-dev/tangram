@@ -1,7 +1,6 @@
 use super::{Package, ROOT_MODULE_FILE_NAME};
 use crate::{
 	error::{Result, WrapErr},
-	language,
 	module::{self, Module},
 	path::Subpath,
 };
@@ -13,9 +12,8 @@ use std::{
 
 impl Package {
 	pub(crate) async fn analyze_path(
-		tg: &Arc<crate::instance::Instance>,
 		package_path: &Path,
-	) -> Result<HashMap<Subpath, language::analyze::Output, fnv::FnvBuildHasher>> {
+	) -> Result<HashMap<Subpath, module::analyze::Output, fnv::FnvBuildHasher>> {
 		// Create a queue of paths to visit and a visited set.
 		let mut output = HashMap::default();
 		let mut queue = VecDeque::from(vec![Subpath::try_from(ROOT_MODULE_FILE_NAME).unwrap()]);
@@ -28,9 +26,7 @@ impl Package {
 				.wrap_err("Failed to read the module.")?;
 
 			// Analyze the module and get its imports.
-			let analyze_output = Module::analyze(tg, text)
-				.await
-				.wrap_err("Failed to analyze the module.")?;
+			let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
 
 			// Add the path and analyze output to the output.
 			output.insert(path.clone(), analyze_output.clone());
@@ -58,7 +54,7 @@ impl Package {
 	pub(crate) async fn analyze(
 		&self,
 		tg: &Arc<crate::instance::Instance>,
-	) -> Result<HashMap<Subpath, language::analyze::Output, fnv::FnvBuildHasher>> {
+	) -> Result<HashMap<Subpath, module::analyze::Output, fnv::FnvBuildHasher>> {
 		// Create a queue of paths to visit and a visited set.
 		let mut output = HashMap::default();
 		let mut queue = VecDeque::from(vec![Subpath::try_from(ROOT_MODULE_FILE_NAME).unwrap()]);
@@ -78,7 +74,7 @@ impl Package {
 				.await?;
 
 			// Analyze the module and get its imports.
-			let analyze_output = Module::analyze(tg, text).await?;
+			let analyze_output = Module::analyze(text)?;
 
 			// Add the path and analyze output to the output.
 			output.insert(path.clone(), analyze_output.clone());

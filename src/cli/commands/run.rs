@@ -7,7 +7,6 @@ use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram::{
 	artifact::Artifact,
 	function::Function,
-	operation::Call,
 	package::{self, Package, ROOT_MODULE_FILE_NAME},
 };
 
@@ -46,17 +45,19 @@ impl Cli {
 			.wrap_err("Failed to create the package instance.")?;
 
 		// Run the operation.
-		let function = Function::new(
-			&package_instance,
-			ROOT_MODULE_FILE_NAME.parse().unwrap(),
-			args.function,
-		);
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let call = Call::new(&self.tg, function, env, args_)
-			.await
-			.wrap_err("Failed to create the call.")?;
-		let output = call.run(&self.tg).await?;
+		let function = Function::new(
+			&self.tg,
+			package_instance,
+			ROOT_MODULE_FILE_NAME.parse().unwrap(),
+			args.function,
+			env,
+			args_,
+		)
+		.await
+		.wrap_err("Failed to create the function.")?;
+		let output = function.call(&self.tg).await?;
 
 		// Get the output artifact.
 		let artifact = output
@@ -80,7 +81,7 @@ impl Cli {
 			}
 		};
 
-		// Exec the process.
+		// Exec.
 		Err(std::process::Command::new(executable_path)
 			.args(args.trailing_args)
 			.exec()

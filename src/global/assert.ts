@@ -7,6 +7,10 @@ export let assert: (
 	}
 };
 
+export let unimplemented = (message?: string): never => {
+	throw new Error(message ?? "Reached unimplemented code.");
+};
+
 export let unreachable = (message?: string): never => {
 	throw new Error(message ?? "Reached unreachable code.");
 };

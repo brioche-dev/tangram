@@ -1,5 +1,9 @@
 import * as syscall from "./syscall.ts";
 
+export let placeholder = (name: string) => {
+	return Placeholder.new(name);
+};
+
 export class Placeholder {
 	#name: string;
 
@@ -30,5 +34,3 @@ export class Placeholder {
 		return this.#name;
 	}
 }
-
-export let placeholder = Placeholder.new;

@@ -6,7 +6,7 @@ use crate::{
 use url::Url;
 
 /// An import specifier in a Tangram TypeScript module.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]
 pub enum Specifier {
 	/// A module specifier that refers to a module in the current package, such as `import "./module.tg"`.

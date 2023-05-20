@@ -1,38 +1,36 @@
 import { unreachable } from "./assert.ts";
-import { Call } from "./call.ts";
-import { Download } from "./download.ts";
-import { Process } from "./process.ts";
+import { Command } from "./command.ts";
+import { Function } from "./function.ts";
+import { Resource } from "./resource.ts";
 import * as syscall from "./syscall.ts";
 
-export type Operation = Call | Download | Process;
+export type Operation = Command | Function | Resource;
 
 export namespace Operation {
 	export type Hash = string;
 
-	export type Kind = "download" | "process" | "call";
-
 	export let is = (value: unknown): value is Operation => {
 		return (
-			value instanceof Call ||
-			value instanceof Download ||
-			value instanceof Process
+			value instanceof Command ||
+			value instanceof Function ||
+			value instanceof Resource
 		);
 	};
 
 	export let toSyscall = (operation: Operation): syscall.Operation => {
-		if (operation instanceof Download) {
+		if (operation instanceof Command) {
 			return {
-				kind: "download",
+				kind: "command",
 				value: operation.toSyscall(),
 			};
-		} else if (operation instanceof Process) {
+		} else if (operation instanceof Function) {
 			return {
-				kind: "process",
+				kind: "function",
 				value: operation.toSyscall(),
 			};
-		} else if (operation instanceof Call) {
+		} else if (operation instanceof Resource) {
 			return {
-				kind: "call",
+				kind: "resource",
 				value: operation.toSyscall(),
 			};
 		} else {
@@ -40,19 +38,16 @@ export namespace Operation {
 		}
 	};
 
-	export let fromSyscall = (
-		hash: Operation.Hash,
-		operation: syscall.Operation,
-	): Operation => {
+	export let fromSyscall = (operation: syscall.Operation): Operation => {
 		switch (operation.kind) {
-			case "download": {
-				return Download.fromSyscall(operation.value);
+			case "command": {
+				return Command.fromSyscall(operation.value);
 			}
-			case "process": {
-				return Process.fromSyscall(operation.value);
+			case "function": {
+				return Function.fromSyscall(operation.value);
 			}
-			case "call": {
-				return Call.fromSyscall(operation.value);
+			case "resource": {
+				return Resource.fromSyscall(operation.value);
 			}
 			default: {
 				return unreachable();

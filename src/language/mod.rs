@@ -6,7 +6,6 @@ pub use self::{
 	range::Range,
 };
 
-pub mod analyze;
 pub mod check;
 pub mod completion;
 pub mod definition;
@@ -22,4 +21,3 @@ pub mod references;
 pub mod rename;
 pub mod service;
 pub mod symbols;
-pub mod transpile;

@@ -1,18 +1,17 @@
 import { Artifact } from "./artifact.ts";
 import { Blob, blob } from "./blob.ts";
-import { call } from "./call.ts";
+import { command, output, run } from "./command.ts";
 import { Directory, directory } from "./directory.ts";
-import { download } from "./download.ts";
 import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
-import { Function, function_ } from "./function.ts";
+import { Function, call, entrypoint, function_ } from "./function.ts";
 import { include } from "./include.ts";
 import { log } from "./log.ts";
-import { Path, path } from "./path.ts";
+import { Relpath, Subpath, relpath, subpath } from "./path.ts";
 import { Placeholder, placeholder } from "./placeholder.ts";
-import { output, process } from "./process.ts";
 import { resolve } from "./resolve.ts";
+import { download, resource } from "./resource.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import { base64, hex, json, toml, utf8, yaml } from "./syscall.ts";
 import { System, system } from "./system.ts";
@@ -39,8 +38,9 @@ let tg = {
 	Directory,
 	File,
 	Function,
-	Path,
 	Placeholder,
+	Relpath,
+	Subpath,
 	Symlink,
 	System,
 	Template,
@@ -48,8 +48,10 @@ let tg = {
 	base64,
 	blob,
 	call,
+	command,
 	directory,
 	download,
+	entrypoint,
 	env,
 	file,
 	function: function_,
@@ -58,10 +60,12 @@ let tg = {
 	json,
 	log,
 	output,
-	path,
 	placeholder,
-	process,
+	relpath,
 	resolve,
+	resource,
+	run,
+	subpath,
 	symlink,
 	system,
 	template,

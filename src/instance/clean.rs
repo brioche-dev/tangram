@@ -128,35 +128,40 @@ impl Instance {
 					}
 
 					match operation {
-						Operation::Download(_) => {},
+						Operation::Resource(_) => {},
 
-						Operation::Process(process) => {
+						Operation::Command(command) => {
 							// Add the executable to the queue.
 							queue.push_back(QueueItem::Value(Value::Template(
-								process.executable().clone(),
+								command.executable().clone(),
 							)));
 
 							// Add the env to the queue.
-							for template in process.env().values() {
+							for template in command.env().values() {
 								queue
 									.push_back(QueueItem::Value(Value::Template(template.clone())));
 							}
 
 							// Add the args to the queue.
-							for template in process.args() {
+							for template in command.args() {
 								queue
 									.push_back(QueueItem::Value(Value::Template(template.clone())));
 							}
 						},
 
-						Operation::Call(call) => {
+						Operation::Function(function) => {
 							// Add the package instance to the queue.
 							queue.push_back(QueueItem::PackageInstance(
-								call.function.package_instance(self).await?,
+								function.package_instance(self).await?,
 							));
 
+							// Add the env to the queue.
+							for value in function.env.into_values() {
+								queue.push_back(QueueItem::Value(value));
+							}
+
 							// Add the args to the queue.
-							for value in call.args {
+							for value in function.args {
 								queue.push_back(QueueItem::Value(value));
 							}
 						},
@@ -208,6 +213,11 @@ impl Instance {
 								},
 							}
 						}
+					},
+
+					Value::Operation(operation) => {
+						// Add the artifact to the queue.
+						queue.push_back(QueueItem::Operation(operation));
 					},
 
 					Value::Array(array) => {

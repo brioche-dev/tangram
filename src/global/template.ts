@@ -1,6 +1,6 @@
 import { Artifact } from "./artifact.ts";
-import { assert, unreachable } from "./assert.ts";
-import { Path } from "./path.ts";
+import { assert as assert_, unreachable } from "./assert.ts";
+import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
@@ -35,7 +35,7 @@ export class Template {
 		let collectComponents = (arg: Template.Arg) => {
 			if (Template.Component.is(arg)) {
 				components.push(arg);
-			} else if (arg instanceof Path) {
+			} else if (arg instanceof Relpath || arg instanceof Subpath) {
 				components.push(arg.toString());
 			} else if (arg instanceof Template) {
 				components.push(...arg.components());
@@ -82,6 +82,15 @@ export class Template {
 		return value instanceof Template;
 	}
 
+	static expect(value: unknown): Template {
+		assert_(Template.is(value));
+		return value;
+	}
+
+	static assert(value: unknown): asserts value is Template {
+		assert_(Template.is(value));
+	}
+
 	/** Join an array of templates with a separator. */
 	static async join(
 		separator: Unresolved<Template.Arg>,
@@ -96,7 +105,7 @@ export class Template {
 				templates.push(separatorTemplate);
 			}
 			let argTemplate = argTemplates[i];
-			assert(argTemplate);
+			assert_(argTemplate);
 			templates.push(argTemplate);
 		}
 		return template(...templates);
@@ -137,7 +146,7 @@ export namespace Template {
 
 		export let toSyscall = (
 			component: Component,
-		): syscall.TemplateComponent => {
+		): syscall.Template.Component => {
 			if (typeof component === "string") {
 				return {
 					kind: "string",
@@ -159,7 +168,7 @@ export namespace Template {
 		};
 
 		export let fromSyscall = (
-			component: syscall.TemplateComponent,
+			component: syscall.Template.Component,
 		): Component => {
 			switch (component.kind) {
 				case "string": {
@@ -180,13 +189,20 @@ export namespace Template {
 }
 
 export namespace Template {
-	export type Arg = undefined | Component | Path | Template | Array<Arg>;
+	export type Arg =
+		| undefined
+		| Component
+		| Relpath
+		| Subpath
+		| Template
+		| Array<Arg>;
 
 	export namespace Arg {
 		export let is = (value: unknown): value is Template.Arg => {
 			return (
 				Template.Component.is(value) ||
-				value instanceof Path ||
+				value instanceof Relpath ||
+				value instanceof Subpath ||
 				value instanceof Template ||
 				(value instanceof Array && value.every(Template.Arg.is))
 			);

@@ -1,12 +1,25 @@
-pub use self::data::Data;
-use crate::{error::Result, instance::Instance, package, path::Subpath};
+pub use self::{data::Data, error::Error};
+use crate::{error::Result, instance::Instance, operation, package, path::Subpath, value::Value};
+use std::collections::BTreeMap;
 
+mod call;
+mod context;
 mod data;
+mod error;
+mod exception;
+mod isolate;
+mod module;
+mod new;
+mod state;
+mod syscall;
 
 /// A function.
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Function {
+	/// The hash.
+	pub hash: operation::Hash,
+
 	/// The hash of the package instance of the function.
 	pub package_instance_hash: package::instance::Hash,
 
@@ -15,16 +28,18 @@ pub struct Function {
 
 	/// The name of the function.
 	pub name: String,
+
+	/// The environment variables to call the function with.
+	pub env: BTreeMap<String, Value>,
+
+	/// The arguments to call the function with.
+	pub args: Vec<Value>,
 }
 
 impl Function {
 	#[must_use]
-	pub fn new(package_instance: &package::Instance, module_path: Subpath, name: String) -> Self {
-		Self {
-			package_instance_hash: package_instance.hash(),
-			module_path,
-			name,
-		}
+	pub fn hash(&self) -> operation::Hash {
+		self.hash
 	}
 
 	pub async fn package_instance(&self, tg: &Instance) -> Result<package::Instance> {

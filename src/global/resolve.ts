@@ -1,9 +1,12 @@
 import { Artifact } from "./artifact.ts";
 import { Blob } from "./blob.ts";
+import { Command } from "./command.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Path } from "./path.ts";
+import { Operation } from "./operation.ts";
+import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
+import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
 import { Template } from "./template.ts";
 import { Value } from "./value.ts";
@@ -15,11 +18,13 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| number
 		| string
 		| Uint8Array
-		| Path
+		| Relpath
+		| Subpath
 		| Blob
 		| Artifact
 		| Placeholder
 		| Template
+		| Operation
 		? T
 		: T extends Array<infer U extends Value>
 		? Array<Unresolved<U>>
@@ -34,11 +39,13 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| number
 	| string
 	| Uint8Array
-	| Path
+	| Relpath
+	| Subpath
 	| Blob
 	| Artifact
 	| Placeholder
 	| Template
+	| Operation
 	? T
 	: T extends Promise<infer U extends Unresolved<Value>>
 	? Resolved<U>
@@ -60,13 +67,17 @@ export let resolve = async <T extends Unresolved<Value>>(
 		typeof value === "number" ||
 		typeof value === "string" ||
 		value instanceof Uint8Array ||
-		value instanceof Path ||
+		value instanceof Relpath ||
+		value instanceof Subpath ||
 		value instanceof Blob ||
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||
 		value instanceof Placeholder ||
-		value instanceof Template
+		value instanceof Template ||
+		value instanceof Command ||
+		value instanceof Function ||
+		value instanceof Resource
 	) {
 		return value as unknown as Resolved<T>;
 	} else if (value instanceof Array) {

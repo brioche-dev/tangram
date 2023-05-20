@@ -7,11 +7,14 @@ use crate::{
 };
 use url::Url;
 
+pub mod analyze;
 pub mod dependency;
 pub mod load;
+mod parse;
 mod path;
 pub mod resolve;
 pub mod specifier;
+pub mod transpile;
 mod version;
 
 /// A module.

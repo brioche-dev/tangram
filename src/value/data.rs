@@ -1,8 +1,10 @@
+use super::Value;
 use crate::{
 	artifact::{self, Artifact},
 	blob::{self, Blob},
 	error::{return_error, Error, Result},
 	instance::Instance,
+	operation::{self, Operation},
 	path::{Relpath, Subpath},
 	placeholder::{self, Placeholder},
 	template::{self, Template},
@@ -33,10 +35,10 @@ pub enum Data {
 	Bytes(Vec<u8>),
 
 	#[buffalo(id = 5)]
-	Subpath(Subpath),
+	Relpath(Relpath),
 
 	#[buffalo(id = 6)]
-	Relpath(Relpath),
+	Subpath(Subpath),
 
 	#[buffalo(id = 7)]
 	Blob(blob::Hash),
@@ -51,9 +53,12 @@ pub enum Data {
 	Template(template::Data),
 
 	#[buffalo(id = 11)]
-	Array(Array),
+	Operation(operation::Hash),
 
 	#[buffalo(id = 12)]
+	Array(Array),
+
+	#[buffalo(id = 13)]
 	Object(Object),
 }
 
@@ -92,7 +97,7 @@ impl Data {
 	}
 }
 
-impl super::Value {
+impl Value {
 	pub fn to_data(&self) -> Data {
 		match self {
 			Self::Null(_) => Data::Null(()),
@@ -106,6 +111,7 @@ impl super::Value {
 			Self::Artifact(artifact) => Data::Artifact(artifact.hash()),
 			Self::Placeholder(placeholder) => Data::Placeholder(placeholder.to_data()),
 			Self::Template(template) => Data::Template(template.to_data()),
+			Self::Operation(operation) => Data::Operation(operation.hash()),
 			Self::Array(array) => Data::Array(array.iter().map(Self::to_data).collect()),
 			Self::Object(map) => Data::Object(
 				map.iter()
@@ -140,6 +146,10 @@ impl super::Value {
 			Data::Template(template) => {
 				let template = Template::from_data(tg, template).await?;
 				Ok(Self::Template(template))
+			},
+			Data::Operation(hash) => {
+				let operation = Operation::get(tg, hash).await?;
+				Ok(Self::Operation(operation))
 			},
 			Data::Array(array) => {
 				let array =

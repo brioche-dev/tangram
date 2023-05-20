@@ -1,182 +1,205 @@
+import { assert as assert_ } from "./assert.ts";
 import * as syscall from "./syscall.ts";
 
-export class Path {
-	#components: Array<Path.Component>;
+export let relpath = (...args: Array<Relpath.Arg>): Relpath => {
+	return Relpath.new(...args);
+};
 
-	static new(...args: Array<Path.Arg>): Path {
-		// Collect the components.
-		let components: Array<Path.Component> = [];
-		let collectComponents = (arg: Path.Arg) => {
+export let subpath = (...args: Array<Subpath.Arg>): Subpath => {
+	return Subpath.new(...args);
+};
+
+type RelpathConstructorArg = {
+	parents?: number;
+	subpath?: Subpath;
+};
+
+export class Relpath {
+	#parents: number;
+	#subpath: Subpath;
+
+	static new(...args: Array<Relpath.Arg>): Relpath {
+		let path = new Relpath();
+		let visit = (arg: Relpath.Arg) => {
 			if (typeof arg === "string") {
-				// Push each component.
 				for (let component of arg.split("/")) {
 					if (component === "" || component === ".") {
-						// Ignore empty and current dir components.
+						continue;
 					} else if (component === "..") {
-						components.push({ kind: "parent" });
+						path = path.parent();
 					} else {
-						components.push({
-							kind: "normal",
-							value: component,
-						});
+						path.#subpath.push(component);
 					}
 				}
-			} else if (Path.Component.is(arg)) {
-				components.push(arg);
-			} else if (arg instanceof Path) {
-				components.push(...arg.components());
+			} else if (arg instanceof Relpath) {
+				for (let i = 0; i < arg.#parents; i++) {
+					path.parent();
+				}
+				path.#subpath.join(arg.#subpath);
+			} else if (arg instanceof Subpath) {
+				path.#subpath.join(arg);
 			} else if (arg instanceof Array) {
-				for (let component of arg) {
-					collectComponents(component);
+				for (let entry of arg) {
+					visit(entry);
 				}
 			}
 		};
 		for (let arg of args) {
-			collectComponents(arg);
+			visit(arg);
 		}
-
-		// Create the path.
-		let path_ = new Path();
-		for (let component of components) {
-			path_.push(component);
-		}
-
-		return path_;
+		return path;
 	}
 
-	constructor(components: Array<Path.Component> = []) {
-		this.#components = components;
+	constructor(arg?: RelpathConstructorArg) {
+		this.#parents = arg?.parents ?? 0;
+		this.#subpath = arg?.subpath ?? new Subpath();
 	}
 
-	static is(value: unknown): value is Path {
-		return value instanceof Path;
+	static is(value: unknown): value is Relpath {
+		return value instanceof Relpath;
 	}
 
-	toSyscall(): syscall.Path {
+	toSyscall(): syscall.Relpath {
 		return this.toString();
 	}
 
-	static fromSyscall(value: syscall.Path): Path {
-		return path(value);
+	static fromSyscall(value: syscall.Relpath): Relpath {
+		return Relpath.new(value);
 	}
 
-	components(): Array<Path.Component> {
-		return [...this.#components];
+	isEmpty(): boolean {
+		return this.#parents == 0 && this.#subpath.isEmpty();
 	}
 
-	push(component: Path.Component) {
-		if (component.kind === "parent") {
-			let lastComponent = this.#components.at(-1);
-			if (lastComponent === undefined || lastComponent.kind === "parent") {
-				this.#components.push(component);
-			} else {
-				this.#components.pop();
-			}
+	parents(): number {
+		return this.#parents;
+	}
+
+	subpath(): Subpath {
+		return this.#subpath;
+	}
+
+	parent(): Relpath {
+		if (this.#subpath.isEmpty()) {
+			this.#parents += 1;
 		} else {
-			this.#components.push(component);
+			this.#subpath.pop();
 		}
+		return this;
 	}
 
-	join(other: Path.Arg): Path {
-		let result = path(this);
-		for (let component of path(other).components()) {
-			result.push(component);
+	join(other: Relpath.Arg): Relpath {
+		other = Relpath.new(other);
+		for (let i = 0; i < other.#parents; i++) {
+			this.parent();
 		}
-		return result;
+		this.#subpath.join(other.#subpath);
+		return this;
 	}
 
-	diff(src: Path.Arg): Path {
-		let srcPath = path(src);
-		let dstPath = path(this);
+	extension(): string | undefined {
+		return this.#subpath.extension();
+	}
 
-		// Remove the paths' common ancestor.
-		while (true) {
-			let srcComponent = srcPath.#components.at(0);
-			let dstComponent = dstPath.#components.at(0);
-			if (
-				srcComponent &&
-				dstComponent &&
-				Path.Component.equal(srcComponent, dstComponent)
-			) {
-				srcPath.#components.shift();
-				dstPath.#components.shift();
-			} else {
-				break;
-			}
+	toSubpath(): Subpath {
+		if (this.#parents > 0) {
+			throw new Error("Cannot convert to subpath.");
 		}
-
-		// If there is no valid path from the base to the target, then throw an error.
-		if (srcPath.#components.at(0)?.kind === "parent") {
-			throw new Error(
-				`There is no valid path from "${srcPath}" to "${dstPath}".`,
-			);
-		}
-
-		// Construct the path.
-		let output = path(
-			Array.from({ length: srcPath.#components.length }, () => ({
-				kind: "parent",
-			})),
-			dstPath,
-		);
-		return output;
+		return this.#subpath;
 	}
 
 	toString(): string {
-		return this.#components
-			.map((component) => {
-				switch (component.kind) {
-					case "parent": {
-						return "..";
-					}
-					case "normal": {
-						return component.value;
-					}
-				}
-			})
-			.join("/");
+		let string = "";
+		for (let i = 0; i < this.#parents; i++) {
+			string += "../";
+		}
+		string += this.#subpath.toString();
+		return string;
 	}
 }
 
-export namespace Path {
-	export type Component =
-		| { kind: "parent" }
-		| { kind: "normal"; value: string };
-
-	export namespace Component {
-		export let is = (value: unknown): value is Path.Component => {
-			return (
-				typeof value === "object" &&
-				value !== null &&
-				"kind" in value &&
-				(value.kind === "parent" || value.kind === "normal")
-			);
-		};
-
-		export let equal = (a: Path.Component, b: Path.Component): boolean => {
-			return (
-				a.kind === b.kind &&
-				(a.kind === "normal" && b.kind === "normal"
-					? a.value === b.value
-					: true)
-			);
-		};
-	}
-}
-
-export namespace Path {
-	export type Arg = string | Path.Component | Path | Array<Arg>;
+export namespace Relpath {
+	export type Arg = undefined | string | Subpath | Relpath | Array<Arg>;
 
 	export namespace Arg {
-		export let is = (value: unknown): value is Path.Arg => {
+		export let is = (value: unknown): value is Relpath.Arg => {
 			return (
+				value === undefined ||
 				typeof value === "string" ||
-				Path.Component.is(value) ||
-				value instanceof Path ||
-				(value instanceof Array && value.every(Path.Arg.is))
+				value instanceof Subpath ||
+				value instanceof Relpath ||
+				(value instanceof Array && value.every(Relpath.Arg.is))
 			);
+		};
+
+		export let expect = (value: unknown): Relpath.Arg => {
+			assert_(is(value));
+			return value;
+		};
+
+		export let assert = (value: unknown): asserts value is Relpath.Arg => {
+			assert_(is(value));
 		};
 	}
 }
 
-export let path = Path.new;
+export class Subpath {
+	#components: Array<string>;
+
+	static new(...args: Array<Subpath.Arg>): Subpath {
+		return Relpath.new(...args).toSubpath();
+	}
+
+	constructor(components?: Array<string>) {
+		this.#components = components ?? [];
+	}
+
+	static is(value: unknown): value is Subpath {
+		return value instanceof Subpath;
+	}
+
+	toSyscall(): syscall.Subpath {
+		return this.toString();
+	}
+
+	static fromSyscall(value: syscall.Subpath): Subpath {
+		return subpath(value);
+	}
+
+	components(): Array<string> {
+		return [...this.#components];
+	}
+
+	isEmpty(): boolean {
+		return this.#components.length == 0;
+	}
+
+	join(other: Subpath): Subpath {
+		this.#components.push(...other.#components);
+		return this;
+	}
+
+	push(component: string) {
+		this.#components.push(component);
+	}
+
+	pop() {
+		this.#components.pop();
+	}
+
+	extension(): string | undefined {
+		return this.#components.at(-1)?.split(".").at(-1);
+	}
+
+	toRelpath(): Relpath {
+		return Relpath.new(this);
+	}
+
+	toString(): string {
+		return this.#components.join("/");
+	}
+}
+
+export namespace Subpath {
+	export type Arg = undefined | string | Subpath | Array<Arg>;
+}

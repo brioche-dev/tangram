@@ -61,7 +61,7 @@ declare global {
 	function syscall(syscall: "json_decode", value: string): unknown;
 
 	/** Encode a value to a json string. */
-	function syscall(syscall: "json_encode", value: any): string;
+	function syscall(syscall: "json_encode", value: unknown): string;
 }
 
 export let json = {
@@ -73,7 +73,7 @@ export let json = {
 		}
 	},
 
-	encode: (value: any): string => {
+	encode: (value: unknown): string => {
 		try {
 			return syscall("json_encode", value);
 		} catch (cause) {

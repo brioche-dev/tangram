@@ -1,4 +1,4 @@
-import { unreachable } from "./assert.ts";
+import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Symlink } from "./symlink.ts";
@@ -15,6 +15,15 @@ export namespace Artifact {
 			value instanceof File ||
 			value instanceof Symlink
 		);
+	};
+
+	export let expect = (value: unknown): Artifact => {
+		assert_(is(value));
+		return value;
+	};
+
+	export let assert = (value: unknown): asserts value is Artifact => {
+		assert_(is(value));
 	};
 
 	export let get = async (hash: Hash): Promise<Artifact> => {

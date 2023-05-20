@@ -1,4 +1,4 @@
-use crate::{call, download, process};
+use crate::{command, function, resource};
 use thiserror::Error;
 
 /// An operation result.
@@ -8,17 +8,17 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Clone, Debug, Error, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Error {
-	/// An error from a download.
+	/// An error from a command.
 	#[error(transparent)]
-	Download(#[from] download::Error),
+	Command(#[from] command::Error),
 
-	/// An error from a process.
+	/// An error from a function.
 	#[error(transparent)]
-	Process(#[from] process::Error),
+	Function(#[from] function::Error),
 
-	/// An error from a call.
+	/// An error from a resource.
 	#[error(transparent)]
-	Call(#[from] call::Error),
+	Resource(#[from] resource::Error),
 
 	/// A cancellation.
 	#[error("The operation was cancelled.")]

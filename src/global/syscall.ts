@@ -1,96 +1,26 @@
-export type ArtifactHash = string;
-
 export type Artifact =
 	| { kind: "directory"; value: Directory }
 	| { kind: "file"; value: File }
 	| { kind: "symlink"; value: Symlink };
 
-export type BlobHash = string;
+export namespace Artifact {
+	export type Hash = string;
+}
 
 export type Blob = {
-	hash: BlobHash;
+	hash: Blob.Hash;
 };
 
-export type Directory = {
-	hash: ArtifactHash;
-	entries: Record<string, ArtifactHash>;
-};
+export namespace Blob {
+	export type Hash = string;
+}
 
-export type File = {
-	hash: ArtifactHash;
-	blob: Blob;
-	executable: boolean;
-	references: Array<ArtifactHash>;
-};
+export type Checksum = string;
 
-export type Symlink = {
-	hash: ArtifactHash;
-	target: Template;
-};
+export type ChecksumAlgorithm = "blake3" | "sha256";
 
-export type Value =
-	| { kind: "null"; value: null }
-	| { kind: "bool"; value: boolean }
-	| { kind: "number"; value: number }
-	| { kind: "string"; value: string }
-	| { kind: "bytes"; value: Uint8Array }
-	| { kind: "subpath"; value: Subpath }
-	| { kind: "relpath"; value: Relpath }
-	| { kind: "blob"; value: Blob }
-	| { kind: "artifact"; value: Artifact }
-	| { kind: "placeholder"; value: Placeholder }
-	| { kind: "template"; value: Template }
-	| { kind: "array"; value: Array<Value> }
-	| { kind: "object"; value: Record<string, Value> };
-
-export type Subpath = string;
-
-export type Relpath = string;
-
-export type Placeholder = {
-	name: string;
-};
-
-export type Template = {
-	components: Array<TemplateComponent>;
-};
-
-export type TemplateComponent =
-	| { kind: "string"; value: string }
-	| { kind: "artifact"; value: Artifact }
-	| { kind: "placeholder"; value: Placeholder };
-
-export type OperationHash = string;
-
-export type Operation =
-	| { kind: "call"; value: Call }
-	| { kind: "download"; value: Download }
-	| { kind: "process"; value: Process };
-
-export type Download = {
-	hash: OperationHash;
-	url: string;
-	unpack: boolean;
-	checksum?: Checksum;
-	unsafe: boolean;
-};
-
-export type UnpackFormat =
-	| ".bz2"
-	| ".gz"
-	| ".lz"
-	| ".xz"
-	| ".zstd"
-	| ".tar"
-	| ".tar.bz2"
-	| ".tar.gz"
-	| ".tar.lz"
-	| ".tar.xz"
-	| ".tar.zstd"
-	| ".zip";
-
-export type Process = {
-	hash: OperationHash;
+export type Command = {
+	hash: Operation.Hash;
 	system: System;
 	executable: Template;
 	env: Record<string, Template>;
@@ -101,41 +31,25 @@ export type Process = {
 	hostPaths: Array<string>;
 };
 
-export type System =
-	| "amd64_linux"
-	| "arm64_linux"
-	| "amd64_macos"
-	| "arm64_macos";
+export type Directory = {
+	hash: Artifact.Hash;
+	entries: Record<string, Artifact.Hash>;
+};
 
-export type Call = {
-	hash: OperationHash;
-	function: Function;
-	env: Record<string, Value>;
-	args: Array<Value>;
+export type File = {
+	hash: Artifact.Hash;
+	blob: Blob;
+	executable: boolean;
+	references: Array<Artifact.Hash>;
 };
 
 export type Function = {
+	hash: Operation.Hash;
 	packageInstanceHash: PackageInstanceHash;
 	modulePath: string;
 	name: string;
-};
-
-export type PackageInstanceHash = string;
-
-export type PackageInstance = {
-	hash: PackageInstanceHash;
-	packageHash: ArtifactHash;
-	dependencies: Record<string, PackageInstanceHash>;
-};
-
-export type Checksum = `${ChecksumAlgorithm}${":" | "-"}${string}`;
-
-export type ChecksumAlgorithm = "blake3" | "sha256";
-
-export type StackFrame = {
-	module: Module;
-	position: Position;
-	line: string;
+	env?: Record<string, Value>;
+	args?: Array<Value>;
 };
 
 export type Module =
@@ -157,10 +71,101 @@ export type NormalModule = {
 	modulePath: string;
 };
 
+export type StackFrame = {
+	module: Module;
+	position: Position;
+	line: string;
+};
+
 export type Position = {
 	line: number;
 	character: number;
 };
+
+export type Operation =
+	| { kind: "command"; value: Command }
+	| { kind: "function"; value: Function }
+	| { kind: "resource"; value: Resource };
+
+export namespace Operation {
+	export type Hash = string;
+}
+
+export type PackageInstanceHash = string;
+
+export type PackageInstance = {
+	hash: PackageInstanceHash;
+	packageHash: Artifact.Hash;
+	dependencies: Record<string, PackageInstanceHash>;
+};
+
+export type Relpath = string;
+
+export type Subpath = string;
+
+export type Placeholder = {
+	name: string;
+};
+
+export type Resource = {
+	hash: Operation.Hash;
+	url: string;
+	unpack: boolean;
+	checksum?: Checksum;
+	unsafe: boolean;
+};
+
+export type UnpackFormat =
+	| ".bz2"
+	| ".gz"
+	| ".lz"
+	| ".xz"
+	| ".zstd"
+	| ".tar"
+	| ".tar.bz2"
+	| ".tar.gz"
+	| ".tar.lz"
+	| ".tar.xz"
+	| ".tar.zstd"
+	| ".zip";
+
+export type Symlink = {
+	hash: Artifact.Hash;
+	target: Template;
+};
+
+export type Template = {
+	components: Array<Template.Component>;
+};
+
+export namespace Template {
+	export type Component =
+		| { kind: "string"; value: string }
+		| { kind: "artifact"; value: Artifact }
+		| { kind: "placeholder"; value: Placeholder };
+}
+
+export type System =
+	| "amd64_linux"
+	| "arm64_linux"
+	| "amd64_macos"
+	| "arm64_macos";
+
+export type Value =
+	| { kind: "null"; value: null }
+	| { kind: "bool"; value: boolean }
+	| { kind: "number"; value: number }
+	| { kind: "string"; value: string }
+	| { kind: "bytes"; value: Uint8Array }
+	| { kind: "subpath"; value: Subpath }
+	| { kind: "relpath"; value: Relpath }
+	| { kind: "blob"; value: Blob }
+	| { kind: "artifact"; value: Artifact }
+	| { kind: "placeholder"; value: Placeholder }
+	| { kind: "template"; value: Template }
+	| { kind: "operation"; value: Operation }
+	| { kind: "array"; value: Array<Value> }
+	| { kind: "object"; value: Record<string, Value> };
 
 declare global {
 	function syscall(
@@ -170,7 +175,7 @@ declare global {
 
 	function syscall(
 		syscall: "artifact_get",
-		hash: ArtifactHash,
+		hash: Artifact.Hash,
 	): Promise<Artifact>;
 }
 
@@ -183,7 +188,7 @@ export let artifact = {
 		}
 	},
 
-	get: async (hash: ArtifactHash): Promise<Artifact> => {
+	get: async (hash: Artifact.Hash): Promise<Artifact> => {
 		try {
 			return await syscall("artifact_get", hash);
 		} catch (cause) {
@@ -256,24 +261,30 @@ export let blob = {
 };
 
 declare global {
-	type CallArg = {
-		function: Function;
-		env: Record<string, Value>;
-		args: Array<Value>;
+	type FunctionArg = {
+		packageInstanceHash: PackageInstanceHash;
+		modulePath: string;
+		name: string;
+		env?: Record<string, Value>;
+		args?: Array<Value>;
 	};
 
-	function syscall(syscall: "call_new", arg: CallArg): Promise<Call>;
+	function syscall(
+		syscall: "function_new",
+		arg: FunctionArg,
+	): Promise<Function>;
 }
 
-export let call = {
-	new: async (arg: CallArg): Promise<Call> => {
+let function_ = {
+	new: async (arg: FunctionArg): Promise<Function> => {
 		try {
-			return await syscall("call_new", arg);
+			return await syscall("function_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
 };
+export { function_ as function };
 
 declare global {
 	function syscall(
@@ -295,7 +306,7 @@ export let checksum = (
 };
 
 declare global {
-	type DownloadArg = {
+	type ResourceArg = {
 		url: string;
 		unpack: boolean;
 		checksum?: Checksum;
@@ -303,15 +314,15 @@ declare global {
 	};
 
 	function syscall(
-		syscall: "download_new",
-		arg: DownloadArg,
-	): Promise<Download>;
+		syscall: "resource_new",
+		arg: ResourceArg,
+	): Promise<Resource>;
 }
 
 export let download = {
-	new: async (arg: DownloadArg): Promise<Download> => {
+	new: async (arg: ResourceArg): Promise<Resource> => {
 		try {
-			return await syscall("download_new", arg);
+			return await syscall("resource_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -445,7 +456,7 @@ export let log = (value: string) => {
 declare global {
 	function syscall(
 		syscall: "operation_get",
-		hash: OperationHash,
+		hash: Operation.Hash,
 	): Promise<Operation>;
 
 	function syscall(
@@ -455,7 +466,7 @@ declare global {
 }
 
 export let operation = {
-	get: async (hash: OperationHash): Promise<Operation> => {
+	get: async (hash: Operation.Hash): Promise<Operation> => {
 		try {
 			return await syscall("operation_get", hash);
 		} catch (cause) {
@@ -473,7 +484,7 @@ export let operation = {
 };
 
 declare global {
-	type ProcessArg = {
+	type CommandArg = {
 		system: System;
 		executable: Template;
 		env?: Record<string, Template>;
@@ -484,13 +495,13 @@ declare global {
 		hostPaths?: Array<string>;
 	};
 
-	function syscall(syscall: "process_new", arg: ProcessArg): Promise<Process>;
+	function syscall(syscall: "command_new", arg: CommandArg): Promise<Command>;
 }
 
-export let process = {
-	new: async (arg: ProcessArg): Promise<Process> => {
+export let command = {
+	new: async (arg: CommandArg): Promise<Command> => {
 		try {
-			return await syscall("process_new", arg);
+			return await syscall("command_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}

@@ -55,9 +55,9 @@ impl Operation {
 
 		// Run the operation.
 		let output = match self {
-			Operation::Call(call) => call.run_inner(tg).await?,
-			Operation::Download(download) => download.run_inner(tg).await?,
-			Operation::Process(process) => process.run_inner(tg).await?,
+			Operation::Command(command) => command.run_inner(tg).await?,
+			Operation::Function(function) => function.call_inner(tg).await?,
+			Operation::Resource(resource) => resource.download_inner(tg).await?,
 		};
 
 		// Set the operation output.
