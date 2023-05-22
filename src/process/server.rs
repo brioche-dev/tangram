@@ -137,9 +137,17 @@ impl Server {
 		// Get the host path.
 		let host_path =
 			if let Ok(path) = guest_path.strip_prefix(&self.working_directory_guest_path) {
-				self.working_directory_host_path.join(path)
+				if path.components().count() == 0 {
+					self.working_directory_host_path.clone()
+				} else {
+					self.working_directory_host_path.join(path)
+				}
 			} else if let Ok(path) = guest_path.strip_prefix(&self.output_guest_path) {
-				self.output_host_path.join(path)
+				if path.components().count() == 0 {
+					self.output_host_path.clone()
+				} else {
+					self.output_host_path.join(path)
+				}
 			} else {
 				return_error!("The path is not in the artifacts, working, or output directories.");
 			};
