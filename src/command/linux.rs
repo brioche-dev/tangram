@@ -584,9 +584,9 @@ impl Command {
 		tracing::debug!(?output_host_path, "Checking in the process output.");
 
 		// Create the output.
-		let value = if tokio::fs::try_exists(&output_path).await? {
+		let value = if tokio::fs::try_exists(&output_host_path).await? {
 			// Check in the output.
-			let artifact = Artifact::check_in(tg, &output_path)
+			let artifact = Artifact::check_in(tg, &output_host_path)
 				.await
 				.wrap_err("Failed to check in the output.")?;
 
