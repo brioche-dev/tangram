@@ -1,7 +1,7 @@
 pub use self::{component::Component, data::Data};
 
 mod component;
-mod data;
+pub mod data;
 mod references;
 mod render;
 mod unrender;
