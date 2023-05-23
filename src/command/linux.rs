@@ -20,7 +20,7 @@ use std::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// The artifacts directory guest path.
-const ARTIFACTS_DIRECTORY_GUEST_PATH: &str = "/.tangram/artifacts";
+const TANGRAM_DIRECTORY_GUEST_PATH: &str = "/.tangram";
 
 /// The home directory guest path.
 const HOME_DIRECTORY_GUEST_PATH: &str = "/home/tangram";
@@ -78,8 +78,8 @@ impl Command {
 		let output_guest_path = output_parent_directory_guest_path.join("output");
 
 		// Create the host and guest paths for the artifacts directory.
-		let artifacts_directory_host_path = tg.artifacts_path();
-		let artifacts_directory_guest_path = PathBuf::from(ARTIFACTS_DIRECTORY_GUEST_PATH);
+		let tangram_directory_host_path = tg.path().to_owned();
+		let tangram_directory_guest_path = PathBuf::from(TANGRAM_DIRECTORY_GUEST_PATH);
 
 		// Create the host and guest paths for the home directory.
 		let home_directory_host_path =
@@ -99,7 +99,7 @@ impl Command {
 
 		// Render the executable, env, and args.
 		let (executable, mut env, args) = self.render(
-			Path::new(ARTIFACTS_DIRECTORY_GUEST_PATH),
+			&Path::new(TANGRAM_DIRECTORY_GUEST_PATH).join("artifacts"),
 			&output_guest_path,
 		)?;
 
@@ -153,8 +153,8 @@ impl Command {
 		// Start the server.
 		let server = Server::new(
 			Arc::downgrade(tg),
-			artifacts_directory_host_path.clone(),
-			artifacts_directory_guest_path.clone(),
+			tangram_directory_host_path.clone(),
+			tangram_directory_guest_path.clone(),
 			working_directory_host_path.clone(),
 			working_directory_guest_path.clone(),
 			output_host_path.clone(),
@@ -361,24 +361,25 @@ impl Command {
 			});
 		}
 
-		// Add the artifacts directory to the mounts.
-		let artifacts_directory_source_path = artifacts_directory_host_path;
-		let artifacts_directory_target_path =
-			root_host_path.join(artifacts_directory_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(&artifacts_directory_target_path)
+		// Add the tangram directory to the mounts.
+		let tangram_directory_source_path = tangram_directory_host_path;
+		let tangram_directory_target_path =
+			root_host_path.join(tangram_directory_guest_path.strip_prefix("/").unwrap());
+		tokio::fs::create_dir_all(&tangram_directory_target_path)
 			.await
-			.wrap_err(r#"Failed to create the mount point for the artifacts directory."#)?;
-		let artifacts_directory_source_path =
-			CString::new(artifacts_directory_source_path.as_os_str().as_bytes()).unwrap();
-		let artifacts_directory_target_path =
-			CString::new(artifacts_directory_target_path.as_os_str().as_bytes()).unwrap();
+			.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
+		let tangram_directory_source_path =
+			CString::new(tangram_directory_source_path.as_os_str().as_bytes()).unwrap();
+		let tangram_directory_target_path =
+			CString::new(tangram_directory_target_path.as_os_str().as_bytes()).unwrap();
 		mounts.push(Mount {
-			source: artifacts_directory_source_path,
-			target: artifacts_directory_target_path,
+			source: tangram_directory_source_path,
+			target: tangram_directory_target_path,
 			fstype: None,
 			flags: libc::MS_BIND | libc::MS_REC,
 			data: None,
-			readonly: true,
+			// TODO: Only the database and artifacts created by the guest process should be write-able.
+			readonly: false,
 		});
 
 		// Add the home directory to the mounts.
