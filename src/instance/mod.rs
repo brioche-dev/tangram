@@ -74,6 +74,11 @@ impl Instance {
 		// Migrate the path.
 		Self::migrate(&path).await?;
 
+		Self::new_uninitialized(path, options)
+	}
+
+	/// Create a new instance, assuming that the directory at `path` has already been created and migrated and V8 is initialized.
+	pub fn new_uninitialized(path: PathBuf, options: Options) -> Result<Instance> {
 		// Create the API Client.
 		let api_url = options
 			.api_url
