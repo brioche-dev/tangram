@@ -1,4 +1,4 @@
-use super::{server::Server, Command};
+use super::Command;
 use crate::{
 	artifact::Artifact,
 	command,
@@ -92,7 +92,6 @@ impl Command {
 		// Create the host and guest paths for the working directory.
 		let working_directory_host_path =
 			root_host_path.join(WORKING_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
-		let working_directory_guest_path = PathBuf::from(WORKING_DIRECTORY_GUEST_PATH);
 		tokio::fs::create_dir_all(&working_directory_host_path)
 			.await
 			.wrap_err(r#"Failed to create the working directory."#)?;
@@ -135,9 +134,6 @@ impl Command {
 		};
 		let sh_host_path = tg.assets_path().join(sh_file_name);
 
-		// Create the socket path.
-		let socket_host_path = root_host_path.join(SOCKET_GUEST_PATH.strip_prefix('/').unwrap());
-
 		// Set `$HOME`.
 		env.insert("HOME".to_owned(), HOME_DIRECTORY_GUEST_PATH.to_owned());
 
@@ -149,23 +145,6 @@ impl Command {
 
 		// Set `$TANGRAM_SOCKET`.
 		env.insert(String::from("TANGRAM_SOCKET"), SOCKET_GUEST_PATH.to_owned());
-
-		// Start the server.
-		let server = Server::new(
-			Arc::downgrade(tg),
-			tangram_directory_host_path.clone(),
-			tangram_directory_guest_path.clone(),
-			working_directory_host_path.clone(),
-			working_directory_guest_path.clone(),
-			output_host_path.clone(),
-			output_guest_path.clone(),
-		);
-		let server_task = tokio::spawn({
-			let socket_host_path = socket_host_path.clone();
-			async move {
-				server.serve(&socket_host_path).await.unwrap();
-			}
-		});
 
 		// Create /etc.
 		tokio::fs::create_dir_all(root_host_path.join("etc"))
@@ -562,10 +541,6 @@ impl Command {
 		.map_err(Error::other)
 		.wrap_err("Failed to join the process task.")?
 		.wrap_err("Failed to run the process.")?;
-
-		// Stop the server.
-		server_task.abort();
-		server_task.await.ok();
 
 		// Handle the guest process's exit status.
 		match exit_status {

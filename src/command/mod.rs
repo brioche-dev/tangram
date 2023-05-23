@@ -1,4 +1,4 @@
-pub use self::{builder::Builder, data::Data, error::Error, server::Server};
+pub use self::{builder::Builder, data::Data, error::Error};
 use crate::{checksum::Checksum, operation, system::System, template::Template};
 use std::collections::BTreeMap;
 
@@ -10,12 +10,10 @@ mod linux;
 #[cfg(all(target_os = "macos", feature = "run"))]
 mod macos;
 mod new;
-mod server;
-
 #[cfg(feature = "run")]
 mod run;
 
-/// A command.
+/// A process.
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

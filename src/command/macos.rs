@@ -268,23 +268,6 @@ impl Command {
 		// Make the profile a C string.
 		let profile = CString::new(profile).unwrap();
 
-		// Start the server.
-		let server = Server::new(
-			Arc::downgrade(tg),
-			artifacts_directory_path.clone(),
-			artifacts_directory_path.clone(),
-			working_directory_path.clone(),
-			working_directory_path.clone(),
-			output_path.clone(),
-			output_path.clone(),
-		);
-		let server_task = tokio::spawn({
-			let socket_path = socket_path.clone();
-			async move {
-				server.serve(&socket_path).await.unwrap();
-			}
-		});
-
 		// Create the command.
 		let mut command = tokio::process::Command::new(&executable);
 
@@ -325,10 +308,6 @@ impl Command {
 			.wait()
 			.await
 			.wrap_err("Failed to wait for the process to exit.")?;
-
-		// Stop the server.
-		server_task.abort();
-		server_task.await.ok();
 
 		// Return an error if the process did not exit successfully.
 		if !status.success() {
