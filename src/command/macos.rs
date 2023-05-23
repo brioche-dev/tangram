@@ -43,7 +43,7 @@ impl Command {
 		let output_path = output_parent_directory_path.join("output");
 
 		// Get the path for the artifacts directory.
-		let artifacts_directory_path = tg.artifacts_path();
+		let tangram_directory_path = tg.path();
 
 		// Create the home directory.
 		let home_directory_path = root_path.join("Users/tangram");
@@ -58,7 +58,7 @@ impl Command {
 			.wrap_err("Failed to create the working directory.")?;
 
 		// Render the executable, env, and args.
-		let (executable, mut env, args) = self.render(&artifacts_directory_path, &output_path)?;
+		let (executable, mut env, args) = self.render(&tg.artifacts_path(), &output_path)?;
 
 		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
 		let enable_unsafe = self.checksum.is_some() || self.unsafe_;
@@ -234,8 +234,9 @@ impl Command {
 				(allow process-exec* (subpath {0}))
 				(allow file-read* (path-ancestors {0}))
 				(allow file-read* (subpath {0}))
+				(allow file-write* (subpath {0}))
 			"#,
-			escape(artifacts_directory_path.as_os_str().as_bytes())
+			escape(tangram_directory_path.as_os_str().as_bytes())
 		)
 		.unwrap();
 
