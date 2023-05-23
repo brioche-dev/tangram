@@ -220,7 +220,7 @@ declare namespace tg {
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
 	>(
-		f: (...args: A) => MaybePromise<R>,
+		f: (...args: A) => MaybePromise<R | void>,
 	) => Promise<Function<A, R>>;
 	export { function_ as function };
 
