@@ -24,6 +24,12 @@ export let t = async (
 	return await template(...components);
 };
 
+export let template = (
+	...args: Array<Unresolved<Template.Arg>>
+): Promise<Template> => {
+	return Template.new(...args);
+};
+
 export class Template {
 	#components: Array<Template.Component>;
 
@@ -210,8 +216,6 @@ export namespace Template {
 	}
 }
 
-export let template = Template.new;
-
 // Compute the minimum indentation level of a string. Returns undefined if the string is on one line.
 let minIndentLevel = (s: string): string | undefined => {
 	let lines: Array<string> = s.split("\n");
@@ -246,7 +250,6 @@ let minIndentLevel = (s: string): string | undefined => {
 };
 
 // Remove the leading whitespace from string components in a template, including empty lines and any leading indentation.
-// Note: does not handle mixed tab/spaces for indentation.
 let stripLeadingWhitespace = (
 	components: Array<Template.Component>,
 ): Array<Template.Component> => {
@@ -266,7 +269,7 @@ let stripLeadingWhitespace = (
 
 	// If there was some indentation, replace all occurrences of it.
 	if (minIndent) {
-		let indent = minIndent; // Needed for type narrowing.
+		let indent = minIndent;
 		components = components.map((component) => {
 			if (typeof component === "string") {
 				return component

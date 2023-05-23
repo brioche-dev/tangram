@@ -1,6 +1,11 @@
 import * as syscall from "./syscall.ts";
 
-export let checksum = Checksum.new;
+export let checksum = (
+	algorithm: Checksum.Algorithm,
+	bytes: Uint8Array,
+): Checksum => {
+	return Checksum.new(algorithm, bytes);
+};
 
 export type Checksum = string;
 

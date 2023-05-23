@@ -7,24 +7,24 @@ import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 
-export let directory = async (arg: Directory.Arg) => {
-	return await Directory.new(arg);
+export let directory = async (...args: Array<Unresolved<Directory.Arg>>) => {
+	return await Directory.new(...args);
 };
 
 type ConstructorArg = {
 	hash: Artifact.Hash;
-	entries: Map<string, Artifact.Hash>;
+	entries: Record<string, Artifact.Hash>;
 };
 
 export class Directory {
 	#hash: Artifact.Hash;
-	#entries: Map<string, Artifact.Hash>;
+	#entries: Record<string, Artifact.Hash>;
 
 	static async new(
 		...args: Array<Unresolved<Directory.Arg>>
 	): Promise<Directory> {
 		// Create the entries.
-		let entries: Map<string, Artifact> = new Map();
+		let entries: Record<string, Artifact> = {};
 
 		// Apply each arg.
 		for (let arg of await Promise.all(args.map(resolve))) {
@@ -32,9 +32,9 @@ export class Directory {
 				// If the arg is undefined, then continue.
 			} else if (arg instanceof Directory) {
 				// If the arg is a directory, then apply each entry.
-				for (let [name, entry] of await arg.entries()) {
+				for (let [name, entry] of Object.entries(await arg.entries())) {
 					// Get an existing entry.
-					let existingEntry = entries.get(name);
+					let existingEntry = entries[name];
 
 					// Merge the existing entry with the entry if they are both directories.
 					if (
@@ -45,7 +45,7 @@ export class Directory {
 					}
 
 					// Set the entry.
-					entries.set(name, entry);
+					entries[name] = entry;
 				}
 			} else if (typeof arg === "object") {
 				// If the arg is an object, then apply each entry.
@@ -59,7 +59,7 @@ export class Directory {
 					let name = firstComponent;
 
 					// Get an existing entry.
-					let existingEntry = entries.get(name);
+					let existingEntry = entries[name];
 
 					// Remove the entry if it is not a directory.
 					if (!(existingEntry instanceof Directory)) {
@@ -76,19 +76,19 @@ export class Directory {
 						});
 
 						// Add the entry.
-						entries.set(name, newEntry);
+						entries[name] = newEntry;
 					} else {
 						// If there are no trailing path components, then create the artifact specified by the value.
 						if (value === undefined) {
-							entries.delete(name);
+							delete entries[name];
 						} else if (Blob.Arg.is(value)) {
 							let newEntry = await file(value);
-							entries.set(name, newEntry);
+							entries[name] = newEntry;
 						} else if (File.is(value) || Symlink.is(value)) {
-							entries.set(name, value);
+							entries[name] = value;
 						} else {
 							let newEntry = await Directory.new(existingEntry, value);
-							entries.set(name, newEntry);
+							entries[name] = newEntry;
 						}
 					}
 				}
@@ -99,7 +99,7 @@ export class Directory {
 		return Directory.fromSyscall(
 			await syscall.directory.new({
 				entries: Object.fromEntries(
-					Array.from(entries, ([name, entry]) => [
+					Object.entries(entries).map(([name, entry]) => [
 						name,
 						Artifact.toSyscall(entry),
 					]),
@@ -129,13 +129,13 @@ export class Directory {
 	toSyscall(): syscall.Directory {
 		return {
 			hash: this.#hash,
-			entries: Object.fromEntries(this.#entries),
+			entries: this.#entries,
 		};
 	}
 
 	static fromSyscall(directory: syscall.Directory): Directory {
 		let hash = directory.hash;
-		let entries = new Map(Object.entries(directory.entries));
+		let entries = directory.entries;
 		return new Directory({ hash, entries });
 	}
 
@@ -155,7 +155,7 @@ export class Directory {
 			if (!(artifact instanceof Directory)) {
 				return undefined;
 			}
-			let hash = artifact.#entries.get(component);
+			let hash = artifact.#entries[component];
 			if (!hash) {
 				return undefined;
 			}
@@ -164,10 +164,10 @@ export class Directory {
 		return artifact;
 	}
 
-	async entries(): Promise<Map<string, Artifact>> {
-		let entries = new Map();
+	async entries(): Promise<Record<string, Artifact>> {
+		let entries: Record<string, Artifact> = {};
 		for await (let [name, artifact] of this) {
-			entries.set(name, artifact);
+			entries[name] = artifact;
 		}
 		return entries;
 	}
@@ -192,13 +192,13 @@ export class Directory {
 	}
 
 	*[Symbol.iterator](): Iterator<[string, Artifact.Hash]> {
-		for (let [name, entry] of this.#entries) {
+		for (let [name, entry] of Object.entries(this.#entries)) {
 			yield [name, entry];
 		}
 	}
 
 	async *[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]> {
-		for (let name of this.#entries.keys()) {
+		for (let name of Object.keys(this.#entries)) {
 			yield [name, await this.get(name)];
 		}
 	}
