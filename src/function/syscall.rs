@@ -15,7 +15,7 @@ use crate::{
 	language::Position,
 	module::Module,
 	operation::{self, Operation},
-	package,
+	package::{self, Package},
 	path::{Relpath, Subpath},
 	resource::Resource,
 	symlink::Symlink,
@@ -248,7 +248,7 @@ async fn syscall_file_new(tg: Arc<Instance>, args: (FileArg,)) -> Result<File> {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FunctionArg {
-	package_instance_hash: package::instance::Hash,
+	package_hash: package::Hash,
 	module_path: Subpath,
 	name: String,
 	env: Option<BTreeMap<String, Value>>,
@@ -257,10 +257,10 @@ struct FunctionArg {
 
 async fn syscall_function_new(tg: Arc<Instance>, args: (FunctionArg,)) -> Result<Function> {
 	let (arg,) = args;
-	let package_instance = package::Instance::get(&tg, arg.package_instance_hash).await?;
+	let package = Package::get(&tg, arg.package_hash).await?;
 	let function = Function::new(
 		&tg,
-		package_instance,
+		package,
 		arg.module_path,
 		arg.name,
 		arg.env.unwrap_or_default(),
@@ -301,12 +301,12 @@ fn syscall_hex_encode(
 async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Relpath)) -> Result<Artifact> {
 	let (stack_frame, path) = args;
 
-	// Get the package instance and module path.
+	// Get the package and module path.
 	let Module::Normal(module) = stack_frame.module else { unreachable!() };
-	let package_instance = package::Instance::get(&tg, module.package_instance_hash).await?;
+	let package = Package::get(&tg, module.package_hash).await?;
 	let module_path = module.module_path;
 
-	// Get the path to the artifact.
+	// Get the include path.
 	let artifact_path = module_path
 		.into_relpath()
 		.parent()
@@ -315,8 +315,7 @@ async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Relpath)) -> Resu
 		.wrap_err("Invalid path.")?;
 
 	// Get the artifact.
-	let artifact = package_instance
-		.package()
+	let artifact = package
 		.artifact()
 		.as_directory()
 		.wrap_err("A package must be a directory.")?
@@ -392,15 +391,13 @@ fn syscall_stack_frame(
 	let stack_trace = v8::StackTrace::current_stack_trace(scope, index + 1).unwrap();
 	let stack_frame = stack_trace.get_frame(scope, index).unwrap();
 
-	// Get the module and package instance hash.
+	// Get the module.
 	let module: Module = stack_frame
 		.get_script_name(scope)
 		.unwrap()
 		.to_rust_string_lossy(scope)
 		.parse()
 		.unwrap();
-
-	// Get the module.
 	let modules = state.modules.borrow();
 	let source_map_module = modules
 		.iter()

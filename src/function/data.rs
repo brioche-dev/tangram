@@ -1,8 +1,9 @@
 use super::Function;
 use crate::{
+	artifact,
 	error::Result,
 	instance::Instance,
-	operation, package,
+	operation,
 	path::Subpath,
 	value::{self, Value},
 };
@@ -15,7 +16,7 @@ use std::collections::BTreeMap;
 #[serde(rename_all = "camelCase")]
 pub struct Data {
 	#[buffalo(id = 0)]
-	pub package_instance_hash: package::instance::Hash,
+	pub package_hash: artifact::Hash,
 
 	#[buffalo(id = 1)]
 	pub module_path: Subpath,
@@ -40,7 +41,7 @@ impl Function {
 			.collect();
 		let args = self.args.iter().map(Value::to_data).collect();
 		Data {
-			package_instance_hash: self.package_instance_hash,
+			package_hash: self.package_hash,
 			module_path: self.module_path.clone(),
 			name: self.name.clone(),
 			env,
@@ -63,7 +64,7 @@ impl Function {
 		.await?;
 		Ok(Self {
 			hash,
-			package_instance_hash: data.package_instance_hash,
+			package_hash: data.package_hash,
 			module_path: data.module_path,
 			name: data.name,
 			env,

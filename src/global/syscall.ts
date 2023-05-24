@@ -45,8 +45,8 @@ export type File = {
 
 export type Function = {
 	hash: Operation.Hash;
-	packageInstanceHash: PackageInstanceHash;
-	modulePath: string;
+	packageHash: Package.Hash;
+	modulePath: Subpath;
 	name: string;
 	env?: Record<string, Value>;
 	args?: Array<Value>;
@@ -58,18 +58,26 @@ export type Module =
 	| { kind: "normal"; value: NormalModule };
 
 export type LibraryModule = {
-	modulePath: string;
+	modulePath: Subpath;
 };
 
 export type DocumentModule = {
 	packagePath: string;
-	modulePath: string;
+	modulePath: Subpath;
 };
 
 export type NormalModule = {
-	packageInstanceHash: string;
-	modulePath: string;
+	packageHash: Package.Hash;
+	modulePath: Subpath;
 };
+
+export type Package = {
+	artifact: Artifact;
+};
+
+export namespace Package {
+	export type Hash = string;
+}
 
 export type StackFrame = {
 	module: Module;
@@ -90,14 +98,6 @@ export type Operation =
 export namespace Operation {
 	export type Hash = string;
 }
-
-export type PackageInstanceHash = string;
-
-export type PackageInstance = {
-	hash: PackageInstanceHash;
-	packageHash: Artifact.Hash;
-	dependencies: Record<string, PackageInstanceHash>;
-};
 
 export type Relpath = string;
 
@@ -262,8 +262,8 @@ export let blob = {
 
 declare global {
 	type FunctionArg = {
-		packageInstanceHash: PackageInstanceHash;
-		modulePath: string;
+		packageHash: Package.Hash;
+		modulePath: Subpath;
 		name: string;
 		env?: Record<string, Value>;
 		args?: Array<Value>;

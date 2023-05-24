@@ -12,7 +12,7 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_fmt(&self, _args: Args) -> Result<()> {
-		todo!()
+		unimplemented!()
 
 		// // Format each module.
 		// for module in package.modules(&self.tg).await? {

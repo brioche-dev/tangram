@@ -9,6 +9,6 @@ pub struct Request {
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
-	pub imports: Vec<module::Specifier>,
+	pub imports: Vec<module::Import>,
 	pub includes: Vec<Relpath>,
 }

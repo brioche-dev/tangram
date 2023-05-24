@@ -4,7 +4,7 @@ use crate::{
 	path::Relpath,
 };
 
-/// A reference from a package to a dependency, either at a path or from the registry.
+/// A dependency on a package, either at a path or from the registry.
 #[derive(
 	Clone,
 	Debug,
@@ -20,47 +20,47 @@ use crate::{
 )]
 #[serde(into = "String", try_from = "String")]
 #[buffalo(into = "String", try_from = "String")]
-pub enum Specifier {
-	/// A reference to a dependency at a path.
+pub enum Dependency {
+	/// A dependency on a package at a path.
 	Path(Relpath),
 
-	/// A reference to a dependency from the registry.
+	/// A dependency on a package from the registry.
 	Registry(Registry),
 }
 
-impl std::str::FromStr for Specifier {
-	type Err = Error;
-
-	fn from_str(value: &str) -> Result<Specifier> {
-		if value.starts_with('.') {
-			// If the string starts with `.`, then parse the string as a path.
-			let specifier = value.parse()?;
-			Ok(Specifier::Path(specifier))
-		} else {
-			// Otherwise, parse the string as a registry specifier.
-			let specifier = value.parse()?;
-			Ok(Specifier::Registry(specifier))
-		}
-	}
-}
-
-impl std::fmt::Display for Specifier {
+impl std::fmt::Display for Dependency {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
-			Specifier::Path(path) => {
+			Dependency::Path(path) => {
 				write!(f, "{path}")?;
 				Ok(())
 			},
 
-			Specifier::Registry(specifier) => {
-				write!(f, "{specifier}")?;
+			Dependency::Registry(registry) => {
+				write!(f, "{registry}")?;
 				Ok(())
 			},
 		}
 	}
 }
 
-impl TryFrom<String> for Specifier {
+impl std::str::FromStr for Dependency {
+	type Err = Error;
+
+	fn from_str(value: &str) -> Result<Dependency> {
+		if value.starts_with('.') {
+			// If the string starts with `.`, then parse the string as a relative path.
+			let path = value.parse()?;
+			Ok(Dependency::Path(path))
+		} else {
+			// Otherwise, parse the string as a registry dependency.
+			let registry = value.parse()?;
+			Ok(Dependency::Registry(registry))
+		}
+	}
+}
+
+impl TryFrom<String> for Dependency {
 	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -68,8 +68,8 @@ impl TryFrom<String> for Specifier {
 	}
 }
 
-impl From<Specifier> for String {
-	fn from(value: Specifier) -> Self {
+impl From<Dependency> for String {
+	fn from(value: Dependency) -> Self {
 		value.to_string()
 	}
 }

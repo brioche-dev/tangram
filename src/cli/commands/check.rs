@@ -23,18 +23,12 @@ pub struct Args {
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = Package::with_specifier(&self.tg, args.package)
+		let package = Package::from_specifier(&self.tg, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
-		// Create the package instance.
-		let package_instance = package
-			.instantiate(&self.tg)
-			.await
-			.wrap_err("Failed to create the package instance.")?;
-
 		// Get the root module.
-		let root_module = package_instance.root_module();
+		let root_module = package.root_module();
 
 		// Check the package for diagnostics.
 		let diagnostics = Module::check(&self.tg, vec![root_module]).await?;

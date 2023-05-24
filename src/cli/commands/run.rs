@@ -36,20 +36,16 @@ pub struct Args {
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = Package::with_specifier(&self.tg, args.package).await?;
-
-		// Create the package instance.
-		let package_instance = package
-			.instantiate(&self.tg)
+		let package = Package::from_specifier(&self.tg, args.package)
 			.await
-			.wrap_err("Failed to create the package instance.")?;
+			.wrap_err("Failed to get the package.")?;
 
 		// Run the operation.
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
 		let function = Function::new(
 			&self.tg,
-			package_instance,
+			package,
 			ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			args.function,
 			env,

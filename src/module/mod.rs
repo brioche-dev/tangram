@@ -1,4 +1,4 @@
-pub use self::specifier::Specifier;
+pub use self::import::Import;
 use crate::{
 	document::Document,
 	error::{return_error, Error, Result, WrapErr},
@@ -8,12 +8,10 @@ use crate::{
 use url::Url;
 
 pub mod analyze;
-pub mod dependency;
+pub mod import;
 pub mod load;
-mod parse;
-mod path;
+pub mod parse;
 pub mod resolve;
-pub mod specifier;
 pub mod transpile;
 mod version;
 
@@ -47,8 +45,8 @@ pub struct Library {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Normal {
-	/// The module's package instance hash.
-	pub package_instance_hash: package::instance::Hash,
+	/// The module's package hash.
+	pub package_hash: package::Hash,
 
 	/// The module's path.
 	pub module_path: Subpath,

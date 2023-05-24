@@ -15,7 +15,7 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_serve(&self, _args: Args) -> Result<()> {
-		todo!()
+		unimplemented!()
 
 		// // Create the server.
 		// let addr = SocketAddr::new(args.host, args.port);

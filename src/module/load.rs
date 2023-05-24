@@ -2,7 +2,7 @@ use super::Module;
 use crate::{
 	error::{Result, WrapErr},
 	instance::Instance,
-	package,
+	package::Package,
 };
 use include_dir::include_dir;
 
@@ -35,15 +35,13 @@ impl Module {
 			// Load a module from a document.
 			Self::Document(document) => document.text(tg).await,
 
-			// Load a module from a package instance.
+			// Load a module from a package.
 			Self::Normal(module) => {
-				// Get the package instance.
-				let package_instance =
-					package::Instance::get(tg, module.package_instance_hash).await?;
+				// Get the package.
+				let package = Package::get(tg, module.package_hash).await?;
 
 				// Load the module.
-				let artifact = package_instance.package().artifact();
-				let directory = artifact.as_directory().unwrap();
+				let directory = package.artifact().as_directory().unwrap();
 				let entry = directory.get(tg, &module.module_path).await?;
 				let file = entry.into_file().wrap_err("Expected a file.")?;
 				let text = file.blob().text(tg).await?;

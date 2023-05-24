@@ -39,7 +39,7 @@ impl Function {
 
 		// Get the module.
 		let module = Module::Normal(module::Normal {
-			package_instance_hash: self.package_instance_hash,
+			package_hash: self.package_hash,
 			module_path: self.module_path.clone(),
 		});
 

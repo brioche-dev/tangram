@@ -12,7 +12,7 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_log(&self, _args: Args) -> Result<()> {
-		todo!()
+		unimplemented!()
 
 		// // Get the log reader.
 		// let mut reader = self.tg.get_log_reader(args.operation_hash).await?;

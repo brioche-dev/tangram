@@ -55,7 +55,7 @@ export let entrypoint = async <A extends Array<Value>, R extends Value>(
 type ConstructorArgs<A extends Array<Value>, R extends Value> = {
 	f?: (...args: A) => MaybePromise<R>;
 	hash: Operation.Hash;
-	packageInstanceHash: Package.Instance.Hash;
+	packageHash: Package.Hash;
 	modulePath: Subpath.Arg;
 	name: string;
 	env?: Record<string, Value>;
@@ -75,7 +75,7 @@ export class Function<
 > extends globalThis.Function {
 	f?: (...args: A) => MaybePromise<R>;
 	hash: Operation.Hash;
-	packageInstanceHash: Package.Instance.Hash;
+	packageHash: Package.Hash;
 	modulePath: Subpath;
 	name: string;
 	env?: Record<string, Value>;
@@ -86,7 +86,7 @@ export class Function<
 		R extends Value = Value,
 	>(arg: Function.Arg<A, R>): Promise<Function<A, R>> {
 		let f: ((...args: A) => MaybePromise<R>) | undefined;
-		let packageInstanceHash: Package.Instance.Hash;
+		let packageHash: Package.Hash;
 		let modulePath: Subpath;
 		let name: string;
 		let env: Record<string, Value> | undefined;
@@ -99,9 +99,9 @@ export class Function<
 			// Get the function's caller.
 			let { module, line } = syscall.stackFrame(2);
 
-			// Get the function's package instance hash and module path.
+			// Get the function's package hash and module path.
 			assert_(module.kind === "normal");
-			packageInstanceHash = module.value.packageInstanceHash;
+			packageHash = module.value.packageHash;
 			modulePath = subpath(module.value.modulePath);
 
 			// Get the function's name.
@@ -118,7 +118,7 @@ export class Function<
 			}
 		} else {
 			f = arg.function.f;
-			packageInstanceHash = arg.function.packageInstanceHash;
+			packageHash = arg.function.packageHash;
 			modulePath = subpath(arg.function.modulePath);
 			name = arg.function.name;
 
@@ -144,7 +144,7 @@ export class Function<
 
 		let function_ = Function.fromSyscall<A, R>(
 			await syscall.function.new({
-				packageInstanceHash,
+				packageHash,
 				modulePath: modulePath.toSyscall(),
 				name,
 				env: env_,
@@ -161,7 +161,7 @@ export class Function<
 
 		this.f = args.f;
 		this.hash = args.hash;
-		this.packageInstanceHash = args.packageInstanceHash;
+		this.packageHash = args.packageHash;
 		this.modulePath = subpath(args.modulePath);
 		this.name = args.name;
 		this.env = args.env;
@@ -193,7 +193,7 @@ export class Function<
 
 	toSyscall(): syscall.Function {
 		let hash = this.hash;
-		let packageInstanceHash = this.packageInstanceHash;
+		let packageHash = this.packageHash;
 		let modulePath = this.modulePath.toString();
 		let name = this.name;
 		let env = this.env
@@ -209,7 +209,7 @@ export class Function<
 			: undefined;
 		return {
 			hash,
-			packageInstanceHash,
+			packageHash,
 			modulePath,
 			name,
 			env,
@@ -222,7 +222,7 @@ export class Function<
 		R extends Value = Value,
 	>(function_: syscall.Function): Function<A, R> {
 		let hash = function_.hash;
-		let packageInstanceHash = function_.packageInstanceHash;
+		let packageHash = function_.packageHash;
 		let modulePath = function_.modulePath;
 		let name = function_.name;
 		let env =
@@ -240,7 +240,7 @@ export class Function<
 				: undefined;
 		return new Function({
 			hash,
-			packageInstanceHash,
+			packageHash,
 			modulePath,
 			name,
 			env,

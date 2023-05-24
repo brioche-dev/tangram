@@ -1,3 +1,5 @@
+use crate::{error::Error, return_error};
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Id(u128);
 
@@ -16,10 +18,13 @@ impl std::fmt::Display for Id {
 }
 
 impl std::str::FromStr for Id {
-	type Err = std::num::ParseIntError;
+	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let id = u128::from_str_radix(s, 16)?;
+		if s.len() != 32 {
+			return_error!("The ID must be 32 characters long.");
+		}
+		let id = u128::from_str_radix(s, 16).map_err(Error::other)?;
 		let id = Id(id);
 		Ok(id)
 	}

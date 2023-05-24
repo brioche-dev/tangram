@@ -7,8 +7,7 @@ use crate::{
 	database::Database,
 	document,
 	error::Result,
-	hash, language, operation,
-	package::{self, Package},
+	language, operation,
 	util::task_map::TaskMap,
 	value::Value,
 };
@@ -57,9 +56,6 @@ pub struct Instance {
 	#[allow(clippy::type_complexity)]
 	pub(crate) operations_task_map:
 		std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Result<Value>>>>>,
-
-	/// A map of package specifiers to packages.
-	pub(crate) packages: std::sync::RwLock<HashMap<Package, package::Specifier, hash::BuildHasher>>,
 
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
@@ -139,9 +135,6 @@ impl Instance {
 		// Create the operations task map.
 		let operations_task_map = std::sync::Mutex::new(None);
 
-		// Create the packages map.
-		let packages = std::sync::RwLock::new(HashMap::default());
-
 		// Get a handle to the tokio runtime.
 		let runtime_handle = tokio::runtime::Handle::current();
 
@@ -156,7 +149,6 @@ impl Instance {
 			local_pool_handle,
 			lock,
 			operations_task_map,
-			packages,
 			path,
 			runtime_handle,
 		};
