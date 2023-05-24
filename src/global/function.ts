@@ -1,5 +1,5 @@
 import { assert as assert_ } from "./assert.ts";
-import { env } from "./env.ts";
+import { env as globalEnv } from "./env.ts";
 import { Operation } from "./operation.ts";
 import { Package } from "./package.ts";
 import { Subpath, subpath } from "./path.ts";
@@ -33,7 +33,7 @@ export let entrypoint = async <A extends Array<Value>, R extends Value>(
 	syscallArgs: Array<syscall.Value>,
 ): Promise<syscall.Value> => {
 	// Set the env.
-	env.value = Object.fromEntries(
+	globalEnv.value = Object.fromEntries(
 		Object.entries(syscallEnv).map(([key, value]) => [
 			key,
 			Value.fromSyscall(value),
@@ -121,7 +121,9 @@ export class Function<
 			packageInstanceHash = arg.function.packageInstanceHash;
 			modulePath = subpath(arg.function.modulePath);
 			name = arg.function.name;
-			env = arg.env ?? {};
+
+			// If the env hasn't been overridden, inherit the caller's global env.
+			env = arg.env ?? globalEnv.value;
 			args = arg.args ?? [];
 		}
 
@@ -134,6 +136,7 @@ export class Function<
 						]),
 				  )
 				: undefined;
+
 		let args_ =
 			args !== undefined
 				? args.map((value) => Value.toSyscall(value))
