@@ -59,22 +59,21 @@ impl Artifact {
 
 	async fn check_in_directory(tg: &Instance, path: &Path, _metadata: &Metadata) -> Result<Self> {
 		// Read the contents of the directory.
+		let permit = tg.file_descriptor_semaphore.acquire().await;
 		let mut read_dir = tokio::fs::read_dir(path)
 			.await
 			.wrap_err("Failed to read the directory.")?;
 		let mut names = Vec::new();
 		while let Some(entry) = read_dir.next_entry().await? {
-			// Get the entry's name.
 			let name = entry
 				.file_name()
 				.to_str()
 				.wrap_err("All file names must be valid UTF-8.")?
 				.to_owned();
-
-			// Add the name to the names.
 			names.push(name);
 		}
 		drop(read_dir);
+		drop(permit);
 
 		// Recurse into the directory's entries.
 		let entries = try_join_all(names.into_iter().map(|name| async {
@@ -109,16 +108,20 @@ impl Artifact {
 		// }
 
 		// Compute the file's hash.
+		let permit = tg.file_descriptor_semaphore.acquire().await;
 		let mut file = tokio::fs::File::open(path).await?;
 		let mut hash_writer = hash::Writer::new();
 		tokio::io::copy(&mut file, &mut hash_writer).await?;
 		let blob_hash = blob::Hash(hash_writer.finalize());
 		drop(file);
+		drop(permit);
 
 		// Copy the file to the temp path.
+		let permit = tg.file_descriptor_semaphore.acquire().await;
 		let temp = Temp::new(tg);
 		let blob_path = tg.blob_path(blob_hash);
 		tokio::fs::copy(path, temp.path()).await?;
+		drop(permit);
 
 		// Set the permissions.
 		let permissions = std::fs::Permissions::from_mode(0o644);

@@ -34,6 +34,8 @@ pub struct Instance {
 	pub(crate) documents:
 		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
 
+	pub(crate) file_descriptor_semaphore: tokio::sync::Semaphore,
+
 	/// An HTTP client for download operations.
 	pub(crate) http_client: reqwest::Client,
 
@@ -115,6 +117,9 @@ impl Instance {
 		// Create the documents maps.
 		let documents = tokio::sync::RwLock::new(HashMap::default());
 
+		// Create the file system semaphore.
+		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
+
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
 
@@ -143,6 +148,7 @@ impl Instance {
 			api_client,
 			database,
 			documents,
+			file_descriptor_semaphore,
 			http_client,
 			internal_checkouts_task_map,
 			language_service_request_sender,

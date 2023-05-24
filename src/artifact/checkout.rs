@@ -65,7 +65,7 @@ impl Artifact {
 		match tokio::fs::rename(temp.path(), &path).await {
 			Ok(()) => Ok(()),
 
-			// If the error is ENOTEMPTY or EEXIST, then we can ignore it because there is already an artifact checkout present.
+			// If the error is ENOTEMPTY or EEXIST, then ignore it because there is already an artifact checkout present.
 			Err(error) if matches!(error.raw_os_error(), Some(libc::ENOTEMPTY | libc::EEXIST)) => {
 				Ok(())
 			},
@@ -353,10 +353,12 @@ impl Artifact {
 		};
 
 		// Copy the blob to the path.
+		let permit = tg.file_descriptor_semaphore.acquire().await;
 		file.blob()
 			.copy_to_path(tg, path)
 			.await
 			.wrap_err("Failed to copy the blob.")?;
+		drop(permit);
 
 		// Make the file executable if necessary.
 		if file.executable() {

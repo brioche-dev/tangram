@@ -42,6 +42,10 @@ impl Package {
 			// Get the module's path.
 			let module_path = package_path.join(module_subpath.to_string());
 
+			// Add the module to the package directory.
+			let artifact = Artifact::check_in(tg, &module_path).await?;
+			directory = directory.add(tg, &module_subpath, artifact).await?;
+
 			// Get the module's text.
 			let text = tokio::fs::read_to_string(&module_path)
 				.await
@@ -49,10 +53,6 @@ impl Package {
 
 			// Analyze the module.
 			let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
-
-			// Add the module to the package directory.
-			let artifact = Artifact::check_in(tg, &module_path).await?;
-			directory = directory.add(tg, &module_subpath, artifact).await?;
 
 			// Add the includes to the package directory.
 			for include_path in analyze_output.includes {
