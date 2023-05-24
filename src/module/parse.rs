@@ -1,11 +1,13 @@
 use super::Module;
 use crate::error::{Error, Result};
 use std::rc::Rc;
-use swc_common::{FileName, SourceMap};
-use swc_ecma_parser::{Parser, StringInput, Syntax, TsConfig};
+use swc_core::{
+	common::{FileName, SourceMap},
+	ecma::parser::{Parser, StringInput, Syntax, TsConfig},
+};
 
 pub struct Output {
-	pub module: swc_ecma_ast::Module,
+	pub module: swc_core::ecma::ast::Module,
 	pub source_map: Rc<SourceMap>,
 }
 

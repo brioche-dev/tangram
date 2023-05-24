@@ -74,12 +74,7 @@ serde_yaml = "0.9"
 serde_v8 = "0.88.0"
 sha2 = "0.10.6"
 sourcemap = "6"
-swc_common = { version = "0.31", features = ["sourcemap"] }
-swc_ecma_ast = "0.103"
-swc_ecma_codegen = "0.138"
-swc_ecma_parser = "0.133"
-swc_ecma_transforms = { version ="0.217", features = ["typescript"] }
-swc_ecma_visit =  "0.89"
+swc_core = { version = "0.76.29", features = ["common", "common_sourcemap", "ecma_ast", "ecma_codegen", "ecma_parser", "ecma_parser_typescript", "ecma_transforms", "ecma_transforms_module", "ecma_transforms_typescript", "ecma_visit"] }
 tar = "0.4"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }

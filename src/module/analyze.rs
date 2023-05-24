@@ -5,9 +5,13 @@ use crate::{
 	path::Relpath,
 };
 use std::{collections::HashSet, rc::Rc, str::FromStr};
-use swc_common::{SourceMap, Span, DUMMY_SP};
-use swc_ecma_ast::{CallExpr, Callee, ExportAll, Expr, Ident, ImportDecl, Lit, NamedExport};
-use swc_ecma_visit::{Visit, VisitWith};
+use swc_core::{
+	common::{SourceMap, Span, DUMMY_SP},
+	ecma::{
+		ast::{CallExpr, Callee, ExportAll, Expr, Ident, ImportDecl, Lit, NamedExport},
+		visit::{Visit, VisitWith},
+	},
+};
 
 #[derive(Clone, Debug)]
 pub struct Output {

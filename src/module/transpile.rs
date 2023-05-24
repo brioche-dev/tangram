@@ -4,15 +4,22 @@ use crate::{
 	module::Module,
 };
 use std::rc::Rc;
-use swc_common::{Globals, Mark, SourceMap, Span, GLOBALS};
-use swc_ecma_ast::{
-	CallExpr, EsVersion, ExportDecl, ExportDefaultExpr, Expr, ExprOrSpread, Ident, KeyValueProp,
-	Lit, ObjectLit, Prop, PropOrSpread, Str, TsEntityName, TsQualifiedName, TsType,
-	TsTypeParamInstantiation, TsTypeRef, VarDeclarator,
+use swc_core::{
+	common::{Globals, Mark, SourceMap, Span, GLOBALS},
+	ecma::{
+		ast::{
+			CallExpr, EsVersion, ExportDecl, ExportDefaultExpr, Expr, ExprOrSpread, Ident,
+			KeyValueProp, Lit, ObjectLit, Prop, PropOrSpread, Str, TsEntityName, TsQualifiedName,
+			TsType, TsTypeParamInstantiation, TsTypeRef, VarDeclarator,
+		},
+		codegen::{text_writer::JsWriter, Config, Emitter, Node},
+		transforms::{
+			base::{fixer::fixer, resolver},
+			typescript::strip,
+		},
+		visit::{VisitMut, VisitMutWith},
+	},
 };
-use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter, Node};
-use swc_ecma_transforms::{fixer, resolver, typescript::strip};
-use swc_ecma_visit::{VisitMut, VisitMutWith};
 
 #[derive(Debug)]
 pub struct Output {
