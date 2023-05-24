@@ -111,10 +111,12 @@ impl Artifact {
 
 			Artifact::File(file) => {
 				// Copy the blob to the path.
+				let permit = tg.file_descriptor_semaphore.acquire().await;
 				file.blob()
 					.copy_to_path(tg, path)
 					.await
 					.wrap_err("Failed to copy the blob.")?;
+				drop(permit);
 
 				// Make the file executable if necessary.
 				if file.executable() {

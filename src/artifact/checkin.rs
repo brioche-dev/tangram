@@ -114,10 +114,8 @@ impl Artifact {
 		tokio::io::copy(&mut file, &mut hash_writer).await?;
 		let blob_hash = blob::Hash(hash_writer.finalize());
 		drop(file);
-		drop(permit);
 
 		// Copy the file to the temp path.
-		let permit = tg.file_descriptor_semaphore.acquire().await;
 		let temp = Temp::new(tg);
 		let blob_path = tg.blob_path(blob_hash);
 		tokio::fs::copy(path, temp.path()).await?;
