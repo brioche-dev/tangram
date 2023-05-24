@@ -61,6 +61,13 @@ impl Artifact {
 		// Perform the checkout to the temp path.
 		self.check_out_internal_inner_inner(tg, temp.path()).await?;
 
+		// // If the artifact is a directory, then make it writeable so it can be renamed.
+		// if self.as_directory().is_some() {
+		// 	tokio::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o755))
+		// 		.await
+		// 		.wrap_err("Failed to make the directory writeable.")?;
+		// }
+
 		// Move the checkout from the temp path to the path in the artifacts directory.
 		match tokio::fs::rename(temp.path(), &path).await {
 			Ok(()) => Ok(()),
@@ -74,7 +81,14 @@ impl Artifact {
 		}
 		.wrap_err("Failed to move the checkout to the checkout path.")?;
 
-		// Clear the file system object's timestamps.
+		// // If the artifact is a directory, then make it readonly again.
+		// if self.as_directory().is_some() {
+		// 	tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o555))
+		// 		.await
+		// 		.wrap_err("Failed to make the directory readonly.")?;
+		// }
+
+		// Clear the path's timestamps.
 		tokio::task::spawn_blocking({
 			let path = path.clone();
 			move || {
@@ -91,21 +105,29 @@ impl Artifact {
 	}
 
 	#[async_recursion]
+	#[allow(clippy::too_many_lines)]
 	async fn check_out_internal_inner_inner(&self, tg: &Instance, path: &Path) -> Result<()> {
 		match self {
 			Artifact::Directory(directory) => {
 				// Create the directory.
-				tokio::fs::create_dir(path).await?;
+				tokio::fs::create_dir(path)
+					.await
+					.wrap_err("Failed to create the directory.")?;
 
 				// Recurse into the entries.
-				try_join_all(directory.entries(tg).await?.into_iter().map(
-					|(name, artifact)| async move {
-						artifact
-							.check_out_internal_inner_inner(tg, &path.join(name))
-							.await?;
-						Ok::<_, Error>(())
-					},
-				))
+				try_join_all(
+					directory
+						.entries(tg)
+						.await
+						.wrap_err("Failed to get the directory's entries.")?
+						.into_iter()
+						.map(|(name, artifact)| async move {
+							artifact
+								.check_out_internal_inner_inner(tg, &path.join(name))
+								.await?;
+							Ok::<_, Error>(())
+						}),
+				)
 				.await?;
 			},
 
@@ -121,13 +143,16 @@ impl Artifact {
 				// Make the file executable if necessary.
 				if file.executable() {
 					let permissions = std::fs::Permissions::from_mode(0o755);
-					tokio::fs::set_permissions(path, permissions).await?;
+					tokio::fs::set_permissions(path, permissions)
+						.await
+						.wrap_err("Failed to make the file executable.")?;
 				}
 
 				// Check out the references.
 				try_join_all(
 					file.references(tg)
-						.await?
+						.await
+						.wrap_err("Failed to get the file's references.")?
 						.into_iter()
 						.map(|artifact| async move {
 							artifact.check_out_internal_inner(tg).await?;
@@ -181,6 +206,19 @@ impl Artifact {
 					.wrap_err("Failed to write the symlink for the reference.")?;
 			},
 		};
+
+		// // Make the file system object readonly.
+		// let mode = match self {
+		// 	Artifact::Directory(_) => Some(0o555),
+		// 	Artifact::File(file) if file.executable() => Some(0o555),
+		// 	Artifact::File(_) => Some(0o444),
+		// 	Artifact::Symlink(_) => None,
+		// };
+		// if let Some(mode) = mode {
+		// 	tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
+		// 		.await
+		// 		.wrap_err("Failed to make the file system object readonly.")?;
+		// }
 
 		// Clear the file system object's timestamps.
 		tokio::task::spawn_blocking({

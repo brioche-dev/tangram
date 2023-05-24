@@ -122,7 +122,7 @@ impl Artifact {
 		drop(permit);
 
 		// Set the permissions.
-		let permissions = std::fs::Permissions::from_mode(0o644);
+		let permissions = std::fs::Permissions::from_mode(0o444);
 		tokio::fs::set_permissions(temp.path(), permissions).await?;
 
 		// Move the file to the blobs directory.
