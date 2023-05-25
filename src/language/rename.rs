@@ -1,8 +1,8 @@
-use super::{service, location::Location,};
+use super::{location::Location, service};
 use crate::{
-	module::position::Position,
 	error::{return_error, Result},
 	instance::Instance,
+	module::position::Position,
 	module::Module,
 };
 use std::sync::Arc;

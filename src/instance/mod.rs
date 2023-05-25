@@ -5,14 +5,11 @@ use crate::{
 	blob,
 	client::Client,
 	database::Database,
-	document,
 	error::Result,
-	hash, operation,
-	package::{self, Package},
+	operation,
 	util::task_map::TaskMap,
 };
 use std::{
-	collections::HashMap,
 	path::{Path, PathBuf},
 	sync::Arc,
 };
@@ -24,7 +21,10 @@ mod lock;
 pub(crate) mod language;
 
 #[cfg(feature = "v8")]
-pub(crate) mod run;
+pub(crate) mod operations;
+
+#[cfg(feature = "modules")]
+pub(crate) mod module;
 
 /// An instance.
 pub struct Instance {
@@ -34,10 +34,6 @@ pub struct Instance {
 	/// The database.
 	pub(crate) database: Database,
 
-	/// A map of paths to documents.
-	pub(crate) documents:
-		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
-
 	/// A task map that deduplicates internal checkouts.
 	#[allow(clippy::type_complexity)]
 	pub(crate) internal_checkouts_task_map:
@@ -46,21 +42,21 @@ pub struct Instance {
 	/// A lock used to acquire shared and exclusive access to the path.
 	pub(crate) lock: Lock<()>,
 
-	/// A map of package specifiers to packages.
-	pub(crate) packages: std::sync::RwLock<HashMap<Package, package::Specifier, hash::BuildHasher>>,
-
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
 
+	/// State required to provide modules support.
+	#[cfg(feature = "modules")]
+	pub(crate) modules: module::State,
+
 	/// State required to provide language support to an instance.
 	#[cfg(feature = "v8")]
-	pub(crate) language: language::Language,
+	pub(crate) language: language::State,
 
 	/// State required to provide support for running operations.
 	#[cfg(feature = "run")]
-	pub(crate) run: run::Run,
+	pub(crate) operations: operations::State,
 }
-
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
@@ -87,10 +83,6 @@ impl Instance {
 		let database_path = path.join("database.mdb");
 		let database = Database::open(&database_path)?;
 
-		// Create the documents maps.
-		let documents = tokio::sync::RwLock::new(HashMap::default());
-
-
 		// Create the internal checkouts task map.
 		let internal_checkouts_task_map = std::sync::Mutex::new(None);
 
@@ -98,33 +90,34 @@ impl Instance {
 		let lock_path = path.join("lock");
 		let lock = Lock::new(&lock_path, ());
 
-		// Create the packages map.
-		let packages = std::sync::RwLock::new(HashMap::default());
+		// Create the state required for module support.
+		#[cfg(feature = "modules")]
+		let modules = module::State::new();
 
 		// Create the language handles.
 		#[cfg(feature = "v8")]
-		let language =language::Language::new();
+		let language = language::State::new();
 
 		// Create the state needed to run operations.
 		#[cfg(feature = "run")]
-		let run = run::Run::new();
+		let run = operations::State::new();
 
 		// Create the instance.
 		let instance = Instance {
 			api_client,
 			database,
-			documents,
 			internal_checkouts_task_map,
 			lock,
-			packages,
 			path,
+
+			#[cfg(feature = "modules")]
+			modules,
 
 			#[cfg(feature = "v8")]
 			language,
 
 			#[cfg(feature = "run")]
-			run,
-
+			operations: run,
 		};
 
 		Ok(instance)

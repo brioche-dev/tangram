@@ -1,4 +1,4 @@
-use super::{service, location::Location};
+use super::{location::Location, service};
 use crate::{
 	error::{return_error, Result},
 	instance::Instance,

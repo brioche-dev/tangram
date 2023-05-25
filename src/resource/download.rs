@@ -37,7 +37,7 @@ impl Resource {
 
 		// Send the request.
 		let response = tg
-			.run
+			.operations
 			.http_client
 			.get(self.url.clone())
 			.send()

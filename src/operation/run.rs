@@ -13,7 +13,7 @@ impl Operation {
 	pub async fn run(&self, tg: &Arc<Instance>) -> Result<Value> {
 		// Get the operations task map.
 		let operations_task_map = tg
-			.run
+			.operations
 			.task_map
 			.lock()
 			.unwrap()

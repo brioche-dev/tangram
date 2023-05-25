@@ -9,14 +9,23 @@ use url::Url;
 
 pub mod analyze;
 pub mod dependency;
+
+#[cfg(feature = "modules")]
 pub mod load;
 mod parse;
+
+#[cfg(feature = "modules")]
 mod path;
+
 pub mod position;
 pub mod range;
+
+#[cfg(feature = "modules")]
 pub mod resolve;
 pub mod specifier;
 pub mod transpile;
+
+#[cfg(feature = "modules")]
 mod version;
 
 /// A module.

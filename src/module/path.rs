@@ -16,7 +16,7 @@ impl Module {
 				let package = package_instance.package();
 
 				// Get the package path.
-				let packages = tg.packages.read().unwrap();
+				let packages = tg.modules.packages.read().unwrap();
 				let Some(specifier) = packages.get(package) else {
 					return Ok(None);
 				};

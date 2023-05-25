@@ -1,6 +1,5 @@
-
 /// State associated with an `Instance` required to provide language support.
-pub (crate) struct Language {
+pub(crate) struct State {
 	/// A handle to the main tokio runtime.
 	pub(crate) runtime: tokio::runtime::Handle,
 
@@ -8,9 +7,9 @@ pub (crate) struct Language {
 	pub(crate) local_pool: tokio_util::task::LocalPoolHandle,
 
 	/// A channel sender to send requests to the language service.
-	pub(crate) service_request_sender: std::sync::Mutex<Option<crate::language::service::RequestSender>>,
+	pub(crate) service_request_sender:
+		std::sync::Mutex<Option<crate::language::service::RequestSender>>,
 }
-
 
 static V8_INIT: std::sync::Once = std::sync::Once::new();
 
@@ -32,8 +31,8 @@ fn initialize_v8() {
 	v8::V8::initialize();
 }
 
-impl Language {
-    pub fn new () -> Language {
+impl State {
+	pub fn new() -> State {
 		// Initialize v8.
 		V8_INIT.call_once(initialize_v8);
 
@@ -47,7 +46,10 @@ impl Language {
 		// Create a new sender for the service request.
 		let service_request_sender = std::sync::Mutex::new(None);
 
-		Language { runtime, local_pool, service_request_sender }
-    }
+		State {
+			runtime,
+			local_pool,
+			service_request_sender,
+		}
+	}
 }
-
