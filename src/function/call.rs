@@ -19,7 +19,8 @@ impl Function {
 	pub(crate) async fn call_inner(&self, tg: &Arc<Instance>) -> Result<Value> {
 		// Call the function on the local pool because it is a `!Send` future.
 		let output = tg
-			.local_pool_handle
+			.language
+			.local_pool
 			.spawn_pinned({
 				let tg = tg.clone();
 				let function = self.clone();

@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{error::Result, language::Range, module::Module};
+use crate::{error::Result, module::range::Range, module::Module};
 use lsp_types as lsp;
 
 impl Server {

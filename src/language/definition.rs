@@ -1,5 +1,6 @@
-use super::{service, Location, Position};
+use super::{location::Location, service};
 use crate::{
+	module::position::Position,
 	error::{return_error, Result},
 	instance::Instance,
 	module::Module,

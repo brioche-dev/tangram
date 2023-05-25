@@ -42,6 +42,7 @@ async fn main() {
 		// Exit with a non-zero status code.
 		std::process::exit(1);
 	}
+
 }
 
 #[tracing::instrument(name = "main")]

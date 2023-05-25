@@ -12,6 +12,8 @@ pub mod dependency;
 pub mod load;
 mod parse;
 mod path;
+pub mod position;
+pub mod range;
 pub mod resolve;
 pub mod specifier;
 pub mod transpile;

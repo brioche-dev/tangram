@@ -1,5 +1,6 @@
 use crate::{
-	language::{Location, Position},
+	language::location::Location,
+	module::position::Position,
 	module,
 };
 

@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 impl Module {
 	#[allow(clippy::unused_async)]
+
 	pub async fn metadata(tg: &Arc<Instance>, text: &str) -> Result<package::Metadata> {
 		// Create the language service request.
 		let request = service::Request::Metadata(service::metadata::Request {

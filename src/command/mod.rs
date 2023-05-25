@@ -5,13 +5,15 @@ use std::collections::BTreeMap;
 mod builder;
 mod data;
 mod error;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "run"))]
 mod linux;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "run"))]
 mod macos;
 mod new;
-mod run;
 mod server;
+
+#[cfg(feature = "run")]
+mod run;
 
 /// A command.
 #[allow(clippy::unsafe_derive_deserialize)]

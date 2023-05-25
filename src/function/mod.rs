@@ -2,15 +2,29 @@ pub use self::{data::Data, error::Error};
 use crate::{error::Result, instance::Instance, operation, package, path::Subpath, value::Value};
 use std::collections::BTreeMap;
 
+#[cfg(feature = "v8")]
 mod call;
+
+#[cfg(feature = "v8")]
 mod context;
+
 mod data;
 mod error;
+
+#[cfg(feature = "v8")]
 mod exception;
+
+#[cfg(feature = "v8")]
 mod isolate;
+
+#[cfg(feature = "v8")]
 mod module;
 mod new;
+
+#[cfg(feature = "v8")]
 mod state;
+
+#[cfg(feature = "v8")]
 mod syscall;
 
 /// A function.

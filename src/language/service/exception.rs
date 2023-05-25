@@ -1,5 +1,5 @@
 use super::error::{Location, StackFrame, StackTrace};
-use crate::{error::Error, language::Position};
+use crate::{error::Error, module::position::Position};
 use sourcemap::SourceMap;
 use std::sync::Arc;
 

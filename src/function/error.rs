@@ -1,4 +1,4 @@
-use crate::{language::Position, module::Module};
+use crate::{module::position::Position, module::Module};
 use std::sync::Arc;
 use thiserror::Error;
 

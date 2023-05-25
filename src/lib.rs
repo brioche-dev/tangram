@@ -20,6 +20,7 @@ pub mod id;
 pub mod instance;
 pub mod language;
 pub mod log;
+#[cfg(feature = "v8")]
 pub mod lsp;
 pub mod migrations;
 pub mod module;
@@ -34,4 +35,3 @@ pub mod temp;
 pub mod template;
 pub mod util;
 pub mod value;
-// pub mod server;

@@ -121,7 +121,7 @@ fn load_module<'s>(
 
 	// Load the module.
 	let (sender, receiver) = std::sync::mpsc::channel();
-	tg.runtime_handle.spawn({
+	tg.language.runtime.spawn({
 		let tg = tg.clone();
 		let module = module.clone();
 		async move {
@@ -232,7 +232,7 @@ fn resolve_module_callback_inner<'s>(
 
 	// Resolve.
 	let (sender, receiver) = std::sync::mpsc::channel();
-	tg.runtime_handle.spawn({
+	tg.language.runtime.spawn({
 		let tg = tg.clone();
 		let specifier = specifier.clone();
 		let referrer = referrer.clone();

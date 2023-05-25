@@ -1,5 +1,6 @@
 use crate::{
-	language::{completion::Entry, Position},
+	language::completion::Entry,
+	module::position::Position,
 	module,
 };
 

@@ -58,7 +58,7 @@ fn syscall_documents(
 	_scope: &mut v8::HandleScope,
 	_args: (),
 ) -> Result<Vec<module::Module>> {
-	tg.runtime_handle.clone().block_on(async move {
+	tg.language.runtime.clone().block_on(async move {
 		let documents = tg.documents.read().await;
 		let modules = documents.keys().cloned().map(Module::Document).collect();
 		Ok(modules)
@@ -128,7 +128,7 @@ fn syscall_module_load(
 	args: (module::Module,),
 ) -> Result<String> {
 	let (module,) = args;
-	tg.runtime_handle.clone().block_on(async move {
+	tg.language.runtime.clone().block_on(async move {
 		let text = module
 			.load(tg)
 			.await
@@ -143,7 +143,7 @@ fn syscall_module_resolve(
 	args: (module::Module, module::Specifier),
 ) -> Result<module::Module> {
 	let (module, specifier) = args;
-	tg.runtime_handle.clone().block_on(async move {
+	tg.language.runtime.clone().block_on(async move {
 		let module = module.resolve(tg, &specifier).await.wrap_err_with(|| {
 			format!(r#"Failed to resolve specifier "{specifier}" relative to module "{module}"."#)
 		})?;
@@ -157,7 +157,7 @@ fn syscall_module_version(
 	args: (module::Module,),
 ) -> Result<String> {
 	let (module,) = args;
-	tg.runtime_handle.clone().block_on(async move {
+	tg.language.runtime.clone().block_on(async move {
 		let version = module.version(tg).await?;
 		Ok(version.to_string())
 	})
@@ -169,7 +169,7 @@ fn syscall_package_hash_for_module(
 	args: (module::Module,),
 ) -> Result<Hash> {
 	let (module,) = args;
-	tg.runtime_handle.clone().block_on(async move {
+	tg.language.runtime.clone().block_on(async move {
 		match module {
 			Module::Normal(module) => {
 				let package_instance =

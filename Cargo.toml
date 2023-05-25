@@ -22,6 +22,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "tg"
 path = "src/cli/main.rs"
+required-features = ["full"]
 
 [build-dependencies]
 v8 = "0.66.0"
@@ -71,7 +72,7 @@ reqwest = { version = "0.11", default-features = false, features = ["json", "str
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-serde_v8 = "0.88.0"
+serde_v8 = { version = "0.88.0", optional = true }
 sha2 = "0.10.6"
 sourcemap = "6"
 swc_common = { version = "0.31", features = ["sourcemap"] }
@@ -89,7 +90,7 @@ toml = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
-v8 = "0.66.0"
+v8 = { version = "0.66.0", optional = true }
 webbrowser = "0.8"
 xattr = "1"
 xz = "0.1"
@@ -97,7 +98,10 @@ zip = { version = "0.6", default-features = false, features = ["aes-crypto", "de
 zstd = "0.12.3"
 
 [features]
-default = []
+default = ["full"]
+v8 = ["dep:v8", "dep:serde_v8"]
+run = ["v8"]
+full = ["v8", "run"]
 
 [profile.dev.package.blake3]
 opt-level = 3

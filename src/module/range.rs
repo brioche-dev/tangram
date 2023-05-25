@@ -1,4 +1,4 @@
-use super::Position;
+use super::position::Position;
 
 /// A range in a string, such as a text editor selection. The end is exclusive. This type maps cleanly to the `Range` type in the Language Server Protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

@@ -7,21 +7,24 @@ use crate::{
 	database::Database,
 	document,
 	error::Result,
-	hash, language, operation,
+	hash, operation,
 	package::{self, Package},
 	util::task_map::TaskMap,
-	value::Value,
 };
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
 	sync::Arc,
 };
-use tokio_util::task::LocalPoolHandle;
 use url::Url;
-
 mod clean;
 mod lock;
+
+#[cfg(feature = "v8")]
+pub(crate) mod language;
+
+#[cfg(feature = "v8")]
+pub(crate) mod run;
 
 /// An instance.
 pub struct Instance {
@@ -35,28 +38,13 @@ pub struct Instance {
 	pub(crate) documents:
 		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
 
-	/// An HTTP client for download operations.
-	pub(crate) http_client: reqwest::Client,
-
 	/// A task map that deduplicates internal checkouts.
 	#[allow(clippy::type_complexity)]
 	pub(crate) internal_checkouts_task_map:
 		std::sync::Mutex<Option<Arc<TaskMap<Artifact, Result<PathBuf>>>>>,
 
-	/// A channel sender to send requests to the language service.
-	pub(crate) language_service_request_sender:
-		std::sync::Mutex<Option<language::service::RequestSender>>,
-
-	/// A local pool for running `!Send` futures.
-	pub(crate) local_pool_handle: LocalPoolHandle,
-
 	/// A lock used to acquire shared and exclusive access to the path.
 	pub(crate) lock: Lock<()>,
-
-	/// A task map that deduplicates operations.
-	#[allow(clippy::type_complexity)]
-	pub(crate) operations_task_map:
-		std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Result<Value>>>>>,
 
 	/// A map of package specifiers to packages.
 	pub(crate) packages: std::sync::RwLock<HashMap<Package, package::Specifier, hash::BuildHasher>>,
@@ -64,9 +52,15 @@ pub struct Instance {
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
 
-	/// A handle to the main tokio runtime.
-	pub(crate) runtime_handle: tokio::runtime::Handle,
+	/// State required to provide language support to an instance.
+	#[cfg(feature = "v8")]
+	pub(crate) language: language::Language,
+
+	/// State required to provide support for running operations.
+	#[cfg(feature = "run")]
+	pub(crate) run: run::Run,
 }
+
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
@@ -74,31 +68,8 @@ pub struct Options {
 	pub api_token: Option<String>,
 }
 
-static V8_INIT: std::sync::Once = std::sync::Once::new();
-
-fn initialize_v8() {
-	// Set the ICU data.
-	#[repr(C, align(16))]
-	struct IcuData([u8; 10_541_264]);
-	static ICU_DATA: IcuData = IcuData(*include_bytes!(concat!(
-		env!("CARGO_MANIFEST_DIR"),
-		"/assets/icudtl.dat"
-	)));
-	v8::icu::set_common_data_72(&ICU_DATA.0).unwrap();
-
-	// Initialize the platform.
-	let platform = v8::new_default_platform(0, true);
-	v8::V8::initialize_platform(platform.make_shared());
-
-	// Initialize V8.
-	v8::V8::initialize();
-}
-
 impl Instance {
 	pub async fn new(path: PathBuf, options: Options) -> Result<Instance> {
-		// Initialize V8.
-		V8_INIT.call_once(initialize_v8);
-
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
 
@@ -119,46 +90,41 @@ impl Instance {
 		// Create the documents maps.
 		let documents = tokio::sync::RwLock::new(HashMap::default());
 
-		// Create the HTTP client.
-		let http_client = reqwest::Client::new();
 
 		// Create the internal checkouts task map.
 		let internal_checkouts_task_map = std::sync::Mutex::new(None);
-
-		// Create the language service request sender.
-		let language_service_request_sender = std::sync::Mutex::new(None);
-
-		// Create the local pool handle.
-		let threads = std::thread::available_parallelism().unwrap().get();
-		let local_pool_handle = LocalPoolHandle::new(threads);
 
 		// Create the lock.
 		let lock_path = path.join("lock");
 		let lock = Lock::new(&lock_path, ());
 
-		// Create the operations task map.
-		let operations_task_map = std::sync::Mutex::new(None);
-
 		// Create the packages map.
 		let packages = std::sync::RwLock::new(HashMap::default());
 
-		// Get a handle to the tokio runtime.
-		let runtime_handle = tokio::runtime::Handle::current();
+		// Create the language handles.
+		#[cfg(feature = "v8")]
+		let language =language::Language::new();
+
+		// Create the state needed to run operations.
+		#[cfg(feature = "run")]
+		let run = run::Run::new();
 
 		// Create the instance.
 		let instance = Instance {
 			api_client,
 			database,
 			documents,
-			http_client,
 			internal_checkouts_task_map,
-			language_service_request_sender,
-			local_pool_handle,
 			lock,
-			operations_task_map,
 			packages,
 			path,
-			runtime_handle,
+
+			#[cfg(feature = "v8")]
+			language,
+
+			#[cfg(feature = "run")]
+			run,
+
 		};
 
 		Ok(instance)
