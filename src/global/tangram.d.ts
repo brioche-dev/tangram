@@ -229,9 +229,6 @@ declare namespace tg {
 	let function_: Function_;
 	export { function_ as function };
 
-	/** Create a Tangram test function. */
-	export let test: Function_<[], undefined>;
-
 	/** A Tangram function. */
 	export interface Function<
 		A extends Array<Value> = Array<Value>,

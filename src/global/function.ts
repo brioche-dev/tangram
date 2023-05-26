@@ -46,10 +46,6 @@ export let function_ = async <
 	return function_;
 };
 
-export let test = async (arg: FunctionArg<[], undefined>) => {
-	return await function_(arg);
-};
-
 export let entrypoint = async <A extends Array<Value>, R extends Value>(
 	f: (...args: A) => MaybePromise<R>,
 	syscallEnv: Record<string, syscall.Value>,
