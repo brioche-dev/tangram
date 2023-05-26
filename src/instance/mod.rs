@@ -107,7 +107,11 @@ impl Instance {
 			internal_checkouts_task_map,
 			lock,
 			path,
+
+			#[cfg(feature = "v8")]
 			v8,
+
+			#[cfg(feature = "run")]
 			operations,
 		};
 
