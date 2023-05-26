@@ -64,7 +64,7 @@ impl Instance {
 	) -> Result<Response> {
 		// Spawn the language service if necessary.
 		let request_sender = self
-			.language
+			.v8
 			.service_request_sender
 			.lock()
 			.unwrap()

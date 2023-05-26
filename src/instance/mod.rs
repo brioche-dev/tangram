@@ -7,7 +7,7 @@ use crate::{
 	database::Database,
 	document,
 	error::Result,
-	language, operation,
+	operation,
 	util::task_map::TaskMap,
 };
 use std::{
@@ -20,10 +20,11 @@ mod clean;
 mod lock;
 
 #[cfg(feature = "v8")]
-pub(crate) mod language;
+pub(crate) mod v8;
 
 #[cfg(feature = "v8")]
 pub(crate) mod operations;
+
 /// An instance.
 pub struct Instance {
 	/// A client for communicating with the API.
@@ -36,8 +37,8 @@ pub struct Instance {
 	pub(crate) documents:
 		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
 
-	/// An HTTP client for download operations.
-	pub(crate) http_client: reqwest::Client,
+	/// A semaphore that prevents opening too many file descriptors.
+	pub(crate) file_descriptor_semaphore: tokio::sync::Semaphore,
 
 	/// A task map that deduplicates internal checkouts.
 	#[allow(clippy::type_complexity)]
@@ -50,11 +51,9 @@ pub struct Instance {
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
 
-	/// A map of package specifiers to packages.
-	pub(crate) packages: std::sync::RwLock<HashMap<Package, package::Specifier, hash::BuildHasher>>,
-
-	/// The path to the directory where the instance stores its data.
-	pub(crate) path: PathBuf,
+	/// State required to provide language support.
+	#[cfg(feature = "v8")]
+	pub(crate) v8: v8::State,
 
 	/// State required to provide support for running operations.
 	#[cfg(feature = "run")]
@@ -79,15 +78,12 @@ impl Instance {
 		// Create the documents maps.
 		let documents = tokio::sync::RwLock::new(HashMap::default());
 
+		// Create the file system semaphore.
+		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
+
 		// Open the database.
 		let database_path = path.join("database.mdb");
 		let database = Database::open(&database_path)?;
-
-		// Create the documents maps.
-		let documents = tokio::sync::RwLock::new(HashMap::default());
-
-		// Create the HTTP client.
-		let http_client = reqwest::Client::new();
 
 		// Create the internal checkouts task map.
 		let internal_checkouts_task_map = std::sync::Mutex::new(None);
@@ -96,27 +92,23 @@ impl Instance {
 		let lock_path = path.join("lock");
 		let lock = Lock::new(&lock_path, ());
 
-		// Create the operations task map.
-		let operations_task_map = std::sync::Mutex::new(None);
+		#[cfg(feature = "v8")]
+		let v8 = v8::State::new();
 
-		// Create the packages map.
-		let packages = std::sync::RwLock::new(HashMap::default());
-
-		// Get a handle to the tokio runtime.
-		let runtime_handle = tokio::runtime::Handle::current();
+		#[cfg(feature = "run")]
+		let operations = operations::State::new();
 
 		// Create the instance.
 		let instance = Instance {
 			api_client,
 			database,
 			documents,
-			http_client,
+			file_descriptor_semaphore,
 			internal_checkouts_task_map,
 			lock,
-			operations_task_map,
-			packages,
 			path,
-			runtime_handle,
+			v8,
+			operations,
 		};
 
 		Ok(instance)
