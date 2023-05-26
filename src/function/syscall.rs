@@ -23,7 +23,7 @@ use crate::{
 	template::Template,
 	value::Value,
 };
-use base64::{engine::general_purpose, Engine as _};
+use base64::Engine as _;
 use itertools::Itertools;
 use std::{collections::BTreeMap, future::Future, rc::Rc, sync::Arc};
 use tracing::Instrument;
@@ -110,7 +110,7 @@ fn syscall_base64_decode(
 	args: (String,),
 ) -> Result<serde_v8::ZeroCopyBuf> {
 	let (value,) = args;
-	let bytes = general_purpose::STANDARD_NO_PAD
+	let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
 		.decode(value)
 		.map_err(Error::other)
 		.wrap_err("Failed to decode the bytes.")?;
@@ -124,7 +124,7 @@ fn syscall_base64_encode(
 	args: (serde_v8::ZeroCopyBuf,),
 ) -> Result<String> {
 	let (value,) = args;
-	let encoded = general_purpose::STANDARD_NO_PAD.encode(value);
+	let encoded = base64::engine::general_purpose::STANDARD_NO_PAD.encode(value);
 	Ok(encoded)
 }
 

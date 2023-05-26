@@ -215,18 +215,18 @@ declare namespace tg {
 
 	// Function.
 
-	type Function_<
+	/** Create a Tangram function. */
+	function function_<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
-	> = {
-		(f: (...args: A) => MaybePromise<R | void>): Promise<Function<A, R>>;
-		(name: string, f: (...args: A) => MaybePromise<R | void>): Promise<
-			Function<A, R>
-		>;
-	};
-
-	/** Create a Tangram function. */
-	let function_: Function_;
+	>(f: (...args: A) => MaybePromise<R | void>): Promise<Function<A, R>>;
+	function function_<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	>(
+		name: string,
+		f: (...args: A) => MaybePromise<R | void>,
+	): Promise<Function<A, R>>;
 	export { function_ as function };
 
 	/** A Tangram function. */
