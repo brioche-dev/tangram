@@ -41,7 +41,7 @@ buffalo = { workspace = true }
 byteorder = "1.4.3"
 bytes = "1"
 bzip2 = "0.4.4"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 derive_more = "0.99.17"
 either = { version = "1", features = ["serde"] }
 filetime = "0.2"

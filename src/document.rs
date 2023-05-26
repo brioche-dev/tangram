@@ -1,16 +1,14 @@
-#[cfg(feature = "modules")]
 use crate::{
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
 	module::range::Range,
 	package::ROOT_MODULE_FILE_NAME,
+	path::Subpath,
 };
-
-#[cfg(feature = "modules")]
-use std::path::Path;
-
-use crate::path::Subpath;
-use std::{path::PathBuf, time::SystemTime};
+use std::{
+	path::{Path, PathBuf},
+	time::SystemTime,
+};
 
 /// A document.
 #[derive(
@@ -55,7 +53,6 @@ pub struct Opened {
 	pub text: String,
 }
 
-#[cfg(feature = "modules")]
 impl Document {
 	pub async fn new(tg: &Instance, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
 		let path = package_path.join(module_path.to_string());
@@ -67,7 +64,7 @@ impl Document {
 		};
 
 		// Lock the documents.
-		let mut documents = tg.modules.documents.write().await;
+		let mut documents = tg.documents.write().await;
 
 		// Set the state to unopened if it is not present.
 		if !documents.contains_key(&document) {
@@ -119,7 +116,7 @@ impl Document {
 	/// Open a document.
 	pub async fn open(&self, tg: &Instance, version: i32, text: String) -> Result<()> {
 		// Lock the documents.
-		let mut documents = tg.modules.documents.write().await;
+		let mut documents = tg.documents.write().await;
 
 		// Set the state.
 		let state = State::Opened(Opened { version, text });
@@ -137,7 +134,7 @@ impl Document {
 		text: String,
 	) -> Result<()> {
 		// Lock the documents.
-		let mut documents = tg.modules.documents.write().await;
+		let mut documents = tg.documents.write().await;
 
 		// Get the state.
 		let Some(State::Opened(state)) = documents.get_mut(self) else {
@@ -165,7 +162,7 @@ impl Document {
 	/// Close a document.
 	pub async fn close(self, tg: &Instance) -> Result<()> {
 		// Lock the documents.
-		let mut documents = tg.modules.documents.write().await;
+		let mut documents = tg.documents.write().await;
 
 		// Remove the document.
 		documents.remove(&self);
@@ -182,7 +179,7 @@ impl Document {
 	/// Get the document's version.
 	pub async fn version(&self, tg: &Instance) -> Result<i32> {
 		// Lock the documents.
-		let mut documents = tg.modules.documents.write().await;
+		let mut documents = tg.documents.write().await;
 
 		// Get the state.
 		let state = documents.get_mut(self).unwrap();
@@ -206,7 +203,7 @@ impl Document {
 	/// Get the document's text.
 	pub async fn text(&self, tg: &Instance) -> Result<String> {
 		let path = self.path();
-		let documents = tg.modules.documents.read().await;
+		let documents = tg.documents.read().await;
 		let document = documents.get(self).unwrap();
 		let text = match document {
 			State::Closed(_) => tokio::fs::read_to_string(&path).await?,

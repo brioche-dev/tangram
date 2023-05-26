@@ -5,11 +5,14 @@ use crate::{
 	blob,
 	client::Client,
 	database::Database,
+	document,
 	error::Result,
-	operation,
+	hash, operation,
+	package::{self, Package},
 	util::task_map::TaskMap,
 };
 use std::{
+	collections::HashMap,
 	path::{Path, PathBuf},
 	sync::Arc,
 };
@@ -22,10 +25,6 @@ pub(crate) mod language;
 
 #[cfg(feature = "v8")]
 pub(crate) mod operations;
-
-#[cfg(feature = "modules")]
-pub(crate) mod module;
-
 /// An instance.
 pub struct Instance {
 	/// A client for communicating with the API.
@@ -33,6 +32,10 @@ pub struct Instance {
 
 	/// The database.
 	pub(crate) database: Database,
+
+	/// A map of paths to documents.
+	pub(crate) documents:
+		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
 
 	/// A task map that deduplicates internal checkouts.
 	#[allow(clippy::type_complexity)]
@@ -45,9 +48,8 @@ pub struct Instance {
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
 
-	/// State required to provide modules support.
-	#[cfg(feature = "modules")]
-	pub(crate) modules: module::State,
+	/// A map of package specifiers to packages.
+	pub(crate) packages: std::sync::RwLock<HashMap<Package, package::Specifier, hash::BuildHasher>>,
 
 	/// State required to provide language support to an instance.
 	#[cfg(feature = "v8")]
@@ -79,6 +81,9 @@ impl Instance {
 		let token = options.api_token;
 		let api_client = api::Client::new(api_url, token);
 
+		// Create the documents maps.
+		let documents = tokio::sync::RwLock::new(HashMap::default());
+
 		// Open the database.
 		let database_path = path.join("database.mdb");
 		let database = Database::open(&database_path)?;
@@ -90,9 +95,8 @@ impl Instance {
 		let lock_path = path.join("lock");
 		let lock = Lock::new(&lock_path, ());
 
-		// Create the state required for module support.
-		#[cfg(feature = "modules")]
-		let modules = module::State::new();
+		// Create the packages map.
+		let packages = std::sync::RwLock::new(HashMap::default());
 
 		// Create the language handles.
 		#[cfg(feature = "v8")]
@@ -106,12 +110,11 @@ impl Instance {
 		let instance = Instance {
 			api_client,
 			database,
+			documents,
 			internal_checkouts_task_map,
 			lock,
 			path,
-
-			#[cfg(feature = "modules")]
-			modules,
+			packages,
 
 			#[cfg(feature = "v8")]
 			language,

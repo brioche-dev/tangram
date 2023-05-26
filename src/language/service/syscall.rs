@@ -59,7 +59,7 @@ fn syscall_documents(
 	_args: (),
 ) -> Result<Vec<module::Module>> {
 	tg.language.runtime.clone().block_on(async move {
-		let documents = tg.modules.documents.read().await;
+		let documents = tg.documents.read().await;
 		let modules = documents.keys().cloned().map(Module::Document).collect();
 		Ok(modules)
 	})
