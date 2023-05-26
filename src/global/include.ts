@@ -11,10 +11,11 @@ type Arg = {
 
 export let include = async (arg: Arg): Promise<Artifact> => {
 	assert(arg.module.kind === "normal");
-	let artifact = Artifact.get(arg.module.value.packageHash);
+	let artifact = await Artifact.get(arg.module.value.packageHash);
 	Directory.assert(artifact);
 	let path = subpath(arg.module.value.modulePath)
 		.toRelpath()
+		.parent()
 		.join(arg.path)
 		.toSubpath();
 	let includedArtifact = artifact.get(path);
