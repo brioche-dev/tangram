@@ -150,6 +150,7 @@ export class Function<
 				let function_ = await Function.new({
 					function: target,
 					args: (await Promise.all(args.map(resolve))) as A,
+					env: globalEnv.value,
 				});
 				let syscallOutput = await syscall.operation.run(
 					Operation.toSyscall(function_ as Operation),
