@@ -1,12 +1,14 @@
 use super::{Data, Function};
-use crate::{error::Result, instance::Instance, operation, package, path::Subpath, value::Value};
+use crate::{
+	error::Result, instance::Instance, operation, package::Package, path::Subpath, value::Value,
+};
 use std::collections::BTreeMap;
 
 impl Function {
 	/// Create a new function call.
 	pub async fn new(
 		tg: &Instance,
-		package_instance: package::Instance,
+		package: Package,
 		module_path: Subpath,
 		name: String,
 		env: BTreeMap<String, Value>,
@@ -19,7 +21,7 @@ impl Function {
 			.collect();
 		let args_ = args.iter().map(Value::to_data).collect();
 		let operation = operation::Data::Function(Data {
-			package_instance_hash: package_instance.hash(),
+			package_hash: package.hash(),
 			module_path: module_path.clone(),
 			name: name.clone(),
 			env: env_,
@@ -37,7 +39,7 @@ impl Function {
 		// Create the function.
 		let function = Self {
 			hash,
-			package_instance_hash: package_instance.hash(),
+			package_hash: package.hash(),
 			module_path,
 			name,
 			env,

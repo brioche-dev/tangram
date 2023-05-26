@@ -1,5 +1,12 @@
 pub use self::{data::Data, error::Error};
-use crate::{error::Result, instance::Instance, operation, package, path::Subpath, value::Value};
+use crate::{
+	error::Result,
+	instance::Instance,
+	operation,
+	package::{self, Package},
+	path::Subpath,
+	value::Value,
+};
 use std::collections::BTreeMap;
 
 #[cfg(feature = "v8")]
@@ -34,8 +41,8 @@ pub struct Function {
 	/// The hash.
 	pub hash: operation::Hash,
 
-	/// The hash of the package instance of the function.
-	pub package_instance_hash: package::instance::Hash,
+	/// The hash of the package the function is defined in.
+	pub package_hash: package::Hash,
 
 	/// The path to module where the function is defined.
 	pub module_path: Subpath,
@@ -56,7 +63,7 @@ impl Function {
 		self.hash
 	}
 
-	pub async fn package_instance(&self, tg: &Instance) -> Result<package::Instance> {
-		package::Instance::get(tg, self.package_instance_hash).await
+	pub async fn package(&self, tg: &Instance) -> Result<Package> {
+		Package::get(tg, self.package_hash).await
 	}
 }

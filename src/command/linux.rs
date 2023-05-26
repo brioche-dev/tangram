@@ -415,8 +415,8 @@ impl Command {
 			.map(|entry| CString::new(entry).unwrap())
 			.collect_vec();
 		let mut envp = Vec::with_capacity(env.len() + 1);
-		for pair in env {
-			envp.push(pair);
+		for entry in env {
+			envp.push(entry);
 		}
 		let envp = CStringVec::new(envp);
 

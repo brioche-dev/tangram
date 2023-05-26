@@ -7,7 +7,7 @@ use crate::{
 impl Client {
 	#[allow(clippy::unused_async)]
 	pub async fn add_artifact(&self, _artifact: &Artifact) -> Result<artifact::Hash> {
-		todo!()
+		unimplemented!()
 		// if let artifact::add::Outcome::Added { artifact_hash } =
 		// 	self.try_add_artifact(artifact).await?
 		// {

@@ -25,9 +25,6 @@ pub async fn migrate(path: &Path) -> Result<()> {
 	// Create the artifact trackers database.
 	env.create_db("artifact_trackers".into(), lmdb::DatabaseFlags::empty())?;
 
-	// Create the package instances database.
-	env.create_db("package_instances".into(), lmdb::DatabaseFlags::empty())?;
-
 	// Create the operations database.
 	env.create_db("operations".into(), lmdb::DatabaseFlags::empty())?;
 

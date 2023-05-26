@@ -1,9 +1,7 @@
 use crate::{
-	artifact::Hash,
 	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
 	module::{self, Module},
-	package,
 };
 use itertools::Itertools;
 use std::sync::Weak;
@@ -46,7 +44,6 @@ fn syscall_inner<'s>(
 		"module_load" => syscall_sync(scope, args, syscall_module_load),
 		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
 		"module_version" => syscall_sync(scope, args, syscall_module_version),
-		"package_hash_for_module" => syscall_sync(scope, args, syscall_package_hash_for_module),
 		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
 		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
@@ -140,7 +137,7 @@ fn syscall_module_load(
 fn syscall_module_resolve(
 	tg: &Instance,
 	_scope: &mut v8::HandleScope,
-	args: (module::Module, module::Specifier),
+	args: (module::Module, module::Import),
 ) -> Result<module::Module> {
 	let (module, specifier) = args;
 	tg.language.runtime.clone().block_on(async move {
@@ -160,25 +157,6 @@ fn syscall_module_version(
 	tg.language.runtime.clone().block_on(async move {
 		let version = module.version(tg).await?;
 		Ok(version.to_string())
-	})
-}
-
-fn syscall_package_hash_for_module(
-	tg: &Instance,
-	_scope: &mut v8::HandleScope,
-	args: (module::Module,),
-) -> Result<Hash> {
-	let (module,) = args;
-	tg.language.runtime.clone().block_on(async move {
-		match module {
-			Module::Normal(module) => {
-				let package_instance =
-					package::instance::Instance::get_local(tg, module.package_instance_hash)
-						.await?;
-				Ok(package_instance.package().artifact().hash())
-			},
-			_ => unreachable!(),
-		}
 	})
 }
 

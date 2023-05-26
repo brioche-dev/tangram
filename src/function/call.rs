@@ -33,19 +33,21 @@ impl Function {
 		Ok(output)
 	}
 
-	#[allow(clippy::await_holding_refcell_ref, clippy::too_many_lines)]
+	#[allow(
+		clippy::await_holding_refcell_ref,
+		clippy::too_many_lines,
+		clippy::items_after_statements
+	)]
 	async fn call_inner_inner(&self, tg: Arc<Instance>) -> Result<Value> {
 		// Create the context.
 		let context = super::context::new(tg.clone());
 
-		// Get the module.
+		// Evaluate the module.
 		let module = Module::Normal(module::Normal {
-			package_instance_hash: self.package_instance_hash,
+			package_hash: self.package_hash,
 			module_path: self.module_path.clone(),
 		});
-
-		// Evaluate the module.
-		let (module, _) = super::module::evaluate(context.clone(), &module).await?;
+		super::module::evaluate(context.clone(), &module).await?;
 
 		// Enter the context.
 		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
@@ -64,7 +66,7 @@ impl Function {
 		let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
 		let undefined = v8::undefined(&mut try_catch_scope);
 
-		// Get the entrypoint.
+		// Get the tg global.
 		let global = context.global(&mut try_catch_scope);
 		let tg_string = v8::String::new(&mut try_catch_scope, "tg").unwrap();
 		let tg: v8::Local<v8::Object> = global
@@ -72,30 +74,36 @@ impl Function {
 			.unwrap()
 			.try_into()
 			.unwrap();
-		let entrypoint_string = v8::String::new(&mut try_catch_scope, "entrypoint").unwrap();
-		let entrypoint: v8::Local<v8::Function> = tg
-			.get(&mut try_catch_scope, entrypoint_string.into())
+
+		// Get the registry.
+		let registry_string = v8::String::new(&mut try_catch_scope, "registry").unwrap();
+		let registry: v8::Local<v8::Object> = tg
+			.get(&mut try_catch_scope, registry_string.into())
 			.unwrap()
 			.try_into()
 			.unwrap();
 
-		// Move the module to the context.
-		let module = v8::Local::new(&mut try_catch_scope, module);
-
-		// Get the module namespace.
-		let namespace = module
-			.get_module_namespace()
-			.to_object(&mut try_catch_scope)
-			.unwrap();
-
 		// Get the function.
-		let function_name_string = v8::String::new(&mut try_catch_scope, &self.name).unwrap();
-		let function: v8::Local<v8::Function> = namespace
-			.get(&mut try_catch_scope, function_name_string.into())
-			.wrap_err("Failed to get the export.")?
+		#[derive(serde::Serialize)]
+		struct RegistryKey {
+			module: Module,
+			name: String,
+		}
+		let key = RegistryKey {
+			module,
+			name: self.name.clone(),
+		};
+		let key = serde_json::to_value(&key).unwrap();
+		let key = serde_json::to_string(&key).unwrap();
+		let key = serde_v8::to_v8(&mut try_catch_scope, key).map_err(Error::other)?;
+		let function: v8::Local<v8::Function> = registry
+			.get(&mut try_catch_scope, key)
+			.wrap_err("Failed to get the function.")?
 			.try_into()
 			.map_err(Error::other)
-			.wrap_err("The export must be an object.")?;
+			.wrap_err("Expected a function.")?;
+
+		// Get the implementation.
 		let f_string = v8::String::new(&mut try_catch_scope, "f").unwrap();
 		let f: v8::Local<v8::Function> = function
 			.get(&mut try_catch_scope, f_string.into())
@@ -103,6 +111,14 @@ impl Function {
 			.try_into()
 			.map_err(Error::other)
 			.wrap_err(r#"The value for the key "f" must be a function."#)?;
+
+		// Get the entrypoint.
+		let entrypoint_string = v8::String::new(&mut try_catch_scope, "entrypoint").unwrap();
+		let entrypoint: v8::Local<v8::Function> = tg
+			.get(&mut try_catch_scope, entrypoint_string.into())
+			.unwrap()
+			.try_into()
+			.unwrap();
 
 		// Serialize the env to v8.
 		let env = serde_v8::to_v8(&mut try_catch_scope, &self.env)

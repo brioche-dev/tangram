@@ -22,7 +22,7 @@ export let run = async (
 
 export let output = placeholder("output");
 
-type ConstructorArgs = {
+type ConstructorArg = {
 	hash: Operation.Hash;
 	system: System;
 	executable: Template;
@@ -83,16 +83,16 @@ export class Command {
 		);
 	}
 
-	constructor(args: ConstructorArgs) {
-		this.#hash = args.hash;
-		this.#system = args.system;
-		this.#executable = args.executable;
-		this.#env = args.env;
-		this.#args = args.args;
-		this.#checksum = args.checksum;
-		this.#unsafe = args.unsafe;
-		this.#network = args.network;
-		this.#hostPaths = args.hostPaths;
+	constructor(arg: ConstructorArg) {
+		this.#hash = arg.hash;
+		this.#system = arg.system;
+		this.#executable = arg.executable;
+		this.#env = arg.env;
+		this.#args = arg.args;
+		this.#checksum = arg.checksum;
+		this.#unsafe = arg.unsafe;
+		this.#network = arg.network;
+		this.#hostPaths = arg.hostPaths;
 	}
 
 	toSyscall(): syscall.Command {

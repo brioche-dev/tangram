@@ -15,17 +15,16 @@ use crate::{
 	module::position::Position,
 	module::Module,
 	operation::{self, Operation},
-	package,
-	path::{Relpath, Subpath},
+	package::{self, Package},
+	path::Subpath,
 	resource::Resource,
 	symlink::Symlink,
 	system::System,
 	template::Template,
 	value::Value,
 };
-use base64::{engine::general_purpose, Engine as _};
+use base64::Engine as _;
 use itertools::Itertools;
-use num::ToPrimitive;
 use std::{collections::BTreeMap, future::Future, rc::Rc, sync::Arc};
 use tracing::Instrument;
 use url::Url;
@@ -75,14 +74,12 @@ fn syscall_inner<'s>(
 		"function_new" => syscall_async(scope, args, syscall_function_new),
 		"hex_decode" => syscall_sync(scope, args, syscall_hex_decode),
 		"hex_encode" => syscall_sync(scope, args, syscall_hex_encode),
-		"include" => syscall_async(scope, args, syscall_include),
 		"json_decode" => syscall_sync(scope, args, syscall_json_decode),
 		"json_encode" => syscall_sync(scope, args, syscall_json_encode),
 		"log" => syscall_sync(scope, args, syscall_log),
 		"operation_get" => syscall_async(scope, args, syscall_operation_get),
 		"operation_run" => syscall_async(scope, args, syscall_operation_run),
 		"resource_new" => syscall_async(scope, args, syscall_resource_new),
-		"stack_frame" => syscall_sync(scope, args, syscall_stack_frame),
 		"symlink_new" => syscall_async(scope, args, syscall_symlink_new),
 		"toml_decode" => syscall_sync(scope, args, syscall_toml_decode),
 		"toml_encode" => syscall_sync(scope, args, syscall_toml_encode),
@@ -113,7 +110,7 @@ fn syscall_base64_decode(
 	args: (String,),
 ) -> Result<serde_v8::ZeroCopyBuf> {
 	let (value,) = args;
-	let bytes = general_purpose::STANDARD_NO_PAD
+	let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
 		.decode(value)
 		.map_err(Error::other)
 		.wrap_err("Failed to decode the bytes.")?;
@@ -127,7 +124,7 @@ fn syscall_base64_encode(
 	args: (serde_v8::ZeroCopyBuf,),
 ) -> Result<String> {
 	let (value,) = args;
-	let encoded = general_purpose::STANDARD_NO_PAD.encode(value);
+	let encoded = base64::engine::general_purpose::STANDARD_NO_PAD.encode(value);
 	Ok(encoded)
 }
 
@@ -248,25 +245,18 @@ async fn syscall_file_new(tg: Arc<Instance>, args: (FileArg,)) -> Result<File> {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FunctionArg {
-	package_instance_hash: package::instance::Hash,
+	package_hash: package::Hash,
 	module_path: Subpath,
 	name: String,
-	env: Option<BTreeMap<String, Value>>,
-	args: Option<Vec<Value>>,
+	env: BTreeMap<String, Value>,
+	args: Vec<Value>,
 }
 
 async fn syscall_function_new(tg: Arc<Instance>, args: (FunctionArg,)) -> Result<Function> {
 	let (arg,) = args;
-	let package_instance = package::Instance::get(&tg, arg.package_instance_hash).await?;
-	let function = Function::new(
-		&tg,
-		package_instance,
-		arg.module_path,
-		arg.name,
-		arg.env.unwrap_or_default(),
-		arg.args.unwrap_or_default(),
-	)
-	.await?;
+	let package = Package::get(&tg, arg.package_hash).await?;
+	let function =
+		Function::new(&tg, package, arg.module_path, arg.name, arg.env, arg.args).await?;
 	Ok(function)
 }
 
@@ -296,35 +286,6 @@ fn syscall_hex_encode(
 	let hex = hex::encode(bytes);
 	let bytes = hex.into_bytes().into();
 	Ok(bytes)
-}
-
-async fn syscall_include(tg: Arc<Instance>, args: (StackFrame, Relpath)) -> Result<Artifact> {
-	let (stack_frame, path) = args;
-
-	// Get the package instance and module path.
-	let Module::Normal(module) = stack_frame.module else { unreachable!() };
-	let package_instance = package::Instance::get(&tg, module.package_instance_hash).await?;
-	let module_path = module.module_path;
-
-	// Get the path to the artifact.
-	let artifact_path = module_path
-		.into_relpath()
-		.parent()
-		.join(path)
-		.try_into_subpath()
-		.wrap_err("Invalid path.")?;
-
-	// Get the artifact.
-	let artifact = package_instance
-		.package()
-		.artifact()
-		.as_directory()
-		.wrap_err("A package must be a directory.")?
-		.get(&tg, &artifact_path)
-		.await
-		.wrap_err("Failed to get the artifact.")?;
-
-	Ok(artifact)
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -379,63 +340,6 @@ struct StackFrame {
 	module: Module,
 	position: Position,
 	line: String,
-}
-
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_stack_frame(
-	scope: &mut v8::HandleScope,
-	state: Rc<State>,
-	args: (usize,),
-) -> Result<StackFrame> {
-	// Get the stack frame at the index.
-	let (index,) = args;
-	let stack_trace = v8::StackTrace::current_stack_trace(scope, index + 1).unwrap();
-	let stack_frame = stack_trace.get_frame(scope, index).unwrap();
-
-	// Get the module and package instance hash.
-	let module: Module = stack_frame
-		.get_script_name(scope)
-		.unwrap()
-		.to_rust_string_lossy(scope)
-		.parse()
-		.unwrap();
-
-	// Get the module.
-	let modules = state.modules.borrow();
-	let source_map_module = modules
-		.iter()
-		.find(|source_map_module| source_map_module.module == module)
-		.unwrap();
-
-	// Get the position and apply a source map.
-	let line = stack_frame.get_line_number().to_u32().unwrap() - 1;
-	let character = stack_frame.get_column().to_u32().unwrap();
-	let position = Position { line, character };
-	let position = source_map_module
-		.source_map
-		.as_ref()
-		.map_or(position, |source_map| {
-			let token = source_map
-				.lookup_token(position.line, position.character)
-				.unwrap();
-			let line = token.get_src_line();
-			let character = token.get_src_col();
-			Position { line, character }
-		});
-
-	// Get the source line.
-	let line = source_map_module
-		.text
-		.lines()
-		.nth(position.line.to_usize().unwrap())
-		.unwrap()
-		.to_owned();
-
-	Ok(StackFrame {
-		module,
-		position,
-		line,
-	})
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]

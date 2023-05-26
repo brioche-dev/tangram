@@ -10,6 +10,6 @@ impl<W> Writer<W> {
 	}
 
 	pub fn archive() -> Result<()> {
-		todo!()
+		unimplemented!()
 	}
 }

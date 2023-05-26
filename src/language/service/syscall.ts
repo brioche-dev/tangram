@@ -13,7 +13,7 @@ export type DocumentModule = {
 };
 
 export type NormalModule = {
-	packageInstanceHash: string;
+	packageHash: string;
 	modulePath: string;
 };
 
@@ -96,14 +96,14 @@ export let log = (value: string) => {
 };
 
 declare global {
-	/** Load the text of a module. */
+	/** Load a module. */
 	function syscall(name: "module_load", module: Module): string;
 
-	/** Resolve a specifier from a module. */
+	/** Resolve a module. */
 	function syscall(
 		name: "module_resolve",
-		referrer: Module,
-		specifier: string,
+		module: Module,
+		import_: string,
 	): Module;
 
 	/** Get the version of a module. */
@@ -119,9 +119,9 @@ export let module_ = {
 		}
 	},
 
-	resolve: (referrer: Module, specifier: string): Module => {
+	resolve: (module: Module, import_: string): Module => {
 		try {
-			return syscall("module_resolve", referrer, specifier);
+			return syscall("module_resolve", module, import_);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}

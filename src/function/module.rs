@@ -132,6 +132,11 @@ fn load_module<'s>(
 			};
 
 			// Transpile the module.
+			let Module::Normal(_) = module else {
+				return sender.send(Err(Error::message(
+					"The module must be a normal module.",
+				))).unwrap();
+			};
 			let output = match Module::transpile(text.clone()) {
 				Ok(transpile_output) => transpile_output,
 				Err(error) => return sender.send(Err(error)).unwrap(),
@@ -211,13 +216,13 @@ fn resolve_module_callback_inner<'s>(
 	// Get the state.
 	let state = context.get_slot::<Rc<State>>(&mut scope).unwrap().clone();
 
-	// Get the specifier.
+	// Parse the specifier.
 	let specifier = specifier.to_rust_string_lossy(&mut scope);
-	let specifier: module::Specifier = specifier.parse()?;
+	let import: module::Import = specifier.parse()?;
 
 	// Get the referrer.
 	let referrer_identity_hash = referrer.get_identity_hash();
-	let referrer = state
+	let module = state
 		.modules
 		.borrow()
 		.iter()
@@ -234,16 +239,17 @@ fn resolve_module_callback_inner<'s>(
 	let (sender, receiver) = std::sync::mpsc::channel();
 	tg.language.runtime.spawn({
 		let tg = tg.clone();
-		let specifier = specifier.clone();
-		let referrer = referrer.clone();
+		let import = import.clone();
+		let module = module.clone();
 		async move {
-			let module = referrer.resolve(&tg, &specifier).await;
+			let module = module.resolve(&tg, &import).await;
 			sender.send(module).unwrap();
 		}
 	});
-	let module = receiver.recv().unwrap().wrap_err_with(|| {
-		format!(r#"Failed to resolve specifier "{specifier}" relative to referrer "{referrer}"."#)
-	})?;
+	let module = receiver
+		.recv()
+		.unwrap()
+		.wrap_err_with(|| format!(r#"Failed to resolve "{import}" relative to "{module}"."#))?;
 
 	// Load.
 	let module = load_module(&mut scope, &module).wrap_err(r#"Failed to load the module."#)?;

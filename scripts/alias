@@ -1,2 +1,3 @@
 SCRIPT_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]:-${(%):-%x}}")")"
 alias tg='cargo run --manifest-path ${SCRIPT_PATH}/../Cargo.toml --'
+alias tgr='cargo run --manifest-path ${SCRIPT_PATH}/../Cargo.toml --release --'

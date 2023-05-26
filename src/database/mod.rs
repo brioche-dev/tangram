@@ -1,7 +1,7 @@
 use crate::{
 	artifact,
 	error::{Error, Result},
-	operation, package, value,
+	operation, value,
 };
 use itertools::Itertools;
 use lmdb::{Cursor, Transaction};
@@ -16,9 +16,6 @@ pub struct Database {
 
 	/// The artifact trackers database maps paths to artifact trackers.
 	pub artifact_trackers: lmdb::Database,
-
-	/// The package instances database maps package instance hashes to package instances.
-	pub package_instances: lmdb::Database,
 
 	/// The operations database maps operation hashes to operations.
 	pub operations: lmdb::Database,
@@ -46,9 +43,6 @@ impl Database {
 		// Open the artifact trackers database.
 		let artifact_trackers = env.open_db("artifact_trackers".into())?;
 
-		// Open the package instances database.
-		let package_instances = env.open_db("package_instances".into())?;
-
 		// Open the operations database.
 		let operations = env.open_db("operations".into())?;
 
@@ -63,7 +57,6 @@ impl Database {
 			env,
 			artifacts,
 			artifact_trackers,
-			package_instances,
 			operations,
 			operation_children,
 			operation_outputs,
@@ -160,53 +153,6 @@ impl Database {
 		let artifact_tracker = artifact::Tracker::deserialize(bytes)?;
 
 		Ok(Some(artifact_tracker))
-	}
-
-	#[allow(clippy::unused_async)]
-	pub async fn add_package_instance(
-		&self,
-		hash: package::instance::Hash,
-		bytes: &[u8],
-	) -> Result<package::instance::Hash> {
-		// Begin a write transaction.
-		let mut txn = self.env.begin_rw_txn()?;
-
-		// Add the package instance to the database.
-		match txn.put(
-			self.package_instances,
-			&hash.as_slice(),
-			&bytes,
-			lmdb::WriteFlags::NO_OVERWRITE,
-		) {
-			Ok(_) | Err(lmdb::Error::KeyExist) => {},
-			Err(error) => return Err(error.into()),
-		};
-
-		// Commit the transaction.
-		txn.commit()?;
-
-		Ok(hash)
-	}
-
-	#[allow(clippy::unused_async)]
-	pub async fn try_get_package_instance(
-		&self,
-		hash: package::instance::Hash,
-	) -> Result<Option<package::instance::Data>> {
-		// Begin a read transaction.
-		let txn = self.env.begin_ro_txn()?;
-
-		// Get the data.
-		let data = match txn.get(self.package_instances, &hash.as_slice()) {
-			Ok(data) => data,
-			Err(lmdb::Error::NotFound) => return Ok(None),
-			Err(error) => return Err(error.into()),
-		};
-
-		// Deserialize the package instance data.
-		let data = package::instance::Data::deserialize(data)?;
-
-		Ok(Some(data))
 	}
 
 	#[allow(clippy::unused_async)]

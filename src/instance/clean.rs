@@ -5,7 +5,7 @@ use crate::{
 	error::{Error, Result, WrapErr},
 	hash,
 	operation::{self, Operation},
-	package, template,
+	template,
 	value::Value,
 };
 use lmdb::{Cursor, Transaction};
@@ -13,10 +13,10 @@ use std::collections::{HashSet, VecDeque};
 
 impl Instance {
 	pub async fn clean(&self, roots: Vec<Operation>) -> Result<()> {
-		// Create marks to track marked artifacts, blobs, operations, and package instances.
+		// Create marks to track marked artifacts, blobs, operations.
 		let mut marks = Marks::default();
 
-		// Mark the artifacts, blobs, operations, and package instances.
+		// Mark the artifacts, blobs, operations.
 		self.mark(&mut marks, roots)
 			.await
 			.wrap_err("Failed to perform the mark phase.")?;
@@ -47,10 +47,6 @@ impl Instance {
 		self.sweep_operation_outputs(&marks)
 			.wrap_err("Failed to sweep the operation outputs.")?;
 
-		// Sweep the package instances.
-		self.sweep_package_instances(&marks)
-			.wrap_err("Failed to sweep the package instances.")?;
-
 		// Delete all temps.
 		tokio::fs::remove_dir_all(&self.temps_path())
 			.await
@@ -67,7 +63,6 @@ enum QueueItem {
 	Artifact(Artifact),
 	Blob(Blob),
 	Operation(Operation),
-	PackageInstance(package::Instance),
 	Value(Value),
 }
 
@@ -150,9 +145,9 @@ impl Instance {
 						},
 
 						Operation::Function(function) => {
-							// Add the package instance to the queue.
-							queue.push_back(QueueItem::PackageInstance(
-								function.package_instance(self).await?,
+							// Add the package to the queue.
+							queue.push_back(QueueItem::Artifact(
+								function.package(self).await?.artifact().clone(),
 							));
 
 							// Add the env to the queue.
@@ -165,21 +160,6 @@ impl Instance {
 								queue.push_back(QueueItem::Value(value));
 							}
 						},
-					}
-				},
-
-				QueueItem::PackageInstance(package_instance) => {
-					// Mark the package instance.
-					marks.mark_package_instance(package_instance.hash());
-
-					// Add the pacakge artifact to the queue.
-					queue.push_back(QueueItem::Artifact(
-						package_instance.package().artifact().clone(),
-					));
-
-					// Mark the package instance's dependencies.
-					for dependency in package_instance.dependencies(self).await?.into_values() {
-						marks.mark_package_instance(dependency.hash());
 					}
 				},
 
@@ -391,32 +371,6 @@ impl Instance {
 
 		Ok(())
 	}
-
-	fn sweep_package_instances(&self, marks: &Marks) -> Result<()> {
-		// Open a read/write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
-
-		// Open a read/write cursor.
-		let mut cursor = txn.open_rw_cursor(self.database.package_instances)?;
-
-		// Delete all packages that are not marked.
-		for entry in cursor.iter() {
-			let (hash, _) = entry?;
-			let hash = hash.try_into().map_err(Error::other)?;
-			let hash = package::instance::Hash(hash::Hash(hash));
-			if !marks.contains_package_instance(hash) {
-				cursor.del(lmdb::WriteFlags::empty())?;
-			}
-		}
-
-		// Drop the cursor.
-		drop(cursor);
-
-		// Commit the transaction.
-		txn.commit()?;
-
-		Ok(())
-	}
 }
 
 #[derive(Default)]
@@ -424,7 +378,6 @@ struct Marks {
 	artifacts: HashSet<artifact::Hash, hash::BuildHasher>,
 	blobs: HashSet<blob::Hash, hash::BuildHasher>,
 	operations: HashSet<operation::Hash, hash::BuildHasher>,
-	package_instances: HashSet<package::instance::Hash, hash::BuildHasher>,
 }
 
 impl Marks {
@@ -450,13 +403,5 @@ impl Marks {
 
 	fn contains_operation(&self, operation_hash: operation::Hash) -> bool {
 		self.operations.contains(&operation_hash)
-	}
-
-	fn mark_package_instance(&mut self, package_instance_hash: package::instance::Hash) {
-		self.package_instances.insert(package_instance_hash);
-	}
-
-	fn contains_package_instance(&self, package_instance_hash: package::instance::Hash) -> bool {
-		self.package_instances.contains(&package_instance_hash)
 	}
 }

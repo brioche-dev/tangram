@@ -12,7 +12,7 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_publish(&self, _args: Args) -> Result<()> {
-		todo!()
+		unimplemented!()
 
 		// // Check in the package.
 		// let package = Package::check_in(&self.tg, &args.package).await?;

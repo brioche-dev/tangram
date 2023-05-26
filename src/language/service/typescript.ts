@@ -76,12 +76,12 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 		throw new Error("Unimplemented.");
 	},
 
-	resolveModuleNames: (specifiers, referrer) => {
-		return specifiers.map((specifier) => {
+	resolveModuleNames: (imports_, module) => {
+		return imports_.map((import_) => {
 			let resolvedFileName;
 			try {
 				resolvedFileName = fileNameFromModule(
-					syscall.module_.resolve(moduleFromFileName(referrer), specifier),
+					syscall.module_.resolve(moduleFromFileName(module), import_),
 				);
 			} catch {
 				return undefined;

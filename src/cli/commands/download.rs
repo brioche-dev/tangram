@@ -18,13 +18,15 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_download(&self, args: Args) -> Result<()> {
-		// Run the operation.
-		let download = Resource::builder(args.url)
+		// Create the resource.
+		let resource = Resource::builder(args.url)
 			.unpack(args.unpack)
 			.unsafe_(true)
 			.build(&self.tg)
 			.await?;
-		let output = download.download(&self.tg).await?;
+
+		// Download it.
+		let output = resource.download(&self.tg).await?;
 
 		// Print the output.
 		let output = serde_json::to_string_pretty(&output).map_err(Error::other)?;

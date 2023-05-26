@@ -7,8 +7,7 @@ use crate::{
 	database::Database,
 	document,
 	error::Result,
-	hash, operation,
-	package::{self, Package},
+	language, operation,
 	util::task_map::TaskMap,
 };
 use std::{
@@ -37,6 +36,9 @@ pub struct Instance {
 	pub(crate) documents:
 		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
 
+	/// An HTTP client for download operations.
+	pub(crate) http_client: reqwest::Client,
+
 	/// A task map that deduplicates internal checkouts.
 	#[allow(clippy::type_complexity)]
 	pub(crate) internal_checkouts_task_map:
@@ -51,9 +53,8 @@ pub struct Instance {
 	/// A map of package specifiers to packages.
 	pub(crate) packages: std::sync::RwLock<HashMap<Package, package::Specifier, hash::BuildHasher>>,
 
-	/// State required to provide language support to an instance.
-	#[cfg(feature = "v8")]
-	pub(crate) language: language::State,
+	/// The path to the directory where the instance stores its data.
+	pub(crate) path: PathBuf,
 
 	/// State required to provide support for running operations.
 	#[cfg(feature = "run")]
@@ -82,6 +83,12 @@ impl Instance {
 		let database_path = path.join("database.mdb");
 		let database = Database::open(&database_path)?;
 
+		// Create the documents maps.
+		let documents = tokio::sync::RwLock::new(HashMap::default());
+
+		// Create the HTTP client.
+		let http_client = reqwest::Client::new();
+
 		// Create the internal checkouts task map.
 		let internal_checkouts_task_map = std::sync::Mutex::new(None);
 
@@ -89,32 +96,27 @@ impl Instance {
 		let lock_path = path.join("lock");
 		let lock = Lock::new(&lock_path, ());
 
+		// Create the operations task map.
+		let operations_task_map = std::sync::Mutex::new(None);
+
 		// Create the packages map.
 		let packages = std::sync::RwLock::new(HashMap::default());
 
-		// Create the language handles.
-		#[cfg(feature = "v8")]
-		let language = language::State::new();
-
-		// Create the state needed to run operations.
-		#[cfg(feature = "run")]
-		let run = operations::State::new();
+		// Get a handle to the tokio runtime.
+		let runtime_handle = tokio::runtime::Handle::current();
 
 		// Create the instance.
 		let instance = Instance {
 			api_client,
 			database,
 			documents,
+			http_client,
 			internal_checkouts_task_map,
 			lock,
-			path,
+			operations_task_map,
 			packages,
-
-			#[cfg(feature = "v8")]
-			language,
-
-			#[cfg(feature = "run")]
-			operations: run,
+			path,
+			runtime_handle,
 		};
 
 		Ok(instance)

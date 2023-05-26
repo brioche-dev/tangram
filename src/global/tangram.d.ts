@@ -216,22 +216,20 @@ declare namespace tg {
 	// Function.
 
 	/** Create a Tangram function. */
-	let function_: <
+	function function_<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	>(f: (...args: A) => MaybePromise<R | void>): Promise<Function<A, R>>;
+	function function_<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
 	>(
+		name: string,
 		f: (...args: A) => MaybePromise<R | void>,
-	) => Promise<Function<A, R>>;
+	): Promise<Function<A, R>>;
 	export { function_ as function };
 
-	/** Call a Tangram function. */
-	export let call: <
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(
-		arg: Function.Arg<A, R>,
-	) => Promise<R>;
-
+	/** A Tangram function. */
 	export interface Function<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
@@ -244,11 +242,6 @@ declare namespace tg {
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
 	> extends globalThis.Function {
-		/** Create a new function. */
-		static new<A extends Array<Value> = Array<Value>, R extends Value = Value>(
-			f: (...args: A) => MaybePromise<R>,
-		): Promise<Function<A, R>>;
-
 		/** Check if a value is a `Function`. */
 		static is(value: unknown): value is Function;
 
@@ -261,24 +254,11 @@ declare namespace tg {
 		/** Get this function's hash. */
 		hash(): Operation.Hash;
 
-		// /** Call this function. */
-		// call(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
-	}
+		/** Get this function's env. */
+		env(): Record<string, Value>;
 
-	export namespace Function {
-		export type Arg<
-			A extends Array<Value> = Array<Value>,
-			R extends Value = Value,
-		> = ((...args: A) => MaybePromise<R>) | ArgObject<A, R>;
-
-		export type ArgObject<
-			A extends Array<Value> = Array<Value>,
-			R extends Value = Value,
-		> = {
-			function: Function<A, R>;
-			env?: Record<string, Value>;
-			args: A;
-		};
+		/** Get this function's args. */
+		args(): Array<Value>;
 	}
 
 	// Include.

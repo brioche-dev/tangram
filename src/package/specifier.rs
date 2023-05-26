@@ -105,11 +105,25 @@ impl std::str::FromStr for Registry {
 	}
 }
 
-impl From<dependency::Specifier> for Specifier {
-	fn from(value: dependency::Specifier) -> Self {
+impl From<Registry> for String {
+	fn from(value: Registry) -> Self {
+		value.to_string()
+	}
+}
+
+impl TryFrom<String> for Registry {
+	type Error = Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
+	}
+}
+
+impl From<dependency::Dependency> for Specifier {
+	fn from(value: dependency::Dependency) -> Self {
 		match value {
-			dependency::Specifier::Path(path) => Specifier::Path(path.into()),
-			dependency::Specifier::Registry(specifier) => Specifier::Registry(specifier),
+			dependency::Dependency::Path(path) => Specifier::Path(path.into()),
+			dependency::Dependency::Registry(specifier) => Specifier::Registry(specifier),
 		}
 	}
 }

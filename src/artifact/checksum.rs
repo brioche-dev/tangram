@@ -12,6 +12,6 @@ impl Artifact {
 		_tg: &Instance,
 		_algorithm: checksum::Algorithm,
 	) -> Result<Checksum> {
-		todo!()
+		unimplemented!()
 	}
 }

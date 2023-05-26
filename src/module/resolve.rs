@@ -1,70 +1,66 @@
-use super::{dependency, Document, Library, Module, Specifier};
+use super::{Document, Import, Library, Module};
 use crate::{
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
-	package::{self, ROOT_MODULE_FILE_NAME},
+	package::{dependency::Dependency, Package, ROOT_MODULE_FILE_NAME},
 };
 
 impl Module {
-	/// Resolve a specifier relative to the module.
-	pub async fn resolve(&self, tg: &Instance, specifier: &Specifier) -> Result<Self> {
-		match (self, specifier) {
-			(Self::Library(module), Specifier::Path(specifier)) => {
+	/// Resolve a module.
+	#[allow(clippy::too_many_lines)]
+	pub async fn resolve(&self, tg: &Instance, import: &Import) -> Result<Self> {
+		match (self, import) {
+			(Self::Library(module), Import::Path(path)) => {
 				let module_path = module
 					.module_path
 					.clone()
 					.into_relpath()
 					.parent()
-					.join(specifier.clone())
+					.join(path.clone())
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Library(Library { module_path }))
 			},
 
-			(Self::Library(_), Specifier::Dependency(_)) => {
-				return_error!(r#"Cannot resolve a dependency specifier from a library module."#);
+			(Self::Library(_), Import::Dependency(_)) => {
+				return_error!(r#"Cannot resolve a dependency import from a library module."#);
 			},
 
-			(Self::Document(document), Specifier::Path(specifier)) => {
+			(Self::Document(document), Import::Path(path)) => {
 				// Resolve the module path.
 				let package_path = document.package_path.clone();
-				let module_path = document
+				let module_subpath = document
 					.module_path
 					.clone()
 					.into_relpath()
 					.parent()
-					.join(specifier.clone())
+					.join(path.clone())
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
 
 				// Ensure that the module exists.
-				let path = package_path.join(module_path.to_string());
-				let exists = tokio::fs::try_exists(&path).await?;
+				let module_path = package_path.join(module_subpath.to_string());
+				let exists = tokio::fs::try_exists(&module_path).await?;
 				if !exists {
-					let path = path.display();
+					let path = module_path.display();
 					return_error!(r#"Could not find a module at path "{path}"."#);
 				}
 
 				// Create the module.
-				let module = Self::Document(Document::new(tg, package_path, module_path).await?);
+				let module = Self::Document(Document::new(tg, package_path, module_subpath).await?);
 
 				Ok(module)
 			},
 
-			(
-				Self::Document(document),
-				Specifier::Dependency(dependency::Specifier::Path(specifier)),
-			) => {
-				// Convert the module dependency specifier to a package dependency specifier.
-				let specifier = document
+			(Self::Document(document), Import::Dependency(Dependency::Path(dependency_path))) => {
+				// Resolve the package path.
+				let dependency_path = document
 					.module_path
 					.clone()
 					.into_relpath()
 					.parent()
-					.join(specifier.clone());
-
-				// Resolve the package path.
-				let package_path = document.package_path.join(specifier.to_string());
+					.join(dependency_path.clone());
+				let package_path = document.package_path.join(dependency_path.to_string());
 				let package_path = tokio::fs::canonicalize(package_path).await?;
 
 				// The module path is the root module.
@@ -75,54 +71,56 @@ impl Module {
 				))
 			},
 
-			(Self::Document(_), Specifier::Dependency(dependency::Specifier::Registry(_))) => {
-				todo!()
+			(Self::Document(_), Import::Dependency(Dependency::Registry(_))) => {
+				unimplemented!()
 			},
 
-			(Self::Normal(module), Specifier::Path(specifier)) => {
+			(Self::Normal(module), Import::Path(path)) => {
 				let module_path = module
 					.module_path
 					.clone()
 					.into_relpath()
 					.parent()
-					.join(specifier.clone())
+					.join(path.clone())
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Normal(super::Normal {
-					package_instance_hash: module.package_instance_hash,
+					package_hash: module.package_hash,
 					module_path,
 				}))
 			},
 
-			(Self::Normal(module), Specifier::Dependency(specifier)) => {
-				// Convert the module dependency specifier to a package dependency specifier.
-				let package_dependency_specifier = match specifier {
-					dependency::Specifier::Path(specifier) => {
-						let path = module
-							.module_path
-							.clone()
+			(Self::Normal(module), Import::Dependency(dependency)) => {
+				// Convert the module dependency to a package dependency.
+				let module_subpath = module.module_path.clone();
+				let dependency = match dependency {
+					Dependency::Path(dependency_path) => Dependency::Path(
+						module_subpath
 							.into_relpath()
 							.parent()
-							.join(specifier.clone());
-						package::dependency::Specifier::Path(path)
-					},
-					dependency::Specifier::Registry(registry) => {
-						package::dependency::Specifier::Registry(registry.clone())
-					},
+							.join(dependency_path.clone()),
+					),
+					Dependency::Registry(_) => dependency.clone(),
 				};
 
-				// Get the package instance.
-				let package_instance =
-					package::Instance::get(tg, module.package_instance_hash).await?;
+				// Get the package.
+				let package = Package::get(tg, module.package_hash).await?;
 
-				// Get the specified package instance from the dependencies.
-				let dependencies = package_instance.dependencies(tg).await?;
-				let package_instance = dependencies
-					.get(&package_dependency_specifier)
-					.wrap_err("Expected the dependencies to contain the dependency specifier.")?;
+				// Get the specified package from the dependencies.
+				let dependencies = package
+					.dependencies()
+					.as_ref()
+					.wrap_err("Expected the package to be locked.")?;
+				let package_hash = dependencies
+					.get(&dependency)
+					.copied()
+					.wrap_err("Expected the dependencies to contain the dependency.")?;
+				let package = Package::get(tg, package_hash)
+					.await
+					.wrap_err("Failed to get the dependency package.")?;
 
 				// Get the root module.
-				let module = package_instance.root_module();
+				let module = package.root_module();
 
 				Ok(module)
 			},

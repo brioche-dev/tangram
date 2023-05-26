@@ -5,7 +5,6 @@ use crate::{
 };
 use std::sync::{Arc, Weak};
 
-pub mod analyze;
 pub mod check;
 pub mod completion;
 pub mod definition;
@@ -20,12 +19,10 @@ pub mod references;
 pub mod rename;
 pub mod symbols;
 mod syscall;
-pub mod transpile;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(tag = "kind", content = "request", rename_all = "snake_case")]
 pub enum Request {
-	Analyze(analyze::Request),
 	Check(check::Request),
 	Completion(completion::Request),
 	Definition(definition::Request),
@@ -37,13 +34,11 @@ pub enum Request {
 	References(references::Request),
 	Rename(rename::Request),
 	Symbols(symbols::Request),
-	Transpile(transpile::Request),
 }
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(tag = "kind", content = "response", rename_all = "snake_case")]
 pub enum Response {
-	Analyze(analyze::Response),
 	Check(check::Response),
 	Completion(completion::Response),
 	Definition(definition::Response),
@@ -55,7 +50,6 @@ pub enum Response {
 	References(references::Response),
 	Rename(rename::Response),
 	Symbols(symbols::Response),
-	Transpile(transpile::Response),
 }
 
 pub type RequestSender = tokio::sync::mpsc::UnboundedSender<(Request, ResponseSender)>;
