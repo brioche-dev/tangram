@@ -85,6 +85,9 @@ impl Command {
 			home_directory_path.to_str().unwrap().to_owned(),
 		);
 
+		// Set `$TANGRAM_PATH`.
+		env.insert("TANGRAM_PATH".to_owned(), tangram_directory_path.clone());
+
 		// Set `$TG_PLACEHOLDER_OUTPUT`.
 		env.insert(
 			"TANGRAM_PLACEHOLDER_OUTPUT".to_owned(),

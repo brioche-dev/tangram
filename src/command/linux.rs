@@ -137,6 +137,9 @@ impl Command {
 		// Set `$HOME`.
 		env.insert("HOME".to_owned(), HOME_DIRECTORY_GUEST_PATH.to_owned());
 
+		// Set `$TANGRAM_PATH`.
+		env.insert("TANGRAM_PATH".to_owned(), TANGRAM_DIRECTORY_GUEST_PATH.to_owned());
+
 		// Set `$TG_PLACEHOLDER_OUTPUT`.
 		env.insert(
 			"TANGRAM_PLACEHOLDER_OUTPUT".to_owned(),
