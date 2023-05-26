@@ -5,7 +5,7 @@ import { Directory, directory } from "./directory.ts";
 import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
-import { Function, entrypoint, function_, registry, test } from "./function.ts";
+import { Function, entrypoint, function_, registry } from "./function.ts";
 import { include } from "./include.ts";
 import { log } from "./log.ts";
 import { Relpath, Subpath, relpath, subpath } from "./path.ts";
@@ -69,7 +69,6 @@ let tg = {
 	symlink,
 	system,
 	template,
-	test,
 	toml,
 	utf8,
 	yaml,

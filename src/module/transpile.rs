@@ -166,7 +166,7 @@ impl VisitMut for FunctionVisitor {
 		// Visit each declaration.
 		for decl in &mut decl.decls {
 			let VarDeclarator { name, init, .. } = decl;
-			let Some(ident) = name.as_ident().map(|ident| &ident.id) else { continue; };
+			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else { continue; };
 			let Some(init) = init.as_deref_mut() else { continue; };
 			let Some(expr) = init.as_mut_await_expr() else { continue; };
 			let Some(expr) = expr.arg.as_mut_call() else { continue; };
