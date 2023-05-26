@@ -1,4 +1,8 @@
-use crate::language::{Diagnostic, Position, Range, Severity};
+use crate::{
+	language::{Diagnostic, Severity},
+	module::position::Position,
+	module::range::Range,
+};
 use lsp_types as lsp;
 
 impl From<Diagnostic> for lsp::Diagnostic {

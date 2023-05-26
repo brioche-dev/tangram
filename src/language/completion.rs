@@ -1,7 +1,8 @@
-use super::{service, Position};
+use super::service;
 use crate::{
 	error::{return_error, Result},
 	instance::Instance,
+	module::position::Position,
 	module::Module,
 };
 use std::sync::Arc;

@@ -47,7 +47,7 @@ mod upgrade;
 )]
 pub struct Args {
 	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
-	#[arg(long)]
+	#[arg(long, env = "TANGRAM_PATH")]
 	pub path: Option<PathBuf>,
 
 	#[command(subcommand)]

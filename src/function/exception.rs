@@ -2,7 +2,7 @@ use super::{
 	error::{Location, Source, StackFrame, StackTrace},
 	state::State,
 };
-use crate::{error::Error, language::Position, operation};
+use crate::{error::Error, module::position::Position, operation};
 use num::ToPrimitive;
 use std::sync::Arc;
 

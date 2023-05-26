@@ -4,7 +4,8 @@ use crate::{
 	Cli,
 };
 use tangram::{
-	language::{Diagnostic, Location, Position},
+	language::{location::Location, Diagnostic},
+	module::position::Position,
 	module::Module,
 	package::{self, Package},
 };

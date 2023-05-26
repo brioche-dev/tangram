@@ -12,7 +12,7 @@ use crate::{
 	file::File,
 	function::Function,
 	instance::Instance,
-	language::Position,
+	module::position::Position,
 	module::Module,
 	operation::{self, Operation},
 	package::{self, Package},

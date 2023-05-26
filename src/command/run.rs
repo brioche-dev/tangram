@@ -17,6 +17,7 @@ use std::{
 
 impl Command {
 	#[tracing::instrument(skip(tg), ret)]
+	#[cfg(feature = "run")]
 	pub async fn run(&self, tg: &Arc<Instance>) -> Result<Value> {
 		let operation = Operation::Command(self.clone());
 		operation.run(tg).await

@@ -64,7 +64,8 @@ impl Instance {
 	) -> Result<Response> {
 		// Spawn the language service if necessary.
 		let request_sender = self
-			.language_service_request_sender
+			.v8
+			.service_request_sender
 			.lock()
 			.unwrap()
 			.get_or_insert_with(|| {

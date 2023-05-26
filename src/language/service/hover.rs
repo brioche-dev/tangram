@@ -1,4 +1,4 @@
-use crate::{language::Position, module};
+use crate::{module, module::position::Position};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

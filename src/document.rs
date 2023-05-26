@@ -1,7 +1,7 @@
 use crate::{
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
-	language::Range,
+	module::range::Range,
 	package::ROOT_MODULE_FILE_NAME,
 	path::Subpath,
 };

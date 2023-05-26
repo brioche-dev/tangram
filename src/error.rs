@@ -1,4 +1,4 @@
-use crate::{language, operation};
+use crate::operation;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -23,7 +23,8 @@ pub enum Error {
 
 	/// A language service error.
 	#[error(transparent)]
-	LanguageService(#[from] language::service::error::Error),
+	#[cfg(feature = "v8")]
+	LanguageService(#[from] crate::language::service::error::Error),
 
 	/// Any other error.
 	#[error("{message}")]

@@ -1,9 +1,7 @@
+#![cfg(feature = "v8")]
 pub use self::{
 	diagnostics::{Diagnostic, Severity},
 	doc::Doc,
-	location::Location,
-	position::Position,
-	range::Range,
 };
 
 pub mod check;
@@ -15,8 +13,6 @@ pub mod format;
 pub mod hover;
 pub mod location;
 pub mod metadata;
-pub mod position;
-pub mod range;
 pub mod references;
 pub mod rename;
 pub mod service;
