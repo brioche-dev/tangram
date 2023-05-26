@@ -79,12 +79,6 @@ export namespace Package {
 	export type Hash = string;
 }
 
-export type StackFrame = {
-	module: Module;
-	position: Position;
-	line: string;
-};
-
 export type Position = {
 	line: number;
 	character: number;
@@ -261,32 +255,6 @@ export let blob = {
 };
 
 declare global {
-	type FunctionArg = {
-		packageHash: Package.Hash;
-		modulePath: Subpath;
-		name: string;
-		env?: Record<string, Value>;
-		args?: Array<Value>;
-	};
-
-	function syscall(
-		syscall: "function_new",
-		arg: FunctionArg,
-	): Promise<Function>;
-}
-
-let function_ = {
-	new: async (arg: FunctionArg): Promise<Function> => {
-		try {
-			return await syscall("function_new", arg);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-export { function_ as function };
-
-declare global {
 	function syscall(
 		syscall: "checksum",
 		algorithm: ChecksumAlgorithm,
@@ -306,23 +274,24 @@ export let checksum = (
 };
 
 declare global {
-	type ResourceArg = {
-		url: string;
-		unpack: boolean;
+	type CommandArg = {
+		system: System;
+		executable: Template;
+		env?: Record<string, Template>;
+		args?: Array<Template>;
 		checksum?: Checksum;
-		unsafe: boolean;
+		unsafe?: boolean;
+		network?: boolean;
+		hostPaths?: Array<string>;
 	};
 
-	function syscall(
-		syscall: "resource_new",
-		arg: ResourceArg,
-	): Promise<Resource>;
+	function syscall(syscall: "command_new", arg: CommandArg): Promise<Command>;
 }
 
-export let download = {
-	new: async (arg: ResourceArg): Promise<Resource> => {
+export let command = {
+	new: async (arg: CommandArg): Promise<Command> => {
 		try {
-			return await syscall("resource_new", arg);
+			return await syscall("command_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -371,6 +340,32 @@ export let file = {
 };
 
 declare global {
+	type FunctionArg = {
+		packageHash: Package.Hash;
+		modulePath: Subpath;
+		name: string;
+		env: Record<string, Value>;
+		args: Array<Value>;
+	};
+
+	function syscall(
+		syscall: "function_new",
+		arg: FunctionArg,
+	): Promise<Function>;
+}
+
+let function_ = {
+	new: async (arg: FunctionArg): Promise<Function> => {
+		try {
+			return await syscall("function_new", arg);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+};
+export { function_ as function };
+
+declare global {
 	/** Decode a hex string to bytes. */
 	function syscall(syscall: "hex_decode", value: string): Uint8Array;
 
@@ -394,25 +389,6 @@ export let hex = {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
-};
-
-declare global {
-	function syscall(
-		syscall: "include",
-		stackFrame: StackFrame,
-		path: string,
-	): Promise<Artifact>;
-}
-
-export let include = async (
-	stackFrame: StackFrame,
-	path: string,
-): Promise<Artifact> => {
-	try {
-		return await syscall("include", stackFrame, path);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
 };
 
 declare global {
@@ -484,40 +460,27 @@ export let operation = {
 };
 
 declare global {
-	type CommandArg = {
-		system: System;
-		executable: Template;
-		env?: Record<string, Template>;
-		args?: Array<Template>;
+	type ResourceArg = {
+		url: string;
+		unpack: boolean;
 		checksum?: Checksum;
-		unsafe?: boolean;
-		network?: boolean;
-		hostPaths?: Array<string>;
+		unsafe: boolean;
 	};
 
-	function syscall(syscall: "command_new", arg: CommandArg): Promise<Command>;
+	function syscall(
+		syscall: "resource_new",
+		arg: ResourceArg,
+	): Promise<Resource>;
 }
 
-export let command = {
-	new: async (arg: CommandArg): Promise<Command> => {
+export let resource = {
+	new: async (arg: ResourceArg): Promise<Resource> => {
 		try {
-			return await syscall("command_new", arg);
+			return await syscall("resource_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
-};
-
-declare global {
-	function syscall(syscall: "stack_frame", index: number): StackFrame;
-}
-
-export let stackFrame = (index: number): StackFrame => {
-	try {
-		return syscall("stack_frame", index + 1);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
 };
 
 declare global {

@@ -1,4 +1,5 @@
 import { assert as assert_ } from "./assert.ts";
+import { json } from "./encoding.ts";
 import { env as globalEnv } from "./env.ts";
 import { Operation } from "./operation.ts";
 import { Package } from "./package.ts";
@@ -7,24 +8,46 @@ import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Value } from "./value.ts";
 
+export let registry: Record<string, Function<any, any>> = {};
+
+type FunctionArg<
+	A extends Array<Value> = Array<Value>,
+	R extends Value = Value,
+> = {
+	f: (...args: A) => MaybePromise<R>;
+	module: syscall.Module;
+	name: string;
+};
+
 export let function_ = async <
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 >(
-	f: (...args: A) => MaybePromise<R>,
+	arg: FunctionArg<A, R>,
 ) => {
-	return await Function.new(f);
+	// Create the function.
+	assert_(arg.module.kind === "normal");
+	let function_ = Function.fromSyscall<A, R>(
+		await syscall.function.new({
+			packageHash: arg.module.value.packageHash,
+			modulePath: arg.module.value.modulePath,
+			name: arg.name,
+			env: {},
+			args: [],
+		}),
+	);
+	function_.f = arg.f;
+
+	// Add the function to the registry.
+	let key = json.encode({ module: arg.module, name: arg.name });
+	assert_(registry[key] === undefined);
+	registry[key] = function_;
+
+	return function_;
 };
 
-export let call = async <A extends Array<Value>, R extends Value>(
-	arg: Function.Arg<A, R>,
-): Promise<R> => {
-	let function_ = await Function.new(arg);
-	let syscallOutput = await syscall.operation.run(
-		Operation.toSyscall(function_ as Operation),
-	);
-	let output = Value.fromSyscall(syscallOutput) as R;
-	return output;
+export let test = async (arg: FunctionArg<[], undefined>) => {
+	return await function_(arg);
 };
 
 export let entrypoint = async <A extends Array<Value>, R extends Value>(
@@ -52,7 +75,16 @@ export let entrypoint = async <A extends Array<Value>, R extends Value>(
 	return syscallOutput;
 };
 
-type ConstructorArgs<A extends Array<Value>, R extends Value> = {
+type NewArg<A extends Array<Value> = Array<Value>, R extends Value = Value> = {
+	function: Function<A, R>;
+	env?: Record<string, Value>;
+	args?: A;
+};
+
+type ConstructorArg<
+	A extends Array<Value> = Array<Value>,
+	R extends Value = Value,
+> = {
 	f?: (...args: A) => MaybePromise<R>;
 	hash: Operation.Hash;
 	packageHash: Package.Hash;
@@ -84,96 +116,50 @@ export class Function<
 	static async new<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
-	>(arg: Function.Arg<A, R>): Promise<Function<A, R>> {
-		let f: ((...args: A) => MaybePromise<R>) | undefined;
-		let packageHash: Package.Hash;
-		let modulePath: Subpath;
-		let name: string;
-		let env: Record<string, Value> | undefined;
-		let args: A | undefined;
-
-		if (arg instanceof globalThis.Function) {
-			// Set the function.
-			f = arg;
-
-			// Get the function's caller.
-			let { module, line } = syscall.stackFrame(2);
-
-			// Get the function's package hash and module path.
-			assert_(module.kind === "normal");
-			packageHash = module.value.packageHash;
-			modulePath = subpath(module.value.modulePath);
-
-			// Get the function's name.
-			if (line.startsWith("export default ")) {
-				name = "default";
-			} else if (line.startsWith("export let ")) {
-				let exportName = line.match(/^export let ([a-zA-Z0-9]+)\b/)?.at(1);
-				if (!exportName) {
-					throw new Error("Invalid use of tg.function.");
-				}
-				name = exportName;
-			} else {
-				throw new Error("Invalid use of tg.function.");
-			}
-		} else {
-			f = arg.function.f;
-			packageHash = arg.function.packageHash;
-			modulePath = subpath(arg.function.modulePath);
-			name = arg.function.name;
-
-			// If the env hasn't been overridden, inherit the caller's global env.
-			env = arg.env ?? globalEnv.value;
-			args = arg.args ?? [];
-		}
-
-		let env_ =
-			env !== undefined
-				? Object.fromEntries(
-						Object.entries(env).map(([key, value]) => [
-							key,
-							Value.toSyscall(value),
-						]),
-				  )
-				: undefined;
-
-		let args_ =
-			args !== undefined
-				? args.map((value) => Value.toSyscall(value))
-				: undefined;
-
+	>(arg: NewArg<A, R>): Promise<Function<A, R>> {
+		let env_ = Object.fromEntries(
+			Object.entries(arg.env ?? {}).map(([key, value]) => [
+				key,
+				Value.toSyscall(value),
+			]),
+		);
+		let args_ = (arg.args ?? []).map((value) => Value.toSyscall(value));
 		let function_ = Function.fromSyscall<A, R>(
 			await syscall.function.new({
-				packageHash,
-				modulePath: modulePath.toSyscall(),
-				name,
+				packageHash: arg.function.packageHash,
+				modulePath: arg.function.modulePath.toSyscall(),
+				name: arg.function.name,
 				env: env_,
 				args: args_,
 			}),
 		);
-		function_.f = f;
-
+		function_.f = arg.function.f;
 		return function_;
 	}
 
-	constructor(args: ConstructorArgs<A, R>) {
+	constructor(arg: ConstructorArg<A, R>) {
 		super();
 
-		this.f = args.f;
-		this.hash = args.hash;
-		this.packageHash = args.packageHash;
-		this.modulePath = subpath(args.modulePath);
-		this.name = args.name;
-		this.env = args.env;
-		this.args = args.args;
+		this.f = arg.f;
+		this.hash = arg.hash;
+		this.packageHash = arg.packageHash;
+		this.modulePath = subpath(arg.modulePath);
+		this.name = arg.name;
+		this.env = arg.env;
+		this.args = arg.args;
 
 		// Proxy this object so that it is callable.
 		return new Proxy(this, {
 			apply: async (target, _, args) => {
-				return await call({
+				let function_ = await Function.new({
 					function: target,
 					args: (await Promise.all(args.map(resolve))) as A,
 				});
+				let syscallOutput = await syscall.operation.run(
+					Operation.toSyscall(function_ as Operation),
+				);
+				let output = Value.fromSyscall(syscallOutput) as R;
+				return output;
 			},
 		});
 	}
@@ -247,20 +233,4 @@ export class Function<
 			args,
 		});
 	}
-}
-
-export namespace Function {
-	export type Arg<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	> = ((...args: A) => MaybePromise<R>) | ArgObject<A, R>;
-
-	export type ArgObject<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	> = {
-		function: Function<A, R>;
-		env?: Record<string, Value>;
-		args: A;
-	};
 }

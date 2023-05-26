@@ -11,7 +11,7 @@ export let symlink = async (arg: Unresolved<Symlink.Arg>): Promise<Symlink> => {
 	return await Symlink.new(arg);
 };
 
-type ConstructorArgs = {
+type ConstructorArg = {
 	hash: Artifact.Hash;
 	target: Template;
 };
@@ -79,9 +79,9 @@ export class Symlink {
 		);
 	}
 
-	constructor(args: ConstructorArgs) {
-		this.#hash = args.hash;
-		this.#target = args.target;
+	constructor(arg: ConstructorArg) {
+		this.#hash = arg.hash;
+		this.#target = arg.target;
 	}
 
 	static is(value: unknown): value is Symlink {

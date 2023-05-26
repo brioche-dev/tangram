@@ -32,7 +32,7 @@ export class Resource {
 
 	static async new(arg: Resource.Arg): Promise<Resource> {
 		return Resource.fromSyscall(
-			await syscall.download.new({
+			await syscall.resource.new({
 				url: arg.url,
 				unpack: arg.unpack ?? false,
 				checksum: arg.checksum ?? undefined,

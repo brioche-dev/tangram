@@ -47,9 +47,11 @@ impl Package {
 			directory = directory.add(tg, &module_subpath, artifact).await?;
 
 			// Get the module's text.
+			let permit = tg.file_descriptor_semaphore.acquire().await;
 			let text = tokio::fs::read_to_string(&module_path)
 				.await
 				.wrap_err("Failed to read the module.")?;
+			drop(permit);
 
 			// Analyze the module.
 			let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;

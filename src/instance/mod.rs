@@ -34,6 +34,7 @@ pub struct Instance {
 	pub(crate) documents:
 		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
 
+	/// A semaphore that prevents opening too many file descriptors.
 	pub(crate) file_descriptor_semaphore: tokio::sync::Semaphore,
 
 	/// An HTTP client for download operations.

@@ -1,18 +1,18 @@
-use super::parse;
+use super::{error::Error, parse};
 use crate::{
-	error::{Error, Location, Result, WrapErr},
+	error::{Result, WrapErr},
 	module::Module,
 };
 use std::rc::Rc;
 use swc_core::{
-	common::{Globals, Mark, SourceMap, Span, GLOBALS},
+	common::{Globals, Mark, SourceMap, DUMMY_SP, GLOBALS},
 	ecma::{
 		ast::{
 			CallExpr, EsVersion, ExportDecl, ExportDefaultExpr, Expr, ExprOrSpread, Ident,
-			KeyValueProp, Lit, ObjectLit, Prop, PropOrSpread, Str, TsEntityName, TsQualifiedName,
-			TsType, TsTypeParamInstantiation, TsTypeRef, VarDeclarator,
+			KeyValueProp, Lit, MemberExpr, MetaPropExpr, ObjectLit, Prop, PropOrSpread, Str,
+			VarDeclarator,
 		},
-		codegen::{text_writer::JsWriter, Config, Emitter, Node},
+		codegen::{text_writer::JsWriter, Config, Emitter},
 		transforms::{
 			base::{fixer::fixer, resolver},
 			typescript::strip,
@@ -29,27 +29,27 @@ pub struct Output {
 
 impl Module {
 	pub fn transpile(text: String) -> Result<Output> {
-		// Parse the text.
-		let parse::Output {
-			mut module,
-			source_map,
-		} = Module::parse(text)?;
-
-		// Create the function visitor.
-		let mut function_visitor = FunctionVisitor {
-			source_map: source_map.clone(),
-			errors: Vec::new(),
-		};
-
-		// Create the include visitor.
-		let mut include_visitor = IncludeVisitor {
-			source_map: source_map.clone(),
-			errors: Vec::new(),
-		};
-
-		// Transpile the module.
 		let globals = Globals::default();
 		GLOBALS.set(&globals, move || {
+			// Parse the text.
+			let parse::Output {
+				mut module,
+				source_map,
+			} = Module::parse(text)?;
+
+			// Create the function visitor.
+			let mut function_visitor = FunctionVisitor {
+				source_map: source_map.clone(),
+				errors: Vec::new(),
+			};
+
+			// Create the include visitor.
+			let mut include_visitor = IncludeVisitor {
+				source_map: source_map.clone(),
+				errors: Vec::new(),
+			};
+
+			// Visit the module.
 			let unresolved_mark = Mark::new();
 			let top_level_mark = Mark::new();
 			module.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, true));
@@ -58,15 +58,15 @@ impl Module {
 			module.visit_mut_with(&mut strip(top_level_mark));
 			module.visit_mut_with(&mut fixer(None));
 
-			// Emit the output.
+			// Create the writer.
 			let mut transpiled_text = Vec::new();
 			let mut source_mappings = Vec::new();
-			let writer = Box::new(JsWriter::new(
+			let writer = JsWriter::new(
 				source_map.clone(),
 				"\n",
 				&mut transpiled_text,
 				Some(&mut source_mappings),
-			));
+			);
 
 			// Create the config.
 			let config = Config {
@@ -85,19 +85,23 @@ impl Module {
 			};
 
 			// Emit the module.
-			module.emit_with(&mut emitter).map_err(Error::other)?;
+			emitter
+				.emit_module(&module)
+				.map_err(crate::error::Error::other)?;
+			let transpiled_text =
+				String::from_utf8(transpiled_text).map_err(crate::error::Error::other)?;
 
-			// Convert the source mappings to source map text.
+			// Create the source map.
 			let mut output_source_map = Vec::new();
 			source_map
 				.build_source_map(&source_mappings)
 				.to_writer(&mut output_source_map)
-				.map_err(Error::other)
+				.map_err(crate::error::Error::other)
 				.wrap_err("Failed to create the source map.")?;
+			let source_map =
+				String::from_utf8(output_source_map).map_err(crate::error::Error::other)?;
 
 			// Create the output.
-			let transpiled_text = String::from_utf8(transpiled_text).map_err(Error::other)?;
-			let source_map = String::from_utf8(output_source_map).map_err(Error::other)?;
 			let output = Output {
 				transpiled_text,
 				source_map,
@@ -113,94 +117,187 @@ struct FunctionVisitor {
 	errors: Vec<Error>,
 }
 
-impl FunctionVisitor {
-	fn add_error(&mut self, message: &str, span: Span) {
-		let start = self.source_map.lookup_char_pos(span.lo);
-		let location = Location {
-			file: start.file.name.to_string(),
-			line: start.line.try_into().unwrap(),
-			column: start.col_display.try_into().unwrap(),
-		};
-
-		let error = Error::Message {
-			message: message.to_owned(),
-			location,
-			source: None,
-		};
-
-		self.errors.push(error);
-	}
-
-	fn add_object_argument_to_call(&mut self, expr: &mut CallExpr, name: &str, span: Span) {
-		// Check if we're visiting a tg.function() call.
-		let Some(callee) = expr.callee.as_expr().and_then(|expr| expr.as_member()) else { return };
-		let Some(obj) = callee.obj.as_ident() else { return };
-		let Some(prop) = callee.prop.as_ident() else { return };
-
-		if (&obj.sym) != "tg" || (&prop.sym) != "function" {
-			return;
-		}
-
-		if expr.args.len() != 1 {
-			self.add_error("Invalid number of arguments to tg.function.", expr.span);
-			return;
-		}
-
-		let key = Ident::new("name".into(), span);
-		let value: Expr = Lit::Str(Str {
-			value: name.into(),
-			span,
-			raw: None,
-		})
-		.into();
-		let prop = Prop::KeyValue(KeyValueProp {
-			key: key.into(),
-			value: Box::new(value),
-		});
-		let object = ObjectLit {
-			props: vec![PropOrSpread::Prop(Box::new(prop))],
-			span,
-		};
-
-		// Add the object to the arguments.
-		expr.args.push(ExprOrSpread {
-			spread: None,
-			expr: object.into(),
-		});
-	}
-}
-
 impl VisitMut for FunctionVisitor {
+	fn visit_mut_expr(&mut self, n: &mut Expr) {
+		// Check that this is an await expression.
+		let Some(expr) = n.as_mut_await_expr() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
+
+		// Check that the await expression contains a call expression.
+		let Some(expr) = expr.arg.as_mut_call() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
+
+		// Visit the call.
+		self.visit_call(expr, None);
+
+		n.visit_mut_children_with(self);
+	}
+
 	fn visit_mut_export_default_expr(&mut self, n: &mut ExportDefaultExpr) {
-		// Check that this is a function call expression.
-		let Some(expr) = n.expr.as_mut_call() else { return };
+		// Check that this is an await expression.
+		let Some(expr) = n.expr.as_mut_await_expr() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
 
-		// Attempt to add { name: <name> } to a tg.function invocation.
-		self.add_object_argument_to_call(expr, "default", n.span);
+		// Check that the await expression contains a call expression.
+		let Some(expr) = expr.arg.as_mut_call() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
 
-		// Continue visiting children.
+		// Visit the call.
+		self.visit_call(expr, Some("default".to_owned()));
+
 		n.visit_mut_children_with(self);
 	}
 
 	fn visit_mut_export_decl(&mut self, n: &mut ExportDecl) {
-		// Check that this is an expression of the form "export let <name> = <function call>"
-		let Some(decl) = n.decl.as_mut_var() else { return; };
-		if decl.decls.len() != 1 {
+		// Check that this export statement has a declaration.
+		let Some(decl) = n.decl.as_mut_var() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
+
+		// Visit each declaration.
+		for decl in &mut decl.decls {
+			let VarDeclarator { name, init, .. } = decl;
+			let Some(ident) = name.as_ident().map(|ident| &ident.id) else { continue; };
+			let Some(init) = init.as_deref_mut() else { continue; };
+			let Some(expr) = init.as_mut_await_expr() else { continue; };
+			let Some(expr) = expr.arg.as_mut_call() else { continue; };
+
+			// Visit the call.
+			self.visit_call(expr, Some(ident.to_string()));
+		}
+
+		n.visit_mut_children_with(self);
+	}
+}
+
+impl FunctionVisitor {
+	#[allow(clippy::too_many_lines)]
+	fn visit_call(&mut self, n: &mut CallExpr, export_name: Option<String>) {
+		// Check if this is a call to tg.function.
+		let Some(callee) = n.callee.as_expr().and_then(|expr| expr.as_member()) else {
+			n.visit_mut_children_with(self);
+			return
+		};
+		let Some(obj) = callee.obj.as_ident() else {
+			n.visit_mut_children_with(self);
+			return
+		};
+		let Some(prop) = callee.prop.as_ident() else {
+			n.visit_mut_children_with(self);
+			return
+		};
+		if !(&obj.sym == "tg" && &prop.sym == "function") {
+			n.visit_mut_children_with(self);
 			return;
 		}
 
-		let VarDeclarator {
-			name, init, span, ..
-		} = &mut decl.decls[0];
-		let Some(ident) = name.as_ident().map(|ident| &ident.id) else { return };
-		let Some(init) = init.as_deref_mut() else { return };
-		let Some(expr) = init.as_mut_call() else { return };
+		// Get the location of the call.
+		let loc = self.source_map.lookup_char_pos(n.span.lo);
 
-		// Add { name: <name> } to a tg.function invocation.
-		self.add_object_argument_to_call(expr, ident.as_ref(), *span);
+		let (name, f) = match n.args.len() {
+			1 => {
+				let Some(name) = export_name else {
+					self.errors.push(Error::new(
+						"Functions that are not exported must have a name.",
+						&loc,
+					));
+					n.visit_mut_children_with(self);
+					return;
+				};
+				let Some(f) = n.args[0].expr.as_arrow() else {
+					self.errors.push(Error::new(
+						"The argument to tg.function must be an arrow function.",
+						&loc,
+					));
+					n.visit_mut_children_with(self);
+					return;
+				};
+				(name, f)
+			},
+			2 => {
+				let Some(Lit::Str(name)) = n.args[0].expr.as_lit() else {
+					self.errors.push(Error::new(
+						"The first argument to tg.function must be a string.",
+						&loc,
+					));
+					n.visit_mut_children_with(self);
+					return;
+				};
+				let name = name.value.to_string();
+				let Some(f) = n.args[1].expr.as_arrow() else {
+					self.errors.push(Error::new(
+						"The second argument to tg.function must be an arrow function.",
+						&loc,
+					));
+					n.visit_mut_children_with(self);
+					return;
+				};
+				(name, f)
+			},
+			_ => {
+				self.errors.push(Error::new(
+					"Invalid number of arguments to tg.function.",
+					&loc,
+				));
+				n.visit_mut_children_with(self);
+				return;
+			},
+		};
 
-		// Continue visiting children.
-		n.visit_mut_children_with(self);
+		// Create the function property.
+		let f_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+			key: Ident::new("f".into(), n.span).into(),
+			value: Box::new(f.clone().into()),
+		})));
+
+		// Create the module property.
+		let import_meta = Expr::MetaProp(MetaPropExpr {
+			span: DUMMY_SP,
+			kind: swc_core::ecma::ast::MetaPropKind::ImportMeta,
+		});
+		let import_meta_module = MemberExpr {
+			span: DUMMY_SP,
+			obj: Box::new(import_meta),
+			prop: Ident::new("module".into(), n.span).into(),
+		};
+		let module_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+			key: Ident::new("module".into(), n.span).into(),
+			value: Box::new(import_meta_module.into()),
+		})));
+
+		// Create the name property.
+		let key = Ident::new("name".into(), n.span);
+		let value: Expr = Lit::Str(Str {
+			value: name.into(),
+			span: n.span,
+			raw: None,
+		})
+		.into();
+		let name_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+			key: key.into(),
+			value: Box::new(value),
+		})));
+
+		// Create the object.
+		let object = ObjectLit {
+			props: vec![f_prop, module_prop, name_prop],
+			span: DUMMY_SP,
+		};
+
+		// Set the args.
+		n.args = vec![ExprOrSpread {
+			spread: None,
+			expr: object.into(),
+		}];
 	}
 }
 
@@ -209,109 +306,135 @@ struct IncludeVisitor {
 	errors: Vec<Error>,
 }
 
-impl IncludeVisitor {
-	fn add_error(&mut self, message: &str, span: Span) {
-		let start = self.source_map.lookup_char_pos(span.lo);
-		let location = Location {
-			file: start.file.name.to_string(),
-			line: start.line.try_into().unwrap(),
-			column: start.col_display.try_into().unwrap(),
-		};
-		let error = Error::Message {
-			message: message.to_owned(),
-			location,
-			source: None,
-		};
-		self.errors.push(error);
-	}
-}
-
 impl VisitMut for IncludeVisitor {
 	fn visit_mut_call_expr(&mut self, n: &mut CallExpr) {
-		let span = n.span;
-
-		// Check if we're visiting a tg.include() call.
-		let Some(callee) = n.callee.as_expr().and_then(|e| e.as_member()) else { return };
-		let Some(obj) = callee.obj.as_ident() else { return };
-		let Some(prop) = callee.prop.as_ident() else { return };
-
-		if (&obj.sym) != "tg" || (&prop.sym) != "include" {
+		// Ignore call expression that are not tg.include.
+		let Some(callee) = n.callee.as_expr().and_then(|callee| callee.as_member()) else {
+			n.visit_mut_children_with(self);
+			return;
+		};
+		let Some(obj) = callee.obj.as_ident() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
+		let Some(prop) = callee.prop.as_ident() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
+		if !(&obj.sym == "tg" && &prop.sym == "include") {
+			n.visit_mut_children_with(self);
 			return;
 		}
 
-		// Validate the arguments to the call.
+		// Get the location of the call.
+		let loc = self.source_map.lookup_char_pos(n.span.lo);
+
+		// Get the argument and verify it is a string literal.
 		if n.args.len() != 1 {
-			self.add_error("Invalid number of arguments to tg.include.", n.span);
+			self.errors.push(Error::new(
+				"tg.include must be called with exactly one argument.",
+				&loc,
+			));
+
 			return;
 		}
-		let Some(Lit::Str(arg)) = n.args[0].expr.as_lit() else {
-			self.add_error("tg.include() must be called with a string literal as an argument.", n.span);
+		let Some(arg) = n.args[0].expr.as_lit() else {
+			self.errors.push(Error::new("The argument to tg.include must be a string literal.", &loc));
 			return;
 		};
 
-		// Extract the type of the file.
-		let path = arg.value.as_ref();
-		let type_ = match std::fs::metadata(path) {
-			Ok(stat) if stat.is_symlink() => "Symlink",
-			Ok(stat) if stat.is_dir() => "Directory",
-			Ok(_) => "File",
-			Err(e) => {
-				self.add_error(&e.to_string(), arg.span);
-				return;
-			},
+		// Create the arg.
+		let import_meta = Expr::MetaProp(MetaPropExpr {
+			span: DUMMY_SP,
+			kind: swc_core::ecma::ast::MetaPropKind::ImportMeta,
+		});
+		let import_meta_module = MemberExpr {
+			span: DUMMY_SP,
+			obj: Box::new(import_meta),
+			prop: Ident::new("module".into(), n.span).into(),
+		};
+		let module_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+			key: Ident::new("module".into(), n.span).into(),
+			value: Box::new(import_meta_module.into()),
+		})));
+		let path_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+			key: Ident::new("path".into(), n.span).into(),
+			value: Box::new(arg.clone().into()),
+		})));
+		let object = ObjectLit {
+			props: vec![module_prop, path_prop],
+			span: DUMMY_SP,
 		};
 
-		// Add a type parameter to the expression.
-		let qualified_name = TsQualifiedName {
-			left: Ident::new("tg".into(), span).into(),
-			right: Ident::new(type_.into(), span),
-		};
-
-		let type_params = TsTypeParamInstantiation {
-			span,
-			params: vec![Box::new(TsType::TsTypeRef(TsTypeRef {
-				span,
-				type_name: TsEntityName::TsQualifiedName(Box::new(qualified_name)),
-				type_params: None,
-			}))],
-		};
-
-		n.type_args = Some(Box::new(type_params));
-		n.visit_mut_children_with(self);
+		// Set the args.
+		n.args = vec![ExprOrSpread {
+			spread: None,
+			expr: object.into(),
+		}];
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use crate::module::Module;
+	use indoc::indoc;
 
 	#[test]
-	fn export_default_function() {
-		let text = r#"export default tg.function(arg)"#;
-		let output = Module::transpile(text.to_owned()).unwrap();
-		let left = output.transpiled_text;
-		let right = "export default tg.function(arg, {\n    name: \"default\"\n});\n";
+	fn test_export_default_function() {
+		let text = indoc!(
+			r#"
+				export default await tg.function(() => {});
+			"#
+		);
+		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
+		let right = indoc!(
+			r#"
+				export default await tg.function({
+					f: () => {},
+					module: import.meta.module,
+					name: "default",
+				});
+			"#
+		);
 		assert_eq!(left, right);
 	}
 
 	#[test]
-	fn export_named_function() {
-		let text = r#"export let named = tg.function(arg)"#;
-		let output = Module::transpile(text.to_owned()).expect("Failed to transpile text.");
-		let left = output.transpiled_text;
-		let right = "export let named = tg.function(arg, {\n    name: \"named\"\n});\n";
-		assert_eq!(left, right,);
+	fn test_export_named_function() {
+		let text = indoc!(
+			r#"
+				export let named = await tg.function(() => {});
+			"#
+		);
+		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
+		let right = indoc!(
+			r#"
+				export default await tg.function({
+					module: import.meta.module,
+					name: "named",
+					f: () => {},
+				});
+			"#
+		);
+		assert_eq!(left, right);
 	}
 
 	#[test]
-	fn hello() {
-		let text = r#"
-			import * as std from "tangram:std";
-			export let named = tg.function(() => "hello");
-			export default tg.function(() => {
-				return named();
-			});
-		"#;
-		Module::transpile(text.to_owned()).unwrap();
+	fn test_include() {
+		let text = indoc!(
+			r#"
+				await tg.include("./hello_world.txt");
+			"#
+		);
+		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
+		let right = indoc!(
+			r#"
+				await tg.include({
+					module: import.meta.module,
+					path: "./hello_world.txt",
+				});
+			"#
+		);
+		assert_eq!(left, right);
 	}
 }

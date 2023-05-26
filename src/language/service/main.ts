@@ -1,4 +1,3 @@
-import * as analyze from "./analyze.ts";
 import * as check from "./check.ts";
 import * as completion from "./completion.ts";
 import * as definition from "./definition.ts";
@@ -11,7 +10,6 @@ import * as metadata from "./metadata.ts";
 import * as references from "./references.ts";
 import * as rename from "./rename.ts";
 import * as symbols from "./symbols.ts";
-import * as transpile from "./transpile.ts";
 
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
@@ -19,7 +17,6 @@ Object.defineProperties(Error, {
 });
 
 type Request =
-	| { kind: "analyze"; request: analyze.Request }
 	| { kind: "check"; request: check.Request }
 	| { kind: "completion"; request: completion.Request }
 	| { kind: "definition"; request: definition.Request }
@@ -30,11 +27,9 @@ type Request =
 	| { kind: "metadata"; request: metadata.Request }
 	| { kind: "references"; request: references.Request }
 	| { kind: "rename"; request: rename.Request }
-	| { kind: "symbols"; request: symbols.Request }
-	| { kind: "transpile"; request: transpile.Request };
+	| { kind: "symbols"; request: symbols.Request };
 
 type Response =
-	| { kind: "analyze"; response: analyze.Response }
 	| { kind: "check"; response: check.Response }
 	| { kind: "completion"; response: completion.Response }
 	| { kind: "definition"; response: definition.Response }
@@ -45,15 +40,10 @@ type Response =
 	| { kind: "metadata"; response: metadata.Response }
 	| { kind: "references"; response: references.Response }
 	| { kind: "rename"; response: rename.Response }
-	| { kind: "symbols"; response: symbols.Response }
-	| { kind: "transpile"; response: transpile.Response };
+	| { kind: "symbols"; response: symbols.Response };
 
 let handle = ({ kind, request }: Request): Response => {
 	switch (kind) {
-		case "analyze": {
-			let response = analyze.handle(request);
-			return { kind: "analyze", response };
-		}
 		case "check": {
 			let response = check.handle(request);
 			return { kind: "check", response };
@@ -97,10 +87,6 @@ let handle = ({ kind, request }: Request): Response => {
 		case "symbols": {
 			let response = symbols.handle(request);
 			return { kind: "symbols", response };
-		}
-		case "transpile": {
-			let response = transpile.handle(request);
-			return { kind: "transpile", response };
 		}
 	}
 };

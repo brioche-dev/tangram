@@ -8,6 +8,7 @@ use crate::{
 use url::Url;
 
 pub mod analyze;
+pub mod error;
 pub mod import;
 pub mod load;
 pub mod parse;

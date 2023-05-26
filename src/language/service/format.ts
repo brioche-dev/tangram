@@ -1,5 +1,4 @@
-// @ts-ignore
-import templateIndent from "./template_ident";
+import templateIndent from "./template_indent.ts";
 // @ts-ignore
 import * as tangramEslintPlugin from "@tangramdotdev/eslint-plugin";
 import * as typescriptEslintParser from "@typescript-eslint/parser";

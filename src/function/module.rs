@@ -132,6 +132,11 @@ fn load_module<'s>(
 			};
 
 			// Transpile the module.
+			let Module::Normal(_) = module else {
+				return sender.send(Err(Error::message(
+					"The module must be a normal module.",
+				))).unwrap();
+			};
 			let output = match Module::transpile(text.clone()) {
 				Ok(transpile_output) => transpile_output,
 				Err(error) => return sender.send(Err(error)).unwrap(),
