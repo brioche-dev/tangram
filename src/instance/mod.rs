@@ -68,17 +68,6 @@ pub struct Options {
 
 impl Instance {
 	pub async fn new(path: PathBuf, options: Options) -> Result<Instance> {
-		// Ensure the path exists.
-		tokio::fs::create_dir_all(&path).await?;
-
-		// Migrate the path.
-		Self::migrate(&path).await?;
-
-		Self::new_uninitialized(path, options)
-	}
-
-	/// Create a new instance, assuming that the directory at `path` has already been created and migrated and V8 is initialized.
-	pub fn new_uninitialized(path: PathBuf, options: Options) -> Result<Instance> {
 		// Create the API Client.
 		let api_url = options
 			.api_url
