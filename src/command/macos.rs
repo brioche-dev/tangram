@@ -1,7 +1,6 @@
 use super::Command;
 use crate::{
 	artifact::Artifact,
-	command::Server,
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
 	temp::Temp,
@@ -86,7 +85,10 @@ impl Command {
 		);
 
 		// Set `$TANGRAM_PATH`.
-		env.insert("TANGRAM_PATH".to_owned(), tangram_directory_path.clone());
+		env.insert(
+			"TANGRAM_PATH".to_owned(),
+			tangram_directory_path.to_str().unwrap().to_owned()
+		);
 
 		// Set `$TG_PLACEHOLDER_OUTPUT`.
 		env.insert(
