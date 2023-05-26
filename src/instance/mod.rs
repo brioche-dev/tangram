@@ -68,6 +68,12 @@ pub struct Options {
 
 impl Instance {
 	pub async fn new(path: PathBuf, options: Options) -> Result<Instance> {
+		// Ensure the path exists.
+		tokio::fs::create_dir_all(&path).await?;
+
+		// Migrate the path.
+		Self::migrate(&path).await?;
+
 		// Create the API Client.
 		let api_url = options
 			.api_url
