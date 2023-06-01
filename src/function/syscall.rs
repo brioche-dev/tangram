@@ -175,7 +175,7 @@ struct CommandArg {
 	executable: Template,
 	env: BTreeMap<String, Template>,
 	args: Vec<Template>,
-	checksum: Checksum,
+	checksum: Option<Checksum>,
 	unsafe_: bool,
 	network: bool,
 	host_paths: Vec<String>,

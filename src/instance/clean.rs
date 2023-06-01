@@ -164,7 +164,7 @@ impl Instance {
 				},
 
 				QueueItem::Value(value) => match value {
-					Value::Null(_)
+					Value::Null
 					| Value::Bool(_)
 					| Value::Number(_)
 					| Value::String(_)

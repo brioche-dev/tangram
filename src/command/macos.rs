@@ -1,6 +1,6 @@
 use super::Command;
 use crate::{
-	artifact::Artifact,
+	artifact::{self, Artifact},
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
 	temp::Temp,
@@ -87,7 +87,7 @@ impl Command {
 		// Set `$TANGRAM_PATH`.
 		env.insert(
 			"TANGRAM_PATH".to_owned(),
-			tangram_directory_path.to_str().unwrap().to_owned()
+			tangram_directory_path.to_str().unwrap().to_owned(),
 		);
 
 		// Set `$TG_PLACEHOLDER_OUTPUT`.
@@ -325,7 +325,10 @@ impl Command {
 		// Create the output.
 		let value = if tokio::fs::try_exists(&output_path).await? {
 			// Check in the output.
-			let artifact = Artifact::check_in(tg, &output_path)
+			let options = artifact::checkin::Options {
+				artifacts_paths: vec![tg.artifacts_path()],
+			};
+			let artifact = Artifact::check_in_with_options(tg, &output_path, &options)
 				.await
 				.wrap_err("Failed to check in the output.")?;
 
@@ -347,7 +350,7 @@ impl Command {
 			}
 			Value::Artifact(artifact)
 		} else {
-			Value::Null(())
+			Value::Null
 		};
 
 		Ok(value)

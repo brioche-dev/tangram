@@ -1,12 +1,20 @@
 use super::{Component, Template};
 use crate::{artifact::Artifact, error::Result, instance::Instance};
-use std::path::Path;
+use itertools::Itertools;
+use std::path::PathBuf;
 
 impl Template {
-	pub async fn unrender(tg: &Instance, path: &Path, string: &str) -> Result<Template> {
+	pub async fn unrender(
+		tg: &Instance,
+		artifacts_paths: &[PathBuf],
+		string: &str,
+	) -> Result<Template> {
 		// Create the regex.
-		let path = path.to_str().unwrap().to_owned();
-		let regex = format!(r"{path}/([0-9a-f]{{64}})");
+		let artifacts_paths = artifacts_paths
+			.iter()
+			.map(|artifacts_path| artifacts_path.to_str().unwrap())
+			.join("|");
+		let regex = format!(r"(?:{artifacts_paths})/([0-9a-f]{{64}})");
 		let regex = regex::Regex::new(&regex).unwrap();
 
 		let mut i = 0;
@@ -75,7 +83,7 @@ mod tests {
 
 		let string = artifact_path;
 
-		let left = Template::unrender(&tg, &tg.artifacts_path(), &string).await?;
+		let left = Template::unrender(&tg, &[tg.artifacts_path()], &string).await?;
 		let right = template::Template::new(template::Component::Artifact(artifact));
 		assert_eq!(left, right);
 
@@ -100,7 +108,7 @@ mod tests {
 
 		let string = format!("{artifact_path}/fizz/buzz");
 
-		let left = Template::unrender(&tg, &tg.artifacts_path(), &string).await?;
+		let left = Template::unrender(&tg, &[tg.artifacts_path()], &string).await?;
 		let right = template::Template::new(vec![
 			template::Component::Artifact(artifact),
 			template::Component::String("/fizz/buzz".into()),
@@ -118,7 +126,7 @@ mod tests {
 
 		let string = "/etc/resolv.conf";
 
-		let left = Template::unrender(&tg, &tg.artifacts_path(), string).await?;
+		let left = Template::unrender(&tg, &[tg.artifacts_path()], string).await?;
 		let right = template::Template::new(template::Component::String("/etc/resolv.conf".into()));
 		assert_eq!(left, right);
 
@@ -143,7 +151,7 @@ mod tests {
 
 		let string = format!("foo {artifact_path} bar");
 
-		let left = Template::unrender(&tg, &tg.artifacts_path(), &string).await?;
+		let left = Template::unrender(&tg, &[tg.artifacts_path()], &string).await?;
 		let right = template::Template::new(vec![
 			template::Component::String("foo ".into()),
 			template::Component::Artifact(artifact),
@@ -193,7 +201,7 @@ mod tests {
 
 		let string = format!("PATH={foo_path}:{bar_path}:/bin gcc {baz_path}");
 
-		let left = Template::unrender(&tg, &tg.artifacts_path(), &string).await?;
+		let left = Template::unrender(&tg, &[tg.artifacts_path()], &string).await?;
 		let right = template::Template::new(vec![
 			template::Component::String("PATH=".into()),
 			template::Component::Artifact(foo),

@@ -1,6 +1,6 @@
 use super::Command;
 use crate::{
-	artifact::Artifact,
+	artifact::{self, Artifact},
 	command,
 	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
@@ -19,9 +19,6 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-/// The artifacts directory guest path.
-const TANGRAM_DIRECTORY_GUEST_PATH: &str = "/.tangram";
-
 /// The home directory guest path.
 const HOME_DIRECTORY_GUEST_PATH: &str = "/home/tangram";
 
@@ -37,6 +34,9 @@ const STACK_LAYOUT: std::alloc::Layout =
 
 /// The size of the stack to allocate for each process.
 const STACK_SIZE: usize = 2 << 21;
+
+/// The tangram directory guest path.
+const TANGRAM_DIRECTORY_GUEST_PATH: &str = "/.tangram";
 
 /// The UID for the tangram user.
 const TANGRAM_UID: libc::uid_t = 1000;
@@ -77,9 +77,14 @@ impl Command {
 		let output_host_path = output_parent_directory_host_path.join("output");
 		let output_guest_path = output_parent_directory_guest_path.join("output");
 
-		// Create the host and guest paths for the artifacts directory.
+		// Create the host and guest paths for the tangram directory.
 		let tangram_directory_host_path = tg.path().to_owned();
 		let tangram_directory_guest_path = PathBuf::from(TANGRAM_DIRECTORY_GUEST_PATH);
+
+		// Create the host and guest paths for the artifacts directory.
+		let _artifacts_directory_guest_path = tg.artifacts_path().to_owned();
+		let artifacts_directory_guest_path =
+			Path::new(TANGRAM_DIRECTORY_GUEST_PATH).join("artifacts");
 
 		// Create the host and guest paths for the home directory.
 		let home_directory_host_path =
@@ -97,10 +102,8 @@ impl Command {
 			.wrap_err(r#"Failed to create the working directory."#)?;
 
 		// Render the executable, env, and args.
-		let (executable, mut env, args) = self.render(
-			&Path::new(TANGRAM_DIRECTORY_GUEST_PATH).join("artifacts"),
-			&output_guest_path,
-		)?;
+		let (executable, mut env, args) =
+			self.render(&artifacts_directory_guest_path, &output_guest_path)?;
 
 		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
 		let enable_unsafe = self.checksum.is_some() || self.unsafe_;
@@ -138,7 +141,10 @@ impl Command {
 		env.insert("HOME".to_owned(), HOME_DIRECTORY_GUEST_PATH.to_owned());
 
 		// Set `$TANGRAM_PATH`.
-		env.insert("TANGRAM_PATH".to_owned(), TANGRAM_DIRECTORY_GUEST_PATH.to_owned());
+		env.insert(
+			"TANGRAM_PATH".to_owned(),
+			TANGRAM_DIRECTORY_GUEST_PATH.to_owned(),
+		);
 
 		// Set `$TG_PLACEHOLDER_OUTPUT`.
 		env.insert(
@@ -565,7 +571,10 @@ impl Command {
 		// Create the output.
 		let value = if tokio::fs::try_exists(&output_host_path).await? {
 			// Check in the output.
-			let artifact = Artifact::check_in(tg, &output_host_path)
+			let options = artifact::checkin::Options {
+				artifacts_paths: vec![artifacts_directory_guest_path],
+			};
+			let artifact = Artifact::check_in_with_options(tg, &output_host_path, &options)
 				.await
 				.wrap_err("Failed to check in the output.")?;
 
@@ -587,7 +596,7 @@ impl Command {
 			}
 			Value::Artifact(artifact)
 		} else {
-			Value::Null(())
+			Value::Null
 		};
 
 		Ok(value)

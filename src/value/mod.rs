@@ -16,7 +16,7 @@ mod data;
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Value {
 	/// A null value.
-	Null(()),
+	Null,
 
 	/// A boolean value.
 	Bool(bool),
@@ -63,15 +63,6 @@ pub type Array = Vec<Value>;
 pub type Object = BTreeMap<String, Value>;
 
 impl Value {
-	#[must_use]
-	pub fn as_null(&self) -> Option<&()> {
-		if let Self::Null(v) = self {
-			Some(v)
-		} else {
-			None
-		}
-	}
-
 	#[must_use]
 	pub fn as_bool(&self) -> Option<&bool> {
 		if let Self::Bool(v) = self {
@@ -191,15 +182,6 @@ impl Value {
 }
 
 impl Value {
-	#[must_use]
-	pub fn into_null(self) -> Option<()> {
-		if let Self::Null(v) = self {
-			Some(v)
-		} else {
-			None
-		}
-	}
-
 	#[must_use]
 	pub fn into_bool(self) -> Option<bool> {
 		if let Self::Bool(v) = self {

@@ -63,8 +63,8 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn checksum(mut self, checksum: Checksum) -> Self {
-		self.checksum = Some(checksum);
+	pub fn checksum(mut self, checksum: Option<Checksum>) -> Self {
+		self.checksum = checksum;
 		self
 	}
 

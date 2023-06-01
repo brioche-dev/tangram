@@ -100,7 +100,7 @@ impl Data {
 impl Value {
 	pub fn to_data(&self) -> Data {
 		match self {
-			Self::Null(_) => Data::Null(()),
+			Self::Null => Data::Null(()),
 			Self::Bool(bool_) => Data::Bool(*bool_),
 			Self::Number(number) => Data::Number(*number),
 			Self::String(string) => Data::String(string.clone()),
@@ -124,7 +124,7 @@ impl Value {
 	#[async_recursion]
 	pub async fn from_data(tg: &'async_recursion Instance, data: Data) -> Result<Self> {
 		match data {
-			Data::Null(_) => Ok(Self::Null(())),
+			Data::Null(_) => Ok(Self::Null),
 			Data::Bool(bool_) => Ok(Self::Bool(bool_)),
 			Data::Number(number) => Ok(Self::Number(number)),
 			Data::String(string) => Ok(Self::String(string)),
