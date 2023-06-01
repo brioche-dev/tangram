@@ -119,14 +119,8 @@ struct FunctionVisitor {
 
 impl VisitMut for FunctionVisitor {
 	fn visit_mut_expr(&mut self, n: &mut Expr) {
-		// Check that this is an await expression.
-		let Some(expr) = n.as_mut_await_expr() else {
-			n.visit_mut_children_with(self);
-			return;
-		};
-
-		// Check that the await expression contains a call expression.
-		let Some(expr) = expr.arg.as_mut_call() else {
+		// Check that this is a call expression.
+		let Some(expr) = n.as_mut_call() else {
 			n.visit_mut_children_with(self);
 			return;
 		};
@@ -138,14 +132,8 @@ impl VisitMut for FunctionVisitor {
 	}
 
 	fn visit_mut_export_default_expr(&mut self, n: &mut ExportDefaultExpr) {
-		// Check that this is an await expression.
-		let Some(expr) = n.expr.as_mut_await_expr() else {
-			n.visit_mut_children_with(self);
-			return;
-		};
-
-		// Check that the await expression contains a call expression.
-		let Some(expr) = expr.arg.as_mut_call() else {
+		// Check that this is a call expression.
+		let Some(expr) = n.expr.as_mut_call() else {
 			n.visit_mut_children_with(self);
 			return;
 		};
@@ -168,8 +156,7 @@ impl VisitMut for FunctionVisitor {
 			let VarDeclarator { name, init, .. } = decl;
 			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else { continue; };
 			let Some(init) = init.as_deref_mut() else { continue; };
-			let Some(expr) = init.as_mut_await_expr() else { continue; };
-			let Some(expr) = expr.arg.as_mut_call() else { continue; };
+			let Some(expr) = init.as_mut_call() else { continue; };
 
 			// Visit the call.
 			self.visit_call(expr, Some(ident.to_string()));
@@ -383,13 +370,13 @@ mod tests {
 	fn test_export_default_function() {
 		let text = indoc!(
 			r#"
-				export default await tg.function(() => {});
+				export default tg.function(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export default await tg.function({
+				export default tg.function({
 					f: () => {},
 					module: import.meta.module,
 					name: "default",
@@ -403,13 +390,13 @@ mod tests {
 	fn test_export_named_function() {
 		let text = indoc!(
 			r#"
-				export let named = await tg.function(() => {});
+				export let named = tg.function(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export default await tg.function({
+				export default tg.function({
 					module: import.meta.module,
 					name: "named",
 					f: () => {},
@@ -423,13 +410,13 @@ mod tests {
 	fn test_include() {
 		let text = indoc!(
 			r#"
-				await tg.include("./hello_world.txt");
+				tg.include("./hello_world.txt");
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				await tg.include({
+				tg.include({
 					module: import.meta.module,
 					path: "./hello_world.txt",
 				});

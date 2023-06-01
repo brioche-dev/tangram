@@ -25,7 +25,7 @@ export type Command = {
 	executable: Template;
 	env: Record<string, Template>;
 	args: Array<Template>;
-	checksum?: Checksum;
+	checksum: Checksum | undefined;
 	unsafe: boolean;
 	network: boolean;
 	hostPaths: Array<string>;
@@ -47,10 +47,15 @@ export type Function = {
 	hash: Operation.Hash;
 	packageHash: Package.Hash;
 	modulePath: Subpath;
+	kind: Function.Kind;
 	name: string;
 	env?: Record<string, Value>;
 	args?: Array<Value>;
 };
+
+export namespace Function {
+	export type Kind = "function" | "test";
+}
 
 export type Module =
 	| { kind: "library"; value: LibraryModule }
@@ -146,7 +151,7 @@ export type System =
 	| "arm64_macos";
 
 export type Value =
-	| { kind: "null"; value: null }
+	| { kind: "null" }
 	| { kind: "bool"; value: boolean }
 	| { kind: "number"; value: number }
 	| { kind: "string"; value: string }
@@ -285,13 +290,13 @@ declare global {
 		hostPaths?: Array<string>;
 	};
 
-	function syscall(syscall: "command_new", arg: CommandArg): Promise<Command>;
+	function syscall(syscall: "command_new", arg: CommandArg): Command;
 }
 
 export let command = {
-	new: async (arg: CommandArg): Promise<Command> => {
+	new: (arg: CommandArg): Command => {
 		try {
-			return await syscall("command_new", arg);
+			return syscall("command_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -303,16 +308,13 @@ declare global {
 		entries: Record<string, Artifact>;
 	};
 
-	function syscall(
-		syscall: "directory_new",
-		arg: DirectoryArg,
-	): Promise<Directory>;
+	function syscall(syscall: "directory_new", arg: DirectoryArg): Directory;
 }
 
 export let directory = {
-	new: async (arg: DirectoryArg): Promise<Directory> => {
+	new: (arg: DirectoryArg): Directory => {
 		try {
-			return await syscall("directory_new", arg);
+			return syscall("directory_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -326,13 +328,13 @@ declare global {
 		references: Array<Artifact>;
 	};
 
-	function syscall(syscall: "file_new", arg: FileArg): Promise<File>;
+	function syscall(syscall: "file_new", arg: FileArg): File;
 }
 
 export let file = {
-	new: async (arg: FileArg): Promise<File> => {
+	new: (arg: FileArg): File => {
 		try {
-			return await syscall("file_new", arg);
+			return syscall("file_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -343,21 +345,19 @@ declare global {
 	type FunctionArg = {
 		packageHash: Package.Hash;
 		modulePath: Subpath;
+		kind: Function.Kind;
 		name: string;
 		env: Record<string, Value>;
 		args: Array<Value>;
 	};
 
-	function syscall(
-		syscall: "function_new",
-		arg: FunctionArg,
-	): Promise<Function>;
+	function syscall(syscall: "function_new", arg: FunctionArg): Function;
 }
 
 let function_ = {
-	new: async (arg: FunctionArg): Promise<Function> => {
+	new: (arg: FunctionArg): Function => {
 		try {
-			return await syscall("function_new", arg);
+			return syscall("function_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -467,16 +467,13 @@ declare global {
 		unsafe: boolean;
 	};
 
-	function syscall(
-		syscall: "resource_new",
-		arg: ResourceArg,
-	): Promise<Resource>;
+	function syscall(syscall: "resource_new", arg: ResourceArg): Resource;
 }
 
 export let resource = {
-	new: async (arg: ResourceArg): Promise<Resource> => {
+	new: (arg: ResourceArg): Resource => {
 		try {
-			return await syscall("resource_new", arg);
+			return syscall("resource_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -486,13 +483,13 @@ export let resource = {
 declare global {
 	type SymlinkArg = { target: Template };
 
-	function syscall(syscall: "symlink_new", arg: SymlinkArg): Promise<Symlink>;
+	function syscall(syscall: "symlink_new", arg: SymlinkArg): Symlink;
 }
 
 export let symlink = {
-	new: async (arg: SymlinkArg): Promise<Symlink> => {
+	new: (arg: SymlinkArg): Symlink => {
 		try {
-			return await syscall("symlink_new", arg);
+			return syscall("symlink_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}

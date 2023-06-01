@@ -46,7 +46,7 @@ export class File {
 
 		// Create the file.
 		return File.fromSyscall(
-			await syscall.file.new({
+			syscall.file.new({
 				blob: blob_.toSyscall(),
 				executable,
 				references: references.map((reference) =>

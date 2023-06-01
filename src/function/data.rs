@@ -1,4 +1,4 @@
-use super::Function;
+use super::{Function, Kind};
 use crate::{
 	artifact,
 	error::Result,
@@ -22,12 +22,15 @@ pub struct Data {
 	pub module_path: Subpath,
 
 	#[buffalo(id = 2)]
-	pub name: String,
+	pub kind: Kind,
 
 	#[buffalo(id = 3)]
-	pub env: BTreeMap<String, value::Data>,
+	pub name: String,
 
 	#[buffalo(id = 4)]
+	pub env: BTreeMap<String, value::Data>,
+
+	#[buffalo(id = 5)]
 	pub args: Vec<value::Data>,
 }
 
@@ -43,6 +46,7 @@ impl Function {
 		Data {
 			package_hash: self.package_hash,
 			module_path: self.module_path.clone(),
+			kind: self.kind,
 			name: self.name.clone(),
 			env,
 			args,
@@ -67,6 +71,7 @@ impl Function {
 			package_hash: data.package_hash,
 			module_path: data.module_path,
 			name: data.name,
+			kind: data.kind,
 			env,
 			args,
 		})

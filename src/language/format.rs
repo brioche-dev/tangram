@@ -56,12 +56,12 @@ mod tests {
 	async fn test_basic_formatting() {
 		test!(
 			r#"
-				export default await tg.function(() => {
+				export default tg.function(() => {
 				return "Hello, world!"
 				});
 			"#,
 			r#"
-				export default await tg.function(() => {
+				export default tg.function(() => {
 					return "Hello, world!";
 				});
 			"#,
@@ -90,7 +90,7 @@ mod tests {
 				import zlib from "tangram:zlib";
 				import bar from "tangram:bar";
 
-				export default await tg.function(() => {
+				export default tg.function(() => {
 					return "Hello, world!";
 				});
 			"#,
@@ -101,7 +101,7 @@ mod tests {
 				import * as std from "tangram:std";
 				import zlib from "tangram:zlib";
 
-				export default await tg.function(() => {
+				export default tg.function(() => {
 					return "Hello, world!";
 				});
 			"#,
@@ -121,7 +121,7 @@ mod tests {
 					baz1,
 				} from "tangram:baz";
 
-				export default await tg.function(() => {
+				export default tg.function(() => {
 					return "Hello, world!";
 				});
 			"#,
@@ -138,7 +138,7 @@ mod tests {
 					foo1, foo2,
 				} from "tangram:foo";
 
-				export default await tg.function(() => {
+				export default tg.function(() => {
 					return "Hello, world!";
 				});
 			"#,
@@ -203,7 +203,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export default await tg.function(async ({ target }: Args) => {
+				export default tg.function(async ({ target }: Args) => {
 					return std.run(
 						t`
 					echo "hello world" > ${tg.output}
@@ -220,7 +220,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export default await tg.function(async ({ target }: Args) => {
+				export default tg.function(async ({ target }: Args) => {
 					return std.run(
 						t`
 							echo "hello world" > ${tg.output}
@@ -241,7 +241,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export default await tg.function(async ({ target }: Args) => {
+				export default tg.function(async ({ target }: Args) => {
 					return std.run(
 						t`
 								echo "hello world" > ${tg.output}
@@ -258,7 +258,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export default await tg.function(async ({ target }: Args) => {
+				export default tg.function(async ({ target }: Args) => {
 					return std.run(
 						t`
 							echo "hello world" > ${tg.output}
@@ -302,7 +302,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export default await tg.function(async ({ target }: Args) => {
+				export default tg.function(async ({ target }: Args) => {
 					return std.run(
 						t` echo "Hello world" > ${tg.output}; echo "hi" `,
 						{ target },
@@ -316,7 +316,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export default await tg.function(async ({ target }: Args) => {
+				export default tg.function(async ({ target }: Args) => {
 					return std.run(
 						t`echo "Hello world" > ${tg.output}; echo "hi"`,
 						{ target },
@@ -582,7 +582,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export let foo = await tg.function(({ target }: Args) => {
+				export let foo = tg.function(({ target }: Args) => {
 					return std.run(
 						t`echo Hello world
 
@@ -598,7 +598,7 @@ mod tests {
 					target: tg.System;
 				};
 
-				export let foo = await tg.function(({ target }: Args) => {
+				export let foo = tg.function(({ target }: Args) => {
 					return std.run(
 						t`
 							echo Hello world
@@ -619,7 +619,7 @@ mod tests {
 				import { foo, buzz, fizz } from "tangram:foo";
 				import { bar } from "tangram:bar";
 
-				export let foo = await tg.function(({ target }: Args) => {
+				export let foo = tg.function(({ target }: Args) => {
 					return std.run(
 						t`echo Hello world
 						echo "hi"
@@ -632,7 +632,7 @@ mod tests {
 				import { bar } from "tangram:bar";
 				import { buzz, fizz, foo } from "tangram:foo";
 
-				export let foo = await tg.function(({ target }: Args) => {
+				export let foo = tg.function(({ target }: Args) => {
 					return std.run(
 						t`
 							echo Hello world

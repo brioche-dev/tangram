@@ -3,7 +3,7 @@ use crate::{checksum::Checksum, error::Result, instance::Instance, operation};
 use url::Url;
 
 impl Resource {
-	pub async fn new(
+	pub fn new(
 		tg: &Instance,
 		url: Url,
 		unpack: bool,
@@ -24,7 +24,7 @@ impl Resource {
 		let hash = operation::Hash(crate::hash::Hash::new(&bytes));
 
 		// Add the operation.
-		let hash = tg.database.add_operation(hash, &bytes).await?;
+		let hash = tg.database.add_operation(hash, &bytes)?;
 
 		// Create the download.
 		let download = Self {

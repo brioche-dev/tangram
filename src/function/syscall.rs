@@ -10,12 +10,12 @@ use crate::{
 	directory::Directory,
 	error::{return_error, Error, Result, WrapErr},
 	file::File,
-	function::Function,
+	function::{self, Function},
 	instance::Instance,
 	module::position::Position,
 	module::Module,
 	operation::{self, Operation},
-	package::{self, Package},
+	package,
 	path::Subpath,
 	resource::Resource,
 	symlink::Symlink,
@@ -68,10 +68,10 @@ fn syscall_inner<'s>(
 		"blob_new" => syscall_async(scope, args, syscall_blob_new),
 		"blob_text" => syscall_async(scope, args, syscall_blob_text),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
-		"command_new" => syscall_async(scope, args, syscall_command_new),
-		"directory_new" => syscall_async(scope, args, syscall_directory_new),
-		"file_new" => syscall_async(scope, args, syscall_file_new),
-		"function_new" => syscall_async(scope, args, syscall_function_new),
+		"command_new" => syscall_sync(scope, args, syscall_command_new),
+		"directory_new" => syscall_sync(scope, args, syscall_directory_new),
+		"file_new" => syscall_sync(scope, args, syscall_file_new),
+		"function_new" => syscall_sync(scope, args, syscall_function_new),
 		"hex_decode" => syscall_sync(scope, args, syscall_hex_decode),
 		"hex_encode" => syscall_sync(scope, args, syscall_hex_encode),
 		"json_decode" => syscall_sync(scope, args, syscall_json_decode),
@@ -79,8 +79,8 @@ fn syscall_inner<'s>(
 		"log" => syscall_sync(scope, args, syscall_log),
 		"operation_get" => syscall_async(scope, args, syscall_operation_get),
 		"operation_run" => syscall_async(scope, args, syscall_operation_run),
-		"resource_new" => syscall_async(scope, args, syscall_resource_new),
-		"symlink_new" => syscall_async(scope, args, syscall_symlink_new),
+		"resource_new" => syscall_sync(scope, args, syscall_resource_new),
+		"symlink_new" => syscall_sync(scope, args, syscall_symlink_new),
 		"toml_decode" => syscall_sync(scope, args, syscall_toml_decode),
 		"toml_encode" => syscall_sync(scope, args, syscall_toml_encode),
 		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
@@ -92,21 +92,23 @@ fn syscall_inner<'s>(
 }
 
 async fn syscall_artifact_bundle(tg: Arc<Instance>, args: (Artifact,)) -> Result<Artifact> {
+	let tg = &tg;
 	let (artifact,) = args;
-	let artifact = artifact.bundle(&tg).await?;
+	let artifact = artifact.bundle(tg).await?;
 	Ok(artifact)
 }
 
 async fn syscall_artifact_get(tg: Arc<Instance>, args: (artifact::Hash,)) -> Result<Artifact> {
+	let tg = &tg;
 	let (hash,) = args;
-	let artifact = Artifact::get(&tg, hash).await?;
+	let artifact = Artifact::get(tg, hash).await?;
 	Ok(artifact)
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_base64_decode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (String,),
 ) -> Result<serde_v8::ZeroCopyBuf> {
 	let (value,) = args;
@@ -120,7 +122,7 @@ fn syscall_base64_decode(
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_base64_encode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (serde_v8::ZeroCopyBuf,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -129,31 +131,34 @@ fn syscall_base64_encode(
 }
 
 async fn syscall_blob_bytes(tg: Arc<Instance>, args: (Blob,)) -> Result<serde_v8::ZeroCopyBuf> {
+	let tg = &tg;
 	let (blob,) = args;
-	let bytes = blob.bytes(&tg).await?;
+	let bytes = blob.bytes(tg).await?;
 	Ok(bytes.into())
 }
 
 async fn syscall_blob_new(tg: Arc<Instance>, args: (serde_v8::StringOrBuffer,)) -> Result<Blob> {
+	let tg = &tg;
 	let (bytes,) = args;
 	let bytes = match &bytes {
 		serde_v8::StringOrBuffer::String(string) => string.as_bytes(),
 		serde_v8::StringOrBuffer::Buffer(buffer) => buffer.as_ref(),
 	};
-	let blob = Blob::new(&tg, bytes).await?;
+	let blob = Blob::new(tg, bytes).await?;
 	Ok(blob)
 }
 
 async fn syscall_blob_text(tg: Arc<Instance>, args: (Blob,)) -> Result<String> {
+	let tg = &tg;
 	let (blob,) = args;
-	let text = blob.text(&tg).await?;
+	let text = blob.text(tg).await?;
 	Ok(text)
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (checksum::Algorithm, serde_v8::ZeroCopyBuf),
 ) -> Result<Checksum> {
 	let (algorithm, bytes) = args;
@@ -168,36 +173,28 @@ fn syscall_checksum(
 struct CommandArg {
 	system: System,
 	executable: Template,
-	env: Option<BTreeMap<String, Template>>,
-	args: Option<Vec<Template>>,
-	checksum: Option<Checksum>,
-	unsafe_: Option<bool>,
-	network: Option<bool>,
-	host_paths: Option<Vec<String>>,
+	env: BTreeMap<String, Template>,
+	args: Vec<Template>,
+	checksum: Checksum,
+	unsafe_: bool,
+	network: bool,
+	host_paths: Vec<String>,
 }
 
-async fn syscall_command_new(tg: Arc<Instance>, args: (CommandArg,)) -> Result<Command> {
+fn syscall_command_new(
+	_scope: &mut v8::HandleScope,
+	tg: &Arc<Instance>,
+	args: (CommandArg,),
+) -> Result<Command> {
 	let (arg,) = args;
-	let mut command = Command::builder(arg.system, arg.executable);
-	if let Some(env) = arg.env {
-		command = command.env(env);
-	}
-	if let Some(args) = arg.args {
-		command = command.args(args);
-	}
-	if let Some(checksum) = arg.checksum {
-		command = command.checksum(checksum);
-	}
-	if let Some(unsafe_) = arg.unsafe_ {
-		command = command.unsafe_(unsafe_);
-	}
-	if let Some(network) = arg.network {
-		command = command.network(network);
-	}
-	if let Some(host_paths) = arg.host_paths {
-		command = command.host_paths(host_paths);
-	}
-	let command = command.build(&tg).await?;
+	let command = Command::builder(arg.system, arg.executable)
+		.env(arg.env)
+		.args(arg.args)
+		.checksum(arg.checksum)
+		.unsafe_(arg.unsafe_)
+		.network(arg.network)
+		.host_paths(arg.host_paths)
+		.build(tg)?;
 	Ok(command)
 }
 
@@ -207,9 +204,14 @@ struct DirectoryArg {
 	entries: BTreeMap<String, Artifact>,
 }
 
-async fn syscall_directory_new(tg: Arc<Instance>, args: (DirectoryArg,)) -> Result<Directory> {
+fn syscall_directory_new(
+	_scope: &mut v8::HandleScope,
+	tg: &Arc<Instance>,
+	args: (DirectoryArg,),
+) -> Result<Directory> {
+	let tg = &tg;
 	let (arg,) = args;
-	let directory = Directory::new(&tg, arg.entries).await?;
+	let directory = Directory::new(tg, &arg.entries)?;
 	Ok(directory)
 }
 
@@ -222,9 +224,14 @@ struct ResourceArg {
 	unsafe_: bool,
 }
 
-async fn syscall_resource_new(tg: Arc<Instance>, args: (ResourceArg,)) -> Result<Resource> {
+fn syscall_resource_new(
+	_scope: &mut v8::HandleScope,
+	tg: &Arc<Instance>,
+	args: (ResourceArg,),
+) -> Result<Resource> {
+	let tg = &tg;
 	let (arg,) = args;
-	let download = Resource::new(&tg, arg.url, arg.unpack, arg.checksum, arg.unsafe_).await?;
+	let download = Resource::new(tg, arg.url, arg.unpack, arg.checksum, arg.unsafe_)?;
 	Ok(download)
 }
 
@@ -236,9 +243,14 @@ struct FileArg {
 	references: Vec<Artifact>,
 }
 
-async fn syscall_file_new(tg: Arc<Instance>, args: (FileArg,)) -> Result<File> {
+fn syscall_file_new(
+	_scope: &mut v8::HandleScope,
+	tg: &Arc<Instance>,
+	args: (FileArg,),
+) -> Result<File> {
+	let tg = &tg;
 	let (arg,) = args;
-	let file = File::new(&tg, arg.blob, arg.executable, &arg.references).await?;
+	let file = File::new(tg, arg.blob, arg.executable, &arg.references)?;
 	Ok(file)
 }
 
@@ -247,23 +259,34 @@ async fn syscall_file_new(tg: Arc<Instance>, args: (FileArg,)) -> Result<File> {
 struct FunctionArg {
 	package_hash: package::Hash,
 	module_path: Subpath,
+	kind: function::Kind,
 	name: String,
 	env: BTreeMap<String, Value>,
 	args: Vec<Value>,
 }
 
-async fn syscall_function_new(tg: Arc<Instance>, args: (FunctionArg,)) -> Result<Function> {
+fn syscall_function_new(
+	_scope: &mut v8::HandleScope,
+	tg: &Arc<Instance>,
+	args: (FunctionArg,),
+) -> Result<Function> {
 	let (arg,) = args;
-	let package = Package::get(&tg, arg.package_hash).await?;
-	let function =
-		Function::new(&tg, package, arg.module_path, arg.name, arg.env, arg.args).await?;
+	let function = Function::new(
+		tg,
+		arg.package_hash,
+		arg.module_path,
+		arg.kind,
+		arg.name,
+		arg.env,
+		arg.args,
+	)?;
 	Ok(function)
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_hex_decode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (serde_v8::ZeroCopyBuf,),
 ) -> Result<String> {
 	let (hex,) = args;
@@ -279,7 +302,7 @@ fn syscall_hex_decode(
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_hex_encode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (String,),
 ) -> Result<serde_v8::ZeroCopyBuf> {
 	let (bytes,) = args;
@@ -291,7 +314,7 @@ fn syscall_hex_encode(
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_json_decode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (String,),
 ) -> Result<serde_json::Value> {
 	let (json,) = args;
@@ -304,7 +327,7 @@ fn syscall_json_decode(
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_json_encode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (serde_json::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -315,22 +338,24 @@ fn syscall_json_encode(
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_log(_scope: &mut v8::HandleScope, _state: Rc<State>, args: (String,)) -> Result<()> {
+fn syscall_log(_scope: &mut v8::HandleScope, _tg: &Arc<Instance>, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	println!("{string}");
 	Ok(())
 }
 
 async fn syscall_operation_get(tg: Arc<Instance>, args: (operation::Hash,)) -> Result<Operation> {
+	let tg = &tg;
 	let (hash,) = args;
-	let operation = Operation::get(&tg, hash).await?;
+	let operation = Operation::get(tg, hash).await?;
 	Ok(operation)
 }
 
 async fn syscall_operation_run(tg: Arc<Instance>, args: (Operation,)) -> Result<Value> {
+	let tg = &tg;
 	let (operation,) = args;
 	// TODO: Set the parent operation here.
-	let value = operation.run(&tg).await?;
+	let value = operation.run(tg).await?;
 	Ok(value)
 }
 
@@ -348,16 +373,20 @@ struct SymlinkArg {
 	target: Template,
 }
 
-async fn syscall_symlink_new(tg: Arc<Instance>, args: (SymlinkArg,)) -> Result<Symlink> {
+fn syscall_symlink_new(
+	_scope: &mut v8::HandleScope,
+	tg: &Arc<Instance>,
+	args: (SymlinkArg,),
+) -> Result<Symlink> {
 	let (arg,) = args;
-	let symlink = Symlink::new(&tg, arg.target).await?;
+	let symlink = Symlink::new(tg, arg.target)?;
 	Ok(symlink)
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_toml_decode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (String,),
 ) -> Result<toml::Value> {
 	let (toml,) = args;
@@ -370,7 +399,7 @@ fn syscall_toml_decode(
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_toml_encode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -383,7 +412,7 @@ fn syscall_toml_encode(
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_utf8_decode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (serde_v8::ZeroCopyBuf,),
 ) -> Result<String> {
 	let (bytes,) = args;
@@ -397,7 +426,7 @@ fn syscall_utf8_decode(
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_utf8_encode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (String,),
 ) -> Result<serde_v8::ZeroCopyBuf> {
 	let (string,) = args;
@@ -408,7 +437,7 @@ fn syscall_utf8_encode(
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_yaml_decode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (String,),
 ) -> Result<serde_yaml::Value> {
 	let (yaml,) = args;
@@ -421,7 +450,7 @@ fn syscall_yaml_decode(
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_yaml_encode(
 	_scope: &mut v8::HandleScope,
-	_state: Rc<State>,
+	_tg: &Arc<Instance>,
 	args: (serde_yaml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -439,13 +468,13 @@ fn syscall_sync<'s, A, T, F>(
 where
 	A: serde::de::DeserializeOwned,
 	T: serde::Serialize,
-	F: FnOnce(&mut v8::HandleScope<'s>, Rc<State>, A) -> Result<T>,
+	F: FnOnce(&mut v8::HandleScope<'s>, &Arc<Instance>, A) -> Result<T>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the state.
-	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
+	// Get the instance.
+	let tg = context.get_slot::<Arc<Instance>>(scope).unwrap().clone();
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
@@ -457,7 +486,7 @@ where
 		.wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
-	let value = f(scope, state, args)?;
+	let value = f(scope, &tg, args)?;
 
 	// Serialize the value.
 	let value = serde_v8::to_v8(scope, &value)

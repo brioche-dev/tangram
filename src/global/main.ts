@@ -5,7 +5,7 @@ import { Directory, directory } from "./directory.ts";
 import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
-import { Function, entrypoint, function_, registry } from "./function.ts";
+import { Function, entrypoint, function_, functions } from "./function.ts";
 import { include } from "./include.ts";
 import { log } from "./log.ts";
 import { Relpath, Subpath, relpath, subpath } from "./path.ts";
@@ -60,7 +60,7 @@ let tg = {
 	log,
 	output,
 	placeholder,
-	registry,
+	functions,
 	relpath,
 	resolve,
 	resource,

@@ -4,11 +4,12 @@ use url::Url;
 
 mod builder;
 mod data;
-#[cfg(feature = "run")]
+#[cfg(feature = "operation_run")]
 mod download;
 mod error;
 mod new;
 mod unpack;
+
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Resource {
 	/// The hash.

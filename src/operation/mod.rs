@@ -11,8 +11,7 @@ mod error;
 mod get;
 mod hash;
 mod output;
-
-#[cfg(feature = "run")]
+#[cfg(feature = "operation_run")]
 mod run;
 
 /// An operation.

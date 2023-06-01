@@ -1,4 +1,3 @@
-#![cfg(feature = "v8")]
 pub use self::{
 	diagnostics::{Diagnostic, Severity},
 	doc::Doc,

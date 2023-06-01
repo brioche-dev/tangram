@@ -30,7 +30,7 @@ impl Operation {
 
 	pub async fn try_get_local(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
 		// Get the serialized operation from the database.
-		let Some(operation) = tg.database.try_get_operation(hash).await? else {
+		let Some(operation) = tg.database.try_get_operation(hash)? else {
 			return Ok(None);
 		};
 
@@ -42,7 +42,7 @@ impl Operation {
 
 	pub async fn get_operation_output(tg: &Instance, hash: Hash) -> Result<Option<Value>> {
 		// Get the serialized operation output from the database.
-		let Some(output) = tg.database.get_operation_output(hash).await? else {
+		let Some(output) = tg.database.get_operation_output(hash)? else {
 			return Ok(None);
 		};
 

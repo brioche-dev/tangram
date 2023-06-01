@@ -22,8 +22,7 @@ impl Cli {
 		let resource = Resource::builder(args.url)
 			.unpack(args.unpack)
 			.unsafe_(true)
-			.build(&self.tg)
-			.await?;
+			.build(&self.tg)?;
 
 		// Download it.
 		let output = resource.download(&self.tg).await?;

@@ -184,9 +184,11 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 				},
 
 				lsp::request::Initialize::METHOD => {
-					handle_request::<lsp::request::Initialize, _, _>(sender, request, |params| {
-						server.initialize(params)
-					})
+					handle_request::<lsp::request::Initialize, _, _>(
+						sender,
+						request,
+						|params| async move { server.initialize(&params) },
+					)
 					.boxed()
 				},
 
@@ -204,12 +206,12 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 					.boxed()
 				},
 
-				lsp::request::Shutdown::METHOD => {
-					handle_request::<lsp::request::Shutdown, _, _>(sender, request, |params| {
-						server.shutdown(params)
-					})
-					.boxed()
-				},
+				lsp::request::Shutdown::METHOD => handle_request::<lsp::request::Shutdown, _, _>(
+					sender,
+					request,
+					|params| async move { server.shutdown(params) },
+				)
+				.boxed(),
 
 				self::virtual_text_document::VirtualTextDocument::METHOD => {
 					handle_request::<self::virtual_text_document::VirtualTextDocument, _, _>(

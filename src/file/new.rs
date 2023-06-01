@@ -8,7 +8,7 @@ use crate::{
 use itertools::Itertools;
 
 impl File {
-	pub async fn new(
+	pub fn new(
 		tg: &Instance,
 		blob: Blob,
 		executable: bool,
@@ -33,7 +33,7 @@ impl File {
 		let hash = artifact::Hash(crate::hash::Hash::new(&bytes));
 
 		// Add the artifact data.
-		let hash = tg.database.add_artifact(hash, &bytes).await?;
+		let hash = tg.database.add_artifact(hash, &bytes)?;
 
 		// Create the file.
 		let file = Self {

@@ -6,7 +6,7 @@ use crate::{
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram::{
 	artifact::Artifact,
-	function::Function,
+	function::{self, Function},
 	package::{self, Package, ROOT_MODULE_FILE_NAME},
 };
 
@@ -45,13 +45,13 @@ impl Cli {
 		let args_ = Vec::new();
 		let function = Function::new(
 			&self.tg,
-			package,
+			package.hash(),
 			ROOT_MODULE_FILE_NAME.parse().unwrap(),
+			function::Kind::Function,
 			args.function,
 			env,
 			args_,
 		)
-		.await
 		.wrap_err("Failed to create the function.")?;
 		let output = function.call(&self.tg).await?;
 

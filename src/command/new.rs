@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 impl Command {
 	#[allow(clippy::too_many_arguments)]
-	pub async fn new(
+	pub fn new(
 		tg: &Instance,
 		system: System,
 		executable: Template,
@@ -42,7 +42,7 @@ impl Command {
 		let hash = operation::Hash(crate::hash::Hash::new(&bytes));
 
 		// Add the operation.
-		tg.database.add_operation(hash, &bytes).await?;
+		tg.database.add_operation(hash, &bytes)?;
 
 		// Create the command.
 		let command = Self {

@@ -86,7 +86,7 @@ impl Artifact {
 		.collect();
 
 		// Create the directory.
-		let directory = Directory::new(tg, entries).await?;
+		let directory = Directory::new(tg, &entries)?;
 
 		Ok(directory.into())
 	}
@@ -149,7 +149,7 @@ impl Artifact {
 		.await?;
 
 		// Create the file.
-		let file = File::new(tg, blob, executable, &references).await?;
+		let file = File::new(tg, blob, executable, &references)?;
 
 		// // Add the artifact tracker.
 		// let timestamp_seconds = metadata.ctime().try_into().unwrap();
@@ -181,7 +181,7 @@ impl Artifact {
 		let target = Template::unrender(tg, &artifacts_path, target).await?;
 
 		// Create the symlink.
-		let symlink = Symlink::new(tg, target).await?;
+		let symlink = Symlink::new(tg, target)?;
 
 		Ok(symlink.into())
 	}

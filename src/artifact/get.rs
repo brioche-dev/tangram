@@ -43,7 +43,7 @@ impl Artifact {
 
 	pub async fn try_get_local(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
 		// Get the artifact data from the database.
-		let Some(data) = tg.database.try_get_artifact(hash).await? else {
+		let Some(data) = tg.database.try_get_artifact(hash)? else {
 			return Ok(None);
 		};
 

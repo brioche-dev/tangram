@@ -67,8 +67,7 @@ impl Database {
 }
 
 impl Database {
-	#[allow(clippy::unused_async)]
-	pub async fn add_artifact(&self, hash: artifact::Hash, bytes: &[u8]) -> Result<artifact::Hash> {
+	pub fn add_artifact(&self, hash: artifact::Hash, bytes: &[u8]) -> Result<artifact::Hash> {
 		// Begin a write transaction.
 		let mut txn = self.env.begin_rw_txn()?;
 
@@ -89,8 +88,7 @@ impl Database {
 		Ok(hash)
 	}
 
-	#[allow(clippy::unused_async)]
-	pub async fn try_get_artifact(&self, hash: artifact::Hash) -> Result<Option<artifact::Data>> {
+	pub fn try_get_artifact(&self, hash: artifact::Hash) -> Result<Option<artifact::Data>> {
 		// Begin a read transaction.
 		let txn = self.env.begin_ro_txn()?;
 
@@ -155,12 +153,7 @@ impl Database {
 		Ok(Some(artifact_tracker))
 	}
 
-	#[allow(clippy::unused_async)]
-	pub async fn add_operation(
-		&self,
-		hash: operation::Hash,
-		bytes: &[u8],
-	) -> Result<operation::Hash> {
+	pub fn add_operation(&self, hash: operation::Hash, bytes: &[u8]) -> Result<operation::Hash> {
 		// Begin a write transaction.
 		let mut txn = self.env.begin_rw_txn()?;
 
@@ -182,11 +175,7 @@ impl Database {
 	}
 
 	/// Try to get an operation from the database.
-	#[allow(clippy::unused_async)]
-	pub async fn try_get_operation(
-		&self,
-		hash: operation::Hash,
-	) -> Result<Option<operation::Data>> {
+	pub fn try_get_operation(&self, hash: operation::Hash) -> Result<Option<operation::Data>> {
 		// Begin a read transaction.
 		let txn = self.env.begin_ro_txn()?;
 
@@ -204,8 +193,7 @@ impl Database {
 	}
 
 	/// Get the output for an operation from the database.
-	#[allow(clippy::unused_async)]
-	pub async fn get_operation_output(
+	pub fn get_operation_output(
 		&self,
 		operation_hash: operation::Hash,
 	) -> Result<Option<value::Data>> {
@@ -226,8 +214,7 @@ impl Database {
 	}
 
 	/// Set the output for an operation in the database.
-	#[allow(clippy::unused_async)]
-	pub async fn set_operation_output(
+	pub fn set_operation_output(
 		&self,
 		operation_hash: operation::Hash,
 		output_data: &value::Data,
@@ -254,8 +241,7 @@ impl Database {
 	}
 
 	/// Add a run to the database.
-	#[allow(clippy::unused_async)]
-	pub async fn add_operation_child(
+	pub fn add_operation_child(
 		&self,
 		parent_operation_hash: operation::Hash,
 		child_operation_hash: operation::Hash,
@@ -278,8 +264,7 @@ impl Database {
 	}
 
 	/// Get the children for an operation.
-	#[allow(clippy::unused_async)]
-	pub async fn get_operation_children(
+	pub fn get_operation_children(
 		&self,
 		operation_hash: operation::Hash,
 	) -> Result<Vec<operation::Hash>> {

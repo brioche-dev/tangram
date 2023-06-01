@@ -1,5 +1,4 @@
-
-export let source = await tg.function(() => tg.directory({
+export let source = tg.function(() => tg.directory({
 	["Cargo.toml"]: tg.include("Cargo.toml"),
 	["Cargo.lock"]: tg.include("Cargo.lock"),
 	["src"]: tg.include("./src"),

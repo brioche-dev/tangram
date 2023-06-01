@@ -23,7 +23,7 @@ pub enum Error {
 
 	/// A language service error.
 	#[error(transparent)]
-	#[cfg(feature = "v8")]
+	#[cfg(feature = "language")]
 	LanguageService(#[from] crate::language::service::error::Error),
 
 	/// Any other error.

@@ -45,12 +45,12 @@ impl Builder {
 		self
 	}
 
-	pub async fn build(self, tg: &Instance) -> Result<Resource> {
+	pub fn build(self, tg: &Instance) -> Result<Resource> {
 		let url = self.url;
 		let unpack = self.unpack.unwrap_or(false);
 		let checksum = self.checksum;
 		let unsafe_ = self.unsafe_.unwrap_or(false);
-		let download = Resource::new(tg, url, unpack, checksum, unsafe_).await?;
+		let download = Resource::new(tg, url, unpack, checksum, unsafe_)?;
 		Ok(download)
 	}
 }

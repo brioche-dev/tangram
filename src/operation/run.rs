@@ -13,8 +13,7 @@ impl Operation {
 	pub async fn run(&self, tg: &Arc<Instance>) -> Result<Value> {
 		// Get the operations task map.
 		let operations_task_map = tg
-			.operations
-			.task_map
+			.operations_task_map
 			.lock()
 			.unwrap()
 			.get_or_insert_with(|| {
@@ -45,7 +44,7 @@ impl Operation {
 	async fn run_inner(&self, tg: &Arc<Instance>, parent: Option<Operation>) -> Result<Value> {
 		// Add this operation as a child of its parent.
 		if let Some(parent) = parent {
-			self.add_child(tg, &parent).await?;
+			self.add_child(tg, &parent)?;
 		}
 
 		// Attempt to get the operation output. If the operation has already run, then return its output.
@@ -62,7 +61,7 @@ impl Operation {
 		};
 
 		// Set the operation output.
-		self.set_output(tg, &output).await?;
+		self.set_output(tg, &output)?;
 
 		Ok(output)
 	}

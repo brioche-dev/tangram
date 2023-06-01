@@ -2,7 +2,7 @@ use super::Symlink;
 use crate::{artifact, error::Result, instance::Instance, template::Template};
 
 impl Symlink {
-	pub async fn new(tg: &Instance, target: Template) -> Result<Self> {
+	pub fn new(tg: &Instance, target: Template) -> Result<Self> {
 		// Create the artifact data.
 		let data = artifact::Data::Symlink(super::Data {
 			target: target.to_data(),
@@ -14,7 +14,7 @@ impl Symlink {
 		let hash = artifact::Hash(crate::hash::Hash::new(&bytes));
 
 		// Add the artifact data.
-		let hash = tg.database.add_artifact(hash, &bytes).await?;
+		let hash = tg.database.add_artifact(hash, &bytes)?;
 
 		// Create the symlink.
 		let symlink = Self { hash, target };

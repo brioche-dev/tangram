@@ -70,7 +70,7 @@ export class Command {
 		let network = resolvedArg.network ?? false;
 		let hostPaths = resolvedArg.hostPaths ?? [];
 		return Command.fromSyscall(
-			await syscall.command.new({
+			syscall.command.new({
 				system,
 				executable: executable.toSyscall(),
 				env: env_,

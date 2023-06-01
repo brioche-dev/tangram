@@ -3,11 +3,7 @@ use crate::error::Result;
 use lsp_types as lsp;
 
 impl Server {
-	#[allow(clippy::unused_async)]
-	pub async fn initialize(
-		&self,
-		_params: lsp::InitializeParams,
-	) -> Result<lsp::InitializeResult> {
+	pub fn initialize(&self, _params: &lsp::InitializeParams) -> Result<lsp::InitializeResult> {
 		Ok(lsp::InitializeResult {
 			capabilities: lsp::ServerCapabilities {
 				text_document_sync: Some(lsp::TextDocumentSyncCapability::Options(
@@ -31,8 +27,7 @@ impl Server {
 		})
 	}
 
-	#[allow(clippy::unused_async)]
-	pub async fn shutdown(&self, _params: ()) -> Result<()> {
+	pub fn shutdown(&self, _params: ()) -> Result<()> {
 		Ok(())
 	}
 }

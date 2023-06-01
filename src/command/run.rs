@@ -17,13 +17,11 @@ use std::{
 
 impl Command {
 	#[tracing::instrument(skip(tg), ret)]
-	#[cfg(feature = "run")]
 	pub async fn run(&self, tg: &Arc<Instance>) -> Result<Value> {
 		let operation = Operation::Command(self.clone());
 		operation.run(tg).await
 	}
 
-	#[allow(clippy::too_many_lines)]
 	pub(crate) async fn run_inner(&self, tg: &Arc<Instance>) -> Result<Value> {
 		let system = self.system;
 		match system {

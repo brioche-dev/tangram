@@ -5,12 +5,12 @@ use std::collections::BTreeMap;
 mod builder;
 mod data;
 mod error;
-#[cfg(all(target_os = "linux", feature = "run"))]
+#[cfg(all(target_os = "linux", feature = "operation_run"))]
 mod linux;
-#[cfg(all(target_os = "macos", feature = "run"))]
+#[cfg(all(target_os = "macos", feature = "operation_run"))]
 mod macos;
 mod new;
-#[cfg(feature = "run")]
+#[cfg(feature = "operation_run")]
 mod run;
 
 /// A process.

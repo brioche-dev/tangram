@@ -8,7 +8,7 @@ import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Value } from "./value.ts";
 
-export let registry: Record<string, Function<any, any>> = {};
+export let functions: Record<string, Function<any, any>> = {};
 
 type FunctionArg<
 	A extends Array<Value> = Array<Value>,
@@ -16,10 +16,11 @@ type FunctionArg<
 > = {
 	f: (...args: A) => MaybePromise<R>;
 	module: syscall.Module;
+	kind?: Function.Kind;
 	name: string;
 };
 
-export let function_ = async <
+export let function_ = <
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 >(
@@ -28,9 +29,10 @@ export let function_ = async <
 	// Create the function.
 	assert_(arg.module.kind === "normal");
 	let function_ = Function.fromSyscall<A, R>(
-		await syscall.function.new({
+		syscall.function.new({
 			packageHash: arg.module.value.packageHash,
 			modulePath: arg.module.value.modulePath,
+			kind: arg.kind ?? "function",
 			name: arg.name,
 			env: {},
 			args: [],
@@ -38,12 +40,21 @@ export let function_ = async <
 	);
 	function_.f = arg.f;
 
-	// Add the function to the registry.
+	// Register the function.
 	let key = json.encode({ module: arg.module, name: arg.name });
-	assert_(registry[key] === undefined);
-	registry[key] = function_;
+	assert_(functions[key] === undefined);
+	functions[key] = function_;
 
 	return function_;
+};
+
+export let test = <
+	A extends Array<Value> = Array<Value>,
+	R extends Value = Value,
+>(
+	arg: FunctionArg<A, R>,
+) => {
+	return function_({ ...arg, kind: "test" });
 };
 
 export let entrypoint = async <A extends Array<Value>, R extends Value>(
@@ -85,6 +96,7 @@ type ConstructorArg<
 	hash: Operation.Hash;
 	packageHash: Package.Hash;
 	modulePath: Subpath.Arg;
+	kind: Function.Kind;
 	name: string;
 	env?: Record<string, Value>;
 	args?: A;
@@ -105,14 +117,14 @@ export class Function<
 	hash: Operation.Hash;
 	packageHash: Package.Hash;
 	modulePath: Subpath;
+	kind: Function.Kind;
 	name: string;
 	env?: Record<string, Value>;
 	args?: A;
 
-	static async new<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(arg: NewArg<A, R>): Promise<Function<A, R>> {
+	static new<A extends Array<Value> = Array<Value>, R extends Value = Value>(
+		arg: NewArg<A, R>,
+	): Function<A, R> {
 		let env_ = Object.fromEntries(
 			Object.entries(arg.env ?? {}).map(([key, value]) => [
 				key,
@@ -121,9 +133,10 @@ export class Function<
 		);
 		let args_ = (arg.args ?? []).map((value) => Value.toSyscall(value));
 		let function_ = Function.fromSyscall<A, R>(
-			await syscall.function.new({
+			syscall.function.new({
 				packageHash: arg.function.packageHash,
 				modulePath: arg.function.modulePath.toSyscall(),
+				kind: arg.function.kind,
 				name: arg.function.name,
 				env: env_,
 				args: args_,
@@ -140,6 +153,7 @@ export class Function<
 		this.hash = arg.hash;
 		this.packageHash = arg.packageHash;
 		this.modulePath = subpath(arg.modulePath);
+		this.kind = arg.kind;
 		this.name = arg.name;
 		this.env = arg.env;
 		this.args = arg.args;
@@ -147,7 +161,7 @@ export class Function<
 		// Proxy this object so that it is callable.
 		return new Proxy(this, {
 			apply: async (target, _, args) => {
-				let function_ = await Function.new({
+				let function_ = Function.new({
 					function: target,
 					args: (await Promise.all(args.map(resolve))) as A,
 					env: globalEnv.value,
@@ -178,6 +192,7 @@ export class Function<
 		let hash = this.hash;
 		let packageHash = this.packageHash;
 		let modulePath = this.modulePath.toString();
+		let kind = this.kind;
 		let name = this.name;
 		let env = this.env
 			? Object.fromEntries(
@@ -194,6 +209,7 @@ export class Function<
 			hash,
 			packageHash,
 			modulePath,
+			kind,
 			name,
 			env,
 			args,
@@ -207,6 +223,7 @@ export class Function<
 		let hash = function_.hash;
 		let packageHash = function_.packageHash;
 		let modulePath = function_.modulePath;
+		let kind = function_.kind;
 		let name = function_.name;
 		let env =
 			function_.env !== undefined
@@ -225,9 +242,14 @@ export class Function<
 			hash,
 			packageHash,
 			modulePath,
+			kind,
 			name,
 			env,
 			args,
 		});
 	}
+}
+
+export namespace Function {
+	export type Kind = "function" | "test";
 }

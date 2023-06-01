@@ -67,8 +67,7 @@ impl Builder {
 			builder
 				.add(tg, &trailing_path, artifact)
 				.await?
-				.build(tg)
-				.await?
+				.build(tg)?
 				.into()
 		};
 
@@ -78,7 +77,7 @@ impl Builder {
 		Ok(self)
 	}
 
-	pub async fn build(self, tg: &Instance) -> Result<Directory> {
-		Directory::new(tg, self.entries).await
+	pub fn build(self, tg: &Instance) -> Result<Directory> {
+		Directory::new(tg, &self.entries)
 	}
 }

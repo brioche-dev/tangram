@@ -7,7 +7,7 @@ use crate::{
 use std::collections::BTreeMap;
 
 impl Directory {
-	pub async fn new(tg: &Instance, entries: BTreeMap<String, Artifact>) -> Result<Self> {
+	pub fn new(tg: &Instance, entries: &BTreeMap<String, Artifact>) -> Result<Self> {
 		// Get the hashes of the entries.
 		let entries: BTreeMap<String, artifact::Hash> = entries
 			.iter()
@@ -25,7 +25,7 @@ impl Directory {
 		let hash = artifact::Hash(crate::hash::Hash::new(&bytes));
 
 		// Add the artifact data.
-		let hash = tg.database.add_artifact(hash, &bytes).await?;
+		let hash = tg.database.add_artifact(hash, &bytes)?;
 
 		// Create the directory.
 		let directory = Self { hash, entries };

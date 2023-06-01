@@ -97,7 +97,7 @@ export class Directory {
 
 		// Create the directory.
 		return Directory.fromSyscall(
-			await syscall.directory.new({
+			syscall.directory.new({
 				entries: Object.fromEntries(
 					Object.entries(entries).map(([name, entry]) => [
 						name,

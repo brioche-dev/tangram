@@ -3,7 +3,6 @@ use crate::{artifact::Artifact, error::Result, instance::Instance};
 use std::path::Path;
 
 impl Template {
-	#[allow(clippy::unused_async)]
 	pub async fn unrender(tg: &Instance, path: &Path, string: &str) -> Result<Template> {
 		// Create the regex.
 		let path = path.to_str().unwrap().to_owned();
@@ -65,8 +64,7 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let artifact: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
-			.build(&tg)
-			.await?
+			.build(&tg)?
 			.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
@@ -91,8 +89,7 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let artifact: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
-			.build(&tg)
-			.await?
+			.build(&tg)?
 			.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
@@ -135,8 +132,7 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let artifact: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
-			.build(&tg)
-			.await?
+			.build(&tg)?
 			.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
@@ -166,8 +162,7 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let foo: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
-			.build(&tg)
-			.await?
+			.build(&tg)?
 			.into();
 		let foo_path = foo
 			.check_out_internal(&tg)
@@ -177,8 +172,7 @@ mod tests {
 			.to_owned();
 
 		let bar: Artifact = File::builder(Blob::new(&tg, "bar".as_bytes()).await?)
-			.build(&tg)
-			.await?
+			.build(&tg)?
 			.into();
 		let bar_path = bar
 			.check_out_internal(&tg)
@@ -188,8 +182,7 @@ mod tests {
 			.to_owned();
 
 		let baz: Artifact = File::builder(Blob::new(&tg, "baz".as_bytes()).await?)
-			.build(&tg)
-			.await?
+			.build(&tg)?
 			.into();
 		let baz_path = baz
 			.check_out_internal(&tg)

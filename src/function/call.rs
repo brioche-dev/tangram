@@ -19,7 +19,6 @@ impl Function {
 	pub(crate) async fn call_inner(&self, tg: &Arc<Instance>) -> Result<Value> {
 		// Call the function on the local pool because it is a `!Send` future.
 		let output = tg
-			.v8
 			.local_pool
 			.spawn_pinned({
 				let tg = tg.clone();
@@ -75,10 +74,10 @@ impl Function {
 			.try_into()
 			.unwrap();
 
-		// Get the registry.
-		let registry_string = v8::String::new(&mut try_catch_scope, "registry").unwrap();
-		let registry: v8::Local<v8::Object> = tg
-			.get(&mut try_catch_scope, registry_string.into())
+		// Get the functions.
+		let functions_string = v8::String::new(&mut try_catch_scope, "functions").unwrap();
+		let functions: v8::Local<v8::Object> = tg
+			.get(&mut try_catch_scope, functions_string.into())
 			.unwrap()
 			.try_into()
 			.unwrap();
@@ -96,7 +95,7 @@ impl Function {
 		let key = serde_json::to_value(&key).unwrap();
 		let key = serde_json::to_string(&key).unwrap();
 		let key = serde_v8::to_v8(&mut try_catch_scope, key).map_err(Error::other)?;
-		let function: v8::Local<v8::Function> = registry
+		let function: v8::Local<v8::Function> = functions
 			.get(&mut try_catch_scope, key)
 			.wrap_err("Failed to get the function.")?
 			.try_into()

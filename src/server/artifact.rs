@@ -42,7 +42,6 @@ impl Server {
 		Ok(response)
 	}
 
-	#[allow(clippy::unused_async)]
 	pub async fn handle_get_artifact_request(
 		&self,
 		request: http::Request<Incoming>,

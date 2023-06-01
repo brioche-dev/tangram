@@ -86,7 +86,7 @@ impl Builder {
 		self
 	}
 
-	pub async fn build(self, tg: &Instance) -> Result<Command> {
+	pub fn build(self, tg: &Instance) -> Result<Command> {
 		Command::new(
 			tg,
 			self.system,
@@ -98,6 +98,5 @@ impl Builder {
 			self.network,
 			self.host_paths,
 		)
-		.await
 	}
 }

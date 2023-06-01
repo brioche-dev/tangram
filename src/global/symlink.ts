@@ -75,7 +75,7 @@ export class Symlink {
 		}
 
 		return Symlink.fromSyscall(
-			await syscall.symlink.new({ target: target.toSyscall() }),
+			syscall.symlink.new({ target: target.toSyscall() }),
 		);
 	}
 
