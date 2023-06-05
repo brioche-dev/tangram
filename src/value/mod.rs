@@ -299,3 +299,57 @@ impl Value {
 		}
 	}
 }
+
+impl std::fmt::Display for Value {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match &self {
+			Value::Null => f.write_str("null"),
+			Value::Bool(value) => f.write_str(&format!("{value}")),
+			Value::Number(value) => f.write_str(&format!("{value}")),
+			Value::String(value) => f.write_str(&format!(r#""{value}""#)),
+			Value::Bytes(value) => f.write_str(&format!(r#"(tg.bytes {}"#, value.len())),
+			Value::Relpath(value) => f.write_str(&format!(r#""{value}""#)),
+			Value::Subpath(value) => f.write_str(&format!(r#""{value}""#)),
+			Value::Blob(value) => f.write_str(&format!(r#"(tg.blob {})"#, value.hash())),
+			Value::Artifact(value) => f.write_str(&format!("{value}")),
+			Value::Placeholder(value) => {
+				f.write_str(&format!(r#"(tg.placeholder "${}")"#, value.name,))
+			},
+			Value::Template(value) => {
+				let values = value
+					.components()
+					.iter()
+					.map(|value| format!("${value}"))
+					.collect::<String>();
+				f.write_str(&format!(r#"(tg.template "${values}")"#))
+			},
+			Value::Operation(value) => match value {
+				Operation::Command(command) => {
+					f.write_str(&format!(r#"(tg.command {})"#, command.hash()))
+				},
+				Operation::Function(function) => {
+					f.write_str(&format!(r#"(tg.function {})"#, function.hash()))
+				},
+				Operation::Resource(resource) => {
+					f.write_str(&format!(r#"(tg.resource {})"#, resource.hash()))
+				},
+			},
+			Value::Array(values) => {
+				let values = values
+					.iter()
+					.map(|value| format!("${value}"))
+					.collect::<Vec<String>>()
+					.join(", ");
+				f.write_str(&format!("[{values}]"))
+			},
+			Value::Object(value) => {
+				let value = value
+					.iter()
+					.map(|(key, value)| format!(r#""{key}": {value}"#))
+					.collect::<Vec<String>>()
+					.join(", ");
+				f.write_str(&format!(r#"{{ {value} }}"#))
+			},
+		}
+	}
+}

@@ -117,3 +117,20 @@ impl std::hash::Hash for Artifact {
 		self.hash().hash(state);
 	}
 }
+
+impl std::fmt::Display for Artifact {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Artifact::Directory(directory) => f.write_str(&format!(
+				r#"(tg.directory {value})"#,
+				value = directory.hash()
+			)),
+			Artifact::File(file) => {
+				f.write_str(&format!(r#"(tg.file {value})"#, value = file.hash()))
+			},
+			Artifact::Symlink(symlink) => {
+				f.write_str(&format!(r#"(tg.symlink {value})"#, value = symlink.hash()))
+			},
+		}
+	}
+}

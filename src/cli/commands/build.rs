@@ -1,6 +1,6 @@
 use super::PackageArgs;
 use crate::{
-	error::{Error, Result, WrapErr},
+	error::{Result, WrapErr},
 	Cli,
 };
 use std::path::PathBuf;
@@ -63,7 +63,6 @@ impl Cli {
 		}
 
 		// Print the output.
-		let output = serde_json::to_string_pretty(&output).map_err(Error::other)?;
 		println!("{output}");
 
 		Ok(())
