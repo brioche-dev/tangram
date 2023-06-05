@@ -308,8 +308,8 @@ impl std::fmt::Display for Value {
 			Value::Number(value) => f.write_str(&format!("{value}")),
 			Value::String(value) => f.write_str(&format!(r#""{value}""#)),
 			Value::Bytes(value) => f.write_str(&format!(r#"(tg.bytes {}"#, value.len())),
-			Value::Relpath(value) => f.write_str(&format!(r#""{value}""#)),
-			Value::Subpath(value) => f.write_str(&format!(r#""{value}""#)),
+			Value::Relpath(value) => f.write_str(&format!(r#"(tg.relpath "{value}")"#)),
+			Value::Subpath(value) => f.write_str(&format!(r#"(tg.subpath "{value}")"#)),
 			Value::Blob(value) => f.write_str(&format!(r#"(tg.blob {})"#, value.hash())),
 			Value::Artifact(value) => f.write_str(&format!("{value}")),
 			Value::Placeholder(value) => {

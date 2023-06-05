@@ -1,6 +1,11 @@
+import { Blob } from "./blob.ts";
+import { Command } from "./command.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Function } from "./function.ts";
+import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
+import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 import { Template } from "./template.ts";
@@ -68,6 +73,12 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Promise) {
 		// Handle a promise.
 		return "(promise)";
+	} else if (value instanceof Relpath) {
+		return `(tg.relpath ${value.toString()})`;
+	} else if (value instanceof Subpath) {
+		return `(tg.subpath ${value.toString()})`;
+	} else if (value instanceof Blob) {
+		return `(tg.blob ${value.hash()})`;
 	} else if (value instanceof Directory) {
 		return `(tg.directory ${value.hash()})`;
 	} else if (value instanceof File) {
@@ -88,6 +99,12 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			})
 			.join("");
 		return `(tg.template "${string}")`;
+	} else if (value instanceof Command) {
+		return `(tg.command "${value.hash()}")`;
+	} else if (value instanceof Function) {
+		return `(tg.function "${value.hash}")`;
+	} else if (value instanceof Resource) {
+		return `(tg.resource "${value.hash()}")`;
 	} else {
 		// Handle any other object.
 		let constructorName = "";
