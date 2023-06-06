@@ -477,7 +477,7 @@ impl Command {
 
 		// Receive the guest process's PID from the socket.
 		let guest_process_pid: libc::pid_t = host_socket
-			.read_i32_ne()
+			.read_i32_le()
 			.await
 			.wrap_err("Failed to receive the PID of the guest process from the socket.")?;
 
@@ -516,7 +516,7 @@ impl Command {
 			.await
 			.wrap_err("Failed to receive the exit status kind from the root process.")?;
 		let value = host_socket
-			.read_i32_ne()
+			.read_i32_le()
 			.await
 			.wrap_err("Failed to receive the exit status value from the root process.")?;
 		let exit_status = match kind {
