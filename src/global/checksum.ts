@@ -15,7 +15,7 @@ export declare namespace Checksum {
 }
 
 export namespace Checksum {
-	export type Algorithm = "blake3" | "sha256";
+	export type Algorithm = "blake3" | "sha256" | "sha512";
 
 	export let new_ = (
 		algorithm: Checksum.Algorithm,

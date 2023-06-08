@@ -4,6 +4,7 @@ use crate::error::{return_error, Error};
 #[serde(into = "String", try_from = "String")]
 pub enum Algorithm {
 	Sha256,
+	Sha512,
 	Blake3,
 }
 
@@ -11,6 +12,7 @@ impl std::fmt::Display for Algorithm {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let system = match self {
 			Algorithm::Sha256 => "sha256",
+			Algorithm::Sha512 => "sha512",
 			Algorithm::Blake3 => "blake3",
 		};
 		write!(f, "{system}")?;
@@ -24,6 +26,7 @@ impl std::str::FromStr for Algorithm {
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		let system = match s {
 			"sha256" => Algorithm::Sha256,
+			"sha512" => Algorithm::Sha512,
 			"blake3" => Algorithm::Blake3,
 			_ => return_error!(r#"Invalid algorithm "{s}"."#),
 		};
