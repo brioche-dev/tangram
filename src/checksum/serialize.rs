@@ -7,6 +7,9 @@ impl std::fmt::Display for Checksum {
 			Checksum::Sha256(bytes) => {
 				write!(f, "sha256:{}", hex::encode(bytes))?;
 			},
+			Checksum::Sha512(bytes) => {
+				write!(f, "sha512:{}", hex::encode(bytes))?;
+			},
 			Checksum::Blake3(bytes) => {
 				write!(f, "blake3:{}", hex::encode(bytes))?;
 			},
@@ -36,14 +39,18 @@ impl std::str::FromStr for Checksum {
 				.wrap_err(r#"The string must have a ":"."#)?,
 		)
 		.ok()
-		.wrap_err("Invalid bytes.")?
-		.try_into()
-		.ok()
 		.wrap_err("Invalid bytes.")?;
 
 		let checksum = match algorithm {
-			Algorithm::Sha256 => Checksum::Sha256(bytes),
-			Algorithm::Blake3 => Checksum::Blake3(bytes),
+			Algorithm::Sha256 => {
+				Checksum::Sha256(bytes.try_into().ok().wrap_err("Invalid bytes.")?)
+			},
+			Algorithm::Sha512 => {
+				Checksum::Sha512(bytes.try_into().ok().wrap_err("Invalid bytes.")?)
+			},
+			Algorithm::Blake3 => {
+				Checksum::Blake3(bytes.try_into().ok().wrap_err("Invalid bytes.")?)
+			},
 		};
 
 		Ok(checksum)

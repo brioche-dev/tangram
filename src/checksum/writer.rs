@@ -4,6 +4,7 @@ use super::{Algorithm, Checksum};
 pub enum Writer {
 	Blake3(Box<blake3::Hasher>),
 	Sha256(sha2::Sha256),
+	Sha512(sha2::Sha512),
 }
 
 impl Writer {
@@ -12,6 +13,7 @@ impl Writer {
 		match algorithm {
 			Algorithm::Blake3 => Writer::Blake3(Box::new(blake3::Hasher::new())),
 			Algorithm::Sha256 => Writer::Sha256(sha2::Sha256::default()),
+			Algorithm::Sha512 => Writer::Sha512(sha2::Sha512::default()),
 		}
 	}
 
@@ -22,6 +24,9 @@ impl Writer {
 			},
 			Writer::Sha256(sha256) => {
 				sha2::Digest::update(sha256, data);
+			},
+			Writer::Sha512(sha512) => {
+				sha2::Digest::update(sha512, data);
 			},
 		}
 	}
@@ -36,6 +41,10 @@ impl Writer {
 			Writer::Sha256(sha256) => {
 				let value = sha2::Digest::finalize(sha256);
 				Checksum::Sha256(value.into())
+			},
+			Writer::Sha512(sha512) => {
+				let value = sha2::Digest::finalize(sha512);
+				Checksum::Sha512(value.into())
 			},
 		}
 	}

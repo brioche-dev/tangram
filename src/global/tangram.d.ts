@@ -68,7 +68,7 @@ declare namespace tg {
 	export type Checksum = string;
 
 	export namespace Checksum {
-		export type Algorithm = "blake3" | "sha256";
+		export type Algorithm = "blake3" | "sha256" | "sha512";
 
 		export let new_: (algorithm: Algorithm, bytes: Uint8Array) => Checksum;
 		export { new_ as new };
