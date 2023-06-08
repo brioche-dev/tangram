@@ -1,5 +1,6 @@
-use super::full;
-use crate::util::http::Outgoing;
+#![allow(dead_code)]
+
+use super::{full, Outgoing};
 
 /// 400
 pub fn bad_request() -> http::Response<Outgoing> {

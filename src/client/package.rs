@@ -1,11 +1,11 @@
 use super::Client;
-use crate::{artifact, error::Result};
+use crate::{artifact, error::Result, package};
 
 impl Client {
-	pub async fn publish_package(&self, artifact_hash: artifact::Hash) -> Result<()> {
+	pub async fn publish_package(&self, package_hash: package::Hash) -> Result<()> {
 		// Build the URL.
 		let mut url = self.url.clone();
-		let path = format!("/v1/packages/{artifact_hash}");
+		let path = format!("/v1/packages/{package_hash}");
 		url.set_path(&path);
 
 		// Send the request.

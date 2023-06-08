@@ -8,7 +8,7 @@ pub struct Args {}
 impl Cli {
 	pub async fn command_lsp(&self, _args: Args) -> Result<()> {
 		// Create the language server.
-		let server = tangram::lsp::Server::new(self.tg.clone());
+		let server = tangram::language::Server::new(self.tg.clone());
 
 		// Run the language server.
 		server.serve().await?;

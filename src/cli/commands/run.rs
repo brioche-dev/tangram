@@ -36,7 +36,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = Package::from_specifier(&self.tg, args.package)
+		let package = Package::with_specifier(&self.tg, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 

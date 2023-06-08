@@ -1,6 +1,7 @@
 pub use self::{data::Data, hash::Hash, tracker::Tracker};
 use crate::{directory::Directory, file::File, symlink::Symlink};
 
+mod add;
 mod bundle;
 pub mod checkin;
 mod checkout;

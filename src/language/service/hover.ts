@@ -1,5 +1,5 @@
+import { Module } from "./module.ts";
 import { Position } from "./position.ts";
-import { Module } from "./syscall.ts";
 import * as typescript from "./typescript.ts";
 import ts from "typescript";
 

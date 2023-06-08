@@ -3,7 +3,7 @@ use crate::{artifact::Artifact, error::Result, instance::Instance};
 use async_recursion::async_recursion;
 
 impl Client {
-	/// Push an artifact to a remote server.
+	/// Push an artifact.
 	#[async_recursion]
 	#[must_use]
 	pub async fn push(&self, _tg: &Instance, _artifact: &Artifact) -> Result<()> {

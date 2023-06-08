@@ -1,21 +1,10 @@
-use base64::Engine;
-
-use super::{Algorithm, Checksum};
+use super::{Algorithm, Checksum, Encoding};
 use crate::error::{return_error, Error, WrapErr};
+use base64::Engine;
 
 impl std::fmt::Display for Checksum {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			Checksum::Sha256(bytes) => {
-				write!(f, "sha256:{}", hex::encode(bytes))?;
-			},
-			Checksum::Sha512(bytes) => {
-				write!(f, "sha512:{}", hex::encode(bytes))?;
-			},
-			Checksum::Blake3(bytes) => {
-				write!(f, "blake3:{}", hex::encode(bytes))?;
-			},
-		}
+		write!(f, "{}:{}", self.algorithm, hex::encode(&self.bytes))?;
 		Ok(())
 	}
 }
@@ -26,57 +15,47 @@ impl std::str::FromStr for Checksum {
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		// Split on a ":" or "-".
 		let mut components = if value.contains(':') {
-			value.split(":")
+			value.split(':')
 		} else {
-			value.split("-")
+			value.split('-')
 		};
 
 		// Parse the algorithm.
 		let algorithm = components
 			.next()
-			.wrap_err(r#"The string must have a ":"."#)?
+			.unwrap()
 			.parse()
 			.wrap_err("Invalid algorithm.")?;
 
-		// Parse the bytes.
-		let hash_string = components
+		// Get the encoded bytes.
+		let encoded_bytes = components
 			.next()
-			.wrap_err(r#"The string must have a ":" or "-"."#)?;
+			.wrap_err(r#"The string must have a ":" or "-" separator."#)?;
 
-		// Check the length of the string and decide if it's base64 or hex.
-		let is_base64_string = match (algorithm, hash_string.len()) {
-			(Algorithm::Blake3 | Algorithm::Sha256, 64) => false,
-			(Algorithm::Blake3 | Algorithm::Sha256, 44) => true,
-			(Algorithm::Sha512, 128) => false,
-			(Algorithm::Sha512, 88) => true,
+		// Determine the encoding.
+		let encoding = match (algorithm, encoded_bytes.len()) {
+			(Algorithm::Blake3 | Algorithm::Sha256, 64) | (Algorithm::Sha512, 128) => Encoding::Hex,
+			(Algorithm::Blake3 | Algorithm::Sha256, 44) | (Algorithm::Sha512, 88) => {
+				Encoding::Base64
+			},
 			_ => return_error!("Invalid checksum string length."),
 		};
 
-		// Decode the string into bytes.
-		let bytes = if is_base64_string {
-			base64::engine::general_purpose::STANDARD
-				.decode(hash_string)
+		// Decode the bytes.
+		let bytes = match encoding {
+			Encoding::Base64 => base64::engine::general_purpose::STANDARD
+				.decode(encoded_bytes)
 				.ok()
 				.wrap_err(r#"Invalid base64 string."#)?
-				.into_boxed_slice()
-		} else {
-			hex::decode(hash_string)
+				.into_boxed_slice(),
+			Encoding::Hex => hex::decode(encoded_bytes)
 				.ok()
 				.wrap_err(r#"Invalid hex string."#)?
-				.into_boxed_slice()
+				.into_boxed_slice(),
 		};
 
-		let checksum = match algorithm {
-			Algorithm::Sha256 => {
-				Checksum::Sha256(bytes)
-			},
-			Algorithm::Sha512 => {
-				Checksum::Sha512(bytes)
-			},
-			Algorithm::Blake3 => {
-				Checksum::Blake3(bytes)
-			},
-		};
+		// Create the checksum.
+		let checksum = Checksum { algorithm, bytes };
 
 		Ok(checksum)
 	}

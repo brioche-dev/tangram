@@ -10,6 +10,16 @@ fn main() {
 		});
 	}
 
+	#[cfg(feature = "language")]
+	{
+		// Create the language service snapshot.
+		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+		println!("cargo-rerun-if-changed=assets/language_service.js");
+		let path = out_dir_path.join("language_service.heapsnapshot");
+		let snapshot = create_snapshot("assets/language_service.js");
+		std::fs::write(path, snapshot).unwrap();
+	}
+
 	#[cfg(feature = "operation_run")]
 	{
 		// Create the global snapshot.

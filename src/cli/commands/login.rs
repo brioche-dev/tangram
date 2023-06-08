@@ -5,7 +5,7 @@ use crate::{
 };
 use std::time::{Duration, Instant};
 
-/// Login to Tangram.
+/// Log in to Tangram.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {}
@@ -22,7 +22,7 @@ impl Cli {
 
 		// Open the browser to the login URL.
 		webbrowser::open(login.url.as_ref())?;
-		eprintln!("To login, please open your browser to:\n\n{}\n", login.url);
+		eprintln!("To log in, please open your browser to:\n\n{}\n", login.url);
 
 		// Poll.
 		let start_instant = Instant::now();

@@ -2,6 +2,7 @@ use super::{error::Error, parse, Import};
 use crate::{
 	error::{Result, WrapErr},
 	module::Module,
+	package::Metadata,
 	path::Relpath,
 };
 use std::{collections::HashSet, rc::Rc};
@@ -13,8 +14,9 @@ use swc_core::{
 	},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Output {
+	pub metadata: Option<Metadata>,
 	pub imports: HashSet<Import, fnv::FnvBuildHasher>,
 	pub includes: HashSet<Relpath, fnv::FnvBuildHasher>,
 }
@@ -43,6 +45,7 @@ impl Module {
 
 		// Create the output.
 		let output = Output {
+			metadata: None,
 			imports: visitor.imports,
 			includes: visitor.includes,
 		};
@@ -164,44 +167,50 @@ impl Visitor {
 
 #[cfg(test)]
 mod tests {
-	use crate::module::Module;
+	use super::*;
 
 	#[test]
 	fn test_analyze() {
 		let text = r#"
+			export let metadata = { name: "name", version: "version" };
 			import defaultImport from "tangram:default_import";
 			import { namedImport } from "./named_import.tg";
 			import * as namespaceImport from "tangram:namespace_import";
-
 			let dynamicImport = import("./dynamic_import.tg");
 			let include = tg.include("./include.txt");
-
 			export let nested = tg.function(() => {
 				let nestedDynamicImport = import("tangram:nested_dynamic_import");
 				let nestedInclude = tg.include("./nested_include.txt");
 			});
-
 			export { namedExport } from "tangram:named_export";
 			export * as namespaceExport from "./namespace_export.tg";
 		"#;
-		let output = Module::analyze(text.to_owned()).unwrap();
-		let import = "tangram:default_import".parse().unwrap();
-		assert!(output.imports.contains(&import));
-		let import = "./named_import.tg".parse().unwrap();
-		assert!(output.imports.contains(&import));
-		let import = "tangram:namespace_import".parse().unwrap();
-		assert!(output.imports.contains(&import));
-		let import = "./dynamic_import.tg".parse().unwrap();
-		assert!(output.imports.contains(&import));
-		let include = "./include.txt".parse().unwrap();
-		assert!(output.includes.contains(&include));
-		let import = "tangram:nested_dynamic_import".parse().unwrap();
-		assert!(output.imports.contains(&import));
-		let include = "./nested_include.txt".parse().unwrap();
-		assert!(output.includes.contains(&include));
-		let import = "tangram:named_export".parse().unwrap();
-		assert!(output.imports.contains(&import));
-		let import = "./namespace_export.tg".parse().unwrap();
-		assert!(output.imports.contains(&import));
+		let left = Module::analyze(text.to_owned()).unwrap();
+		let metadata = Metadata {
+			name: Some("name".to_owned()),
+			version: Some("version".to_owned()),
+		};
+		let imports = [
+			"tangram:default_import",
+			"./named_import.tg",
+			"tangram:namespace_import",
+			"./dynamic_import.tg",
+			"tangram:nested_dynamic_import",
+			"tangram:named_export",
+			"./namespace_export.tg",
+		]
+		.into_iter()
+		.map(|import| import.parse().unwrap())
+		.collect();
+		let includes = ["./include.txt", "./nested_include.txt"]
+			.into_iter()
+			.map(|include| include.parse().unwrap())
+			.collect();
+		let right = Output {
+			metadata: Some(metadata),
+			imports,
+			includes,
+		};
+		assert_eq!(left, right);
 	}
 }

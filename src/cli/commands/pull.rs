@@ -12,17 +12,19 @@ use url::Url;
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
+	/// The url of the Tangram server.
+	#[clap(long)]
+	pub url: Option<Url>,
+
 	/// The hash of the artifact to pull.
 	pub artifact_hash: artifact::Hash,
-
-	/// The url of the Tangram server.
-	pub url: Url,
 }
 
 impl Cli {
 	pub async fn command_pull(&self, args: Args) -> Result<()> {
 		// Create a client.
-		let client = Client::new(args.url, None);
+		let client = args.url.map(|url| Client::new(url, None));
+		let client = client.as_ref().unwrap_or(self.tg.api_client());
 
 		// Get the artifact.
 		let artifact = Artifact::get(&self.tg, args.artifact_hash).await?;

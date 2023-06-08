@@ -1,7 +1,10 @@
-import * as format from "./format.ts";
+import * as eslint from "./eslint.ts";
 import { Location } from "./location.ts";
+import { Module } from "./module.ts";
 import * as syscall from "./syscall.ts";
 import * as typescript from "./typescript.ts";
+import { assert } from "./util.ts";
+import * as eslint_ from "eslint";
 import ts from "typescript";
 
 export type Request = {};
@@ -22,25 +25,32 @@ export let handle = (_request: Request): Response => {
 	// Get the modules for all documents.
 	let modules = syscall.documents();
 
+	// Create the ESLint config.
+	let program = typescript.languageService.getProgram();
+	assert(program !== undefined);
+	let eslintConfig = eslint.createConfig(program);
+
 	// Collect the diagnostics.
 	let diagnostics: Array<Diagnostic> = [];
 	for (let module_ of modules) {
+		// Collect the TypeScript diagnostics.
 		let fileName = typescript.fileNameFromModule(module_);
-		let sourceFile = typescript.host.getSourceFile(
-			fileName,
-			ts.ScriptTarget.ESNext,
-		);
-
-		if (sourceFile) {
-			diagnostics.push(...getLinterDiagnosticsForFile(sourceFile, module_));
-		}
-
 		diagnostics.push(
 			...[
 				...typescript.languageService.getSyntacticDiagnostics(fileName),
 				...typescript.languageService.getSemanticDiagnostics(fileName),
 				...typescript.languageService.getSuggestionDiagnostics(fileName),
 			].map(convertDiagnosticFromTypeScript),
+		);
+
+		// Collect the ESLint diagnostics.
+		let text = syscall.module_.load(module_);
+		diagnostics.push(
+			...eslint.linter
+				.verify(text, eslintConfig, fileName)
+				.map((lintMessage) =>
+					convertDiagnosticFromESLint(module_, lintMessage),
+				),
 		);
 	}
 
@@ -124,29 +134,34 @@ export let convertDiagnosticFromTypeScript = (
 	};
 };
 
-export let getLinterDiagnosticsForFile = (
-	sourceFile: ts.SourceFile,
-	module_?: syscall.Module,
-) => {
-	// Get the lints for the source file's text.
-	let lintMessages = format.getLints(sourceFile.text);
+export let convertDiagnosticFromESLint = (
+	module_: Module,
+	lintMessage: eslint_.Linter.LintMessage,
+): Diagnostic => {
+	// Convert the location.
+	let start = { line: lintMessage.line - 1, character: lintMessage.column - 1 };
+	let end = {
+		line: (lintMessage.endLine ?? lintMessage.line) - 1,
+		character: (lintMessage.endColumn ?? lintMessage.column) - 1,
+	};
+	let range = { start, end };
+	let location = { module: module_, range };
 
-	// Convert to diagnostics.
-	let diagnostics = lintMessages.map(
-		({ column, line, endColumn, endLine, message }): Diagnostic => {
-			let range = {
-				start: { line, character: column },
-				end: { line: endLine ?? line, character: endColumn ?? column },
-			};
+	// Convert the severity.
+	let severity: Severity;
+	switch (lintMessage.severity) {
+		case 1: {
+			severity = "warning";
+			break;
+		}
+		case 2: {
+			severity = "error";
+			break;
+		}
+		default: {
+			throw new Error("Unknown lint severity.");
+		}
+	}
 
-			let location = {
-				module: module_ ?? typescript.moduleFromFileName(sourceFile.fileName),
-				range,
-			};
-
-			return { location, severity: "warning", message };
-		},
-	);
-
-	return diagnostics;
+	return { location, severity, message: lintMessage.message };
 };

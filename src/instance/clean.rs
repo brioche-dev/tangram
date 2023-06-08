@@ -117,7 +117,7 @@ impl Instance {
 					}
 
 					// Get the output and add it to the queue.
-					let output = operation.output(self).await?;
+					let output = operation.try_get_output(self).await?;
 					if let Some(value) = output {
 						queue.push_back(QueueItem::Value(value));
 					}

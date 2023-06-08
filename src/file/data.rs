@@ -38,7 +38,7 @@ impl File {
 
 	#[must_use]
 	pub fn from_data(hash: artifact::Hash, data: Data) -> Self {
-		let blob = Blob::with_hash(data.blob_hash);
+		let blob = Blob::from_hash(data.blob_hash);
 		let executable = data.executable;
 		let references = data.references;
 		Self {

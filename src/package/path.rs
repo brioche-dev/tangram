@@ -21,7 +21,7 @@ use std::{
 impl Package {
 	/// Create a package from a path.
 	#[async_recursion]
-	pub async fn from_path(
+	pub async fn with_path(
 		tg: &Arc<crate::instance::Instance>,
 		package_path: &Path,
 	) -> Result<Self> {
@@ -83,6 +83,7 @@ impl Package {
 			// Recurse into the dependencies.
 			for import in &analyze_output.imports {
 				if let module::Import::Dependency(dependency) = import {
+					// Ignore duplicate dependencies.
 					if dependencies.contains_key(dependency) {
 						continue;
 					}
@@ -104,7 +105,7 @@ impl Package {
 						unimplemented!();
 					};
 					let dependency_package_path = package_path.join(dependency_relpath.to_string());
-					let dependency_package = Self::from_path(tg, &dependency_package_path).await?;
+					let dependency_package = Self::with_path(tg, &dependency_package_path).await?;
 
 					// Add the dependency.
 					dependencies.insert(dependency.clone(), dependency_package.hash());

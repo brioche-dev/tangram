@@ -57,9 +57,7 @@ let rule: eslint.Rule.RuleModule = {
 				// Add the expression if it exists. Note that this doesn't preserve leading or trailing between the expression and the surrounding "${}" syntax.
 				if (expression != null) {
 					newNodeText += "${";
-					newNodeText += context
-						.getSourceCode()
-						.getText(expression as estree.Node);
+					newNodeText += context.sourceCode.getText(expression as estree.Node);
 					newNodeText += "}";
 				}
 			});
@@ -241,9 +239,9 @@ let rule: eslint.Rule.RuleModule = {
 					// Add the expression if it exists. Note that this doesn't preserve leading or trailing between the expression and the surrounding "${}" syntax.
 					if (expression != null) {
 						newNodeText += "${";
-						newNodeText += context
-							.getSourceCode()
-							.getText(expression as estree.Node);
+						newNodeText += context.sourceCode.getText(
+							expression as estree.Node,
+						);
 						newNodeText += "}";
 					}
 				});
@@ -274,9 +272,10 @@ let rule: eslint.Rule.RuleModule = {
 
 				// Get the line where the template is defined.
 				let [templateStartIndex, _] = nodeRange;
-				let textToTemplateStart = context
-					.getSourceCode()
-					.text.slice(0, templateStartIndex);
+				let textToTemplateStart = context.sourceCode.text.slice(
+					0,
+					templateStartIndex,
+				);
 				let templateStartLine = textToTemplateStart.split("\n").at(-1) ?? "";
 
 				// Get the indentation.

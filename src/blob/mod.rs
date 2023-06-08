@@ -3,9 +3,10 @@ use crate::{
 	error::{Error, Result},
 	instance::Instance,
 };
-use std::path::PathBuf;
+use tokio::io::AsyncReadExt;
 
 mod copy;
+mod get;
 mod hash;
 mod new;
 
@@ -16,7 +17,7 @@ pub struct Blob {
 
 impl Blob {
 	#[must_use]
-	pub(crate) fn with_hash(hash: Hash) -> Self {
+	pub fn from_hash(hash: Hash) -> Self {
 		Self { hash }
 	}
 
@@ -25,13 +26,10 @@ impl Blob {
 		self.hash
 	}
 
-	pub fn path(&self, tg: &Instance) -> PathBuf {
-		tg.blob_path(self.hash)
-	}
-
 	pub async fn bytes(&self, tg: &Instance) -> Result<Vec<u8>> {
-		let path = tg.blob_path(self.hash);
-		let bytes = tokio::fs::read(&path).await?;
+		let mut reader = self.get(tg).await?;
+		let mut bytes = Vec::new();
+		reader.read_to_end(&mut bytes).await?;
 		Ok(bytes)
 	}
 

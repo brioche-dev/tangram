@@ -156,7 +156,7 @@ impl Artifact {
 		tokio::fs::rename(temp.path(), &blob_path).await?;
 
 		// Create the blob.
-		let blob = Blob::with_hash(blob_hash);
+		let blob = Blob::from_hash(blob_hash);
 
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;

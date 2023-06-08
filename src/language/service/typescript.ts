@@ -99,8 +99,11 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	},
 };
 
+// Create the document registry.
+export let documentRegistry = ts.createDocumentRegistry();
+
 // Create the TypeScript language service.
-export let languageService = ts.createLanguageService(host);
+export let languageService = ts.createLanguageService(host, documentRegistry);
 
 /** Convert a module to a TypeScript file name. */
 export let fileNameFromModule = (module_: Module): string => {

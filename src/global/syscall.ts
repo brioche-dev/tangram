@@ -17,7 +17,7 @@ export namespace Blob {
 
 export type Checksum = string;
 
-export type ChecksumAlgorithm = "blake3" | "sha256";
+export type ChecksumAlgorithm = "blake3" | "sha256" | "sha512";
 
 export type Command = {
 	hash: Operation.Hash;

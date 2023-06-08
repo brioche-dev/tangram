@@ -1,14 +1,15 @@
 {
 	"dependencies": {
-		"@tangramdotdev/eslint-config": "^0.1.0",
-		"@tangramdotdev/eslint-plugin": "^0.1.0",
+		"@rushstack/eslint-patch": "^1.2.0",
 		"@typescript-eslint/eslint-plugin": "^5.38.1",
 		"@typescript-eslint/parser": "^5.38.1",
 		"eslint": "^8.29.0",
+		"eslint-plugin-jsonc": "^2.4.0",
 		"prettier": "^2.7.1",
 		"typescript": "^5.0.4"
 	},
 	"workspaces": [
+		"packages/eslint-plugin",
 		"packages/vscode",
 		"src/global",
 		"src/language/service"

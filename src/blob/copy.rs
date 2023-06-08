@@ -1,20 +1,22 @@
 use super::Blob;
-use crate::{error::Result, instance::Instance};
+use crate::{error::return_error, error::Result, instance::Instance};
 use std::path::Path;
-use tokio::io::AsyncWrite;
 
 impl Blob {
 	pub async fn copy_to_path(&self, tg: &Instance, path: &Path) -> Result<()> {
-		tokio::fs::copy(self.path(tg), path).await?;
-		Ok(())
-	}
-
-	pub async fn copy_to_writer<W>(&self, tg: &Instance, writer: &mut W) -> Result<()>
-	where
-		W: AsyncWrite + Unpin,
-	{
-		let mut file = tokio::fs::File::open(self.path(tg)).await?;
-		tokio::io::copy(&mut file, writer).await?;
+		let blob_path = tg.blob_path(self.hash);
+		if tokio::fs::try_exists(&blob_path).await? {
+			// Attempt to copy the blob locally.
+			tokio::fs::copy(&blob_path, path).await?;
+		} else {
+			// Otherwise, attempt to copy the blob from the API.
+			let reader = tg.api_client().try_get_blob(self.hash).await.ok().flatten();
+			let Some(mut reader) = reader else {
+				return_error!("Failed to find the blob.");
+			};
+			let mut file = tokio::fs::File::create(path).await?;
+			tokio::io::copy(&mut reader, &mut file).await?;
+		}
 		Ok(())
 	}
 }

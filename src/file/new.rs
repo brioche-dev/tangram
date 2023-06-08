@@ -32,7 +32,7 @@ impl File {
 		data.serialize(&mut bytes).unwrap();
 		let hash = artifact::Hash(crate::hash::Hash::new(&bytes));
 
-		// Add the artifact data.
+		// Add the artifact to the database.
 		let hash = tg.database.add_artifact(hash, &bytes)?;
 
 		// Create the file.

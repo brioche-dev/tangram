@@ -47,8 +47,8 @@ impl Operation {
 			self.add_child(tg, &parent)?;
 		}
 
-		// Attempt to get the operation output. If the operation has already run, then return its output.
-		let output = self.output(tg).await?;
+		// If the operation has already run, then return its output.
+		let output = self.try_get_output(tg).await?;
 		if let Some(output) = output {
 			return Ok(output);
 		}
@@ -61,7 +61,7 @@ impl Operation {
 		};
 
 		// Set the operation output.
-		self.set_output(tg, &output)?;
+		self.set_output_local(tg, &output)?;
 
 		Ok(output)
 	}

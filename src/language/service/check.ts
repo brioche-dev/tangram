@@ -1,11 +1,12 @@
 import {
 	Diagnostic,
+	convertDiagnosticFromESLint,
 	convertDiagnosticFromTypeScript,
-	getLinterDiagnosticsForFile,
 } from "./diagnostics.ts";
-import { Module } from "./syscall.ts";
+import * as eslint from "./eslint.ts";
+import { Module } from "./module.ts";
+import * as syscall from "./syscall.ts";
 import * as typescript from "./typescript.ts";
-
 import ts from "typescript";
 
 export type Request = {
@@ -17,6 +18,8 @@ export type Response = {
 };
 
 export let handle = (request: Request): Response => {
+	let diagnostics = [];
+
 	// Create a typescript program.
 	let program = ts.createProgram({
 		rootNames: request.modules.map(typescript.fileNameFromModule),
@@ -24,22 +27,35 @@ export let handle = (request: Request): Response => {
 		host: typescript.host,
 	});
 
-	// Get the diagnostics and convert them.
-	let diagnostics = [
-		...program.getConfigFileParsingDiagnostics(),
-		...program.getOptionsDiagnostics(),
-		...program.getGlobalDiagnostics(),
-		...program.getDeclarationDiagnostics(),
-		...program.getSyntacticDiagnostics(),
-		...program.getSemanticDiagnostics(),
-	].map(convertDiagnosticFromTypeScript);
+	// Collect the TypeScript diagnostics.
+	diagnostics.push(
+		...[
+			...program.getConfigFileParsingDiagnostics(),
+			...program.getOptionsDiagnostics(),
+			...program.getGlobalDiagnostics(),
+			...program.getDeclarationDiagnostics(),
+			...program.getSyntacticDiagnostics(),
+			...program.getSemanticDiagnostics(),
+		].map(convertDiagnosticFromTypeScript),
+	);
 
-	let linterDiagnostics = program
+	// Collect the ESLint diagnostics.
+	let modules = program
 		.getSourceFiles()
-		.map((source) => getLinterDiagnosticsForFile(source))
-		.flat();
+		.map((sourceFile) => typescript.moduleFromFileName(sourceFile.fileName));
+	for (let module_ of modules) {
+		diagnostics.push(
+			...eslint.linter
+				.verify(
+					syscall.module_.load(module_),
+					eslint.createConfig(program),
+					typescript.fileNameFromModule(module_),
+				)
+				.map((lintMessage) =>
+					convertDiagnosticFromESLint(module_, lintMessage),
+				),
+		);
+	}
 
-	return {
-		diagnostics: [...diagnostics, ...linterDiagnostics],
-	};
+	return { diagnostics };
 };

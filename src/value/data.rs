@@ -132,7 +132,7 @@ impl Value {
 			Data::Subpath(path) => Ok(Self::Subpath(path)),
 			Data::Relpath(path) => Ok(Self::Relpath(path)),
 			Data::Blob(value) => {
-				let blob = Blob::with_hash(value);
+				let blob = Blob::from_hash(value);
 				Ok(Self::Blob(blob))
 			},
 			Data::Artifact(hash) => {

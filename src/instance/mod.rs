@@ -2,10 +2,9 @@ use self::lock::Lock;
 #[cfg(feature = "operation_run")]
 use crate::value::Value;
 use crate::{
-	api,
 	artifact::{self, Artifact},
 	blob,
-	client::Client,
+	client::{Client, API_URL},
 	database::Database,
 	document,
 	error::Result,
@@ -25,7 +24,7 @@ mod lock;
 /// An instance.
 pub struct Instance {
 	/// A client for communicating with the API.
-	pub(crate) api_client: api::Client,
+	pub(crate) api_client: Client,
 
 	/// The database.
 	pub(crate) database: Database,
@@ -93,11 +92,9 @@ impl Instance {
 		}
 
 		// Create the API Client.
-		let api_url = options
-			.api_url
-			.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
+		let api_url = options.api_url.unwrap_or_else(|| API_URL.parse().unwrap());
 		let token = options.api_token;
-		let api_client = api::Client::new(api_url, token);
+		let api_client = Client::new(api_url, token);
 
 		// Create the documents maps.
 		let documents = tokio::sync::RwLock::new(HashMap::default());
@@ -256,11 +253,7 @@ impl Instance {
 }
 
 impl Instance {
-	pub fn api_client(&self) -> &api::Client {
+	pub fn api_client(&self) -> &Client {
 		&self.api_client
-	}
-
-	pub fn api_instance_client(&self) -> &Client {
-		self.api_client.instance_client()
 	}
 }

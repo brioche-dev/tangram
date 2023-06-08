@@ -15,21 +15,17 @@ impl Artifact {
 	}
 
 	pub async fn try_get(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
-		// Attempt to get the artifact from the database.
+		// Attempt to get the artifact locally.
 		if let Some(artifact) = Self::try_get_local(tg, hash).await? {
 			return Ok(Some(artifact));
 		}
 
-		// // Attempt to get the artifact from the API.
-		// let artifact = tg
-		// 	.api_instance_client()
-		// 	.try_get(artifact_hash)
-		// 	.await
-		// 	.ok()
-		// 	.flatten();
-		// if let Some(artifact) = artifact {
-		// 	return Ok(Some(artifact));
-		// }
+		// Attempt to get the artifact from the API.
+		let data = tg.api_client().try_get_artifact(hash).await.ok().flatten();
+		if let Some(data) = data {
+			let artifact = Artifact::add(tg, data).await?;
+			return Ok(Some(artifact));
+		}
 
 		Ok(None)
 	}

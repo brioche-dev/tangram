@@ -67,6 +67,7 @@ impl Database {
 }
 
 impl Database {
+	/// Add an artifact to the database.
 	pub fn add_artifact(&self, hash: artifact::Hash, bytes: &[u8]) -> Result<artifact::Hash> {
 		// Begin a write transaction.
 		let mut txn = self.env.begin_rw_txn()?;
@@ -88,6 +89,7 @@ impl Database {
 		Ok(hash)
 	}
 
+	/// Try to get an artifact from the database.
 	pub fn try_get_artifact(&self, hash: artifact::Hash) -> Result<Option<artifact::Data>> {
 		// Begin a read transaction.
 		let txn = self.env.begin_ro_txn()?;
@@ -105,7 +107,7 @@ impl Database {
 		Ok(Some(data))
 	}
 
-	/// Add an artifact tracker.
+	/// Add an artifact tracker to the database.
 	pub fn add_artifact_tracker(
 		&self,
 		path: &Path,
@@ -135,7 +137,7 @@ impl Database {
 		Ok(())
 	}
 
-	/// Get an artifact tracker.
+	/// Try to get an artifact tracker from the database.
 	pub fn try_get_artifact_tracker(&self, path: &Path) -> Result<Option<artifact::Tracker>> {
 		// Begin a read transaction.
 		let txn = self.env.begin_ro_txn()?;
@@ -153,6 +155,7 @@ impl Database {
 		Ok(Some(artifact_tracker))
 	}
 
+	/// Add an operation to the database.
 	pub fn add_operation(&self, hash: operation::Hash, bytes: &[u8]) -> Result<operation::Hash> {
 		// Begin a write transaction.
 		let mut txn = self.env.begin_rw_txn()?;
@@ -192,8 +195,8 @@ impl Database {
 		Ok(Some(data))
 	}
 
-	/// Get the output for an operation from the database.
-	pub fn get_operation_output(
+	/// Try to get the output for an operation from the database.
+	pub fn try_get_operation_output(
 		&self,
 		operation_hash: operation::Hash,
 	) -> Result<Option<value::Data>> {
@@ -240,7 +243,7 @@ impl Database {
 		Ok(())
 	}
 
-	/// Add a run to the database.
+	/// Add an operation child to the database.
 	pub fn add_operation_child(
 		&self,
 		parent_operation_hash: operation::Hash,
@@ -263,7 +266,7 @@ impl Database {
 		Ok(())
 	}
 
-	/// Get the children for an operation.
+	/// Get the children for an operation from the database.
 	pub fn get_operation_children(
 		&self,
 		operation_hash: operation::Hash,

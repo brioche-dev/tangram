@@ -107,7 +107,7 @@ declare namespace tg {
 		tryGet(arg: Subpath.Arg): Promise<Artifact | undefined>;
 
 		/** Get this directory's entries. */
-		entries(): Promise<Map<string, Artifact>>;
+		entries(): Promise<Record<string, Artifact>>;
 
 		/** Bundle this directory with all its recursive references. */
 		bundle: () => Promise<Directory>;

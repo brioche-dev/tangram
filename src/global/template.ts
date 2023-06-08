@@ -12,14 +12,11 @@ export let t = async (
 	// Collect the strings and placeholders.
 	let components: Array<Unresolved<Template.Arg>> = [];
 	for (let i = 0; i < strings.length - 1; i++) {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		let string = strings[i]!;
 		components.push(string);
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		let placeholder = placeholders[i]!;
 		components.push(placeholder);
 	}
-	// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 	components.push(strings[strings.length - 1]!);
 	return await template(...components);
 };

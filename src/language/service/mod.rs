@@ -102,49 +102,18 @@ impl Instance {
 	}
 }
 
-// Snapshotting the language_service is disabled due to bugs in eslint and v8.
-// const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
-const LANGUAGE_SERVICE_JS: &str = include_str!(concat!(
-	env!("CARGO_MANIFEST_DIR"),
-	"/assets/language_service.js"
-));
+const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
 
 /// Run the language service.
 fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
-	let params = v8::CreateParams::default();
+	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);
 
 	// Create the context.
 	let mut handle_scope = v8::HandleScope::new(&mut isolate);
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-
-	// Compile and run language_service.js.
-	let code = v8::String::new(&mut context_scope, LANGUAGE_SERVICE_JS).unwrap();
-	let resource_name = v8::String::new(&mut context_scope, "[global]").unwrap();
-	let resource_line_offset = 0;
-	let resource_column_offset = 0;
-	let resource_is_shared_cross_origin = false;
-	let script_id = 0;
-	let source_map_url = v8::undefined(&mut context_scope).into();
-	let resource_is_opaque = true;
-	let is_wasm = false;
-	let is_module = false;
-	let origin = v8::ScriptOrigin::new(
-		&mut context_scope,
-		resource_name.into(),
-		resource_line_offset,
-		resource_column_offset,
-		resource_is_shared_cross_origin,
-		script_id,
-		source_map_url,
-		resource_is_opaque,
-		is_wasm,
-		is_module,
-	);
-	let script = v8::Script::compile(&mut context_scope, code, Some(&origin)).unwrap();
-	script.run(&mut context_scope).unwrap();
 
 	// Set the instance on the context.
 	context.set_slot(&mut context_scope, tg);

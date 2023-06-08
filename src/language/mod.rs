@@ -1,4 +1,7 @@
-pub use self::diagnostics::{Diagnostic, Severity};
+pub use self::{
+	diagnostics::{Diagnostic, Severity},
+	server::Server,
+};
 
 pub mod check;
 pub mod completion;
@@ -11,5 +14,6 @@ pub mod location;
 pub mod metadata;
 pub mod references;
 pub mod rename;
+pub mod server;
 pub mod service;
 pub mod symbols;

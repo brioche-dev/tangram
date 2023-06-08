@@ -5,7 +5,8 @@
 		"@typescript-eslint/parser": "^5.50.0",
 		"@typescript-eslint/typescript-estree": "^5.53.0",
 		"esbuild": "^0.17.0",
-		"esbuild-plugin-alias": "^0.2.1"
+		"esbuild-plugin-alias": "^0.2.1",
+		"path-browserify": "^1.0.1"
 	},
 	"name": "@tangramdotdev/language-service",
 	"private": true,

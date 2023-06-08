@@ -25,7 +25,7 @@ async fn main() {
 	// Run the main function.
 	let result = main_inner().await;
 
-	// If an error occurred, print the error trace and exit with a non-zero status code.
+	// If an error occurred, print the error trace and exit with a non-zero code.
 	if let Err(error) = result {
 		// Print the error trace.
 		eprintln!("An error occurred.");
@@ -39,7 +39,7 @@ async fn main() {
 			}
 		}
 
-		// Exit with a non-zero status code.
+		// Exit with a non-zero code.
 		std::process::exit(1);
 	}
 }

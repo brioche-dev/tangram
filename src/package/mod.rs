@@ -28,12 +28,12 @@ pub struct Package {
 }
 
 impl Package {
-	pub async fn from_specifier(
+	pub async fn with_specifier(
 		tg: &Arc<crate::instance::Instance>,
 		specifier: Specifier,
 	) -> Result<Self> {
 		match specifier {
-			Specifier::Path(path) => Ok(Self::from_path(tg, &path).await?),
+			Specifier::Path(path) => Ok(Self::with_path(tg, &path).await?),
 			Specifier::Registry(_) => unimplemented!(),
 		}
 	}

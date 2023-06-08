@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Metadata {
 	pub name: Option<String>,
 	pub version: Option<String>,

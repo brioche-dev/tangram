@@ -1,6 +1,5 @@
-import { Location } from "./location.ts";
+import { Module } from "./module.ts";
 import { Range } from "./range.ts";
-import { Module } from "./syscall.ts";
 import * as typescript from "./typescript.ts";
 import ts from "typescript";
 

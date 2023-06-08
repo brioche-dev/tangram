@@ -4,7 +4,10 @@ use tangram::util::dirs::user_config_directory_path;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {
+	/// The user's email.
 	pub email: String,
+
+	/// The user's token.
 	pub token: String,
 }
 

@@ -8,6 +8,7 @@ use crate::{
 	temp::Temp,
 	value::Value,
 };
+use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt};
 use std::{
 	path::Path,
@@ -108,7 +109,7 @@ impl Resource {
 	#[tracing::instrument(skip_all)]
 	async fn download_simple<S>(tg: &Instance, stream: S) -> Result<Value>
 	where
-		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
+		S: Stream<Item = std::io::Result<Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp.
 		let temp = Temp::new(tg);
@@ -141,7 +142,7 @@ impl Resource {
 		compression: Option<unpack::Compression>,
 	) -> Result<Value>
 	where
-		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
+		S: Stream<Item = std::io::Result<Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp.
 		let temp = Temp::new(tg);
@@ -202,7 +203,7 @@ impl Resource {
 
 	async fn download_zip<S>(tg: &Instance, stream: S) -> Result<Value>
 	where
-		S: Stream<Item = std::io::Result<hyper::body::Bytes>> + Send + Unpin + 'static,
+		S: Stream<Item = std::io::Result<Bytes>> + Send + Unpin + 'static,
 	{
 		// Create a temp.
 		let temp = Temp::new(tg);

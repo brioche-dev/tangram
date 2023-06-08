@@ -1,9 +1,15 @@
 use url::Url;
 
-mod artifact;
-mod blob;
-mod pull;
-mod push;
+pub mod artifact;
+pub mod blob;
+pub mod login;
+pub mod operation;
+pub mod package;
+pub mod pull;
+pub mod push;
+pub mod user;
+
+pub const API_URL: &str = "https://api.tangram.dev";
 
 pub struct Client {
 	url: Url,

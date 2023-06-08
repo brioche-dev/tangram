@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-
 import { Range } from "./range.ts";
 import { Module } from "./syscall.ts";
 import * as syscall from "./syscall.ts";

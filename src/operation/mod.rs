@@ -5,6 +5,7 @@ pub use self::{
 };
 pub use crate::{command::Command, function::Function, resource::Resource};
 
+mod add;
 mod children;
 mod data;
 mod error;
