@@ -33,10 +33,10 @@ export let createConfig = (program: ts.Program): eslint.Linter.Config => {
 			programs: [program],
 		},
 		rules: {
-			"@typescript-eslint/await-thenable": "error",
 			"@tangramdotdev/sort-imports": "warn",
 			"@tangramdotdev/template-indent": "warn",
-			"sort-imports": "warn",
+			"@typescript-eslint/await-thenable": "warn",
+			"sort-imports": ["warn", { ignoreDeclarationSort: true }],
 			semi: "warn",
 		},
 	};

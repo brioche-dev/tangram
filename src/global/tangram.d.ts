@@ -451,6 +451,7 @@ declare namespace tg {
 			| Artifact
 			| Placeholder
 			| Template
+			| Operation
 			? T
 			: T extends Array<infer U extends Value>
 			? Array<Unresolved<U>>
@@ -483,6 +484,7 @@ declare namespace tg {
 		| Artifact
 		| Placeholder
 		| Template
+		| Operation
 		? T
 		: T extends Array<infer U extends Unresolved<Value>>
 		? Array<Resolved<U>>

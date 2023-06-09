@@ -1,7 +1,5 @@
-import templateIndent from "./template_indent.ts";
-import * as tangramEslintPlugin from "@tangramdotdev/eslint-plugin";
-import * as typescriptEslintParser from "@typescript-eslint/parser";
-import * as eslint from "eslint";
+import * as eslint from "./eslint.ts";
+import * as eslint_ from "eslint";
 import * as prettier from "prettier";
 // @ts-ignore
 import prettierTypescriptPlugin from "prettier/esm/parser-typescript.mjs";
@@ -22,26 +20,12 @@ let prettierOptions: prettier.Options = {
 	plugins: [prettierTypescriptPlugin],
 };
 
-// Create an ESLint linter.
-let linter = new eslint.Linter();
-
-// Use the TypeScript ESLint parser.
-linter.defineParser(
-	"@typescript-eslint/parser",
-	typescriptEslintParser as eslint.Linter.ParserModule,
-);
-
-// Define the tangram rules.
-linter.defineRules({
-	"@tangramdotdev/sort-imports": tangramEslintPlugin.rules["sort-imports"]!,
-	"@tangramdotdev/template-indent": templateIndent,
-});
-
 // Create the ESLint config.
-let eslintConfig: eslint.Linter.Config = {
+let eslintConfig: eslint_.Linter.Config = {
 	rules: {
 		"@tangramdotdev/sort-imports": "warn",
 		"@tangramdotdev/template-indent": "warn",
+		"sort-imports": ["warn", { ignoreDeclarationSort: true }],
 		semi: "warn",
 	},
 	parser: "@typescript-eslint/parser",
@@ -59,7 +43,7 @@ export let handle = (request: Request): Response => {
 
 	try {
 		// Run ESLint and fix any errors.
-		let eslintOutput = linter.verifyAndFix(text, eslintConfig);
+		let eslintOutput = eslint.linter.verifyAndFix(text, eslintConfig);
 		text = eslintOutput.output;
 	} catch (e) {
 		// Ignore errors.
