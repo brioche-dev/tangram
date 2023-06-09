@@ -36,15 +36,16 @@ impl Writer {
 		match self {
 			Writer::Blake3(hasher) => {
 				let value = hasher.finalize();
-				Checksum::Blake3(value.into())
+				let bytes: &[u8] = value.as_bytes();
+				Checksum::Blake3(bytes.into())
 			},
 			Writer::Sha256(sha256) => {
 				let value = sha2::Digest::finalize(sha256);
-				Checksum::Sha256(value.into())
+				Checksum::Sha256(value.as_slice().into())
 			},
 			Writer::Sha512(sha512) => {
 				let value = sha2::Digest::finalize(sha512);
-				Checksum::Sha512(value.into())
+				Checksum::Sha512(value.as_slice().into())
 			},
 		}
 	}
