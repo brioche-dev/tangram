@@ -15,7 +15,7 @@ export let compilerOptions: ts.CompilerOptions = {
 
 // Create the host implementation for the TypeScript language service and compiler.
 export let host: ts.LanguageServiceHost & ts.CompilerHost = {
-	fileExists: (f) => {
+	fileExists: () => {
 		return false;
 	},
 
@@ -76,8 +76,8 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 		throw new Error("Unimplemented.");
 	},
 
-	resolveModuleNames: (imports_, module) => {
-		return imports_.map((import_) => {
+	resolveModuleNames: (imports, module) => {
+		return imports.map((import_) => {
 			let resolvedFileName;
 			try {
 				resolvedFileName = fileNameFromModule(

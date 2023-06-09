@@ -1,7 +1,4 @@
-pub use self::{
-	diagnostics::{Diagnostic, Severity},
-	doc::Doc,
-};
+pub use self::diagnostics::{Diagnostic, Severity};
 
 pub mod check;
 pub mod completion;

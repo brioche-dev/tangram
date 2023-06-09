@@ -2,6 +2,7 @@ use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
 	module::{self, Module},
+	package,
 };
 use itertools::Itertools;
 use std::sync::Weak;
@@ -43,6 +44,9 @@ fn syscall_inner<'s>(
 		"log" => syscall_sync(scope, args, syscall_log),
 		"module_load" => syscall_sync(scope, args, syscall_module_load),
 		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
+		"module_unlocked_package_hash" => {
+			syscall_sync(scope, args, syscall_module_unlocked_package_hash)
+		},
 		"module_version" => syscall_sync(scope, args, syscall_module_version),
 		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
 		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
@@ -145,6 +149,24 @@ fn syscall_module_resolve(
 			format!(r#"Failed to resolve specifier "{specifier}" relative to module "{module}"."#)
 		})?;
 		Ok(module)
+	})
+}
+
+fn syscall_module_unlocked_package_hash(
+	tg: &Instance,
+	_scope: &mut v8::HandleScope,
+	args: (module::Module,),
+) -> Result<package::Hash> {
+	let (module,) = args;
+	tg.main_runtime_handle.clone().block_on(async move {
+		match module {
+			Module::Normal(module) => {
+				let package = package::Package::get(tg, module.package_hash).await?;
+				let package = package.unlock(tg).await?;
+				Ok(package.artifact().hash())
+			},
+			_ => unreachable!(),
+		}
 	})
 }
 

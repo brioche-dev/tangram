@@ -84,7 +84,7 @@ export let json = {
 
 declare global {
 	/** Write to the log. */
-	function syscall(name: "log", value: string): void;
+	function syscall(syscall: "log", value: string): void;
 }
 
 export let log = (value: string) => {
@@ -108,6 +108,12 @@ declare global {
 
 	/** Get the version of a module. */
 	function syscall(name: "module_version", module: Module): string;
+
+	/** Get the package hash for the module. */
+	function syscall(
+		name: "module_unlocked_package_hash",
+		module: Module,
+	): string;
 }
 
 export let module_ = {
@@ -134,12 +140,15 @@ export let module_ = {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
-};
 
-declare global {
-	/** Get the package hash for the module. */
-	function syscall(name: "package_hash_for_module", module: Module): string;
-}
+	unlockedPackageHash: (module: Module) => {
+		try {
+			return syscall("module_unlocked_package_hash", module);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+};
 
 declare global {
 	/** Decode bytes as UTF-8. */

@@ -77,6 +77,42 @@ impl Builder {
 		Ok(self)
 	}
 
+	#[async_recursion]
+	pub async fn remove(mut self, tg: &Instance, path: &Subpath) -> Result<Self> {
+		// Get the first component.
+		let name = path
+			.components()
+			.first()
+			.wrap_err("Expected the path to have at least one component.")?;
+
+		// Collect the trailing path.
+		let trailing_path: Subpath = path.components().iter().skip(1).cloned().collect();
+
+		if trailing_path.components().is_empty() {
+			// Remove the entry.
+			self.entries.remove(name);
+		} else {
+			// Get a child directory.
+			let builder = if let Some(child) = self.entries.get(name) {
+				child
+					.as_directory()
+					.wrap_err("Expected the artifact to be a directory.")?
+					.builder(tg)
+					.await?
+			} else {
+				return Err(crate::error!("The path does not exist."));
+			};
+
+			// Recurse.
+			let artifact = builder.remove(tg, &trailing_path).await?.build(tg)?.into();
+
+			// Add the new artifact.
+			self.entries.insert(name.clone(), artifact);
+		};
+
+		Ok(self)
+	}
+
 	pub fn build(self, tg: &Instance) -> Result<Directory> {
 		Directory::new(tg, &self.entries)
 	}

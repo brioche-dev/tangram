@@ -2,7 +2,8 @@ pub use self::{dependency::Dependency, metadata::Metadata, specifier::Specifier}
 pub use crate::artifact::Hash;
 use crate::{
 	artifact::Artifact,
-	error::Result,
+	error::{Result, WrapErr},
+	instance::Instance,
 	module::{self, Module},
 };
 use std::{collections::BTreeMap, sync::Arc};
@@ -57,6 +58,22 @@ impl Package {
 		Module::Normal(module::Normal {
 			package_hash: self.hash(),
 			module_path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+		})
+	}
+
+	pub async fn unlock(&self, tg: &Instance) -> Result<Package> {
+		let directory = self
+			.artifact
+			.as_directory()
+			.wrap_err("Expected a directory.")?;
+		let builder = directory.builder(tg).await?;
+		let builder = builder
+			.remove(tg, &LOCKFILE_FILE_NAME.parse().unwrap())
+			.await?;
+		let artifact = builder.build(tg)?.into();
+		Ok(Package {
+			artifact,
+			dependencies: None,
 		})
 	}
 }
