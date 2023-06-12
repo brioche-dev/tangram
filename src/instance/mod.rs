@@ -68,14 +68,21 @@ pub struct Instance {
 	pub(crate) operations_task_map:
 		std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Result<Value>>>>>,
 
+	#[cfg(feature = "operation_run")]
+	pub(crate) process_semaphore: tokio::sync::Semaphore,
+
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
+
+	/// The configuration options for creating the instance.
+	pub(crate) options: Options,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
 	pub api_url: Option<Url>,
 	pub api_token: Option<String>,
+	pub sandbox_enabled: bool,
 }
 
 impl Instance {
@@ -95,8 +102,9 @@ impl Instance {
 		// Create the API Client.
 		let api_url = options
 			.api_url
+			.clone()
 			.unwrap_or_else(|| "https://api.tangram.dev".parse().unwrap());
-		let token = options.api_token;
+		let token = options.api_token.clone();
 		let api_client = api::Client::new(api_url, token);
 
 		// Create the documents maps.
@@ -138,6 +146,10 @@ impl Instance {
 		#[cfg(feature = "operation_run")]
 		let operations_task_map = std::sync::Mutex::new(None);
 
+		// Create the process semaphore.
+		#[cfg(feature = "operation_run")]
+		let process_semaphore = tokio::sync::Semaphore::new(16);
+
 		// Create the instance.
 		let instance = Instance {
 			api_client,
@@ -156,7 +168,10 @@ impl Instance {
 			main_runtime_handle,
 			#[cfg(feature = "operation_run")]
 			operations_task_map,
+			#[cfg(feature = "operation_run")]
+			process_semaphore,
 			path,
+			options,
 		};
 
 		Ok(instance)

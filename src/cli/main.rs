@@ -67,6 +67,12 @@ async fn main_inner() -> Result<()> {
 
 	tracing::debug!(?config, "Read config.");
 
+	// Get the sandbox configuration.
+	let sandbox_enabled = args
+		.sandbox_enabled
+		.or(config.as_ref().and_then(|c| c.sandbox_enabled))
+		.unwrap_or(true);
+
 	// Read the credentials.
 	let credentials = Cli::read_credentials().await?;
 
@@ -82,7 +88,11 @@ async fn main_inner() -> Result<()> {
 	tracing::debug!(?api_url, has_token = api_token.is_some(), "Got API config.");
 
 	// Create the options.
-	let options = tangram::instance::Options { api_url, api_token };
+	let options = tangram::instance::Options {
+		api_url,
+		api_token,
+		sandbox_enabled,
+	};
 
 	// Create the instance.
 	let tg = Arc::new(Instance::new(path, options).await?);

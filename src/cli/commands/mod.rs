@@ -50,6 +50,10 @@ pub struct Args {
 	#[arg(long, env = "TANGRAM_PATH")]
 	pub path: Option<PathBuf>,
 
+	/// If set, child processes will be run un-sandboxed.
+	#[arg(long, env = "TANGRAM_SANDBOX_ENABLED")]
+	pub sandbox_enabled: Option<bool>,
+
 	#[command(subcommand)]
 	pub command: Command,
 }
