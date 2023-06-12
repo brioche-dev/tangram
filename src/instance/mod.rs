@@ -104,7 +104,7 @@ impl Instance {
 			.clone()
 			.unwrap_or_else(|| API_URL.parse().unwrap());
 		let token = options.api_token.clone();
-		let api_client = api::Client::new(api_url, token);
+		let api_client = Client::new(api_url, token);
 
 		// Create the documents maps.
 		let documents = tokio::sync::RwLock::new(HashMap::default());

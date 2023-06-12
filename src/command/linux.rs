@@ -867,19 +867,23 @@ enum ExitStatus {
 	Signal(i32),
 }
 
+// Invoke the clone3 syscall: https://man7.org/linux/man-pages/man2/clone.2.html
+// - Returns 0 in the child process.
+// - Returns the PID of the child process in the parent.
+// - Returns -1 if an error occurs.
 fn clone3(flags: u64) -> libc::pid_t {
 	let mut args = libc::clone_args {
-		flags,
-		stack: 0,
-		stack_size: 0,
-		pidfd: 0,
-		child_tid: 0,
-		parent_tid: 0,
-		exit_signal: 0,
-		tls: 0,
-		set_tid: 0,
-		set_tid_size: 0,
-		cgroup: 0,
+		flags,           // CLONE_XXX flags.
+		stack: 0,        // When NULL, the parent's stack is reused.
+		stack_size: 0,   // When 0, the parent's stack is reused.
+		pidfd: 0,        // Output: *int. Child's PID file descriptor.
+		child_tid: 0,    // Output: *int. Child's thread ID.
+		parent_tid: 0,   // Output: *int. Paren'ts thread ID.
+		exit_signal: 0,  // Signal sent to parent when child is terminated.
+		tls: 0,          // void*. Pointer to thread-local storage.
+		set_tid: 0,      // Pointer to an array of pid_t.
+		set_tid_size: 0, // Length of set_tid array.
+		cgroup: 0,       // File descriptor for target cgroup of the child process.
 	};
 
 	let return_code = unsafe {
@@ -890,9 +894,7 @@ fn clone3(flags: u64) -> libc::pid_t {
 		)
 	};
 
-	return_code
-		.try_into()
-		.unwrap_or(-1)
+	return_code.try_into().unwrap_or(-1)
 }
 
 macro_rules! abort {
