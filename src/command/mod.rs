@@ -12,6 +12,8 @@ mod macos;
 mod new;
 #[cfg(feature = "operation_run")]
 mod run;
+#[cfg(feature = "operation_run")]
+mod sandbox_disabled;
 
 /// A process.
 #[allow(clippy::unsafe_derive_deserialize)]
