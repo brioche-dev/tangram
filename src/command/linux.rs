@@ -878,7 +878,7 @@ fn clone3(flags: u64) -> libc::pid_t {
 		stack_size: 0,   // When 0, the parent's stack is reused.
 		pidfd: 0,        // Output: *int. Child's PID file descriptor.
 		child_tid: 0,    // Output: *int. Child's thread ID.
-		parent_tid: 0,   // Output: *int. Paren'ts thread ID.
+		parent_tid: 0,   // Output: *int. Parent's thread ID.
 		exit_signal: 0,  // Signal sent to parent when child is terminated.
 		tls: 0,          // void*. Pointer to thread-local storage.
 		set_tid: 0,      // Pointer to an array of pid_t.
