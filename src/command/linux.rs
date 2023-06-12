@@ -25,16 +25,6 @@ const HOME_DIRECTORY_GUEST_PATH: &str = "/home/tangram";
 /// The socket guest path.
 const SOCKET_GUEST_PATH: &str = "/socket";
 
-/// The alignment of the stack to allocate for each process.
-const STACK_ALIGN: usize = 16;
-
-/// The layout of the stack to allocate for each process.
-const STACK_LAYOUT: std::alloc::Layout =
-	unsafe { std::alloc::Layout::from_size_align_unchecked(STACK_SIZE, STACK_ALIGN) };
-
-/// The size of the stack to allocate for each process.
-const STACK_SIZE: usize = 2 << 21;
-
 /// The tangram directory guest path.
 const TANGRAM_DIRECTORY_GUEST_PATH: &str = "/.tangram";
 
@@ -213,10 +203,6 @@ impl Command {
 			.wrap_err("Failed to create the socket pair.")?;
 		let guest_socket = guest_socket.into_std()?;
 		guest_socket.set_nonblocking(false)?;
-
-		// Create the stacks for the root and guest processes.
-		let root_stack = Stack::new();
-		let guest_stack = Stack::new();
 
 		// Create the mounts.
 		let mut mounts = Vec::new();
@@ -449,13 +435,11 @@ impl Command {
 			.wrap_err("The working directory is not a valid C string.")?;
 
 		// Create the context.
-		let mut context = Context {
+		let context = Context {
 			argv,
 			envp,
 			executable,
 			guest_socket,
-			guest_stack,
-			root_stack,
 			mounts,
 			network_enabled,
 			root_host_path,
@@ -463,16 +447,14 @@ impl Command {
 		};
 
 		// Spawn the root process.
-		let root_process_pid = unsafe {
-			libc::clone(
-				root,
-				context.root_stack.as_mut_ptr().cast(),
-				libc::CLONE_NEWUSER,
-				std::ptr::addr_of_mut!(context).cast(),
-			)
-		};
+		let root_process_pid = clone3(libc::CLONE_NEWUSER as _);
 		if root_process_pid == -1 {
 			return Err(Error::last_os_error().wrap("Failed to spawn the root process."));
+		}
+
+		// We are the child process. Execute the root function.
+		if root_process_pid == 0 {
+			root(context);
 		}
 
 		// Receive the guest process's PID from the socket.
@@ -603,10 +585,8 @@ impl Command {
 	}
 }
 
-pub extern "C" fn root(arg: *mut libc::c_void) -> libc::c_int {
+fn root(context: Context) {
 	unsafe {
-		let context = &mut *arg.cast::<Context>();
-
 		// Ask to receive a SIGKILL signal if the host process exits.
 		let ret = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
 		if ret == -1 {
@@ -637,14 +617,13 @@ pub extern "C" fn root(arg: *mut libc::c_void) -> libc::c_int {
 		};
 
 		// Spawn the guest process.
-		let guest_process_pid: libc::pid_t = libc::clone(
-			guest,
-			context.guest_stack.as_mut_ptr().cast(),
-			libc::CLONE_NEWNS | libc::CLONE_NEWPID | network_clone_flags,
-			(context as *mut Context).cast(),
-		);
+		let flags = libc::CLONE_NEWNS | libc::CLONE_NEWPID | network_clone_flags;
+		let guest_process_pid = clone3(flags as _);
 		if guest_process_pid == -1 {
 			abort_errno!("Failed to spawn the guest process.");
+		}
+		if guest_process_pid == 0 {
+			guest(&context);
 		}
 
 		// Send the guest process's PID to the host process, so the host process can write the UID and GID maps.
@@ -698,15 +677,13 @@ pub extern "C" fn root(arg: *mut libc::c_void) -> libc::c_int {
 			abort_errno!("Failed to send the guest process's exit status's value to the host.");
 		}
 
-		0
+		std::process::exit(0)
 	}
 }
 
 #[allow(clippy::too_many_lines)]
-pub extern "C" fn guest(arg: *mut libc::c_void) -> libc::c_int {
+fn guest(context: &Context) {
 	unsafe {
-		let context = &mut *arg.cast::<Context>();
-
 		// Ask to receive a SIGKILL signal if the host process exits.
 		let ret = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
 		if ret == -1 {
@@ -838,12 +815,6 @@ struct Context {
 	/// The file descriptor of the guest side of the socket.
 	guest_socket: std::os::unix::net::UnixStream,
 
-	/// The guest process's stack.
-	guest_stack: Stack,
-
-	/// The root process's stack.
-	root_stack: Stack,
-
 	/// The mounts.
 	mounts: Vec<Mount>,
 
@@ -890,33 +861,38 @@ impl CStringVec {
 
 unsafe impl Send for CStringVec {}
 
-struct Stack(*mut u8);
-
-unsafe impl Send for Stack {}
-
-impl Stack {
-	/// Create a new stack.
-	fn new() -> Self {
-		let pointer = unsafe { std::alloc::alloc(STACK_LAYOUT) };
-		Self(pointer)
-	}
-
-	/// Get a pointer to the top of the stack.
-	fn as_mut_ptr(&self) -> *mut u8 {
-		unsafe { self.0.add(STACK_SIZE) }
-	}
-}
-
-impl Drop for Stack {
-	fn drop(&mut self) {
-		unsafe { std::alloc::dealloc(self.0, STACK_LAYOUT) };
-	}
-}
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum ExitStatus {
 	Code(i32),
 	Signal(i32),
+}
+
+fn clone3(flags: u64) -> libc::pid_t {
+	let mut args = libc::clone_args {
+		flags,
+		stack: 0,
+		stack_size: 0,
+		pidfd: 0,
+		child_tid: 0,
+		parent_tid: 0,
+		exit_signal: 0,
+		tls: 0,
+		set_tid: 0,
+		set_tid_size: 0,
+		cgroup: 0,
+	};
+
+	let return_code = unsafe {
+		libc::syscall(
+			libc::SYS_clone3,
+			(&mut args) as *mut _,
+			std::mem::size_of::<libc::clone_args>(),
+		)
+	};
+
+	return_code
+		.try_into()
+		.unwrap_or(-1)
 }
 
 macro_rules! abort {

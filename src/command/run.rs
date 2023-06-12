@@ -23,17 +23,26 @@ impl Command {
 	}
 
 	pub(crate) async fn run_inner(&self, tg: &Arc<Instance>) -> Result<Value> {
-		let system = self.system;
-		match system {
-			#[cfg(target_os = "linux")]
-			System::Amd64Linux | System::Arm64Linux => self.run_inner_linux(tg).boxed(),
+		let permit = tg.process_semaphore.acquire().await;
 
-			#[cfg(target_os = "macos")]
-			System::Amd64MacOs | System::Arm64MacOs => self.run_inner_macos(tg).boxed(),
+		let result = if tg.options.sandbox_enabled {
+			let system = self.system;
+			match system {
+				#[cfg(target_os = "linux")]
+				System::Amd64Linux | System::Arm64Linux => self.run_inner_linux(tg).boxed(),
 
-			_ => return_error!(r#"This machine cannot run a process for system "{system}"."#),
-		}
-		.await
+				#[cfg(target_os = "macos")]
+				System::Amd64MacOs | System::Arm64MacOs => self.run_inner_macos(tg).boxed(),
+
+				_ => return_error!(r#"This machine cannot run a process for system "{system}"."#),
+			}
+			.await
+		} else {
+			self.run_inner_sandbox_disabled(tg).await
+		};
+
+		drop(permit);
+		result
 	}
 
 	pub(crate) fn render(
