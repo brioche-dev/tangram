@@ -6,6 +6,7 @@ import { Subpath, subpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
+import { t } from "./template.ts";
 
 export let directory = async (...args: Array<Unresolved<Directory.Arg>>) => {
 	return await Directory.new(...args);
@@ -143,16 +144,25 @@ export class Directory {
 		return this.#hash;
 	}
 
-	async get(arg: Subpath.Arg): Promise<Artifact> {
+	async get(arg: Subpath.Arg): Promise<Directory | File> {
 		let artifact = await this.tryGet(arg);
 		assert_(artifact, `Failed to get the directory entry "${arg}".`);
 		return artifact;
 	}
 
-	async tryGet(arg: Subpath.Arg): Promise<Artifact | undefined> {
+	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
+		let currentSubpath = subpath();
 		let artifact: Artifact = this;
 		for (let component of subpath(arg).components()) {
-			if (!(artifact instanceof Directory)) {
+			currentSubpath.push(component);
+			if (artifact instanceof Symlink) {
+				let resolved = await artifact.resolve(t`${this}/${currentSubpath}`);
+				if (resolved === undefined) {
+					return undefined;
+				}
+				artifact = resolved;
+			}
+			if (artifact instanceof File) {
 				return undefined;
 			}
 			let hash = artifact.#entries[component];
@@ -160,6 +170,13 @@ export class Directory {
 				return undefined;
 			}
 			artifact = await Artifact.get(hash);
+		}
+		if (artifact instanceof Symlink) {
+			let resolved = await artifact.resolve(t`${this}/${arg}`);
+			if (resolved === undefined) {
+				return undefined;
+			}
+			artifact = resolved;
 		}
 		return artifact;
 	}

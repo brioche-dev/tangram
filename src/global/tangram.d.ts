@@ -600,7 +600,7 @@ declare namespace tg {
 	}
 
 	export namespace Symlink {
-		type Arg = Relpath.Arg | Artifact | Template | ArgObject;
+		type Arg = Relpath.Arg | Artifact | Template | Symlink | ArgObject;
 
 		type ArgObject = {
 			artifact?: Artifact;

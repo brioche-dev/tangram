@@ -2,7 +2,7 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_ } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Relpath, Subpath, subpath } from "./path.ts";
+import { Relpath, Subpath, relpath, subpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Template, t } from "./template.ts";
@@ -132,42 +132,53 @@ export class Symlink {
 		}
 	}
 
-	path(): Subpath {
+	path(): Relpath | undefined {
 		let [firstComponent, secondComponent] = this.#target.components();
 		if (typeof firstComponent === "string" && secondComponent === undefined) {
-			return subpath(firstComponent);
+			return relpath(firstComponent);
 		} else if (Artifact.is(firstComponent) && secondComponent === undefined) {
-			return subpath();
+			return undefined;
 		} else if (
 			Artifact.is(firstComponent) &&
 			typeof secondComponent === "string"
 		) {
-			return subpath(secondComponent);
+			return relpath(secondComponent.slice(1));
 		} else {
 			throw new Error("Invalid template.");
 		}
 	}
 
-	async resolve(): Promise<Directory | File | undefined> {
-		let result: Artifact = this;
-		while (Symlink.is(result)) {
-			let artifact = result.artifact();
-			let path = result.path();
-			if (Directory.is(artifact)) {
-				result = await artifact.get(path);
-			} else if (File.is(artifact)) {
-				assert_(path.components().length === 0);
-				result = artifact;
-			} else if (Symlink.is(artifact)) {
-				assert_(path.components().length === 0);
-				result = artifact;
-			} else {
-				throw new Error(
-					"Cannot resolve a symlink without an artifact in its target.",
-				);
-			}
+	async resolve(
+		from?: Unresolved<Symlink.Arg>,
+	): Promise<Directory | File | undefined> {
+		from = from ? await symlink(from) : undefined;
+		let fromArtifact = from?.artifact();
+		if (fromArtifact instanceof Symlink) {
+			fromArtifact = await fromArtifact.resolve();
 		}
-		return result;
+		let fromPath = from?.path();
+		let artifact = this.artifact();
+		if (artifact instanceof Symlink) {
+			artifact = await artifact.resolve();
+		}
+		let path = this.path();
+		if (artifact !== undefined && path === undefined) {
+			return artifact;
+		} else if (artifact === undefined && path !== undefined) {
+			if (!(fromArtifact instanceof Directory)) {
+				throw new Error("Expected a directory.");
+			}
+			return await fromArtifact.tryGet(
+				(fromPath ?? relpath()).join(path).toSubpath(),
+			);
+		} else if (artifact !== undefined && path !== undefined) {
+			if (!(artifact instanceof Directory)) {
+				throw new Error("Expected a directory.");
+			}
+			return await artifact.tryGet(path.toSubpath());
+		} else {
+			throw new Error("Invalid symlink.");
+		}
 	}
 }
 
@@ -178,6 +189,7 @@ export namespace Symlink {
 		| Subpath
 		| Artifact
 		| Template
+		| Symlink
 		| ArgObject;
 
 	export type ArgObject = {

@@ -1,7 +1,42 @@
-export let source = tg.function(() => tg.directory({
-	["Cargo.toml"]: tg.include("Cargo.toml"),
-	["Cargo.lock"]: tg.include("Cargo.lock"),
-	["src"]: tg.include("./src"),
-	["packages"]: tg.include("./packages"),
-	["assets"]: tg.include("./assets"),
-}));
+export let source = tg.function(() =>
+	tg.directory({
+		["Cargo.toml"]: tg.include("Cargo.toml"),
+		["Cargo.lock"]: tg.include("Cargo.lock"),
+		["src"]: tg.include("./src"),
+		["packages"]: tg.include("./packages"),
+		["assets"]: tg.include("./assets"),
+	}),
+);
+
+export let test = tg.function(async () => {
+	await symlinkResolution();
+});
+
+/** Test that symlinks resolve as expected. */
+let symlinkResolution = async () => {
+	/*
+		baz: -> bar
+		bar:
+		  |_ symlinkToFoo -> foo
+		foo:
+		  |_ symlinkToRealFile -> realFile
+		  |_ realFile: "hello"
+	*/
+
+	let foo = tg.directory({
+		symlinkToRealFile: tg.symlink("realFile"),
+		realFile: "hello",
+	});
+	let bar = tg.directory({
+		symlinkToFoo: tg.symlink(foo),
+	});
+	let baz = tg.symlink(bar);
+	let symlink = await tg.symlink(t`${baz}/symlinkToFoo/symlinkToRealFile`);
+	let file = symlink.resolve();
+	tg.File.assert(file);
+
+	let text = await file.text();
+	if (text !== "hello") {
+		throw new Error("Failed to resolve symlinks.");
+	}
+};
