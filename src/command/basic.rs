@@ -9,7 +9,7 @@ use crate::{
 use std::sync::Arc;
 
 impl Command {
-	pub async fn run_inner_sandbox_disabled(&self, tg: &Arc<Instance>) -> Result<Value> {
+	pub async fn run_inner_basic(&self, tg: &Arc<Instance>) -> Result<Value> {
 		// Check out the references.
 		self.check_out_references(tg)
 			.await

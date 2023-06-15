@@ -38,7 +38,7 @@ impl Command {
 			}
 			.await
 		} else {
-			self.run_inner_sandbox_disabled(tg).await
+			self.run_inner_basic(tg).await
 		};
 
 		drop(permit);

@@ -2,6 +2,8 @@ pub use self::{builder::Builder, data::Data, error::Error};
 use crate::{checksum::Checksum, operation, system::System, template::Template};
 use std::collections::BTreeMap;
 
+#[cfg(feature = "operation_run")]
+mod basic;
 mod builder;
 mod data;
 mod error;
@@ -12,8 +14,6 @@ mod macos;
 mod new;
 #[cfg(feature = "operation_run")]
 mod run;
-#[cfg(feature = "operation_run")]
-mod sandbox_disabled;
 
 /// A process.
 #[allow(clippy::unsafe_derive_deserialize)]
