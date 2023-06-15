@@ -160,7 +160,6 @@ export class Directory {
 			if (artifact instanceof Symlink) {
 				// If the artifact is a non-relative path symlink, we need to reset the `from` context if a subsequent component of `arg` leads us to a relative path symlink.
 				if (artifact.artifact()) {
-					console.log("Resetting from context.");
 					fromArtifact = artifact;
 					currentSubpath = subpath();
 				}
@@ -168,7 +167,6 @@ export class Directory {
 				// We need to make sure that the `path` argument of `from` is the containing directory and not the path to the link itself.
 				let resolved = await artifact.resolve(t`${fromArtifact}/${currentSubpath}/..`);
 				if (resolved === undefined) {
-					console.log("Failed to resolve symlink.");
 					return undefined;
 				}
 				artifact = resolved;
