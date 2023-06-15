@@ -67,14 +67,15 @@ pub struct Instance {
 	pub(crate) operations_task_map:
 		std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Result<Value>>>>>,
 
+	/// The configuration options for creating the instance.
+	#[cfg(feature = "operation_run")]
+	pub(crate) options: Options,
+
 	#[cfg(feature = "operation_run")]
 	pub(crate) process_semaphore: tokio::sync::Semaphore,
 
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
-
-	/// The configuration options for creating the instance.
-	pub(crate) options: Options,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -168,9 +169,10 @@ impl Instance {
 			#[cfg(feature = "operation_run")]
 			operations_task_map,
 			#[cfg(feature = "operation_run")]
+			options,
+			#[cfg(feature = "operation_run")]
 			process_semaphore,
 			path,
-			options,
 		};
 
 		Ok(instance)
