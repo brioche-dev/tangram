@@ -151,46 +151,45 @@ export class Directory {
 	}
 
 	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
-		let currentSubpath = subpath();
-		let artifact: Artifact = this;
-		let fromArtifact: Artifact = this;
+		let components = subpath(arg).components();
 
-		for (let component of subpath(arg).components()) {
-			currentSubpath.push(component);
-			if (artifact instanceof Symlink) {
-				// If the artifact is a non-relative path symlink, we need to reset the `from` context if a subsequent component of `arg` leads us to a relative path symlink.
-				if (artifact.artifact()) {
-					fromArtifact = artifact;
-					currentSubpath = subpath();
-				}
+		// Case 0, if the path is empty return it.
+		if (components.length === 0) {
+			return this;
+		} else {
+			let component = components[0];
+			let entryHash = this.#entries[component];
 
-				// We need to make sure that the `path` argument of `from` is the containing directory and not the path to the link itself.
-				let resolved = await artifact.resolve(
-					t`${fromArtifact}/${currentSubpath}/..`,
-				);
-				if (resolved === undefined) {
-					return undefined;
+			// Case 1, if there is no entry with the first component return undefined.
+			if (entryHash === undefined) {
+				return undefined;
+			}
+
+			// Get the underlying artifact by hash.
+			let entry = await Artifact.get(entryHash);
+
+			// Case 2: If entry is a file, return it.
+			if (entry instanceof File) {
+				return entry;
+			}
+			// Case 3: If the entry is a directory, keep going.
+			else if (entry instanceof Directory) {
+				return entry.tryGet(components.slice(1));
+			}
+			// Case 4: If the entry is a symlink, follow it.
+			else if (entry instanceof Symlink) {
+				let resolved =  await entry.resolve(t`${this}/${components}`);
+
+				// Case 5: We followed the symlink and it returned a directory. Try and get the remaining path.
+				if (resolved instanceof Directory) {
+					return resolved.tryGet(components.slice(1));
 				}
-				artifact = resolved;
+				// Case 6: We followed the symlink and it didn't return a directory, return the value.
+				return resolved;
 			}
-			if (artifact instanceof File) {
-				return undefined;
-			}
-			let hash = artifact.#entries[component];
-			if (!hash) {
-				return undefined;
-			}
-			artifact = await Artifact.get(hash);
+
+			unreachable();
 		}
-		if (artifact instanceof Symlink) {
-			// Like above, we need to make sure the `path` arg of `from` is the containing directory of the link.
-			let resolved = await artifact.resolve(t`${this}/${arg}/..`);
-			if (resolved === undefined) {
-				return undefined;
-			}
-			artifact = resolved;
-		}
-		return artifact;
 	}
 
 	async entries(): Promise<Record<string, Artifact>> {

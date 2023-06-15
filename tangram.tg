@@ -14,6 +14,7 @@ export let test = tg.function(async () => {
 	await symlinkIntoDirectory();
 	await symlinkThroughSymlink();
 	await relativePathSymlink();
+	await dependencyIndirection();
 	await multipleLevelsOfIndirection();
 });
 
@@ -108,7 +109,7 @@ let symlinkThroughSymlink = async () => {
 };
 
 let relativePathSymlink = async () => {
-	console.log("Checking if we can get a file pointed to by relativePathSymlink.") ;
+	console.log("Checking if we can get a file pointed to by a relative path symlink.") ;
 	/*
 		foo
 		|_ file.txt
@@ -148,6 +149,36 @@ let multipleLevelsOfIndirection = async () => {
 	});
 
 	let resolved = await baz.get("bar/link/file.txt");
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	if (text !== "hello") {
+		throw new Error("Fail: invalid text.");
+	}
+	console.log("Success.");
+};
+
+/**  A key use case for symlinks is to allow for de-duplication of depency artifacts that are "in tree." To support this, an artifact may contain a ./dependencies directory where entries may be symlinks to other directories containing the depenencies. If one of those dependencies contains some bin, we want to make sure we can resolve it through a pair of symlinks, one that is only aware of the outer directory but whose path implicitly routes through the inner symlink. */
+export let dependencyIndirection = async () => {
+	console.log("Checking if we can resolve a dependency through indirection.");
+	// dependency
+	// |_ bin
+	//    |_ script.sh
+	// dependencies
+	// |_ dependency -> dependency
+	//
+	// resolve ${dependencies}/dependency/bin/script.sh
+	//
+	let dependency = tg.directory({
+		["bin/script.sh"]: tg.file("hello"),
+	});
+
+	let dependencies = tg.directory({
+		["dependencies/dependency"]: tg.symlink(dependency),
+	});
+
+	let executable = await tg.symlink(t`${dependencies}/dependencies/dependency/bin/script.sh`);
+
+	let resolved = await executable.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
 	if (text !== "hello") {
