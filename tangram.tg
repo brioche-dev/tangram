@@ -9,6 +9,51 @@ export let source = tg.function(() =>
 );
 
 export let test = tg.function(async () => {
+	await testSymlinks();
+	await testDirectories();
+});
+
+export let testDirectories = tg.function(async () => {
+	await testGetChildren();
+	await testDeepMerge();
+});
+
+export let testGetChildren = async () => {
+	console.log("Checking that we can retrieve directory entries;");
+	let directory = await tg.directory({
+		["foo/bar/baz"]: "hello",
+		["foo/baz"]: tg.symlink("bar/baz"),
+	});
+
+	tg.Directory.assert(await directory.get(""));
+	tg.Directory.assert(await directory.get("foo"));
+	tg.Directory.assert(await directory.get("foo/bar"));
+	tg.File.assert(await directory.get("foo/baz"));
+
+	console.log("Success");
+};
+
+export let testDeepMerge = async () => {
+	console.log("Checking that we can deep merge two directories.");
+	let foo = tg.directory({
+		"foo": "foo",
+		"foolink": tg.symlink("foo"),
+	});
+
+	let bar = tg.directory({
+		"bar": "bar",
+		"barlink": tg.symlink("bar"),
+	});
+
+	let foobar = await tg.directory(foo, bar);
+	tg.File.assert(await foobar.get("foo"));
+	tg.File.assert(await foobar.get("foolink"));
+	tg.File.assert(await foobar.get("bar"));
+	tg.File.assert(await foobar.get("barlink"));
+	console.log("Success.");
+};
+
+export let testSymlinks = tg.function(async () => {
 	await symlinkToFile();
 	await symlinkInDirectory();
 	await symlinkIntoDirectory();
