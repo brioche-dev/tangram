@@ -2,10 +2,22 @@ use crate::error::Result;
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 
-pub(crate) const ENV_AMD64_LINUX: &[u8] = include_bytes!("../../assets/env_amd64_linux");
-pub(crate) const ENV_ARM64_LINUX: &[u8] = include_bytes!("../../assets/env_arm64_linux");
-pub(crate) const SH_AMD64_LINUX: &[u8] = include_bytes!("../../assets/sh_amd64_linux");
-pub(crate) const SH_ARM64_LINUX: &[u8] = include_bytes!("../../assets/sh_arm64_linux");
+const ENV_AMD64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/env_amd64_linux"
+));
+const ENV_ARM64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/env_arm64_linux"
+));
+const SH_AMD64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/sh_amd64_linux"
+));
+const SH_ARM64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/sh_arm64_linux"
+));
 
 pub async fn migrate(path: &Path) -> Result<()> {
 	// Create the database file.
@@ -52,8 +64,6 @@ pub async fn migrate(path: &Path) -> Result<()> {
 	// Create the temps directory.
 	let temps_path = path.join("temps");
 	tokio::fs::create_dir_all(&temps_path).await?;
-
-	// david edit: fill this with bb_arm64_linux, bb_x86_linux, etc. don't ifdef
 
 	// Create the assets directory.
 	let assets_path = path.join("assets");
