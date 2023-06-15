@@ -153,11 +153,22 @@ export class Directory {
 	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
 		let currentSubpath = subpath();
 		let artifact: Artifact = this;
+		let fromArtifact = this;
+
 		for (let component of subpath(arg).components()) {
 			currentSubpath.push(component);
 			if (artifact instanceof Symlink) {
-				let resolved = await artifact.resolve(t`${this}/${currentSubpath}`);
+				// If the artifact is a non-relative path symlink, we need to reset the `from` context if a subsequent component of `arg` leads us to a relative path symlink.
+				if (artifact.artifact()) {
+					console.log("Resetting from context.");
+					fromArtifact = artifact;
+					currentSubpath = subpath();
+				}
+
+				// We need to make sure that the `path` argument of `from` is the containing directory and not the path to the link itself.
+				let resolved = await artifact.resolve(t`${fromArtifact}/${currentSubpath}/..`);
 				if (resolved === undefined) {
+					console.log("Failed to resolve symlink.");
 					return undefined;
 				}
 				artifact = resolved;
@@ -172,7 +183,8 @@ export class Directory {
 			artifact = await Artifact.get(hash);
 		}
 		if (artifact instanceof Symlink) {
-			let resolved = await artifact.resolve(t`${this}/${arg}`);
+			// Like above, we need to make sure the `path` arg of `from` is the containing directory of the link.
+			let resolved = await artifact.resolve(t`${this}/${arg}/..`);
 			if (resolved === undefined) {
 				return undefined;
 			}
