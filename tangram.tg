@@ -30,7 +30,7 @@ let symlinkToFile = async () => {
 	tg.File.assert(resolved);
 	let text = await resolved.text();
 	if (text !== "hello") {
-		throw new Error("Failed to resolve simple case.");
+		throw new Error("Fail: invalid text.");
 	}
 	console.log("Success.");
 };
@@ -51,7 +51,7 @@ let symlinkInDirectory = async () => {
 	tg.File.assert(resolved);
 	let text = await resolved.text();
 	if (text !== "hello") {
-		throw new Error("Failed to resolve simple case.");
+		throw new Error("Fail: invalid text.");
 	}
 	console.log("Success.");
 };
@@ -72,7 +72,7 @@ let symlinkIntoDirectory = async () => {
 	tg.File.assert(resolved);
 	let text = await resolved.text();
 	if (text !== "hello") {
-		throw new Error("Failed to resolve simple case.");
+		throw new Error("Fail: invalid text.");
 	}
 	console.log("Success.");
 };
@@ -102,7 +102,7 @@ let symlinkThroughSymlink = async () => {
 	tg.File.assert(resolved);
 	let text = await resolved.text();
 	if (text !== "hello") {
-		throw new Error("Failed to resolve simple case.");
+		throw new Error("Fail: invalid text.");
 	}
 	console.log("Success.");
 };
@@ -123,7 +123,7 @@ let relativePathSymlink = async () => {
 	tg.File.assert(resolved);
 	let text = await resolved.text();
 	if (text !== "hello") {
-		throw new Error("Failed to resolve simple case.");
+		throw new Error("Fail: invalid text.");
 	}
 	console.log("Success.");
 };
@@ -131,10 +131,6 @@ let relativePathSymlink = async () => {
 let multipleLevelsOfIndirection = async () => {
 	console.log("Checking if we can resolve symlinks through multiple levels of indirection.");
 	/*
-		foo
-		|_ subdirectory
-		   |_ file.txt: "hello"
-
 		bar
 		|_ subdirectory/file.txt: "hello"
 		|__link -> ./subdirectory
@@ -155,7 +151,7 @@ let multipleLevelsOfIndirection = async () => {
 	tg.File.assert(resolved);
 	let text = await resolved.text();
 	if (text !== "hello") {
-		throw new Error("Failed to resolve simple case.");
+		throw new Error("Fail: invalid text.");
 	}
 	console.log("Success.");
 };
