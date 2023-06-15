@@ -72,7 +72,7 @@ impl Command {
 		let tangram_directory_guest_path = PathBuf::from(TANGRAM_DIRECTORY_GUEST_PATH);
 
 		// Create the host and guest paths for the artifacts directory.
-		let _artifacts_directory_guest_path = tg.artifacts_path().to_owned();
+		let _artifacts_directory_guest_path = tg.artifacts_path();
 		let artifacts_directory_guest_path =
 			Path::new(TANGRAM_DIRECTORY_GUEST_PATH).join("artifacts");
 
@@ -447,15 +447,41 @@ impl Command {
 		};
 
 		// Spawn the root process.
-		let root_process_pid = clone3(libc::CLONE_NEWUSER as _);
-		if root_process_pid == -1 {
+		let clone_flags = libc::CLONE_NEWUSER;
+		let clone_flags = clone_flags
+			.try_into()
+			.map_err(Error::other)
+			.wrap_err("Invalid clone flags.")?;
+		let mut clone_args = libc::clone_args {
+			flags: clone_flags,
+			stack: 0,
+			stack_size: 0,
+			pidfd: 0,
+			child_tid: 0,
+			parent_tid: 0,
+			exit_signal: 0,
+			tls: 0,
+			set_tid: 0,
+			set_tid_size: 0,
+			cgroup: 0,
+		};
+		let ret = unsafe {
+			libc::syscall(
+				libc::SYS_clone3,
+				std::ptr::addr_of_mut!(clone_args),
+				std::mem::size_of::<libc::clone_args>(),
+			)
+		};
+		if ret == -1 {
 			return Err(Error::last_os_error().wrap("Failed to spawn the root process."));
 		}
-
-		// We are the child process. Execute the root function.
-		if root_process_pid == 0 {
-			root(context);
+		if ret == 0 {
+			root(&context);
 		}
+		let root_process_pid: libc::pid_t = ret
+			.try_into()
+			.map_err(Error::other)
+			.wrap_err("Invalid root process PID.")?;
 
 		// Receive the guest process's PID from the socket.
 		let guest_process_pid: libc::pid_t = host_socket
@@ -585,7 +611,8 @@ impl Command {
 	}
 }
 
-fn root(context: Context) {
+#[allow(clippy::too_many_lines)]
+fn root(context: &Context) {
 	unsafe {
 		// Ask to receive a SIGKILL signal if the host process exits.
 		let ret = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
@@ -617,14 +644,39 @@ fn root(context: Context) {
 		};
 
 		// Spawn the guest process.
-		let flags = libc::CLONE_NEWNS | libc::CLONE_NEWPID | network_clone_flags;
-		let guest_process_pid = clone3(flags as _);
-		if guest_process_pid == -1 {
+		let clone_flags = libc::CLONE_NEWNS | libc::CLONE_NEWPID | network_clone_flags;
+		let Ok(clone_flags) = clone_flags.try_into() else {
+			abort!("Invalid clone flags.");
+		};
+		let mut clone_args = libc::clone_args {
+			flags: clone_flags,
+			stack: 0,
+			stack_size: 0,
+			pidfd: 0,
+			child_tid: 0,
+			parent_tid: 0,
+			exit_signal: 0,
+			tls: 0,
+			set_tid: 0,
+			set_tid_size: 0,
+			cgroup: 0,
+		};
+		let ret = libc::syscall(
+			libc::SYS_clone3,
+			std::ptr::addr_of_mut!(clone_args),
+			std::mem::size_of::<libc::clone_args>(),
+		);
+		if ret == -1 {
 			abort_errno!("Failed to spawn the guest process.");
 		}
-		if guest_process_pid == 0 {
-			guest(&context);
+		if ret == 0 {
+			guest(context);
 		}
+		let guest_process_pid: libc::pid_t = if let Ok(guest_process_pid) = ret.try_into() {
+			guest_process_pid
+		} else {
+			abort!("Invalid guest process PID.");
+		};
 
 		// Send the guest process's PID to the host process, so the host process can write the UID and GID maps.
 		let ret = libc::send(
@@ -865,36 +917,6 @@ unsafe impl Send for CStringVec {}
 enum ExitStatus {
 	Code(i32),
 	Signal(i32),
-}
-
-// Invoke the clone3 syscall: https://man7.org/linux/man-pages/man2/clone.2.html
-// - Returns 0 in the child process.
-// - Returns the PID of the child process in the parent.
-// - Returns -1 if an error occurs.
-fn clone3(flags: u64) -> libc::pid_t {
-	let mut args = libc::clone_args {
-		flags,           // CLONE_XXX flags.
-		stack: 0,        // When NULL, the parent's stack is reused.
-		stack_size: 0,   // When 0, the parent's stack is reused.
-		pidfd: 0,        // Output: *int. Child's PID file descriptor.
-		child_tid: 0,    // Output: *int. Child's thread ID.
-		parent_tid: 0,   // Output: *int. Parent's thread ID.
-		exit_signal: 0,  // Signal sent to parent when child is terminated.
-		tls: 0,          // void*. Pointer to thread-local storage.
-		set_tid: 0,      // Pointer to an array of pid_t.
-		set_tid_size: 0, // Length of set_tid array.
-		cgroup: 0,       // File descriptor for target cgroup of the child process.
-	};
-
-	let return_code = unsafe {
-		libc::syscall(
-			libc::SYS_clone3,
-			(&mut args) as *mut _,
-			std::mem::size_of::<libc::clone_args>(),
-		)
-	};
-
-	return_code.try_into().unwrap_or(-1)
 }
 
 macro_rules! abort {
