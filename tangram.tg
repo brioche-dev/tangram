@@ -9,34 +9,153 @@ export let source = tg.function(() =>
 );
 
 export let test = tg.function(async () => {
-	await symlinkResolution();
+	await symlinkToFile();
+	await symlinkInDirectory();
+	await symlinkIntoDirectory();
+	await symlinkThroughSymlink();
+	await relativePathSymlink();
+	await multipleLevelsOfIndirection();
 });
 
-/** Test that symlinks resolve as expected. */
-let symlinkResolution = async () => {
+let symlinkToFile = async () => {
+	console.log("Checking that we can resolve a symlink to a file.");
 	/*
-		baz: -> bar
-		bar:
-		  |_ symlinkToFoo -> foo
-		foo:
-		  |_ symlinkToRealFile -> realFile
-		  |_ realFile: "hello"
+		foo: "hello"
+		bar -> foo
 	*/
+	let foo = await tg.file("hello");
+	let bar = await tg.symlink(foo);
+	let resolved = await bar.resolve();
 
-	let foo = tg.directory({
-		symlinkToRealFile: tg.symlink("realFile"),
-		realFile: "hello",
-	});
-	let bar = tg.directory({
-		symlinkToFoo: tg.symlink(foo),
-	});
-	let baz = tg.symlink(bar);
-	let symlink = await tg.symlink(t`${baz}/symlinkToFoo/symlinkToRealFile`);
-	let file = symlink.resolve();
-	tg.File.assert(file);
-
-	let text = await file.text();
+	tg.File.assert(resolved);
+	let text = await resolved.text();
 	if (text !== "hello") {
-		throw new Error("Failed to resolve symlinks.");
+		throw new Error("Failed to resolve simple case.");
 	}
+	console.log("Success.");
+};
+
+let symlinkInDirectory = async () => {
+	console.log("Checking that we can resolve a symlink inside a directory.");
+	/*
+		foo: "hello"
+		bar
+		|_ link -> foo
+	*/
+	let foo = await tg.file("hello");
+	let bar = await tg.directory({
+		["link"]: tg.symlink(foo),
+	});
+
+	let resolved = await bar.get("link");
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	if (text !== "hello") {
+		throw new Error("Failed to resolve simple case.");
+	}
+	console.log("Success.");
+};
+
+let symlinkIntoDirectory = async () => {
+	console.log("Checking if we can resolve a symlink into a directory.");
+	/*
+		foo
+		|_ file.txt: "hello"
+
+		bar -> foo/file.txt
+	*/
+	let foo = await tg.directory({
+		"file.txt": "hello"
+	});
+	let bar = await tg.symlink(t`${foo}/file.txt`);
+	let resolved = await bar.resolve();
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	if (text !== "hello") {
+		throw new Error("Failed to resolve simple case.");
+	}
+	console.log("Success.");
+};
+
+let symlinkThroughSymlink = async () => {
+	console.log("Checking if we can resolve a symlink through another symlink.");
+	/*
+	foo
+	|_ subdirectory
+	   |_ file.txt: "hello"
+
+	bar
+	|_ subdirectory
+	   |_ foo -> foo
+	*/
+	let foo = await tg.directory({
+		"subdirectory/file.txt": "hello",
+	});
+
+	let bar = await tg.directory({
+		"subdirectory/foo": tg.symlink(t`${foo}`),
+	});
+
+	let baz = await tg.symlink(t`${bar}/subdirectory/foo/subdirectory/file.txt`);
+
+	let resolved = await baz.resolve();
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	if (text !== "hello") {
+		throw new Error("Failed to resolve simple case.");
+	}
+	console.log("Success.");
+};
+
+let relativePathSymlink = async () => {
+	console.log("Checking if we can get a file pointed to by relativePathSymlink.") ;
+	/*
+		foo
+		|_ file.txt
+		|_ link -> ./file.txt
+	*/
+	let foo = await tg.directory({
+		"file.txt": "hello",
+		"link": tg.symlink("file.txt"),
+	});
+
+	let resolved = await foo.get("link");
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	if (text !== "hello") {
+		throw new Error("Failed to resolve simple case.");
+	}
+	console.log("Success.");
+};
+
+let multipleLevelsOfIndirection = async () => {
+	console.log("Checking if we can resolve symlinks through multiple levels of indirection.");
+	/*
+		foo
+		|_ subdirectory
+		   |_ file.txt: "hello"
+
+		bar
+		|_ subdirectory/file.txt: "hello"
+		|__link -> ./subdirectory
+
+		baz
+		|_ bar -> bar
+
+	*/
+	let bar = await tg.directory({
+		"link": tg.symlink("subdirectory"),
+		"subdirectory/file.txt": "hello",
+	});
+	let baz = await tg.directory({
+		"bar": tg.symlink(bar)
+	});
+
+	let resolved = await baz.get("bar/link/file.txt");
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	if (text !== "hello") {
+		throw new Error("Failed to resolve simple case.");
+	}
+	console.log("Success.");
 };
