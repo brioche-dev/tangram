@@ -157,7 +157,7 @@ export class Directory {
 		if (components.length === 0) {
 			return this;
 		} else {
-			let component = components[0];
+			let component = components[0] as string;
 			let entryHash = this.#entries[component];
 
 			// Case 1, if there is no entry with the first component return undefined.
@@ -177,8 +177,8 @@ export class Directory {
 				return entry.tryGet(components.slice(1));
 			}
 			// Case 4: If the entry is a symlink, follow it.
-			else if (entry instanceof Symlink) {
-				let resolved =  await entry.resolve(t`${this}/${components}`);
+			else {
+				let resolved = await entry.resolve(t`${this}/${components}`);
 
 				// Case 5: We followed the symlink and it returned a directory. Try and get the remaining path.
 				if (resolved instanceof Directory) {
@@ -187,8 +187,6 @@ export class Directory {
 				// Case 6: We followed the symlink and it didn't return a directory, return the value.
 				return resolved;
 			}
-
-			unreachable();
 		}
 	}
 
@@ -226,8 +224,8 @@ export class Directory {
 	}
 
 	async *[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]> {
-		for (let name of Object.keys(this.#entries)) {
-			yield [name, await this.get(name)];
+		for (let [name, entry] of this) {
+			yield [name, await Artifact.get(entry)];
 		}
 	}
 }

@@ -171,9 +171,7 @@ export class Symlink {
 				throw new Error("Expected a directory.");
 			}
 			let tryGetPath = (fromPath ?? relpath()).parent().join(path).toSubpath();
-			return await fromArtifact.tryGet(
-				tryGetPath
-			);
+			return await fromArtifact.tryGet(tryGetPath);
 		} else if (artifact !== undefined && path !== undefined) {
 			if (!(artifact instanceof Directory)) {
 				throw new Error("Expected a directory.");
