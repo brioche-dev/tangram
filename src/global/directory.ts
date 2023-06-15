@@ -153,7 +153,7 @@ export class Directory {
 	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
 		let currentSubpath = subpath();
 		let artifact: Artifact = this;
-		let fromArtifact = this;
+		let fromArtifact: Artifact = this;
 
 		for (let component of subpath(arg).components()) {
 			currentSubpath.push(component);
@@ -165,7 +165,9 @@ export class Directory {
 				}
 
 				// We need to make sure that the `path` argument of `from` is the containing directory and not the path to the link itself.
-				let resolved = await artifact.resolve(t`${fromArtifact}/${currentSubpath}/..`);
+				let resolved = await artifact.resolve(
+					t`${fromArtifact}/${currentSubpath}/..`,
+				);
 				if (resolved === undefined) {
 					return undefined;
 				}
