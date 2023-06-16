@@ -9,225 +9,163 @@ export let source = tg.function(() =>
 );
 
 export let test = tg.function(async () => {
-	await testSymlinks();
-	await testDirectories();
+	await testDirectory();
+	await testSymlink();
 });
 
-export let testDirectories = tg.function(async () => {
-	await testGetChildren();
-	await testDeepMerge();
-});
+let testDirectory = async () => {
+	await testDirectoryGet();
+	await testDirectoryNew();
+};
 
-export let testGetChildren = async () => {
-	console.log("Checking that we can retrieve directory entries;");
+let testDirectoryGet = async () => {
 	let directory = await tg.directory({
 		["foo/bar/baz"]: "hello",
-		["foo/baz"]: tg.symlink("bar/baz"),
+		["foo/qux"]: tg.symlink("bar/baz"),
 	});
-
 	tg.Directory.assert(await directory.get(""));
 	tg.Directory.assert(await directory.get("foo"));
 	tg.Directory.assert(await directory.get("foo/bar"));
-	tg.File.assert(await directory.get("foo/baz"));
-
-	console.log("Success");
+	tg.File.assert(await directory.get("foo/qux"));
 };
 
-export let testDeepMerge = async () => {
-	console.log("Checking that we can deep merge two directories.");
+let testDirectoryNew = async () => {
 	let foo = tg.directory({
-		"foo": "foo",
-		"foolink": tg.symlink("foo"),
+		foo: "foo",
+		fooSymlink: tg.symlink("foo"),
 	});
-
 	let bar = tg.directory({
-		"bar": "bar",
-		"barlink": tg.symlink("bar"),
+		bar: "bar",
+		barSymlink: tg.symlink("bar"),
 	});
-
 	let foobar = await tg.directory(foo, bar);
 	tg.File.assert(await foobar.get("foo"));
-	tg.File.assert(await foobar.get("foolink"));
+	tg.File.assert(await foobar.get("fooSymlink"));
 	tg.File.assert(await foobar.get("bar"));
-	tg.File.assert(await foobar.get("barlink"));
-	console.log("Success.");
+	tg.File.assert(await foobar.get("barSymlink"));
 };
 
-export let testSymlinks = tg.function(async () => {
-	await symlinkToFile();
-	await symlinkInDirectory();
-	await symlinkIntoDirectory();
-	await symlinkThroughSymlink();
-	await relativePathSymlink();
-	await dependencyIndirection();
-	await multipleLevelsOfIndirection();
-});
+let testSymlink = async () => {
+	await testSymlinkToFile();
+	await testSymlinkInDirectory();
+	await testSymlinkWithPathInDirectory();
+	await testSymlinkThroughSymlink();
+	await testRelativePathSymlink();
+	await testDeepRelativePathSymlink();
+	await testDependencyIndirection();
+	await testMultipleLevelsOfIndirection();
+};
 
-let symlinkToFile = async () => {
-	console.log("Checking that we can resolve a symlink to a file.");
-	/*
-		foo: "hello"
-		bar -> foo
-	*/
-	let foo = await tg.file("hello");
-	let bar = await tg.symlink(foo);
-	let resolved = await bar.resolve();
-
+let testSymlinkToFile = async () => {
+	let hello = await tg.file("hello");
+	let symlink = await tg.symlink(hello);
+	let resolved = await symlink.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	if (text !== "hello") {
-		throw new Error("Fail: invalid text.");
-	}
-	console.log("Success.");
+	assert(text === "hello");
 };
 
-let symlinkInDirectory = async () => {
-	console.log("Checking that we can resolve a symlink inside a directory.");
-	/*
-		foo: "hello"
-		bar
-		|_ link -> foo
-	*/
-	let foo = await tg.file("hello");
-	let bar = await tg.directory({
-		["link"]: tg.symlink(foo),
+let testSymlinkInDirectory = async () => {
+	let hello = await tg.file("hello");
+	let directory = await tg.directory({
+		symlink: tg.symlink(hello),
 	});
-
-	let resolved = await bar.get("link");
+	let resolved = await directory.get("symlink");
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	if (text !== "hello") {
-		throw new Error("Fail: invalid text.");
-	}
-	console.log("Success.");
+	assert(text === "hello");
 };
 
-let symlinkIntoDirectory = async () => {
-	console.log("Checking if we can resolve a symlink into a directory.");
-	/*
-		foo
-		|_ file.txt: "hello"
+let testSymlinkWithPathInDirectory = async () => {
+	let directory = await tg.directory({
+		hello: "hello",
+	});
+	let symlink = await tg.symlink(t`${directory}/hello`);
+	let resolved = await symlink.resolve();
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	assert(text === "hello");
+};
 
-		bar -> foo/file.txt
-	*/
+let testSymlinkThroughSymlink = async () => {
 	let foo = await tg.directory({
-		"file.txt": "hello"
+		"subdirectory/hello": "hello",
 	});
-	let bar = await tg.symlink(t`${foo}/file.txt`);
-	let resolved = await bar.resolve();
-	tg.File.assert(resolved);
-	let text = await resolved.text();
-	if (text !== "hello") {
-		throw new Error("Fail: invalid text.");
-	}
-	console.log("Success.");
-};
-
-let symlinkThroughSymlink = async () => {
-	console.log("Checking if we can resolve a symlink through another symlink.");
-	/*
-	foo
-	|_ subdirectory
-	   |_ file.txt: "hello"
-
-	bar
-	|_ subdirectory
-	   |_ foo -> foo
-	*/
-	let foo = await tg.directory({
-		"subdirectory/file.txt": "hello",
-	});
-
 	let bar = await tg.directory({
-		"subdirectory/foo": tg.symlink(t`${foo}`),
+		"subdirectory/world": tg.symlink(t`${foo}`),
 	});
-
-	let baz = await tg.symlink(t`${bar}/subdirectory/foo/subdirectory/file.txt`);
-
-	let resolved = await baz.resolve();
+	let symlink = await tg.symlink(
+		t`${bar}/subdirectory/world/subdirectory/hello`,
+	);
+	let resolved = await symlink.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	if (text !== "hello") {
-		throw new Error("Fail: invalid text.");
-	}
-	console.log("Success.");
+	assert(text === "hello");
 };
 
-let relativePathSymlink = async () => {
-	console.log("Checking if we can get a file pointed to by a relative path symlink.") ;
-	/*
-		foo
-		|_ file.txt
-		|_ link -> ./file.txt
-	*/
+let testRelativePathSymlink = async () => {
+	let directory = await tg.directory({
+		hello: "hello",
+		symlink: tg.symlink("hello"),
+	});
+	let resolved = await directory.get("symlink");
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	assert(text === "hello");
+};
+
+let testDeepRelativePathSymlink = async () => {
+	let directory = await tg.directory({
+		hello: "hello",
+		foo: {
+			bar: {
+				baz: {
+					symlink: tg.symlink("../../../hello"),
+				},
+			},
+		},
+	});
+	let resolved = await directory.get("foo/bar/baz/symlink");
+	tg.File.assert(resolved);
+	let text = await resolved.text();
+	assert(text === "hello");
+};
+
+let testMultipleLevelsOfIndirection = async () => {
 	let foo = await tg.directory({
-		"file.txt": "hello",
-		"link": tg.symlink("file.txt"),
+		link: tg.symlink("subdirectory"),
+		"subdirectory/hello": "hello",
 	});
-
-	let resolved = await foo.get("link");
-	tg.File.assert(resolved);
-	let text = await resolved.text();
-	if (text !== "hello") {
-		throw new Error("Fail: invalid text.");
-	}
-	console.log("Success.");
-};
-
-let multipleLevelsOfIndirection = async () => {
-	console.log("Checking if we can resolve symlinks through multiple levels of indirection.");
-	/*
-		bar
-		|_ subdirectory/file.txt: "hello"
-		|__link -> ./subdirectory
-
-		baz
-		|_ bar -> bar
-
-	*/
 	let bar = await tg.directory({
-		"link": tg.symlink("subdirectory"),
-		"subdirectory/file.txt": "hello",
+		baz: tg.symlink(foo),
 	});
-	let baz = await tg.directory({
-		"bar": tg.symlink(bar)
-	});
-
-	let resolved = await baz.get("bar/link/file.txt");
+	let resolved = await bar.get("baz/link/hello");
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	if (text !== "hello") {
-		throw new Error("Fail: invalid text.");
-	}
-	console.log("Success.");
+	assert(text === "hello");
 };
 
-/**  A key use case for symlinks is to allow for de-duplication of depency artifacts that are "in tree." To support this, an artifact may contain a ./dependencies directory where entries may be symlinks to other directories containing the depenencies. If one of those dependencies contains some bin, we want to make sure we can resolve it through a pair of symlinks, one that is only aware of the outer directory but whose path implicitly routes through the inner symlink. */
-export let dependencyIndirection = async () => {
-	console.log("Checking if we can resolve a dependency through indirection.");
-	// dependency
-	// |_ bin
-	//    |_ script.sh
-	// dependencies
-	// |_ dependency -> dependency
-	//
-	// resolve ${dependencies}/dependency/bin/script.sh
-	//
+export let testDependencyIndirection = async () => {
 	let dependency = tg.directory({
-		["bin/script.sh"]: tg.file("hello"),
+		["bin/hello"]: tg.file("hello"),
 	});
-
-	let dependencies = tg.directory({
+	let project = tg.directory({
 		["dependencies/dependency"]: tg.symlink(dependency),
 	});
-
-	let executable = await tg.symlink(t`${dependencies}/dependencies/dependency/bin/script.sh`);
-
-	let resolved = await executable.resolve();
+	let symlink = await tg.symlink(
+		t`${project}/dependencies/dependency/bin/hello`,
+	);
+	let resolved = await symlink.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	if (text !== "hello") {
-		throw new Error("Fail: invalid text.");
+	assert(text === "hello");
+};
+
+export let assert: (
+	condition: unknown,
+	message?: string,
+) => asserts condition = (condition, message) => {
+	if (!condition) {
+		throw new Error(message ?? "Failed assertion.");
 	}
-	console.log("Success.");
 };
