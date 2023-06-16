@@ -19,6 +19,9 @@ impl Directory {
 		// Track the current artifact.
 		let mut artifact = Artifact::Directory(self.clone());
 
+		// Track the current subpath.
+		let mut current_subpath = Subpath::empty();
+
 		// Handle each path component.
 		for name in path.components() {
 			// The artifact must be a directory.
@@ -26,7 +29,10 @@ impl Directory {
 				return Ok(None);
 			};
 
-			// Get the entry hash for the file name. If it doesn't exist, return `None`.
+			// Update the current subpath.
+			current_subpath = current_subpath.join(name.parse().unwrap());
+
+			// Get the hash for the entry. If it doesn't exist, return `None`.
 			let Some(artifact_hash) = directory.entries.get(name).copied() else {
 				return Ok(None);
 			};
@@ -35,6 +41,18 @@ impl Directory {
 			artifact = Artifact::get(tg, artifact_hash)
 				.await
 				.wrap_err("Failed to get the artifact.")?;
+
+			// If the artifact is a symlink, then resolve it.
+			if let Artifact::Symlink(symlink) = &artifact {
+				match symlink
+					.resolve_from(tg, Some(symlink))
+					.await
+					.wrap_err("Failed to resolve the symlink.")?
+				{
+					Some(resolved) => artifact = resolved,
+					None => return Ok(None),
+				}
+			}
 		}
 
 		Ok(Some(artifact))

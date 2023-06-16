@@ -1,5 +1,5 @@
 fn main() {
-	println!("cargo-rerun-if-changed=build.rs");
+	println!("cargo:rerun-if-changed=build.rs");
 
 	#[cfg(feature = "v8")]
 	{
@@ -16,7 +16,7 @@ fn main() {
 	{
 		// Create the language service snapshot.
 		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-		println!("cargo-rerun-if-changed=assets/language_service.js");
+		println!("cargo:rerun-if-changed=assets/language_service.js");
 		let path = out_dir_path.join("language_service.heapsnapshot");
 		let snapshot = create_snapshot("assets/language_service.js");
 		std::fs::write(path, snapshot).unwrap();
@@ -26,7 +26,7 @@ fn main() {
 	{
 		// Create the global snapshot.
 		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-		println!("cargo-rerun-if-changed=assets/global.js");
+		println!("cargo:rerun-if-changed=assets/global.js");
 		let path = out_dir_path.join("global.heapsnapshot");
 		let snapshot = create_snapshot("assets/global.js");
 		std::fs::write(path, snapshot).unwrap();

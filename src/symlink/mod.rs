@@ -3,6 +3,7 @@ use crate::{artifact, template::Template};
 
 mod data;
 mod new;
+mod resolve;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct Symlink {

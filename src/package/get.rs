@@ -50,7 +50,7 @@ impl Package {
 				.map(|(dependency, entry)| async move {
 					let hash = match entry {
 						lockfile::Entry::Locked(hash) => hash,
-						lockfile::Entry::Unlocked { .. } => todo!(),
+						lockfile::Entry::Unlocked { .. } => unimplemented!(),
 					};
 					Ok::<_, Error>((dependency, hash))
 				})
