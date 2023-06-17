@@ -37,6 +37,26 @@ const TANGRAM_GID: libc::gid_t = 1000;
 /// The working directory guest path.
 const WORKING_DIRECTORY_GUEST_PATH: &str = "/home/tangram/work";
 
+const ENV_AMD64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/env_amd64_linux"
+));
+
+const ENV_ARM64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/env_arm64_linux"
+));
+
+const SH_AMD64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/sh_amd64_linux"
+));
+
+const SH_ARM64_LINUX: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/sh_arm64_linux"
+));
+
 impl Command {
 	#[allow(clippy::too_many_lines, clippy::similar_names)]
 	pub async fn run_inner_linux(&self, tg: &Arc<Instance>) -> Result<Value> {
@@ -51,6 +71,33 @@ impl Command {
 		tokio::fs::create_dir_all(&root_host_path)
 			.await
 			.wrap_err("Failed to create the root directory.")?;
+
+		// Add `/usr/bin/env` and `/bin/sh` to the root.
+		let env_path = root_host_path.join("usr/bin/env");
+		let sh_path = root_host_path.join("bin/sh");
+		let (env_bytes, sh_bytes) = match self.system {
+			System::Amd64Linux => (ENV_AMD64_LINUX, SH_AMD64_LINUX),
+			System::Arm64Linux => (ENV_ARM64_LINUX, SH_ARM64_LINUX),
+			_ => unreachable!(),
+		};
+		tokio::fs::create_dir_all(&env_path.parent().unwrap()).await?;
+		tokio::fs::OpenOptions::new()
+			.write(true)
+			.create(true)
+			.mode(0o755)
+			.open(&env_path)
+			.await?
+			.write_all(env_bytes)
+			.await?;
+		tokio::fs::create_dir_all(&sh_path.parent().unwrap()).await?;
+		tokio::fs::OpenOptions::new()
+			.write(true)
+			.create(true)
+			.mode(0o755)
+			.open(&sh_path)
+			.await?
+			.write_all(sh_bytes)
+			.await?;
 
 		// Create a temp for the output.
 		let output_temp = Temp::new(tg);
@@ -110,22 +157,6 @@ impl Command {
 
 		// Handle the network flag.
 		let network_enabled = self.network;
-
-		// Get the `env` host path.
-		let env_file_name = match self.system {
-			System::Amd64Linux => "env_amd64_linux",
-			System::Arm64Linux => "env_arm64_linux",
-			_ => unreachable!(),
-		};
-		let env_host_path = tg.assets_path().join(env_file_name);
-
-		// Get the `sh` host path.
-		let sh_file_name = match self.system {
-			System::Amd64Linux => "sh_amd64_linux",
-			System::Arm64Linux => "sh_arm64_linux",
-			_ => unreachable!(),
-		};
-		let sh_host_path = tg.assets_path().join(sh_file_name);
 
 		// Set `$HOME`.
 		env.insert("HOME".to_owned(), HOME_DIRECTORY_GUEST_PATH.to_owned());
@@ -262,53 +293,6 @@ impl Command {
 			flags: 0,
 			data: None,
 			readonly: false,
-		});
-
-		// Add /usr/bin/env to the mounts.
-		let usr_bin_env_host_path = env_host_path;
-		let usr_bin_env_guest_path = Path::new("/usr/bin/env");
-		let usr_bin_env_source_path = usr_bin_env_host_path;
-		let usr_bin_env_target_path =
-			root_host_path.join(usr_bin_env_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(usr_bin_env_target_path.parent().unwrap())
-			.await
-			.wrap_err(r#"Failed to create the parent for the mount point for "/usr/bin/env"."#)?;
-		tokio::fs::write(&usr_bin_env_target_path, "")
-			.await
-			.wrap_err(r#"Failed to create the mount point for "/usr/bin/env"."#)?;
-		let usr_bin_env_source_path =
-			CString::new(usr_bin_env_source_path.as_os_str().as_bytes()).unwrap();
-		let usr_bin_env_target_path =
-			CString::new(usr_bin_env_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: usr_bin_env_source_path,
-			target: usr_bin_env_target_path,
-			fstype: None,
-			flags: libc::MS_BIND | libc::MS_REC,
-			data: None,
-			readonly: true,
-		});
-
-		// Add /bin/sh to the mounts.
-		let bin_sh_host_path = sh_host_path;
-		let bin_sh_guest_path = Path::new("/bin/sh");
-		let bin_sh_source_path = bin_sh_host_path;
-		let bin_sh_target_path = root_host_path.join(bin_sh_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(bin_sh_target_path.parent().unwrap())
-			.await
-			.wrap_err(r#"Failed to create the parent for the mount point for "/bin/sh"."#)?;
-		tokio::fs::write(&bin_sh_target_path, "")
-			.await
-			.wrap_err(r#"Failed to create the mount point for "/bin/sh"."#)?;
-		let bin_sh_source_path = CString::new(bin_sh_source_path.as_os_str().as_bytes()).unwrap();
-		let bin_sh_target_path = CString::new(bin_sh_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: bin_sh_source_path,
-			target: bin_sh_target_path,
-			fstype: None,
-			flags: libc::MS_BIND | libc::MS_REC,
-			data: None,
-			readonly: true,
 		});
 
 		// Add the host paths to the mounts.
