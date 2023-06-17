@@ -14,12 +14,12 @@ use derive_more::{Deref, Display, From, FromStr, Into};
 	Ord,
 	PartialEq,
 	PartialOrd,
-	buffalo::Serialize,
-	buffalo::Deserialize,
+	tangram_serialize::Serialize,
+	tangram_serialize::Deserialize,
 	serde::Serialize,
 	serde::Deserialize,
 )]
-#[buffalo(into = "crate::hash::Hash", try_from = "crate::hash::Hash")]
+#[tangram_serialize(into = "crate::hash::Hash", try_from = "crate::hash::Hash")]
 pub struct Hash(pub crate::hash::Hash);
 
 impl std::hash::Hash for Hash {

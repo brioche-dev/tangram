@@ -13,13 +13,13 @@ use crate::{
 	PartialEq,
 	Eq,
 	Hash,
-	buffalo::Deserialize,
-	buffalo::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
 )]
 #[serde(into = "String", try_from = "String")]
-#[buffalo(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
 pub enum Dependency {
 	/// A dependency on a package at a path.
 	Path(Relpath),

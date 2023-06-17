@@ -12,11 +12,11 @@ pub mod writer;
 	Eq,
 	serde::Serialize,
 	serde::Deserialize,
-	buffalo::Serialize,
-	buffalo::Deserialize,
+	tangram_serialize::Serialize,
+	tangram_serialize::Deserialize,
 )]
 #[serde(into = "String", try_from = "String")]
-#[buffalo(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
 pub struct Checksum {
 	algorithm: Algorithm,
 	bytes: Box<[u8]>,

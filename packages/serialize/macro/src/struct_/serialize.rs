@@ -34,7 +34,7 @@ impl<'a> Struct<'a> {
 
 			quote! {
 				// Write the kind.
-				serializer.write_kind(buffalo::Kind::Struct)?;
+				serializer.write_kind(tangram_serialize::Kind::Struct)?;
 
 				// Write the number of fields.
 				serializer.write_uvarint(#len as u64)?;
@@ -53,8 +53,8 @@ impl<'a> Struct<'a> {
 
 		// Generate the code.
 		let code = quote! {
-			impl buffalo::Serialize for #ident {
-				fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
+			impl tangram_serialize::Serialize for #ident {
+				fn serialize<W>(&self, serializer: &mut tangram_serialize::Serializer<W>) -> std::io::Result<()>
 				where
 					W: std::io::Write,
 				{

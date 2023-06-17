@@ -9,19 +9,19 @@ impl<'a> Struct<'a> {
 		let mut into = None;
 		let mut try_from = None;
 
-		// Get the buffalo attr.
+		// Get the tangram_serialize attr.
 		let attr = input
 			.attrs
 			.iter()
-			.find(|attr| attr.path.is_ident("buffalo"));
+			.find(|attr| attr.path.is_ident("tangram_serialize"));
 
 		if let Some(attr) = attr {
-			// Parse the buffalo attr as a list.
+			// Parse the tangram_serialize attr as a list.
 			let meta = attr.parse_meta()?;
 			let syn::Meta::List(list) = meta else {
 				return Err(syn::Error::new_spanned(
 					attr,
-					"The buffalo attribute must contain a list.",
+					"The tangram_serialize attribute must contain a list.",
 				));
 			};
 
@@ -101,11 +101,11 @@ impl<'a> Field<'a> {
 		// Get the ident.
 		let ident = field.ident.as_ref();
 
-		// Get the buffalo attr.
+		// Get the tangram_serialize attr.
 		let attr = field
 			.attrs
 			.iter()
-			.find(|attr| attr.path.is_ident("buffalo"));
+			.find(|attr| attr.path.is_ident("tangram_serialize"));
 
 		// Parse the list items.
 		if let Some(attr) = attr {
@@ -113,7 +113,7 @@ impl<'a> Field<'a> {
 			let syn::Meta::List(list) = meta else {
 				return Err(syn::Error::new_spanned(
 					attr,
-					"The buffalo attribute must contain a list.",
+					"The tangram_serialize attribute must contain a list.",
 				))
 			};
 

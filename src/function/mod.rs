@@ -57,12 +57,12 @@ pub struct Function {
 	Clone,
 	Copy,
 	Debug,
-	buffalo::Deserialize,
-	buffalo::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
 )]
-#[buffalo(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub enum Kind {
 	Function,

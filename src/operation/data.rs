@@ -9,17 +9,22 @@ use crate::{
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 #[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	Command(command::Data),
 
-	#[buffalo(id = 1)]
+	#[tangram_serialize(id = 1)]
 	Function(function::Data),
 
-	#[buffalo(id = 2)]
+	#[tangram_serialize(id = 2)]
 	Resource(resource::Data),
 }
 
@@ -32,7 +37,7 @@ impl Data {
 		writer.write_u8(0)?;
 
 		// Write the operation.
-		buffalo::to_writer(self, &mut writer)?;
+		tangram_serialize::to_writer(self, &mut writer)?;
 
 		Ok(())
 	}
@@ -48,7 +53,7 @@ impl Data {
 		}
 
 		// Deserialize the operation.
-		let operation = buffalo::from_reader(reader)?;
+		let operation = tangram_serialize::from_reader(reader)?;
 
 		Ok(operation)
 	}

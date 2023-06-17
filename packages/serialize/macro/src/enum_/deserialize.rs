@@ -27,7 +27,7 @@ impl<'a> Enum<'a> {
 
 			quote! {
 				// Read the kind.
-				deserializer.ensure_kind(buffalo::Kind::Enum)?;
+				deserializer.ensure_kind(tangram_serialize::Kind::Enum)?;
 
 				// Read the variant id.
 				let variant_id = deserializer.read_id()?;
@@ -39,7 +39,7 @@ impl<'a> Enum<'a> {
 
 					// Skip over variants with unknown ids.
 					_ => {
-						buffalo::Value::deserialize(deserializer)?;
+						tangram_serialize::Value::deserialize(deserializer)?;
 						return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unexpected variant id."));
 					},
 				};
@@ -50,8 +50,8 @@ impl<'a> Enum<'a> {
 
 		// Generate the code.
 		let code = quote! {
-			impl buffalo::Deserialize for #ident {
-				fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
+			impl tangram_serialize::Deserialize for #ident {
+				fn deserialize<R>(deserializer: &mut tangram_serialize::Deserializer<R>) -> std::io::Result<Self>
 				where
 					R: std::io::Read,
 				{

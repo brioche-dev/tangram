@@ -10,13 +10,13 @@ use std::path::PathBuf;
 	Eq,
 	PartialOrd,
 	Ord,
-	buffalo::Serialize,
-	buffalo::Deserialize,
+	tangram_serialize::Serialize,
+	tangram_serialize::Deserialize,
 	serde::Serialize,
 	serde::Deserialize,
 )]
 #[serde(into = "String", try_from = "String")]
-#[buffalo(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
 pub enum Specifier {
 	/// A reference to a package at a path.
 	Path(PathBuf),

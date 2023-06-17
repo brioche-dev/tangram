@@ -12,28 +12,33 @@ use itertools::Itertools;
 	Clone,
 	Debug,
 	Default,
-	buffalo::Deserialize,
-	buffalo::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
 )]
 pub struct Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	pub components: Vec<Component>,
 }
 
 #[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Component {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	String(String),
 
-	#[buffalo(id = 1)]
+	#[tangram_serialize(id = 1)]
 	Artifact(artifact::Hash),
 
-	#[buffalo(id = 2)]
+	#[tangram_serialize(id = 2)]
 	Placeholder(placeholder::Data),
 }
 

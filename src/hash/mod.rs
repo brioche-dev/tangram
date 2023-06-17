@@ -14,12 +14,12 @@ pub mod writer;
 	Ord,
 	PartialEq,
 	PartialOrd,
-	buffalo::Serialize,
-	buffalo::Deserialize,
+	tangram_serialize::Serialize,
+	tangram_serialize::Deserialize,
 	serde::Serialize,
 	serde::Deserialize,
 )]
-#[buffalo(into = "[u8; 32]", try_from = "[u8; 32]")]
+#[tangram_serialize(into = "[u8; 32]", try_from = "[u8; 32]")]
 pub struct Hash(#[serde(with = "hex")] pub [u8; 32]);
 
 impl Hash {

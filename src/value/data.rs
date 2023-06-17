@@ -15,50 +15,55 @@ use futures::future::try_join_all;
 use std::collections::BTreeMap;
 
 #[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	Null(()),
 
-	#[buffalo(id = 1)]
+	#[tangram_serialize(id = 1)]
 	Bool(bool),
 
-	#[buffalo(id = 2)]
+	#[tangram_serialize(id = 2)]
 	Number(f64),
 
-	#[buffalo(id = 3)]
+	#[tangram_serialize(id = 3)]
 	String(String),
 
-	#[buffalo(id = 4)]
+	#[tangram_serialize(id = 4)]
 	Bytes(Vec<u8>),
 
-	#[buffalo(id = 5)]
+	#[tangram_serialize(id = 5)]
 	Relpath(Relpath),
 
-	#[buffalo(id = 6)]
+	#[tangram_serialize(id = 6)]
 	Subpath(Subpath),
 
-	#[buffalo(id = 7)]
+	#[tangram_serialize(id = 7)]
 	Blob(blob::Hash),
 
-	#[buffalo(id = 8)]
+	#[tangram_serialize(id = 8)]
 	Artifact(artifact::Hash),
 
-	#[buffalo(id = 9)]
+	#[tangram_serialize(id = 9)]
 	Placeholder(placeholder::Data),
 
-	#[buffalo(id = 10)]
+	#[tangram_serialize(id = 10)]
 	Template(template::Data),
 
-	#[buffalo(id = 11)]
+	#[tangram_serialize(id = 11)]
 	Operation(operation::Hash),
 
-	#[buffalo(id = 12)]
+	#[tangram_serialize(id = 12)]
 	Array(Array),
 
-	#[buffalo(id = 13)]
+	#[tangram_serialize(id = 13)]
 	Object(Object),
 }
 
@@ -75,7 +80,7 @@ impl Data {
 		writer.write_u8(0)?;
 
 		// Write the value.
-		buffalo::to_writer(self, &mut writer)?;
+		tangram_serialize::to_writer(self, &mut writer)?;
 
 		Ok(())
 	}
@@ -91,7 +96,7 @@ impl Data {
 		}
 
 		// Deserialize the value.
-		let value = buffalo::from_reader(reader)?;
+		let value = tangram_serialize::from_reader(reader)?;
 
 		Ok(value)
 	}

@@ -35,7 +35,7 @@ impl<'a> Struct<'a> {
 
 			quote! {
 				// Read the kind.
-				deserializer.ensure_kind(buffalo::Kind::Struct)?;
+				deserializer.ensure_kind(tangram_serialize::Kind::Struct)?;
 
 				// Initialize the fields.
 				#(let mut #field_idents = None;)*
@@ -54,7 +54,7 @@ impl<'a> Struct<'a> {
 
 						// Skip over fields with unknown ids.
 						_ => {
-							buffalo::Value::deserialize(deserializer)?;
+							tangram_serialize::Value::deserialize(deserializer)?;
 						},
 					}
 				}
@@ -72,8 +72,8 @@ impl<'a> Struct<'a> {
 
 		// Generate the code.
 		let code = quote! {
-			impl buffalo::Deserialize for #ident {
-				fn deserialize<R>(deserializer: &mut buffalo::Deserializer<R>) -> std::io::Result<Self>
+			impl tangram_serialize::Deserialize for #ident {
+				fn deserialize<R>(deserializer: &mut tangram_serialize::Deserializer<R>) -> std::io::Result<Self>
 				where
 					R: std::io::Read,
 				{

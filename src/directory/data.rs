@@ -8,13 +8,13 @@ use std::collections::BTreeMap;
 	Default,
 	PartialEq,
 	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
 )]
 pub struct Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	pub entries: BTreeMap<String, artifact::Hash>,
 }
 

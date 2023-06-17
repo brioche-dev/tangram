@@ -4,15 +4,15 @@ use crate::{
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
-#[derive(Clone, Debug, buffalo::Serialize, buffalo::Deserialize)]
+#[derive(Clone, Debug, tangram_serialize::Serialize, tangram_serialize::Deserialize)]
 pub struct Tracker {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	pub artifact_hash: artifact::Hash,
 
-	#[buffalo(id = 1)]
+	#[tangram_serialize(id = 1)]
 	pub timestamp_seconds: u64,
 
-	#[buffalo(id = 2)]
+	#[tangram_serialize(id = 2)]
 	pub timestamp_nanoseconds: u32,
 }
 
@@ -25,7 +25,7 @@ impl Tracker {
 		writer.write_u8(0)?;
 
 		// Write the artifact tracker.
-		buffalo::to_writer(self, &mut writer)?;
+		tangram_serialize::to_writer(self, &mut writer)?;
 
 		Ok(())
 	}
@@ -41,7 +41,7 @@ impl Tracker {
 		}
 
 		// Deserialize the artifact tracker.
-		let artifact_tracker = buffalo::from_reader(reader)?;
+		let artifact_tracker = tangram_serialize::from_reader(reader)?;
 
 		Ok(artifact_tracker)
 	}

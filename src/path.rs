@@ -12,12 +12,12 @@ use std::path::PathBuf;
 	Ord,
 	PartialEq,
 	PartialOrd,
-	buffalo::Serialize,
-	buffalo::Deserialize,
+	tangram_serialize::Serialize,
+	tangram_serialize::Deserialize,
 	serde::Serialize,
 	serde::Deserialize,
 )]
-#[buffalo(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub struct Relpath {
 	/// The number of leading parent components.
@@ -37,12 +37,12 @@ pub struct Relpath {
 	Ord,
 	PartialEq,
 	PartialOrd,
-	buffalo::Serialize,
-	buffalo::Deserialize,
+	tangram_serialize::Serialize,
+	tangram_serialize::Deserialize,
 	serde::Serialize,
 	serde::Deserialize,
 )]
-#[buffalo(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub struct Subpath {
 	components: Vec<String>,

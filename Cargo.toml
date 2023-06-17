@@ -1,19 +1,30 @@
 [workspace]
 members = [
-  "packages/buffalo"
+  "packages/serialize"
 ]
 
+[workspace.package]
+authors = ["Tangram <root@tangram.dev"]
+description = "Tangram is a programmable build system and package manager that makes your builds simple, reproducible, cacheable, and distributable."
+edition = "2021"
+homepage = "https://github.com/tangramdotdev/tangram"
+license = "MIT"
+repository = "https://github.com/tangramdotdev/tangram"
+version = "0.0.0"
+
 [workspace.dependencies]
-buffalo = { path = "packages/buffalo" }
+tangram_serialize = { path = "packages/serialize" }
 
 [package]
 name = "tangram"
 
-description = "Tangram is a programmable build system and package manager that makes your builds simple, reproducible, cacheable, and distributable."
-edition = "2021"
-license = "MIT"
+description = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
 publish = false
-version = "0.0.0"
+repository = { workspace = true }
+version = { workspace = true }
 
 [lib]
 name = "tangram"
@@ -36,7 +47,7 @@ async-compression = { version = "0.4", features = ["tokio", "zstd"] }
 async-recursion = "1"
 base64 = "0.21"
 blake3 = "1"
-buffalo = { workspace = true }
+tangram_serialize = { workspace = true }
 byteorder = "1.4"
 bytes = "1"
 bzip2 = "0.4"

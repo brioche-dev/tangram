@@ -3,8 +3,8 @@
 #![allow(clippy::missing_panics_doc)]
 
 pub use self::{deserializer::Deserializer, kind::Kind, serializer::Serializer, value::Value};
-pub use buffalo_macro::{Deserialize, Serialize};
 use std::io::{Read, Result, Write};
+pub use tangram_serialize_macro::{Deserialize, Serialize};
 
 pub mod deserializer;
 pub mod kind;
@@ -63,29 +63,29 @@ where
 
 #[cfg(test)]
 mod test {
-	use crate as buffalo;
+	use crate as tangram_serialize;
 
-	#[derive(Debug, PartialEq, buffalo::Deserialize, buffalo::Serialize)]
+	#[derive(Debug, PartialEq, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 	struct AddressBook {
-		#[buffalo(id = 0)]
+		#[tangram_serialize(id = 0)]
 		pub contacts: Vec<Contact>,
 	}
 
-	#[derive(Debug, PartialEq, buffalo::Deserialize, buffalo::Serialize)]
+	#[derive(Debug, PartialEq, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 	struct Contact {
-		#[buffalo(id = 0)]
+		#[tangram_serialize(id = 0)]
 		pub name: String,
-		#[buffalo(id = 1)]
+		#[tangram_serialize(id = 1)]
 		pub age: Option<u16>,
-		#[buffalo(id = 2)]
+		#[tangram_serialize(id = 2)]
 		pub phone_numbers: Vec<PhoneNumber>,
 	}
 
-	#[derive(Debug, PartialEq, buffalo::Deserialize, buffalo::Serialize)]
+	#[derive(Debug, PartialEq, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 	enum PhoneNumber {
-		#[buffalo(id = 0)]
+		#[tangram_serialize(id = 0)]
 		Home(String),
-		#[buffalo(id = 1)]
+		#[tangram_serialize(id = 1)]
 		Mobile(String),
 	}
 
@@ -98,8 +98,8 @@ mod test {
 				phone_numbers: vec![PhoneNumber::Mobile("555-555-5555".to_owned())],
 			}],
 		};
-		let bytes = buffalo::to_vec(&right).unwrap();
-		let left: AddressBook = buffalo::from_slice(&bytes).unwrap();
+		let bytes = tangram_serialize::to_vec(&right).unwrap();
+		let left: AddressBook = tangram_serialize::from_slice(&bytes).unwrap();
 		assert_eq!(left, right);
 	}
 }

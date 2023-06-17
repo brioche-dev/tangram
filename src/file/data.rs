@@ -9,20 +9,20 @@ use crate::{
 	Debug,
 	PartialEq,
 	Eq,
-	buffalo::Deserialize,
-	buffalo::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	pub blob_hash: blob::Hash,
 
-	#[buffalo(id = 1)]
+	#[tangram_serialize(id = 1)]
 	pub executable: bool,
 
-	#[buffalo(id = 2)]
+	#[tangram_serialize(id = 2)]
 	pub references: Vec<artifact::Hash>,
 }
 

@@ -282,7 +282,7 @@ impl Database {
 			.iter_dup_of(operation_hash.as_slice())
 			.map(|value| {
 				let (_, value) = value?;
-				let value = buffalo::from_slice(value)?;
+				let value = tangram_serialize::from_slice(value)?;
 				Ok::<_, Error>(value)
 			})
 			.try_collect()?;

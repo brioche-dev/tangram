@@ -7,10 +7,15 @@ use crate::{
 };
 
 #[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 pub struct Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	pub target: template::Data,
 }
 

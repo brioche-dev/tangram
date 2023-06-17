@@ -11,36 +11,41 @@ use futures::future::try_join_all;
 use std::collections::BTreeMap;
 
 #[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 pub struct Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	pub system: System,
 
-	#[buffalo(id = 1)]
+	#[tangram_serialize(id = 1)]
 	pub executable: template::Data,
 
-	#[buffalo(id = 2)]
+	#[tangram_serialize(id = 2)]
 	#[serde(default)]
 	pub env: BTreeMap<String, template::Data>,
 
-	#[buffalo(id = 3)]
+	#[tangram_serialize(id = 3)]
 	#[serde(default)]
 	pub args: Vec<template::Data>,
 
-	#[buffalo(id = 4)]
+	#[tangram_serialize(id = 4)]
 	#[serde(default)]
 	pub checksum: Option<Checksum>,
 
-	#[buffalo(id = 5)]
+	#[tangram_serialize(id = 5)]
 	#[serde(default, rename = "unsafe")]
 	pub unsafe_: bool,
 
-	#[buffalo(id = 6)]
+	#[tangram_serialize(id = 6)]
 	#[serde(default)]
 	pub network: bool,
 
-	#[buffalo(id = 7)]
+	#[tangram_serialize(id = 7)]
 	#[serde(default)]
 	pub host_paths: Vec<String>,
 }

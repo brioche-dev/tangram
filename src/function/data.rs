@@ -11,26 +11,31 @@ use futures::future::try_join_all;
 use std::collections::BTreeMap;
 
 #[derive(
-	Clone, Debug, buffalo::Deserialize, buffalo::Serialize, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Data {
-	#[buffalo(id = 0)]
+	#[tangram_serialize(id = 0)]
 	pub package_hash: artifact::Hash,
 
-	#[buffalo(id = 1)]
+	#[tangram_serialize(id = 1)]
 	pub module_path: Subpath,
 
-	#[buffalo(id = 2)]
+	#[tangram_serialize(id = 2)]
 	pub kind: Kind,
 
-	#[buffalo(id = 3)]
+	#[tangram_serialize(id = 3)]
 	pub name: String,
 
-	#[buffalo(id = 4)]
+	#[tangram_serialize(id = 4)]
 	pub env: BTreeMap<String, value::Data>,
 
-	#[buffalo(id = 5)]
+	#[tangram_serialize(id = 5)]
 	pub args: Vec<value::Data>,
 }
 

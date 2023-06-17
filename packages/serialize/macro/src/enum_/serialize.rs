@@ -33,7 +33,7 @@ impl<'a> Enum<'a> {
 				match self {
 					#(#ident::#variant_idents(value) => {
 						// Write the kind.
-						serializer.write_kind(buffalo::Kind::Enum)?;
+						serializer.write_kind(tangram_serialize::Kind::Enum)?;
 
 						// Serialize the variant id.
 						serializer.write_id(#variant_ids)?;
@@ -48,8 +48,8 @@ impl<'a> Enum<'a> {
 
 		// Generate the code.
 		let code = quote! {
-			impl buffalo::Serialize for #ident {
-				fn serialize<W>(&self, serializer: &mut buffalo::Serializer<W>) -> std::io::Result<()>
+			impl tangram_serialize::Serialize for #ident {
+				fn serialize<W>(&self, serializer: &mut tangram_serialize::Serializer<W>) -> std::io::Result<()>
 				where
 					W: std::io::Write,
 				{
