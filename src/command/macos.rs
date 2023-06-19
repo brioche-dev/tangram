@@ -160,7 +160,7 @@ impl Command {
 				)
 
 				;; Allow executing /usr/bin/env and /bin/sh.
-				(allow process-exec
+				(allow file-read* process-exec
 					(literal "/usr/bin/env")
 					(literal "/bin/sh")
 					(literal "/bin/bash")
