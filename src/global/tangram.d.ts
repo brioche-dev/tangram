@@ -543,8 +543,8 @@ declare namespace tg {
 			/** The resource's URL. */
 			url: string;
 
-			/** Whether to unpack the archive downloaded from the URL. */
-			unpack?: boolean;
+			/** The format to unpack the download with. */
+			unpack?: UnpackFormat;
 
 			/** The checksum to verify the resource. */
 			checksum?: Checksum;
@@ -554,11 +554,6 @@ declare namespace tg {
 		};
 
 		export type UnpackFormat =
-			| ".bz2"
-			| ".gz"
-			| ".lz"
-			| ".xz"
-			| ".zstd"
 			| ".tar"
 			| ".tar.bz2"
 			| ".tar.gz"

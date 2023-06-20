@@ -1,14 +1,27 @@
 use crate::error::{return_error, Error};
-use std::path::Path;
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(
+	Clone,
+	Copy,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
 pub enum Format {
-	Tar(Option<Compression>),
+	Tar,
+	TarBz2,
+	TarGz,
+	TarLz,
+	TarXz,
+	TarZstd,
 	Zip,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Compression {
 	Bz2,
 	Gz,
@@ -20,11 +33,23 @@ pub enum Compression {
 impl std::fmt::Display for Format {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Format::Tar(compression) => {
+			Format::Tar => {
 				write!(f, ".tar")?;
-				if let Some(compression) = compression {
-					write!(f, "{compression}")?;
-				}
+			},
+			Format::TarBz2 => {
+				write!(f, ".tar.bz2")?;
+			},
+			Format::TarGz => {
+				write!(f, ".tar.gz")?;
+			},
+			Format::TarLz => {
+				write!(f, ".tar.lz")?;
+			},
+			Format::TarXz => {
+				write!(f, ".tar.xz")?;
+			},
+			Format::TarZstd => {
+				write!(f, ".tar.zstd")?;
 			},
 			Format::Zip => {
 				write!(f, ".zip")?;
@@ -38,17 +63,15 @@ impl std::str::FromStr for Format {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		if let Some(compression) = s.strip_prefix(".tar") {
-			let compression = if compression.is_empty() {
-				None
-			} else {
-				Some(compression.parse()?)
-			};
-			Ok(Format::Tar(compression))
-		} else if s == ".zip" {
-			Ok(Format::Zip)
-		} else {
-			return_error!("Invalid unpack format.");
+		match s {
+			".tar" => Ok(Format::Tar),
+			".tar.bz2" => Ok(Format::TarBz2),
+			".tar.gz" => Ok(Format::TarGz),
+			".tar.lz" => Ok(Format::TarLz),
+			".tar.xz" => Ok(Format::TarXz),
+			".tar.zstd" => Ok(Format::TarZstd),
+			".zip" => Ok(Format::Zip),
+			_ => return_error!("Invalid format."),
 		}
 	}
 }
@@ -93,34 +116,5 @@ impl TryFrom<String> for Format {
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl Format {
-	#[allow(clippy::case_sensitive_file_extension_comparisons)]
-	#[must_use]
-	pub fn for_path(path: &Path) -> Option<Format> {
-		let path = path.to_str().unwrap();
-		if path.ends_with(".tar.bz2") || path.ends_with(".tbz2") {
-			Some(Format::Tar(Some(Compression::Bz2)))
-		} else if path.ends_with(".tar.gz") || path.ends_with(".tgz") {
-			Some(Format::Tar(Some(Compression::Gz)))
-		} else if path.ends_with(".tar.lz") || path.ends_with(".tlz") {
-			Some(Format::Tar(Some(Compression::Lz)))
-		} else if path.ends_with(".tar.xz") || path.ends_with(".txz") {
-			Some(Format::Tar(Some(Compression::Xz)))
-		} else if path.ends_with(".tar.zstd")
-			|| path.ends_with(".tzstd")
-			|| path.ends_with(".tar.zst")
-			|| path.ends_with(".tzst")
-		{
-			Some(Format::Tar(Some(Compression::Zstd)))
-		} else if path.ends_with(".tar") {
-			Some(Format::Tar(None))
-		} else if path.ends_with(".zip") {
-			Some(Format::Zip)
-		} else {
-			None
-		}
 	}
 }

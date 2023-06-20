@@ -1,4 +1,4 @@
-use super::Resource;
+use super::{unpack, Resource};
 use crate::{checksum::Checksum, operation};
 use url::Url;
 
@@ -16,7 +16,7 @@ pub struct Data {
 
 	#[tangram_serialize(id = 1)]
 	#[serde(default)]
-	pub unpack: bool,
+	pub unpack: Option<unpack::Format>,
 
 	#[tangram_serialize(id = 2)]
 	#[serde(default)]

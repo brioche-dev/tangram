@@ -1,4 +1,7 @@
-use super::{unpack, Resource};
+use super::{
+	unpack::{self, Compression},
+	Resource,
+};
 use crate::{
 	artifact::Artifact,
 	checksum::{self, Checksum},
@@ -10,10 +13,7 @@ use crate::{
 };
 use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt};
-use std::{
-	path::Path,
-	sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 use tokio_util::io::{StreamReader, SyncIoBridge};
 
 impl Resource {
@@ -24,17 +24,7 @@ impl Resource {
 	}
 
 	pub(crate) async fn download_inner(&self, tg: &Instance) -> Result<Value> {
-		// Get the unpack format.
-		let unpack_format = if self.unpack {
-			Some(
-				unpack::Format::for_path(Path::new(self.url.path()))
-					.wrap_err("Failed to determine the unpack format.")?,
-			)
-		} else {
-			None
-		};
-
-		tracing::info!(?self.url, ?unpack_format, "Downloading.");
+		tracing::info!(?self.url, "Downloading.");
 
 		// Send the request.
 		let response = tg
@@ -67,13 +57,24 @@ impl Resource {
 			})
 		};
 
-		let artifact = match unpack_format {
+		let artifact = match self.unpack {
 			None => Self::download_simple(tg, stream).await?,
-
-			Some(unpack::Format::Tar(compression)) => {
-				Self::download_tar(tg, stream, compression).await?
+			Some(unpack::Format::Tar) => Self::download_tar(tg, stream, None).await?,
+			Some(unpack::Format::TarBz2) => {
+				Self::download_tar(tg, stream, Some(Compression::Bz2)).await?
 			},
-
+			Some(unpack::Format::TarGz) => {
+				Self::download_tar(tg, stream, Some(Compression::Gz)).await?
+			},
+			Some(unpack::Format::TarLz) => {
+				Self::download_tar(tg, stream, Some(Compression::Lz)).await?
+			},
+			Some(unpack::Format::TarXz) => {
+				Self::download_tar(tg, stream, Some(Compression::Xz)).await?
+			},
+			Some(unpack::Format::TarZstd) => {
+				Self::download_tar(tg, stream, Some(Compression::Zstd)).await?
+			},
 			Some(unpack::Format::Zip) => Self::download_zip(tg, stream).await?,
 		};
 
@@ -135,7 +136,6 @@ impl Resource {
 		Ok(value)
 	}
 
-	#[tracing::instrument(skip_all)]
 	async fn download_tar<S>(
 		tg: &Instance,
 		stream: S,

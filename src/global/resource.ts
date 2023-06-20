@@ -18,7 +18,7 @@ export let download = async (arg: Resource.Arg): Promise<Artifact> => {
 type ConstructorArg = {
 	hash: Operation.Hash;
 	url: string;
-	unpack?: boolean;
+	unpack?: Resource.UnpackFormat;
 	checksum?: Checksum;
 	unsafe?: boolean;
 };
@@ -26,7 +26,7 @@ type ConstructorArg = {
 export class Resource {
 	#hash: Operation.Hash;
 	#url: string;
-	#unpack: boolean;
+	#unpack?: Resource.UnpackFormat;
 	#checksum?: Checksum;
 	#unsafe: boolean;
 
@@ -34,7 +34,7 @@ export class Resource {
 		return Resource.fromSyscall(
 			syscall.resource.new({
 				url: arg.url,
-				unpack: arg.unpack ?? false,
+				unpack: arg.unpack ?? undefined,
 				checksum: arg.checksum ?? undefined,
 				unsafe: arg.unsafe ?? false,
 			}),
@@ -44,7 +44,7 @@ export class Resource {
 	constructor(arg: ConstructorArg) {
 		this.#hash = arg.hash;
 		this.#url = arg.url;
-		this.#unpack = arg.unpack ?? false;
+		this.#unpack = arg.unpack ?? undefined;
 		this.#checksum = arg.checksum ?? undefined;
 		this.#unsafe = arg.unsafe ?? false;
 	}
@@ -98,8 +98,17 @@ export class Resource {
 export namespace Resource {
 	export type Arg = {
 		url: string;
-		unpack?: boolean;
+		unpack?: UnpackFormat;
 		checksum?: Checksum;
 		unsafe?: boolean;
 	};
+
+	export type UnpackFormat =
+		| ".tar"
+		| ".tar.bz2"
+		| ".tar.gz"
+		| ".tar.lz"
+		| ".tar.xz"
+		| ".tar.zstd"
+		| ".zip";
 }

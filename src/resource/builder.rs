@@ -1,4 +1,4 @@
-use super::Resource;
+use super::{unpack, Resource};
 use crate::{checksum::Checksum, error::Result, instance::Instance};
 use url::Url;
 
@@ -11,9 +11,9 @@ impl Resource {
 
 pub struct Builder {
 	url: Url,
-	unpack: Option<bool>,
+	unpack: Option<unpack::Format>,
 	checksum: Option<Checksum>,
-	unsafe_: Option<bool>,
+	unsafe_: bool,
 }
 
 impl Builder {
@@ -23,12 +23,12 @@ impl Builder {
 			url,
 			unpack: None,
 			checksum: None,
-			unsafe_: None,
+			unsafe_: false,
 		}
 	}
 
 	#[must_use]
-	pub fn unpack(mut self, unpack: bool) -> Self {
+	pub fn unpack(mut self, unpack: unpack::Format) -> Self {
 		self.unpack = Some(unpack);
 		self
 	}
@@ -41,15 +41,15 @@ impl Builder {
 
 	#[must_use]
 	pub fn unsafe_(mut self, unsafe_: bool) -> Self {
-		self.unsafe_ = Some(unsafe_);
+		self.unsafe_ = unsafe_;
 		self
 	}
 
 	pub fn build(self, tg: &Instance) -> Result<Resource> {
 		let url = self.url;
-		let unpack = self.unpack.unwrap_or(false);
+		let unpack = self.unpack;
 		let checksum = self.checksum;
-		let unsafe_ = self.unsafe_.unwrap_or(false);
+		let unsafe_ = self.unsafe_;
 		let download = Resource::new(tg, url, unpack, checksum, unsafe_)?;
 		Ok(download)
 	}

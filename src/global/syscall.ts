@@ -108,17 +108,12 @@ export type Placeholder = {
 export type Resource = {
 	hash: Operation.Hash;
 	url: string;
-	unpack: boolean;
+	unpack?: UnpackFormat;
 	checksum?: Checksum;
 	unsafe: boolean;
 };
 
 export type UnpackFormat =
-	| ".bz2"
-	| ".gz"
-	| ".lz"
-	| ".xz"
-	| ".zstd"
 	| ".tar"
 	| ".tar.bz2"
 	| ".tar.gz"
@@ -460,7 +455,7 @@ export let operation = {
 declare global {
 	type ResourceArg = {
 		url: string;
-		unpack: boolean;
+		unpack?: UnpackFormat;
 		checksum?: Checksum;
 		unsafe: boolean;
 	};

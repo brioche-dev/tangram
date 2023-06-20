@@ -1,4 +1,4 @@
-use super::{Data, Resource};
+use super::{unpack, Data, Resource};
 use crate::{checksum::Checksum, error::Result, instance::Instance, operation};
 use url::Url;
 
@@ -6,7 +6,7 @@ impl Resource {
 	pub fn new(
 		tg: &Instance,
 		url: Url,
-		unpack: bool,
+		unpack: Option<unpack::Format>,
 		checksum: Option<Checksum>,
 		unsafe_: bool,
 	) -> Result<Self> {

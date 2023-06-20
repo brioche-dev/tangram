@@ -2,7 +2,7 @@ use crate::{
 	error::{Error, Result},
 	Cli,
 };
-use tangram::operation::Resource;
+use tangram::{operation::Resource, resource};
 use url::Url;
 
 /// Run a download operation.
@@ -10,7 +10,7 @@ use url::Url;
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(long)]
-	pub unpack: bool,
+	pub unpack: Option<resource::unpack::Format>,
 
 	/// The URL to download from.
 	pub url: Url,
@@ -19,10 +19,11 @@ pub struct Args {
 impl Cli {
 	pub async fn command_download(&self, args: Args) -> Result<()> {
 		// Create the resource.
-		let resource = Resource::builder(args.url)
-			.unpack(args.unpack)
-			.unsafe_(true)
-			.build(&self.tg)?;
+		let mut resource = Resource::builder(args.url).unsafe_(true);
+		if let Some(unpack) = args.unpack {
+			resource = resource.unpack(unpack);
+		}
+		let resource = resource.build(&self.tg)?;
 
 		// Download it.
 		let output = resource.download(&self.tg).await?;

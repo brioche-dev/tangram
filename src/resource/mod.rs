@@ -8,7 +8,7 @@ mod data;
 mod download;
 mod error;
 mod new;
-mod unpack;
+pub mod unpack;
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Resource {
@@ -18,9 +18,9 @@ pub struct Resource {
 	/// The URL to download from.
 	url: Url,
 
-	/// Whether to unpack the downloaded file.
+	/// The format to unpack the download with.
 	#[serde(default)]
-	unpack: bool,
+	unpack: Option<unpack::Format>,
 
 	/// A checksum of the downloaded file.
 	#[serde(default)]

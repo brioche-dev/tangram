@@ -17,7 +17,7 @@ use crate::{
 	operation::{self, Operation},
 	package,
 	path::Subpath,
-	resource::Resource,
+	resource::{self, Resource},
 	symlink::Symlink,
 	system::System,
 	template::Template,
@@ -217,7 +217,7 @@ fn syscall_directory_new(
 #[serde(rename_all = "camelCase")]
 struct ResourceArg {
 	url: Url,
-	unpack: bool,
+	unpack: Option<resource::unpack::Format>,
 	checksum: Option<Checksum>,
 	unsafe_: bool,
 }
