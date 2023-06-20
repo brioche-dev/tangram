@@ -20,7 +20,6 @@ pub struct Builder {
 	checksum: Option<Checksum>,
 	unsafe_: bool,
 	network: bool,
-	host_paths: Vec<String>,
 }
 
 impl Builder {
@@ -34,7 +33,6 @@ impl Builder {
 			checksum: None,
 			unsafe_: false,
 			network: false,
-			host_paths: Vec::new(),
 		}
 	}
 
@@ -80,12 +78,6 @@ impl Builder {
 		self
 	}
 
-	#[must_use]
-	pub fn host_paths(mut self, host_paths: Vec<String>) -> Self {
-		self.host_paths = host_paths;
-		self
-	}
-
 	pub fn build(self, tg: &Instance) -> Result<Command> {
 		Command::new(
 			tg,
@@ -96,7 +88,6 @@ impl Builder {
 			self.checksum,
 			self.unsafe_,
 			self.network,
-			self.host_paths,
 		)
 	}
 }

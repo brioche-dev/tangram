@@ -48,10 +48,6 @@ pub struct Command {
 	/// If this flag is set, then the process will have access to the network. This is an unsafe option.
 	#[serde(default)]
 	network: bool,
-
-	/// A set of paths on the host's file system to expose to the process. This is an unsafe option.
-	#[serde(default)]
-	host_paths: Vec<String>,
 }
 
 impl Command {
@@ -93,10 +89,5 @@ impl Command {
 	#[must_use]
 	pub fn network(&self) -> bool {
 		self.network
-	}
-
-	#[must_use]
-	pub fn host_paths(&self) -> &[String] {
-		&self.host_paths
 	}
 }

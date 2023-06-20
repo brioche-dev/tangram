@@ -28,7 +28,6 @@ export type Command = {
 	checksum: Checksum | undefined;
 	unsafe: boolean;
 	network: boolean;
-	hostPaths: Array<string>;
 };
 
 export type Directory = {
@@ -287,7 +286,6 @@ declare global {
 		checksum?: Checksum;
 		unsafe?: boolean;
 		network?: boolean;
-		hostPaths?: Array<string>;
 	};
 
 	function syscall(syscall: "command_new", arg: CommandArg): Command;

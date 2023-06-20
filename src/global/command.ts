@@ -31,7 +31,6 @@ type ConstructorArg = {
 	checksum?: Checksum;
 	unsafe: boolean;
 	network: boolean;
-	hostPaths: Array<string>;
 };
 
 export class Command {
@@ -43,7 +42,6 @@ export class Command {
 	#checksum?: Checksum;
 	#unsafe: boolean;
 	#network: boolean;
-	#hostPaths: Array<string>;
 
 	static async new(arg: Unresolved<Command.Arg>): Promise<Command> {
 		let resolvedArg = await resolve(arg);
@@ -68,7 +66,6 @@ export class Command {
 		let checksum = resolvedArg.checksum ?? undefined;
 		let unsafe = resolvedArg.unsafe ?? false;
 		let network = resolvedArg.network ?? false;
-		let hostPaths = resolvedArg.hostPaths ?? [];
 		return Command.fromSyscall(
 			syscall.command.new({
 				system,
@@ -78,7 +75,6 @@ export class Command {
 				checksum,
 				unsafe,
 				network,
-				hostPaths,
 			}),
 		);
 	}
@@ -92,7 +88,6 @@ export class Command {
 		this.#checksum = arg.checksum;
 		this.#unsafe = arg.unsafe;
 		this.#network = arg.network;
-		this.#hostPaths = arg.hostPaths;
 	}
 
 	toSyscall(): syscall.Command {
@@ -106,7 +101,6 @@ export class Command {
 		let checksum = this.#checksum;
 		let unsafe = this.#unsafe;
 		let network = this.#network;
-		let hostPaths = this.#hostPaths;
 		return {
 			hash,
 			system,
@@ -116,7 +110,6 @@ export class Command {
 			checksum,
 			unsafe,
 			network,
-			hostPaths,
 		};
 	}
 
@@ -134,7 +127,6 @@ export class Command {
 		let checksum = command.checksum;
 		let unsafe = command.unsafe;
 		let network = command.network;
-		let hostPaths = command.hostPaths;
 		return new Command({
 			hash,
 			system,
@@ -144,7 +136,6 @@ export class Command {
 			checksum,
 			unsafe,
 			network,
-			hostPaths,
 		});
 	}
 
@@ -170,6 +161,5 @@ export namespace Command {
 		checksum?: Checksum;
 		unsafe?: boolean;
 		network?: boolean;
-		hostPaths?: Array<string>;
 	};
 }

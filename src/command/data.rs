@@ -44,10 +44,6 @@ pub struct Data {
 	#[tangram_serialize(id = 6)]
 	#[serde(default)]
 	pub network: bool,
-
-	#[tangram_serialize(id = 7)]
-	#[serde(default)]
-	pub host_paths: Vec<String>,
 }
 
 impl Command {
@@ -67,7 +63,6 @@ impl Command {
 		let checksum = self.checksum.clone();
 		let unsafe_ = self.unsafe_;
 		let network = self.network;
-		let host_paths = self.host_paths.clone();
 		Data {
 			system,
 			executable: command,
@@ -76,7 +71,6 @@ impl Command {
 			checksum,
 			unsafe_,
 			network,
-			host_paths,
 		}
 	}
 
@@ -99,7 +93,6 @@ impl Command {
 		let checksum = data.checksum;
 		let unsafe_ = data.unsafe_;
 		let network = data.network;
-		let host_paths = data.host_paths;
 		Ok(Self {
 			hash,
 			system,
@@ -109,7 +102,6 @@ impl Command {
 			checksum,
 			unsafe_,
 			network,
-			host_paths,
 		})
 	}
 }

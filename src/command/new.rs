@@ -16,7 +16,6 @@ impl Command {
 		checksum: Option<Checksum>,
 		unsafe_: bool,
 		network: bool,
-		host_paths: Vec<String>,
 	) -> Result<Self> {
 		// Create the operation data.
 		let executable_ = executable.to_data();
@@ -33,7 +32,6 @@ impl Command {
 			checksum: checksum.clone(),
 			unsafe_,
 			network,
-			host_paths: host_paths.clone(),
 		});
 
 		// Serialize and hash the data.
@@ -54,7 +52,6 @@ impl Command {
 			checksum,
 			unsafe_,
 			network,
-			host_paths,
 		};
 
 		Ok(command)

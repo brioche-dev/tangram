@@ -178,7 +178,6 @@ struct CommandArg {
 	checksum: Option<Checksum>,
 	unsafe_: bool,
 	network: bool,
-	host_paths: Vec<String>,
 }
 
 fn syscall_command_new(
@@ -193,7 +192,6 @@ fn syscall_command_new(
 		.checksum(arg.checksum)
 		.unsafe_(arg.unsafe_)
 		.network(arg.network)
-		.host_paths(arg.host_paths)
 		.build(tg)?;
 	Ok(command)
 }

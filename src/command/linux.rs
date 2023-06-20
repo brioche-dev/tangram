@@ -150,9 +150,6 @@ impl Command {
 			if self.network {
 				return_error!("Network access is not allowed in safe processes.");
 			}
-			if !self.host_paths.is_empty() {
-				return_error!("Host paths are not allowed in safe processes.");
-			}
 		}
 
 		// Handle the network flag.
@@ -294,30 +291,6 @@ impl Command {
 			data: None,
 			readonly: false,
 		});
-
-		// Add the host paths to the mounts.
-		for host_path in &self.host_paths {
-			let host_path = Path::new(host_path);
-			let guest_path = Path::new(host_path);
-			let source_path = host_path;
-			let target_path = root_host_path.join(guest_path.strip_prefix("/").unwrap());
-			tokio::fs::create_dir_all(&target_path)
-				.await
-				.wrap_err(format!(
-					r#"Failed to create the mount point for "{}"."#,
-					host_path.display()
-				))?;
-			let source_path = CString::new(source_path.as_os_str().as_bytes()).unwrap();
-			let target_path = CString::new(target_path.as_os_str().as_bytes()).unwrap();
-			mounts.push(Mount {
-				source: source_path,
-				target: target_path,
-				fstype: None,
-				flags: libc::MS_BIND | libc::MS_REC,
-				data: None,
-				readonly: true,
-			});
-		}
 
 		// Add the tangram directory to the mounts.
 		let tangram_directory_source_path = tangram_directory_host_path;

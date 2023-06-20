@@ -421,9 +421,6 @@ declare namespace tg {
 
 			/** Whether to enable network access. Because this is an unsafe option, you must either provide a checksum for the command's output or set `unsafe` to `true`. */
 			network?: boolean;
-
-			/** Paths on the host to mount in the sandbox the command runs in. Because this is an unsafe option, you must either provide a checksum for the command's output or set `unsafe` to `true`. */
-			hostPaths?: Array<string>;
 		};
 	}
 

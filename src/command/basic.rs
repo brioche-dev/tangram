@@ -56,13 +56,8 @@ impl Command {
 		let enable_unsafe = self.checksum.is_some() || self.unsafe_;
 
 		// Verify the safety constraints.
-		if !enable_unsafe {
-			if self.network {
-				return_error!("Network access is not allowed in safe processes.");
-			}
-			if !self.host_paths.is_empty() {
-				return_error!("Host paths are not allowed in safe processes.");
-			}
+		if !enable_unsafe && self.network {
+			return_error!("Network access is not allowed in safe processes.");
 		}
 
 		// Create the socket path.

@@ -63,13 +63,8 @@ impl Command {
 		let enable_unsafe = self.checksum.is_some() || self.unsafe_;
 
 		// Verify the safety constraints.
-		if !enable_unsafe {
-			if self.network {
-				return_error!("Network access is not allowed in safe processes.");
-			}
-			if !self.host_paths.is_empty() {
-				return_error!("Host paths are not allowed in safe processes.");
-			}
+		if !enable_unsafe && self.network {
+			return_error!("Network access is not allowed in safe processes.");
 		}
 
 		// Handle the network flag.
@@ -214,20 +209,6 @@ impl Command {
 					(allow network* (remote ip "localhost:*"))
 					(allow network* (remote unix-socket))
 				"#
-			)
-			.unwrap();
-		}
-
-		// Allow read access to the host paths.
-		for host_path in &self.host_paths {
-			writedoc!(
-				profile,
-				r#"
-					(allow process-exec* (subpath {0}))
-					(allow file-read* (path-ancestors {0}))
-					(allow file-read* (subpath {0}))
-				"#,
-				escape(host_path.as_bytes())
 			)
 			.unwrap();
 		}
