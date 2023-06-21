@@ -1,5 +1,5 @@
 use crate::{
-	artifact::{self, Artifact},
+	artifact::{Artifact},
 	blob::{self, Blob},
 	directory::Directory,
 	error::{return_error, Error, Result, WrapErr},
@@ -17,11 +17,6 @@ use std::{
 	os::unix::prelude::PermissionsExt,
 	path::{Path, PathBuf},
 };
-
-#[derive(serde::Deserialize)]
-struct Attributes {
-	references: Vec<artifact::Hash>,
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
@@ -161,19 +156,8 @@ impl Artifact {
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
 
-		// Read the file's references from its xattrs.
-		let attributes: Option<Attributes> = xattr::get(path, "user.tangram")
-			.ok()
-			.flatten()
-			.and_then(|attributes| serde_json::from_slice(&attributes).ok());
-		let references = try_join_all(
-			attributes
-				.map(|attributes| attributes.references)
-				.unwrap_or_default()
-				.into_iter()
-				.map(|hash| Artifact::get(tg, hash)),
-		)
-		.await?;
+		// The file has no references.
+		let references = [];
 
 		// Create the file.
 		let file = File::new(tg, blob, executable, &references)?;
