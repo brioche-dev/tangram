@@ -665,7 +665,7 @@ declare namespace tg {
 		/** Join an array of templates with a separator. */
 		static join(
 			separator: Template.Arg,
-			...args: Array<Template.Arg>
+			...args: Array<Unresolved<Template.Arg>>
 		): Promise<Template>;
 
 		/** Get this template's components. */
