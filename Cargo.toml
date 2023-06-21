@@ -69,7 +69,7 @@ itertools = "0.10"
 libc = "0.2"
 lmdb-rkv = "0.14"
 lsp-types = "0.94.0"
-lz4_flex = "0.10"
+lz4_flex = "0.11"
 num = "0.4"
 num-derive = "0.3"
 num-traits = "0.2"
@@ -81,11 +81,11 @@ regex = "1"
 reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
-serde_v8 = { version = "=0.100.0", optional = true }
+serde_v8 = { version = "=0.102.0", optional = true }
 serde_yaml = "0.9"
 sha2 = "0.10"
 sourcemap = "6"
-swc_core = { version = "=0.76.38", features = ["common", "common_sourcemap", "ecma_ast", "ecma_codegen", "ecma_parser", "ecma_parser_typescript", "ecma_transforms", "ecma_transforms_module", "ecma_transforms_typescript", "ecma_visit"] }
+swc_core = { version = "=0.78.19", features = ["common", "common_sourcemap", "ecma_ast", "ecma_codegen", "ecma_parser", "ecma_parser_typescript", "ecma_transforms", "ecma_transforms_module", "ecma_transforms_typescript", "ecma_visit"] }
 tar = "0.4"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
