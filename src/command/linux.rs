@@ -493,9 +493,11 @@ impl Command {
 			.wrap_err("Failed to notify the guest process that it can continue.")?;
 
 		// Receive the file descriptor of /dev/fuse from the guest process.
-		let fuse_fd = recvfd(host_fuse_socket.as_raw_fd())
+		let fuse_device = recvfd(host_fuse_socket.as_raw_fd())
 			.wrap_err("Failed to receive the file descriptor for /dev/fd.")?;
-		eprintln!("host: fuse_fd: {fuse_fd}");
+
+		// Begin running the fuse server in the background.
+		let fuse_task = tokio::task::spawn(fuse::run(fuse_device));
 
 		// Receive the exit status of the guest process from the root process.
 		let kind = host_socket
@@ -536,6 +538,8 @@ impl Command {
 		.map_err(Error::other)
 		.wrap_err("Failed to join the process task.")?
 		.wrap_err("Failed to run the process.")?;
+
+		fuse_task.abort();
 
 		// Handle the guest process's exit status.
 		match exit_status {
@@ -733,12 +737,14 @@ fn guest(context: &Context) {
 		}
 		assert_eq!(notification, 1);
 
-		// Mount the FUSE filesystem and send the FD back to the host process.
+		// Open the FUSE device as read/write/nonblock.
 		let fuse_fd = libc::open(
 			CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0").as_ptr(),
-			libc::O_RDWR,
+			libc::O_RDWR | libc::O_NONBLOCK,
 		);
+		// Mount the FUSE filesystem.
 		mount_fuse(fuse_fd, &context.fuse_target_path);
+		// Attempt to send the file descriptor of /dev/fd back to the host process.
 		if sendfd(context.guest_fuse_socket.as_raw_fd(), fuse_fd) < 0 {
 			abort_errno!("Failed to send /dev/fuse file descriptor back to the host.");
 		}
@@ -1021,7 +1027,7 @@ unsafe fn sendfd(socket: std::os::fd::RawFd, fd: std::os::fd::RawFd) -> isize {
 }
 
 // Receive a file descriptor over a socket.
-fn recvfd(socket: std::os::fd::RawFd) -> Result<std::os::fd::RawFd> {
+fn recvfd(socket: std::os::fd::RawFd) -> Result<tokio::fs::File> {
 	unsafe {
 		// Set up the call.
 		let mut buf = [0u8; 8];
@@ -1048,7 +1054,7 @@ fn recvfd(socket: std::os::fd::RawFd) -> Result<std::os::fd::RawFd> {
 			let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
 			let fd = *libc::CMSG_DATA(cmsg).cast();
 			deallocate_cmsghdr(msg.msg_control);
-			Ok(fd)
+			Ok(tokio::fs::File::from_raw_fd(fd))
 		} else {
 			deallocate_cmsghdr(msg.msg_control);
 			return Err(std::io::Error::last_os_error())?;
