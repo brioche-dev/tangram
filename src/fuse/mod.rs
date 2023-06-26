@@ -9,7 +9,7 @@ mod response;
 mod server;
 
 /// Run the FUSE file server, listening on `file`.
-pub async fn run(fuse_device: &mut tokio::fs::File) -> Result<()> {
+pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 	let mut buffer = aligned_buffer();
 	loop {
 		match fuse_device.read(buffer.as_mut()).await {
@@ -31,7 +31,7 @@ pub async fn run(fuse_device: &mut tokio::fs::File) -> Result<()> {
 					return Ok(());
 				} else {
 					let response = handle_request(request).await;
-					response.write(unique, fuse_device).await?;
+					response.write(unique, &mut fuse_device).await?;
 				}
 			},
 			// If the error is ENOENT, EINTR, or EAGAIN, retry. If ENODEV then the FUSE has been unmounted. Otherwise, return an error.
