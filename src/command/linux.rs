@@ -3,6 +3,7 @@ use crate::{
 	artifact::{self, Artifact},
 	command,
 	error::{return_error, Error, Result, WrapErr},
+	fuse,
 	instance::Instance,
 	operation,
 	system::System,
@@ -12,8 +13,11 @@ use crate::{
 use indoc::formatdoc;
 use itertools::Itertools;
 use std::{
-	ffi::CString,
-	os::{fd::AsRawFd, unix::ffi::OsStrExt},
+	ffi::{CStr, CString},
+	os::{
+		fd::{AsRawFd, FromRawFd},
+		unix::ffi::OsStrExt,
+	},
 	path::{Path, PathBuf},
 	sync::Arc,
 };
@@ -232,8 +236,19 @@ impl Command {
 		let guest_socket = guest_socket.into_std()?;
 		guest_socket.set_nonblocking(false)?;
 
+		let (host_fuse_socket, guest_fuse_socket) = std::os::unix::net::UnixStream::pair()
+			.wrap_err("Failed to create the fuse socket pair.")?;
+
 		// Create the mounts.
 		let mut mounts = Vec::new();
+
+		// Create the fuse_mount.
+		let fuse_guest_path = Path::new("/tangram_fuse");
+		let fuse_target_path = root_host_path.join(fuse_guest_path.strip_prefix("/").unwrap());
+		tokio::fs::create_dir_all(&fuse_target_path)
+			.await
+			.wrap_err("Failed to create the mountpoint for FUSE.")?;
+		let fuse_target_path = CString::new(fuse_target_path.as_os_str().as_bytes()).unwrap();
 
 		// Add /dev to the mounts.
 		let dev_host_path = Path::new("/dev");
@@ -401,6 +416,8 @@ impl Command {
 			network_enabled,
 			root_host_path,
 			working_directory_guest_path,
+			fuse_target_path,
+			guest_fuse_socket,
 		};
 
 		// Spawn the root process.
@@ -475,6 +492,11 @@ impl Command {
 			.await
 			.wrap_err("Failed to notify the guest process that it can continue.")?;
 
+		// Receive the file descriptor of /dev/fuse from the guest process.
+		let fuse_fd = recvfd(host_fuse_socket.as_raw_fd())
+			.wrap_err("Failed to receive the file descriptor for /dev/fd.")?;
+		eprintln!("host: fuse_fd: {fuse_fd}");
+
 		// Receive the exit status of the guest process from the root process.
 		let kind = host_socket
 			.read_u8()
@@ -490,7 +512,6 @@ impl Command {
 			_ => unreachable!(),
 		};
 
-		// Wait for the root process.
 		tokio::task::spawn_blocking(move || {
 			let mut status: libc::c_int = 0;
 			let ret = unsafe { libc::waitpid(root_process_pid, &mut status, libc::__WALL) };
@@ -712,6 +733,16 @@ fn guest(context: &Context) {
 		}
 		assert_eq!(notification, 1);
 
+		// Mount the FUSE filesystem and send the FD back to the host process.
+		let fuse_fd = libc::open(
+			CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0").as_ptr(),
+			libc::O_RDWR,
+		);
+		mount_fuse(fuse_fd, &context.fuse_target_path);
+		if sendfd(context.guest_fuse_socket.as_raw_fd(), fuse_fd) < 0 {
+			abort_errno!("Failed to send /dev/fuse file descriptor back to the host.");
+		}
+
 		// Perform the mounts.
 		for mount in &context.mounts {
 			let source = mount.source.as_ptr();
@@ -835,6 +866,11 @@ struct Context {
 
 	/// The guest path to the working directory.
 	working_directory_guest_path: CString,
+
+	/// The directory to mount the FUSE filesystem to.
+	fuse_target_path: CString,
+
+	guest_fuse_socket: std::os::unix::net::UnixStream,
 }
 
 unsafe impl Send for Context {}
@@ -892,3 +928,130 @@ macro_rules! abort_errno {
 	}};
 }
 use abort_errno;
+
+// Mount a FUSE file system at `target`.
+unsafe fn mount_fuse(fd: std::os::fd::RawFd, target: &CString) {
+	let src = CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0");
+	let fstype = CStr::from_bytes_with_nul_unchecked(b"fuse\0");
+
+	let uid = libc::getuid();
+	let gid = libc::getgid();
+
+	let data = format!(
+		"fd={fd},rootmode=40755,user_id={uid},group_id={gid},allow_other,default_permissions\0"
+	);
+	let flags = libc::MS_RDONLY | libc::MS_NODEV | libc::MS_NOSUID;
+
+	// Perform the mount.
+	if libc::mount(
+		src.as_ptr(),
+		target.as_ptr(),
+		fstype.as_ptr(),
+		flags,
+		data.as_bytes().as_ptr().cast(),
+	) != 0
+	{
+		abort_errno!("Failed to mount FUSE filesystem.");
+	}
+}
+
+// Helper to allocate a cmsghdr structure
+unsafe fn allocate_cmsghdr() -> (*mut libc::c_void, usize) {
+	let num_fds = 1;
+	let len = num_fds * std::mem::size_of::<std::os::fd::RawFd>();
+	let align = std::mem::align_of::<libc::cmsghdr>();
+
+	let size = libc::CMSG_LEN(len as u32);
+	let layout = std::alloc::Layout::from_size_align(size as usize, align)
+		.expect("Failed to get valid layout to allocate cmsghdr.");
+
+	let ptr = std::alloc::alloc(layout).cast();
+	(ptr, size as usize)
+}
+
+unsafe fn deallocate_cmsghdr(ptr: *mut libc::c_void) {
+	let num_fds = 1;
+	let len = num_fds * std::mem::size_of::<std::os::fd::RawFd>();
+	let align = std::mem::align_of::<libc::cmsghdr>();
+
+	let size = libc::CMSG_LEN(len as u32);
+	let layout = std::alloc::Layout::from_size_align(size as usize, align)
+		.expect("Failed to get valid layout to allocate cmsghdr.");
+
+	std::alloc::dealloc(ptr.cast(), layout);
+}
+
+// Send a file descriptor over a socket.
+unsafe fn sendfd(socket: std::os::fd::RawFd, fd: std::os::fd::RawFd) -> isize {
+	// Set up the call.
+	let mut buf = [0u8; 8];
+	let mut iov = [libc::iovec {
+		iov_base: buf.as_mut_ptr().cast(),
+		iov_len: buf.len(),
+	}];
+
+	// Allocate the control message.
+	let (cmsg, cmsg_len) = allocate_cmsghdr();
+	let mut msg = libc::msghdr {
+		msg_name: std::ptr::null_mut(),
+		msg_namelen: 0,
+		msg_iov: iov.as_mut_ptr(),
+		msg_iovlen: 1,
+		msg_control: cmsg,
+		msg_controllen: cmsg_len,
+		msg_flags: 0,
+	};
+
+	// Configure the control message.
+	let cmsg = libc::CMSG_FIRSTHDR(&msg as *const _);
+	(*cmsg).cmsg_level = libc::SOL_SOCKET;
+	(*cmsg).cmsg_type = libc::SCM_RIGHTS;
+	(*cmsg).cmsg_len = libc::CMSG_LEN((std::mem::size_of::<std::os::fd::RawFd>()) as u32) as usize;
+
+	// Write the file descriptors we want to send over the socket to the control message.
+	let dst = libc::CMSG_DATA(cmsg).cast();
+	*dst = fd;
+
+	// Attempt the write.
+	let result = libc::sendmsg(socket, std::ptr::addr_of_mut!(msg), 0);
+
+	// Avoid leaking the control header we previously allocated.
+	deallocate_cmsghdr(msg.msg_control);
+	result
+}
+
+// Receive a file descriptor over a socket.
+fn recvfd(socket: std::os::fd::RawFd) -> Result<std::os::fd::RawFd> {
+	unsafe {
+		// Set up the call.
+		let mut buf = [0u8; 8];
+		let mut iov = [libc::iovec {
+			iov_base: buf.as_mut_ptr().cast(),
+			iov_len: buf.len(),
+		}];
+
+		// Allocate the control message.
+		let (cmsg, cmsg_len) = allocate_cmsghdr();
+		let mut msg = libc::msghdr {
+			msg_name: std::ptr::null_mut(),
+			msg_namelen: 0,
+			msg_iov: iov.as_mut_ptr(),
+			msg_iovlen: 1,
+			msg_control: cmsg,
+			msg_controllen: cmsg_len,
+			msg_flags: 0,
+		};
+
+		// Attempt to receive a message.
+		let result = libc::recvmsg(socket, std::ptr::addr_of_mut!(msg), 0);
+		if result > 0 {
+			let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
+			let fd = *libc::CMSG_DATA(cmsg).cast();
+			deallocate_cmsghdr(msg.msg_control);
+			Ok(fd)
+		} else {
+			deallocate_cmsghdr(msg.msg_control);
+			return Err(std::io::Error::last_os_error())?;
+		}
+	}
+}
