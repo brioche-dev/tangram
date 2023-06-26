@@ -9,9 +9,11 @@ mod response;
 mod server;
 
 /// Run the FUSE file server, listening on `file`.
+#[tracing::instrument]
 pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 	let mut buffer = aligned_buffer();
 	loop {
+		eprintln!("Trying to read next message from /dev/fuse.");
 		match fuse_device.read(buffer.as_mut()).await {
 			Ok(request_size) => {
 				// Attempt to deserialize the request.
@@ -32,6 +34,7 @@ pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 				} else {
 					let response = handle_request(request).await;
 					response.write(unique, &mut fuse_device).await?;
+					eprintln!("Handled.");
 				}
 			},
 			// If the error is ENOENT, EINTR, or EAGAIN, retry. If ENODEV then the FUSE has been unmounted. Otherwise, return an error.
@@ -47,7 +50,7 @@ pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 /// Dispatch to one of the response handlers.
 async fn handle_request(request: request::Request<'_>) -> response::Response {
 	match request.data {
-		request::RequestData::Initialize(_data) => server::initialize(request).await,
+		request::RequestData::Initialize(arg) => server::initialize(request, arg).await,
 		request::RequestData::Lookup(_data) => server::lookup(request).await,
 		request::RequestData::GetAttr => server::getattr(request).await,
 		request::RequestData::ReadLink => server::readlink(request).await,
@@ -57,14 +60,19 @@ async fn handle_request(request: request::Request<'_>) -> response::Response {
 		request::RequestData::ReadDir(_data) => server::readdir(request).await,
 		request::RequestData::Access(_data) => server::access(request).await,
 		request::RequestData::StatFs => server::statfs(request).await,
-		_ => unreachable!(),
+		_ => {
+			tracing::error!("Unexpected request.");
+			unreachable!();
+		}
 	}
 }
+
+pub(crate) const MAX_WRITE_SIZE: usize = 16 * 1024 * 1024;
 
 // We need to create an aligned buffer to write requests into to avoid UB.
 fn aligned_buffer() -> Box<[u8]> {
 	// MAX_WRITE_SIZE + 1 page.
-	let buffer_size = 16 * 1024 * 1024 + 4096;
+	let buffer_size = MAX_WRITE_SIZE + 4096;
 	let alignment = std::mem::align_of::<abi::fuse_in_header>();
 	let ptr = unsafe {
 		std::alloc::alloc_zeroed(

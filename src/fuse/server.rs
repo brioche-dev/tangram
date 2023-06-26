@@ -1,12 +1,25 @@
-use super::{request, response};
+use super::{abi, request, response, MAX_WRITE_SIZE};
+use zerocopy::AsBytes;
 
-#[tracing::instrument]
-pub async fn initialize(request: request::Request<'_>) -> response::Response {
-	response::Response::error(0)
+#[tracing::instrument(skip(request))]
+pub async fn initialize(
+	request: request::Request<'_>,
+	arg: request::Initialize<'_>,
+) -> response::Response {
+	let response = abi::fuse_init_out {
+		major: 7,                              // Major version that we support.
+		minor: 9,                              // Minor version that we target.
+		max_readahead: arg.data.max_readahead, // Reuse from the argument.
+		max_write: MAX_WRITE_SIZE as u32,
+		flags: abi::consts::FUSE_ASYNC_READ,   // Equivalent to no flags.
+		unused: 0,                             // Padding.
+	};
+
+	response::Response::data(response.as_bytes())
 }
 
-#[tracing::instrument]
-pub async fn destroy(request: request::Request<'_>) {}
+#[tracing::instrument(skip(_request))]
+pub async fn destroy(_request: request::Request<'_>) {}
 
 #[tracing::instrument]
 pub async fn lookup(request: request::Request<'_>) -> response::Response {

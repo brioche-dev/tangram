@@ -78,7 +78,7 @@ pub enum RequestData<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Initialize<'a> {
-	data: &'a abi::fuse_init_in,
+	pub data: &'a abi::fuse_init_in,
 }
 
 #[derive(Copy, Clone, Debug)]

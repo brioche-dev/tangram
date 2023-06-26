@@ -1,9 +1,11 @@
+use bytes::BufMut;
 use tokio::io::AsyncWriteExt;
 use zerocopy::AsBytes;
 
 use super::abi;
 use crate::error::Result;
 
+#[derive(Debug)]
 pub enum Response {
 	Error(i32),
 	Data(Vec<u8>),
@@ -18,6 +20,7 @@ impl Response {
 		Self::Data(data.iter().copied().collect())
 	}
 
+	#[tracing::instrument]
 	pub async fn write(&self, unique: u64, file: &mut tokio::fs::File) -> Result<()> {
 		let len = match &self {
 			Response::Error(_) => 0,
@@ -36,12 +39,18 @@ impl Response {
 				.unwrap(),
 		};
 
+		let header = header.as_bytes();
+		let mut response = Vec::with_capacity(header.len() + len);
+		response.put_slice(header);
+
 		// TODO: use write_vectored here.
-		file.write_all(header.as_bytes()).await?;
 		if let Self::Data(data) = &self {
-			file.write_all(data).await?;
+			response.put_slice(data);
 		}
 
+		file.write_all(&response).await?;
+		file.flush().await?;
+		eprintln!("Done writing response.");
 		Ok(())
 	}
 }
