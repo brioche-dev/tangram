@@ -236,9 +236,6 @@ impl Command {
 		let guest_socket = guest_socket.into_std()?;
 		guest_socket.set_nonblocking(false)?;
 
-		let (host_fuse_socket, guest_fuse_socket) = std::os::unix::net::UnixStream::pair()
-			.wrap_err("Failed to create the fuse socket pair.")?;
-
 		// Create the mounts.
 		let mut mounts = Vec::new();
 
@@ -417,7 +414,6 @@ impl Command {
 			root_host_path,
 			working_directory_guest_path,
 			fuse_target_path,
-			guest_fuse_socket,
 		};
 
 		// Spawn the root process.
@@ -493,8 +489,11 @@ impl Command {
 			.wrap_err("Failed to notify the guest process that it can continue.")?;
 
 		// Receive the file descriptor of /dev/fuse from the guest process.
-		let fuse_device = recvfd(host_fuse_socket.as_raw_fd())
+		let host_socket = host_socket.into_std()?;
+		host_socket.set_nonblocking(false)?;
+		let fuse_device = recvfd(host_socket.as_raw_fd())
 			.wrap_err("Failed to receive the file descriptor for /dev/fd.")?;
+		let mut host_socket = tokio::net::UnixStream::from_std(host_socket)?;
 
 		// Begin running the fuse server in the background.
 		let fuse_task = tokio::task::spawn(fuse::run(fuse_device));
@@ -742,10 +741,12 @@ fn guest(context: &Context) {
 			CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0").as_ptr(),
 			libc::O_RDWR | libc::O_NONBLOCK,
 		);
+
 		// Mount the FUSE filesystem.
 		mount_fuse(fuse_fd, &context.fuse_target_path);
+
 		// Attempt to send the file descriptor of /dev/fd back to the host process.
-		if sendfd(context.guest_fuse_socket.as_raw_fd(), fuse_fd) < 0 {
+		if sendfd(context.guest_socket.as_raw_fd(), fuse_fd) < 0 {
 			abort_errno!("Failed to send /dev/fuse file descriptor back to the host.");
 		}
 
@@ -875,8 +876,6 @@ struct Context {
 
 	/// The directory to mount the FUSE filesystem to.
 	fuse_target_path: CString,
-
-	guest_fuse_socket: std::os::unix::net::UnixStream,
 }
 
 unsafe impl Send for Context {}
