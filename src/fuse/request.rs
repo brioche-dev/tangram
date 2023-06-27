@@ -88,7 +88,7 @@ pub struct Initialize<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Lookup<'a> {
-	name: &'a std::ffi::OsStr,
+	pub name: &'a std::ffi::OsStr,
 }
 
 #[derive(Copy, Clone, Debug)]

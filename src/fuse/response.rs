@@ -61,7 +61,7 @@ impl Response {
 				let header = abi::fuse_out_header {
 					unique,
 					len: std::mem::size_of::<abi::fuse_out_header>() as u32,
-					error: *error,
+					error: -error, // Errors are ERRNO * -1.
 				};
 				let iov = [IoSlice::new(header.as_bytes())];
 				file.write_vectored(&iov)?;
@@ -94,6 +94,7 @@ impl FileKind {
 
 	pub fn permissions(&self) -> u32 {
 		match self {
+			Self::Directory => libc::S_IREAD | libc::S_IEXEC,
 			Self::File { is_executable } if *is_executable => libc::S_IREAD | libc::S_IEXEC,
 			_ => libc::S_IREAD,
 		}

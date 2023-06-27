@@ -9,11 +9,9 @@ mod response;
 mod server;
 
 /// Run the FUSE file server, listening on `file`.
-#[tracing::instrument]
 pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 	let mut buffer = aligned_buffer();
 	loop {
-		eprintln!("Trying to read next message from /dev/fuse.");
 		match fuse_device.read(buffer.as_mut()).await {
 			Ok(request_size) => {
 				// Attempt to deserialize the request.
@@ -54,7 +52,7 @@ pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 async fn handle_request(request: request::Request<'_>) -> response::Response {
 	match request.data {
 		request::RequestData::Initialize(arg) => server::initialize(request, arg).await,
-		request::RequestData::Lookup(_data) => server::lookup(request).await,
+		request::RequestData::Lookup(arg) => server::lookup(request, arg).await,
 		request::RequestData::GetAttr => server::getattr(request).await,
 		request::RequestData::ReadLink => server::readlink(request).await,
 		request::RequestData::Open(_data) => server::open(request).await,

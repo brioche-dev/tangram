@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use super::{abi, request, response};
 use zerocopy::AsBytes;
 
@@ -22,8 +24,12 @@ pub async fn initialize(
 pub async fn destroy(_request: request::Request<'_>) {}
 
 #[tracing::instrument]
-pub async fn lookup(request: request::Request<'_>) -> response::Response {
-	response::Response::error(libc::ENOSYS)
+pub async fn lookup(request: request::Request<'_>, arg: request::Lookup<'_>) -> response::Response {
+	let parent_inode = request.header.nodeid;
+	let name: &'_ Path = arg.name.as_ref();
+
+	tracing::info!("looking up {name:#?} in {parent_inode}");
+	response::Response::error(libc::ENOENT)
 }
 
 #[tracing::instrument]
