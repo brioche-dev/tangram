@@ -1,16 +1,16 @@
-use super::{abi, request, response, MAX_WRITE_SIZE};
+use super::{abi, request, response};
 use zerocopy::AsBytes;
 
-#[tracing::instrument(skip(request))]
+#[tracing::instrument(skip(_request))]
 pub async fn initialize(
-	request: request::Request<'_>,
+	_request: request::Request<'_>,
 	arg: request::Initialize<'_>,
 ) -> response::Response {
 	let response = abi::fuse_init_out {
 		major: 7,                              // Major version that we support.
 		minor: 9,                              // Minor version that we target.
 		max_readahead: arg.data.max_readahead, // Reuse from the argument.
-		max_write: MAX_WRITE_SIZE as u32,
+		max_write: 4096,                       // This is a limit on the size of messages.
 		flags: abi::consts::FUSE_ASYNC_READ,   // Equivalent to no flags.
 		unused: 0,                             // Padding.
 	};

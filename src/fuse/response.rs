@@ -1,5 +1,4 @@
-use bytes::BufMut;
-use tokio::io::AsyncWriteExt;
+use std::io::{Write, IoSlice};
 use zerocopy::AsBytes;
 
 use super::abi;
@@ -21,36 +20,31 @@ impl Response {
 	}
 
 	#[tracing::instrument]
-	pub async fn write(&self, unique: u64, file: &mut tokio::fs::File) -> Result<()> {
-		let len = match &self {
-			Response::Error(_) => 0,
-			Response::Data(data) => data.len(),
-		};
-
-		let header = abi::fuse_out_header {
-			unique,
-			error: if let Response::Error(ec) = self {
-				*ec
-			} else {
-				0
+	pub async fn write(&self, unique: u64, mut file: std::fs::File) -> Result<()> {
+		match self {
+			Self::Data(data) => {
+				let len = data.len() + std::mem::size_of::<abi::fuse_out_header>();
+				let header = abi::fuse_out_header {
+					unique,
+					len: len as u32,
+					error: 0,
+				};
+				let iov = [
+					IoSlice::new(header.as_bytes()),
+					IoSlice::new(data.as_bytes()),
+				];
+				file.write_vectored(&iov)?;
 			},
-			len: (std::mem::size_of::<abi::fuse_out_header>() + len)
-				.try_into()
-				.unwrap(),
-		};
-
-		let header = header.as_bytes();
-		let mut response = Vec::with_capacity(header.len() + len);
-		response.put_slice(header);
-
-		// TODO: use write_vectored here.
-		if let Self::Data(data) = &self {
-			response.put_slice(data);
+			Self::Error(error) => {
+				let header = abi::fuse_out_header {
+					unique,
+					len: std::mem::size_of::<abi::fuse_out_header>() as u32,
+					error: *error,
+				};
+				let iov = [IoSlice::new(header.as_bytes())];
+				file.write_vectored(&iov)?;
+			},
 		}
-
-		file.write_all(&response).await?;
-		file.flush().await?;
-		eprintln!("Done writing response.");
 		Ok(())
 	}
 }

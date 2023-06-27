@@ -32,9 +32,17 @@ pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 					server::destroy(request).await;
 					return Ok(());
 				} else {
+					// TODO:
+					// 	- Spawn a new task for each incoming request
+					// 	- Use an mspc channel to pull responses from pending requests and write to fuse_device as needed.
+					let outfile = fuse_device
+						.try_clone()
+						.await
+						.unwrap()
+						.into_std()
+						.await;
 					let response = handle_request(request).await;
-					response.write(unique, &mut fuse_device).await?;
-					eprintln!("Handled.");
+					response.write(unique, outfile).await?;
 				}
 			},
 			// If the error is ENOENT, EINTR, or EAGAIN, retry. If ENODEV then the FUSE has been unmounted. Otherwise, return an error.
