@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use super::{abi, request, response};
 use zerocopy::AsBytes;
 
@@ -26,15 +24,26 @@ pub async fn destroy(_request: request::Request<'_>) {}
 #[tracing::instrument]
 pub async fn lookup(request: request::Request<'_>, arg: request::Lookup<'_>) -> response::Response {
 	let parent_inode = request.header.nodeid;
-	let name: &'_ Path = arg.name.as_ref();
-
-	tracing::info!("looking up {name:#?} in {parent_inode}");
-	response::Response::error(libc::ENOENT)
+	if parent_inode == 1 && arg.name == "file.txt" {
+		response::Response::entry(
+			2,             // inode
+			FILE_TXT_SIZE, // file_size
+			1,             // num_blocks
+			response::FileKind::File {
+				is_executable: false,
+			},
+		)
+	} else {
+		response::Response::error(libc::ENOENT)
+	}
 }
 
 #[tracing::instrument]
 pub async fn getattr(request: request::Request<'_>) -> response::Response {
-	let ttl = std::time::Duration::from_micros(100);
+	// This represents how much time the kernel is allowed to cache the results of this function before it must re-request data.
+	// TODO: since the file system is immutable and read-only (from the perspective of processes that acces it), this value could be "never." We should identify what that value is.
+	let ttl: std::time::Duration = std::time::Duration::from_micros(100);
+
 	let attr = abi::fuse_attr {
 		ino: request.header.nodeid,
 		size: 0,
@@ -70,7 +79,7 @@ pub async fn readlink(request: request::Request<'_>) -> response::Response {
 }
 
 #[tracing::instrument]
-pub async fn open(request: request::Request<'_>) -> response::Response {
+pub async fn open(request: request::Request<'_>, _arg: request::Open<'_>) -> response::Response {
 	// Create the response object.
 	let response = abi::fuse_open_out {
 		fh: 0,         // No file handle.
@@ -82,14 +91,28 @@ pub async fn open(request: request::Request<'_>) -> response::Response {
 }
 
 #[tracing::instrument]
-pub async fn read(request: request::Request<'_>) -> response::Response {
-	response::Response::error(libc::ENOSYS)
+pub async fn read(request: request::Request<'_>, arg: request::Read<'_>) -> response::Response {
+	if request.header.nodeid == 2 {
+		let file_contents = FILE_TXT_CONTENTS;
+		let offset: usize = arg.data.offset.try_into().unwrap();
+		let length = arg.data.size as usize;
+
+		let range = offset..length.min(file_contents.len());
+		let read_output = &file_contents[range];
+
+		response::Response::data(read_output)
+	} else {
+		response::Response::error(libc::ENOENT)
+	}
 }
 
 #[tracing::instrument]
-pub async fn opendir(request: request::Request<'_>) -> response::Response {
+pub async fn opendir(
+	request: request::Request<'_>,
+	_arg: request::OpenDir<'_>,
+) -> response::Response {
 	// Note:
-	// - This must be made stateful (returning a valid file handle) or else we cannot correctly implement directory streams (POSIX opendir(2))
+	// - This must be made stateful (returning a valid file handle) or else we cannot correctly implement directory streams (POSIX opendir)
 	let response = abi::fuse_open_out {
 		fh: 0,         // No file handle.
 		open_flags: 0, // No flags.
@@ -100,7 +123,10 @@ pub async fn opendir(request: request::Request<'_>) -> response::Response {
 }
 
 #[tracing::instrument]
-pub async fn readdir(request: request::Request<'_>) -> response::Response {
+pub async fn readdir(
+	request: request::Request<'_>,
+	_arg: request::ReadDir<'_>,
+) -> response::Response {
 	if request.header.nodeid != 1 {
 		return response::Response::error(libc::ENOENT);
 	}
@@ -116,12 +142,22 @@ pub async fn readdir(request: request::Request<'_>) -> response::Response {
 			name: "..",
 			kind: response::FileKind::Directory,
 		},
+		response::DirectoryEntry {
+			inode: 2,
+			name: "file.txt",
+			kind: response::FileKind::File {
+				is_executable: false,
+			},
+		},
 	];
 	response::Response::directory(&entries)
 }
 
 #[tracing::instrument]
-pub async fn access(request: request::Request<'_>) -> response::Response {
+pub async fn access(
+	request: request::Request<'_>,
+	_arg: request::Access<'_>,
+) -> response::Response {
 	response::Response::error(libc::ENOSYS)
 }
 
@@ -130,7 +166,17 @@ pub async fn statfs(request: request::Request<'_>) -> response::Response {
 	response::Response::error(libc::ENOSYS)
 }
 
+/// release() is called on close() after flush().
 #[tracing::instrument]
 pub async fn release(_request: request::Request<'_>) -> response::Response {
 	response::Response::error(0)
 }
+
+/// flush() is called on close() before release().
+#[tracing::instrument]
+pub async fn flush(_request: request::Request<'_>, _arg: request::Flush<'_>) -> response::Response {
+	response::Response::error(0)
+}
+
+const FILE_TXT_CONTENTS: &[u8] = b"Goodbye, FUSE!\n";
+const FILE_TXT_SIZE: usize = FILE_TXT_CONTENTS.len();

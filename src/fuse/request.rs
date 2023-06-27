@@ -49,7 +49,9 @@ impl<'a> Request<'a> {
 			})),
 			abi::fuse_opcode::FUSE_STATFS => Some(RequestData::StatFs),
 			abi::fuse_opcode::FUSE_RELEASEDIR => Some(RequestData::ReleaseDir),
-
+			abi::fuse_opcode::FUSE_FLUSH => Some(RequestData::Flush(Flush {
+				data: data.fetch().unwrap(),
+			})),
 			_ => return_error!("Unsupported FUSE opcode: {}.", header.opcode),
 		};
 
@@ -79,6 +81,7 @@ pub enum RequestData<'a> {
 	ReleaseDir,
 	Access(Access<'a>),
 	StatFs,
+	Flush(Flush<'a>),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -98,7 +101,7 @@ pub struct Open<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Read<'a> {
-	data: &'a abi::fuse_read_in,
+	pub data: &'a abi::fuse_read_in,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -117,3 +120,8 @@ pub struct Access<'a> {
 }
 
 pub struct ReleaseDir;
+
+#[derive(Copy, Clone, Debug)]
+pub struct Flush<'a> {
+	data: &'a abi::fuse_flush_in,
+}

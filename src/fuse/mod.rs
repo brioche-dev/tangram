@@ -55,14 +55,15 @@ async fn handle_request(request: request::Request<'_>) -> response::Response {
 		request::RequestData::Lookup(arg) => server::lookup(request, arg).await,
 		request::RequestData::GetAttr => server::getattr(request).await,
 		request::RequestData::ReadLink => server::readlink(request).await,
-		request::RequestData::Open(_data) => server::open(request).await,
-		request::RequestData::Read(_data) => server::read(request).await,
-		request::RequestData::OpenDir(_data) => server::opendir(request).await,
-		request::RequestData::ReadDir(_data) => server::readdir(request).await,
-		request::RequestData::Access(_data) => server::access(request).await,
+		request::RequestData::Open(arg) => server::open(request, arg).await,
+		request::RequestData::Read(arg) => server::read(request, arg).await,
+		request::RequestData::OpenDir(arg) => server::opendir(request, arg).await,
+		request::RequestData::ReadDir(arg) => server::readdir(request, arg).await,
+		request::RequestData::Access(arg) => server::access(request, arg).await,
 		request::RequestData::StatFs => server::statfs(request).await,
 		request::RequestData::Release => server::release(request).await,
 		request::RequestData::ReleaseDir => server::release(request).await,
+		request::RequestData::Flush(arg) => server::flush(request, arg).await,
 		_ => {
 			tracing::error!("Unexpected request.");
 			unreachable!();
