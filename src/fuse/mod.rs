@@ -35,12 +35,7 @@ pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 					// TODO:
 					// 	- Spawn a new task for each incoming request
 					// 	- Use an mspc channel to pull responses from pending requests and write to fuse_device as needed.
-					let outfile = fuse_device
-						.try_clone()
-						.await
-						.unwrap()
-						.into_std()
-						.await;
+					let outfile = fuse_device.try_clone().await.unwrap().into_std().await;
 					let response = handle_request(request).await;
 					response.write(unique, outfile).await?;
 				}
@@ -71,7 +66,7 @@ async fn handle_request(request: request::Request<'_>) -> response::Response {
 		_ => {
 			tracing::error!("Unexpected request.");
 			unreachable!();
-		}
+		},
 	}
 }
 

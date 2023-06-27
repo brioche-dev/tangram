@@ -1,4 +1,4 @@
-use std::io::{Write, IoSlice};
+use std::io::{IoSlice, Write};
 use zerocopy::AsBytes;
 
 use super::abi;
