@@ -530,7 +530,6 @@ pub struct fuse_batch_forget_in {
 	pub dummy: u32,
 }
 
-
 #[repr(C)]
 #[derive(Debug, FromBytes)]
 pub struct fuse_getattr_in {

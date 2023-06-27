@@ -40,7 +40,7 @@ pub async fn getattr(request: request::Request<'_>) -> response::Response {
 		mtimensec: 0,
 		ctimensec: 0,
 		nlink: 2, // number of hard links.
-		mode: FileKind::Directory.mode(),
+		mode: response::FileKind::Directory.mode(),
 		uid: 1000,
 		gid: 1000,
 		rdev: 0,
@@ -65,7 +65,14 @@ pub async fn readlink(request: request::Request<'_>) -> response::Response {
 
 #[tracing::instrument]
 pub async fn open(request: request::Request<'_>) -> response::Response {
-	response::Response::error(libc::ENOSYS)
+	// Create the response object.
+	let response = abi::fuse_open_out {
+		fh: 0,         // No file handle.
+		open_flags: 0, // No flags.
+		padding: 0,    // Padding.
+	};
+
+	response::Response::data(response.as_bytes())
 }
 
 #[tracing::instrument]
@@ -75,12 +82,36 @@ pub async fn read(request: request::Request<'_>) -> response::Response {
 
 #[tracing::instrument]
 pub async fn opendir(request: request::Request<'_>) -> response::Response {
-	response::Response::error(libc::ENOSYS)
+	// Note:
+	// - This must be made stateful (returning a valid file handle) or else we cannot correctly implement directory streams (POSIX opendir(2))
+	let response = abi::fuse_open_out {
+		fh: 0,         // No file handle.
+		open_flags: 0, // No flags.
+		padding: 0,    // Padding.
+	};
+
+	response::Response::data(response.as_bytes())
 }
 
 #[tracing::instrument]
 pub async fn readdir(request: request::Request<'_>) -> response::Response {
-	response::Response::error(libc::ENOSYS)
+	if request.header.nodeid != 1 {
+		return response::Response::error(libc::ENOENT);
+	}
+
+	let entries = [
+		response::DirectoryEntry {
+			inode: 1,
+			name: ".",
+			kind: response::FileKind::Directory,
+		},
+		response::DirectoryEntry {
+			inode: 1,
+			name: "..",
+			kind: response::FileKind::Directory,
+		},
+	];
+	response::Response::directory(&entries)
 }
 
 #[tracing::instrument]
@@ -93,24 +124,7 @@ pub async fn statfs(request: request::Request<'_>) -> response::Response {
 	response::Response::error(libc::ENOSYS)
 }
 
-enum FileKind {
-	Directory,
-	File { is_executable: bool },
-	Symlink,
-}
-
-impl FileKind {
-	fn mode(&self) -> u32 {
-		match self {
-			Self::Directory => libc::S_IFDIR | libc::S_IREAD | libc::S_IEXEC,
-			Self::File { is_executable } => {
-				if *is_executable {
-					libc::S_IFREG | libc::S_IREAD | libc::S_IEXEC
-				} else {
-					libc::S_IFREG | libc::S_IREAD
-				}
-			},
-			Self::Symlink => libc::S_IFLNK | libc::S_IREAD | libc::S_IEXEC,
-		}
-	}
+#[tracing::instrument]
+pub async fn release(_request: request::Request<'_>) -> response::Response {
+	response::Response::error(0)
 }

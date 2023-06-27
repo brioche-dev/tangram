@@ -63,6 +63,8 @@ async fn handle_request(request: request::Request<'_>) -> response::Response {
 		request::RequestData::ReadDir(_data) => server::readdir(request).await,
 		request::RequestData::Access(_data) => server::access(request).await,
 		request::RequestData::StatFs => server::statfs(request).await,
+		request::RequestData::Release => server::release(request).await,
+		request::RequestData::ReleaseDir => server::release(request).await,
 		_ => {
 			tracing::error!("Unexpected request.");
 			unreachable!();

@@ -37,6 +37,7 @@ impl<'a> Request<'a> {
 			abi::fuse_opcode::FUSE_READ => Some(RequestData::Read(Read {
 				data: data.fetch().unwrap(),
 			})),
+			abi::fuse_opcode::FUSE_RELEASE => Some(RequestData::Release),
 			abi::fuse_opcode::FUSE_OPENDIR => Some(RequestData::OpenDir(OpenDir {
 				data: data.fetch().unwrap(),
 			})),
@@ -47,6 +48,8 @@ impl<'a> Request<'a> {
 				data: data.fetch().unwrap(),
 			})),
 			abi::fuse_opcode::FUSE_STATFS => Some(RequestData::StatFs),
+			abi::fuse_opcode::FUSE_RELEASEDIR => Some(RequestData::ReleaseDir),
+
 			_ => return_error!("Unsupported FUSE opcode: {}.", header.opcode),
 		};
 
@@ -70,8 +73,10 @@ pub enum RequestData<'a> {
 	ReadLink,
 	Open(Open<'a>),
 	Read(Read<'a>),
+	Release,
 	OpenDir(OpenDir<'a>),
 	ReadDir(ReadDir<'a>),
+	ReleaseDir,
 	Access(Access<'a>),
 	StatFs,
 }
@@ -110,3 +115,5 @@ pub struct ReadDir<'a> {
 pub struct Access<'a> {
 	data: &'a abi::fuse_access_in,
 }
+
+pub struct ReleaseDir;
