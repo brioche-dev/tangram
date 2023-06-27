@@ -39,11 +39,13 @@ pub async fn getattr(request: request::Request<'_>) -> response::Response {
 		atimensec: 0,
 		mtimensec: 0,
 		ctimensec: 0,
-		nlink: 1, // number of hard links.
+		nlink: 2, // number of hard links.
 		mode: FileKind::Directory.mode(),
 		uid: 1000,
 		gid: 1000,
 		rdev: 0,
+		blksize: 512,
+		padding: 0,
 	};
 
 	let response = abi::fuse_attr_out {

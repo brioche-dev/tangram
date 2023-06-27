@@ -21,8 +21,6 @@
 #![warn(missing_debug_implementations)]
 #![allow(missing_docs)]
 
-#[cfg(feature = "abi-7-9")]
-use crate::consts::{FATTR_ATIME_NOW, FATTR_MTIME_NOW};
 use std::convert::TryFrom;
 use zerocopy::{AsBytes, FromBytes};
 
@@ -108,9 +106,9 @@ pub struct fuse_attr {
 	pub rdev: u32,
 	#[cfg(target_os = "macos")]
 	pub flags: u32, // see chflags(2)
-	#[cfg(feature = "abi-7-9")]
+
 	pub blksize: u32,
-	#[cfg(feature = "abi-7-9")]
+
 	pub padding: u32,
 }
 
@@ -148,11 +146,11 @@ pub mod consts {
 	pub const FATTR_ATIME: u32 = 1 << 4;
 	pub const FATTR_MTIME: u32 = 1 << 5;
 	pub const FATTR_FH: u32 = 1 << 6;
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FATTR_ATIME_NOW: u32 = 1 << 7;
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FATTR_MTIME_NOW: u32 = 1 << 8;
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FATTR_LOCKOWNER: u32 = 1 << 9;
 	#[cfg(feature = "abi-7-23")]
 	pub const FATTR_CTIME: u32 = 1 << 10;
@@ -184,13 +182,13 @@ pub mod consts {
 	// Init request/reply flags
 	pub const FUSE_ASYNC_READ: u32 = 1 << 0; // asynchronous read requests
 	pub const FUSE_POSIX_LOCKS: u32 = 1 << 1; // remote locking for POSIX file locks
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_FILE_OPS: u32 = 1 << 2; // kernel sends file handle for fstat, etc...
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_ATOMIC_O_TRUNC: u32 = 1 << 3; // handles the O_TRUNC open flag in the filesystem
 	#[cfg(feature = "abi-7-10")]
 	pub const FUSE_EXPORT_SUPPORT: u32 = 1 << 4; // filesystem handles lookups of "." and ".."
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_BIG_WRITES: u32 = 1 << 5; // filesystem can handle write size larger than 4kB
 	#[cfg(feature = "abi-7-12")]
 	pub const FUSE_DONT_MASK: u32 = 1 << 6; // don't apply umask to file mode on create operations
@@ -255,23 +253,23 @@ pub mod consts {
 	pub const FUSE_RELEASE_FLOCK_UNLOCK: u32 = 1 << 1;
 
 	// Getattr flags
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_GETATTR_FH: u32 = 1 << 0;
 
 	// Lock flags
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_LK_FLOCK: u32 = 1 << 0;
 
 	// Write flags
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_WRITE_CACHE: u32 = 1 << 0; // delayed write from page cache, file handle is guessed
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_WRITE_LOCKOWNER: u32 = 1 << 1; // lock_owner field is valid
 	#[cfg(feature = "abi-7-31")]
 	pub const FUSE_WRITE_KILL_PRIV: u32 = 1 << 2; // kill suid and sgid bits
 
 	// Read flags
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_READ_LOCKOWNER: u32 = 1 << 1;
 
 	// IOCTL flags
@@ -291,7 +289,7 @@ pub mod consts {
 	pub const FUSE_IOCTL_MAX_IOV: u32 = 256; // maximum of in_iovecs + out_iovecs
 
 	// Poll flags
-	#[cfg(feature = "abi-7-9")]
+
 	pub const FUSE_POLL_SCHEDULE_NOTIFY: u32 = 1 << 0; // request poll notify
 
 	// fsync flags
@@ -532,7 +530,7 @@ pub struct fuse_batch_forget_in {
 	pub dummy: u32,
 }
 
-#[cfg(feature = "abi-7-9")]
+
 #[repr(C)]
 #[derive(Debug, FromBytes)]
 pub struct fuse_getattr_in {
@@ -619,7 +617,7 @@ pub struct fuse_setattr_in {
 	pub size: u64,
 	#[cfg(not(feature = "abi-7-9"))]
 	pub unused1: u64,
-	#[cfg(feature = "abi-7-9")]
+
 	pub lock_owner: u64,
 	// NOTE: this field is defined as u64 in fuse_kernel.h in libfuse. However, it is treated as signed
 	// to match stat.st_atime
@@ -658,28 +656,6 @@ pub struct fuse_setattr_in {
 	pub crtimensec: u32,
 	#[cfg(target_os = "macos")]
 	pub flags: u32, // see chflags(2)
-}
-
-impl fuse_setattr_in {
-	#[cfg(feature = "abi-7-9")]
-	pub fn atime_now(&self) -> bool {
-		self.valid & FATTR_ATIME_NOW != 0
-	}
-
-	#[cfg(not(feature = "abi-7-9"))]
-	pub fn atime_now(&self) -> bool {
-		false
-	}
-
-	#[cfg(feature = "abi-7-9")]
-	pub fn mtime_now(&self) -> bool {
-		self.valid & FATTR_MTIME_NOW != 0
-	}
-
-	#[cfg(not(feature = "abi-7-9"))]
-	pub fn mtime_now(&self) -> bool {
-		false
-	}
 }
 
 #[repr(C)]
@@ -744,15 +720,15 @@ pub struct fuse_read_in {
 	// to an i64 when invoking the filesystem's read method
 	pub offset: i64,
 	pub size: u32,
-	#[cfg(feature = "abi-7-9")]
+
 	pub read_flags: u32,
-	#[cfg(feature = "abi-7-9")]
+
 	pub lock_owner: u64,
-	#[cfg(feature = "abi-7-9")]
+
 	// NOTE: this field is defined as u32 in fuse_kernel.h in libfuse. However, it is then cast
 	// to an i32 when invoking the filesystem's read method
 	pub flags: i32,
-	#[cfg(feature = "abi-7-9")]
+
 	pub padding: u32,
 }
 
@@ -765,13 +741,13 @@ pub struct fuse_write_in {
 	pub offset: i64,
 	pub size: u32,
 	pub write_flags: u32,
-	#[cfg(feature = "abi-7-9")]
+
 	pub lock_owner: u64,
-	#[cfg(feature = "abi-7-9")]
+
 	// NOTE: this field is defined as u32 in fuse_kernel.h in libfuse. However, it is then cast
 	// to an i32 when invoking the filesystem's read method
 	pub flags: i32,
-	#[cfg(feature = "abi-7-9")]
+
 	pub padding: u32,
 }
 
@@ -833,9 +809,9 @@ pub struct fuse_lk_in {
 	pub fh: u64,
 	pub owner: u64,
 	pub lk: fuse_file_lock,
-	#[cfg(feature = "abi-7-9")]
+
 	pub lk_flags: u32,
-	#[cfg(feature = "abi-7-9")]
+
 	pub padding: u32,
 }
 
