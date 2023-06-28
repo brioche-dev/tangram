@@ -4,7 +4,7 @@ import * as syscall from "./syscall.ts";
 import { compilerOptions, host } from "./typescript.ts";
 import * as typescript from "./typescript.ts";
 import { assert } from "./util.ts";
-import ts, { TypeAliasDeclaration } from "typescript";
+import ts from "typescript";
 
 declare module "typescript" {
 	interface TypeChecker {
@@ -18,6 +18,7 @@ export type Request = {
 };
 
 export type Response = {
+	module: Module;
 	exports: { [key: string]: Symbol };
 };
 
@@ -36,7 +37,7 @@ type Declaration =
 
 type ClassDeclaration = {
 	location: Location;
-	constructSignatures: Array<ConstructSignature>;
+	constructSignature: ConstructSignature;
 	properties: Array<ClassProperty>;
 };
 
@@ -57,10 +58,14 @@ type EnumDeclaration = {
 	members: { [key: string]: EnumMemberValue };
 };
 
-type EnumMemberValue =
-	| { kind: "string"; value: string }
+type EnumMemberValue = {
+	constantValue: EnumMemberConstantValue | undefined;
+	initializer: string | undefined;
+};
+
+type EnumMemberConstantValue =
 	| { kind: "number"; value: number }
-	| { kind: "undefined" };
+	| { kind: "string"; value: string };
 
 type FunctionDeclaration = {
 	location: Location;
@@ -77,11 +82,11 @@ type FunctionSignature = {
 type InterfaceDeclaration = {
 	location: Location;
 	indexSignature?: IndexSignature;
-	members: { [key: string]: InterfaceMember };
+	properties: { [key: string]: InterfaceProperty };
 	constructSignatures: Array<ConstructSignature>;
 };
 
-type InterfaceMember = {
+type InterfaceProperty = {
 	type: Type;
 	readonly?: boolean;
 };
@@ -199,6 +204,7 @@ type ObjectProperty = {
 };
 
 type IndexSignature = {
+	name: string;
 	key: Parameter;
 	type: Type;
 };
@@ -210,9 +216,10 @@ type PredicateType = {
 };
 
 type ReferenceType = {
-	location: Location;
+	module: Module;
 	name: string;
 	typeArguments: Array<Type>;
+	isTypeParameter: boolean;
 };
 
 type TemplateLiteralType = {
@@ -236,7 +243,6 @@ type TypeOperatorType = {
 
 type TypeQueryType = {
 	name: string;
-	location: Location;
 };
 
 type UnionType = {
@@ -270,7 +276,10 @@ export let handle = (request: Request): Response => {
 		exports[export_.getName()] = convertSymbol(typeChecker, export_);
 	}
 
+	let declaration = symbol.getDeclarations()?.[0];
+	if (!declaration) throw new Error();
 	return {
+		module: convertLocation(declaration).module,
 		exports,
 	};
 };
@@ -432,7 +441,11 @@ let convertClassSymbol = (
 	// Get the instance type properties of the class.
 	let instanceType = typeChecker.getDeclaredTypeOfSymbol(symbol);
 	for (let instanceProperty of typeChecker.getPropertiesOfType(instanceType)) {
-		properties.push(convertClassPropertySymbol(typeChecker, instanceProperty));
+		if (instanceProperty.flags & ts.SymbolFlags.ClassMember) {
+			properties.push(
+				convertClassPropertySymbol(typeChecker, instanceProperty),
+			);
+		}
 	}
 
 	// Get the static properties of the class.
@@ -440,23 +453,23 @@ let convertClassSymbol = (
 	for (let staticProperty of typeChecker.getPropertiesOfType(staticType)) {
 		// Ignore prototype.
 		if (staticProperty.flags & ts.SymbolFlags.Prototype) continue;
-		properties.push(convertClassPropertySymbol(typeChecker, staticProperty));
+
+		if (staticProperty.flags & ts.SymbolFlags.ClassMember) {
+			properties.push(convertClassPropertySymbol(typeChecker, staticProperty));
+		}
 	}
 
-	// Get the constructor signatures.
-	let constructSignatures = staticType
+	// Get the constructor signature.
+	let constructSignature = staticType
 		.getConstructSignatures()
-		.map((signature) =>
-			convertConstructSignature(
-				typeChecker,
-				signature.getDeclaration() as ts.ConstructSignatureDeclaration,
-			),
-		);
+		.map((signature) => {
+			return convertConstructSignature(typeChecker, signature);
+		})[0]!;
 
 	return {
 		location: convertLocation(declaration),
 		properties,
-		constructSignatures,
+		constructSignature,
 	};
 };
 
@@ -522,8 +535,8 @@ let convertFunctionDeclaration = (
 			return [
 				parameter.name.getText(),
 				{
-					type: declaration?.type
-						? convertTypeNode(typeChecker, declaration.type)
+					type: parameter?.type
+						? convertTypeNode(typeChecker, parameter.type)
 						: convertType(typeChecker, type),
 					optional,
 				},
@@ -619,16 +632,14 @@ let convertEnumSymbol = (
 		// Get the members.
 		let members: { [key: string]: EnumMemberValue } = {};
 		for (let enumMember of declaration.members) {
-			let enumMemberSymbol = typeChecker.getSymbolAtLocation(enumMember);
+			let enumMemberSymbol = typeChecker.getSymbolAtLocation(enumMember.name);
 			if (!enumMemberSymbol) {
 				throw new Error();
 			}
-			if (enumMember.flags & ts.SymbolFlags.EnumMember) {
-				members[enumMemberSymbol.getName()] = convertEnumMemberSymbol(
-					typeChecker,
-					enumMemberSymbol,
-				);
-			}
+			members[enumMemberSymbol.getName()] = convertEnumMemberSymbol(
+				typeChecker,
+				enumMemberSymbol,
+			);
 		}
 		return {
 			location: convertLocation(declaration),
@@ -663,10 +674,12 @@ let convertInterfaceSymbol = (
 			.filter((d): d is ts.ConstructSignatureDeclaration =>
 				ts.isConstructSignatureDeclaration(d),
 			)
-			.map((member) => convertConstructSignature(typeChecker, member));
+			.map((member) => {
+				return convertConstructSignatureDeclaration(typeChecker, member);
+			});
 
 		// Get the members.
-		let members = Object.fromEntries(
+		let properties = Object.fromEntries(
 			declaration.members
 				.filter((d) => !ts.isIndexSignatureDeclaration(d))
 				.map((member) => {
@@ -681,7 +694,7 @@ let convertInterfaceSymbol = (
 			location: convertLocation(declaration),
 			indexSignature,
 			constructSignatures,
-			members,
+			properties,
 		};
 	});
 };
@@ -693,6 +706,7 @@ let convertIndexSignature = (
 ): IndexSignature => {
 	let key = convertParameterNode(typeChecker, declaration.parameters[0]!);
 	return {
+		name: declaration.name?.getText() ?? "",
 		type: convertTypeNode(typeChecker, declaration.type),
 		key,
 	};
@@ -700,6 +714,46 @@ let convertIndexSignature = (
 
 // ConstructSignature.
 let convertConstructSignature = (
+	typeChecker: ts.TypeChecker,
+	signature: ts.Signature,
+): ConstructSignature => {
+	// Get the parameters.
+	let parameters = Object.fromEntries(
+		signature.parameters.map((parameter) => {
+			let optional = false;
+			if (parameter.flags & ts.SymbolFlags.Optional) {
+				optional = true;
+			}
+			let declaration =
+				parameter.getDeclarations()?.[0] as ts.ParameterDeclaration;
+			return [
+				parameter.getName(),
+				{
+					type: declaration?.type
+						? convertTypeNode(typeChecker, declaration.type)
+						: convertType(typeChecker, typeChecker.getTypeOfSymbol(parameter)),
+					optional,
+				},
+			];
+		}),
+	);
+
+	// Get the return type.
+	let declaration = signature.declaration as
+		| ts.SignatureDeclaration
+		| undefined;
+	let returnType: Type;
+	if (declaration?.type) {
+		returnType = convertTypeNode(typeChecker, declaration.type);
+	} else {
+		returnType = convertType(typeChecker, signature.getReturnType());
+	}
+
+	return { parameters, return: returnType };
+};
+
+// ConstructSignatureDeclaration.
+let convertConstructSignatureDeclaration = (
 	typeChecker: ts.TypeChecker,
 	declaration: ts.ConstructSignatureDeclaration,
 ): ConstructSignature => {
@@ -741,7 +795,7 @@ let convertConstructSignature = (
 let convertTypeElement = (
 	typeChecker: ts.TypeChecker,
 	member: ts.TypeElement,
-): InterfaceMember => {
+): InterfaceProperty => {
 	// Get the type.
 	let type = typeChecker.getTypeAtLocation(member);
 	return {
@@ -763,26 +817,25 @@ let convertEnumMemberSymbol = (
 	let constantValue = typeChecker.getConstantValue(declaration);
 
 	// Convert the value.
-	let value: EnumMemberValue;
+	let value: EnumMemberConstantValue | undefined = undefined;
+	let initializer = declaration.initializer?.getText();
 	if (typeof constantValue == "string") {
 		value = {
 			kind: "string",
 			value: constantValue,
 		};
-	} else if (typeof constantValue == "number") {
+	}
+	if (typeof constantValue == "number") {
 		value = {
 			kind: "number",
 			value: constantValue,
 		};
-	} else {
-		value = {
-			kind: "undefined",
-		};
 	}
 
-	return value;
+	return { constantValue: value, initializer };
 };
 
+// ClassPropertySymbol.
 let convertClassPropertySymbol = (
 	typeChecker: ts.TypeChecker,
 	property: ts.Symbol,
@@ -887,25 +940,24 @@ let convertFunctionType = (
 		let parameters = Object.fromEntries(
 			signature.getParameters().map((parameter) => {
 				let parameterType = typeChecker.getTypeOfSymbol(parameter);
-				let declaration: ts.ParameterDeclaration | undefined =
+				let parameterDeclaration: ts.ParameterDeclaration | undefined =
 					parameter.valueDeclaration as ts.ParameterDeclaration;
 				let optional = false;
-				if (declaration) {
-					if (ts.isParameter(declaration) && declaration.questionToken) {
+				if (parameterDeclaration) {
+					if (
+						ts.isParameter(parameterDeclaration) &&
+						parameterDeclaration.questionToken
+					) {
 						optional = true;
 					}
 				}
-				let comment = ts.displayPartsToString(
-					parameter.getDocumentationComment(typeChecker),
-				);
 				return [
 					parameter.getName(),
 					{
-						type: declaration?.type
-							? convertTypeNode(typeChecker, declaration.type)
+						type: parameterDeclaration?.type
+							? convertTypeNode(typeChecker, parameterDeclaration.type)
 							: convertType(typeChecker, parameterType),
 						optional,
-						comment,
 					},
 				];
 			}),
@@ -1011,19 +1063,17 @@ let convertObjectType = (
 	if (indexSymbol) {
 		let declaration =
 			indexSymbol.declarations![0]! as ts.IndexSignatureDeclaration;
-		let key = convertParameterNode(typeChecker, declaration.parameters[0]!);
-		let type = convertTypeNode(typeChecker, declaration.type);
-		indexSignature = {
-			type,
-			key,
-		};
+		indexSignature = convertIndexSignature(typeChecker, declaration);
 	}
 
 	// Get the construct signatures.
 	let constructSignatures = type.getConstructSignatures().map((signature) => {
 		let signatureDeclaration = signature.getDeclaration();
 		assert(ts.isConstructSignatureDeclaration(signatureDeclaration));
-		return convertConstructSignature(typeChecker, signatureDeclaration);
+		return convertConstructSignatureDeclaration(
+			typeChecker,
+			signatureDeclaration,
+		);
 	});
 
 	// Get the properties.
@@ -1084,6 +1134,7 @@ let convertTypeReferenceType = (
 	typeChecker: ts.TypeChecker,
 	type: ts.Type,
 ): ReferenceType => {
+	let isTypeParameter = (type.flags & ts.TypeFlags.TypeParameter) !== 0;
 	if (type.aliasSymbol) {
 		let aliasSymbol = type.aliasSymbol;
 		let typeArguments = type.aliasTypeArguments?.map((typeArgument) =>
@@ -1092,8 +1143,9 @@ let convertTypeReferenceType = (
 		let declaration = aliasSymbol.declarations![0]!;
 		return {
 			name: aliasSymbol.getName(),
-			location: convertLocation(declaration),
+			module: convertLocation(declaration).module,
 			typeArguments: typeArguments ?? [],
+			isTypeParameter,
 		};
 	} else {
 		let typeArguments = typeChecker
@@ -1103,8 +1155,9 @@ let convertTypeReferenceType = (
 		let declaration = symbol.declarations![0]!;
 		return {
 			name: symbol.getName(),
-			location: convertLocation(declaration),
+			module: convertLocation(declaration).module,
 			typeArguments: typeArguments ?? [],
+			isTypeParameter,
 		};
 	}
 };
@@ -1154,6 +1207,8 @@ let convertTypeNode = (
 			value: convertIntersectionTypeNode(typeChecker, node),
 		};
 	} else if (keywordSet.has(node.kind)) {
+		let value = node.kind.toString();
+		console.log(value);
 		return { kind: "keyword", value: convertKeywordType(node.kind) };
 	} else if (ts.isLiteralTypeNode(node)) {
 		return {
@@ -1441,7 +1496,6 @@ let convertTypeQueryNode = (
 	symbol = getAliasedSymbolIfAliased(typeChecker, symbol);
 	return {
 		name: node.exprName.getText(),
-		location: convertLocation(symbol.declarations![0]!),
 	};
 };
 
@@ -1456,10 +1510,12 @@ let convertTypeReferenceTypeNode = (
 		convertTypeNode(typeChecker, typeArgument),
 	);
 	let declaration = resolved.declarations![0]!;
+	let isTypeParameter = ts.isTypeParameterDeclaration(declaration);
 	return {
-		location: convertLocation(declaration),
+		module: convertLocation(declaration).module,
 		name: node.typeName.getText(),
 		typeArguments: typeArguments ?? [],
+		isTypeParameter,
 	};
 };
 

@@ -7,7 +7,7 @@ pub mod check;
 pub mod completion;
 pub mod definition;
 pub mod diagnostics;
-pub mod doc;
+pub mod docs;
 pub mod format;
 pub mod hover;
 pub mod location;

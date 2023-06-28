@@ -27,7 +27,7 @@ impl Cli {
 		let root_module = package.root_module();
 
 		// Get the doc.
-		let doc = root_module.doc(&self.tg).await?;
+		let doc = root_module.docs(&self.tg).await?;
 
 		// Render the doc to JSON.
 		let json = serde_json::to_string_pretty(&doc).map_err(Error::other)?;
