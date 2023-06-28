@@ -64,12 +64,12 @@ pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<
 					// Service the request.
 					_ => {
 						let file_system = file_system.clone();
-						let fut = async move {
+						tokio::spawn(async move {
 							let response = file_system.handle_request(request).await;
-							let _ = response.write(unique, outfile).await;
-						};
-						fut.await;
-						// tokio::spawn(fut);
+							if let Err(e) = response.write(unique, outfile).await {
+								tracing::error!(?e, "Dropped FUSE request.");
+							}
+						});
 					},
 				};
 			},

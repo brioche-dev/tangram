@@ -14,133 +14,39 @@ use super::{
 	request::{Arg, Request},
 	response::Response,
 };
-type Result<T> = std::result::Result<T, i32>;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct NodeID(u64);
-const ROOT: NodeID = NodeID(1);
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct FileHandle(NonZeroU64);
-
-impl FileHandle {
-	fn new(fh: u64) -> Option<FileHandle> {
-		Some(FileHandle(NonZeroU64::new(fh)?))
-	}
-}
-
+/// The FUSE implementation.
 #[derive(Clone)]
 pub struct FileSystem {
 	tg: Arc<Instance>,
 	state: Arc<Mutex<State>>,
 }
 
+/// Internal state of the file system.
 #[derive(Default)]
-pub struct State {
-	root: BTreeMap<artifact::Hash, NodeID>,
-	nodes: BTreeMap<NodeID, artifact::Hash>,
+struct State {
+	/// A map of NodeIDs for the artifacts in the root of the file system.
+	root: BTreeMap<artifact::Hash, Node>,
+	/// A map of NodeIDs for any other artifacts referenced by the file system.
+	nodes: BTreeMap<Node, artifact::Hash>,
 }
 
-impl State {
-	fn add_node(&mut self, hash: artifact::Hash) -> NodeID {
-		let node = NodeID(self.nodes.len() as u64 + 1000);
-		let _ = self.nodes.insert(node, hash);
-		node
-	}
+/// All filesystem methods need to return a valid code, using the standard values for errno from libc.
+type Result<T> = std::result::Result<T, i32>;
 
-	fn add_to_root(&mut self, hash: artifact::Hash) -> NodeID {
-		if let Some(node) = self.root.get(&hash) {
-			*node
-		} else {
-			let node = self.add_node(hash);
-			let _ = self.root.insert(hash, node);
-			node
-		}
-	}
+/// A node in the file system.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Node(u64);
 
-	async fn artifact(&self, node: NodeID, tg: &Instance) -> Result<artifact::Artifact> {
-		let hash = self.nodes.get(&node).ok_or(libc::ENOENT)?;
+/// The root node has a reserved ID of 1.
+const ROOT: Node = Node(1);
 
-		Artifact::get(tg, *hash).await.or(Err(libc::EIO))
-	}
-
-	async fn directory(&self, node: NodeID, tg: &Instance) -> Result<Directory> {
-		self.artifact(node, tg)
-			.await
-			.and_then(|a| a.into_directory().ok_or(libc::ENOENT))
-	}
-
-	async fn file(&self, node: NodeID, tg: &Instance) -> Result<File> {
-		self.artifact(node, tg)
-			.await
-			.and_then(|a| a.into_file().ok_or(libc::ENOENT))
-	}
-
-	async fn kind(&self, node: NodeID, tg: &Instance) -> Result<FileKind> {
-		let artifact = self.artifact(node, tg).await?;
-		let kind = match artifact {
-			Artifact::File(file) => FileKind::File {
-				is_executable: file.executable(),
-			},
-			Artifact::Symlink(_) => FileKind::Symlink,
-			Artifact::Directory(_) => FileKind::Directory,
-		};
-
-		Ok(kind)
-	}
-
-	async fn size(&self, node: NodeID, tg: &Instance) -> Result<usize> {
-		let artifact = self.artifact(node, tg).await?;
-		match artifact {
-			Artifact::File(file) => {
-				let bytes = file.blob().bytes(tg).await.or(Err(libc::EIO))?;
-				Ok(bytes.len())
-			},
-			_ => Ok(0),
-		}
-	}
-}
-
-#[derive(Debug)]
-struct FileData {
-	size: usize,
-	kind: FileKind,
-}
-
-/// Represents the files we expose through FUSE.
-
-#[derive(Debug)]
-pub enum FileKind {
-	Directory,
-	File { is_executable: bool },
-	Symlink,
-}
-
-impl FileKind {
-	fn type_(&self) -> u32 {
-		match self {
-			Self::Directory => libc::S_IFDIR,
-			Self::File { is_executable: _ } => libc::S_IFREG,
-			Self::Symlink => libc::S_IFLNK,
-		}
-	}
-
-	fn permissions(&self) -> u32 {
-		match self {
-			Self::Directory => libc::S_IEXEC | libc::S_IREAD,
-			Self::File { is_executable } if *is_executable => libc::S_IEXEC | libc::S_IREAD,
-			_ => libc::S_IREAD,
-		}
-	}
-
-	fn mode(&self) -> u32 {
-		self.type_() | self.permissions()
-	}
-}
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct FileHandle(NonZeroU64);
 
 #[derive(Debug)]
 pub struct Entry {
-	pub node: NodeID,
+	pub node: Node,
 	pub valid_time: Duration,
 	pub size: usize,
 	pub kind: FileKind,
@@ -148,7 +54,7 @@ pub struct Entry {
 
 #[derive(Debug)]
 pub struct Attr {
-	pub node: NodeID,
+	pub node: Node,
 	pub valid_time: Duration,
 	pub kind: FileKind,
 	pub size: usize,
@@ -158,12 +64,21 @@ pub struct Attr {
 #[derive(Debug)]
 pub struct DirectoryEntry {
 	pub offset: usize,
-	pub node: NodeID,
+	pub node: Node,
 	pub name: String,
 	pub kind: FileKind,
 }
 
+/// Represents the files we expose through FUSE.
+#[derive(Debug)]
+pub enum FileKind {
+	Directory,
+	File { is_executable: bool },
+	Symlink,
+}
+
 impl FileSystem {
+	/// Create a new file system instance.
 	pub fn new(tg: Arc<Instance>) -> Self {
 		Self {
 			tg,
@@ -171,8 +86,9 @@ impl FileSystem {
 		}
 	}
 
+	/// Service a file system request from the FUSE server.
 	pub async fn handle_request(&self, request: Request) -> Response {
-		let node = NodeID(request.header.nodeid);
+		let node = Node(request.header.nodeid);
 
 		match &request.arg {
 			Arg::GetAttr => self.get_attr(node).await.into(),
@@ -211,19 +127,20 @@ impl FileSystem {
 		}
 	}
 
+	/// Look up a filesystem entry from a given parent node and subpath.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn lookup(&self, parent: NodeID, name: &str) -> Result<Entry> {
+	pub async fn lookup(&self, parent: Node, name: &str) -> Result<Entry> {
 		// Acquire a lock on the state.
 		let mut state = self.state.lock().await;
 
 		// Get the NodeID corresponding to <parent>/name, creating one if it does not exist.
 		let node = if parent == ROOT {
 			let hash = artifact::Hash::from_str(name).or(Err(libc::EINVAL))?;
-			state.add_to_root(hash)
+			state.root_node(hash)
 		} else {
 			let parent = state.directory(parent, &*self.tg).await?.to_data();
 			let hash = *parent.entries.get(name).ok_or(libc::ENOENT)?;
-			state.add_node(hash)
+			state.node(hash)
 		};
 
 		// Get the artifact metadata.
@@ -240,8 +157,9 @@ impl FileSystem {
 		Ok(entry)
 	}
 
+	/// Get file system attributes.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn get_attr(&self, node: NodeID) -> Result<Attr> {
+	pub async fn get_attr(&self, node: Node) -> Result<Attr> {
 		match node.0 {
 			1 => Ok(Attr {
 				node,
@@ -255,22 +173,25 @@ impl FileSystem {
 		}
 	}
 
+	/// TODO: implement read_link
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn read_link(&self, _node: NodeID) -> Result<Entry> {
+	pub async fn read_link(&self, _node: Node) -> Result<Entry> {
 		Err(libc::ENOSYS)
 	}
 
+	/// Open a regular file.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
+	pub async fn open(&self, node: Node, flags: i32) -> Result<Option<FileHandle>> {
 		let _file = self.state.lock().await.file(node, &*self.tg).await?;
 		// TODO: create a file handle
 		Ok(None)
 	}
 
+	/// Read from a regular file.
 	#[tracing::instrument(skip(self), ret)]
 	pub async fn read(
 		&self,
-		node: NodeID,
+		node: Node,
 		_fh: Option<FileHandle>,
 		offset: isize,
 		length: usize,
@@ -283,22 +204,26 @@ impl FileSystem {
 		Ok(blob[range].to_owned())
 	}
 
+	/// Release a regular file. Note: potentially called many times for the same node.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn release(&self, _node: NodeID) -> Result<()> {
+	pub async fn release(&self, _node: Node) -> Result<()> {
+		// TODO: reuse the nodeid if refcount goes to zero.
 		Ok(())
 	}
 
+	/// Open a directory. TODO:make sure we return a real file handle.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn open_dir(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
+	pub async fn open_dir(&self, node: Node, flags: i32) -> Result<Option<FileHandle>> {
 		let state = self.state.lock().await;
 		let _ = state.directory(node, &self.tg);
 		Ok(FileHandle::new(0))
 	}
 
+	/// Read a directory.
 	#[tracing::instrument(skip(self), ret)]
 	pub async fn read_dir(
 		&self,
-		node: NodeID,
+		node: Node,
 		_fh: Option<FileHandle>,
 		_flags: i32,
 		_offset: isize,
@@ -311,19 +236,19 @@ impl FileSystem {
 		Ok(vec![
 			DirectoryEntry {
 				offset: 0,
-				node: NodeID(1),
+				node: Node(1),
 				name: ".".to_owned(),
 				kind: FileKind::Directory,
 			},
 			DirectoryEntry {
 				offset: 1,
-				node: NodeID(1),
+				node: Node(1),
 				name: "..".to_owned(),
 				kind: FileKind::Directory,
 			},
 			DirectoryEntry {
 				offset: 2,
-				node: NodeID(2),
+				node: Node(2),
 				name: "file.txt".to_owned(),
 				kind: FileKind::File {
 					is_executable: false,
@@ -332,13 +257,15 @@ impl FileSystem {
 		])
 	}
 
+	/// Release a directory.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn release_dir(&self, _node: NodeID) -> Result<()> {
+	pub async fn release_dir(&self, _node: Node) -> Result<()> {
 		Ok(())
 	}
 
+	/// Flush calls to the file. Happens after open and before release.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn flush(&self, _node: NodeID, _fh: Option<FileHandle>) -> Result<()> {
+	pub async fn flush(&self, _node: Node, _fh: Option<FileHandle>) -> Result<()> {
 		Ok(())
 	}
 
@@ -349,10 +276,102 @@ impl FileSystem {
 	fn entry_valid_time(&self) -> Duration {
 		self.attr_valid_time()
 	}
+}
 
-	// TODO: access control.
-	fn can_open(&self, _node: NodeID, _flags: i32) -> bool {
-		true
+impl State {
+	/// Get a node for an artifact hash, creating a new one if it does not exist.
+	fn node(&mut self, hash: artifact::Hash) -> Node {
+		// TODO: Reuse existing node IDs if necessary.
+		let node = Node(self.nodes.len() as u64 + 1000);
+		let _ = self.nodes.insert(node, hash);
+		node
+	}
+
+	/// Get a node for an artifact at the root of the file system.
+	fn root_node(&mut self, hash: artifact::Hash) -> Node {
+		if let Some(node) = self.root.get(&hash) {
+			*node
+		} else {
+			let node = self.node(hash);
+			let _ = self.root.insert(hash, node);
+			node
+		}
+	}
+
+	/// Get the artifact for a node.
+	async fn artifact(&self, node: Node, tg: &Instance) -> Result<artifact::Artifact> {
+		let hash = self.nodes.get(&node).ok_or(libc::ENOENT)?;
+
+		Artifact::get(tg, *hash).await.or(Err(libc::EIO))
+	}
+
+	/// Get a directory at a given node.
+	async fn directory(&self, node: Node, tg: &Instance) -> Result<Directory> {
+		// TODO: what is the correct libc error code?
+		self.artifact(node, tg)
+			.await
+			.and_then(|a| a.into_directory().ok_or(libc::ENOENT))
+	}
+
+	/// Get a file at a given node.
+	async fn file(&self, node: Node, tg: &Instance) -> Result<File> {
+		self.artifact(node, tg)
+			.await
+			.and_then(|a| a.into_file().ok_or(libc::ENOENT))
+	}
+
+	/// Get the file metadata for an object.
+	async fn kind(&self, node: Node, tg: &Instance) -> Result<FileKind> {
+		let artifact = self.artifact(node, tg).await?;
+		let kind = match artifact {
+			Artifact::File(file) => FileKind::File {
+				is_executable: file.executable(),
+			},
+			Artifact::Symlink(_) => FileKind::Symlink,
+			Artifact::Directory(_) => FileKind::Directory,
+		};
+
+		Ok(kind)
+	}
+
+	/// Get the size of an object.
+	async fn size(&self, node: Node, tg: &Instance) -> Result<usize> {
+		let artifact = self.artifact(node, tg).await?;
+		match artifact {
+			Artifact::File(file) => {
+				let bytes = file.blob().bytes(tg).await.or(Err(libc::EIO))?;
+				Ok(bytes.len())
+			},
+			_ => Ok(0),
+		}
+	}
+}
+
+impl FileHandle {
+	fn new(fh: u64) -> Option<FileHandle> {
+		Some(FileHandle(NonZeroU64::new(fh)?))
+	}
+}
+
+impl FileKind {
+	fn type_(&self) -> u32 {
+		match self {
+			Self::Directory => libc::S_IFDIR,
+			Self::File { is_executable: _ } => libc::S_IFREG,
+			Self::Symlink => libc::S_IFLNK,
+		}
+	}
+
+	fn permissions(&self) -> u32 {
+		match self {
+			Self::Directory => libc::S_IEXEC | libc::S_IREAD,
+			Self::File { is_executable } if *is_executable => libc::S_IEXEC | libc::S_IREAD,
+			_ => libc::S_IREAD,
+		}
+	}
+
+	fn mode(&self) -> u32 {
+		self.type_() | self.permissions()
 	}
 }
 
