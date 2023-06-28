@@ -21,7 +21,7 @@ mod response;
 /// Run the FUSE file server, listening on `file`.
 pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<()> {
 	let mut buffer = aligned_buffer();
-	let file_system = Arc::new(fs::FileSystem::new(tg));
+	let file_system = fs::FileSystem::new(tg);
 	let mut initialized = false;
 	loop {
 		match fuse_device.read(buffer.as_mut()).await {
@@ -68,7 +68,8 @@ pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<
 							let response = file_system.handle_request(request).await;
 							let _ = response.write(unique, outfile).await;
 						};
-						tokio::spawn(fut);
+						fut.await;
+						// tokio::spawn(fut);
 					},
 				};
 			},
