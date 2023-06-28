@@ -1,23 +1,37 @@
 #![allow(dead_code)]
-use crate::error::Result;
+use std::sync::Arc;
+
+use crate::{
+	error::{error, Result},
+	instance::Instance,
+};
 
 use tokio::io::AsyncReadExt;
+use zerocopy::AsBytes;
+
+use self::{
+	request::{Arg, Request},
+	response::Response,
+};
 mod abi;
-mod argument;
+mod fs;
 mod request;
 mod response;
-mod server;
 
 /// Run the FUSE file server, listening on `file`.
-pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
+pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<()> {
 	let mut buffer = aligned_buffer();
+	let file_system = Arc::new(fs::FileSystem::new(tg));
+	let mut initialized = false;
 	loop {
 		match fuse_device.read(buffer.as_mut()).await {
 			Ok(request_size) => {
 				// Attempt to deserialize the request.
-				let request = request::Request::deserialize(&buffer[..request_size]);
-				if let Err(err) = request {
-					tracing::error!(?err, "Failed to deserialize FUSE request.");
+				let request = Request::deserialize(&buffer[..request_size])
+					.ok_or(error!("Failed to deserialize FUSE request."));
+				if request.is_err() {
+					let message = &buffer[..request_size];
+					tracing::error!(?message, "Failed to deserialize FUSE request.");
 					continue;
 				}
 				let request = request.unwrap();
@@ -25,18 +39,38 @@ pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 				// Get a response to the request. Failures need to be encapsulated in the response.
 				let unique = request.header.unique;
 
-				// FUSE_DESTROY is special in that it does not have a response.
-				if let request::RequestData::Destroy = request.data {
-					server::destroy(request).await;
-					return Ok(());
-				} else {
-					// TODO:
-					// 	- Spawn a new task for each incoming request
-					// 	- Use an mspc channel to pull responses from pending requests and write to fuse_device as needed.
-					let outfile = fuse_device.try_clone().await.unwrap().into_std().await;
-					let response = handle_request(request).await;
-					response.write(unique, outfile).await?;
-				}
+				let outfile: std::fs::File =
+					fuse_device.try_clone().await.unwrap().into_std().await;
+				match request.arg {
+					// Perform the initialization handshake.
+					Arg::Initialize(arg) => {
+						let response = initialize(arg);
+						response.write(unique, outfile).await?;
+						initialized = true;
+					},
+
+					// Drop any requests that occur before the handshake has completed.
+					_ if !initialized => {
+						tracing::warn!(
+							?request,
+							"Ignoring request sent before server was initialized."
+						);
+						Response::error(libc::EIO).write(unique, outfile).await?;
+					},
+
+					// Exit.
+					Arg::Destroy => return Ok(()),
+
+					// Service the request.
+					_ => {
+						let file_system = file_system.clone();
+						let fut = async move {
+							let response = file_system.handle_request(request).await;
+							let _ = response.write(unique, outfile).await;
+						};
+						tokio::spawn(fut);
+					},
+				};
 			},
 			// If the error is ENOENT, EINTR, or EAGAIN, retry. If ENODEV then the FUSE has been unmounted. Otherwise, return an error.
 			Err(e) => match e.raw_os_error() {
@@ -48,35 +82,12 @@ pub async fn run(mut fuse_device: tokio::fs::File) -> Result<()> {
 	}
 }
 
-/// Dispatch to one of the response handlers.
-async fn handle_request(request: request::Request<'_>) -> response::Response {
-	match request.data {
-		request::RequestData::Initialize(arg) => server::initialize(request, arg).await,
-		request::RequestData::Lookup(arg) => server::lookup(request, arg).await,
-		request::RequestData::GetAttr => server::getattr(request).await,
-		request::RequestData::ReadLink => server::readlink(request).await,
-		request::RequestData::Open(arg) => server::open(request, arg).await,
-		request::RequestData::Read(arg) => server::read(request, arg).await,
-		request::RequestData::OpenDir(arg) => server::opendir(request, arg).await,
-		request::RequestData::ReadDir(arg) => server::readdir(request, arg).await,
-		request::RequestData::Access(arg) => server::access(request, arg).await,
-		request::RequestData::StatFs => server::statfs(request).await,
-		request::RequestData::Release => server::release(request).await,
-		request::RequestData::ReleaseDir => server::release(request).await,
-		request::RequestData::Flush(arg) => server::flush(request, arg).await,
-		_ => {
-			tracing::error!("Unexpected request.");
-			unreachable!();
-		},
-	}
-}
-
-pub(crate) const MAX_WRITE_SIZE: usize = 16 * 1024 * 1024;
+const MAX_WRITE_SIZE: usize = 4096;
 
 // We need to create an aligned buffer to write requests into to avoid UB.
 fn aligned_buffer() -> Box<[u8]> {
 	// MAX_WRITE_SIZE + 1 page.
-	let buffer_size = MAX_WRITE_SIZE + 4096;
+	let buffer_size = 16 * 1024 * 1024 + 4096;
 	let alignment = std::mem::align_of::<abi::fuse_in_header>();
 	let ptr = unsafe {
 		std::alloc::alloc_zeroed(
@@ -85,4 +96,18 @@ fn aligned_buffer() -> Box<[u8]> {
 	};
 	let ptr = core::ptr::slice_from_raw_parts_mut(ptr, buffer_size);
 	unsafe { Box::from_raw(ptr) }
+}
+
+#[tracing::instrument]
+fn initialize(arg: abi::fuse_init_in) -> Response {
+	let response = abi::fuse_init_out {
+		major: 7,                            // Major version that we support.
+		minor: 9,                            // Minor version that we target.
+		max_readahead: arg.max_readahead,    // Reuse from the argument.
+		max_write: MAX_WRITE_SIZE as u32,    // This is a limit on the size of messages.
+		flags: abi::consts::FUSE_ASYNC_READ, // Equivalent to no flags.
+		unused: 0,                           // Padding.
+	};
+
+	Response::data(response.as_bytes())
 }

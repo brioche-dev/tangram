@@ -658,7 +658,7 @@ pub struct fuse_setattr_in {
 }
 
 #[repr(C)]
-#[derive(Debug, FromBytes)]
+#[derive(Copy, Clone, Debug, FromBytes)]
 pub struct fuse_open_in {
 	// NOTE: this field is defined as u32 in fuse_kernel.h in libfuse. However, it is then cast
 	// to an i32 when invoking the filesystem's open method and this matches the open() syscall
@@ -703,7 +703,7 @@ pub struct fuse_release_in {
 }
 
 #[repr(C)]
-#[derive(Debug, FromBytes)]
+#[derive(Copy, Clone, Debug, FromBytes)]
 pub struct fuse_flush_in {
 	pub fh: u64,
 	pub unused: u32,
@@ -712,7 +712,7 @@ pub struct fuse_flush_in {
 }
 
 #[repr(C)]
-#[derive(Debug, FromBytes)]
+#[derive(Copy, Clone, Debug, FromBytes)]
 pub struct fuse_read_in {
 	pub fh: u64,
 	// NOTE: this field is defined as u64 in fuse_kernel.h in libfuse. However, it is then cast
@@ -830,7 +830,7 @@ pub struct fuse_access_in {
 }
 
 #[repr(C)]
-#[derive(Debug, FromBytes)]
+#[derive(Copy, Clone, Debug, FromBytes)]
 pub struct fuse_init_in {
 	pub major: u32,
 	pub minor: u32,
@@ -981,7 +981,7 @@ pub struct fuse_fallocate_in {
 }
 
 #[repr(C)]
-#[derive(Debug, FromBytes)]
+#[derive(Copy, Clone, Debug, FromBytes)]
 pub struct fuse_in_header {
 	pub len: u32,
 	pub opcode: u32,

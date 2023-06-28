@@ -1,127 +1,76 @@
+use std::os::unix::prelude::OsStrExt;
+
 use super::abi;
-use super::argument::ArgumentIterator;
-use crate::{
-	error::{error, Result},
-	return_error,
-};
+use zerocopy::FromBytes;
 
-impl<'a> Request<'a> {
+#[derive(Clone, Debug)]
+pub struct Request {
+	pub header: abi::fuse_in_header,
+	pub arg: Arg,
+}
+
+fn read<T>(bytes: &[u8]) -> Option<T>
+where
+	T: FromBytes,
+{
+	T::read_from_prefix(bytes)
+}
+
+fn read_string(bytes: &[u8]) -> Option<std::ffi::OsString> {
+	if *bytes.last()? != 0 {
+		return None;
+	}
+
+	let s = std::ffi::OsStr::from_bytes(&bytes[..bytes.len() - 1]).to_owned();
+	Some(s)
+}
+
+impl Request {
 	// Deserialize a request from raw bytes.
-	pub fn deserialize(data: &'a [u8]) -> Result<Self> {
+	pub fn deserialize(data: &[u8]) -> Option<Self> {
+		let header: abi::fuse_in_header = read(data)?;
+
+		let header_len = std::mem::size_of::<abi::fuse_in_header>();
 		let data_len = data.len();
-		let mut arg_iter = ArgumentIterator::new(data);
-
-		let header: &abi::fuse_in_header = arg_iter
-			.fetch()
-			.ok_or(error!("Failed to deserialize header length."))?;
-
 		if data_len < header.len as usize {
-			return_error!("Failed to deserialize FUSE request header.");
+			tracing::error!(?data_len, ?header, "Not enough data for FUSE request.");
+			return None;
 		}
 
-		let data = &data[std::mem::size_of::<abi::fuse_in_header>()..header.len as usize];
-		let mut data = ArgumentIterator::new(data);
-		let data = match header.opcode.try_into().unwrap() {
-			abi::fuse_opcode::FUSE_INIT => Some(RequestData::Initialize(Initialize {
-				data: data.fetch().unwrap(),
-			})),
-			abi::fuse_opcode::FUSE_DESTROY => Some(RequestData::Destroy),
-			abi::fuse_opcode::FUSE_LOOKUP => Some(RequestData::Lookup(Lookup {
-				name: data.fetch_str().unwrap(),
-			})),
-			abi::fuse_opcode::FUSE_GETATTR => Some(RequestData::GetAttr),
-			abi::fuse_opcode::FUSE_READLINK => Some(RequestData::ReadLink),
-			abi::fuse_opcode::FUSE_OPEN => Some(RequestData::Open(Open {
-				data: data.fetch().unwrap(),
-			})),
-			abi::fuse_opcode::FUSE_READ => Some(RequestData::Read(Read {
-				data: data.fetch().unwrap(),
-			})),
-			abi::fuse_opcode::FUSE_RELEASE => Some(RequestData::Release),
-			abi::fuse_opcode::FUSE_OPENDIR => Some(RequestData::OpenDir(OpenDir {
-				data: data.fetch().unwrap(),
-			})),
-			abi::fuse_opcode::FUSE_READDIR => Some(RequestData::ReadDir(ReadDir {
-				data: data.fetch().unwrap(),
-			})),
-			abi::fuse_opcode::FUSE_ACCESS => Some(RequestData::Access(Access {
-				data: data.fetch().unwrap(),
-			})),
-			abi::fuse_opcode::FUSE_STATFS => Some(RequestData::StatFs),
-			abi::fuse_opcode::FUSE_RELEASEDIR => Some(RequestData::ReleaseDir),
-			abi::fuse_opcode::FUSE_FLUSH => Some(RequestData::Flush(Flush {
-				data: data.fetch().unwrap(),
-			})),
-			_ => return_error!("Unsupported FUSE opcode: {}.", header.opcode),
+		let data = &data[header_len..];
+		let arg = match header.opcode.try_into().unwrap() {
+			abi::fuse_opcode::FUSE_INIT => Arg::Initialize(read(data)?),
+			abi::fuse_opcode::FUSE_DESTROY => Arg::Destroy,
+			abi::fuse_opcode::FUSE_LOOKUP => Arg::Lookup(read_string(data)?),
+			abi::fuse_opcode::FUSE_GETATTR => Arg::GetAttr,
+			abi::fuse_opcode::FUSE_READLINK => Arg::ReadLink,
+			abi::fuse_opcode::FUSE_OPEN => Arg::Open(read(data)?),
+			abi::fuse_opcode::FUSE_READ => Arg::Read(read(data)?),
+			abi::fuse_opcode::FUSE_RELEASE => Arg::Release,
+			abi::fuse_opcode::FUSE_OPENDIR => Arg::OpenDir(read(data)?),
+			abi::fuse_opcode::FUSE_READDIR => Arg::ReadDir(read(data)?),
+			abi::fuse_opcode::FUSE_RELEASEDIR => Arg::ReleaseDir,
+			abi::fuse_opcode::FUSE_FLUSH => Arg::Flush(read(data)?),
+			_ => Arg::Unknown,
 		};
 
-		let data = data.ok_or(error!("Failed to parse request."))?;
-		Ok(Self { header, data })
+		Some(Self { header, arg })
 	}
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Request<'a> {
-	pub header: &'a abi::fuse_in_header,
-	pub data: RequestData<'a>,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum RequestData<'a> {
-	Initialize(Initialize<'a>),
+#[derive(Clone, Debug)]
+pub enum Arg {
+	Initialize(abi::fuse_init_in),
 	Destroy,
-	Lookup(Lookup<'a>),
+	Lookup(std::ffi::OsString),
 	GetAttr,
 	ReadLink,
-	Open(Open<'a>),
-	Read(Read<'a>),
+	Open(abi::fuse_open_in),
+	Read(abi::fuse_read_in),
 	Release,
-	OpenDir(OpenDir<'a>),
-	ReadDir(ReadDir<'a>),
+	OpenDir(abi::fuse_open_in),
+	ReadDir(abi::fuse_read_in),
 	ReleaseDir,
-	Access(Access<'a>),
-	StatFs,
-	Flush(Flush<'a>),
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Initialize<'a> {
-	pub data: &'a abi::fuse_init_in,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Lookup<'a> {
-	pub name: &'a std::ffi::OsStr,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Open<'a> {
-	data: &'a abi::fuse_open_in,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Read<'a> {
-	pub data: &'a abi::fuse_read_in,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct OpenDir<'a> {
-	data: &'a abi::fuse_open_in,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct ReadDir<'a> {
-	data: &'a abi::fuse_read_in,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Access<'a> {
-	data: &'a abi::fuse_access_in,
-}
-
-pub struct ReleaseDir;
-
-#[derive(Copy, Clone, Debug)]
-pub struct Flush<'a> {
-	data: &'a abi::fuse_flush_in,
+	Flush(abi::fuse_flush_in),
+	Unknown,
 }
