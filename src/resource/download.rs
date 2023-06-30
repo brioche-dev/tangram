@@ -66,9 +66,6 @@ impl Resource {
 			Some(unpack::Format::TarGz) => {
 				Self::download_tar(tg, stream, Some(Compression::Gz)).await?
 			},
-			Some(unpack::Format::TarLz) => {
-				Self::download_tar(tg, stream, Some(Compression::Lz)).await?
-			},
 			Some(unpack::Format::TarXz) => {
 				Self::download_tar(tg, stream, Some(Compression::Xz)).await?
 			},
@@ -167,11 +164,8 @@ impl Resource {
 					Some(unpack::Compression::Gz) => {
 						Box::new(flate2::read::GzDecoder::new(archive_reader))
 					},
-					Some(unpack::Compression::Lz) => {
-						Box::new(lz4_flex::frame::FrameDecoder::new(archive_reader))
-					},
 					Some(unpack::Compression::Xz) => {
-						Box::new(xz::read::XzDecoder::new(archive_reader))
+						Box::new(xz2::read::XzDecoder::new(archive_reader))
 					},
 					Some(unpack::Compression::Zstd) => {
 						Box::new(zstd::Decoder::new(archive_reader)?)

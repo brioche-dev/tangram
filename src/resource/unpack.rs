@@ -15,7 +15,6 @@ pub enum Format {
 	Tar,
 	TarBz2,
 	TarGz,
-	TarLz,
 	TarXz,
 	TarZstd,
 	Zip,
@@ -25,7 +24,6 @@ pub enum Format {
 pub enum Compression {
 	Bz2,
 	Gz,
-	Lz,
 	Xz,
 	Zstd,
 }
@@ -41,9 +39,6 @@ impl std::fmt::Display for Format {
 			},
 			Format::TarGz => {
 				write!(f, ".tar.gz")?;
-			},
-			Format::TarLz => {
-				write!(f, ".tar.lz")?;
 			},
 			Format::TarXz => {
 				write!(f, ".tar.xz")?;
@@ -67,7 +62,6 @@ impl std::str::FromStr for Format {
 			".tar" => Ok(Format::Tar),
 			".tar.bz2" => Ok(Format::TarBz2),
 			".tar.gz" => Ok(Format::TarGz),
-			".tar.lz" => Ok(Format::TarLz),
 			".tar.xz" => Ok(Format::TarXz),
 			".tar.zstd" => Ok(Format::TarZstd),
 			".zip" => Ok(Format::Zip),
@@ -81,7 +75,6 @@ impl std::fmt::Display for Compression {
 		let string = match self {
 			Compression::Bz2 => ".bz2",
 			Compression::Gz => ".gz",
-			Compression::Lz => ".lz",
 			Compression::Xz => ".xz",
 			Compression::Zstd => ".zstd",
 		};
@@ -97,7 +90,6 @@ impl std::str::FromStr for Compression {
 		match s {
 			".bz2" => Ok(Compression::Bz2),
 			".gz" => Ok(Compression::Gz),
-			".lz" => Ok(Compression::Lz),
 			".xz" => Ok(Compression::Xz),
 			".zstd" => Ok(Compression::Zstd),
 			_ => return_error!("Invalid compression format."),
