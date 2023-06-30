@@ -275,7 +275,7 @@ impl Server {
 	}
 
 	/// Read from a regular file.
-	#[tracing::instrument(skip(self), ret)]
+	#[tracing::instrument(skip(self))]
 	async fn read(
 		&self,
 		node: NodeID,
@@ -292,9 +292,10 @@ impl Server {
 		};
 
 		let blob = file.blob().bytes(&self.tg).await.or(Err(libc::EIO))?;
-		let start = offset.try_into().or(Err(libc::EINVAL))?;
-		let end = length.min(blob.len());
-		Ok(blob[start..end].to_owned())
+		let start: usize = offset.try_into().or(Err(libc::EINVAL))?;
+		let end = (start + length).min(blob.len());
+		let contents = blob.get(start..end).ok_or(libc::EINVAL)?;
+		Ok(contents.to_owned())
 	}
 
 	/// Release a regular file. Note: potentially called many times for the same node.
