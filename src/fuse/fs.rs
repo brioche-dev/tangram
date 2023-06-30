@@ -175,7 +175,10 @@ impl Server {
 		let (node, artifact) = if parent == ROOT {
 			// If the parent is ROOT, we parse the name as a hash and get the artifact.
 			let hash = artifact::Hash::from_str(name).or(Err(libc::EINVAL))?;
-			let artifact = Artifact::get(&self.tg, hash).await.or(Err(libc::EIO))?;
+			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
+				tracing::error!(?e);
+				libc::EIO
+			})?;
 			let node = self.tree_mut()?.lookup(ROOT, &artifact);
 			(node, artifact)
 		} else {
@@ -191,7 +194,10 @@ impl Server {
 
 			// Lookup the artifact hash by name.
 			let hash = *directory.get(name).ok_or(libc::ENOENT)?;
-			let artifact = Artifact::get(&self.tg, hash).await.or(Err(libc::EIO))?;
+			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
+				tracing::error!(?e);
+				libc::EIO
+			})?;
 			let node = self.tree_mut()?.lookup(parent, &artifact);
 			(node, artifact)
 		};
@@ -327,29 +333,26 @@ impl Server {
 		_size: usize,
 	) -> Result<Vec<DirectoryEntry>> {
 		// TODO: track state w/ a file handle and make sure we don't overflow the MAX_WRITE size configured by init.
-		let entries = {
+		let directory = {
 			self.tree()?
 				.artifact(node)?
-				.as_directory()
+				.into_directory()
 				.ok_or(libc::ENOENT)?
-				.to_data()
-				.entries
-				.into_iter()
 		};
 
-		let entries = entries
-			.enumerate()
-			.map(|(offset, (name, hash))| async move {
-				let artifact = Artifact::get(&self.tg, hash).await.or(Err(libc::EIO))?;
+		let entries = directory.to_data().entries.into_iter().enumerate().map(
+			|(offset, (name, _))| async move {
+				let (node, artifact) = self.lookup_inner(node, &name).await?;
 				let kind = (&artifact).into();
-				let node = self.tree_mut()?.lookup(node, &artifact).ok_or(libc::EIO)?;
+
 				Ok(DirectoryEntry {
 					offset,
 					node,
 					name,
 					kind,
 				})
-			});
+			},
+		);
 
 		try_join_all(entries).await
 	}
