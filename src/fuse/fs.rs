@@ -1,11 +1,14 @@
+use futures::future::try_join_all;
+use std::ffi::OsString;
+use std::os::unix::prelude::OsStrExt;
+use std::path::PathBuf;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{collections::BTreeMap, num::NonZeroU64, str::FromStr, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
 use zerocopy::AsBytes;
 
+use crate::template;
 use crate::{
 	artifact::{self, Artifact},
-	directory::Directory,
-	file::File,
 	instance::Instance,
 };
 
@@ -19,16 +22,7 @@ use super::{
 #[derive(Clone)]
 pub struct FileSystem {
 	tg: Arc<Instance>,
-	state: Arc<Mutex<State>>,
-}
-
-/// Internal state of the file system.
-#[derive(Default)]
-struct State {
-	/// A map of NodeIDs for the artifacts in the root of the file system.
-	root: BTreeMap<artifact::Hash, Node>,
-	/// A map of NodeIDs for any other artifacts referenced by the file system.
-	nodes: BTreeMap<Node, artifact::Hash>,
+	tree: Arc<RwLock<FileTree>>,
 }
 
 /// All filesystem methods need to return a valid code, using the standard values for errno from libc.
@@ -36,17 +30,22 @@ type Result<T> = std::result::Result<T, i32>;
 
 /// A node in the file system.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Node(u64);
+pub struct NodeID(u64);
+
+struct NodeData {
+	artifact: Artifact,
+	refcount: usize,
+}
 
 /// The root node has a reserved ID of 1.
-const ROOT: Node = Node(1);
+const ROOT: NodeID = NodeID(1);
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct FileHandle(NonZeroU64);
 
 #[derive(Debug)]
 pub struct Entry {
-	pub node: Node,
+	pub node: NodeID,
 	pub valid_time: Duration,
 	pub size: usize,
 	pub kind: FileKind,
@@ -54,7 +53,7 @@ pub struct Entry {
 
 #[derive(Debug)]
 pub struct Attr {
-	pub node: Node,
+	pub node: NodeID,
 	pub valid_time: Duration,
 	pub kind: FileKind,
 	pub size: usize,
@@ -64,7 +63,7 @@ pub struct Attr {
 #[derive(Debug)]
 pub struct DirectoryEntry {
 	pub offset: usize,
-	pub node: Node,
+	pub node: NodeID,
 	pub name: String,
 	pub kind: FileKind,
 }
@@ -82,13 +81,13 @@ impl FileSystem {
 	pub fn new(tg: Arc<Instance>) -> Self {
 		Self {
 			tg,
-			state: Arc::new(Mutex::new(State::default())),
+			tree: Arc::new(RwLock::new(FileTree::new())),
 		}
 	}
 
 	/// Service a file system request from the FUSE server.
 	pub async fn handle_request(&self, request: Request) -> Response {
-		let node = Node(request.header.nodeid);
+		let node = NodeID(request.header.nodeid);
 
 		match &request.arg {
 			Arg::GetAttr => self.get_attr(node).await.into(),
@@ -129,23 +128,20 @@ impl FileSystem {
 
 	/// Look up a filesystem entry from a given parent node and subpath.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn lookup(&self, parent: Node, name: &str) -> Result<Entry> {
-		// Acquire a lock on the state.
-		let mut state = self.state.lock().await;
-
-		// Get the NodeID corresponding to <parent>/name, creating one if it does not exist.
-		let node = if parent == ROOT {
-			let hash = artifact::Hash::from_str(name).or(Err(libc::EINVAL))?;
-			state.root_node(hash)
-		} else {
-			let parent = state.directory(parent, &*self.tg).await?.to_data();
-			let hash = *parent.entries.get(name).ok_or(libc::ENOENT)?;
-			state.node(hash)
-		};
+	pub async fn lookup(&self, parent: NodeID, name: &str) -> Result<Entry> {
+		// First we need to convert the <parent>/name into an underlying artifact.
+		let (node, artifact) = self.lookup_inner(parent, name).await?;
 
 		// Get the artifact metadata.
-		let kind = state.kind(node, &self.tg).await?;
-		let size = state.size(node, &self.tg).await?;
+		let kind = (&artifact).into();
+		let size = if let Some(file) = artifact.as_file() {
+			let blob = file.blob();
+			let bytes = blob.bytes(&self.tg).await.or(Err(libc::EIO))?;
+			bytes.len()
+		} else {
+			0
+		};
+
 		let valid_time = self.entry_valid_time();
 
 		let entry = Entry {
@@ -157,9 +153,53 @@ impl FileSystem {
 		Ok(entry)
 	}
 
+	async fn lookup_inner(&self, parent: NodeID, name: &str) -> Result<(NodeID, Artifact)> {
+		if name == "." {
+			let artifact = self.tree()?.artifact(parent)?;
+			return Ok((parent, artifact));
+		}
+		if name == ".." {
+			let parent = self.tree()?.parent(parent)?;
+			let artifact = self.tree()?.artifact(parent)?;
+			return Ok((parent, artifact));
+		}
+
+		let (node, artifact) = if parent == ROOT {
+			// If the parent is ROOT, we parse the name as a hash and get the artifact.
+			let hash = artifact::Hash::from_str(name).or(Err(libc::EINVAL))?;
+			let artifact = Artifact::get(&self.tg, hash).await.or(Err(libc::EIO))?;
+			let node = self.tree_mut()?.lookup(ROOT, &artifact);
+			(node, artifact)
+		} else {
+			// Otherwise we get the parent directory (which must already exist) and find the corresponding entry.
+			let directory = {
+				self.tree()?
+					.artifact(parent)?
+					.as_directory()
+					.ok_or(libc::ENOENT)?
+					.to_data()
+					.entries
+			};
+
+			// Lookup the artifact hash by name.
+			let hash = *directory.get(name).ok_or(libc::ENOENT)?;
+			let artifact = Artifact::get(&self.tg, hash).await.or(Err(libc::EIO))?;
+			let node = self.tree_mut()?.lookup(parent, &artifact);
+			(node, artifact)
+		};
+
+		// If the node is None, it means we haven't created one for this entry yet.
+		let node = node.unwrap_or(self.tree_mut()?.insert(
+			parent,
+			artifact.clone(),
+			name.to_owned(),
+		));
+
+		Ok((node, artifact))
+	}
 	/// Get file system attributes.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn get_attr(&self, node: Node) -> Result<Attr> {
+	pub async fn get_attr(&self, node: NodeID) -> Result<Attr> {
 		match node.0 {
 			1 => Ok(Attr {
 				node,
@@ -173,17 +213,60 @@ impl FileSystem {
 		}
 	}
 
-	/// TODO: implement read_link
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn read_link(&self, _node: Node) -> Result<Entry> {
-		Err(libc::ENOSYS)
+	pub async fn read_link(&self, node: NodeID) -> Result<OsString> {
+		// Check that the artifact pointed to by node is actually a symlink.
+		let symlink = self
+			.tree()?
+			.artifact(node)?
+			.into_symlink()
+			.ok_or(libc::EINVAL)?;
+
+		// Grab the target and attempt to parse it into the [artifact] [subpath...]
+		let target = symlink.target();
+		let mut artifact = None;
+		let mut subpath = Vec::new();
+		for (i, component) in target.components().iter().enumerate() {
+			match component {
+				template::Component::Artifact(_) if i != 0 => {
+					tracing::error!(?target, "Invalid symlink target.");
+					return Err(libc::EINVAL);
+				},
+				template::Component::Artifact(a) => {
+					artifact = Some(a.clone());
+				},
+				template::Component::Placeholder(placeholder) => {
+					tracing::error!(?placeholder, "Cannot resolve placeholders in symlinks.");
+					return Err(libc::EINVAL);
+				},
+				template::Component::String(string) => {
+					// TODO: use std::path here.
+					subpath.extend(string.split('/'));
+				},
+			}
+		}
+
+		let mut result = PathBuf::new();
+		if let Some(artifact) = artifact {
+			let mut parent = self.tree()?.parent(node)?;
+			while parent != ROOT {
+				result.push("..");
+				parent = self.tree()?.parent(parent)?;
+			}
+			result.push(artifact.hash().to_string());
+		}
+
+		for component in subpath {
+			result.push(component);
+		}
+
+		Ok(result.as_os_str().to_owned())
 	}
 
 	/// Open a regular file.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn open(&self, node: Node, flags: i32) -> Result<Option<FileHandle>> {
-		let _file = self.state.lock().await.file(node, &*self.tg).await?;
-		// TODO: create a file handle
+	pub async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
+		let _entry = self.tree()?.artifact(node)?;
 		Ok(None)
 	}
 
@@ -191,14 +274,20 @@ impl FileSystem {
 	#[tracing::instrument(skip(self), ret)]
 	pub async fn read(
 		&self,
-		node: Node,
+		node: NodeID,
 		_fh: Option<FileHandle>,
 		offset: isize,
 		length: usize,
 		_flags: i32,
 	) -> Result<Vec<u8>> {
-		let state = self.state.lock().await;
-		let file = state.file(node, &*self.tg).await?;
+		let file = {
+			self.tree()?
+				.artifact(node)?
+				.clone()
+				.into_file()
+				.ok_or(libc::ENOENT)?
+		};
+
 		let blob = file.blob().bytes(&self.tg).await.or(Err(libc::EIO))?;
 		let range = (offset as usize)..(length.min(blob.len()));
 		Ok(blob[range].to_owned())
@@ -206,16 +295,19 @@ impl FileSystem {
 
 	/// Release a regular file. Note: potentially called many times for the same node.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn release(&self, _node: Node) -> Result<()> {
-		// TODO: reuse the nodeid if refcount goes to zero.
+	pub async fn release(&self, node: NodeID) -> Result<()> {
+		// TODO: implement release
 		Ok(())
 	}
 
 	/// Open a directory. TODO:make sure we return a real file handle.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn open_dir(&self, node: Node, flags: i32) -> Result<Option<FileHandle>> {
-		let state = self.state.lock().await;
-		let _ = state.directory(node, &self.tg);
+	pub async fn open_dir(&self, node: NodeID, _flags: i32) -> Result<Option<FileHandle>> {
+		let _entry = self
+			.tree()?
+			.artifact(node)?
+			.into_directory()
+			.ok_or(libc::ENOENT)?;
 		Ok(FileHandle::new(0))
 	}
 
@@ -223,49 +315,50 @@ impl FileSystem {
 	#[tracing::instrument(skip(self), ret)]
 	pub async fn read_dir(
 		&self,
-		node: Node,
+		node: NodeID,
 		_fh: Option<FileHandle>,
 		_flags: i32,
 		_offset: isize,
 		_size: usize,
 	) -> Result<Vec<DirectoryEntry>> {
-		if node.0 != 1 {
-			return Err(libc::ENOENT);
-		}
+		// TODO: track state w/ a file handle and make sure we don't overflow the MAX_WRITE size configured by init.
+		let entries = {
+			self.tree()?
+				.artifact(node)?
+				.as_directory()
+				.ok_or(libc::ENOENT)?
+				.to_data()
+				.entries
+				.into_iter()
+		};
 
-		Ok(vec![
-			DirectoryEntry {
-				offset: 0,
-				node: Node(1),
-				name: ".".to_owned(),
-				kind: FileKind::Directory,
-			},
-			DirectoryEntry {
-				offset: 1,
-				node: Node(1),
-				name: "..".to_owned(),
-				kind: FileKind::Directory,
-			},
-			DirectoryEntry {
-				offset: 2,
-				node: Node(2),
-				name: "file.txt".to_owned(),
-				kind: FileKind::File {
-					is_executable: false,
-				},
-			},
-		])
+		let entries = entries
+			.enumerate()
+			.map(|(offset, (name, hash))| async move {
+				let artifact = Artifact::get(&self.tg, hash).await.or(Err(libc::EIO))?;
+				let kind = (&artifact).into();
+				let node = self.tree_mut()?.lookup(node, &artifact).ok_or(libc::EIO)?;
+				Ok(DirectoryEntry {
+					offset,
+					node,
+					name,
+					kind,
+				})
+			});
+
+		try_join_all(entries).await
 	}
 
 	/// Release a directory.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn release_dir(&self, _node: Node) -> Result<()> {
+	pub async fn release_dir(&self, node: NodeID) -> Result<()> {
+		// TODO: release dir
 		Ok(())
 	}
 
 	/// Flush calls to the file. Happens after open and before release.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn flush(&self, _node: Node, _fh: Option<FileHandle>) -> Result<()> {
+	pub async fn flush(&self, _node: NodeID, _fh: Option<FileHandle>) -> Result<()> {
 		Ok(())
 	}
 
@@ -276,74 +369,13 @@ impl FileSystem {
 	fn entry_valid_time(&self) -> Duration {
 		self.attr_valid_time()
 	}
-}
 
-impl State {
-	/// Get a node for an artifact hash, creating a new one if it does not exist.
-	fn node(&mut self, hash: artifact::Hash) -> Node {
-		// TODO: Reuse existing node IDs if necessary.
-		let node = Node(self.nodes.len() as u64 + 1000);
-		let _ = self.nodes.insert(node, hash);
-		node
+	fn tree(&self) -> Result<RwLockReadGuard<'_, FileTree>> {
+		self.tree.read().map_err(|_| libc::EIO)
 	}
 
-	/// Get a node for an artifact at the root of the file system.
-	fn root_node(&mut self, hash: artifact::Hash) -> Node {
-		if let Some(node) = self.root.get(&hash) {
-			*node
-		} else {
-			let node = self.node(hash);
-			let _ = self.root.insert(hash, node);
-			node
-		}
-	}
-
-	/// Get the artifact for a node.
-	async fn artifact(&self, node: Node, tg: &Instance) -> Result<artifact::Artifact> {
-		let hash = self.nodes.get(&node).ok_or(libc::ENOENT)?;
-
-		Artifact::get(tg, *hash).await.or(Err(libc::EIO))
-	}
-
-	/// Get a directory at a given node.
-	async fn directory(&self, node: Node, tg: &Instance) -> Result<Directory> {
-		// TODO: what is the correct libc error code?
-		self.artifact(node, tg)
-			.await
-			.and_then(|a| a.into_directory().ok_or(libc::ENOENT))
-	}
-
-	/// Get a file at a given node.
-	async fn file(&self, node: Node, tg: &Instance) -> Result<File> {
-		self.artifact(node, tg)
-			.await
-			.and_then(|a| a.into_file().ok_or(libc::ENOENT))
-	}
-
-	/// Get the file metadata for an object.
-	async fn kind(&self, node: Node, tg: &Instance) -> Result<FileKind> {
-		let artifact = self.artifact(node, tg).await?;
-		let kind = match artifact {
-			Artifact::File(file) => FileKind::File {
-				is_executable: file.executable(),
-			},
-			Artifact::Symlink(_) => FileKind::Symlink,
-			Artifact::Directory(_) => FileKind::Directory,
-		};
-
-		Ok(kind)
-	}
-
-	/// Get the size of an object.
-	async fn size(&self, node: Node, tg: &Instance) -> Result<usize> {
-		let artifact = self.artifact(node, tg).await?;
-		match artifact {
-			Artifact::File(file) => {
-				let bytes = file.blob().bytes(tg).await.or(Err(libc::EIO))?;
-				Ok(bytes.len())
-			},
-			_ => Ok(0),
-		}
+	fn tree_mut(&self) -> Result<RwLockWriteGuard<'_, FileTree>> {
+		self.tree.write().map_err(|_| libc::EIO)
 	}
 }
 
@@ -468,6 +500,12 @@ impl From<Vec<u8>> for Response {
 	}
 }
 
+impl From<OsString> for Response {
+	fn from(value: OsString) -> Self {
+		Response::Data(value.as_bytes().to_owned())
+	}
+}
+
 impl From<Option<FileHandle>> for Response {
 	fn from(value: Option<FileHandle>) -> Self {
 		let response = abi::fuse_open_out {
@@ -496,5 +534,109 @@ impl From<Vec<DirectoryEntry>> for Response {
 		}
 
 		Response::Data(buf)
+	}
+}
+
+impl<'a> From<&'a Artifact> for FileKind {
+	fn from(value: &'a Artifact) -> Self {
+		match value {
+			Artifact::File(f) => FileKind::File {
+				is_executable: f.executable(),
+			},
+			Artifact::Directory(_) => FileKind::Directory,
+			Artifact::Symlink(_) => FileKind::Symlink,
+		}
+	}
+}
+
+#[derive(Default)]
+struct FileTree {
+	data: BTreeMap<NodeID, Node>,
+}
+
+struct Node {
+	name: Option<String>,
+	artifact: Option<Artifact>, // TODO: use artifact::Hash internally.
+	parent: NodeID,
+	children: Vec<NodeID>,
+}
+
+impl FileTree {
+	fn new() -> Self {
+		let root = (
+			ROOT,
+			Node {
+				name: None,
+				artifact: None,
+				parent: ROOT,
+				children: Vec::new(),
+			},
+		);
+		Self {
+			data: [root].into_iter().collect(),
+		}
+	}
+
+	fn insert(&mut self, parent: NodeID, artifact: Artifact, name: String) -> NodeID {
+		let node = NodeID(self.data.len() as u64 + 1000);
+		let data = Node {
+			name: Some(name),
+			artifact: Some(artifact),
+			parent,
+			children: Vec::new(),
+		};
+		self.data.insert(node, data);
+
+		if let Some(parent_data) = self.data.get_mut(&parent) {
+			parent_data.children.push(node)
+		}
+
+		node
+	}
+
+	fn lookup(&mut self, parent: NodeID, artifact: &Artifact) -> Option<NodeID> {
+		self.data
+			.get(&parent)
+			.and_then(|p| {
+				p.children.iter().find(|node| {
+					let existing = self
+						.data
+						.get(node)
+						.and_then(|data| data.artifact.as_ref().map(Artifact::hash));
+
+					existing == Some(artifact.hash())
+				})
+			})
+			.copied()
+	}
+
+	fn name(&self, node: NodeID) -> Option<String> {
+		self.data.get(&node).and_then(|data| data.name.clone())
+	}
+
+	fn artifact(&self, node: NodeID) -> Result<Artifact> {
+		self.data
+			.get(&node)
+			.map(|data| data.artifact.clone())
+			.flatten()
+			.ok_or(libc::ENOENT)
+	}
+
+	fn children(&self, node: NodeID) -> Result<Vec<NodeID>> {
+		let data = self.data.get(&node).ok_or(libc::ENOENT)?;
+		Ok(data.children.clone())
+	}
+
+	fn parent(&self, node: NodeID) -> Result<NodeID> {
+		let data = self.data.get(&node).ok_or(libc::ENOENT)?;
+		Ok(data.parent)
+	}
+
+	fn add_ref(&mut self, _node: NodeID) {
+		// TODO: add_ref
+	}
+
+	fn release(&mut self, _node: NodeID) {
+		// TODO: release
 	}
 }
