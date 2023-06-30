@@ -18,54 +18,62 @@ use super::{
 	response::Response,
 };
 
+/// All filesystem and server methods need to return an error code, using the standard values for errno from libc.
+type Result<T> = std::result::Result<T, i32>;
+
 /// The FUSE implementation.
 #[derive(Clone)]
-pub struct FileSystem {
+pub struct Server {
 	tg: Arc<Instance>,
-	tree: Arc<RwLock<FileTree>>,
+	tree: Arc<RwLock<FileSystem>>,
 }
 
-/// All filesystem methods need to return a valid code, using the standard values for errno from libc.
-type Result<T> = std::result::Result<T, i32>;
+/// The underlying file system implementation.
+#[derive(Default)]
+struct FileSystem {
+	data: BTreeMap<NodeID, Node>,
+}
+
+/// A single node in the file system.
+struct Node {
+	artifact: Option<Artifact>, // TODO: use artifact::Hash internally.
+	parent: NodeID,
+	children: Vec<NodeID>,
+}
 
 /// A node in the file system.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct NodeID(u64);
-
-struct NodeData {
-	artifact: Artifact,
-	refcount: usize,
-}
+struct NodeID(u64);
 
 /// The root node has a reserved ID of 1.
 const ROOT: NodeID = NodeID(1);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct FileHandle(NonZeroU64);
+struct FileHandle(NonZeroU64);
 
 #[derive(Debug)]
-pub struct Entry {
-	pub node: NodeID,
-	pub valid_time: Duration,
-	pub size: usize,
-	pub kind: FileKind,
+struct Entry {
+	node: NodeID,
+	valid_time: Duration,
+	size: usize,
+	kind: FileKind,
 }
 
 #[derive(Debug)]
 pub struct Attr {
-	pub node: NodeID,
-	pub valid_time: Duration,
-	pub kind: FileKind,
-	pub size: usize,
-	pub num_hardlinks: usize,
+	node: NodeID,
+	valid_time: Duration,
+	kind: FileKind,
+	size: usize,
+	num_hardlinks: u32,
 }
 
 #[derive(Debug)]
 pub struct DirectoryEntry {
-	pub offset: usize,
-	pub node: NodeID,
-	pub name: String,
-	pub kind: FileKind,
+	offset: usize,
+	node: NodeID,
+	name: String,
+	kind: FileKind,
 }
 
 /// Represents the files we expose through FUSE.
@@ -76,12 +84,12 @@ pub enum FileKind {
 	Symlink,
 }
 
-impl FileSystem {
+impl Server {
 	/// Create a new file system instance.
 	pub fn new(tg: Arc<Instance>) -> Self {
 		Self {
 			tg,
-			tree: Arc::new(RwLock::new(FileTree::new())),
+			tree: Arc::new(RwLock::new(FileSystem::new())),
 		}
 	}
 
@@ -128,7 +136,7 @@ impl FileSystem {
 
 	/// Look up a filesystem entry from a given parent node and subpath.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn lookup(&self, parent: NodeID, name: &str) -> Result<Entry> {
+	async fn lookup(&self, parent: NodeID, name: &str) -> Result<Entry> {
 		// First we need to convert the <parent>/name into an underlying artifact.
 		let (node, artifact) = self.lookup_inner(parent, name).await?;
 
@@ -146,8 +154,8 @@ impl FileSystem {
 
 		let entry = Entry {
 			node,
-			kind,
 			valid_time,
+			kind,
 			size,
 		};
 		Ok(entry)
@@ -189,17 +197,13 @@ impl FileSystem {
 		};
 
 		// If the node is None, it means we haven't created one for this entry yet.
-		let node = node.unwrap_or(self.tree_mut()?.insert(
-			parent,
-			artifact.clone(),
-			name.to_owned(),
-		));
+		let node = node.unwrap_or(self.tree_mut()?.insert(parent, artifact.clone()));
 
 		Ok((node, artifact))
 	}
 	/// Get file system attributes.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn get_attr(&self, node: NodeID) -> Result<Attr> {
+	async fn get_attr(&self, node: NodeID) -> Result<Attr> {
 		match node.0 {
 			1 => Ok(Attr {
 				node,
@@ -214,7 +218,7 @@ impl FileSystem {
 	}
 
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn read_link(&self, node: NodeID) -> Result<OsString> {
+	async fn read_link(&self, node: NodeID) -> Result<OsString> {
 		// Check that the artifact pointed to by node is actually a symlink.
 		let symlink = self
 			.tree()?
@@ -265,14 +269,14 @@ impl FileSystem {
 
 	/// Open a regular file.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
+	async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
 		let _entry = self.tree()?.artifact(node)?;
 		Ok(None)
 	}
 
 	/// Read from a regular file.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn read(
+	async fn read(
 		&self,
 		node: NodeID,
 		_fh: Option<FileHandle>,
@@ -283,26 +287,26 @@ impl FileSystem {
 		let file = {
 			self.tree()?
 				.artifact(node)?
-				.clone()
 				.into_file()
 				.ok_or(libc::ENOENT)?
 		};
 
 		let blob = file.blob().bytes(&self.tg).await.or(Err(libc::EIO))?;
-		let range = (offset as usize)..(length.min(blob.len()));
-		Ok(blob[range].to_owned())
+		let start = offset.try_into().or(Err(libc::EINVAL))?;
+		let end = length.min(blob.len());
+		Ok(blob[start..end].to_owned())
 	}
 
 	/// Release a regular file. Note: potentially called many times for the same node.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn release(&self, node: NodeID) -> Result<()> {
+	async fn release(&self, node: NodeID) -> Result<()> {
 		// TODO: implement release
 		Ok(())
 	}
 
 	/// Open a directory. TODO:make sure we return a real file handle.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn open_dir(&self, node: NodeID, _flags: i32) -> Result<Option<FileHandle>> {
+	async fn open_dir(&self, node: NodeID, _flags: i32) -> Result<Option<FileHandle>> {
 		let _entry = self
 			.tree()?
 			.artifact(node)?
@@ -313,7 +317,7 @@ impl FileSystem {
 
 	/// Read a directory.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn read_dir(
+	async fn read_dir(
 		&self,
 		node: NodeID,
 		_fh: Option<FileHandle>,
@@ -351,14 +355,14 @@ impl FileSystem {
 
 	/// Release a directory.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn release_dir(&self, node: NodeID) -> Result<()> {
+	async fn release_dir(&self, node: NodeID) -> Result<()> {
 		// TODO: release dir
 		Ok(())
 	}
 
 	/// Flush calls to the file. Happens after open and before release.
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn flush(&self, _node: NodeID, _fh: Option<FileHandle>) -> Result<()> {
+	async fn flush(&self, _node: NodeID, _fh: Option<FileHandle>) -> Result<()> {
 		Ok(())
 	}
 
@@ -370,12 +374,80 @@ impl FileSystem {
 		self.attr_valid_time()
 	}
 
-	fn tree(&self) -> Result<RwLockReadGuard<'_, FileTree>> {
+	fn tree(&self) -> Result<RwLockReadGuard<'_, FileSystem>> {
 		self.tree.read().map_err(|_| libc::EIO)
 	}
 
-	fn tree_mut(&self) -> Result<RwLockWriteGuard<'_, FileTree>> {
+	fn tree_mut(&self) -> Result<RwLockWriteGuard<'_, FileSystem>> {
 		self.tree.write().map_err(|_| libc::EIO)
+	}
+}
+
+impl FileSystem {
+	fn new() -> Self {
+		let root = (
+			ROOT,
+			Node {
+				artifact: None,
+				parent: ROOT,
+				children: Vec::new(),
+			},
+		);
+		Self {
+			data: [root].into_iter().collect(),
+		}
+	}
+
+	fn insert(&mut self, parent: NodeID, artifact: Artifact) -> NodeID {
+		let node = NodeID(self.data.len() as u64 + 1000);
+		let data = Node {
+			artifact: Some(artifact),
+			parent,
+			children: Vec::new(),
+		};
+		self.data.insert(node, data);
+
+		if let Some(parent_data) = self.data.get_mut(&parent) {
+			parent_data.children.push(node);
+		}
+
+		node
+	}
+
+	fn lookup(&mut self, parent: NodeID, artifact: &Artifact) -> Option<NodeID> {
+		self.data
+			.get(&parent)
+			.and_then(|p| {
+				p.children.iter().find(|node| {
+					let existing = self
+						.data
+						.get(node)
+						.and_then(|data| data.artifact.as_ref().map(Artifact::hash));
+
+					existing == Some(artifact.hash())
+				})
+			})
+			.copied()
+	}
+
+	fn artifact(&self, node: NodeID) -> Result<Artifact> {
+		self.data
+			.get(&node)
+			.and_then(|data| data.artifact.clone())
+			.ok_or(libc::ENOENT)
+	}
+
+	fn parent(&self, node: NodeID) -> Result<NodeID> {
+		let data = self.data.get(&node).ok_or(libc::ENOENT)?;
+		Ok(data.parent)
+	}
+
+	fn _add_ref(&mut self, _node: NodeID) {
+		// TODO: add_ref
+	}
+
+	fn _release(&mut self, _node: NodeID) {
+		// TODO: release
 	}
 }
 
@@ -509,7 +581,7 @@ impl From<OsString> for Response {
 impl From<Option<FileHandle>> for Response {
 	fn from(value: Option<FileHandle>) -> Self {
 		let response = abi::fuse_open_out {
-			fh: value.map(|fh| fh.0.get()).unwrap_or(0),
+			fh: value.map_or(0, |fh| fh.0.get()),
 			open_flags: 0,
 			padding: 0,
 		};
@@ -520,14 +592,17 @@ impl From<Option<FileHandle>> for Response {
 impl From<Vec<DirectoryEntry>> for Response {
 	fn from(value: Vec<DirectoryEntry>) -> Self {
 		let mut buf = Vec::new();
-
 		for entry in value {
+			let ino = entry.node.0;
 			let name = entry.name.as_bytes();
+			let namelen = name.len().try_into().expect("Name too long.");
+			let off = entry.offset.try_into().expect("Offset too larger.");
+			let typ = entry.kind.type_();
 			let header = abi::fuse_dirent {
-				ino: entry.node.0,
-				off: entry.offset as i64,
-				namelen: name.len() as u32,
-				typ: entry.kind.type_(),
+				ino,
+				off,
+				namelen,
+				typ,
 			};
 			buf.extend_from_slice(header.as_bytes());
 			buf.extend_from_slice(name);
@@ -546,97 +621,5 @@ impl<'a> From<&'a Artifact> for FileKind {
 			Artifact::Directory(_) => FileKind::Directory,
 			Artifact::Symlink(_) => FileKind::Symlink,
 		}
-	}
-}
-
-#[derive(Default)]
-struct FileTree {
-	data: BTreeMap<NodeID, Node>,
-}
-
-struct Node {
-	name: Option<String>,
-	artifact: Option<Artifact>, // TODO: use artifact::Hash internally.
-	parent: NodeID,
-	children: Vec<NodeID>,
-}
-
-impl FileTree {
-	fn new() -> Self {
-		let root = (
-			ROOT,
-			Node {
-				name: None,
-				artifact: None,
-				parent: ROOT,
-				children: Vec::new(),
-			},
-		);
-		Self {
-			data: [root].into_iter().collect(),
-		}
-	}
-
-	fn insert(&mut self, parent: NodeID, artifact: Artifact, name: String) -> NodeID {
-		let node = NodeID(self.data.len() as u64 + 1000);
-		let data = Node {
-			name: Some(name),
-			artifact: Some(artifact),
-			parent,
-			children: Vec::new(),
-		};
-		self.data.insert(node, data);
-
-		if let Some(parent_data) = self.data.get_mut(&parent) {
-			parent_data.children.push(node)
-		}
-
-		node
-	}
-
-	fn lookup(&mut self, parent: NodeID, artifact: &Artifact) -> Option<NodeID> {
-		self.data
-			.get(&parent)
-			.and_then(|p| {
-				p.children.iter().find(|node| {
-					let existing = self
-						.data
-						.get(node)
-						.and_then(|data| data.artifact.as_ref().map(Artifact::hash));
-
-					existing == Some(artifact.hash())
-				})
-			})
-			.copied()
-	}
-
-	fn name(&self, node: NodeID) -> Option<String> {
-		self.data.get(&node).and_then(|data| data.name.clone())
-	}
-
-	fn artifact(&self, node: NodeID) -> Result<Artifact> {
-		self.data
-			.get(&node)
-			.map(|data| data.artifact.clone())
-			.flatten()
-			.ok_or(libc::ENOENT)
-	}
-
-	fn children(&self, node: NodeID) -> Result<Vec<NodeID>> {
-		let data = self.data.get(&node).ok_or(libc::ENOENT)?;
-		Ok(data.children.clone())
-	}
-
-	fn parent(&self, node: NodeID) -> Result<NodeID> {
-		let data = self.data.get(&node).ok_or(libc::ENOENT)?;
-		Ok(data.parent)
-	}
-
-	fn add_ref(&mut self, _node: NodeID) {
-		// TODO: add_ref
-	}
-
-	fn release(&mut self, _node: NodeID) {
-		// TODO: release
 	}
 }

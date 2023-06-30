@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::sync::Arc;
 
 use crate::{
@@ -21,7 +20,7 @@ mod response;
 /// Run the FUSE file server, listening on `file`.
 pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<()> {
 	let mut buffer = aligned_buffer();
-	let file_system = fs::FileSystem::new(tg);
+	let file_system = fs::Server::new(tg);
 	let mut initialized = false;
 	loop {
 		match fuse_device.read(buffer.as_mut()).await {
@@ -75,7 +74,7 @@ pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<
 			},
 			// If the error is ENOENT, EINTR, or EAGAIN, retry. If ENODEV then the FUSE has been unmounted. Otherwise, return an error.
 			Err(e) => match e.raw_os_error() {
-				Some(libc::ENOENT) | Some(libc::EINTR) | Some(libc::EAGAIN) => (),
+				Some(libc::ENOENT | libc::EINTR | libc::EAGAIN) => (),
 				Some(libc::ENODEV) => return Ok(()),
 				_ => Err(e)?,
 			},

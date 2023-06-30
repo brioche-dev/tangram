@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! FUSE kernel interface.
 //!
 //! Types and definitions used for communication between the kernel driver and the userspace
