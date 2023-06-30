@@ -118,10 +118,6 @@ impl Command {
 		let output_host_path = output_parent_directory_host_path.join("output");
 		let output_guest_path = output_parent_directory_guest_path.join("output");
 
-		// Create the host and guest paths for the tangram directory.
-		let tangram_directory_host_path = tg.path().to_owned();
-		let tangram_directory_guest_path = PathBuf::from(TANGRAM_DIRECTORY_GUEST_PATH);
-
 		// Create the host and guest paths for the artifacts directory.
 		let _artifacts_directory_guest_path = tg.artifacts_path();
 		let artifacts_directory_guest_path =
@@ -240,7 +236,7 @@ impl Command {
 		let mut mounts = Vec::new();
 
 		// Create the fuse_mount.
-		let fuse_guest_path = Path::new("/tangram_fuse");
+		let fuse_guest_path = Path::new("/.tangram/artifacts");
 		let fuse_target_path = root_host_path.join(fuse_guest_path.strip_prefix("/").unwrap());
 		tokio::fs::create_dir_all(&fuse_target_path)
 			.await
@@ -305,25 +301,25 @@ impl Command {
 		});
 
 		// Add the tangram directory to the mounts.
-		let tangram_directory_source_path = tangram_directory_host_path;
-		let tangram_directory_target_path =
-			root_host_path.join(tangram_directory_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(&tangram_directory_target_path)
-			.await
-			.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
-		let tangram_directory_source_path =
-			CString::new(tangram_directory_source_path.as_os_str().as_bytes()).unwrap();
-		let tangram_directory_target_path =
-			CString::new(tangram_directory_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: tangram_directory_source_path,
-			target: tangram_directory_target_path,
-			fstype: None,
-			flags: libc::MS_BIND | libc::MS_REC,
-			data: None,
-			// TODO: Only the database and artifacts created by the guest process should be write-able.
-			readonly: false,
-		});
+		// let tangram_directory_source_path = tangram_directory_host_path;
+		// let tangram_directory_target_path =
+		// 	root_host_path.join(tangram_directory_guest_path.strip_prefix("/").unwrap());
+		// tokio::fs::create_dir_all(&tangram_directory_target_path)
+		// 	.await
+		// 	.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
+		// let tangram_directory_source_path =
+		// 	CString::new(tangram_directory_source_path.as_os_str().as_bytes()).unwrap();
+		// let tangram_directory_target_path =
+		// 	CString::new(tangram_directory_target_path.as_os_str().as_bytes()).unwrap();
+		// mounts.push(Mount {
+		// 	source: tangram_directory_source_path,
+		// 	target: tangram_directory_target_path,
+		// 	fstype: None,
+		// 	flags: libc::MS_BIND | libc::MS_REC,
+		// 	data: None,
+		// 	// TODO: Only the database and artifacts created by the guest process should be write-able.
+		// 	readonly: false,
+		// });
 
 		// Add the home directory to the mounts.
 		let home_directory_source_path = home_directory_host_path.clone();
@@ -496,7 +492,7 @@ impl Command {
 		let mut host_socket = tokio::net::UnixStream::from_std(host_socket)?;
 
 		// Begin running the fuse server in the background.
-		let fuse_task = tokio::task::spawn(fuse::run(fuse_device));
+		let fuse_task = tokio::task::spawn(fuse::run(fuse_device, tg.clone()));
 
 		// Receive the exit status of the guest process from the root process.
 		let kind = host_socket
@@ -736,20 +732,6 @@ fn guest(context: &Context) {
 		}
 		assert_eq!(notification, 1);
 
-		// Open the FUSE device as read/write/nonblock.
-		let fuse_fd = libc::open(
-			CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0").as_ptr(),
-			libc::O_RDWR | libc::O_NONBLOCK,
-		);
-
-		// Mount the FUSE filesystem.
-		mount_fuse(fuse_fd, &context.fuse_target_path);
-
-		// Attempt to send the file descriptor of /dev/fd back to the host process.
-		if sendfd(context.guest_socket.as_raw_fd(), fuse_fd) < 0 {
-			abort_errno!("Failed to send /dev/fuse file descriptor back to the host.");
-		}
-
 		// Perform the mounts.
 		for mount in &context.mounts {
 			let source = mount.source.as_ptr();
@@ -788,6 +770,20 @@ fn guest(context: &Context) {
 					);
 				}
 			}
+		}
+
+		// Open the FUSE device as read/write/nonblock.
+		let fuse_fd = libc::open(
+			CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0").as_ptr(),
+			libc::O_RDWR | libc::O_NONBLOCK,
+		);
+
+		// Mount the FUSE filesystem.
+		mount_fuse(fuse_fd, &context.fuse_target_path);
+
+		// Attempt to send the file descriptor of /dev/fd back to the host process.
+		if sendfd(context.guest_socket.as_raw_fd(), fuse_fd) < 0 {
+			abort_errno!("Failed to send /dev/fuse file descriptor back to the host.");
 		}
 
 		// Mount the root.
@@ -956,7 +952,7 @@ unsafe fn mount_fuse(fd: std::os::fd::RawFd, target: &CString) {
 		data.as_bytes().as_ptr().cast(),
 	) != 0
 	{
-		abort_errno!("Failed to mount FUSE filesystem.");
+		abort_errno!("Failed to mount FUSE filesystem at {target:?}.");
 	}
 }
 
