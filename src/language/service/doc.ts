@@ -1208,7 +1208,6 @@ let convertTypeNode = (
 		};
 	} else if (keywordSet.has(node.kind)) {
 		let value = node.kind.toString();
-		console.log(value);
 		return { kind: "keyword", value: convertKeywordType(node.kind) };
 	} else if (ts.isLiteralTypeNode(node)) {
 		return {
