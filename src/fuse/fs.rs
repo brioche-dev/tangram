@@ -237,8 +237,27 @@ impl Server {
 				num_hardlinks: 2,
 				size: 0,
 			}),
+			_ => {
+				let artifact = self.tree()?.artifact(node)?;
+				let size = if let Artifact::File(file) = &artifact {
+					let blob = file.blob();
+					let bytes = blob.bytes(&self.tg).await.map_err(|e| {
+						tracing::error!(?e, "Failed to read artifact.");
+						libc::EIO
+					})?;
+					bytes.len()
+				} else {
+					0
+				};
 
-			_ => Err(libc::ENOENT),
+				Ok(Attr {
+					node,
+					valid_time: self.attr_valid_time(),
+					kind: (&artifact).into(),
+					num_hardlinks: 1,
+					size,
+				})
+			},
 		}
 	}
 
