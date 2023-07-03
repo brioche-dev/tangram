@@ -388,36 +388,41 @@ impl Server {
 	}
 
 	/// Read a directory.
-	#[tracing::instrument(skip(self), ret)]
+	#[tracing::instrument(skip(self, _fh, _flags), ret)]
 	async fn read_dir(
 		&self,
 		node: NodeID,
 		_fh: Option<FileHandle>,
 		_flags: i32,
-		_offset: isize,
-		_size: usize,
+		offset: isize,
+		size: usize,
 	) -> Result<Vec<DirectoryEntry>> {
+		let offset = offset.try_into().unwrap();
+
 		// TODO: track state w/ a file handle and make sure we don't overflow the MAX_WRITE size configured by init.
-		let directory = {
-			self.tree()?
-				.artifact(node)?
-				.into_directory()
-				.ok_or(libc::ENOENT)?
-		};
+		let entries = self
+			.tree()?
+			.artifact(node)?
+			.into_directory()
+			.ok_or(libc::ENOENT)?
+			.to_data()
+			.entries
+			.into_iter()
+			.skip(offset)
+			.take(size)
+			.enumerate();
 
-		let entries = directory.to_data().entries.into_iter().enumerate().map(
-			|(offset, (name, _))| async move {
-				let (node, artifact) = self.lookup_inner(node, &name).await?;
-				let kind = (&artifact).into();
+		let entries = entries.map(|(n, (name, _))| async move {
+			let (node, artifact) = self.lookup_inner(node, &name).await?;
+			let kind = (&artifact).into();
 
-				Ok(DirectoryEntry {
-					offset,
-					node,
-					name,
-					kind,
-				})
-			},
-		);
+			Ok(DirectoryEntry {
+				offset: offset + n + 1,
+				node,
+				name,
+				kind,
+			})
+		});
 
 		try_join_all(entries).await
 	}
