@@ -1,9 +1,11 @@
 use futures::future::try_join_all;
 use std::ffi::OsString;
+use std::io::SeekFrom;
 use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{collections::BTreeMap, num::NonZeroU64, str::FromStr, sync::Arc, time::Duration};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use zerocopy::AsBytes;
 
 use crate::template;
@@ -150,13 +152,7 @@ impl Server {
 
 		// Get the artifact metadata.
 		let kind = (&artifact).into();
-		let size = if let Some(file) = artifact.as_file() {
-			let blob = file.blob();
-			let bytes = blob.bytes(&self.tg).await.or(Err(libc::EIO))?;
-			bytes.len()
-		} else {
-			0
-		};
+		let size = self.size(node).await?;
 
 		let valid_time = self.entry_valid_time();
 
@@ -239,16 +235,7 @@ impl Server {
 			}),
 			_ => {
 				let artifact = self.tree()?.artifact(node)?;
-				let size = if let Artifact::File(file) = &artifact {
-					let blob = file.blob();
-					let bytes = blob.bytes(&self.tg).await.map_err(|e| {
-						tracing::error!(?e, "Failed to read artifact.");
-						libc::EIO
-					})?;
-					bytes.len()
-				} else {
-					0
-				};
+				let size = self.size(node).await?;
 
 				Ok(Attr {
 					node,
@@ -335,11 +322,51 @@ impl Server {
 				.ok_or(libc::ENOENT)?
 		};
 
-		let blob = file.blob().bytes(&self.tg).await.or(Err(libc::EIO))?;
-		let start: usize = offset.try_into().or(Err(libc::EINVAL))?;
-		let end = (start + length).min(blob.len());
-		let contents = blob.get(start..end).ok_or(libc::EINVAL)?;
-		Ok(contents.to_owned())
+		let blob = file.blob();
+		let mut reader = blob
+			.try_get_local(&self.tg)
+			.await
+			.map_err(|e| {
+				tracing::error!(?e, ?node, "Failed to get the underlying blob.");
+				libc::EIO
+			})?
+			.ok_or_else(|| {
+				tracing::error!(?node, "Failed to get reader for the blob.");
+				libc::EIO
+			})?;
+
+		// Get the start and end positions of the stream.
+		let start = reader
+			.seek(SeekFrom::Start(offset.try_into().unwrap()))
+			.await
+			.map_err(|e| {
+				tracing::error!(?e);
+				e.raw_os_error().unwrap_or(libc::EIO)
+			})?;
+
+		let end = reader.seek(SeekFrom::End(0)).await.map_err(|e| {
+			tracing::error!(?e);
+			e.raw_os_error().unwrap_or(libc::EIO)
+		})?;
+
+		// Seek back to the offset.
+		reader
+			.seek(SeekFrom::Start(offset.try_into().unwrap()))
+			.await
+			.map_err(|e| {
+				tracing::error!(?e);
+				e.raw_os_error().unwrap_or(libc::EIO)
+			})?;
+
+		// Read the contents from the stream.
+		let mut buf = Vec::new();
+		buf.resize_with(length.min((end - start).try_into().unwrap()), || 0);
+		reader.read_exact(&mut buf).await.map_err(|e| {
+			tracing::error!(?e, "Failed to read.");
+			e.raw_os_error().unwrap_or(libc::EIO)
+		})?;
+
+		Ok(buf)
 	}
 
 	/// Release a regular file. Note: potentially called many times for the same node.
@@ -428,6 +455,38 @@ impl Server {
 			tracing::error!("FS write lock was poisoned.");
 			libc::EIO
 		})
+	}
+
+	async fn size(&self, node: NodeID) -> Result<usize> {
+		let artifact = self.tree()?.artifact(node)?;
+		if let Artifact::File(file) = artifact {
+			let blob = file.blob();
+			let mut reader = blob
+				.try_get_local(&self.tg)
+				.await
+				.map_err(|e| {
+					tracing::error!(?e, ?node, "Failed to get the underlying blob.");
+					libc::EIO
+				})?
+				.ok_or_else(|| {
+					tracing::error!(?node, "Failed to get reader for the blob.");
+					libc::EIO
+				})?;
+
+			reader
+				.seek(SeekFrom::Start(0))
+				.await
+				.map_err(|e| e.raw_os_error().unwrap_or(libc::EIO))?;
+
+			let end = reader
+				.seek(SeekFrom::End(0))
+				.await
+				.map_err(|e| e.raw_os_error().unwrap_or(libc::EIO))?;
+
+			Ok(end.try_into().unwrap())
+		} else {
+			Ok(0)
+		}
 	}
 }
 

@@ -40,6 +40,7 @@ pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<
 
 				let outfile: std::fs::File =
 					fuse_device.try_clone().await.unwrap().into_std().await;
+
 				match request.arg {
 					// Perform the initialization handshake.
 					Arg::Initialize(arg) => {
