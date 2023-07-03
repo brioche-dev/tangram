@@ -305,7 +305,7 @@ pub mod consts {
 pub struct InvalidOpcodeError;
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum fuse_opcode {
 	FUSE_LOOKUP = 1,
@@ -344,33 +344,18 @@ pub enum fuse_opcode {
 	FUSE_INTERRUPT = 36,
 	FUSE_BMAP = 37,
 	FUSE_DESTROY = 38,
-	#[cfg(feature = "abi-7-11")]
 	FUSE_IOCTL = 39,
-	#[cfg(feature = "abi-7-11")]
 	FUSE_POLL = 40,
-	#[cfg(feature = "abi-7-15")]
 	FUSE_NOTIFY_REPLY = 41,
-	#[cfg(feature = "abi-7-16")]
 	FUSE_BATCH_FORGET = 42,
-	#[cfg(feature = "abi-7-19")]
 	FUSE_FALLOCATE = 43,
-	#[cfg(feature = "abi-7-21")]
 	FUSE_READDIRPLUS = 44,
-	#[cfg(feature = "abi-7-23")]
 	FUSE_RENAME2 = 45,
-	#[cfg(feature = "abi-7-24")]
 	FUSE_LSEEK = 46,
-	#[cfg(feature = "abi-7-28")]
 	FUSE_COPY_FILE_RANGE = 47,
-
-	#[cfg(target_os = "macos")]
 	FUSE_SETVOLNAME = 61,
-	#[cfg(target_os = "macos")]
 	FUSE_GETXTIMES = 62,
-	#[cfg(target_os = "macos")]
 	FUSE_EXCHANGE = 63,
-
-	#[cfg(feature = "abi-7-12")]
 	CUSE_INIT = 4096,
 }
 
@@ -415,33 +400,18 @@ impl TryFrom<u32> for fuse_opcode {
 			36 => Ok(fuse_opcode::FUSE_INTERRUPT),
 			37 => Ok(fuse_opcode::FUSE_BMAP),
 			38 => Ok(fuse_opcode::FUSE_DESTROY),
-			#[cfg(feature = "abi-7-11")]
 			39 => Ok(fuse_opcode::FUSE_IOCTL),
-			#[cfg(feature = "abi-7-11")]
 			40 => Ok(fuse_opcode::FUSE_POLL),
-			#[cfg(feature = "abi-7-15")]
 			41 => Ok(fuse_opcode::FUSE_NOTIFY_REPLY),
-			#[cfg(feature = "abi-7-16")]
 			42 => Ok(fuse_opcode::FUSE_BATCH_FORGET),
-			#[cfg(feature = "abi-7-19")]
 			43 => Ok(fuse_opcode::FUSE_FALLOCATE),
-			#[cfg(feature = "abi-7-21")]
 			44 => Ok(fuse_opcode::FUSE_READDIRPLUS),
-			#[cfg(feature = "abi-7-23")]
 			45 => Ok(fuse_opcode::FUSE_RENAME2),
-			#[cfg(feature = "abi-7-24")]
 			46 => Ok(fuse_opcode::FUSE_LSEEK),
-			#[cfg(feature = "abi-7-28")]
 			47 => Ok(fuse_opcode::FUSE_COPY_FILE_RANGE),
-
-			#[cfg(target_os = "macos")]
 			61 => Ok(fuse_opcode::FUSE_SETVOLNAME),
-			#[cfg(target_os = "macos")]
 			62 => Ok(fuse_opcode::FUSE_GETXTIMES),
-			#[cfg(target_os = "macos")]
 			63 => Ok(fuse_opcode::FUSE_EXCHANGE),
-
-			#[cfg(feature = "abi-7-12")]
 			4096 => Ok(fuse_opcode::CUSE_INIT),
 
 			_ => Err(InvalidOpcodeError),

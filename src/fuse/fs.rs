@@ -129,7 +129,15 @@ impl Server {
 			Arg::Flush(arg) => self.flush(node, FileHandle::new(arg.fh)).await.into(),
 			Arg::Release => self.release(node).await.into(),
 			Arg::ReleaseDir => self.release_dir(node).await.into(),
-			Arg::Unknown => Response::error(libc::ENOSYS),
+			Arg::Unsupported(opcode) => {
+				// Processes will call ioctl() in order to determine if a device is a TTY or regular file.
+				if *opcode == abi::fuse_opcode::FUSE_IOCTL {
+					Response::error(libc::ENOTTY)
+				} else {
+					tracing::error!(?opcode, "Unsupported FUSE request.");
+					Response::error(libc::ENOSYS)
+				}
+			},
 			Arg::Initialize(_) | Arg::Destroy => unreachable!(),
 		}
 	}
@@ -174,9 +182,12 @@ impl Server {
 
 		let (node, artifact) = if parent == ROOT {
 			// If the parent is ROOT, we parse the name as a hash and get the artifact.
-			let hash = artifact::Hash::from_str(name).or(Err(libc::EINVAL))?;
+			let hash = artifact::Hash::from_str(name).map_err(|e| {
+				tracing::error!(?e, "Failed to parse path as hash.");
+				libc::EINVAL
+			})?;
 			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
-				tracing::error!(?e);
+				tracing::error!(?e, ?hash, "Failed to lookup artifact.");
 				libc::EIO
 			})?;
 			let node = self.tree_mut()?.lookup(ROOT, &artifact);
@@ -187,17 +198,25 @@ impl Server {
 				self.tree()?
 					.artifact(parent)?
 					.as_directory()
-					.ok_or(libc::ENOENT)?
+					.ok_or_else(|| {
+						tracing::error!(?parent, "Could not find node.");
+						libc::ENOENT
+					})?
 					.to_data()
 					.entries
 			};
 
 			// Lookup the artifact hash by name.
-			let hash = *directory.get(name).ok_or(libc::ENOENT)?;
+			let hash = *directory.get(name).ok_or_else(|| {
+				tracing::error!(?name, ?parent, "Failed to lookup in directory.");
+				libc::ENOENT
+			})?;
+
 			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
-				tracing::error!(?e);
+				tracing::error!(?e, ?hash, "Failed to lookup artifact.");
 				libc::EIO
 			})?;
+
 			let node = self.tree_mut()?.lookup(parent, &artifact);
 			(node, artifact)
 		};
@@ -379,11 +398,17 @@ impl Server {
 	}
 
 	fn tree(&self) -> Result<RwLockReadGuard<'_, FileSystem>> {
-		self.tree.read().map_err(|_| libc::EIO)
+		self.tree.read().map_err(|_| {
+			tracing::error!("FS read lock was poisoned.");
+			libc::EIO
+		})
 	}
 
 	fn tree_mut(&self) -> Result<RwLockWriteGuard<'_, FileSystem>> {
-		self.tree.write().map_err(|_| libc::EIO)
+		self.tree.write().map_err(|_| {
+			tracing::error!("FS write lock was poisoned.");
+			libc::EIO
+		})
 	}
 }
 
@@ -438,7 +463,10 @@ impl FileSystem {
 		self.data
 			.get(&node)
 			.and_then(|data| data.artifact.clone())
-			.ok_or(libc::ENOENT)
+			.ok_or_else(|| {
+				tracing::error!(?node, "Failed to retrieve artifact.");
+				libc::ENOENT
+			})
 	}
 
 	fn parent(&self, node: NodeID) -> Result<NodeID> {

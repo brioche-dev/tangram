@@ -38,7 +38,13 @@ impl Request {
 		}
 
 		let data = &data[header_len..];
-		let arg = match header.opcode.try_into().unwrap() {
+		let opcode = header
+			.opcode
+			.try_into()
+			.map_err(|e| tracing::error!(?e, ?header))
+			.ok()?;
+
+		let arg = match opcode {
 			abi::fuse_opcode::FUSE_INIT => Arg::Initialize(read(data)?),
 			abi::fuse_opcode::FUSE_DESTROY => Arg::Destroy,
 			abi::fuse_opcode::FUSE_LOOKUP => Arg::Lookup(read_string(data)?),
@@ -51,7 +57,7 @@ impl Request {
 			abi::fuse_opcode::FUSE_READDIR => Arg::ReadDir(read(data)?),
 			abi::fuse_opcode::FUSE_RELEASEDIR => Arg::ReleaseDir,
 			abi::fuse_opcode::FUSE_FLUSH => Arg::Flush(read(data)?),
-			_ => Arg::Unknown,
+			_ => Arg::Unsupported(opcode),
 		};
 
 		Some(Self { header, arg })
@@ -72,5 +78,5 @@ pub enum Arg {
 	ReadDir(abi::fuse_read_in),
 	ReleaseDir,
 	Flush(abi::fuse_flush_in),
-	Unknown,
+	Unsupported(abi::fuse_opcode),
 }
