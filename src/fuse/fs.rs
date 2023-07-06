@@ -1,13 +1,16 @@
 use std::ffi::OsString;
 use std::io::SeekFrom;
 use std::os::unix::prelude::OsStrExt;
-use std::path::PathBuf;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::path::{Path, PathBuf};
+// use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{collections::BTreeMap, num::NonZeroU64, str::FromStr, sync::Arc, time::Duration};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::{
+	io::{AsyncReadExt, AsyncSeekExt},
+	sync::RwLock,
+};
 use zerocopy::AsBytes;
 
-use crate::template;
+use crate::template::{self};
 use crate::{
 	artifact::{self, Artifact},
 	instance::Instance,
@@ -37,11 +40,11 @@ struct FileSystem {
 
 /// A single node in the file system.
 struct Node {
-	name:Option<String>,
-	hash:Option<artifact::Hash>,
-	kind:FileKind,
+	name: Option<String>,
+	hash: Option<artifact::Hash>,
+	kind: FileKind,
 	parent: NodeID,
-	children: Vec<NodeID>,
+	children: Option<Vec<NodeID>>,
 }
 
 /// A node in the file system.
@@ -72,7 +75,7 @@ pub struct Attr {
 }
 
 /// Represents the files we expose through FUSE.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum FileKind {
 	Directory,
 	File { is_executable: bool },
@@ -143,13 +146,16 @@ impl Server {
 	/// Look up a filesystem entry from a given parent node and subpath.
 	#[tracing::instrument(skip(self), ret)]
 	async fn lookup(&self, parent: NodeID, name: &str) -> Result<Entry> {
+		// Make sure the directory entries have been cached already.
+		if parent != ROOT {
+			self.ensure_directory_is_cached(parent).await?;
+		}
+
 		// First we need to convert the <parent>/name into an underlying artifact.
-		let (node, artifact) = self.lookup_inner(parent, name).await?;
+		let (node, kind) = self.lookup_inner(parent, name).await?;
 
 		// Get the artifact metadata.
-		let kind = (&artifact).into();
 		let size = self.size(node).await?;
-
 		let valid_time = self.entry_valid_time();
 
 		let entry = Entry {
@@ -158,66 +164,62 @@ impl Server {
 			kind,
 			size,
 		};
+
 		Ok(entry)
 	}
 
-	async fn lookup_inner(&self, parent: NodeID, name: &str) -> Result<(NodeID, Artifact)> {
+	/// Lookup an entry in the file system by name.
+	async fn lookup_inner(&self, parent: NodeID, name: &str) -> Result<(NodeID, FileKind)> {
+		// Handle special cases, "." and "..".
 		if name == "." {
-			let artifact = self.get_artifact(parent).await?;
-			return Ok((parent, artifact));
+			return Ok((parent, FileKind::Directory));
 		}
 		if name == ".." {
-			let parent = self.tree()?.parent(parent)?;
-			let artifact = self.get_artifact(parent).await?;
-			return Ok((parent, artifact));
+			let parent = self.tree.read().await.parent(parent)?;
+			return Ok((parent, FileKind::Directory));
 		}
 
-		let (node, artifact) = if parent == ROOT {
-			// If the parent is ROOT, we parse the name as a hash and get the artifact.
+		// If the parent node isn't ROOT we can do a simple lookup in the tree.
+		if parent != ROOT {
+			return self
+				.tree
+				.write()
+				.await
+				.lookup(parent, name)
+				.map(|(node, data)| (node, data.kind))
+				.ok_or(libc::ENOENT);
+		}
+
+		// Check if the artifact has already been added at the root.
+		let result = self
+			.tree
+			.read()
+			.await
+			.lookup(ROOT, name)
+			.map(|(node, data)| (node, data.kind));
+
+		if let Some((node, kind)) = result {
+			Ok((node, kind))
+		} else {
+			// Otherwise, get the artifact and insert it into the file system.
 			let hash = artifact::Hash::from_str(name).map_err(|e| {
-				tracing::error!(?e, "Failed to parse path as hash.");
+				tracing::error!(?name, ?e, "Failed to parse path as an artifact hash.");
 				libc::EINVAL
 			})?;
 			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
-				tracing::error!(?e, ?hash, "Failed to lookup artifact.");
+				tracing::error!(?e, "Failed to get artifact at root.");
 				libc::EIO
 			})?;
-			let node = self.tree_mut()?.lookup(ROOT, &artifact);
-			(node, artifact)
-		} else {
-			// Otherwise we get the parent directory (which must already exist) and find the corresponding entry.
-			let directory = {
-				self.get_artifact(parent)
-					.await?
-					.as_directory()
-					.ok_or_else(|| {
-						tracing::warn!(?parent, "Node is not a directory.");
-						libc::ENOENT
-					})?
-					.to_data()
-					.entries
-			};
-
-			// Lookup the artifact hash by name.
-			let hash = *directory.get(name).ok_or_else(|| {
-				tracing::warn!(?name, ?parent, "Failed to get directory entry.");
-				libc::ENOENT
-			})?;
-
-			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
-				tracing::warn!(?e, ?hash, "Failed to get artifact.");
-				libc::EIO
-			})?;
-
-			let node: Option<NodeID> = self.tree_mut()?.lookup(parent, &artifact);
-			(node, artifact)
-		};
-
-		// If the node is None, it means we haven't created one for this entry yet.
-		let node = node.unwrap_or(self.tree_mut()?.insert(parent, name.to_owned(), artifact.clone()));
-
-		Ok((node, artifact))
+			let kind = (&artifact).into();
+			let node = self
+				.tree
+				.write()
+				.await
+				.insert(ROOT, name.to_owned(), artifact)?;
+			Ok((node, kind))
+		}
 	}
+
 	/// Get file system attributes.
 	#[tracing::instrument(skip(self), ret)]
 	async fn get_attr(&self, node: NodeID) -> Result<Attr> {
@@ -279,10 +281,10 @@ impl Server {
 
 		let mut result = PathBuf::new();
 		if let Some(artifact) = artifact {
-			let mut parent = self.tree()?.parent(node)?;
+			let mut parent = self.tree.read().await.parent(node)?;
 			while parent != ROOT {
 				result.push("..");
-				parent = self.tree()?.parent(parent)?;
+				parent = self.tree.read().await.parent(parent)?;
 			}
 			result.push(artifact.hash().to_string());
 		}
@@ -298,7 +300,7 @@ impl Server {
 	#[tracing::instrument(skip(self), ret)]
 	async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
 		let _entry = self.get_artifact(node).await?;
-		self.tree_mut()?.add_ref(node)?;
+		self.tree.write().await.add_ref(node)?;
 		Ok(None)
 	}
 
@@ -382,7 +384,7 @@ impl Server {
 				tracing::error!(?node, "Failed to get artifact as directory.");
 				libc::ENOENT
 			})?;
-		self.tree_mut()?.add_ref(node)?;
+		self.tree.write().await.add_ref(node)?;
 		Ok(FileHandle::new(0))
 	}
 
@@ -398,27 +400,24 @@ impl Server {
 		offset: isize,
 		size: usize,
 	) -> Result<Response> {
-		let directory_data = self
-			.get_artifact(node)
-			.await?
-			.into_directory()
-			.ok_or_else(|| {
-				tracing::error!(?node, "Failed to get directory.");
-				libc::EIO
-			})?
-			.to_data();
+		if node != ROOT {
+			self.ensure_directory_is_cached(node).await?;
+		}
 
-		let entries = directory_data.entries.into_iter().skip(offset as usize);
+		let tree = self.tree.read().await;
+		let entries = tree
+			.children(node)?
+			.iter()
+			.skip(offset as usize)
+			.filter_map(|node| {
+				let data = tree.data.get(node)?;
+				Some((*node, data.name.as_deref().unwrap(), data.kind))
+			});
 
 		let mut buf = Vec::with_capacity(size);
-
-		for (n, (name, _)) in entries.enumerate() {
-			let (node, artifact) = self.lookup_inner(node, &name).await.map_err(|e| {
-				tracing::error!(?node, ?name, "Failed to lookup child in directory.");
-				e
-			})?;
-			let path: PathBuf = name.into();
-			let kind: FileKind = (&artifact).into();
+		for (n, (node, name, kind)) in entries.enumerate() {
+			// TODO: Do we need to convert to an OsStr here?
+			let path: &Path = name.as_ref();
 			let name_bytes = path.as_os_str().as_bytes();
 			let offset = 1 + (n as isize + offset) as i64;
 			let dirent = abi::fuse_dirent {
@@ -442,7 +441,7 @@ impl Server {
 	/// Release a directory.
 	#[tracing::instrument(skip(self), ret)]
 	async fn release_dir(&self, node: NodeID) -> Result<()> {
-		self.tree_mut()?.release(node)?;
+		self.tree.write().await.release(node)?;
 		Ok(())
 	}
 
@@ -458,20 +457,6 @@ impl Server {
 
 	fn entry_valid_time(&self) -> Duration {
 		self.attr_valid_time()
-	}
-
-	fn tree(&self) -> Result<RwLockReadGuard<'_, FileSystem>> {
-		self.tree.read().map_err(|_| {
-			tracing::error!("FS read lock was poisoned.");
-			libc::EIO
-		})
-	}
-
-	fn tree_mut(&self) -> Result<RwLockWriteGuard<'_, FileSystem>> {
-		self.tree.write().map_err(|_| {
-			tracing::error!("FS write lock was poisoned.");
-			libc::EIO
-		})
 	}
 
 	async fn size(&self, node: NodeID) -> Result<usize> {
@@ -506,19 +491,49 @@ impl Server {
 		}
 	}
 
-	async fn get_artifact(&self, node:NodeID) -> Result<Artifact> {
-		let hash = self.tree()?.hash(node)?;
-		Artifact::get(&self.tg, hash)
-			.await
-			.map_err(|e| {
-				tracing::error!(?e, ?hash, "Failed to get artifact.");
-				libc::EIO
-			})
+	async fn get_artifact(&self, node: NodeID) -> Result<Artifact> {
+		let hash = self.tree.read().await.hash(node)?;
+		Artifact::get(&self.tg, hash).await.map_err(|e| {
+			tracing::error!(?e, ?hash, "Failed to get artifact.");
+			libc::EIO
+		})
 	}
 
-	async fn read_dir_inner (&self, node:NodeID) -> Result<Vec<(String, NodeID, FileKind)>> {
-		let mut tree = self.tree_mut()?;
-		todo!()
+	/// Eagerly fetch the children of the directory and insert them to the file system for fast subsequent lookups.
+	async fn ensure_directory_is_cached(&self, node: NodeID) -> Result<()> {
+		let mut tree = self.tree.write().await;
+		let data = tree.data.get_mut(&node).ok_or_else(|| {
+			tracing::error!(?node, "Failed to get node as a directory.");
+			libc::EIO
+		})?;
+
+		if data.children.is_some() {
+			return Ok(());
+		}
+
+		let artifact = Artifact::get(&self.tg, data.hash.unwrap())
+			.await
+			.map_err(|e| {
+				tracing::error!(?e, "Failed to get the artifact.");
+				libc::EIO
+			})?
+			.into_directory()
+			.ok_or_else(|| {
+				tracing::error!("Failed to get artifact as a directory.");
+				libc::EIO
+			})?;
+
+		let entries = artifact.entries(&self.tg).await.map_err(|e| {
+			tracing::error!(?e, "Failed to get directory entries.");
+			libc::EIO
+		})?;
+
+		data.children = Some(Vec::new());
+		for (name, artifact) in entries {
+			tree.insert(node, name, artifact)?;
+		}
+
+		Ok(())
 	}
 }
 
@@ -531,7 +546,7 @@ impl FileSystem {
 				hash: None,
 				kind: FileKind::Directory,
 				parent: ROOT,
-				children: Vec::new(),
+				children: Some(Vec::new()),
 			},
 		);
 
@@ -540,38 +555,43 @@ impl FileSystem {
 		}
 	}
 
-	fn insert(&mut self, parent: NodeID, name:String, artifact: Artifact) -> NodeID {
+	fn insert(&mut self, parent: NodeID, name: String, artifact: Artifact) -> Result<NodeID> {
 		let node = NodeID(self.data.len() as u64 + 1000);
 		let data = Node {
 			name: Some(name),
 			hash: Some(artifact.hash()),
 			kind: (&artifact).into(),
 			parent,
-			children: Vec::new(),
+			children: None,
 		};
 		self.data.insert(node, data);
 
-		if let Some(parent_data) = self.data.get_mut(&parent) {
-			parent_data.children.push(node);
-		}
+		// Insert into the parent.
+		self.data
+			.get_mut(&parent)
+			.unwrap()
+			.children
+			.as_mut()
+			.ok_or_else(|| {
+				tracing::error!("Failed to insert child into directory.");
+				libc::EIO
+			})?
+			.push(node);
 
-		node
+		Ok(node)
 	}
 
-	fn lookup(&mut self, parent: NodeID, artifact: &Artifact) -> Option<NodeID> {
-		self.data
-			.get(&parent)
-			.and_then(|p| {
-				p.children.iter().find(|node| {
-					let existing = self
-						.data
-						.get(node)
-						.and_then(|data| data.hash);
-
-					existing == Some(artifact.hash())
-				})
-			})
-			.copied()
+	fn lookup(&self, parent: NodeID, name: &str) -> Option<(NodeID, &'_ Node)> {
+		let parent = self.data.get(&parent)?;
+		let children = parent.children.as_ref()?;
+		children.iter().find_map(|node| {
+			let data = self.data.get(node)?;
+			if data.name.as_deref() == Some(name) {
+				Some((*node, data))
+			} else {
+				None
+			}
+		})
 	}
 
 	fn hash(&self, node: NodeID) -> Result<artifact::Hash> {
@@ -590,6 +610,21 @@ impl FileSystem {
 			libc::ENOENT
 		})?;
 		Ok(data.parent)
+	}
+
+	fn children(&self, node: NodeID) -> Result<&'_ [NodeID]> {
+		self.data
+			.get(&node)
+			.ok_or_else(|| {
+				tracing::error!(?node, "Node does not exist.");
+				libc::EIO
+			})?
+			.children
+			.as_deref()
+			.ok_or_else(|| {
+				tracing::error!(?node, "Failed to get children of a node.");
+				libc::EIO
+			})
 	}
 
 	fn add_ref(&mut self, _node: NodeID) -> Result<()> {
