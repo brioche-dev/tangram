@@ -1,8 +1,8 @@
-use std::io::{IoSlice, Write};
+use std::io::Write;
 use zerocopy::AsBytes;
 
 use super::abi;
-use crate::{error::Result, return_error};
+use crate::error::Result;
 
 /// A response a a FUSE request.
 #[derive(Debug)]
@@ -27,8 +27,10 @@ impl Response {
 
 	/// Write a response to a request to `file`.
 	pub async fn write(&self, unique: u64, mut file: std::fs::File) -> Result<()> {
-		// TODO: make async.
-		match self {
+		// TODO: make async. We cannot use tokio::fs::File::write, write_all, write_vectored because:
+		// - write_vectored only writes the first non-empty IoSlice.
+		// - tokio::fs::file::write assumes that the underlying file descriptor is a file.
+		let buffer = match self {
 			Self::Data(data) => {
 				let len = data.len() + std::mem::size_of::<abi::fuse_out_header>();
 				let header = abi::fuse_out_header {
@@ -36,14 +38,10 @@ impl Response {
 					len: len as u32,
 					error: 0,
 				};
-				let iov = [
-					IoSlice::new(header.as_bytes()),
-					IoSlice::new(data.as_bytes()),
-				];
-				let size = file.write_vectored(&iov)?;
-				if size != header.as_bytes().len() + data.as_bytes().len() {
-					return_error!("Failed to complete FUSE write.");
-				}
+
+				let mut buffer = header.as_bytes().to_owned();
+				buffer.extend_from_slice(data);
+				buffer
 			},
 			Self::Error(error) => {
 				let header = abi::fuse_out_header {
@@ -51,11 +49,18 @@ impl Response {
 					len: std::mem::size_of::<abi::fuse_out_header>() as u32,
 					error: -error, // Errors are ERRNO * -1.
 				};
-				let iov = [IoSlice::new(header.as_bytes())];
-				let size = file.write_vectored(&iov)?;
-				if size != header.as_bytes().len() {
-					return_error!("Failed to complete FUSE write.");
-				}
+				header.as_bytes().to_owned()
+			},
+		};
+
+		match file.write_all(&buffer) {
+			Ok(_) => (),
+			// ENOENT means the kernel will retry the request.
+			Err(e) if e.raw_os_error() == Some(libc::ENOENT) => (),
+			Err(e) => {
+				let buffer_len = buffer.len();
+				tracing::error!(?e, ?buffer_len, "Failed to write FUSE result.");
+				Err(e)?;
 			},
 		}
 		Ok(())

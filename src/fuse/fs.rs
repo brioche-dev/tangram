@@ -1,4 +1,3 @@
-use futures::future::try_join_all;
 use std::ffi::OsString;
 use std::io::SeekFrom;
 use std::os::unix::prelude::OsStrExt;
@@ -70,14 +69,6 @@ pub struct Attr {
 	num_hardlinks: u32,
 }
 
-#[derive(Debug)]
-pub struct DirectoryEntry {
-	offset: usize,
-	node: NodeID,
-	name: String,
-	kind: FileKind,
-}
-
 /// Represents the files we expose through FUSE.
 #[derive(Debug)]
 pub enum FileKind {
@@ -102,7 +93,10 @@ impl Server {
 		match &request.arg {
 			Arg::GetAttr => self.get_attr(node).await.into(),
 			Arg::Lookup(arg) => match arg.to_str() {
-				None => Response::error(libc::EINVAL),
+				None => {
+					tracing::error!(?arg, "Failed to parse path as UTF-8.");
+					Response::error(libc::EINVAL)
+				},
 				Some(name) => self.lookup(node, name).await.into(),
 			},
 			Arg::Open(arg) => self.open(node, arg.flags).await.into(),
@@ -195,7 +189,7 @@ impl Server {
 					.artifact(parent)?
 					.as_directory()
 					.ok_or_else(|| {
-						tracing::error!(?parent, "Could not find node.");
+						tracing::warn!(?parent, "Node is not a directory.");
 						libc::ENOENT
 					})?
 					.to_data()
@@ -204,16 +198,16 @@ impl Server {
 
 			// Lookup the artifact hash by name.
 			let hash = *directory.get(name).ok_or_else(|| {
-				tracing::error!(?name, ?parent, "Failed to lookup in directory.");
+				tracing::warn!(?name, ?parent, "Failed to get directory entry.");
 				libc::ENOENT
 			})?;
 
 			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
-				tracing::error!(?e, ?hash, "Failed to lookup artifact.");
+				tracing::warn!(?e, ?hash, "Failed to get artifact.");
 				libc::EIO
 			})?;
 
-			let node = self.tree_mut()?.lookup(parent, &artifact);
+			let node: Option<NodeID> = self.tree_mut()?.lookup(parent, &artifact);
 			(node, artifact)
 		};
 
@@ -302,11 +296,12 @@ impl Server {
 	#[tracing::instrument(skip(self), ret)]
 	async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
 		let _entry = self.tree()?.artifact(node)?;
+		self.tree_mut()?.add_ref(node)?;
 		Ok(None)
 	}
 
 	/// Read from a regular file.
-	#[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self, _fh, _flags))]
 	async fn read(
 		&self,
 		node: NodeID,
@@ -315,12 +310,10 @@ impl Server {
 		length: usize,
 		_flags: i32,
 	) -> Result<Vec<u8>> {
-		let file = {
-			self.tree()?
-				.artifact(node)?
-				.into_file()
-				.ok_or(libc::ENOENT)?
-		};
+		let file = self.tree()?.artifact(node)?.into_file().ok_or_else(|| {
+			tracing::error!(?node, "Failed to get file artifact.");
+			libc::ENOENT
+		})?;
 
 		let blob = file.blob();
 		let mut reader = blob
@@ -340,12 +333,12 @@ impl Server {
 			.seek(SeekFrom::Start(offset.try_into().unwrap()))
 			.await
 			.map_err(|e| {
-				tracing::error!(?e);
+				tracing::error!(?e, "Failed to seek to start of file.");
 				e.raw_os_error().unwrap_or(libc::EIO)
 			})?;
 
 		let end = reader.seek(SeekFrom::End(0)).await.map_err(|e| {
-			tracing::error!(?e);
+			tracing::error!(?e, "Failed to seek to end of file.");
 			e.raw_os_error().unwrap_or(libc::EIO)
 		})?;
 
@@ -383,12 +376,18 @@ impl Server {
 			.tree()?
 			.artifact(node)?
 			.into_directory()
-			.ok_or(libc::ENOENT)?;
+			.ok_or_else(|| {
+				tracing::error!(?node, "Failed to get artifact as directory.");
+				libc::ENOENT
+			})?;
+		self.tree_mut()?.add_ref(node)?;
 		Ok(FileHandle::new(0))
 	}
 
 	/// Read a directory.
-	#[tracing::instrument(skip(self, _fh, _flags), ret)]
+	///
+	/// Since our server does not support adding, removing, or renaming directory entries we do not have to worry about concurrent modifications to the underlying directory object, and as a result we do not need to track directory stream state using the file handle or offset value.
+	#[tracing::instrument(skip(self, _fh, _flags, size))]
 	async fn read_dir(
 		&self,
 		node: NodeID,
@@ -396,41 +395,52 @@ impl Server {
 		_flags: i32,
 		offset: isize,
 		size: usize,
-	) -> Result<Vec<DirectoryEntry>> {
-		let offset = offset.try_into().unwrap();
-
-		// TODO: track state w/ a file handle and make sure we don't overflow the MAX_WRITE size configured by init.
-		let entries = self
+	) -> Result<Response> {
+		let directory_data = self
 			.tree()?
 			.artifact(node)?
 			.into_directory()
-			.ok_or(libc::ENOENT)?
-			.to_data()
-			.entries
-			.into_iter()
-			.skip(offset)
-			.take(size)
-			.enumerate();
+			.ok_or_else(|| {
+				tracing::error!(?node, "Failed to get directory.");
+				libc::EIO
+			})?
+			.to_data();
 
-		let entries = entries.map(|(n, (name, _))| async move {
-			let (node, artifact) = self.lookup_inner(node, &name).await?;
-			let kind = (&artifact).into();
+		let entries = directory_data.entries.into_iter().skip(offset as usize);
 
-			Ok(DirectoryEntry {
-				offset: offset + n + 1,
-				node,
-				name,
-				kind,
-			})
-		});
+		let mut buf = Vec::with_capacity(size);
 
-		try_join_all(entries).await
+		for (n, (name, _)) in entries.enumerate() {
+			let (node, artifact) = self.lookup_inner(node, &name).await.map_err(|e| {
+				tracing::error!(?node, ?name, "Failed to lookup child in directory.");
+				e
+			})?;
+			let path: PathBuf = name.into();
+			let kind: FileKind = (&artifact).into();
+			let name_bytes = path.as_os_str().as_bytes();
+			let offset = 1 + (n as isize + offset) as i64;
+			let dirent = abi::fuse_dirent {
+				ino: node.0,
+				off: offset,
+				namelen: name_bytes.len().try_into().unwrap(),
+				typ: kind.type_(),
+			};
+
+			let dirent_bytes = dirent.as_bytes();
+			let new_size = dirent_bytes.len() + name_bytes.len() + buf.len();
+			if new_size > buf.capacity() {
+				break;
+			}
+			buf.extend_from_slice(dirent_bytes);
+			buf.extend_from_slice(name_bytes);
+		}
+		Ok(Response::Data(buf))
 	}
 
 	/// Release a directory.
 	#[tracing::instrument(skip(self), ret)]
 	async fn release_dir(&self, node: NodeID) -> Result<()> {
-		// TODO: release dir
+		self.tree_mut()?.release(node)?;
 		Ok(())
 	}
 
@@ -478,15 +488,15 @@ impl Server {
 					libc::EIO
 				})?;
 
-			reader
-				.seek(SeekFrom::Start(0))
-				.await
-				.map_err(|e| e.raw_os_error().unwrap_or(libc::EIO))?;
+			reader.seek(SeekFrom::Start(0)).await.map_err(|e| {
+				tracing::error!(?e, "Failed to seek to beginning of file.");
+				e.raw_os_error().unwrap_or(libc::EIO)
+			})?;
 
-			let end = reader
-				.seek(SeekFrom::End(0))
-				.await
-				.map_err(|e| e.raw_os_error().unwrap_or(libc::EIO))?;
+			let end = reader.seek(SeekFrom::End(0)).await.map_err(|e| {
+				tracing::error!(?e, "Failed to seek to end of file.");
+				e.raw_os_error().unwrap_or(libc::EIO)
+			})?;
 
 			Ok(end.try_into().unwrap())
 		} else {
@@ -553,16 +563,21 @@ impl FileSystem {
 	}
 
 	fn parent(&self, node: NodeID) -> Result<NodeID> {
-		let data = self.data.get(&node).ok_or(libc::ENOENT)?;
+		let data = self.data.get(&node).ok_or_else(|| {
+			tracing::error!(?node, "Failed to retrieve parent.");
+			libc::ENOENT
+		})?;
 		Ok(data.parent)
 	}
 
-	fn _add_ref(&mut self, _node: NodeID) {
-		// TODO: add_ref
+	fn add_ref(&mut self, _node: NodeID) -> Result<()> {
+		// TODO
+		Ok(())
 	}
 
-	fn _release(&mut self, _node: NodeID) {
-		// TODO: release
+	fn release(&mut self, _node: NodeID) -> Result<()> {
+		// TODO
+		Ok(())
 	}
 }
 
@@ -701,29 +716,6 @@ impl From<Option<FileHandle>> for Response {
 			padding: 0,
 		};
 		Response::data(response.as_bytes())
-	}
-}
-
-impl From<Vec<DirectoryEntry>> for Response {
-	fn from(value: Vec<DirectoryEntry>) -> Self {
-		let mut buf = Vec::new();
-		for entry in value {
-			let ino = entry.node.0;
-			let name = entry.name.as_bytes();
-			let namelen = name.len().try_into().expect("Name too long.");
-			let off = entry.offset.try_into().expect("Offset too larger.");
-			let typ = entry.kind.type_();
-			let header = abi::fuse_dirent {
-				ino,
-				off,
-				namelen,
-				typ,
-			};
-			buf.extend_from_slice(header.as_bytes());
-			buf.extend_from_slice(name);
-		}
-
-		Response::Data(buf)
 	}
 }
 
