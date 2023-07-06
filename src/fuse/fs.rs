@@ -37,7 +37,9 @@ struct FileSystem {
 
 /// A single node in the file system.
 struct Node {
-	artifact: Option<Artifact>, // TODO: use artifact::Hash internally.
+	name:Option<String>,
+	hash:Option<artifact::Hash>,
+	kind:FileKind,
 	parent: NodeID,
 	children: Vec<NodeID>,
 }
@@ -161,12 +163,12 @@ impl Server {
 
 	async fn lookup_inner(&self, parent: NodeID, name: &str) -> Result<(NodeID, Artifact)> {
 		if name == "." {
-			let artifact = self.tree()?.artifact(parent)?;
+			let artifact = self.get_artifact(parent).await?;
 			return Ok((parent, artifact));
 		}
 		if name == ".." {
 			let parent = self.tree()?.parent(parent)?;
-			let artifact = self.tree()?.artifact(parent)?;
+			let artifact = self.get_artifact(parent).await?;
 			return Ok((parent, artifact));
 		}
 
@@ -185,8 +187,8 @@ impl Server {
 		} else {
 			// Otherwise we get the parent directory (which must already exist) and find the corresponding entry.
 			let directory = {
-				self.tree()?
-					.artifact(parent)?
+				self.get_artifact(parent)
+					.await?
 					.as_directory()
 					.ok_or_else(|| {
 						tracing::warn!(?parent, "Node is not a directory.");
@@ -212,7 +214,7 @@ impl Server {
 		};
 
 		// If the node is None, it means we haven't created one for this entry yet.
-		let node = node.unwrap_or(self.tree_mut()?.insert(parent, artifact.clone()));
+		let node = node.unwrap_or(self.tree_mut()?.insert(parent, name.to_owned(), artifact.clone()));
 
 		Ok((node, artifact))
 	}
@@ -228,7 +230,7 @@ impl Server {
 				size: 0,
 			}),
 			_ => {
-				let artifact = self.tree()?.artifact(node)?;
+				let artifact = self.get_artifact(node).await?;
 				let size = self.size(node).await?;
 
 				Ok(Attr {
@@ -246,8 +248,8 @@ impl Server {
 	async fn read_link(&self, node: NodeID) -> Result<OsString> {
 		// Check that the artifact pointed to by node is actually a symlink.
 		let symlink = self
-			.tree()?
-			.artifact(node)?
+			.get_artifact(node)
+			.await?
 			.into_symlink()
 			.ok_or(libc::EINVAL)?;
 
@@ -295,7 +297,7 @@ impl Server {
 	/// Open a regular file.
 	#[tracing::instrument(skip(self), ret)]
 	async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
-		let _entry = self.tree()?.artifact(node)?;
+		let _entry = self.get_artifact(node).await?;
 		self.tree_mut()?.add_ref(node)?;
 		Ok(None)
 	}
@@ -310,7 +312,7 @@ impl Server {
 		length: usize,
 		_flags: i32,
 	) -> Result<Vec<u8>> {
-		let file = self.tree()?.artifact(node)?.into_file().ok_or_else(|| {
+		let file = self.get_artifact(node).await?.into_file().ok_or_else(|| {
 			tracing::error!(?node, "Failed to get file artifact.");
 			libc::ENOENT
 		})?;
@@ -373,8 +375,8 @@ impl Server {
 	#[tracing::instrument(skip(self), ret)]
 	async fn open_dir(&self, node: NodeID, _flags: i32) -> Result<Option<FileHandle>> {
 		let _entry = self
-			.tree()?
-			.artifact(node)?
+			.get_artifact(node)
+			.await?
 			.into_directory()
 			.ok_or_else(|| {
 				tracing::error!(?node, "Failed to get artifact as directory.");
@@ -397,8 +399,8 @@ impl Server {
 		size: usize,
 	) -> Result<Response> {
 		let directory_data = self
-			.tree()?
-			.artifact(node)?
+			.get_artifact(node)
+			.await?
 			.into_directory()
 			.ok_or_else(|| {
 				tracing::error!(?node, "Failed to get directory.");
@@ -473,7 +475,7 @@ impl Server {
 	}
 
 	async fn size(&self, node: NodeID) -> Result<usize> {
-		let artifact = self.tree()?.artifact(node)?;
+		let artifact = self.get_artifact(node).await?;
 		if let Artifact::File(file) = artifact {
 			let blob = file.blob();
 			let mut reader = blob
@@ -503,6 +505,21 @@ impl Server {
 			Ok(0)
 		}
 	}
+
+	async fn get_artifact(&self, node:NodeID) -> Result<Artifact> {
+		let hash = self.tree()?.hash(node)?;
+		Artifact::get(&self.tg, hash)
+			.await
+			.map_err(|e| {
+				tracing::error!(?e, ?hash, "Failed to get artifact.");
+				libc::EIO
+			})
+	}
+
+	async fn read_dir_inner (&self, node:NodeID) -> Result<Vec<(String, NodeID, FileKind)>> {
+		let mut tree = self.tree_mut()?;
+		todo!()
+	}
 }
 
 impl FileSystem {
@@ -510,20 +527,25 @@ impl FileSystem {
 		let root = (
 			ROOT,
 			Node {
-				artifact: None,
+				name: None,
+				hash: None,
+				kind: FileKind::Directory,
 				parent: ROOT,
 				children: Vec::new(),
 			},
 		);
+
 		Self {
 			data: [root].into_iter().collect(),
 		}
 	}
 
-	fn insert(&mut self, parent: NodeID, artifact: Artifact) -> NodeID {
+	fn insert(&mut self, parent: NodeID, name:String, artifact: Artifact) -> NodeID {
 		let node = NodeID(self.data.len() as u64 + 1000);
 		let data = Node {
-			artifact: Some(artifact),
+			name: Some(name),
+			hash: Some(artifact.hash()),
+			kind: (&artifact).into(),
 			parent,
 			children: Vec::new(),
 		};
@@ -544,7 +566,7 @@ impl FileSystem {
 					let existing = self
 						.data
 						.get(node)
-						.and_then(|data| data.artifact.as_ref().map(Artifact::hash));
+						.and_then(|data| data.hash);
 
 					existing == Some(artifact.hash())
 				})
@@ -552,12 +574,12 @@ impl FileSystem {
 			.copied()
 	}
 
-	fn artifact(&self, node: NodeID) -> Result<Artifact> {
+	fn hash(&self, node: NodeID) -> Result<artifact::Hash> {
 		self.data
 			.get(&node)
-			.and_then(|data| data.artifact.clone())
+			.and_then(|data| data.hash)
 			.ok_or_else(|| {
-				tracing::error!(?node, "Failed to retrieve artifact.");
+				tracing::error!(?node, "Failed to retrieve artifact hash.");
 				libc::ENOENT
 			})
 	}
