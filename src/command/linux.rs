@@ -301,25 +301,26 @@ impl Command {
 		});
 
 		// Add the tangram directory to the mounts.
-		// let tangram_directory_source_path = tangram_directory_host_path;
-		// let tangram_directory_target_path =
-		// 	root_host_path.join(tangram_directory_guest_path.strip_prefix("/").unwrap());
-		// tokio::fs::create_dir_all(&tangram_directory_target_path)
-		// 	.await
-		// 	.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
-		// let tangram_directory_source_path =
-		// 	CString::new(tangram_directory_source_path.as_os_str().as_bytes()).unwrap();
-		// let tangram_directory_target_path =
-		// 	CString::new(tangram_directory_target_path.as_os_str().as_bytes()).unwrap();
-		// mounts.push(Mount {
-		// 	source: tangram_directory_source_path,
-		// 	target: tangram_directory_target_path,
-		// 	fstype: None,
-		// 	flags: libc::MS_BIND | libc::MS_REC,
-		// 	data: None,
-		// 	// TODO: Only the database and artifacts created by the guest process should be write-able.
-		// 	readonly: false,
-		// });
+		let tangram_directory_source_path = tg.path();
+		let tangram_directory_guest_path = "/.tangram";
+		let tangram_directory_target_path =
+			root_host_path.join(tangram_directory_guest_path.strip_prefix("/").unwrap());
+		tokio::fs::create_dir_all(&tangram_directory_target_path)
+			.await
+			.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
+		let tangram_directory_source_path =
+			CString::new(tangram_directory_source_path.as_os_str().as_bytes()).unwrap();
+		let tangram_directory_target_path =
+			CString::new(tangram_directory_target_path.as_os_str().as_bytes()).unwrap();
+		mounts.push(Mount {
+			source: tangram_directory_source_path,
+			target: tangram_directory_target_path,
+			fstype: None,
+			flags: libc::MS_BIND | libc::MS_REC,
+			data: None,
+			// TODO: Only the database and artifacts created by the guest process should be write-able.
+			readonly: false,
+		});
 
 		// Add the home directory to the mounts.
 		let home_directory_source_path = home_directory_host_path.clone();
@@ -779,6 +780,7 @@ fn guest(context: &Context) {
 		);
 
 		// Mount the FUSE filesystem.
+		// libc::unlink(CStr::from_bytes_with_nul(b"/.tangram/artifacts\0").unwrap().as_ptr());
 		mount_fuse(fuse_fd, &context.fuse_target_path);
 
 		// Attempt to send the file descriptor of /dev/fd back to the host process.
