@@ -92,6 +92,7 @@ async fn main_inner() -> Result<()> {
 		api_url,
 		api_token,
 		sandbox_enabled,
+		create_directory: true,
 	};
 
 	// Create the instance.

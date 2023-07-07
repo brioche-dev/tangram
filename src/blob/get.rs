@@ -3,7 +3,7 @@ use crate::{
 	error::{Result, WrapErr},
 	instance::Instance,
 };
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, AsyncSeek};
 
 impl Blob {
 	pub async fn get(&self, tg: &Instance) -> Result<impl AsyncRead> {
@@ -39,7 +39,7 @@ impl Blob {
 		Ok(reader)
 	}
 
-	pub async fn try_get_local(&self, tg: &Instance) -> Result<Option<impl AsyncRead>> {
+	pub async fn try_get_local(&self, tg: &Instance) -> Result<Option<impl AsyncRead + AsyncSeek>> {
 		let path = tg.blob_path(self.hash);
 		if !tokio::fs::try_exists(&path).await? {
 			return Ok(None);

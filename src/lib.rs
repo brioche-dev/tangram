@@ -14,6 +14,7 @@ pub mod document;
 pub mod error;
 pub mod file;
 pub mod function;
+pub mod fuse;
 pub mod hash;
 pub mod id;
 pub mod instance;
