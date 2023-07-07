@@ -66,6 +66,15 @@ struct Entry {
 }
 
 #[derive(Debug)]
+pub struct DirectoryEntry<'a> {
+	node: NodeID,
+	offset: usize,
+	name: &'a str,
+	kind: FileKind,
+	size: usize,
+}
+
+#[derive(Debug)]
 pub struct Attr {
 	node: NodeID,
 	valid_time: Duration,
@@ -286,7 +295,6 @@ impl Server {
 					return Err(libc::EINVAL);
 				},
 				template::Component::String(string) => {
-					// TODO: use std::path here.
 					subpath.extend(string.split('/'));
 				},
 			}
@@ -311,8 +319,7 @@ impl Server {
 
 	/// Open a regular file.
 	#[tracing::instrument(skip(self), ret)]
-	async fn open(&self, node: NodeID, flags: i32) -> Result<Option<FileHandle>> {
-		let _entry = self.get_artifact(node).await?;
+	async fn open(&self, node: NodeID, _flags: i32) -> Result<Option<FileHandle>> {
 		self.tree.write().await.add_ref(node)?;
 		Ok(None)
 	}
@@ -382,21 +389,12 @@ impl Server {
 	/// Release a regular file. Note: potentially called many times for the same node.
 	#[tracing::instrument(skip(self), ret)]
 	async fn release(&self, node: NodeID) -> Result<()> {
-		// TODO: implement release
-		Ok(())
+		self.tree.write().await.release(node)
 	}
 
 	/// Open a directory. TODO:make sure we return a real file handle.
 	#[tracing::instrument(skip(self), ret)]
 	async fn open_dir(&self, node: NodeID, _flags: i32) -> Result<Option<FileHandle>> {
-		let _entry = self
-			.get_artifact(node)
-			.await?
-			.into_directory()
-			.ok_or_else(|| {
-				tracing::error!(?node, "Failed to get artifact as directory.");
-				libc::ENOENT
-			})?;
 		self.tree.write().await.add_ref(node)?;
 		Ok(FileHandle::new(0))
 	}
@@ -420,36 +418,23 @@ impl Server {
 		let tree = self.tree.read().await;
 
 		// Some tools rely on readdir returning "." and "..".
-		let mut buf = Vec::with_capacity(size);
+		let dot = (offset < 1).then_some(DirectoryEntry {
+			node,
+			offset: 1,
+			name: ".",
+			kind: FileKind::Directory,
+			size: 0,
+		});
 
-		// TODO: we can avoid allocation using bool::map(...).into_iter() and chaining the iterators.
-		let mut entries = Vec::new();
-		if offset < 1 {
-			let dot = DirectoryEntry {
-				node,
-				offset: 1,
-				name: ".",
-				kind: FileKind::Directory,
-				size: 0,
-				valid_time: self.entry_valid_time(),
-			};
-			entries.push(dot);
-		}
+		let dotdot = (offset < 2).then_some(DirectoryEntry {
+			node,
+			offset: 2,
+			name: "..",
+			kind: FileKind::Directory,
+			size: 0,
+		});
 
-		if offset < 2 {
-			let dotdot = DirectoryEntry {
-				node: tree.parent(node)?,
-				name: "..",
-				offset: 2,
-				kind: FileKind::Directory,
-				size: 0,
-				valid_time: self.entry_valid_time(),
-			};
-			entries.push(dotdot);
-		}
-
-		let offset: usize = (offset - 2).max(0).try_into().unwrap();
-
+		let offset = (offset - 2).max(0).try_into().or(Err(libc::EIO))?;
 		let children = tree
 			.children(node)?
 			.iter()
@@ -464,17 +449,63 @@ impl Server {
 					name: data.name.as_deref().unwrap(),
 					kind: data.kind,
 					size: data.size,
-					valid_time: self.entry_valid_time(),
 				};
 
 				Some(entry)
 			});
 
-		entries.extend(children);
+		// Collect all the entries we will return from this syscall.
+		let entries = dot.into_iter().chain(dotdot.into_iter()).chain(children);
 
-		// TODO: clean this up.
+		// Write the entries to the output buffer.
+		let mut buf = Vec::with_capacity(size);
+		let valid_time = self.entry_valid_time();
+		let time = valid_time.as_secs();
+		let time_nsec = valid_time.subsec_nanos();
 		for entry in entries {
-			let (direntplus, name) = entry.to_direntplus();
+			let size = entry.size.try_into().or(Err(libc::EIO))?;
+			let mode = entry.kind.mode();
+			let name = entry.name.as_bytes();
+			let off = entry.offset.try_into().or(Err(libc::EIO))?;
+			let namelen = entry.name.len().try_into().or(Err(libc::EIO))?;
+			let typ = entry.kind.type_();
+
+			let entry_out = abi::fuse_entry_out {
+				nodeid: entry.node.0,
+				generation: 0,
+				entry_valid: time,
+				entry_valid_nsec: time_nsec,
+				attr_valid: time,
+				attr_valid_nsec: time_nsec,
+				attr: abi::fuse_attr {
+					ino: entry.node.0,
+					size,
+					blocks: 1,
+					atime: 0,
+					mtime: 0,
+					ctime: 0,
+					atimensec: 0,
+					mtimensec: 0,
+					ctimensec: 0,
+					mode,
+					nlink: 1,
+					uid: 1000,
+					gid: 1000,
+					rdev: 1000,
+					blksize: 512,
+					padding: 0,
+				},
+			};
+
+			let dirent = abi::fuse_dirent {
+				ino: entry.node.0,
+				off,
+				namelen,
+				typ,
+			};
+
+			let direntplus = abi::fuse_direntplus { entry_out, dirent };
+
 			let header = if plus {
 				direntplus.as_bytes()
 			} else {
@@ -493,7 +524,6 @@ impl Server {
 			buf.extend((0..padlen).map(|_| 0));
 		}
 
-		debug_assert!(buf.len() < size);
 		Ok(Response::Data(buf))
 	}
 
@@ -871,62 +901,5 @@ impl<'a> From<&'a Artifact> for FileKind {
 			Artifact::Directory(_) => FileKind::Directory,
 			Artifact::Symlink(_) => FileKind::Symlink,
 		}
-	}
-}
-
-#[derive(Debug)]
-pub struct DirectoryEntry<'a> {
-	node: NodeID,
-	offset: usize,
-	name: &'a str,
-	kind: FileKind,
-	size: usize,
-	valid_time: Duration,
-}
-
-impl<'a> DirectoryEntry<'a> {
-	// TODO: Move this into the body of read_dir or use the same pattern as other requests.
-	fn to_direntplus(&self) -> (abi::fuse_direntplus, &'_ [u8]) {
-		let time = self.valid_time.as_secs();
-		let time_nsec = self.valid_time.subsec_nanos();
-		let name = self.name.as_bytes();
-
-		let entry_out = abi::fuse_entry_out {
-			nodeid: self.node.0,
-			generation: 0,
-			entry_valid: time,
-			entry_valid_nsec: time_nsec,
-			attr_valid: time,
-			attr_valid_nsec: time_nsec,
-			attr: abi::fuse_attr {
-				ino: self.node.0,
-				size: self.size.try_into().expect("Size too big."),
-				blocks: 1,
-				atime: 0,
-				mtime: 0,
-				ctime: 0,
-				atimensec: 0,
-				mtimensec: 0,
-				ctimensec: 0,
-				mode: self.kind.mode(),
-				nlink: 1,
-				uid: 1000,
-				gid: 1000,
-				rdev: 1000,
-				blksize: 512,
-				padding: 0,
-			},
-		};
-
-		let dirent = abi::fuse_dirent {
-			ino: self.node.0,
-			off: self.offset.try_into().expect("Offset too large."),
-			namelen: name.as_bytes().len().try_into().expect("Name too long."),
-			typ: self.kind.type_(),
-		};
-
-		let direntplus = abi::fuse_direntplus { entry_out, dirent };
-
-		(direntplus, name)
 	}
 }
