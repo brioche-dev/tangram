@@ -83,15 +83,17 @@ pub struct Options {
 	pub api_url: Option<Url>,
 	pub api_token: Option<String>,
 	pub sandbox_enabled: bool,
+	pub create_directory: bool,
 }
 
 impl Instance {
 	pub async fn new(path: PathBuf, options: Options) -> Result<Instance> {
-		// Ensure the path exists.
-		tokio::fs::create_dir_all(&path).await?;
-
-		// Migrate the path.
-		Self::migrate(&path).await?;
+		if options.create_directory {
+			// Ensure the path exists.
+			tokio::fs::create_dir_all(&path).await?;
+			// Migrate the path.
+			Self::migrate(&path).await?;
+		}
 
 		#[cfg(feature = "v8")]
 		{
