@@ -215,7 +215,8 @@ impl Server {
 			// Otherwise, get the artifact and insert it into the file system.
 			let hash = artifact::Hash::from_str(name).map_err(|e| {
 				tracing::error!(?name, ?e, "Failed to parse path as an artifact hash.");
-				libc::EINVAL
+				// Note: programs will often attempt to lookup paths that don't exist, so we cannot be more restrictive than responding with ENOENT.
+				libc::ENOENT
 			})?;
 			let artifact = Artifact::get(&self.tg, hash).await.map_err(|e| {
 				tracing::error!(?e, "Failed to get artifact at root.");
@@ -416,19 +417,48 @@ impl Server {
 		if node != ROOT {
 			self.ensure_directory_is_cached(node).await?;
 		}
-
 		let tree = self.tree.read().await;
-		let entries = tree
+
+		// Some tools rely on readdir returning "." and "..".
+		let mut buf = Vec::with_capacity(size);
+		let mut entries = Vec::new();
+		if offset < 1 {
+			let dot = DirectoryEntry {
+				node,
+				offset: 1,
+				name: ".",
+				kind: FileKind::Directory,
+				size: 0,
+				valid_time: self.entry_valid_time(),
+			};
+			entries.push(dot);
+		}
+
+		if offset < 2 {
+			let dotdot = DirectoryEntry {
+				node: tree.parent(node)?,
+				name: "..",
+				offset: 2,
+				kind: FileKind::Directory,
+				size: 0,
+				valid_time: self.entry_valid_time(),
+			};
+			entries.push(dotdot);
+		}
+
+		let offset: usize = (offset - 2).max(0).try_into().unwrap();
+
+		let children = tree
 			.children(node)?
 			.iter()
-			.skip(offset as usize)
+			.skip(offset)
 			.enumerate()
 			.filter_map(|(n, node)| {
 				let data = tree.data.get(node)?;
 
 				let entry = DirectoryEntry {
 					node: *node,
-					offset: (offset as usize) + n + 1,
+					offset: offset + n + 3,
 					name: data.name.as_deref().unwrap(),
 					kind: data.kind,
 					size: data.size,
@@ -437,8 +467,7 @@ impl Server {
 
 				Some(entry)
 			});
-
-		let mut buf = Vec::with_capacity(size);
+		entries.extend(children);
 
 		for entry in entries {
 			let (direntplus, name) = entry.to_direntplus();
@@ -540,7 +569,6 @@ impl Server {
 		})
 	}
 
-	/// Eagerly fetch the children of the directory and insert them to the file system for fast subsequent lookups.
 	async fn ensure_directory_is_cached(&self, node: NodeID) -> Result<()> {
 		let mut tree = self.tree.write().await;
 		let data = tree.data.get_mut(&node).ok_or_else(|| {
