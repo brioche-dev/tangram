@@ -412,7 +412,7 @@ impl Server {
 		_flags: i32,
 		offset: isize,
 		size: usize,
-		plus: bool,
+		plus: bool, // TODO: only use readdirplus, don't support readdir.
 	) -> Result<Response> {
 		if node != ROOT {
 			self.ensure_directory_is_cached(node).await?;
@@ -421,6 +421,8 @@ impl Server {
 
 		// Some tools rely on readdir returning "." and "..".
 		let mut buf = Vec::with_capacity(size);
+
+		// TODO: we can avoid allocation using bool::map(...).into_iter() and chaining the iterators.
 		let mut entries = Vec::new();
 		if offset < 1 {
 			let dot = DirectoryEntry {
@@ -467,8 +469,10 @@ impl Server {
 
 				Some(entry)
 			});
+
 		entries.extend(children);
 
+		// TODO: clean this up.
 		for entry in entries {
 			let (direntplus, name) = entry.to_direntplus();
 			let header = if plus {
@@ -542,6 +546,7 @@ impl Server {
 
 				Ok(end.try_into().unwrap())
 			},
+			// The "size" of a symlink is the contents of the symlink file itself (in our case, the size of the template + size of any referenced artifacts.)
 			Artifact::Symlink(symlink) => {
 				let size = symlink
 					.target()
@@ -557,6 +562,7 @@ impl Server {
 					});
 				Ok(size)
 			},
+			// TODO: is this the correct value for the "size" of a directory?
 			Artifact::Directory(directory) => Ok(directory.to_data().entries.len()),
 		}
 	}
@@ -706,12 +712,12 @@ impl FileSystem {
 	}
 
 	fn add_ref(&mut self, _node: NodeID) -> Result<()> {
-		// TODO
+		// TODO: add reference counting to cleanup resources that are released.
 		Ok(())
 	}
 
 	fn release(&mut self, _node: NodeID) -> Result<()> {
-		// TODO
+		// TODO: add reference counting to cleanup resources that are released.
 		Ok(())
 	}
 }
@@ -879,6 +885,7 @@ pub struct DirectoryEntry<'a> {
 }
 
 impl<'a> DirectoryEntry<'a> {
+	// TODO: Move this into the body of read_dir or use the same pattern as other requests.
 	fn to_direntplus(&self) -> (abi::fuse_direntplus, &'_ [u8]) {
 		let time = self.valid_time.as_secs();
 		let time_nsec = self.valid_time.subsec_nanos();

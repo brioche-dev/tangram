@@ -23,6 +23,7 @@ pub async fn run(mut fuse_device: tokio::fs::File, tg: Arc<Instance>) -> Result<
 	let file_system = fs::Server::new(tg);
 	let mut initialized = false;
 	loop {
+		// TODO: use synchronous reads.
 		match fuse_device.read(buffer.as_mut()).await {
 			Ok(request_size) => {
 				// Attempt to deserialize the request.
