@@ -425,7 +425,6 @@ impl Server {
 			kind: FileKind::Directory,
 			size: 0,
 		});
-
 		let dotdot = (offset < 2).then_some(DirectoryEntry {
 			node,
 			offset: 2,
@@ -434,18 +433,18 @@ impl Server {
 			size: 0,
 		});
 
-		let offset = (offset - 2).max(0).try_into().or(Err(libc::EIO))?;
+		let skip = (offset - 2).max(0).try_into().or(Err(libc::EIO))?;
 		let children = tree
 			.children(node)?
 			.iter()
-			.skip(offset)
+			.skip(skip)
 			.enumerate()
 			.filter_map(|(n, node)| {
 				let data = tree.data.get(node)?;
 
 				let entry = DirectoryEntry {
 					node: *node,
-					offset: offset + n + 3,
+					offset: skip + n + 3,
 					name: data.name.as_deref().unwrap(),
 					kind: data.kind,
 					size: data.size,
@@ -463,6 +462,7 @@ impl Server {
 		let time = valid_time.as_secs();
 		let time_nsec = valid_time.subsec_nanos();
 		for entry in entries {
+			// Get entry metadata.
 			let size = entry.size.try_into().or(Err(libc::EIO))?;
 			let mode = entry.kind.mode();
 			let name = entry.name.as_bytes();
@@ -470,6 +470,7 @@ impl Server {
 			let namelen = entry.name.len().try_into().or(Err(libc::EIO))?;
 			let typ = entry.kind.type_();
 
+			// Convert to a fuse_entry_out and fuse_dirent.
 			let entry_out = abi::fuse_entry_out {
 				nodeid: entry.node.0,
 				generation: 0,
@@ -496,22 +497,22 @@ impl Server {
 					padding: 0,
 				},
 			};
-
 			let dirent = abi::fuse_dirent {
 				ino: entry.node.0,
 				off,
 				namelen,
 				typ,
 			};
-
 			let direntplus = abi::fuse_direntplus { entry_out, dirent };
 
+			// If this function is called as direntplus use the entire object, else just use the dirent field.
 			let header = if plus {
 				direntplus.as_bytes()
 			} else {
 				direntplus.dirent.as_bytes()
 			};
 
+			// Entries **must** be eight byte aligned.
 			let entlen = header.len() + name.len();
 			let entsize = (entlen + 7) & !7; // 8 byte alignment.
 			let padlen = entsize - entlen;
