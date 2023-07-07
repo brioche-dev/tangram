@@ -102,12 +102,12 @@ fn aligned_buffer() -> Box<[u8]> {
 #[tracing::instrument]
 fn initialize(arg: abi::fuse_init_in) -> Response {
 	let response = abi::fuse_init_out {
-		major: 7,                            // Major version that we support.
-		minor: 9,                            // Minor version that we target.
-		max_readahead: arg.max_readahead,    // Reuse from the argument.
-		max_write: MAX_WRITE_SIZE as u32,    // This is a limit on the size of messages.
-		flags: abi::consts::FUSE_ASYNC_READ, // Equivalent to no flags.
-		unused: 0,                           // Padding.
+		major: 7,                                // Major version that we support.
+		minor: 21,                               // Minor version that we target.
+		max_readahead: arg.max_readahead,        // Reuse from the argument.
+		max_write: MAX_WRITE_SIZE as u32,        // This is a limit on the size of messages.
+		flags: abi::consts::FUSE_DO_READDIRPLUS, // Use readdir+ instead of readdir.
+		unused: 0,                               // Padding.
 	};
 
 	Response::data(response.as_bytes())

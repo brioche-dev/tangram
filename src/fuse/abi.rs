@@ -206,9 +206,7 @@ pub mod consts {
 	pub const FUSE_HAS_IOCTL_DIR: u32 = 1 << 11; // kernel supports ioctl on directories
 	#[cfg(feature = "abi-7-20")]
 	pub const FUSE_AUTO_INVAL_DATA: u32 = 1 << 12; // automatically invalidate cached pages
-	#[cfg(feature = "abi-7-21")]
 	pub const FUSE_DO_READDIRPLUS: u32 = 1 << 13; // do READDIRPLUS (READDIR+LOOKUP in one)
-	#[cfg(feature = "abi-7-21")]
 	pub const FUSE_READDIRPLUS_AUTO: u32 = 1 << 14; // adaptive readdirplus
 	#[cfg(feature = "abi-7-22")]
 	pub const FUSE_ASYNC_DIO: u32 = 1 << 15; // asynchronous direct I/O submission

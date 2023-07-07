@@ -1,8 +1,7 @@
 use std::ffi::OsString;
 use std::io::SeekFrom;
 use std::os::unix::prelude::OsStrExt;
-use std::path::{Path, PathBuf};
-// use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::path::PathBuf;
 use std::{collections::BTreeMap, num::NonZeroU64, str::FromStr, sync::Arc, time::Duration};
 use tokio::{
 	io::{AsyncReadExt, AsyncSeekExt},
@@ -43,6 +42,7 @@ struct Node {
 	name: Option<String>,
 	hash: Option<artifact::Hash>,
 	kind: FileKind,
+	size: usize,
 	parent: NodeID,
 	children: Option<Vec<NodeID>>,
 }
@@ -123,6 +123,18 @@ impl Server {
 					arg.flags,
 					arg.offset as isize,
 					arg.size as usize,
+					false,
+				)
+				.await
+				.into(),
+			Arg::ReadDirPlus(arg) => self
+				.read_dir(
+					node,
+					FileHandle::new(arg.fh),
+					arg.flags,
+					arg.offset as isize,
+					arg.size as usize,
+					true,
 				)
 				.await
 				.into(),
@@ -152,10 +164,9 @@ impl Server {
 		}
 
 		// First we need to convert the <parent>/name into an underlying artifact.
-		let (node, kind) = self.lookup_inner(parent, name).await?;
+		let (node, kind, size) = self.lookup_inner(parent, name).await?;
 
 		// Get the artifact metadata.
-		let size = self.size(node).await?;
 		let valid_time = self.entry_valid_time();
 
 		let entry = Entry {
@@ -169,14 +180,14 @@ impl Server {
 	}
 
 	/// Lookup an entry in the file system by name.
-	async fn lookup_inner(&self, parent: NodeID, name: &str) -> Result<(NodeID, FileKind)> {
+	async fn lookup_inner(&self, parent: NodeID, name: &str) -> Result<(NodeID, FileKind, usize)> {
 		// Handle special cases, "." and "..".
 		if name == "." {
-			return Ok((parent, FileKind::Directory));
+			return Ok((parent, FileKind::Directory, 0));
 		}
 		if name == ".." {
 			let parent = self.tree.read().await.parent(parent)?;
-			return Ok((parent, FileKind::Directory));
+			return Ok((parent, FileKind::Directory, 0));
 		}
 
 		// If the parent node isn't ROOT we can do a simple lookup in the tree.
@@ -186,7 +197,7 @@ impl Server {
 				.write()
 				.await
 				.lookup(parent, name)
-				.map(|(node, data)| (node, data.kind))
+				.map(|(node, data)| (node, data.kind, data.size))
 				.ok_or(libc::ENOENT);
 		}
 
@@ -196,10 +207,10 @@ impl Server {
 			.read()
 			.await
 			.lookup(ROOT, name)
-			.map(|(node, data)| (node, data.kind));
+			.map(|(node, data)| (node, data.kind, data.size));
 
-		if let Some((node, kind)) = result {
-			Ok((node, kind))
+		if let Some((node, kind, size)) = result {
+			Ok((node, kind, size))
 		} else {
 			// Otherwise, get the artifact and insert it into the file system.
 			let hash = artifact::Hash::from_str(name).map_err(|e| {
@@ -211,12 +222,13 @@ impl Server {
 				libc::EIO
 			})?;
 			let kind = (&artifact).into();
+			let size = self.size(artifact.clone()).await?;
 			let node = self
 				.tree
 				.write()
 				.await
-				.insert(ROOT, name.to_owned(), artifact)?;
-			Ok((node, kind))
+				.insert(ROOT, name.to_owned(), size, artifact)?;
+			Ok((node, kind, size))
 		}
 	}
 
@@ -233,7 +245,7 @@ impl Server {
 			}),
 			_ => {
 				let artifact = self.get_artifact(node).await?;
-				let size = self.size(node).await?;
+				let size = self.size(artifact.clone()).await?;
 
 				Ok(Attr {
 					node,
@@ -399,6 +411,7 @@ impl Server {
 		_flags: i32,
 		offset: isize,
 		size: usize,
+		plus: bool,
 	) -> Result<Response> {
 		if node != ROOT {
 			self.ensure_directory_is_cached(node).await?;
@@ -409,32 +422,45 @@ impl Server {
 			.children(node)?
 			.iter()
 			.skip(offset as usize)
-			.filter_map(|node| {
+			.enumerate()
+			.filter_map(|(n, node)| {
 				let data = tree.data.get(node)?;
-				Some((*node, data.name.as_deref().unwrap(), data.kind))
+
+				let entry = DirectoryEntry {
+					node: *node,
+					offset: (offset as usize) + n + 1,
+					name: data.name.as_deref().unwrap(),
+					kind: data.kind,
+					size: data.size,
+					valid_time: self.entry_valid_time(),
+				};
+
+				Some(entry)
 			});
 
 		let mut buf = Vec::with_capacity(size);
-		for (n, (node, name, kind)) in entries.enumerate() {
-			// TODO: Do we need to convert to an OsStr here?
-			let path: &Path = name.as_ref();
-			let name_bytes = path.as_os_str().as_bytes();
-			let offset = 1 + (n as isize + offset) as i64;
-			let dirent = abi::fuse_dirent {
-				ino: node.0,
-				off: offset,
-				namelen: name_bytes.len().try_into().unwrap(),
-				typ: kind.type_(),
+
+		for entry in entries {
+			let (direntplus, name) = entry.to_direntplus();
+			let header = if plus {
+				direntplus.as_bytes()
+			} else {
+				direntplus.dirent.as_bytes()
 			};
 
-			let dirent_bytes = dirent.as_bytes();
-			let new_size = dirent_bytes.len() + name_bytes.len() + buf.len();
-			if new_size > buf.capacity() {
+			let entlen = header.len() + name.len();
+			let entsize = (entlen + 7) & !7; // 8 byte alignment.
+			let padlen = entsize - entlen;
+			if buf.len() + entsize >= buf.capacity() {
 				break;
 			}
-			buf.extend_from_slice(dirent_bytes);
-			buf.extend_from_slice(name_bytes);
+
+			buf.extend_from_slice(header);
+			buf.extend_from_slice(name);
+			buf.extend((0..padlen).map(|_| 0));
 		}
+
+		debug_assert!(buf.len() < size);
 		Ok(Response::Data(buf))
 	}
 
@@ -452,42 +478,57 @@ impl Server {
 	}
 
 	fn attr_valid_time(&self) -> Duration {
-		Duration::from_micros(100)
+		Duration::from_secs(20)
 	}
 
 	fn entry_valid_time(&self) -> Duration {
 		self.attr_valid_time()
 	}
 
-	async fn size(&self, node: NodeID) -> Result<usize> {
-		let artifact = self.get_artifact(node).await?;
-		if let Artifact::File(file) = artifact {
-			let blob = file.blob();
-			let mut reader = blob
-				.try_get_local(&self.tg)
-				.await
-				.map_err(|e| {
-					tracing::error!(?e, ?node, "Failed to get the underlying blob.");
-					libc::EIO
-				})?
-				.ok_or_else(|| {
-					tracing::error!(?node, "Failed to get reader for the blob.");
-					libc::EIO
+	async fn size(&self, artifact: Artifact) -> Result<usize> {
+		match artifact {
+			Artifact::File(file) => {
+				let blob = file.blob();
+				let mut reader = blob
+					.try_get_local(&self.tg)
+					.await
+					.map_err(|e| {
+						tracing::error!(?e, "Failed to get the underlying blob.");
+						libc::EIO
+					})?
+					.ok_or_else(|| {
+						tracing::error!("Failed to get reader for the blob.");
+						libc::EIO
+					})?;
+
+				reader.seek(SeekFrom::Start(0)).await.map_err(|e| {
+					tracing::error!(?e, "Failed to seek to beginning of file.");
+					e.raw_os_error().unwrap_or(libc::EIO)
 				})?;
 
-			reader.seek(SeekFrom::Start(0)).await.map_err(|e| {
-				tracing::error!(?e, "Failed to seek to beginning of file.");
-				e.raw_os_error().unwrap_or(libc::EIO)
-			})?;
+				let end = reader.seek(SeekFrom::End(0)).await.map_err(|e| {
+					tracing::error!(?e, "Failed to seek to end of file.");
+					e.raw_os_error().unwrap_or(libc::EIO)
+				})?;
 
-			let end = reader.seek(SeekFrom::End(0)).await.map_err(|e| {
-				tracing::error!(?e, "Failed to seek to end of file.");
-				e.raw_os_error().unwrap_or(libc::EIO)
-			})?;
-
-			Ok(end.try_into().unwrap())
-		} else {
-			Ok(0)
+				Ok(end.try_into().unwrap())
+			},
+			Artifact::Symlink(symlink) => {
+				let size = symlink
+					.target()
+					.components()
+					.iter()
+					.fold(0, |acc, component| {
+						let len = match component {
+							template::Component::Artifact(_) => 64,
+							template::Component::String(s) => s.len(),
+							_ => 0,
+						};
+						acc + len
+					});
+				Ok(size)
+			},
+			Artifact::Directory(directory) => Ok(directory.to_data().entries.len()),
 		}
 	}
 
@@ -530,7 +571,8 @@ impl Server {
 
 		data.children = Some(Vec::new());
 		for (name, artifact) in entries {
-			tree.insert(node, name, artifact)?;
+			let size = self.size(artifact.clone()).await?;
+			tree.insert(node, name, size, artifact)?;
 		}
 
 		Ok(())
@@ -545,6 +587,7 @@ impl FileSystem {
 				name: None,
 				hash: None,
 				kind: FileKind::Directory,
+				size: 0,
 				parent: ROOT,
 				children: Some(Vec::new()),
 			},
@@ -555,12 +598,19 @@ impl FileSystem {
 		}
 	}
 
-	fn insert(&mut self, parent: NodeID, name: String, artifact: Artifact) -> Result<NodeID> {
+	fn insert(
+		&mut self,
+		parent: NodeID,
+		name: String,
+		size: usize,
+		artifact: Artifact,
+	) -> Result<NodeID> {
 		let node = NodeID(self.data.len() as u64 + 1000);
 		let data = Node {
 			name: Some(name),
 			hash: Some(artifact.hash()),
 			kind: (&artifact).into(),
+			size,
 			parent,
 			children: None,
 		};
@@ -654,10 +704,12 @@ impl FileKind {
 	}
 
 	fn permissions(&self) -> u32 {
+		let read_flags = 0o00444;
+		let exec_flags = 0o00777;
 		match self {
-			Self::Directory => libc::S_IEXEC | libc::S_IREAD,
-			Self::File { is_executable } if *is_executable => libc::S_IEXEC | libc::S_IREAD,
-			_ => libc::S_IREAD,
+			Self::Directory => read_flags | exec_flags,
+			Self::File { is_executable } if *is_executable => read_flags | exec_flags,
+			_ => read_flags,
 		}
 	}
 
@@ -785,5 +837,61 @@ impl<'a> From<&'a Artifact> for FileKind {
 			Artifact::Directory(_) => FileKind::Directory,
 			Artifact::Symlink(_) => FileKind::Symlink,
 		}
+	}
+}
+
+#[derive(Debug)]
+pub struct DirectoryEntry<'a> {
+	node: NodeID,
+	offset: usize,
+	name: &'a str,
+	kind: FileKind,
+	size: usize,
+	valid_time: Duration,
+}
+
+impl<'a> DirectoryEntry<'a> {
+	fn to_direntplus(&self) -> (abi::fuse_direntplus, &'_ [u8]) {
+		let time = self.valid_time.as_secs();
+		let time_nsec = self.valid_time.subsec_nanos();
+		let name = self.name.as_bytes();
+
+		let entry_out = abi::fuse_entry_out {
+			nodeid: self.node.0,
+			generation: 0,
+			entry_valid: time,
+			entry_valid_nsec: time_nsec,
+			attr_valid: time,
+			attr_valid_nsec: time_nsec,
+			attr: abi::fuse_attr {
+				ino: self.node.0,
+				size: self.size.try_into().expect("Size too big."),
+				blocks: 1,
+				atime: 0,
+				mtime: 0,
+				ctime: 0,
+				atimensec: 0,
+				mtimensec: 0,
+				ctimensec: 0,
+				mode: self.kind.mode(),
+				nlink: 1,
+				uid: 1000,
+				gid: 1000,
+				rdev: 1000,
+				blksize: 512,
+				padding: 0,
+			},
+		};
+
+		let dirent = abi::fuse_dirent {
+			ino: self.node.0,
+			off: self.offset.try_into().expect("Offset too large."),
+			namelen: name.as_bytes().len().try_into().expect("Name too long."),
+			typ: self.kind.type_(),
+		};
+
+		let direntplus = abi::fuse_direntplus { entry_out, dirent };
+
+		(direntplus, name)
 	}
 }
