@@ -1,6 +1,16 @@
 /// <reference lib="es2023" />
 
 declare namespace tg {
+	// Assertions.
+	export let assert: (
+		condition: unknown,
+		message?: string,
+	) => asserts condition;
+
+	export let unimplemented: (message?: string) => never;
+
+	export let unreachable: (message?: string) => never;
+
 	// Artifact.
 
 	/** An artifact. */

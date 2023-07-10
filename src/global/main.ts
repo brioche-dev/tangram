@@ -1,4 +1,5 @@
 import { Artifact } from "./artifact.ts";
+import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
 import { command, output, run } from "./command.ts";
 import { Directory, directory } from "./directory.ts";
@@ -33,6 +34,7 @@ Object.defineProperties(globalThis, {
 
 // Create the tg global.
 let tg = {
+	assert,
 	Artifact,
 	Blob,
 	Directory,
@@ -70,6 +72,8 @@ let tg = {
 	system,
 	template,
 	toml,
+	unimplemented,
+	unreachable,
 	utf8,
 	yaml,
 };
