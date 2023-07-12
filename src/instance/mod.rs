@@ -82,6 +82,7 @@ pub struct Instance {
 pub struct Options {
 	pub api_url: Option<Url>,
 	pub api_token: Option<String>,
+	pub preserve_temps: bool,
 	pub sandbox_enabled: bool,
 	pub create_directory: bool,
 }

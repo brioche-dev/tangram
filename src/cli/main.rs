@@ -67,6 +67,12 @@ async fn main_inner() -> Result<()> {
 
 	tracing::debug!(?config, "Read config.");
 
+	// Get the preserve temps configuration.
+	let preserve_temps = args
+		.preserve_temps
+		.or(config.as_ref().and_then(|c| c.preserve_temps))
+		.unwrap_or(false);
+
 	// Get the sandbox configuration.
 	let sandbox_enabled = args
 		.sandbox_enabled
@@ -91,6 +97,7 @@ async fn main_inner() -> Result<()> {
 	let options = tangram::instance::Options {
 		api_url,
 		api_token,
+		preserve_temps,
 		sandbox_enabled,
 		create_directory: true,
 	};

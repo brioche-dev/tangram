@@ -13,6 +13,10 @@ pub struct Config {
 
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub api_url: Option<Url>,
+
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub preserve_temps: Option<bool>,
+
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub sandbox_enabled: Option<bool>,
 }
