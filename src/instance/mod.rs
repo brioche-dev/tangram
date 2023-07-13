@@ -71,6 +71,9 @@ pub struct Instance {
 	#[cfg(feature = "operation_run")]
 	pub(crate) options: Options,
 
+	/// Whether to preserve temporary files.
+	pub(crate) preserve_temps: bool,
+
 	#[cfg(feature = "operation_run")]
 	pub(crate) process_semaphore: tokio::sync::Semaphore,
 
@@ -149,6 +152,9 @@ impl Instance {
 		#[cfg(feature = "operation_run")]
 		let operations_task_map = std::sync::Mutex::new(None);
 
+		// Forward the preserve_temps preference.
+		let preserve_temps = options.preserve_temps;
+
 		// Create the process semaphore.
 		#[cfg(feature = "operation_run")]
 		let process_semaphore = tokio::sync::Semaphore::new(16);
@@ -173,6 +179,7 @@ impl Instance {
 			operations_task_map,
 			#[cfg(feature = "operation_run")]
 			options,
+			preserve_temps,
 			#[cfg(feature = "operation_run")]
 			process_semaphore,
 			path,

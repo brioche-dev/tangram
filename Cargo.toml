@@ -104,9 +104,9 @@ zip = { version = "0.6", default-features = false, features = ["aes-crypto", "de
 zstd = { version = "0.12", optional = true }
 
 [features]
-default = ["operation_run", "server"]
-operation_run = ["dep:flate2", "dep:tar", "dep:xz2", "dep:zstd", "language"]
+default = ["language", "operation_run", "server"]
 language = ["v8"]
+operation_run = ["dep:flate2", "dep:tar", "dep:xz2", "dep:zstd", "v8"]
 server = ["dep:http-body", "dep:http-body-util", "dep:hyper"]
 v8 = ["dep:v8", "dep:serde_v8"]
 
