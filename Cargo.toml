@@ -55,7 +55,7 @@ clap = { version = "4", features = ["derive", "env"] }
 derive_more = "0.99"
 either = { version = "1", features = ["serde"] }
 filetime = "0.2"
-flate2 = "1"
+flate2 = { version = "1", optional = true }
 fnv = "1"
 futures = "0.3"
 hex = { version = "0.4", features = ["serde"] }
@@ -69,7 +69,6 @@ itertools = "0.10"
 libc = "0.2"
 lmdb-rkv = "0.14"
 lsp-types = "0.94.0"
-lz4_flex = "0.11"
 memchr = "2"
 num = "0.4"
 num-derive = "0.3"
@@ -87,7 +86,7 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 sourcemap = "6"
 swc_core = { version = "=0.78.19", features = ["common", "common_sourcemap", "ecma_ast", "ecma_codegen", "ecma_parser", "ecma_parser_typescript", "ecma_transforms", "ecma_transforms_module", "ecma_transforms_typescript", "ecma_visit"] }
-tar = "0.4"
+tar = { version = "0.4", optional = true }
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["fs"] }
@@ -99,16 +98,15 @@ url = "2"
 v8 = { version = "=0.73.0", optional = true }
 webbrowser = "0.8"
 xattr = "1"
-xz2 = "0.1"
-xz = "0.1"
+xz2 = { version = "0.1", optional = true }
 zerocopy = "0.6"
 zip = { version = "0.6", default-features = false, features = ["aes-crypto", "deflate", "bzip2", "time"] }
-zstd = "0.12"
+zstd = { version = "0.12", optional = true }
 
 [features]
-default = ["language", "operation_run", "server"]
+default = ["operation_run", "server"]
+operation_run = ["dep:flate2", "dep:tar", "dep:xz2", "dep:zstd", "language"]
 language = ["v8"]
-operation_run = ["v8"]
 server = ["dep:http-body", "dep:http-body-util", "dep:hyper"]
 v8 = ["dep:v8", "dep:serde_v8"]
 

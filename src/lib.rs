@@ -14,6 +14,7 @@ pub mod document;
 pub mod error;
 pub mod file;
 pub mod function;
+#[cfg(target_os = "linux")]
 pub mod fuse;
 pub mod hash;
 pub mod id;
