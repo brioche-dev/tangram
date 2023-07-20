@@ -8,15 +8,15 @@ use crate::{
 #[derive(
 	Clone,
 	Debug,
-	PartialOrd,
-	Ord,
-	PartialEq,
 	Eq,
 	Hash,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
+	Ord,
+	PartialEq,
+	PartialOrd,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(into = "String", try_from = "String")]
 #[tangram_serialize(into = "String", try_from = "String")]

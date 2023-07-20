@@ -1,5 +1,6 @@
-use super::{Artifact, Hash};
+use super::{Artifact, Data};
 use crate::{
+	block::Block,
 	error::{Result, WrapErr},
 	instance::Instance,
 };
@@ -7,44 +8,24 @@ use async_recursion::async_recursion;
 
 impl Artifact {
 	#[async_recursion]
-	pub async fn get(tg: &'async_recursion Instance, hash: Hash) -> Result<Self> {
-		let artifact = Self::try_get(tg, hash)
+	pub async fn get(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
+		let artifact = Self::try_get(tg, block)
 			.await?
-			.wrap_err_with(|| format!(r#"Failed to get the artifact with hash "{hash}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to get the artifact with block "{block}"."#))?;
 		Ok(artifact)
 	}
 
-	pub async fn try_get(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
-		// Attempt to get the artifact locally.
-		if let Some(artifact) = Self::try_get_local(tg, hash).await? {
-			return Ok(Some(artifact));
-		}
-
-		// Attempt to get the artifact from the API.
-		let data = tg.api_client().try_get_artifact(hash).await.ok().flatten();
-		if let Some(data) = data {
-			let artifact = Artifact::add(tg, data).await?;
-			return Ok(Some(artifact));
-		}
-
-		Ok(None)
-	}
-
-	pub async fn get_local(tg: &Instance, hash: Hash) -> Result<Self> {
-		let artifact = Self::try_get_local(tg, hash)
-			.await?
-			.wrap_err_with(|| format!(r#"Failed to find the artifact with hash "{hash}"."#))?;
-		Ok(artifact)
-	}
-
-	pub async fn try_get_local(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
-		// Get the artifact data from the database.
-		let Some(data) = tg.database.try_get_artifact(hash)? else {
+	pub async fn try_get(tg: &Instance, block: Block) -> Result<Option<Self>> {
+		// Get the data.
+		let Some(data) = block.try_get_data(tg).await? else {
 			return Ok(None);
 		};
 
-		// Create the artifact from the serialized artifact.
-		let artifact = Self::from_data(tg, hash, data).await?;
+		// Deserialize the data.
+		let data = Data::deserialize(data.as_slice())?;
+
+		// Create the artifact from the data.
+		let artifact = Self::from_data(tg, block, data).await?;
 
 		Ok(Some(artifact))
 	}

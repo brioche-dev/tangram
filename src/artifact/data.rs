@@ -1,5 +1,6 @@
-use super::{Artifact, Hash};
+use super::Artifact;
 use crate::{
+	block::Block,
 	directory::{self, Directory},
 	error::{return_error, Result},
 	file::{self, File},
@@ -11,10 +12,10 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 #[derive(
 	Clone,
 	Debug,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Data {
@@ -69,18 +70,18 @@ impl Artifact {
 		}
 	}
 
-	pub async fn from_data(tg: &Instance, hash: Hash, data: Data) -> Result<Self> {
+	pub async fn from_data(tg: &Instance, block: Block, data: Data) -> Result<Self> {
 		let artifact = match data {
 			Data::Directory(data) => {
-				let directory = Directory::from_data(hash, data);
+				let directory = Directory::from_data(block, data);
 				Self::Directory(directory)
 			},
 			Data::File(data) => {
-				let file = File::from_data(hash, data);
+				let file = File::from_data(block, data);
 				Self::File(file)
 			},
 			Data::Symlink(data) => {
-				let symlink = Symlink::from_data(tg, hash, data).await?;
+				let symlink = Symlink::from_data(tg, block, data).await?;
 				Self::Symlink(symlink)
 			},
 		};

@@ -28,7 +28,7 @@ impl Cli {
 			package: args.package,
 			package_args: args.package_args,
 			run_args: args.run_args,
-			function: "shell".to_owned(),
+			target: "shell".to_owned(),
 			trailing_args: args.trailing_args,
 		};
 

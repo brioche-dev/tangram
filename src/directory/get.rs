@@ -32,13 +32,13 @@ impl Directory {
 			// Update the current subpath.
 			current_subpath = current_subpath.join(name.parse().unwrap());
 
-			// Get the hash for the entry. If it doesn't exist, return `None`.
-			let Some(artifact_hash) = directory.entries.get(name).copied() else {
+			// Get the entry. If it doesn't exist, return `None`.
+			let Some(block) = directory.entries.get(name).copied() else {
 				return Ok(None);
 			};
 
 			// Get the artifact.
-			artifact = Artifact::get(tg, artifact_hash)
+			artifact = Artifact::get(tg, block)
 				.await
 				.wrap_err("Failed to get the artifact.")?;
 

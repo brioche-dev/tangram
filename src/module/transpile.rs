@@ -37,8 +37,8 @@ impl Module {
 				source_map,
 			} = Module::parse(text)?;
 
-			// Create the function visitor.
-			let mut function_visitor = FunctionVisitor {
+			// Create the target visitor.
+			let mut target_visitor = TargetVisitor {
 				source_map: source_map.clone(),
 				errors: Vec::new(),
 			};
@@ -53,7 +53,7 @@ impl Module {
 			let unresolved_mark = Mark::new();
 			let top_level_mark = Mark::new();
 			module.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, true));
-			module.visit_mut_with(&mut function_visitor);
+			module.visit_mut_with(&mut target_visitor);
 			module.visit_mut_with(&mut include_visitor);
 			module.visit_mut_with(&mut strip(top_level_mark));
 			module.visit_mut_with(&mut fixer(None));
@@ -61,12 +61,13 @@ impl Module {
 			// Create the writer.
 			let mut transpiled_text = Vec::new();
 			let mut source_mappings = Vec::new();
-			let writer = JsWriter::new(
+			let mut writer = JsWriter::new(
 				source_map.clone(),
 				"\n",
 				&mut transpiled_text,
 				Some(&mut source_mappings),
 			);
+			writer.set_indent_str("\t");
 
 			// Create the config.
 			let config = Config {
@@ -112,12 +113,12 @@ impl Module {
 	}
 }
 
-struct FunctionVisitor {
+struct TargetVisitor {
 	source_map: Rc<SourceMap>,
 	errors: Vec<Error>,
 }
 
-impl VisitMut for FunctionVisitor {
+impl VisitMut for TargetVisitor {
 	fn visit_mut_expr(&mut self, n: &mut Expr) {
 		// Check that this is a call expression.
 		let Some(expr) = n.as_mut_call() else {
@@ -166,10 +167,10 @@ impl VisitMut for FunctionVisitor {
 	}
 }
 
-impl FunctionVisitor {
+impl TargetVisitor {
 	#[allow(clippy::too_many_lines)]
 	fn visit_call(&mut self, n: &mut CallExpr, export_name: Option<String>) {
-		// Check if this is a call to tg.function.
+		// Check if this is a call to tg.target.
 		let Some(callee) = n.callee.as_expr().and_then(|expr| expr.as_member()) else {
 			n.visit_mut_children_with(self);
 			return
@@ -182,7 +183,7 @@ impl FunctionVisitor {
 			n.visit_mut_children_with(self);
 			return
 		};
-		if !(&obj.sym == "tg" && &prop.sym == "function") {
+		if !(&obj.sym == "tg" && &prop.sym == "target") {
 			n.visit_mut_children_with(self);
 			return;
 		}
@@ -190,11 +191,13 @@ impl FunctionVisitor {
 		// Get the location of the call.
 		let loc = self.source_map.lookup_char_pos(n.span.lo);
 
+		// Get the name and function from the call.
 		let (name, f) = match n.args.len() {
+			// Handle one argument.
 			1 => {
 				let Some(name) = export_name else {
 					self.errors.push(Error::new(
-						"Functions that are not exported must have a name.",
+						"Targets that are not exported must have a name.",
 						&loc,
 					));
 					n.visit_mut_children_with(self);
@@ -202,7 +205,7 @@ impl FunctionVisitor {
 				};
 				let Some(f) = n.args[0].expr.as_arrow() else {
 					self.errors.push(Error::new(
-						"The argument to tg.function must be an arrow function.",
+						"The argument to tg.target must be an arrow function.",
 						&loc,
 					));
 					n.visit_mut_children_with(self);
@@ -210,10 +213,12 @@ impl FunctionVisitor {
 				};
 				(name, f)
 			},
+
+			// Handle two arguments.
 			2 => {
 				let Some(Lit::Str(name)) = n.args[0].expr.as_lit() else {
 					self.errors.push(Error::new(
-						"The first argument to tg.function must be a string.",
+						"The first argument to tg.target must be a string.",
 						&loc,
 					));
 					n.visit_mut_children_with(self);
@@ -222,7 +227,7 @@ impl FunctionVisitor {
 				let name = name.value.to_string();
 				let Some(f) = n.args[1].expr.as_arrow() else {
 					self.errors.push(Error::new(
-						"The second argument to tg.function must be an arrow function.",
+						"The second argument to tg.target must be an arrow function.",
 						&loc,
 					));
 					n.visit_mut_children_with(self);
@@ -230,9 +235,11 @@ impl FunctionVisitor {
 				};
 				(name, f)
 			},
+
+			// Any other number of arguments is invalid.
 			_ => {
 				self.errors.push(Error::new(
-					"Invalid number of arguments to tg.function.",
+					"Invalid number of arguments to tg.target.",
 					&loc,
 				));
 				n.visit_mut_children_with(self);
@@ -367,19 +374,19 @@ mod tests {
 	use indoc::indoc;
 
 	#[test]
-	fn test_export_default_function() {
+	fn test_export_default_target() {
 		let text = indoc!(
 			r#"
-				export default tg.function(() => {});
+				export default tg.target(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export default tg.function({
-					f: () => {},
+				export default tg.target({
+					f: ()=>{},
 					module: import.meta.module,
-					name: "default",
+					name: "default"
 				});
 			"#
 		);
@@ -387,19 +394,39 @@ mod tests {
 	}
 
 	#[test]
-	fn test_export_named_function() {
+	fn test_export_named_target() {
 		let text = indoc!(
 			r#"
-				export let named = tg.function(() => {});
+				export let named = tg.target(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export default tg.function({
+				export let named = tg.target({
+					f: ()=>{},
 					module: import.meta.module,
-					name: "named",
-					f: () => {},
+					name: "named"
+				});
+			"#
+		);
+		assert_eq!(left, right);
+	}
+
+	#[test]
+	fn test_named_target() {
+		let text = indoc!(
+			r#"
+				tg.target("named", () => {});
+			"#
+		);
+		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
+		let right = indoc!(
+			r#"
+				tg.target({
+					f: ()=>{},
+					module: import.meta.module,
+					name: "named"
 				});
 			"#
 		);
@@ -418,7 +445,7 @@ mod tests {
 			r#"
 				tg.include({
 					module: import.meta.module,
-					path: "./hello_world.txt",
+					path: "./hello_world.txt"
 				});
 			"#
 		);

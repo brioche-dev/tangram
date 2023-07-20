@@ -1,8 +1,9 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
+	instance::{self, Instance},
 	module::{self, Module},
 	package,
+	package::Package,
 };
 use itertools::Itertools;
 use std::sync::Weak;
@@ -44,9 +45,7 @@ fn syscall_inner<'s>(
 		"log" => syscall_sync(scope, args, syscall_log),
 		"module_load" => syscall_sync(scope, args, syscall_module_load),
 		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
-		"module_unlocked_package_hash" => {
-			syscall_sync(scope, args, syscall_module_unlocked_package_hash)
-		},
+		"module_unlocked_package" => syscall_sync(scope, args, syscall_module_unlocked_package),
 		"module_version" => syscall_sync(scope, args, syscall_module_version),
 		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
 		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
@@ -71,7 +70,7 @@ fn syscall_hex_decode(
 	_tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
-) -> Result<serde_v8::ZeroCopyBuf> {
+) -> Result<serde_v8::ToJsBuffer> {
 	let (hex,) = args;
 	let bytes = hex::decode(hex)
 		.map_err(Error::other)
@@ -83,7 +82,7 @@ fn syscall_hex_decode(
 fn syscall_hex_encode(
 	_tg: &Instance,
 	_scope: &mut v8::HandleScope,
-	args: (serde_v8::ZeroCopyBuf,),
+	args: (serde_v8::JsBuffer,),
 ) -> Result<String> {
 	let (bytes,) = args;
 	let hex = hex::encode(bytes);
@@ -152,18 +151,18 @@ fn syscall_module_resolve(
 	})
 }
 
-fn syscall_module_unlocked_package_hash(
+fn syscall_module_unlocked_package(
 	tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module,),
-) -> Result<package::Hash> {
+) -> Result<Package> {
 	let (module,) = args;
 	tg.main_runtime_handle.clone().block_on(async move {
 		match module {
 			Module::Normal(module) => {
-				let package = package::Package::get(tg, module.package_hash).await?;
+				let package = package::Package::get(tg, module.package).await?;
 				let package = package.unlock(tg).await?;
-				Ok(package.artifact().hash())
+				Ok(package)
 			},
 			_ => unreachable!(),
 		}
@@ -186,7 +185,7 @@ fn syscall_module_version(
 fn syscall_utf8_decode(
 	_tg: &Instance,
 	_scope: &mut v8::HandleScope,
-	args: (serde_v8::ZeroCopyBuf,),
+	args: (serde_v8::JsBuffer,),
 ) -> Result<String> {
 	let (bytes,) = args;
 	let bytes = bytes::Bytes::from(bytes);
@@ -201,7 +200,7 @@ fn syscall_utf8_encode(
 	_tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
-) -> Result<serde_v8::ZeroCopyBuf> {
+) -> Result<serde_v8::ToJsBuffer> {
 	let (string,) = args;
 	let bytes = string.into_bytes().into();
 	Ok(bytes)
@@ -221,11 +220,12 @@ where
 	let context = scope.get_current_context();
 
 	// Get the instance.
-	let tg = context
-		.get_slot::<Weak<Instance>>(scope)
+	let state = context
+		.get_slot::<Weak<instance::State>>(scope)
 		.unwrap()
 		.upgrade()
 		.unwrap();
+	let tg = Instance { state };
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();

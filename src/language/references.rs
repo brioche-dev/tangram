@@ -5,12 +5,11 @@ use crate::{
 	module::position::Position,
 	module::Module,
 };
-use std::sync::Arc;
 
 impl Module {
 	pub async fn references(
 		&self,
-		tg: &Arc<Instance>,
+		tg: &Instance,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the language service request.

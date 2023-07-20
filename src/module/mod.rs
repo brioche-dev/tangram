@@ -1,8 +1,8 @@
 pub use self::import::Import;
 use crate::{
+	block::Block,
 	document::Document,
 	error::{return_error, Error, Result, WrapErr},
-	package,
 	path::Subpath,
 };
 use url::Url;
@@ -48,8 +48,8 @@ pub struct Library {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Normal {
-	/// The module's package hash.
-	pub package_hash: package::Hash,
+	/// The module's package.
+	pub package: Block,
 
 	/// The module's path.
 	pub module_path: Subpath,

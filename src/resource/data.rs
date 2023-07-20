@@ -1,14 +1,14 @@
 use super::{unpack, Resource};
-use crate::{checksum::Checksum, operation};
+use crate::{block::Block, checksum::Checksum};
 use url::Url;
 
 #[derive(
 	Clone,
 	Debug,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
@@ -39,9 +39,9 @@ impl Resource {
 	}
 
 	#[must_use]
-	pub fn from_data(hash: operation::Hash, data: Data) -> Self {
+	pub fn from_data(block: Block, data: Data) -> Self {
 		Self {
-			hash,
+			block,
 			url: data.url,
 			unpack: data.unpack,
 			checksum: data.checksum,

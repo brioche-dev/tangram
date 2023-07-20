@@ -4,11 +4,10 @@ use crate::{
 	instance::Instance,
 	module::Module,
 };
-use std::sync::Arc;
 
 impl Module {
 	/// Get all diagnostics for the provided modules.
-	pub async fn check(tg: &Arc<Instance>, modules: Vec<Module>) -> Result<Vec<Diagnostic>> {
+	pub async fn check(tg: &Instance, modules: Vec<Module>) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Check(service::check::Request { modules });
 

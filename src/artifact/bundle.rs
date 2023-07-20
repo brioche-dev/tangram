@@ -11,7 +11,6 @@ use crate::{
 use async_recursion::async_recursion;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use once_cell::sync::Lazy;
-use std::collections::HashSet;
 
 static TANGRAM_ARTIFACTS_PATH: Lazy<Subpath> = Lazy::new(|| ".tangram/artifacts".parse().unwrap());
 static TANGRAM_RUN_SUBPATH: Lazy<Subpath> = Lazy::new(|| ".tangram/run".parse().unwrap());
@@ -19,10 +18,8 @@ static TANGRAM_RUN_SUBPATH: Lazy<Subpath> = Lazy::new(|| ".tangram/run".parse().
 impl Artifact {
 	/// Bundle an artifact with all of its recursive references at `.tangram/artifacts`.
 	pub async fn bundle(&self, tg: &Instance) -> Result<Artifact> {
-		// Collect the recursive references.
-		let mut references = HashSet::default();
-		self.collect_recursive_references(tg, &mut references)
-			.await?;
+		// Collect the artifact's references.
+		let references = self.recursive_references(tg).await?;
 
 		// If there are no references, then return the artifact.
 		if references.is_empty() {
@@ -48,20 +45,20 @@ impl Artifact {
 		// Bundle the artifact, stripping any references recursively.
 		let artifact = artifact.bundle_inner(tg, &Subpath::empty()).await?;
 
-		// Create the references directory by bundling each reference at `.tangram/artifacts/HASH`.
+		// Create the references directory by bundling each reference at `.tangram/artifacts/<id>`.
 		let entries = references
 			.into_iter()
 			.map(|reference| {
 				async move {
-					// Create the path for the reference at `.tangram/artifacts/HASH`.
+					// Create the path for the reference at `.tangram/artifacts/<id>`.
 					let path = TANGRAM_ARTIFACTS_PATH
 						.clone()
-						.join(reference.hash().to_string().parse().unwrap());
+						.join(reference.block().id().to_string().parse().unwrap());
 
 					// Bundle the reference.
 					let artifact = reference.bundle_inner(tg, &path).await?;
 
-					Ok::<_, Error>((reference.hash().to_string(), artifact))
+					Ok::<_, Error>((reference.block().id().to_string(), artifact))
 				}
 			})
 			.collect::<FuturesOrdered<_>>()
@@ -84,7 +81,7 @@ impl Artifact {
 		Ok(artifact)
 	}
 
-	/// Remove all references from an artifact recursively, rendering symlink targets to a relative path from `path` to `.tangram/artifacts/HASH`.
+	/// Remove all references from an artifact recursively, rendering symlink targets to a relative path from `path` to `.tangram/artifacts/<id>`.
 	#[async_recursion]
 	async fn bundle_inner(
 		&self,
@@ -119,17 +116,17 @@ impl Artifact {
 			// If the artifact is a file, then return the file without any references.
 			Artifact::File(file) => Ok(Artifact::File(File::new(
 				tg,
-				file.blob(),
+				&file.contents(tg).await?,
 				file.executable(),
 				&[],
 			)?)),
 
-			// If the artifact is a symlink, then return the symlink with its target rendered with artifacts pointing to `.tangram/artifacts/HASH`.
+			// If the artifact is a symlink, then return the symlink with its target rendered with artifacts pointing to `.tangram/artifacts/<id>`.
 			Artifact::Symlink(symlink) => {
 				// Render the target.
 				let target = symlink
 					.target()
-					.render(|component| async move {
+					.try_render(|component| async move {
 						match component {
 							// Render a string component as is.
 							template::Component::String(string) => Ok(string.into()),
@@ -138,7 +135,7 @@ impl Artifact {
 							template::Component::Artifact(artifact) => {
 								let artifact_path = TANGRAM_ARTIFACTS_PATH
 									.clone()
-									.join(artifact.hash().to_string().parse().unwrap());
+									.join(artifact.block().id().to_string().parse().unwrap());
 								let path = artifact_path
 									.into_relpath()
 									.diff(&path.clone().into_relpath().parent())

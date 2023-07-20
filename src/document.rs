@@ -92,7 +92,7 @@ impl Document {
 		}
 		if !found {
 			let path = path.display();
-			return_error!(r#"Could not find the package for path "{path}"."#,);
+			return_error!(r#"Could not find the package for path "{path}"."#);
 		}
 
 		// Get the module path by stripping the package path.

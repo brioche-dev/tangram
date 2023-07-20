@@ -22,14 +22,14 @@ impl Cli {
 		// Push the package.
 		self.tg
 			.api_client()
-			.push(&self.tg, package.artifact())
+			.push(&self.tg, package.artifact().block())
 			.await
 			.wrap_err("Failed to push the package.")?;
 
 		// Publish the package.
 		self.tg
 			.api_client()
-			.publish_package(package.hash())
+			.publish_package(package)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

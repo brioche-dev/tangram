@@ -1,7 +1,7 @@
 use self::syscall::syscall;
 use crate::{
 	error::{Error, Result, WrapErr},
-	instance::Instance,
+	instance::{Instance, State},
 };
 use std::sync::{Arc, Weak};
 
@@ -21,7 +21,7 @@ pub mod symbols;
 mod syscall;
 
 #[derive(Debug, serde::Serialize)]
-#[serde(tag = "kind", content = "request", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "kind", content = "request")]
 pub enum Request {
 	Check(check::Request),
 	Completion(completion::Request),
@@ -37,7 +37,7 @@ pub enum Request {
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[serde(tag = "kind", content = "response", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "kind", content = "response")]
 pub enum Response {
 	Check(check::Response),
 	Completion(completion::Response),
@@ -58,10 +58,7 @@ pub type ResponseSender = tokio::sync::oneshot::Sender<Result<Response>>;
 pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Instance {
-	pub async fn handle_language_service_request(
-		self: &Arc<Self>,
-		request: Request,
-	) -> Result<Response> {
+	pub async fn handle_language_service_request(&self, request: Request) -> Result<Response> {
 		// Spawn the language service if necessary.
 		let request_sender = self
 			.language_service_request_sender
@@ -105,7 +102,7 @@ impl Instance {
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
 
 /// Run the language service.
-fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceiver) {
+fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
 	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);
@@ -115,8 +112,8 @@ fn run_language_service(tg: Weak<Instance>, mut request_receiver: RequestReceive
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-	// Set the instance on the context.
-	context.set_slot(&mut context_scope, tg);
+	// Set the instance state on the context.
+	context.set_slot(&mut context_scope, state);
 
 	// Add the syscall function to the global.
 	let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();

@@ -1,4 +1,4 @@
-import { assert as assert_ } from "./assert.ts";
+import { assert as assert_, unreachable } from "./assert.ts";
 import * as syscall from "./syscall.ts";
 
 export let relpath = (...args: Array<Relpath.Arg>): Relpath => {
@@ -19,8 +19,7 @@ export class Relpath {
 	#subpath: Subpath;
 
 	static new(...args: Array<Relpath.Arg>): Relpath {
-		let path = new Relpath();
-		let visit = (arg: Relpath.Arg) => {
+		return args.reduce(function reduce(path: Relpath, arg: Relpath.Arg) {
 			if (typeof arg === "string") {
 				for (let component of arg.split("/")) {
 					if (component === "" || component === ".") {
@@ -39,15 +38,12 @@ export class Relpath {
 			} else if (arg instanceof Subpath) {
 				path.#subpath.join(arg);
 			} else if (arg instanceof Array) {
-				for (let entry of arg) {
-					visit(entry);
-				}
+				arg.forEach((arg) => reduce(path, arg));
+			} else {
+				return unreachable();
 			}
-		};
-		for (let arg of args) {
-			visit(arg);
-		}
-		return path;
+			return path;
+		}, new Relpath());
 	}
 
 	constructor(arg?: RelpathConstructorArg) {

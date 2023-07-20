@@ -1541,7 +1541,7 @@ let convertLocation = (node: ts.Node): Location => {
 			kind: "normal",
 			value: {
 				modulePath: module_.value.modulePath,
-				packageHash: syscall.module_.unlockedPackageHash(module_),
+				package: syscall.module_.unlockedPackage(module_),
 			},
 		};
 	} else {

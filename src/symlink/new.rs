@@ -1,5 +1,12 @@
 use super::Symlink;
-use crate::{artifact, error::Result, instance::Instance, template::Template};
+use crate::{
+	artifact::{self, Artifact},
+	block::Block,
+	error::Result,
+	instance::Instance,
+	template::Template,
+};
+use itertools::Itertools;
 
 impl Symlink {
 	pub fn new(tg: &Instance, target: Template) -> Result<Self> {
@@ -8,16 +15,18 @@ impl Symlink {
 			target: target.to_data(),
 		});
 
-		// Serialize and hash the artifact data.
+		// Serialize the artifact data.
 		let mut bytes = Vec::new();
 		data.serialize(&mut bytes).unwrap();
-		let hash = artifact::Hash(crate::hash::Hash::new(&bytes));
 
-		// Add the artifact to the database.
-		let hash = tg.database.add_artifact(hash, &bytes)?;
+		// Collect the children.
+		let children = target.artifacts().map(Artifact::block).collect_vec();
+
+		// Create the block.
+		let block = Block::new(tg, children, &bytes)?;
 
 		// Create the symlink.
-		let symlink = Self { hash, target };
+		let symlink = Self { block, target };
 
 		Ok(symlink)
 	}

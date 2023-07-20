@@ -1,13 +1,13 @@
 use crate::{
-	artifact,
 	error::{return_error, Result},
+	id::Id,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 #[derive(Clone, Debug, tangram_serialize::Serialize, tangram_serialize::Deserialize)]
 pub struct Tracker {
 	#[tangram_serialize(id = 0)]
-	pub artifact_hash: artifact::Hash,
+	pub artifact_id: Id,
 
 	#[tangram_serialize(id = 1)]
 	pub timestamp_seconds: u64,

@@ -1,31 +1,32 @@
-use super::{Hash, Operation};
+use super::Operation;
 use crate::{
-	command::{self, Command},
+	block::Block,
 	error::{return_error, Result},
-	function::{self, Function},
 	instance::Instance,
 	resource::{self, Resource},
+	target::{self, Target},
+	task::{self, Task},
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
 #[derive(
 	Clone,
 	Debug,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Data {
 	#[tangram_serialize(id = 0)]
-	Command(command::Data),
+	Resource(resource::Data),
 
 	#[tangram_serialize(id = 1)]
-	Function(function::Data),
+	Target(target::Data),
 
 	#[tangram_serialize(id = 2)]
-	Resource(resource::Data),
+	Task(task::Data),
 }
 
 impl Data {
@@ -63,17 +64,17 @@ impl Operation {
 	#[must_use]
 	pub fn to_data(&self) -> Data {
 		match self {
-			Self::Command(command) => Data::Command(command.to_data()),
-			Self::Function(function) => Data::Function(function.to_data()),
 			Self::Resource(resource) => Data::Resource(resource.to_data()),
+			Self::Target(target) => Data::Target(target.to_data()),
+			Self::Task(task) => Data::Task(task.to_data()),
 		}
 	}
 
-	pub async fn from_data(tg: &Instance, hash: Hash, data: Data) -> Result<Self> {
+	pub async fn from_data(tg: &Instance, block: Block, data: Data) -> Result<Self> {
 		let operation = match data {
-			Data::Command(data) => Self::Command(Command::from_data(tg, hash, data).await?),
-			Data::Function(data) => Self::Function(Function::from_data(tg, hash, data).await?),
-			Data::Resource(data) => Self::Resource(Resource::from_data(hash, data)),
+			Data::Resource(data) => Self::Resource(Resource::from_data(block, data)),
+			Data::Target(data) => Self::Target(Target::from_data(tg, block, data).await?),
+			Data::Task(data) => Self::Task(Task::from_data(tg, block, data).await?),
 		};
 		Ok(operation)
 	}

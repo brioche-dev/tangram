@@ -5,14 +5,9 @@ use crate::{
 	module::position::Position,
 	module::Module,
 };
-use std::sync::Arc;
 
 impl Module {
-	pub async fn rename(
-		&self,
-		tg: &Arc<Instance>,
-		position: Position,
-	) -> Result<Option<Vec<Location>>> {
+	pub async fn rename(&self, tg: &Instance, position: Position) -> Result<Option<Vec<Location>>> {
 		// Create the language service request.
 		let request = service::Request::Rename(service::rename::Request {
 			module: self.clone(),

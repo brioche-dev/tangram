@@ -38,13 +38,13 @@ impl Module {
 			// Load a module from a package.
 			Self::Normal(module) => {
 				// Get the package.
-				let package = Package::get(tg, module.package_hash).await?;
+				let package = Package::get(tg, module.package).await?;
 
 				// Load the module.
 				let directory = package.artifact().as_directory().unwrap();
 				let entry = directory.get(tg, &module.module_path).await?;
 				let file = entry.into_file().wrap_err("Expected a file.")?;
-				let text = file.blob().text(tg).await?;
+				let text = file.contents(tg).await?.text(tg).await?;
 
 				Ok(text)
 			},

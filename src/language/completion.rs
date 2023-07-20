@@ -5,7 +5,6 @@ use crate::{
 	module::position::Position,
 	module::Module,
 };
-use std::sync::Arc;
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,7 +15,7 @@ pub struct Entry {
 impl Module {
 	pub async fn completion(
 		&self,
-		tg: &Arc<Instance>,
+		tg: &Instance,
 		position: Position,
 	) -> Result<Option<Vec<Entry>>> {
 		// Create the language service request.

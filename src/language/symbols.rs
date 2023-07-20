@@ -4,13 +4,9 @@ use crate::{
 	instance::Instance,
 	module::Module,
 };
-use std::sync::Arc;
 
 impl Module {
-	pub async fn symbols(
-		&self,
-		tg: &Arc<Instance>,
-	) -> Result<Option<Vec<service::symbols::Symbol>>> {
+	pub async fn symbols(&self, tg: &Instance) -> Result<Option<Vec<service::symbols::Symbol>>> {
 		// Create the language service request.
 		let request = service::Request::Symbols(service::symbols::Request {
 			module: self.clone(),

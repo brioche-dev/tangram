@@ -1,13 +1,15 @@
 use super::{
 	lockfile::{self, Lockfile},
-	Dependency, Hash, Package, LOCKFILE_FILE_NAME, ROOT_MODULE_FILE_NAME,
+	Dependency, Package, LOCKFILE_FILE_NAME, ROOT_MODULE_FILE_NAME,
 };
 use crate::{
 	artifact::Artifact,
 	blob::Blob,
+	block::Block,
 	directory,
 	error::{Result, WrapErr},
 	file::File,
+	instance::Instance,
 	module::{self, Module},
 	path::Subpath,
 };
@@ -15,22 +17,18 @@ use async_recursion::async_recursion;
 use std::{
 	collections::{BTreeMap, HashSet, VecDeque},
 	path::Path,
-	sync::Arc,
 };
 
 impl Package {
 	/// Create a package from a path.
 	#[async_recursion]
-	pub async fn with_path(
-		tg: &Arc<crate::instance::Instance>,
-		package_path: &Path,
-	) -> Result<Self> {
+	pub async fn with_path(tg: &Instance, package_path: &Path) -> Result<Self> {
 		// Create a builder for the directory.
 		let mut directory = directory::Builder::new();
 
 		// Create the dependencies map.
 		let mut dependency_packages: Vec<Package> = Vec::new();
-		let mut dependencies: BTreeMap<Dependency, Hash> = BTreeMap::default();
+		let mut dependencies: BTreeMap<Dependency, Block> = BTreeMap::default();
 
 		// Create a queue of module paths to visit and a visited set.
 		let mut queue: VecDeque<Subpath> =
@@ -108,7 +106,7 @@ impl Package {
 					let dependency_package = Self::with_path(tg, &dependency_package_path).await?;
 
 					// Add the dependency.
-					dependencies.insert(dependency.clone(), dependency_package.hash());
+					dependencies.insert(dependency.clone(), dependency_package.artifact().block());
 					dependency_packages.push(dependency_package);
 				}
 			}
@@ -136,7 +134,7 @@ impl Package {
 		// Create the lockfile.
 		let lockfile_dependencies = dependencies
 			.iter()
-			.map(|(dependency, hash)| (dependency.clone(), lockfile::Entry::Locked(*hash)))
+			.map(|(dependency, block)| (dependency.clone(), lockfile::Entry::Locked(block.id())))
 			.collect();
 		let references = dependency_packages
 			.into_iter()
@@ -146,7 +144,7 @@ impl Package {
 			dependencies: lockfile_dependencies,
 		};
 		let lockfile = serde_json::to_string(&lockfile).unwrap();
-		let lockfile = Blob::new(tg, lockfile.into_bytes().as_slice()).await?;
+		let lockfile = Blob::with_bytes(tg, lockfile.into_bytes().as_slice()).await?;
 		let lockfile = File::builder(lockfile).references(references).build(tg)?;
 		let lockfile_subpath = LOCKFILE_FILE_NAME.parse().unwrap();
 		directory = directory.add(tg, &lockfile_subpath, lockfile).await?;

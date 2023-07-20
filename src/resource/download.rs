@@ -18,9 +18,9 @@ use tokio_util::io::{StreamReader, SyncIoBridge};
 
 impl Resource {
 	#[tracing::instrument(skip(tg))]
-	pub async fn download(&self, tg: &Arc<Instance>) -> Result<Value> {
+	pub async fn download(&self, tg: &Instance) -> Result<Value> {
 		let operation = Operation::Resource(self.clone());
-		operation.run(tg).await
+		operation.evaluate(tg, None).await
 	}
 
 	pub(crate) async fn download_inner(&self, tg: &Instance) -> Result<Value> {
@@ -50,10 +50,10 @@ impl Resource {
 		// Compute the checksum while streaming.
 		let stream = {
 			let checksum_writer = checksum_writer.clone();
-			stream.map(move |value| -> std::io::Result<_> {
-				let value = value?;
-				checksum_writer.lock().unwrap().update(&value);
-				Ok(value)
+			stream.map(move |bytes| -> std::io::Result<_> {
+				let bytes = bytes?;
+				checksum_writer.lock().unwrap().update(&bytes);
+				Ok(bytes)
 			})
 		};
 

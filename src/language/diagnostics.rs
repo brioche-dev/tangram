@@ -4,7 +4,6 @@ use crate::{
 	instance::Instance,
 	module::Module,
 };
-use std::sync::Arc;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,7 +23,7 @@ pub enum Severity {
 }
 
 impl Module {
-	pub async fn diagnostics(tg: &Arc<Instance>) -> Result<Vec<Diagnostic>> {
+	pub async fn diagnostics(tg: &Instance) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Diagnostics(service::diagnostics::Request {});
 

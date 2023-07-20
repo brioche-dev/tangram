@@ -11,7 +11,7 @@ use crate::{
 	util::task_map::TaskMap,
 };
 use async_recursion::async_recursion;
-use futures::{future::try_join_all, FutureExt};
+use futures::{stream::FuturesUnordered, FutureExt, TryStreamExt};
 use std::{
 	os::unix::prelude::PermissionsExt,
 	path::{Path, PathBuf},
@@ -19,7 +19,7 @@ use std::{
 };
 
 impl Artifact {
-	pub async fn check_out_internal(&self, tg: &Arc<Instance>) -> Result<PathBuf> {
+	pub async fn check_out_internal(&self, tg: &Instance) -> Result<PathBuf> {
 		// Get the internal checkouts task map.
 		let internal_checkouts_task_map = tg
 			.internal_checkouts_task_map
@@ -27,11 +27,12 @@ impl Artifact {
 			.unwrap()
 			.get_or_insert_with(|| {
 				Arc::new(TaskMap::new(Box::new({
-					let tg = Arc::downgrade(tg);
+					let state = Arc::downgrade(&tg.state);
 					move |artifact| {
-						let tg = tg.clone();
+						let state = state.clone();
 						async move {
-							let tg = tg.upgrade().unwrap();
+							let state = state.upgrade().unwrap();
+							let tg = Instance { state };
 							artifact.check_out_internal_inner(&tg).await
 						}
 						.boxed()
@@ -48,7 +49,7 @@ impl Artifact {
 
 	async fn check_out_internal_inner(&self, tg: &Instance) -> Result<PathBuf> {
 		// Compute the checkout's path in the artifacts directory.
-		let path = tg.artifact_path(self.hash());
+		let path = tg.artifacts_path().join(self.block().id().to_string());
 
 		// If the path exists, then the artifact is already checked out.
 		if tokio::fs::try_exists(&path).await? {
@@ -115,29 +116,31 @@ impl Artifact {
 					.wrap_err("Failed to create the directory.")?;
 
 				// Recurse into the entries.
-				try_join_all(
-					directory
-						.entries(tg)
-						.await
-						.wrap_err("Failed to get the directory's entries.")?
-						.into_iter()
-						.map(|(name, artifact)| async move {
-							artifact
-								.check_out_internal_inner_inner(tg, &path.join(name))
-								.await?;
-							Ok::<_, Error>(())
-						}),
-				)
-				.await?;
+				directory
+					.entries(tg)
+					.await
+					.wrap_err("Failed to get the directory's entries.")?
+					.into_iter()
+					.map(|(name, artifact)| async move {
+						artifact
+							.check_out_internal_inner_inner(tg, &path.join(name))
+							.await?;
+						Ok::<_, Error>(())
+					})
+					.collect::<FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
 			},
 
 			Artifact::File(file) => {
 				// Copy the blob to the path.
 				let permit = tg.file_descriptor_semaphore.acquire().await;
-				file.blob()
-					.copy_to_path(tg, path)
-					.await
-					.wrap_err("Failed to copy the blob.")?;
+				tokio::io::copy(
+					&mut file.contents(tg).await?.reader(tg),
+					&mut tokio::fs::File::create(path).await?,
+				)
+				.await
+				.wrap_err("Failed to copy the blob.")?;
 				drop(permit);
 
 				// Make the file executable if necessary.
@@ -149,24 +152,24 @@ impl Artifact {
 				}
 
 				// Check out the references.
-				try_join_all(
-					file.references(tg)
-						.await
-						.wrap_err("Failed to get the file's references.")?
-						.into_iter()
-						.map(|artifact| async move {
-							artifact.check_out_internal_inner(tg).await?;
-							Ok::<_, Error>(())
-						}),
-				)
-				.await?;
+				file.references(tg)
+					.await
+					.wrap_err("Failed to get the file's references.")?
+					.into_iter()
+					.map(|artifact| async move {
+						artifact.check_out_internal_inner(tg).await?;
+						Ok::<_, Error>(())
+					})
+					.collect::<FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
 			},
 
 			Artifact::Symlink(symlink) => {
 				// Render the symlink target.
 				let target = symlink
 					.target()
-					.render(|component| async move {
+					.try_render(|component| async move {
 						match component {
 							template::Component::String(string) => Ok(string.into()),
 
@@ -238,7 +241,7 @@ impl Artifact {
 }
 
 impl Artifact {
-	pub async fn check_out(&self, tg: &Arc<Instance>, path: &Path) -> Result<()> {
+	pub async fn check_out(&self, tg: &Instance, path: &Path) -> Result<()> {
 		// Bundle the artifact.
 		let artifact = self
 			.bundle(tg)
@@ -268,7 +271,7 @@ impl Artifact {
 	) -> Result<()> {
 		// If the artifact is the same as the existing artifact, then return.
 		if existing_artifact.map_or(false, |existing_artifact| {
-			self.hash() == existing_artifact.hash()
+			self.block() == existing_artifact.block()
 		}) {
 			return Ok(());
 		}
@@ -279,9 +282,9 @@ impl Artifact {
 				Self::check_out_directory(tg, existing_artifact, directory, path)
 					.await
 					.wrap_err_with(|| {
-						let hash = self.hash();
+						let block = self.block();
 						let path = path.display();
-						format!(r#"Failed to check out directory "{hash}" to "{path}"."#)
+						format!(r#"Failed to check out directory "{block}" to "{path}"."#)
 					})?;
 			},
 
@@ -289,9 +292,9 @@ impl Artifact {
 				Self::check_out_file(tg, existing_artifact, file, path)
 					.await
 					.wrap_err_with(|| {
-						let hash = self.hash();
+						let block = self.block();
 						let path = path.display();
-						format!(r#"Failed to check out file "{hash}" to "{path}"."#)
+						format!(r#"Failed to check out file "{block}" to "{path}"."#)
 					})?;
 			},
 
@@ -299,9 +302,9 @@ impl Artifact {
 				Self::check_out_symlink(tg, existing_artifact, symlink, path)
 					.await
 					.wrap_err_with(|| {
-						let hash = self.hash();
+						let block = self.block();
 						let path = path.display();
-						format!(r#"Failed to check out symlink "{hash}" to "{path}"."#)
+						format!(r#"Failed to check out symlink "{block}" to "{path}"."#)
 					})?;
 			},
 		}
@@ -320,14 +323,18 @@ impl Artifact {
 		match &existing_artifact {
 			// If there is already a directory, then remove any extraneous entries.
 			Some(Artifact::Directory(existing_directory)) => {
-				try_join_all(existing_directory.names().map(|name| async move {
-					if !directory.contains(name) {
-						let entry_path = path.join(name);
-						crate::util::fs::rmrf(&entry_path).await?;
-					}
-					Ok::<_, Error>(())
-				}))
-				.await?;
+				existing_directory
+					.names()
+					.map(|name| async move {
+						if !directory.contains(name) {
+							let entry_path = path.join(name);
+							crate::util::fs::rmrf(&entry_path).await?;
+						}
+						Ok::<_, Error>(())
+					})
+					.collect::<FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
 			},
 
 			// If there is an existing artifact at the path and it is not a directory, then remove it, create a directory, and continue.
@@ -343,34 +350,34 @@ impl Artifact {
 		};
 
 		// Recurse into the entries.
-		try_join_all(
-			directory
-				.entries(tg)
-				.await?
-				.into_iter()
-				.map(|(name, artifact)| {
-					let existing_artifact = &existing_artifact;
-					async move {
-						// Retrieve an existing artifact.
-						let existing_artifact = match existing_artifact {
-							Some(Artifact::Directory(existing_directory)) => {
-								let name: Subpath = name.parse().wrap_err("Invalid entry name.")?;
-								existing_directory.try_get(tg, &name).await?
-							},
-							_ => None,
-						};
+		directory
+			.entries(tg)
+			.await?
+			.into_iter()
+			.map(|(name, artifact)| {
+				let existing_artifact = &existing_artifact;
+				async move {
+					// Retrieve an existing artifact.
+					let existing_artifact = match existing_artifact {
+						Some(Artifact::Directory(existing_directory)) => {
+							let name: Subpath = name.parse().wrap_err("Invalid entry name.")?;
+							existing_directory.try_get(tg, &name).await?
+						},
+						_ => None,
+					};
 
-						// Recurse.
-						let entry_path = path.join(&name);
-						artifact
-							.check_out_inner(tg, existing_artifact.as_ref(), &entry_path)
-							.await?;
+					// Recurse.
+					let entry_path = path.join(&name);
+					artifact
+						.check_out_inner(tg, existing_artifact.as_ref(), &entry_path)
+						.await?;
 
-						Ok::<_, Error>(())
-					}
-				}),
-		)
-		.await?;
+					Ok::<_, Error>(())
+				}
+			})
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
 
 		Ok(())
 	}
@@ -394,10 +401,12 @@ impl Artifact {
 
 		// Copy the blob to the path.
 		let permit = tg.file_descriptor_semaphore.acquire().await;
-		file.blob()
-			.copy_to_path(tg, path)
-			.await
-			.wrap_err("Failed to copy the blob.")?;
+		tokio::io::copy(
+			&mut file.contents(tg).await?.reader(tg),
+			&mut tokio::fs::File::create(path).await?,
+		)
+		.await
+		.wrap_err("Failed to copy the blob.")?;
 		drop(permit);
 
 		// Make the file executable if necessary.
@@ -434,7 +443,7 @@ impl Artifact {
 		// Render the target.
 		let target = symlink
 			.target()
-			.render(|component| async move {
+			.try_render(|component| async move {
 				match component {
 					crate::template::Component::String(string) => Ok(string.into()),
 					_ => Err(Error::message(

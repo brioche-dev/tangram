@@ -1,16 +1,18 @@
-export let source = tg.function(() =>
-	tg.directory({
-		["Cargo.toml"]: tg.include("Cargo.toml"),
-		["Cargo.lock"]: tg.include("Cargo.lock"),
-		["src"]: tg.include("./src"),
-		["packages"]: tg.include("./packages"),
-		["assets"]: tg.include("./assets"),
-	}),
-);
+// export let source = tg.target(() =>
+// 	tg.directory({
+// 		["Cargo.toml"]: tg.include("Cargo.toml"),
+// 		["Cargo.lock"]: tg.include("Cargo.lock"),
+// 		["src"]: tg.include("./src"),
+// 		["packages"]: tg.include("./packages"),
+// 		["assets"]: tg.include("./assets"),
+// 	}),
+// );
 
-export let test = tg.function(async () => {
-	await testDirectory();
-	await testSymlink();
+tg.target("test", async () => {
+	// await testDirectory();
+	// await testFile();
+	// await testSymlink();
+	return await testTask();
 });
 
 let testDirectory = async () => {
@@ -45,6 +47,12 @@ let testDirectoryNew = async () => {
 	tg.File.assert(await foobar.get("barSymlink"));
 };
 
+let testFile = async () => {
+	let file = await tg.file("hello");
+	let text = await file.text();
+	tg.assert(text === "hello");
+};
+
 let testSymlink = async () => {
 	await testSymlinkToFile();
 	await testSymlinkInDirectory();
@@ -62,7 +70,7 @@ let testSymlinkToFile = async () => {
 	let resolved = await symlink.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
 let testSymlinkInDirectory = async () => {
@@ -73,7 +81,7 @@ let testSymlinkInDirectory = async () => {
 	let resolved = await directory.get("symlink");
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
 let testSymlinkWithPathInDirectory = async () => {
@@ -84,7 +92,7 @@ let testSymlinkWithPathInDirectory = async () => {
 	let resolved = await symlink.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
 let testSymlinkThroughSymlink = async () => {
@@ -100,7 +108,7 @@ let testSymlinkThroughSymlink = async () => {
 	let resolved = await symlink.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
 let testRelativePathSymlink = async () => {
@@ -111,7 +119,7 @@ let testRelativePathSymlink = async () => {
 	let resolved = await directory.get("symlink");
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
 let testDeepRelativePathSymlink = async () => {
@@ -128,7 +136,7 @@ let testDeepRelativePathSymlink = async () => {
 	let resolved = await directory.get("foo/bar/baz/symlink");
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
 let testMultipleLevelsOfIndirection = async () => {
@@ -142,7 +150,7 @@ let testMultipleLevelsOfIndirection = async () => {
 	let resolved = await bar.get("baz/link/hello");
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
 export let testDependencyIndirection = async () => {
@@ -158,14 +166,25 @@ export let testDependencyIndirection = async () => {
 	let resolved = await symlink.resolve();
 	tg.File.assert(resolved);
 	let text = await resolved.text();
-	assert(text === "hello");
+	tg.assert(text === "hello");
 };
 
-export let assert: (
-	condition: unknown,
-	message?: string,
-) => asserts condition = (condition, message) => {
-	if (!condition) {
-		throw new Error(message ?? "Failed assertion.");
-	}
-};
+export let testTask = async () => {
+	let utils = tg.download({
+		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/utils_arm64_linux.tar.zstd",
+		checksum: "sha256:36c0dcfb02e61a07f4654e1ca6047cdefb17ce1f2e37fcb2ba5dc20695b3e273",
+		unpack: ".tar.zstd",
+	})
+	let file = await tg.file("hello");
+	let output = await tg.run({
+		system: "arm64_linux",
+		executable: "/bin/sh",
+		// args: ["-c", t`cat ${file} > ${tg.output}`],
+		args: ["-c", t`ls ${utils}/bin > ${tg.output}`],
+		env: {
+			PATH: t`${utils}/bin`
+		}
+	});
+	// tg.assert(await output.text() === await file.text());
+	return output;
+}

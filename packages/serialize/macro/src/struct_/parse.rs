@@ -76,7 +76,7 @@ impl<'a> Struct<'a> {
 			.map(Field::parse)
 			.collect::<syn::Result<Vec<_>>>()?;
 
-		// Sort the fields by id.
+		// Sort the fields by ID.
 		fields.sort_by_key(|field| field.id);
 
 		// Create the struct.

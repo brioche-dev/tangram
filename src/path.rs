@@ -12,10 +12,10 @@ use std::path::PathBuf;
 	Ord,
 	PartialEq,
 	PartialOrd,
-	tangram_serialize::Serialize,
-	tangram_serialize::Deserialize,
-	serde::Serialize,
 	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
@@ -37,10 +37,10 @@ pub struct Relpath {
 	Ord,
 	PartialEq,
 	PartialOrd,
-	tangram_serialize::Serialize,
-	tangram_serialize::Deserialize,
-	serde::Serialize,
 	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]

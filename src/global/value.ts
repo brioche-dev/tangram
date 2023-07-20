@@ -1,7 +1,7 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
-import { Command } from "./command.ts";
+import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Operation } from "./operation.ts";
@@ -10,6 +10,8 @@ import { Placeholder } from "./placeholder.ts";
 import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
+import { Target } from "./target.ts";
+import { Task } from "./task.ts";
 import { Template } from "./template.ts";
 
 export type Value =
@@ -20,6 +22,7 @@ export type Value =
 	| Uint8Array
 	| Relpath
 	| Subpath
+	| Block
 	| Blob
 	| Artifact
 	| Placeholder
@@ -39,14 +42,15 @@ export namespace Value {
 			value instanceof Relpath ||
 			value instanceof Subpath ||
 			value instanceof Blob ||
+			value instanceof Block ||
 			value instanceof Directory ||
 			value instanceof File ||
 			value instanceof Symlink ||
 			value instanceof Placeholder ||
 			value instanceof Template ||
-			value instanceof Command ||
-			value instanceof Function ||
 			value instanceof Resource ||
+			value instanceof Target ||
+			value instanceof Task ||
 			value instanceof Array ||
 			typeof value === "object"
 		);
@@ -94,6 +98,11 @@ export namespace Value {
 		} else if (value instanceof Subpath) {
 			return {
 				kind: "subpath",
+				value: value.toSyscall(),
+			};
+		} else if (value instanceof Block) {
+			return {
+				kind: "block",
 				value: value.toSyscall(),
 			};
 		} else if (value instanceof Blob) {
@@ -165,6 +174,9 @@ export namespace Value {
 			}
 			case "subpath": {
 				return Subpath.fromSyscall(value.value);
+			}
+			case "block": {
+				return Block.fromSyscall(value.value);
 			}
 			case "blob": {
 				return Blob.fromSyscall(value.value);

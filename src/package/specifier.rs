@@ -6,14 +6,14 @@ use std::path::PathBuf;
 #[derive(
 	Clone,
 	Debug,
-	PartialEq,
 	Eq,
-	PartialOrd,
 	Ord,
-	tangram_serialize::Serialize,
-	tangram_serialize::Deserialize,
-	serde::Serialize,
+	PartialEq,
+	PartialOrd,
 	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(into = "String", try_from = "String")]
 #[tangram_serialize(into = "String", try_from = "String")]
@@ -133,7 +133,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn test_parse_specifier() {
+	fn test() {
 		let left: Specifier = "hello".parse().unwrap();
 		let right = Specifier::Registry(Registry {
 			name: "hello".to_owned(),

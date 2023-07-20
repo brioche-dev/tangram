@@ -1,53 +1,84 @@
 import { Artifact } from "./artifact.ts";
-import { assert as assert_ } from "./assert.ts";
+import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
+import { Block } from "./block.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
+import { MaybeNestedArray, flatten } from "./util.ts";
 
-export let file = async (arg: Unresolved<File.Arg>) => {
-	return await File.new(arg);
+export let file = async (...args: Array<Unresolved<File.Arg>>) => {
+	return await File.new(...args);
 };
 
 type ConstructorArg = {
-	hash: Artifact.Hash;
-	blob: Blob;
+	block: Block;
+	contents: Block;
 	executable: boolean;
-	references: Array<Artifact.Hash>;
+	references: Array<Block>;
 };
 
 export class File {
-	#hash: Artifact.Hash;
-	#blob: Blob;
+	#block: Block;
+	#contents: Block;
 	#executable: boolean;
-	#references: Array<Artifact.Hash>;
+	#references: Array<Block>;
 
-	static async new(arg: Unresolved<File.Arg>): Promise<File> {
-		// Resolve the arg.
-		let resolvedArg = await resolve(arg);
-
-		// Get the blob, executable, and references.
-		let blob_: Blob;
-		let executable: boolean;
-		let references: Array<Artifact>;
-		if (Blob.Arg.is(resolvedArg)) {
-			// If the arg is a blob arg, then create a file which is not executable and has no references.
-			blob_ = await blob(resolvedArg);
-			executable = false;
-			references = [];
-		} else if (File.is(resolvedArg)) {
-			// If the arg is a file, then return it.
-			return resolvedArg;
-		} else {
-			// Otherwise, the arg is a file object.
-			blob_ = await blob(resolvedArg.blob);
-			executable = resolvedArg.executable ?? false;
-			references = resolvedArg.references ?? [];
-		}
-
-		// Create the file.
+	static async new(...args: Array<Unresolved<File.Arg>>): Promise<File> {
+		let {
+			contents: contentsArgs,
+			executable,
+			references,
+		} = flatten(
+			await Promise.all(
+				args.map(async function map(
+					unresolvedArg: Unresolved<File.Arg>,
+				): Promise<
+					MaybeNestedArray<{
+						contents: Blob.Arg;
+						executable?: boolean;
+						references?: Array<Artifact>;
+					}>
+				> {
+					let arg = await resolve(unresolvedArg);
+					if (Blob.Arg.is(arg)) {
+						return { contents: arg };
+					} else if (File.is(arg)) {
+						return {
+							contents: arg.#contents,
+							executable: arg.#executable,
+							references: await arg.references(),
+						};
+					} else if (arg instanceof Array) {
+						return await Promise.all(arg.map(map));
+					} else if (arg instanceof Object) {
+						return {
+							contents: arg.contents,
+							executable: arg.executable,
+							references: arg.references,
+						};
+					} else {
+						return unreachable();
+					}
+				}),
+			),
+		).reduce<{
+			contents: Array<Blob.Arg>;
+			executable: boolean;
+			references: Array<Artifact>;
+		}>(
+			(value, { contents, executable, references }) => {
+				value.contents.push(contents);
+				value.executable =
+					executable !== undefined ? executable : value.executable;
+				value.references.push(...(references ?? []));
+				return value;
+			},
+			{ contents: [], executable: false, references: [] },
+		);
+		let contents = await blob(...contentsArgs);
 		return File.fromSyscall(
 			syscall.file.new({
-				blob: blob_.toSyscall(),
+				contents: contents.toSyscall(),
 				executable,
 				references: references.map((reference) =>
 					Artifact.toSyscall(reference),
@@ -57,8 +88,8 @@ export class File {
 	}
 
 	constructor(arg: ConstructorArg) {
-		this.#hash = arg.hash;
-		this.#blob = arg.blob;
+		this.#block = arg.block;
+		this.#contents = arg.contents;
 		this.#executable = arg.executable;
 		this.#references = arg.references;
 	}
@@ -77,29 +108,37 @@ export class File {
 	}
 
 	toSyscall(): syscall.File {
+		let block = this.#block.toSyscall();
+		let contents = this.#contents.toSyscall();
+		let executable = this.#executable;
+		let references = this.#references.map((block) => block.toSyscall());
 		return {
-			hash: this.#hash,
-			blob: this.#blob.toSyscall(),
-			executable: this.#executable,
-			references: this.#references,
+			block,
+			contents,
+			executable,
+			references,
 		};
 	}
 
 	static fromSyscall(value: syscall.File): File {
+		let block = Block.fromSyscall(value.block);
+		let contents = Block.fromSyscall(value.contents);
+		let executable = value.executable;
+		let references = value.references.map((block) => Block.fromSyscall(block));
 		return new File({
-			hash: value.hash,
-			blob: Blob.fromSyscall(value.blob),
-			executable: value.executable,
-			references: value.references,
+			block,
+			contents,
+			executable,
+			references,
 		});
 	}
 
-	hash(): Artifact.Hash {
-		return this.#hash;
+	block(): Block {
+		return this.#block;
 	}
 
-	blob(): Blob {
-		return this.#blob;
+	async contents(): Promise<Blob> {
+		return await Blob.get(this.#contents);
 	}
 
 	executable(): boolean {
@@ -111,19 +150,19 @@ export class File {
 	}
 
 	async bytes(): Promise<Uint8Array> {
-		return await this.blob().bytes();
+		return await (await this.contents()).bytes();
 	}
 
 	async text(): Promise<string> {
-		return await this.blob().text();
+		return await (await this.contents()).text();
 	}
 }
 
 export namespace File {
-	export type Arg = Blob.Arg | File | ArgObject;
+	export type Arg = Blob.Arg | File | Array<Arg> | ArgObject;
 
 	export type ArgObject = {
-		blob: Blob.Arg;
+		contents: Blob.Arg;
 		executable?: boolean;
 		references?: Array<Artifact>;
 	};

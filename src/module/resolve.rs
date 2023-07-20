@@ -85,7 +85,7 @@ impl Module {
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Normal(super::Normal {
-					package_hash: module.package_hash,
+					package: module.package,
 					module_path,
 				}))
 			},
@@ -104,18 +104,18 @@ impl Module {
 				};
 
 				// Get the package.
-				let package = Package::get(tg, module.package_hash).await?;
+				let package = Package::get(tg, module.package).await?;
 
 				// Get the specified package from the dependencies.
 				let dependencies = package
 					.dependencies()
 					.as_ref()
 					.wrap_err("Expected the package to be locked.")?;
-				let package_hash = dependencies
+				let block = dependencies
 					.get(&dependency)
 					.copied()
 					.wrap_err("Expected the dependencies to contain the dependency.")?;
-				let package = Package::get(tg, package_hash)
+				let package = Package::get(tg, block)
 					.await
 					.wrap_err("Failed to get the dependency package.")?;
 

@@ -1,62 +1,49 @@
-use super::Client;
-use crate::{artifact::Artifact, error::Result, instance::Instance};
+use super::{block::TryAddBlockOutcome, Client};
+use crate::{
+	block::Block,
+	error::{return_error, Error, Result},
+	instance::Instance,
+};
 use async_recursion::async_recursion;
+use futures::{stream::FuturesUnordered, TryStreamExt};
+use std::{io::Cursor, sync::Arc};
 
 impl Client {
-	/// Push an artifact.
+	/// Push a block.
 	#[async_recursion]
 	#[must_use]
-	pub async fn push(&self, _tg: &Instance, _artifact: &Artifact) -> Result<()> {
-		// // Get the artifact.
-		// let artifact = self.get_artifact_local(artifact_hash)?;
+	pub async fn push(&self, tg: &Instance, block: Block) -> Result<()> {
+		// Attempt to add the block.
+		let bytes: Arc<[u8]> = block.bytes(tg).await?.into();
+		let reader = Cursor::new(bytes.clone());
+		let outcome = self.try_add_block(block.id(), reader).await?;
 
-		// // Try to add the artifact.
-		// let outcome = client.try_add_artifact(&artifact).await?;
+		// If the block was added, then return. Otherwise, push the missing children.
+		match outcome {
+			TryAddBlockOutcome::Added => return Ok(()),
+			TryAddBlockOutcome::MissingChildren(children) => {
+				children
+					.into_iter()
+					.map(|id| async move {
+						let child = Block::with_id(id);
+						self.push(tg, child).await?;
+						Ok::<_, Error>(())
+					})
+					.collect::<FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
+			},
+		}
 
-		// // Handle the outcome.
-		// match outcome {
-		// 	// If the artifact was added, then we are done.
-		// 	artifact::add::Outcome::Added { .. } => return Ok(()),
-
-		// 	// If there were missing entries, then recurse to push them.
-		// 	artifact::add::Outcome::MissingEntries { entries } => {
-		// 		try_join_all(entries.into_iter().map(|(_, hash)| async move {
-		// 			self.push(client, hash).await?;
-		// 			Ok::<_, Error>(())
-		// 		}))
-		// 		.await?;
-		// 	},
-
-		// 	// If the blob is missing, then push it.
-		// 	artifact::add::Outcome::MissingBlob { blob_hash } => {
-		// 		// Get the blob.
-		// 		let blob = self
-		// 			.get_blob(blob_hash)
-		// 			.await
-		// 			.wrap_err("Failed to get the blob.")?;
-
-		// 		// Add the blob.
-		// 		client
-		// 			.add_blob(blob, blob_hash)
-		// 			.await
-		// 			.wrap_err("Failed to add the blob.")?;
-		// 	},
-
-		// 	// If there are missing references, then recurse to push them.
-		// 	artifact::add::Outcome::MissingReferences { artifact_hashes } => {
-		// 		try_join_all(artifact_hashes.into_iter().map(|hash| async move {
-		// 			self.push(client, hash).await?;
-		// 			Ok::<_, Error>(())
-		// 		}))
-		// 		.await?;
-		// 	},
-		// };
-
-		// // Attempt to push the artifact again. At this point, there should not be any missing entries or a missing blob.
-		// let outcome = client.try_add_artifact(&artifact).await?;
-		// if !matches!(outcome, artifact::add::Outcome::Added { .. }) {
-		// 	return_error!("An unexpected error occurred.");
-		// }
+		// Attempt to add the block again. This time, return an error if there are missing children.
+		let reader = Cursor::new(bytes.clone());
+		let outcome = self.try_add_block(block.id(), reader).await?;
+		match outcome {
+			TryAddBlockOutcome::Added => {},
+			TryAddBlockOutcome::MissingChildren(_) => {
+				return_error!("Failed to push the block.");
+			},
+		}
 
 		Ok(())
 	}

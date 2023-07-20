@@ -8,10 +8,10 @@ use crate::error::{return_error, Error, Result};
 	Ord,
 	PartialEq,
 	PartialOrd,
-	tangram_serialize::Serialize,
-	tangram_serialize::Deserialize,
-	serde::Serialize,
 	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
@@ -30,10 +30,10 @@ pub enum System {
 	Ord,
 	PartialEq,
 	PartialOrd,
-	tangram_serialize::Serialize,
-	tangram_serialize::Deserialize,
-	serde::Serialize,
 	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
@@ -50,10 +50,10 @@ pub enum Arch {
 	Ord,
 	PartialEq,
 	PartialOrd,
-	tangram_serialize::Serialize,
-	tangram_serialize::Deserialize,
-	serde::Serialize,
 	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]

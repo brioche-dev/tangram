@@ -1,6 +1,7 @@
 pub use self::{builder::Builder, data::Data};
 use crate::{
-	artifact::{self, Artifact},
+	artifact::Artifact,
+	block::Block,
 	error::{Error, Result},
 	instance::Instance,
 };
@@ -14,15 +15,15 @@ mod new;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct Directory {
-	hash: artifact::Hash,
-	entries: BTreeMap<String, artifact::Hash>,
+	block: Block,
+	entries: BTreeMap<String, Block>,
 }
 
 impl Directory {
-	/// Get the hash.
+	/// Get the block.
 	#[must_use]
-	pub fn hash(&self) -> artifact::Hash {
-		self.hash
+	pub fn block(&self) -> Block {
+		self.block
 	}
 
 	/// Get the entries.
@@ -40,6 +41,14 @@ impl Directory {
 		Ok(entries)
 	}
 
+	pub async fn try_get_entry(&self, tg: &Instance, name: &str) -> Result<Option<Artifact>> {
+		let Some(block) = self.entries.get(name) else {
+			return Ok(None);
+		};
+		let artifact = Artifact::get(tg, *block).await?;
+		Ok(Some(artifact))
+	}
+
 	#[must_use]
 	pub fn contains(&self, name: &str) -> bool {
 		self.entries.contains_key(name)
@@ -47,5 +56,19 @@ impl Directory {
 
 	pub fn names(&self) -> impl Iterator<Item = &str> {
 		self.entries.keys().map(std::string::String::as_str)
+	}
+
+	pub async fn references(&self, tg: &Instance) -> Result<Vec<Artifact>> {
+		Ok(self
+			.entries(tg)
+			.await?
+			.into_values()
+			.map(|artifact| async move { artifact.references(tg).await })
+			.collect::<FuturesOrdered<_>>()
+			.try_collect::<Vec<_>>()
+			.await?
+			.into_iter()
+			.flatten()
+			.collect())
 	}
 }

@@ -17,6 +17,6 @@ default = ["url"]
 tangram_serialize_macro = { path = "macro" }
 byteorder = "1"
 num = "0.4"
-num-derive = "0.3"
+num-derive = "0.4"
 num-traits = "0.2"
 url = { version = "2", optional = true }

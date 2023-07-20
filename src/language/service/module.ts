@@ -13,6 +13,6 @@ export type DocumentModule = {
 };
 
 export type NormalModule = {
-	packageHash: string;
+	package: string;
 	modulePath: string;
 };

@@ -4,7 +4,7 @@
 
 use self::{commands::Args, error::Result};
 use clap::Parser;
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 use tangram::{error::WrapErr, instance::Instance, system::System, value::Value};
 use tracing_subscriber::prelude::*;
 
@@ -14,7 +14,7 @@ mod credentials;
 mod error;
 
 struct Cli {
-	tg: Arc<Instance>,
+	tg: Instance,
 }
 
 #[tokio::main]
@@ -49,7 +49,7 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	tracing::debug!(?args, "Running command.");
+	tracing::debug!(?args, "Parsed the args.");
 
 	// Get the path.
 	let path = if let Some(path) = args.path.clone() {
@@ -99,11 +99,10 @@ async fn main_inner() -> Result<()> {
 		api_token,
 		preserve_temps,
 		sandbox_enabled,
-		create_directory: true,
 	};
 
 	// Create the instance.
-	let tg = Arc::new(Instance::new(path, options).await?);
+	let tg = Instance::new(path, options).await?;
 
 	// Create the CLI.
 	let cli = Cli { tg };

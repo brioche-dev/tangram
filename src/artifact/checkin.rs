@@ -1,17 +1,19 @@
 use crate::{
-	artifact::{self, Artifact},
-	blob::{self, Blob},
+	artifact::Artifact,
+	blob::Blob,
+	block::Block,
 	directory::Directory,
 	error::{return_error, Error, Result, WrapErr},
 	file::File,
-	hash,
 	instance::Instance,
 	symlink::Symlink,
-	temp::Temp,
 	template::Template,
 };
 use async_recursion::async_recursion;
-use futures::future::try_join_all;
+use futures::{
+	stream::{FuturesOrdered, FuturesUnordered},
+	TryStreamExt,
+};
 use std::{
 	fs::Metadata,
 	os::unix::prelude::PermissionsExt,
@@ -20,7 +22,7 @@ use std::{
 
 #[derive(serde::Deserialize)]
 struct Attributes {
-	references: Vec<artifact::Hash>,
+	references: Vec<Block>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -98,14 +100,16 @@ impl Artifact {
 		drop(permit);
 
 		// Recurse into the directory's entries.
-		let entries = try_join_all(names.into_iter().map(|name| async {
-			let path = path.join(&name);
-			let artifact = Self::check_in_with_options(tg, &path, options).await?;
-			Ok::<_, Error>((name, artifact))
-		}))
-		.await?
-		.into_iter()
-		.collect();
+		let entries = names
+			.into_iter()
+			.map(|name| async {
+				let path = path.join(&name);
+				let artifact = Self::check_in_with_options(tg, &path, options).await?;
+				Ok::<_, Error>((name, artifact))
+			})
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
 
 		// Create the directory.
 		let directory = Directory::new(tg, &entries)?;
@@ -119,44 +123,8 @@ impl Artifact {
 		metadata: &Metadata,
 		_options: &Options,
 	) -> Result<Self> {
-		// // If there is an artifact tracker whose timestamp matches the file at the path, then return the tracked artifact hash.
-		// if let Some(artifact_tracker) = tg.get_artifact_tracker(path)? {
-		// 	let timestamp = std::time::Duration::new(
-		// 		metadata.ctime().try_into().unwrap(),
-		// 		metadata.ctime_nsec().try_into().unwrap(),
-		// 	);
-		// 	let tracked_timestamp = std::time::Duration::new(
-		// 		artifact_tracker.timestamp_seconds,
-		// 		artifact_tracker.timestamp_nanoseconds,
-		// 	);
-		// 	if tracked_timestamp == timestamp {
-		// 		return Ok(artifact_tracker.artifact_hash);
-		// 	}
-		// }
-
-		// Compute the file's hash.
-		let permit = tg.file_descriptor_semaphore.acquire().await;
-		let mut file = tokio::fs::File::open(path).await?;
-		let mut hash_writer = hash::Writer::new();
-		tokio::io::copy(&mut file, &mut hash_writer).await?;
-		let blob_hash = blob::Hash(hash_writer.finalize());
-		drop(file);
-
-		// Copy the file to the temp path.
-		let temp = Temp::new(tg);
-		let blob_path = tg.blob_path(blob_hash);
-		tokio::fs::copy(path, temp.path()).await?;
-		drop(permit);
-
-		// Set the permissions.
-		let permissions = std::fs::Permissions::from_mode(0o444);
-		tokio::fs::set_permissions(temp.path(), permissions).await?;
-
-		// Move the file to the blobs directory.
-		tokio::fs::rename(temp.path(), &blob_path).await?;
-
 		// Create the blob.
-		let blob = Blob::from_hash(blob_hash);
+		let contents = Blob::with_path(tg, path).await?;
 
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
@@ -166,27 +134,17 @@ impl Artifact {
 			.ok()
 			.flatten()
 			.and_then(|attributes| serde_json::from_slice(&attributes).ok());
-		let references = try_join_all(
-			attributes
-				.map(|attributes| attributes.references)
-				.unwrap_or_default()
-				.into_iter()
-				.map(|hash| Artifact::get(tg, hash)),
-		)
-		.await?;
+		let references = attributes
+			.map(|attributes| attributes.references)
+			.unwrap_or_default()
+			.into_iter()
+			.map(|hash| Artifact::get(tg, hash))
+			.collect::<FuturesOrdered<_>>()
+			.try_collect::<Vec<_>>()
+			.await?;
 
 		// Create the file.
-		let file = File::new(tg, blob, executable, &references)?;
-
-		// // Add the artifact tracker.
-		// let timestamp_seconds = metadata.ctime().try_into().unwrap();
-		// let timestamp_nanoseconds = metadata.ctime_nsec().try_into().unwrap();
-		// let entry = artifact::Tracker {
-		// 	artifact_hash,
-		// 	timestamp_seconds,
-		// 	timestamp_nanoseconds,
-		// };
-		// tg.add_artifact_tracker(path, &entry)?;
+		let file = File::new(tg, &contents, executable, &references)?;
 
 		Ok(file.into())
 	}

@@ -1,55 +1,45 @@
 use super::Client;
-use crate::{artifact::Artifact, error::Result, instance::Instance};
+use crate::{
+	block::{self, Block},
+	error::Result,
+	instance::Instance,
+	return_error,
+};
 use async_recursion::async_recursion;
+use futures::{stream::FuturesUnordered, TryStreamExt};
+use std::io::Cursor;
+use tokio::io::AsyncReadExt;
 
 impl Client {
-	/// Pull an artifact.
+	/// Pull a block.
 	#[async_recursion]
 	#[must_use]
-	pub async fn pull(&self, _tg: &Instance, _artifact: &Artifact) -> Result<()> {
-		// // Get the artifact.
-		// let artifact = client
-		// 	.try_get_artifact(artifact_hash)
-		// 	.await?
-		// 	.wrap_err_with(|| format!(r#"Unable to find artifact with hash "{artifact_hash}""#))?;
+	pub async fn pull(&self, tg: &Instance, block: Block) -> Result<()> {
+		// If the block is in this instance's database, then return.
+		if block.is_local(tg)? {
+			return Ok(());
+		}
 
-		// // Try to add the artifact.
-		// let outcome = self.try_add_artifact(&artifact).await?;
+		// Otherwise, get the block's bytes.
+		let Some(mut reader) = self.try_get_block(block.id()).await? else {
+			return_error!(r#"Failed to get the block "{block}"."#);
+		};
+		let mut bytes = Vec::new();
+		reader.read_to_end(&mut bytes).await?;
 
-		// // Handle the outcome.
-		// match outcome {
-		// 	artifact::add::Outcome::Added { .. } => return Ok(()),
+		// Pull the block's children.
+		let mut reader = block::Reader::new(Cursor::new(bytes));
+		reader
+			.children()?
+			.into_iter()
+			.map(|child| self.pull(tg, child))
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+		let bytes = reader.into_inner().into_inner();
 
-		// 	artifact::add::Outcome::MissingEntries { entries } => {
-		// 		// Pull the missing entries.
-		// 		try_join_all(entries.into_iter().map(|(_, artifact_hash)| async move {
-		// 			self.pull(client, artifact_hash).await?;
-		// 			Ok::<_, Error>(())
-		// 		}))
-		// 		.await?;
-		// 	},
-
-		// 	artifact::add::Outcome::MissingBlob { blob_hash } => {
-		// 		// Pull the blob.
-		// 		let blob = client.get_blob(blob_hash).await?;
-		// 		self.add_blob(blob).await?;
-		// 	},
-
-		// 	artifact::add::Outcome::MissingReferences { artifact_hashes } => {
-		// 		// Pull the missing references.
-		// 		try_join_all(artifact_hashes.into_iter().map(|artifact_hash| async move {
-		// 			self.pull(client, artifact_hash).await?;
-		// 			Ok::<_, Error>(())
-		// 		}))
-		// 		.await?;
-		// 	},
-		// };
-
-		// // Attempt to add the artifact again. At this point, there should not be any missing entries, blobs, or references.
-		// let outcome = self.try_add_artifact(&artifact).await?;
-		// if !matches!(outcome, artifact::add::Outcome::Added { .. }) {
-		// 	return Err(Error::message("An unexpected error occurred."));
-		// }
+		// Add the block.
+		Block::add(tg, block.id(), bytes)?;
 
 		Ok(())
 	}

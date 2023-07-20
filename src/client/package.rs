@@ -1,11 +1,12 @@
 use super::Client;
-use crate::{artifact, error::Result, package};
+use crate::{error::Result, package::Package};
 
 impl Client {
-	pub async fn publish_package(&self, package_hash: package::Hash) -> Result<()> {
+	pub async fn publish_package(&self, package: Package) -> Result<()> {
 		// Build the URL.
+		let id = package.artifact().block().id();
 		let mut url = self.url.clone();
-		let path = format!("/v1/packages/{package_hash}");
+		let path = format!("/v1/packages/{id}");
 		url.set_path(&path);
 
 		// Send the request.
@@ -15,54 +16,6 @@ impl Client {
 			.error_for_status()?;
 
 		Ok(())
-	}
-}
-
-impl Client {
-	pub async fn get_package_version(&self, name: &str, version: &str) -> Result<artifact::Hash> {
-		// Build the URL.
-		let mut url = self.url.clone();
-		let path = format!("/v1/packages/{name}/versions/{version}");
-		url.set_path(&path);
-
-		// Send the request.
-		let response = self
-			.request(reqwest::Method::GET, url)
-			.send()
-			.await?
-			.error_for_status()?;
-
-		// Read the response body.
-		let response = response.json().await?;
-
-		Ok(response)
-	}
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-pub struct Package {
-	pub name: String,
-	pub versions: Vec<String>,
-}
-
-impl Client {
-	pub async fn get_package(&self, name: String) -> Result<Package> {
-		// Build the URL.
-		let mut url = self.url.clone();
-		let path = format!("/v1/packages/{name}");
-		url.set_path(&path);
-
-		// Make the request.
-		let response = self
-			.request(reqwest::Method::GET, url)
-			.send()
-			.await?
-			.error_for_status()?;
-
-		// Read the response body.
-		let response = response.json().await?;
-
-		Ok(response)
 	}
 }
 

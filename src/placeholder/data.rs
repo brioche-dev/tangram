@@ -3,10 +3,10 @@ use super::Placeholder;
 #[derive(
 	Clone,
 	Debug,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 pub struct Data {
 	#[tangram_serialize(id = 0)]

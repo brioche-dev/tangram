@@ -4,14 +4,13 @@ use crate::{
 	instance::Instance,
 	module::Module,
 };
-use std::sync::Arc;
 
 // #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub type Symbol = serde_json::Value;
 
 impl Module {
 	/// Get the docs for a module.
-	pub async fn docs(&self, tg: &Arc<Instance>) -> Result<Response> {
+	pub async fn docs(&self, tg: &Instance) -> Result<Response> {
 		// Create the language service request.
 		let request = service::Request::Doc(service::doc::Request {
 			module: self.clone(),

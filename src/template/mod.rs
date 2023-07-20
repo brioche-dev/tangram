@@ -1,8 +1,8 @@
 pub use self::{component::Component, data::Data};
+use crate::artifact::Artifact;
 
 mod component;
 pub mod data;
-mod references;
 mod render;
 mod unrender;
 
@@ -24,6 +24,15 @@ impl Template {
 	#[must_use]
 	pub fn components(&self) -> &[Component] {
 		&self.components
+	}
+
+	pub fn artifacts(&self) -> impl Iterator<Item = &Artifact> {
+		self.components
+			.iter()
+			.filter_map(|component| match component {
+				Component::Artifact(artifact) => Some(artifact),
+				_ => None,
+			})
 	}
 }
 

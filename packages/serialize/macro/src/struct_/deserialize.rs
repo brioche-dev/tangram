@@ -45,7 +45,7 @@ impl<'a> Struct<'a> {
 
 				// Deserialize `len` fields.
 				for _ in 0..len {
-					// Deserialize the field id.
+					// Deserialize the field ID.
 					let field_id = deserializer.read_id()?;
 
 					// Deserialize the field value.

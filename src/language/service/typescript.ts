@@ -1,5 +1,5 @@
+import { Module } from "./module.ts";
 import * as syscall from "./syscall.ts";
-import { Module as Module } from "./syscall.ts";
 import ts from "typescript";
 
 // Create the TypeScript compiler options.

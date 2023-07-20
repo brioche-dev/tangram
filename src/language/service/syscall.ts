@@ -13,7 +13,7 @@ export type DocumentModule = {
 };
 
 export type NormalModule = {
-	packageHash: string;
+	package: string;
 	modulePath: string;
 };
 
@@ -109,11 +109,8 @@ declare global {
 	/** Get the version of a module. */
 	function syscall(name: "module_version", module: Module): string;
 
-	/** Get the package hash for the module. */
-	function syscall(
-		name: "module_unlocked_package_hash",
-		module: Module,
-	): string;
+	/** Get the package id for the module. */
+	function syscall(name: "module_unlocked_package_id", module: Module): string;
 }
 
 export let module_ = {
@@ -141,9 +138,9 @@ export let module_ = {
 		}
 	},
 
-	unlockedPackageHash: (module: Module) => {
+	unlockedPackage: (module: Module) => {
 		try {
-			return syscall("module_unlocked_package_hash", module);
+			return syscall("module_unlocked_package_id", module);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}

@@ -1,4 +1,5 @@
 import { assert as assert_, unreachable } from "./assert.ts";
+import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Symlink } from "./symlink.ts";
@@ -7,8 +8,6 @@ import * as syscall from "./syscall.ts";
 export type Artifact = Directory | File | Symlink;
 
 export namespace Artifact {
-	export type Hash = string;
-
 	export let is = (value: unknown): value is Artifact => {
 		return (
 			value instanceof Directory ||
@@ -26,8 +25,8 @@ export namespace Artifact {
 		assert_(is(value));
 	};
 
-	export let get = async (hash: Hash): Promise<Artifact> => {
-		return Artifact.fromSyscall(await syscall.artifact.get(hash));
+	export let get = async (block: Block): Promise<Artifact> => {
+		return Artifact.fromSyscall(await syscall.artifact.get(block.toSyscall()));
 	};
 
 	export let toSyscall = (artifact: Artifact): syscall.Artifact => {

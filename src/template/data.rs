@@ -1,21 +1,21 @@
 use super::Template;
 use crate::{
-	artifact::{self, Artifact},
+	artifact::Artifact,
+	block::Block,
 	error::{Error, Result},
 	instance::Instance,
 	placeholder::{self, Placeholder},
 };
-use futures::future::try_join_all;
-use itertools::Itertools;
+use futures::{stream::FuturesOrdered, TryStreamExt};
 
 #[derive(
 	Clone,
 	Debug,
 	Default,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
@@ -25,10 +25,10 @@ pub struct Data {
 #[derive(
 	Clone,
 	Debug,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Component {
@@ -36,7 +36,7 @@ pub enum Component {
 	String(String),
 
 	#[tangram_serialize(id = 1)]
-	Artifact(artifact::Hash),
+	Artifact(Block),
 
 	#[tangram_serialize(id = 2)]
 	Placeholder(placeholder::Data),
@@ -50,23 +50,25 @@ impl Template {
 			.iter()
 			.map(|component| match component {
 				super::Component::String(string) => Component::String(string.clone()),
-				super::Component::Artifact(artifact) => Component::Artifact(artifact.hash()),
+				super::Component::Artifact(artifact) => Component::Artifact(artifact.block()),
 				super::Component::Placeholder(placeholder) => {
 					let placeholder = placeholder.to_data();
 					Component::Placeholder(placeholder)
 				},
 			})
-			.collect_vec();
+			.collect();
 		Data { components }
 	}
 
 	pub async fn from_data(tg: &Instance, template: Data) -> Result<Self> {
-		let components =
-			try_join_all(template.components.into_iter().map(|component| async move {
+		let components = template
+			.components
+			.into_iter()
+			.map(|component| async move {
 				let component = match component {
 					Component::String(string) => super::Component::String(string),
-					Component::Artifact(artifact_hash) => {
-						let artifact = Artifact::get(tg, artifact_hash).await?;
+					Component::Artifact(block) => {
+						let artifact = Artifact::get(tg, block).await?;
 						super::Component::Artifact(artifact)
 					},
 					Component::Placeholder(placeholder) => {
@@ -75,7 +77,9 @@ impl Template {
 					},
 				};
 				Ok::<_, Error>(component)
-			}))
+			})
+			.collect::<FuturesOrdered<_>>()
+			.try_collect()
 			.await?;
 		Ok(Self { components })
 	}

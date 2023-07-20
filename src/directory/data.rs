@@ -1,21 +1,21 @@
 use super::Directory;
-use crate::artifact;
+use crate::block::Block;
 use std::collections::BTreeMap;
 
 #[derive(
 	Clone,
 	Debug,
 	Default,
-	PartialEq,
 	Eq,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
+	PartialEq,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
-	pub entries: BTreeMap<String, artifact::Hash>,
+	pub entries: BTreeMap<String, Block>,
 }
 
 impl Directory {
@@ -27,8 +27,8 @@ impl Directory {
 	}
 
 	#[must_use]
-	pub fn from_data(hash: artifact::Hash, data: Data) -> Self {
+	pub fn from_data(block: Block, data: Data) -> Self {
 		let entries = data.entries;
-		Self { hash, entries }
+		Self { block, entries }
 	}
 }

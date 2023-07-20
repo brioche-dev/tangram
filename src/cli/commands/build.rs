@@ -5,11 +5,11 @@ use crate::{
 };
 use std::path::PathBuf;
 use tangram::{
-	function::{self, Function},
 	package::{self, Package, ROOT_MODULE_FILE_NAME},
+	target::Target,
 };
 
-/// Call a function.
+/// Build a target.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -20,7 +20,7 @@ pub struct Args {
 	pub package_args: PackageArgs,
 
 	#[arg(default_value = "default")]
-	pub function: String,
+	pub target: String,
 
 	#[arg(short, long)]
 	pub output: Option<PathBuf>,
@@ -33,23 +33,22 @@ impl Cli {
 			.await
 			.wrap_err("Failed to get the package.")?;
 
-		// Call the function.
+		// Build the target.
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let function = Function::new(
+		let target = Target::new(
 			&self.tg,
-			package.hash(),
+			package.artifact().block(),
 			ROOT_MODULE_FILE_NAME.parse().unwrap(),
-			function::Kind::Function,
-			args.function,
+			args.target,
 			env,
 			args_,
 		)
-		.wrap_err("Failed to create the function.")?;
-		let output = function
-			.call(&self.tg)
+		.wrap_err("Failed to create the target.")?;
+		let output = target
+			.build(&self.tg)
 			.await
-			.wrap_err("The function call failed.")?;
+			.wrap_err("Failed to build the target.")?;
 
 		// Check out the output if requested.
 		if let Some(path) = args.output {

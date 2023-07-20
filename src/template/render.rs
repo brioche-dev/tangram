@@ -1,10 +1,10 @@
 use super::{Component, Template};
 use crate::error::Result;
-use futures::future::try_join_all;
+use futures::{stream::FuturesOrdered, TryStreamExt};
 use std::{borrow::Cow, future::Future};
 
 impl Template {
-	pub fn render_sync<'a, F>(&'a self, mut f: F) -> Result<String>
+	pub fn try_render_sync<'a, F>(&'a self, mut f: F) -> Result<String>
 	where
 		F: (FnMut(&'a Component) -> Result<Cow<'a, str>>) + 'a,
 	{
@@ -15,11 +15,18 @@ impl Template {
 		Ok(string)
 	}
 
-	pub async fn render<'a, F, Fut>(&'a self, f: F) -> Result<String>
+	pub async fn try_render<'a, F, Fut>(&'a self, f: F) -> Result<String>
 	where
 		F: FnMut(&'a Component) -> Fut,
 		Fut: Future<Output = Result<Cow<'a, str>>>,
 	{
-		Ok(try_join_all(self.components.iter().map(f)).await?.join(""))
+		Ok(self
+			.components
+			.iter()
+			.map(f)
+			.collect::<FuturesOrdered<_>>()
+			.try_collect::<Vec<_>>()
+			.await?
+			.join(""))
 	}
 }

@@ -41,7 +41,7 @@ impl<'a> Struct<'a> {
 
 				// Write the fields.
 				#(
-					// Write the field id.
+					// Write the field ID.
 					serializer.write_id(#field_ids)?;
 					// Write the field value.
 					serializer.serialize(&self.#field_idents)?;

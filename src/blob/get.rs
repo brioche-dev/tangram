@@ -1,52 +1,53 @@
-use super::Blob;
+use super::{Blob, Data, Kind};
 use crate::{
+	block::Block,
 	error::{Result, WrapErr},
 	instance::Instance,
 };
-use tokio::io::{AsyncRead, AsyncSeek};
+use async_recursion::async_recursion;
+use num_traits::ToPrimitive;
 
 impl Blob {
-	pub async fn get(&self, tg: &Instance) -> Result<impl AsyncRead> {
-		let reader = self
-			.try_get(tg)
+	#[async_recursion]
+	pub async fn get(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
+		let artifact = Self::try_get(tg, block)
 			.await?
-			.wrap_err("Failed to find the blob.")?;
-		Ok(reader)
+			.wrap_err_with(|| format!(r#"Failed to get the blob with block "{block}"."#))?;
+		Ok(artifact)
 	}
 
-	pub async fn try_get(&self, tg: &Instance) -> Result<Option<impl AsyncRead>> {
-		// Attempt to get the blob locally.
-		if let Some(reader) = self.try_get_local(tg).await? {
-			return Ok(Some(
-				Box::new(reader) as Box<dyn AsyncRead + Send + Sync + Unpin>
-			));
-		}
-
-		// Attempt to get the blob from the API.
-		let reader = tg.api_client().try_get_blob(self.hash).await.ok().flatten();
-		if let Some(reader) = reader {
-			return Ok(Some(Box::new(reader)));
-		}
-
-		Ok(None)
-	}
-
-	pub async fn get_local(&self, tg: &Instance) -> Result<impl AsyncRead> {
-		let reader = self
-			.try_get_local(tg)
-			.await?
-			.wrap_err("Failed to find the blob.")?;
-		Ok(reader)
-	}
-
-	pub async fn try_get_local(&self, tg: &Instance) -> Result<Option<impl AsyncRead + AsyncSeek>> {
-		let path = tg.blob_path(self.hash);
-		if !tokio::fs::try_exists(&path).await? {
+	pub async fn try_get(tg: &Instance, block: Block) -> Result<Option<Self>> {
+		// Get the children.
+		let Some(children) = block.try_get_children(tg).await? else {
 			return Ok(None);
-		}
-		let file = tokio::fs::File::open(path)
-			.await
-			.wrap_err("Failed to open the blob file.")?;
-		Ok(Some(file))
+		};
+
+		let blob = if children.is_empty() {
+			// If the block has no children, then it is a leaf.
+
+			// Get the size.
+			let size = block.data_size(tg).await?.to_u64().unwrap();
+
+			Self {
+				block,
+				kind: Kind::Leaf(size),
+			}
+		} else {
+			// Otherwise, it is a branch.
+
+			// Get the data.
+			let data = block.data(tg).await?;
+
+			// Deserialize the data.
+			let data = Data::deserialize(data.as_slice())?;
+
+			// Create the blob from the data.
+			Self {
+				block,
+				kind: Kind::Branch(data.sizes),
+			}
+		};
+
+		Ok(Some(blob))
 	}
 }

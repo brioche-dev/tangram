@@ -1,15 +1,10 @@
 use crate::{artifact::Artifact, placeholder::Placeholder};
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-#[serde(tag = "kind", content = "value")]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Component {
-	#[serde(rename = "string")]
 	String(String),
-
-	#[serde(rename = "artifact")]
 	Artifact(Artifact),
-
-	#[serde(rename = "placeholder")]
 	Placeholder(Placeholder),
 }
 

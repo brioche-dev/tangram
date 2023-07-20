@@ -2,6 +2,9 @@ pub use self::data::Data;
 use crate::{
 	artifact::Artifact,
 	blob::Blob,
+	block::Block,
+	error::Result,
+	instance::Instance,
 	operation::Operation,
 	path::{Relpath, Subpath},
 	placeholder::Placeholder,
@@ -36,6 +39,9 @@ pub enum Value {
 	/// A subpath value.
 	Subpath(Subpath),
 
+	/// A block value.
+	Block(Block),
+
 	/// A blob value.
 	Blob(Blob),
 
@@ -61,6 +67,43 @@ pub enum Value {
 pub type Array = Vec<Value>;
 
 pub type Object = BTreeMap<String, Value>;
+
+impl Value {
+	pub fn to_bytes(&self) -> Result<Vec<u8>> {
+		let data = self.to_data();
+		let mut bytes = Vec::new();
+		data.serialize(&mut bytes)?;
+		Ok(bytes)
+	}
+
+	pub async fn from_bytes(tg: &Instance, bytes: &[u8]) -> Result<Self> {
+		let data = Data::deserialize(bytes)?;
+		let value = Self::from_data(tg, data).await?;
+		Ok(value)
+	}
+}
+
+impl Value {
+	pub fn blocks(&self) -> Vec<Block> {
+		match self {
+			Self::Null
+			| Self::Bool(_)
+			| Self::Number(_)
+			| Self::String(_)
+			| Self::Bytes(_)
+			| Self::Relpath(_)
+			| Self::Subpath(_)
+			| Self::Placeholder(_) => vec![],
+			Self::Block(block) => vec![*block],
+			Self::Blob(blob) => vec![blob.block()],
+			Self::Artifact(artifact) => vec![artifact.block()],
+			Self::Template(template) => template.artifacts().map(Artifact::block).collect(),
+			Self::Operation(operation) => vec![operation.block()],
+			Self::Array(array) => array.iter().flat_map(Self::blocks).collect(),
+			Self::Object(object) => object.values().flat_map(Self::blocks).collect(),
+		}
+	}
+}
 
 impl Value {
 	#[must_use]
@@ -111,6 +154,15 @@ impl Value {
 	#[must_use]
 	pub fn as_subpath(&self) -> Option<&Subpath> {
 		if let Self::Subpath(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
+	pub fn as_block(&self) -> Option<&Block> {
+		if let Self::Block(v) = self {
 			Some(v)
 		} else {
 			None
@@ -237,6 +289,15 @@ impl Value {
 	}
 
 	#[must_use]
+	pub fn into_block(self) -> Option<Block> {
+		if let Self::Block(v) = self {
+			Some(v)
+		} else {
+			None
+		}
+	}
+
+	#[must_use]
 	pub fn into_blob(self) -> Option<Blob> {
 		if let Self::Blob(v) = self {
 			Some(v)
@@ -310,7 +371,8 @@ impl std::fmt::Display for Value {
 			Value::Bytes(value) => f.write_str(&format!(r#"(tg.bytes {}"#, value.len())),
 			Value::Relpath(value) => f.write_str(&format!(r#"(tg.relpath "{value}")"#)),
 			Value::Subpath(value) => f.write_str(&format!(r#"(tg.subpath "{value}")"#)),
-			Value::Blob(value) => f.write_str(&format!(r#"(tg.blob {})"#, value.hash())),
+			Value::Block(value) => f.write_str(&format!(r#"(tg.blob {})"#, value.id())),
+			Value::Blob(value) => f.write_str(&format!(r#"(tg.blob {})"#, value.block().id())),
 			Value::Artifact(value) => f.write_str(&format!("{value}")),
 			Value::Placeholder(value) => {
 				f.write_str(&format!(r#"(tg.placeholder "${}")"#, value.name,))
@@ -324,14 +386,14 @@ impl std::fmt::Display for Value {
 				f.write_str(&format!(r#"(tg.template "${values}")"#))
 			},
 			Value::Operation(value) => match value {
-				Operation::Command(command) => {
-					f.write_str(&format!(r#"(tg.command {})"#, command.hash()))
-				},
-				Operation::Function(function) => {
-					f.write_str(&format!(r#"(tg.function {})"#, function.hash()))
-				},
 				Operation::Resource(resource) => {
-					f.write_str(&format!(r#"(tg.resource {})"#, resource.hash()))
+					f.write_str(&format!(r#"(tg.resource {})"#, resource.block().id()))
+				},
+				Operation::Target(target) => {
+					f.write_str(&format!(r#"(tg.target {})"#, target.block().id()))
+				},
+				Operation::Task(task) => {
+					f.write_str(&format!(r#"(tg.task {})"#, task.block().id()))
 				},
 			},
 			Value::Array(values) => {

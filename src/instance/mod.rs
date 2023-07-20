@@ -1,16 +1,14 @@
-use self::lock::Lock;
-#[cfg(feature = "operation_run")]
-use crate::value::Value;
 use crate::{
-	artifact::{self, Artifact},
-	blob,
+	artifact::Artifact,
+	block::Block,
 	client::{Client, API_URL},
-	database::Database,
-	document,
+	document::{self, Document},
 	error::Result,
-	operation,
 	util::task_map::TaskMap,
+	value::Value,
 };
+use derive_more::Deref;
+use object_pool::Pool;
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -19,25 +17,29 @@ use std::{
 use url::Url;
 
 mod clean;
-mod lock;
 
 /// An instance.
+#[derive(Clone, Deref)]
 pub struct Instance {
+	pub(crate) state: Arc<State>,
+}
+
+pub struct State {
 	/// A client for communicating with the API.
 	pub(crate) api_client: Client,
 
-	/// The database.
-	pub(crate) database: Database,
+	/// The database connection pool.
+	pub(crate) database_connection_pool: Pool<rusqlite::Connection>,
 
 	/// A map of paths to documents.
 	pub(crate) documents:
-		tokio::sync::RwLock<HashMap<document::Document, document::State, fnv::FnvBuildHasher>>,
+		tokio::sync::RwLock<HashMap<Document, document::State, fnv::FnvBuildHasher>>,
 
 	/// A semaphore that prevents opening too many file descriptors.
 	pub(crate) file_descriptor_semaphore: tokio::sync::Semaphore,
 
 	/// An HTTP client for downloading resources.
-	#[cfg(feature = "operation_run")]
+	#[cfg(feature = "evaluate")]
 	pub(crate) http_client: reqwest::Client,
 
 	/// A task map that deduplicates internal checkouts.
@@ -51,11 +53,8 @@ pub struct Instance {
 		std::sync::Mutex<Option<crate::language::service::RequestSender>>,
 
 	/// A local pool for running `!Send` futures.
-	#[cfg(feature = "operation_run")]
+	#[cfg(feature = "evaluate")]
 	pub(crate) local_pool: tokio_util::task::LocalPoolHandle,
-
-	/// A lock used to acquire shared and exclusive access to the path.
-	pub(crate) lock: Lock<()>,
 
 	/// A handle to the main tokio runtime.
 	#[cfg(feature = "language")]
@@ -63,22 +62,19 @@ pub struct Instance {
 
 	/// A task map that deduplicates operations.
 	#[allow(clippy::type_complexity)]
-	#[cfg(feature = "operation_run")]
-	pub(crate) operations_task_map:
-		std::sync::Mutex<Option<Arc<TaskMap<operation::Hash, Result<Value>>>>>,
+	#[cfg(feature = "evaluate")]
+	pub(crate) operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<Block, Result<Value>>>>>,
 
-	/// The configuration options for creating the instance.
-	#[cfg(feature = "operation_run")]
+	/// The options the instance was created with.
+	#[cfg(feature = "evaluate")]
 	pub(crate) options: Options,
-
-	/// Whether to preserve temporary files.
-	pub(crate) preserve_temps: bool,
-
-	#[cfg(feature = "operation_run")]
-	pub(crate) process_semaphore: tokio::sync::Semaphore,
 
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
+
+	/// A semaphore that prevents running too many processes.
+	#[cfg(feature = "evaluate")]
+	pub(crate) process_semaphore: tokio::sync::Semaphore,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -87,17 +83,15 @@ pub struct Options {
 	pub api_token: Option<String>,
 	pub preserve_temps: bool,
 	pub sandbox_enabled: bool,
-	pub create_directory: bool,
 }
 
 impl Instance {
 	pub async fn new(path: PathBuf, options: Options) -> Result<Instance> {
-		if options.create_directory {
-			// Ensure the path exists.
-			tokio::fs::create_dir_all(&path).await?;
-			// Migrate the path.
-			Self::migrate(&path).await?;
-		}
+		// Ensure the path exists.
+		tokio::fs::create_dir_all(&path).await?;
+
+		// Migrate the path.
+		Self::migrate(&path).await?;
 
 		#[cfg(feature = "v8")]
 		{
@@ -119,12 +113,11 @@ impl Instance {
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 
-		// Open the database.
-		let database_path = path.join("database.mdb");
-		let database = Database::open(&database_path)?;
+		// Create the database pool.
+		let database_connection_pool = Pool::from_vec(vec![]);
 
 		// Create the HTTP client.
-		#[cfg(feature = "operation_run")]
+		#[cfg(feature = "evaluate")]
 		let http_client = reqwest::Client::new();
 
 		// Create the internal checkouts task map.
@@ -135,54 +128,50 @@ impl Instance {
 		let language_service_request_sender = std::sync::Mutex::new(None);
 
 		// Create the local pool handle.
-		#[cfg(feature = "operation_run")]
+		#[cfg(feature = "evaluate")]
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
 			std::thread::available_parallelism().unwrap().get(),
 		);
-
-		// Create the lock.
-		let lock_path = path.join("lock");
-		let lock = Lock::new(&lock_path, ());
 
 		// Get the curent tokio runtime handler.
 		#[cfg(feature = "language")]
 		let main_runtime_handle = tokio::runtime::Handle::current();
 
 		// Create the operations task map.
-		#[cfg(feature = "operation_run")]
+		#[cfg(feature = "evaluate")]
 		let operations_task_map = std::sync::Mutex::new(None);
 
-		// Forward the preserve_temps preference.
-		let preserve_temps = options.preserve_temps;
-
 		// Create the process semaphore.
-		#[cfg(feature = "operation_run")]
+		#[cfg(feature = "evaluate")]
 		let process_semaphore = tokio::sync::Semaphore::new(16);
 
-		// Create the instance.
-		let instance = Instance {
+		// Create the state.
+		let state = State {
 			api_client,
-			database,
+			database_connection_pool,
 			documents,
 			file_descriptor_semaphore,
-			#[cfg(feature = "operation_run")]
+			#[cfg(feature = "evaluate")]
 			http_client,
 			internal_checkouts_task_map,
 			#[cfg(feature = "language")]
 			language_service_request_sender,
-			#[cfg(feature = "operation_run")]
+			#[cfg(feature = "evaluate")]
 			local_pool,
-			lock,
 			#[cfg(feature = "language")]
 			main_runtime_handle,
-			#[cfg(feature = "operation_run")]
+			#[cfg(feature = "evaluate")]
 			operations_task_map,
-			#[cfg(feature = "operation_run")]
+			#[cfg(feature = "evaluate")]
 			options,
-			preserve_temps,
-			#[cfg(feature = "operation_run")]
-			process_semaphore,
 			path,
+			#[cfg(feature = "evaluate")]
+			process_semaphore,
+		};
+
+		// Create the instance.
+		let instance = Instance {
+			state: Arc::new(state),
 		};
 
 		Ok(instance)
@@ -212,71 +201,39 @@ fn initialize_v8() {
 }
 
 impl Instance {
-	pub async fn try_lock_shared(&self) -> Result<Option<lock::SharedGuard<()>>> {
-		self.lock.try_lock_shared().await
-	}
-
-	pub async fn try_lock_exclusive(&self) -> Result<Option<lock::ExclusiveGuard<()>>> {
-		self.lock.try_lock_exclusive().await
-	}
-
-	pub async fn lock_shared(&self) -> Result<lock::SharedGuard<()>> {
-		self.lock.lock_shared().await
-	}
-
-	pub async fn lock_exclusive(&self) -> Result<lock::ExclusiveGuard<()>> {
-		self.lock.lock_exclusive().await
+	#[must_use]
+	pub fn path(&self) -> &Path {
+		&self.state.path
 	}
 }
 
 impl Instance {
-	#[must_use]
-	pub fn path(&self) -> &Path {
-		&self.path
-	}
-
 	#[must_use]
 	pub fn artifacts_path(&self) -> PathBuf {
 		self.path().join("artifacts")
 	}
 
 	#[must_use]
-	pub fn artifact_path(&self, artifact_hash: artifact::Hash) -> PathBuf {
-		self.artifacts_path().join(artifact_hash.to_string())
-	}
-
-	#[must_use]
-	pub fn blobs_path(&self) -> PathBuf {
-		self.path().join("blobs")
-	}
-
-	#[must_use]
-	pub fn blob_path(&self, blob_hash: blob::Hash) -> PathBuf {
-		self.blobs_path().join(blob_hash.to_string())
-	}
-
-	#[must_use]
 	pub fn database_path(&self) -> PathBuf {
-		self.path().join("database.mdb")
+		self.path().join("database")
 	}
 
-	#[must_use]
-	pub fn logs_path(&self) -> PathBuf {
-		self.path().join("logs")
-	}
-
-	#[must_use]
-	pub fn log_path(&self, operation_hash: operation::Hash) -> PathBuf {
-		self.logs_path().join(operation_hash.to_string())
+	pub fn get_database_connection(&self) -> Result<object_pool::Reusable<rusqlite::Connection>> {
+		if let Some(connection) = self.database_connection_pool.try_pull() {
+			Ok(connection)
+		} else {
+			let connection = rusqlite::Connection::open(self.database_path())?;
+			let connection = object_pool::Reusable::new(&self.database_connection_pool, connection);
+			Ok(connection)
+		}
 	}
 
 	#[must_use]
 	pub fn temps_path(&self) -> PathBuf {
 		self.path().join("temps")
 	}
-}
 
-impl Instance {
+	#[must_use]
 	pub fn api_client(&self) -> &Client {
 		&self.api_client
 	}

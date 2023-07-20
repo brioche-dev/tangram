@@ -1,6 +1,6 @@
 import { Artifact } from "./artifact.ts";
 import { Blob } from "./blob.ts";
-import { Command } from "./command.ts";
+import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Operation } from "./operation.ts";
@@ -8,6 +8,8 @@ import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
+import { Target } from "./target.ts";
+import { Task } from "./task.ts";
 import { Template } from "./template.ts";
 import { Value } from "./value.ts";
 
@@ -21,6 +23,7 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| Relpath
 		| Subpath
 		| Blob
+		| Block
 		| Artifact
 		| Placeholder
 		| Template
@@ -42,6 +45,7 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| Relpath
 	| Subpath
 	| Blob
+	| Block
 	| Artifact
 	| Placeholder
 	| Template
@@ -75,9 +79,9 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Symlink ||
 		value instanceof Placeholder ||
 		value instanceof Template ||
-		value instanceof Command ||
-		value instanceof Function ||
-		value instanceof Resource
+		value instanceof Resource ||
+		value instanceof Target ||
+		value instanceof Task
 	) {
 		return value as unknown as Resolved<T>;
 	} else if (value instanceof Array) {

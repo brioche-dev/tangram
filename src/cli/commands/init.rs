@@ -43,7 +43,7 @@ impl Cli {
 			path.join("tangram.tg"),
 			formatdoc!(
 				r#"
-					export default tg.function(() => "Hello, World!");
+					tg.target("default", () => "Hello, World!");
 				"#,
 			),
 		));

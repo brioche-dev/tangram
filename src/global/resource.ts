@@ -1,5 +1,6 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_ } from "./assert.ts";
+import { Block } from "./block.ts";
 import { Checksum } from "./checksum.ts";
 import { Operation } from "./operation.ts";
 import * as syscall from "./syscall.ts";
@@ -16,7 +17,7 @@ export let download = async (arg: Resource.Arg): Promise<Artifact> => {
 };
 
 type ConstructorArg = {
-	hash: Operation.Hash;
+	block: Block;
 	url: string;
 	unpack?: Resource.UnpackFormat;
 	checksum?: Checksum;
@@ -24,7 +25,7 @@ type ConstructorArg = {
 };
 
 export class Resource {
-	#hash: Operation.Hash;
+	#block: Block;
 	#url: string;
 	#unpack?: Resource.UnpackFormat;
 	#checksum?: Checksum;
@@ -42,7 +43,7 @@ export class Resource {
 	}
 
 	constructor(arg: ConstructorArg) {
-		this.#hash = arg.hash;
+		this.#block = arg.block;
 		this.#url = arg.url;
 		this.#unpack = arg.unpack ?? undefined;
 		this.#checksum = arg.checksum ?? undefined;
@@ -62,13 +63,13 @@ export class Resource {
 		assert_(Resource.is(value));
 	}
 
-	hash(): Operation.Hash {
-		return this.#hash;
+	block(): Block {
+		return this.#block;
 	}
 
 	toSyscall(): syscall.Resource {
 		return {
-			hash: this.#hash,
+			block: this.#block.toSyscall(),
 			url: this.#url,
 			unpack: this.#unpack,
 			checksum: this.#checksum,
@@ -78,7 +79,7 @@ export class Resource {
 
 	static fromSyscall(download: syscall.Resource): Resource {
 		return new Resource({
-			hash: download.hash,
+			block: Block.fromSyscall(download.block),
 			url: download.url,
 			unpack: download.unpack,
 			checksum: download.checksum,
@@ -87,7 +88,7 @@ export class Resource {
 	}
 
 	async download(): Promise<Artifact> {
-		let outputFromSyscall = await syscall.operation.run(
+		let outputFromSyscall = await syscall.operation.evaluation(
 			Operation.toSyscall(this),
 		);
 		let output = Value.fromSyscall(outputFromSyscall);

@@ -6,11 +6,11 @@ use crate::{
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram::{
 	artifact::Artifact,
-	function::{self, Function},
 	package::{self, Package, ROOT_MODULE_FILE_NAME},
+	target::Target,
 };
 
-/// Build a package and run an executable from its output.
+/// Build the specified target from a package and execute a command from its output.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 #[command(trailing_var_arg = true)]
@@ -25,9 +25,9 @@ pub struct Args {
 	#[command(flatten)]
 	pub run_args: RunArgs,
 
-	/// The name of the function to call.
+	/// The name of the target to build.
 	#[arg(default_value = "default")]
-	pub function: String,
+	pub target: String,
 
 	/// Arguments to pass to the executable.
 	pub trailing_args: Vec<String>,
@@ -43,17 +43,16 @@ impl Cli {
 		// Run the operation.
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let function = Function::new(
+		let target = Target::new(
 			&self.tg,
-			package.hash(),
+			package.artifact().block(),
 			ROOT_MODULE_FILE_NAME.parse().unwrap(),
-			function::Kind::Function,
-			args.function,
+			args.target,
 			env,
 			args_,
 		)
-		.wrap_err("Failed to create the function.")?;
-		let output = function.call(&self.tg).await?;
+		.wrap_err("Failed to create the target.")?;
+		let output = target.build(&self.tg).await?;
 
 		// Get the output artifact.
 		let artifact = output

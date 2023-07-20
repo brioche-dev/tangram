@@ -1,4 +1,5 @@
-use super::{Dependency, Hash};
+use super::Dependency;
+use crate::id::Id;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -9,9 +10,9 @@ pub struct Lockfile {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Entry {
-	Locked(Hash),
+	Locked(Id),
 	Unlocked {
-		hash: Hash,
+		id: Id,
 		dependencies: BTreeMap<Dependency, Entry>,
 	},
 }

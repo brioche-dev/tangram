@@ -30,14 +30,15 @@ type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 #[derive(Clone)]
 pub struct Server {
 	/// The Tangram instance.
-	tg: Arc<Instance>,
+	tg: Instance,
 
 	// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
 }
 
 impl Server {
-	pub fn new(tg: Arc<Instance>) -> Self {
+	#[must_use]
+	pub fn new(tg: Instance) -> Self {
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 		Self { tg, diagnostics }
 	}

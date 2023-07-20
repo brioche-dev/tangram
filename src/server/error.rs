@@ -14,6 +14,6 @@ pub fn bad_request() -> http::Response<Outgoing> {
 pub fn not_found() -> http::Response<Outgoing> {
 	http::Response::builder()
 		.status(http::StatusCode::NOT_FOUND)
-		.body(full("Bad request."))
+		.body(full("Not found."))
 		.unwrap()
 }

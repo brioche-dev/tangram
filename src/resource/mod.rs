@@ -1,10 +1,10 @@
 pub use self::{builder::Builder, data::Data, error::Error};
-use crate::{checksum::Checksum, operation};
+use crate::{block::Block, checksum::Checksum};
 use url::Url;
 
 mod builder;
 mod data;
-#[cfg(feature = "operation_run")]
+#[cfg(feature = "evaluate")]
 mod download;
 mod error;
 mod new;
@@ -12,8 +12,8 @@ pub mod unpack;
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Resource {
-	/// The hash.
-	hash: operation::Hash,
+	/// The resource's block.
+	block: Block,
 
 	/// The URL to download from.
 	url: Url,
@@ -32,9 +32,9 @@ pub struct Resource {
 }
 
 impl Resource {
-	/// Get the hash.
+	/// Get the ID.
 	#[must_use]
-	pub fn hash(&self) -> operation::Hash {
-		self.hash
+	pub fn block(&self) -> Block {
+		self.block
 	}
 }

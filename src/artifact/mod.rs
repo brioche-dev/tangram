@@ -1,14 +1,12 @@
-pub use self::{data::Data, hash::Hash, tracker::Tracker};
-use crate::{directory::Directory, file::File, symlink::Symlink};
+pub use self::{data::Data, tracker::Tracker};
+use crate::{block::Block, directory::Directory, file::File, symlink::Symlink};
 
-mod add;
 mod bundle;
 pub mod checkin;
 mod checkout;
 mod checksum;
 mod data;
 mod get;
-mod hash;
 mod references;
 mod tracker;
 
@@ -104,33 +102,30 @@ impl Artifact {
 
 impl Artifact {
 	#[must_use]
-	pub fn hash(&self) -> Hash {
+	pub fn block(&self) -> Block {
 		match self {
-			Self::Directory(directory) => directory.hash(),
-			Self::File(file) => file.hash(),
-			Self::Symlink(symlink) => symlink.hash(),
+			Self::Directory(directory) => directory.block(),
+			Self::File(file) => file.block(),
+			Self::Symlink(symlink) => symlink.block(),
 		}
 	}
 }
 
 impl std::hash::Hash for Artifact {
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		self.hash().hash(state);
+		self.block().hash(state);
 	}
 }
 
 impl std::fmt::Display for Artifact {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Artifact::Directory(directory) => f.write_str(&format!(
-				r#"(tg.directory {value})"#,
-				value = directory.hash()
-			)),
-			Artifact::File(file) => {
-				f.write_str(&format!(r#"(tg.file {value})"#, value = file.hash()))
+			Artifact::Directory(directory) => {
+				f.write_str(&format!(r#"(tg.directory {})"#, directory.block().id()))
 			},
+			Artifact::File(file) => f.write_str(&format!(r#"(tg.file {})"#, file.block().id())),
 			Artifact::Symlink(symlink) => {
-				f.write_str(&format!(r#"(tg.symlink {value})"#, value = symlink.hash()))
+				f.write_str(&format!(r#"(tg.symlink {})"#, symlink.block().id()))
 			},
 		}
 	}

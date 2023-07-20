@@ -1,34 +1,36 @@
 import { Artifact } from "./artifact.ts";
-import { assert as assert_ } from "./assert.ts";
+import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
+import { Block } from "./block.ts";
 import { File, file } from "./file.ts";
 import { Subpath, subpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
-import { t } from "./template.ts";
 
 export let directory = async (...args: Array<Unresolved<Directory.Arg>>) => {
 	return await Directory.new(...args);
 };
 
 type ConstructorArg = {
-	hash: Artifact.Hash;
-	entries: Record<string, Artifact.Hash>;
+	block: Block;
+	entries: Record<string, Block>;
 };
 
 export class Directory {
-	#hash: Artifact.Hash;
-	#entries: Record<string, Artifact.Hash>;
+	#block: Block;
+	#entries: Record<string, Block>;
 
 	static async new(
 		...args: Array<Unresolved<Directory.Arg>>
 	): Promise<Directory> {
-		// Create the entries.
-		let entries: Record<string, Artifact> = {};
-
-		// Apply each arg.
-		for (let arg of await Promise.all(args.map(resolve))) {
+		let entries = await (
+			await Promise.all(args.map(resolve))
+		).reduce<Promise<Record<string, Artifact>>>(async function reduce(
+			promiseEntries,
+			arg,
+		) {
+			let entries = await promiseEntries;
 			if (arg === undefined) {
 				// If the arg is undefined, then continue.
 			} else if (arg instanceof Directory) {
@@ -47,6 +49,10 @@ export class Directory {
 
 					// Set the entry.
 					entries[name] = entry;
+				}
+			} else if (arg instanceof Array) {
+				for (let argEntry of arg) {
+					entries = await reduce(Promise.resolve(entries), argEntry);
 				}
 			} else if (typeof arg === "object") {
 				// If the arg is an object, then apply each entry.
@@ -93,10 +99,12 @@ export class Directory {
 						}
 					}
 				}
+			} else {
+				return unreachable();
 			}
-		}
-
-		// Create the directory.
+			return entries;
+		},
+		Promise.resolve({}));
 		return Directory.fromSyscall(
 			syscall.directory.new({
 				entries: Object.fromEntries(
@@ -110,7 +118,7 @@ export class Directory {
 	}
 
 	constructor(arg: ConstructorArg) {
-		this.#hash = arg.hash;
+		this.#block = arg.block;
 		this.#entries = arg.entries;
 	}
 
@@ -128,20 +136,32 @@ export class Directory {
 	}
 
 	toSyscall(): syscall.Directory {
+		let block = this.#block.toSyscall();
+		let entries = Object.fromEntries(
+			Object.entries(this.#entries).map(([name, entry]) => [
+				name,
+				entry.toSyscall(),
+			]),
+		);
 		return {
-			hash: this.#hash,
-			entries: this.#entries,
+			block,
+			entries,
 		};
 	}
 
 	static fromSyscall(directory: syscall.Directory): Directory {
-		let hash = directory.hash;
-		let entries = directory.entries;
-		return new Directory({ hash, entries });
+		let block = Block.fromSyscall(directory.block);
+		let entries = Object.fromEntries(
+			Object.entries(directory.entries).map(([name, entry]) => [
+				name,
+				Block.fromSyscall(entry),
+			]),
+		);
+		return new Directory({ block, entries });
 	}
 
-	hash(): Artifact.Hash {
-		return this.#hash;
+	block(): Block {
+		return this.#block;
 	}
 
 	async get(arg: Subpath.Arg): Promise<Directory | File> {
@@ -159,13 +179,16 @@ export class Directory {
 				return undefined;
 			}
 			currentSubpath.push(component);
-			let entryHash = artifact.#entries[component];
-			if (entryHash === undefined) {
+			let entryBlock = artifact.#entries[component];
+			if (entryBlock === undefined) {
 				return undefined;
 			}
-			let entry = await Artifact.get(entryHash);
+			let entry = await Artifact.get(entryBlock);
 			if (entry instanceof Symlink) {
-				let resolved = await entry.resolve(t`${this}/${currentSubpath}`);
+				let resolved = await entry.resolve({
+					artifact: this,
+					path: currentSubpath,
+				});
 				if (resolved === undefined) {
 					return undefined;
 				}
@@ -204,7 +227,7 @@ export class Directory {
 		}
 	}
 
-	*[Symbol.iterator](): Iterator<[string, Artifact.Hash]> {
+	*[Symbol.iterator](): Iterator<[string, Block]> {
 		for (let [name, entry] of Object.entries(this.#entries)) {
 			yield [name, entry];
 		}
@@ -218,7 +241,7 @@ export class Directory {
 }
 
 export namespace Directory {
-	export type Arg = undefined | Directory | ArgObject;
+	export type Arg = undefined | Directory | Array<Arg> | ArgObject;
 
 	export type ArgObject = { [name: string]: ArgObjectValue };
 

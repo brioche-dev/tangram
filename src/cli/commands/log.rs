@@ -1,12 +1,12 @@
 use crate::{error::Result, Cli};
-use tangram::operation;
+use tangram::id::Id;
 
 /// Get the log for an operation.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
-	/// The hash of the operation to get logs from.
-	pub operation_hash: operation::Hash,
+	/// The ID of the operation to get logs from.
+	pub id: Id,
 }
 
 impl Cli {
@@ -15,7 +15,7 @@ impl Cli {
 		unimplemented!()
 
 		// // Get the log reader.
-		// let mut reader = self.tg.get_log_reader(args.operation_hash).await?;
+		// let mut reader = self.tg.get_log_reader(args.id).await?;
 
 		// // Copy the log to stdout.
 		// let mut stdout = tokio::io::stdout();

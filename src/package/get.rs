@@ -1,9 +1,10 @@
 use super::{
 	lockfile::{self, Lockfile},
-	Hash, Package, LOCKFILE_FILE_NAME,
+	Package, LOCKFILE_FILE_NAME,
 };
 use crate::{
 	artifact::Artifact,
+	block::Block,
 	error::{Error, Result, WrapErr},
 	instance::Instance,
 };
@@ -12,16 +13,16 @@ use futures::{stream::FuturesUnordered, TryStreamExt};
 
 impl Package {
 	#[async_recursion]
-	pub async fn get(tg: &'async_recursion Instance, hash: Hash) -> Result<Self> {
-		let artifact = Self::try_get(tg, hash)
+	pub async fn get(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
+		let artifact = Self::try_get(tg, block)
 			.await?
-			.wrap_err_with(|| format!(r#"Failed to get the package with hash "{hash}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to get the package with block "{block}"."#))?;
 		Ok(artifact)
 	}
 
-	pub async fn try_get(tg: &Instance, hash: Hash) -> Result<Option<Self>> {
+	pub async fn try_get(tg: &Instance, block: Block) -> Result<Option<Self>> {
 		// Get the artifact.
-		let Some(artifact) = Artifact::try_get(tg, hash).await? else {
+		let Some(artifact) = Artifact::try_get(tg, block).await? else {
 			return Ok(None);
 		};
 
@@ -37,7 +38,8 @@ impl Package {
 				.as_file()
 				.wrap_err("Expected the lockfile to be a file.")?;
 			let lockfile = lockfile
-				.blob()
+				.contents(tg)
+				.await?
 				.text(tg)
 				.await
 				.wrap_err("Failed to read the lockfile.")?;
@@ -48,11 +50,11 @@ impl Package {
 				.dependencies
 				.into_iter()
 				.map(|(dependency, entry)| async move {
-					let hash = match entry {
-						lockfile::Entry::Locked(hash) => hash,
+					let id = match entry {
+						lockfile::Entry::Locked(id) => Block::with_id(id),
 						lockfile::Entry::Unlocked { .. } => unimplemented!(),
 					};
-					Ok::<_, Error>((dependency, hash))
+					Ok::<_, Error>((dependency, id))
 				})
 				.collect::<FuturesUnordered<_>>()
 				.try_collect()

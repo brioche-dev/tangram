@@ -22,7 +22,7 @@ fn main() {
 		std::fs::write(path, snapshot).unwrap();
 	}
 
-	#[cfg(feature = "operation_run")]
+	#[cfg(feature = "evaluate")]
 	{
 		// Create the global snapshot.
 		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());

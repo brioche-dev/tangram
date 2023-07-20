@@ -70,7 +70,7 @@ impl<'a> Enum<'a> {
 			.map(Variant::parse)
 			.collect::<syn::Result<Vec<_>>>()?;
 
-		// Sort the variants by id.
+		// Sort the variants by ID.
 		variants.sort_by_key(|field| field.id);
 
 		// Create the enum.

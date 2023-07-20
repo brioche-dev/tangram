@@ -29,7 +29,7 @@ impl<'a> Enum<'a> {
 				// Read the kind.
 				deserializer.ensure_kind(tangram_serialize::Kind::Enum)?;
 
-				// Read the variant id.
+				// Read the variant ID.
 				let variant_id = deserializer.read_id()?;
 
 				// Deserialize the value.

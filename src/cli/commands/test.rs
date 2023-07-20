@@ -2,7 +2,7 @@ use super::PackageArgs;
 use crate::{error::Result, Cli};
 use tangram::package;
 
-/// Build a package's "test" export and run it.
+/// Build the target named "test" from the specified package.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -14,7 +14,7 @@ pub struct Args {
 	pub package_args: PackageArgs,
 
 	#[arg(default_value = "test")]
-	pub function: String,
+	pub target: String,
 }
 
 impl Cli {
@@ -23,7 +23,7 @@ impl Cli {
 		let args = super::build::Args {
 			package: args.package,
 			package_args: args.package_args,
-			function: args.function,
+			target: args.target,
 			output: None,
 		};
 

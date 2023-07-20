@@ -35,7 +35,7 @@ impl<'a> Enum<'a> {
 						// Write the kind.
 						serializer.write_kind(tangram_serialize::Kind::Enum)?;
 
-						// Serialize the variant id.
+						// Serialize the variant ID.
 						serializer.write_id(#variant_ids)?;
 
 						// Serialize the value.

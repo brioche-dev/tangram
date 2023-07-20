@@ -231,6 +231,36 @@ impl Deserialize for Arc<str> {
 	}
 }
 
+impl<T, U> Serialize for (T, U)
+where
+	T: Serialize,
+	U: Serialize,
+{
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.serialize(&self.0)?;
+		serializer.serialize(&self.1)?;
+		Ok(())
+	}
+}
+
+impl<T, U> Deserialize for (T, U)
+where
+	T: Deserialize,
+	U: Deserialize,
+{
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		let t = deserializer.deserialize()?;
+		let u = deserializer.deserialize()?;
+		Ok((t, u))
+	}
+}
+
 impl<T> Serialize for Vec<T>
 where
 	T: Serialize,

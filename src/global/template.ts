@@ -4,6 +4,7 @@ import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
+import { MaybeNestedArray, flatten } from "./util.ts";
 
 export let t = async (
 	strings: TemplateStringsArray,
@@ -34,45 +35,49 @@ export class Template {
 		...args: Array<Unresolved<Template.Arg>>
 	): Promise<Template> {
 		// Collect the components.
-		let components: Array<Template.Component> = [];
-		let collectComponents = (arg: Template.Arg) => {
-			if (Template.Component.is(arg)) {
-				components.push(arg);
-			} else if (arg instanceof Relpath || arg instanceof Subpath) {
-				components.push(arg.toString());
-			} else if (arg instanceof Template) {
-				components.push(...arg.components());
-			} else if (arg instanceof Array) {
-				for (let component of arg) {
-					collectComponents(component);
-				}
-			}
-		};
-		for (let arg of await Promise.all(args.map(resolve))) {
-			collectComponents(arg);
-		}
+		let components = flatten(
+			await Promise.all(
+				args.map(async function map(
+					arg,
+				): Promise<MaybeNestedArray<Template.Component>> {
+					arg = await resolve(arg);
+					if (Template.Component.is(arg)) {
+						return arg;
+					} else if (arg instanceof Relpath || arg instanceof Subpath) {
+						return arg.toString();
+					} else if (arg instanceof Template) {
+						return arg.components();
+					} else if (arg instanceof Array) {
+						return await Promise.all(arg.map(map));
+					} else {
+						return unreachable();
+					}
+				}),
+			),
+		).reduce<Array<Template.Component>>((components, component) => {
+			components.push(component);
+			return components;
+		}, []);
 
 		// Normalize the components.
-		let normalizedComponents: Array<Template.Component> = [];
-		for (let component of components) {
-			let lastComponent = normalizedComponents.at(-1);
-			if (component === "") {
-				// Ignore empty string components.
-				continue;
-			} else if (
-				typeof lastComponent === "string" &&
-				typeof component === "string"
-			) {
-				// Merge adjacent string components.
-				normalizedComponents.splice(-1, 1, lastComponent + component);
-			} else {
-				normalizedComponents.push(component);
-			}
-		}
-		components = normalizedComponents;
-
-		// Remove leading indentation.
-		components = stripLeadingWhitespace(components);
+		components = components.reduce<Array<Template.Component>>(
+			(components, component) => {
+				let lastComponent = components.at(-1);
+				if (component === "") {
+					// Ignore empty string components.
+				} else if (
+					typeof lastComponent === "string" &&
+					typeof component === "string"
+				) {
+					// Merge adjacent string components.
+					components.splice(-1, 1, lastComponent + component);
+				} else {
+					components.push(component);
+				}
+				return components;
+			},
+			[],
+		);
 
 		return new Template(components);
 	}
@@ -199,90 +204,4 @@ export namespace Template {
 		| Subpath
 		| Template
 		| Array<Arg>;
-
-	export namespace Arg {
-		export let is = (value: unknown): value is Template.Arg => {
-			return (
-				Template.Component.is(value) ||
-				value instanceof Relpath ||
-				value instanceof Subpath ||
-				value instanceof Template ||
-				(value instanceof Array && value.every(Template.Arg.is))
-			);
-		};
-	}
 }
-
-// Compute the minimum indentation level of a string. Returns undefined if the string is on one line.
-let minIndentLevel = (s: string): string | undefined => {
-	let lines: Array<string> = s.split("\n");
-
-	if (lines.length == 1) {
-		return undefined;
-	}
-
-	// Strip lines with only whitespace.
-	lines = lines.filter((line) => {
-		let matches = /^\s*$/.exec(line);
-		return !matches;
-	});
-
-	// Find lines with zero or more leading whitespaces and find the leading whitespace of minimum length.
-	lines = lines
-		.map((line) => {
-			let matches = /^\s*/.exec(line);
-			return matches?.map((s) => s) ?? [];
-		})
-		.flat();
-
-	if (lines.length == 0) {
-		return undefined;
-	} else {
-		return lines.reduce((acc, str) => {
-			let l1 = acc?.length ?? 0;
-			let l2 = str?.length ?? 0;
-			return l1 < l2 ? acc : str;
-		});
-	}
-};
-
-// Remove the leading whitespace from string components in a template, including empty lines and any leading indentation.
-let stripLeadingWhitespace = (
-	components: Array<Template.Component>,
-): Array<Template.Component> => {
-	let minIndent: string | undefined = undefined;
-
-	// Compute the minimum indentation level.
-	for (let component of components) {
-		if (typeof component === "string") {
-			let indent = minIndentLevel(component);
-			if (indent && !minIndent) {
-				minIndent = indent;
-			} else if (indent && minIndent && indent.length < minIndent.length) {
-				minIndent = indent;
-			}
-		}
-	}
-
-	// If there was some indentation, replace all occurrences of it.
-	if (minIndent) {
-		let indent = minIndent;
-		components = components.map((component) => {
-			if (typeof component === "string") {
-				return component
-					.split("\n")
-					.map((line) => {
-						if (line.startsWith(indent)) {
-							line = line.replace(indent, "");
-						}
-						return line;
-					})
-					.join("\n");
-			} else {
-				return component;
-			}
-		});
-	}
-
-	return components;
-};

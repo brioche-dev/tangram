@@ -58,27 +58,27 @@ impl Error {
 	}
 }
 
-impl From<std::io::Error> for Error {
-	fn from(error: std::io::Error) -> Error {
-		Error::Other {
-			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		}
-	}
-}
-
-impl From<lmdb::Error> for Error {
-	fn from(error: lmdb::Error) -> Self {
-		Self::Other {
-			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		}
-	}
-}
-
 impl From<reqwest::Error> for Error {
 	fn from(error: reqwest::Error) -> Self {
 		Self::Other {
+			message: error.to_string(),
+			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
+		}
+	}
+}
+
+impl From<rusqlite::Error> for Error {
+	fn from(error: rusqlite::Error) -> Self {
+		Self::Other {
+			message: error.to_string(),
+			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
+		}
+	}
+}
+
+impl From<std::io::Error> for Error {
+	fn from(error: std::io::Error) -> Error {
+		Error::Other {
 			message: error.to_string(),
 			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
 		}

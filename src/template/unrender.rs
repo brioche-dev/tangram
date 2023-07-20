@@ -26,12 +26,12 @@ impl Template {
 				components.push(Component::String(string[i..match_.start()].to_owned()));
 			}
 
-			// Get and parse the artifact hash.
-			let artifact_hash_match = captures.get(1).unwrap();
-			let artifact_hash = artifact_hash_match.as_str().parse().unwrap();
+			// Get and parse the ID.
+			let id = captures.get(1).unwrap();
+			let block = id.as_str().parse().unwrap();
 
 			// Get the artifact.
-			let artifact = Artifact::get(tg, artifact_hash).await?;
+			let artifact = Artifact::get(tg, block).await?;
 
 			// Add an artifact component.
 			components.push(Component::Artifact(artifact));
@@ -71,7 +71,7 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let artifact: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
+		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
 			.build(&tg)?
 			.into();
 		let artifact_path = artifact
@@ -96,7 +96,7 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let artifact: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
+		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
 			.build(&tg)?
 			.into();
 		let artifact_path = artifact
@@ -139,7 +139,7 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let artifact: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
+		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
 			.build(&tg)?
 			.into();
 		let artifact_path = artifact
@@ -169,7 +169,7 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let foo: Artifact = File::builder(Blob::new(&tg, "foo".as_bytes()).await?)
+		let foo: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
 			.build(&tg)?
 			.into();
 		let foo_path = foo
@@ -179,7 +179,7 @@ mod tests {
 			.unwrap()
 			.to_owned();
 
-		let bar: Artifact = File::builder(Blob::new(&tg, "bar".as_bytes()).await?)
+		let bar: Artifact = File::builder(Blob::with_bytes(&tg, "bar").await?)
 			.build(&tg)?
 			.into();
 		let bar_path = bar
@@ -189,7 +189,7 @@ mod tests {
 			.unwrap()
 			.to_owned();
 
-		let baz: Artifact = File::builder(Blob::new(&tg, "baz".as_bytes()).await?)
+		let baz: Artifact = File::builder(Blob::with_bytes(&tg, "baz").await?)
 			.build(&tg)?
 			.into();
 		let baz_path = baz

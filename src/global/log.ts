@@ -1,13 +1,14 @@
 import { Blob } from "./blob.ts";
-import { Command } from "./command.ts";
+import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Function } from "./function.ts";
 import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
+import { Target } from "./target.ts";
+import { Task } from "./task.ts";
 import { Template } from "./template.ts";
 
 /** Write to the log. */
@@ -78,13 +79,15 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Subpath) {
 		return `(tg.subpath ${value.toString()})`;
 	} else if (value instanceof Blob) {
-		return `(tg.blob ${value.hash()})`;
+		return `(tg.blob ${value.block().id()})`;
+	} else if (value instanceof Block) {
+		return `(tg.block ${value.id()})`;
 	} else if (value instanceof Directory) {
-		return `(tg.directory ${value.hash()})`;
+		return `(tg.directory ${value.block().id()})`;
 	} else if (value instanceof File) {
-		return `(tg.file ${value.hash()})`;
+		return `(tg.file ${value.block().id()})`;
 	} else if (value instanceof Symlink) {
-		return `(tg.symlink ${value.hash()})`;
+		return `(tg.symlink ${value.block().id()})`;
 	} else if (value instanceof Placeholder) {
 		return `(tg.placeholder "${value.name()}")`;
 	} else if (value instanceof Template) {
@@ -99,12 +102,12 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			})
 			.join("");
 		return `(tg.template "${string}")`;
-	} else if (value instanceof Command) {
-		return `(tg.command "${value.hash()}")`;
-	} else if (value instanceof Function) {
-		return `(tg.function "${value.hash}")`;
 	} else if (value instanceof Resource) {
-		return `(tg.resource "${value.hash()}")`;
+		return `(tg.resource "${value.block().id()}")`;
+	} else if (value instanceof Target) {
+		return `(tg.target "${value.block.id()}")`;
+	} else if (value instanceof Task) {
+		return `(tg.task "${value.block().id()}")`;
 	} else {
 		// Handle any other object.
 		let constructorName = "";

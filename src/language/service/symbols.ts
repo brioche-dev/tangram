@@ -99,10 +99,9 @@ export let walk = (
 	return {
 		name,
 		kind,
-		tags: [], // TODO: deprecation tags.
-		detail: null, // TODO: symbol details.
+		tags: [],
+		detail: null,
 		range,
-		// TODO: improve this using tree.nameSpan.
 		selectionRange: range,
 		children: children ?? null,
 	};
@@ -151,7 +150,6 @@ let getKind = (tsKind: string): Kind => {
 			return "typeParameter";
 		case "external module":
 			return "module";
-		// Default to a variable. TODO: handle unknown symbol kinds in a better way.
 		default:
 			return "variable";
 	}

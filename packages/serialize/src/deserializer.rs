@@ -15,6 +15,10 @@ where
 		Deserializer(reader)
 	}
 
+	pub fn into_inner(self) -> R {
+		self.0
+	}
+
 	pub fn deserialize<T>(&mut self) -> Result<T>
 	where
 		T: Deserialize,

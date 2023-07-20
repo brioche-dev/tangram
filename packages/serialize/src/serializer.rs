@@ -15,6 +15,10 @@ where
 		Serializer(writer)
 	}
 
+	pub fn into_inner(self) -> W {
+		self.0
+	}
+
 	pub fn serialize<T>(&mut self, value: &T) -> Result<()>
 	where
 		T: Serialize + ?Sized,

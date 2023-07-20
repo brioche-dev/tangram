@@ -44,18 +44,16 @@ impl Cli {
 			tokio::time::sleep(poll_interval).await;
 		};
 
+		// Set the token.
+		self.tg.api_client().set_token(Some(token.clone()));
+
 		// Get the user.
-		let user = self
-			.tg
-			.api_client()
-			.get_current_user(token)
-			.await
-			.wrap_err("Failed to get the current user.")?;
+		let user = self.tg.api_client().get_current_user().await?;
 
 		// Write the credentials.
 		let credentials = Credentials {
 			email: user.email,
-			token: user.token,
+			token,
 		};
 		Self::write_credentials(&credentials).await?;
 

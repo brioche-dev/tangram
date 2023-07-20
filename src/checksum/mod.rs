@@ -8,12 +8,12 @@ pub mod writer;
 #[derive(
 	Clone,
 	Debug,
-	PartialEq,
 	Eq,
-	serde::Serialize,
+	PartialEq,
 	serde::Deserialize,
-	tangram_serialize::Serialize,
+	serde::Serialize,
 	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(into = "String", try_from = "String")]
 #[tangram_serialize(into = "String", try_from = "String")]

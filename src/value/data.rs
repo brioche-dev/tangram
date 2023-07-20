@@ -1,26 +1,30 @@
 use super::Value;
 use crate::{
-	artifact::{self, Artifact},
-	blob::{self, Blob},
+	artifact::Artifact,
+	blob::Blob,
+	block::Block,
 	error::{return_error, Error, Result},
 	instance::Instance,
-	operation::{self, Operation},
+	operation::Operation,
 	path::{Relpath, Subpath},
 	placeholder::{self, Placeholder},
 	template::{self, Template},
 };
 use async_recursion::async_recursion;
 use byteorder::{ReadBytesExt, WriteBytesExt};
-use futures::future::try_join_all;
+use futures::{
+	stream::{FuturesOrdered, FuturesUnordered},
+	TryStreamExt,
+};
 use std::collections::BTreeMap;
 
 #[derive(
 	Clone,
 	Debug,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 	serde::Deserialize,
 	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Data {
@@ -46,24 +50,27 @@ pub enum Data {
 	Subpath(Subpath),
 
 	#[tangram_serialize(id = 7)]
-	Blob(blob::Hash),
+	Block(Block),
 
 	#[tangram_serialize(id = 8)]
-	Artifact(artifact::Hash),
+	Blob(Block),
 
 	#[tangram_serialize(id = 9)]
-	Placeholder(placeholder::Data),
+	Artifact(Block),
 
 	#[tangram_serialize(id = 10)]
-	Template(template::Data),
+	Placeholder(placeholder::Data),
 
 	#[tangram_serialize(id = 11)]
-	Operation(operation::Hash),
+	Template(template::Data),
 
 	#[tangram_serialize(id = 12)]
-	Array(Array),
+	Operation(Block),
 
 	#[tangram_serialize(id = 13)]
+	Array(Array),
+
+	#[tangram_serialize(id = 14)]
 	Object(Object),
 }
 
@@ -112,11 +119,12 @@ impl Value {
 			Self::Bytes(bytes) => Data::Bytes(bytes.clone()),
 			Self::Subpath(path) => Data::Subpath(path.clone()),
 			Self::Relpath(path) => Data::Relpath(path.clone()),
-			Self::Blob(blob) => Data::Blob(blob.hash()),
-			Self::Artifact(artifact) => Data::Artifact(artifact.hash()),
+			Self::Block(block) => Data::Block(*block),
+			Self::Blob(block) => Data::Blob(block.block()),
+			Self::Artifact(block) => Data::Artifact(block.block()),
 			Self::Placeholder(placeholder) => Data::Placeholder(placeholder.to_data()),
 			Self::Template(template) => Data::Template(template.to_data()),
-			Self::Operation(operation) => Data::Operation(operation.hash()),
+			Self::Operation(block) => Data::Operation(block.block()),
 			Self::Array(array) => Data::Array(array.iter().map(Self::to_data).collect()),
 			Self::Object(map) => Data::Object(
 				map.iter()
@@ -136,12 +144,13 @@ impl Value {
 			Data::Bytes(bytes) => Ok(Self::Bytes(bytes)),
 			Data::Subpath(path) => Ok(Self::Subpath(path)),
 			Data::Relpath(path) => Ok(Self::Relpath(path)),
+			Data::Block(value) => Ok(Self::Block(value)),
 			Data::Blob(value) => {
-				let blob = Blob::from_hash(value);
+				let blob = Blob::get(tg, value).await?;
 				Ok(Self::Blob(blob))
 			},
-			Data::Artifact(hash) => {
-				let artifact = Artifact::get(tg, hash).await?;
+			Data::Artifact(block) => {
+				let artifact = Artifact::get(tg, block).await?;
 				Ok(Self::Artifact(artifact))
 			},
 			Data::Placeholder(placeholder) => {
@@ -152,23 +161,29 @@ impl Value {
 				let template = Template::from_data(tg, template).await?;
 				Ok(Self::Template(template))
 			},
-			Data::Operation(hash) => {
-				let operation = Operation::get(tg, hash).await?;
+			Data::Operation(block) => {
+				let operation = Operation::get(tg, block).await?;
 				Ok(Self::Operation(operation))
 			},
 			Data::Array(array) => {
-				let array =
-					try_join_all(array.into_iter().map(|value| Self::from_data(tg, value))).await?;
+				let array = array
+					.into_iter()
+					.map(|value| Self::from_data(tg, value))
+					.collect::<FuturesOrdered<_>>()
+					.try_collect()
+					.await?;
 				Ok(Self::Array(array))
 			},
 			Data::Object(map) => {
-				let map = try_join_all(map.into_iter().map(|(key, value)| async move {
-					let value = Self::from_data(tg, value).await?;
-					Ok::<_, Error>((key, value))
-				}))
-				.await?
-				.into_iter()
-				.collect();
+				let map = map
+					.into_iter()
+					.map(|(key, value)| async move {
+						let value = Self::from_data(tg, value).await?;
+						Ok::<_, Error>((key, value))
+					})
+					.collect::<FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
 				Ok(Self::Object(map))
 			},
 		}

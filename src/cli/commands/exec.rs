@@ -1,14 +1,14 @@
 use crate::{error::Result, Cli};
 use tangram::package;
 
-/// Build a package and run an executable from its output.
+/// Build a target from the specified package and execute a command from its output.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 #[command(trailing_var_arg = true)]
 pub struct Args {
-	/// The name of the function to call.
+	/// The name of the target to build.
 	#[arg(short, long, default_value = "default")]
-	pub function: String,
+	pub target: String,
 
 	#[command(flatten)]
 	pub package_args: super::PackageArgs,
@@ -29,7 +29,7 @@ impl Cli {
 			package: args.package,
 			package_args: args.package_args,
 			run_args: args.run_args,
-			function: args.function,
+			target: args.target,
 			trailing_args: args.trailing_args,
 		};
 

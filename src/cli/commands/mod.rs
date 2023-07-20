@@ -1,5 +1,4 @@
 use crate::{error::Result, Cli};
-use either::Either;
 use futures::FutureExt;
 use std::path::PathBuf;
 use tangram::path::Subpath;
@@ -117,28 +116,6 @@ impl Cli {
 	/// Run a command.
 	#[tracing::instrument(skip_all)]
 	pub async fn run(&self, args: Args) -> Result<()> {
-		// Acquire an appropriate lock for the subcommand.
-		let _lock = match args.command {
-			Command::Clean(_) => {
-				if let Some(lock) = self.tg.try_lock_exclusive().await? {
-					Either::Left(lock)
-				} else {
-					eprintln!("Waiting on an exclusive lock to the tangram path.");
-					Either::Left(self.tg.lock_exclusive().await?)
-				}
-			},
-			_ => {
-				if let Some(lock) = self.tg.try_lock_shared().await? {
-					Either::Right(lock)
-				} else {
-					eprintln!("Waiting on a shared lock to the tangram path.");
-					Either::Right(self.tg.lock_shared().await?)
-				}
-			},
-		};
-
-		tracing::debug!("Acquired lock.");
-
 		// Run the subcommand.
 		match args.command {
 			Command::Add(args) => self.command_add(args).boxed(),

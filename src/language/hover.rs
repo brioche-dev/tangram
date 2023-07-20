@@ -5,10 +5,9 @@ use crate::{
 	module::position::Position,
 	module::Module,
 };
-use std::sync::Arc;
 
 impl Module {
-	pub async fn hover(&self, tg: &Arc<Instance>, position: Position) -> Result<Option<String>> {
+	pub async fn hover(&self, tg: &Instance, position: Position) -> Result<Option<String>> {
 		// Create the language service request.
 		let request = service::Request::Hover(service::hover::Request {
 			module: self.clone(),

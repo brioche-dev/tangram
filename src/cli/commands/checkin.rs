@@ -24,9 +24,9 @@ impl Cli {
 		// Perform the checkin.
 		let artifact = Artifact::check_in(&self.tg, &path).await?;
 
-		// Print the artifact hash.
-		let hash = artifact.hash();
-		println!("{hash}");
+		// Print the ID.
+		let id = artifact.block().id();
+		println!("{id}");
 
 		Ok(())
 	}

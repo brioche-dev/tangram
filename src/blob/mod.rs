@@ -1,33 +1,45 @@
-pub use self::hash::Hash;
+pub use self::{data::Data, reader::Reader};
 use crate::{
+	block::Block,
 	error::{Error, Result},
 	instance::Instance,
 };
 use tokio::io::AsyncReadExt;
 
-mod copy;
+mod data;
 mod get;
-mod hash;
 mod new;
+mod reader;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Blob {
-	hash: Hash,
+	block: Block,
+	kind: Kind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+enum Kind {
+	Branch(Vec<(Block, u64)>),
+	Leaf(u64),
 }
 
 impl Blob {
 	#[must_use]
-	pub fn from_hash(hash: Hash) -> Self {
-		Self { hash }
+	pub fn block(&self) -> Block {
+		self.block
 	}
 
 	#[must_use]
-	pub fn hash(&self) -> Hash {
-		self.hash
+	pub fn size(&self) -> u64 {
+		match &self.kind {
+			Kind::Branch(sizes) => sizes.iter().map(|(_, size)| size).sum(),
+			Kind::Leaf(size) => *size,
+		}
 	}
 
 	pub async fn bytes(&self, tg: &Instance) -> Result<Vec<u8>> {
-		let mut reader = self.get(tg).await?;
+		let mut reader = self.reader(tg);
 		let mut bytes = Vec::new();
 		reader.read_to_end(&mut bytes).await?;
 		Ok(bytes)

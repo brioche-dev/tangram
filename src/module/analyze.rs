@@ -9,7 +9,10 @@ use std::{collections::HashSet, rc::Rc};
 use swc_core::{
 	common::{SourceMap, Span},
 	ecma::{
-		ast::{CallExpr, Callee, ExportAll, ImportDecl, Lit, NamedExport},
+		ast::{
+			CallExpr, Callee, ExportAll, ExportDecl, Expr, ImportDecl, Lit, NamedExport, ObjectLit,
+			PropName, VarDeclarator,
+		},
 		visit::{Visit, VisitWith},
 	},
 };
@@ -45,7 +48,7 @@ impl Module {
 
 		// Create the output.
 		let output = Output {
-			metadata: None,
+			metadata: visitor.metadata,
 			imports: visitor.imports,
 			includes: visitor.includes,
 		};
@@ -58,6 +61,7 @@ impl Module {
 struct Visitor {
 	source_map: Rc<SourceMap>,
 	errors: Vec<Error>,
+	metadata: Option<Metadata>,
 	imports: HashSet<Import, fnv::FnvBuildHasher>,
 	includes: HashSet<Relpath, fnv::FnvBuildHasher>,
 }
@@ -72,6 +76,31 @@ impl Visitor {
 }
 
 impl Visit for Visitor {
+	fn visit_export_decl(&mut self, n: &ExportDecl) {
+		// Check that this export statement has a declaration.
+		let Some(decl) = n.decl.as_var() else {
+			n.visit_children_with(self);
+			return;
+		};
+
+		// Visit each declaration.
+		for decl in &decl.decls {
+			// Get the object from the declaration.
+			let VarDeclarator { name, init, .. } = decl;
+			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else { continue; };
+			if ident != "metadata" {
+				continue;
+			}
+			let Some(init) = init.as_deref() else { continue; };
+			let Some(object) = init.as_object() else { continue; };
+			let metadata = self.object_to_json(object);
+			let Ok(metadata) = serde_json::from_value(metadata) else { continue; };
+			self.metadata = Some(metadata);
+		}
+
+		n.visit_children_with(self);
+	}
+
 	fn visit_import_decl(&mut self, n: &ImportDecl) {
 		self.add_import(&n.src.value, n.span);
 	}
@@ -165,6 +194,59 @@ impl Visitor {
 	}
 }
 
+impl Visitor {
+	fn object_to_json(&mut self, object: &ObjectLit) -> serde_json::Value {
+		let mut output = serde_json::Map::new();
+		let loc = self.source_map.lookup_char_pos(object.span.lo);
+		for prop in &object.props {
+			let Some(prop) = prop.as_prop() else {
+				self.errors.push(Error::new(
+					"Spread properties are not allowed in metadata.",
+					&loc,
+				));
+				continue;
+			};
+			let Some(key_value) = prop.as_key_value() else {
+				self.errors.push(Error::new(
+					"Only key-value properties are allowed in metadata.",
+					&loc,
+				));
+				continue;
+			};
+			let key = match &key_value.key {
+				PropName::Ident(ident) => ident.sym.to_string(),
+				PropName::Str(value) => value.value.to_string(),
+				_ => {
+					self.errors.push(Error::new("Keys must be strings.", &loc));
+					continue;
+				},
+			};
+			let value = match key_value.value.as_ref() {
+				Expr::Lit(Lit::Null(_)) => serde_json::Value::Null,
+				Expr::Lit(Lit::Bool(value)) => serde_json::Value::Bool(value.value),
+				Expr::Lit(Lit::Num(value)) => {
+					let Some(value) = serde_json::Number::from_f64(value.value) else {
+						self.errors.push(Error::new(
+							"Invalid number.",
+							&loc,
+						));
+						continue;
+					};
+					serde_json::Value::Number(value)
+				},
+				Expr::Lit(Lit::Str(value)) => serde_json::Value::String(value.value.to_string()),
+				_ => {
+					self.errors
+						.push(Error::new("Values must be valid JSON.", &loc));
+					continue;
+				},
+			};
+			output.insert(key, value);
+		}
+		serde_json::Value::Object(output)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -178,7 +260,7 @@ mod tests {
 			import * as namespaceImport from "tangram:namespace_import";
 			let dynamicImport = import("./dynamic_import.tg");
 			let include = tg.include("./include.txt");
-			export let nested = tg.function(() => {
+			export let nested = tg.target(() => {
 				let nestedDynamicImport = import("tangram:nested_dynamic_import");
 				let nestedInclude = tg.include("./nested_include.txt");
 			});

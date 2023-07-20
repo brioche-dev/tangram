@@ -1,60 +1,150 @@
+declare global {
+	function syscall(
+		syscall: "artifact_bundle",
+		artifact: Artifact,
+	): Promise<Artifact>;
+
+	function syscall(syscall: "artifact_get", block: Block): Promise<Artifact>;
+
+	function syscall(syscall: "blob_bytes", blob: Blob): Promise<Uint8Array>;
+
+	function syscall(syscall: "blob_get", block: Block): Promise<Blob>;
+
+	function syscall(syscall: "blob_new", arg: Blob.Arg): Promise<Blob>;
+
+	function syscall(syscall: "blob_text", blob: Blob): Promise<string>;
+
+	function syscall(syscall: "block_bytes", block: Block): Promise<Uint8Array>;
+
+	function syscall(
+		syscall: "block_children",
+		block: Block,
+	): Promise<Array<Block>>;
+
+	function syscall(syscall: "block_data", block: Block): Promise<Uint8Array>;
+
+	function syscall(syscall: "block_new", arg: Block.Arg): Block;
+
+	function syscall(
+		syscall: "checksum",
+		algorithm: ChecksumAlgorithm,
+		bytes: string | Uint8Array,
+	): Checksum;
+
+	function syscall(syscall: "directory_new", arg: Directory.Arg): Directory;
+
+	function syscall(
+		syscall: "encoding_base64_decode",
+		value: string,
+	): Uint8Array;
+
+	function syscall(
+		syscall: "encoding_base64_encode",
+		value: Uint8Array,
+	): string;
+
+	function syscall(syscall: "encoding_hex_decode", value: string): Uint8Array;
+
+	function syscall(syscall: "encoding_hex_encode", value: Uint8Array): string;
+
+	function syscall(syscall: "encoding_json_decode", value: string): unknown;
+
+	function syscall(syscall: "encoding_json_encode", value: any): string;
+
+	function syscall(syscall: "encoding_toml_decode", value: string): unknown;
+
+	function syscall(syscall: "encoding_toml_encode", value: any): string;
+
+	function syscall(syscall: "encoding_utf8_decode", value: Uint8Array): string;
+
+	function syscall(syscall: "encoding_utf8_encode", value: string): Uint8Array;
+
+	function syscall(syscall: "encoding_yaml_decode", value: string): unknown;
+
+	function syscall(syscall: "encoding_yaml_encode", value: any): string;
+
+	function syscall(syscall: "file_new", arg: File.Arg): File;
+
+	function syscall(syscall: "log", value: string): void;
+
+	function syscall(syscall: "operation_get", block: Block): Promise<Operation>;
+
+	function syscall(
+		syscall: "operation_evaluate",
+		operation: Operation,
+	): Promise<Value>;
+
+	function syscall(syscall: "resource_new", arg: Resource.Arg): Resource;
+
+	function syscall(syscall: "symlink_new", arg: Symlink.Arg): Symlink;
+
+	function syscall(syscall: "target_new", arg: Target.Arg): Target;
+
+	function syscall(syscall: "task_new", arg: Task.Arg): Task;
+}
+
 export type Artifact =
 	| { kind: "directory"; value: Directory }
 	| { kind: "file"; value: File }
 	| { kind: "symlink"; value: Symlink };
 
-export namespace Artifact {
-	export type Hash = string;
-}
-
 export type Blob = {
-	hash: Blob.Hash;
+	block: Block;
+	kind: Blob.Kind;
 };
 
 export namespace Blob {
-	export type Hash = string;
+	export type Arg = {
+		children: Array<Block>;
+	};
+
+	export type Kind =
+		| { kind: "branch"; value: Array<[Block, number]> }
+		| { kind: "leaf"; value: number };
+}
+
+export type Block = {
+	id: Id;
+};
+
+export namespace Block {
+	export type Arg = {
+		children: Array<Block>;
+		data: Uint8Array | string;
+	};
 }
 
 export type Checksum = string;
 
 export type ChecksumAlgorithm = "blake3" | "sha256" | "sha512";
 
-export type Command = {
-	hash: Operation.Hash;
-	system: System;
-	executable: Template;
-	env: Record<string, Template>;
-	args: Array<Template>;
-	checksum: Checksum | undefined;
-	unsafe: boolean;
-	network: boolean;
+export type Directory = {
+	block: Block;
+	entries: Record<string, Block>;
 };
 
-export type Directory = {
-	hash: Artifact.Hash;
-	entries: Record<string, Artifact.Hash>;
-};
+export namespace Directory {
+	export type Arg = {
+		entries: Record<string, Artifact>;
+	};
+}
 
 export type File = {
-	hash: Artifact.Hash;
-	blob: Blob;
+	block: Block;
+	contents: Block;
 	executable: boolean;
-	references: Array<Artifact.Hash>;
+	references: Array<Block>;
 };
 
-export type Function = {
-	hash: Operation.Hash;
-	packageHash: Package.Hash;
-	modulePath: Subpath;
-	kind: Function.Kind;
-	name: string;
-	env?: Record<string, Value>;
-	args?: Array<Value>;
-};
-
-export namespace Function {
-	export type Kind = "function" | "test";
+export namespace File {
+	export type Arg = {
+		contents: Blob;
+		executable: boolean;
+		references: Array<Artifact>;
+	};
 }
+
+export type Id = string;
 
 export type Module =
 	| { kind: "library"; value: LibraryModule }
@@ -71,7 +161,7 @@ export type DocumentModule = {
 };
 
 export type NormalModule = {
-	packageHash: Package.Hash;
+	package: Block;
 	modulePath: Subpath;
 };
 
@@ -79,23 +169,15 @@ export type Package = {
 	artifact: Artifact;
 };
 
-export namespace Package {
-	export type Hash = string;
-}
-
 export type Position = {
 	line: number;
 	character: number;
 };
 
 export type Operation =
-	| { kind: "command"; value: Command }
-	| { kind: "function"; value: Function }
-	| { kind: "resource"; value: Resource };
-
-export namespace Operation {
-	export type Hash = string;
-}
+	| { kind: "resource"; value: Resource }
+	| { kind: "target"; value: Target }
+	| { kind: "task"; value: Task };
 
 export type Relpath = string;
 
@@ -106,12 +188,21 @@ export type Placeholder = {
 };
 
 export type Resource = {
-	hash: Operation.Hash;
+	block: Block;
 	url: string;
 	unpack?: UnpackFormat;
 	checksum?: Checksum;
 	unsafe: boolean;
 };
+
+export namespace Resource {
+	export type Arg = {
+		url: string;
+		unpack?: UnpackFormat;
+		checksum?: Checksum;
+		unsafe: boolean;
+	};
+}
 
 export type UnpackFormat =
 	| ".tar"
@@ -123,9 +214,55 @@ export type UnpackFormat =
 	| ".zip";
 
 export type Symlink = {
-	hash: Artifact.Hash;
+	block: Block;
 	target: Template;
 };
+
+export namespace Symlink {
+	export type Arg = { target: Template };
+}
+
+export type Target = {
+	block: Block;
+	package: Block;
+	modulePath: Subpath;
+	name: string;
+	env?: Record<string, Value>;
+	args?: Array<Value>;
+};
+
+export namespace Target {
+	export type Arg = {
+		package: Block;
+		modulePath: Subpath;
+		name: string;
+		env: Record<string, Value>;
+		args: Array<Value>;
+	};
+}
+
+export type Task = {
+	block: Block;
+	system: System;
+	executable: Template;
+	env: Record<string, Template>;
+	args: Array<Template>;
+	checksum: Checksum | undefined;
+	unsafe: boolean;
+	network: boolean;
+};
+
+export namespace Task {
+	export type Arg = {
+		system: System;
+		executable: Template;
+		env?: Record<string, Template>;
+		args?: Array<Template>;
+		checksum?: Checksum;
+		unsafe?: boolean;
+		network?: boolean;
+	};
+}
 
 export type Template = {
 	components: Array<Template.Component>;
@@ -152,6 +289,7 @@ export type Value =
 	| { kind: "bytes"; value: Uint8Array }
 	| { kind: "subpath"; value: Subpath }
 	| { kind: "relpath"; value: Relpath }
+	| { kind: "block"; value: Block }
 	| { kind: "blob"; value: Blob }
 	| { kind: "artifact"; value: Artifact }
 	| { kind: "placeholder"; value: Placeholder }
@@ -159,18 +297,6 @@ export type Value =
 	| { kind: "operation"; value: Operation }
 	| { kind: "array"; value: Array<Value> }
 	| { kind: "object"; value: Record<string, Value> };
-
-declare global {
-	function syscall(
-		syscall: "artifact_bundle",
-		artifact: Artifact,
-	): Promise<Artifact>;
-
-	function syscall(
-		syscall: "artifact_get",
-		hash: Artifact.Hash,
-	): Promise<Artifact>;
-}
 
 export let artifact = {
 	bundle: async (artifact: Artifact): Promise<Artifact> => {
@@ -181,51 +307,14 @@ export let artifact = {
 		}
 	},
 
-	get: async (hash: Artifact.Hash): Promise<Artifact> => {
+	get: async (block: Block): Promise<Artifact> => {
 		try {
-			return await syscall("artifact_get", hash);
+			return await syscall("artifact_get", block);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
 };
-
-declare global {
-	/** Decode a base64 string to bytes. */
-	function syscall(syscall: "base64_decode", value: string): Uint8Array;
-
-	/** Encode bytes to a base64 string. */
-	function syscall(syscall: "base64_encode", value: Uint8Array): string;
-}
-
-export let base64 = {
-	decode: (value: string): Uint8Array => {
-		try {
-			return syscall("base64_decode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-
-	encode: (value: Uint8Array): string => {
-		try {
-			return syscall("base64_encode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-
-declare global {
-	function syscall(syscall: "blob_bytes", blob: Blob): Promise<Uint8Array>;
-
-	function syscall(
-		syscall: "blob_new",
-		bytes: Uint8Array | string,
-	): Promise<Blob>;
-
-	function syscall(syscall: "blob_text", blob: Blob): Promise<string>;
-}
 
 export let blob = {
 	bytes: async (blob: Blob): Promise<Uint8Array> => {
@@ -236,9 +325,17 @@ export let blob = {
 		}
 	},
 
-	new: async (bytes: Uint8Array | string): Promise<Blob> => {
+	get: async (arg: Block): Promise<Blob> => {
 		try {
-			return await syscall("blob_new", bytes);
+			return await syscall("blob_get", arg);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	new: async (arg: Blob.Arg): Promise<Blob> => {
+		try {
+			return await syscall("blob_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -253,17 +350,43 @@ export let blob = {
 	},
 };
 
-declare global {
-	function syscall(
-		syscall: "checksum",
-		algorithm: ChecksumAlgorithm,
-		bytes: Uint8Array,
-	): Checksum;
-}
+export let block = {
+	bytes: async (block: Block): Promise<Uint8Array> => {
+		try {
+			return await syscall("block_bytes", block);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	children: async (block: Block): Promise<Array<Block>> => {
+		try {
+			return syscall("block_children", block);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	data: async (block: Block): Promise<Uint8Array> => {
+		try {
+			return await syscall("block_data", block);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+
+	new: async (arg: Block.Arg): Promise<Block> => {
+		try {
+			return syscall("block_new", arg);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+};
 
 export let checksum = (
 	algorithm: ChecksumAlgorithm,
-	bytes: Uint8Array,
+	bytes: string | Uint8Array,
 ): Checksum => {
 	try {
 		return syscall("checksum", algorithm, bytes);
@@ -272,40 +395,8 @@ export let checksum = (
 	}
 };
 
-declare global {
-	type CommandArg = {
-		system: System;
-		executable: Template;
-		env?: Record<string, Template>;
-		args?: Array<Template>;
-		checksum?: Checksum;
-		unsafe?: boolean;
-		network?: boolean;
-	};
-
-	function syscall(syscall: "command_new", arg: CommandArg): Command;
-}
-
-export let command = {
-	new: (arg: CommandArg): Command => {
-		try {
-			return syscall("command_new", arg);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-
-declare global {
-	type DirectoryArg = {
-		entries: Record<string, Artifact>;
-	};
-
-	function syscall(syscall: "directory_new", arg: DirectoryArg): Directory;
-}
-
 export let directory = {
-	new: (arg: DirectoryArg): Directory => {
+	new: (arg: Directory.Arg): Directory => {
 		try {
 			return syscall("directory_new", arg);
 		} catch (cause) {
@@ -314,18 +405,118 @@ export let directory = {
 	},
 };
 
-declare global {
-	type FileArg = {
-		blob: Blob;
-		executable: boolean;
-		references: Array<Artifact>;
+export namespace encoding {
+	export let base64 = {
+		decode: (value: string): Uint8Array => {
+			try {
+				return syscall("encoding_base64_decode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+
+		encode: (value: Uint8Array): string => {
+			try {
+				return syscall("encoding_base64_encode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
 	};
 
-	function syscall(syscall: "file_new", arg: FileArg): File;
+	export let hex = {
+		decode: (value: string): Uint8Array => {
+			try {
+				return syscall("encoding_hex_decode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+
+		encode: (value: Uint8Array): string => {
+			try {
+				return syscall("encoding_hex_encode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+	};
+
+	export let json = {
+		decode: (value: string): unknown => {
+			try {
+				return syscall("encoding_json_decode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+
+		encode: (value: any): string => {
+			try {
+				return syscall("encoding_json_encode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+	};
+
+	export let toml = {
+		decode: (value: string): unknown => {
+			try {
+				return syscall("encoding_toml_decode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+
+		encode: (value: any): string => {
+			try {
+				return syscall("encoding_toml_encode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+	};
+
+	export let utf8 = {
+		decode: (value: Uint8Array): string => {
+			try {
+				return syscall("encoding_utf8_decode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+
+		encode: (value: string): Uint8Array => {
+			try {
+				return syscall("encoding_utf8_encode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+	};
+
+	export let yaml = {
+		decode: (value: string): unknown => {
+			try {
+				return syscall("encoding_yaml_decode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+
+		encode: (value: any): string => {
+			try {
+				return syscall("encoding_yaml_encode", value);
+			} catch (cause) {
+				throw new Error("The syscall failed.", { cause });
+			}
+		},
+	};
 }
 
 export let file = {
-	new: (arg: FileArg): File => {
+	new: (arg: File.Arg): File => {
 		try {
 			return syscall("file_new", arg);
 		} catch (cause) {
@@ -333,86 +524,6 @@ export let file = {
 		}
 	},
 };
-
-declare global {
-	type FunctionArg = {
-		packageHash: Package.Hash;
-		modulePath: Subpath;
-		kind: Function.Kind;
-		name: string;
-		env: Record<string, Value>;
-		args: Array<Value>;
-	};
-
-	function syscall(syscall: "function_new", arg: FunctionArg): Function;
-}
-
-let function_ = {
-	new: (arg: FunctionArg): Function => {
-		try {
-			return syscall("function_new", arg);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-export { function_ as function };
-
-declare global {
-	/** Decode a hex string to bytes. */
-	function syscall(syscall: "hex_decode", value: string): Uint8Array;
-
-	/** Encode bytes to a hex string. */
-	function syscall(syscall: "hex_encode", value: Uint8Array): string;
-}
-
-export let hex = {
-	decode: (value: string): Uint8Array => {
-		try {
-			return syscall("hex_decode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-
-	encode: (value: Uint8Array): string => {
-		try {
-			return syscall("hex_encode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-
-declare global {
-	/** Decode a json string to a value. */
-	function syscall(syscall: "json_decode", value: string): unknown;
-
-	/** Encode a value to a json string. */
-	function syscall(syscall: "json_encode", value: any): string;
-}
-
-export let json = {
-	decode: (value: string): unknown => {
-		try {
-			return syscall("json_decode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-
-	encode: (value: any): string => {
-		try {
-			return syscall("json_encode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-
-declare global {
-	function syscall(syscall: "log", value: string): void;
-}
 
 export let log = (value: string) => {
 	try {
@@ -422,49 +533,26 @@ export let log = (value: string) => {
 	}
 };
 
-declare global {
-	function syscall(
-		syscall: "operation_get",
-		hash: Operation.Hash,
-	): Promise<Operation>;
-
-	function syscall(
-		syscall: "operation_run",
-		operation: Operation,
-	): Promise<Value>;
-}
-
 export let operation = {
-	get: async (hash: Operation.Hash): Promise<Operation> => {
+	get: async (block: Block): Promise<Operation> => {
 		try {
-			return await syscall("operation_get", hash);
+			return await syscall("operation_get", block);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
 
-	run: async (operation: Operation): Promise<Value> => {
+	evaluation: async (operation: Operation): Promise<Value> => {
 		try {
-			return await syscall("operation_run", operation);
+			return await syscall("operation_evaluate", operation);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
 };
 
-declare global {
-	type ResourceArg = {
-		url: string;
-		unpack?: UnpackFormat;
-		checksum?: Checksum;
-		unsafe: boolean;
-	};
-
-	function syscall(syscall: "resource_new", arg: ResourceArg): Resource;
-}
-
 export let resource = {
-	new: (arg: ResourceArg): Resource => {
+	new: (arg: Resource.Arg): Resource => {
 		try {
 			return syscall("resource_new", arg);
 		} catch (cause) {
@@ -473,94 +561,30 @@ export let resource = {
 	},
 };
 
-declare global {
-	type SymlinkArg = { target: Template };
+export let target = {
+	new: (arg: Target.Arg): Target => {
+		try {
+			return syscall("target_new", arg);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+};
 
-	function syscall(syscall: "symlink_new", arg: SymlinkArg): Symlink;
-}
+export let task = {
+	new: (arg: Task.Arg): Task => {
+		try {
+			return syscall("task_new", arg);
+		} catch (cause) {
+			throw new Error("The syscall failed.", { cause });
+		}
+	},
+};
 
 export let symlink = {
-	new: (arg: SymlinkArg): Symlink => {
+	new: (arg: Symlink.Arg): Symlink => {
 		try {
 			return syscall("symlink_new", arg);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-
-declare global {
-	/** Decode a toml string to a value. */
-	function syscall(syscall: "toml_decode", value: string): unknown;
-
-	/** Encode a value to a toml string. */
-	function syscall(syscall: "toml_encode", value: any): string;
-}
-
-export let toml = {
-	decode: (value: string): unknown => {
-		try {
-			return syscall("toml_decode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-
-	encode: (value: any): string => {
-		try {
-			return syscall("toml_encode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-
-declare global {
-	/** Decode UTF-8 bytes to a string. */
-	function syscall(syscall: "utf8_decode", value: Uint8Array): string;
-
-	/** Encode a string to UTF-8 bytes. */
-	function syscall(syscall: "utf8_encode", value: string): Uint8Array;
-}
-
-export let utf8 = {
-	decode: (value: Uint8Array): string => {
-		try {
-			return syscall("utf8_decode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-
-	encode: (value: string): Uint8Array => {
-		try {
-			return syscall("utf8_encode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-};
-
-declare global {
-	/** Decode a yaml string to a value. */
-	function syscall(syscall: "yaml_decode", value: string): unknown;
-
-	/** Encode a value to a yaml string. */
-	function syscall(syscall: "yaml_encode", value: any): string;
-}
-
-export let yaml = {
-	decode: (value: string): unknown => {
-		try {
-			return syscall("yaml_decode", value);
-		} catch (cause) {
-			throw new Error("The syscall failed.", { cause });
-		}
-	},
-
-	encode: (value: any): string => {
-		try {
-			return syscall("yaml_encode", value);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}

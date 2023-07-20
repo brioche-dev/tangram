@@ -1,10 +1,7 @@
 use super::Artifact;
 use crate::{error::Result, instance::Instance};
 use async_recursion::async_recursion;
-use futures::{
-	future::try_join_all,
-	stream::{FuturesUnordered, TryStreamExt},
-};
+use futures::stream::{FuturesUnordered, TryStreamExt};
 use std::collections::{HashSet, VecDeque};
 
 impl Artifact {
@@ -12,29 +9,19 @@ impl Artifact {
 	#[async_recursion]
 	pub async fn references(&self, tg: &Instance) -> Result<Vec<Artifact>> {
 		match self {
-			Artifact::Directory(directory) => Ok(try_join_all(
-				directory
-					.entries(tg)
-					.await?
-					.into_values()
-					.map(|artifact| async move { artifact.references(tg).await }),
-			)
-			.await?
-			.into_iter()
-			.flatten()
-			.collect()),
+			Artifact::Directory(directory) => directory.references(tg).await,
 			Artifact::File(file) => file.references(tg).await,
-			Artifact::Symlink(symlink) => Ok(symlink.target().references()),
+			Artifact::Symlink(symlink) => Ok(symlink.references()),
 		}
 	}
 
 	/// Collect an artifact's recursive references.
-	pub async fn collect_recursive_references(
+	pub async fn recursive_references(
 		&self,
 		tg: &Instance,
-		references: &mut HashSet<Artifact, fnv::FnvBuildHasher>,
-	) -> Result<()> {
+	) -> Result<HashSet<Artifact, fnv::FnvBuildHasher>> {
 		// Create a queue of artifacts and a set of futures.
+		let mut references = HashSet::default();
 		let mut queue = VecDeque::new();
 		let mut futures = FuturesUnordered::new();
 		queue.push_back(self.clone());
@@ -61,6 +48,6 @@ impl Artifact {
 			}
 		}
 
-		Ok(())
+		Ok(references)
 	}
 }

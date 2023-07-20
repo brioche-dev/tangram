@@ -1,5 +1,5 @@
 use super::{unpack, Data, Resource};
-use crate::{checksum::Checksum, error::Result, instance::Instance, operation};
+use crate::{block::Block, checksum::Checksum, error::Result, instance::Instance, operation};
 use url::Url;
 
 impl Resource {
@@ -18,17 +18,16 @@ impl Resource {
 			unsafe_,
 		});
 
-		// Serialize and hash the data.
+		// Serialize the data.
 		let mut bytes = Vec::new();
 		data.serialize(&mut bytes).unwrap();
-		let hash = operation::Hash(crate::hash::Hash::new(&bytes));
 
-		// Add the operation.
-		let hash = tg.database.add_operation(hash, &bytes)?;
+		// Create the block.
+		let block = Block::new(tg, vec![], bytes.as_slice())?;
 
 		// Create the download.
 		let download = Self {
-			hash,
+			block,
 			url,
 			unpack,
 			checksum,
