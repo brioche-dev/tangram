@@ -133,8 +133,14 @@ impl VisitMut for TargetVisitor {
 	}
 
 	fn visit_mut_export_default_expr(&mut self, n: &mut ExportDefaultExpr) {
+		// Check that this is an await expression.
+		let Some(expr) = n.expr.as_mut_await_expr() else {
+			n.visit_mut_children_with(self);
+			return;
+		};
+
 		// Check that this is a call expression.
-		let Some(expr) = n.expr.as_mut_call() else {
+		let Some(expr) = expr.arg.as_mut_call() else {
 			n.visit_mut_children_with(self);
 			return;
 		};
@@ -157,7 +163,8 @@ impl VisitMut for TargetVisitor {
 			let VarDeclarator { name, init, .. } = decl;
 			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else { continue; };
 			let Some(init) = init.as_deref_mut() else { continue; };
-			let Some(expr) = init.as_mut_call() else { continue; };
+			let Some(expr) = init.as_mut_await_expr() else { continue; };
+			let Some(expr) = expr.arg.as_mut_call() else { continue; };
 
 			// Visit the call.
 			self.visit_call(expr, Some(ident.to_string()));
@@ -377,13 +384,13 @@ mod tests {
 	fn test_export_default_target() {
 		let text = indoc!(
 			r#"
-				export default tg.target(() => {});
+				export default await tg.target(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export default tg.target({
+				export default await tg.target({
 					f: ()=>{},
 					module: import.meta.module,
 					name: "default"
@@ -397,13 +404,13 @@ mod tests {
 	fn test_export_named_target() {
 		let text = indoc!(
 			r#"
-				export let named = tg.target(() => {});
+				export let named = await tg.target(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export let named = tg.target({
+				export let named = await tg.target({
 					f: ()=>{},
 					module: import.meta.module,
 					name: "named"
