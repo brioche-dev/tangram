@@ -3,7 +3,6 @@ use crate::{
 	error::{Result, WrapErr},
 	instance::Instance,
 };
-use tokio::io::AsyncReadExt;
 
 impl Block {
 	/// Determine whether the block is in this instance's database.
@@ -108,20 +107,21 @@ impl Block {
 			return Ok(Some(row_id));
 		};
 
-		// Otherwise, attempt to get the block from the API, add it to the database, and return the inserted row ID.
-		let Some(mut reader) = tg.api_client.try_get_block(self.id()).await? else {
-			return Ok(None);
-		};
-		let mut bytes = Vec::new();
-		reader.read_to_end(&mut bytes).await?;
-		let connection = tg.database_connection_pool.get().await.unwrap();
-		let connection = connection.lock().unwrap();
-		let mut statement = connection.prepare_cached(
-			"insert into blocks (id, bytes) values (?, ?) on conflict (id) do nothing",
-		)?;
-		statement.execute(rusqlite::params![self.id(), bytes])?;
-		let row_id = connection.last_insert_rowid();
-		Ok(Some(row_id))
+		// // Otherwise, attempt to get the block from the API, add it to the database, and return the inserted row ID.
+		// let Some(mut reader) = tg.api_client.try_get_block(self.id()).await? else {
+		// 	return Ok(None);
+		// };
+		// let mut bytes = Vec::new();
+		// reader.read_to_end(&mut bytes).await?;
+		// let connection = tg.database_connection_pool.get().await.unwrap();
+		// let connection = connection.lock().unwrap();
+		// let mut statement = connection.prepare_cached(
+		// 	"insert into blocks (id, bytes) values (?, ?) on conflict (id) do nothing",
+		// )?;
+		// statement.execute(rusqlite::params![self.id(), bytes])?;
+		// let row_id = connection.last_insert_rowid();
+		// Ok(Some(row_id))
+		Ok(None)
 	}
 
 	/// Attempt to get the block's row ID in the database.
