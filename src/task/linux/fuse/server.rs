@@ -75,11 +75,7 @@ enum NodeKind {
 struct FileHandle(u64);
 
 /// The data associated with a file handle.
-struct FileHandleData {
-	kind: FileHandleDataKind,
-}
-
-enum FileHandleDataKind {
+enum FileHandleData {
 	Directory,
 	File { reader: blob::Reader },
 	Symlink,
@@ -381,18 +377,17 @@ impl Server {
 		let node = self.get_node(node_id).await?;
 
 		// Create the file handle.
-		let kind = match &node.kind {
+		let file_handle_data = match &node.kind {
 			NodeKind::Root { .. } => return Err(libc::EIO),
-			NodeKind::Directory { .. } => FileHandleDataKind::Directory,
+			NodeKind::Directory { .. } => FileHandleData::Directory,
 			NodeKind::File { file, .. } => {
 				let Ok(reader) = file.reader(&self.tg).await else {
 					return Err(libc::EIO);
 				};
-				FileHandleDataKind::File { reader }
+				FileHandleData::File { reader }
 			},
-			NodeKind::Symlink { .. } => FileHandleDataKind::Symlink,
+			NodeKind::Symlink { .. } => FileHandleData::Symlink,
 		};
-		let file_handle_data = FileHandleData { kind };
 		let file_handle_data = Arc::new(RwLock::new(file_handle_data));
 
 		// Add the file handle to the state.
@@ -439,7 +434,7 @@ impl Server {
 			.ok_or(libc::ENOENT)?
 			.clone();
 		let mut file_handle_data = file_handle_data.write().await;
-		let FileHandleDataKind::File { reader } = &mut file_handle_data.kind else {
+		let FileHandleData::File { reader } = &mut *file_handle_data else {
 			return Err(libc::EIO);
 		};
 		let mut response = vec![0u8; data.size.to_usize().unwrap()];

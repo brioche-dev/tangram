@@ -117,9 +117,8 @@ impl AsyncRead for Reader {
 					reader.set_position(position as u64);
 					if position == reader.get_ref().len() {
 						*this.state = State::Empty;
-					} else {
-						return Poll::Ready(Ok(()));
 					}
+					return Poll::Ready(Ok(()));
 				},
 			};
 		}

@@ -1,12 +1,12 @@
-export let source = tg.target(() =>
-	tg.directory({
-		["Cargo.toml"]: tg.include("Cargo.toml"),
-		["Cargo.lock"]: tg.include("Cargo.lock"),
-		["src"]: tg.include("./src"),
-		["packages"]: tg.include("./packages"),
-		["assets"]: tg.include("./assets"),
-	}),
-);
+// export let source = tg.target(() =>
+// 	tg.directory({
+// 		["Cargo.toml"]: tg.include("Cargo.toml"),
+// 		["Cargo.lock"]: tg.include("Cargo.lock"),
+// 		["src"]: tg.include("./src"),
+// 		["packages"]: tg.include("./packages"),
+// 		["assets"]: tg.include("./assets"),
+// 	}),
+// );
 
 tg.target("test", async () => {
 	await testDirectory();
@@ -168,22 +168,43 @@ export let testDependencyIndirection = async () => {
 	tg.assert(text === "hello");
 };
 
-// export let testTask = async () => {
+// export let example = await tg.target(async () => {
 // 	let utils = tg.download({
 // 		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/utils_arm64_linux.tar.zstd",
 // 		checksum: "sha256:36c0dcfb02e61a07f4654e1ca6047cdefb17ce1f2e37fcb2ba5dc20695b3e273",
 // 		unpack: ".tar.zstd",
-// 	})
-// 	let file = await tg.file("hello");
-// 	let output = await tg.run({
+// 	});
+// 	let file = tg.file("hello");
+// 	return tg.run({
 // 		system: "arm64_linux",
 // 		executable: "/bin/sh",
-// 		// args: ["-c", t`cat ${file} > ${tg.output}`],
-// 		args: ["-c", t`ls ${utils}/bin > ${tg.output}`],
+// 		args: ["-c", t`cat ${file} > ${tg.output}`],
 // 		env: {
 // 			PATH: t`${utils}/bin`
 // 		}
 // 	});
-// 	// tg.assert(await output.text() === await file.text());
-// 	return output;
-// }
+// });
+
+export let example = await tg.target(async () => {
+	let system = tg.env.get()["system"] as tg.System;
+	let dash = tg.download({
+		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/dash_universal_macos.tar.zstd",
+		checksum: "sha256:579d924e4da700f590aa39202305016fe70402c1499f66c211f4b9a2ab614cd5",
+		unpack: ".tar.zstd",
+	});
+	let utils = tg.download({
+		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/utils_universal_macos.tar.zstd",
+		checksum: "sha256:eb94f2451dfaa5f423d271dde1ac47f475ab5343b4feeb194a7386f0a4d8e227",
+		unpack: ".tar.zstd",
+	});
+	// let file = tg.file("hello");
+	// return tg.run({
+	// 	system,
+	// 	executable: t`/bin/sh`,
+	// 	args: ["-c", t`cat ${file} > ${tg.output}`],
+	// 	env: {
+	// 		PATH: t`${utils}/bin`
+	// 	}
+	// });
+	return dash;
+});

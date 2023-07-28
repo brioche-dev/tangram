@@ -5,6 +5,8 @@ use tangram::path::Subpath;
 
 mod add;
 mod autoenv;
+mod blob;
+mod block;
 mod build;
 mod check;
 mod checkin;
@@ -65,6 +67,8 @@ pub struct Args {
 pub enum Command {
 	Add(self::add::Args),
 	Autoenv(self::autoenv::Args),
+	Blob(self::blob::Args),
+	Block(self::block::Args),
 	Build(self::build::Args),
 	Check(self::check::Args),
 	Checkin(self::checkin::Args),
@@ -120,6 +124,8 @@ impl Cli {
 		match args.command {
 			Command::Add(args) => self.command_add(args).boxed(),
 			Command::Autoenv(args) => self.command_autoenv(args).boxed(),
+			Command::Blob(args) => self.command_blob(args).boxed(),
+			Command::Block(args) => self.command_block(args).boxed(),
 			Command::Build(args) => self.command_build(args).boxed(),
 			Command::Check(args) => self.command_check(args).boxed(),
 			Command::Checkin(args) => self.command_checkin(args).boxed(),
