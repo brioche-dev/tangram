@@ -45,7 +45,7 @@ pub struct Task {
 	#[serde(default, rename = "unsafe")]
 	unsafe_: bool,
 
-	/// If this flag is set, then the process will have access to the network. This is an unsafe option.
+	/// If this flag is set, then the task will have access to the network. This is an unsafe option.
 	#[serde(default)]
 	network: bool,
 }

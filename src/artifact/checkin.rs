@@ -53,7 +53,7 @@ impl Artifact {
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
-					format!(r#"Failed to cache the directory at path "{path}"."#)
+					format!(r#"Failed to check in the directory at path "{path}"."#)
 				})?
 		} else if metadata.is_file() {
 			Self::check_in_file(tg, path, &metadata, options)
@@ -67,7 +67,7 @@ impl Artifact {
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
-					format!(r#"Failed to cache the symlink at path "{path}"."#)
+					format!(r#"Failed to check in the symlink at path "{path}"."#)
 				})?
 		} else {
 			return_error!("The path must point to a directory, file, or symlink.")
@@ -124,7 +124,9 @@ impl Artifact {
 		_options: &Options,
 	) -> Result<Self> {
 		// Create the blob.
+		let permit = tg.file_descriptor_semaphore.acquire().await;
 		let contents = Blob::with_path(tg, path).await?;
+		drop(permit);
 
 		// Determine if the file is executable.
 		let executable = (metadata.permissions().mode() & 0o111) != 0;

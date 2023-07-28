@@ -684,7 +684,7 @@ declare namespace tg {
 			/** If this flag is set, then unsafe options can be used without a checksum. */
 			unsafe?: boolean;
 
-			/** If this flag is set, then the process will have access to the network. This is an unsafe option. */
+			/** If this flag is set, then the task will have access to the network. This is an unsafe option. */
 			network?: boolean;
 		};
 	}

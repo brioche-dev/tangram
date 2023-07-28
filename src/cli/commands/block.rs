@@ -19,7 +19,6 @@ pub enum Command {
 
 #[derive(Debug, clap::Args)]
 pub struct BytesArgs {
-	/// The ID of the block.
 	pub id: Id,
 }
 

@@ -1,12 +1,12 @@
 use crate::{
 	artifact::Artifact,
-	block::Block,
 	client::{Client, API_URL},
 	document::{self, Document},
 	error::Result,
 	util::task_map::TaskMap,
-	value::Value,
 };
+#[cfg(feature = "evaluate")]
+use crate::{block::Block, value::Value};
 use derive_more::Deref;
 use std::{
 	collections::HashMap,

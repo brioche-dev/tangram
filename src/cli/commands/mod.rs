@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tangram::path::Subpath;
 
 mod add;
+mod artifact;
 mod autoenv;
 mod blob;
 mod block;
@@ -23,6 +24,7 @@ mod log;
 mod login;
 mod lsp;
 mod new;
+mod operation;
 mod outdated;
 mod publish;
 mod pull;
@@ -66,6 +68,7 @@ pub struct Args {
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
 	Add(self::add::Args),
+	Artifact(self::artifact::Args),
 	Autoenv(self::autoenv::Args),
 	Blob(self::blob::Args),
 	Block(self::block::Args),
@@ -85,6 +88,7 @@ pub enum Command {
 	Login(self::login::Args),
 	Lsp(self::lsp::Args),
 	New(self::new::Args),
+	Operation(self::operation::Args),
 	Outdated(self::outdated::Args),
 	Publish(self::publish::Args),
 	Pull(self::pull::Args),
@@ -123,6 +127,7 @@ impl Cli {
 		// Run the subcommand.
 		match args.command {
 			Command::Add(args) => self.command_add(args).boxed(),
+			Command::Artifact(args) => self.command_artifact(args).boxed(),
 			Command::Autoenv(args) => self.command_autoenv(args).boxed(),
 			Command::Blob(args) => self.command_blob(args).boxed(),
 			Command::Block(args) => self.command_block(args).boxed(),
@@ -142,6 +147,7 @@ impl Cli {
 			Command::Login(args) => self.command_login(args).boxed(),
 			Command::Lsp(args) => self.command_lsp(args).boxed(),
 			Command::New(args) => self.command_new(args).boxed(),
+			Command::Operation(args) => self.command_operation(args).boxed(),
 			Command::Outdated(args) => self.command_outdated(args).boxed(),
 			Command::Publish(args) => self.command_publish(args).boxed(),
 			Command::Pull(args) => self.command_pull(args).boxed(),
