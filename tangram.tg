@@ -1,12 +1,12 @@
-// export let source = tg.target(() =>
-// 	tg.directory({
-// 		["Cargo.toml"]: tg.include("Cargo.toml"),
-// 		["Cargo.lock"]: tg.include("Cargo.lock"),
-// 		["src"]: tg.include("./src"),
-// 		["packages"]: tg.include("./packages"),
-// 		["assets"]: tg.include("./assets"),
-// 	}),
-// );
+export let source = await tg.target(() =>
+	tg.directory({
+		["Cargo.toml"]: tg.include("Cargo.toml"),
+		["Cargo.lock"]: tg.include("Cargo.lock"),
+		["src"]: tg.include("./src"),
+		["packages"]: tg.include("./packages"),
+		["assets"]: tg.include("./assets"),
+	}),
+);
 
 tg.target("test", async () => {
 	await testDirectory();
@@ -189,12 +189,14 @@ export let example = await tg.target(async () => {
 	let system = tg.env.get()["system"] as tg.System;
 	let dash = tg.download({
 		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/dash_universal_macos.tar.zstd",
-		checksum: "sha256:579d924e4da700f590aa39202305016fe70402c1499f66c211f4b9a2ab614cd5",
+		checksum:
+			"sha256:579d924e4da700f590aa39202305016fe70402c1499f66c211f4b9a2ab614cd5",
 		unpack: ".tar.zstd",
 	});
 	let utils = tg.download({
 		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/utils_universal_macos.tar.zstd",
-		checksum: "sha256:eb94f2451dfaa5f423d271dde1ac47f475ab5343b4feeb194a7386f0a4d8e227",
+		checksum:
+			"sha256:eb94f2451dfaa5f423d271dde1ac47f475ab5343b4feeb194a7386f0a4d8e227",
 		unpack: ".tar.zstd",
 	});
 	// let file = tg.file("hello");

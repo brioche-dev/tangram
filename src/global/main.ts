@@ -1,6 +1,7 @@
 import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
+import { Block } from "./block.ts";
 import { Directory, directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { env } from "./env.ts";
@@ -36,6 +37,7 @@ Object.defineProperties(globalThis, {
 let tg = {
 	Artifact,
 	Blob,
+	Block,
 	Directory,
 	File,
 	Placeholder,
