@@ -33,7 +33,7 @@ export class Resource {
 
 	static async new(arg: Resource.Arg): Promise<Resource> {
 		return Resource.fromSyscall(
-			syscall.resource.new({
+			await syscall.resource.new({
 				url: arg.url,
 				unpack: arg.unpack ?? undefined,
 				checksum: arg.checksum ?? undefined,
