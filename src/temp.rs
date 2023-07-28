@@ -28,7 +28,7 @@ impl<'a> Temp<'a> {
 
 impl<'a> Drop for Temp<'a> {
 	fn drop(&mut self) {
-		if !self.tg.options.preserve_temps {
+		if !self.tg.state.preserve_temps {
 			let path = self.path.clone();
 			tokio::task::spawn(async move {
 				crate::util::fs::rmrf(&path).await.ok();

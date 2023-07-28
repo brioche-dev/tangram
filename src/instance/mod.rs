@@ -71,6 +71,9 @@ pub struct State {
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
 
+	/// Whether to preserve temporary files.
+	pub preserve_temps: bool,
+	
 	/// A semaphore that prevents running too many processes.
 	#[cfg(feature = "evaluate")]
 	pub(crate) process_semaphore: tokio::sync::Semaphore,
@@ -143,6 +146,9 @@ impl Instance {
 		#[cfg(feature = "evaluate")]
 		let operations_task_map = std::sync::Mutex::new(None);
 
+		// Store the option for preserving temps.
+		let preserve_temps = options.preserve_temps;
+
 		// Create the process semaphore.
 		#[cfg(feature = "evaluate")]
 		let process_semaphore = tokio::sync::Semaphore::new(16);
@@ -167,6 +173,7 @@ impl Instance {
 			#[cfg(feature = "evaluate")]
 			options,
 			path,
+			preserve_temps,
 			#[cfg(feature = "evaluate")]
 			process_semaphore,
 		};
