@@ -16,6 +16,10 @@ type ConstructorArg = {
 export class Block {
 	#id: Id;
 
+	static withId(id: Id): Block {
+		return new Block({ id });
+	}
+
 	static async new(...args: Array<Unresolved<Block.Arg>>): Promise<Block> {
 		// Collect the children and data from the args.
 		let { children, data: dataEntries } = flatten(

@@ -73,7 +73,7 @@ pub struct State {
 
 	/// Whether to preserve temporary files.
 	pub preserve_temps: bool,
-	
+
 	/// A semaphore that prevents running too many processes.
 	#[cfg(feature = "evaluate")]
 	pub(crate) process_semaphore: tokio::sync::Semaphore,
@@ -118,7 +118,10 @@ impl Instance {
 		// Create the database pool.
 		let database_path = path.join("database");
 		let database_connection_pool = deadpool_sqlite::Config::new(database_path)
-			.create_pool(deadpool_sqlite::Runtime::Tokio1)
+			.builder(deadpool_sqlite::Runtime::Tokio1)
+			.unwrap()
+			.max_size(std::thread::available_parallelism().unwrap().get())
+			.build()
 			.unwrap();
 
 		// Create the HTTP client.

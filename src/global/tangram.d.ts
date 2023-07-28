@@ -64,6 +64,9 @@ declare namespace tg {
 	export let block: (...args: Array<Unresolved<Block.Arg>>) => Promise<Block>;
 
 	export class Block {
+		/** Create a block with an existing ID. */
+		static withId(id: Id): Block;
+
 		/** Create a block. */
 		static new(...args: Array<Unresolved<Block.Arg>>): Promise<Block>;
 
