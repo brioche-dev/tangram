@@ -62,7 +62,7 @@ impl Package {
 		let builder = builder
 			.remove(tg, &LOCKFILE_FILE_NAME.parse().unwrap())
 			.await?;
-		let artifact = builder.build(tg)?.into();
+		let artifact = builder.build(tg).await?.into();
 		Ok(Package {
 			artifact,
 			dependencies: None,

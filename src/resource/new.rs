@@ -3,7 +3,7 @@ use crate::{block::Block, checksum::Checksum, error::Result, instance::Instance,
 use url::Url;
 
 impl Resource {
-	pub fn new(
+	pub async fn new(
 		tg: &Instance,
 		url: Url,
 		unpack: Option<unpack::Format>,
@@ -23,7 +23,7 @@ impl Resource {
 		data.serialize(&mut bytes).unwrap();
 
 		// Create the block.
-		let block = Block::new(tg, vec![], bytes.as_slice())?;
+		let block = Block::new(tg, vec![], bytes.as_slice()).await?;
 
 		// Create the download.
 		let download = Self {

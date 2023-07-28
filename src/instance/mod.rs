@@ -8,7 +8,6 @@ use crate::{
 	value::Value,
 };
 use derive_more::Deref;
-use object_pool::Pool;
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -29,7 +28,7 @@ pub struct State {
 	pub(crate) api_client: Client,
 
 	/// The database connection pool.
-	pub(crate) database_connection_pool: Pool<rusqlite::Connection>,
+	pub(crate) database_connection_pool: deadpool_sqlite::Pool,
 
 	/// A map of paths to documents.
 	pub(crate) documents:
@@ -114,7 +113,10 @@ impl Instance {
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 
 		// Create the database pool.
-		let database_connection_pool = Pool::from_vec(vec![]);
+		let database_path = path.join("database");
+		let database_connection_pool = deadpool_sqlite::Config::new(database_path)
+			.create_pool(deadpool_sqlite::Runtime::Tokio1)
+			.unwrap();
 
 		// Create the HTTP client.
 		#[cfg(feature = "evaluate")]
@@ -216,16 +218,6 @@ impl Instance {
 	#[must_use]
 	pub fn database_path(&self) -> PathBuf {
 		self.path().join("database")
-	}
-
-	pub fn get_database_connection(&self) -> Result<object_pool::Reusable<rusqlite::Connection>> {
-		if let Some(connection) = self.database_connection_pool.try_pull() {
-			Ok(connection)
-		} else {
-			let connection = rusqlite::Connection::open(self.database_path())?;
-			let connection = object_pool::Reusable::new(&self.database_connection_pool, connection);
-			Ok(connection)
-		}
 	}
 
 	#[must_use]

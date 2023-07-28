@@ -9,7 +9,7 @@ use crate::{
 use itertools::Itertools;
 
 impl Symlink {
-	pub fn new(tg: &Instance, target: Template) -> Result<Self> {
+	pub async fn new(tg: &Instance, target: Template) -> Result<Self> {
 		// Create the artifact data.
 		let data = artifact::Data::Symlink(super::Data {
 			target: target.to_data(),
@@ -23,7 +23,7 @@ impl Symlink {
 		let children = target.artifacts().map(Artifact::block).collect_vec();
 
 		// Create the block.
-		let block = Block::new(tg, children, &bytes)?;
+		let block = Block::new(tg, children, &bytes).await?;
 
 		// Create the symlink.
 		let symlink = Self { block, target };

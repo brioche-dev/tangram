@@ -106,7 +106,7 @@ export class Directory {
 		},
 		Promise.resolve({}));
 		return Directory.fromSyscall(
-			syscall.directory.new({
+			await syscall.directory.new({
 				entries: Object.fromEntries(
 					Object.entries(entries).map(([name, entry]) => [
 						name,

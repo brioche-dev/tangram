@@ -23,7 +23,7 @@ declare global {
 
 	function syscall(syscall: "block_data", block: Block): Promise<Uint8Array>;
 
-	function syscall(syscall: "block_new", arg: Block.Arg): Block;
+	function syscall(syscall: "block_new", arg: Block.Arg): Promise<Block>;
 
 	function syscall(
 		syscall: "checksum",
@@ -31,7 +31,10 @@ declare global {
 		bytes: string | Uint8Array,
 	): Checksum;
 
-	function syscall(syscall: "directory_new", arg: Directory.Arg): Directory;
+	function syscall(
+		syscall: "directory_new",
+		arg: Directory.Arg,
+	): Promise<Directory>;
 
 	function syscall(
 		syscall: "encoding_base64_decode",
@@ -63,7 +66,7 @@ declare global {
 
 	function syscall(syscall: "encoding_yaml_encode", value: any): string;
 
-	function syscall(syscall: "file_new", arg: File.Arg): File;
+	function syscall(syscall: "file_new", arg: File.Arg): Promise<File>;
 
 	function syscall(syscall: "log", value: string): void;
 
@@ -74,13 +77,16 @@ declare global {
 		operation: Operation,
 	): Promise<Value>;
 
-	function syscall(syscall: "resource_new", arg: Resource.Arg): Resource;
+	function syscall(
+		syscall: "resource_new",
+		arg: Resource.Arg,
+	): Promise<Resource>;
 
-	function syscall(syscall: "symlink_new", arg: Symlink.Arg): Symlink;
+	function syscall(syscall: "symlink_new", arg: Symlink.Arg): Promise<Symlink>;
 
-	function syscall(syscall: "target_new", arg: Target.Arg): Target;
+	function syscall(syscall: "target_new", arg: Target.Arg): Promise<Target>;
 
-	function syscall(syscall: "task_new", arg: Task.Arg): Task;
+	function syscall(syscall: "task_new", arg: Task.Arg): Promise<Task>;
 }
 
 export type Artifact =
@@ -396,9 +402,9 @@ export let checksum = (
 };
 
 export let directory = {
-	new: (arg: Directory.Arg): Directory => {
+	new: async (arg: Directory.Arg): Promise<Directory> => {
 		try {
-			return syscall("directory_new", arg);
+			return await syscall("directory_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -516,9 +522,9 @@ export namespace encoding {
 }
 
 export let file = {
-	new: (arg: File.Arg): File => {
+	new: async (arg: File.Arg): Promise<File> => {
 		try {
-			return syscall("file_new", arg);
+			return await syscall("file_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -552,9 +558,9 @@ export let operation = {
 };
 
 export let resource = {
-	new: (arg: Resource.Arg): Resource => {
+	new: async (arg: Resource.Arg): Promise<Resource> => {
 		try {
-			return syscall("resource_new", arg);
+			return await syscall("resource_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -562,9 +568,9 @@ export let resource = {
 };
 
 export let target = {
-	new: (arg: Target.Arg): Target => {
+	new: async (arg: Target.Arg): Promise<Target> => {
 		try {
-			return syscall("target_new", arg);
+			return await syscall("target_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -572,9 +578,9 @@ export let target = {
 };
 
 export let task = {
-	new: (arg: Task.Arg): Task => {
+	new: async (arg: Task.Arg): Promise<Task> => {
 		try {
-			return syscall("task_new", arg);
+			return await syscall("task_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -582,9 +588,9 @@ export let task = {
 };
 
 export let symlink = {
-	new: (arg: Symlink.Arg): Symlink => {
+	new: async (arg: Symlink.Arg): Promise<Symlink> => {
 		try {
-			return syscall("symlink_new", arg);
+			return await syscall("symlink_new", arg);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}

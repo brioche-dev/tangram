@@ -67,7 +67,8 @@ impl Builder {
 			builder
 				.add(tg, &trailing_path, artifact)
 				.await?
-				.build(tg)?
+				.build(tg)
+				.await?
 				.into()
 		};
 
@@ -104,7 +105,12 @@ impl Builder {
 			};
 
 			// Recurse.
-			let artifact = builder.remove(tg, &trailing_path).await?.build(tg)?.into();
+			let artifact = builder
+				.remove(tg, &trailing_path)
+				.await?
+				.build(tg)
+				.await?
+				.into();
 
 			// Add the new artifact.
 			self.entries.insert(name.clone(), artifact);
@@ -113,7 +119,7 @@ impl Builder {
 		Ok(self)
 	}
 
-	pub fn build(self, tg: &Instance) -> Result<Directory> {
-		Directory::new(tg, &self.entries)
+	pub async fn build(self, tg: &Instance) -> Result<Directory> {
+		Directory::new(tg, &self.entries).await
 	}
 }

@@ -9,7 +9,7 @@ use crate::{
 use itertools::Itertools;
 
 impl File {
-	pub fn new(
+	pub async fn new(
 		tg: &Instance,
 		contents: &Blob,
 		executable: bool,
@@ -36,7 +36,7 @@ impl File {
 			.collect_vec();
 
 		// Create the block.
-		let block = Block::new(tg, children, &data)?;
+		let block = Block::new(tg, children, &data).await?;
 
 		// Create the file.
 		let file = Self {

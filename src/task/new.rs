@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 impl Task {
 	#[allow(clippy::too_many_arguments)]
-	pub fn new(
+	pub async fn new(
 		tg: &Instance,
 		system: System,
 		executable: Template,
@@ -49,7 +49,7 @@ impl Task {
 			.collect_vec();
 
 		// Create the block.
-		let block = Block::new(tg, children, &data)?;
+		let block = Block::new(tg, children, &data).await?;
 
 		// Create the task.
 		let task = Self {

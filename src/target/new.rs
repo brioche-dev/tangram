@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 impl Target {
 	/// Create a target.
-	pub fn new(
+	pub async fn new(
 		tg: &Instance,
 		package: Block,
 		module_path: Subpath,
@@ -42,7 +42,7 @@ impl Target {
 			.collect_vec();
 
 		// Create the block.
-		let block = Block::new(tg, children, &data)?;
+		let block = Block::new(tg, children, &data).await?;
 
 		// Create the target.
 		let target = Self {

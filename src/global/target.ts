@@ -19,16 +19,16 @@ export type TargetArg<
 	name: string;
 };
 
-export let target = <
+export let target = async <
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 >(
 	arg: TargetArg<A, R>,
-) => {
+): Promise<Target<A, R>> => {
 	// Create the target.
 	assert_(arg.module.kind === "normal");
 	let target = Target.fromSyscall<A, R>(
-		syscall.target.new({
+		await syscall.target.new({
 			package: arg.module.value.package,
 			modulePath: arg.module.value.modulePath,
 			name: arg.name,
@@ -109,9 +109,10 @@ export class Target<
 	env?: Record<string, Value>;
 	args?: A;
 
-	static new<A extends Array<Value> = Array<Value>, R extends Value = Value>(
-		arg: NewArg<A, R>,
-	): Target<A, R> {
+	static async new<
+		A extends Array<Value> = Array<Value>,
+		R extends Value = Value,
+	>(arg: NewArg<A, R>): Promise<Target<A, R>> {
 		let env_ = Object.fromEntries(
 			Object.entries(arg.env ?? {}).map(([key, value]) => [
 				key,
@@ -120,7 +121,7 @@ export class Target<
 		);
 		let args_ = (arg.args ?? []).map((value) => Value.toSyscall(value));
 		let target = Target.fromSyscall<A, R>(
-			syscall.target.new({
+			await syscall.target.new({
 				package: arg.target.package.toSyscall(),
 				modulePath: arg.target.modulePath.toSyscall(),
 				name: arg.target.name,
@@ -146,7 +147,7 @@ export class Target<
 		// Proxy this object so that it is callable.
 		return new Proxy(this, {
 			apply: async (target, _, args) => {
-				let target_ = Target.new({
+				let target_ = await Target.new({
 					target,
 					args: (await Promise.all(args.map(resolve))) as A,
 					env: env.value,

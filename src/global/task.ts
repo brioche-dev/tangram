@@ -68,7 +68,7 @@ export class Task {
 		let unsafe = resolvedArg.unsafe ?? false;
 		let network = resolvedArg.network ?? false;
 		return Task.fromSyscall(
-			syscall.task.new({
+			await syscall.task.new({
 				system,
 				executable: executable.toSyscall(),
 				env: env_,

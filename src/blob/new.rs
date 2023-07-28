@@ -23,7 +23,7 @@ impl Blob {
 				let kind = Kind::Leaf(0);
 
 				// Create the block.
-				let block = Block::new(tg, Vec::new(), &[])?;
+				let block = Block::new(tg, Vec::new(), &[]).await?;
 
 				// Create the blob.
 				let blob = Self { block, kind };
@@ -69,7 +69,7 @@ impl Blob {
 				let data = bytes;
 
 				// Create the block.
-				let block = Block::new(tg, children, &data)?;
+				let block = Block::new(tg, children, &data).await?;
 
 				// Create the blob.
 				let kind = Kind::Branch(sizes);
@@ -81,7 +81,7 @@ impl Blob {
 	}
 
 	pub async fn with_bytes(tg: &Instance, bytes: impl AsRef<[u8]>) -> Result<Self> {
-		let block = Block::new(tg, vec![], bytes.as_ref())?;
+		let block = Block::new(tg, vec![], bytes.as_ref()).await?;
 		let blob = Self::new(tg, vec![block]).await?;
 		Ok(blob)
 	}
@@ -100,7 +100,7 @@ impl Blob {
 			let bytes = &mut bytes[..n.to_usize().unwrap()];
 			file.read_exact(bytes).await?;
 			position += n;
-			let block = Block::new(tg, vec![], bytes)?;
+			let block = Block::new(tg, vec![], bytes).await?;
 			if blocks.len() == MAX_CHILDREN {
 				let blob = Self::new(tg, blocks).await?;
 				blocks = vec![blob.block];

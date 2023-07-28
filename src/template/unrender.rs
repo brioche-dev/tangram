@@ -72,7 +72,8 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
-			.build(&tg)?
+			.build(&tg)
+			.await?
 			.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
@@ -97,7 +98,8 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
-			.build(&tg)?
+			.build(&tg)
+			.await?
 			.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
@@ -140,7 +142,8 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
-			.build(&tg)?
+			.build(&tg)
+			.await?
 			.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
@@ -170,7 +173,8 @@ mod tests {
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
 		let foo: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
-			.build(&tg)?
+			.build(&tg)
+			.await?
 			.into();
 		let foo_path = foo
 			.check_out_internal(&tg)
@@ -180,7 +184,8 @@ mod tests {
 			.to_owned();
 
 		let bar: Artifact = File::builder(Blob::with_bytes(&tg, "bar").await?)
-			.build(&tg)?
+			.build(&tg)
+			.await?
 			.into();
 		let bar_path = bar
 			.check_out_internal(&tg)
@@ -190,7 +195,8 @@ mod tests {
 			.to_owned();
 
 		let baz: Artifact = File::builder(Blob::with_bytes(&tg, "baz").await?)
-			.build(&tg)?
+			.build(&tg)
+			.await?
 			.into();
 		let baz_path = baz
 			.check_out_internal(&tg)

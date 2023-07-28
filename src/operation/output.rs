@@ -22,7 +22,8 @@ impl Operation {
 
 	pub async fn try_get_output_local(&self, tg: &Instance) -> Result<Option<Value>> {
 		let data = {
-			let connection = tg.get_database_connection()?;
+			let connection = tg.database_connection_pool.get().await.unwrap();
+			let connection = connection.lock().unwrap();
 			let mut statement =
 				connection.prepare_cached("select value from outputs where id = ?")?;
 			let mut rows = statement.query(rusqlite::params![self.block().id()])?;
@@ -36,8 +37,9 @@ impl Operation {
 		Ok(Some(output))
 	}
 
-	pub fn set_output_local(&self, tg: &Instance, output: &Value) -> Result<()> {
-		let connection = tg.get_database_connection()?;
+	pub async fn set_output_local(&self, tg: &Instance, output: &Value) -> Result<()> {
+		let connection = tg.database_connection_pool.get().await.unwrap();
+		let connection = connection.lock().unwrap();
 		let mut statement =
 			connection.prepare_cached("insert into outputs (id, value) values (?, ?)")?;
 		statement.execute(rusqlite::params![self.block().id(), output.to_bytes()?])?;

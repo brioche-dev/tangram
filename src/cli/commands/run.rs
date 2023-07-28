@@ -51,6 +51,7 @@ impl Cli {
 			env,
 			args_,
 		)
+		.await
 		.wrap_err("Failed to create the target.")?;
 		let output = target.build(&self.tg).await?;
 

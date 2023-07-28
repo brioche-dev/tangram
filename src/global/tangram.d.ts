@@ -571,11 +571,14 @@ declare namespace tg {
 	function target<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
-	>(f: (...args: A) => MaybePromise<R | void>): Target<A, R>;
+	>(f: (...args: A) => MaybePromise<R | void>): Promise<Target<A, R>>;
 	function target<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
-	>(name: string, f: (...args: A) => MaybePromise<R | void>): Target<A, R>;
+	>(
+		name: string,
+		f: (...args: A) => MaybePromise<R | void>,
+	): Promise<Target<A, R>>;
 
 	/** Build a target. */
 	export let build: <

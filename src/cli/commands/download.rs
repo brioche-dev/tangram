@@ -23,7 +23,7 @@ impl Cli {
 		if let Some(unpack) = args.unpack {
 			resource = resource.unpack(unpack);
 		}
-		let resource = resource.build(&self.tg)?;
+		let resource = resource.build(&self.tg).await?;
 
 		// Download it.
 		let output = resource.download(&self.tg).await?;

@@ -112,7 +112,7 @@ impl Artifact {
 			.await?;
 
 		// Create the directory.
-		let directory = Directory::new(tg, &entries)?;
+		let directory = Directory::new(tg, &entries).await?;
 
 		Ok(directory.into())
 	}
@@ -144,7 +144,7 @@ impl Artifact {
 			.await?;
 
 		// Create the file.
-		let file = File::new(tg, &contents, executable, &references)?;
+		let file = File::new(tg, &contents, executable, &references).await?;
 
 		Ok(file.into())
 	}
@@ -170,7 +170,7 @@ impl Artifact {
 		let target = Template::unrender(tg, &options.artifacts_paths, target).await?;
 
 		// Create the symlink.
-		let symlink = Symlink::new(tg, target)?;
+		let symlink = Symlink::new(tg, target).await?;
 
 		Ok(symlink.into())
 	}

@@ -9,7 +9,7 @@ use itertools::Itertools;
 use std::collections::BTreeMap;
 
 impl Directory {
-	pub fn new(tg: &Instance, entries: &BTreeMap<String, Artifact>) -> Result<Self> {
+	pub async fn new(tg: &Instance, entries: &BTreeMap<String, Artifact>) -> Result<Self> {
 		// Get the entries' blocks.
 		let entries: BTreeMap<String, Block> = entries
 			.iter()
@@ -30,7 +30,7 @@ impl Directory {
 		let children = entries.values().copied().collect_vec();
 
 		// Create the block.
-		let block = Block::new(tg, children, &data)?;
+		let block = Block::new(tg, children, &data).await?;
 
 		// Create the directory.
 		let directory = Self { block, entries };

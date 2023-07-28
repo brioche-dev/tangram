@@ -70,9 +70,9 @@ fn syscall_inner<'s>(
 		"block_bytes" => syscall_async(scope, args, syscall_block_bytes),
 		"block_children" => syscall_async(scope, args, syscall_block_children),
 		"block_data" => syscall_async(scope, args, syscall_block_data),
-		"block_new" => syscall_sync(scope, args, syscall_block_new),
+		"block_new" => syscall_async(scope, args, syscall_block_new),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
-		"directory_new" => syscall_sync(scope, args, syscall_directory_new),
+		"directory_new" => syscall_async(scope, args, syscall_directory_new),
 		"encoding_base64_decode" => syscall_sync(scope, args, syscall_encoding_base64_decode),
 		"encoding_base64_encode" => syscall_sync(scope, args, syscall_encoding_base64_encode),
 		"encoding_hex_decode" => syscall_sync(scope, args, syscall_encoding_hex_decode),
@@ -85,14 +85,14 @@ fn syscall_inner<'s>(
 		"encoding_utf8_encode" => syscall_sync(scope, args, syscall_encoding_utf8_encode),
 		"encoding_yaml_decode" => syscall_sync(scope, args, syscall_encoding_yaml_decode),
 		"encoding_yaml_encode" => syscall_sync(scope, args, syscall_encoding_yaml_encode),
-		"file_new" => syscall_sync(scope, args, syscall_file_new),
+		"file_new" => syscall_async(scope, args, syscall_file_new),
 		"log" => syscall_sync(scope, args, syscall_log),
 		"operation_evaluate" => syscall_async(scope, args, syscall_operation_evaluate),
 		"operation_get" => syscall_async(scope, args, syscall_operation_get),
-		"resource_new" => syscall_sync(scope, args, syscall_resource_new),
-		"symlink_new" => syscall_sync(scope, args, syscall_symlink_new),
-		"target_new" => syscall_sync(scope, args, syscall_target_new),
-		"task_new" => syscall_sync(scope, args, syscall_task_new),
+		"resource_new" => syscall_async(scope, args, syscall_resource_new),
+		"symlink_new" => syscall_async(scope, args, syscall_symlink_new),
+		"target_new" => syscall_async(scope, args, syscall_target_new),
+		"task_new" => syscall_async(scope, args, syscall_task_new),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
@@ -158,13 +158,9 @@ struct BlockArg {
 	data: serde_v8::StringOrBuffer,
 }
 
-fn syscall_block_new(
-	_scope: &mut v8::HandleScope,
-	tg: Instance,
-	args: (BlockArg,),
-) -> Result<Block> {
+async fn syscall_block_new(tg: Instance, args: (BlockArg,)) -> Result<Block> {
 	let (BlockArg { data, children },) = args;
-	let block = Block::new(&tg, children, &data)?;
+	let block = Block::new(&tg, children, &data).await?;
 	Ok(block)
 }
 
@@ -192,13 +188,9 @@ struct DirectoryArg {
 	entries: BTreeMap<String, Artifact>,
 }
 
-fn syscall_directory_new(
-	_scope: &mut v8::HandleScope,
-	tg: Instance,
-	args: (DirectoryArg,),
-) -> Result<Directory> {
+async fn syscall_directory_new(tg: Instance, args: (DirectoryArg,)) -> Result<Directory> {
 	let (arg,) = args;
-	let directory = Directory::new(&tg, &arg.entries)?;
+	let directory = Directory::new(&tg, &arg.entries).await?;
 	Ok(directory)
 }
 
@@ -354,9 +346,9 @@ struct FileArg {
 	references: Vec<Artifact>,
 }
 
-fn syscall_file_new(_scope: &mut v8::HandleScope, tg: Instance, args: (FileArg,)) -> Result<File> {
+async fn syscall_file_new(tg: Instance, args: (FileArg,)) -> Result<File> {
 	let (arg,) = args;
-	let file = File::new(&tg, &arg.contents, arg.executable, &arg.references)?;
+	let file = File::new(&tg, &arg.contents, arg.executable, &arg.references).await?;
 	Ok(file)
 }
 
@@ -387,13 +379,9 @@ struct ResourceArg {
 	unsafe_: bool,
 }
 
-fn syscall_resource_new(
-	_scope: &mut v8::HandleScope,
-	tg: Instance,
-	args: (ResourceArg,),
-) -> Result<Resource> {
+async fn syscall_resource_new(tg: Instance, args: (ResourceArg,)) -> Result<Resource> {
 	let (arg,) = args;
-	let download = Resource::new(&tg, arg.url, arg.unpack, arg.checksum, arg.unsafe_)?;
+	let download = Resource::new(&tg, arg.url, arg.unpack, arg.checksum, arg.unsafe_).await?;
 	Ok(download)
 }
 
@@ -411,13 +399,9 @@ struct SymlinkArg {
 	target: Template,
 }
 
-fn syscall_symlink_new(
-	_scope: &mut v8::HandleScope,
-	tg: Instance,
-	args: (SymlinkArg,),
-) -> Result<Symlink> {
+async fn syscall_symlink_new(tg: Instance, args: (SymlinkArg,)) -> Result<Symlink> {
 	let (arg,) = args;
-	let symlink = Symlink::new(&tg, arg.target)?;
+	let symlink = Symlink::new(&tg, arg.target).await?;
 	Ok(symlink)
 }
 
@@ -431,11 +415,7 @@ struct TargetArg {
 	args: Vec<Value>,
 }
 
-fn syscall_target_new(
-	_scope: &mut v8::HandleScope,
-	tg: Instance,
-	args: (TargetArg,),
-) -> Result<Target> {
+async fn syscall_target_new(tg: Instance, args: (TargetArg,)) -> Result<Target> {
 	let (arg,) = args;
 	let target = Target::new(
 		&tg,
@@ -444,7 +424,8 @@ fn syscall_target_new(
 		arg.name,
 		arg.env,
 		arg.args,
-	)?;
+	)
+	.await?;
 	Ok(target)
 }
 
@@ -460,7 +441,7 @@ struct TaskArg {
 	network: bool,
 }
 
-fn syscall_task_new(_scope: &mut v8::HandleScope, tg: Instance, args: (TaskArg,)) -> Result<Task> {
+async fn syscall_task_new(tg: Instance, args: (TaskArg,)) -> Result<Task> {
 	let (arg,) = args;
 	let task = Task::builder(arg.system, arg.executable)
 		.env(arg.env)
@@ -468,7 +449,8 @@ fn syscall_task_new(_scope: &mut v8::HandleScope, tg: Instance, args: (TaskArg,)
 		.checksum(arg.checksum)
 		.unsafe_(arg.unsafe_)
 		.network(arg.network)
-		.build(&tg)?;
+		.build(&tg)
+		.await?;
 	Ok(task)
 }
 

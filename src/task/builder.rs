@@ -78,7 +78,7 @@ impl Builder {
 		self
 	}
 
-	pub fn build(self, tg: &Instance) -> Result<Task> {
+	pub async fn build(self, tg: &Instance) -> Result<Task> {
 		Task::new(
 			tg,
 			self.system,
@@ -89,5 +89,6 @@ impl Builder {
 			self.unsafe_,
 			self.network,
 		)
+		.await
 	}
 }

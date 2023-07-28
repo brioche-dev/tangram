@@ -42,7 +42,7 @@ impl Builder {
 		self
 	}
 
-	pub fn build(self, tg: &Instance) -> Result<File> {
-		File::new(tg, &self.contents, self.executable, &self.references)
+	pub async fn build(self, tg: &Instance) -> Result<File> {
+		File::new(tg, &self.contents, self.executable, &self.references).await
 	}
 }

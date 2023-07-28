@@ -16,7 +16,7 @@ impl Client {
 	#[must_use]
 	pub async fn pull(&self, tg: &Instance, block: Block) -> Result<()> {
 		// If the block is in this instance's database, then return.
-		if block.is_local(tg)? {
+		if block.is_local(tg).await? {
 			return Ok(());
 		}
 
@@ -39,7 +39,7 @@ impl Client {
 		let bytes = reader.into_inner().into_inner();
 
 		// Add the block.
-		Block::add(tg, block.id(), bytes)?;
+		Block::add(tg, block.id(), bytes).await?;
 
 		Ok(())
 	}

@@ -145,12 +145,15 @@ impl Package {
 		};
 		let lockfile = serde_json::to_string(&lockfile).unwrap();
 		let lockfile = Blob::with_bytes(tg, lockfile.into_bytes().as_slice()).await?;
-		let lockfile = File::builder(lockfile).references(references).build(tg)?;
+		let lockfile = File::builder(lockfile)
+			.references(references)
+			.build(tg)
+			.await?;
 		let lockfile_subpath = LOCKFILE_FILE_NAME.parse().unwrap();
 		directory = directory.add(tg, &lockfile_subpath, lockfile).await?;
 
 		// Create the package directory.
-		let directory = directory.build(tg)?;
+		let directory = directory.build(tg).await?;
 
 		// Create the package.
 		let package = Self {

@@ -77,7 +77,7 @@ export class File {
 		);
 		let contents = await blob(...contentsArgs);
 		return File.fromSyscall(
-			syscall.file.new({
+			await syscall.file.new({
 				contents: contents.toSyscall(),
 				executable,
 				references: references.map((reference) =>

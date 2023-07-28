@@ -35,7 +35,8 @@ impl Artifact {
 			Artifact::File(file) if file.executable() => directory::Builder::new()
 				.add(tg, &TANGRAM_RUN_SUBPATH, file.clone())
 				.await?
-				.build(tg)?
+				.build(tg)
+				.await?
 				.into(),
 
 			// Otherwise, return an error.
@@ -65,7 +66,7 @@ impl Artifact {
 			.try_collect()
 			.await?;
 
-		let directory = Directory::new(tg, &entries)?;
+		let directory = Directory::new(tg, &entries).await?;
 
 		// Add the references directory to the artifact at `.tangram/artifacts`.
 		let artifact = artifact
@@ -75,7 +76,8 @@ impl Artifact {
 			.await?
 			.add(tg, &TANGRAM_ARTIFACTS_PATH, directory)
 			.await?
-			.build(tg)?
+			.build(tg)
+			.await?
 			.into();
 
 		Ok(artifact)
@@ -110,16 +112,13 @@ impl Artifact {
 					.try_collect()
 					.await?;
 
-				Ok(Artifact::Directory(Directory::new(tg, &entries)?))
+				Ok(Artifact::Directory(Directory::new(tg, &entries).await?))
 			},
 
 			// If the artifact is a file, then return the file without any references.
-			Artifact::File(file) => Ok(Artifact::File(File::new(
-				tg,
-				&file.contents(tg).await?,
-				file.executable(),
-				&[],
-			)?)),
+			Artifact::File(file) => Ok(Artifact::File(
+				File::new(tg, &file.contents(tg).await?, file.executable(), &[]).await?,
+			)),
 
 			// If the artifact is a symlink, then return the symlink with its target rendered with artifacts pointing to `.tangram/artifacts/<id>`.
 			Artifact::Symlink(symlink) => {
@@ -155,7 +154,7 @@ impl Artifact {
 					.await?
 					.into();
 
-				Ok(Artifact::Symlink(Symlink::new(tg, target)?))
+				Ok(Artifact::Symlink(Symlink::new(tg, target).await?))
 			},
 		}
 	}

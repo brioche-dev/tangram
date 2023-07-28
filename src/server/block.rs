@@ -73,14 +73,16 @@ impl Server {
 		let bytes = reader.into_inner().into_inner();
 		let mut missing_children = Vec::new();
 		for child in children {
-			if !child.is_local(&self.tg)? {
+			if !child.is_local(&self.tg).await? {
 				missing_children.push(child.id());
 			}
 		}
 
 		// If there are no missing children, then add the block.
 		if missing_children.is_empty() {
-			Block::add(&self.tg, id, bytes).wrap_err("Failed to create the block.")?;
+			Block::add(&self.tg, id, bytes)
+				.await
+				.wrap_err("Failed to create the block.")?;
 		}
 
 		// Determine the outcome.

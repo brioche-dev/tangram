@@ -57,7 +57,7 @@ impl Operation {
 		};
 
 		// Set the operation output value.
-		self.set_output_local(tg, &output)?;
+		self.set_output_local(tg, &output).await?;
 
 		Ok(output)
 	}

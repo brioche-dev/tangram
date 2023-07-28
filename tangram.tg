@@ -9,10 +9,9 @@ export let source = tg.target(() =>
 );
 
 tg.target("test", async () => {
-	// await testDirectory();
-	// await testFile();
-	// await testSymlink();
-	return await testTask();
+	await testDirectory();
+	await testFile();
+	await testSymlink();
 });
 
 let testDirectory = async () => {
@@ -169,23 +168,22 @@ export let testDependencyIndirection = async () => {
 	tg.assert(text === "hello");
 };
 
-export let testTask = async () => {
-	let utils = tg.download({
-		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/utils_arm64_linux.tar.zstd",
-		checksum:
-			"sha256:36c0dcfb02e61a07f4654e1ca6047cdefb17ce1f2e37fcb2ba5dc20695b3e273",
-		unpack: ".tar.zstd",
-	});
-	let file = await tg.file("hello");
-	let output = await tg.run({
-		system: "arm64_linux",
-		executable: "/bin/sh",
-		// args: ["-c", t`cat ${file} > ${tg.output}`],
-		args: ["-c", t`ls ${utils}/bin > ${tg.output}`],
-		env: {
-			PATH: t`${utils}/bin`,
-		},
-	});
-	// tg.assert(await output.text() === await file.text());
-	return output;
-};
+// export let testTask = async () => {
+// 	let utils = tg.download({
+// 		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/utils_arm64_linux.tar.zstd",
+// 		checksum: "sha256:36c0dcfb02e61a07f4654e1ca6047cdefb17ce1f2e37fcb2ba5dc20695b3e273",
+// 		unpack: ".tar.zstd",
+// 	})
+// 	let file = await tg.file("hello");
+// 	let output = await tg.run({
+// 		system: "arm64_linux",
+// 		executable: "/bin/sh",
+// 		// args: ["-c", t`cat ${file} > ${tg.output}`],
+// 		args: ["-c", t`ls ${utils}/bin > ${tg.output}`],
+// 		env: {
+// 			PATH: t`${utils}/bin`
+// 		}
+// 	});
+// 	// tg.assert(await output.text() === await file.text());
+// 	return output;
+// }
