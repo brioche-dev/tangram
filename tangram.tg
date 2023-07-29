@@ -199,14 +199,14 @@ export let example = await tg.target(async () => {
 			"sha256:eb94f2451dfaa5f423d271dde1ac47f475ab5343b4feeb194a7386f0a4d8e227",
 		unpack: ".tar.zstd",
 	});
-	// let file = tg.file("hello");
-	// return tg.run({
-	// 	system,
-	// 	executable: t`/bin/sh`,
-	// 	args: ["-c", t`cat ${file} > ${tg.output}`],
-	// 	env: {
-	// 		PATH: t`${utils}/bin`
-	// 	}
-	// });
+	let file = tg.file("hello");
+	return tg.run({
+		system,
+		executable: t`/bin/sh`,
+		args: ["-c", t`cat ${file} > ${tg.output}`],
+		env: {
+			PATH: t`${utils}/bin`
+		}
+	});
 	return dash;
 });

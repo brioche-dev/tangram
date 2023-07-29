@@ -28,7 +28,6 @@ use crate::{
 use base64::Engine as _;
 use itertools::Itertools;
 use std::{collections::BTreeMap, future::Future, rc::Rc};
-use tracing::Instrument;
 use url::Url;
 
 pub fn syscall(
@@ -532,7 +531,6 @@ where
 			result,
 		}
 	};
-	let future = future.instrument(tracing::info_span!("syscall_async"));
 	let future = Box::pin(future);
 
 	// Add the future to the context's future set.

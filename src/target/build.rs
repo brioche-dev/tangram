@@ -48,7 +48,9 @@ impl Target {
 			package: self.package,
 			module_path: self.module_path.clone(),
 		});
+		dbg!("Before evaluation.", self.block().id());
 		super::module::evaluate(context.clone(), &module).await?;
+		dbg!("After evaluation.", self.block().id());
 
 		// Enter the context.
 		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);

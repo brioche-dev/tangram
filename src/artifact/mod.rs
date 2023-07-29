@@ -121,12 +121,15 @@ impl std::fmt::Display for Artifact {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Artifact::Directory(directory) => {
-				f.write_str(&format!(r#"(tg.directory {})"#, directory.block().id()))
+				write!(f, r#"(tg.directory {})"#, directory.block().id())?;
 			},
-			Artifact::File(file) => f.write_str(&format!(r#"(tg.file {})"#, file.block().id())),
+			Artifact::File(file) => {
+				write!(f, r#"(tg.file {})"#, file.block().id())?;
+			},
 			Artifact::Symlink(symlink) => {
-				f.write_str(&format!(r#"(tg.symlink {})"#, symlink.block().id()))
+				write!(f, r#"(tg.symlink {})"#, symlink.block().id())?;
 			},
 		}
+		Ok(())
 	}
 }

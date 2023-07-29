@@ -8,7 +8,7 @@ use crate::{
 	operation::Operation,
 	path::{Relpath, Subpath},
 	placeholder::Placeholder,
-	template::Template,
+	template::{self, Template},
 };
 use std::collections::BTreeMap;
 
@@ -364,54 +364,90 @@ impl Value {
 impl std::fmt::Display for Value {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match &self {
-			Value::Null => f.write_str("null"),
-			Value::Bool(value) => f.write_str(&format!("{value}")),
-			Value::Number(value) => f.write_str(&format!("{value}")),
-			Value::String(value) => f.write_str(&format!(r#""{value}""#)),
-			Value::Bytes(value) => f.write_str(&format!(r#"(tg.bytes {}"#, value.len())),
-			Value::Relpath(value) => f.write_str(&format!(r#"(tg.relpath "{value}")"#)),
-			Value::Subpath(value) => f.write_str(&format!(r#"(tg.subpath "{value}")"#)),
-			Value::Block(value) => f.write_str(&format!(r#"(tg.blob {})"#, value.id())),
-			Value::Blob(value) => f.write_str(&format!(r#"(tg.blob {})"#, value.block().id())),
-			Value::Artifact(value) => f.write_str(&format!("{value}")),
+			Value::Null => {
+				write!(f, "null")?;
+			},
+			Value::Bool(value) => {
+				write!(f, "{value}")?;
+			},
+			Value::Number(value) => {
+				write!(f, "{value}")?;
+			},
+			Value::String(value) => {
+				write!(f, r#""{value}""#)?;
+			},
+			Value::Bytes(value) => {
+				write!(f, r#"(tg.bytes {})"#, value.len())?;
+			},
+			Value::Relpath(value) => {
+				write!(f, r#"(tg.relpath {value})"#)?;
+			},
+			Value::Subpath(value) => {
+				write!(f, r#"(tg.subpath {value})"#)?;
+			},
+			Value::Block(value) => {
+				write!(f, r#"(tg.block {})"#, value.id())?;
+			},
+			Value::Blob(value) => {
+				write!(f, r#"(tg.blob {})"#, value.block().id())?;
+			},
+			Value::Artifact(value) => {
+				write!(f, "{value}")?;
+			},
 			Value::Placeholder(value) => {
-				f.write_str(&format!(r#"(tg.placeholder "${}")"#, value.name,))
+				write!(f, "{value}")?;
 			},
 			Value::Template(value) => {
-				let values = value
-					.components()
-					.iter()
-					.map(|value| format!("${value}"))
-					.collect::<String>();
-				f.write_str(&format!(r#"(tg.template "${values}")"#))
+				write!(f, r#"(tg.template ""#)?;
+				for component in value.components() {
+					match component {
+						template::Component::String(string) => {
+							write!(f, "{string}")?;
+						},
+						template::Component::Artifact(artifact) => {
+							write!(f, r#"${{{artifact}}}"#)?;
+						},
+						template::Component::Placeholder(placeholder) => {
+							write!(f, r#"${{{placeholder}}}"#)?;
+						},
+					}
+				}
+				write!(f, r#"")"#)?;
 			},
 			Value::Operation(value) => match value {
 				Operation::Resource(resource) => {
-					f.write_str(&format!(r#"(tg.resource {})"#, resource.block().id()))
+					write!(f, r#"(tg.resource {})"#, resource.block().id())?;
 				},
 				Operation::Target(target) => {
-					f.write_str(&format!(r#"(tg.target {})"#, target.block().id()))
+					write!(f, r#"(tg.target {})"#, target.block().id())?;
 				},
 				Operation::Task(task) => {
-					f.write_str(&format!(r#"(tg.task {})"#, task.block().id()))
+					write!(f, r#"(tg.task {})"#, task.block().id())?;
 				},
 			},
-			Value::Array(values) => {
-				let values = values
-					.iter()
-					.map(|value| format!("${value}"))
-					.collect::<Vec<String>>()
-					.join(", ");
-				f.write_str(&format!("[{values}]"))
+			Value::Array(value) => {
+				let len = value.len();
+				write!(f, "[")?;
+				for (i, value) in value.iter().enumerate() {
+					write!(f, "{value}")?;
+					if i < len - 1 {
+						write!(f, ", ")?;
+					}
+				}
+				write!(f, "]")?;
 			},
 			Value::Object(value) => {
-				let value = value
-					.iter()
-					.map(|(key, value)| format!(r#""{key}": {value}"#))
-					.collect::<Vec<String>>()
-					.join(", ");
-				f.write_str(&format!(r#"{{ {value} }}"#))
+				let len = value.len();
+				write!(f, "{{")?;
+				for (i, (key, value)) in value.iter().enumerate() {
+					write!(f, r#""{key}": {value}"#)?;
+					if i < len - 1 {
+						write!(f, ", ")?;
+					}
+				}
+				write!(f, "}}")?;
 			},
 		}
+		Ok(())
 	}
 }
