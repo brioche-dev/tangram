@@ -1,4 +1,5 @@
 use crate::error::{return_error, Error, Result};
+use crate::target::{FromV8, ToV8};
 
 #[derive(
 	Clone,
@@ -210,5 +211,20 @@ impl TryFrom<String> for Os {
 
 	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
 		value.parse()
+	}
+}
+
+impl ToV8 for System {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		todo!()
+	}
+}
+
+impl FromV8 for System {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
 	}
 }

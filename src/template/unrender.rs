@@ -1,5 +1,5 @@
 use super::{Component, Template};
-use crate::{artifact::Artifact, error::Result, instance::Instance};
+use crate::{artifact::Artifact, block::Block, error::Result, instance::Instance};
 use itertools::Itertools;
 use std::path::PathBuf;
 
@@ -28,10 +28,10 @@ impl Template {
 
 			// Get and parse the ID.
 			let id = captures.get(1).unwrap();
-			let block = id.as_str().parse().unwrap();
+			let id = id.as_str().parse().unwrap();
 
 			// Get the artifact.
-			let artifact = Artifact::get(tg, block).await?;
+			let artifact = Artifact::with_block(tg, Block::with_id(id)).await?;
 
 			// Add an artifact component.
 			components.push(Component::Artifact(artifact));
@@ -71,10 +71,11 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
-			.build(&tg)
-			.await?
-			.into();
+		let artifact: Artifact =
+			File::builder(Blob::with_bytes(&tg, "foo".as_bytes().into()).await?)
+				.build(&tg)
+				.await?
+				.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
 			.await?
@@ -97,10 +98,11 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
-			.build(&tg)
-			.await?
-			.into();
+		let artifact: Artifact =
+			File::builder(Blob::with_bytes(&tg, "foo".as_bytes().into()).await?)
+				.build(&tg)
+				.await?
+				.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
 			.await?
@@ -141,10 +143,11 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let artifact: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
-			.build(&tg)
-			.await?
-			.into();
+		let artifact: Artifact =
+			File::builder(Blob::with_bytes(&tg, "foo".as_bytes().into()).await?)
+				.build(&tg)
+				.await?
+				.into();
 		let artifact_path = artifact
 			.check_out_internal(&tg)
 			.await?
@@ -172,7 +175,7 @@ mod tests {
 		let temp_path = temp_dir.path().to_owned();
 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
 
-		let foo: Artifact = File::builder(Blob::with_bytes(&tg, "foo").await?)
+		let foo: Artifact = File::builder(Blob::with_bytes(&tg, "foo".as_bytes().into()).await?)
 			.build(&tg)
 			.await?
 			.into();
@@ -183,7 +186,7 @@ mod tests {
 			.unwrap()
 			.to_owned();
 
-		let bar: Artifact = File::builder(Blob::with_bytes(&tg, "bar").await?)
+		let bar: Artifact = File::builder(Blob::with_bytes(&tg, "bar".as_bytes().into()).await?)
 			.build(&tg)
 			.await?
 			.into();
@@ -194,7 +197,7 @@ mod tests {
 			.unwrap()
 			.to_owned();
 
-		let baz: Artifact = File::builder(Blob::with_bytes(&tg, "baz").await?)
+		let baz: Artifact = File::builder(Blob::with_bytes(&tg, "baz".as_bytes().into()).await?)
 			.build(&tg)
 			.await?
 			.into();

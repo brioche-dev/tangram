@@ -4,11 +4,10 @@ use super::{
 };
 use crate::{
 	block::{self, Block},
-	client::block::TryAddBlockOutcome,
+	client::block::TryPutBlockOutcome,
 	error::{return_error, Error, Result, WrapErr},
 };
 use futures::TryStreamExt;
-use std::io::Cursor;
 use tokio::io::AsyncReadExt;
 
 impl Server {
@@ -68,28 +67,29 @@ impl Server {
 		body.read_to_end(&mut bytes).await?;
 
 		// Get the missing children.
-		let mut reader = block::Reader::new(Cursor::new(bytes));
-		let children = reader.children()?;
-		let bytes = reader.into_inner().into_inner();
+		let children = {
+			let reader = block::Reader::new_borrowed(&bytes);
+			reader.children()?
+		};
 		let mut missing_children = Vec::new();
-		for child in children {
-			if !child.is_local(&self.tg).await? {
-				missing_children.push(child.id());
+		for id in children {
+			if !Block::with_id(id).is_local(&self.tg).await? {
+				missing_children.push(id);
 			}
 		}
 
 		// If there are no missing children, then add the block.
 		if missing_children.is_empty() {
-			Block::add(&self.tg, id, bytes)
-				.await
+			let block = Block::with_id_and_bytes(id, bytes.into())
 				.wrap_err("Failed to create the block.")?;
+			block.store(&self.tg).await?;
 		}
 
 		// Determine the outcome.
 		let outcome = if missing_children.is_empty() {
-			TryAddBlockOutcome::Added
+			TryPutBlockOutcome::Added
 		} else {
-			TryAddBlockOutcome::MissingChildren(missing_children)
+			TryPutBlockOutcome::MissingChildren(missing_children)
 		};
 
 		// Create the body.

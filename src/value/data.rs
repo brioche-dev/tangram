@@ -3,7 +3,9 @@ use crate::{
 	artifact::Artifact,
 	blob::Blob,
 	block::Block,
+	bytes::Bytes,
 	error::{return_error, Error, Result},
+	id::Id,
 	instance::Instance,
 	operation::Operation,
 	path::{Relpath, Subpath},
@@ -41,7 +43,7 @@ pub enum Data {
 	String(String),
 
 	#[tangram_serialize(id = 4)]
-	Bytes(Vec<u8>),
+	Bytes(Bytes),
 
 	#[tangram_serialize(id = 5)]
 	Relpath(Relpath),
@@ -50,13 +52,13 @@ pub enum Data {
 	Subpath(Subpath),
 
 	#[tangram_serialize(id = 7)]
-	Block(Block),
+	Block(Id),
 
 	#[tangram_serialize(id = 8)]
-	Blob(Block),
+	Blob(Id),
 
 	#[tangram_serialize(id = 9)]
-	Artifact(Block),
+	Artifact(Id),
 
 	#[tangram_serialize(id = 10)]
 	Placeholder(placeholder::Data),
@@ -65,7 +67,7 @@ pub enum Data {
 	Template(template::Data),
 
 	#[tangram_serialize(id = 12)]
-	Operation(Block),
+	Operation(Id),
 
 	#[tangram_serialize(id = 13)]
 	Array(Array),
@@ -119,12 +121,12 @@ impl Value {
 			Self::Bytes(bytes) => Data::Bytes(bytes.clone()),
 			Self::Subpath(path) => Data::Subpath(path.clone()),
 			Self::Relpath(path) => Data::Relpath(path.clone()),
-			Self::Block(block) => Data::Block(*block),
-			Self::Blob(block) => Data::Blob(block.block()),
-			Self::Artifact(block) => Data::Artifact(block.block()),
+			Self::Block(block) => Data::Block(block.id()),
+			Self::Blob(blob) => Data::Blob(blob.id()),
+			Self::Artifact(artifact) => Data::Artifact(artifact.id()),
 			Self::Placeholder(placeholder) => Data::Placeholder(placeholder.to_data()),
 			Self::Template(template) => Data::Template(template.to_data()),
-			Self::Operation(block) => Data::Operation(block.block()),
+			Self::Operation(operation) => Data::Operation(operation.id()),
 			Self::Array(array) => Data::Array(array.iter().map(Self::to_data).collect()),
 			Self::Object(map) => Data::Object(
 				map.iter()
@@ -144,13 +146,13 @@ impl Value {
 			Data::Bytes(bytes) => Ok(Self::Bytes(bytes)),
 			Data::Subpath(path) => Ok(Self::Subpath(path)),
 			Data::Relpath(path) => Ok(Self::Relpath(path)),
-			Data::Block(value) => Ok(Self::Block(value)),
-			Data::Blob(value) => {
-				let blob = Blob::get(tg, value).await?;
+			Data::Block(id) => Ok(Self::Block(Block::with_id(id))),
+			Data::Blob(id) => {
+				let blob = Blob::with_block(tg, Block::with_id(id)).await?;
 				Ok(Self::Blob(blob))
 			},
-			Data::Artifact(block) => {
-				let artifact = Artifact::get(tg, block).await?;
+			Data::Artifact(id) => {
+				let artifact = Artifact::with_block(tg, Block::with_id(id)).await?;
 				Ok(Self::Artifact(artifact))
 			},
 			Data::Placeholder(placeholder) => {
@@ -161,8 +163,8 @@ impl Value {
 				let template = Template::from_data(tg, template).await?;
 				Ok(Self::Template(template))
 			},
-			Data::Operation(block) => {
-				let operation = Operation::get(tg, block).await?;
+			Data::Operation(id) => {
+				let operation = Operation::with_block(tg, Block::with_id(id)).await?;
 				Ok(Self::Operation(operation))
 			},
 			Data::Array(array) => {

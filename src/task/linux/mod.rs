@@ -79,7 +79,7 @@ impl Task {
 		// Add `/usr/bin/env` and `/bin/sh` to the root.
 		let env_path = root_host_path.join("usr/bin/env");
 		let sh_path = root_host_path.join("bin/sh");
-		let (env_bytes, sh_bytes) = match self.system {
+		let (env_bytes, sh_bytes) = match self.host {
 			System::Amd64Linux => (ENV_AMD64_LINUX, SH_AMD64_LINUX),
 			System::Arm64Linux => (ENV_ARM64_LINUX, SH_ARM64_LINUX),
 			_ => unreachable!(),

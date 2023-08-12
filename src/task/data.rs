@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 )]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
-	pub system: System,
+	pub host: System,
 
 	#[tangram_serialize(id = 1)]
 	pub executable: template::Data,
@@ -51,7 +51,7 @@ pub struct Data {
 
 impl Task {
 	pub fn to_data(&self) -> Data {
-		let system = self.system;
+		let host = self.host;
 		let executable = self.executable.to_data();
 		let env = self
 			.env
@@ -67,7 +67,7 @@ impl Task {
 		let unsafe_ = self.unsafe_;
 		let network = self.network;
 		Data {
-			system,
+			host,
 			executable,
 			env,
 			args,
@@ -78,7 +78,7 @@ impl Task {
 	}
 
 	pub async fn from_data(tg: &Instance, block: Block, data: Data) -> Result<Self> {
-		let system = data.system;
+		let host = data.host;
 		let executable = Template::from_data(tg, data.executable).await?;
 		let env = data
 			.env
@@ -102,7 +102,7 @@ impl Task {
 		let network = data.network;
 		Ok(Self {
 			block,
-			system,
+			host,
 			executable,
 			env,
 			args,

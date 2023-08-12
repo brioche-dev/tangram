@@ -21,9 +21,10 @@ impl Resource {
 		// Serialize the data.
 		let mut bytes = Vec::new();
 		data.serialize(&mut bytes).unwrap();
+		let data = bytes;
 
 		// Create the block.
-		let block = Block::new(tg, vec![], bytes.as_slice()).await?;
+		let block = Block::with_data(&data)?;
 
 		// Create the download.
 		let download = Self {

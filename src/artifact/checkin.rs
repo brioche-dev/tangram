@@ -5,6 +5,7 @@ use crate::{
 	directory::Directory,
 	error::{return_error, Error, Result, WrapErr},
 	file::File,
+	id::Id,
 	instance::Instance,
 	symlink::Symlink,
 	template::Template,
@@ -22,7 +23,7 @@ use std::{
 
 #[derive(serde::Deserialize)]
 struct Attributes {
-	references: Vec<Block>,
+	references: Vec<Id>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -83,21 +84,22 @@ impl Artifact {
 		options: &Options,
 	) -> Result<Self> {
 		// Read the contents of the directory.
-		let permit = tg.file_descriptor_semaphore.acquire().await;
-		let mut read_dir = tokio::fs::read_dir(path)
-			.await
-			.wrap_err("Failed to read the directory.")?;
-		let mut names = Vec::new();
-		while let Some(entry) = read_dir.next_entry().await? {
-			let name = entry
-				.file_name()
-				.to_str()
-				.wrap_err("All file names must be valid UTF-8.")?
-				.to_owned();
-			names.push(name);
-		}
-		drop(read_dir);
-		drop(permit);
+		let names = {
+			let _permit = tg.file_descriptor_semaphore.acquire().await;
+			let mut read_dir = tokio::fs::read_dir(path)
+				.await
+				.wrap_err("Failed to read the directory.")?;
+			let mut names = Vec::new();
+			while let Some(entry) = read_dir.next_entry().await? {
+				let name = entry
+					.file_name()
+					.to_str()
+					.wrap_err("All file names must be valid UTF-8.")?
+					.to_owned();
+				names.push(name);
+			}
+			names
+		};
 
 		// Recurse into the directory's entries.
 		let entries = names
@@ -112,7 +114,7 @@ impl Artifact {
 			.await?;
 
 		// Create the directory.
-		let directory = Directory::new(tg, &entries).await?;
+		let directory = Directory::new(&entries).await?;
 
 		Ok(directory.into())
 	}
@@ -125,7 +127,9 @@ impl Artifact {
 	) -> Result<Self> {
 		// Create the blob.
 		let permit = tg.file_descriptor_semaphore.acquire().await;
-		let contents = Blob::with_path(tg, path).await?;
+		let contents = Blob::with_path(tg, path)
+			.await
+			.wrap_err("Failed to create the contents.")?;
 		drop(permit);
 
 		// Determine if the file is executable.
@@ -140,13 +144,15 @@ impl Artifact {
 			.map(|attributes| attributes.references)
 			.unwrap_or_default()
 			.into_iter()
-			.map(|hash| Artifact::get(tg, hash))
+			.map(|id| Artifact::with_block(tg, Block::with_id(id)))
 			.collect::<FuturesOrdered<_>>()
 			.try_collect::<Vec<_>>()
 			.await?;
 
 		// Create the file.
-		let file = File::new(tg, &contents, executable, &references).await?;
+		let file = File::new(tg, &contents, executable, &references)
+			.await
+			.wrap_err("Failed to create the file.")?;
 
 		Ok(file.into())
 	}
@@ -172,7 +178,7 @@ impl Artifact {
 		let target = Template::unrender(tg, &options.artifacts_paths, target).await?;
 
 		// Create the symlink.
-		let symlink = Symlink::new(tg, target).await?;
+		let symlink = Symlink::new(target)?;
 
 		Ok(symlink.into())
 	}

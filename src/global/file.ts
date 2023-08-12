@@ -2,6 +2,7 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
 import { Block } from "./block.ts";
+import { Id } from "./id.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
@@ -22,6 +23,13 @@ export class File {
 	#contents: Block;
 	#executable: boolean;
 	#references: Array<Block>;
+
+	constructor(arg: ConstructorArg) {
+		this.#block = arg.block;
+		this.#contents = arg.contents;
+		this.#executable = arg.executable;
+		this.#references = arg.references;
+	}
 
 	static async new(...args: Array<Unresolved<File.Arg>>): Promise<File> {
 		let {
@@ -76,22 +84,11 @@ export class File {
 			{ contents: [], executable: false, references: [] },
 		);
 		let contents = await blob(...contentsArgs);
-		return File.fromSyscall(
-			await syscall.file.new({
-				contents: contents.toSyscall(),
-				executable,
-				references: references.map((reference) =>
-					Artifact.toSyscall(reference),
-				),
-			}),
-		);
-	}
-
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#contents = arg.contents;
-		this.#executable = arg.executable;
-		this.#references = arg.references;
+		return await syscall.file.new({
+			contents,
+			executable,
+			references,
+		});
 	}
 
 	static is(value: unknown): value is File {
@@ -107,30 +104,8 @@ export class File {
 		assert_(File.is(value));
 	}
 
-	toSyscall(): syscall.File {
-		let block = this.#block.toSyscall();
-		let contents = this.#contents.toSyscall();
-		let executable = this.#executable;
-		let references = this.#references.map((block) => block.toSyscall());
-		return {
-			block,
-			contents,
-			executable,
-			references,
-		};
-	}
-
-	static fromSyscall(value: syscall.File): File {
-		let block = Block.fromSyscall(value.block);
-		let contents = Block.fromSyscall(value.contents);
-		let executable = value.executable;
-		let references = value.references.map((block) => Block.fromSyscall(block));
-		return new File({
-			block,
-			contents,
-			executable,
-			references,
-		});
+	id(): Id {
+		return this.block().id();
 	}
 
 	block(): Block {
@@ -138,7 +113,7 @@ export class File {
 	}
 
 	async contents(): Promise<Blob> {
-		return await Blob.get(this.#contents);
+		return await Blob.withBlock(this.#contents);
 	}
 
 	executable(): boolean {
@@ -146,7 +121,7 @@ export class File {
 	}
 
 	async references(): Promise<Array<Artifact>> {
-		return await Promise.all(this.#references.map(Artifact.get));
+		return await Promise.all(this.#references.map(Artifact.withBlock));
 	}
 
 	async bytes(): Promise<Uint8Array> {

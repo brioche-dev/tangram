@@ -17,23 +17,20 @@ use std::{
 	io::{SeekFrom, Write},
 	sync::{Arc, Weak},
 };
-use tokio::{
-	io::{AsyncReadExt, AsyncSeekExt},
-	sync::RwLock,
-};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use zerocopy::{AsBytes, FromBytes};
 
 /// A FUSE server.
 #[derive(Clone)]
 pub struct Server {
 	tg: Instance,
-	state: Arc<RwLock<State>>,
+	state: Arc<tokio::sync::RwLock<State>>,
 }
 
 /// The server's state.
 struct State {
 	nodes: BTreeMap<NodeId, Arc<Node>>,
-	handles: BTreeMap<FileHandle, Arc<RwLock<FileHandleData>>>,
+	handles: BTreeMap<FileHandle, Arc<tokio::sync::RwLock<FileHandleData>>>,
 }
 
 /// A node in the file system.
@@ -55,11 +52,11 @@ struct Node {
 #[derive(Debug)]
 enum NodeKind {
 	Root {
-		children: RwLock<BTreeMap<String, Arc<Node>>>,
+		children: tokio::sync::RwLock<BTreeMap<String, Arc<Node>>>,
 	},
 	Directory {
 		directory: Directory,
-		children: RwLock<BTreeMap<String, Arc<Node>>>,
+		children: tokio::sync::RwLock<BTreeMap<String, Arc<Node>>>,
 	},
 	File {
 		file: File,
@@ -130,13 +127,13 @@ impl Server {
 			id: ROOT_NODE_ID,
 			parent: root.clone(),
 			kind: NodeKind::Root {
-				children: RwLock::new(BTreeMap::default()),
+				children: tokio::sync::RwLock::new(BTreeMap::default()),
 			},
 		});
 		let nodes = [(ROOT_NODE_ID, root)].into();
 		let handles = BTreeMap::default();
 		let state = State { nodes, handles };
-		let state = Arc::new(RwLock::new(state));
+		let state = Arc::new(tokio::sync::RwLock::new(state));
 		Self { tg, state }
 	}
 
@@ -388,7 +385,7 @@ impl Server {
 			},
 			NodeKind::Symlink { .. } => FileHandleData::Symlink,
 		};
-		let file_handle_data = Arc::new(RwLock::new(file_handle_data));
+		let file_handle_data = Arc::new(tokio::sync::RwLock::new(file_handle_data));
 
 		// Add the file handle to the state.
 		let mut state = self.state.write().await;
@@ -545,12 +542,7 @@ impl Server {
 					write!(&mut response, "{string}").unwrap();
 				},
 				template::Component::Artifact(artifact) => {
-					write!(
-						&mut response,
-						"/.tangram/artifacts/{}",
-						artifact.block().id()
-					)
-					.unwrap();
+					write!(&mut response, "/.tangram/artifacts/{}", artifact.id()).unwrap();
 				},
 				template::Component::Placeholder(_) => {
 					return Err(libc::EIO);
@@ -637,7 +629,7 @@ impl Server {
 			NodeKind::Root { .. } => {
 				let id = name.parse().map_err(|_| libc::ENOENT)?;
 				let block = Block::with_id(id);
-				Artifact::get(&self.tg, block)
+				Artifact::with_block(&self.tg, block)
 					.await
 					.map_err(|_| libc::EIO)?
 			},
@@ -655,7 +647,7 @@ impl Server {
 		let node_id = NodeId(self.state.read().await.nodes.len() as u64 + 1000);
 		let kind = match child_artifact {
 			Artifact::Directory(directory) => {
-				let children = RwLock::new(BTreeMap::default());
+				let children = tokio::sync::RwLock::new(BTreeMap::default());
 				NodeKind::Directory {
 					directory,
 					children,

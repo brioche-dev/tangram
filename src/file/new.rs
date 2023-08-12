@@ -15,13 +15,23 @@ impl File {
 		executable: bool,
 		references: &[Artifact],
 	) -> Result<Self> {
-		let references = references.iter().map(Artifact::block).collect_vec();
+		let references = references
+			.iter()
+			.map(Artifact::block)
+			.cloned()
+			.collect_vec();
+
+		// Collect the children.
+		let children = Some(contents.block().clone())
+			.into_iter()
+			.chain(references.iter().cloned())
+			.collect_vec();
 
 		// Create the artifact data.
 		let data = artifact::Data::File(super::Data {
-			contents: contents.block(),
+			contents: contents.id(),
 			executable,
-			references: references.clone(),
+			references: references.iter().map(Block::id).collect(),
 		});
 
 		// Serialize the data.
@@ -29,19 +39,13 @@ impl File {
 		data.serialize(&mut bytes).unwrap();
 		let data = bytes;
 
-		// Collect the children.
-		let children = Some(contents.block())
-			.into_iter()
-			.chain(references.iter().copied())
-			.collect_vec();
-
 		// Create the block.
-		let block = Block::new(tg, children, &data).await?;
+		let block = Block::with_children_and_data(children, &data)?;
 
 		// Create the file.
 		let file = Self {
 			block,
-			contents: contents.block(),
+			contents: contents.block().clone(),
 			executable,
 			references,
 		};

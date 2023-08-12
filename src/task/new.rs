@@ -10,7 +10,7 @@ impl Task {
 	#[allow(clippy::too_many_arguments)]
 	pub async fn new(
 		tg: &Instance,
-		system: System,
+		host: System,
 		executable: Template,
 		env: BTreeMap<String, Template>,
 		args: Vec<Template>,
@@ -18,6 +18,15 @@ impl Task {
 		unsafe_: bool,
 		network: bool,
 	) -> Result<Self> {
+		// Collect the children.
+		let children = executable
+			.artifacts()
+			.chain(env.values().flat_map(Template::artifacts))
+			.chain(args.iter().flat_map(Template::artifacts))
+			.map(Artifact::block)
+			.cloned()
+			.collect_vec();
+
 		// Create the operation data.
 		let executable_ = executable.to_data();
 		let env_ = env
@@ -26,7 +35,7 @@ impl Task {
 			.collect();
 		let args_ = args.iter().map(Template::to_data).collect();
 		let data = operation::Data::Task(Data {
-			system,
+			host,
 			executable: executable_,
 			env: env_,
 			args: args_,
@@ -40,21 +49,13 @@ impl Task {
 		data.serialize(&mut bytes).unwrap();
 		let data = bytes;
 
-		// Collect the children.
-		let children = executable
-			.artifacts()
-			.chain(env.values().flat_map(Template::artifacts))
-			.chain(args.iter().flat_map(Template::artifacts))
-			.map(Artifact::block)
-			.collect_vec();
-
 		// Create the block.
-		let block = Block::new(tg, children, &data).await?;
+		let block = Block::with_children_and_data(children, &data)?;
 
 		// Create the task.
 		let task = Self {
 			block,
-			system,
+			host,
 			executable,
 			env,
 			args,

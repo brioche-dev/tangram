@@ -43,7 +43,7 @@ let stringifyInner = (value: unknown, visited: WeakSet<object>): string => {
 			}
 		}
 		case "function": {
-			return `(function "${value.name ?? "(anonymous)"}")`;
+			return `(function "${value.name_ ?? "(anonymous)"}")`;
 		}
 		case "symbol": {
 			return "(symbol)";
@@ -79,15 +79,15 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Subpath) {
 		return `(tg.subpath ${value.toString()})`;
 	} else if (value instanceof Blob) {
-		return `(tg.blob ${value.block().id()})`;
+		return `(tg.blob ${value.id()})`;
 	} else if (value instanceof Block) {
 		return `(tg.block ${value.id()})`;
 	} else if (value instanceof Directory) {
-		return `(tg.directory ${value.block().id()})`;
+		return `(tg.directory ${value.id()})`;
 	} else if (value instanceof File) {
-		return `(tg.file ${value.block().id()})`;
+		return `(tg.file ${value.id()})`;
 	} else if (value instanceof Symlink) {
-		return `(tg.symlink ${value.block().id()})`;
+		return `(tg.symlink ${value.id()})`;
 	} else if (value instanceof Placeholder) {
 		return `(tg.placeholder "${value.name()}")`;
 	} else if (value instanceof Template) {
@@ -103,19 +103,19 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			.join("");
 		return `(tg.template "${string}")`;
 	} else if (value instanceof Resource) {
-		return `(tg.resource "${value.block().id()}")`;
+		return `(tg.resource "${value.id()}")`;
 	} else if (value instanceof Target) {
-		return `(tg.target "${value.block.id()}")`;
+		return `(tg.target "${value.#block.id()}")`;
 	} else if (value instanceof Task) {
-		return `(tg.task "${value.block().id()}")`;
+		return `(tg.task "${value.id()}")`;
 	} else {
 		// Handle any other object.
 		let constructorName = "";
 		if (
 			value.constructor !== undefined &&
-			value.constructor.name !== "Object"
+			value.constructor.name_ !== "Object"
 		) {
-			constructorName = `${value.constructor.name} `;
+			constructorName = `${value.constructor.name_} `;
 		}
 		let entries = Object.entries(value).map(
 			([key, value]) => `${key}: ${stringifyInner(value, visited)}`,

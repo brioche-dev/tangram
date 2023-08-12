@@ -30,8 +30,8 @@ impl Cli {
 	async fn command_operation_get(&self, args: GetArgs) -> Result<()> {
 		let mut stdout = tokio::io::stdout();
 		let block = Block::with_id(args.id);
-		let operation = Operation::get(&self.tg, block).await?;
-		let json = serde_json::to_string_pretty(&operation).unwrap();
+		let operation = Operation::with_block(&self.tg, block).await?;
+		let json = serde_json::to_string_pretty(&operation.to_data()).unwrap();
 		stdout.write_all(json.as_bytes()).await?;
 		Ok(())
 	}

@@ -6,6 +6,7 @@ pub mod archive;
 pub mod artifact;
 pub mod blob;
 pub mod block;
+pub mod bytes;
 pub mod checksum;
 pub mod client;
 pub mod directory;

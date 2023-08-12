@@ -10,6 +10,7 @@ use itertools::Itertools;
 use pin_project::pin_project;
 use std::{
 	convert::Infallible,
+	future::Future,
 	net::SocketAddr,
 	pin::Pin,
 	task::{Context, Poll},
@@ -161,6 +162,19 @@ where
 			Poll::Ready(None) => Poll::Ready(None),
 			Poll::Pending => Poll::Pending,
 		}
+	}
+}
+
+#[derive(Clone)]
+pub struct TokioExecutor;
+
+impl<F> hyper::rt::Executor<F> for TokioExecutor
+where
+	F: Future + Send + 'static,
+	F::Output: Send + 'static,
+{
+	fn execute(&self, future: F) {
+		tokio::spawn(future);
 	}
 }
 

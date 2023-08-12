@@ -82,21 +82,25 @@ async fn main_inner() -> Result<()> {
 	// Read the credentials.
 	let credentials = Cli::read_credentials().await?;
 
-	// Resolve the API URL.
-	let api_url = config
+	// Get the origin URL.
+	let origin_url = config
 		.as_ref()
-		.and_then(|config| config.api_url.as_ref())
+		.and_then(|config| config.origin_url.as_ref())
 		.cloned();
 
-	// Get the token.
-	let api_token = credentials.map(|credentials| credentials.token);
+	// Get the origin token.
+	let origin_token = credentials.map(|credentials| credentials.token);
 
-	tracing::debug!(?api_url, has_token = api_token.is_some(), "Got API config.");
+	tracing::debug!(
+		?origin_url,
+		has_token = origin_token.is_some(),
+		"Got API config."
+	);
 
 	// Create the options.
 	let options = tangram::instance::Options {
-		api_url,
-		api_token,
+		origin_token,
+		origin_url,
 		preserve_temps,
 		sandbox_enabled,
 	};
@@ -136,7 +140,7 @@ impl Cli {
 	fn create_default_env() -> Result<BTreeMap<String, Value>> {
 		let host = System::host()?;
 		let host = Value::String(host.to_string());
-		let env = [("system".to_owned(), host)].into();
+		let env = [("host".to_owned(), host)].into();
 		Ok(env)
 	}
 }

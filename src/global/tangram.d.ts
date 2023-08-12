@@ -24,7 +24,7 @@ declare namespace tg {
 		export let assert: (value: unknown) => asserts value is Artifact;
 
 		/* Get an artifact. */
-		export let get: (block: Block) => Promise<Artifact>;
+		export let withBlock: (block: Block) => Promise<Artifact>;
 	}
 
 	/** Create a blob. */
@@ -42,6 +42,9 @@ declare namespace tg {
 
 		/** Assert that a value is a `Blob`. */
 		static assert(value: unknown): asserts value is Blob;
+
+		/* Get this blob's id. */
+		id(): Id;
 
 		/* Get this blob's block. */
 		block(): Block;
@@ -147,6 +150,9 @@ declare namespace tg {
 		/** Assert that a value is a `Directory`. */
 		static assert(value: unknown): asserts value is Directory;
 
+		/* Get this directory's id. */
+		id(): Id;
+
 		/* Get this directory's block. */
 		block(): Block;
 
@@ -229,6 +235,9 @@ declare namespace tg {
 
 		/** Assert that a value is a `File`. */
 		static assert(value: unknown): asserts value is File;
+
+		/* Get this file's id. */
+		id(): Id;
 
 		/* Get this file's block. */
 		block(): Block;
@@ -333,6 +342,12 @@ declare namespace tg {
 	export namespace Subpath {
 		export type Arg = undefined | string | Subpath | Array<Arg>;
 	}
+
+	/** Create a package. */
+	export let package_: () => Package;
+
+	/** A package. */
+	export class Package {}
 
 	/** Create a placeholder. */
 	export let placeholder: (name: string) => Placeholder;
@@ -448,6 +463,9 @@ declare namespace tg {
 		/** Assert that a value is a `Resource`. */
 		static assert(value: unknown): asserts value is Resource;
 
+		/* Get this resource's id. */
+		id(): Id;
+
 		/** Get this resource's block. */
 		block(): Block;
 
@@ -455,7 +473,7 @@ declare namespace tg {
 		url(): string;
 
 		/** Get whether this resource should be unpacked. */
-		unpack(): boolean;
+		unpack(): Resource.UnpackFormat | undefined;
 
 		/** Get this resource's checksum. */
 		checksum(): Checksum | undefined;
@@ -509,6 +527,9 @@ declare namespace tg {
 
 		/** Assert that a value is a `Symlink`. */
 		static assert(value: unknown): asserts value is Symlink;
+
+		/* Get this symlink's id. */
+		id(): Id;
 
 		/* Get this symlink's block. */
 		block(): Block;
@@ -613,8 +634,20 @@ declare namespace tg {
 		/** Assert that a value is a `Target`. */
 		static assert(value: unknown): asserts value is Target;
 
+		/* Get this target's id. */
+		id(): Id;
+
 		/** Get this target's block. */
 		block(): Block;
+
+		/** Get this target's package. */
+		package(): Block;
+
+		/** The path to the module in the package where the target is defined. */
+		path(): Subpath;
+
+		/** Get the target's name. */
+		name_(): string;
 
 		/** Get this target's env. */
 		env(): Record<string, Value>;
@@ -657,8 +690,32 @@ declare namespace tg {
 		/** Assert that a value is a `Task`. */
 		static assert(value: unknown): asserts value is Task;
 
+		/* Get this task's id. */
+		id(): Id;
+
 		/** Get this task's block. */
 		block(): Block;
+
+		/** Get this task's host. */
+		host(): System;
+
+		/** Get this task's executable. */
+		executable(): Template;
+
+		/** Get this task's environment variables. */
+		env(): Record<string, Template>;
+
+		/** Get this task's command line arguments. */
+		args(): Array<Template>;
+
+		/** Get this task's checksum. */
+		checksum(): Checksum | undefined;
+
+		/** Get whether this task is unsafe. */
+		unsafe(): boolean;
+
+		/** Get whether this task has the network enabled. */
+		network(): boolean;
 
 		/** Run this task. */
 		run(): Promise<Artifact | undefined>;
@@ -667,7 +724,7 @@ declare namespace tg {
 	export namespace Task {
 		export type Arg = {
 			/** The system to run the task on. */
-			system: System;
+			host: System;
 
 			/** The task's executable. */
 			executable: Template.Arg;

@@ -2,6 +2,7 @@ use super::Target;
 use crate::{
 	block::Block,
 	error::Result,
+	id::Id,
 	instance::Instance,
 	path::Subpath,
 	value::{self, Value},
@@ -23,10 +24,10 @@ use std::collections::BTreeMap;
 #[serde(rename_all = "camelCase")]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
-	pub package: Block,
+	pub package: Id,
 
 	#[tangram_serialize(id = 1)]
-	pub module_path: Subpath,
+	pub path: Subpath,
 
 	#[tangram_serialize(id = 2)]
 	pub name: String,
@@ -48,8 +49,8 @@ impl Target {
 			.collect();
 		let args = self.args.iter().map(Value::to_data).collect();
 		Data {
-			package: self.package,
-			module_path: self.module_path.clone(),
+			package: self.package.id(),
+			path: self.path.clone(),
 			name: self.name.clone(),
 			env,
 			args,
@@ -57,6 +58,9 @@ impl Target {
 	}
 
 	pub async fn from_data(tg: &Instance, block: Block, data: Data) -> Result<Self> {
+		let package = Block::with_id(data.package);
+		let module_path = data.path;
+		let name = data.name;
 		let env = data
 			.env
 			.into_iter()
@@ -75,9 +79,9 @@ impl Target {
 			.await?;
 		Ok(Self {
 			block,
-			package: data.package,
-			module_path: data.module_path,
-			name: data.name,
+			package,
+			path: module_path,
+			name,
 			env,
 			args,
 		})

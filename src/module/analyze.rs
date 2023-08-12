@@ -5,6 +5,7 @@ use crate::{
 	package::Metadata,
 	path::Relpath,
 };
+use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 use swc_core::{
 	common::{SourceMap, Span},
@@ -41,7 +42,7 @@ impl Module {
 			let message = errors
 				.iter()
 				.map(std::string::ToString::to_string)
-				.collect::<Vec<_>>()
+				.collect_vec()
 				.join("\n");
 			return Err(crate::error::Error::message(message));
 		}

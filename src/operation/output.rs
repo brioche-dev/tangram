@@ -1,5 +1,10 @@
 use super::Operation;
-use crate::{error::Result, instance::Instance, value::Value};
+use crate::{
+	error::Result,
+	instance::Instance,
+	value::{self, Value},
+};
+use lmdb::Transaction;
 
 impl Operation {
 	pub async fn try_get_output(&self, tg: &Instance) -> Result<Option<Value>> {
@@ -20,29 +25,47 @@ impl Operation {
 		Ok(None)
 	}
 
+	#[allow(clippy::unused_async)]
 	pub async fn try_get_output_local(&self, tg: &Instance) -> Result<Option<Value>> {
 		let data = {
-			let connection = tg.database_connection_pool.get().await.unwrap();
-			let connection = connection.lock().unwrap();
-			let mut statement =
-				connection.prepare_cached("select value from outputs where id = ?")?;
-			let mut rows = statement.query(rusqlite::params![self.block().id()])?;
-			let Some(row) = rows.next()? else {
-				return Ok(None);
+			// Begin a read transaction.
+			let txn = tg.database.env.begin_ro_txn()?;
+
+			// Get the output from the database.
+			let data = match txn.get(tg.database.outputs, &self.id().as_bytes()) {
+				Ok(data) => data,
+				Err(lmdb::Error::NotFound) => return Ok(None),
+				Err(error) => return Err(error.into()),
 			};
-			let data: Vec<u8> = row.get(0)?;
-			data
+
+			value::Data::deserialize(data)?
 		};
-		let output = Value::from_bytes(tg, &data).await?;
+
+		let output = Value::from_data(tg, data).await?;
+
 		Ok(Some(output))
 	}
 
+	#[allow(clippy::unused_async)]
 	pub async fn set_output_local(&self, tg: &Instance, output: &Value) -> Result<()> {
-		let connection = tg.database_connection_pool.get().await.unwrap();
-		let connection = connection.lock().unwrap();
-		let mut statement =
-			connection.prepare_cached("insert into outputs (id, value) values (?, ?)")?;
-		statement.execute(rusqlite::params![self.block().id(), output.to_bytes()?])?;
+		// Serialize the output data.
+		let mut bytes = Vec::new();
+		output.to_data().serialize(&mut bytes).unwrap();
+
+		// Begin a write transaction.
+		let mut txn = tg.database.env.begin_rw_txn()?;
+
+		// Add the output to the database.
+		txn.put(
+			tg.database.outputs,
+			&self.id().as_bytes(),
+			&bytes,
+			lmdb::WriteFlags::empty(),
+		)?;
+
+		// Commit the transaction.
+		txn.commit()?;
+
 		Ok(())
 	}
 }

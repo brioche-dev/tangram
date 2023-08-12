@@ -3,6 +3,7 @@ import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { Block } from "./block.ts";
 import { File, file } from "./file.ts";
+import { Id } from "./id.ts";
 import { Subpath, subpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
@@ -20,6 +21,11 @@ type ConstructorArg = {
 export class Directory {
 	#block: Block;
 	#entries: Record<string, Block>;
+
+	constructor(arg: ConstructorArg) {
+		this.#block = arg.block;
+		this.#entries = arg.entries;
+	}
 
 	static async new(
 		...args: Array<Unresolved<Directory.Arg>>
@@ -105,21 +111,9 @@ export class Directory {
 			return entries;
 		},
 		Promise.resolve({}));
-		return Directory.fromSyscall(
-			await syscall.directory.new({
-				entries: Object.fromEntries(
-					Object.entries(entries).map(([name, entry]) => [
-						name,
-						Artifact.toSyscall(entry),
-					]),
-				),
-			}),
-		);
-	}
-
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#entries = arg.entries;
+		return await syscall.directory.new({
+			entries,
+		});
 	}
 
 	static is(value: unknown): value is Directory {
@@ -135,29 +129,8 @@ export class Directory {
 		assert_(Directory.is(value));
 	}
 
-	toSyscall(): syscall.Directory {
-		let block = this.#block.toSyscall();
-		let entries = Object.fromEntries(
-			Object.entries(this.#entries).map(([name, entry]) => [
-				name,
-				entry.toSyscall(),
-			]),
-		);
-		return {
-			block,
-			entries,
-		};
-	}
-
-	static fromSyscall(directory: syscall.Directory): Directory {
-		let block = Block.fromSyscall(directory.block);
-		let entries = Object.fromEntries(
-			Object.entries(directory.entries).map(([name, entry]) => [
-				name,
-				Block.fromSyscall(entry),
-			]),
-		);
-		return new Directory({ block, entries });
+	id(): Id {
+		return this.block().id();
 	}
 
 	block(): Block {
@@ -183,7 +156,7 @@ export class Directory {
 			if (entryBlock === undefined) {
 				return undefined;
 			}
-			let entry = await Artifact.get(entryBlock);
+			let entry = await Artifact.withBlock(entryBlock);
 			if (entry instanceof Symlink) {
 				let resolved = await entry.resolve({
 					artifact: this,
@@ -209,11 +182,9 @@ export class Directory {
 	}
 
 	async bundle(): Promise<Directory> {
-		let bundledArtifact = Artifact.fromSyscall(
-			await syscall.artifact.bundle(Artifact.toSyscall(this)),
-		);
-		assert_(Directory.is(bundledArtifact));
-		return bundledArtifact;
+		let artifact = await syscall.artifact.bundle(this);
+		assert_(Directory.is(artifact));
+		return artifact;
 	}
 
 	async *walk(): AsyncIterableIterator<[Subpath, Artifact]> {
@@ -227,15 +198,9 @@ export class Directory {
 		}
 	}
 
-	*[Symbol.iterator](): Iterator<[string, Block]> {
-		for (let [name, entry] of Object.entries(this.#entries)) {
-			yield [name, entry];
-		}
-	}
-
 	async *[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]> {
-		for (let [name, entry] of this) {
-			yield [name, await Artifact.get(entry)];
+		for (let [name, block] of Object.entries(this.#entries)) {
+			yield [name, await Artifact.withBlock(block)];
 		}
 	}
 }

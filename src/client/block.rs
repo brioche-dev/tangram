@@ -8,9 +8,8 @@ use tokio::io::AsyncRead;
 use tokio_util::io::{ReaderStream, StreamReader};
 
 impl Client {
+	/// Get a block.
 	pub async fn try_get_block(&self, id: Id) -> Result<Option<impl AsyncRead>> {
-		let _permit = self.semaphore.acquire().await.unwrap();
-
 		// Build the URL.
 		let path = format!("/v1/blocks/{id}");
 		let mut url = self.url.clone();
@@ -44,18 +43,17 @@ impl Client {
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
-pub enum TryAddBlockOutcome {
+pub enum TryPutBlockOutcome {
 	Added,
 	MissingChildren(Vec<Id>),
 }
 
 impl Client {
-	pub async fn try_add_block<R>(&self, id: Id, reader: R) -> Result<TryAddBlockOutcome>
+	/// Put a block.
+	pub async fn try_put_block<R>(&self, id: Id, reader: R) -> Result<TryPutBlockOutcome>
 	where
 		R: AsyncRead + Send + Sync + Unpin + 'static,
 	{
-		let _permit = self.semaphore.acquire().await.unwrap();
-
 		// Build the URL.
 		let path = format!("/v1/blocks/{id}");
 		let mut url = self.url.clone();

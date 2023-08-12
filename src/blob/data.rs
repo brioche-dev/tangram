@@ -1,6 +1,6 @@
 use crate::{
-	block::Block,
 	error::{return_error, Result},
+	id::Id,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 
@@ -16,7 +16,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 )]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
-	pub sizes: Vec<(Block, u64)>,
+	pub sizes: Vec<(Id, u64)>,
 }
 
 impl Data {

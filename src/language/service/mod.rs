@@ -2,6 +2,7 @@ use self::syscall::syscall;
 use crate::{
 	error::{Error, Result, WrapErr},
 	instance::{Instance, State},
+	target::{from_v8, FromV8, ToV8},
 };
 use std::sync::{Arc, Weak};
 
@@ -50,6 +51,21 @@ pub enum Response {
 	References(references::Response),
 	Rename(rename::Response),
 	Symbols(symbols::Response),
+}
+
+impl ToV8 for Request {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		serde_v8::to_v8(scope, self).map_err(Error::other)
+	}
+}
+
+impl FromV8 for Response {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		serde_v8::from_v8(scope, value).map_err(Error::other)
+	}
 }
 
 pub type RequestSender = tokio::sync::mpsc::UnboundedSender<(Request, ResponseSender)>;
@@ -129,20 +145,21 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 
 	// Get the handle function.
 	let handle_string = v8::String::new(&mut context_scope, "handle").unwrap();
-	let handle_function: v8::Local<v8::Function> = context
-		.global(&mut context_scope)
-		.get(&mut context_scope, handle_string.into())
-		.unwrap()
-		.try_into()
-		.unwrap();
+	let handle_function = v8::Local::<v8::Function>::try_from(
+		context
+			.global(&mut context_scope)
+			.get(&mut context_scope, handle_string.into())
+			.unwrap(),
+	)
+	.unwrap();
 
 	while let Some((request, response_sender)) = request_receiver.blocking_recv() {
 		// Create a try catch scope.
 		let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
 
 		// Serialize the request.
-		let request = match serde_v8::to_v8(&mut try_catch_scope, request)
-			.map_err(Error::other)
+		let request = match request
+			.to_v8(&mut try_catch_scope)
 			.wrap_err("Failed to serialize the request.")
 		{
 			Ok(request) => request,
@@ -166,8 +183,7 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 		};
 
 		// Deserialize the response.
-		let response = match serde_v8::from_v8(&mut try_catch_scope, response)
-			.map_err(Error::other)
+		let response = match from_v8(&mut try_catch_scope, response)
 			.wrap_err("Failed to deserialize the response.")
 		{
 			Ok(response) => response,

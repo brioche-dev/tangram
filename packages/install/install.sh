@@ -36,7 +36,7 @@ bashrc_path="${HOME}/.bashrc"
 zshenv_path="${HOME}/.zshenv"
 zshrc_path="${HOME}/.zshrc"
 
-# Detect the host system.
+# Detect the host.
 case "$(uname -m) $(uname -s)" in
 	"x86_64 Linux")
 		host="amd64_linux"

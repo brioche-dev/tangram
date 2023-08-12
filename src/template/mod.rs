@@ -1,12 +1,18 @@
 pub use self::{component::Component, data::Data};
-use crate::artifact::Artifact;
+use crate::{
+	artifact::Artifact,
+	error::Result,
+	instance::Instance,
+	target::{FromV8, ToV8},
+};
+use futures::{stream::FuturesUnordered, TryStreamExt};
 
 mod component;
 pub mod data;
 mod render;
 mod unrender;
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Template {
 	components: Vec<Component>,
 }
@@ -33,6 +39,15 @@ impl Template {
 				Component::Artifact(artifact) => Some(artifact),
 				_ => None,
 			})
+	}
+
+	pub async fn store(&self, tg: &Instance) -> Result<()> {
+		Ok(self
+			.artifacts()
+			.map(|artifact| artifact.store(tg))
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?)
 	}
 }
 
@@ -65,5 +80,20 @@ impl FromIterator<Component> for Template {
 		Template {
 			components: value.into_iter().collect(),
 		}
+	}
+}
+
+impl ToV8 for Template {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		todo!()
+	}
+}
+
+impl FromV8 for Template {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
 	}
 }

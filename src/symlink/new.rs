@@ -3,13 +3,19 @@ use crate::{
 	artifact::{self, Artifact},
 	block::Block,
 	error::Result,
-	instance::Instance,
 	template::Template,
 };
 use itertools::Itertools;
 
 impl Symlink {
-	pub async fn new(tg: &Instance, target: Template) -> Result<Self> {
+	pub fn new(target: Template) -> Result<Self> {
+		// Collect the children.
+		let children = target
+			.artifacts()
+			.map(Artifact::block)
+			.cloned()
+			.collect_vec();
+
 		// Create the artifact data.
 		let data = artifact::Data::Symlink(super::Data {
 			target: target.to_data(),
@@ -18,12 +24,10 @@ impl Symlink {
 		// Serialize the artifact data.
 		let mut bytes = Vec::new();
 		data.serialize(&mut bytes).unwrap();
-
-		// Collect the children.
-		let children = target.artifacts().map(Artifact::block).collect_vec();
+		let data = bytes;
 
 		// Create the block.
-		let block = Block::new(tg, children, &bytes).await?;
+		let block = Block::with_children_and_data(children, &data)?;
 
 		// Create the symlink.
 		let symlink = Self { block, target };

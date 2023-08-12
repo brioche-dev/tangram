@@ -2,45 +2,45 @@ use super::Client;
 use crate::{
 	block::{self, Block},
 	error::Result,
+	id::Id,
 	instance::Instance,
 	return_error,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
-use std::io::Cursor;
 use tokio::io::AsyncReadExt;
 
 impl Client {
 	/// Pull a block.
 	#[async_recursion]
 	#[must_use]
-	pub async fn pull(&self, tg: &Instance, block: Block) -> Result<()> {
-		// If the block is in this instance's database, then return.
-		if block.is_local(tg).await? {
-			return Ok(());
+	pub async fn pull(&self, tg: &Instance, id: Id) -> Result<Block> {
+		// If the block is in this instance's store, then return.
+		let block = Block::with_id(id);
+		if block.exists_local(tg).await? {
+			return Ok(block);
 		}
 
 		// Otherwise, get the block's bytes.
-		let Some(mut reader) = self.try_get_block(block.id()).await? else {
-			return_error!(r#"Failed to get the block "{block}"."#);
+		let Some(mut reader) = self.try_get_block(id).await? else {
+			return_error!(r#"Failed to get block "{id}"."#);
 		};
 		let mut bytes = Vec::new();
 		reader.read_to_end(&mut bytes).await?;
 
 		// Pull the block's children.
-		let mut reader = block::Reader::new(Cursor::new(bytes));
-		reader
+		let mut reader = block::Reader::with_bytes(&bytes);
+		let children = reader
 			.children()?
 			.into_iter()
-			.map(|child| self.pull(tg, child))
+			.map(|child| self.pull(tg, child.id()))
 			.collect::<FuturesUnordered<_>>()
 			.try_collect()
 			.await?;
-		let bytes = reader.into_inner().into_inner();
 
-		// Add the block.
-		Block::add(tg, block.id(), bytes).await?;
+		// Create the block.
+		let block = Block::with_id_and_bytes(tg, id, bytes.into())?;
 
-		Ok(())
+		Ok(block)
 	}
 }

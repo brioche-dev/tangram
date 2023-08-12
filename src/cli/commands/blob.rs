@@ -30,7 +30,7 @@ impl Cli {
 	async fn command_block_get(&self, args: GetArgs) -> Result<()> {
 		let mut stdout = tokio::io::stdout();
 		let block = Block::with_id(args.id);
-		let blob = Blob::get(&self.tg, block).await?;
+		let blob = Blob::with_block(&self.tg, block).await?;
 		let bytes = blob.bytes(&self.tg).await?;
 		stdout.write_all(&bytes).await?;
 		Ok(())

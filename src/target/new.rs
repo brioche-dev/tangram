@@ -10,11 +10,18 @@ impl Target {
 	pub async fn new(
 		tg: &Instance,
 		package: Block,
-		module_path: Subpath,
+		path: Subpath,
 		name: String,
 		env: BTreeMap<String, Value>,
 		args: Vec<Value>,
 	) -> Result<Self> {
+		// Collect the children.
+		let children = Some(package.clone())
+			.into_iter()
+			.chain(env.values().flat_map(Value::blocks))
+			.chain(args.iter().flat_map(Value::blocks))
+			.collect_vec();
+
 		// Create the data.
 		let env_ = env
 			.iter()
@@ -22,8 +29,8 @@ impl Target {
 			.collect();
 		let args_ = args.iter().map(Value::to_data).collect();
 		let data = operation::Data::Target(Data {
-			package,
-			module_path: module_path.clone(),
+			package: package.id(),
+			path: path.clone(),
 			name: name.clone(),
 			env: env_,
 			args: args_,
@@ -34,21 +41,14 @@ impl Target {
 		data.serialize(&mut bytes).unwrap();
 		let data = bytes;
 
-		// Collect the children.
-		let children = Some(package)
-			.into_iter()
-			.chain(env.values().flat_map(Value::blocks))
-			.chain(args.iter().flat_map(Value::blocks))
-			.collect_vec();
-
 		// Create the block.
-		let block = Block::new(tg, children, &data).await?;
+		let block = Block::with_children_and_data(children, &data)?;
 
 		// Create the target.
 		let target = Self {
 			block,
 			package,
-			module_path,
+			path,
 			name,
 			env,
 			args,

@@ -2,9 +2,8 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_ } from "./assert.ts";
 import { Block } from "./block.ts";
 import { Checksum } from "./checksum.ts";
-import { Operation } from "./operation.ts";
+import { Id } from "./id.ts";
 import * as syscall from "./syscall.ts";
-import { Value } from "./value.ts";
 
 export let resource = async (arg: Resource.Arg): Promise<Resource> => {
 	return await Resource.new(arg);
@@ -31,23 +30,21 @@ export class Resource {
 	#checksum?: Checksum;
 	#unsafe: boolean;
 
-	static async new(arg: Resource.Arg): Promise<Resource> {
-		return Resource.fromSyscall(
-			await syscall.resource.new({
-				url: arg.url,
-				unpack: arg.unpack ?? undefined,
-				checksum: arg.checksum ?? undefined,
-				unsafe: arg.unsafe ?? false,
-			}),
-		);
-	}
-
 	constructor(arg: ConstructorArg) {
 		this.#block = arg.block;
 		this.#url = arg.url;
 		this.#unpack = arg.unpack ?? undefined;
 		this.#checksum = arg.checksum ?? undefined;
 		this.#unsafe = arg.unsafe ?? false;
+	}
+
+	static async new(arg: Resource.Arg): Promise<Resource> {
+		return await syscall.resource.new({
+			url: arg.url,
+			unpack: arg.unpack ?? undefined,
+			checksum: arg.checksum ?? undefined,
+			unsafe: arg.unsafe ?? false,
+		});
 	}
 
 	static is(value: unknown): value is Resource {
@@ -63,36 +60,33 @@ export class Resource {
 		assert_(Resource.is(value));
 	}
 
+	id(): Id {
+		return this.block().id();
+	}
+
 	block(): Block {
 		return this.#block;
 	}
 
-	toSyscall(): syscall.Resource {
-		return {
-			block: this.#block.toSyscall(),
-			url: this.#url,
-			unpack: this.#unpack,
-			checksum: this.#checksum,
-			unsafe: this.#unsafe,
-		};
+	/** Get this resource's URL. */
+	url(): string {
+		return this.#url;
 	}
 
-	static fromSyscall(download: syscall.Resource): Resource {
-		return new Resource({
-			block: Block.fromSyscall(download.block),
-			url: download.url,
-			unpack: download.unpack,
-			checksum: download.checksum,
-			unsafe: download.unsafe,
-		});
+	unpack(): Resource.UnpackFormat | undefined {
+		return this.#unpack;
+	}
+
+	checksum(): Checksum | undefined {
+		return this.#checksum;
+	}
+
+	unsafe(): boolean {
+		return this.#unsafe;
 	}
 
 	async download(): Promise<Artifact> {
-		let outputFromSyscall = await syscall.operation.evaluation(
-			Operation.toSyscall(this),
-		);
-		let output = Value.fromSyscall(outputFromSyscall);
-		return output as Artifact;
+		return (await syscall.operation.evaluate(this)) as Artifact;
 	}
 }
 

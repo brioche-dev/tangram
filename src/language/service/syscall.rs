@@ -1,9 +1,10 @@
 use crate::{
+	block::Block,
 	error::{return_error, Error, Result, WrapErr},
+	id::Id,
 	instance::{self, Instance},
 	module::{self, Module},
 	package,
-	package::Package,
 };
 use itertools::Itertools;
 use std::sync::Weak;
@@ -45,7 +46,7 @@ fn syscall_inner<'s>(
 		"log" => syscall_sync(scope, args, syscall_log),
 		"module_load" => syscall_sync(scope, args, syscall_module_load),
 		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
-		"module_unlocked_package" => syscall_sync(scope, args, syscall_module_unlocked_package),
+		"module_unlocked_package" => syscall_sync(scope, args, syscall_module_unlocked_package_id),
 		"module_version" => syscall_sync(scope, args, syscall_module_version),
 		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
 		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
@@ -151,18 +152,19 @@ fn syscall_module_resolve(
 	})
 }
 
-fn syscall_module_unlocked_package(
+fn syscall_module_unlocked_package_id(
 	tg: &Instance,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module,),
-) -> Result<Package> {
+) -> Result<Id> {
 	let (module,) = args;
 	tg.main_runtime_handle.clone().block_on(async move {
 		match module {
 			Module::Normal(module) => {
-				let package = package::Package::get(tg, module.package).await?;
+				let package =
+					package::Package::with_block(tg, Block::with_id(module.package)).await?;
 				let package = package.unlock(tg).await?;
-				Ok(package)
+				Ok(package.id())
 			},
 			_ => unreachable!(),
 		}

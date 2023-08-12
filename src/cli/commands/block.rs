@@ -44,7 +44,7 @@ impl Cli {
 		let block = Block::with_id(args.id);
 		let children = block.children(&self.tg).await?;
 		for child in children {
-			stdout.write_all(child.to_string().as_bytes()).await?;
+			stdout.write_all(child.id().to_string().as_bytes()).await?;
 			stdout.write_all("\n".as_bytes()).await?;
 		}
 		Ok(())

@@ -3,6 +3,7 @@ use crate::{
 	artifact::Artifact,
 	block::Block,
 	error::{Error, Result},
+	id::Id,
 	instance::Instance,
 	placeholder::{self, Placeholder},
 };
@@ -36,7 +37,7 @@ pub enum Component {
 	String(String),
 
 	#[tangram_serialize(id = 1)]
-	Artifact(Block),
+	Artifact(Id),
 
 	#[tangram_serialize(id = 2)]
 	Placeholder(placeholder::Data),
@@ -50,7 +51,7 @@ impl Template {
 			.iter()
 			.map(|component| match component {
 				super::Component::String(string) => Component::String(string.clone()),
-				super::Component::Artifact(artifact) => Component::Artifact(artifact.block()),
+				super::Component::Artifact(artifact) => Component::Artifact(artifact.id()),
 				super::Component::Placeholder(placeholder) => {
 					let placeholder = placeholder.to_data();
 					Component::Placeholder(placeholder)
@@ -67,8 +68,8 @@ impl Template {
 			.map(|component| async move {
 				let component = match component {
 					Component::String(string) => super::Component::String(string),
-					Component::Artifact(block) => {
-						let artifact = Artifact::get(tg, block).await?;
+					Component::Artifact(id) => {
+						let artifact = Artifact::with_block(tg, Block::with_id(id)).await?;
 						super::Component::Artifact(artifact)
 					},
 					Component::Placeholder(placeholder) => {

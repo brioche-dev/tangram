@@ -3,6 +3,7 @@ use crate::{
 	artifact::Artifact,
 	block::Block,
 	error::{Result, WrapErr},
+	id::Id,
 	instance::Instance,
 	module::{self, Module},
 };
@@ -21,7 +22,7 @@ pub mod metadata;
 mod path;
 pub mod specifier;
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Package {
 	artifact: Artifact,
 	dependencies: Option<BTreeMap<Dependency, Block>>,
@@ -33,6 +34,16 @@ impl Package {
 			Specifier::Path(path) => Ok(Self::with_path(tg, &path).await?),
 			Specifier::Registry(_) => unimplemented!(),
 		}
+	}
+
+	#[must_use]
+	pub fn id(&self) -> Id {
+		self.block().id()
+	}
+
+	#[must_use]
+	pub fn block(&self) -> &Block {
+		self.artifact().block()
 	}
 
 	#[must_use]
@@ -48,7 +59,7 @@ impl Package {
 	#[must_use]
 	pub fn root_module(&self) -> Module {
 		Module::Normal(module::Normal {
-			package: self.artifact.block(),
+			package: self.artifact.id(),
 			module_path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		})
 	}
@@ -62,7 +73,7 @@ impl Package {
 		let builder = builder
 			.remove(tg, &LOCKFILE_FILE_NAME.parse().unwrap())
 			.await?;
-		let artifact = builder.build(tg).await?.into();
+		let artifact = builder.build().await?.into();
 		Ok(Package {
 			artifact,
 			dependencies: None,

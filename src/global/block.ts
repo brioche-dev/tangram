@@ -15,6 +15,12 @@ type ConstructorArg = {
 
 export class Block {
 	#id: Id;
+	#bytes: Uint8Array | undefined;
+	#children: unknown | undefined;
+
+	constructor(arg: ConstructorArg) {
+		this.#id = arg.id;
+	}
 
 	static withId(id: Id): Block {
 		return new Block({ id });
@@ -91,16 +97,10 @@ export class Block {
 			position += dataEntry.length;
 		}
 
-		return Block.fromSyscall(
-			await syscall.block.new({
-				data,
-				children: children.map((block) => block.toSyscall()),
-			}),
-		);
-	}
-
-	constructor(arg: ConstructorArg) {
-		this.#id = arg.id;
+		return await syscall.block.new({
+			children,
+			data,
+		});
 	}
 
 	static is(value: unknown): value is Block {
@@ -116,33 +116,24 @@ export class Block {
 		assert_(Block.is(value));
 	}
 
-	toSyscall(): syscall.Block {
-		return {
-			id: this.#id,
-		};
-	}
-
-	static fromSyscall(value: syscall.Block): Block {
-		let id = value.id;
-		return new Block({ id });
-	}
-
 	id(): Id {
 		return this.#id;
 	}
 
 	async bytes(): Promise<Uint8Array> {
-		return await syscall.block.bytes(this.toSyscall());
+		return await syscall.block.bytes(this);
+	}
+
+	async text(): Promise<string> {
+		return encoding.utf8.decode(await this.bytes());
 	}
 
 	async children(): Promise<Array<Block>> {
-		return (await syscall.block.children(this.toSyscall())).map((block) =>
-			Block.fromSyscall(block),
-		);
+		return await syscall.block.children(this);
 	}
 
 	async data(): Promise<Uint8Array> {
-		return await syscall.block.data(this.toSyscall());
+		return await syscall.block.data(this);
 	}
 }
 

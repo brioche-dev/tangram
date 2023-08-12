@@ -15,7 +15,7 @@ impl Cli {
 		// Create a login.
 		let login = self
 			.tg
-			.api_client()
+			.origin_client()
 			.create_login()
 			.await
 			.wrap_err("Failed to create the login.")?;
@@ -34,7 +34,7 @@ impl Cli {
 			}
 			let login = self
 				.tg
-				.api_client()
+				.origin_client()
 				.get_login(login.id)
 				.await
 				.wrap_err("Failed to get the login.")?;
@@ -45,10 +45,10 @@ impl Cli {
 		};
 
 		// Set the token.
-		self.tg.api_client().set_token(Some(token.clone()));
+		self.tg.origin_client().set_token(Some(token.clone()));
 
 		// Get the user.
-		let user = self.tg.api_client().get_current_user().await?;
+		let user = self.tg.origin_client().get_current_user().await?;
 
 		// Write the credentials.
 		let credentials = Credentials {

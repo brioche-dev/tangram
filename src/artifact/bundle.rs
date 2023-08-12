@@ -35,7 +35,7 @@ impl Artifact {
 			Artifact::File(file) if file.executable() => directory::Builder::new()
 				.add(tg, &TANGRAM_RUN_SUBPATH, file.clone())
 				.await?
-				.build(tg)
+				.build()
 				.await?
 				.into(),
 
@@ -54,19 +54,19 @@ impl Artifact {
 					// Create the path for the reference at `.tangram/artifacts/<id>`.
 					let path = TANGRAM_ARTIFACTS_PATH
 						.clone()
-						.join(reference.block().id().to_string().parse().unwrap());
+						.join(reference.id().to_string().parse().unwrap());
 
 					// Bundle the reference.
 					let artifact = reference.bundle_inner(tg, &path).await?;
 
-					Ok::<_, Error>((reference.block().id().to_string(), artifact))
+					Ok::<_, Error>((reference.id().to_string(), artifact))
 				}
 			})
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
 			.await?;
 
-		let directory = Directory::new(tg, &entries).await?;
+		let directory = Directory::new(&entries).await?;
 
 		// Add the references directory to the artifact at `.tangram/artifacts`.
 		let artifact = artifact
@@ -76,7 +76,7 @@ impl Artifact {
 			.await?
 			.add(tg, &TANGRAM_ARTIFACTS_PATH, directory)
 			.await?
-			.build(tg)
+			.build()
 			.await?
 			.into();
 
@@ -112,7 +112,7 @@ impl Artifact {
 					.try_collect()
 					.await?;
 
-				Ok(Artifact::Directory(Directory::new(tg, &entries).await?))
+				Ok(Artifact::Directory(Directory::new(&entries).await?))
 			},
 
 			// If the artifact is a file, then return the file without any references.
@@ -134,7 +134,7 @@ impl Artifact {
 							template::Component::Artifact(artifact) => {
 								let artifact_path = TANGRAM_ARTIFACTS_PATH
 									.clone()
-									.join(artifact.block().id().to_string().parse().unwrap());
+									.join(artifact.id().to_string().parse().unwrap());
 								let path = artifact_path
 									.into_relpath()
 									.diff(&path.clone().into_relpath().parent())
@@ -154,7 +154,7 @@ impl Artifact {
 					.await?
 					.into();
 
-				Ok(Artifact::Symlink(Symlink::new(tg, target).await?))
+				Ok(Artifact::Symlink(Symlink::new(target)?))
 			},
 		}
 	}

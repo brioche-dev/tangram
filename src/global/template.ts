@@ -3,7 +3,6 @@ import { assert as assert_, unreachable } from "./assert.ts";
 import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Unresolved, resolve } from "./resolve.ts";
-import * as syscall from "./syscall.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
 
 export let t = async (
@@ -30,6 +29,10 @@ export let template = (
 
 export class Template {
 	#components: Array<Template.Component>;
+
+	constructor(components: Array<Template.Component>) {
+		this.#components = components;
+	}
 
 	static async new(
 		...args: Array<Unresolved<Template.Arg>>
@@ -82,10 +85,6 @@ export class Template {
 		return new Template(components);
 	}
 
-	constructor(components: Array<Template.Component>) {
-		this.#components = components;
-	}
-
 	static is(value: unknown): value is Template {
 		return value instanceof Template;
 	}
@@ -119,22 +118,6 @@ export class Template {
 		return template(...templates);
 	}
 
-	toSyscall(): syscall.Template {
-		let components = this.#components.map((component) =>
-			Template.Component.toSyscall(component),
-		);
-		return {
-			components,
-		};
-	}
-
-	static fromSyscall(value: syscall.Template): Template {
-		let components = value.components.map((component) =>
-			Template.Component.fromSyscall(component),
-		);
-		return new Template(components);
-	}
-
 	components(): Array<Template.Component> {
 		return [...this.#components];
 	}
@@ -150,48 +133,6 @@ export namespace Template {
 				Artifact.is(value) ||
 				value instanceof Placeholder
 			);
-		};
-
-		export let toSyscall = (
-			component: Component,
-		): syscall.Template.Component => {
-			if (typeof component === "string") {
-				return {
-					kind: "string",
-					value: component,
-				};
-			} else if (Artifact.is(component)) {
-				return {
-					kind: "artifact",
-					value: Artifact.toSyscall(component),
-				};
-			} else if (component instanceof Placeholder) {
-				return {
-					kind: "placeholder",
-					value: component.toSyscall(),
-				};
-			} else {
-				return unreachable();
-			}
-		};
-
-		export let fromSyscall = (
-			component: syscall.Template.Component,
-		): Component => {
-			switch (component.kind) {
-				case "string": {
-					return component.value;
-				}
-				case "artifact": {
-					return Artifact.fromSyscall(component.value);
-				}
-				case "placeholder": {
-					return Placeholder.fromSyscall(component.value);
-				}
-				default: {
-					return unreachable();
-				}
-			}
 		};
 	}
 }

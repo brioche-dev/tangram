@@ -1,5 +1,6 @@
 use super::{Document, Import, Library, Module};
 use crate::{
+	block::Block,
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
 	package::{dependency::Dependency, Package, ROOT_MODULE_FILE_NAME},
@@ -85,7 +86,7 @@ impl Module {
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Normal(super::Normal {
-					package: module.package,
+					package: module.package.clone(),
 					module_path,
 				}))
 			},
@@ -104,7 +105,7 @@ impl Module {
 				};
 
 				// Get the package.
-				let package = Package::get(tg, module.package).await?;
+				let package = Package::with_block(tg, Block::with_id(module.package)).await?;
 
 				// Get the specified package from the dependencies.
 				let dependencies = package
@@ -113,9 +114,9 @@ impl Module {
 					.wrap_err("Expected the package to be locked.")?;
 				let block = dependencies
 					.get(&dependency)
-					.copied()
+					.cloned()
 					.wrap_err("Expected the dependencies to contain the dependency.")?;
-				let package = Package::get(tg, block)
+				let package = Package::with_block(tg, block)
 					.await
 					.wrap_err("Failed to get the dependency package.")?;
 

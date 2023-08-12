@@ -8,7 +8,7 @@ impl Client {
 		operation: &Operation,
 	) -> Result<Option<Value>> {
 		// Build the URL.
-		let id = operation.block().id();
+		let id = operation.id();
 		let path = format!("/v1/outputs/{id}");
 		let mut url = self.url.clone();
 		url.set_path(&path);

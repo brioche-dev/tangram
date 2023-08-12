@@ -1,8 +1,10 @@
 #![allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
 use super::{
+	buffer::Buffer,
 	isolate::THREAD_LOCAL_ISOLATE,
 	state::{FutureOutput, State},
+	FromV8, ToV8,
 };
 use crate::{
 	artifact::Artifact,
@@ -20,7 +22,7 @@ use crate::{
 	resource::{self, Resource},
 	symlink::Symlink,
 	system::System,
-	target::Target,
+	target::{convert::from_v8, Target},
 	task::Task,
 	template::Template,
 	value::Value,
@@ -30,9 +32,9 @@ use itertools::Itertools;
 use std::{collections::BTreeMap, future::Future, rc::Rc};
 use url::Url;
 
-pub fn syscall(
-	scope: &mut v8::HandleScope,
-	args: v8::FunctionCallbackArguments,
+pub fn syscall<'s>(
+	scope: &mut v8::HandleScope<'s>,
+	args: v8::FunctionCallbackArguments<'s>,
 	mut return_value: v8::ReturnValue,
 ) {
 	match syscall_inner(scope, &args) {
@@ -51,10 +53,10 @@ pub fn syscall(
 
 fn syscall_inner<'s>(
 	scope: &mut v8::HandleScope<'s>,
-	args: &v8::FunctionCallbackArguments,
+	args: &v8::FunctionCallbackArguments<'s>,
 ) -> Result<v8::Local<'s, v8::Value>> {
 	// Get the syscall name.
-	let name: String = serde_v8::from_v8(scope, args.get(0))
+	let name = String::from_v8(scope, args.get(0))
 		.map_err(Error::other)
 		.wrap_err("Failed to deserialize the syscall name.")?;
 
@@ -104,11 +106,11 @@ async fn syscall_artifact_bundle(tg: Instance, args: (Artifact,)) -> Result<Arti
 
 async fn syscall_artifact_get(tg: Instance, args: (Block,)) -> Result<Artifact> {
 	let (block,) = args;
-	let artifact = Artifact::get(&tg, block).await?;
+	let artifact = Artifact::with_block(&tg, block).await?;
 	Ok(artifact)
 }
 
-async fn syscall_blob_bytes(tg: Instance, args: (Blob,)) -> Result<serde_v8::ToJsBuffer> {
+async fn syscall_blob_bytes(tg: Instance, args: (Blob,)) -> Result<Buffer> {
 	let (blob,) = args;
 	let bytes = blob.bytes(&tg).await?;
 	Ok(bytes.into())
@@ -116,14 +118,27 @@ async fn syscall_blob_bytes(tg: Instance, args: (Blob,)) -> Result<serde_v8::ToJ
 
 async fn syscall_blob_get(tg: Instance, args: (Block,)) -> Result<Blob> {
 	let (block,) = args;
-	let blob = Blob::get(&tg, block).await?;
+	let blob = Blob::with_block(&tg, block).await?;
 	Ok(blob)
 }
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct BlobArg {
 	children: Vec<Block>,
+}
+
+impl FromV8 for BlobArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = v8::Local::<v8::Object>::try_from(value).map_err(Error::other)?;
+		let children = "children".to_owned().to_v8(scope)?;
+		let children = value
+			.get(scope, children)
+			.wrap_err(r#"Expected key "children"."#)?;
+		let children = from_v8(scope, children)?;
+		Ok(Self { children })
+	}
 }
 
 async fn syscall_blob_new(tg: Instance, args: (BlobArg,)) -> Result<Blob> {
@@ -138,28 +153,47 @@ async fn syscall_blob_text(tg: Instance, args: (Blob,)) -> Result<String> {
 	Ok(text)
 }
 
-async fn syscall_block_bytes(tg: Instance, args: (Block,)) -> Result<serde_v8::ToJsBuffer> {
+async fn syscall_block_bytes(tg: Instance, args: (Block,)) -> Result<Buffer> {
 	let (block,) = args;
 	let bytes = block.bytes(&tg).await?;
 	Ok(bytes.into())
 }
 
-async fn syscall_block_data(tg: Instance, args: (Block,)) -> Result<serde_v8::ToJsBuffer> {
+async fn syscall_block_data(tg: Instance, args: (Block,)) -> Result<Buffer> {
 	let (block,) = args;
 	let data = block.data(&tg).await?;
 	Ok(data.into())
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct BlockArg {
-	children: Vec<Block>,
-	data: serde_v8::StringOrBuffer,
+	children: Option<Vec<Block>>,
+	data: Option<Buffer>,
 }
 
-async fn syscall_block_new(tg: Instance, args: (BlockArg,)) -> Result<Block> {
+impl FromV8 for BlockArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = v8::Local::<v8::Object>::try_from(value).map_err(Error::other)?;
+		let children = "children".to_owned().to_v8(scope)?;
+		let children = value
+			.get(scope, children)
+			.wrap_err(r#"Expected key "children"."#)?;
+		let children = from_v8(scope, children)?;
+		let data = "data".to_owned().to_v8(scope)?;
+		let data = value.get(scope, data).wrap_err(r#"Expected key "data"."#)?;
+		let data = from_v8(scope, data)?;
+		Ok(Self { children, data })
+	}
+}
+
+async fn syscall_block_new(_tg: Instance, args: (BlockArg,)) -> Result<Block> {
 	let (BlockArg { data, children },) = args;
-	let block = Block::new(&tg, children, &data).await?;
+	let block = Block::with_children_and_data(
+		children.unwrap_or_default(),
+		data.as_ref().map_or(&[], |data| data.as_ref()),
+	)?;
 	Ok(block)
 }
 
@@ -172,7 +206,7 @@ async fn syscall_block_children(tg: Instance, args: (Block,)) -> Result<Vec<Bloc
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (checksum::Algorithm, serde_v8::JsBuffer),
+	args: (checksum::Algorithm, Buffer),
 ) -> Result<Checksum> {
 	let (algorithm, bytes) = args;
 	let mut checksum_writer = checksum::Writer::new(algorithm);
@@ -181,15 +215,28 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct DirectoryArg {
 	entries: BTreeMap<String, Artifact>,
 }
 
-async fn syscall_directory_new(tg: Instance, args: (DirectoryArg,)) -> Result<Directory> {
+impl FromV8 for DirectoryArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = v8::Local::<v8::Object>::try_from(value).map_err(Error::other)?;
+		let entries = "entries".to_owned().to_v8(scope)?;
+		let entries = value
+			.get(scope, entries)
+			.wrap_err(r#"Expected key "entries"."#)?;
+		let entries = from_v8(scope, entries)?;
+		Ok(Self { entries })
+	}
+}
+
+async fn syscall_directory_new(_tg: Instance, args: (DirectoryArg,)) -> Result<Directory> {
 	let (arg,) = args;
-	let directory = Directory::new(&tg, &arg.entries).await?;
+	let directory = Directory::new(&arg.entries).await?;
 	Ok(directory)
 }
 
@@ -197,7 +244,7 @@ fn syscall_encoding_base64_decode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
 	args: (String,),
-) -> Result<serde_v8::ToJsBuffer> {
+) -> Result<Buffer> {
 	let (value,) = args;
 	let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
 		.decode(value)
@@ -209,7 +256,7 @@ fn syscall_encoding_base64_decode(
 fn syscall_encoding_base64_encode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (serde_v8::JsBuffer,),
+	args: (Buffer,),
 ) -> Result<String> {
 	let (value,) = args;
 	let encoded = base64::engine::general_purpose::STANDARD_NO_PAD.encode(value);
@@ -219,7 +266,7 @@ fn syscall_encoding_base64_encode(
 fn syscall_encoding_hex_decode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (serde_v8::JsBuffer,),
+	args: (Buffer,),
 ) -> Result<String> {
 	let (hex,) = args;
 	let bytes = hex::decode(hex)
@@ -235,7 +282,7 @@ fn syscall_encoding_hex_encode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
 	args: (String,),
-) -> Result<serde_v8::ToJsBuffer> {
+) -> Result<Buffer> {
 	let (bytes,) = args;
 	let hex = hex::encode(bytes);
 	let bytes = hex.into_bytes().into();
@@ -270,9 +317,9 @@ fn syscall_encoding_toml_decode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
 	args: (String,),
-) -> Result<toml::Value> {
+) -> Result<serde_toml::Value> {
 	let (toml,) = args;
-	let value = toml::from_str(&toml)
+	let value = serde_toml::from_str(&toml)
 		.map_err(Error::other)
 		.wrap_err("Failed to decode the string as toml.")?;
 	Ok(value)
@@ -281,10 +328,10 @@ fn syscall_encoding_toml_decode(
 fn syscall_encoding_toml_encode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (toml::Value,),
+	args: (serde_toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
-	let toml = toml::to_string(&value)
+	let toml = serde_toml::to_string(&value)
 		.map_err(Error::other)
 		.wrap_err("Failed to encode the value.")?;
 	Ok(toml)
@@ -293,11 +340,10 @@ fn syscall_encoding_toml_encode(
 fn syscall_encoding_utf8_decode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (serde_v8::JsBuffer,),
+	args: (Buffer,),
 ) -> Result<String> {
 	let (bytes,) = args;
-	let bytes = bytes::Bytes::from(bytes);
-	let string = String::from_utf8(bytes.into())
+	let string = String::from_utf8(bytes.as_slice().to_owned())
 		.map_err(Error::other)
 		.wrap_err("Failed to decode the bytes as UTF-8.")?;
 	Ok(string)
@@ -307,7 +353,7 @@ fn syscall_encoding_utf8_encode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
 	args: (String,),
-) -> Result<serde_v8::ToJsBuffer> {
+) -> Result<Buffer> {
 	let (string,) = args;
 	let bytes = string.into_bytes().into();
 	Ok(bytes)
@@ -337,12 +383,19 @@ fn syscall_encoding_yaml_encode(
 	Ok(yaml)
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct FileArg {
 	contents: Blob,
 	executable: bool,
 	references: Vec<Artifact>,
+}
+
+impl FromV8 for FileArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
 }
 
 async fn syscall_file_new(tg: Instance, args: (FileArg,)) -> Result<File> {
@@ -365,17 +418,24 @@ async fn syscall_operation_evaluate(tg: Instance, args: (Operation,)) -> Result<
 
 async fn syscall_operation_get(tg: Instance, args: (Block,)) -> Result<Operation> {
 	let (block,) = args;
-	let operation = Operation::get(&tg, block).await?;
+	let operation = Operation::with_block(&tg, block).await?;
 	Ok(operation)
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct ResourceArg {
 	url: Url,
 	unpack: Option<resource::unpack::Format>,
 	checksum: Option<Checksum>,
 	unsafe_: bool,
+}
+
+impl FromV8 for ResourceArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
 }
 
 async fn syscall_resource_new(tg: Instance, args: (ResourceArg,)) -> Result<Resource> {
@@ -384,34 +444,46 @@ async fn syscall_resource_new(tg: Instance, args: (ResourceArg,)) -> Result<Reso
 	Ok(download)
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct StackFrame {
 	module: Module,
 	position: Position,
 	line: String,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct SymlinkArg {
 	target: Template,
 }
 
-async fn syscall_symlink_new(tg: Instance, args: (SymlinkArg,)) -> Result<Symlink> {
+impl FromV8 for SymlinkArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
+}
+
+async fn syscall_symlink_new(_tg: Instance, args: (SymlinkArg,)) -> Result<Symlink> {
 	let (arg,) = args;
-	let symlink = Symlink::new(&tg, arg.target).await?;
+	let symlink = Symlink::new(arg.target)?;
 	Ok(symlink)
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TargetArg {
 	package: Block,
 	module_path: Subpath,
 	name: String,
 	env: BTreeMap<String, Value>,
 	args: Vec<Value>,
+}
+
+impl FromV8 for TargetArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
 }
 
 async fn syscall_target_new(tg: Instance, args: (TargetArg,)) -> Result<Target> {
@@ -428,10 +500,8 @@ async fn syscall_target_new(tg: Instance, args: (TargetArg,)) -> Result<Target> 
 	Ok(target)
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TaskArg {
-	system: System,
+	host: System,
 	executable: Template,
 	env: BTreeMap<String, Template>,
 	args: Vec<Template>,
@@ -440,9 +510,18 @@ struct TaskArg {
 	network: bool,
 }
 
+impl FromV8 for TaskArg {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
+}
+
 async fn syscall_task_new(tg: Instance, args: (TaskArg,)) -> Result<Task> {
 	let (arg,) = args;
-	let task = Task::builder(arg.system, arg.executable)
+	let task = Task::builder(arg.host, arg.executable)
 		.env(arg.env)
 		.args(arg.args)
 		.checksum(arg.checksum)
@@ -459,8 +538,8 @@ fn syscall_sync<'s, A, T, F>(
 	f: F,
 ) -> Result<v8::Local<'s, v8::Value>>
 where
-	A: serde::de::DeserializeOwned,
-	T: serde::Serialize,
+	A: FromV8,
+	T: ToV8,
 	F: FnOnce(&mut v8::HandleScope<'s>, Instance, A) -> Result<T>,
 {
 	// Get the context.
@@ -474,16 +553,14 @@ where
 	let args = v8::Array::new_with_elements(scope, args.as_slice());
 
 	// Deserialize the args.
-	let args = serde_v8::from_v8(scope, args.into())
-		.map_err(Error::other)
-		.wrap_err("Failed to deserialize the args.")?;
+	let args = from_v8(scope, args.into()).wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
 	let value = f(scope, tg, args)?;
 
-	// Serialize the value.
-	let value = serde_v8::to_v8(scope, &value)
-		.map_err(Error::other)
+	// Move the value to v8.
+	let value = value
+		.to_v8(scope)
 		.wrap_err("Failed to serialize the value.")?;
 
 	Ok(value)
@@ -495,8 +572,8 @@ fn syscall_async<'s, A, T, F, Fut>(
 	f: F,
 ) -> Result<v8::Local<'s, v8::Value>>
 where
-	A: serde::de::DeserializeOwned,
-	T: serde::Serialize,
+	A: FromV8,
+	T: ToV8,
 	F: FnOnce(Instance, A) -> Fut + 'static,
 	Fut: Future<Output = Result<T>>,
 {
@@ -539,15 +616,15 @@ where
 	Ok(value.into())
 }
 
-async fn syscall_async_inner<A, T, F, Fut>(
+async fn syscall_async_inner<'s, A, T, F, Fut>(
 	context: v8::Global<v8::Context>,
 	tg: Instance,
 	args: v8::Global<v8::Array>,
 	f: F,
 ) -> Result<v8::Global<v8::Value>>
 where
-	A: serde::de::DeserializeOwned,
-	T: serde::Serialize,
+	A: FromV8,
+	T: ToV8,
 	F: FnOnce(Instance, A) -> Fut,
 	Fut: Future<Output = Result<T>>,
 {
@@ -559,9 +636,7 @@ where
 		let context = v8::Local::new(&mut handle_scope, &context);
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 		let args = v8::Local::new(&mut context_scope, args);
-		serde_v8::from_v8(&mut context_scope, args.into())
-			.map_err(Error::other)
-			.wrap_err("Failed to deserialize the args.")?
+		from_v8(&mut context_scope, args.into()).wrap_err("Failed to deserialize the args.")?
 	};
 
 	// Call the function.
@@ -574,8 +649,8 @@ where
 		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
 		let context = v8::Local::new(&mut handle_scope, &context);
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-		let value = serde_v8::to_v8(&mut context_scope, value)
-			.map_err(Error::other)
+		let value = value
+			.to_v8(&mut context_scope)
 			.wrap_err("Failed to serialize the value.")?;
 		v8::Global::new(&mut context_scope, value)
 	};

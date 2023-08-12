@@ -106,7 +106,7 @@ impl Package {
 					let dependency_package = Self::with_path(tg, &dependency_package_path).await?;
 
 					// Add the dependency.
-					dependencies.insert(dependency.clone(), dependency_package.artifact().block());
+					dependencies.insert(dependency.clone(), dependency_package.block().clone());
 					dependency_packages.push(dependency_package);
 				}
 			}
@@ -143,8 +143,8 @@ impl Package {
 		let lockfile = Lockfile {
 			dependencies: lockfile_dependencies,
 		};
-		let lockfile = serde_json::to_string(&lockfile).unwrap();
-		let lockfile = Blob::with_bytes(tg, lockfile.into_bytes().as_slice()).await?;
+		let lockfile = serde_json::to_vec(&lockfile).unwrap();
+		let lockfile = Blob::with_bytes(tg, &lockfile).await?;
 		let lockfile = File::builder(lockfile)
 			.references(references)
 			.build(tg)
@@ -153,7 +153,7 @@ impl Package {
 		directory = directory.add(tg, &lockfile_subpath, lockfile).await?;
 
 		// Create the package directory.
-		let directory = directory.build(tg).await?;
+		let directory = directory.build().await?;
 
 		// Create the package.
 		let package = Self {

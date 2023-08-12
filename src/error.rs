@@ -67,8 +67,8 @@ impl From<reqwest::Error> for Error {
 	}
 }
 
-impl From<rusqlite::Error> for Error {
-	fn from(error: rusqlite::Error) -> Self {
+impl From<lmdb::Error> for Error {
+	fn from(error: lmdb::Error) -> Self {
 		Self::Other {
 			message: error.to_string(),
 			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),

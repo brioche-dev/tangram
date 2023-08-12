@@ -1,8 +1,8 @@
 pub use self::import::Import;
 use crate::{
-	block::Block,
 	document::Document,
 	error::{return_error, Error, Result, WrapErr},
+	id::Id,
 	path::Subpath,
 };
 use url::Url;
@@ -20,7 +20,7 @@ mod version;
 
 /// A module.
 #[derive(
-	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
+	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Module {
@@ -35,7 +35,7 @@ pub enum Module {
 }
 
 #[derive(
-	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
+	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Library {
@@ -44,12 +44,12 @@ pub struct Library {
 }
 
 #[derive(
-	Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize,
+	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Normal {
 	/// The module's package.
-	pub package: Block,
+	pub package: Id,
 
 	/// The module's path.
 	pub module_path: Subpath,

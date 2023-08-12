@@ -2,7 +2,6 @@ use super::{Blob, Kind};
 use crate::{
 	error::{return_error, Result},
 	instance::Instance,
-	util::unsafe_sync::UnsafeSync,
 };
 use futures::future::BoxFuture;
 use num_traits::ToPrimitive;
@@ -25,24 +24,19 @@ impl Blob {
 /// A blob reader.
 #[pin_project]
 pub struct Reader {
-	/// The blob.
 	blob: Blob,
-
-	/// The instance.
 	tg: Instance,
-
-	/// The position.
 	position: u64,
-
-	/// The state.
 	state: State,
 }
 
 pub enum State {
 	Empty,
-	Reading(UnsafeSync<BoxFuture<'static, Result<Cursor<Vec<u8>>>>>),
-	Full(Cursor<Vec<u8>>),
+	Reading(BoxFuture<'static, Result<Cursor<Box<[u8]>>>>),
+	Full(Cursor<Box<[u8]>>),
 }
+
+unsafe impl Sync for State {}
 
 impl AsyncRead for Reader {
 	fn poll_read(
@@ -69,7 +63,8 @@ impl AsyncRead for Reader {
 									Kind::Branch(sizes) => {
 										for (block, size) in sizes {
 											if position < current_blob_position + size {
-												current_blob = Blob::get(&tg, *block).await?;
+												current_blob =
+													Blob::with_block(&tg, block.clone()).await?;
 												continue 'outer;
 											}
 											current_blob_position += size;
@@ -91,7 +86,7 @@ impl AsyncRead for Reader {
 						}
 					};
 					let future = Box::pin(future);
-					*this.state = State::Reading(UnsafeSync::new(future));
+					*this.state = State::Reading(future);
 				},
 
 				State::Reading(future) => match future.as_mut().poll(cx) {

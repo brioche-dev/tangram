@@ -13,16 +13,17 @@ use futures::{stream::FuturesUnordered, TryStreamExt};
 
 impl Package {
 	#[async_recursion]
-	pub async fn get(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
-		let artifact = Self::try_get(tg, block)
+	pub async fn with_block(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
+		let id = block.id();
+		let artifact = Self::try_with_block(tg, block)
 			.await?
-			.wrap_err_with(|| format!(r#"Failed to get the package with block "{block}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to get package "{id}"."#))?;
 		Ok(artifact)
 	}
 
-	pub async fn try_get(tg: &Instance, block: Block) -> Result<Option<Self>> {
+	pub async fn try_with_block(tg: &Instance, block: Block) -> Result<Option<Self>> {
 		// Get the artifact.
-		let Some(artifact) = Artifact::try_get(tg, block).await? else {
+		let Some(artifact) = Artifact::try_with_block(tg, block).await? else {
 			return Ok(None);
 		};
 

@@ -3,6 +3,7 @@ import { assert as assert_, unreachable } from "./assert.ts";
 import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Id } from "./id.ts";
 import { Relpath, Subpath, relpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
@@ -23,6 +24,11 @@ type ConstructorArg = {
 export class Symlink {
 	#block: Block;
 	#target: Template;
+
+	constructor(arg: ConstructorArg) {
+		this.#block = arg.block;
+		this.#target = arg.target;
+	}
 
 	static async new(...args: Array<Unresolved<Symlink.Arg>>): Promise<Symlink> {
 		// Get the artifact and path.
@@ -107,14 +113,7 @@ export class Symlink {
 			throw new Error("Invalid symlink.");
 		}
 
-		return Symlink.fromSyscall(
-			await syscall.symlink.new({ target: target.toSyscall() }),
-		);
-	}
-
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#target = arg.target;
+		return await syscall.symlink.new({ target });
 	}
 
 	static is(value: unknown): value is Symlink {
@@ -130,22 +129,8 @@ export class Symlink {
 		assert_(Symlink.is(value));
 	}
 
-	toSyscall(): syscall.Symlink {
-		let block = this.#block.toSyscall();
-		let target = this.#target.toSyscall();
-		return {
-			block,
-			target,
-		};
-	}
-
-	static fromSyscall(symlink: syscall.Symlink): Symlink {
-		let block = Block.fromSyscall(symlink.block);
-		let target = Template.fromSyscall(symlink.target);
-		return new Symlink({
-			block,
-			target,
-		});
+	id(): Id {
+		return this.block().id();
 	}
 
 	block(): Block {

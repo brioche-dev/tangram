@@ -33,12 +33,12 @@ impl Directory {
 			current_subpath = current_subpath.join(name.parse().unwrap());
 
 			// Get the entry. If it doesn't exist, return `None`.
-			let Some(block) = directory.entries.get(name).copied() else {
+			let Some(block) = directory.entries.get(name).cloned() else {
 				return Ok(None);
 			};
 
 			// Get the artifact.
-			artifact = Artifact::get(tg, block)
+			artifact = Artifact::with_block(tg, block)
 				.await
 				.wrap_err("Failed to get the artifact.")?;
 

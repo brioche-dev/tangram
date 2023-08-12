@@ -22,17 +22,17 @@ impl Task {
 	}
 
 	pub(crate) async fn run_inner(&self, tg: &Instance) -> Result<Value> {
-		let _permit = tg.process_semaphore.acquire().await;
+		let _permit = tg.command_semaphore.acquire().await;
 		if tg.options.sandbox_enabled {
-			let system = self.system;
-			match system {
+			let host = self.host;
+			match host {
 				#[cfg(target_os = "linux")]
 				System::Amd64Linux | System::Arm64Linux => self.run_inner_linux(tg).boxed(),
 
 				#[cfg(target_os = "macos")]
 				System::Amd64MacOs | System::Arm64MacOs => self.run_inner_macos(tg).boxed(),
 
-				_ => return_error!(r#"This machine cannot run a process for system "{system}"."#),
+				_ => return_error!(r#"This machine cannot run a process for host "{host}"."#),
 			}
 			.await
 		} else {
@@ -51,7 +51,7 @@ impl Task {
 				crate::template::Component::String(string) => Ok(string.into()),
 				crate::template::Component::Artifact(artifact) => {
 					Ok(artifacts_directory_guest_path
-						.join(artifact.block().id().to_string())
+						.join(artifact.id().to_string())
 						.into_os_string()
 						.into_string()
 						.unwrap()

@@ -29,7 +29,7 @@ impl Cli {
 		let output = resource.download(&self.tg).await?;
 
 		// Print the output.
-		let output = serde_json::to_string_pretty(&output).map_err(Error::other)?;
+		let output = serde_json::to_string_pretty(&output.to_data()).map_err(Error::other)?;
 		println!("{output}");
 
 		Ok(())

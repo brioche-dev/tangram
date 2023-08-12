@@ -1,56 +1,82 @@
 use super::Block;
 use crate::{
-	error::Result,
+	error::{return_error, Result},
 	id::{self, Id},
-	instance::Instance,
 };
 use num_traits::ToPrimitive;
+use std::collections::HashMap;
 use varint_rs::VarintWriter;
 
 impl Block {
-	pub async fn new(tg: &Instance, children: Vec<Block>, data: &[u8]) -> Result<Self> {
+	#[must_use]
+	pub fn with_id(id: Id) -> Block {
+		Block {
+			id,
+			bytes: None,
+			children: None,
+		}
+	}
+
+	pub fn empty() -> Result<Block> {
+		Self::with_bytes(Box::new([]))
+	}
+
+	pub fn with_bytes(bytes: Box<[u8]>) -> Result<Self> {
+		// Compute the block's ID.
+		let id = Id::with_bytes(&bytes);
+
+		// Create the block.
+		let block = Self::new(id, bytes, HashMap::default());
+
+		Ok(block)
+	}
+
+	pub fn with_data(data: &[u8]) -> Result<Self> {
+		Self::with_children_and_data(vec![], data)
+	}
+
+	pub fn with_id_and_bytes(id: Id, bytes: Box<[u8]>) -> Result<Self> {
+		// Verify the block's ID.
+		if id != Id::with_bytes(&bytes) {
+			return_error!("Invalid block ID.");
+		}
+
+		// Create the block.
+		let block = Self::new(id, bytes, HashMap::default());
+
+		Ok(block)
+	}
+
+	pub fn with_children_and_data(children: Vec<Block>, data: &[u8]) -> Result<Self> {
 		// Create the block's bytes.
 		let mut bytes = Vec::new();
 		bytes.write_u64_varint(children.len().to_u64().unwrap())?;
-		for child in children {
-			bytes.extend_from_slice(child.id().as_slice());
+		for child in &children {
+			bytes.extend_from_slice(&child.id().as_bytes());
 		}
 		bytes.extend_from_slice(data);
+		let bytes = bytes.into_boxed_slice();
+
+		// Compute the block's ID.
+		let id = Id::with_bytes(&bytes);
+
+		// Collect the children.
+		let children = children
+			.into_iter()
+			.map(|block| (block.id(), block))
+			.collect();
 
 		// Create the block.
-		let block = Self::with_bytes(tg, bytes).await?;
+		let block = Self::new(id, bytes, children);
 
 		Ok(block)
 	}
 
-	pub async fn with_bytes(tg: &Instance, bytes: impl AsRef<[u8]>) -> Result<Self> {
-		let bytes = bytes.as_ref();
-
-		// Create the block's ID.
-		let mut writer = id::Writer::new();
-		writer.update(bytes);
-		let id = writer.finalize();
-
-		// Create the block.
-		let block = Self::add(tg, id, bytes).await?;
-
-		Ok(block)
-	}
-
-	pub(crate) async fn add(tg: &Instance, id: Id, bytes: impl AsRef<[u8]>) -> Result<Self> {
-		let bytes = bytes.as_ref();
-
-		// Add the block to the database.
-		let connection = tg.database_connection_pool.get().await.unwrap();
-		let connection = connection.lock().unwrap();
-		let mut statement = connection.prepare_cached(
-			"insert into blocks (id, bytes) values (?, ?) on conflict (id) do nothing",
-		)?;
-		statement.execute(rusqlite::params![id, bytes])?;
-
-		// Create the block.
-		let block = Block { id };
-
-		Ok(block)
+	fn new(id: Id, bytes: Box<[u8]>, children: HashMap<Id, Block, id::BuildHasher>) -> Self {
+		Self {
+			id,
+			bytes: Some(bytes.into()),
+			children: None,
+		}
 	}
 }

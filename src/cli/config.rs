@@ -12,7 +12,7 @@ pub struct Config {
 	pub autoenvs: Option<Vec<PathBuf>>,
 
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub api_url: Option<Url>,
+	pub origin_url: Option<Url>,
 
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub preserve_temps: Option<bool>,

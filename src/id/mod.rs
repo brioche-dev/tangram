@@ -1,8 +1,7 @@
-pub use self::{hasher::Hasher, writer::Writer};
+pub use self::hasher::Hasher;
 use derive_more::{From, Into};
 
 pub mod hasher;
-pub mod writer;
 
 #[derive(
 	Clone,
@@ -24,13 +23,15 @@ pub struct Id([u8; 32]);
 
 impl Id {
 	#[must_use]
-	pub fn as_bytes(&self) -> [u8; 32] {
-		self.0
+	pub fn with_bytes(bytes: &[u8]) -> Id {
+		let hash = blake3::hash(bytes);
+		let hash = *hash.as_bytes();
+		Id(hash)
 	}
 
 	#[must_use]
-	pub fn as_slice(&self) -> &[u8] {
-		&self.0
+	pub fn as_bytes(&self) -> [u8; 32] {
+		self.0
 	}
 }
 
@@ -82,12 +83,6 @@ impl rand::distributions::Distribution<Id> for rand::distributions::Standard {
 impl std::hash::Hash for Id {
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
 		state.write(&self.0);
-	}
-}
-
-impl rusqlite::ToSql for Id {
-	fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-		self.0.to_sql()
 	}
 }
 

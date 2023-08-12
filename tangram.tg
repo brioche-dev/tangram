@@ -176,7 +176,7 @@ export let testDependencyIndirection = async () => {
 // 	});
 // 	let file = tg.file("hello");
 // 	return tg.run({
-// 		system: "arm64_linux",
+// 		host: "arm64_linux",
 // 		executable: "/bin/sh",
 // 		args: ["-c", t`cat ${file} > ${tg.output}`],
 // 		env: {
@@ -186,7 +186,7 @@ export let testDependencyIndirection = async () => {
 // });
 
 export let example = await tg.target(async () => {
-	let system = tg.env.get()["system"] as tg.System;
+	let host = tg.env.get()["host"] as tg.System;
 	let dash = tg.download({
 		url: "https://github.com/tangramdotdev/bootstrap/releases/download/v2023.07.06/dash_universal_macos.tar.zstd",
 		checksum:
@@ -201,7 +201,7 @@ export let example = await tg.target(async () => {
 	});
 	let file = tg.file("hello");
 	return tg.run({
-		system,
+		host,
 		executable: t`/bin/sh`,
 		args: ["-c", t`cat ${file} > ${tg.output}`],
 		env: {

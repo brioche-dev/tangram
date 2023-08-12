@@ -1,7 +1,7 @@
 use super::{Blob, Data, Kind};
 use crate::{
 	block::Block,
-	error::{Error, Result},
+	error::{Error, Result, WrapErr},
 	instance::Instance,
 };
 use async_recursion::async_recursion;
@@ -23,7 +23,7 @@ impl Blob {
 				let kind = Kind::Leaf(0);
 
 				// Create the block.
-				let block = Block::new(tg, Vec::new(), &[]).await?;
+				let block = Block::empty()?;
 
 				// Create the blob.
 				let blob = Self { block, kind };
@@ -32,7 +32,7 @@ impl Blob {
 			},
 			1 => {
 				// Get the block.
-				let block = children[0];
+				let block = children.into_iter().next().unwrap();
 
 				// Get the size.
 				let size = block.data_size(tg).await?.to_u64().unwrap();
@@ -50,9 +50,8 @@ impl Blob {
 				let sizes = children
 					.iter()
 					.map(|block| async move {
-						let blob = Blob::get(tg, *block).await?;
-						let size = blob.size();
-						Ok::<_, Error>((*block, size))
+						let blob = Blob::with_block(tg, block.clone()).await?;
+						Ok::<_, Error>((blob.id(), blob.size()))
 					})
 					.collect::<FuturesOrdered<_>>()
 					.try_collect::<Vec<_>>()
@@ -69,9 +68,13 @@ impl Blob {
 				let data = bytes;
 
 				// Create the block.
-				let block = Block::new(tg, children, &data).await?;
+				let block = Block::with_children_and_data(children, &data)?;
 
 				// Create the blob.
+				let sizes = sizes
+					.into_iter()
+					.map(|(id, size)| (Block::with_id(id), size))
+					.collect();
 				let kind = Kind::Branch(sizes);
 				let blob = Self { block, kind };
 
@@ -80,27 +83,34 @@ impl Blob {
 		}
 	}
 
-	pub async fn with_bytes(tg: &Instance, bytes: impl AsRef<[u8]>) -> Result<Self> {
-		let block = Block::new(tg, vec![], bytes.as_ref()).await?;
+	pub async fn with_bytes(tg: &Instance, bytes: &[u8]) -> Result<Self> {
+		let block = Block::with_data(bytes)?;
 		let blob = Self::new(tg, vec![block]).await?;
 		Ok(blob)
 	}
 
 	pub async fn with_path(tg: &Instance, path: &Path) -> Result<Self> {
 		// Open the file.
-		let mut file = tokio::fs::File::open(path).await?;
+		let mut file = tokio::fs::File::open(path)
+			.await
+			.wrap_err("Failed to open the file.")?;
 
 		// Create the blocks.
 		let mut blocks = Vec::new();
-		let size = file.metadata().await?.len();
+		let size = file
+			.metadata()
+			.await
+			.wrap_err("Failed to get the file's metadata.")?
+			.len();
 		let mut position = 0;
 		let mut bytes = vec![0u8; MAX_LEAF_BLOCK_DATA_SIZE];
 		while position < size {
 			let n = std::cmp::min(size - position, MAX_LEAF_BLOCK_DATA_SIZE.to_u64().unwrap());
-			let bytes = &mut bytes[..n.to_usize().unwrap()];
-			file.read_exact(bytes).await?;
+			let data = &mut bytes[..n.to_usize().unwrap()];
+			file.read_exact(data).await?;
 			position += n;
-			let block = Block::new(tg, vec![], bytes).await?;
+			let block = Block::with_data(data)?;
+			block.store(tg).await?;
 			if blocks.len() == MAX_BRANCH_CHILDREN {
 				let blob = Self::new(tg, blocks).await?;
 				blocks = vec![blob.block];
@@ -109,7 +119,9 @@ impl Blob {
 		}
 
 		// Create the blob.
-		let blob = Self::new(tg, blocks).await?;
+		let blob = Self::new(tg, blocks)
+			.await
+			.wrap_err("Failed to create the blob.")?;
 
 		Ok(blob)
 	}

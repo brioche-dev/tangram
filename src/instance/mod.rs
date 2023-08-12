@@ -6,7 +6,7 @@ use crate::{
 	util::task_map::TaskMap,
 };
 #[cfg(feature = "evaluate")]
-use crate::{block::Block, value::Value};
+use crate::{id::Id, value::Value};
 use derive_more::Deref;
 use std::{
 	collections::HashMap,
@@ -24,11 +24,12 @@ pub struct Instance {
 }
 
 pub struct State {
-	/// A client for communicating with the API.
-	pub(crate) api_client: Client,
+	/// A semaphore that limits the number of concurrent commands.
+	#[cfg(feature = "evaluate")]
+	pub(crate) command_semaphore: tokio::sync::Semaphore,
 
-	/// The database connection pool.
-	pub(crate) database_connection_pool: deadpool_sqlite::Pool,
+	/// The database.
+	pub(crate) database: Database,
 
 	/// A map of paths to documents.
 	pub(crate) documents:
@@ -62,29 +63,38 @@ pub struct State {
 	/// A task map that deduplicates operations.
 	#[allow(clippy::type_complexity)]
 	#[cfg(feature = "evaluate")]
-	pub(crate) operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<Block, Result<Value>>>>>,
+	pub(crate) operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<Id, Result<Value>>>>>,
 
 	/// The options the instance was created with.
-	#[cfg(feature = "evaluate")]
 	pub(crate) options: Options,
+
+	/// A client for communicating with the origin.
+	pub(crate) origin_client: Client,
 
 	/// The path to the directory where the instance stores its data.
 	pub(crate) path: PathBuf,
 
-	/// Whether to preserve temporary files.
-	pub preserve_temps: bool,
+	/// The store.
+	pub(crate) store: Store,
+}
 
-	/// A semaphore that prevents running too many processes.
-	#[cfg(feature = "evaluate")]
-	pub(crate) process_semaphore: tokio::sync::Semaphore,
+pub(crate) struct Database {
+	pub(crate) env: lmdb::Environment,
+	pub(crate) evaluations: lmdb::Database,
+	pub(crate) outputs: lmdb::Database,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
-	pub api_url: Option<Url>,
-	pub api_token: Option<String>,
+	pub origin_token: Option<String>,
+	pub origin_url: Option<Url>,
 	pub preserve_temps: bool,
 	pub sandbox_enabled: bool,
+}
+
+pub(crate) struct Store {
+	pub(crate) env: lmdb::Environment,
+	pub(crate) blocks: lmdb::Database,
 }
 
 impl Instance {
@@ -101,28 +111,31 @@ impl Instance {
 			V8_INIT.call_once(initialize_v8);
 		}
 
-		// Create the API Client.
-		let api_url = options
-			.api_url
-			.clone()
-			.unwrap_or_else(|| API_URL.parse().unwrap());
-		let token = options.api_token.clone();
-		let api_client = Client::new(api_url, token);
+		// Create the command semaphore.
+		#[cfg(feature = "evaluate")]
+		let command_semaphore = tokio::sync::Semaphore::new(16);
+
+		// Create the database.
+		let database_path = path.join("database");
+		let mut env_builder = lmdb::Environment::new();
+		env_builder.set_map_size(1_099_511_627_776);
+		env_builder.set_max_dbs(2);
+		env_builder.set_max_readers(1024);
+		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
+		let env = env_builder.open(&database_path)?;
+		let evaluations = env.open_db(Some("evaluations"))?;
+		let outputs = env.open_db(Some("outputs"))?;
+		let database = Database {
+			env,
+			evaluations,
+			outputs,
+		};
 
 		// Create the documents maps.
 		let documents = tokio::sync::RwLock::new(HashMap::default());
 
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
-
-		// Create the database pool.
-		let database_path = path.join("database");
-		let database_connection_pool = deadpool_sqlite::Config::new(database_path)
-			.builder(deadpool_sqlite::Runtime::Tokio1)
-			.unwrap()
-			.max_size(std::thread::available_parallelism().unwrap().get())
-			.build()
-			.unwrap();
 
 		// Create the HTTP client.
 		#[cfg(feature = "evaluate")]
@@ -131,7 +144,7 @@ impl Instance {
 		// Create the internal checkouts task map.
 		let internal_checkouts_task_map = std::sync::Mutex::new(None);
 
-		// Create a new sender for the service request.
+		// Create the sender for language service requests.
 		#[cfg(feature = "language")]
 		let language_service_request_sender = std::sync::Mutex::new(None);
 
@@ -149,17 +162,30 @@ impl Instance {
 		#[cfg(feature = "evaluate")]
 		let operations_task_map = std::sync::Mutex::new(None);
 
-		// Store the option for preserving temps.
-		let preserve_temps = options.preserve_temps;
+		// Create the origin client.
+		let url = options
+			.origin_url
+			.clone()
+			.unwrap_or_else(|| API_URL.parse().unwrap());
+		let token = options.origin_token.clone();
+		let origin_client = Client::new(url, token);
 
-		// Create the process semaphore.
-		#[cfg(feature = "evaluate")]
-		let process_semaphore = tokio::sync::Semaphore::new(16);
+		// Create the store.
+		let store_path = path.join("store");
+		let mut env_builder = lmdb::Environment::new();
+		env_builder.set_map_size(1_099_511_627_776);
+		env_builder.set_max_dbs(1);
+		env_builder.set_max_readers(1024);
+		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
+		let env = env_builder.open(&store_path)?;
+		let blocks = env.open_db(Some("blocks"))?;
+		let store = Store { env, blocks };
 
 		// Create the state.
 		let state = State {
-			api_client,
-			database_connection_pool,
+			#[cfg(feature = "evaluate")]
+			command_semaphore,
+			database,
 			documents,
 			file_descriptor_semaphore,
 			#[cfg(feature = "evaluate")]
@@ -173,12 +199,10 @@ impl Instance {
 			main_runtime_handle,
 			#[cfg(feature = "evaluate")]
 			operations_task_map,
-			#[cfg(feature = "evaluate")]
 			options,
+			origin_client,
 			path,
-			preserve_temps,
-			#[cfg(feature = "evaluate")]
-			process_semaphore,
+			store,
 		};
 
 		// Create the instance.
@@ -236,7 +260,7 @@ impl Instance {
 	}
 
 	#[must_use]
-	pub fn api_client(&self) -> &Client {
-		&self.api_client
+	pub fn origin_client(&self) -> &Client {
+		&self.origin_client
 	}
 }

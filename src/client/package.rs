@@ -4,7 +4,7 @@ use crate::{error::Result, package::Package};
 impl Client {
 	pub async fn publish_package(&self, package: Package) -> Result<()> {
 		// Build the URL.
-		let id = package.artifact().block().id();
+		let id = package.id();
 		let mut url = self.url.clone();
 		let path = format!("/v1/packages/{id}");
 		url.set_path(&path);

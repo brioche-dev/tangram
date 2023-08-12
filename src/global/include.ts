@@ -1,22 +1,17 @@
 import { Artifact } from "./artifact.ts";
-import { assert } from "./assert.ts";
-import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
+import { Module } from "./module.ts";
 import { Relpath, subpath } from "./path.ts";
-import * as syscall from "./syscall.ts";
 
 type Arg = {
-	module: syscall.Module;
+	module: Module;
 	path: Relpath.Arg;
 };
 
 export let include = async (arg: Arg): Promise<Artifact> => {
-	assert(arg.module.kind === "normal");
-	let artifact = await Artifact.get(
-		Block.fromSyscall(arg.module.value.package),
-	);
+	let artifact = await Artifact.withBlock(arg.module.package());
 	Directory.assert(artifact);
-	let path = subpath(arg.module.value.modulePath)
+	let path = subpath(arg.module.#path())
 		.toRelpath()
 		.parent()
 		.join(arg.path)

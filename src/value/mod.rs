@@ -3,20 +3,23 @@ use crate::{
 	artifact::Artifact,
 	blob::Blob,
 	block::Block,
+	bytes::Bytes,
 	error::Result,
 	instance::Instance,
 	operation::Operation,
 	path::{Relpath, Subpath},
 	placeholder::Placeholder,
+	target::{FromV8, ToV8},
 	template::{self, Template},
 };
+use async_recursion::async_recursion;
+use futures::{stream::FuturesUnordered, TryStreamExt};
 use std::collections::BTreeMap;
 
 mod data;
 
 /// A value.
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+#[derive(Clone, Debug)]
 pub enum Value {
 	/// A null value.
 	Null,
@@ -31,7 +34,7 @@ pub enum Value {
 	String(String),
 
 	/// A bytes value.
-	Bytes(Vec<u8>),
+	Bytes(Bytes),
 
 	/// A relpath value.
 	Relpath(Relpath),
@@ -81,9 +84,7 @@ impl Value {
 		let value = Self::from_data(tg, data).await?;
 		Ok(value)
 	}
-}
 
-impl Value {
 	pub fn blocks(&self) -> Vec<Block> {
 		match self {
 			Self::Null
@@ -94,14 +95,55 @@ impl Value {
 			| Self::Relpath(_)
 			| Self::Subpath(_)
 			| Self::Placeholder(_) => vec![],
-			Self::Block(block) => vec![*block],
-			Self::Blob(blob) => vec![blob.block()],
-			Self::Artifact(artifact) => vec![artifact.block()],
-			Self::Template(template) => template.artifacts().map(Artifact::block).collect(),
-			Self::Operation(operation) => vec![operation.block()],
+			Self::Block(block) => vec![block.clone()],
+			Self::Blob(blob) => vec![blob.block().clone()],
+			Self::Artifact(artifact) => vec![artifact.block().clone()],
+			Self::Template(template) => {
+				template.artifacts().map(Artifact::block).cloned().collect()
+			},
+			Self::Operation(operation) => vec![operation.block().clone()],
 			Self::Array(array) => array.iter().flat_map(Self::blocks).collect(),
 			Self::Object(object) => object.values().flat_map(Self::blocks).collect(),
 		}
+	}
+
+	#[async_recursion]
+	pub async fn store(&self, tg: &Instance) -> Result<()> {
+		match self {
+			Value::Block(block) => {
+				block.store(tg).await?;
+			},
+			Value::Blob(blob) => {
+				blob.block().store(tg).await?;
+			},
+			Value::Artifact(artifact) => {
+				artifact.block().store(tg).await?;
+			},
+			Value::Template(template) => {
+				template.store(tg).await?;
+			},
+			Value::Operation(operation) => {
+				operation.block().store(tg).await?;
+			},
+			Value::Array(array) => {
+				array
+					.iter()
+					.map(|value| value.store(tg))
+					.collect::<FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
+			},
+			Value::Object(object) => {
+				object
+					.values()
+					.map(|value| value.store(tg))
+					.collect::<FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
+			},
+			_ => {},
+		}
+		Ok(())
 	}
 }
 
@@ -134,7 +176,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn as_bytes(&self) -> Option<&[u8]> {
+	pub fn as_bytes(&self) -> Option<&Bytes> {
 		if let Self::Bytes(v) = self {
 			Some(v)
 		} else {
@@ -262,7 +304,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn into_bytes(self) -> Option<Vec<u8>> {
+	pub fn into_bytes(self) -> Option<Bytes> {
 		if let Self::Bytes(v) = self {
 			Some(v)
 		} else {
@@ -377,7 +419,7 @@ impl std::fmt::Display for Value {
 				write!(f, r#""{value}""#)?;
 			},
 			Value::Bytes(value) => {
-				write!(f, r#"(tg.bytes {})"#, value.len())?;
+				write!(f, r#"(tg.bytes {})"#, value.as_ref().len())?;
 			},
 			Value::Relpath(value) => {
 				write!(f, r#"(tg.relpath {value})"#)?;
@@ -389,7 +431,7 @@ impl std::fmt::Display for Value {
 				write!(f, r#"(tg.block {})"#, value.id())?;
 			},
 			Value::Blob(value) => {
-				write!(f, r#"(tg.blob {})"#, value.block().id())?;
+				write!(f, r#"(tg.blob {})"#, value.id())?;
 			},
 			Value::Artifact(value) => {
 				write!(f, "{value}")?;
@@ -416,13 +458,13 @@ impl std::fmt::Display for Value {
 			},
 			Value::Operation(value) => match value {
 				Operation::Resource(resource) => {
-					write!(f, r#"(tg.resource {})"#, resource.block().id())?;
+					write!(f, r#"(tg.resource {})"#, resource.id())?;
 				},
 				Operation::Target(target) => {
-					write!(f, r#"(tg.target {})"#, target.block().id())?;
+					write!(f, r#"(tg.target {})"#, target.id())?;
 				},
 				Operation::Task(task) => {
-					write!(f, r#"(tg.task {})"#, task.block().id())?;
+					write!(f, r#"(tg.task {})"#, task.id())?;
 				},
 			},
 			Value::Array(value) => {
@@ -449,5 +491,37 @@ impl std::fmt::Display for Value {
 			},
 		}
 		Ok(())
+	}
+}
+
+impl ToV8 for Value {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		// match self {
+		// 	Value::Null => ().to_v8(scope),
+		// 	Value::Bool(value) => value.to_v8(scope),
+		// 	Value::Number(value) => value.to_v8(scope),
+		// 	Value::String(value) => value.to_v8(scope),
+		// 	Value::Bytes(value) => value.to_v8(scope),
+		// 	Value::Relpath(value) => value.to_v8(scope),
+		// 	Value::Subpath(value) => value.to_v8(scope),
+		// 	Value::Block(value) => value.to_v8(scope),
+		// 	Value::Blob(value) => value.to_v8(scope),
+		// 	Value::Artifact(value) => value.to_v8(scope),
+		// 	Value::Placeholder(value) => value.to_v8(scope),
+		// 	Value::Template(value) => value.to_v8(scope),
+		// 	Value::Operation(value) => value.to_v8(scope),
+		// 	Value::Array(value) => value.to_v8(scope),
+		// 	Value::Object(value) => value.to_v8(scope),
+		// }
+		todo!()
+	}
+}
+
+impl FromV8 for Value {
+	fn from_v8<'a>(
+		_scope: &mut v8::HandleScope<'a>,
+		_value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
 	}
 }

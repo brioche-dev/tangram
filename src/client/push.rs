@@ -16,7 +16,7 @@ impl Client {
 		// Attempt to add the block.
 		let bytes: Arc<[u8]> = block.bytes(tg).await?.into();
 		let reader = Cursor::new(bytes.clone());
-		let outcome = self.try_add_block(block.id(), reader).await?;
+		let outcome = self.try_put_block(block.id(), reader).await?;
 
 		// If the block was added, then return. Otherwise, push the missing children.
 		match outcome {
@@ -37,7 +37,7 @@ impl Client {
 
 		// Attempt to add the block again. This time, return an error if there are missing children.
 		let reader = Cursor::new(bytes.clone());
-		let outcome = self.try_add_block(block.id(), reader).await?;
+		let outcome = self.try_put_block(block.id(), reader).await?;
 		match outcome {
 			TryAddBlockOutcome::Added => {},
 			TryAddBlockOutcome::MissingChildren(_) => {

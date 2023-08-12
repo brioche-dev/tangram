@@ -7,7 +7,7 @@ pub struct Command {
 	block: Block,
 
 	/// The system to run the command on.
-	system: System,
+	host: System,
 
 	/// The command's executable.
 	executable: Template,

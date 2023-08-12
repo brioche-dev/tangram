@@ -21,14 +21,14 @@ impl Cli {
 	pub async fn command_push(&self, args: Args) -> Result<()> {
 		// Create a client.
 		let client = args.url.map(|url| Client::new(url, None));
-		let client = client.as_ref().unwrap_or(self.tg.api_client());
+		let client = client.as_ref().unwrap_or(self.tg.origin_client());
 
-		// Push.
-		let block = Block::with_id(args.id);
-		client
-			.push(&self.tg, block)
-			.await
-			.wrap_err("Failed to push the artifact.")?;
+		// // Push.
+		// let block = Block::with_id(args.id);
+		// client
+		// 	.push(&self.tg, block)
+		// 	.await
+		// 	.wrap_err("Failed to push the artifact.")?;
 
 		Ok(())
 	}

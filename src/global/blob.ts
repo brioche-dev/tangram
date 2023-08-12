@@ -1,5 +1,6 @@
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Block, block } from "./block.ts";
+import { Id } from "./id.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
@@ -10,19 +11,25 @@ export let blob = async (...args: Array<Unresolved<Blob.Arg>>) => {
 
 type ConstructorArg = {
 	block: Block;
-	kind: syscall.Blob.Kind;
+	kind: unknown;
 };
 
 export class Blob {
 	#block: Block;
-	#kind: syscall.Blob.Kind;
+	// @ts-ignore
+	#kind: unknown;
 
-	static async get(block: Block): Promise<Blob> {
-		return Blob.fromSyscall(await syscall.blob.get(block.toSyscall()));
+	constructor(arg: ConstructorArg) {
+		this.#block = arg.block;
+		this.#kind = arg.kind;
+	}
+
+	static async withBlock(block: Block): Promise<Blob> {
+		return await syscall.blob.get(block);
 	}
 
 	static async new(...args: Array<Unresolved<Blob.Arg>>): Promise<Blob> {
-		let blocks = flatten(
+		let children = flatten(
 			await Promise.all(
 				args.map(async function map(
 					unresolvedArg: Unresolved<Blob.Arg>,
@@ -43,16 +50,9 @@ export class Blob {
 			blocks.push(block);
 			return blocks;
 		}, []);
-		return Blob.fromSyscall(
-			await syscall.blob.new({
-				children: blocks.map((block) => block.toSyscall()),
-			}),
-		);
-	}
-
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#kind = arg.kind;
+		return await syscall.blob.new({
+			children,
+		});
 	}
 
 	static is(value: unknown): value is Blob {
@@ -68,17 +68,8 @@ export class Blob {
 		assert_(Blob.is(value));
 	}
 
-	toSyscall(): syscall.Blob {
-		return {
-			block: this.#block.toSyscall(),
-			kind: this.#kind,
-		};
-	}
-
-	static fromSyscall(value: syscall.Blob): Blob {
-		let block = Block.fromSyscall(value.block);
-		let kind = value.kind;
-		return new Blob({ block, kind });
+	id(): Id {
+		return this.block().id();
 	}
 
 	block(): Block {
@@ -86,11 +77,11 @@ export class Blob {
 	}
 
 	async bytes(): Promise<Uint8Array> {
-		return await syscall.blob.bytes(this.toSyscall());
+		return await syscall.blob.bytes(this);
 	}
 
 	async text(): Promise<string> {
-		return await syscall.blob.text(this.toSyscall());
+		return await syscall.blob.text(this);
 	}
 }
 

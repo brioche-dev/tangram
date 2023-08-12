@@ -28,7 +28,7 @@ impl Cli {
 
 		// Get the artifact.
 		let block = Block::with_id(args.id);
-		let artifact = Artifact::get(&self.tg, block)
+		let artifact = Artifact::with_block(&self.tg, block)
 			.await
 			.wrap_err("Failed to get the artifact.")?;
 

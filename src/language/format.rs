@@ -578,7 +578,7 @@ mod tests {
 				import * as std from "tangram:std";
 
 				type Args = {
-					target: tg.System;
+					host: tg.System;
 				};
 
 				export let foo = tg.target(({ target }: Args) => {
@@ -586,7 +586,7 @@ mod tests {
 						t`echo Hello world
 
 						`,
-						{ system: target },
+						{ host },
 					);
 				});
 			"#,
@@ -594,7 +594,7 @@ mod tests {
 				import * as std from "tangram:std";
 
 				type Args = {
-					target: tg.System;
+					host: tg.System;
 				};
 
 				export let foo = tg.target(({ target }: Args) => {
@@ -603,7 +603,7 @@ mod tests {
 							echo Hello world
 
 						`,
-						{ system: target },
+						{ host },
 					);
 				});
 			"#,
@@ -623,7 +623,7 @@ mod tests {
 						t`echo Hello world
 						echo "hi"
 						`,
-						{ system: target },
+						{ host },
 					);
 				});
 			"#,
@@ -637,7 +637,7 @@ mod tests {
 							echo Hello world
 							echo "hi"
 						`,
-						{ system: target },
+						{ host },
 					);
 				});
 			"#,

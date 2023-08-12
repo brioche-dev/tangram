@@ -1,6 +1,7 @@
-use super::{isolate::THREAD_LOCAL_ISOLATE, state::State, Target};
+use super::{from_v8, isolate::THREAD_LOCAL_ISOLATE, state::State, Target, ToV8};
 use crate::{
 	error::{Error, Result, WrapErr},
+	id::Id,
 	instance::Instance,
 	module::{self, Module},
 	operation::Operation,
@@ -9,8 +10,9 @@ use crate::{
 use std::rc::Rc;
 
 #[derive(serde::Serialize)]
-struct TargetKey {
-	module: Module,
+struct Key {
+	package: Id,
+	path: String,
 	name: String,
 }
 
@@ -45,12 +47,10 @@ impl Target {
 
 		// Evaluate the module.
 		let module = Module::Normal(module::Normal {
-			package: self.package,
-			module_path: self.module_path.clone(),
+			package: self.package.id(),
+			module_path: self.path.clone(),
 		});
-		dbg!("Before evaluation.", self.block().id());
 		super::module::evaluate(context.clone(), &module).await?;
-		dbg!("After evaluation.", self.block().id());
 
 		// Enter the context.
 		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
@@ -71,69 +71,63 @@ impl Target {
 
 		// Get the tg global.
 		let global = context.global(&mut try_catch_scope);
-		let tg_string = v8::String::new(&mut try_catch_scope, "tg").unwrap();
-		let tg: v8::Local<v8::Object> = global
-			.get(&mut try_catch_scope, tg_string.into())
-			.unwrap()
-			.try_into()
-			.unwrap();
+		let tg = v8::String::new(&mut try_catch_scope, "tg").unwrap();
+		let tg = global.get(&mut try_catch_scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
 		// Get the targets.
-		let targets_string = v8::String::new(&mut try_catch_scope, "targets").unwrap();
-		let targets: v8::Local<v8::Object> = tg
-			.get(&mut try_catch_scope, targets_string.into())
-			.unwrap()
-			.try_into()
-			.unwrap();
+		let targets = v8::String::new(&mut try_catch_scope, "targets").unwrap();
+		let targets = tg.get(&mut try_catch_scope, targets.into()).unwrap();
+		let targets = v8::Local::<v8::Object>::try_from(targets).unwrap();
 
 		// Get the target.
-		let key = TargetKey {
-			module,
+		let key = Key {
+			package: todo!(),
+			path: todo!(),
 			name: self.name.clone(),
 		};
 		let key = serde_json::to_value(&key).unwrap();
 		let key = serde_json::to_string(&key).unwrap();
 		let key = serde_v8::to_v8(&mut try_catch_scope, key).map_err(Error::other)?;
-		let target: v8::Local<v8::Function> = targets
+		let target = targets
 			.get(&mut try_catch_scope, key)
-			.wrap_err("Failed to get the function.")?
-			.try_into()
+			.wrap_err("Failed to get the function.")?;
+		let target = v8::Local::<v8::Function>::try_from(target)
 			.map_err(Error::other)
 			.wrap_err("Expected a function.")?;
 
-		// Get the implementation.
-		let f_string = v8::String::new(&mut try_catch_scope, "f").unwrap();
-		let f: v8::Local<v8::Function> = target
-			.get(&mut try_catch_scope, f_string.into())
-			.wrap_err(r#"Failed to find a value for the key "f"."#)?
-			.try_into()
+		// Get the function.
+		let f = v8::String::new(&mut try_catch_scope, "f").unwrap();
+		let f = target
+			.get(&mut try_catch_scope, f.into())
+			.wrap_err(r#"Failed to find a value for the key "f"."#)?;
+		let f = v8::Local::<v8::Function>::try_from(f)
 			.map_err(Error::other)
 			.wrap_err(r#"The value for the key "f" must be a function."#)?;
 
-		// Get the entrypoint.
-		let entrypoint_string = v8::String::new(&mut try_catch_scope, "entrypoint").unwrap();
-		let entrypoint: v8::Local<v8::Function> = tg
-			.get(&mut try_catch_scope, entrypoint_string.into())
-			.unwrap()
-			.try_into()
-			.unwrap();
+		// Move the env to v8.
+		let env = self
+			.env
+			.to_v8(&mut try_catch_scope)
+			.wrap_err("Failed to move the env to v8.")?;
 
-		// Serialize the env to v8.
-		let env = serde_v8::to_v8(&mut try_catch_scope, &self.env)
-			.map_err(Error::other)
-			.wrap_err("Failed to serialize the env.")?;
+		// Set the env.
+		let env_object = v8::String::new(&mut try_catch_scope, "env").unwrap();
+		let env_object = tg.get(&mut try_catch_scope, env_object.into()).unwrap();
+		let env_object = v8::Local::<v8::Object>::try_from(env_object).unwrap();
+		let value = v8::String::new(&mut try_catch_scope, "value").unwrap();
+		env_object.set(&mut try_catch_scope, value.into(), env.into());
 
-		// Serialize the args to v8.
-		let args = serde_v8::to_v8(&mut try_catch_scope, &self.args)
-			.map_err(Error::other)
-			.wrap_err("Failed to serialize the args.")?;
+		// Move the args to v8.
+		let args = self
+			.args
+			.iter()
+			.map(|arg| arg.to_v8(&mut try_catch_scope))
+			.collect::<Result<Vec<_>>>()
+			.wrap_err("Failed to move the args to v8.")?;
 
-		// Call the entrypoint.
-		let output = entrypoint.call(
-			&mut try_catch_scope,
-			undefined.into(),
-			&[f.into(), env, args],
-		);
+		// Call the function.
+		let output = f.call(&mut try_catch_scope, undefined.into(), &args);
 		let Some(output) = output else {
 			let exception = try_catch_scope.exception().unwrap();
 			let error = Error::from_exception(&mut try_catch_scope, &state, exception);
@@ -163,8 +157,8 @@ impl Target {
 		// Move the output to the context.
 		let output = v8::Local::new(&mut context_scope, output);
 
-		// Deserialize the output from v8.
-		let output = serde_v8::from_v8(&mut context_scope, output).map_err(Error::other)?;
+		// Move the output from v8.
+		let output = from_v8(&mut context_scope, output)?;
 
 		// Exit the context.
 		drop(context_scope);

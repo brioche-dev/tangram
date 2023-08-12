@@ -1,5 +1,6 @@
 use super::Module;
 use crate::{
+	block::Block,
 	error::{Result, WrapErr},
 	instance::Instance,
 	package::Package,
@@ -38,7 +39,7 @@ impl Module {
 			// Load a module from a package.
 			Self::Normal(module) => {
 				// Get the package.
-				let package = Package::get(tg, module.package).await?;
+				let package = Package::with_block(tg, Block::with_id(module.package)).await?;
 
 				// Load the module.
 				let directory = package.artifact().as_directory().unwrap();

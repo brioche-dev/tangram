@@ -1,5 +1,4 @@
 import { assert as assert_, unreachable } from "./assert.ts";
-import * as syscall from "./syscall.ts";
 
 export let relpath = (...args: Array<Relpath.Arg>): Relpath => {
 	return Relpath.new(...args);
@@ -17,6 +16,11 @@ type RelpathConstructorArg = {
 export class Relpath {
 	#parents: number;
 	#subpath: Subpath;
+
+	constructor(arg?: RelpathConstructorArg) {
+		this.#parents = arg?.parents ?? 0;
+		this.#subpath = arg?.subpath ?? new Subpath();
+	}
 
 	static new(...args: Array<Relpath.Arg>): Relpath {
 		return args.reduce(function reduce(path: Relpath, arg: Relpath.Arg) {
@@ -46,21 +50,8 @@ export class Relpath {
 		}, new Relpath());
 	}
 
-	constructor(arg?: RelpathConstructorArg) {
-		this.#parents = arg?.parents ?? 0;
-		this.#subpath = arg?.subpath ?? new Subpath();
-	}
-
 	static is(value: unknown): value is Relpath {
 		return value instanceof Relpath;
-	}
-
-	toSyscall(): syscall.Relpath {
-		return this.toString();
-	}
-
-	static fromSyscall(value: syscall.Relpath): Relpath {
-		return Relpath.new(value);
 	}
 
 	isEmpty(): boolean {
@@ -142,24 +133,16 @@ export namespace Relpath {
 export class Subpath {
 	#components: Array<string>;
 
-	static new(...args: Array<Subpath.Arg>): Subpath {
-		return Relpath.new(...args).toSubpath();
-	}
-
 	constructor(components?: Array<string>) {
 		this.#components = components ?? [];
 	}
 
+	static new(...args: Array<Subpath.Arg>): Subpath {
+		return Relpath.new(...args).toSubpath();
+	}
+
 	static is(value: unknown): value is Subpath {
 		return value instanceof Subpath;
-	}
-
-	toSyscall(): syscall.Subpath {
-		return this.toString();
-	}
-
-	static fromSyscall(value: syscall.Subpath): Subpath {
-		return subpath(value);
 	}
 
 	components(): Array<string> {

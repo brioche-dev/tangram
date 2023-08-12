@@ -49,7 +49,7 @@ impl Artifact {
 
 	async fn check_out_internal_inner(&self, tg: &Instance) -> Result<PathBuf> {
 		// Compute the checkout's path in the artifacts directory.
-		let path = tg.artifacts_path().join(self.block().id().to_string());
+		let path = tg.artifacts_path().join(self.id().to_string());
 
 		// If the path exists, then the artifact is already checked out.
 		if tokio::fs::try_exists(&path).await? {
@@ -282,9 +282,9 @@ impl Artifact {
 				Self::check_out_directory(tg, existing_artifact, directory, path)
 					.await
 					.wrap_err_with(|| {
-						let block = self.block();
+						let id = self.id();
 						let path = path.display();
-						format!(r#"Failed to check out directory "{block}" to "{path}"."#)
+						format!(r#"Failed to check out directory "{id}" to "{path}"."#)
 					})?;
 			},
 
@@ -292,9 +292,9 @@ impl Artifact {
 				Self::check_out_file(tg, existing_artifact, file, path)
 					.await
 					.wrap_err_with(|| {
-						let block = self.block();
+						let id = self.id();
 						let path = path.display();
-						format!(r#"Failed to check out file "{block}" to "{path}"."#)
+						format!(r#"Failed to check out file "{id}" to "{path}"."#)
 					})?;
 			},
 
@@ -302,9 +302,9 @@ impl Artifact {
 				Self::check_out_symlink(tg, existing_artifact, symlink, path)
 					.await
 					.wrap_err_with(|| {
-						let block = self.block();
+						let id = self.id();
 						let path = path.display();
-						format!(r#"Failed to check out symlink "{block}" to "{path}"."#)
+						format!(r#"Failed to check out symlink "{id}" to "{path}"."#)
 					})?;
 			},
 		}

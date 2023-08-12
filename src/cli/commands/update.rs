@@ -1,4 +1,7 @@
-use crate::{error::Result, return_error, Cli};
+use crate::{
+	error::{return_error, Result},
+	Cli,
+};
 use std::path::PathBuf;
 
 /// Update a package's dependencies.

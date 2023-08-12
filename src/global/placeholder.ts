@@ -1,5 +1,3 @@
-import * as syscall from "./syscall.ts";
-
 export let placeholder = (name: string) => {
 	return Placeholder.new(name);
 };
@@ -7,27 +5,16 @@ export let placeholder = (name: string) => {
 export class Placeholder {
 	#name: string;
 
-	static new(name: string): Placeholder {
-		return new Placeholder(name);
-	}
-
 	constructor(name: string) {
 		this.#name = name;
 	}
 
+	static new(name: string): Placeholder {
+		return new Placeholder(name);
+	}
+
 	static is(value: unknown): value is Placeholder {
 		return value instanceof Placeholder;
-	}
-
-	toSyscall(): syscall.Placeholder {
-		return {
-			name: this.#name,
-		};
-	}
-
-	static fromSyscall(placeholder: syscall.Placeholder): Placeholder {
-		let name = placeholder.name;
-		return new Placeholder(name);
 	}
 
 	name(): string {

@@ -1,5 +1,6 @@
 use super::Operation;
 use crate::{
+	block::Block,
 	error::{Error, Result},
 	instance::Instance,
 	util::task_map::TaskMap,
@@ -19,12 +20,12 @@ impl Operation {
 			.get_or_insert_with(|| {
 				Arc::new(TaskMap::new(Box::new({
 					let state = Arc::downgrade(&tg.state);
-					move |block| {
+					move |id| {
 						let state = state.clone();
 						async move {
 							let state = state.upgrade().unwrap();
 							let tg = Instance { state };
-							let operation = Self::get(&tg, block).await?;
+							let operation = Self::with_block(&tg, Block::with_id(id)).await?;
 							let output = operation.run_inner(&tg, None).await?;
 							Ok::<_, Error>(output)
 						}
@@ -34,8 +35,11 @@ impl Operation {
 			})
 			.clone();
 
+		// Store the operation.
+		self.block().store(tg).await?;
+
 		// Run the operation.
-		let value = operations_task_map.run(self.block()).await?;
+		let value = operations_task_map.run(self.id()).await?;
 
 		Ok(value)
 	}
@@ -43,7 +47,7 @@ impl Operation {
 	#[must_use]
 	#[tracing::instrument(skip(tg), ret)]
 	async fn run_inner(&self, tg: &Instance, parent: Option<Operation>) -> Result<Value> {
-		// If the operation has already run, then return its output value.
+		// If the operation has already run, then return its output.
 		let output = self.try_get_output(tg).await?;
 		if let Some(output) = output {
 			return Ok(output);
@@ -56,7 +60,10 @@ impl Operation {
 			Operation::Task(task) => task.run_inner(tg).await?,
 		};
 
-		// Set the operation output value.
+		// Store the output.
+		output.store(tg).await?;
+
+		// Set the output.
 		self.set_output_local(tg, &output).await?;
 
 		Ok(output)

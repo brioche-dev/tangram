@@ -1,3 +1,19 @@
+import { Artifact } from "./artifact.ts";
+import { Blob } from "./blob.ts";
+import { Block } from "./block.ts";
+import { Checksum } from "./checksum.ts";
+import { Directory } from "./directory.ts";
+import { File } from "./file.ts";
+import { Operation } from "./operation.ts";
+import { Subpath } from "./path.ts";
+import { Resource } from "./resource.ts";
+import { Symlink } from "./symlink.ts";
+import { System } from "./system.ts";
+import { Target } from "./target.ts";
+import { Task } from "./task.ts";
+import { Template } from "./template.ts";
+import { Value } from "./value.ts";
+
 declare global {
 	function syscall(
 		syscall: "artifact_bundle",
@@ -10,7 +26,7 @@ declare global {
 
 	function syscall(syscall: "blob_get", block: Block): Promise<Blob>;
 
-	function syscall(syscall: "blob_new", arg: Blob.Arg): Promise<Blob>;
+	function syscall(syscall: "blob_new", arg: BlobArg): Promise<Blob>;
 
 	function syscall(syscall: "blob_text", blob: Blob): Promise<string>;
 
@@ -23,17 +39,17 @@ declare global {
 
 	function syscall(syscall: "block_data", block: Block): Promise<Uint8Array>;
 
-	function syscall(syscall: "block_new", arg: Block.Arg): Promise<Block>;
+	function syscall(syscall: "block_new", arg: BlockArg): Promise<Block>;
 
 	function syscall(
 		syscall: "checksum",
-		algorithm: ChecksumAlgorithm,
+		algorithm: Checksum.Algorithm,
 		bytes: string | Uint8Array,
 	): Checksum;
 
 	function syscall(
 		syscall: "directory_new",
-		arg: Directory.Arg,
+		arg: DirectoryArg,
 	): Promise<Directory>;
 
 	function syscall(
@@ -66,7 +82,7 @@ declare global {
 
 	function syscall(syscall: "encoding_yaml_encode", value: any): string;
 
-	function syscall(syscall: "file_new", arg: File.Arg): Promise<File>;
+	function syscall(syscall: "file_new", arg: FileArg): Promise<File>;
 
 	function syscall(syscall: "log", value: string): void;
 
@@ -79,230 +95,61 @@ declare global {
 
 	function syscall(
 		syscall: "resource_new",
-		arg: Resource.Arg,
+		arg: ResourceArg,
 	): Promise<Resource>;
 
-	function syscall(syscall: "symlink_new", arg: Symlink.Arg): Promise<Symlink>;
+	function syscall(syscall: "symlink_new", arg: SymlinkArg): Promise<Symlink>;
 
-	function syscall(syscall: "target_new", arg: Target.Arg): Promise<Target>;
+	function syscall(syscall: "target_new", arg: TargetArg): Promise<Target>;
 
-	function syscall(syscall: "task_new", arg: Task.Arg): Promise<Task>;
+	function syscall(syscall: "task_new", arg: TaskArg): Promise<Task>;
 }
 
-export type Artifact =
-	| { kind: "directory"; value: Directory }
-	| { kind: "file"; value: File }
-	| { kind: "symlink"; value: Symlink };
-
-export type Blob = {
-	block: Block;
-	kind: Blob.Kind;
+export type BlobArg = {
+	children: Array<Block>;
 };
 
-export namespace Blob {
-	export type Arg = {
-		children: Array<Block>;
-	};
-
-	export type Kind =
-		| { kind: "branch"; value: Array<[Block, number]> }
-		| { kind: "leaf"; value: number };
-}
-
-export type Block = {
-	id: Id;
+export type BlockArg = {
+	children: Array<Block> | undefined;
+	data: Uint8Array | undefined;
 };
 
-export namespace Block {
-	export type Arg = {
-		children: Array<Block>;
-		data: Uint8Array | string;
-	};
-}
-
-export type Checksum = string;
-
-export type ChecksumAlgorithm = "blake3" | "sha256" | "sha512";
-
-export type Directory = {
-	block: Block;
-	entries: Record<string, Block>;
+export type DirectoryArg = {
+	entries: Record<string, Artifact>;
 };
 
-export namespace Directory {
-	export type Arg = {
-		entries: Record<string, Artifact>;
-	};
-}
-
-export type File = {
-	block: Block;
-	contents: Block;
+export type FileArg = {
+	contents: Blob;
 	executable: boolean;
-	references: Array<Block>;
+	references: Array<Artifact>;
 };
 
-export namespace File {
-	export type Arg = {
-		contents: Blob;
-		executable: boolean;
-		references: Array<Artifact>;
-	};
-}
-
-export type Id = string;
-
-export type Module =
-	| { kind: "library"; value: LibraryModule }
-	| { kind: "document"; value: DocumentModule }
-	| { kind: "normal"; value: NormalModule };
-
-export type LibraryModule = {
-	modulePath: Subpath;
-};
-
-export type DocumentModule = {
-	packagePath: string;
-	modulePath: Subpath;
-};
-
-export type NormalModule = {
-	package: Block;
-	modulePath: Subpath;
-};
-
-export type Package = {
-	artifact: Artifact;
-};
-
-export type Position = {
-	line: number;
-	character: number;
-};
-
-export type Operation =
-	| { kind: "resource"; value: Resource }
-	| { kind: "target"; value: Target }
-	| { kind: "task"; value: Task };
-
-export type Relpath = string;
-
-export type Subpath = string;
-
-export type Placeholder = {
-	name: string;
-};
-
-export type Resource = {
-	block: Block;
+export type ResourceArg = {
 	url: string;
-	unpack?: UnpackFormat;
+	unpack?: Resource.UnpackFormat;
 	checksum?: Checksum;
 	unsafe: boolean;
 };
 
-export namespace Resource {
-	export type Arg = {
-		url: string;
-		unpack?: UnpackFormat;
-		checksum?: Checksum;
-		unsafe: boolean;
-	};
-}
+export type SymlinkArg = { target: Template };
 
-export type UnpackFormat =
-	| ".tar"
-	| ".tar.bz2"
-	| ".tar.gz"
-	| ".tar.lz"
-	| ".tar.xz"
-	| ".tar.zstd"
-	| ".zip";
-
-export type Symlink = {
-	block: Block;
-	target: Template;
-};
-
-export namespace Symlink {
-	export type Arg = { target: Template };
-}
-
-export type Target = {
-	block: Block;
+export type TargetArg = {
 	package: Block;
-	modulePath: Subpath;
+	path: Subpath;
 	name: string;
-	env?: Record<string, Value>;
-	args?: Array<Value>;
+	env: Record<string, Value>;
+	args: Array<Value>;
 };
 
-export namespace Target {
-	export type Arg = {
-		package: Block;
-		modulePath: Subpath;
-		name: string;
-		env: Record<string, Value>;
-		args: Array<Value>;
-	};
-}
-
-export type Task = {
-	block: Block;
-	system: System;
+export type TaskArg = {
+	host: System;
 	executable: Template;
-	env: Record<string, Template>;
-	args: Array<Template>;
-	checksum: Checksum | undefined;
-	unsafe: boolean;
-	network: boolean;
+	env?: Record<string, Template>;
+	args?: Array<Template>;
+	checksum?: Checksum;
+	unsafe?: boolean;
+	network?: boolean;
 };
-
-export namespace Task {
-	export type Arg = {
-		system: System;
-		executable: Template;
-		env?: Record<string, Template>;
-		args?: Array<Template>;
-		checksum?: Checksum;
-		unsafe?: boolean;
-		network?: boolean;
-	};
-}
-
-export type Template = {
-	components: Array<Template.Component>;
-};
-
-export namespace Template {
-	export type Component =
-		| { kind: "string"; value: string }
-		| { kind: "artifact"; value: Artifact }
-		| { kind: "placeholder"; value: Placeholder };
-}
-
-export type System =
-	| "amd64_linux"
-	| "arm64_linux"
-	| "amd64_macos"
-	| "arm64_macos";
-
-export type Value =
-	| { kind: "null" }
-	| { kind: "bool"; value: boolean }
-	| { kind: "number"; value: number }
-	| { kind: "string"; value: string }
-	| { kind: "bytes"; value: Uint8Array }
-	| { kind: "subpath"; value: Subpath }
-	| { kind: "relpath"; value: Relpath }
-	| { kind: "block"; value: Block }
-	| { kind: "blob"; value: Blob }
-	| { kind: "artifact"; value: Artifact }
-	| { kind: "placeholder"; value: Placeholder }
-	| { kind: "template"; value: Template }
-	| { kind: "operation"; value: Operation }
-	| { kind: "array"; value: Array<Value> }
-	| { kind: "object"; value: Record<string, Value> };
 
 export let artifact = {
 	bundle: async (artifact: Artifact): Promise<Artifact> => {
@@ -339,7 +186,7 @@ export let blob = {
 		}
 	},
 
-	new: async (arg: Blob.Arg): Promise<Blob> => {
+	new: async (arg: BlobArg): Promise<Blob> => {
 		try {
 			return await syscall("blob_new", arg);
 		} catch (cause) {
@@ -381,7 +228,7 @@ export let block = {
 		}
 	},
 
-	new: async (arg: Block.Arg): Promise<Block> => {
+	new: async (arg: BlockArg): Promise<Block> => {
 		try {
 			return syscall("block_new", arg);
 		} catch (cause) {
@@ -391,7 +238,7 @@ export let block = {
 };
 
 export let checksum = (
-	algorithm: ChecksumAlgorithm,
+	algorithm: Checksum.Algorithm,
 	bytes: string | Uint8Array,
 ): Checksum => {
 	try {
@@ -402,7 +249,7 @@ export let checksum = (
 };
 
 export let directory = {
-	new: async (arg: Directory.Arg): Promise<Directory> => {
+	new: async (arg: DirectoryArg): Promise<Directory> => {
 		try {
 			return await syscall("directory_new", arg);
 		} catch (cause) {
@@ -522,7 +369,7 @@ export namespace encoding {
 }
 
 export let file = {
-	new: async (arg: File.Arg): Promise<File> => {
+	new: async (arg: FileArg): Promise<File> => {
 		try {
 			return await syscall("file_new", arg);
 		} catch (cause) {
@@ -548,7 +395,7 @@ export let operation = {
 		}
 	},
 
-	evaluation: async (operation: Operation): Promise<Value> => {
+	evaluate: async (operation: Operation): Promise<Value> => {
 		try {
 			return await syscall("operation_evaluate", operation);
 		} catch (cause) {
@@ -558,7 +405,7 @@ export let operation = {
 };
 
 export let resource = {
-	new: async (arg: Resource.Arg): Promise<Resource> => {
+	new: async (arg: ResourceArg): Promise<Resource> => {
 		try {
 			return await syscall("resource_new", arg);
 		} catch (cause) {
@@ -568,7 +415,7 @@ export let resource = {
 };
 
 export let target = {
-	new: async (arg: Target.Arg): Promise<Target> => {
+	new: async (arg: TargetArg): Promise<Target> => {
 		try {
 			return await syscall("target_new", arg);
 		} catch (cause) {
@@ -578,7 +425,7 @@ export let target = {
 };
 
 export let task = {
-	new: async (arg: Task.Arg): Promise<Task> => {
+	new: async (arg: TaskArg): Promise<Task> => {
 		try {
 			return await syscall("task_new", arg);
 		} catch (cause) {
@@ -588,7 +435,7 @@ export let task = {
 };
 
 export let symlink = {
-	new: async (arg: Symlink.Arg): Promise<Symlink> => {
+	new: async (arg: SymlinkArg): Promise<Symlink> => {
 		try {
 			return await syscall("symlink_new", arg);
 		} catch (cause) {

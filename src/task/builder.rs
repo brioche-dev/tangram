@@ -6,14 +6,14 @@ use std::collections::BTreeMap;
 
 impl Task {
 	#[must_use]
-	pub fn builder(system: System, executable: Template) -> Builder {
-		Builder::new(system, executable)
+	pub fn builder(host: System, executable: Template) -> Builder {
+		Builder::new(host, executable)
 	}
 }
 
 #[derive(Clone, Debug)]
 pub struct Builder {
-	system: System,
+	host: System,
 	executable: Template,
 	env: BTreeMap<String, Template>,
 	args: Vec<Template>,
@@ -24,9 +24,9 @@ pub struct Builder {
 
 impl Builder {
 	#[must_use]
-	pub fn new(system: System, executable: Template) -> Self {
+	pub fn new(host: System, executable: Template) -> Self {
 		Self {
-			system,
+			host,
 			executable,
 			env: BTreeMap::new(),
 			args: Vec::new(),
@@ -37,8 +37,8 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn system(mut self, system: System) -> Self {
-		self.system = system;
+	pub fn system(mut self, host: System) -> Self {
+		self.host = host;
 		self
 	}
 
@@ -81,7 +81,7 @@ impl Builder {
 	pub async fn build(self, tg: &Instance) -> Result<Task> {
 		Task::new(
 			tg,
-			self.system,
+			self.host,
 			self.executable,
 			self.env,
 			self.args,

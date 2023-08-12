@@ -45,7 +45,7 @@ impl Cli {
 		let args_ = Vec::new();
 		let target = Target::new(
 			&self.tg,
-			package.artifact().block(),
+			package.block().clone(),
 			ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			args.target,
 			env,

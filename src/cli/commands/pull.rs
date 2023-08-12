@@ -21,14 +21,14 @@ impl Cli {
 	pub async fn command_pull(&self, args: Args) -> Result<()> {
 		// Create a client.
 		let client = args.url.map(|url| Client::new(url, None));
-		let client = client.as_ref().unwrap_or(self.tg.api_client());
+		let client = client.as_ref().unwrap_or(self.tg.origin_client());
 
-		// Pull.
-		let block = Block::with_id(args.id);
-		client
-			.pull(&self.tg, block)
-			.await
-			.wrap_err("Failed to pull the artifact.")?;
+		// // Pull.
+		// let block = Block::with_id(args.id);
+		// client
+		// 	.pull(&self.tg, block)
+		// 	.await
+		// 	.wrap_err("Failed to pull the artifact.")?;
 
 		Ok(())
 	}

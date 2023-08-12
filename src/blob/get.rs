@@ -9,14 +9,15 @@ use num_traits::ToPrimitive;
 
 impl Blob {
 	#[async_recursion]
-	pub async fn get(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
-		let artifact = Self::try_get(tg, block)
+	pub async fn with_block(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
+		let id = block.id();
+		let artifact = Self::try_with_block(tg, block)
 			.await?
-			.wrap_err_with(|| format!(r#"Failed to get the blob with block "{block}"."#))?;
+			.wrap_err_with(|| format!(r#"Failed to get blob "{id}"."#))?;
 		Ok(artifact)
 	}
 
-	pub async fn try_get(tg: &Instance, block: Block) -> Result<Option<Self>> {
+	pub async fn try_with_block(tg: &Instance, block: Block) -> Result<Option<Self>> {
 		// Get the children.
 		let Some(children) = block.try_get_children(tg).await? else {
 			return Ok(None);
@@ -39,12 +40,17 @@ impl Blob {
 			let data = block.data(tg).await?;
 
 			// Deserialize the data.
-			let data = Data::deserialize(data.as_slice())?;
+			let data = Data::deserialize(&*data)?;
 
 			// Create the blob from the data.
+			let sizes = data
+				.sizes
+				.into_iter()
+				.map(|(id, size)| (Block::with_id(id), size))
+				.collect();
 			Self {
 				block,
-				kind: Kind::Branch(data.sizes),
+				kind: Kind::Branch(sizes),
 			}
 		};
 
