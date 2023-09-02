@@ -1,9 +1,7 @@
-import { Artifact } from "./artifact.ts";
 import { Blob } from "./blob.ts";
-import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Operation } from "./operation.ts";
+import { Package } from "./package.ts";
 import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Resource } from "./resource.ts";
@@ -23,11 +21,15 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| Relpath
 		| Subpath
 		| Blob
-		| Block
-		| Artifact
+		| Directory
+		| File
+		| Symlink
 		| Placeholder
 		| Template
-		| Operation
+		| Package
+		| Resource
+		| Target
+		| Task
 		? T
 		: T extends Array<infer U extends Value>
 		? Array<Unresolved<U>>
@@ -45,11 +47,15 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| Relpath
 	| Subpath
 	| Blob
-	| Block
-	| Artifact
+	| Directory
+	| File
+	| Symlink
 	| Placeholder
 	| Template
-	| Operation
+	| Package
+	| Resource
+	| Target
+	| Task
 	? T
 	: T extends Promise<infer U extends Unresolved<Value>>
 	? Resolved<U>
@@ -79,6 +85,7 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Symlink ||
 		value instanceof Placeholder ||
 		value instanceof Template ||
+		value instanceof Package ||
 		value instanceof Resource ||
 		value instanceof Target ||
 		value instanceof Task

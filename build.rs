@@ -1,7 +1,7 @@
 fn main() {
 	println!("cargo:rerun-if-changed=build.rs");
 
-	#[cfg(feature = "v8")]
+	#[cfg(any(feature = "build", feature = "language"))]
 	{
 		// Initialize V8.
 		static V8_INIT: std::sync::Once = std::sync::Once::new();
@@ -10,6 +10,16 @@ fn main() {
 			v8::V8::initialize_platform(platform);
 			v8::V8::initialize();
 		});
+	}
+
+	#[cfg(feature = "build")]
+	{
+		// Create the global snapshot.
+		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+		println!("cargo:rerun-if-changed=assets/global.js");
+		let path = out_dir_path.join("global.heapsnapshot");
+		let snapshot = create_snapshot("assets/global.js");
+		std::fs::write(path, snapshot).unwrap();
 	}
 
 	#[cfg(feature = "language")]
@@ -21,19 +31,9 @@ fn main() {
 		let snapshot = create_snapshot("assets/language_service.js");
 		std::fs::write(path, snapshot).unwrap();
 	}
-
-	#[cfg(feature = "evaluate")]
-	{
-		// Create the global snapshot.
-		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-		println!("cargo:rerun-if-changed=assets/global.js");
-		let path = out_dir_path.join("global.heapsnapshot");
-		let snapshot = create_snapshot("assets/global.js");
-		std::fs::write(path, snapshot).unwrap();
-	}
 }
 
-#[cfg(feature = "v8")]
+#[cfg(any(feature = "build", feature = "language"))]
 fn create_snapshot(path: impl AsRef<std::path::Path>) -> v8::StartupData {
 	// Create the isolate.
 	let mut isolate = v8::Isolate::snapshot_creator(None);
@@ -47,7 +47,8 @@ fn create_snapshot(path: impl AsRef<std::path::Path>) -> v8::StartupData {
 	// Compile and run the code.
 	let code = std::fs::read_to_string(path).unwrap();
 	let code = v8::String::new(&mut context_scope, &code).unwrap();
-	let resource_name = v8::String::new(&mut context_scope, "[global]").unwrap();
+	let resource_name =
+		v8::String::new_external_onebyte_static(&mut context_scope, "[global]".as_bytes()).unwrap();
 	let resource_line_offset = 0;
 	let resource_column_offset = 0;
 	let resource_is_shared_cross_origin = false;

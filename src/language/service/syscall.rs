@@ -1,5 +1,4 @@
 use crate::{
-	block::Block,
 	error::{return_error, Error, Result, WrapErr},
 	id::Id,
 	instance::{self, Instance},

@@ -2,7 +2,7 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use tangram::{block::Block, client::Client, id::Id};
+use tangram::{client::Client, id::Id};
 use url::Url;
 
 /// Pull a block.
@@ -28,7 +28,7 @@ impl Cli {
 		// client
 		// 	.pull(&self.tg, block)
 		// 	.await
-		// 	.wrap_err("Failed to pull the artifact.")?;
+		// 	.wrap_err("Failed to pull the block.")?;
 
 		Ok(())
 	}

@@ -1,12 +1,7 @@
 use url::Url;
 
-pub mod block;
-pub mod login;
-pub mod operation;
-pub mod package;
-// pub mod pull;
-// pub mod push;
-pub mod user;
+pub mod output;
+pub mod value;
 
 pub const API_URL: &str = "https://api.tangram.dev";
 

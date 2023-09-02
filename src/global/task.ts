@@ -1,5 +1,4 @@
 import { Artifact } from "./artifact.ts";
-import { Block } from "./block.ts";
 import { Checksum } from "./checksum.ts";
 import { Id } from "./id.ts";
 import { placeholder } from "./placeholder.ts";
@@ -22,36 +21,12 @@ export let run = async (
 
 export let output = placeholder("output");
 
-type ConstructorArg = {
-	block: Block;
-	host: System;
-	executable: Template;
-	env: Record<string, Template>;
-	args: Array<Template>;
-	checksum?: Checksum;
-	unsafe: boolean;
-	network: boolean;
-};
-
 export class Task {
-	#block: Block;
-	#host: System;
-	#executable: Template;
-	#env: Record<string, Template>;
-	#args: Array<Template>;
-	#checksum: Checksum | undefined;
-	#unsafe: boolean;
-	#network: boolean;
+	#id: Id | undefined;
+	#data: Task.Data | undefined;
 
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#host = arg.host;
-		this.#executable = arg.executable;
-		this.#env = arg.env;
-		this.#args = arg.args;
-		this.#checksum = arg.checksum;
-		this.#unsafe = arg.unsafe;
-		this.#network = arg.network;
+	constructor(arg: Task.Data) {
+		this.#data = arg;
 	}
 
 	static async new(arg: Unresolved<Task.Arg>): Promise<Task> {
@@ -72,8 +47,7 @@ export class Task {
 		let checksum = resolvedArg.checksum ?? undefined;
 		let unsafe = resolvedArg.unsafe ?? false;
 		let network = resolvedArg.network ?? false;
-
-		return await syscall.task.new({
+		return new Task({
 			host,
 			executable,
 			env,
@@ -84,44 +58,55 @@ export class Task {
 		});
 	}
 
-	id(): Id {
-		return this.block().id();
+	async load(): Promise<void> {
+		if (!this.#data) {
+			this.#data = ((await syscall.value.load(this)) as Task).#data;
+		}
 	}
 
-	block(): Block {
-		return this.#block;
+	async store(): Promise<void> {
+		if (!this.#id) {
+			this.#id = ((await syscall.value.store(this)) as Task).#id;
+		}
 	}
 
-	host(): System {
-		return this.#host;
+	async host(): Promise<System> {
+		await this.load();
+		return this.#data!.host;
 	}
 
-	executable(): Template {
-		return this.#executable;
+	async executable(): Promise<Template> {
+		await this.load();
+		return this.#data!.executable;
 	}
 
-	env(): Record<string, Template> {
-		return this.#env;
+	async env(): Promise<Record<string, Template>> {
+		await this.load();
+		return this.#data!.env;
 	}
 
-	args(): Array<Template> {
-		return this.#args;
+	async args(): Promise<Array<Template>> {
+		await this.load();
+		return this.#data!.args;
 	}
 
-	checksum(): Checksum | undefined {
-		return this.#checksum;
+	async checksum(): Promise<Checksum | undefined> {
+		await this.load();
+		return this.#data!.checksum;
 	}
 
-	unsafe(): boolean {
-		return this.#unsafe;
+	async unsafe(): Promise<boolean> {
+		await this.load();
+		return this.#data!.unsafe;
 	}
 
-	network(): boolean {
-		return this.#network;
+	async network(): Promise<boolean> {
+		await this.load();
+		return this.#data!.network;
 	}
 
 	async run(): Promise<Artifact | undefined> {
-		return (await syscall.operation.evaluate(this)) as Artifact | undefined;
+		return (await syscall.build.output(this)) as Artifact | undefined;
 	}
 }
 
@@ -134,5 +119,15 @@ export namespace Task {
 		checksum?: Checksum;
 		unsafe?: boolean;
 		network?: boolean;
+	};
+
+	export type Data = {
+		host: System;
+		executable: Template;
+		env: Record<string, Template>;
+		args: Array<Template>;
+		checksum: Checksum | undefined;
+		unsafe: boolean;
+		network: boolean;
 	};
 }

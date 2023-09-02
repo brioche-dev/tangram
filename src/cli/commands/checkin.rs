@@ -3,7 +3,6 @@ use crate::{
 	Cli,
 };
 use std::path::PathBuf;
-use tangram::artifact::Artifact;
 
 /// Check in an artifact.
 #[derive(Debug, clap::Args)]
@@ -22,13 +21,13 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let artifact = Artifact::check_in(&self.tg, &path).await?;
+		let artifact = tg::Artifact::check_in(&self.tg, &path).await?;
 
 		// Store the artifact.
 		artifact.store(&self.tg).await?;
 
 		// Print the ID.
-		let id = artifact.id();
+		let id = artifact.id(&self.tg).await?;
 		println!("{id}");
 
 		Ok(())

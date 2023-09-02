@@ -1,7 +1,4 @@
-use crate::{
-	error::{return_error, Error, Result},
-	target::{FromV8, ToV8},
-};
+use crate::error::{return_error, Error, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String", try_from = "String")]
@@ -48,20 +45,5 @@ impl TryFrom<String> for Algorithm {
 
 	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl ToV8 for Algorithm {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::other)
-	}
-}
-
-impl FromV8 for Algorithm {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::other)
 	}
 }

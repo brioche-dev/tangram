@@ -10,8 +10,8 @@ impl<'a> Struct<'a> {
 		// Generate the body.
 		let body = if let Some(try_from) = self.try_from {
 			quote! {
-				let value = <#try_from>::deserialize(deserializer)?;
-				let value = value.try_into().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+				let value = deserializer.deserialize::<#try_from>()?;
+				let value = value.try_into().map_err(|error| ::std::io::Error::new(::std::io::ErrorKind::Other, error))?;
 				Ok(value)
 			}
 		} else {
@@ -33,6 +33,23 @@ impl<'a> Struct<'a> {
 				.map(|field| &field.ident)
 				.collect_vec();
 
+			// Create the field reads.
+			let field_reads = fields
+				.iter()
+				.map(|field| {
+					if let Some(deserialize_with) = field.deserialize_with.as_ref() {
+						let deserialize_with = quote::format_ident!("{deserialize_with}");
+						quote! {
+							#deserialize_with(deserializer)?
+						}
+					} else {
+						quote! {
+							deserializer.deserialize()?
+						}
+					}
+				})
+				.collect_vec();
+
 			quote! {
 				// Read the kind.
 				deserializer.ensure_kind(tangram_serialize::Kind::Struct)?;
@@ -50,7 +67,7 @@ impl<'a> Struct<'a> {
 
 					// Deserialize the field value.
 					match field_id {
-						#(#field_ids => { #field_idents = Some(deserializer.deserialize()?); })*
+						#(#field_ids => { #field_idents = ::std::option::Option::Some(#field_reads); })*
 
 						// Skip over fields with unknown ids.
 						_ => {
@@ -60,12 +77,12 @@ impl<'a> Struct<'a> {
 				}
 
 				// Retrieve the fields.
-				#(let #field_idents = #field_idents.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Missing field."))?;)*
+				#(let #field_idents = #field_idents.ok_or_else(|| ::std::io::Error::new(::std::io::ErrorKind::Other, "Missing field."))?;)*
 
 				// Create the struct.
 				Ok(#ident {
 					#(#field_idents,)*
-					#(#skipped_field_idents: Default::default(),)*
+					#(#skipped_field_idents: ::std::default::Default::default(),)*
 				})
 			}
 		};
@@ -73,9 +90,9 @@ impl<'a> Struct<'a> {
 		// Generate the code.
 		let code = quote! {
 			impl tangram_serialize::Deserialize for #ident {
-				fn deserialize<R>(deserializer: &mut tangram_serialize::Deserializer<R>) -> std::io::Result<Self>
+				fn deserialize<R>(deserializer: &mut tangram_serialize::Deserializer<R>) -> ::std::io::Result<Self>
 				where
-					R: std::io::Read,
+					R: ::std::io::Read,
 				{
 					#body
 				}

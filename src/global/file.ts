@@ -1,7 +1,6 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import { Block } from "./block.ts";
 import { Id } from "./id.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
@@ -11,24 +10,12 @@ export let file = async (...args: Array<Unresolved<File.Arg>>) => {
 	return await File.new(...args);
 };
 
-type ConstructorArg = {
-	block: Block;
-	contents: Block;
-	executable: boolean;
-	references: Array<Block>;
-};
-
 export class File {
-	#block: Block;
-	#contents: Block;
-	#executable: boolean;
-	#references: Array<Block>;
+	#id: Id | undefined;
+	#data: File.Data | undefined;
 
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#contents = arg.contents;
-		this.#executable = arg.executable;
-		this.#references = arg.references;
+	constructor(arg: File.Data) {
+		this.#data = arg;
 	}
 
 	static async new(...args: Array<Unresolved<File.Arg>>): Promise<File> {
@@ -52,8 +39,8 @@ export class File {
 						return { contents: arg };
 					} else if (File.is(arg)) {
 						return {
-							contents: arg.#contents,
-							executable: arg.#executable,
+							contents: await arg.contents(),
+							executable: await arg.executable(),
 							references: await arg.references(),
 						};
 					} else if (arg instanceof Array) {
@@ -84,7 +71,7 @@ export class File {
 			{ contents: [], executable: false, references: [] },
 		);
 		let contents = await blob(...contentsArgs);
-		return await syscall.file.new({
+		return new File({
 			contents,
 			executable,
 			references,
@@ -104,32 +91,43 @@ export class File {
 		assert_(File.is(value));
 	}
 
-	id(): Id {
-		return this.block().id();
+	async load(): Promise<void> {
+		if (!this.#data) {
+			this.#data = ((await syscall.value.load(this)) as File).#data;
+		}
 	}
 
-	block(): Block {
-		return this.#block;
+	async store(): Promise<void> {
+		if (!this.#id) {
+			this.#id = ((await syscall.value.store(this)) as File).#id;
+		}
 	}
 
 	async contents(): Promise<Blob> {
-		return await Blob.withBlock(this.#contents);
+		await this.load();
+		return this.#data!.contents;
 	}
 
-	executable(): boolean {
-		return this.#executable;
+	async executable(): Promise<boolean> {
+		await this.load();
+		return this.#data!.executable;
 	}
 
 	async references(): Promise<Array<Artifact>> {
-		return await Promise.all(this.#references.map(Artifact.withBlock));
+		await this.load();
+		return this.#data!.references;
+	}
+
+	async size(): Promise<number> {
+		return (await this.contents()).size();
 	}
 
 	async bytes(): Promise<Uint8Array> {
-		return await (await this.contents()).bytes();
+		return (await this.contents()).bytes();
 	}
 
 	async text(): Promise<string> {
-		return await (await this.contents()).text();
+		return (await this.contents()).text();
 	}
 }
 
@@ -140,5 +138,11 @@ export namespace File {
 		contents: Blob.Arg;
 		executable?: boolean;
 		references?: Array<Artifact>;
+	};
+
+	export type Data = {
+		contents: Blob;
+		executable: boolean;
+		references: Array<Artifact>;
 	};
 }

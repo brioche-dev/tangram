@@ -17,7 +17,6 @@ pub struct Params {
 }
 
 impl Server {
-	#[allow(clippy::unused_async)]
 	pub async fn virtual_text_document(&self, params: Params) -> Result<Option<String>> {
 		// Get the module.
 		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;

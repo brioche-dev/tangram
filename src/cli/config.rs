@@ -3,7 +3,7 @@ use crate::{
 	Cli,
 };
 use std::path::{Path, PathBuf};
-use tangram::util::dirs::user_config_directory_path;
+use tg::util::dirs::user_config_directory_path;
 use url::Url;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]

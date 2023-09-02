@@ -1,8 +1,8 @@
 use super::Task;
 use crate::{
+	build::Build,
 	error::{error, return_error, Error, Result},
 	instance::Instance,
-	operation::Operation,
 	system::System,
 	template::Template,
 	value::Value,
@@ -17,8 +17,8 @@ use std::{
 impl Task {
 	#[tracing::instrument(skip(tg), ret)]
 	pub async fn run(&self, tg: &Instance) -> Result<Value> {
-		let operation = Operation::Task(self.clone());
-		operation.evaluate(tg, None).await
+		let operation = Build::Task(self.clone());
+		operation.output(tg, None).await
 	}
 
 	pub(crate) async fn run_inner(&self, tg: &Instance) -> Result<Value> {

@@ -1,6 +1,5 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
-import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Id } from "./id.ts";
@@ -16,18 +15,12 @@ export let symlink = async (
 	return await Symlink.new(...args);
 };
 
-type ConstructorArg = {
-	block: Block;
-	target: Template;
-};
-
 export class Symlink {
-	#block: Block;
-	#target: Template;
+	#id: Id | undefined;
+	#data: Symlink.Data | undefined;
 
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#target = arg.target;
+	constructor(arg: Symlink.Data) {
+		this.#data = arg;
 	}
 
 	static async new(...args: Array<Unresolved<Symlink.Arg>>): Promise<Symlink> {
@@ -73,8 +66,8 @@ export class Symlink {
 						}
 					} else if (arg instanceof Symlink) {
 						return {
-							artifact: arg.artifact(),
-							path: arg.path(),
+							artifact: await arg.artifact(),
+							path: await arg.path(),
 						};
 					} else if (arg instanceof Array) {
 						return await Promise.all(arg.map(map));
@@ -113,7 +106,7 @@ export class Symlink {
 			throw new Error("Invalid symlink.");
 		}
 
-		return await syscall.symlink.new({ target });
+		return new Symlink({ target });
 	}
 
 	static is(value: unknown): value is Symlink {
@@ -129,20 +122,26 @@ export class Symlink {
 		assert_(Symlink.is(value));
 	}
 
-	id(): Id {
-		return this.block().id();
+	async load(): Promise<void> {
+		if (!this.#data) {
+			this.#data = ((await syscall.value.load(this)) as Symlink).#data;
+		}
 	}
 
-	block(): Block {
-		return this.#block;
+	async store(): Promise<void> {
+		if (!this.#id) {
+			this.#id = ((await syscall.value.store(this)) as Symlink).#id;
+		}
 	}
 
-	target(): Template {
-		return this.#target;
+	async target(): Promise<Template> {
+		await this.load();
+		return this.#data!.target;
 	}
 
-	artifact(): Artifact | undefined {
-		let firstComponent = this.#target.components().at(0);
+	async artifact(): Promise<Artifact | undefined> {
+		await this.load();
+		let firstComponent = this.#data!.target.components().at(0);
 		if (Artifact.is(firstComponent)) {
 			return firstComponent;
 		} else {
@@ -150,8 +149,9 @@ export class Symlink {
 		}
 	}
 
-	path(): Relpath {
-		let [firstComponent, secondComponent] = this.#target.components();
+	async path(): Promise<Relpath> {
+		await this.load();
+		let [firstComponent, secondComponent] = this.#data!.target.components();
 		if (typeof firstComponent === "string" && secondComponent === undefined) {
 			return relpath(firstComponent);
 		} else if (Artifact.is(firstComponent) && secondComponent === undefined) {
@@ -170,16 +170,16 @@ export class Symlink {
 		from?: Unresolved<Symlink.Arg>,
 	): Promise<Directory | File | undefined> {
 		from = from ? await symlink(from) : undefined;
-		let fromArtifact = from?.artifact();
+		let fromArtifact = await from?.artifact();
 		if (fromArtifact instanceof Symlink) {
 			fromArtifact = await fromArtifact.resolve();
 		}
 		let fromPath = from?.path();
-		let artifact = this.artifact();
+		let artifact = await this.artifact();
 		if (artifact instanceof Symlink) {
 			artifact = await artifact.resolve();
 		}
-		let path = this.path();
+		let path = await this.path();
 		if (artifact !== undefined && path.isEmpty()) {
 			return artifact;
 		} else if (artifact === undefined && !path.isEmpty()) {
@@ -187,7 +187,7 @@ export class Symlink {
 				throw new Error("Expected a directory.");
 			}
 			return await fromArtifact.tryGet(
-				(fromPath ?? relpath()).parent().join(path).toSubpath(),
+				(await (fromPath ?? relpath())).parent().join(path).toSubpath(),
 			);
 		} else if (artifact !== undefined && !path.isEmpty()) {
 			if (!(artifact instanceof Directory)) {
@@ -215,4 +215,6 @@ export namespace Symlink {
 		artifact?: Artifact;
 		path?: string | Subpath;
 	};
+
+	export type Data = { target: Template };
 }

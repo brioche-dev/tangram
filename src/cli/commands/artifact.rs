@@ -1,5 +1,5 @@
 use crate::{error::Result, Cli};
-use tangram::{artifact::Artifact, block::Block, id::Id};
+use tangram::{artifact::Artifact, id::Id};
 use tokio::io::AsyncWriteExt;
 
 /// Manage artifacts.
@@ -29,10 +29,8 @@ impl Cli {
 
 	async fn command_artifact_get(&self, args: GetArgs) -> Result<()> {
 		let mut stdout = tokio::io::stdout();
-		let block = Block::with_id(args.id);
-		let artifact = Artifact::with_block(&self.tg, block).await?;
-		let json = serde_json::to_string_pretty(&artifact.to_data()).unwrap();
-		stdout.write_all(json.as_bytes()).await?;
+		let artifact = Artifact::with_id(id).await?;
+		stdout.write_all(format!("{artifact:?}").as_bytes()).await?;
 		Ok(())
 	}
 }

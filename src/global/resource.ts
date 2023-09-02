@@ -1,49 +1,39 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_ } from "./assert.ts";
-import { Block } from "./block.ts";
 import { Checksum } from "./checksum.ts";
 import { Id } from "./id.ts";
+import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 
-export let resource = async (arg: Resource.Arg): Promise<Resource> => {
+export let resource = async (
+	arg: Unresolved<Resource.Arg>,
+): Promise<Resource> => {
 	return await Resource.new(arg);
 };
 
-export let download = async (arg: Resource.Arg): Promise<Artifact> => {
+export let download = async (
+	arg: Unresolved<Resource.Arg>,
+): Promise<Artifact> => {
 	let resource = await Resource.new(arg);
 	let output = await resource.download();
 	return output;
 };
 
-type ConstructorArg = {
-	block: Block;
-	url: string;
-	unpack?: Resource.UnpackFormat;
-	checksum?: Checksum;
-	unsafe?: boolean;
-};
-
 export class Resource {
-	#block: Block;
-	#url: string;
-	#unpack?: Resource.UnpackFormat;
-	#checksum?: Checksum;
-	#unsafe: boolean;
+	#id: Id | undefined;
+	#data: Resource.Data | undefined;
 
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#url = arg.url;
-		this.#unpack = arg.unpack ?? undefined;
-		this.#checksum = arg.checksum ?? undefined;
-		this.#unsafe = arg.unsafe ?? false;
+	constructor(arg: Resource.Data) {
+		this.#data = arg;
 	}
 
-	static async new(arg: Resource.Arg): Promise<Resource> {
-		return await syscall.resource.new({
-			url: arg.url,
-			unpack: arg.unpack ?? undefined,
-			checksum: arg.checksum ?? undefined,
-			unsafe: arg.unsafe ?? false,
+	static async new(arg: Unresolved<Resource.Arg>): Promise<Resource> {
+		let resolvedArg = await resolve(arg);
+		return new Resource({
+			url: resolvedArg.url,
+			unpack: resolvedArg.unpack ?? undefined,
+			checksum: resolvedArg.checksum ?? undefined,
+			unsafe: resolvedArg.unsafe ?? false,
 		});
 	}
 
@@ -60,33 +50,41 @@ export class Resource {
 		assert_(Resource.is(value));
 	}
 
-	id(): Id {
-		return this.block().id();
+	async load(): Promise<void> {
+		if (!this.#data) {
+			this.#data = ((await syscall.value.load(this)) as Resource).#data;
+		}
 	}
 
-	block(): Block {
-		return this.#block;
+	async store(): Promise<void> {
+		if (!this.#id) {
+			this.#id = ((await syscall.value.store(this)) as Resource).#id;
+		}
 	}
 
 	/** Get this resource's URL. */
-	url(): string {
-		return this.#url;
+	async url(): Promise<string> {
+		await this.load();
+		return this.#data!.url;
 	}
 
-	unpack(): Resource.UnpackFormat | undefined {
-		return this.#unpack;
+	async unpack(): Promise<Resource.UnpackFormat | undefined> {
+		await this.load();
+		return this.#data!.unpack;
 	}
 
-	checksum(): Checksum | undefined {
-		return this.#checksum;
+	async checksum(): Promise<Checksum | undefined> {
+		await this.load();
+		return this.#data!.checksum;
 	}
 
-	unsafe(): boolean {
-		return this.#unsafe;
+	async unsafe(): Promise<boolean> {
+		await this.load();
+		return this.#data!.unsafe;
 	}
 
 	async download(): Promise<Artifact> {
-		return (await syscall.operation.evaluate(this)) as Artifact;
+		return (await syscall.build.output(this)) as Artifact;
 	}
 }
 
@@ -106,4 +104,11 @@ export namespace Resource {
 		| ".tar.xz"
 		| ".tar.zstd"
 		| ".zip";
+
+	export type Data = {
+		url: string;
+		unpack?: Resource.UnpackFormat;
+		checksum?: Checksum;
+		unsafe: boolean;
+	};
 }

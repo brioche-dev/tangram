@@ -1,10 +1,13 @@
-use crate::{artifact::Artifact, placeholder::Placeholder};
+use crate as tg;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 pub enum Component {
+	#[tangram_serialize(id = 0)]
 	String(String),
-	Artifact(Artifact),
-	Placeholder(Placeholder),
+	#[tangram_serialize(id = 1)]
+	Artifact(tg::Artifact),
+	#[tangram_serialize(id = 2)]
+	Placeholder(tg::Placeholder),
 }
 
 impl Component {
@@ -18,7 +21,7 @@ impl Component {
 	}
 
 	#[must_use]
-	pub fn as_artifact(&self) -> Option<&Artifact> {
+	pub fn as_artifact(&self) -> Option<&tg::Artifact> {
 		if let Self::Artifact(artifact) = self {
 			Some(artifact)
 		} else {
@@ -27,7 +30,7 @@ impl Component {
 	}
 
 	#[must_use]
-	pub fn as_placeholder(&self) -> Option<&Placeholder> {
+	pub fn as_placeholder(&self) -> Option<&tg::Placeholder> {
 		if let Self::Placeholder(placeholder) = self {
 			Some(placeholder)
 		} else {
@@ -47,7 +50,7 @@ impl Component {
 	}
 
 	#[must_use]
-	pub fn into_artifact(self) -> Option<Artifact> {
+	pub fn into_artifact(self) -> Option<tg::Artifact> {
 		if let Self::Artifact(artifact) = self {
 			Some(artifact)
 		} else {
@@ -56,21 +59,11 @@ impl Component {
 	}
 
 	#[must_use]
-	pub fn into_placeholder(self) -> Option<Placeholder> {
+	pub fn into_placeholder(self) -> Option<tg::Placeholder> {
 		if let Self::Placeholder(placeholder) = self {
 			Some(placeholder)
 		} else {
 			None
-		}
-	}
-}
-
-impl std::fmt::Display for Component {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			Component::String(value) => f.write_str(value),
-			Component::Artifact(value) => f.write_str(&format!("{value}")),
-			Component::Placeholder(value) => f.write_str(&value.name.to_string()),
 		}
 	}
 }

@@ -1,42 +1,42 @@
 use crate::{error::Result, Cli};
 use futures::FutureExt;
 use std::path::PathBuf;
-use tangram::path::Subpath;
+use tg::subpath::Subpath;
 
-mod add;
-mod artifact;
-mod autoenv;
-mod blob;
-mod block;
-mod build;
-mod check;
+// mod add;
+// mod artifact;
+// mod autoenv;
+// mod blob;
+// mod block;
+// mod build;
+// mod check;
 mod checkin;
-mod checkout;
-mod checksum;
-mod clean;
-mod doc;
-mod download;
-mod env;
-mod exec;
-mod fmt;
-mod init;
-mod log;
-mod login;
-mod lsp;
-mod new;
-mod operation;
-mod outdated;
-mod publish;
-mod pull;
-mod push;
-mod remove;
-mod run;
-mod search;
-mod serve;
-mod shell;
-mod test;
-mod tree;
-mod update;
+// mod checkout;
+// mod checksum;
+// mod clean;
+// mod doc;
+// mod download;
+// mod env;
+// mod exec;
+// mod fmt;
+// mod init;
+// mod log;
+// mod login;
+// mod lsp;
+// mod new;
+// mod operation;
+// mod outdated;
+// mod publish;
+// mod pull;
+// mod push;
+// mod remove;
+// mod run;
+// mod search;
+// mod serve;
+// mod shell;
+// mod test;
+// mod tree;
+// mod update;
 mod upgrade;
 
 #[derive(Debug, clap::Parser)]
@@ -67,40 +67,40 @@ pub struct Args {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
-	Add(self::add::Args),
-	Artifact(self::artifact::Args),
-	Autoenv(self::autoenv::Args),
-	Blob(self::blob::Args),
-	Block(self::block::Args),
-	Build(self::build::Args),
-	Check(self::check::Args),
+	// Add(self::add::Args),
+	// Artifact(self::artifact::Args),
+	// Autoenv(self::autoenv::Args),
+	// Blob(self::blob::Args),
+	// Block(self::block::Args),
+	// Build(self::build::Args),
+	// Check(self::check::Args),
 	Checkin(self::checkin::Args),
-	Checkout(self::checkout::Args),
-	Checksum(self::checksum::Args),
-	Clean(self::clean::Args),
-	Doc(self::doc::Args),
-	Download(self::download::Args),
-	Env(self::env::Args),
-	Exec(self::exec::Args),
-	Fmt(self::fmt::Args),
-	Init(self::init::Args),
-	Log(self::log::Args),
-	Login(self::login::Args),
-	Lsp(self::lsp::Args),
-	New(self::new::Args),
-	Operation(self::operation::Args),
-	Outdated(self::outdated::Args),
-	Publish(self::publish::Args),
-	Pull(self::pull::Args),
-	Push(self::push::Args),
-	Remove(self::remove::Args),
-	Run(self::run::Args),
-	Search(self::search::Args),
-	Serve(self::serve::Args),
-	Shell(self::shell::Args),
-	Test(self::test::Args),
-	Tree(self::tree::Args),
-	Update(self::update::Args),
+	// Checkout(self::checkout::Args),
+	// Checksum(self::checksum::Args),
+	// Clean(self::clean::Args),
+	// Doc(self::doc::Args),
+	// Download(self::download::Args),
+	// Env(self::env::Args),
+	// Exec(self::exec::Args),
+	// Fmt(self::fmt::Args),
+	// Init(self::init::Args),
+	// Log(self::log::Args),
+	// Login(self::login::Args),
+	// Lsp(self::lsp::Args),
+	// New(self::new::Args),
+	// Operation(self::operation::Args),
+	// Outdated(self::outdated::Args),
+	// Publish(self::publish::Args),
+	// Pull(self::pull::Args),
+	// Push(self::push::Args),
+	// Remove(self::remove::Args),
+	// Run(self::run::Args),
+	// Search(self::search::Args),
+	// Serve(self::serve::Args),
+	// Shell(self::shell::Args),
+	// Test(self::test::Args),
+	// Tree(self::tree::Args),
+	// Update(self::update::Args),
 	Upgrade(self::upgrade::Args),
 }
 
@@ -126,40 +126,40 @@ impl Cli {
 	pub async fn run(&self, args: Args) -> Result<()> {
 		// Run the subcommand.
 		match args.command {
-			Command::Add(args) => self.command_add(args).boxed(),
-			Command::Artifact(args) => self.command_artifact(args).boxed(),
-			Command::Autoenv(args) => self.command_autoenv(args).boxed(),
-			Command::Blob(args) => self.command_blob(args).boxed(),
-			Command::Block(args) => self.command_block(args).boxed(),
-			Command::Build(args) => self.command_build(args).boxed(),
-			Command::Check(args) => self.command_check(args).boxed(),
+			// Command::Add(args) => self.command_add(args).boxed(),
+			// Command::Artifact(args) => self.command_artifact(args).boxed(),
+			// Command::Autoenv(args) => self.command_autoenv(args).boxed(),
+			// Command::Blob(args) => self.command_blob(args).boxed(),
+			// Command::Block(args) => self.command_block(args).boxed(),
+			// Command::Build(args) => self.command_build(args).boxed(),
+			// Command::Check(args) => self.command_check(args).boxed(),
 			Command::Checkin(args) => self.command_checkin(args).boxed(),
-			Command::Checkout(args) => self.command_checkout(args).boxed(),
-			Command::Checksum(args) => self.command_checksum(args).boxed(),
-			Command::Clean(args) => self.command_clean(args).boxed(),
-			Command::Doc(args) => self.command_doc(args).boxed(),
-			Command::Download(args) => self.command_download(args).boxed(),
-			Command::Env(args) => self.command_env(args).boxed(),
-			Command::Exec(args) => self.command_exec(args).boxed(),
-			Command::Fmt(args) => self.command_fmt(args).boxed(),
-			Command::Init(args) => self.command_init(args).boxed(),
-			Command::Log(args) => self.command_log(args).boxed(),
-			Command::Login(args) => self.command_login(args).boxed(),
-			Command::Lsp(args) => self.command_lsp(args).boxed(),
-			Command::New(args) => self.command_new(args).boxed(),
-			Command::Operation(args) => self.command_operation(args).boxed(),
-			Command::Outdated(args) => self.command_outdated(args).boxed(),
-			Command::Publish(args) => self.command_publish(args).boxed(),
-			Command::Pull(args) => self.command_pull(args).boxed(),
-			Command::Push(args) => self.command_push(args).boxed(),
-			Command::Remove(args) => self.command_remove(args).boxed(),
-			Command::Run(args) => self.command_run(args).boxed(),
-			Command::Search(args) => self.command_search(args).boxed(),
-			Command::Serve(args) => self.command_serve(args).boxed(),
-			Command::Shell(args) => self.command_shell(args).boxed(),
-			Command::Test(args) => self.command_test(args).boxed(),
-			Command::Tree(args) => self.command_tree(args).boxed(),
-			Command::Update(args) => self.command_update(args).boxed(),
+			// Command::Checkout(args) => self.command_checkout(args).boxed(),
+			// Command::Checksum(args) => self.command_checksum(args).boxed(),
+			// Command::Clean(args) => self.command_clean(args).boxed(),
+			// Command::Doc(args) => self.command_doc(args).boxed(),
+			// Command::Download(args) => self.command_download(args).boxed(),
+			// Command::Env(args) => self.command_env(args).boxed(),
+			// Command::Exec(args) => self.command_exec(args).boxed(),
+			// Command::Fmt(args) => self.command_fmt(args).boxed(),
+			// Command::Init(args) => self.command_init(args).boxed(),
+			// Command::Log(args) => self.command_log(args).boxed(),
+			// Command::Login(args) => self.command_login(args).boxed(),
+			// Command::Lsp(args) => self.command_lsp(args).boxed(),
+			// Command::New(args) => self.command_new(args).boxed(),
+			// Command::Operation(args) => self.command_operation(args).boxed(),
+			// Command::Outdated(args) => self.command_outdated(args).boxed(),
+			// Command::Publish(args) => self.command_publish(args).boxed(),
+			// Command::Pull(args) => self.command_pull(args).boxed(),
+			// Command::Push(args) => self.command_push(args).boxed(),
+			// Command::Remove(args) => self.command_remove(args).boxed(),
+			// Command::Run(args) => self.command_run(args).boxed(),
+			// Command::Search(args) => self.command_search(args).boxed(),
+			// Command::Serve(args) => self.command_serve(args).boxed(),
+			// Command::Shell(args) => self.command_shell(args).boxed(),
+			// Command::Test(args) => self.command_test(args).boxed(),
+			// Command::Tree(args) => self.command_tree(args).boxed(),
+			// Command::Update(args) => self.command_update(args).boxed(),
 			Command::Upgrade(args) => self.command_upgrade(args).boxed(),
 		}
 		.await?;

@@ -1,7 +1,7 @@
 use crate::{
 	error::{return_error, Error, WrapErr},
 	package::Dependency,
-	path::Relpath,
+	relpath::Relpath,
 };
 use url::Url;
 

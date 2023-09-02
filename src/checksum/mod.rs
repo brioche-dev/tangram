@@ -1,8 +1,3 @@
-use crate::{
-	error::{Error, Result},
-	target::{FromV8, ToV8},
-};
-
 pub use self::{algorithm::Algorithm, encoding::Encoding, writer::Writer};
 
 pub mod algorithm;
@@ -31,21 +26,6 @@ impl Checksum {
 	#[must_use]
 	pub fn algorithm(&self) -> Algorithm {
 		self.algorithm
-	}
-}
-
-impl ToV8 for Checksum {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::other)
-	}
-}
-
-impl FromV8 for Checksum {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::other)
 	}
 }
 

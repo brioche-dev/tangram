@@ -1,5 +1,4 @@
 import { Blob } from "./blob.ts";
-import { Block } from "./block.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Relpath, Subpath } from "./path.ts";
@@ -43,7 +42,7 @@ let stringifyInner = (value: unknown, visited: WeakSet<object>): string => {
 			}
 		}
 		case "function": {
-			return `(function "${value.name_ ?? "(anonymous)"}")`;
+			return `(function "${value.name ?? "(anonymous)"}")`;
 		}
 		case "symbol": {
 			return "(symbol)";
@@ -80,8 +79,6 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		return `(tg.subpath ${value.toString()})`;
 	} else if (value instanceof Blob) {
 		return `(tg.blob ${value.id()})`;
-	} else if (value instanceof Block) {
-		return `(tg.block ${value.id()})`;
 	} else if (value instanceof Directory) {
 		return `(tg.directory ${value.id()})`;
 	} else if (value instanceof File) {
@@ -105,7 +102,7 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Resource) {
 		return `(tg.resource "${value.id()}")`;
 	} else if (value instanceof Target) {
-		return `(tg.target "${value.#block.id()}")`;
+		return `(tg.target "${value.id()}")`;
 	} else if (value instanceof Task) {
 		return `(tg.task "${value.id()}")`;
 	} else {
@@ -113,9 +110,9 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		let constructorName = "";
 		if (
 			value.constructor !== undefined &&
-			value.constructor.name_ !== "Object"
+			value.constructor.name !== "Object"
 		) {
-			constructorName = `${value.constructor.name_} `;
+			constructorName = `${value.constructor.name} `;
 		}
 		let entries = Object.entries(value).map(
 			([key, value]) => `${key}: ${stringifyInner(value, visited)}`,

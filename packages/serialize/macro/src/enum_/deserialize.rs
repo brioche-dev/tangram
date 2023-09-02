@@ -10,8 +10,8 @@ impl<'a> Enum<'a> {
 		// Generate the body.
 		let body = if let Some(try_from) = self.try_from {
 			quote! {
-				let value = <#try_from>::deserialize(deserializer)?;
-				let value = value.try_into().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+				let value = deserializer.deserialize::<#try_from>()?;
+				let value = value.try_into().map_err(|error| ::std::io::Error::new(::std::io::ErrorKind::Other, error))?;
 				Ok(value)
 			}
 		} else {
@@ -39,8 +39,8 @@ impl<'a> Enum<'a> {
 
 					// Skip over variants with unknown ids.
 					_ => {
-						tangram_serialize::Value::deserialize(deserializer)?;
-						return Err(std::io::Error::new(std::io::ErrorKind::Other, "Unexpected variant id."));
+						deserializer.deserialize::<tangram_serialize::Value>()?;
+						return ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::Other, "Unexpected variant id."));
 					},
 				};
 
@@ -51,9 +51,9 @@ impl<'a> Enum<'a> {
 		// Generate the code.
 		let code = quote! {
 			impl tangram_serialize::Deserialize for #ident {
-				fn deserialize<R>(deserializer: &mut tangram_serialize::Deserializer<R>) -> std::io::Result<Self>
+				fn deserialize<R>(deserializer: &mut tangram_serialize::Deserializer<R>) -> ::std::io::Result<Self>
 				where
-					R: std::io::Read,
+					R: ::std::io::Read,
 				{
 					#body
 				}

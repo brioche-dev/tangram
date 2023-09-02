@@ -44,15 +44,12 @@ impl Cli {
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
 		let target = Target::new(
-			&self.tg,
-			package.block().clone(),
+			package,
 			ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			args.target,
 			env,
 			args_,
-		)
-		.await
-		.wrap_err("Failed to create the target.")?;
+		);
 		let output = target.build(&self.tg).await?;
 
 		// Get the output artifact.

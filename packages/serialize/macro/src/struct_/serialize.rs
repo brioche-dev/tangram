@@ -15,7 +15,7 @@ impl<'a> Struct<'a> {
 				let s: #into = self.clone().into();
 
 				// Serialize the value.
-				s.serialize(serializer)?;
+				tangram_serialize::Serialize::serialize(&s, serializer)?;
 
 				Ok(())
 			}
@@ -29,8 +29,23 @@ impl<'a> Struct<'a> {
 			// Get the field ids.
 			let field_ids = fields.iter().map(|field| field.id).collect_vec();
 
-			// Get the field idents.
-			let field_idents = fields.iter().map(|field| &field.ident).collect_vec();
+			// Create the field writes.
+			let field_writes = fields
+				.iter()
+				.map(|field| {
+					let ident = field.ident.unwrap();
+					if let Some(serialize_with) = field.serialize_with.as_ref() {
+						let serialize_with = quote::format_ident!("{serialize_with}");
+						quote! {
+							#serialize_with(&self.#ident, serializer)?;
+						}
+					} else {
+						quote! {
+							serializer.serialize(&self.#ident)?;
+						}
+					}
+				})
+				.collect_vec();
 
 			quote! {
 				// Write the kind.
@@ -44,7 +59,7 @@ impl<'a> Struct<'a> {
 					// Write the field ID.
 					serializer.write_id(#field_ids)?;
 					// Write the field value.
-					serializer.serialize(&self.#field_idents)?;
+					#field_writes
 				)*;
 
 				Ok(())

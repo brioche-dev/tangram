@@ -1,5 +1,5 @@
 use super::{unpack, Resource};
-use crate::{checksum::Checksum, error::Result, instance::Instance};
+use crate::checksum::Checksum;
 use url::Url;
 
 impl Resource {
@@ -45,12 +45,8 @@ impl Builder {
 		self
 	}
 
-	pub async fn build(self, tg: &Instance) -> Result<Resource> {
-		let url = self.url;
-		let unpack = self.unpack;
-		let checksum = self.checksum;
-		let unsafe_ = self.unsafe_;
-		let download = Resource::new(tg, url, unpack, checksum, unsafe_).await?;
-		Ok(download)
+	#[must_use]
+	pub fn build(self) -> Resource {
+		Resource::new(self.url, self.unpack, self.checksum, self.unsafe_)
 	}
 }

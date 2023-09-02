@@ -1,7 +1,6 @@
 #![allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
 use super::{
-	buffer::Buffer,
 	isolate::THREAD_LOCAL_ISOLATE,
 	state::{FutureOutput, State},
 	FromV8, ToV8,
@@ -9,28 +8,17 @@ use super::{
 use crate::{
 	artifact::Artifact,
 	blob::Blob,
-	block::Block,
+	build::Build,
+	bytes::Bytes,
 	checksum::{self, Checksum},
-	directory::Directory,
 	error::{return_error, Error, Result, WrapErr},
-	file::File,
 	instance::Instance,
-	module::position::Position,
-	module::Module,
-	operation::Operation,
-	path::Subpath,
-	resource::{self, Resource},
-	symlink::Symlink,
-	system::System,
-	target::{convert::from_v8, Target},
-	task::Task,
-	template::Template,
-	value::Value,
+	target::convert::from_v8,
+	value::{Buffer, Value},
 };
 use base64::Engine as _;
 use itertools::Itertools;
-use std::{collections::BTreeMap, future::Future, rc::Rc};
-use url::Url;
+use std::{future::Future, rc::Rc};
 
 pub fn syscall<'s>(
 	scope: &mut v8::HandleScope<'s>,
@@ -63,17 +51,9 @@ fn syscall_inner<'s>(
 	// Invoke the syscall.
 	match name.as_str() {
 		"artifact_bundle" => syscall_async(scope, args, syscall_artifact_bundle),
-		"artifact_get" => syscall_async(scope, args, syscall_artifact_get),
 		"blob_bytes" => syscall_async(scope, args, syscall_blob_bytes),
-		"blob_get" => syscall_async(scope, args, syscall_blob_get),
-		"blob_new" => syscall_async(scope, args, syscall_blob_new),
-		"blob_text" => syscall_async(scope, args, syscall_blob_text),
-		"block_bytes" => syscall_async(scope, args, syscall_block_bytes),
-		"block_children" => syscall_async(scope, args, syscall_block_children),
-		"block_data" => syscall_async(scope, args, syscall_block_data),
-		"block_new" => syscall_async(scope, args, syscall_block_new),
+		"build_output" => syscall_async(scope, args, syscall_build_output),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
-		"directory_new" => syscall_async(scope, args, syscall_directory_new),
 		"encoding_base64_decode" => syscall_sync(scope, args, syscall_encoding_base64_decode),
 		"encoding_base64_encode" => syscall_sync(scope, args, syscall_encoding_base64_encode),
 		"encoding_hex_decode" => syscall_sync(scope, args, syscall_encoding_hex_decode),
@@ -86,14 +66,9 @@ fn syscall_inner<'s>(
 		"encoding_utf8_encode" => syscall_sync(scope, args, syscall_encoding_utf8_encode),
 		"encoding_yaml_decode" => syscall_sync(scope, args, syscall_encoding_yaml_decode),
 		"encoding_yaml_encode" => syscall_sync(scope, args, syscall_encoding_yaml_encode),
-		"file_new" => syscall_async(scope, args, syscall_file_new),
 		"log" => syscall_sync(scope, args, syscall_log),
-		"operation_evaluate" => syscall_async(scope, args, syscall_operation_evaluate),
-		"operation_get" => syscall_async(scope, args, syscall_operation_get),
-		"resource_new" => syscall_async(scope, args, syscall_resource_new),
-		"symlink_new" => syscall_async(scope, args, syscall_symlink_new),
-		"target_new" => syscall_async(scope, args, syscall_target_new),
-		"task_new" => syscall_async(scope, args, syscall_task_new),
+		"value_load" => syscall_async(scope, args, syscall_value_load),
+		"value_store" => syscall_async(scope, args, syscall_value_store),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
@@ -104,109 +79,16 @@ async fn syscall_artifact_bundle(tg: Instance, args: (Artifact,)) -> Result<Arti
 	Ok(artifact)
 }
 
-async fn syscall_artifact_get(tg: Instance, args: (Block,)) -> Result<Artifact> {
-	let (block,) = args;
-	let artifact = Artifact::with_block(&tg, block).await?;
-	Ok(artifact)
-}
-
-async fn syscall_blob_bytes(tg: Instance, args: (Blob,)) -> Result<Buffer> {
+async fn syscall_blob_bytes(tg: Instance, args: (Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
 	let bytes = blob.bytes(&tg).await?;
 	Ok(bytes.into())
 }
 
-async fn syscall_blob_get(tg: Instance, args: (Block,)) -> Result<Blob> {
-	let (block,) = args;
-	let blob = Blob::with_block(&tg, block).await?;
-	Ok(blob)
-}
-
-struct BlobArg {
-	children: Vec<Block>,
-}
-
-impl FromV8 for BlobArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let value = v8::Local::<v8::Object>::try_from(value).map_err(Error::other)?;
-		let children = "children".to_owned().to_v8(scope)?;
-		let children = value
-			.get(scope, children)
-			.wrap_err(r#"Expected key "children"."#)?;
-		let children = from_v8(scope, children)?;
-		Ok(Self { children })
-	}
-}
-
-async fn syscall_blob_new(tg: Instance, args: (BlobArg,)) -> Result<Blob> {
-	let (BlobArg { children },) = args;
-	let blob = Blob::new(&tg, children).await?;
-	Ok(blob)
-}
-
-async fn syscall_blob_text(tg: Instance, args: (Blob,)) -> Result<String> {
-	let (blob,) = args;
-	let text = blob.text(&tg).await?;
-	Ok(text)
-}
-
-async fn syscall_block_bytes(tg: Instance, args: (Block,)) -> Result<Buffer> {
-	let (block,) = args;
-	let bytes = block.bytes(&tg).await?;
-	Ok(bytes.into())
-}
-
-async fn syscall_block_data(tg: Instance, args: (Block,)) -> Result<Buffer> {
-	let (block,) = args;
-	let data = block.data(&tg).await?;
-	Ok(data.into())
-}
-
-struct BlockArg {
-	children: Option<Vec<Block>>,
-	data: Option<Buffer>,
-}
-
-impl FromV8 for BlockArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let value = v8::Local::<v8::Object>::try_from(value).map_err(Error::other)?;
-		let children = "children".to_owned().to_v8(scope)?;
-		let children = value
-			.get(scope, children)
-			.wrap_err(r#"Expected key "children"."#)?;
-		let children = from_v8(scope, children)?;
-		let data = "data".to_owned().to_v8(scope)?;
-		let data = value.get(scope, data).wrap_err(r#"Expected key "data"."#)?;
-		let data = from_v8(scope, data)?;
-		Ok(Self { children, data })
-	}
-}
-
-async fn syscall_block_new(_tg: Instance, args: (BlockArg,)) -> Result<Block> {
-	let (BlockArg { data, children },) = args;
-	let block = Block::with_children_and_data(
-		children.unwrap_or_default(),
-		data.as_ref().map_or(&[], |data| data.as_ref()),
-	)?;
-	Ok(block)
-}
-
-async fn syscall_block_children(tg: Instance, args: (Block,)) -> Result<Vec<Block>> {
-	let (block,) = args;
-	let references = block.children(&tg).await?;
-	Ok(references)
-}
-
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (checksum::Algorithm, Buffer),
+	args: (checksum::Algorithm, Bytes),
 ) -> Result<Checksum> {
 	let (algorithm, bytes) = args;
 	let mut checksum_writer = checksum::Writer::new(algorithm);
@@ -215,36 +97,11 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
-struct DirectoryArg {
-	entries: BTreeMap<String, Artifact>,
-}
-
-impl FromV8 for DirectoryArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let value = v8::Local::<v8::Object>::try_from(value).map_err(Error::other)?;
-		let entries = "entries".to_owned().to_v8(scope)?;
-		let entries = value
-			.get(scope, entries)
-			.wrap_err(r#"Expected key "entries"."#)?;
-		let entries = from_v8(scope, entries)?;
-		Ok(Self { entries })
-	}
-}
-
-async fn syscall_directory_new(_tg: Instance, args: (DirectoryArg,)) -> Result<Directory> {
-	let (arg,) = args;
-	let directory = Directory::new(&arg.entries).await?;
-	Ok(directory)
-}
-
 fn syscall_encoding_base64_decode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
 	args: (String,),
-) -> Result<Buffer> {
+) -> Result<Bytes> {
 	let (value,) = args;
 	let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
 		.decode(value)
@@ -256,7 +113,7 @@ fn syscall_encoding_base64_decode(
 fn syscall_encoding_base64_encode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (Buffer,),
+	args: (Bytes,),
 ) -> Result<String> {
 	let (value,) = args;
 	let encoded = base64::engine::general_purpose::STANDARD_NO_PAD.encode(value);
@@ -266,7 +123,7 @@ fn syscall_encoding_base64_encode(
 fn syscall_encoding_hex_decode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (Buffer,),
+	args: (Bytes,),
 ) -> Result<String> {
 	let (hex,) = args;
 	let bytes = hex::decode(hex)
@@ -282,7 +139,7 @@ fn syscall_encoding_hex_encode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
 	args: (String,),
-) -> Result<Buffer> {
+) -> Result<Bytes> {
 	let (bytes,) = args;
 	let hex = hex::encode(bytes);
 	let bytes = hex.into_bytes().into();
@@ -340,7 +197,7 @@ fn syscall_encoding_toml_encode(
 fn syscall_encoding_utf8_decode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
-	args: (Buffer,),
+	args: (Bytes,),
 ) -> Result<String> {
 	let (bytes,) = args;
 	let string = String::from_utf8(bytes.as_slice().to_owned())
@@ -353,7 +210,7 @@ fn syscall_encoding_utf8_encode(
 	_scope: &mut v8::HandleScope,
 	_tg: Instance,
 	args: (String,),
-) -> Result<Buffer> {
+) -> Result<Bytes> {
 	let (string,) = args;
 	let bytes = string.into_bytes().into();
 	Ok(bytes)
@@ -383,153 +240,10 @@ fn syscall_encoding_yaml_encode(
 	Ok(yaml)
 }
 
-struct FileArg {
-	contents: Blob,
-	executable: bool,
-	references: Vec<Artifact>,
-}
-
-impl FromV8 for FileArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		todo!()
-	}
-}
-
-async fn syscall_file_new(tg: Instance, args: (FileArg,)) -> Result<File> {
-	let (arg,) = args;
-	let file = File::new(&tg, &arg.contents, arg.executable, &arg.references).await?;
-	Ok(file)
-}
-
 fn syscall_log(_scope: &mut v8::HandleScope, _tg: Instance, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	println!("{string}");
 	Ok(())
-}
-
-async fn syscall_operation_evaluate(tg: Instance, args: (Operation,)) -> Result<Value> {
-	let (operation,) = args;
-	let value = operation.evaluate(&tg, None).await?;
-	Ok(value)
-}
-
-async fn syscall_operation_get(tg: Instance, args: (Block,)) -> Result<Operation> {
-	let (block,) = args;
-	let operation = Operation::with_block(&tg, block).await?;
-	Ok(operation)
-}
-
-struct ResourceArg {
-	url: Url,
-	unpack: Option<resource::unpack::Format>,
-	checksum: Option<Checksum>,
-	unsafe_: bool,
-}
-
-impl FromV8 for ResourceArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		todo!()
-	}
-}
-
-async fn syscall_resource_new(tg: Instance, args: (ResourceArg,)) -> Result<Resource> {
-	let (arg,) = args;
-	let download = Resource::new(&tg, arg.url, arg.unpack, arg.checksum, arg.unsafe_).await?;
-	Ok(download)
-}
-
-struct StackFrame {
-	module: Module,
-	position: Position,
-	line: String,
-}
-
-struct SymlinkArg {
-	target: Template,
-}
-
-impl FromV8 for SymlinkArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		todo!()
-	}
-}
-
-async fn syscall_symlink_new(_tg: Instance, args: (SymlinkArg,)) -> Result<Symlink> {
-	let (arg,) = args;
-	let symlink = Symlink::new(arg.target)?;
-	Ok(symlink)
-}
-
-struct TargetArg {
-	package: Block,
-	module_path: Subpath,
-	name: String,
-	env: BTreeMap<String, Value>,
-	args: Vec<Value>,
-}
-
-impl FromV8 for TargetArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		todo!()
-	}
-}
-
-async fn syscall_target_new(tg: Instance, args: (TargetArg,)) -> Result<Target> {
-	let (arg,) = args;
-	let target = Target::new(
-		&tg,
-		arg.package,
-		arg.module_path,
-		arg.name,
-		arg.env,
-		arg.args,
-	)
-	.await?;
-	Ok(target)
-}
-
-struct TaskArg {
-	host: System,
-	executable: Template,
-	env: BTreeMap<String, Template>,
-	args: Vec<Template>,
-	checksum: Option<Checksum>,
-	unsafe_: bool,
-	network: bool,
-}
-
-impl FromV8 for TaskArg {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		todo!()
-	}
-}
-
-async fn syscall_task_new(tg: Instance, args: (TaskArg,)) -> Result<Task> {
-	let (arg,) = args;
-	let task = Task::builder(arg.host, arg.executable)
-		.env(arg.env)
-		.args(arg.args)
-		.checksum(arg.checksum)
-		.unsafe_(arg.unsafe_)
-		.network(arg.network)
-		.build(&tg)
-		.await?;
-	Ok(task)
 }
 
 fn syscall_sync<'s, A, T, F>(

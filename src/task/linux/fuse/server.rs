@@ -2,7 +2,6 @@ use super::sys;
 use crate::{
 	artifact::Artifact,
 	blob,
-	block::Block,
 	directory::Directory,
 	error::{Error, Result, WrapErr},
 	file::File,
@@ -542,7 +541,8 @@ impl Server {
 					write!(&mut response, "{string}").unwrap();
 				},
 				template::Component::Artifact(artifact) => {
-					write!(&mut response, "/.tangram/artifacts/{}", artifact.id()).unwrap();
+					let id = artifact.id(&self.tg).await?;
+					write!(&mut response, "/.tangram/artifacts/{id}").unwrap();
 				},
 				template::Component::Placeholder(_) => {
 					return Err(libc::EIO);
@@ -628,10 +628,7 @@ impl Server {
 		let child_artifact = match &parent_node.kind {
 			NodeKind::Root { .. } => {
 				let id = name.parse().map_err(|_| libc::ENOENT)?;
-				let block = Block::with_id(id);
-				Artifact::with_block(&self.tg, block)
-					.await
-					.map_err(|_| libc::EIO)?
+				Artifact::with_id(id)
 			},
 
 			NodeKind::Directory { directory, .. } => directory

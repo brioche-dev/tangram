@@ -224,6 +224,44 @@ impl FromV8 for i64 {
 	}
 }
 
+impl ToV8 for f32 {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		Ok(v8::Number::new(scope, self.to_f64().wrap_err("Invalid number.")?).into())
+	}
+}
+
+impl FromV8 for f32 {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		v8::Local::<v8::Number>::try_from(value)
+			.map_err(Error::other)?
+			.number_value(scope)
+			.wrap_err("Expected a number.")?
+			.to_f32()
+			.wrap_err("Invalid number.")
+	}
+}
+
+impl ToV8 for f64 {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		Ok(v8::Number::new(scope, *self).into())
+	}
+}
+
+impl FromV8 for f64 {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		v8::Local::<v8::Number>::try_from(value)
+			.map_err(Error::other)?
+			.number_value(scope)
+			.wrap_err("Expected a number.")
+	}
+}
+
 impl ToV8 for String {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		Ok(v8::String::new(scope, self)
@@ -333,7 +371,7 @@ where
 	}
 }
 
-impl<T> ToV8 for Vec<T>
+impl<T> ToV8 for &[T]
 where
 	T: ToV8,
 {
@@ -344,6 +382,15 @@ where
 			.collect::<Result<Vec<_>>>()?;
 		let value = v8::Array::new_with_elements(scope, &values);
 		Ok(value.into())
+	}
+}
+
+impl<T> ToV8 for Vec<T>
+where
+	T: ToV8,
+{
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.as_slice().to_v8(scope)
 	}
 }
 

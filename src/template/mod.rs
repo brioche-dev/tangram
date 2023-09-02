@@ -1,21 +1,17 @@
-pub use self::{component::Component, data::Data};
-use crate::{
-	artifact::Artifact,
-	error::Result,
-	instance::Instance,
-	target::{FromV8, ToV8},
-};
-use futures::{stream::FuturesUnordered, TryStreamExt};
+pub use self::component::Component;
+use crate as tg;
 
 mod component;
-pub mod data;
 mod render;
 mod unrender;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 pub struct Template {
-	components: Vec<Component>,
+	#[tangram_serialize(id = 0)]
+	pub components: Vec<Component>,
 }
+
+crate::value!(Template);
 
 impl Template {
 	#[must_use]
@@ -32,7 +28,7 @@ impl Template {
 		&self.components
 	}
 
-	pub fn artifacts(&self) -> impl Iterator<Item = &Artifact> {
+	pub fn artifacts(&self) -> impl Iterator<Item = &tg::Artifact> {
 		self.components
 			.iter()
 			.filter_map(|component| match component {
@@ -40,14 +36,18 @@ impl Template {
 				_ => None,
 			})
 	}
+}
 
-	pub async fn store(&self, tg: &Instance) -> Result<()> {
-		Ok(self
-			.artifacts()
-			.map(|artifact| artifact.store(tg))
-			.collect::<FuturesUnordered<_>>()
-			.try_collect()
-			.await?)
+impl Template {
+	#[must_use]
+	pub fn children(&self) -> Vec<tg::Value> {
+		self.components
+			.iter()
+			.filter_map(|component| match component {
+				Component::Artifact(artifact) => Some(artifact.clone().into()),
+				_ => None,
+			})
+			.collect()
 	}
 }
 
@@ -80,20 +80,5 @@ impl FromIterator<Component> for Template {
 		Template {
 			components: value.into_iter().collect(),
 		}
-	}
-}
-
-impl ToV8 for Template {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		todo!()
-	}
-}
-
-impl FromV8 for Template {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		todo!()
 	}
 }

@@ -95,7 +95,9 @@ impl<'a> Struct<'a> {
 impl<'a> Field<'a> {
 	pub fn parse(field: &'a syn::Field) -> syn::Result<Field<'a>> {
 		// Initialize the attrs.
+		let mut deserialize_with = None;
 		let mut id = None;
+		let mut serialize_with = None;
 		let mut skip = false;
 
 		// Get the ident.
@@ -119,6 +121,21 @@ impl<'a> Field<'a> {
 
 			for item in list.nested.iter() {
 				match item {
+					// Handle the "deserialize_with" key.
+					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
+						if item.path.is_ident("deserialize_with") =>
+					{
+						// Get the value as an identifier.
+						let syn::Lit::Str(value) = &item.lit else {
+							return Err(syn::Error::new_spanned(
+								item,
+								r#"The value for the attribute "deserialize_with" must be a string."#,
+							));
+						};
+
+						deserialize_with = Some(value.value());
+					},
+
 					// Handle the "id" key.
 					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
 						if item.path.is_ident("id") =>
@@ -142,6 +159,21 @@ impl<'a> Field<'a> {
 						id = Some(value);
 					},
 
+					// Handle the "serialize_with" key.
+					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
+						if item.path.is_ident("serialize_with") =>
+					{
+						// Get the value as an identifier.
+						let syn::Lit::Str(value) = &item.lit else {
+							return Err(syn::Error::new_spanned(
+								item,
+								r#"The value for the attribute "serialize_with" must be a string."#,
+							));
+						};
+
+						serialize_with = Some(value.value());
+					},
+
 					// Handle the "skip" key.
 					syn::NestedMeta::Meta(syn::Meta::Path(path)) if path.is_ident("skip") => {
 						skip = true;
@@ -152,6 +184,12 @@ impl<'a> Field<'a> {
 			}
 		}
 
-		Ok(Field { id, ident, skip })
+		Ok(Field {
+			deserialize_with,
+			id,
+			ident,
+			serialize_with,
+			skip,
+		})
 	}
 }

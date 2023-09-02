@@ -1,7 +1,6 @@
 import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import { Block, block } from "./block.ts";
 import { Directory, directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { env } from "./env.ts";
@@ -9,7 +8,6 @@ import { prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
 import { include } from "./include.ts";
 import { log } from "./log.ts";
-import { Package, package_ } from "./package.ts";
 import { Relpath, Subpath, relpath, subpath } from "./path.ts";
 import { Placeholder, placeholder } from "./placeholder.ts";
 import { resolve } from "./resolve.ts";
@@ -38,10 +36,8 @@ Object.defineProperties(globalThis, {
 let tg = {
 	Artifact,
 	Blob,
-	Block,
 	Directory,
 	File,
-	Package,
 	Placeholder,
 	Relpath,
 	Subpath,
@@ -53,7 +49,6 @@ let tg = {
 	Value,
 	assert,
 	blob,
-	block,
 	directory,
 	download,
 	encoding,
@@ -62,7 +57,6 @@ let tg = {
 	include,
 	log,
 	output,
-	package_,
 	placeholder,
 	relpath,
 	resolve,

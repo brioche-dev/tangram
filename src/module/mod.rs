@@ -1,20 +1,22 @@
 pub use self::import::Import;
+#[cfg(feature = "language")]
+pub use crate::document::Document;
 use crate::{
-	document::Document,
 	error::{return_error, Error, Result, WrapErr},
 	id::Id,
-	path::Subpath,
+	package::Package,
+	subpath::Subpath,
 };
 use url::Url;
 
 pub mod analyze;
 pub mod error;
 pub mod import;
-pub mod load;
+// pub mod load;
 pub mod parse;
 pub mod position;
 pub mod range;
-pub mod resolve;
+// pub mod resolve;
 pub mod transpile;
 mod version;
 
@@ -28,6 +30,7 @@ pub enum Module {
 	Library(Library),
 
 	/// A document module.
+	#[cfg(feature = "language")]
 	Document(Document),
 
 	/// A normal module.
@@ -40,7 +43,7 @@ pub enum Module {
 #[serde(rename_all = "camelCase")]
 pub struct Library {
 	/// The module's path.
-	pub module_path: Subpath,
+	pub path: Subpath,
 }
 
 #[derive(
@@ -52,7 +55,7 @@ pub struct Normal {
 	pub package: Id,
 
 	/// The module's path.
-	pub module_path: Subpath,
+	pub path: Subpath,
 }
 
 impl From<Module> for Url {
@@ -61,13 +64,14 @@ impl From<Module> for Url {
 		let data = hex::encode(serde_json::to_string(&value).unwrap());
 
 		let path = match value {
-			Module::Library(library) => format!("/{}", library.module_path),
+			Module::Library(library) => format!("/{}", library.path),
+			#[cfg(feature = "language")]
 			Module::Document(document) => format!(
 				"/{}/{}",
 				document.package_path.display(),
 				document.module_path
 			),
-			Module::Normal(normal) => format!("/{}", normal.module_path),
+			Module::Normal(normal) => format!("/{}", normal.path),
 		};
 
 		// Create the URL.
@@ -87,12 +91,12 @@ impl TryFrom<Url> for Module {
 		// Get the domain.
 		let data = value.domain().wrap_err("The URL must have a domain.")?;
 
-		// Decode.
+		// Decode the domain.
 		let data = hex::decode(data)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the path as hex.")?;
 
-		// Deserialize.
+		// Deserialize the domain.
 		let module = serde_json::from_slice(&data)
 			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the module.")?;

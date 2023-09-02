@@ -1,109 +1,96 @@
-pub use self::{
-	buffer::Buffer,
-	convert::{from_v8, to_v8, FromV8, ToV8},
-};
-pub use self::{data::Data, error::Error};
-use crate::{
-	block::Block, error::Result, id::Id, instance::Instance, package::Package, path::Subpath,
-	value::Value,
-};
+pub use self::error::Error;
+use crate::{self as tg, subpath::Subpath};
 use std::collections::BTreeMap;
 
-mod buffer;
-#[cfg(feature = "evaluate")]
-mod build;
-#[cfg(feature = "evaluate")]
+// #[cfg(feature = "build")]
+// mod build;
+#[cfg(feature = "build")]
 mod context;
+#[cfg(feature = "build")]
 mod convert;
-mod data;
 mod error;
-#[cfg(feature = "evaluate")]
+#[cfg(feature = "build")]
 mod exception;
-#[cfg(feature = "evaluate")]
+#[cfg(feature = "build")]
 mod isolate;
-#[cfg(feature = "evaluate")]
+#[cfg(feature = "build")]
 mod module;
-mod new;
-#[cfg(feature = "evaluate")]
+#[cfg(feature = "build")]
 mod state;
-#[cfg(feature = "evaluate")]
+#[cfg(feature = "build")]
 mod syscall;
 
-/// A target.
-#[derive(Clone, Debug)]
-pub struct Target {
-	/// The target's block.
-	block: Block,
+crate::value!(Target);
 
+/// A target.
+#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+pub struct Target {
 	/// The target's package.
-	package: Block,
+	#[tangram_serialize(id = 0)]
+	pub package: tg::Package,
 
 	/// The path to the module in the package where the target is defined.
-	path: Subpath,
+	#[tangram_serialize(id = 1)]
+	pub path: Subpath,
 
 	/// The name of the target.
-	name: String,
+	#[tangram_serialize(id = 2)]
+	pub name: String,
 
 	/// The target's environment variables.
-	env: BTreeMap<String, Value>,
+	#[tangram_serialize(id = 3)]
+	pub env: BTreeMap<String, tg::Value>,
 
 	/// The target's arguments.
-	args: Vec<Value>,
+	#[tangram_serialize(id = 4)]
+	pub args: Vec<tg::Value>,
 }
 
 impl Target {
 	#[must_use]
-	pub fn id(&self) -> Id {
-		self.block().id()
+	pub fn new(
+		package: tg::Package,
+		path: Subpath,
+		name: String,
+		env: BTreeMap<String, tg::Value>,
+		args: Vec<tg::Value>,
+	) -> Self {
+		Self {
+			package,
+			path,
+			name,
+			env,
+			args,
+		}
 	}
 
 	#[must_use]
-	pub fn block(&self) -> &Block {
-		&self.block
-	}
-
-	pub async fn package(&self, tg: &Instance) -> Result<Package> {
-		Package::with_block(tg, self.block().clone()).await
-	}
-}
-
-impl std::cmp::PartialEq for Target {
-	fn eq(&self, other: &Self) -> bool {
-		self.id() == other.id()
-	}
-}
-
-impl std::cmp::Eq for Target {}
-
-impl std::cmp::PartialOrd for Target {
-	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.id().partial_cmp(&other.id())
-	}
-}
-
-impl std::cmp::Ord for Target {
-	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		self.id().cmp(&other.id())
-	}
-}
-
-impl std::hash::Hash for Target {
-	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		self.id().hash(state);
-	}
-}
-
-impl ToV8 for Target {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+	pub fn children(&self) -> Vec<tg::Value> {
 		todo!()
 	}
-}
 
-impl FromV8 for Target {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		todo!()
+	#[must_use]
+	pub fn package(&self) -> &tg::Package {
+		&self.package
+	}
+
+	#[must_use]
+	pub fn path(&self) -> &Subpath {
+		&self.path
+	}
+
+	#[must_use]
+	pub fn name(&self) -> &String {
+		&self.name
+	}
+
+	#[must_use]
+	pub fn env(&self) -> &BTreeMap<String, tg::Value> {
+		&self.env
+	}
+
+	#[must_use]
+	pub fn args(&self) -> &Vec<tg::Value> {
+		&self.args
 	}
 }

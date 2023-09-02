@@ -1,6 +1,7 @@
-use super::{Document, Import, Library, Module};
+use super::{Import, Library, Module};
+#[cfg(feature = "language")]
+use crate::document::Document;
 use crate::{
-	block::Block,
 	error::{return_error, Result, WrapErr},
 	instance::Instance,
 	package::{dependency::Dependency, Package, ROOT_MODULE_FILE_NAME},
@@ -27,6 +28,7 @@ impl Module {
 				return_error!(r#"Cannot resolve a dependency import from a library module."#);
 			},
 
+			#[cfg(feature = "language")]
 			(Self::Document(document), Import::Path(path)) => {
 				// Resolve the module path.
 				let package_path = document.package_path.clone();
@@ -53,6 +55,7 @@ impl Module {
 				Ok(module)
 			},
 
+			#[cfg(feature = "language")]
 			(Self::Document(document), Import::Dependency(Dependency::Path(dependency_path))) => {
 				// Resolve the package path.
 				let dependency_path = document
@@ -72,6 +75,7 @@ impl Module {
 				))
 			},
 
+			#[cfg(feature = "language")]
 			(Self::Document(_), Import::Dependency(Dependency::Registry(_))) => {
 				unimplemented!()
 			},
@@ -86,7 +90,7 @@ impl Module {
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Normal(super::Normal {
-					package: module.package.clone(),
+					package: module.package,
 					module_path,
 				}))
 			},

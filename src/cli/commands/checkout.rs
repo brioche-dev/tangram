@@ -3,7 +3,7 @@ use crate::{
 	Cli,
 };
 use std::path::PathBuf;
-use tangram::{artifact::Artifact, block::Block, id::Id};
+use tangram::{artifact::Artifact, id::Id};
 
 /// Check out an artifact.
 #[derive(Debug, clap::Args)]

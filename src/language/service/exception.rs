@@ -27,7 +27,8 @@ impl Error {
 			.to_rust_string_lossy(scope);
 
 		// Get the stack trace.
-		let stack_string = v8::String::new(scope, "stack").unwrap();
+		let stack_string =
+			v8::String::new_external_onebyte_static(scope, "stack".as_bytes()).unwrap();
 		let stack_trace = if let Some(stack) = exception
 			.is_native_error()
 			.then(|| exception.to_object(scope).unwrap())
@@ -78,7 +79,8 @@ impl Error {
 		};
 
 		// Get the source.
-		let cause_string = v8::String::new(scope, "cause").unwrap();
+		let cause_string =
+			v8::String::new_external_onebyte_static(scope, "cause".as_bytes()).unwrap();
 		let source = if let Some(cause) = exception
 			.is_native_error()
 			.then(|| exception.to_object(scope).unwrap())

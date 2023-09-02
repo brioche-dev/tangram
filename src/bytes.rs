@@ -1,31 +1,60 @@
-#[cfg(feature = "v8")]
-use crate::{
-	error::Result,
-	target::{from_v8, FromV8, ToV8},
-};
-#[cfg(not(feature = "v8"))]
+#[cfg(feature = "build")]
+use crate::error::{Error, Result, WrapErr};
+use std::ops::Range;
+#[cfg(not(feature = "build"))]
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
-pub struct Bytes(
-	#[cfg(not(feature = "v8"))] Arc<[u8]>,
-	#[cfg(feature = "v8")] crate::target::Buffer,
-);
+pub struct Bytes {
+	buffer: Buffer,
+	range: Range<usize>,
+}
+
+crate::value!(Bytes);
 
 impl Bytes {
 	#[must_use]
-	pub fn with_boxed_slice(bytes: Box<[u8]>) -> Self {
-		Self(bytes.into())
+	pub fn empty() -> Self {
+		Self::with_buffer(vec![].into())
 	}
 
 	#[must_use]
-	pub fn with_vec(bytes: Vec<u8>) -> Self {
-		Self(bytes.into())
+	pub fn with_slice(slice: &[u8]) -> Self {
+		Self::with_buffer(slice.to_owned().into())
+	}
+
+	pub fn with_boxed_slice(slice: Box<[u8]>) -> Self {
+		Self::with_buffer(slice.into())
+	}
+
+	pub fn with_vec(vec: Vec<u8>) -> Self {
+		Self::with_buffer(vec.into())
+	}
+
+	#[must_use]
+	pub fn with_buffer(buffer: Buffer) -> Self {
+		let range = 0..buffer.as_ref().len();
+		Self::new(buffer, range)
+	}
+
+	#[must_use]
+	pub fn new(buffer: Buffer, range: Range<usize>) -> Self {
+		Self { buffer, range }
+	}
+
+	#[must_use]
+	pub fn buffer(&self) -> &Buffer {
+		&self.buffer
+	}
+
+	#[must_use]
+	pub fn range(&self) -> Range<usize> {
+		self.range.clone()
 	}
 
 	#[must_use]
 	pub fn as_slice(&self) -> &[u8] {
-		&self.0
+		&self.buffer.as_ref()[self.range.clone()]
 	}
 }
 
@@ -35,15 +64,11 @@ impl AsRef<[u8]> for Bytes {
 	}
 }
 
-impl From<Box<[u8]>> for Bytes {
-	fn from(bytes: Box<[u8]>) -> Self {
-		Self::with_boxed_slice(bytes)
-	}
-}
+impl std::ops::Deref for Bytes {
+	type Target = [u8];
 
-impl From<Vec<u8>> for Bytes {
-	fn from(bytes: Vec<u8>) -> Self {
-		Self::with_vec(bytes)
+	fn deref(&self) -> &Self::Target {
+		self.as_slice()
 	}
 }
 
@@ -52,7 +77,7 @@ impl serde::Serialize for Bytes {
 	where
 		S: serde::Serializer,
 	{
-		todo!()
+		serializer.serialize_bytes(self.as_slice())
 	}
 }
 
@@ -61,7 +86,20 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 	where
 		D: serde::Deserializer<'de>,
 	{
-		todo!()
+		struct Visitor;
+		impl<'de> serde::de::Visitor<'de> for Visitor {
+			type Value = Bytes;
+			fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+				formatter.write_str("a byte buf")
+			}
+			fn visit_byte_buf<E>(self, v: Vec<u8>) -> std::result::Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				Ok(Bytes::with_buffer(Buffer::from(v.into_boxed_slice())))
+			}
+		}
+		deserializer.deserialize_byte_buf(Visitor)
 	}
 }
 
@@ -70,7 +108,7 @@ impl tangram_serialize::Serialize for Bytes {
 	where
 		W: std::io::Write,
 	{
-		todo!()
+		serializer.serialize_bytes(self.as_slice())
 	}
 }
 
@@ -81,23 +119,55 @@ impl tangram_serialize::Deserialize for Bytes {
 	where
 		R: std::io::Read,
 	{
-		todo!()
+		let bytes = deserializer.deserialize_bytes()?;
+		Ok(Bytes::with_buffer(Buffer::from(bytes.into_boxed_slice())))
 	}
 }
 
-#[cfg(feature = "v8")]
-impl ToV8 for Bytes {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		self.0.to_v8(scope)
+#[derive(Clone, Debug)]
+pub struct Buffer(
+	#[cfg(not(feature = "build"))] Arc<[u8]>,
+	#[cfg(feature = "build")] v8::SharedRef<v8::BackingStore>,
+);
+
+impl AsRef<[u8]> for Buffer {
+	fn as_ref(&self) -> &[u8] {
+		#[cfg(not(feature = "build"))]
+		{
+			&self.0
+		}
+		#[cfg(feature = "build")]
+		unsafe {
+			std::slice::from_raw_parts(
+				self.0.data().unwrap().as_ptr().cast::<u8>(),
+				self.0.byte_length(),
+			)
+		}
 	}
 }
 
-#[cfg(feature = "v8")]
-impl FromV8 for Bytes {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		Ok(Self(from_v8(scope, value)?))
+impl From<Box<[u8]>> for Buffer {
+	fn from(value: Box<[u8]>) -> Self {
+		Self(
+			#[cfg(not(feature = "build"))]
+			value.into(),
+			#[cfg(feature = "build")]
+			unsafe {
+				v8::ArrayBuffer::new_backing_store_from_boxed_slice(value).make_shared()
+			},
+		)
+	}
+}
+
+impl From<Vec<u8>> for Buffer {
+	fn from(value: Vec<u8>) -> Self {
+		Self(
+			#[cfg(not(feature = "build"))]
+			value.into(),
+			#[cfg(feature = "build")]
+			unsafe {
+				v8::ArrayBuffer::new_backing_store_from_vec(value).make_shared()
+			},
+		)
 	}
 }

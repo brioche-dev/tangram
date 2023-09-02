@@ -3,9 +3,6 @@
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Command {
-	/// The command's block.
-	block: Block,
-
 	/// The system to run the command on.
 	host: System,
 
@@ -23,4 +20,21 @@ pub struct Command {
 	/// If this flag is set, then the command will have access to the network.
 	#[serde(default)]
 	network: bool,
+}
+
+pub enum Input {
+	Stdin(Vec<u8>),
+	Window((u64, u64)),
+	Signal(i32),
+}
+
+pub enum Event {
+	Stdout(Vec<u8>),
+	Stderr(Vec<u8>),
+	Exit(Exit),
+}
+
+enum Exit {
+	Code(i32),
+	Signal(i32),
 }

@@ -1,6 +1,5 @@
 use super::Module;
 use crate::{
-	block::Block,
 	error::{Result, WrapErr},
 	instance::Instance,
 	package::Package,
@@ -34,6 +33,7 @@ impl Module {
 			},
 
 			// Load a module from a document.
+			#[cfg(feature = "language")]
 			Self::Document(document) => document.text(tg).await,
 
 			// Load a module from a package.

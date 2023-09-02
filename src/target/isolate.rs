@@ -45,6 +45,7 @@ pub extern "C" fn host_initialize_import_meta_object_callback(
 	let module = serde_v8::to_v8(&mut scope, module).unwrap();
 
 	// Set import.meta.module.
-	let module_string = v8::String::new(&mut scope, "module").unwrap();
+	let module_string =
+		v8::String::new_external_onebyte_static(&mut scope, "module".as_bytes()).unwrap();
 	meta.set(&mut scope, module_string.into(), module).unwrap();
 }

@@ -21,7 +21,7 @@ pub enum Error {
 
 	/// A tangram error.
 	#[error(transparent)]
-	Tangram(#[from] tangram::error::Error),
+	Tangram(#[from] tg::error::Error),
 
 	/// Any other error.
 	#[error(transparent)]

@@ -1,7 +1,6 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
-import { Block } from "./block.ts";
 import { File, file } from "./file.ts";
 import { Id } from "./id.ts";
 import { Subpath, subpath } from "./path.ts";
@@ -13,18 +12,12 @@ export let directory = async (...args: Array<Unresolved<Directory.Arg>>) => {
 	return await Directory.new(...args);
 };
 
-type ConstructorArg = {
-	block: Block;
-	entries: Record<string, Block>;
-};
-
 export class Directory {
-	#block: Block;
-	#entries: Record<string, Block>;
+	#id: Id | undefined;
+	#data: Directory.Data | undefined;
 
-	constructor(arg: ConstructorArg) {
-		this.#block = arg.block;
-		this.#entries = arg.entries;
+	constructor(arg: Directory.Data) {
+		this.#data = arg;
 	}
 
 	static async new(
@@ -111,7 +104,7 @@ export class Directory {
 			return entries;
 		},
 		Promise.resolve({}));
-		return await syscall.directory.new({
+		return new Directory({
 			entries,
 		});
 	}
@@ -129,12 +122,16 @@ export class Directory {
 		assert_(Directory.is(value));
 	}
 
-	id(): Id {
-		return this.block().id();
+	async load(): Promise<void> {
+		if (!this.#data) {
+			this.#data = ((await syscall.value.load(this)) as Directory).#data;
+		}
 	}
 
-	block(): Block {
-		return this.#block;
+	async store(): Promise<void> {
+		if (!this.#id) {
+			this.#id = ((await syscall.value.store(this)) as Directory).#id;
+		}
 	}
 
 	async get(arg: Subpath.Arg): Promise<Directory | File> {
@@ -144,6 +141,7 @@ export class Directory {
 	}
 
 	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
+		await this.load();
 		let artifact: Directory | File = this;
 		let currentSubpath = subpath();
 		arg = subpath(arg);
@@ -152,12 +150,12 @@ export class Directory {
 				return undefined;
 			}
 			currentSubpath.push(component);
-			let entryBlock = artifact.#entries[component];
-			if (entryBlock === undefined) {
+			let entry: Artifact | undefined = await artifact.#data!.entries[
+				component
+			];
+			if (entry === undefined) {
 				return undefined;
-			}
-			let entry = await Artifact.withBlock(entryBlock);
-			if (entry instanceof Symlink) {
+			} else if (entry instanceof Symlink) {
 				let resolved = await entry.resolve({
 					artifact: this,
 					path: currentSubpath,
@@ -182,9 +180,10 @@ export class Directory {
 	}
 
 	async bundle(): Promise<Directory> {
-		let artifact = await syscall.artifact.bundle(this);
-		assert_(Directory.is(artifact));
-		return artifact;
+		return unreachable();
+		// let artifact = await syscall.artifact.bundle(this);
+		// assert_(Directory.is(artifact));
+		// return artifact;
 	}
 
 	async *walk(): AsyncIterableIterator<[Subpath, Artifact]> {
@@ -199,8 +198,9 @@ export class Directory {
 	}
 
 	async *[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]> {
-		for (let [name, block] of Object.entries(this.#entries)) {
-			yield [name, await Artifact.withBlock(block)];
+		await this.load();
+		for (let [name, artifact] of Object.entries(this.#data!.entries)) {
+			yield [name, artifact];
 		}
 	}
 }
@@ -211,4 +211,8 @@ export namespace Directory {
 	export type ArgObject = { [name: string]: ArgObjectValue };
 
 	export type ArgObjectValue = undefined | Blob.Arg | Artifact | ArgObject;
+
+	export type Data = {
+		entries: Record<string, Artifact>;
+	};
 }

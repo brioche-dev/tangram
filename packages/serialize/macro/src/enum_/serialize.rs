@@ -14,7 +14,7 @@ impl<'a> Enum<'a> {
 				let s: #into = self.clone().into();
 
 				// Serialize the value.
-				s.serialize(serializer)?;
+				tangram_serialize::Serialize::serialize(&s, serializer)?;
 
 				Ok(())
 			}
@@ -49,9 +49,9 @@ impl<'a> Enum<'a> {
 		// Generate the code.
 		let code = quote! {
 			impl tangram_serialize::Serialize for #ident {
-				fn serialize<W>(&self, serializer: &mut tangram_serialize::Serializer<W>) -> std::io::Result<()>
+				fn serialize<W>(&self, serializer: &mut tangram_serialize::Serializer<W>) -> ::std::io::Result<()>
 				where
-					W: std::io::Write,
+					W: ::std::io::Write,
 				{
 					#body
 				}

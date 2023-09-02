@@ -2,7 +2,7 @@ use crate::{
 	error::{Result, WrapErr},
 	Cli,
 };
-use tangram::{block::Block, client::Client, id::Id};
+use tangram::{client::Client, id::Id};
 use url::Url;
 
 /// Push a block.

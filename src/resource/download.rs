@@ -4,10 +4,10 @@ use super::{
 };
 use crate::{
 	artifact::Artifact,
+	build::Build,
 	checksum::{self, Checksum},
 	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
-	operation::Operation,
 	temp::Temp,
 	value::Value,
 };
@@ -19,8 +19,8 @@ use tokio_util::io::{StreamReader, SyncIoBridge};
 impl Resource {
 	#[tracing::instrument(skip(tg))]
 	pub async fn download(&self, tg: &Instance) -> Result<Value> {
-		let operation = Operation::Resource(self.clone());
-		operation.evaluate(tg, None).await
+		let operation = Build::Resource(self.clone());
+		operation.output(tg, None).await
 	}
 
 	pub(crate) async fn download_inner(&self, tg: &Instance) -> Result<Value> {

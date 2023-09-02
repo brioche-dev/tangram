@@ -1,7 +1,5 @@
 use super::Task;
-use crate::{
-	checksum::Checksum, error::Result, instance::Instance, system::System, template::Template,
-};
+use crate::{checksum::Checksum, system::System, template::Template};
 use std::collections::BTreeMap;
 
 impl Task {
@@ -78,9 +76,9 @@ impl Builder {
 		self
 	}
 
-	pub async fn build(self, tg: &Instance) -> Result<Task> {
+	#[must_use]
+	pub fn build(self) -> Task {
 		Task::new(
-			tg,
 			self.host,
 			self.executable,
 			self.env,
@@ -89,6 +87,5 @@ impl Builder {
 			self.unsafe_,
 			self.network,
 		)
-		.await
 	}
 }

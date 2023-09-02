@@ -256,7 +256,7 @@ impl TargetVisitor {
 
 		// Create the function property.
 		let f_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-			key: Ident::new("f".into(), n.span).into(),
+			key: Ident::new("function".into(), n.span).into(),
 			value: Box::new(f.clone().into()),
 		})));
 
@@ -391,7 +391,7 @@ mod tests {
 		let right = indoc!(
 			r#"
 				export default await tg.target({
-					f: ()=>{},
+					function: ()=>{},
 					module: import.meta.module,
 					name: "default"
 				});
@@ -411,7 +411,7 @@ mod tests {
 		let right = indoc!(
 			r#"
 				export let named = await tg.target({
-					f: ()=>{},
+					function: ()=>{},
 					module: import.meta.module,
 					name: "named"
 				});
@@ -431,7 +431,7 @@ mod tests {
 		let right = indoc!(
 			r#"
 				tg.target({
-					f: ()=>{},
+					function: ()=>{},
 					module: import.meta.module,
 					name: "named"
 				});

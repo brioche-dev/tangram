@@ -33,7 +33,8 @@ pub fn new(tg: Instance) -> v8::Global<v8::Context> {
 	context.set_slot(&mut context_scope, state);
 
 	// Create the syscall function.
-	let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();
+	let syscall_string =
+		v8::String::new_external_onebyte_static(&mut context_scope, "syscall".as_bytes()).unwrap();
 	let syscall = v8::Function::new(&mut context_scope, syscall).unwrap();
 	let global = context.global(&mut context_scope);
 	global

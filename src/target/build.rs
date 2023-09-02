@@ -1,10 +1,10 @@
 use super::{from_v8, isolate::THREAD_LOCAL_ISOLATE, state::State, Target, ToV8};
 use crate::{
+	build::Build,
 	error::{Error, Result, WrapErr},
 	id::Id,
 	instance::Instance,
 	module::{self, Module},
-	operation::Operation,
 	value::Value,
 };
 use std::rc::Rc;
@@ -20,8 +20,8 @@ impl Target {
 	/// Build the target.
 	#[tracing::instrument(skip(tg), ret)]
 	pub async fn build(&self, tg: &Instance) -> Result<Value> {
-		let operation = Operation::Target(self.clone());
-		operation.evaluate(tg, None).await
+		let operation = Build::Target(self.clone());
+		operation.output(tg, None).await
 	}
 
 	pub(crate) async fn build_inner(&self, tg: &Instance) -> Result<Value> {
@@ -71,39 +71,36 @@ impl Target {
 
 		// Get the tg global.
 		let global = context.global(&mut try_catch_scope);
-		let tg = v8::String::new(&mut try_catch_scope, "tg").unwrap();
+		let tg =
+			v8::String::new_external_onebyte_static(&mut try_catch_scope, "tg".as_bytes()).unwrap();
 		let tg = global.get(&mut try_catch_scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
 		// Get the targets.
-		let targets = v8::String::new(&mut try_catch_scope, "targets").unwrap();
+		let targets =
+			v8::String::new_external_onebyte_static(&mut try_catch_scope, "targets".as_bytes())
+				.unwrap();
 		let targets = tg.get(&mut try_catch_scope, targets.into()).unwrap();
 		let targets = v8::Local::<v8::Object>::try_from(targets).unwrap();
 
-		// Get the target.
+		// Get the target function.
+		let (package, path) = match &module {
+			Module::Normal(module) => (module.package, module.module_path.to_string()),
+			_ => unreachable!(),
+		};
 		let key = Key {
-			package: todo!(),
-			path: todo!(),
+			package,
+			path,
 			name: self.name.clone(),
 		};
-		let key = serde_json::to_value(&key).unwrap();
 		let key = serde_json::to_string(&key).unwrap();
 		let key = serde_v8::to_v8(&mut try_catch_scope, key).map_err(Error::other)?;
-		let target = targets
+		let function = targets
 			.get(&mut try_catch_scope, key)
-			.wrap_err("Failed to get the function.")?;
-		let target = v8::Local::<v8::Function>::try_from(target)
+			.wrap_err("Failed to get the target function.")?;
+		let function = v8::Local::<v8::Function>::try_from(function)
 			.map_err(Error::other)
 			.wrap_err("Expected a function.")?;
-
-		// Get the function.
-		let f = v8::String::new(&mut try_catch_scope, "f").unwrap();
-		let f = target
-			.get(&mut try_catch_scope, f.into())
-			.wrap_err(r#"Failed to find a value for the key "f"."#)?;
-		let f = v8::Local::<v8::Function>::try_from(f)
-			.map_err(Error::other)
-			.wrap_err(r#"The value for the key "f" must be a function."#)?;
 
 		// Move the env to v8.
 		let env = self
@@ -112,11 +109,15 @@ impl Target {
 			.wrap_err("Failed to move the env to v8.")?;
 
 		// Set the env.
-		let env_object = v8::String::new(&mut try_catch_scope, "env").unwrap();
+		let env_object =
+			v8::String::new_external_onebyte_static(&mut try_catch_scope, "env".as_bytes())
+				.unwrap();
 		let env_object = tg.get(&mut try_catch_scope, env_object.into()).unwrap();
 		let env_object = v8::Local::<v8::Object>::try_from(env_object).unwrap();
-		let value = v8::String::new(&mut try_catch_scope, "value").unwrap();
-		env_object.set(&mut try_catch_scope, value.into(), env.into());
+		let value =
+			v8::String::new_external_onebyte_static(&mut try_catch_scope, "value".as_bytes())
+				.unwrap();
+		env_object.set(&mut try_catch_scope, value.into(), env);
 
 		// Move the args to v8.
 		let args = self
@@ -127,7 +128,7 @@ impl Target {
 			.wrap_err("Failed to move the args to v8.")?;
 
 		// Call the function.
-		let output = f.call(&mut try_catch_scope, undefined.into(), &args);
+		let output = function.call(&mut try_catch_scope, undefined.into(), &args);
 		let Some(output) = output else {
 			let exception = try_catch_scope.exception().unwrap();
 			let error = Error::from_exception(&mut try_catch_scope, &state, exception);

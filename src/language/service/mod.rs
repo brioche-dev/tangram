@@ -132,7 +132,8 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 	context.set_slot(&mut context_scope, state);
 
 	// Add the syscall function to the global.
-	let syscall_string = v8::String::new(&mut context_scope, "syscall").unwrap();
+	let syscall_string =
+		v8::String::new_external_onebyte_static(&mut context_scope, "syscall".as_bytes()).unwrap();
 	let syscall_function = v8::Function::new(&mut context_scope, syscall).unwrap();
 	context
 		.global(&mut context_scope)
@@ -144,7 +145,8 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 		.unwrap();
 
 	// Get the handle function.
-	let handle_string = v8::String::new(&mut context_scope, "handle").unwrap();
+	let handle_string =
+		v8::String::new_external_onebyte_static(&mut context_scope, "handle".as_bytes()).unwrap();
 	let handle_function = v8::Local::<v8::Function>::try_from(
 		context
 			.global(&mut context_scope)

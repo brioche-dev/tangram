@@ -3,7 +3,7 @@ use crate::{
 	error::{Result, WrapErr},
 	module::Module,
 	package::Metadata,
-	path::Relpath,
+	relpath::Relpath,
 };
 use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};

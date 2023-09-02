@@ -1,4 +1,3 @@
-use crate::operation;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -17,14 +16,14 @@ pub enum Error {
 		source: Option<Arc<Error>>,
 	},
 
-	/// An operation error.
-	#[error(transparent)]
-	Operation(#[from] operation::Error),
+	/// A build error.
+	// #[error(transparent)]
+	// Build(#[from] build::Error),
 
 	/// A language service error.
-	#[error(transparent)]
-	#[cfg(feature = "language")]
-	LanguageService(#[from] crate::language::service::error::Error),
+	// #[error(transparent)]
+	// #[cfg(feature = "language")]
+	// LanguageService(#[from] crate::language::service::error::Error),
 
 	/// Any other error.
 	#[error("{message}")]

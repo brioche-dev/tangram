@@ -1,11 +1,12 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
+#![allow(clippy::missing_safety_doc)]
 
 use self::{commands::Args, error::Result};
 use clap::Parser;
 use std::collections::BTreeMap;
-use tangram::{error::WrapErr, instance::Instance, system::System, value::Value};
+use tg::{error::WrapErr, instance::Instance, system::System, value::Value};
 use tracing_subscriber::prelude::*;
 
 mod commands;
@@ -44,28 +45,21 @@ async fn main() {
 	}
 }
 
-#[tracing::instrument(name = "main")]
 async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
-
-	tracing::debug!(?args, "Parsed the args.");
 
 	// Get the path.
 	let path = if let Some(path) = args.path.clone() {
 		path
 	} else {
-		tangram::util::dirs::home_directory_path()
+		tg::util::dirs::home_directory_path()
 			.wrap_err("Failed to find the user home directory.")?
 			.join(".tangram")
 	};
 
-	tracing::debug!(?path, "Got path.");
-
 	// Read the config.
 	let config = Cli::read_config().await?;
-
-	tracing::debug!(?config, "Read config.");
 
 	// Get the preserve temps configuration.
 	let preserve_temps = args
@@ -91,14 +85,8 @@ async fn main_inner() -> Result<()> {
 	// Get the origin token.
 	let origin_token = credentials.map(|credentials| credentials.token);
 
-	tracing::debug!(
-		?origin_url,
-		has_token = origin_token.is_some(),
-		"Got API config."
-	);
-
 	// Create the options.
-	let options = tangram::instance::Options {
+	let options = tg::instance::Options {
 		origin_token,
 		origin_url,
 		preserve_temps,
@@ -138,9 +126,6 @@ fn setup_tracing() {
 
 impl Cli {
 	fn create_default_env() -> Result<BTreeMap<String, Value>> {
-		let host = System::host()?;
-		let host = Value::String(host.to_string());
-		let env = [("host".to_owned(), host)].into();
-		Ok(env)
+		Ok([("host".to_owned(), Value::from(System::host()?.to_string()))].into())
 	}
 }

@@ -1,7 +1,7 @@
 pub use crate::package::specifier::Registry;
 use crate::{
 	error::{Error, Result},
-	path::Relpath,
+	relpath::Relpath,
 };
 
 /// A dependency on a package, either at a path or from the registry.

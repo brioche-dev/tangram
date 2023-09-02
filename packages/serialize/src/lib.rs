@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
+#![allow(clippy::missing_safety_doc)]
 
 pub use self::{deserializer::Deserializer, kind::Kind, serializer::Serializer, value::Value};
 use std::io::{Read, Result, Write};

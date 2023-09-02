@@ -1,22 +1,21 @@
 import { assert as assert_ } from "./assert.ts";
-import { Block } from "./block.ts";
+import { Build } from "./build.ts";
 import { json } from "./encoding.ts";
 import { env } from "./env.ts";
 import { Id } from "./id.ts";
 import { Module } from "./module.ts";
-import { Operation } from "./operation.ts";
 import { Subpath, subpath } from "./path.ts";
 import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Value } from "./value.ts";
 
-export let targets: Record<string, Target<any, any>> = {};
+export let targets: Record<string, Function> = {};
 
 export type TargetArg<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 > = {
-	f: (...args: A) => MaybePromise<R>;
+	function: (...args: A) => MaybePromise<R>;
 	module: Module;
 	name: string;
 };
@@ -28,40 +27,28 @@ export let target = async <
 	arg: TargetArg<A, R>,
 ): Promise<Target<A, R>> => {
 	// Create the target.
-	let target = (await syscall.target.new({
-		package: arg.module.package(),
-		path: subpath(arg.module.path()),
+	let target = new Target({
+		package: arg.module.package,
+		path: subpath(arg.module.path),
 		name: arg.name,
 		env: {},
 		args: [],
-	})) as Target<A, R>;
-	target.f = arg.f;
+	}) as unknown as Target<A, R>;
 
-	// Register the target.
+	// Register the target function.
 	let key = json.encode({
-		package: arg.module.package().id(),
-		path: arg.module.path(),
+		package: arg.module.package,
+		path: arg.module.path,
 		name: arg.name,
 	});
 	assert_(targets[key] === undefined);
-	targets[key] = target;
+	targets[key] = arg.function;
 
 	return target;
 };
 
-type NewArg<A extends Array<Value> = Array<Value>, R extends Value = Value> = {
-	target: Target<A, R>;
-	env?: Record<string, Value>;
-	args?: A;
-};
-
-type ConstructorArg<
-	A extends Array<Value> = Array<Value>,
-	R extends Value = Value,
-> = {
-	f?: (...args: A) => MaybePromise<R>;
-	block: Block;
-	package: Block;
+type ConstructorArg<A extends Array<Value> = Array<Value>> = {
+	package: Id;
 	path: Subpath.Arg;
 	name: string;
 	env: Record<string, Value>;
@@ -79,51 +66,35 @@ export class Target<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 > extends globalThis.Function {
-	f?: (...args: A) => MaybePromise<R>;
-	#block: Block;
-	#package: Block;
-	#path: Subpath;
-	#name_: string;
-	#env: Record<string, Value>;
-	#args: A;
+	#id: Id | undefined;
+	#data: Target.Data | undefined;
 
-	constructor(arg: ConstructorArg<A, R>) {
+	constructor(arg: ConstructorArg<A>) {
 		super();
 
-		this.f = arg.f;
-		this.#block = arg.block;
-		this.#package = arg.package;
-		this.#path = subpath(arg.path);
-		this.#name_ = arg.name;
-		this.#env = arg.env;
-		this.#args = arg.args;
+		// Set the state.
+		this.#data = {
+			package: arg.package,
+			path: subpath(arg.path),
+			name: arg.name,
+			env: arg.env,
+			args: arg.args,
+		};
 
 		// Proxy this object so that it is callable.
 		return new Proxy(this, {
 			apply: async (target, _, args) => {
-				let target_ = await Target.new({
-					target,
+				await this.load();
+				let target_ = new Target({
+					package: target.#data!.package,
+					path: target.#data!.path,
+					name: target.#data!.name,
 					args: (await Promise.all(args.map(resolve))) as A,
 					env: env.get(),
 				});
-				return await syscall.operation.evaluate(target_ as Operation);
+				return await syscall.build.output(target_ as Build);
 			},
 		});
-	}
-
-	static async new<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(arg: NewArg<A, R>): Promise<Target<A, R>> {
-		let target = (await syscall.target.new({
-			package: arg.target.#package,
-			path: arg.target.#path,
-			name: arg.target.#name_,
-			env: arg.env ?? {},
-			args: arg.args ?? [],
-		})) as Target<A, R>;
-		target.f = arg.target.f;
-		return target;
 	}
 
 	static is(value: unknown): value is Target {
@@ -139,31 +110,41 @@ export class Target<
 		assert_(Target.is(value));
 	}
 
-	id(): Id {
-		return this.block().id();
+	async load(): Promise<void> {
+		if (!this.#data) {
+			this.#data = ((await syscall.value.load(this as Target)) as Target).#data;
+		}
 	}
 
-	block(): Block {
-		return this.#block;
+	async store(): Promise<void> {
+		if (!this.#id) {
+			this.#id = ((await syscall.value.store(this as Target)) as Target).#id;
+		}
 	}
 
-	package(): Block {
-		return this.#package;
+	async path(): Promise<Subpath> {
+		return this.#data!.path;
 	}
 
-	path(): Subpath {
-		return this.#path;
+	async name_(): Promise<string> {
+		return this.#data!.name;
 	}
 
-	name_(): string {
-		return this.#name_;
+	async env(): Promise<Record<string, Value>> {
+		return this.#data!.env;
 	}
 
-	env(): Record<string, Value> {
-		return this.#env;
+	async args(): Promise<A> {
+		return this.#data!.args as A;
 	}
+}
 
-	args(): Array<Value> {
-		return this.#args;
-	}
+export namespace Target {
+	export type Data = {
+		package: Id;
+		path: Subpath;
+		name: string;
+		env: Record<string, Value>;
+		args: Array<Value>;
+	};
 }

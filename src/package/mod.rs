@@ -1,9 +1,7 @@
 pub use self::{dependency::Dependency, metadata::Metadata, specifier::Specifier};
 use crate::{
-	artifact::Artifact,
-	block::Block,
-	error::{Result, WrapErr},
-	id::Id,
+	self as tg,
+	error::Result,
 	instance::Instance,
 	module::{self, Module},
 };
@@ -22,10 +20,15 @@ pub mod metadata;
 mod path;
 pub mod specifier;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+crate::value!(Package);
+
+#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 pub struct Package {
-	artifact: Artifact,
-	dependencies: Option<BTreeMap<Dependency, Block>>,
+	#[tangram_serialize(id = 0)]
+	artifact: tg::Artifact,
+
+	#[tangram_serialize(id = 1)]
+	dependencies: Option<BTreeMap<Dependency, tg::Package>>,
 }
 
 impl Package {
@@ -37,52 +40,32 @@ impl Package {
 	}
 
 	#[must_use]
-	pub fn id(&self) -> Id {
-		self.block().id()
+	pub fn children(&self) -> Vec<tg::Value> {
+		todo!()
 	}
 
 	#[must_use]
-	pub fn block(&self) -> &Block {
-		self.artifact().block()
-	}
-
-	#[must_use]
-	pub fn artifact(&self) -> &Artifact {
+	pub fn artifact(&self) -> &tg::Artifact {
 		&self.artifact
 	}
 
 	#[must_use]
-	pub fn dependencies(&self) -> &Option<BTreeMap<Dependency, Block>> {
+	pub fn dependencies(&self) -> &Option<BTreeMap<Dependency, tg::Package>> {
 		&self.dependencies
 	}
 
+	pub async fn root_module(&self, tg: &Instance) -> Result<Module> {
+		Ok(Module::Normal(module::Normal {
+			package: self.artifact.id(tg).await?,
+			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+		}))
+	}
+
 	#[must_use]
-	pub fn root_module(&self) -> Module {
-		Module::Normal(module::Normal {
-			package: self.artifact.id(),
-			module_path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
-		})
-	}
-
-	pub async fn unlock(&self, tg: &Instance) -> Result<Package> {
-		let directory = self
-			.artifact
-			.as_directory()
-			.wrap_err("Expected a directory.")?;
-		let builder = directory.builder(tg).await?;
-		let builder = builder
-			.remove(tg, &LOCKFILE_FILE_NAME.parse().unwrap())
-			.await?;
-		let artifact = builder.build().await?.into();
-		Ok(Package {
-			artifact,
+	pub fn to_unlocked(&self) -> Package {
+		Self {
+			artifact: self.artifact.clone(),
 			dependencies: None,
-		})
-	}
-}
-
-impl std::hash::Hash for Package {
-	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		self.artifact.hash(state);
+		}
 	}
 }

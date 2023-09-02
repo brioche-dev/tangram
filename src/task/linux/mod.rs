@@ -1,9 +1,9 @@
 use super::Task;
 use crate::{
 	artifact::{self, Artifact},
+	build,
 	error::{return_error, Error, Result, WrapErr},
 	instance::Instance,
-	operation,
 	system::System,
 	task,
 	temp::Temp,
@@ -585,14 +585,12 @@ impl Task {
 		match exit_status {
 			ExitStatus::Code(0) => {},
 			ExitStatus::Code(code) => {
-				return Err(Error::Operation(operation::Error::Task(task::Error::Code(
-					code,
-				))))
+				return Err(Error::Build(build::Error::Task(task::Error::Code(code))))
 			},
 			ExitStatus::Signal(signal) => {
-				return Err(Error::Operation(operation::Error::Task(
-					task::Error::Signal(signal),
-				)))
+				return Err(Error::Build(build::Error::Task(task::Error::Signal(
+					signal,
+				))))
 			},
 		};
 
