@@ -92,6 +92,7 @@ impl Builder {
 		self
 	}
 
+	#[must_use]
 	pub fn build(self) -> tg::File {
 		tg::File::new(self.contents, self.executable, self.references)
 	}

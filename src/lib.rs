@@ -19,7 +19,7 @@ pub mod artifact;
 pub mod blob;
 pub mod bool;
 pub mod build;
-pub mod bundle;
+// pub mod bundle;
 pub mod bytes;
 pub mod checkin;
 pub mod checkout;

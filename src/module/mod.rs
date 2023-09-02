@@ -4,7 +4,6 @@ pub use crate::document::Document;
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	id::Id,
-	package::Package,
 	subpath::Subpath,
 };
 use url::Url;

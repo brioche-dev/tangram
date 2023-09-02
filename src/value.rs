@@ -257,7 +257,7 @@ fn serialize_id<W>(
 where
 	W: std::io::Write,
 {
-	serializer.serialize(id.read().unwrap().as_ref().unwrap())
+	serializer.serialize(&*id.read().unwrap())
 }
 
 fn deserialize_id<R>(
@@ -278,7 +278,7 @@ fn serialize_data<W>(
 where
 	W: std::io::Write,
 {
-	serializer.serialize(data.read().unwrap().as_ref().unwrap())
+	serializer.serialize(&*data.read().unwrap())
 }
 
 fn deserialize_data<R>(
@@ -302,12 +302,12 @@ impl Data {
 			| Data::String(_)
 			| Data::Bytes(_)
 			| Data::Relpath(_)
-			| Data::Subpath(_) => vec![],
+			| Data::Subpath(_)
+			| Data::Placeholder(_) => vec![],
 			Data::Blob(blob) => blob.children(),
 			Data::Directory(directory) => directory.children(),
 			Data::File(file) => file.children(),
 			Data::Symlink(symlink) => symlink.children(),
-			Data::Placeholder(_) => vec![],
 			Data::Template(template) => template.children(),
 			Data::Package(package) => package.children(),
 			Data::Resource(resource) => resource.children(),

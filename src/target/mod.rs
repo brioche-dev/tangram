@@ -66,7 +66,11 @@ impl Target {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<tg::Value> {
-		todo!()
+		let mut children = vec![];
+		children.push(self.package.clone().into());
+		children.extend(self.env.values().cloned());
+		children.extend(self.args.iter().cloned());
+		children
 	}
 
 	#[must_use]

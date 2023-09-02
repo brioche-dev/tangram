@@ -1,4 +1,3 @@
-use crate as tg;
 use crate::error::{error, Error, Result};
 use crate::relpath::Relpath;
 use itertools::Itertools;

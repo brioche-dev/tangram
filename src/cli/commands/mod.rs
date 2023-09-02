@@ -11,7 +11,7 @@ use tg::subpath::Subpath;
 // mod build;
 // mod check;
 mod checkin;
-// mod checkout;
+mod checkout;
 // mod checksum;
 // mod clean;
 // mod doc;
@@ -75,7 +75,7 @@ pub enum Command {
 	// Build(self::build::Args),
 	// Check(self::check::Args),
 	Checkin(self::checkin::Args),
-	// Checkout(self::checkout::Args),
+	Checkout(self::checkout::Args),
 	// Checksum(self::checksum::Args),
 	// Clean(self::clean::Args),
 	// Doc(self::doc::Args),
@@ -134,7 +134,7 @@ impl Cli {
 			// Command::Build(args) => self.command_build(args).boxed(),
 			// Command::Check(args) => self.command_check(args).boxed(),
 			Command::Checkin(args) => self.command_checkin(args).boxed(),
-			// Command::Checkout(args) => self.command_checkout(args).boxed(),
+			Command::Checkout(args) => self.command_checkout(args).boxed(),
 			// Command::Checksum(args) => self.command_checksum(args).boxed(),
 			// Command::Clean(args) => self.command_clean(args).boxed(),
 			// Command::Doc(args) => self.command_doc(args).boxed(),

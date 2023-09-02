@@ -47,7 +47,7 @@ impl Resource {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<tg::Value> {
-		todo!()
+		vec![]
 	}
 
 	#[must_use]

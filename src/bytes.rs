@@ -23,10 +23,12 @@ impl Bytes {
 		Self::with_buffer(slice.to_owned().into())
 	}
 
+	#[must_use]
 	pub fn with_boxed_slice(slice: Box<[u8]>) -> Self {
 		Self::with_buffer(slice.into())
 	}
 
+	#[must_use]
 	pub fn with_vec(vec: Vec<u8>) -> Self {
 		Self::with_buffer(vec.into())
 	}
@@ -120,7 +122,7 @@ impl tangram_serialize::Deserialize for Bytes {
 		R: std::io::Read,
 	{
 		let bytes = deserializer.deserialize_bytes()?;
-		Ok(Bytes::with_buffer(Buffer::from(bytes.into_boxed_slice())))
+		Ok(Bytes::with_vec(bytes))
 	}
 }
 

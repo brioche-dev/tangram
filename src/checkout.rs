@@ -121,7 +121,7 @@ impl tg::Artifact {
 					.entries(tg)
 					.await
 					.wrap_err("Failed to get the directory's entries.")?
-					.into_iter()
+					.iter()
 					.map(|(name, artifact)| async move {
 						artifact
 							.check_out_internal_inner_inner(tg, &path.join(name))
@@ -137,7 +137,7 @@ impl tg::Artifact {
 				// Copy the blob to the path.
 				let permit = tg.file_descriptor_semaphore.acquire().await;
 				tokio::io::copy(
-					&mut file.contents(tg).await?.reader(tg),
+					&mut file.contents(tg).await?.reader(tg).await?,
 					&mut tokio::fs::File::create(path).await?,
 				)
 				.await
@@ -156,7 +156,7 @@ impl tg::Artifact {
 				file.references(tg)
 					.await
 					.wrap_err("Failed to get the file's references.")?
-					.into_iter()
+					.iter()
 					.map(|artifact| async move {
 						artifact.check_out_internal_inner(tg).await?;
 						Ok::<_, Error>(())
@@ -247,10 +247,11 @@ impl tg::Artifact {
 impl tg::Artifact {
 	pub async fn check_out(&self, tg: &Instance, path: &Path) -> Result<()> {
 		// Bundle the artifact.
-		let artifact = self
-			.bundle(tg)
-			.await
-			.wrap_err("Failed to bundle the artifact.")?;
+		let artifact = self.clone();
+		// let artifact = self
+		// 	.bundle(tg)
+		// 	.await
+		// 	.wrap_err("Failed to bundle the artifact.")?;
 
 		// Check in an existing artifact at the path.
 		let existing_artifact = if tokio::fs::try_exists(path).await? {
@@ -359,7 +360,7 @@ impl tg::Artifact {
 		directory
 			.entries(tg)
 			.await?
-			.into_iter()
+			.iter()
 			.map(|(name, artifact)| {
 				let existing_artifact = &existing_artifact;
 				async move {
@@ -367,13 +368,13 @@ impl tg::Artifact {
 					let existing_artifact = match existing_artifact.map(tg::Artifact::get) {
 						Some(Artifact::Directory(existing_directory)) => {
 							let name: Subpath = name.parse().wrap_err("Invalid entry name.")?;
-							existing_directory.try_get(tg, &name).await?
+							existing_directory.try_get_entry(tg, &name).await?
 						},
 						_ => None,
 					};
 
 					// Recurse.
-					let entry_path = path.join(&name);
+					let entry_path = path.join(name);
 					artifact
 						.check_out_inner(tg, existing_artifact.as_ref(), &entry_path)
 						.await?;
@@ -408,7 +409,7 @@ impl tg::Artifact {
 		// Copy the blob to the path.
 		let permit = tg.file_descriptor_semaphore.acquire().await;
 		tokio::io::copy(
-			&mut file.contents(tg).await?.reader(tg),
+			&mut file.contents(tg).await?.reader(tg).await?,
 			&mut tokio::fs::File::create(path).await?,
 		)
 		.await
@@ -449,6 +450,8 @@ impl tg::Artifact {
 		// Render the target.
 		let target = symlink
 			.target(tg)
+			.await?
+			.get(tg)
 			.await?
 			.try_render(|component| async move {
 				match component {

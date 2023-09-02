@@ -1,6 +1,9 @@
-use crate as tg;
-use crate::error::{Result, WrapErr};
-use crate::{artifact, error::Error, instance::Instance, subpath};
+use crate::{
+	self as tg, artifact,
+	error::{Error, Result, WrapErr},
+	instance::Instance,
+	subpath::{self, Subpath},
+};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
@@ -38,7 +41,7 @@ impl Directory {
 }
 
 impl tg::Directory {
-	pub async fn get_entry(&self, tg: &Instance, path: &tg::Subpath) -> Result<tg::Artifact> {
+	pub async fn get_entry(&self, tg: &Instance, path: &Subpath) -> Result<tg::Artifact> {
 		let artifact = self
 			.try_get_entry(tg, path)
 			.await?
@@ -49,16 +52,16 @@ impl tg::Directory {
 	pub async fn try_get_entry(
 		&self,
 		tg: &Instance,
-		path: &tg::Subpath,
+		path: &Subpath,
 	) -> Result<Option<tg::Artifact>> {
 		// Track the current artifact.
-		let mut artifact = self.clone();
+		let mut artifact: tg::Artifact = self.clone().into();
 
 		// Track the current subpath.
 		let mut current_subpath = subpath::Subpath::empty();
 
 		// Handle each path component.
-		for name in path.components(tg).await? {
+		for name in path.components() {
 			// The artifact must be a directory.
 			let Some(directory) = artifact.as_directory() else {
 				return Ok(None);
@@ -68,17 +71,17 @@ impl tg::Directory {
 			current_subpath = current_subpath.join(name.parse().unwrap());
 
 			// Get the entry. If it doesn't exist, return `None`.
-			let Some(id) = directory.entries.get(name).cloned() else {
+			let Some(entry) = directory.entries(tg).await?.get(name).cloned() else {
 				return Ok(None);
 			};
 
 			// Get the artifact.
-			artifact = tg::Artifact::with_id(id);
+			artifact = entry;
 
 			// If the artifact is a symlink, then resolve it.
-			if let Artifact::Symlink(symlink) = &artifact {
+			if let artifact::Artifact::Symlink(symlink) = &artifact.get() {
 				match symlink
-					.resolve_from(tg, Some(symlink))
+					.resolve_from(tg, Some(symlink.get(tg).await?))
 					.await
 					.wrap_err("Failed to resolve the symlink.")?
 				{

@@ -41,7 +41,21 @@ impl Package {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<tg::Value> {
-		todo!()
+		let mut children = vec![];
+		children.extend(
+			self.dependencies
+				.as_ref()
+				.map(|dependencies| {
+					dependencies
+						.values()
+						.cloned()
+						.map(Into::into)
+						.collect::<Vec<tg::Value>>()
+				})
+				.unwrap_or_default(),
+		);
+		children.push(self.artifact.clone().into());
+		children
 	}
 
 	#[must_use]

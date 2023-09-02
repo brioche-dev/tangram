@@ -111,4 +111,5 @@ impl std::hash::Hasher for Hasher {
 		self.0 = Some(value);
 	}
 }
+
 pub type BuildHasher = std::hash::BuildHasherDefault<Hasher>;

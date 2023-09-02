@@ -3,14 +3,13 @@ use crate::{
 	Cli,
 };
 use std::path::PathBuf;
-use tangram::{artifact::Artifact, id::Id};
 
 /// Check out an artifact.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	/// The ID of the artifact to check out.
-	pub id: Id,
+	pub id: tg::Id,
 
 	/// The path to check out the artifact to.
 	pub path: Option<PathBuf>,
@@ -26,14 +25,8 @@ impl Cli {
 			path.push(args.id.to_string());
 		};
 
-		// Get the artifact.
-		let block = Block::with_id(args.id);
-		let artifact = Artifact::with_block(&self.tg, block)
-			.await
-			.wrap_err("Failed to get the artifact.")?;
-
 		// Check out the artifact.
-		artifact
+		tg::Artifact::with_id(args.id)?
 			.check_out(&self.tg, &path)
 			.await
 			.wrap_err("Failed to check out the artifact.")?;

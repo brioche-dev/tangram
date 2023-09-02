@@ -1,4 +1,3 @@
-use crate as tg;
 use crate::error::{return_error, Error, Result};
 use crate::subpath::Subpath;
 use std::path::PathBuf;

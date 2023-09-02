@@ -1,7 +1,7 @@
 use crate::{
 	self as tg,
 	bytes::Bytes,
-	error::{Error, Result},
+	error::{return_error, Error, Result},
 	instance::Instance,
 };
 use futures::{future::BoxFuture, stream::StreamExt, TryStreamExt};
@@ -105,18 +105,19 @@ impl tg::Blob {
 		})
 	}
 
-	#[must_use]
-	pub fn reader(&self, tg: &Instance) -> Reader {
-		Reader {
+	pub async fn reader(&self, tg: &Instance) -> Result<Reader> {
+		let size = self.size(tg).await?;
+		Ok(Reader {
 			blob: self.clone(),
+			size,
 			tg: tg.clone(),
 			position: 0,
 			state: State::Empty,
-		}
+		})
 	}
 
 	pub async fn bytes(&self, tg: &Instance) -> Result<Vec<u8>> {
-		let mut reader = self.reader(tg);
+		let mut reader = self.reader(tg).await?;
 		let mut bytes = Vec::new();
 		reader.read_to_end(&mut bytes).await?;
 		Ok(bytes)
@@ -130,6 +131,7 @@ impl tg::Blob {
 }
 
 impl Blob {
+	#[must_use]
 	pub fn children(&self) -> Vec<tg::Value> {
 		match self {
 			Blob::Branch(children) => children
@@ -141,59 +143,11 @@ impl Blob {
 	}
 }
 
-// impl Blob {
-// 	#[async_recursion]
-// 	pub async fn with_block(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
-// 		let id = block.id();
-// 		let artifact = Self::try_with_block(tg, block)
-// 			.await?
-// 			.wrap_err_with(|| format!(r#"Failed to get blob "{id}"."#))?;
-// 		Ok(artifact)
-// 	}
-
-// 	pub async fn try_with_block(tg: &Instance, block: Block) -> Result<Option<Self>> {
-// 		// Get the children.
-// 		let Some(children) = block.try_get_children(tg).await? else {
-// 			return Ok(None);
-// 		};
-
-// 		let blob = if children.is_empty() {
-// 			// If the block has no children, then it is a leaf.
-
-// 			// Get the size.
-// 			let size = block.data(tg).await?.len().to_u64().unwrap();
-
-// 			Self {
-// 				block,
-// 				kind: Kind::Leaf(size),
-// 			}
-// 		} else {
-// 			// Otherwise, it is a branch.
-
-// 			// Deserialize the data.
-// 			let data = Data::deserialize(&*block.data(tg).await?)?;
-
-// 			// Create the blob from the data.
-// 			let sizes = data
-// 				.sizes
-// 				.into_iter()
-// 				.map(|(id, size)| (Block::with_id(id), size))
-// 				.collect();
-
-// 			Self {
-// 				block,
-// 				kind: Kind::Branch(sizes),
-// 			}
-// 		};
-
-// 		Ok(Some(blob))
-// 	}
-// }
-
 /// A blob reader.
 #[pin_project]
 pub struct Reader {
 	blob: tg::Blob,
+	size: u64,
 	tg: Instance,
 	position: u64,
 	state: State,
@@ -201,8 +155,8 @@ pub struct Reader {
 
 pub enum State {
 	Empty,
-	Reading(BoxFuture<'static, Result<Cursor<Box<[u8]>>>>),
-	Full(Cursor<Box<[u8]>>),
+	Reading(BoxFuture<'static, Result<Cursor<Bytes>>>),
+	Full(Cursor<Bytes>),
 }
 
 unsafe impl Sync for State {}
@@ -213,106 +167,103 @@ impl AsyncRead for Reader {
 		cx: &mut std::task::Context<'_>,
 		buf: &mut tokio::io::ReadBuf<'_>,
 	) -> Poll<std::io::Result<()>> {
-		todo!()
-		// let this = self.project();
-		// loop {
-		// 	match this.state {
-		// 		State::Empty => {
-		// 			if *this.position == this.blob.size() {
-		// 				return Poll::Ready(Ok(()));
-		// 			}
-		// 			let future = {
-		// 				let blob = this.blob.clone();
-		// 				let tg = this.tg.clone();
-		// 				let position = *this.position;
-		// 				async move {
-		// 					let mut current_blob = blob.clone();
-		// 					let mut current_blob_position = 0;
-		// 					let block = 'outer: loop {
-		// 						match &current_blob.kind {
-		// 							Kind::Branch(sizes) => {
-		// 								for (child, size) in sizes {
-		// 									if position < current_blob_position + size {
-		// 										current_blob = child;
-		// 										continue 'outer;
-		// 									}
-		// 									current_blob_position += size;
-		// 								}
-		// 								return_error!("The position is out of bounds.");
-		// 							},
-		// 							Kind::Leaf(size) => {
-		// 								if position < current_blob_position + size {
-		// 									let data = current_blob.data(&tg).await?;
-		// 									let mut reader = Cursor::new(
-		// 										data.as_slice().to_owned().into_boxed_slice(),
-		// 									);
-		// 									reader.set_position(position - current_blob_position);
-		// 									break reader;
-		// 								}
-		// 								return_error!("The position is out of bounds.");
-		// 							},
-		// 						}
-		// 					};
-		// 					Ok(block)
-		// 				}
-		// 			};
-		// 			let future = Box::pin(future);
-		// 			*this.state = State::Reading(future);
-		// 		},
+		let this = self.project();
+		loop {
+			match this.state {
+				State::Empty => {
+					if *this.position == *this.size {
+						return Poll::Ready(Ok(()));
+					}
+					let future = {
+						let blob = this.blob.clone();
+						let tg = this.tg.clone();
+						let position = *this.position;
+						async move {
+							let mut current_blob = blob.clone();
+							let mut current_blob_position = 0;
+							let bytes = 'outer: loop {
+								match &current_blob.get(&tg).await? {
+									Blob::Branch(children) => {
+										for (child, size) in children {
+											if position < current_blob_position + size {
+												current_blob = child.clone();
+												continue 'outer;
+											}
+											current_blob_position += size;
+										}
+										return_error!("The position is out of bounds.");
+									},
+									Blob::Leaf(bytes) => {
+										if position
+											< current_blob_position + bytes.len().to_u64().unwrap()
+										{
+											let mut reader = Cursor::new(bytes.clone());
+											reader.set_position(position - current_blob_position);
+											break reader;
+										}
+										return_error!("The position is out of bounds.");
+									},
+								}
+							};
+							Ok(bytes)
+						}
+					};
+					let future = Box::pin(future);
+					*this.state = State::Reading(future);
+				},
 
-		// 		State::Reading(future) => match future.as_mut().poll(cx) {
-		// 			Poll::Pending => return Poll::Pending,
-		// 			Poll::Ready(Err(error)) => {
-		// 				return Poll::Ready(Err(std::io::Error::new(
-		// 					std::io::ErrorKind::Other,
-		// 					error,
-		// 				)))
-		// 			},
-		// 			Poll::Ready(Ok(data)) => {
-		// 				*this.state = State::Full(data);
-		// 			},
-		// 		},
+				State::Reading(future) => match future.as_mut().poll(cx) {
+					Poll::Pending => return Poll::Pending,
+					Poll::Ready(Err(error)) => {
+						return Poll::Ready(Err(std::io::Error::new(
+							std::io::ErrorKind::Other,
+							error,
+						)))
+					},
+					Poll::Ready(Ok(data)) => {
+						*this.state = State::Full(data);
+					},
+				},
 
-		// 		State::Full(reader) => {
-		// 			let data = reader.get_ref();
-		// 			let position = reader.position().to_usize().unwrap();
-		// 			let n = std::cmp::min(buf.remaining(), data.len() - position);
-		// 			buf.put_slice(&data[position..position + n]);
-		// 			*this.position += n as u64;
-		// 			let position = position + n;
-		// 			reader.set_position(position as u64);
-		// 			if position == reader.get_ref().len() {
-		// 				*this.state = State::Empty;
-		// 			}
-		// 			return Poll::Ready(Ok(()));
-		// 		},
-		// 	};
-		// }
+				State::Full(reader) => {
+					let data = reader.get_ref();
+					let position = reader.position().to_usize().unwrap();
+					let n = std::cmp::min(buf.remaining(), data.len() - position);
+					buf.put_slice(&data[position..position + n]);
+					*this.position += n as u64;
+					let position = position + n;
+					reader.set_position(position as u64);
+					if position == reader.get_ref().len() {
+						*this.state = State::Empty;
+					}
+					return Poll::Ready(Ok(()));
+				},
+			};
+		}
 	}
 }
 
 impl AsyncSeek for Reader {
 	fn start_seek(self: Pin<&mut Self>, position: std::io::SeekFrom) -> std::io::Result<()> {
-		// let this = self.project();
-		// let position = match position {
-		// 	std::io::SeekFrom::Start(position) => position.to_i64().unwrap(),
-		// 	std::io::SeekFrom::End(position) => this.blob.size().to_i64().unwrap() + position,
-		// 	std::io::SeekFrom::Current(position) => this.position.to_i64().unwrap() + position,
-		// };
-		// let position = position.to_u64().ok_or(std::io::Error::new(
-		// 	std::io::ErrorKind::InvalidInput,
-		// 	"Attempted to seek to a negative or overflowing position.",
-		// ))?;
-		// if position > this.blob.size() {
-		// 	return Err(std::io::Error::new(
-		// 		std::io::ErrorKind::InvalidInput,
-		// 		"Attempted to seek to a position beyond the end of the blob.",
-		// 	));
-		// }
-		// *this.state = State::Empty;
-		// *this.position = position;
-		// Ok(())
-		todo!()
+		let this = self.project();
+		let position = match position {
+			std::io::SeekFrom::Start(position) => position.to_i64().unwrap(),
+			std::io::SeekFrom::End(position) => this.size.to_i64().unwrap() + position,
+			std::io::SeekFrom::Current(position) => this.position.to_i64().unwrap() + position,
+		};
+		let position = position.to_u64().ok_or(std::io::Error::new(
+			std::io::ErrorKind::InvalidInput,
+			"Attempted to seek to a negative or overflowing position.",
+		))?;
+		if position > *this.size {
+			return Err(std::io::Error::new(
+				std::io::ErrorKind::InvalidInput,
+				"Attempted to seek to a position beyond the end of the blob.",
+			));
+		}
+		*this.state = State::Empty;
+		*this.position = position;
+		Ok(())
 	}
 
 	fn poll_complete(

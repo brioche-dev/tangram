@@ -19,6 +19,19 @@ impl tg::Symlink {
 	pub async fn target(&self, tg: &Instance) -> Result<tg::Template> {
 		Ok(self.get(tg).await?.target.clone())
 	}
+
+	pub async fn resolve(&self, tg: &Instance) -> Result<Option<tg::Artifact>> {
+		self.resolve_from(tg, None).await
+	}
+
+	#[allow(clippy::unused_async)]
+	pub async fn resolve_from(
+		&self,
+		_tg: &Instance,
+		_from: Option<&Symlink>,
+	) -> Result<Option<tg::Artifact>> {
+		unimplemented!()
+	}
 }
 
 impl Symlink {
@@ -27,21 +40,3 @@ impl Symlink {
 		vec![self.target.clone().into()]
 	}
 }
-
-// use super::Symlink;
-// use crate::{artifact::Artifact, error::Result, instance::Instance};
-
-// impl Symlink {
-// 	pub async fn resolve(&self, tg: &Instance) -> Result<Option<Artifact>> {
-// 		self.resolve_from(tg, None).await
-// 	}
-
-// 	#[allow(clippy::unused_async)]
-// 	pub async fn resolve_from(
-// 		&self,
-// 		_tg: &Instance,
-// 		_from: Option<&Symlink>,
-// 	) -> Result<Option<Artifact>> {
-// 		unimplemented!()
-// 	}
-// }
