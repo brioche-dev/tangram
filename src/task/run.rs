@@ -2,7 +2,7 @@ use super::Task;
 use crate::{
 	build::Build,
 	error::{error, return_error, Error, Result},
-	instance::Instance,
+	server::Server,
 	system::System,
 	template::Template,
 	value::Value,
@@ -16,12 +16,12 @@ use std::{
 
 impl Task {
 	#[tracing::instrument(skip(tg), ret)]
-	pub async fn run(&self, tg: &Instance) -> Result<Value> {
+	pub async fn run(&self, tg: &Server) -> Result<Value> {
 		let operation = Build::Task(self.clone());
 		operation.output(tg, None).await
 	}
 
-	pub(crate) async fn run_inner(&self, tg: &Instance) -> Result<Value> {
+	pub(crate) async fn run_inner(&self, tg: &Server) -> Result<Value> {
 		let _permit = tg.command_semaphore.acquire().await;
 		if tg.options.sandbox_enabled {
 			let host = self.host;
@@ -87,7 +87,7 @@ impl Task {
 		Ok((executable, env, args))
 	}
 
-	pub(crate) async fn check_out_references(&self, tg: &Instance) -> Result<()> {
+	pub(crate) async fn check_out_references(&self, tg: &Server) -> Result<()> {
 		// Collect the references.
 		let mut references = HashSet::<_, fnv::FnvBuildHasher>::default();
 		references.extend(self.executable.artifacts().cloned());

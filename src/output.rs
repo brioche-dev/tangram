@@ -2,7 +2,7 @@ use crate as tg;
 use crate::{error::Error, id::Id, rid::Rid};
 use crate::{
 	error::{Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	value::{self, Value},
 };
 use lmdb::Transaction;
@@ -15,7 +15,7 @@ pub struct Output {
 }
 
 impl Build {
-	pub async fn try_get_output(&self, tg: &Instance) -> Result<Option<Value>> {
+	pub async fn try_get_output(&self, tg: &Server) -> Result<Option<Value>> {
 		// Attempt to get the output locally.
 		if let Some(output) = self.try_get_output_local(tg).await? {
 			return Ok(Some(output));
@@ -33,7 +33,7 @@ impl Build {
 		Ok(None)
 	}
 
-	pub async fn try_get_output_local(&self, tg: &Instance) -> Result<Option<Value>> {
+	pub async fn try_get_output_local(&self, tg: &Server) -> Result<Option<Value>> {
 		// Begin a read transaction.
 		let txn = tg.database.env.begin_ro_txn()?;
 
@@ -49,7 +49,7 @@ impl Build {
 		Ok(Some(output))
 	}
 
-	pub async fn set_output_local(&self, tg: &Instance, output: &tg::Value) -> Result<()> {
+	pub async fn set_output_local(&self, tg: &Server, output: &tg::Value) -> Result<()> {
 		tokio::task::spawn_blocking({
 			let operation = self.clone();
 			let tg = tg.clone();

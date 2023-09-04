@@ -1,6 +1,6 @@
 use crate as tg;
 use crate::error::Result;
-use crate::instance::Instance;
+use crate::server::Server;
 
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 pub struct Symlink {
@@ -16,18 +16,18 @@ impl tg::Symlink {
 		Symlink { target }.into()
 	}
 
-	pub async fn target(&self, tg: &Instance) -> Result<tg::Template> {
+	pub async fn target(&self, tg: &Server) -> Result<tg::Template> {
 		Ok(self.get(tg).await?.target.clone())
 	}
 
-	pub async fn resolve(&self, tg: &Instance) -> Result<Option<tg::Artifact>> {
+	pub async fn resolve(&self, tg: &Server) -> Result<Option<tg::Artifact>> {
 		self.resolve_from(tg, None).await
 	}
 
 	#[allow(clippy::unused_async)]
 	pub async fn resolve_from(
 		&self,
-		_tg: &Instance,
+		_tg: &Server,
 		_from: Option<&Symlink>,
 	) -> Result<Option<tg::Artifact>> {
 		unimplemented!()

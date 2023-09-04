@@ -1,15 +1,15 @@
 use super::{location::Location, service};
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::position::Position,
 	module::Module,
+	server::Server,
 };
 
 impl Module {
 	pub async fn definition(
 		&self,
-		tg: &Instance,
+		tg: &Server,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the language service request.

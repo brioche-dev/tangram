@@ -1,15 +1,11 @@
 use super::{Component, Template};
 use crate as tg;
-use crate::{error::Result, instance::Instance};
+use crate::{error::Result, server::Server};
 use itertools::Itertools;
 use std::path::PathBuf;
 
 impl tg::Template {
-	pub async fn unrender(
-		tg: &Instance,
-		artifacts_paths: &[PathBuf],
-		string: &str,
-	) -> Result<Self> {
+	pub async fn unrender(tg: &Server, artifacts_paths: &[PathBuf], string: &str) -> Result<Self> {
 		// Create the regex.
 		let artifacts_paths = artifacts_paths
 			.iter()
@@ -57,7 +53,7 @@ impl tg::Template {
 // 		blob::Blob,
 // 		error::Result,
 // 		file::File,
-// 		instance::{Instance, Options},
+// 		server::{Server, Options},
 // 		template::{self, Template},
 // 	};
 // 	use std::sync::Arc;
@@ -67,7 +63,7 @@ impl tg::Template {
 // 	async fn test_unrender_artifact() -> Result<()> {
 // 		let temp_dir = TempDir::new().unwrap();
 // 		let temp_path = temp_dir.path().to_owned();
-// 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
+// 		let tg = Arc::new(Server::new(temp_path, Options::default()).await?);
 
 // 		let artifact: Artifact = File::builder(Blob::with_reader(&tg, "foo".as_bytes()).await?)
 // 			.build()
@@ -92,7 +88,7 @@ impl tg::Template {
 // 	async fn test_unrender_artifact_path() -> Result<()> {
 // 		let temp_dir = TempDir::new().unwrap();
 // 		let temp_path = temp_dir.path().to_owned();
-// 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
+// 		let tg = Arc::new(Server::new(temp_path, Options::default()).await?);
 
 // 		let artifact: Artifact = File::builder(Blob::with_reader(&tg, "foo".as_bytes()).await?)
 // 			.build()
@@ -120,7 +116,7 @@ impl tg::Template {
 // 	async fn test_unrender_path() -> Result<()> {
 // 		let temp_dir = TempDir::new().unwrap();
 // 		let temp_path = temp_dir.path().to_owned();
-// 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
+// 		let tg = Arc::new(Server::new(temp_path, Options::default()).await?);
 
 // 		let string = "/etc/resolv.conf";
 
@@ -135,7 +131,7 @@ impl tg::Template {
 // 	async fn test_unrender_multiple() -> Result<()> {
 // 		let temp_dir = TempDir::new().unwrap();
 // 		let temp_path = temp_dir.path().to_owned();
-// 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
+// 		let tg = Arc::new(Server::new(temp_path, Options::default()).await?);
 
 // 		let artifact: Artifact = File::builder(Blob::with_reader(&tg, "foo".as_bytes()).await?)
 // 			.build()
@@ -165,7 +161,7 @@ impl tg::Template {
 // 	async fn test_unrender_command_with_path_environment_variable() -> Result<()> {
 // 		let temp_dir = TempDir::new().unwrap();
 // 		let temp_path = temp_dir.path().to_owned();
-// 		let tg = Arc::new(Instance::new(temp_path, Options::default()).await?);
+// 		let tg = Arc::new(Server::new(temp_path, Options::default()).await?);
 
 // 		let foo: Artifact = File::builder(Blob::with_reader(&tg, "foo".as_bytes()).await?)
 // 			.build()

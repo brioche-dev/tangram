@@ -1,13 +1,13 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 };
 use futures::FutureExt;
 use std::path::Path;
 
 mod migration_0000;
 
-impl Instance {
+impl Server {
 	pub async fn migrate(path: &Path) -> Result<()> {
 		let migrations = vec![migration_0000::migrate(path).boxed()];
 

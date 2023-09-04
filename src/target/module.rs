@@ -5,8 +5,8 @@ use super::{
 };
 use crate::{
 	error::{Error, Result, WrapErr},
-	instance::Instance,
 	module::{self, Module},
+	server::Server,
 };
 use num::ToPrimitive;
 use sourcemap::SourceMap;
@@ -79,8 +79,8 @@ fn load_module<'s>(
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the instance.
-	let tg = context.get_slot::<Instance>(scope).unwrap().clone();
+	// Get the server.
+	let tg = context.get_slot::<Server>(scope).unwrap().clone();
 
 	// Get the state.
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
@@ -207,8 +207,8 @@ fn resolve_module_callback_inner<'s>(
 	// Get a scope for the callback.
 	let mut scope = unsafe { v8::CallbackScope::new(context) };
 
-	// Get the instance.
-	let tg = context.get_slot::<Instance>(&mut scope).unwrap().clone();
+	// Get the server.
+	let tg = context.get_slot::<Server>(&mut scope).unwrap().clone();
 
 	// Get the state.
 	let state = context.get_slot::<Rc<State>>(&mut scope).unwrap().clone();

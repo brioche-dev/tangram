@@ -110,7 +110,7 @@ impl From<tg::Symlink> for Value {
 }
 
 // use super::Artifact;
-// use crate::{error::Result, id::Id, instance::Instance};
+// use crate::{error::Result, id::Id, server::Server};
 // use async_recursion::async_recursion;
 // use futures::stream::{FuturesUnordered, TryStreamExt};
 // use std::collections::{HashSet, VecDeque};
@@ -118,7 +118,7 @@ impl From<tg::Symlink> for Value {
 // impl Artifact {
 // 	/// Collect an artifact's references.
 // 	#[async_recursion]
-// 	pub async fn references(&self, tg: &Instance) -> Result<HashSet<Id, fnv::FnvBuildHasher>> {
+// 	pub async fn references(&self, tg: &Server) -> Result<HashSet<Id, fnv::FnvBuildHasher>> {
 // 		match self {
 // 			Artifact::Directory(directory) => directory.references(tg).await,
 // 			Artifact::File(file) => file.references(tg).await,
@@ -129,7 +129,7 @@ impl From<tg::Symlink> for Value {
 // 	/// Collect an artifact's recursive references.
 // 	pub async fn recursive_references(
 // 		&self,
-// 		tg: &Instance,
+// 		tg: &Server,
 // 	) -> Result<HashSet<Id, fnv::FnvBuildHasher>> {
 // 		// Create a queue of artifacts and a set of futures.
 // 		let mut references = HashSet::default();

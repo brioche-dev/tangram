@@ -12,7 +12,7 @@ use crate::{
 	bytes::Bytes,
 	checksum::{self, Checksum},
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	target::convert::from_v8,
 	value::{Buffer, Value},
 };
@@ -73,13 +73,13 @@ fn syscall_inner<'s>(
 	}
 }
 
-async fn syscall_artifact_bundle(tg: Instance, args: (Artifact,)) -> Result<Artifact> {
+async fn syscall_artifact_bundle(tg: Server, args: (Artifact,)) -> Result<Artifact> {
 	let (artifact,) = args;
 	let artifact = artifact.bundle(&tg).await?;
 	Ok(artifact)
 }
 
-async fn syscall_blob_bytes(tg: Instance, args: (Blob,)) -> Result<Bytes> {
+async fn syscall_blob_bytes(tg: Server, args: (Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
 	let bytes = blob.bytes(&tg).await?;
 	Ok(bytes.into())
@@ -87,7 +87,7 @@ async fn syscall_blob_bytes(tg: Instance, args: (Blob,)) -> Result<Bytes> {
 
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (checksum::Algorithm, Bytes),
 ) -> Result<Checksum> {
 	let (algorithm, bytes) = args;
@@ -99,7 +99,7 @@ fn syscall_checksum(
 
 fn syscall_encoding_base64_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (value,) = args;
@@ -112,7 +112,7 @@ fn syscall_encoding_base64_decode(
 
 fn syscall_encoding_base64_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -122,7 +122,7 @@ fn syscall_encoding_base64_encode(
 
 fn syscall_encoding_hex_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (hex,) = args;
@@ -137,7 +137,7 @@ fn syscall_encoding_hex_decode(
 
 fn syscall_encoding_hex_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (bytes,) = args;
@@ -148,7 +148,7 @@ fn syscall_encoding_hex_encode(
 
 fn syscall_encoding_json_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (String,),
 ) -> Result<serde_json::Value> {
 	let (json,) = args;
@@ -160,7 +160,7 @@ fn syscall_encoding_json_decode(
 
 fn syscall_encoding_json_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (serde_json::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -172,7 +172,7 @@ fn syscall_encoding_json_encode(
 
 fn syscall_encoding_toml_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (String,),
 ) -> Result<serde_toml::Value> {
 	let (toml,) = args;
@@ -184,7 +184,7 @@ fn syscall_encoding_toml_decode(
 
 fn syscall_encoding_toml_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (serde_toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -196,7 +196,7 @@ fn syscall_encoding_toml_encode(
 
 fn syscall_encoding_utf8_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (bytes,) = args;
@@ -208,7 +208,7 @@ fn syscall_encoding_utf8_decode(
 
 fn syscall_encoding_utf8_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (string,) = args;
@@ -218,7 +218,7 @@ fn syscall_encoding_utf8_encode(
 
 fn syscall_encoding_yaml_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (String,),
 ) -> Result<serde_yaml::Value> {
 	let (yaml,) = args;
@@ -230,7 +230,7 @@ fn syscall_encoding_yaml_decode(
 
 fn syscall_encoding_yaml_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Instance,
+	_tg: Server,
 	args: (serde_yaml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -240,7 +240,7 @@ fn syscall_encoding_yaml_encode(
 	Ok(yaml)
 }
 
-fn syscall_log(_scope: &mut v8::HandleScope, _tg: Instance, args: (String,)) -> Result<()> {
+fn syscall_log(_scope: &mut v8::HandleScope, _tg: Server, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	println!("{string}");
 	Ok(())
@@ -254,13 +254,13 @@ fn syscall_sync<'s, A, T, F>(
 where
 	A: FromV8,
 	T: ToV8,
-	F: FnOnce(&mut v8::HandleScope<'s>, Instance, A) -> Result<T>,
+	F: FnOnce(&mut v8::HandleScope<'s>, Server, A) -> Result<T>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the instance.
-	let tg = context.get_slot::<Instance>(scope).unwrap().clone();
+	// Get the server.
+	let tg = context.get_slot::<Server>(scope).unwrap().clone();
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
@@ -288,14 +288,14 @@ fn syscall_async<'s, A, T, F, Fut>(
 where
 	A: FromV8,
 	T: ToV8,
-	F: FnOnce(Instance, A) -> Fut + 'static,
+	F: FnOnce(Server, A) -> Fut + 'static,
 	Fut: Future<Output = Result<T>>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the instance.
-	let tg = context.get_slot::<Instance>(scope).unwrap().clone();
+	// Get the server.
+	let tg = context.get_slot::<Server>(scope).unwrap().clone();
 
 	// Get the state.
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
@@ -332,14 +332,14 @@ where
 
 async fn syscall_async_inner<'s, A, T, F, Fut>(
 	context: v8::Global<v8::Context>,
-	tg: Instance,
+	tg: Server,
 	args: v8::Global<v8::Array>,
 	f: F,
 ) -> Result<v8::Global<v8::Value>>
 where
 	A: FromV8,
 	T: ToV8,
-	F: FnOnce(Instance, A) -> Fut,
+	F: FnOnce(Server, A) -> Fut,
 	Fut: Future<Output = Result<T>>,
 {
 	// Deserialize the args.

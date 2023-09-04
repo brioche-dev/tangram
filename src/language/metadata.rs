@@ -1,13 +1,13 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::Module,
 	package,
+	server::Server,
 };
 
 impl Module {
-	pub async fn metadata(tg: &Instance, text: &str) -> Result<package::Metadata> {
+	pub async fn metadata(tg: &Server, text: &str) -> Result<package::Metadata> {
 		// Create the language service request.
 		let request = service::Request::Metadata(service::metadata::Request {
 			text: text.to_owned(),

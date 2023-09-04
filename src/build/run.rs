@@ -1,7 +1,7 @@
 use super::Build;
 use crate::{
 	error::{Error, Result},
-	instance::Instance,
+	server::Server,
 	util::task_map::TaskMap,
 	value::Value,
 };
@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 impl Build {
 	#[tracing::instrument(skip(tg), ret)]
-	pub async fn output(&self, tg: &Instance) -> Result<Value> {
+	pub async fn output(&self, tg: &Server) -> Result<Value> {
 		// Get the operations task map.
 		let operations_task_map = tg
 			.operations_task_map
@@ -23,7 +23,7 @@ impl Build {
 						let state = state.clone();
 						async move {
 							let state = state.upgrade().unwrap();
-							let tg = Instance { state };
+							let tg = Server { state };
 							let operation = Self::with_block(&tg, Block::with_id(id)).await?;
 							let output = operation.run_inner(&tg, None).await?;
 							Ok::<_, Error>(output)
@@ -45,7 +45,7 @@ impl Build {
 
 	#[must_use]
 	#[tracing::instrument(skip(tg), ret)]
-	async fn run_inner(&self, tg: &Instance, parent: Option<Operation>) -> Result<Value> {
+	async fn run_inner(&self, tg: &Server, parent: Option<Operation>) -> Result<Value> {
 		// If the operation has already run, then return its output.
 		let output = self.try_get_output(tg).await?;
 		if let Some(output) = output {

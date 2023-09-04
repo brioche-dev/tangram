@@ -2,14 +2,13 @@ use crate::{
 	error::{return_error, Result},
 	Cli,
 };
-use tangram::package;
 
 /// Print the dependency tree of a package.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(default_value = ".")]
-	pub package: package::Specifier,
+	pub package: tg::package::Specifier,
 }
 
 impl Cli {

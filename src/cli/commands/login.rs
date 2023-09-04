@@ -15,7 +15,7 @@ impl Cli {
 		// Create a login.
 		let login = self
 			.tg
-			.origin_client()
+			.api_client()
 			.create_login()
 			.await
 			.wrap_err("Failed to create the login.")?;

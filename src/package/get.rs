@@ -5,14 +5,14 @@ use super::{
 use crate::{
 	artifact::Artifact,
 	error::{Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 
 impl Package {
 	// #[async_recursion]
-	// pub async fn with_block(tg: &'async_recursion Instance, block: Block) -> Result<Self> {
+	// pub async fn with_block(tg: &'async_recursion Server, block: Block) -> Result<Self> {
 	// 	// Get the artifact.
 	// 	let artifact = Artifact::with_block(tg, block).await?;
 

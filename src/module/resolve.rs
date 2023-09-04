@@ -1,16 +1,15 @@
 use super::{Import, Library, Module};
-#[cfg(feature = "language")]
 use crate::document::Document;
 use crate::{
 	error::{return_error, Result, WrapErr},
-	instance::Instance,
 	package::{dependency::Dependency, Package, ROOT_MODULE_FILE_NAME},
+	server::Server,
 };
 
 impl Module {
 	/// Resolve a module.
 	#[allow(clippy::too_many_lines)]
-	pub async fn resolve(&self, tg: &Instance, import: &Import) -> Result<Self> {
+	pub async fn resolve(&self, tg: &Server, import: &Import) -> Result<Self> {
 		match (self, import) {
 			(Self::Library(module), Import::Path(path)) => {
 				let module_path = module
@@ -28,7 +27,6 @@ impl Module {
 				return_error!(r#"Cannot resolve a dependency import from a library module."#);
 			},
 
-			#[cfg(feature = "language")]
 			(Self::Document(document), Import::Path(path)) => {
 				// Resolve the module path.
 				let package_path = document.package_path.clone();
@@ -55,7 +53,6 @@ impl Module {
 				Ok(module)
 			},
 
-			#[cfg(feature = "language")]
 			(Self::Document(document), Import::Dependency(Dependency::Path(dependency_path))) => {
 				// Resolve the package path.
 				let dependency_path = document
@@ -75,7 +72,6 @@ impl Module {
 				))
 			},
 
-			#[cfg(feature = "language")]
 			(Self::Document(_), Import::Dependency(Dependency::Registry(_))) => {
 				unimplemented!()
 			},

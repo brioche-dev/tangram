@@ -3,7 +3,7 @@ use crate::{
 	artifact::Artifact,
 	directory,
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	subpath::Subpath,
 	template,
 };
@@ -16,7 +16,7 @@ static TANGRAM_RUN_SUBPATH: Lazy<Subpath> = Lazy::new(|| ".tangram/run".parse().
 
 impl tg::Artifact {
 	/// Bundle an artifact with all of its recursive references at `.tangram/artifacts`.
-	pub async fn bundle(&self, tg: &Instance) -> Result<tg::Artifact> {
+	pub async fn bundle(&self, tg: &Server) -> Result<tg::Artifact> {
 		// Collect the artifact's recursive references.
 		let references = self.recursive_references(tg).await?;
 
@@ -31,7 +31,7 @@ impl tg::Artifact {
 			Artifact::Directory(directory) => Artifact::Directory(directory.clone()),
 
 			// If the artifact is an executable file, create a directory and place the executable at `.tangram/run`.
-			Artifact::File(file) if file.executable(tg).await? => directory::Builder::new()
+			Artifact::File(file) if file.executable(tg).await? => directory::Builder::default()
 				.add(tg, &TANGRAM_RUN_SUBPATH, file.clone())
 				.await?
 				.build()
@@ -64,7 +64,7 @@ impl tg::Artifact {
 			.try_collect()
 			.await?;
 
-		let directory = Directory::new(&entries);
+		let directory = tg::Directory::new(&entries);
 
 		// Add the references directory to the artifact at `.tangram/artifacts`.
 		let artifact = artifact
@@ -82,11 +82,7 @@ impl tg::Artifact {
 
 	/// Remove all references from an artifact recursively, rendering symlink targets to a relative path from `path` to `.tangram/artifacts/<id>`.
 	#[async_recursion]
-	async fn bundle_inner(
-		&self,
-		tg: &'async_recursion Instance,
-		path: &Subpath,
-	) -> Result<Artifact> {
+	async fn bundle_inner(&self, tg: &'async_recursion Server, path: &Subpath) -> Result<Artifact> {
 		match self.get() {
 			// If the artifact is a directory, then recurse to bundle its entries.
 			Artifact::Directory(directory) => {
@@ -109,7 +105,7 @@ impl tg::Artifact {
 					.try_collect()
 					.await?;
 
-				Ok(Artifact::Directory(Directory::new(&entries)))
+				Ok(Artifact::Directory(tg::Directory::new(&entries)))
 			},
 
 			// If the artifact is a file, then return the file without any references.

@@ -4,9 +4,7 @@ use crate::error::return_error;
 use crate::Kind;
 
 mod error;
-// mod output;
-#[cfg(feature = "build")]
-mod run;
+// mod run;
 
 /// A build.
 #[derive(Clone, Debug, tangram_serialize::Serialize, tangram_serialize::Deserialize)]

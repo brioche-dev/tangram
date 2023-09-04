@@ -1,13 +1,13 @@
 use super::{service, Diagnostic};
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::Module,
+	server::Server,
 };
 
 impl Module {
 	/// Get all diagnostics for the provided modules.
-	pub async fn check(tg: &Instance, modules: Vec<Module>) -> Result<Vec<Diagnostic>> {
+	pub async fn check(tg: &Server, modules: Vec<Module>) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Check(service::check::Request { modules });
 

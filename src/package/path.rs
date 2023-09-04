@@ -8,8 +8,8 @@ use crate::{
 	directory,
 	error::{Result, WrapErr},
 	file::File,
-	instance::Instance,
 	module::{self, Module},
+	server::Server,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -20,7 +20,7 @@ use std::{
 impl Package {
 	/// Create a package from a path.
 	#[async_recursion]
-	pub async fn with_path(tg: &Instance, package_path: &Path) -> Result<Self> {
+	pub async fn with_path(tg: &Server, package_path: &Path) -> Result<Self> {
 		todo!()
 		// // Create a builder for the directory.
 		// let mut directory = directory::Builder::new();

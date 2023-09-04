@@ -1,8 +1,8 @@
 use super::Module;
 use crate::{
 	error::{Result, WrapErr},
-	instance::Instance,
 	package::Package,
+	server::Server,
 };
 use include_dir::include_dir;
 
@@ -14,7 +14,7 @@ const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/lib");
 
 impl Module {
 	/// Load the module.
-	pub async fn load(&self, tg: &Instance) -> Result<String> {
+	pub async fn load(&self, tg: &Server) -> Result<String> {
 		match self {
 			// Load a library module.
 			Self::Library(module) => {
@@ -33,7 +33,6 @@ impl Module {
 			},
 
 			// Load a module from a document.
-			#[cfg(feature = "language")]
 			Self::Document(document) => document.text(tg).await,
 
 			// Load a module from a package.

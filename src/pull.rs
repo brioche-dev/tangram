@@ -3,8 +3,8 @@ use crate::{
 	block::{self, Block},
 	error::Result,
 	id::Id,
-	instance::Instance,
 	return_error,
+	server::Server,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
@@ -14,7 +14,7 @@ impl Client {
 	/// Pull a block.
 	#[async_recursion]
 	#[must_use]
-	pub async fn pull(&self, tg: &Instance, id: Id) -> Result<Block> {
+	pub async fn pull(&self, tg: &Server, id: Id) -> Result<Block> {
 		// If the block is stored locally, then return.
 		let block = Block::with_id(id);
 		if block.exists_local(tg).await? {

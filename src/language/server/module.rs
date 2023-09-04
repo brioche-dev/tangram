@@ -1,14 +1,14 @@
 use crate::{
 	document::Document,
 	error::Result,
-	instance::Instance,
 	module::{self, Module},
+	server::Server,
 };
 use std::path::Path;
 use url::Url;
 
 impl Module {
-	pub async fn from_lsp(tg: &Instance, url: Url) -> Result<module::Module> {
+	pub async fn from_lsp(tg: &Server, url: Url) -> Result<module::Module> {
 		match url.scheme() {
 			"file" => {
 				let document = Document::for_path(tg, Path::new(url.path())).await?;

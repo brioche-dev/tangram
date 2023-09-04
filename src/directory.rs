@@ -1,7 +1,7 @@
 use crate::{
 	self as tg, artifact,
 	error::{Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	subpath::{self, Subpath},
 };
 use std::collections::BTreeMap;
@@ -21,11 +21,11 @@ impl tg::Directory {
 		Directory { entries }.into()
 	}
 
-	pub async fn builder(&self, tg: &Instance) -> Result<Builder> {
+	pub async fn builder(&self, tg: &Server) -> Result<Builder> {
 		Ok(Builder::new(self.get(tg).await?.entries.clone()))
 	}
 
-	pub async fn entries(&self, tg: &Instance) -> Result<&BTreeMap<String, tg::Artifact>, Error> {
+	pub async fn entries(&self, tg: &Server) -> Result<&BTreeMap<String, tg::Artifact>, Error> {
 		Ok(&self.get(tg).await?.entries)
 	}
 }
@@ -41,7 +41,7 @@ impl Directory {
 }
 
 impl tg::Directory {
-	pub async fn get_entry(&self, tg: &Instance, path: &Subpath) -> Result<tg::Artifact> {
+	pub async fn get_entry(&self, tg: &Server, path: &Subpath) -> Result<tg::Artifact> {
 		let artifact = self
 			.try_get_entry(tg, path)
 			.await?
@@ -49,11 +49,7 @@ impl tg::Directory {
 		Ok(artifact)
 	}
 
-	pub async fn try_get_entry(
-		&self,
-		tg: &Instance,
-		path: &Subpath,
-	) -> Result<Option<tg::Artifact>> {
+	pub async fn try_get_entry(&self, tg: &Server, path: &Subpath) -> Result<Option<tg::Artifact>> {
 		// Track the current artifact.
 		let mut artifact: tg::Artifact = self.clone().into();
 
@@ -109,7 +105,7 @@ impl Builder {
 	// #[async_recursion]
 	// pub async fn add(
 	// 	mut self,
-	// 	tg: &Instance,
+	// 	tg: &Server,
 	// 	path: &Subpath,
 	// 	artifact: impl Into<Artifact> + Send + 'async_recursion,
 	// ) -> Result<Self> {
@@ -154,7 +150,7 @@ impl Builder {
 	// }
 
 	// #[async_recursion]
-	// pub async fn remove(mut self, tg: &Instance, path: &Subpath) -> Result<Self> {
+	// pub async fn remove(mut self, tg: &Server, path: &Subpath) -> Result<Self> {
 	// 	// Get the first component.
 	// 	let name = path
 	// 		.components()

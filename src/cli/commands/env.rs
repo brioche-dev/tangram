@@ -1,6 +1,5 @@
 use super::{PackageArgs, RunArgs};
 use crate::{error::Result, Cli};
-use tangram::package;
 
 /// Build a package's "env" export and run it.
 #[derive(Debug, clap::Args)]
@@ -9,7 +8,7 @@ use tangram::package;
 pub struct Args {
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: package::Specifier,
+	pub package: tg::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,

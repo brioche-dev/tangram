@@ -1,7 +1,7 @@
-#[cfg(feature = "build")]
+#[cfg(feature = "server")]
 use crate::error::{Error, Result, WrapErr};
 use std::ops::Range;
-#[cfg(not(feature = "build"))]
+#[cfg(not(feature = "server"))]
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -128,17 +128,17 @@ impl tangram_serialize::Deserialize for Bytes {
 
 #[derive(Clone, Debug)]
 pub struct Buffer(
-	#[cfg(not(feature = "build"))] Arc<[u8]>,
-	#[cfg(feature = "build")] v8::SharedRef<v8::BackingStore>,
+	#[cfg(not(feature = "server"))] Arc<[u8]>,
+	#[cfg(feature = "server")] v8::SharedRef<v8::BackingStore>,
 );
 
 impl AsRef<[u8]> for Buffer {
 	fn as_ref(&self) -> &[u8] {
-		#[cfg(not(feature = "build"))]
+		#[cfg(not(feature = "server"))]
 		{
 			&self.0
 		}
-		#[cfg(feature = "build")]
+		#[cfg(feature = "server")]
 		unsafe {
 			std::slice::from_raw_parts(
 				self.0.data().unwrap().as_ptr().cast::<u8>(),
@@ -151,9 +151,9 @@ impl AsRef<[u8]> for Buffer {
 impl From<Box<[u8]>> for Buffer {
 	fn from(value: Box<[u8]>) -> Self {
 		Self(
-			#[cfg(not(feature = "build"))]
+			#[cfg(not(feature = "server"))]
 			value.into(),
-			#[cfg(feature = "build")]
+			#[cfg(feature = "server")]
 			unsafe {
 				v8::ArrayBuffer::new_backing_store_from_boxed_slice(value).make_shared()
 			},
@@ -164,9 +164,9 @@ impl From<Box<[u8]>> for Buffer {
 impl From<Vec<u8>> for Buffer {
 	fn from(value: Vec<u8>) -> Self {
 		Self(
-			#[cfg(not(feature = "build"))]
+			#[cfg(not(feature = "server"))]
 			value.into(),
-			#[cfg(feature = "build")]
+			#[cfg(feature = "server")]
 			unsafe {
 				v8::ArrayBuffer::new_backing_store_from_vec(value).make_shared()
 			},

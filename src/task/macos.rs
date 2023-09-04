@@ -2,7 +2,7 @@ use super::Task;
 use crate::{
 	artifact::{self, Artifact},
 	error::{return_error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	temp::Temp,
 	value::Value,
 };
@@ -15,7 +15,7 @@ use std::{
 
 impl Task {
 	#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
-	pub async fn run_inner_macos(&self, tg: &Instance) -> Result<Value> {
+	pub async fn run_inner_macos(&self, tg: &Server) -> Result<Value> {
 		// Check out the references.
 		self.check_out_references(tg)
 			.await

@@ -3,14 +3,18 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_safety_doc)]
 
+#[cfg(feature = "client")]
+pub use self::client::Client;
+#[cfg(feature = "server")]
+pub use self::server::Server;
 pub use self::{
 	any::Value as Any, array::Value as Array, artifact::Value as Artifact, blob::Value as Blob,
 	bool::Value as Bool, bytes::Value as Bytes, directory::Value as Directory, file::Value as File,
-	id::Id, instance::Instance, kind::Kind, null::Value as Null, number::Value as Number,
-	object::Value as Object, package::Value as Package, placeholder::Value as Placeholder,
-	relpath::Value as Relpath, resource::Value as Resource, rid::Rid, string::Value as String,
-	subpath::Value as Subpath, symlink::Value as Symlink, system::System, target::Value as Target,
-	task::Value as Task, template::Value as Template, value::Value,
+	id::Id, kind::Kind, null::Value as Null, number::Value as Number, object::Value as Object,
+	package::Value as Package, placeholder::Value as Placeholder, relpath::Value as Relpath,
+	resource::Value as Resource, rid::Rid, string::Value as String, subpath::Value as Subpath,
+	symlink::Value as Symlink, system::System, target::Value as Target, task::Value as Task,
+	template::Value as Template, value::Value,
 };
 
 pub mod any;
@@ -24,18 +28,20 @@ pub mod bytes;
 pub mod checkin;
 pub mod checkout;
 pub mod checksum;
+#[cfg(feature = "server")]
+pub mod clean;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod directory;
-#[cfg(feature = "language")]
+#[cfg(feature = "server")]
 pub mod document;
 pub mod error;
 pub mod file;
 pub mod id;
-pub mod instance;
 pub mod kind;
-#[cfg(feature = "language")]
-pub mod language;
+// #[cfg(feature = "server")]
+// pub mod language;
+#[cfg(feature = "server")]
 pub mod migrations;
 pub mod module;
 pub mod null;
@@ -47,6 +53,8 @@ pub mod placeholder;
 pub mod relpath;
 pub mod resource;
 pub mod rid;
+#[cfg(feature = "server")]
+pub mod serve;
 #[cfg(feature = "server")]
 pub mod server;
 pub mod string;

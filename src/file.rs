@@ -1,4 +1,4 @@
-use crate::{self as tg, error::Result, instance::Instance};
+use crate::{self as tg, error::Result, server::Server};
 
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 pub struct File {
@@ -33,15 +33,15 @@ impl tg::File {
 		Builder::new(contents)
 	}
 
-	pub async fn contents(&self, tg: &Instance) -> Result<tg::Blob> {
+	pub async fn contents(&self, tg: &Server) -> Result<tg::Blob> {
 		Ok(self.get(tg).await?.contents.clone())
 	}
 
-	pub async fn executable(&self, tg: &Instance) -> Result<bool> {
+	pub async fn executable(&self, tg: &Server) -> Result<bool> {
 		Ok(self.get(tg).await?.executable)
 	}
 
-	pub async fn references(&self, tg: &Instance) -> Result<&[tg::Artifact]> {
+	pub async fn references(&self, tg: &Server) -> Result<&[tg::Artifact]> {
 		Ok(self.get(tg).await?.references.as_slice())
 	}
 }

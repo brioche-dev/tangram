@@ -3,7 +3,7 @@ use crate::{
 	artifact::{self, Artifact},
 	build,
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	system::System,
 	task,
 	temp::Temp,
@@ -63,7 +63,7 @@ const SH_ARM64_LINUX: &[u8] = include_bytes!(concat!(
 
 impl Task {
 	#[allow(clippy::too_many_lines, clippy::similar_names)]
-	pub async fn run_inner_linux(&self, tg: &Instance) -> Result<Value> {
+	pub async fn run_inner_linux(&self, tg: &Server) -> Result<Value> {
 		// Check out the references.
 		self.check_out_references(tg)
 			.await

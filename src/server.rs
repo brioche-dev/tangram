@@ -1,31 +1,37 @@
-#[cfg(feature = "build")]
-use crate::value::Value;
-use crate::{error::Result, id::Id, util::task_map::TaskMap};
+use crate::{
+	client::API_URL,
+	document::{self, Document},
+	error::Result,
+	id::Id,
+	// language,
+	util::task_map::TaskMap,
+	value,
+	Client,
+};
 use derive_more::Deref;
-#[cfg(feature = "language")]
-use std::collections::HashMap;
+use futures::{StreamExt, TryStreamExt};
+use lmdb::Transaction;
 use std::{
+	collections::HashMap,
 	path::{Path, PathBuf},
 	sync::Arc,
 };
 use url::Url;
 
-/// An instance.
+/// A server.
 #[derive(Clone, Deref)]
-pub struct Instance {
+pub struct Server {
 	pub(crate) state: Arc<State>,
 }
 
 pub struct State {
 	/// A semaphore that limits the number of concurrent commands.
-	#[cfg(feature = "build")]
 	pub(crate) command_semaphore: tokio::sync::Semaphore,
 
 	/// The database.
 	pub(crate) database: Database,
 
 	/// A map of paths to documents.
-	#[cfg(feature = "language")]
 	pub(crate) documents:
 		tokio::sync::RwLock<HashMap<Document, document::State, fnv::FnvBuildHasher>>,
 
@@ -33,7 +39,6 @@ pub struct State {
 	pub(crate) file_descriptor_semaphore: tokio::sync::Semaphore,
 
 	/// An HTTP client for downloading resources.
-	#[cfg(feature = "build")]
 	pub(crate) http_client: reqwest::Client,
 
 	/// A task map that deduplicates internal checkouts.
@@ -42,31 +47,22 @@ pub struct State {
 		std::sync::Mutex<Option<Arc<TaskMap<Id, Result<PathBuf>>>>>,
 
 	/// A channel sender to send requests to the language service.
-	#[cfg(feature = "language")]
-	pub(crate) language_service_request_sender:
-		std::sync::Mutex<Option<crate::language::service::RequestSender>>,
+	// pub(crate) language_service_request_sender:
+	// 	std::sync::Mutex<Option<language::service::RequestSender>>,
 
 	/// A local pool for running `!Send` futures.
-	#[cfg(feature = "build")]
 	pub(crate) local_pool: tokio_util::task::LocalPoolHandle,
 
 	/// A handle to the main tokio runtime.
-	#[cfg(feature = "language")]
 	pub(crate) main_runtime_handle: tokio::runtime::Handle,
 
-	/// A map that deduplicates runs.
-	#[allow(clippy::type_complexity)]
-	#[cfg(feature = "build")]
-	pub(crate) operations_task_map: std::sync::Mutex<Option<Arc<TaskMap<Id, Result<Value>>>>>,
-
-	/// The options the instance was created with.
+	/// The options the server was created with.
 	pub(crate) options: Options,
 
 	/// A client for communicating with the parent.
-	#[cfg(feature = "client")]
 	pub(crate) parent: Client,
 
-	/// The path to the directory where the instance stores its data.
+	/// The path to the directory where the server stores its data.
 	pub(crate) path: PathBuf,
 }
 
@@ -85,22 +81,18 @@ pub struct Options {
 	pub sandbox_enabled: bool,
 }
 
-impl Instance {
-	pub async fn new(path: PathBuf, options: Options) -> Result<Instance> {
+impl Server {
+	pub async fn new(path: PathBuf, options: Options) -> Result<Server> {
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
 
 		// Migrate the path.
 		Self::migrate(&path).await?;
 
-		#[cfg(feature = "build")]
-		{
-			// Initialize v8.
-			V8_INIT.call_once(initialize_v8);
-		}
+		// Initialize v8.
+		V8_INIT.call_once(initialize_v8);
 
 		// Create the command semaphore.
-		#[cfg(feature = "build")]
 		let command_semaphore = tokio::sync::Semaphore::new(16);
 
 		// Create the database.
@@ -122,39 +114,29 @@ impl Instance {
 		};
 
 		// Create the documents maps.
-		#[cfg(feature = "language")]
 		let documents = tokio::sync::RwLock::new(HashMap::default());
 
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 
 		// Create the HTTP client.
-		#[cfg(feature = "build")]
 		let http_client = reqwest::Client::new();
 
 		// Create the internal checkouts task map.
 		let internal_checkouts_task_map = std::sync::Mutex::new(None);
 
 		// Create the sender for language service requests.
-		#[cfg(feature = "language")]
-		let language_service_request_sender = std::sync::Mutex::new(None);
+		// let language_service_request_sender = std::sync::Mutex::new(None);
 
 		// Create the local pool handle.
-		#[cfg(feature = "build")]
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
 			std::thread::available_parallelism().unwrap().get(),
 		);
 
 		// Get the curent tokio runtime handler.
-		#[cfg(feature = "language")]
 		let main_runtime_handle = tokio::runtime::Handle::current();
 
-		// Create the operations task map.
-		#[cfg(feature = "build")]
-		let operations_task_map = std::sync::Mutex::new(None);
-
 		// Create the parent client.
-		#[cfg(feature = "client")]
 		let parent = {
 			let url = options
 				.origin_url
@@ -166,42 +148,31 @@ impl Instance {
 
 		// Create the state.
 		let state = State {
-			#[cfg(feature = "build")]
 			command_semaphore,
 			database,
-			#[cfg(feature = "language")]
 			documents,
 			file_descriptor_semaphore,
-			#[cfg(feature = "build")]
 			http_client,
 			internal_checkouts_task_map,
-			#[cfg(feature = "language")]
-			language_service_request_sender,
-			#[cfg(feature = "build")]
+			// language_service_request_sender,
 			local_pool,
-			#[cfg(feature = "language")]
 			main_runtime_handle,
-			#[cfg(feature = "build")]
-			operations_task_map,
 			options,
-			#[cfg(feature = "client")]
 			parent,
 			path,
 		};
 
-		// Create the instance.
-		let instance = Instance {
+		// Create the server.
+		let server = Server {
 			state: Arc::new(state),
 		};
 
-		Ok(instance)
+		Ok(server)
 	}
 }
 
-#[cfg(feature = "build")]
 static V8_INIT: std::sync::Once = std::sync::Once::new();
 
-#[cfg(feature = "build")]
 fn initialize_v8() {
 	// Set the ICU data.
 	#[repr(C, align(16))]
@@ -220,14 +191,12 @@ fn initialize_v8() {
 	v8::V8::initialize();
 }
 
-impl Instance {
+impl Server {
 	#[must_use]
 	pub fn path(&self) -> &Path {
 		&self.state.path
 	}
-}
 
-impl Instance {
 	#[must_use]
 	pub fn artifacts_path(&self) -> PathBuf {
 		self.path().join("artifacts")
@@ -243,8 +212,88 @@ impl Instance {
 		self.path().join("temps")
 	}
 
-	// #[must_use]
-	// pub fn parent(&self) -> &Client {
-	// 	&self.parent
-	// }
+	#[must_use]
+	pub fn parent(&self) -> &Client {
+		&self.parent
+	}
+
+	pub async fn value_exists(&self, id: Id) -> Result<bool> {
+		// Check if the value exists locally.
+		'a: {
+			let txn = self.database.env.begin_ro_txn()?;
+			match txn.get(self.database.values, &id.as_bytes()) {
+				Ok(_) => return Ok(true),
+				Err(lmdb::Error::NotFound) => break 'a,
+				Err(error) => return Err(error.into()),
+			};
+		}
+
+		// Check if the value exists remotely.
+		'a: {
+			// TODO
+		}
+
+		Ok(false)
+	}
+
+	pub async fn try_get_value_bytes(&self, id: Id) -> Result<Option<Vec<u8>>> {
+		// Attempt to get the value locally.
+		'a: {
+			let txn = self.database.env.begin_ro_txn()?;
+			let data = match txn.get(self.database.values, &id.as_bytes()) {
+				Ok(data) => data.to_owned(),
+				Err(lmdb::Error::NotFound) => break 'a,
+				Err(error) => return Err(error.into()),
+			};
+		}
+
+		// Attempt to get the value remotely.
+		'a: {
+			// TODO
+		}
+
+		Ok(None)
+	}
+
+	pub async fn try_get_value_data(&self, id: Id) -> Result<Option<value::Data>> {
+		let Some(bytes) = self.try_get_value_bytes(id).await? else {
+			return Ok(None);
+		};
+		let data = value::Data::deserialize(&bytes)?;
+		Ok(Some(data))
+	}
+
+	pub async fn try_put_value(&self, id: Id, data: value::Data) -> Result<Result<(), Vec<Id>>> {
+		// Check if there are any missing children.
+		let mut missing_children = futures::stream::iter(data.children())
+			.map(Ok)
+			.try_filter_map(|child| async move {
+				let exists = self.value_exists(child.expect_id()).await?;
+				Ok(if exists { None } else { Some(child) })
+			})
+			.try_collect()
+			.await?;
+		if !missing_children.is_empty() {
+			return Ok(Err(missing_children));
+		}
+
+		// Create a write transaction.
+		let mut txn = self.database.env.begin_rw_txn()?;
+
+		// Serialize the data.
+		let data = data.serialize()?;
+
+		// Add the value to the database.
+		txn.put(
+			self.database.values,
+			&id.as_bytes(),
+			&data,
+			lmdb::WriteFlags::empty(),
+		)?;
+
+		// Commit the transaction.
+		txn.commit()?;
+
+		Ok(Ok(()))
+	}
 }

@@ -1,7 +1,7 @@
 fn main() {
 	println!("cargo:rerun-if-changed=build.rs");
 
-	#[cfg(any(feature = "build", feature = "language"))]
+	#[cfg(feature = "server")]
 	{
 		// Initialize V8.
 		static V8_INIT: std::sync::Once = std::sync::Once::new();
@@ -12,17 +12,7 @@ fn main() {
 		});
 	}
 
-	#[cfg(feature = "build")]
-	{
-		// Create the global snapshot.
-		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-		println!("cargo:rerun-if-changed=assets/global.js");
-		let path = out_dir_path.join("global.heapsnapshot");
-		let snapshot = create_snapshot("assets/global.js");
-		std::fs::write(path, snapshot).unwrap();
-	}
-
-	#[cfg(feature = "language")]
+	#[cfg(feature = "server")]
 	{
 		// Create the language service snapshot.
 		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
@@ -31,9 +21,19 @@ fn main() {
 		let snapshot = create_snapshot("assets/language_service.js");
 		std::fs::write(path, snapshot).unwrap();
 	}
+
+	#[cfg(feature = "server")]
+	{
+		// Create the global snapshot.
+		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+		println!("cargo:rerun-if-changed=assets/global.js");
+		let path = out_dir_path.join("global.heapsnapshot");
+		let snapshot = create_snapshot("assets/global.js");
+		std::fs::write(path, snapshot).unwrap();
+	}
 }
 
-#[cfg(any(feature = "build", feature = "language"))]
+#[cfg(feature = "server")]
 fn create_snapshot(path: impl AsRef<std::path::Path>) -> v8::StartupData {
 	// Create the isolate.
 	let mut isolate = v8::Isolate::snapshot_creator(None);

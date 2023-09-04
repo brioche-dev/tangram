@@ -1,5 +1,5 @@
 use crate::error::{return_error, Error, Result, WrapErr};
-use num_traits::ToPrimitive;
+use num::ToPrimitive;
 use std::collections::BTreeMap;
 
 pub fn to_v8<'a, T>(scope: &mut v8::HandleScope<'a>, value: &T) -> Result<v8::Local<'a, v8::Value>>

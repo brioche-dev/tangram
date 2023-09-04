@@ -2,7 +2,7 @@ use crate::{
 	self as tg,
 	artifact::Artifact,
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	subpath::Subpath,
 	temp::Temp,
 	template,
@@ -17,7 +17,7 @@ use std::{
 };
 
 impl tg::Artifact {
-	pub async fn check_out_internal(&self, tg: &Instance) -> Result<PathBuf> {
+	pub async fn check_out_internal(&self, tg: &Server) -> Result<PathBuf> {
 		// Get the internal checkouts task map.
 		let internal_checkouts_task_map = tg
 			.internal_checkouts_task_map
@@ -30,7 +30,7 @@ impl tg::Artifact {
 						let state = state.clone();
 						async move {
 							let state = state.upgrade().unwrap();
-							let tg = Instance { state };
+							let tg = Server { state };
 							let artifact = tg::Artifact::with_id(id)?;
 							artifact.check_out_internal_inner(&tg).await
 						}
@@ -47,7 +47,7 @@ impl tg::Artifact {
 		Ok(path)
 	}
 
-	async fn check_out_internal_inner(&self, tg: &Instance) -> Result<PathBuf> {
+	async fn check_out_internal_inner(&self, tg: &Server) -> Result<PathBuf> {
 		// Compute the checkout's path in the artifacts directory.
 		let id = self.id(tg).await?;
 		let path = tg.artifacts_path().join(id.to_string());
@@ -108,7 +108,7 @@ impl tg::Artifact {
 
 	#[async_recursion]
 	#[allow(clippy::too_many_lines)]
-	async fn check_out_internal_inner_inner(&self, tg: &Instance, path: &Path) -> Result<()> {
+	async fn check_out_internal_inner_inner(&self, tg: &Server, path: &Path) -> Result<()> {
 		match self.get() {
 			Artifact::Directory(directory) => {
 				// Create the directory.
@@ -245,7 +245,7 @@ impl tg::Artifact {
 }
 
 impl tg::Artifact {
-	pub async fn check_out(&self, tg: &Instance, path: &Path) -> Result<()> {
+	pub async fn check_out(&self, tg: &Server, path: &Path) -> Result<()> {
 		// Bundle the artifact.
 		let artifact = self.clone();
 		// let artifact = self
@@ -270,7 +270,7 @@ impl tg::Artifact {
 
 	async fn check_out_inner(
 		&self,
-		tg: &Instance,
+		tg: &Server,
 		existing_artifact: Option<&tg::Artifact>,
 		path: &Path,
 	) -> Result<()> {
@@ -320,7 +320,7 @@ impl tg::Artifact {
 
 	#[async_recursion]
 	async fn check_out_directory(
-		tg: &Instance,
+		tg: &Server,
 		existing_artifact: Option<&'async_recursion tg::Artifact>,
 		directory: &tg::Directory,
 		path: &Path,
@@ -390,7 +390,7 @@ impl tg::Artifact {
 	}
 
 	async fn check_out_file(
-		tg: &Instance,
+		tg: &Server,
 		existing_artifact: Option<&tg::Artifact>,
 		file: &tg::File,
 		path: &Path,
@@ -431,7 +431,7 @@ impl tg::Artifact {
 	}
 
 	async fn check_out_symlink(
-		tg: &Instance,
+		tg: &Server,
 		existing_artifact: Option<&tg::Artifact>,
 		symlink: &tg::Symlink,
 		path: &Path,

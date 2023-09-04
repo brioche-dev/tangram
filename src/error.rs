@@ -17,12 +17,11 @@ pub enum Error {
 	},
 
 	/// A build error.
-	// #[error(transparent)]
-	// Build(#[from] build::Error),
+	#[error(transparent)]
+	Build(#[from] crate::build::Error),
 
 	/// A language service error.
 	// #[error(transparent)]
-	// #[cfg(feature = "language")]
 	// LanguageService(#[from] crate::language::service::error::Error),
 
 	/// Any other error.
@@ -57,6 +56,7 @@ impl Error {
 	}
 }
 
+#[cfg(feature = "client")]
 impl From<reqwest::Error> for Error {
 	fn from(error: reqwest::Error) -> Self {
 		Self::Other {
@@ -66,6 +66,7 @@ impl From<reqwest::Error> for Error {
 	}
 }
 
+#[cfg(feature = "server")]
 impl From<lmdb::Error> for Error {
 	fn from(error: lmdb::Error) -> Self {
 		Self::Other {

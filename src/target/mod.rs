@@ -2,23 +2,23 @@ pub use self::error::Error;
 use crate::{self as tg, subpath::Subpath};
 use std::collections::BTreeMap;
 
-// #[cfg(feature = "build")]
+// #[cfg(feature = "server")]
 // mod build;
-#[cfg(feature = "build")]
-mod context;
-#[cfg(feature = "build")]
-mod convert;
+// #[cfg(feature = "server")]
+// mod context;
+// #[cfg(feature = "server")]
+// mod convert;
 mod error;
-#[cfg(feature = "build")]
-mod exception;
-#[cfg(feature = "build")]
-mod isolate;
-#[cfg(feature = "build")]
-mod module;
-#[cfg(feature = "build")]
-mod state;
-#[cfg(feature = "build")]
-mod syscall;
+// #[cfg(feature = "server")]
+// mod exception;
+// #[cfg(feature = "server")]
+// mod isolate;
+// #[cfg(feature = "server")]
+// mod module;
+// #[cfg(feature = "server")]
+// mod state;
+// #[cfg(feature = "server")]
+// mod syscall;
 
 crate::value!(Target);
 

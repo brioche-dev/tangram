@@ -2,13 +2,13 @@ use super::Task;
 use crate::{
 	artifact::{self, Artifact},
 	error::{return_error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	temp::Temp,
 	value::Value,
 };
 
 impl Task {
-	pub async fn run_inner_basic(&self, tg: &Instance) -> Result<Value> {
+	pub async fn run_inner_basic(&self, tg: &Server) -> Result<Value> {
 		// Check out the references.
 		self.check_out_references(tg)
 			.await

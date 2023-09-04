@@ -1,12 +1,12 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::Module,
+	server::Server,
 };
 
 impl Module {
-	pub async fn format(tg: &Instance, text: String) -> Result<String> {
+	pub async fn format(tg: &Server, text: String) -> Result<String> {
 		// Create the language service request.
 		let request = service::Request::Format(service::format::Request { text });
 
@@ -24,8 +24,8 @@ impl Module {
 
 #[cfg(test)]
 mod tests {
-	use crate::instance::{Instance, Options};
 	use crate::module::Module;
+	use crate::server::{Options, Server};
 	use once_cell::sync::Lazy;
 	use std::sync::Arc;
 	use tokio::sync::Semaphore;
@@ -37,10 +37,10 @@ mod tests {
 			// Get a permit.
 			let _permit = SEMAPHORE.clone().acquire_owned().await.unwrap();
 
-			// Create the instance.
+			// Create the server.
 			let temp_dir = tempfile::TempDir::new().unwrap();
 			let path = temp_dir.path().to_owned();
-			let tg = Arc::new(Instance::new(path, Options::default()).await.unwrap());
+			let tg = Server::new(path, Options::default()).await.unwrap();
 
 			// Test.
 			let left = Module::format(&tg, indoc::indoc!($before).to_owned())

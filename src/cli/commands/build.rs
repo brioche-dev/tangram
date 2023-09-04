@@ -4,17 +4,13 @@ use crate::{
 	Cli,
 };
 use std::path::PathBuf;
-use tangram::{
-	package::{self, Package, ROOT_MODULE_FILE_NAME},
-	target::Target,
-};
 
 /// Build a target.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: package::Specifier,
+	pub package: tg::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -29,16 +25,16 @@ pub struct Args {
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
 		// Create the package.
-		let package = Package::with_specifier(&self.tg, args.package)
+		let package = tg::Package::with_specifier(&self.tg, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
 		// Build the target.
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let target = Target::new(
+		let target = tg::Target::new(
 			package.block().clone(),
-			ROOT_MODULE_FILE_NAME.parse().unwrap(),
+			tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			args.target,
 			env,
 			args_,

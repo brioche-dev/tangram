@@ -1,15 +1,15 @@
-use crate::{instance::Instance, rid::Rid};
+use crate::{rid::Rid, server::Server};
 use std::path::{Path, PathBuf};
 
 pub struct Temp<'a> {
-	tg: &'a Instance,
+	tg: &'a Server,
 	id: Rid,
 	path: PathBuf,
 }
 
 impl<'a> Temp<'a> {
 	#[must_use]
-	pub fn new(tg: &Instance) -> Temp {
+	pub fn new(tg: &Server) -> Temp {
 		let id = Rid::gen();
 		let path = tg.temps_path().join(id.to_string());
 		Temp { tg, id, path }

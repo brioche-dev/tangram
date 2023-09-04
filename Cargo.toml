@@ -27,9 +27,9 @@ version = { workspace = true }
 [lib]
 path = "src/lib.rs"
 
-[[bin]]
-name = "tg"
-path = "src/cli/main.rs"
+# [[bin]]
+# name = "tg"
+# path = "src/cli/main.rs"
 
 [build-dependencies]
 v8 = { version = "=0.75.0", optional = true }
@@ -48,41 +48,39 @@ bytes = "1"
 bzip2 = { version = "0.4", optional = true }
 clap = { version = "4", features = ["derive", "env"] }
 derive_more = "0.99"
-either = { version = "1", features = ["serde"] }
-filetime = "0.2"
+either = { version = "1", optional = true, features = ["serde"] }
+filetime = { version = "0.2", optional = true }
 flate2 = { version = "1", optional = true }
 fnv = "1"
 futures = "0.3"
 hex = { version = "0.4", features = ["serde"] }
-http = "0.2"
+http = { version = "0.2", optional = true }
 http-body = { version = "=1.0.0-rc.2", optional = true }
-http-body-util = { git = "https://github.com/hyperium/http-body", optional = true }
+http-body-util = { version = "=0.1.0-rc.3", optional = true }
 hyper = { version = "=1.0.0-rc.4", features = ["full"], optional = true }
-hyper-util = { git = "https://github.com/hyperium/hyper-util", optional = true }
+hyper-util = { version = "=0.0.0", optional = true }
 include_dir = "0.7"
 indoc = "2"
 itertools = "0.11"
 libc = "0.2"
-lmdb-rkv = "0.14"
-lsp-types = "0.94"
-memchr = "2"
+lmdb-rkv = { version = "0.14", optional = true }
+lsp-types = { version = "0.94", optional = true }
 num = "0.4"
-num-derive = "0.4"
-num-traits = "0.2"
 once_cell = "1"
 pathdiff = "0.2"
 pin-project = "1"
 rand = "0.8"
 regex = "1"
-reqwest = { version = "0.11", default-features = false, features = [
+reqwest = { version = "0.11", optional = true, default-features = false, features = [
   "json",
   "stream",
   "rustls-tls",
 ] }
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
+serde_toml = { package = "toml", version = "0.7", optional = true }
 serde_v8 = { version = "=0.113.0", optional = true }
-serde_yaml = "0.9"
+serde_yaml = { version = "0.9", optional = true }
 sha2 = "0.10"
 sourcemap = "6"
 swc_core = { version = "=0.79.59", features = [
@@ -103,16 +101,15 @@ thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["fs"] }
 tokio-util = { version = "0.7", features = ["full"] }
-serde_toml = { package = "toml", version = "0.7" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
 v8 = { version = "=0.75.0", optional = true }
 varint-rs = "2"
 webbrowser = "0.8"
-xattr = "1"
+xattr = { version = "1", optional = true }
 xz2 = { version = "0.1", optional = true }
-zerocopy = "0.6"
+zerocopy = { version = "0.6", optional = true }
 zip = { version = "0.6", optional = true, default-features = false, features = [
   "aes-crypto",
   "deflate",
@@ -121,22 +118,39 @@ zip = { version = "0.6", optional = true, default-features = false, features = [
 ] }
 zstd = { version = "0.12", optional = true }
 
+[patch.crates-io]
+hyper-util = { git = "https://github.com/hyperium/hyper-util" }
+http-body = { git = "https://github.com/hyperium/http-body" }
+http-body-util = { git = "https://github.com/hyperium/http-body" }
+
 [features]
-# default = ["build", "client", "language", "server"]
-default = []
-build = [
+client = ["dep:http", "dep:reqwest"]
+default = ["client", "server"]
+server = [
+  "client",
   "dep:bzip2",
+  "dep:either",
+  "dep:filetime",
   "dep:flate2",
+  "dep:http",
+  "dep:http-body",
+  "dep:http-body-util",
+  "dep:hyper",
+  "dep:hyper-util",
+  "dep:lmdb-rkv",
+  "dep:lsp-types",
+  "dep:reqwest",
+  "dep:serde_toml",
   "dep:serde_v8",
+  "dep:serde_yaml",
   "dep:tar",
   "dep:v8",
+  "dep:xattr",
   "dep:xz2",
+  "dep:zerocopy",
   "dep:zip",
   "dep:zstd",
 ]
-client = []
-language = ["dep:serde_v8", "dep:v8"]
-server = ["dep:http-body", "dep:http-body-util", "dep:hyper", "dep:hyper-util"]
 
 [profile.dev.package.blake3]
 opt-level = 3

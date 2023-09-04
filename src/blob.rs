@@ -2,10 +2,10 @@ use crate::{
 	self as tg,
 	bytes::Bytes,
 	error::{return_error, Error, Result},
-	instance::Instance,
+	server::Server,
 };
 use futures::{future::BoxFuture, stream::StreamExt, TryStreamExt};
-use num_traits::ToPrimitive;
+use num::ToPrimitive;
 use pin_project::pin_project;
 use std::{io::Cursor, pin::Pin, task::Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek};
@@ -25,7 +25,7 @@ pub enum Blob {
 }
 
 impl tg::Blob {
-	pub async fn with_reader(tg: &Instance, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
+	pub async fn with_reader(tg: &Server, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
 		let mut leaves = Vec::new();
 		let mut bytes = vec![0u8; MAX_LEAF_SIZE];
 		loop {
@@ -98,14 +98,14 @@ impl tg::Blob {
 		Blob::Leaf(bytes).into()
 	}
 
-	pub async fn size(&self, tg: &Instance) -> Result<u64> {
+	pub async fn size(&self, tg: &Server) -> Result<u64> {
 		Ok(match self.get(tg).await? {
 			Blob::Branch(children) => children.iter().map(|(_, size)| size).sum(),
 			Blob::Leaf(bytes) => bytes.len().to_u64().unwrap(),
 		})
 	}
 
-	pub async fn reader(&self, tg: &Instance) -> Result<Reader> {
+	pub async fn reader(&self, tg: &Server) -> Result<Reader> {
 		let size = self.size(tg).await?;
 		Ok(Reader {
 			blob: self.clone(),
@@ -116,14 +116,14 @@ impl tg::Blob {
 		})
 	}
 
-	pub async fn bytes(&self, tg: &Instance) -> Result<Vec<u8>> {
+	pub async fn bytes(&self, tg: &Server) -> Result<Vec<u8>> {
 		let mut reader = self.reader(tg).await?;
 		let mut bytes = Vec::new();
 		reader.read_to_end(&mut bytes).await?;
 		Ok(bytes)
 	}
 
-	pub async fn text(&self, tg: &Instance) -> Result<String> {
+	pub async fn text(&self, tg: &Server) -> Result<String> {
 		let bytes = self.bytes(tg).await?;
 		let string = String::from_utf8(bytes).map_err(Error::other)?;
 		Ok(string)
@@ -148,7 +148,7 @@ impl Blob {
 pub struct Reader {
 	blob: tg::Blob,
 	size: u64,
-	tg: Instance,
+	tg: Server,
 	position: u64,
 	state: State,
 }

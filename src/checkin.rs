@@ -2,7 +2,7 @@ use crate::{
 	self as tg,
 	error::{return_error, Error, Result, WrapErr},
 	id::Id,
-	instance::Instance,
+	server::Server,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
@@ -24,13 +24,13 @@ pub struct Options {
 }
 
 impl tg::Artifact {
-	pub async fn check_in(tg: &Instance, path: &Path) -> Result<Self> {
+	pub async fn check_in(tg: &Server, path: &Path) -> Result<Self> {
 		Self::check_in_with_options(tg, path, &Options::default()).await
 	}
 
 	#[async_recursion]
 	pub async fn check_in_with_options(
-		tg: &Instance,
+		tg: &Server,
 		path: &Path,
 		options: &Options,
 	) -> Result<Self> {
@@ -70,7 +70,7 @@ impl tg::Artifact {
 	}
 
 	async fn check_in_directory(
-		tg: &Instance,
+		tg: &Server,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,
@@ -112,7 +112,7 @@ impl tg::Artifact {
 	}
 
 	async fn check_in_file(
-		tg: &Instance,
+		tg: &Server,
 		path: &Path,
 		metadata: &Metadata,
 		_options: &Options,
@@ -149,7 +149,7 @@ impl tg::Artifact {
 	}
 
 	async fn check_in_symlink(
-		tg: &Instance,
+		tg: &Server,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,

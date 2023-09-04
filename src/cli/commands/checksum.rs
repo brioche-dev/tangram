@@ -2,7 +2,6 @@ use crate::{
 	error::{return_error, Result},
 	Cli,
 };
-use tangram::checksum;
 
 /// Compute a checksum.
 #[derive(Debug, clap::Args)]
@@ -10,7 +9,7 @@ use tangram::checksum;
 pub struct Args {
 	/// The checksum algorithm to use.
 	#[arg(short, long)]
-	pub algorithm: checksum::Algorithm,
+	pub algorithm: tg::checksum::Algorithm,
 }
 
 impl Cli {

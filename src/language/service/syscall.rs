@@ -1,9 +1,9 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	id::Id,
-	instance::{self, Instance},
 	module::{self, Module},
 	package,
+	server::{self, Server},
 };
 use itertools::Itertools;
 use std::sync::Weak;
@@ -54,7 +54,7 @@ fn syscall_inner<'s>(
 }
 
 fn syscall_documents(
-	tg: &Instance,
+	tg: &Server,
 	_scope: &mut v8::HandleScope,
 	_args: (),
 ) -> Result<Vec<module::Module>> {
@@ -67,7 +67,7 @@ fn syscall_documents(
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_hex_decode(
-	_tg: &Instance,
+	_tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
 ) -> Result<serde_v8::ToJsBuffer> {
@@ -80,7 +80,7 @@ fn syscall_hex_decode(
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_hex_encode(
-	_tg: &Instance,
+	_tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (serde_v8::JsBuffer,),
 ) -> Result<String> {
@@ -91,7 +91,7 @@ fn syscall_hex_encode(
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_json_decode(
-	_tg: &Instance,
+	_tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
 ) -> Result<serde_json::Value> {
@@ -104,7 +104,7 @@ fn syscall_json_decode(
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_json_encode(
-	_tg: &Instance,
+	_tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (serde_json::Value,),
 ) -> Result<String> {
@@ -116,14 +116,14 @@ fn syscall_json_encode(
 }
 
 #[allow(clippy::unnecessary_wraps)]
-fn syscall_log(_tg: &Instance, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
+fn syscall_log(_tg: &Server, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	eprintln!("{string}");
 	Ok(())
 }
 
 fn syscall_module_load(
-	tg: &Instance,
+	tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module,),
 ) -> Result<String> {
@@ -138,7 +138,7 @@ fn syscall_module_load(
 }
 
 fn syscall_module_resolve(
-	tg: &Instance,
+	tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module, module::Import),
 ) -> Result<module::Module> {
@@ -152,7 +152,7 @@ fn syscall_module_resolve(
 }
 
 fn syscall_module_unlocked_package_id(
-	tg: &Instance,
+	tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module,),
 ) -> Result<Id> {
@@ -171,7 +171,7 @@ fn syscall_module_unlocked_package_id(
 }
 
 fn syscall_module_version(
-	tg: &Instance,
+	tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module,),
 ) -> Result<String> {
@@ -184,7 +184,7 @@ fn syscall_module_version(
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_utf8_decode(
-	_tg: &Instance,
+	_tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (serde_v8::JsBuffer,),
 ) -> Result<String> {
@@ -198,7 +198,7 @@ fn syscall_utf8_decode(
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_utf8_encode(
-	_tg: &Instance,
+	_tg: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
 ) -> Result<serde_v8::ToJsBuffer> {
@@ -215,18 +215,18 @@ fn syscall_sync<'s, A, T, F>(
 where
 	A: serde::de::DeserializeOwned,
 	T: serde::Serialize,
-	F: FnOnce(&Instance, &mut v8::HandleScope<'s>, A) -> Result<T>,
+	F: FnOnce(&Server, &mut v8::HandleScope<'s>, A) -> Result<T>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the instance.
+	// Get the server.
 	let state = context
-		.get_slot::<Weak<instance::State>>(scope)
+		.get_slot::<Weak<server::State>>(scope)
 		.unwrap()
 		.upgrade()
 		.unwrap();
-	let tg = Instance { state };
+	let tg = Server { state };
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();

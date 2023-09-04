@@ -1,13 +1,13 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::position::Position,
 	module::Module,
+	server::Server,
 };
 
 impl Module {
-	pub async fn hover(&self, tg: &Instance, position: Position) -> Result<Option<String>> {
+	pub async fn hover(&self, tg: &Server, position: Position) -> Result<Option<String>> {
 		// Create the language service request.
 		let request = service::Request::Hover(service::hover::Request {
 			module: self.clone(),

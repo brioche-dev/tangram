@@ -28,14 +28,14 @@ where
 
 	pub fn read_kind(&mut self) -> Result<Kind> {
 		let value = self.0.read_u8()?;
-		let kind = num_traits::FromPrimitive::from_u8(value)
+		let kind = num::FromPrimitive::from_u8(value)
 			.ok_or_else(|| Error::new(ErrorKind::Other, "Invalid value kind."))?;
 		Ok(kind)
 	}
 
 	pub fn ensure_kind(&mut self, kind: Kind) -> Result<Kind> {
 		let value = self.0.read_u8()?;
-		let read = num_traits::FromPrimitive::from_u8(value)
+		let read = num::FromPrimitive::from_u8(value)
 			.ok_or_else(|| Error::new(ErrorKind::Other, "Invalid value kind."))?;
 		if read != kind {
 			return Err(Error::new(ErrorKind::Other, "Incorrect kind."));

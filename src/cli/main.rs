@@ -6,7 +6,6 @@
 use self::{commands::Args, error::Result};
 use clap::Parser;
 use std::collections::BTreeMap;
-use tg::{error::WrapErr, instance::Instance, system::System, value::Value};
 use tracing_subscriber::prelude::*;
 
 mod commands;
@@ -15,7 +14,7 @@ mod credentials;
 mod error;
 
 struct Cli {
-	tg: Instance,
+	tg: tg::Client,
 }
 
 #[tokio::main]
@@ -49,52 +48,7 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	// Get the path.
-	let path = if let Some(path) = args.path.clone() {
-		path
-	} else {
-		tg::util::dirs::home_directory_path()
-			.wrap_err("Failed to find the user home directory.")?
-			.join(".tangram")
-	};
-
-	// Read the config.
-	let config = Cli::read_config().await?;
-
-	// Get the preserve temps configuration.
-	let preserve_temps = args
-		.preserve_temps
-		.or(config.as_ref().and_then(|c| c.preserve_temps))
-		.unwrap_or(false);
-
-	// Get the sandbox configuration.
-	let sandbox_enabled = args
-		.sandbox_enabled
-		.or(config.as_ref().and_then(|c| c.sandbox_enabled))
-		.unwrap_or(true);
-
-	// Read the credentials.
-	let credentials = Cli::read_credentials().await?;
-
-	// Get the origin URL.
-	let origin_url = config
-		.as_ref()
-		.and_then(|config| config.origin_url.as_ref())
-		.cloned();
-
-	// Get the origin token.
-	let origin_token = credentials.map(|credentials| credentials.token);
-
-	// Create the options.
-	let options = tg::instance::Options {
-		origin_token,
-		origin_url,
-		preserve_temps,
-		sandbox_enabled,
-	};
-
-	// Create the instance.
-	let tg = Instance::new(path, options).await?;
+	let tg = todo!();
 
 	// Create the CLI.
 	let cli = Cli { tg };
@@ -125,7 +79,11 @@ fn setup_tracing() {
 }
 
 impl Cli {
-	fn create_default_env() -> Result<BTreeMap<String, Value>> {
-		Ok([("host".to_owned(), Value::from(System::host()?.to_string()))].into())
+	fn create_default_env() -> Result<BTreeMap<String, tg::Value>> {
+		Ok([(
+			"host".to_owned(),
+			tg::Value::from(tg::System::host()?.to_string()),
+		)]
+		.into())
 	}
 }

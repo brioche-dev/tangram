@@ -1,9 +1,9 @@
 use crate::{
 	error::{return_error, Result, WrapErr},
-	instance::Instance,
 	module::range::Range,
 	package::ROOT_MODULE_FILE_NAME,
-	path::Subpath,
+	server::Server,
+	subpath::Subpath,
 };
 use std::{
 	path::{Path, PathBuf},
@@ -54,7 +54,7 @@ pub struct Opened {
 }
 
 impl Document {
-	pub async fn new(tg: &Instance, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
+	pub async fn new(tg: &Server, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
 		let path = package_path.join(module_path.to_string());
 
 		// Create the document.
@@ -80,7 +80,7 @@ impl Document {
 		Ok(document)
 	}
 
-	pub async fn for_path(tg: &Instance, path: &Path) -> Result<Self> {
+	pub async fn for_path(tg: &Server, path: &Path) -> Result<Self> {
 		// Find the package path by searching the path's ancestors for a root module.
 		let mut found = false;
 		let mut package_path = path.to_owned();
@@ -114,7 +114,7 @@ impl Document {
 	}
 
 	/// Open a document.
-	pub async fn open(&self, tg: &Instance, version: i32, text: String) -> Result<()> {
+	pub async fn open(&self, tg: &Server, version: i32, text: String) -> Result<()> {
 		// Lock the documents.
 		let mut documents = tg.documents.write().await;
 
@@ -128,7 +128,7 @@ impl Document {
 	/// Update a document.
 	pub async fn update(
 		&self,
-		tg: &Instance,
+		tg: &Server,
 		range: Option<Range>,
 		version: i32,
 		text: String,
@@ -160,7 +160,7 @@ impl Document {
 	}
 
 	/// Close a document.
-	pub async fn close(self, tg: &Instance) -> Result<()> {
+	pub async fn close(self, tg: &Server) -> Result<()> {
 		// Lock the documents.
 		let mut documents = tg.documents.write().await;
 
@@ -177,7 +177,7 @@ impl Document {
 	}
 
 	/// Get the document's version.
-	pub async fn version(&self, tg: &Instance) -> Result<i32> {
+	pub async fn version(&self, tg: &Server) -> Result<i32> {
 		// Lock the documents.
 		let mut documents = tg.documents.write().await;
 
@@ -201,7 +201,7 @@ impl Document {
 	}
 
 	/// Get the document's text.
-	pub async fn text(&self, tg: &Instance) -> Result<String> {
+	pub async fn text(&self, tg: &Server) -> Result<String> {
 		let path = self.path();
 		let documents = tg.documents.read().await;
 		let document = documents.get(self).unwrap();

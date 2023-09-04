@@ -1,5 +1,4 @@
 pub use self::import::Import;
-#[cfg(feature = "language")]
 pub use crate::document::Document;
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
@@ -29,7 +28,6 @@ pub enum Module {
 	Library(Library),
 
 	/// A document module.
-	#[cfg(feature = "language")]
 	Document(Document),
 
 	/// A normal module.
@@ -64,7 +62,6 @@ impl From<Module> for Url {
 
 		let path = match value {
 			Module::Library(library) => format!("/{}", library.path),
-			#[cfg(feature = "language")]
 			Module::Document(document) => format!(
 				"/{}/{}",
 				document.package_path.display(),

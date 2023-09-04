@@ -3,14 +3,13 @@ use crate::{
 	error::{Error, Result, WrapErr},
 	Cli,
 };
-use tangram::package::{self, Package};
 
 /// Print the docs for a package.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: package::Specifier,
+	pub package: tg::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -19,7 +18,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_doc(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = Package::with_specifier(&self.tg, args.package)
+		let package = tg::Package::with_specifier(&self.tg, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 

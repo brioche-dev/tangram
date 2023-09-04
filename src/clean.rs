@@ -1,10 +1,10 @@
-use super::Instance;
+use super::Server;
 use crate::{
 	error::{Result, WrapErr},
 	id::Id,
 };
 
-impl Instance {
+impl Server {
 	pub async fn clean(&self, _roots: Vec<Id>) -> Result<()> {
 		// Delete all temps.
 		tokio::fs::remove_dir_all(&self.temps_path())
@@ -13,6 +13,8 @@ impl Instance {
 		tokio::fs::create_dir_all(&self.temps_path())
 			.await
 			.wrap_err("Failed to recreate the temps directory.")?;
+
+		// TODO
 
 		Ok(())
 	}

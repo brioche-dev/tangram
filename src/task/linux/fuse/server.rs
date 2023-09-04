@@ -5,11 +5,11 @@ use crate::{
 	directory::Directory,
 	error::{Error, Result, WrapErr},
 	file::File,
-	instance::Instance,
+	server::Server,
 	symlink::Symlink,
 	template,
 };
-use num_traits::ToPrimitive;
+use num::ToPrimitive;
 use std::{
 	collections::BTreeMap,
 	ffi::CString,
@@ -22,7 +22,7 @@ use zerocopy::{AsBytes, FromBytes};
 /// A FUSE server.
 #[derive(Clone)]
 pub struct Server {
-	tg: Instance,
+	tg: Server,
 	state: Arc<tokio::sync::RwLock<State>>,
 }
 
@@ -121,7 +121,7 @@ enum Response {
 
 impl Server {
 	/// Create a server.
-	pub fn new(tg: Instance) -> Self {
+	pub fn new(tg: Server) -> Self {
 		let root = Arc::new_cyclic(|root| Node {
 			id: ROOT_NODE_ID,
 			parent: root.clone(),

@@ -5,13 +5,13 @@ use super::{
 };
 use crate::{
 	error::{Error, Result},
-	instance::Instance,
+	server::Server,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, rc::Rc, task::Poll};
 
-pub fn new(tg: Instance) -> v8::Global<v8::Context> {
+pub fn new(tg: Server) -> v8::Global<v8::Context> {
 	// Create the context.
 	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
 	let mut isolate = isolate.borrow_mut();
@@ -19,7 +19,7 @@ pub fn new(tg: Instance) -> v8::Global<v8::Context> {
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-	// Set the instance on the context.
+	// Set the server on the context.
 	context.set_slot(&mut context_scope, tg);
 
 	// Create the state.

@@ -1,5 +1,5 @@
 use crate::{error::Result, Cli};
-use tangram::id::Id;
+use tg::id::Id;
 
 /// Get the log for an operation.
 #[derive(Debug, clap::Args)]

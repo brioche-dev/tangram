@@ -4,11 +4,6 @@ use crate::{
 	Cli,
 };
 use std::{os::unix::process::CommandExt, path::PathBuf};
-use tangram::{
-	artifact::Artifact,
-	package::{self, Package, ROOT_MODULE_FILE_NAME},
-	target::Target,
-};
 
 /// Build the specified target from a package and execute a command from its output.
 #[derive(Debug, clap::Args)]
@@ -17,7 +12,7 @@ use tangram::{
 pub struct Args {
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: package::Specifier,
+	pub package: tg::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -36,16 +31,16 @@ pub struct Args {
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = Package::with_specifier(&self.tg, args.package)
+		let package = tg::Package::with_specifier(&self.tg, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
 		// Run the operation.
 		let env = Self::create_default_env()?;
 		let args_ = Vec::new();
-		let target = Target::new(
+		let target = tg::Target::new(
 			package,
-			ROOT_MODULE_FILE_NAME.parse().unwrap(),
+			tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			args.target,
 			env,
 			args_,
@@ -67,10 +62,12 @@ impl Cli {
 		} else {
 			match artifact {
 				// If the artifact is a file or symlink, then the executable path should be the artifact itself.
-				Artifact::File(_) | Artifact::Symlink(_) => artifact_path,
+				tg::artifact::Artifact::File(_) | tg::artifact::Artifact::Symlink(_) => {
+					artifact_path
+				},
 
 				// If the artifact is a directory, then the executable path should be `.tangram/run`.
-				Artifact::Directory(_) => artifact_path.join(".tangram/run"),
+				tg::artifact::Artifact::Directory(_) => artifact_path.join(".tangram/run"),
 			}
 		};
 

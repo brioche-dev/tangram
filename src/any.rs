@@ -30,6 +30,14 @@ pub enum Any {
 	Object(tg::Object),
 }
 
+impl std::ops::Deref for Value {
+	type Target = tg::Value;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
 impl From<Value> for tg::Value {
 	fn from(value: Value) -> Self {
 		value.0
@@ -45,8 +53,9 @@ impl TryFrom<tg::Value> for Value {
 }
 
 impl tg::Any {
-	pub fn with_id(id: Id) -> Result<Self> {
-		tg::Value::with_id(id).try_into()
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		tg::Value::with_id(id).try_into().unwrap()
 	}
 }
 

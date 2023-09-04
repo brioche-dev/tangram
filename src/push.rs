@@ -1,7 +1,7 @@
 use super::{block::TryAddBlockOutcome, Client};
 use crate::{
 	error::{return_error, Error, Result},
-	instance::Instance,
+	server::Server,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
@@ -11,7 +11,7 @@ impl Client {
 	/// Push a block.
 	#[async_recursion]
 	#[must_use]
-	pub async fn push(&self, tg: &Instance, block: Block) -> Result<()> {
+	pub async fn push(&self, tg: &Server, block: Block) -> Result<()> {
 		// Attempt to add the block.
 		let bytes: Arc<[u8]> = block.bytes(tg).await?.into();
 		let reader = Cursor::new(bytes.clone());

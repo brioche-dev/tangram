@@ -2,8 +2,8 @@ pub use self::{dependency::Dependency, metadata::Metadata, specifier::Specifier}
 use crate::{
 	self as tg,
 	error::Result,
-	instance::Instance,
 	module::{self, Module},
+	server::Server,
 };
 use std::collections::BTreeMap;
 
@@ -32,7 +32,7 @@ pub struct Package {
 }
 
 impl Package {
-	pub async fn with_specifier(tg: &Instance, specifier: Specifier) -> Result<Self> {
+	pub async fn with_specifier(tg: &Server, specifier: Specifier) -> Result<Self> {
 		match specifier {
 			Specifier::Path(path) => Ok(Self::with_path(tg, &path).await?),
 			Specifier::Registry(_) => unimplemented!(),
@@ -68,7 +68,7 @@ impl Package {
 		&self.dependencies
 	}
 
-	pub async fn root_module(&self, tg: &Instance) -> Result<Module> {
+	pub async fn root_module(&self, tg: &Server) -> Result<Module> {
 		Ok(Module::Normal(module::Normal {
 			package: self.artifact.id(tg).await?,
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),

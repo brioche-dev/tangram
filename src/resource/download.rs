@@ -7,7 +7,7 @@ use crate::{
 	build::Build,
 	checksum::{self, Checksum},
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
+	server::Server,
 	temp::Temp,
 	value::Value,
 };
@@ -18,12 +18,12 @@ use tokio_util::io::{StreamReader, SyncIoBridge};
 
 impl Resource {
 	#[tracing::instrument(skip(tg))]
-	pub async fn download(&self, tg: &Instance) -> Result<Value> {
+	pub async fn download(&self, tg: &Server) -> Result<Value> {
 		let operation = Build::Resource(self.clone());
 		operation.output(tg, None).await
 	}
 
-	pub(crate) async fn download_inner(&self, tg: &Instance) -> Result<Value> {
+	pub(crate) async fn download_inner(&self, tg: &Server) -> Result<Value> {
 		tracing::info!(?self.url, "Downloading.");
 
 		// Send the request.
@@ -105,7 +105,7 @@ impl Resource {
 	}
 
 	#[tracing::instrument(skip_all)]
-	async fn download_simple<S>(tg: &Instance, stream: S) -> Result<Value>
+	async fn download_simple<S>(tg: &Server, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<Bytes>> + Send + Unpin + 'static,
 	{
@@ -134,7 +134,7 @@ impl Resource {
 	}
 
 	async fn download_tar<S>(
-		tg: &Instance,
+		tg: &Server,
 		stream: S,
 		compression: Option<unpack::Compression>,
 	) -> Result<Value>
@@ -195,7 +195,7 @@ impl Resource {
 		Ok(value)
 	}
 
-	async fn download_zip<S>(tg: &Instance, stream: S) -> Result<Value>
+	async fn download_zip<S>(tg: &Server, stream: S) -> Result<Value>
 	where
 		S: Stream<Item = std::io::Result<Bytes>> + Send + Unpin + 'static,
 	{

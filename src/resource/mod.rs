@@ -3,8 +3,7 @@ use crate::{self as tg, checksum::Checksum};
 use url::Url;
 
 mod builder;
-#[cfg(feature = "build")]
-mod download;
+// mod download;
 mod error;
 pub mod unpack;
 

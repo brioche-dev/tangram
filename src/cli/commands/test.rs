@@ -1,6 +1,5 @@
 use super::PackageArgs;
 use crate::{error::Result, Cli};
-use tangram::package;
 
 /// Build the target named "test" from the specified package.
 #[derive(Debug, clap::Args)]
@@ -8,7 +7,7 @@ use tangram::package;
 pub struct Args {
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: package::Specifier,
+	pub package: tg::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,

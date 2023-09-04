@@ -3,8 +3,8 @@ use crate::{
 	build::Build,
 	error::{Error, Result, WrapErr},
 	id::Id,
-	instance::Instance,
 	module::{self, Module},
+	server::Server,
 	value::Value,
 };
 use std::rc::Rc;
@@ -19,13 +19,13 @@ struct Key {
 impl Target {
 	/// Build the target.
 	#[tracing::instrument(skip(tg), ret)]
-	pub async fn build(&self, tg: &Instance) -> Result<Value> {
+	pub async fn build(&self, tg: &Server) -> Result<Value> {
 		let operation = Build::Target(self.clone());
 		operation.output(tg, None).await
 	}
 
-	pub(crate) async fn build_inner(&self, tg: &Instance) -> Result<Value> {
-		// Build the target on the instance's local pool because it is a `!Send` future.
+	pub(crate) async fn build_inner(&self, tg: &Server) -> Result<Value> {
+		// Build the target on the server's local pool because it is a `!Send` future.
 		let output = tg
 			.local_pool
 			.spawn_pinned({
@@ -41,7 +41,7 @@ impl Target {
 	}
 
 	#[allow(clippy::await_holding_refcell_ref, clippy::too_many_lines)]
-	async fn build_inner_inner(&self, tg: Instance) -> Result<Value> {
+	async fn build_inner_inner(&self, tg: Server) -> Result<Value> {
 		// Create the context.
 		let context = super::context::new(tg.clone());
 

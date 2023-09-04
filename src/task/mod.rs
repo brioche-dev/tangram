@@ -3,16 +3,14 @@ use crate as tg;
 use crate::{checksum::Checksum, system::System, template::Template};
 use std::collections::BTreeMap;
 
-#[cfg(feature = "build")]
-mod basic;
+// mod basic;
 mod builder;
 mod error;
-#[cfg(all(target_os = "linux", feature = "build"))]
-mod linux;
-#[cfg(all(target_os = "macos", feature = "build"))]
-mod macos;
-#[cfg(feature = "build")]
-mod run;
+// #[cfg(target_os = "linux))]
+// mod linux;
+// #[cfg(target_os = "macos")]
+// mod macos;
+// mod run;
 
 /// A task.
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]

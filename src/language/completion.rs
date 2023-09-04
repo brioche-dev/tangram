@@ -1,9 +1,9 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::position::Position,
 	module::Module,
+	server::Server,
 };
 
 #[derive(Debug, serde::Deserialize)]
@@ -13,11 +13,7 @@ pub struct Entry {
 }
 
 impl Module {
-	pub async fn completion(
-		&self,
-		tg: &Instance,
-		position: Position,
-	) -> Result<Option<Vec<Entry>>> {
+	pub async fn completion(&self, tg: &Server, position: Position) -> Result<Option<Vec<Entry>>> {
 		// Create the language service request.
 		let request = service::Request::Completion(service::completion::Request {
 			module: self.clone(),

@@ -1,8 +1,8 @@
 use super::{location::Location, service};
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::Module,
+	server::Server,
 };
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -23,7 +23,7 @@ pub enum Severity {
 }
 
 impl Module {
-	pub async fn diagnostics(tg: &Instance) -> Result<Vec<Diagnostic>> {
+	pub async fn diagnostics(tg: &Server) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Diagnostics(service::diagnostics::Request {});
 

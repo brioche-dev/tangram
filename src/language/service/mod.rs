@@ -1,8 +1,7 @@
 use self::syscall::syscall;
 use crate::{
 	error::{Error, Result, WrapErr},
-	instance::{Instance, State},
-	target::{from_v8, FromV8, ToV8},
+	server::{Server, State},
 };
 use std::sync::{Arc, Weak};
 
@@ -53,27 +52,12 @@ pub enum Response {
 	Symbols(symbols::Response),
 }
 
-impl ToV8 for Request {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::other)
-	}
-}
-
-impl FromV8 for Response {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::other)
-	}
-}
-
 pub type RequestSender = tokio::sync::mpsc::UnboundedSender<(Request, ResponseSender)>;
 pub type RequestReceiver = tokio::sync::mpsc::UnboundedReceiver<(Request, ResponseSender)>;
 pub type ResponseSender = tokio::sync::oneshot::Sender<Result<Response>>;
 pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
-impl Instance {
+impl Server {
 	pub async fn handle_language_service_request(&self, request: Request) -> Result<Response> {
 		// Spawn the language service if necessary.
 		let request_sender = self
@@ -128,7 +112,7 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-	// Set the instance state on the context.
+	// Set the server state on the context.
 	context.set_slot(&mut context_scope, state);
 
 	// Add the syscall function to the global.
@@ -160,8 +144,7 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 		let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
 
 		// Serialize the request.
-		let request = match request
-			.to_v8(&mut try_catch_scope)
+		let request = match serde_v8::to_v8(&mut try_catch_scope, &request)
 			.wrap_err("Failed to serialize the request.")
 		{
 			Ok(request) => request,
@@ -185,7 +168,7 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 		};
 
 		// Deserialize the response.
-		let response = match from_v8(&mut try_catch_scope, response)
+		let response = match serde_v8::from_v8(&mut try_catch_scope, response)
 			.wrap_err("Failed to deserialize the response.")
 		{
 			Ok(response) => response,

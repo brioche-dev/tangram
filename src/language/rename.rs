@@ -1,13 +1,13 @@
 use super::{location::Location, service};
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::position::Position,
 	module::Module,
+	server::Server,
 };
 
 impl Module {
-	pub async fn rename(&self, tg: &Instance, position: Position) -> Result<Option<Vec<Location>>> {
+	pub async fn rename(&self, tg: &Server, position: Position) -> Result<Option<Vec<Location>>> {
 		// Create the language service request.
 		let request = service::Request::Rename(service::rename::Request {
 			module: self.clone(),

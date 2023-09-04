@@ -1,6 +1,6 @@
 use crate::{
+	self as tg,
 	error::{return_error, Error, Result, WrapErr},
-	instance::Instance,
 	language::Diagnostic,
 };
 use futures::{future, FutureExt};
@@ -29,8 +29,8 @@ type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
 #[derive(Clone)]
 pub struct Server {
-	/// The Tangram instance.
-	tg: Instance,
+	/// The Tangram server.
+	tg: tg::Server,
 
 	// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
@@ -38,7 +38,7 @@ pub struct Server {
 
 impl Server {
 	#[must_use]
-	pub fn new(tg: Instance) -> Self {
+	pub fn new(tg: Server) -> Self {
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 		Self { tg, diagnostics }
 	}

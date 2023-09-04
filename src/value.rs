@@ -7,7 +7,6 @@ use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	file::File,
 	id::Id,
-	instance::Instance,
 	null::Null,
 	number::Number,
 	object::Object,
@@ -15,6 +14,7 @@ use crate::{
 	placeholder::Placeholder,
 	relpath::Relpath,
 	resource::Resource,
+	server::Server,
 	string::String,
 	subpath::Subpath,
 	symlink::Symlink,
@@ -138,18 +138,18 @@ impl Value {
 		}
 	}
 
-	pub async fn id(&self, tg: &Instance) -> Result<Id> {
+	pub async fn id(&self, tg: &Server) -> Result<Id> {
 		self.store(tg).await?;
 		Ok(self.id.read().unwrap().unwrap())
 	}
 
-	pub async fn data(&self, tg: &Instance) -> Result<&Data> {
+	pub async fn data(&self, tg: &Server) -> Result<&Data> {
 		self.load(tg).await?;
 		Ok(unsafe { &*(self.data.read().unwrap().as_ref().unwrap() as *const Data) })
 	}
 
 	#[allow(clippy::unused_async)]
-	pub async fn load(&self, tg: &Instance) -> Result<()> {
+	pub async fn load(&self, tg: &Server) -> Result<()> {
 		// If the value is already loaded, then return.
 		if self.data.read().unwrap().is_some() {
 			return Ok(());
@@ -176,7 +176,7 @@ impl Value {
 		return_error!("The value was not found.");
 	}
 
-	pub async fn store(&self, tg: &Instance) -> Result<()> {
+	pub async fn store(&self, tg: &Server) -> Result<()> {
 		// If the value is already stored, then return.
 		if self.id.read().unwrap().is_some() {
 			return Ok(());
@@ -213,7 +213,7 @@ impl Value {
 
 	fn store_inner(
 		&self,
-		tg: &Instance,
+		tg: &Server,
 		txn: &mut lmdb::RwTransaction,
 		stored: &mut Vec<(Id, Value)>,
 	) -> Result<()> {
@@ -413,7 +413,7 @@ macro_rules! value {
 		}
 
 		impl Value {
-			pub async fn get(&self, tg: &$crate::instance::Instance) -> $crate::error::Result<&$t> {
+			pub async fn get(&self, tg: &$crate::server::Server) -> $crate::error::Result<&$t> {
 				match self.0.data(tg).await? {
 					$crate::value::Data::$t(value) => Ok(value),
 					_ => unreachable!(),

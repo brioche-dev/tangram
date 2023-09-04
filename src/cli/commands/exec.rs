@@ -1,5 +1,4 @@
 use crate::{error::Result, Cli};
-use tangram::package;
 
 /// Build a target from the specified package and execute a command from its output.
 #[derive(Debug, clap::Args)]
@@ -17,7 +16,7 @@ pub struct Args {
 	pub run_args: super::RunArgs,
 
 	#[arg(default_value = ".")]
-	pub package: package::Specifier,
+	pub package: tg::package::Specifier,
 
 	pub trailing_args: Vec<String>,
 }

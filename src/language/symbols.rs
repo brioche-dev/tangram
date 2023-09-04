@@ -1,12 +1,12 @@
 use super::service;
 use crate::{
 	error::{return_error, Result},
-	instance::Instance,
 	module::Module,
+	server::Server,
 };
 
 impl Module {
-	pub async fn symbols(&self, tg: &Instance) -> Result<Option<Vec<service::symbols::Symbol>>> {
+	pub async fn symbols(&self, tg: &Server) -> Result<Option<Vec<service::symbols::Symbol>>> {
 		// Create the language service request.
 		let request = service::Request::Symbols(service::symbols::Request {
 			module: self.clone(),

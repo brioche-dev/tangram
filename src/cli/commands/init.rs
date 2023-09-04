@@ -38,7 +38,6 @@ impl Cli {
 
 		// Define the files to generate.
 		let mut files = Vec::new();
-
 		files.push((
 			path.join("tangram.tg"),
 			formatdoc!(
