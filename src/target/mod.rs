@@ -49,7 +49,14 @@ pub struct Value {
 }
 
 /// A target.
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	/// The target's package.
 	#[tangram_serialize(id = 0)]
@@ -90,7 +97,17 @@ impl Value {
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
+		Data {
+			package: self.package.expect_id(),
+			path: self.path.clone(),
+			name: self.name.clone(),
+			env: self
+				.env
+				.iter()
+				.map(|(key, value)| (key.clone(), value.expect_id()))
+				.collect(),
+			args: self.args.iter().map(|arg| arg.expect_id()).collect(),
+		}
 	}
 
 	#[must_use]

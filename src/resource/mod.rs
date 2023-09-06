@@ -1,8 +1,6 @@
-pub use self::builder::Builder;
 use crate::checksum::Checksum;
 use url::Url;
 
-mod builder;
 // mod download;
 // mod error;
 pub mod unpack;
@@ -29,7 +27,14 @@ pub struct Value {
 	pub unsafe_: bool,
 }
 
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	/// The URL to download from.
 	#[tangram_serialize(id = 0)]
@@ -48,10 +53,27 @@ pub struct Data {
 	pub unsafe_: bool,
 }
 
+impl Handle {
+	#[must_use]
+	pub fn new(
+		url: Url,
+		unpack: Option<unpack::Format>,
+		checksum: Option<Checksum>,
+		unsafe_: bool,
+	) -> Self {
+		Self::with_value(Value {
+			url,
+			unpack,
+			checksum,
+			unsafe_,
+		})
+	}
+}
+
 impl Value {
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
-		Value {
+		Self {
 			url: data.url,
 			unpack: data.unpack,
 			checksum: data.checksum,
@@ -61,21 +83,11 @@ impl Value {
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
-	}
-
-	#[must_use]
-	pub fn new(
-		url: Url,
-		unpack: Option<unpack::Format>,
-		checksum: Option<Checksum>,
-		unsafe_: bool,
-	) -> Self {
-		Self {
-			url,
-			unpack,
-			checksum,
-			unsafe_,
+		Data {
+			url: self.url.clone(),
+			unpack: self.unpack,
+			checksum: self.checksum.clone(),
+			unsafe_: self.unsafe_,
 		}
 	}
 
@@ -109,5 +121,47 @@ impl Data {
 	#[must_use]
 	pub fn children(&self) -> Vec<crate::Id> {
 		vec![]
+	}
+}
+
+pub struct Builder {
+	url: Url,
+	unpack: Option<unpack::Format>,
+	checksum: Option<Checksum>,
+	unsafe_: bool,
+}
+
+impl Builder {
+	#[must_use]
+	pub fn new(url: Url) -> Self {
+		Self {
+			url,
+			unpack: None,
+			checksum: None,
+			unsafe_: false,
+		}
+	}
+
+	#[must_use]
+	pub fn unpack(mut self, unpack: unpack::Format) -> Self {
+		self.unpack = Some(unpack);
+		self
+	}
+
+	#[must_use]
+	pub fn checksum(mut self, checksum: Checksum) -> Self {
+		self.checksum = Some(checksum);
+		self
+	}
+
+	#[must_use]
+	pub fn unsafe_(mut self, unsafe_: bool) -> Self {
+		self.unsafe_ = unsafe_;
+		self
+	}
+
+	#[must_use]
+	pub fn build(self) -> Handle {
+		Handle::new(self.url, self.unpack, self.checksum, self.unsafe_)
 	}
 }

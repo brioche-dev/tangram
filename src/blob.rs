@@ -22,7 +22,15 @@ pub enum Value {
 	Leaf(Bytes),
 }
 
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum Data {
 	#[tangram_serialize(id = 0)]
 	Branch(Vec<(Id, u64)>),
@@ -140,30 +148,26 @@ impl Value {
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
 		match data {
-			blob::Data::Branch(data) => {
-				let value = data
-					.into_iter()
+			Data::Branch(data) => Self::Branch(
+				data.into_iter()
 					.map(|(handle, size)| (blob::Handle::with_id(handle), size))
-					.collect::<Vec<_>>();
-				blob::Value::Branch(value)
-			},
-			blob::Data::Leaf(data) => blob::Value::Leaf(data),
+					.collect::<Vec<_>>(),
+			),
+			Data::Leaf(data) => Self::Leaf(data),
 		}
 	}
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
-		// let data = match value {
-		// 	blob::Value::Branch(branch) => {
-		// 		let branch = branch
-		// 			.into_iter()
-		// 			.map(|(handle, size)| todo!())
-		// 			.collect::<Vec<_>>();
-		// 		blob::Data::Branch(branch)
-		// 	},
-		// 	blob::Value::Leaf(leaf) => blob::Data::Leaf(leaf.clone()),
-		// };
+		match self {
+			Self::Branch(branch) => Data::Branch(
+				branch
+					.iter()
+					.map(|(handle, size)| (handle.expect_id(), *size))
+					.collect::<Vec<_>>(),
+			),
+			Self::Leaf(leaf) => Data::Leaf(leaf.clone()),
+		}
 	}
 
 	#[must_use]

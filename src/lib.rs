@@ -15,6 +15,7 @@ pub use self::{
 	bool::Handle as Bool,
 	// build::Handle as Build,
 	bytes::Handle as Bytes,
+	checksum::Checksum,
 	directory::Handle as Directory,
 	error::{Error, Result, WrapErr},
 	file::Handle as File,

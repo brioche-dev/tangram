@@ -17,36 +17,20 @@ pub struct Value {
 	pub components: Vec<component::Value>,
 }
 
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub components: Vec<component::Data>,
 }
 
 impl Value {
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		let components = data
-			.components
-			.into_iter()
-			.map(|component| match component {
-				component::Data::String(data) => component::Value::String(data),
-				component::Data::Artifact(data) => {
-					component::Value::Artifact(artifact::Handle::with_id(data))
-				},
-				component::Data::Placeholder(data) => {
-					component::Value::Placeholder(crate::placeholder::Value { name: data.name })
-				},
-			})
-			.collect();
-		Value { components }
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		todo!()
-	}
-
 	#[must_use]
 	pub fn empty() -> Self {
 		Self { components: vec![] }
@@ -65,9 +49,43 @@ impl Value {
 				_ => None,
 			})
 	}
-}
 
-impl Value {
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
+		let components = data
+			.components
+			.into_iter()
+			.map(|component| match component {
+				component::Data::String(data) => component::Value::String(data),
+				component::Data::Artifact(data) => {
+					component::Value::Artifact(artifact::Handle::with_id(data))
+				},
+				component::Data::Placeholder(data) => {
+					component::Value::Placeholder(crate::placeholder::Value { name: data.name })
+				},
+			})
+			.collect();
+		Self { components }
+	}
+
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		let components = self
+			.components
+			.iter()
+			.map(|component| match component {
+				component::Value::String(value) => component::Data::String(value.clone()),
+				component::Value::Artifact(value) => component::Data::Artifact(value.expect_id()),
+				component::Value::Placeholder(value) => {
+					component::Data::Placeholder(crate::placeholder::Data {
+						name: value.name.clone(),
+					})
+				},
+			})
+			.collect();
+		Data { components }
+	}
+
 	#[must_use]
 	pub fn children(&self) -> Vec<crate::Handle> {
 		self.components

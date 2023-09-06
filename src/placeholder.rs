@@ -13,7 +13,14 @@ pub struct Value {
 }
 
 /// Placeholder data.
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub name: String,
@@ -22,12 +29,14 @@ pub struct Data {
 impl Value {
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
-		Value { name: data.name }
+		Self { name: data.name }
 	}
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
+		Data {
+			name: self.name.clone(),
+		}
 	}
 }
 

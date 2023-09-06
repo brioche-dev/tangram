@@ -22,7 +22,14 @@ pub struct Value {
 }
 
 /// File data.
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	/// The file's contents.
 	#[tangram_serialize(id = 0)]
@@ -79,7 +86,7 @@ impl Value {
 			.into_iter()
 			.map(artifact::Handle::with_id)
 			.collect();
-		Value {
+		Self {
 			contents,
 			executable,
 			references,
@@ -88,7 +95,18 @@ impl Value {
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
+		let contents = self.contents.expect_id();
+		let executable = self.executable;
+		let references = self
+			.references
+			.iter()
+			.map(artifact::Handle::expect_id)
+			.collect();
+		Data {
+			contents,
+			executable,
+			references,
+		}
 	}
 
 	#[must_use]

@@ -222,12 +222,12 @@ impl Server {
 			};
 		}
 
-		// Check if the value exists remotely.
-		{
-			if self.state.parent.value_exists(id).await? {
-				return Ok(true);
-			}
-		}
+		// // Check if the value exists remotely.
+		// {
+		// 	if self.state.parent.value_exists(id).await? {
+		// 		return Ok(true);
+		// 	}
+		// }
 
 		Ok(false)
 	}
@@ -235,33 +235,39 @@ impl Server {
 	#[async_recursion]
 	pub async fn try_get_value_bytes(&self, id: Id) -> Result<Option<Vec<u8>>> {
 		// Attempt to get the value locally.
-		{
+		'a: {
 			let txn = self.state.database.env.begin_ro_txn()?;
 			let data = match txn.get(self.state.database.values, &id.as_bytes()) {
-				Ok(data) => return Ok(Some(data.to_owned())),
-				Err(lmdb::Error::NotFound) => {},
+				Ok(data) => data,
+				Err(lmdb::Error::NotFound) => break 'a,
 				Err(error) => return Err(error.into()),
 			};
+			return Ok(Some(data.to_owned()));
 		}
 
-		// Attempt to get the value remotely.
-		if let Some(bytes) = self.state.parent.try_get_value_bytes(id).await? {
-			// Create a write transaction.
-			let mut txn = self.state.database.env.begin_rw_txn()?;
+		// // Attempt to get the value remotely.
+		// 'a: {
+		// 	// Get the value from the parent.
+		// 	let Some(bytes) = self.state.parent.try_get_value_bytes(id).await? else {
+		// 		break 'a;
+		// 	};
 
-			// Add the value to the database.
-			txn.put(
-				self.state.database.values,
-				&id.as_bytes(),
-				&bytes,
-				lmdb::WriteFlags::empty(),
-			)?;
+		// 	// Create a write transaction.
+		// 	let mut txn = self.state.database.env.begin_rw_txn()?;
 
-			// Commit the transaction.
-			txn.commit()?;
+		// 	// Add the value to the database.
+		// 	txn.put(
+		// 		self.state.database.values,
+		// 		&id.as_bytes(),
+		// 		&bytes,
+		// 		lmdb::WriteFlags::empty(),
+		// 	)?;
 
-			return Ok(Some(bytes));
-		}
+		// 	// Commit the transaction.
+		// 	txn.commit()?;
+
+		// 	return Ok(Some(bytes));
+		// }
 
 		Ok(None)
 	}

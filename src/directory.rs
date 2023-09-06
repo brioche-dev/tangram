@@ -18,7 +18,14 @@ pub struct Value {
 	pub entries: BTreeMap<String, artifact::Handle>,
 }
 
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	/// The directory's entries.
 	#[tangram_serialize(id = 0)]
@@ -97,12 +104,17 @@ impl Value {
 			.into_iter()
 			.map(|(name, id)| (name, artifact::Handle::with_id(id)))
 			.collect();
-		Value { entries }
+		Self { entries }
 	}
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
+		let entries = self
+			.entries
+			.iter()
+			.map(|(name, handle)| (name.clone(), handle.expect_id()))
+			.collect();
+		Data { entries }
 	}
 
 	#[must_use]

@@ -2,7 +2,6 @@ pub use self::import::Import;
 pub use crate::document::Document;
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
-	id::Id,
 	package,
 	subpath::Subpath,
 };

@@ -12,20 +12,14 @@ pub struct Value {
 	pub target: template::Handle,
 }
 
-impl Value {
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		let target = template::Handle::with_id(data.target);
-		Value { target }
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		todo!()
-	}
-}
-
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub target: crate::template::Id,
@@ -56,6 +50,19 @@ impl Handle {
 }
 
 impl Value {
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
+		let target = template::Handle::with_id(data.target);
+		Self { target }
+	}
+
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		Data {
+			target: self.target.expect_id(),
+		}
+	}
+
 	#[must_use]
 	pub fn children(&self) -> Vec<crate::Handle> {
 		vec![self.target.clone().into()]

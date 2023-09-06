@@ -1,11 +1,5 @@
 pub use self::{dependency::Dependency, metadata::Metadata, specifier::Specifier};
-use crate::{
-	artifact,
-	client::Client,
-	error::Result,
-	module::{self, Module},
-	Artifact, Package,
-};
+use crate::{artifact, error::Result, Artifact, Package};
 use std::collections::BTreeMap;
 
 /// The file name of the root module in a package.
@@ -34,7 +28,14 @@ pub struct Value {
 	pub dependencies: Option<BTreeMap<Dependency, Package>>,
 }
 
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub artifact: crate::artifact::Id,
@@ -43,29 +44,68 @@ pub struct Data {
 	pub dependencies: Option<BTreeMap<Dependency, crate::package::Id>>,
 }
 
+impl Handle {
+	// pub async fn with_specifier(tg: &Client, specifier: Specifier) -> Result<Self> {
+	// 	match specifier {
+	// 		Specifier::Path(path) => Ok(Self::with_path(tg, &path).await?),
+	// 		Specifier::Registry(_) => unimplemented!(),
+	// 	}
+	// }
+
+	// #[must_use]
+	// pub fn artifact(&self) -> &Artifact {
+	// 	&self.artifact
+	// }
+
+	// #[must_use]
+	// pub fn dependencies(&self) -> &Option<BTreeMap<Dependency, Package>> {
+	// 	&self.dependencies
+	// }
+
+	// pub async fn root_module(&self, tg: &Client) -> Result<Module> {
+	// 	Ok(Module::Normal(module::Normal {
+	// 		package: todo!(),
+	// 		path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+	// 	}))
+	// }
+
+	// #[must_use]
+	// pub fn to_unlocked(&self) -> Value {
+	// 	Self {
+	// 		artifact: self.artifact.clone(),
+	// 		dependencies: None,
+	// 	}
+	// }
+}
+
 impl Value {
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
-		Value {
-			artifact: artifact::Handle::with_id(data.artifact),
-			dependencies: data.dependencies.map(|dependencies| {
-				dependencies
-					.into_iter()
-					.map(|(dependency, id)| (dependency, Handle::with_id(id)))
-					.collect()
-			}),
+		let artifact = artifact::Handle::with_id(data.artifact);
+		let dependencies = data.dependencies.map(|dependencies| {
+			dependencies
+				.into_iter()
+				.map(|(dependency, id)| (dependency, Handle::with_id(id)))
+				.collect()
+		});
+		Self {
+			artifact,
+			dependencies,
 		}
 	}
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
-	}
-
-	pub async fn with_specifier(tg: &Client, specifier: Specifier) -> Result<Self> {
-		match specifier {
-			Specifier::Path(path) => Ok(Self::with_path(tg, &path).await?),
-			Specifier::Registry(_) => unimplemented!(),
+		let artifact = self.artifact.expect_id();
+		let dependencies = self.dependencies.as_ref().map(|dependencies| {
+			dependencies
+				.iter()
+				.map(|(dependency, id)| (dependency.clone(), id.expect_id()))
+				.collect()
+		});
+		Data {
+			artifact,
+			dependencies,
 		}
 	}
 
@@ -86,31 +126,6 @@ impl Value {
 		);
 		children.push(self.artifact.clone().into());
 		children
-	}
-
-	#[must_use]
-	pub fn artifact(&self) -> &Artifact {
-		&self.artifact
-	}
-
-	#[must_use]
-	pub fn dependencies(&self) -> &Option<BTreeMap<Dependency, Package>> {
-		&self.dependencies
-	}
-
-	pub async fn root_module(&self, tg: &Client) -> Result<Module> {
-		Ok(Module::Normal(module::Normal {
-			package: todo!(),
-			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
-		}))
-	}
-
-	#[must_use]
-	pub fn to_unlocked(&self) -> Value {
-		Self {
-			artifact: self.artifact.clone(),
-			dependencies: None,
-		}
 	}
 }
 

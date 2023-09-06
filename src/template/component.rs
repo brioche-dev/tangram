@@ -7,7 +7,15 @@ pub enum Value {
 	Placeholder(placeholder::Value),
 }
 
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum Data {
 	#[tangram_serialize(id = 0)]
 	String(crate::string::Data),
@@ -44,9 +52,7 @@ impl Value {
 			None
 		}
 	}
-}
 
-impl Value {
 	#[must_use]
 	pub fn into_string(self) -> Option<String> {
 		if let Self::String(string) = self {

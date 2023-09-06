@@ -5,7 +5,6 @@
 
 use self::{commands::Args, error::Result};
 use clap::Parser;
-use std::collections::BTreeMap;
 use tracing_subscriber::prelude::*;
 
 mod commands;
@@ -48,7 +47,7 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	let client = todo!();
+	let client = tg::Client::new_remote("http://localhost:8476".parse().unwrap(), None);
 
 	// Create the CLI.
 	let cli = Cli { client };

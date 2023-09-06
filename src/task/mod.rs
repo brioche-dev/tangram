@@ -44,7 +44,14 @@ pub struct Value {
 }
 
 /// A task.
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Data {
 	/// The system to run the task on.
 	#[tangram_serialize(id = 0)]
@@ -78,7 +85,7 @@ pub struct Data {
 impl Value {
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
-		Value {
+		Self {
 			host: data.host,
 			executable: template::Value::from_data(data.executable),
 			env: data
@@ -99,7 +106,19 @@ impl Value {
 
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		todo!()
+		Data {
+			host: self.host,
+			executable: self.executable.to_data(),
+			env: self
+				.env
+				.iter()
+				.map(|(key, value)| (key.clone(), value.to_data()))
+				.collect(),
+			args: self.args.iter().map(template::Value::to_data).collect(),
+			checksum: self.checksum.clone(),
+			unsafe_: self.unsafe_,
+			network: self.network,
+		}
 	}
 
 	#[must_use]

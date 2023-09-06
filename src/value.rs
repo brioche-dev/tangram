@@ -66,7 +66,15 @@ pub enum Value {
 }
 
 /// Value data.
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum Data {
 	#[tangram_serialize(id = 0)]
 	Null(null::Data),
@@ -184,9 +192,7 @@ impl Value {
 			Value::Resource(value) => Data::Resource(value.to_data()),
 			Value::Target(value) => Data::Target(value.to_data()),
 			Value::Task(value) => Data::Task(value.to_data()),
-			Value::Array(value) => {
-				Data::Array(value.iter().map(|handle| handle.expect_id()).collect())
-			},
+			Value::Array(value) => Data::Array(value.iter().map(any::Handle::expect_id).collect()),
 			Value::Object(value) => Data::Object(
 				value
 					.iter()
@@ -227,6 +233,7 @@ impl Data {
 		let mut bytes = Vec::new();
 		bytes.write_u8(0)?;
 		tangram_serialize::to_writer(self, &mut bytes)?;
+		// serde_json::to_writer(&mut bytes, self).map_err(crate::Error::other)?;
 		Ok(bytes)
 	}
 
@@ -236,6 +243,7 @@ impl Data {
 			return_error!(r#"Cannot deserialize a value with version "{version}"."#);
 		}
 		let value = tangram_serialize::from_reader(bytes)?;
+		// let value = serde_json::from_reader(bytes).map_err(crate::Error::other)?;
 		Ok(value)
 	}
 
