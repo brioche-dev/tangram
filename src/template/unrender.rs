@@ -1,11 +1,9 @@
-use super::{Component, Template};
-use crate as tg;
-use crate::{error::Result, server::Server};
+use crate::{self as tg, Result};
 use itertools::Itertools;
 use std::path::PathBuf;
 
-impl tg::Template {
-	pub async fn unrender(tg: &Server, artifacts_paths: &[PathBuf], string: &str) -> Result<Self> {
+impl super::Handle {
+	pub fn unrender(artifacts_paths: &[PathBuf], string: &str) -> Result<Self> {
 		// Create the regex.
 		let artifacts_paths = artifacts_paths
 			.iter()
@@ -20,7 +18,9 @@ impl tg::Template {
 			// Add the text leading up to the capture as a string component.
 			let match_ = captures.get(0).unwrap();
 			if match_.start() > i {
-				components.push(Component::String(string[i..match_.start()].to_owned()));
+				components.push(super::Component::String(
+					string[i..match_.start()].to_owned(),
+				));
 			}
 
 			// Get and parse the ID.
@@ -28,7 +28,9 @@ impl tg::Template {
 			let id = id.as_str().parse().unwrap();
 
 			// Add an artifact component.
-			components.push(Component::Artifact(tg::Value::with_id(id).try_into()?));
+			components.push(super::Component::Artifact(
+				tg::Handle::with_id(id).try_into()?,
+			));
 
 			// Advance the cursor to the end of the match.
 			i = match_.end();
@@ -36,13 +38,11 @@ impl tg::Template {
 
 		// Add the remaining text as a string component.
 		if i < string.len() {
-			components.push(Component::String(string[i..].to_owned()));
+			components.push(super::Component::String(string[i..].to_owned()));
 		}
 
 		// Create the template.
-		let template = Template::new(components);
-
-		Ok(template.into())
+		Ok(super::Handle::with_value(components.into()))
 	}
 }
 

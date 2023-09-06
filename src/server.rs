@@ -4,11 +4,11 @@ use crate::{
 	error::Result,
 	id::Id,
 	// language,
-	util::task_map::TaskMap,
 	value,
 	Client,
+	Error,
 };
-use derive_more::Deref;
+use async_recursion::async_recursion;
 use futures::{StreamExt, TryStreamExt};
 use lmdb::Transaction;
 use std::{
@@ -19,11 +19,12 @@ use std::{
 use url::Url;
 
 /// A server.
-#[derive(Clone, Deref)]
+#[derive(Clone, Debug)]
 pub struct Server {
 	pub(crate) state: Arc<State>,
 }
 
+#[derive(Debug)]
 pub struct State {
 	/// A semaphore that limits the number of concurrent commands.
 	pub(crate) command_semaphore: tokio::sync::Semaphore,
@@ -40,11 +41,6 @@ pub struct State {
 
 	/// An HTTP client for downloading resources.
 	pub(crate) http_client: reqwest::Client,
-
-	/// A task map that deduplicates internal checkouts.
-	#[allow(clippy::type_complexity)]
-	pub(crate) internal_checkouts_task_map:
-		std::sync::Mutex<Option<Arc<TaskMap<Id, Result<PathBuf>>>>>,
 
 	/// A channel sender to send requests to the language service.
 	// pub(crate) language_service_request_sender:
@@ -66,6 +62,7 @@ pub struct State {
 	pub(crate) path: PathBuf,
 }
 
+#[derive(Debug)]
 pub(crate) struct Database {
 	pub(crate) env: lmdb::Environment,
 	pub(crate) values: lmdb::Database,
@@ -122,9 +119,6 @@ impl Server {
 		// Create the HTTP client.
 		let http_client = reqwest::Client::new();
 
-		// Create the internal checkouts task map.
-		let internal_checkouts_task_map = std::sync::Mutex::new(None);
-
 		// Create the sender for language service requests.
 		// let language_service_request_sender = std::sync::Mutex::new(None);
 
@@ -143,7 +137,7 @@ impl Server {
 				.clone()
 				.unwrap_or_else(|| API_URL.parse().unwrap());
 			let token = options.origin_token.clone();
-			Client::new(url, token)
+			Client::new_remote(url, token)
 		};
 
 		// Create the state.
@@ -153,7 +147,6 @@ impl Server {
 			documents,
 			file_descriptor_semaphore,
 			http_client,
-			internal_checkouts_task_map,
 			// language_service_request_sender,
 			local_pool,
 			main_runtime_handle,
@@ -214,80 +207,93 @@ impl Server {
 
 	#[must_use]
 	pub fn parent(&self) -> &Client {
-		&self.parent
+		&self.state.parent
 	}
 
+	#[async_recursion]
 	pub async fn value_exists(&self, id: Id) -> Result<bool> {
 		// Check if the value exists locally.
-		'a: {
-			let txn = self.database.env.begin_ro_txn()?;
-			match txn.get(self.database.values, &id.as_bytes()) {
+		{
+			let txn = self.state.database.env.begin_ro_txn()?;
+			match txn.get(self.state.database.values, &id.as_bytes()) {
 				Ok(_) => return Ok(true),
-				Err(lmdb::Error::NotFound) => break 'a,
+				Err(lmdb::Error::NotFound) => {},
 				Err(error) => return Err(error.into()),
 			};
 		}
 
 		// Check if the value exists remotely.
-		'a: {
-			// TODO
+		{
+			if self.state.parent.value_exists(id).await? {
+				return Ok(true);
+			}
 		}
 
 		Ok(false)
 	}
 
+	#[async_recursion]
 	pub async fn try_get_value_bytes(&self, id: Id) -> Result<Option<Vec<u8>>> {
 		// Attempt to get the value locally.
-		'a: {
-			let txn = self.database.env.begin_ro_txn()?;
-			let data = match txn.get(self.database.values, &id.as_bytes()) {
-				Ok(data) => data.to_owned(),
-				Err(lmdb::Error::NotFound) => break 'a,
+		{
+			let txn = self.state.database.env.begin_ro_txn()?;
+			let data = match txn.get(self.state.database.values, &id.as_bytes()) {
+				Ok(data) => return Ok(Some(data.to_owned())),
+				Err(lmdb::Error::NotFound) => {},
 				Err(error) => return Err(error.into()),
 			};
 		}
 
 		// Attempt to get the value remotely.
-		'a: {
-			// TODO
+		if let Some(bytes) = self.state.parent.try_get_value_bytes(id).await? {
+			// Create a write transaction.
+			let mut txn = self.state.database.env.begin_rw_txn()?;
+
+			// Add the value to the database.
+			txn.put(
+				self.state.database.values,
+				&id.as_bytes(),
+				&bytes,
+				lmdb::WriteFlags::empty(),
+			)?;
+
+			// Commit the transaction.
+			txn.commit()?;
+
+			return Ok(Some(bytes));
 		}
 
 		Ok(None)
 	}
 
-	pub async fn try_get_value_data(&self, id: Id) -> Result<Option<value::Data>> {
-		let Some(bytes) = self.try_get_value_bytes(id).await? else {
-			return Ok(None);
-		};
-		let data = value::Data::deserialize(&bytes)?;
-		Ok(Some(data))
-	}
+	pub async fn try_put_value_bytes(&self, id: Id, bytes: &[u8]) -> Result<Result<(), Vec<Id>>> {
+		// Deserialize the bytes.
+		let data = value::Data::deserialize(bytes)?;
 
-	pub async fn try_put_value(&self, id: Id, data: value::Data) -> Result<Result<(), Vec<Id>>> {
 		// Check if there are any missing children.
-		let mut missing_children = futures::stream::iter(data.children())
+		let missing_children = futures::stream::iter(data.children())
 			.map(Ok)
-			.try_filter_map(|child| async move {
-				let exists = self.value_exists(child.expect_id()).await?;
-				Ok(if exists { None } else { Some(child) })
+			.try_filter_map(|id| async move {
+				let exists = self.value_exists(id).await?;
+				Ok::<_, Error>(if exists { None } else { Some(id) })
 			})
-			.try_collect()
+			.try_collect::<Vec<_>>()
 			.await?;
 		if !missing_children.is_empty() {
 			return Ok(Err(missing_children));
 		}
 
 		// Create a write transaction.
-		let mut txn = self.database.env.begin_rw_txn()?;
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
 		// Serialize the data.
-		let data = data.serialize()?;
+		let bytes = data.serialize()?;
 
 		// Add the value to the database.
 		txn.put(
-			self.database.values,
+			self.state.database.values,
 			&id.as_bytes(),
-			&data,
+			&bytes,
 			lmdb::WriteFlags::empty(),
 		)?;
 

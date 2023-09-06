@@ -1,12 +1,6 @@
-use crate::{
-	self as tg,
-	error::{return_error, Error, Result, WrapErr},
-	id::Id,
-	server::Server,
-};
+use crate::{self as tg, return_error, Client, Error, Result, WrapErr};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
-use itertools::Itertools;
 use std::{
 	fs::Metadata,
 	os::unix::prelude::PermissionsExt,
@@ -15,7 +9,7 @@ use std::{
 
 #[derive(serde::Deserialize)]
 struct Attributes {
-	references: Vec<Id>,
+	references: Vec<tg::artifact::Id>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -23,14 +17,14 @@ pub struct Options {
 	pub artifacts_paths: Vec<PathBuf>,
 }
 
-impl tg::Artifact {
-	pub async fn check_in(tg: &Server, path: &Path) -> Result<Self> {
-		Self::check_in_with_options(tg, path, &Options::default()).await
+impl crate::Artifact {
+	pub async fn check_in(client: &Client, path: &Path) -> Result<Self> {
+		Self::check_in_with_options(client, path, &Options::default()).await
 	}
 
 	#[async_recursion]
 	pub async fn check_in_with_options(
-		tg: &Server,
+		client: &Client,
 		path: &Path,
 		options: &Options,
 	) -> Result<Self> {
@@ -42,21 +36,21 @@ impl tg::Artifact {
 
 		// Call the appropriate function for the file system object at the path.
 		let artifact = if metadata.is_dir() {
-			Self::check_in_directory(tg, path, &metadata, options)
+			Self::check_in_directory(client, path, &metadata, options)
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to check in the directory at path "{path}"."#)
 				})?
 		} else if metadata.is_file() {
-			Self::check_in_file(tg, path, &metadata, options)
+			Self::check_in_file(client, path, &metadata, options)
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to check in the file at path "{path}"."#)
 				})?
 		} else if metadata.is_symlink() {
-			Self::check_in_symlink(tg, path, &metadata, options)
+			Self::check_in_symlink(client, path, &metadata, options)
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
@@ -70,14 +64,14 @@ impl tg::Artifact {
 	}
 
 	async fn check_in_directory(
-		tg: &Server,
+		client: &Client,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,
 	) -> Result<Self> {
 		// Read the contents of the directory.
 		let names = {
-			let _permit = tg.file_descriptor_semaphore.acquire().await;
+			let _permit = client.file_descriptor_semaphore().acquire().await;
 			let mut read_dir = tokio::fs::read_dir(path)
 				.await
 				.wrap_err("Failed to read the directory.")?;
@@ -98,7 +92,7 @@ impl tg::Artifact {
 			.into_iter()
 			.map(|name| async {
 				let path = path.join(&name);
-				let artifact = Self::check_in_with_options(tg, &path, options).await?;
+				let artifact = Self::check_in_with_options(client, &path, options).await?;
 				Ok::<_, Error>((name, artifact))
 			})
 			.collect::<FuturesUnordered<_>>()
@@ -112,17 +106,17 @@ impl tg::Artifact {
 	}
 
 	async fn check_in_file(
-		tg: &Server,
+		client: &Client,
 		path: &Path,
 		metadata: &Metadata,
 		_options: &Options,
 	) -> Result<Self> {
 		// Create the blob.
-		let permit = tg.file_descriptor_semaphore.acquire().await;
+		let permit = client.file_descriptor_semaphore().acquire().await;
 		let file = tokio::fs::File::open(path)
 			.await
 			.wrap_err("Failed to open the file.")?;
-		let contents = tg::Blob::with_reader(tg, file)
+		let contents = tg::Blob::with_reader(client, file)
 			.await
 			.wrap_err("Failed to create the contents.")?;
 		drop(permit);
@@ -140,7 +134,7 @@ impl tg::Artifact {
 			.unwrap_or_default()
 			.into_iter()
 			.map(tg::Artifact::with_id)
-			.try_collect()?;
+			.collect();
 
 		// Create the file.
 		let file = tg::File::new(contents, executable, references);
@@ -149,7 +143,7 @@ impl tg::Artifact {
 	}
 
 	async fn check_in_symlink(
-		tg: &Server,
+		_client: &Client,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,
@@ -166,7 +160,7 @@ impl tg::Artifact {
 		let target = target
 			.to_str()
 			.wrap_err("The symlink target must be valid UTF-8.")?;
-		let target = tg::Template::unrender(tg, &options.artifacts_paths, target).await?;
+		let target = tg::Template::unrender(&options.artifacts_paths, target)?;
 
 		// Create the symlink.
 		let symlink = tg::Symlink::new(target);

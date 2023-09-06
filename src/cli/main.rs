@@ -14,7 +14,7 @@ mod credentials;
 mod error;
 
 struct Cli {
-	tg: tg::Client,
+	client: tg::Client,
 }
 
 #[tokio::main]
@@ -48,10 +48,10 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	let tg = todo!();
+	let client = todo!();
 
 	// Create the CLI.
-	let cli = Cli { tg };
+	let cli = Cli { client };
 
 	// Run the command.
 	cli.run(args).await?;
@@ -75,15 +75,5 @@ fn setup_tracing() {
 			.with(env_layer)
 			.with(format_layer);
 		subscriber.init();
-	}
-}
-
-impl Cli {
-	fn create_default_env() -> Result<BTreeMap<String, tg::Value>> {
-		Ok([(
-			"host".to_owned(),
-			tg::Value::from(tg::System::host()?.to_string()),
-		)]
-		.into())
 	}
 }

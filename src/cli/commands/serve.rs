@@ -79,7 +79,7 @@ impl Cli {
 		};
 
 		// Create the server.
-		let tg = Server::new(path, options).await?;
+		let server = tg::Server::new(path, options).await?;
 
 		// Serve.
 		let addr = SocketAddr::new(args.host, args.port);

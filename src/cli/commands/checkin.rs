@@ -21,13 +21,10 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let artifact = tg::Artifact::check_in(&self.tg, &path).await?;
-
-		// Store the artifact.
-		artifact.store(&self.tg).await?;
+		let artifact = tg::Artifact::check_in(&self.client, &path).await?;
 
 		// Print the ID.
-		let id = artifact.id(&self.tg).await?;
+		let id = artifact.id(&self.client).await?;
 		println!("{id}");
 
 		Ok(())

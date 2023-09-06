@@ -30,7 +30,11 @@ impl Cli {
 			.wrap_err("Failed to get the package.")?;
 
 		// Build the target.
-		let env = Self::create_default_env()?;
+		let env = [(
+			"host".to_owned(),
+			tg::Value::from(tg::System::host()?.to_string()),
+		)]
+		.into();
 		let args_ = Vec::new();
 		let target = tg::Target::new(
 			package.block().clone(),

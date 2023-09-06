@@ -9,7 +9,7 @@ use std::path::PathBuf;
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	/// The ID of the artifact to check out.
-	pub id: tg::Id,
+	pub id: tg::artifact::Id,
 
 	/// The path to check out the artifact to.
 	pub path: Option<PathBuf>,
@@ -26,8 +26,8 @@ impl Cli {
 		};
 
 		// Check out the artifact.
-		tg::Artifact::with_id(args.id)?
-			.check_out(&self.tg, &path)
+		tg::Artifact::with_id(args.id)
+			.check_out(&self.client, &path)
 			.await
 			.wrap_err("Failed to check out the artifact.")?;
 

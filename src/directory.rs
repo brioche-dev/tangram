@@ -1,57 +1,55 @@
 use crate::{
-	self as tg, artifact,
-	error::{Error, Result, WrapErr},
-	server::Server,
+	artifact,
 	subpath::{self, Subpath},
+	Client, Error, Result, WrapErr,
 };
 use std::collections::BTreeMap;
 
+crate::id!();
+
+crate::kind!(Directory);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+#[derive(Clone, Debug)]
+pub struct Value {
+	/// The directory's entries.
+	pub entries: BTreeMap<String, artifact::Handle>,
+}
+
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
-pub struct Directory {
+pub struct Data {
 	/// The directory's entries.
 	#[tangram_serialize(id = 0)]
-	pub entries: BTreeMap<String, tg::Artifact>,
+	pub entries: BTreeMap<String, crate::artifact::Id>,
 }
 
-crate::value!(Directory);
-
-impl tg::Directory {
+impl Handle {
 	#[must_use]
-	pub fn new(entries: BTreeMap<String, tg::Artifact>) -> Self {
-		Directory { entries }.into()
+	pub fn new(entries: BTreeMap<String, artifact::Handle>) -> Self {
+		Self::with_value(Value { entries })
 	}
 
-	pub async fn builder(&self, tg: &Server) -> Result<Builder> {
-		Ok(Builder::new(self.get(tg).await?.entries.clone()))
+	pub async fn builder(&self, tg: &Client) -> Result<Builder> {
+		Ok(Builder::new(self.value(tg).await?.entries.clone()))
 	}
 
-	pub async fn entries(&self, tg: &Server) -> Result<&BTreeMap<String, tg::Artifact>, Error> {
-		Ok(&self.get(tg).await?.entries)
+	pub async fn entries(&self, tg: &Client) -> Result<&BTreeMap<String, artifact::Handle>, Error> {
+		Ok(&self.value(tg).await?.entries)
 	}
-}
 
-impl Directory {
-	#[must_use]
-	pub fn children(&self) -> Vec<tg::Value> {
-		self.entries
-			.values()
-			.map(|child| child.clone().into())
-			.collect()
-	}
-}
-
-impl tg::Directory {
-	pub async fn get_entry(&self, tg: &Server, path: &Subpath) -> Result<tg::Artifact> {
+	pub async fn get(&self, tg: &Client, path: &Subpath) -> Result<artifact::Handle> {
 		let artifact = self
-			.try_get_entry(tg, path)
+			.try_get(tg, path)
 			.await?
 			.wrap_err("Failed to get the artifact.")?;
 		Ok(artifact)
 	}
 
-	pub async fn try_get_entry(&self, tg: &Server, path: &Subpath) -> Result<Option<tg::Artifact>> {
+	pub async fn try_get(&self, tg: &Client, path: &Subpath) -> Result<Option<artifact::Handle>> {
 		// Track the current artifact.
-		let mut artifact: tg::Artifact = self.clone().into();
+		let mut artifact: artifact::Handle = self.clone().into();
 
 		// Track the current subpath.
 		let mut current_subpath = subpath::Subpath::empty();
@@ -75,9 +73,9 @@ impl tg::Directory {
 			artifact = entry;
 
 			// If the artifact is a symlink, then resolve it.
-			if let artifact::Artifact::Symlink(symlink) = &artifact.get() {
+			if let artifact::Value::Symlink(symlink) = &artifact.value() {
 				match symlink
-					.resolve_from(tg, Some(symlink.get(tg).await?))
+					.resolve_from(tg, Some(symlink.value(tg).await?))
 					.await
 					.wrap_err("Failed to resolve the symlink.")?
 				{
@@ -91,14 +89,46 @@ impl tg::Directory {
 	}
 }
 
+impl Value {
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
+		let entries = data
+			.entries
+			.into_iter()
+			.map(|(name, id)| (name, artifact::Handle::with_id(id)))
+			.collect();
+		Value { entries }
+	}
+
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		todo!()
+	}
+
+	#[must_use]
+	pub fn children(&self) -> Vec<crate::Handle> {
+		self.entries
+			.values()
+			.map(|child| child.clone().into())
+			.collect()
+	}
+}
+
+impl Data {
+	#[must_use]
+	pub fn children(&self) -> Vec<crate::Id> {
+		self.entries.values().copied().map(Into::into).collect()
+	}
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
-	entries: BTreeMap<String, tg::Artifact>,
+	entries: BTreeMap<String, artifact::Handle>,
 }
 
 impl Builder {
 	#[must_use]
-	pub fn new(entries: BTreeMap<String, tg::Artifact>) -> Self {
+	pub fn new(entries: BTreeMap<String, artifact::Handle>) -> Self {
 		Self { entries }
 	}
 
@@ -186,7 +216,7 @@ impl Builder {
 	// }
 
 	#[must_use]
-	pub fn build(self) -> tg::Directory {
-		tg::Directory::new(self.entries)
+	pub fn build(self) -> Handle {
+		Handle::new(self.entries)
 	}
 }

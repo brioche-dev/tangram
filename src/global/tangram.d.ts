@@ -182,7 +182,7 @@ declare namespace tg {
 	}
 
 	export namespace env {
-		export let get: () => Record<string, Value>;
+		export let get: () => Record<string, Any>;
 	}
 
 	/** Create a file. */
@@ -348,7 +348,7 @@ declare namespace tg {
 	 * Unresolved<Array<{ key: string }>> = MaybePromise<Array<MaybePromise<{ key: MaybePromise<string> }>>>
 	 * ```
 	 */
-	export type Unresolved<T extends Value> = MaybePromise<
+	export type Unresolved<T extends Any> = MaybePromise<
 		T extends
 			| undefined
 			| boolean
@@ -368,9 +368,9 @@ declare namespace tg {
 			| Target
 			| Task
 			? T
-			: T extends Array<infer U extends Value>
+			: T extends Array<infer U extends Any>
 			? Array<Unresolved<U>>
-			: T extends { [key: string]: Value }
+			: T extends { [key: string]: Any }
 			? { [K in keyof T]: Unresolved<T[K]> }
 			: never
 	>;
@@ -387,7 +387,7 @@ declare namespace tg {
 	 * Resolved<Promise<Array<Promise<string>>>> = Array<string>
 	 * ```
 	 */
-	export type Resolved<T extends Unresolved<Value>> = T extends
+	export type Resolved<T extends Unresolved<Any>> = T extends
 		| undefined
 		| boolean
 		| number
@@ -406,16 +406,16 @@ declare namespace tg {
 		| Target
 		| Task
 		? T
-		: T extends Array<infer U extends Unresolved<Value>>
+		: T extends Array<infer U extends Unresolved<Any>>
 		? Array<Resolved<U>>
-		: T extends { [key: string]: Unresolved<Value> }
+		: T extends { [key: string]: Unresolved<Any> }
 		? { [K in keyof T]: Resolved<T[K]> }
-		: T extends Promise<infer U extends Unresolved<Value>>
+		: T extends Promise<infer U extends Unresolved<Any>>
 		? Resolved<U>
 		: never;
 
 	/** Resolve all deeply nested promises in an unresolved value. */
-	export let resolve: <T extends Unresolved<Value>>(
+	export let resolve: <T extends Unresolved<Any>>(
 		value: T,
 	) => Promise<Resolved<T>>;
 
@@ -569,38 +569,31 @@ declare namespace tg {
 	}
 
 	/** Create a target. */
-	function target<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(f: (...args: A) => MaybePromise<R | void>): Promise<Target<A, R>>;
-	function target<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(
+	function target<A extends Array<Any> = Array<Any>, R extends Any = Any>(
+		f: (...args: A) => MaybePromise<R | void>,
+	): Promise<Target<A, R>>;
+	function target<A extends Array<Any> = Array<Any>, R extends Any = Any>(
 		name: string,
 		f: (...args: A) => MaybePromise<R | void>,
 	): Promise<Target<A, R>>;
 
 	/** Build a target. */
-	export let build: <
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(
+	export let build: <A extends Array<Any> = Array<Any>, R extends Any = Any>(
 		arg: Target.Arg<A, R>,
 	) => Promise<R>;
 
 	/** A target. */
 	export interface Target<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
+		A extends Array<Any> = Array<Any>,
+		R extends Any = Any,
 	> {
 		/** Build this target. */
 		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
 	}
 
 	export class Target<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
+		A extends Array<Any> = Array<Any>,
+		R extends Any = Any,
 	> extends globalThis.Function {
 		/** Get a target with an ID. */
 		static withId(id: Id): Promise<Target>;
@@ -624,19 +617,16 @@ declare namespace tg {
 		name_(): Promise<string>;
 
 		/** Get this target's env. */
-		env(): Promise<Record<string, Value>>;
+		env(): Promise<Record<string, Any>>;
 
 		/** Get this target's args. */
-		args(): Promise<Array<Value>>;
+		args(): Promise<Array<Any>>;
 	}
 
 	export namespace Target {
-		export type Arg<
-			A extends Array<Value> = Array<Value>,
-			R extends Value = Value,
-		> = {
+		export type Arg<A extends Array<Any> = Array<Any>, R extends Any = Any> = {
 			target: Target<A, R>;
-			env?: Unresolved<Record<string, Value>>;
+			env?: Unresolved<Record<string, Any>>;
 			args: Unresolved<A>;
 		};
 	}
@@ -772,8 +762,8 @@ declare namespace tg {
 		}
 	}
 
-	/** A `Value` is the union of all types that can be used as arguments or return values of Tangram targets. */
-	export type Value =
+	/** `Any` is the union of all types that can be used as the input or output of Tangram targets. */
+	export type Any =
 		| undefined
 		| boolean
 		| number
@@ -791,21 +781,21 @@ declare namespace tg {
 		| Resource
 		| Target
 		| Task
-		| Array<Value>
-		| { [key: string]: Value };
+		| Array<Any>
+		| { [key: string]: Any };
 
-	export namespace Value {
+	export namespace Any {
 		/** Get a value with an ID. */
-		export let withId: (id: Id) => Promise<Value>;
+		export let withId: (id: Id) => Promise<Any>;
 
-		/** Check if a value is a `Value`. */
-		export let is: (value: unknown) => value is Value;
+		/** Check if a value is `Any`. */
+		export let is: (value: unknown) => value is Any;
 
-		/** Expect that a value is a `Value`. */
-		export let expect: (value: unknown) => Value;
+		/** Expect that a value is `Any`. */
+		export let expect: (value: unknown) => Any;
 
-		/** Assert that a value is a `Value`. */
-		export let assert: (value: unknown) => asserts value is Value;
+		/** Assert that a value is `Any`. */
+		export let assert: (value: unknown) => asserts value is Any;
 	}
 }
 

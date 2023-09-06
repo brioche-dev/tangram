@@ -35,8 +35,12 @@ impl Cli {
 			.await
 			.wrap_err("Failed to get the package.")?;
 
-		// Run the operation.
-		let env = Self::create_default_env()?;
+		// Build.
+		let env = [(
+			"host".to_owned(),
+			tg::Value::from(tg::System::host()?.to_string()),
+		)]
+		.into();
 		let args_ = Vec::new();
 		let target = tg::Target::new(
 			package,

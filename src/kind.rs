@@ -77,3 +77,77 @@ impl TryFrom<u8> for Kind {
 		}
 	}
 }
+
+/// Define a value kind.
+#[macro_export]
+macro_rules! kind {
+	($t:ident) => {
+		impl From<Id> for $crate::Id {
+			fn from(value: Id) -> Self {
+				value.0
+			}
+		}
+
+		impl TryFrom<$crate::Id> for Id {
+			type Error = $crate::Error;
+
+			fn try_from(value: $crate::Id) -> Result<Self, Self::Error> {
+				match value.kind() {
+					$crate::Kind::$t => Ok(Self(value)),
+					_ => $crate::return_error!("Unexpected kind."),
+				}
+			}
+		}
+
+		impl From<Handle> for $crate::Handle {
+			fn from(value: Handle) -> Self {
+				value.0
+			}
+		}
+
+		impl TryFrom<$crate::Handle> for Handle {
+			type Error = $crate::Error;
+
+			fn try_from(value: $crate::Handle) -> Result<Self, Self::Error> {
+				match value.kind() {
+					$crate::Kind::$t => Ok(Self(value)),
+					_ => $crate::return_error!("Unexpected kind."),
+				}
+			}
+		}
+
+		impl From<Value> for $crate::Value {
+			fn from(value: Value) -> Self {
+				$crate::Value::$t(value)
+			}
+		}
+
+		impl Handle {
+			#[must_use]
+			pub fn with_id(id: Id) -> Self {
+				Self($crate::Handle::with_id(id.into()))
+			}
+
+			#[must_use]
+			pub fn with_value(value: Value) -> Self {
+				Self($crate::Handle::with_value(value.into()))
+			}
+
+			#[must_use]
+			pub fn expect_id(&self) -> Id {
+				self.0.expect_id().try_into().unwrap()
+			}
+
+			pub async fn id(&self, client: &$crate::Client) -> $crate::Result<Id> {
+				Ok(self.0.id(client).await?.try_into().unwrap())
+			}
+
+			pub async fn value(&self, client: &$crate::Client) -> $crate::Result<&Value> {
+				match self.0.value(client).await? {
+					$crate::Value::$t(value) => Ok(value),
+					_ => unreachable!(),
+				}
+			}
+		}
+	};
+}

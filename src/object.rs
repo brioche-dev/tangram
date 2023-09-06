@@ -1,6 +1,13 @@
-use crate as tg;
+use crate::any;
 use std::collections::BTreeMap;
 
-pub type Object = BTreeMap<String, tg::Value>;
+crate::id!();
 
-crate::value!(Object);
+crate::kind!(Object);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+pub type Value = BTreeMap<String, any::Handle>;
+
+pub type Data = BTreeMap<String, any::Id>;

@@ -1,15 +1,12 @@
 use super::{
 	lockfile::{self, Lockfile},
-	Dependency, Package, LOCKFILE_FILE_NAME, ROOT_MODULE_FILE_NAME,
+	Dependency, Value, LOCKFILE_FILE_NAME, ROOT_MODULE_FILE_NAME,
 };
 use crate::{
-	artifact::Artifact,
-	blob::Blob,
+	client::Client,
 	directory,
 	error::{Result, WrapErr},
-	file::File,
 	module::{self, Module},
-	server::Server,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -17,10 +14,10 @@ use std::{
 	path::Path,
 };
 
-impl Package {
+impl Value {
 	/// Create a package from a path.
 	#[async_recursion]
-	pub async fn with_path(tg: &Server, package_path: &Path) -> Result<Self> {
+	pub async fn with_path(tg: &Client, package_path: &Path) -> Result<Self> {
 		todo!()
 		// // Create a builder for the directory.
 		// let mut directory = directory::Builder::new();

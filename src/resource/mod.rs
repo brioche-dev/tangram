@@ -1,34 +1,69 @@
-pub use self::{builder::Builder, error::Error};
-use crate::{self as tg, checksum::Checksum};
+pub use self::builder::Builder;
+use crate::checksum::Checksum;
 use url::Url;
 
 mod builder;
 // mod download;
-mod error;
+// mod error;
 pub mod unpack;
 
+crate::id!();
+
+crate::kind!(Resource);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+#[derive(Clone, Debug)]
+pub struct Value {
+	/// The URL to download from.
+	pub url: Url,
+
+	/// The format to unpack the download with.
+	pub unpack: Option<unpack::Format>,
+
+	/// A checksum of the downloaded file.
+	pub checksum: Option<Checksum>,
+
+	/// If this flag is set, then the download will succeed without a checksum.
+	pub unsafe_: bool,
+}
+
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
-pub struct Resource {
+pub struct Data {
 	/// The URL to download from.
 	#[tangram_serialize(id = 0)]
-	url: Url,
+	pub url: Url,
 
 	/// The format to unpack the download with.
 	#[tangram_serialize(id = 1)]
-	unpack: Option<unpack::Format>,
+	pub unpack: Option<unpack::Format>,
 
 	/// A checksum of the downloaded file.
 	#[tangram_serialize(id = 2)]
-	checksum: Option<Checksum>,
+	pub checksum: Option<Checksum>,
 
 	/// If this flag is set, then the download will succeed without a checksum.
 	#[tangram_serialize(id = 3)]
-	unsafe_: bool,
+	pub unsafe_: bool,
 }
 
-crate::value!(Resource);
+impl Value {
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
+		Value {
+			url: data.url,
+			unpack: data.unpack,
+			checksum: data.checksum,
+			unsafe_: data.unsafe_,
+		}
+	}
 
-impl Resource {
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		todo!()
+	}
+
 	#[must_use]
 	pub fn new(
 		url: Url,
@@ -45,7 +80,7 @@ impl Resource {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<tg::Value> {
+	pub fn children(&self) -> Vec<crate::Handle> {
 		vec![]
 	}
 
@@ -67,5 +102,12 @@ impl Resource {
 	#[must_use]
 	pub fn unsafe_(&self) -> bool {
 		self.unsafe_
+	}
+}
+
+impl Data {
+	#[must_use]
+	pub fn children(&self) -> Vec<crate::Id> {
+		vec![]
 	}
 }

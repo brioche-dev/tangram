@@ -1,7 +1,5 @@
 pub use self::error::{Error, Result};
-use crate as tg;
-use crate::error::return_error;
-use crate::Kind;
+use crate::return_error;
 
 mod error;
 // mod run;
@@ -12,7 +10,7 @@ mod error;
 pub struct Value(tg::Value);
 
 #[derive(Clone, Debug)]
-pub enum Build {
+pub enum Kind {
 	/// A resource.
 	Resource(tg::Resource),
 
@@ -25,27 +23,23 @@ pub enum Build {
 
 impl Value {
 	#[must_use]
-	pub fn get(&self) -> Build {
+	pub fn kind(&self) -> Kind {
 		match self.0.kind() {
-			Kind::Target => Build::Target(self.0.clone().try_into().unwrap()),
-			Kind::Task => Build::Task(self.0.clone().try_into().unwrap()),
-			Kind::Resource => Build::Resource(self.0.clone().try_into().unwrap()),
+			crate::Kind::Target => Kind::Target(self.0.clone().try_into().unwrap()),
+			crate::Kind::Task => Kind::Task(self.0.clone().try_into().unwrap()),
+			crate::Kind::Resource => Kind::Resource(self.0.clone().try_into().unwrap()),
 			_ => unreachable!(),
 		}
 	}
-}
 
-impl Value {
 	#[must_use]
 	pub fn as_target(&self) -> Option<tg::Target> {
 		match self.0.kind() {
-			Kind::Target => Some(self.0.clone().try_into().unwrap()),
+			crate::Kind::Target => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
-}
 
-impl Value {
 	#[must_use]
 	pub fn as_task(&self) -> Option<tg::Task> {
 		match self.0.kind() {
@@ -53,9 +47,7 @@ impl Value {
 			_ => None,
 		}
 	}
-}
 
-impl Value {
 	#[must_use]
 	pub fn as_resource(&self) -> Option<tg::Resource> {
 		match self.0.kind() {

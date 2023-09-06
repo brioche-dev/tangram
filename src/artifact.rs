@@ -1,110 +1,121 @@
-use crate::error::Result;
-use crate::{self as tg, Id};
-use crate::{error::return_error, Kind};
+use crate::{directory, file, return_error, symlink, Client, Result};
 
-// mod bundle;
-// pub mod checkin;
-// mod checkout;
-// mod references;
+crate::id!();
 
-/// An artifact.
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
-#[tangram_serialize(into = "tg::Value", try_from = "tg::Value")]
-pub struct Value(tg::Value);
+/// An artifact handle.
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
 
-impl std::ops::Deref for Value {
-	type Target = tg::Value;
+#[derive(Clone, Debug)]
+pub enum Value {
+	/// A directory.
+	Directory(directory::Handle),
 
-	fn deref(&self) -> &Self::Target {
-		&self.0
+	/// A file.
+	File(file::Handle),
+
+	/// A symlink.
+	Symlink(symlink::Handle),
+}
+
+impl Handle {
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self(crate::Handle::with_id(id.into()))
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		self.0.expect_id().try_into().unwrap()
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(self.0.id(client).await?.try_into().unwrap())
+	}
+
+	#[must_use]
+	pub fn value(&self) -> Value {
+		match self.0.kind() {
+			crate::Kind::Directory => Value::Directory(self.0.clone().try_into().unwrap()),
+			crate::Kind::File => Value::File(self.0.clone().try_into().unwrap()),
+			crate::Kind::Symlink => Value::Symlink(self.0.clone().try_into().unwrap()),
+			_ => unreachable!(),
+		}
+	}
+
+	#[must_use]
+	pub fn as_directory(&self) -> Option<directory::Handle> {
+		match self.0.kind() {
+			crate::Kind::Directory => Some(self.0.clone().try_into().unwrap()),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_file(&self) -> Option<file::Handle> {
+		match self.0.kind() {
+			crate::Kind::File => Some(self.0.clone().try_into().unwrap()),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_symlink(&self) -> Option<symlink::Handle> {
+		match self.0.kind() {
+			crate::Kind::Symlink => Some(self.0.clone().try_into().unwrap()),
+			_ => None,
+		}
 	}
 }
 
-#[derive(Clone, Debug)]
-pub enum Artifact {
-	/// A directory.
-	Directory(tg::Directory),
-
-	/// A file.
-	File(tg::File),
-
-	/// A symlink.
-	Symlink(tg::Symlink),
-}
-
-impl From<Value> for tg::Value {
-	fn from(value: Value) -> Self {
+impl From<Id> for crate::Id {
+	fn from(value: Id) -> Self {
 		value.0
 	}
 }
 
-impl TryFrom<tg::Value> for Value {
-	type Error = crate::error::Error;
+impl TryFrom<crate::Id> for Id {
+	type Error = crate::Error;
 
-	fn try_from(value: tg::Value) -> std::result::Result<Self, Self::Error> {
+	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
 		match value.kind() {
-			Kind::Directory | Kind::File | Kind::Symlink => Ok(Self(value)),
+			crate::Kind::Directory | crate::Kind::File | crate::Kind::Symlink => Ok(Self(value)),
+			_ => return_error!("Expected an artifact ID."),
+		}
+	}
+}
+
+impl From<Handle> for crate::Handle {
+	fn from(value: Handle) -> Self {
+		value.0
+	}
+}
+
+impl TryFrom<crate::Handle> for Handle {
+	type Error = crate::Error;
+
+	fn try_from(value: crate::Handle) -> Result<Self, Self::Error> {
+		match value.kind() {
+			crate::Kind::Directory | crate::Kind::File | crate::Kind::Symlink => Ok(Self(value)),
 			_ => return_error!("Expected an artifact value."),
 		}
 	}
 }
 
-impl Value {
-	pub fn with_id(id: Id) -> Result<Self> {
-		tg::Value::with_id(id).try_into()
-	}
-
-	#[must_use]
-	pub fn get(&self) -> Artifact {
-		match self.0.kind() {
-			Kind::Directory => Artifact::Directory(self.0.clone().try_into().unwrap()),
-			Kind::File => Artifact::File(self.0.clone().try_into().unwrap()),
-			Kind::Symlink => Artifact::Symlink(self.0.clone().try_into().unwrap()),
-			_ => unreachable!(),
-		}
-	}
-}
-
-impl Value {
-	#[must_use]
-	pub fn as_directory(&self) -> Option<tg::Directory> {
-		match self.0.kind() {
-			Kind::Directory => Some(self.0.clone().try_into().unwrap()),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_file(&self) -> Option<tg::File> {
-		match self.0.kind() {
-			Kind::File => Some(self.0.clone().try_into().unwrap()),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_symlink(&self) -> Option<tg::Symlink> {
-		match self.0.kind() {
-			Kind::Symlink => Some(self.0.clone().try_into().unwrap()),
-			_ => None,
-		}
-	}
-}
-
-impl From<tg::Directory> for Value {
-	fn from(value: tg::Directory) -> Self {
+impl From<directory::Handle> for Handle {
+	fn from(value: directory::Handle) -> Self {
 		Self(value.into())
 	}
 }
 
-impl From<tg::File> for Value {
-	fn from(value: tg::File) -> Self {
+impl From<file::Handle> for Handle {
+	fn from(value: file::Handle) -> Self {
 		Self(value.into())
 	}
 }
 
-impl From<tg::Symlink> for Value {
-	fn from(value: tg::Symlink) -> Self {
+impl From<symlink::Handle> for Handle {
+	fn from(value: symlink::Handle) -> Self {
 		Self(value.into())
 	}
 }

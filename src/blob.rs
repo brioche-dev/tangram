@@ -1,9 +1,4 @@
-use crate::{
-	self as tg,
-	bytes::Bytes,
-	error::{return_error, Error, Result},
-	server::Server,
-};
+use crate::{blob, bytes::Bytes, return_error, Client, Error, Result};
 use futures::{future::BoxFuture, stream::StreamExt, TryStreamExt};
 use num::ToPrimitive;
 use pin_project::pin_project;
@@ -14,18 +9,29 @@ const MAX_BRANCH_CHILDREN: usize = 1024;
 
 const MAX_LEAF_SIZE: usize = 262_144;
 
-crate::value!(Blob);
+crate::id!();
+
+crate::kind!(Blob);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+#[derive(Clone, Debug)]
+pub enum Value {
+	Branch(Vec<(Handle, u64)>),
+	Leaf(Bytes),
+}
 
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
-pub enum Blob {
+pub enum Data {
 	#[tangram_serialize(id = 0)]
-	Branch(Vec<(tg::Blob, u64)>),
+	Branch(Vec<(Id, u64)>),
 	#[tangram_serialize(id = 1)]
 	Leaf(Bytes),
 }
 
-impl tg::Blob {
-	pub async fn with_reader(tg: &Server, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
+impl Handle {
+	pub async fn with_reader(client: &Client, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
 		let mut leaves = Vec::new();
 		let mut bytes = vec![0u8; MAX_LEAF_SIZE];
 		loop {
@@ -45,8 +51,8 @@ impl tg::Blob {
 
 			// Create, store, and add the leaf.
 			let bytes = Bytes::with_slice(&bytes[..position]);
-			let leaf = tg::Blob::new_leaf(bytes);
-			leaf.store(tg).await?;
+			let leaf = blob::Handle::new_leaf(bytes);
+			leaf.id(client).await?;
 			leaves.push((leaf, size));
 		}
 
@@ -58,7 +64,7 @@ impl tg::Blob {
 					if chunk.len() == MAX_BRANCH_CHILDREN {
 						futures::stream::once(async move {
 							let blob = Self::new(chunk);
-							let size = blob.size(tg).await?;
+							let size = blob.size(client).await?;
 							Ok::<_, Error>((blob, size))
 						})
 						.boxed()
@@ -75,37 +81,37 @@ impl tg::Blob {
 	}
 
 	#[must_use]
-	pub fn new(children: Vec<(tg::Blob, u64)>) -> tg::Blob {
+	pub fn new(children: Vec<(Self, u64)>) -> Self {
 		match children.len() {
-			0 => tg::Blob::empty(),
+			0 => Self::empty(),
 			1 => children.into_iter().next().unwrap().0,
-			_ => tg::Blob::new_branch(children),
+			_ => Self::new_branch(children),
 		}
 	}
 
 	#[must_use]
 	pub fn empty() -> Self {
-		Blob::Leaf(Bytes::empty()).into()
+		Self::with_value(Value::Leaf(Bytes::empty()))
 	}
 
 	#[must_use]
-	pub fn new_branch(children: Vec<(tg::Blob, u64)>) -> Self {
-		Blob::Branch(children).into()
+	pub fn new_branch(children: Vec<(blob::Handle, u64)>) -> Self {
+		Self::with_value(Value::Branch(children))
 	}
 
 	#[must_use]
 	pub fn new_leaf(bytes: Bytes) -> Self {
-		Blob::Leaf(bytes).into()
+		Self::with_value(Value::Leaf(bytes))
 	}
 
-	pub async fn size(&self, tg: &Server) -> Result<u64> {
-		Ok(match self.get(tg).await? {
-			Blob::Branch(children) => children.iter().map(|(_, size)| size).sum(),
-			Blob::Leaf(bytes) => bytes.len().to_u64().unwrap(),
+	pub async fn size(&self, tg: &Client) -> Result<u64> {
+		Ok(match self.value(tg).await? {
+			Value::Branch(children) => children.iter().map(|(_, size)| size).sum(),
+			Value::Leaf(bytes) => bytes.len().to_u64().unwrap(),
 		})
 	}
 
-	pub async fn reader(&self, tg: &Server) -> Result<Reader> {
+	pub async fn reader(&self, tg: &Client) -> Result<Reader> {
 		let size = self.size(tg).await?;
 		Ok(Reader {
 			blob: self.clone(),
@@ -116,29 +122,68 @@ impl tg::Blob {
 		})
 	}
 
-	pub async fn bytes(&self, tg: &Server) -> Result<Vec<u8>> {
+	pub async fn bytes(&self, tg: &Client) -> Result<Vec<u8>> {
 		let mut reader = self.reader(tg).await?;
 		let mut bytes = Vec::new();
 		reader.read_to_end(&mut bytes).await?;
 		Ok(bytes)
 	}
 
-	pub async fn text(&self, tg: &Server) -> Result<String> {
+	pub async fn text(&self, tg: &Client) -> Result<String> {
 		let bytes = self.bytes(tg).await?;
 		let string = String::from_utf8(bytes).map_err(Error::other)?;
 		Ok(string)
 	}
 }
 
-impl Blob {
+impl Value {
 	#[must_use]
-	pub fn children(&self) -> Vec<tg::Value> {
+	pub fn from_data(data: Data) -> Self {
+		match data {
+			blob::Data::Branch(data) => {
+				let value = data
+					.into_iter()
+					.map(|(handle, size)| (blob::Handle::with_id(handle), size))
+					.collect::<Vec<_>>();
+				blob::Value::Branch(value)
+			},
+			blob::Data::Leaf(data) => blob::Value::Leaf(data),
+		}
+	}
+
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		todo!()
+		// let data = match value {
+		// 	blob::Value::Branch(branch) => {
+		// 		let branch = branch
+		// 			.into_iter()
+		// 			.map(|(handle, size)| todo!())
+		// 			.collect::<Vec<_>>();
+		// 		blob::Data::Branch(branch)
+		// 	},
+		// 	blob::Value::Leaf(leaf) => blob::Data::Leaf(leaf.clone()),
+		// };
+	}
+
+	#[must_use]
+	pub fn children(&self) -> Vec<crate::Handle> {
 		match self {
-			Blob::Branch(children) => children
+			Value::Branch(children) => children
 				.iter()
 				.map(|(child, _)| child.clone().into())
 				.collect(),
-			Blob::Leaf(_) => vec![],
+			Value::Leaf(_) => vec![],
+		}
+	}
+}
+
+impl Data {
+	#[must_use]
+	pub fn children(&self) -> Vec<crate::Id> {
+		match self {
+			Data::Branch(children) => children.iter().map(|(child, _)| (*child).into()).collect(),
+			Data::Leaf(_) => vec![],
 		}
 	}
 }
@@ -146,9 +191,9 @@ impl Blob {
 /// A blob reader.
 #[pin_project]
 pub struct Reader {
-	blob: tg::Blob,
+	blob: blob::Handle,
 	size: u64,
-	tg: Server,
+	tg: Client,
 	position: u64,
 	state: State,
 }
@@ -182,8 +227,8 @@ impl AsyncRead for Reader {
 							let mut current_blob = blob.clone();
 							let mut current_blob_position = 0;
 							let bytes = 'outer: loop {
-								match &current_blob.get(&tg).await? {
-									Blob::Branch(children) => {
+								match &current_blob.value(&tg).await? {
+									Value::Branch(children) => {
 										for (child, size) in children {
 											if position < current_blob_position + size {
 												current_blob = child.clone();
@@ -193,7 +238,7 @@ impl AsyncRead for Reader {
 										}
 										return_error!("The position is out of bounds.");
 									},
-									Blob::Leaf(bytes) => {
+									Value::Leaf(bytes) => {
 										if position
 											< current_blob_position + bytes.len().to_u64().unwrap()
 										{

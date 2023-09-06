@@ -1,10 +1,35 @@
+crate::kind!(Placeholder);
+
+crate::id!();
+
+/// A placeholder handle.
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+/// A placeholder value.
+#[derive(Clone, Debug)]
+pub struct Value {
+	pub name: String,
+}
+
+/// Placeholder data.
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
-pub struct Placeholder {
+pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub name: String,
 }
 
-crate::value!(Placeholder);
+impl Value {
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
+		Value { name: data.name }
+	}
+
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		todo!()
+	}
+}
 
 // impl std::fmt::Display for Value {
 // 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

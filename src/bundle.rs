@@ -1,11 +1,6 @@
 use crate::{
-	self as tg,
-	artifact::Artifact,
-	directory,
-	error::{return_error, Error, Result, WrapErr},
-	server::Server,
-	subpath::Subpath,
-	template,
+	artifact::Artifact, directory, return_error, server::Server, subpath::Subpath, template, Error,
+	Result, WrapErr,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesOrdered, TryStreamExt};

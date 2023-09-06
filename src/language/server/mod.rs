@@ -1,5 +1,4 @@
 use crate::{
-	self as tg,
 	error::{return_error, Error, Result, WrapErr},
 	language::Diagnostic,
 };

@@ -1,12 +1,12 @@
-use super::{Component, Template};
+use super::{component, Value};
 use crate::error::Result;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use std::{borrow::Cow, future::Future};
 
-impl Template {
+impl Value {
 	pub fn try_render_sync<'a, F>(&'a self, mut f: F) -> Result<String>
 	where
-		F: (FnMut(&'a Component) -> Result<Cow<'a, str>>) + 'a,
+		F: (FnMut(&'a component::Value) -> Result<Cow<'a, str>>) + 'a,
 	{
 		let mut string = String::new();
 		for component in &self.components {
@@ -17,7 +17,7 @@ impl Template {
 
 	pub async fn try_render<'a, F, Fut>(&'a self, f: F) -> Result<String>
 	where
-		F: FnMut(&'a Component) -> Fut,
+		F: FnMut(&'a component::Value) -> Fut,
 		Fut: Future<Output = Result<Cow<'a, str>>>,
 	{
 		Ok(self

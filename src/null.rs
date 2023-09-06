@@ -1,3 +1,10 @@
-pub type Null = ();
+crate::id!();
 
-crate::value!(Null);
+crate::kind!(Null);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+pub type Value = ();
+
+pub type Data = ();

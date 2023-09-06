@@ -1,5 +1,14 @@
-use crate as tg;
+use crate::any;
 
-pub type Array = Vec<tg::Value>;
+crate::id!();
 
-crate::value!(Array);
+crate::kind!(Array);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+pub type Value = Vec<any::Handle>;
+
+pub type Data = Vec<any::Id>;
+
+pub type Array = Vec<any::Handle>;

@@ -17,8 +17,8 @@ pub enum Error {
 	},
 
 	/// A build error.
-	#[error(transparent)]
-	Build(#[from] crate::build::Error),
+	// #[error(transparent)]
+	// Build(#[from] crate::build::Error),
 
 	/// A language service error.
 	// #[error(transparent)]

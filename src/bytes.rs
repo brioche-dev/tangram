@@ -1,16 +1,25 @@
 #[cfg(feature = "server")]
-use crate::error::{Error, Result, WrapErr};
+use crate::Result;
 use std::ops::Range;
 #[cfg(not(feature = "server"))]
 use std::sync::Arc;
+
+crate::id!();
+
+crate::kind!(Bytes);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+pub type Value = Bytes;
+
+pub type Data = Bytes;
 
 #[derive(Clone, Debug)]
 pub struct Bytes {
 	buffer: Buffer,
 	range: Range<usize>,
 }
-
-crate::value!(Bytes);
 
 impl Bytes {
 	#[must_use]
@@ -154,9 +163,7 @@ impl From<Box<[u8]>> for Buffer {
 			#[cfg(not(feature = "server"))]
 			value.into(),
 			#[cfg(feature = "server")]
-			unsafe {
-				v8::ArrayBuffer::new_backing_store_from_boxed_slice(value).make_shared()
-			},
+			v8::ArrayBuffer::new_backing_store_from_boxed_slice(value).make_shared(),
 		)
 	}
 }
@@ -167,9 +174,7 @@ impl From<Vec<u8>> for Buffer {
 			#[cfg(not(feature = "server"))]
 			value.into(),
 			#[cfg(feature = "server")]
-			unsafe {
-				v8::ArrayBuffer::new_backing_store_from_vec(value).make_shared()
-			},
+			v8::ArrayBuffer::new_backing_store_from_vec(value).make_shared(),
 		)
 	}
 }

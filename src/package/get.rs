@@ -3,7 +3,6 @@ use super::{
 	Package, LOCKFILE_FILE_NAME,
 };
 use crate::{
-	artifact::Artifact,
 	error::{Error, Result, WrapErr},
 	server::Server,
 };

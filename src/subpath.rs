@@ -1,7 +1,34 @@
-use crate::error::{error, Error, Result};
-use crate::relpath::Relpath;
+use crate::{
+	error::{error, Error, Result},
+	relpath::Relpath,
+};
 use itertools::Itertools;
 use std::path::PathBuf;
+
+crate::id!();
+
+crate::kind!(Subpath);
+
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+/// A subpath value.
+pub type Value = Subpath;
+
+/// Subpath data.
+pub type Data = Subpath;
+
+impl Value {
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
+		data
+	}
+
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		self.clone()
+	}
+}
 
 /// A subpath.
 #[derive(
@@ -23,8 +50,6 @@ use std::path::PathBuf;
 pub struct Subpath {
 	pub(crate) components: Vec<String>,
 }
-
-crate::value!(Subpath);
 
 impl Subpath {
 	#[must_use]

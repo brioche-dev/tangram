@@ -1,5 +1,4 @@
-use super::Task;
-use crate::{checksum::Checksum, system::System, template::Template};
+use crate::{checksum::Checksum, system::System};
 use std::collections::BTreeMap;
 
 impl Task {

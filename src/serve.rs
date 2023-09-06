@@ -1,8 +1,4 @@
-use crate::{
-	self as tg,
-	error::{return_error, Error, Result},
-	server::Server,
-};
+use crate::{return_error, Error, Result, Server};
 use futures::{FutureExt, TryStreamExt};
 use http_body_util::BodyExt;
 use itertools::Itertools;
@@ -90,7 +86,7 @@ impl Server {
 		let ["v1", "values", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
 		};
-		let Ok(id) = id.parse::<tg::Id>() else {
+		let Ok(id) = id.parse() else {
 			return Ok(bad_request());
 		};
 
@@ -118,7 +114,7 @@ impl Server {
 		let ["v1", "values", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
 		};
-		let Ok(id) = id.parse::<tg::Id>() else {
+		let Ok(id) = id.parse() else {
 			return Ok(bad_request());
 		};
 
@@ -149,7 +145,7 @@ impl Server {
 		let ["v1", "blocks", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
 		};
-		let Ok(id) = id.parse::<tg::Id>() else {
+		let Ok(id) = id.parse() else {
 			return Ok(bad_request());
 		};
 
@@ -164,48 +160,24 @@ impl Server {
 		let mut bytes = Vec::new();
 		body.read_to_end(&mut bytes).await?;
 
-		todo!()
+		// Put the value.
+		let result = self.try_put_value_bytes(id, &bytes).await?;
 
-		// // Get the missing children.
-		// let missing_children = {
-		// 	let mut missing_children = Vec::new();
-		// 	for id in value.children().await? {
-		// 		let id = id?;
-		// 		if !Block::with_id(id)
-		// 			.try_get_bytes_local(&self.tg)
-		// 			.await?
-		// 			.is_some()
-		// 		{
-		// 			missing_children.push(id);
-		// 		}
-		// 	}
-		// 	missing_children
-		// };
+		// If there are missing children, then return a bad request response.
+		if let Err(missing_children) = result {
+			let body = serde_json::to_vec(&missing_children).map_err(Error::other)?;
+			let response = http::Response::builder()
+				.status(http::StatusCode::BAD_REQUEST)
+				.body(full(body))
+				.unwrap();
+			return Ok(response);
+		}
 
-		// // If there are no missing children, then store the block.
-		// if missing_children.is_empty() {
-		// 	let block = Block::with_id_and_bytes(id, bytes.into())
-		// 		.wrap_err("Failed to create the block.")?;
-		// 	block.store(&self.tg).await?;
-		// }
-
-		// // Determine the outcome.
-		// let outcome = if missing_children.is_empty() {
-		// 	TryPutBlockOutcome::Added
-		// } else {
-		// 	TryPutBlockOutcome::MissingChildren(missing_children)
-		// };
-
-		// // Create the body.
-		// let body = serde_json::to_vec(&outcome).map_err(Error::other)?;
-
-		// // Create the response.
-		// let response = http::Response::builder()
-		// 	.status(http::StatusCode::OK)
-		// 	.body(full(body))
-		// 	.unwrap();
-
-		// Ok(response)
+		// Otherwise, return an ok response.
+		Ok(http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(empty())
+			.unwrap())
 	}
 }
 
@@ -226,6 +198,15 @@ pub fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
 	http_body_util::Full::new(chunk.into())
 		.map_err(|_| unreachable!())
 		.boxed()
+}
+
+/// 200
+#[must_use]
+pub fn ok() -> http::Response<Outgoing> {
+	http::Response::builder()
+		.status(http::StatusCode::OK)
+		.body(empty())
+		.unwrap()
 }
 
 /// 400

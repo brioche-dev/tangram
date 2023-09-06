@@ -4,17 +4,17 @@ use tg::subpath::Subpath;
 
 mod add;
 mod autoenv;
-mod build;
+// mod build;
 // mod check;
 mod checkin;
 mod checkout;
 mod checksum;
-mod clean;
+// mod clean;
 // mod doc;
-mod env;
-mod exec;
+// mod env;
+// mod exec;
 // mod fmt;
-mod get;
+// mod get;
 mod init;
 mod log;
 // mod login;
@@ -25,12 +25,12 @@ mod outdated;
 // mod pull;
 // mod push;
 mod remove;
-mod run;
+// mod run;
 // mod search;
 mod serve;
 mod server;
-mod shell;
-mod test;
+// mod shell;
+// mod test;
 mod tree;
 mod update;
 mod upgrade;
@@ -53,17 +53,17 @@ pub struct Args {
 pub enum Command {
 	Add(self::add::Args),
 	Autoenv(self::autoenv::Args),
-	Build(self::build::Args),
+	// Build(self::build::Args),
 	// Check(self::check::Args),
 	Checkin(self::checkin::Args),
 	Checkout(self::checkout::Args),
 	Checksum(self::checksum::Args),
-	Clean(self::clean::Args),
+	// Clean(self::clean::Args),
 	// Doc(self::doc::Args),
-	Env(self::env::Args),
-	Exec(self::exec::Args),
+	// Env(self::env::Args),
+	// Exec(self::exec::Args),
 	// Fmt(self::fmt::Args),
-	Get(self::get::Args),
+	// Get(self::get::Args),
 	Init(self::init::Args),
 	Log(self::log::Args),
 	// Login(self::login::Args),
@@ -74,11 +74,11 @@ pub enum Command {
 	// Pull(self::pull::Args),
 	// Push(self::push::Args),
 	Remove(self::remove::Args),
-	Run(self::run::Args),
+	// Run(self::run::Args),
 	// Search(self::search::Args),
 	Serve(self::serve::Args),
-	Shell(self::shell::Args),
-	Test(self::test::Args),
+	// Shell(self::shell::Args),
+	// Test(self::test::Args),
 	Tree(self::tree::Args),
 	Update(self::update::Args),
 	Upgrade(self::upgrade::Args),
@@ -108,17 +108,17 @@ impl Cli {
 		match args.command {
 			Command::Add(args) => self.command_add(args).boxed(),
 			Command::Autoenv(args) => self.command_autoenv(args).boxed(),
-			Command::Build(args) => self.command_build(args).boxed(),
+			// Command::Build(args) => self.command_build(args).boxed(),
 			// Command::Check(args) => self.command_check(args).boxed(),
 			Command::Checkin(args) => self.command_checkin(args).boxed(),
 			Command::Checkout(args) => self.command_checkout(args).boxed(),
 			Command::Checksum(args) => self.command_checksum(args).boxed(),
-			Command::Clean(args) => self.command_clean(args).boxed(),
+			// Command::Clean(args) => self.command_clean(args).boxed(),
 			// Command::Doc(args) => self.command_doc(args).boxed(),
-			Command::Env(args) => self.command_env(args).boxed(),
-			Command::Exec(args) => self.command_exec(args).boxed(),
+			// Command::Env(args) => self.command_env(args).boxed(),
+			// Command::Exec(args) => self.command_exec(args).boxed(),
 			// Command::Fmt(args) => self.command_fmt(args).boxed(),
-			Command::Get(args) => self.command_get(args).boxed(),
+			// Command::Get(args) => self.command_get(args).boxed(),
 			Command::Init(args) => self.command_init(args).boxed(),
 			Command::Log(args) => self.command_log(args).boxed(),
 			// Command::Login(args) => self.command_login(args).boxed(),
@@ -129,11 +129,11 @@ impl Cli {
 			// Command::Pull(args) => self.command_pull(args).boxed(),
 			// Command::Push(args) => self.command_push(args).boxed(),
 			Command::Remove(args) => self.command_remove(args).boxed(),
-			Command::Run(args) => self.command_run(args).boxed(),
+			// Command::Run(args) => self.command_run(args).boxed(),
 			// Command::Search(args) => self.command_search(args).boxed(),
 			Command::Serve(args) => self.command_serve(args).boxed(),
-			Command::Shell(args) => self.command_shell(args).boxed(),
-			Command::Test(args) => self.command_test(args).boxed(),
+			// Command::Shell(args) => self.command_shell(args).boxed(),
+			// Command::Test(args) => self.command_test(args).boxed(),
 			Command::Tree(args) => self.command_tree(args).boxed(),
 			Command::Update(args) => self.command_update(args).boxed(),
 			Command::Upgrade(args) => self.command_upgrade(args).boxed(),

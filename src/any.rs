@@ -1,115 +1,126 @@
-use crate::{
-	self as tg,
-	error::{Error, Result},
-	Id, Kind,
-};
+use crate::{Client, Error, Result};
 
-#[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
-#[tangram_serialize(into = "tg::Value", try_from = "tg::Value")]
-pub struct Value(tg::Value);
+crate::id!();
 
-pub enum Any {
-	Null(tg::Null),
-	Bool(tg::Bool),
-	Number(tg::Number),
-	String(tg::String),
-	Bytes(tg::Bytes),
-	Relpath(tg::Relpath),
-	Subpath(tg::Subpath),
-	Blob(tg::Blob),
-	Directory(tg::Directory),
-	File(tg::File),
-	Symlink(tg::Symlink),
-	Placeholder(tg::Placeholder),
-	Template(tg::Subpath),
-	Package(tg::Package),
-	Resource(tg::Resource),
-	Target(tg::Target),
-	Task(tg::Task),
-	Array(tg::Array),
-	Object(tg::Object),
+#[derive(Clone, Debug)]
+pub struct Handle(crate::Handle);
+
+#[derive(Clone, Debug)]
+pub enum Value {
+	Null(crate::Null),
+	Bool(crate::Bool),
+	Number(crate::Number),
+	String(crate::String),
+	Bytes(crate::Bytes),
+	Relpath(crate::Relpath),
+	Subpath(crate::Subpath),
+	Blob(crate::Blob),
+	Directory(crate::Directory),
+	File(crate::File),
+	Symlink(crate::Symlink),
+	Placeholder(crate::Placeholder),
+	Template(crate::Subpath),
+	Package(crate::Package),
+	Resource(crate::Resource),
+	Target(crate::Target),
+	Task(crate::Task),
+	Array(crate::Array),
+	Object(crate::Object),
 }
 
-impl std::ops::Deref for Value {
-	type Target = tg::Value;
+impl Handle {
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self(crate::Handle::with_id(id.into()))
+	}
 
-	fn deref(&self) -> &Self::Target {
-		&self.0
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		self.0.expect_id().try_into().unwrap()
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(self.0.id(client).await?.try_into().unwrap())
+	}
+
+	#[must_use]
+	pub fn value(&self) -> Value {
+		match self.0.kind() {
+			crate::Kind::Null => Value::Null(self.0.clone().try_into().unwrap()),
+			crate::Kind::Bool => Value::Bool(self.0.clone().try_into().unwrap()),
+			crate::Kind::Number => Value::Number(self.0.clone().try_into().unwrap()),
+			crate::Kind::String => Value::String(self.0.clone().try_into().unwrap()),
+			crate::Kind::Bytes => Value::Bytes(self.0.clone().try_into().unwrap()),
+			crate::Kind::Relpath => Value::Relpath(self.0.clone().try_into().unwrap()),
+			crate::Kind::Subpath => Value::Subpath(self.0.clone().try_into().unwrap()),
+			crate::Kind::Blob => Value::Blob(self.0.clone().try_into().unwrap()),
+			crate::Kind::Directory => Value::Directory(self.0.clone().try_into().unwrap()),
+			crate::Kind::File => Value::File(self.0.clone().try_into().unwrap()),
+			crate::Kind::Symlink => Value::Symlink(self.0.clone().try_into().unwrap()),
+			crate::Kind::Placeholder => Value::Placeholder(self.0.clone().try_into().unwrap()),
+			crate::Kind::Template => Value::Template(self.0.clone().try_into().unwrap()),
+			crate::Kind::Package => Value::Package(self.0.clone().try_into().unwrap()),
+			crate::Kind::Resource => Value::Resource(self.0.clone().try_into().unwrap()),
+			crate::Kind::Target => Value::Target(self.0.clone().try_into().unwrap()),
+			crate::Kind::Task => Value::Task(self.0.clone().try_into().unwrap()),
+			crate::Kind::Array => Value::Array(self.0.clone().try_into().unwrap()),
+			crate::Kind::Object => Value::Object(self.0.clone().try_into().unwrap()),
+		}
 	}
 }
 
-impl From<Value> for tg::Value {
-	fn from(value: Value) -> Self {
+impl From<Id> for crate::Id {
+	fn from(value: Id) -> Self {
 		value.0
 	}
 }
 
-impl TryFrom<tg::Value> for Value {
-	type Error = Error;
+impl TryFrom<crate::Id> for Id {
+	type Error = crate::Error;
 
-	fn try_from(value: tg::Value) -> Result<Self, Self::Error> {
+	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
 		Ok(Self(value))
 	}
 }
 
-impl tg::Any {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		tg::Value::with_id(id).try_into().unwrap()
+impl From<Handle> for crate::Handle {
+	fn from(value: Handle) -> Self {
+		value.0
+	}
+}
+
+impl TryFrom<crate::Handle> for Handle {
+	type Error = Error;
+
+	fn try_from(value: crate::Handle) -> Result<Self, Self::Error> {
+		Ok(Self(value))
 	}
 }
 
 macro_rules! impls {
 	($t:ty) => {
-		impl From<$t> for tg::Any {
+		impl From<$t> for Handle {
 			fn from(value: $t) -> Self {
 				Self(value.into())
 			}
 		}
 
-		impl TryFrom<tg::Any> for $t {
+		impl TryFrom<Handle> for $t {
 			type Error = Error;
 
-			fn try_from(value: tg::Any) -> Result<Self> {
+			fn try_from(value: Handle) -> Result<Self> {
 				value.0.try_into()
 			}
 		}
 	};
 }
 
-impls!(tg::Null);
-impls!(tg::Bool);
-impls!(tg::Number);
-impls!(tg::String);
-impls!(tg::Bytes);
-impls!(tg::Relpath);
-impls!(tg::Subpath);
-impls!(tg::Array);
-impls!(tg::Object);
-
-impl tg::Any {
-	#[must_use]
-	pub fn get(&self) -> Any {
-		match self.0.kind() {
-			Kind::Null => Any::Null(self.0.clone().try_into().unwrap()),
-			Kind::Bool => Any::Bool(self.0.clone().try_into().unwrap()),
-			Kind::Number => Any::Number(self.0.clone().try_into().unwrap()),
-			Kind::String => Any::String(self.0.clone().try_into().unwrap()),
-			Kind::Bytes => Any::Bytes(self.0.clone().try_into().unwrap()),
-			Kind::Relpath => Any::Relpath(self.0.clone().try_into().unwrap()),
-			Kind::Subpath => Any::Subpath(self.0.clone().try_into().unwrap()),
-			Kind::Blob => Any::Blob(self.0.clone().try_into().unwrap()),
-			Kind::Directory => Any::Directory(self.0.clone().try_into().unwrap()),
-			Kind::File => Any::File(self.0.clone().try_into().unwrap()),
-			Kind::Symlink => Any::Symlink(self.0.clone().try_into().unwrap()),
-			Kind::Placeholder => Any::Placeholder(self.0.clone().try_into().unwrap()),
-			Kind::Template => Any::Template(self.0.clone().try_into().unwrap()),
-			Kind::Package => Any::Package(self.0.clone().try_into().unwrap()),
-			Kind::Resource => Any::Resource(self.0.clone().try_into().unwrap()),
-			Kind::Target => Any::Target(self.0.clone().try_into().unwrap()),
-			Kind::Task => Any::Task(self.0.clone().try_into().unwrap()),
-			Kind::Array => Any::Array(self.0.clone().try_into().unwrap()),
-			Kind::Object => Any::Object(self.0.clone().try_into().unwrap()),
-		}
-	}
-}
+impls!(crate::null::Handle);
+impls!(crate::bool::Handle);
+impls!(crate::number::Handle);
+impls!(crate::string::Handle);
+impls!(crate::bytes::Handle);
+impls!(crate::relpath::Handle);
+impls!(crate::subpath::Handle);
+impls!(crate::array::Handle);
+impls!(crate::object::Handle);

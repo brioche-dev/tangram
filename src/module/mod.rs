@@ -3,6 +3,7 @@ pub use crate::document::Document;
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	id::Id,
+	package,
 	subpath::Subpath,
 };
 use url::Url;
@@ -49,7 +50,7 @@ pub struct Library {
 #[serde(rename_all = "camelCase")]
 pub struct Normal {
 	/// The module's package.
-	pub package: Id,
+	pub package: package::Id,
 
 	/// The module's path.
 	pub path: Subpath,

@@ -11,9 +11,9 @@ pub const SIZE: usize = 32;
 	Clone,
 	Copy,
 	Eq,
+	Ord,
 	From,
 	Into,
-	Ord,
 	PartialEq,
 	PartialOrd,
 	serde::Deserialize,
@@ -31,12 +31,12 @@ impl Id {
 		let hash = blake3::hash(data);
 		let mut bytes = *hash.as_bytes();
 		bytes[0] = kind.into();
-		Id(bytes)
+		Self(bytes)
 	}
 
 	pub fn with_bytes(bytes: [u8; SIZE]) -> Result<Self> {
 		Kind::try_from(bytes[0]).wrap_err("Invalid kind.")?;
-		Ok(Id(bytes))
+		Ok(Self(bytes))
 	}
 
 	#[must_use]
@@ -68,10 +68,10 @@ impl std::fmt::Display for Id {
 impl std::str::FromStr for Id {
 	type Err = Error;
 
-	fn from_str(s: &str) -> Result<Id, Error> {
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		use hex::FromHex;
 		let bytes = <_>::from_hex(s).map_err(Error::other)?;
-		let id = Id::with_bytes(bytes)?;
+		let id = Self::with_bytes(bytes)?;
 		Ok(id)
 	}
 }
@@ -113,3 +113,45 @@ impl std::hash::Hasher for Hasher {
 }
 
 pub type BuildHasher = std::hash::BuildHasherDefault<Hasher>;
+
+#[macro_export]
+macro_rules! id {
+	() => {
+		#[derive(
+			Clone,
+			Copy,
+			Debug,
+			Eq,
+			Ord,
+			PartialEq,
+			PartialOrd,
+			serde::Deserialize,
+			serde::Serialize,
+			tangram_serialize::Deserialize,
+			tangram_serialize::Serialize,
+		)]
+		#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
+		pub struct Id($crate::Id);
+
+		impl std::hash::Hash for Id {
+			fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+				std::hash::Hash::hash(&self.0, state);
+			}
+		}
+
+		impl std::fmt::Display for Id {
+			fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+				write!(f, "{}", self.0)?;
+				Ok(())
+			}
+		}
+
+		impl std::str::FromStr for Id {
+			type Err = $crate::Error;
+
+			fn from_str(s: &str) -> Result<Self, Self::Err> {
+				Ok(Self($crate::Id::from_str(s)?))
+			}
+		}
+	};
+}

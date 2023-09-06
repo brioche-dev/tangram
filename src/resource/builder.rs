@@ -1,8 +1,8 @@
-use super::{unpack, Resource};
+use super::{unpack, Value};
 use crate::checksum::Checksum;
 use url::Url;
 
-impl Resource {
+impl Value {
 	#[must_use]
 	pub fn builder(url: Url) -> Builder {
 		Builder::new(url)
@@ -46,7 +46,7 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn build(self) -> Resource {
-		Resource::new(self.url, self.unpack, self.checksum, self.unsafe_)
+	pub fn build(self) -> Value {
+		Value::new(self.url, self.unpack, self.checksum, self.unsafe_)
 	}
 }
