@@ -8,15 +8,18 @@ impl Server {
 	#[allow(clippy::similar_names)]
 	pub async fn rename(&self, params: lsp::RenameParams) -> Result<Option<lsp::WorkspaceEdit>> {
 		// Get the module.
-		let module =
-			Module::from_lsp(&self.tg, params.text_document_position.text_document.uri).await?;
+		let module = Module::from_lsp(
+			&self.server,
+			params.text_document_position.text_document.uri,
+		)
+		.await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
 		let new_text = &params.new_name;
 
 		// Get the references.
-		let locations = module.rename(&self.tg, position.into()).await?;
+		let locations = module.rename(&self.server, position.into()).await?;
 
 		// If there are no references, then return None.
 		let Some(locations) = locations else {
@@ -27,7 +30,7 @@ impl Server {
 		let mut document_changes = HashMap::<Url, lsp::TextDocumentEdit>::new();
 		for location in locations {
 			// Get the version.
-			let version = location.module.version(&self.tg).await?;
+			let version = location.module.version(&self.server).await?;
 
 			// Create the URI.
 			let uri = location.module.to_lsp();

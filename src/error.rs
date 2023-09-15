@@ -17,12 +17,12 @@ pub enum Error {
 	},
 
 	/// A build error.
-	// #[error(transparent)]
-	// Build(#[from] crate::build::Error),
+	#[error(transparent)]
+	Evaluation(#[from] crate::evaluation::Error),
 
 	/// A language service error.
-	// #[error(transparent)]
-	// LanguageService(#[from] crate::language::service::error::Error),
+	#[error(transparent)]
+	LanguageService(#[from] crate::language::service::error::Error),
 
 	/// Any other error.
 	#[error("{message}")]

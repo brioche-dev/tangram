@@ -18,15 +18,15 @@ pub struct Args {
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = tg::Package::with_specifier(&self.tg, args.package)
+		let package = tg::Package::with_specifier(&self.client, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
 		// Get the root module.
-		let root_module = package.root_module();
+		let root_module = package.root_module(&self.client).await?;
 
 		// Check the package for diagnostics.
-		let diagnostics = tg::Module::check(&self.tg, vec![root_module]).await?;
+		let diagnostics = tg::Module::check(&self.client, vec![root_module]).await?;
 
 		// Print the diagnostics.
 		for diagnostic in &diagnostics {

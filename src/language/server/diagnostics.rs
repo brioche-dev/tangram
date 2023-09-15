@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 impl Server {
 	pub async fn update_diagnostics(&self, sender: &Sender) -> Result<()> {
 		// Get the diagnostics.
-		let diagnostics = Module::diagnostics(&self.tg).await?;
+		let diagnostics = Module::diagnostics(&self.server).await?;
 
 		// Clear the existing diagnostics.
 		let mut existing_diagnostics = self.diagnostics.write().await;
@@ -31,7 +31,7 @@ impl Server {
 
 		// Publish the diagnostics.
 		for (module, diagnostics) in diagnostics_for_module {
-			let version = Some(module.version(&self.tg).await?);
+			let version = Some(module.version(&self.server).await?);
 			let diagnostics = diagnostics.into_iter().map(Into::into).collect();
 			send_notification::<lsp::notification::PublishDiagnostics>(
 				sender,

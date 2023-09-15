@@ -1,14 +1,14 @@
-use crate::any;
-
-crate::id!();
-
-crate::kind!(Array);
+crate::id!(Array);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
 
-pub type Value = Vec<any::Handle>;
+crate::handle!(Array);
 
-pub type Data = Vec<any::Id>;
+pub type Value = Vec<crate::Handle>;
 
-pub type Array = Vec<any::Handle>;
+crate::value!(Array);
+
+pub type Data = Vec<crate::Id>;
+
+pub type Array = Vec<crate::Handle>;

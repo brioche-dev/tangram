@@ -6,7 +6,7 @@ impl Server {
 	pub async fn hover(&self, params: lsp::HoverParams) -> Result<Option<lsp::Hover>> {
 		// Get the module.
 		let module = Module::from_lsp(
-			&self.tg,
+			&self.server,
 			params.text_document_position_params.text_document.uri,
 		)
 		.await?;
@@ -15,7 +15,7 @@ impl Server {
 		let position = params.text_document_position_params.position;
 
 		// Get the hover info.
-		let hover = module.hover(&self.tg, position.into()).await?;
+		let hover = module.hover(&self.server, position.into()).await?;
 		let Some(hover) = hover else {
 			return Ok(None);
 		};

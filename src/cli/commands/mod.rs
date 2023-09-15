@@ -4,7 +4,7 @@ use tg::subpath::Subpath;
 
 mod add;
 mod autoenv;
-// mod build;
+mod build;
 // mod check;
 mod checkin;
 mod checkout;
@@ -14,7 +14,7 @@ mod checksum;
 // mod env;
 // mod exec;
 // mod fmt;
-// mod get;
+mod get;
 mod init;
 mod log;
 // mod login;
@@ -53,7 +53,7 @@ pub struct Args {
 pub enum Command {
 	Add(self::add::Args),
 	Autoenv(self::autoenv::Args),
-	// Build(self::build::Args),
+	Build(self::build::Args),
 	// Check(self::check::Args),
 	Checkin(self::checkin::Args),
 	Checkout(self::checkout::Args),
@@ -63,7 +63,7 @@ pub enum Command {
 	// Env(self::env::Args),
 	// Exec(self::exec::Args),
 	// Fmt(self::fmt::Args),
-	// Get(self::get::Args),
+	Get(self::get::Args),
 	Init(self::init::Args),
 	Log(self::log::Args),
 	// Login(self::login::Args),
@@ -87,9 +87,9 @@ pub enum Command {
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct PackageArgs {
-	// /// If this flag is set, the package's lockfile will not be updated before building.
-	// #[arg(long)]
-	// pub locked: bool,
+	/// If this flag is set, the package's lockfile will not be updated before building.
+	#[arg(long)]
+	pub locked: bool,
 }
 
 #[derive(Debug, clap::Args)]
@@ -108,7 +108,7 @@ impl Cli {
 		match args.command {
 			Command::Add(args) => self.command_add(args).boxed(),
 			Command::Autoenv(args) => self.command_autoenv(args).boxed(),
-			// Command::Build(args) => self.command_build(args).boxed(),
+			Command::Build(args) => self.command_build(args).boxed(),
 			// Command::Check(args) => self.command_check(args).boxed(),
 			Command::Checkin(args) => self.command_checkin(args).boxed(),
 			Command::Checkout(args) => self.command_checkout(args).boxed(),
@@ -118,7 +118,7 @@ impl Cli {
 			// Command::Env(args) => self.command_env(args).boxed(),
 			// Command::Exec(args) => self.command_exec(args).boxed(),
 			// Command::Fmt(args) => self.command_fmt(args).boxed(),
-			// Command::Get(args) => self.command_get(args).boxed(),
+			Command::Get(args) => self.command_get(args).boxed(),
 			Command::Init(args) => self.command_init(args).boxed(),
 			Command::Log(args) => self.command_log(args).boxed(),
 			// Command::Login(args) => self.command_login(args).boxed(),

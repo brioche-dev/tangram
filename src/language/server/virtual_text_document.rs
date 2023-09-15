@@ -19,10 +19,10 @@ pub struct Params {
 impl Server {
 	pub async fn virtual_text_document(&self, params: Params) -> Result<Option<String>> {
 		// Get the module.
-		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
+		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
 
 		// Load the file.
-		let text = module.load(&self.tg).await?;
+		let text = module.load(&self.server).await?;
 
 		Ok(Some(text))
 	}

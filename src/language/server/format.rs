@@ -8,16 +8,16 @@ impl Server {
 		params: lsp::DocumentFormattingParams,
 	) -> Result<Option<Vec<lsp::TextEdit>>> {
 		// Get the module.
-		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
+		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
 
 		// Load the module.
-		let text = module.load(&self.tg).await?;
+		let text = module.load(&self.server).await?;
 
 		// Get the text range.
 		let range = Range::from_byte_range_in_string(&text, 0..text.len());
 
 		// Format the text.
-		let formatted_text = Module::format(&self.tg, text).await?;
+		let formatted_text = Module::format(&self.server, text).await?;
 
 		// Create the edit.
 		let edit = lsp::TextEdit {

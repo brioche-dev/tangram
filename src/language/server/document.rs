@@ -9,13 +9,13 @@ impl Server {
 		params: lsp::DidOpenTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
+		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
 
 		// Open the document.
 		if let Module::Document(document) = module {
 			let version = params.text_document.version;
 			let text = params.text_document.text;
-			document.open(&self.tg, version, text).await?;
+			document.open(&self.server, version, text).await?;
 		}
 
 		// Update all diagnostics.
@@ -30,14 +30,14 @@ impl Server {
 		params: lsp::DidChangeTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
+		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
 
 		if let Module::Document(document) = module {
 			// Apply the changes.
 			for change in params.content_changes {
 				document
 					.update(
-						&self.tg,
+						&self.server,
 						change.range.map(Into::into),
 						params.text_document.version,
 						change.text,
@@ -58,11 +58,11 @@ impl Server {
 		params: lsp::DidCloseTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
+		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
 
 		if let Module::Document(document) = module {
 			// Close the document.
-			document.close(&self.tg).await?;
+			document.close(&self.server).await?;
 		}
 
 		// Update all diagnostics.

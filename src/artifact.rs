@@ -1,4 +1,6 @@
-use crate::{directory, file, return_error, symlink, Client, Result};
+use crate::{directory, file, id, return_error, symlink, Client, Error, Kind, Result};
+use futures::stream::{FuturesUnordered, TryStreamExt};
+use std::collections::{HashSet, VecDeque};
 
 crate::id!();
 
@@ -6,8 +8,9 @@ crate::id!();
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
 
+/// An artifact variant.
 #[derive(Clone, Debug)]
-pub enum Value {
+pub enum Variant {
 	/// A directory.
 	Directory(directory::Handle),
 
@@ -34,19 +37,78 @@ impl Handle {
 	}
 
 	#[must_use]
-	pub fn value(&self) -> Value {
+	pub fn variant(&self) -> Variant {
 		match self.0.kind() {
-			crate::Kind::Directory => Value::Directory(self.0.clone().try_into().unwrap()),
-			crate::Kind::File => Value::File(self.0.clone().try_into().unwrap()),
-			crate::Kind::Symlink => Value::Symlink(self.0.clone().try_into().unwrap()),
+			Kind::Directory => Variant::Directory(self.0.clone().try_into().unwrap()),
+			Kind::File => Variant::File(self.0.clone().try_into().unwrap()),
+			Kind::Symlink => Variant::Symlink(self.0.clone().try_into().unwrap()),
 			_ => unreachable!(),
 		}
+	}
+
+	/// Collect an artifact's recursive references.
+	pub async fn recursive_references(
+		&self,
+		client: &Client,
+	) -> Result<HashSet<Id, id::BuildHasher>> {
+		// Store the handle.
+		self.0.store(client).await?;
+
+		// Create a queue of artifacts and a set of futures.
+		let mut references = HashSet::default();
+		let mut queue = VecDeque::new();
+		let mut futures = FuturesUnordered::new();
+		queue.push_back(self.clone());
+
+		while let Some(artifact) = queue.pop_front() {
+			// Add a request for the artifact's references to the futures.
+			futures.push(async move {
+				Ok::<Vec<Handle>, Error>(match artifact.variant() {
+					Variant::Directory(directory) => {
+						directory.entries(client).await?.values().cloned().collect()
+					},
+					Variant::File(file) => file
+						.references(client)
+						.await?
+						.into_iter()
+						.cloned()
+						.collect(),
+					Variant::Symlink(symlink) => symlink
+						.target(client)
+						.await?
+						.value(client)
+						.await?
+						.artifacts()
+						.cloned()
+						.collect(),
+				})
+			});
+
+			// If the queue is empty, then get more artifacts from the futures.
+			if queue.is_empty() {
+				// Get more artifacts from the futures.
+				if let Some(artifacts) = futures.try_next().await? {
+					// Handle each artifact.
+					for artifact in artifacts {
+						// Insert the artifact into the set of references.
+						let inserted = references.insert(artifact.expect_id());
+
+						// If the artifact was new, then add it to the queue.
+						if inserted {
+							queue.push_back(artifact);
+						}
+					}
+				}
+			}
+		}
+
+		Ok(references)
 	}
 
 	#[must_use]
 	pub fn as_directory(&self) -> Option<directory::Handle> {
 		match self.0.kind() {
-			crate::Kind::Directory => Some(self.0.clone().try_into().unwrap()),
+			Kind::Directory => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -54,7 +116,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_file(&self) -> Option<file::Handle> {
 		match self.0.kind() {
-			crate::Kind::File => Some(self.0.clone().try_into().unwrap()),
+			Kind::File => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -62,7 +124,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_symlink(&self) -> Option<symlink::Handle> {
 		match self.0.kind() {
-			crate::Kind::Symlink => Some(self.0.clone().try_into().unwrap()),
+			Kind::Symlink => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -79,7 +141,7 @@ impl TryFrom<crate::Id> for Id {
 
 	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
 		match value.kind() {
-			crate::Kind::Directory | crate::Kind::File | crate::Kind::Symlink => Ok(Self(value)),
+			Kind::Directory | Kind::File | Kind::Symlink => Ok(Self(value)),
 			_ => return_error!("Expected an artifact ID."),
 		}
 	}
@@ -96,7 +158,7 @@ impl TryFrom<crate::Handle> for Handle {
 
 	fn try_from(value: crate::Handle) -> Result<Self, Self::Error> {
 		match value.kind() {
-			crate::Kind::Directory | crate::Kind::File | crate::Kind::Symlink => Ok(Self(value)),
+			Kind::Directory | Kind::File | Kind::Symlink => Ok(Self(value)),
 			_ => return_error!("Expected an artifact value."),
 		}
 	}
@@ -119,57 +181,3 @@ impl From<symlink::Handle> for Handle {
 		Self(value.into())
 	}
 }
-
-// use super::Artifact;
-// use crate::{error::Result, id::Id, server::Server};
-// use async_recursion::async_recursion;
-// use futures::stream::{FuturesUnordered, TryStreamExt};
-// use std::collections::{HashSet, VecDeque};
-
-// impl Artifact {
-// 	/// Collect an artifact's references.
-// 	#[async_recursion]
-// 	pub async fn references(&self, tg: &Server) -> Result<HashSet<Id, fnv::FnvBuildHasher>> {
-// 		match self {
-// 			Artifact::Directory(directory) => directory.references(tg).await,
-// 			Artifact::File(file) => file.references(tg).await,
-// 			Artifact::Symlink(symlink) => Ok(symlink.references()),
-// 		}
-// 	}
-
-// 	/// Collect an artifact's recursive references.
-// 	pub async fn recursive_references(
-// 		&self,
-// 		tg: &Server,
-// 	) -> Result<HashSet<Id, fnv::FnvBuildHasher>> {
-// 		// Create a queue of artifacts and a set of futures.
-// 		let mut references = HashSet::default();
-// 		let mut queue = VecDeque::new();
-// 		let mut futures = FuturesUnordered::new();
-// 		queue.push_back(self.clone());
-
-// 		while let Some(artifact) = queue.pop_front() {
-// 			// Add a request for the artifact's references to the futures.
-// 			futures.push(async move { artifact.references(tg).await });
-
-// 			// If the queue is empty, then get more artifacts from the futures.
-// 			if queue.is_empty() {
-// 				// Get more artifacts from the futures.
-// 				if let Some(artifacts) = futures.try_next().await? {
-// 					// Handle each artifact.
-// 					for artifact in artifacts {
-// 						// Insert the artifact into the set of references.
-// 						let inserted = references.insert(artifact.clone());
-
-// 						// If the artifact was new, then add it to the queue.
-// 						if inserted {
-// 							queue.push_back(artifact);
-// 						}
-// 					}
-// 				}
-// 			}
-// 		}
-
-// 		Ok(references)
-// 	}
-// }

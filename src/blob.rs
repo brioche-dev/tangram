@@ -9,18 +9,20 @@ const MAX_BRANCH_CHILDREN: usize = 1024;
 
 const MAX_LEAF_SIZE: usize = 262_144;
 
-crate::id!();
-
-crate::kind!(Blob);
+crate::id!(Blob);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
+
+crate::handle!(Blob);
 
 #[derive(Clone, Debug)]
 pub enum Value {
 	Branch(Vec<(Handle, u64)>),
 	Leaf(Bytes),
 }
+
+crate::value!(Blob);
 
 #[derive(
 	Clone,
@@ -112,33 +114,33 @@ impl Handle {
 		Self::with_value(Value::Leaf(bytes))
 	}
 
-	pub async fn size(&self, tg: &Client) -> Result<u64> {
-		Ok(match self.value(tg).await? {
+	pub async fn size(&self, client: &Client) -> Result<u64> {
+		Ok(match self.value(client).await? {
 			Value::Branch(children) => children.iter().map(|(_, size)| size).sum(),
 			Value::Leaf(bytes) => bytes.len().to_u64().unwrap(),
 		})
 	}
 
-	pub async fn reader(&self, tg: &Client) -> Result<Reader> {
-		let size = self.size(tg).await?;
+	pub async fn reader(&self, client: &Client) -> Result<Reader> {
+		let size = self.size(client).await?;
 		Ok(Reader {
 			blob: self.clone(),
 			size,
-			tg: tg.clone(),
+			client: client.clone(),
 			position: 0,
 			state: State::Empty,
 		})
 	}
 
-	pub async fn bytes(&self, tg: &Client) -> Result<Vec<u8>> {
-		let mut reader = self.reader(tg).await?;
+	pub async fn bytes(&self, client: &Client) -> Result<Vec<u8>> {
+		let mut reader = self.reader(client).await?;
 		let mut bytes = Vec::new();
 		reader.read_to_end(&mut bytes).await?;
 		Ok(bytes)
 	}
 
-	pub async fn text(&self, tg: &Client) -> Result<String> {
-		let bytes = self.bytes(tg).await?;
+	pub async fn text(&self, client: &Client) -> Result<String> {
+		let bytes = self.bytes(client).await?;
 		let string = String::from_utf8(bytes).map_err(Error::other)?;
 		Ok(string)
 	}
@@ -196,9 +198,9 @@ impl Data {
 #[pin_project]
 pub struct Reader {
 	blob: blob::Handle,
-	size: u64,
-	tg: Client,
+	client: Client,
 	position: u64,
+	size: u64,
 	state: State,
 }
 
@@ -225,13 +227,13 @@ impl AsyncRead for Reader {
 					}
 					let future = {
 						let blob = this.blob.clone();
-						let tg = this.tg.clone();
+						let client = this.client.clone();
 						let position = *this.position;
 						async move {
 							let mut current_blob = blob.clone();
 							let mut current_blob_position = 0;
 							let bytes = 'outer: loop {
-								match &current_blob.value(&tg).await? {
+								match &current_blob.value(&client).await? {
 									Value::Branch(children) => {
 										for (child, size) in children {
 											if position < current_blob_position + size {

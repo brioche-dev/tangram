@@ -3,20 +3,23 @@ use crate::{
 	subpath::{self, Subpath},
 	Client, Error, Result, WrapErr,
 };
+use async_recursion::async_recursion;
 use std::collections::BTreeMap;
 
-crate::id!();
-
-crate::kind!(Directory);
+crate::id!(Directory);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
+
+crate::handle!(Directory);
 
 #[derive(Clone, Debug)]
 pub struct Value {
 	/// The directory's entries.
 	pub entries: BTreeMap<String, artifact::Handle>,
 }
+
+crate::value!(Directory);
 
 #[derive(
 	Clone,
@@ -38,23 +41,30 @@ impl Handle {
 		Self::with_value(Value { entries })
 	}
 
-	pub async fn builder(&self, tg: &Client) -> Result<Builder> {
-		Ok(Builder::new(self.value(tg).await?.entries.clone()))
+	pub async fn builder(&self, client: &Client) -> Result<Builder> {
+		Ok(Builder::new(self.value(client).await?.entries.clone()))
 	}
 
-	pub async fn entries(&self, tg: &Client) -> Result<&BTreeMap<String, artifact::Handle>, Error> {
-		Ok(&self.value(tg).await?.entries)
+	pub async fn entries(
+		&self,
+		client: &Client,
+	) -> Result<&BTreeMap<String, artifact::Handle>, Error> {
+		Ok(&self.value(client).await?.entries)
 	}
 
-	pub async fn get(&self, tg: &Client, path: &Subpath) -> Result<artifact::Handle> {
+	pub async fn get(&self, client: &Client, path: &Subpath) -> Result<artifact::Handle> {
 		let artifact = self
-			.try_get(tg, path)
+			.try_get(client, path)
 			.await?
 			.wrap_err("Failed to get the artifact.")?;
 		Ok(artifact)
 	}
 
-	pub async fn try_get(&self, tg: &Client, path: &Subpath) -> Result<Option<artifact::Handle>> {
+	pub async fn try_get(
+		&self,
+		client: &Client,
+		path: &Subpath,
+	) -> Result<Option<artifact::Handle>> {
 		// Track the current artifact.
 		let mut artifact: artifact::Handle = self.clone().into();
 
@@ -72,7 +82,7 @@ impl Handle {
 			current_subpath = current_subpath.join(name.parse().unwrap());
 
 			// Get the entry. If it doesn't exist, return `None`.
-			let Some(entry) = directory.entries(tg).await?.get(name).cloned() else {
+			let Some(entry) = directory.entries(client).await?.get(name).cloned() else {
 				return Ok(None);
 			};
 
@@ -80,9 +90,9 @@ impl Handle {
 			artifact = entry;
 
 			// If the artifact is a symlink, then resolve it.
-			if let artifact::Value::Symlink(symlink) = &artifact.value() {
+			if let artifact::Variant::Symlink(symlink) = &artifact.variant() {
 				match symlink
-					.resolve_from(tg, Some(symlink.value(tg).await?))
+					.resolve_from(client, Some(symlink.value(client).await?))
 					.await
 					.wrap_err("Failed to resolve the symlink.")?
 				{
@@ -144,88 +154,85 @@ impl Builder {
 		Self { entries }
 	}
 
-	// #[async_recursion]
-	// pub async fn add(
-	// 	mut self,
-	// 	tg: &Server,
-	// 	path: &Subpath,
-	// 	artifact: impl Into<Artifact> + Send + 'async_recursion,
-	// ) -> Result<Self> {
-	// 	// Get the artifact.
-	// 	let artifact = artifact.into();
+	#[async_recursion]
+	pub async fn add(
+		mut self,
+		client: &Client,
+		path: &Subpath,
+		artifact: artifact::Handle,
+	) -> Result<Self> {
+		// Get the first component.
+		let name = path
+			.components()
+			.first()
+			.wrap_err("Expected the path to have at least one component.")?;
 
-	// 	// Get the first component.
-	// 	let name = path
-	// 		.components()
-	// 		.first()
-	// 		.wrap_err("Expected the path to have at least one component.")?;
+		// Collect the trailing path.
+		let trailing_path: Subpath = path.components().iter().skip(1).cloned().collect();
 
-	// 	// Collect the trailing path.
-	// 	let trailing_path: Subpath = path.components().iter().skip(1).cloned().collect();
+		let artifact = if trailing_path.components().is_empty() {
+			artifact
+		} else {
+			// Get or create a child directory.
+			let builder = if let Some(child) = self.entries.get(name) {
+				child
+					.as_directory()
+					.wrap_err("Expected the artifact to be a directory.")?
+					.builder(client)
+					.await?
+			} else {
+				Self::default()
+			};
 
-	// 	let artifact = if trailing_path.components().is_empty() {
-	// 		artifact
-	// 	} else {
-	// 		// Get or create a child directory.
-	// 		let builder = if let Some(child) = self.entries.get(name) {
-	// 			child
-	// 				.as_directory()
-	// 				.wrap_err("Expected the artifact to be a directory.")?
-	// 				.builder(tg)
-	// 				.await?
-	// 		} else {
-	// 			Self::new()
-	// 		};
+			// Recurse.
+			builder
+				.add(client, &trailing_path, artifact)
+				.await?
+				.build()
+				.into()
+		};
 
-	// 		// Recurse.
-	// 		builder
-	// 			.add(tg, &trailing_path, artifact)
-	// 			.await?
-	// 			.build()
-	// 			.into()
-	// 	};
+		// Add the artifact.
+		self.entries.insert(name.clone(), artifact);
 
-	// 	// Add the artifact.
-	// 	self.entries.insert(name.clone(), artifact);
+		Ok(self)
+	}
 
-	// 	Ok(self)
-	// }
+	#[async_recursion]
+	pub async fn remove(mut self, client: &Client, path: &Subpath) -> Result<Self> {
+		// Get the first component.
+		let name = path
+			.components()
+			.first()
+			.wrap_err("Expected the path to have at least one component.")?;
 
-	// #[async_recursion]
-	// pub async fn remove(mut self, tg: &Server, path: &Subpath) -> Result<Self> {
-	// 	// Get the first component.
-	// 	let name = path
-	// 		.components()
-	// 		.first()
-	// 		.wrap_err("Expected the path to have at least one component.")?;
+		// Collect the trailing path.
+		let trailing_path: Subpath = path.components().iter().skip(1).cloned().collect();
 
-	// 	// Collect the trailing path.
-	// 	let trailing_path: Subpath = path.components().iter().skip(1).cloned().collect();
+		if trailing_path.components().is_empty() {
+			// Remove the entry.
+			self.entries.remove(name);
+		} else {
+			// Get a child directory.
+			let builder = if let Some(child) = self.entries.get(name) {
+				child
+					.as_directory()
+					.wrap_err("Expected the artifact to be a directory.")?
+					.builder(client)
+					.await?
+			} else {
+				return Err(crate::error!("The path does not exist."));
+			};
 
-	// 	if trailing_path.components().is_empty() {
-	// 		// Remove the entry.
-	// 		self.entries.remove(name);
-	// 	} else {
-	// 		// Get a child directory.
-	// 		let builder = if let Some(child) = self.entries.get(name) {
-	// 			child
-	// 				.as_directory()
-	// 				.wrap_err("Expected the artifact to be a directory.")?
-	// 				.builder(tg)
-	// 				.await?
-	// 		} else {
-	// 			return Err(crate::error!("The path does not exist."));
-	// 		};
+			// Recurse.
+			let artifact = builder.remove(client, &trailing_path).await?.build().into();
 
-	// 		// Recurse.
-	// 		let artifact = builder.remove(tg, &trailing_path).await?.build().into();
+			// Add the new artifact.
+			self.entries.insert(name.clone(), artifact);
+		};
 
-	// 		// Add the new artifact.
-	// 		self.entries.insert(name.clone(), artifact);
-	// 	};
-
-	// 	Ok(self)
-	// }
+		Ok(self)
+	}
 
 	#[must_use]
 	pub fn build(self) -> Handle {

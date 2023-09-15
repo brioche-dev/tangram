@@ -1,27 +1,29 @@
-use crate::{self as tg, return_error, subpath::Subpath, Client, Error, Result, WrapErr};
+use crate::{
+	artifact, return_error, subpath::Subpath, Artifact, Client, Directory, Error, File, Result,
+	Symlink, WrapErr,
+};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use std::{os::unix::prelude::PermissionsExt, path::Path};
 
-impl tg::Artifact {
-	pub async fn check_out(&self, tg: &Client, path: &Path) -> Result<()> {
+impl Artifact {
+	pub async fn check_out(&self, client: &Client, path: &Path) -> Result<()> {
 		// Bundle the artifact.
-		let artifact = self.clone();
-		// let artifact = self
-		// 	.bundle(tg)
-		// 	.await
-		// 	.wrap_err("Failed to bundle the artifact.")?;
+		let artifact = self
+			.bundle(client)
+			.await
+			.wrap_err("Failed to bundle the artifact.")?;
 
 		// Check in an existing artifact at the path.
 		let existing_artifact = if tokio::fs::try_exists(path).await? {
-			Some(Self::check_in(tg, path).await?)
+			Some(Self::check_in(client, path).await?)
 		} else {
 			None
 		};
 
 		// Check out the artifact recursively.
 		artifact
-			.check_out_inner(tg, existing_artifact.as_ref(), path)
+			.check_out_inner(client, existing_artifact.as_ref(), path)
 			.await?;
 
 		Ok(())
@@ -29,25 +31,25 @@ impl tg::Artifact {
 
 	async fn check_out_inner(
 		&self,
-		tg: &Client,
-		existing_artifact: Option<&tg::Artifact>,
+		client: &Client,
+		existing_artifact: Option<&Artifact>,
 		path: &Path,
 	) -> Result<()> {
 		// If the artifact is the same as the existing artifact, then return.
-		let id = self.id(tg).await?;
+		let id = self.id(client).await?;
 		match existing_artifact {
 			None => {},
 			Some(existing_artifact) => {
-				if id == existing_artifact.id(tg).await? {
+				if id == existing_artifact.id(client).await? {
 					return Ok(());
 				}
 			},
 		}
 
 		// Call the appropriate function for the artifact's type.
-		match self.value() {
-			tg::artifact::Value::Directory(directory) => {
-				Self::check_out_directory(tg, existing_artifact, &directory, path)
+		match self.variant() {
+			artifact::Variant::Directory(directory) => {
+				Self::check_out_directory(client, existing_artifact, &directory, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -55,8 +57,8 @@ impl tg::Artifact {
 					})?;
 			},
 
-			tg::artifact::Value::File(file) => {
-				Self::check_out_file(tg, existing_artifact, &file, path)
+			artifact::Variant::File(file) => {
+				Self::check_out_file(client, existing_artifact, &file, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -64,8 +66,8 @@ impl tg::Artifact {
 					})?;
 			},
 
-			tg::artifact::Value::Symlink(symlink) => {
-				Self::check_out_symlink(tg, existing_artifact, &symlink, path)
+			artifact::Variant::Symlink(symlink) => {
+				Self::check_out_symlink(client, existing_artifact, &symlink, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -79,23 +81,23 @@ impl tg::Artifact {
 
 	#[async_recursion]
 	async fn check_out_directory(
-		tg: &Client,
-		existing_artifact: Option<&'async_recursion tg::Artifact>,
-		directory: &tg::Directory,
+		client: &Client,
+		existing_artifact: Option<&'async_recursion Artifact>,
+		directory: &Directory,
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing artifact at the path.
-		match existing_artifact.map(tg::Artifact::value) {
+		match existing_artifact.map(Artifact::variant) {
 			// If there is already a directory, then remove any extraneous entries.
-			Some(tg::artifact::Value::Directory(existing_directory)) => {
+			Some(artifact::Variant::Directory(existing_directory)) => {
 				existing_directory
-					.entries(tg)
+					.entries(client)
 					.await?
 					.iter()
 					.map(|(name, _)| async move {
-						if !directory.entries(tg).await?.contains_key(name) {
+						if !directory.entries(client).await?.contains_key(name) {
 							let entry_path = path.join(name);
-							crate::util::fs::rmrf(&entry_path).await?;
+							crate::util::rmrf(&entry_path).await?;
 						}
 						Ok::<_, Error>(())
 					})
@@ -106,7 +108,7 @@ impl tg::Artifact {
 
 			// If there is an existing artifact at the path and it is not a directory, then remove it, create a directory, and continue.
 			Some(_) => {
-				crate::util::fs::rmrf(path).await?;
+				crate::util::rmrf(path).await?;
 				tokio::fs::create_dir_all(path).await?;
 			},
 			// If there is no artifact at this path, then create a directory.
@@ -117,17 +119,17 @@ impl tg::Artifact {
 
 		// Recurse into the entries.
 		directory
-			.entries(tg)
+			.entries(client)
 			.await?
 			.iter()
 			.map(|(name, artifact)| {
 				let existing_artifact = &existing_artifact;
 				async move {
 					// Retrieve an existing artifact.
-					let existing_artifact = match existing_artifact.map(tg::Artifact::value) {
-						Some(tg::artifact::Value::Directory(existing_directory)) => {
+					let existing_artifact = match existing_artifact.map(Artifact::variant) {
+						Some(artifact::Variant::Directory(existing_directory)) => {
 							let name: Subpath = name.parse().wrap_err("Invalid entry name.")?;
-							existing_directory.try_get(tg, &name).await?
+							existing_directory.try_get(client, &name).await?
 						},
 						_ => None,
 					};
@@ -135,7 +137,7 @@ impl tg::Artifact {
 					// Recurse.
 					let entry_path = path.join(name);
 					artifact
-						.check_out_inner(tg, existing_artifact.as_ref(), &entry_path)
+						.check_out_inner(client, existing_artifact.as_ref(), &entry_path)
 						.await?;
 
 					Ok::<_, Error>(())
@@ -150,15 +152,15 @@ impl tg::Artifact {
 
 	async fn check_out_file(
 		client: &Client,
-		existing_artifact: Option<&tg::Artifact>,
-		file: &tg::File,
+		existing_artifact: Option<&Artifact>,
+		file: &File,
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing artifact at the path.
 		match &existing_artifact {
 			// If there is an existing file system object at the path, then remove it and continue.
 			Some(_) => {
-				crate::util::fs::rmrf(path).await?;
+				crate::util::rmrf(path).await?;
 			},
 
 			// If there is no file system object at this path, then continue.
@@ -191,15 +193,15 @@ impl tg::Artifact {
 
 	async fn check_out_symlink(
 		client: &Client,
-		existing_artifact: Option<&tg::Artifact>,
-		symlink: &tg::Symlink,
+		existing_artifact: Option<&Artifact>,
+		symlink: &Symlink,
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing artifact at the path.
 		match &existing_artifact {
 			// If there is an existing file system object at the path, then remove it and continue.
 			Some(_) => {
-				crate::util::fs::rmrf(path).await?;
+				crate::util::rmrf(path).await?;
 			},
 
 			// If there is no file system object at this path, then continue.

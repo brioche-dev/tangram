@@ -8,20 +8,19 @@ pub use self::client::Client;
 #[cfg(feature = "server")]
 pub use self::server::Server;
 pub use self::{
-	any::Handle as Any,
 	array::Handle as Array,
 	artifact::Handle as Artifact,
 	blob::Handle as Blob,
 	bool::Handle as Bool,
-	// build::Handle as Build,
+	build::Handle as Build,
 	bytes::Handle as Bytes,
 	checksum::Checksum,
 	directory::Handle as Directory,
 	error::{Error, Result, WrapErr},
 	file::Handle as File,
-	handle::Handle,
 	id::Id,
 	kind::Kind,
+	module::Module,
 	null::Handle as Null,
 	number::Handle as Number,
 	object::Handle as Object,
@@ -37,23 +36,18 @@ pub use self::{
 	target::Handle as Target,
 	task::Handle as Task,
 	template::Handle as Template,
-	value::Value,
+	value::{Handle, Value},
 };
 
-// pub mod output;
-// pub mod pull;
-// pub mod push;
-// pub mod run;
-// pub mod build;
-// pub mod bundle;
-// #[cfg(feature = "server")]
-// pub mod language;
-
-pub mod any;
 pub mod array;
 pub mod artifact;
 pub mod blob;
 pub mod bool;
+pub mod build;
+pub mod evaluate;
+// pub mod pull;
+// pub mod push;
+pub mod bundle;
 pub mod bytes;
 pub mod checkin;
 pub mod checkout;
@@ -66,10 +60,12 @@ pub mod directory;
 #[cfg(feature = "server")]
 pub mod document;
 pub mod error;
+pub mod evaluation;
 pub mod file;
-pub mod handle;
 pub mod id;
 pub mod kind;
+#[cfg(feature = "server")]
+pub mod language;
 #[cfg(feature = "server")]
 pub mod migrations;
 pub mod module;

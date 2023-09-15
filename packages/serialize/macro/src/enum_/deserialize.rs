@@ -40,7 +40,7 @@ impl<'a> Enum<'a> {
 					// Skip over variants with unknown ids.
 					_ => {
 						deserializer.deserialize::<tangram_serialize::Value>()?;
-						return ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::Other, "Unexpected variant id."));
+						return ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::Other, "Unexpected variant ID."));
 					},
 				};
 

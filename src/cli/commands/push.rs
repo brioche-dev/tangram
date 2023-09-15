@@ -22,8 +22,7 @@ impl Cli {
 		let client = args.url.map(|url| tg::Client::new(url, None));
 		let client = client.as_ref().unwrap_or(self.tg.origin_client());
 
-		// // Push.
-		// let block = Block::with_id(args.id);
+		// Push.
 		// client
 		// 	.push(&self.tg, block)
 		// 	.await

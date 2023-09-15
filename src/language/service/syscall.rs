@@ -1,8 +1,6 @@
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
-	id::Id,
 	module::{self, Module},
-	package,
 	server::{self, Server},
 };
 use itertools::Itertools;
@@ -22,7 +20,7 @@ pub fn syscall(
 
 		Err(error) => {
 			// Throw an exception.
-			let exception = error.to_exception(scope);
+			let exception = serde_v8::to_v8(scope, error).expect("Failed to serialize the error.");
 			scope.throw_exception(exception);
 		},
 	}
@@ -45,7 +43,6 @@ fn syscall_inner<'s>(
 		"log" => syscall_sync(scope, args, syscall_log),
 		"module_load" => syscall_sync(scope, args, syscall_module_load),
 		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
-		"module_unlocked_package" => syscall_sync(scope, args, syscall_module_unlocked_package_id),
 		"module_version" => syscall_sync(scope, args, syscall_module_version),
 		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
 		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
@@ -54,15 +51,19 @@ fn syscall_inner<'s>(
 }
 
 fn syscall_documents(
-	tg: &Server,
+	server: &Server,
 	_scope: &mut v8::HandleScope,
 	_args: (),
 ) -> Result<Vec<module::Module>> {
-	tg.main_runtime_handle.clone().block_on(async move {
-		let documents = tg.documents.read().await;
-		let modules = documents.keys().cloned().map(Module::Document).collect();
-		Ok(modules)
-	})
+	server
+		.state
+		.main_runtime_handle
+		.clone()
+		.block_on(async move {
+			let documents = server.state.documents.read().await;
+			let modules = documents.keys().cloned().map(Module::Document).collect();
+			Ok(modules)
+		})
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -128,7 +129,7 @@ fn syscall_module_load(
 	args: (module::Module,),
 ) -> Result<String> {
 	let (module,) = args;
-	tg.main_runtime_handle.clone().block_on(async move {
+	tg.state.main_runtime_handle.clone().block_on(async move {
 		let text = module
 			.load(tg)
 			.await
@@ -138,53 +139,44 @@ fn syscall_module_load(
 }
 
 fn syscall_module_resolve(
-	tg: &Server,
+	server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module, module::Import),
 ) -> Result<module::Module> {
 	let (module, specifier) = args;
-	tg.main_runtime_handle.clone().block_on(async move {
-		let module = module.resolve(tg, &specifier).await.wrap_err_with(|| {
-			format!(r#"Failed to resolve specifier "{specifier}" relative to module "{module}"."#)
-		})?;
-		Ok(module)
-	})
-}
-
-fn syscall_module_unlocked_package_id(
-	tg: &Server,
-	_scope: &mut v8::HandleScope,
-	args: (module::Module,),
-) -> Result<Id> {
-	let (module,) = args;
-	tg.main_runtime_handle.clone().block_on(async move {
-		match module {
-			Module::Normal(module) => {
-				let package =
-					package::Package::with_block(tg, Block::with_id(module.package)).await?;
-				let package = package.unlock(tg).await?;
-				Ok(package.id())
-			},
-			_ => unreachable!(),
-		}
-	})
+	server
+		.state
+		.main_runtime_handle
+		.clone()
+		.block_on(async move {
+			let module = module.resolve(server, &specifier).await.wrap_err_with(|| {
+				format!(
+					r#"Failed to resolve specifier "{specifier}" relative to module "{module}"."#
+				)
+			})?;
+			Ok(module)
+		})
 }
 
 fn syscall_module_version(
-	tg: &Server,
+	server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module,),
 ) -> Result<String> {
 	let (module,) = args;
-	tg.main_runtime_handle.clone().block_on(async move {
-		let version = module.version(tg).await?;
-		Ok(version.to_string())
-	})
+	server
+		.state
+		.main_runtime_handle
+		.clone()
+		.block_on(async move {
+			let version = module.version(server).await?;
+			Ok(version.to_string())
+		})
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_utf8_decode(
-	_tg: &Server,
+	_server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (serde_v8::JsBuffer,),
 ) -> Result<String> {

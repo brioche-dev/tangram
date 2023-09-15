@@ -12,6 +12,8 @@ mod config;
 mod credentials;
 mod error;
 
+pub const API_URL: &str = "https://api.tangram.dev";
+
 struct Cli {
 	client: tg::Client,
 }
@@ -47,7 +49,7 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	let client = tg::Client::new_remote("http://localhost:8476".parse().unwrap(), None);
+	let client = tg::Client::with_url("http://localhost:8476".parse().unwrap(), None);
 
 	// Create the CLI.
 	let cli = Cli { client };

@@ -10,11 +10,11 @@ use url::Url;
 pub mod analyze;
 pub mod error;
 pub mod import;
-// pub mod load;
+pub mod load;
 pub mod parse;
 pub mod position;
 pub mod range;
-// pub mod resolve;
+pub mod resolve;
 pub mod transpile;
 mod version;
 

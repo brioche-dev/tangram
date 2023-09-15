@@ -1,7 +1,9 @@
 pub use self::{
 	diagnostics::{Diagnostic, Severity},
+	location::Location,
 	server::Server,
 };
+pub use crate::module::position::Position;
 
 pub mod check;
 pub mod completion;

@@ -1,12 +1,12 @@
 use crate::{artifact, blob, Client, Result};
 
-crate::id!();
-
-crate::kind!(File);
+crate::id!(File);
 
 /// A file handle.
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
+
+crate::handle!(File);
 
 /// A file value.
 #[derive(Clone, Debug)]
@@ -20,6 +20,8 @@ pub struct Value {
 	/// The file's references.
 	pub references: Vec<artifact::Handle>,
 }
+
+crate::value!(File);
 
 /// File data.
 #[derive(
@@ -63,16 +65,16 @@ impl Handle {
 		Builder::new(contents)
 	}
 
-	pub async fn contents(&self, tg: &Client) -> Result<blob::Handle> {
-		Ok(self.value(tg).await?.contents.clone())
+	pub async fn contents(&self, client: &Client) -> Result<&blob::Handle> {
+		Ok(&self.value(client).await?.contents)
 	}
 
-	pub async fn executable(&self, tg: &Client) -> Result<bool> {
-		Ok(self.value(tg).await?.executable)
+	pub async fn executable(&self, client: &Client) -> Result<bool> {
+		Ok(self.value(client).await?.executable)
 	}
 
-	pub async fn references(&self, tg: &Client) -> Result<&[artifact::Handle]> {
-		Ok(self.value(tg).await?.references.as_slice())
+	pub async fn references(&self, client: &Client) -> Result<&[artifact::Handle]> {
+		Ok(self.value(client).await?.references.as_slice())
 	}
 }
 

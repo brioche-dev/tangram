@@ -1,16 +1,18 @@
-crate::kind!(Placeholder);
-
-crate::id!();
+crate::id!(Placeholder);
 
 /// A placeholder handle.
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
+
+crate::handle!(Placeholder);
 
 /// A placeholder value.
 #[derive(Clone, Debug)]
 pub struct Value {
 	pub name: String,
 }
+
+crate::value!(Placeholder);
 
 /// Placeholder data.
 #[derive(

@@ -72,8 +72,8 @@ impl Cli {
 
 		// Create the options.
 		let options = tg::server::Options {
-			origin_token,
-			origin_url,
+			parent_token: origin_token,
+			parent_url: origin_url,
 			preserve_temps,
 			sandbox_enabled,
 		};

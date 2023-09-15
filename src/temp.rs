@@ -1,18 +1,20 @@
 use crate::{rid::Rid, server::Server};
 use std::path::{Path, PathBuf};
 
-pub struct Temp<'a> {
-	tg: &'a Server,
+#[derive(Debug)]
+pub struct Temp {
 	id: Rid,
 	path: PathBuf,
+	preserve: bool,
 }
 
-impl<'a> Temp<'a> {
+impl Temp {
 	#[must_use]
-	pub fn new(tg: &Server) -> Temp {
+	pub fn new(server: &Server) -> Temp {
 		let id = Rid::gen();
-		let path = tg.temps_path().join(id.to_string());
-		Temp { tg, id, path }
+		let path = server.temps_path().join(id.to_string());
+		let preserve = server.state.options.preserve_temps;
+		Temp { id, path, preserve }
 	}
 
 	#[must_use]
@@ -26,12 +28,12 @@ impl<'a> Temp<'a> {
 	}
 }
 
-impl<'a> Drop for Temp<'a> {
+impl Drop for Temp {
 	fn drop(&mut self) {
-		if !self.tg.state.options.preserve_temps {
+		if !self.preserve {
 			let path = self.path.clone();
 			tokio::task::spawn(async move {
-				crate::util::fs::rmrf(&path).await.ok();
+				crate::util::rmrf(&path).await.ok();
 			});
 		}
 	}

@@ -1,16 +1,18 @@
 use crate::{artifact, template, Client, Result};
 
-crate::id!();
-
-crate::kind!(Symlink);
+crate::id!(Symlink);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
+
+crate::handle!(Symlink);
 
 #[derive(Clone, Debug)]
 pub struct Value {
 	pub target: template::Handle,
 }
+
+crate::value!(Symlink);
 
 #[derive(
 	Clone,
@@ -31,18 +33,18 @@ impl Handle {
 		Self::with_value(Value { target })
 	}
 
-	pub async fn target(&self, tg: &Client) -> Result<template::Handle> {
-		Ok(self.value(tg).await?.target.clone())
+	pub async fn target(&self, client: &Client) -> Result<template::Handle> {
+		Ok(self.value(client).await?.target.clone())
 	}
 
-	pub async fn resolve(&self, tg: &Client) -> Result<Option<artifact::Handle>> {
-		self.resolve_from(tg, None).await
+	pub async fn resolve(&self, client: &Client) -> Result<Option<artifact::Handle>> {
+		self.resolve_from(client, None).await
 	}
 
 	#[allow(clippy::unused_async)]
 	pub async fn resolve_from(
 		&self,
-		_tg: &Client,
+		_client: &Client,
 		_from: Option<&Value>,
 	) -> Result<Option<artifact::Handle>> {
 		unimplemented!()

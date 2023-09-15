@@ -1,8 +1,43 @@
 use crate::{
-	any, array, blob, bool, bytes, directory, file, null, number, object, package, placeholder,
-	relpath, resource, return_error, string, subpath, symlink, target, task, template, Id, Result,
+	array, blob, bool, bytes, directory, error, file, null, number, object, package, placeholder,
+	relpath, resource, return_error, string, subpath, symlink, target, task, template, value,
+	Client, Id, Kind, Result, WrapErr,
 };
+use async_recursion::async_recursion;
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use futures::{stream::FuturesUnordered, TryStreamExt};
+use std::sync::Arc;
+
+/// A value handle.
+#[derive(Clone, Debug)]
+pub struct Handle {
+	id: Arc<std::sync::RwLock<Option<Id>>>,
+	value: Arc<std::sync::RwLock<Option<Value>>>,
+}
+
+/// A value variant.
+#[derive(Clone, Debug)]
+pub enum Variant {
+	Null(crate::Null),
+	Bool(crate::Bool),
+	Number(crate::Number),
+	String(crate::String),
+	Bytes(crate::Bytes),
+	Relpath(crate::Relpath),
+	Subpath(crate::Subpath),
+	Blob(crate::Blob),
+	Directory(crate::Directory),
+	File(crate::File),
+	Symlink(crate::Symlink),
+	Placeholder(crate::Placeholder),
+	Template(crate::Template),
+	Package(crate::Package),
+	Resource(crate::Resource),
+	Target(crate::Target),
+	Task(crate::Task),
+	Array(crate::Array),
+	Object(crate::Object),
+}
 
 /// A value.
 #[derive(Clone, Debug)]
@@ -134,6 +169,156 @@ pub enum Data {
 	Object(object::Data),
 }
 
+impl Handle {
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self {
+			id: Arc::new(std::sync::RwLock::new(Some(id))),
+			value: Arc::new(std::sync::RwLock::new(None)),
+		}
+	}
+
+	#[must_use]
+	pub fn with_value(value: Value) -> Self {
+		Self {
+			id: Arc::new(std::sync::RwLock::new(None)),
+			value: Arc::new(std::sync::RwLock::new(Some(value))),
+		}
+	}
+
+	#[must_use]
+	pub fn kind(&self) -> Kind {
+		if let Some(id) = *self.id.read().unwrap() {
+			return id.kind();
+		}
+		match self.value.read().unwrap().as_ref().unwrap() {
+			Value::Null(_) => Kind::Null,
+			Value::Bool(_) => Kind::Bool,
+			Value::Number(_) => Kind::Number,
+			Value::String(_) => Kind::String,
+			Value::Bytes(_) => Kind::Bytes,
+			Value::Relpath(_) => Kind::Relpath,
+			Value::Subpath(_) => Kind::Subpath,
+			Value::Blob(_) => Kind::Blob,
+			Value::Directory(_) => Kind::Directory,
+			Value::File(_) => Kind::File,
+			Value::Symlink(_) => Kind::Symlink,
+			Value::Placeholder(_) => Kind::Placeholder,
+			Value::Template(_) => Kind::Template,
+			Value::Package(_) => Kind::Package,
+			Value::Resource(_) => Kind::Resource,
+			Value::Target(_) => Kind::Target,
+			Value::Task(_) => Kind::Task,
+			Value::Array(_) => Kind::Array,
+			Value::Object(_) => Kind::Object,
+		}
+	}
+
+	#[must_use]
+	pub fn variant(&self) -> value::Variant {
+		match self.kind() {
+			Kind::Null => value::Variant::Null(self.clone().try_into().unwrap()),
+			Kind::Bool => value::Variant::Bool(self.clone().try_into().unwrap()),
+			Kind::Number => value::Variant::Number(self.clone().try_into().unwrap()),
+			Kind::String => value::Variant::String(self.clone().try_into().unwrap()),
+			Kind::Bytes => value::Variant::Bytes(self.clone().try_into().unwrap()),
+			Kind::Relpath => value::Variant::Relpath(self.clone().try_into().unwrap()),
+			Kind::Subpath => value::Variant::Subpath(self.clone().try_into().unwrap()),
+			Kind::Blob => value::Variant::Blob(self.clone().try_into().unwrap()),
+			Kind::Directory => value::Variant::Directory(self.clone().try_into().unwrap()),
+			Kind::File => value::Variant::File(self.clone().try_into().unwrap()),
+			Kind::Symlink => value::Variant::Symlink(self.clone().try_into().unwrap()),
+			Kind::Placeholder => value::Variant::Placeholder(self.clone().try_into().unwrap()),
+			Kind::Template => value::Variant::Template(self.clone().try_into().unwrap()),
+			Kind::Package => value::Variant::Package(self.clone().try_into().unwrap()),
+			Kind::Resource => value::Variant::Resource(self.clone().try_into().unwrap()),
+			Kind::Target => value::Variant::Target(self.clone().try_into().unwrap()),
+			Kind::Task => value::Variant::Task(self.clone().try_into().unwrap()),
+			Kind::Array => value::Variant::Array(self.clone().try_into().unwrap()),
+			Kind::Object => value::Variant::Object(self.clone().try_into().unwrap()),
+		}
+	}
+
+	pub(crate) fn expect_id(&self) -> Id {
+		self.id.read().unwrap().unwrap()
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		// Store the value.
+		self.store(client).await?;
+
+		// Return the ID.
+		Ok(self.id.read().unwrap().unwrap())
+	}
+
+	pub async fn value(&self, client: &Client) -> Result<&Value> {
+		// Load the value.
+		self.load(client).await?;
+
+		// Return a reference to the value.
+		Ok(unsafe { &*(self.value.read().unwrap().as_ref().unwrap() as *const Value) })
+	}
+
+	#[allow(clippy::unused_async)]
+	pub async fn load(&self, client: &Client) -> Result<()> {
+		// If the value is already loaded, then return.
+		if self.value.read().unwrap().is_some() {
+			return Ok(());
+		}
+
+		// Get the id.
+		let id = self.id.read().unwrap().unwrap();
+
+		// Get the data.
+		let Some(data) = client.try_get_value_bytes(id).await? else {
+			return_error!(r#"Failed to find value with id "{id}"."#);
+		};
+
+		// Create the value.
+		let data = value::Data::deserialize(&data)?;
+		let value = Value::from_data(data);
+
+		// Set the value.
+		self.value.write().unwrap().replace(value);
+
+		Ok(())
+	}
+
+	#[async_recursion]
+	pub async fn store(&self, client: &Client) -> Result<()> {
+		// If the value is already stored, then return.
+		if self.id.read().unwrap().is_some() {
+			return Ok(());
+		}
+
+		// Store the children.
+		let children = self.value.read().unwrap().as_ref().unwrap().children();
+		children
+			.into_iter()
+			.map(|child| async move { child.store(client).await })
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+
+		// Serialize the data.
+		let data = self.value.read().unwrap().as_ref().unwrap().to_data();
+		let data = data.serialize()?;
+		let id = Id::new(self.kind(), &data);
+
+		// Store the value.
+		client
+			.try_put_value_bytes(id, &data)
+			.await
+			.wrap_err("Failed to put the value.")?
+			.map_err(|_| error!("Expected all children to be stored."))?;
+
+		// Set the ID.
+		self.id.write().unwrap().replace(id);
+
+		Ok(())
+	}
+}
+
 impl Value {
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
@@ -156,16 +341,13 @@ impl Value {
 			Data::Target(data) => Value::Target(target::Value::from_data(data)),
 			Data::Task(data) => Value::Task(task::Value::from_data(data)),
 			Data::Array(data) => {
-				let value = data
-					.into_iter()
-					.map(any::Handle::with_id)
-					.collect::<Vec<_>>();
+				let value = data.into_iter().map(Handle::with_id).collect::<Vec<_>>();
 				Value::Array(value)
 			},
 			Data::Object(data) => {
 				let value = data
 					.into_iter()
-					.map(|(key, value)| (key, any::Handle::with_id(value)))
+					.map(|(key, value)| (key, Handle::with_id(value)))
 					.collect();
 				Value::Object(value)
 			},
@@ -192,7 +374,7 @@ impl Value {
 			Value::Resource(value) => Data::Resource(value.to_data()),
 			Value::Target(value) => Data::Target(value.to_data()),
 			Value::Task(value) => Data::Task(value.to_data()),
-			Value::Array(value) => Data::Array(value.iter().map(any::Handle::expect_id).collect()),
+			Value::Array(value) => Data::Array(value.iter().map(Handle::expect_id).collect()),
 			Value::Object(value) => Data::Object(
 				value
 					.iter()
@@ -203,7 +385,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<Handle> {
 		match self {
 			Self::Null(_)
 			| Self::Bool(_)
@@ -222,8 +404,8 @@ impl Value {
 			Self::Resource(resource) => resource.children(),
 			Self::Target(target) => target.children(),
 			Self::Task(task) => task.children(),
-			Self::Array(array) => array.iter().map(|value| value.clone().into()).collect(),
-			Self::Object(map) => map.values().map(|value| value.clone().into()).collect(),
+			Self::Array(array) => array.clone(),
+			Self::Object(map) => map.values().cloned().collect(),
 		}
 	}
 }
@@ -233,7 +415,6 @@ impl Data {
 		let mut bytes = Vec::new();
 		bytes.write_u8(0)?;
 		tangram_serialize::to_writer(self, &mut bytes)?;
-		// serde_json::to_writer(&mut bytes, self).map_err(crate::Error::other)?;
 		Ok(bytes)
 	}
 
@@ -243,7 +424,6 @@ impl Data {
 			return_error!(r#"Cannot deserialize a value with version "{version}"."#);
 		}
 		let value = tangram_serialize::from_reader(bytes)?;
-		// let value = serde_json::from_reader(bytes).map_err(crate::Error::other)?;
 		Ok(value)
 	}
 
@@ -271,4 +451,65 @@ impl Data {
 			Self::Object(map) => map.values().copied().map(Into::into).collect(),
 		}
 	}
+}
+
+#[macro_export]
+macro_rules! handle {
+	($t:ident) => {
+		impl From<Handle> for $crate::Handle {
+			fn from(value: Handle) -> Self {
+				value.0
+			}
+		}
+
+		impl TryFrom<$crate::Handle> for Handle {
+			type Error = $crate::Error;
+
+			fn try_from(value: $crate::Handle) -> Result<Self, Self::Error> {
+				match value.kind() {
+					$crate::Kind::$t => Ok(Self(value)),
+					_ => $crate::return_error!("Unexpected kind."),
+				}
+			}
+		}
+
+		impl Handle {
+			#[must_use]
+			pub fn with_id(id: Id) -> Self {
+				Self($crate::Handle::with_id(id.into()))
+			}
+
+			#[must_use]
+			pub fn with_value(value: Value) -> Self {
+				Self($crate::Handle::with_value(value.into()))
+			}
+
+			#[must_use]
+			pub fn expect_id(&self) -> Id {
+				self.0.expect_id().try_into().unwrap()
+			}
+
+			pub async fn id(&self, client: &$crate::Client) -> $crate::Result<Id> {
+				Ok(self.0.id(client).await?.try_into().unwrap())
+			}
+
+			pub async fn value(&self, client: &$crate::Client) -> $crate::Result<&Value> {
+				match self.0.value(client).await? {
+					$crate::Value::$t(value) => Ok(value),
+					_ => unreachable!(),
+				}
+			}
+		}
+	};
+}
+
+#[macro_export]
+macro_rules! value {
+	($t:ident) => {
+		impl From<Value> for $crate::Value {
+			fn from(value: Value) -> Self {
+				$crate::Value::$t(value)
+			}
+		}
+	};
 }

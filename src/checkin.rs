@@ -1,4 +1,7 @@
-use crate::{self as tg, return_error, Client, Error, Result, WrapErr};
+use crate::{
+	artifact, return_error, Artifact, Blob, Client, Directory, Error, File, Result, Symlink,
+	Template, WrapErr,
+};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use std::{
@@ -9,7 +12,7 @@ use std::{
 
 #[derive(serde::Deserialize)]
 struct Attributes {
-	references: Vec<tg::artifact::Id>,
+	references: Vec<artifact::Id>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -17,7 +20,7 @@ pub struct Options {
 	pub artifacts_paths: Vec<PathBuf>,
 }
 
-impl crate::Artifact {
+impl Artifact {
 	pub async fn check_in(client: &Client, path: &Path) -> Result<Self> {
 		Self::check_in_with_options(client, path, &Options::default()).await
 	}
@@ -100,7 +103,7 @@ impl crate::Artifact {
 			.await?;
 
 		// Create the directory.
-		let directory = tg::Directory::new(entries);
+		let directory = Directory::new(entries);
 
 		Ok(directory.into())
 	}
@@ -116,7 +119,7 @@ impl crate::Artifact {
 		let file = tokio::fs::File::open(path)
 			.await
 			.wrap_err("Failed to open the file.")?;
-		let contents = tg::Blob::with_reader(client, file)
+		let contents = Blob::with_reader(client, file)
 			.await
 			.wrap_err("Failed to create the contents.")?;
 		drop(permit);
@@ -133,11 +136,11 @@ impl crate::Artifact {
 			.map(|attributes| attributes.references)
 			.unwrap_or_default()
 			.into_iter()
-			.map(tg::Artifact::with_id)
+			.map(Artifact::with_id)
 			.collect();
 
 		// Create the file.
-		let file = tg::File::new(contents, executable, references);
+		let file = File::new(contents, executable, references);
 
 		Ok(file.into())
 	}
@@ -160,10 +163,10 @@ impl crate::Artifact {
 		let target = target
 			.to_str()
 			.wrap_err("The symlink target must be valid UTF-8.")?;
-		let target = tg::Template::unrender(&options.artifacts_paths, target)?;
+		let target = Template::unrender(&options.artifacts_paths, target)?;
 
 		// Create the symlink.
-		let symlink = tg::Symlink::new(target);
+		let symlink = Symlink::new(target);
 
 		Ok(symlink.into())
 	}

@@ -61,6 +61,7 @@ impl Server {
 	pub async fn handle_language_service_request(&self, request: Request) -> Result<Response> {
 		// Spawn the language service if necessary.
 		let request_sender = self
+			.state
 			.language_service_request_sender
 			.lock()
 			.unwrap()
@@ -71,8 +72,8 @@ impl Server {
 
 				// Spawn a thread to run the language service.
 				std::thread::spawn({
-					let tg = Arc::downgrade(self);
-					move || run_language_service(tg, request_receiver)
+					let state = Arc::downgrade(&self.state);
+					move || run_language_service(state, request_receiver)
 				});
 
 				request_sender
@@ -145,6 +146,7 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 
 		// Serialize the request.
 		let request = match serde_v8::to_v8(&mut try_catch_scope, &request)
+			.map_err(Error::other)
 			.wrap_err("Failed to serialize the request.")
 		{
 			Ok(request) => request,
@@ -169,6 +171,7 @@ fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceive
 
 		// Deserialize the response.
 		let response = match serde_v8::from_v8(&mut try_catch_scope, response)
+			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the response.")
 		{
 			Ok(response) => response,

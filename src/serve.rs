@@ -16,7 +16,7 @@ impl Server {
 			let stream = hyper_util::rt::TokioIo::new(stream);
 			let server = self.clone();
 			tokio::spawn(async move {
-				hyper::server::conn::http1::Builder::new()
+				hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
 					.serve_connection(
 						stream,
 						hyper::service::service_fn(move |request| {
@@ -90,7 +90,7 @@ impl Server {
 			return Ok(bad_request());
 		};
 
-		let status = if self.value_exists(id).await? {
+		let status = if self.get_value_exists(id).await? {
 			http::StatusCode::OK
 		} else {
 			http::StatusCode::NOT_FOUND

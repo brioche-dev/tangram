@@ -1,12 +1,19 @@
 use crate::error::{error, Error};
+use byteorder::{NativeEndian, ReadBytesExt};
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Rid([u8; 16]);
+pub const SIZE: usize = 16;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Rid([u8; SIZE]);
 
 impl Rid {
 	#[must_use]
 	pub fn gen() -> Rid {
 		Rid(rand::random())
+	}
+
+	pub fn with_bytes(bytes: [u8; SIZE]) -> Self {
+		Self(bytes)
 	}
 
 	#[must_use]
@@ -15,14 +22,14 @@ impl Rid {
 	}
 }
 
-impl From<Rid> for [u8; 16] {
-	fn from(id: Rid) -> [u8; 16] {
+impl From<Rid> for [u8; SIZE] {
+	fn from(id: Rid) -> [u8; SIZE] {
 		id.0
 	}
 }
 
-impl From<[u8; 16]> for Rid {
-	fn from(id: [u8; 16]) -> Rid {
+impl From<[u8; SIZE]> for Rid {
+	fn from(id: [u8; SIZE]) -> Rid {
 		Rid(id)
 	}
 }
@@ -93,6 +100,30 @@ impl<'de> serde::Deserialize<'de> for Rid {
 		deserializer.deserialize_str(IdVisitor)
 	}
 }
+
+impl std::hash::Hash for Rid {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		state.write(&self.0);
+	}
+}
+
+#[derive(Default)]
+pub struct Hasher(Option<u64>);
+
+impl std::hash::Hasher for Hasher {
+	fn finish(&self) -> u64 {
+		self.0.unwrap()
+	}
+
+	fn write(&mut self, mut bytes: &[u8]) {
+		assert!(self.0.is_none());
+		assert_eq!(bytes.len(), SIZE);
+		let value = bytes.read_u64::<NativeEndian>().unwrap();
+		self.0 = Some(value);
+	}
+}
+
+pub type BuildHasher = std::hash::BuildHasherDefault<Hasher>;
 
 #[cfg(test)]
 mod tests {

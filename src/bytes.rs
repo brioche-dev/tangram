@@ -4,14 +4,16 @@ use std::ops::Range;
 #[cfg(not(feature = "server"))]
 use std::sync::Arc;
 
-crate::id!();
-
-crate::kind!(Bytes);
+crate::id!(Bytes);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
 
+crate::handle!(Bytes);
+
 pub type Value = Bytes;
+
+crate::value!(Bytes);
 
 pub type Data = Bytes;
 
@@ -101,13 +103,33 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 		impl<'de> serde::de::Visitor<'de> for Visitor {
 			type Value = Bytes;
 			fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-				formatter.write_str("a byte buf")
+				formatter.write_str("a string or byte buf")
 			}
 			fn visit_byte_buf<E>(self, v: Vec<u8>) -> std::result::Result<Self::Value, E>
 			where
 				E: serde::de::Error,
 			{
 				Ok(Bytes::with_buffer(Buffer::from(v.into_boxed_slice())))
+			}
+
+			fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				Ok(Bytes::with_buffer(Buffer::from(
+					hex::decode(v).map_err(E::custom)?,
+				)))
+			}
+
+			fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+			where
+				A: serde::de::SeqAccess<'de>,
+			{
+				let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+				while let Some(byte) = seq.next_element()? {
+					bytes.push(byte);
+				}
+				Ok(Bytes::with_buffer(Buffer::from(bytes.into_boxed_slice())))
 			}
 		}
 		deserializer.deserialize_byte_buf(Visitor)

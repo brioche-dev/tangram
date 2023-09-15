@@ -106,7 +106,7 @@ impl std::hash::Hasher for Hasher {
 
 	fn write(&mut self, mut bytes: &[u8]) {
 		assert!(self.0.is_none());
-		assert_eq!(bytes.len(), 32);
+		assert_eq!(bytes.len(), SIZE);
 		let value = bytes.read_u64::<NativeEndian>().unwrap();
 		self.0 = Some(value);
 	}
@@ -133,6 +133,14 @@ macro_rules! id {
 		#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
 		pub struct Id($crate::Id);
 
+		impl std::ops::Deref for Id {
+			type Target = $crate::Id;
+
+			fn deref(&self) -> &Self::Target {
+				&self.0
+			}
+		}
+
 		impl std::hash::Hash for Id {
 			fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
 				std::hash::Hash::hash(&self.0, state);
@@ -151,6 +159,27 @@ macro_rules! id {
 
 			fn from_str(s: &str) -> Result<Self, Self::Err> {
 				Ok(Self($crate::Id::from_str(s)?))
+			}
+		}
+	};
+
+	($t:ident) => {
+		$crate::id!();
+
+		impl From<Id> for $crate::Id {
+			fn from(value: Id) -> Self {
+				value.0
+			}
+		}
+
+		impl TryFrom<$crate::Id> for Id {
+			type Error = $crate::Error;
+
+			fn try_from(value: $crate::Id) -> Result<Self, Self::Error> {
+				match value.kind() {
+					$crate::Kind::$t => Ok(Self(value)),
+					_ => $crate::return_error!("Unexpected kind."),
+				}
 			}
 		}
 	};

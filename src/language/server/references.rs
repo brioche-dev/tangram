@@ -8,14 +8,17 @@ impl Server {
 		params: lsp::ReferenceParams,
 	) -> Result<Option<Vec<lsp::Location>>> {
 		// Get the module.
-		let module =
-			Module::from_lsp(&self.tg, params.text_document_position.text_document.uri).await?;
+		let module = Module::from_lsp(
+			&self.server,
+			params.text_document_position.text_document.uri,
+		)
+		.await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
 
 		// Get the references.
-		let locations = module.references(&self.tg, position.into()).await?;
+		let locations = module.references(&self.server, position.into()).await?;
 		let Some(locations) = locations else {
 			return Ok(None);
 		};

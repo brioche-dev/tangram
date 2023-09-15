@@ -15,10 +15,10 @@ impl Server {
 		params: lsp::DocumentSymbolParams,
 	) -> Result<Option<lsp::DocumentSymbolResponse>> {
 		// Get the module.
-		let module = Module::from_lsp(&self.tg, params.text_document.uri).await?;
+		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
 
 		// Get the document symbols.
-		let symbols = module.symbols(&self.tg).await?;
+		let symbols = module.symbols(&self.server).await?;
 		let Some(symbols) = symbols else {
 			return Ok(None);
 		};

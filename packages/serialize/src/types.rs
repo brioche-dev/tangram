@@ -1,4 +1,4 @@
-use crate::{Deserialize, Deserializer, Serialize, Serializer};
+use crate::{Deserialize, Deserializer, Kind, Serialize, Serializer};
 use std::{
 	collections::BTreeMap,
 	io::{Read, Result, Write},
@@ -181,6 +181,58 @@ where
 		R: Read,
 	{
 		deserializer.deserialize_option()
+	}
+}
+
+impl<T, E> Serialize for std::result::Result<T, E>
+where
+	T: Serialize,
+	E: Serialize,
+{
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		serializer.write_kind(Kind::Enum)?;
+		match self {
+			Ok(value) => {
+				serializer.write_id(0)?;
+				serializer.serialize(value)?;
+			},
+			Err(value) => {
+				serializer.write_id(1)?;
+				serializer.serialize(value)?;
+			},
+		}
+		Ok(())
+	}
+}
+
+impl<T, E> Deserialize for std::result::Result<T, E>
+where
+	T: Deserialize,
+	E: Deserialize,
+{
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		deserializer.ensure_kind(Kind::Enum)?;
+		let id = deserializer.read_id()?;
+		match id {
+			0 => {
+				let value = deserializer.deserialize()?;
+				Ok(Ok(value))
+			},
+			1 => {
+				let value = deserializer.deserialize()?;
+				Ok(Err(value))
+			},
+			_ => Err(std::io::Error::new(
+				std::io::ErrorKind::Other,
+				"Unexpected variant ID.",
+			)),
+		}
 	}
 }
 

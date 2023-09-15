@@ -5,15 +5,17 @@ use crate::{
 use itertools::Itertools;
 use std::path::PathBuf;
 
-crate::id!();
-
-crate::kind!(Subpath);
+crate::id!(Subpath);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
 
+crate::handle!(Subpath);
+
 /// A subpath value.
 pub type Value = Subpath;
+
+crate::value!(Subpath);
 
 /// Subpath data.
 pub type Data = Subpath;

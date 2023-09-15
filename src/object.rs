@@ -1,13 +1,14 @@
-use crate::any;
 use std::collections::BTreeMap;
 
-crate::id!();
-
-crate::kind!(Object);
+crate::id!(Object);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
 
-pub type Value = BTreeMap<String, any::Handle>;
+crate::handle!(Object);
 
-pub type Data = BTreeMap<String, any::Id>;
+pub type Value = BTreeMap<String, crate::Handle>;
+
+crate::value!(Object);
+
+pub type Data = BTreeMap<String, crate::Id>;

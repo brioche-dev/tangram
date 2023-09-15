@@ -2,15 +2,17 @@ use crate::error::{return_error, Error, Result};
 use crate::subpath::Subpath;
 use std::path::PathBuf;
 
-crate::id!();
-
-crate::kind!(Relpath);
+crate::id!(Relpath);
 
 #[derive(Clone, Debug)]
 pub struct Handle(crate::Handle);
 
+crate::handle!(Relpath);
+
 /// A relpath value.
 pub type Value = Relpath;
+
+crate::value!(Relpath);
 
 /// Relpath data.
 pub type Data = Relpath;

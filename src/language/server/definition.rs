@@ -9,7 +9,7 @@ impl Server {
 	) -> Result<Option<lsp::GotoDefinitionResponse>> {
 		// Get the module.
 		let module = Module::from_lsp(
-			&self.tg,
+			&self.server,
 			params.text_document_position_params.text_document.uri,
 		)
 		.await?;
@@ -18,7 +18,7 @@ impl Server {
 		let position = params.text_document_position_params.position;
 
 		// Get the definitions.
-		let locations = module.definition(&self.tg, position.into()).await?;
+		let locations = module.definition(&self.server, position.into()).await?;
 
 		let Some(locations) = locations else {
 			return Ok(None);
