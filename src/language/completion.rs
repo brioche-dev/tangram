@@ -13,7 +13,11 @@ pub struct Entry {
 }
 
 impl Module {
-	pub async fn completion(&self, tg: &Server, position: Position) -> Result<Option<Vec<Entry>>> {
+	pub async fn completion(
+		&self,
+		server: &Server,
+		position: Position,
+	) -> Result<Option<Vec<Entry>>> {
 		// Create the language service request.
 		let request = service::Request::Completion(service::completion::Request {
 			module: self.clone(),
@@ -21,7 +25,7 @@ impl Module {
 		});
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Completion(response) = response else { return_error!("Unexpected response type.") };

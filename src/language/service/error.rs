@@ -3,33 +3,69 @@ use std::sync::Arc;
 use thiserror::Error;
 
 /// A language service error.
-#[derive(Clone, Debug, Error, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	Error,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct Error {
+	#[tangram_serialize(id = 0)]
 	pub message: String,
+	#[tangram_serialize(id = 1)]
 	pub stack_trace: Option<StackTrace>,
+	#[tangram_serialize(id = 2)]
 	pub source: Option<Arc<crate::error::Error>>,
 }
 
 /// A stack trace.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct StackTrace {
+	#[tangram_serialize(id = 0)]
 	pub stack_frames: Vec<StackFrame>,
 }
 
 /// A stack frame.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct StackFrame {
+	#[tangram_serialize(id = 0)]
 	pub location: Option<Location>,
 }
 
 /// A source location.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
+	#[tangram_serialize(id = 0)]
 	pub source: Option<String>,
+	#[tangram_serialize(id = 1)]
 	pub position: Position,
 }
 

@@ -44,14 +44,26 @@ pub struct Library {
 }
 
 #[derive(
-	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	Eq,
+	Hash,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Normal {
 	/// The module's package.
+	#[tangram_serialize(id = 0)]
 	pub package: package::Id,
 
 	/// The module's path.
+	#[tangram_serialize(id = 1)]
 	pub path: Subpath,
 }
 

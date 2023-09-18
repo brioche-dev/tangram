@@ -907,18 +907,6 @@ let convertArrayType = (
 	typeChecker: ts.TypeChecker,
 	type: ts.Type,
 ): ArrayType => {
-	// if (type.symbol) {
-	// 	let symbol = getAliasedSymbolIfAliased(typeChecker, type.symbol);
-	// 	let typeArguments = typeChecker
-	// 		.getTypeArguments(type as ts.TypeReference)
-	// 		.map((typeArgument) => convertType(typeChecker, typeArgument));
-	// 	let declaration = symbol.declarations![0]!;
-	// 	return {
-	// 		location: convertLocation(declaration),
-	// 		name: symbol.getName(),
-	// 		typeArguments: typeArguments ?? [],
-	// 	};
-	// }
 	return {
 		type: convertType(
 			typeChecker,

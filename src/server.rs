@@ -1,10 +1,12 @@
 use crate::{
-	build,
 	document::{self, Document},
-	evaluation, id, language, rid, value, Client, Error, Id, Result, Rid, WrapErr,
+	evaluation::{self},
+	id, language, return_error, rid, value, Blob, Client, Error, Evaluation, Result, WrapErr,
 };
-use async_recursion::async_recursion;
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{
+	stream::{self, BoxStream},
+	StreamExt, TryStreamExt,
+};
 use lmdb::Transaction;
 use std::{
 	collections::HashMap,
@@ -49,10 +51,11 @@ pub struct State {
 
 	/// The pending evaluations.
 	pub(crate) pending_evaluations:
-		std::sync::RwLock<HashMap<Rid, Arc<evaluation::State>, rid::BuildHasher>>,
+		std::sync::RwLock<HashMap<evaluation::Id, Arc<evaluation::State>, rid::BuildHasher>>,
 
-	/// The pending values_evaluations.
-	pub(crate) pending_values_evaluations: std::sync::RwLock<HashMap<Id, Rid, id::BuildHasher>>,
+	/// The pending assignments.
+	pub(crate) pending_assignments:
+		std::sync::RwLock<HashMap<crate::Id, evaluation::Id, id::BuildHasher>>,
 
 	/// An HTTP client for downloading resources.
 	pub(crate) resource_http_client: reqwest::Client,
@@ -69,15 +72,13 @@ pub(crate) struct Database {
 	pub(crate) env: lmdb::Environment,
 	pub(crate) values: lmdb::Database,
 	pub(crate) evaluations: lmdb::Database,
-	pub(crate) values_evaluations: lmdb::Database,
+	pub(crate) assignments: lmdb::Database,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
 	pub parent_token: Option<String>,
 	pub parent_url: Option<Url>,
-	pub preserve_temps: bool,
-	pub sandbox_enabled: bool,
 }
 
 impl Server {
@@ -101,12 +102,12 @@ impl Server {
 		let env = env_builder.open(&database_path)?;
 		let values = env.open_db(Some("values"))?;
 		let evaluations = env.open_db(Some("evaluations"))?;
-		let values_evaluations = env.open_db(Some("values_evaluations"))?;
+		let assignments = env.open_db(Some("assignments"))?;
 		let database = Database {
 			env,
 			values,
 			evaluations,
-			values_evaluations,
+			assignments,
 		};
 
 		// Create the documents maps.
@@ -132,8 +133,8 @@ impl Server {
 		// Create the pending evaluations.
 		let pending_evaluations = std::sync::RwLock::new(HashMap::default());
 
-		// Create the pending values to evaluations map.
-		let pending_values_evaluations = std::sync::RwLock::new(HashMap::default());
+		// Create the pending assignments.
+		let pending_assignments = std::sync::RwLock::new(HashMap::default());
 
 		// Create the HTTP client for downloading resources.
 		let resource_http_client = reqwest::Client::new();
@@ -158,7 +159,7 @@ impl Server {
 			parent,
 			path,
 			pending_evaluations,
-			pending_values_evaluations,
+			pending_assignments,
 			resource_http_client,
 			target_local_pool,
 			task_semaphore,
@@ -214,80 +215,104 @@ impl Server {
 		self.path().join("temps")
 	}
 
-	#[async_recursion]
-	pub async fn get_value_exists(&self, id: Id) -> Result<bool> {
+	pub async fn get_value_exists(&self, id: crate::Id) -> Result<bool> {
 		// Check if the value exists in the database.
-		{
-			let txn = self.state.database.env.begin_ro_txn()?;
-			match txn.get(self.state.database.values, &id.as_bytes()) {
-				Ok(_) => return Ok(true),
-				Err(lmdb::Error::NotFound) => {},
-				Err(error) => return Err(error.into()),
-			};
+		if self.get_value_exists_from_database(id)? {
+			return Ok(true);
 		}
 
 		// Check if the value exists in the parent.
-		{
-			if let Some(parent) = self.state.parent.as_ref() {
-				if parent.get_value_exists(id).await? {
-					return Ok(true);
-				}
-			}
+		if self.get_value_exists_from_parent(id).await? {
+			return Ok(true);
 		}
 
 		Ok(false)
 	}
 
-	#[async_recursion]
-	pub async fn try_get_value_bytes(&self, id: Id) -> Result<Option<Vec<u8>>> {
-		// Attempt to get the value from the database.
-		'a: {
-			let txn = self.state.database.env.begin_ro_txn()?;
-			let data = match txn.get(self.state.database.values, &id.as_bytes()) {
-				Ok(data) => data,
-				Err(lmdb::Error::NotFound) => break 'a,
-				Err(error) => return Err(error.into()),
-			};
-			return Ok(Some(data.to_owned()));
+	pub fn get_value_exists_from_database(&self, id: crate::Id) -> Result<bool> {
+		let txn = self.state.database.env.begin_ro_txn()?;
+		match txn.get(self.state.database.values, &id.as_bytes()) {
+			Ok(_) => Ok(true),
+			Err(lmdb::Error::NotFound) => Ok(false),
+			Err(error) => Err(error.into()),
 		}
+	}
+
+	pub async fn get_value_exists_from_parent(&self, id: crate::Id) -> Result<bool> {
+		if let Some(parent) = self.state.parent.as_ref() {
+			if parent.get_value_exists(id).await? {
+				return Ok(true);
+			}
+		}
+		Ok(false)
+	}
+
+	pub async fn get_value_bytes(&self, id: crate::Id) -> Result<Vec<u8>> {
+		self.try_get_value_bytes(id)
+			.await?
+			.wrap_err("Failed to get the value.")
+	}
+
+	pub async fn try_get_value_bytes(&self, id: crate::Id) -> Result<Option<Vec<u8>>> {
+		// Attempt to get the value from the database.
+		if let Some(bytes) = self.try_get_value_bytes_from_database(id)? {
+			return Ok(Some(bytes));
+		};
 
 		// Attempt to get the value from the parent.
-		'a: {
-			let Some(parent) = self.state.parent.as_ref() else {
-				break 'a;
-			};
-
-			// Get the value from the parent.
-			let Some(bytes) = parent.try_get_value_bytes(id).await? else {
-				break 'a;
-			};
-
-			// Create a write transaction.
-			let mut txn = self.state.database.env.begin_rw_txn()?;
-
-			// Add the value to the database.
-			txn.put(
-				self.state.database.values,
-				&id.as_bytes(),
-				&bytes,
-				lmdb::WriteFlags::empty(),
-			)?;
-
-			// Commit the transaction.
-			txn.commit()?;
-
+		if let Some(bytes) = self.try_get_value_bytes_from_parent(id).await? {
 			return Ok(Some(bytes));
-		}
+		};
 
 		Ok(None)
 	}
 
-	pub async fn try_put_value_bytes(&self, id: Id, bytes: &[u8]) -> Result<Result<(), Vec<Id>>> {
+	pub fn try_get_value_bytes_from_database(&self, id: crate::Id) -> Result<Option<Vec<u8>>> {
+		let txn = self.state.database.env.begin_ro_txn()?;
+		match txn.get(self.state.database.values, &id.as_bytes()) {
+			Ok(data) => Ok(Some(data.to_owned())),
+			Err(lmdb::Error::NotFound) => Ok(None),
+			Err(error) => Err(error.into()),
+		}
+	}
+
+	pub async fn try_get_value_bytes_from_parent(&self, id: crate::Id) -> Result<Option<Vec<u8>>> {
+		let Some(parent) = self.state.parent.as_ref() else {
+			return Ok(None);
+		};
+
+		// Get the value from the parent.
+		let Some(bytes) = parent.try_get_value_bytes(id).await? else {
+			return Ok(None);
+		};
+
+		// Create a write transaction.
+		let mut txn = self.state.database.env.begin_rw_txn()?;
+
+		// Add the value to the database.
+		txn.put(
+			self.state.database.values,
+			&id.as_bytes(),
+			&bytes,
+			lmdb::WriteFlags::empty(),
+		)?;
+
+		// Commit the transaction.
+		txn.commit()?;
+
+		Ok(Some(bytes))
+	}
+
+	pub async fn try_put_value_bytes(
+		&self,
+		id: crate::Id,
+		bytes: &[u8],
+	) -> Result<Result<(), Vec<crate::Id>>> {
 		// Deserialize the bytes.
 		let data = value::Data::deserialize(bytes)?;
 
 		// Check if there are any missing children.
-		let missing_children = futures::stream::iter(data.children())
+		let missing_children = stream::iter(data.children())
 			.map(Ok)
 			.try_filter_map(|id| async move {
 				let exists = self.get_value_exists(id).await?;
@@ -319,39 +344,20 @@ impl Server {
 		Ok(Ok(()))
 	}
 
-	pub async fn try_get_evaluation_for_build(&self, build_id: build::Id) -> Result<Option<Rid>> {
-		// Attempt to get the evaluation from the pending evaluations.
-		if let Some(evaluation_id) = self
-			.state
-			.pending_values_evaluations
-			.read()
-			.unwrap()
-			.get(&build_id)
-		{
+	pub async fn try_get_assignment(&self, id: crate::Id) -> Result<Option<evaluation::Id>> {
+		// Attempt to get the assignment from the pending assignments.
+		if let Some(evaluation_id) = self.state.pending_assignments.read().unwrap().get(&id) {
 			return Ok(Some(*evaluation_id));
 		}
 
-		// Attempt to get the evaluation from the database.
-		'a: {
-			let txn = self.state.database.env.begin_ro_txn()?;
-			let evaluation_id =
-				match txn.get(self.state.database.values_evaluations, &build_id.as_bytes()) {
-					Ok(evaluation_id) => evaluation_id,
-					Err(lmdb::Error::NotFound) => break 'a,
-					Err(error) => return Err(error.into()),
-				};
-			let evaluation_id = Rid::with_bytes(
-				evaluation_id
-					.try_into()
-					.map_err(Error::other)
-					.wrap_err("Invalid ID.")?,
-			);
+		// Attempt to get the assignment from the database.
+		if let Some(evaluation_id) = self.try_get_assignment_from_database(id).await? {
 			return Ok(Some(evaluation_id));
 		}
 
-		// Attempt to get the evaluation from the parent.
+		// Attempt to get the assignment from the parent.
 		if let Some(parent) = self.state.parent.as_ref() {
-			if let Some(evaluation_id) = parent.try_get_evaluation_for_build(build_id).await? {
+			if let Some(evaluation_id) = parent.try_get_assignment(id).await? {
 				return Ok(Some(evaluation_id));
 			}
 		}
@@ -359,32 +365,133 @@ impl Server {
 		Ok(None)
 	}
 
-	pub fn try_get_evaluation_children(
+	pub async fn try_get_assignment_from_database(
 		&self,
-		evaluation_id: Rid,
-	) -> Result<Option<BoxStream<'static, Rid>>> {
+		id: crate::Id,
+	) -> Result<Option<evaluation::Id>> {
+		// Get the assignment from the database.
+		let evaluation_id = {
+			let txn = self.state.database.env.begin_ro_txn()?;
+			match txn.get(self.state.database.assignments, &id.as_bytes()) {
+				Ok(evaluation_id) => evaluation::Id::with_bytes(
+					evaluation_id
+						.try_into()
+						.map_err(Error::other)
+						.wrap_err("Invalid ID.")?,
+				),
+				Err(lmdb::Error::NotFound) => return Ok(None),
+				Err(error) => return Err(error.into()),
+			}
+		};
+
+		// Get the evaluation. If the evaluation's result is an error, then return None.
+		let Some(evaluation) = self.try_get_evaluation(evaluation_id).await? else {
+			return_error!("Expected the evaluation to exist.");
+		};
+		if evaluation.result.is_err() {
+			return Ok(None);
+		}
+
+		Ok(Some(evaluation_id))
+	}
+
+	pub async fn try_get_evaluation(&self, id: evaluation::Id) -> Result<Option<Evaluation>> {
+		let Some(bytes) = self.try_get_evaluation_bytes(id).await? else {
+			return Ok(None);
+		};
+		let evaluation = Evaluation::deserialize(&bytes)?;
+		Ok(Some(evaluation))
+	}
+
+	pub async fn try_get_evaluation_bytes(&self, id: evaluation::Id) -> Result<Option<Vec<u8>>> {
+		// Attempt to get the evaluation from the database.
+		if let Some(bytes) = self.try_get_evaluation_bytes_from_database(id)? {
+			return Ok(Some(bytes));
+		}
+
+		// Attempt to get the evaluation from the parent.
+		if let Some(bytes) = self.try_get_evaluation_bytes_from_parent(id).await? {
+			return Ok(Some(bytes));
+		}
+
+		Ok(None)
+	}
+
+	pub fn try_get_evaluation_bytes_from_database(
+		&self,
+		id: evaluation::Id,
+	) -> Result<Option<Vec<u8>>> {
+		let txn = self.state.database.env.begin_ro_txn()?;
+		match txn.get(self.state.database.evaluations, &id.as_bytes()) {
+			Ok(evaluation) => Ok(Some(evaluation.to_owned())),
+			Err(lmdb::Error::NotFound) => Ok(None),
+			Err(error) => Err(error.into()),
+		}
+	}
+
+	pub async fn try_get_evaluation_bytes_from_parent(
+		&self,
+		id: evaluation::Id,
+	) -> Result<Option<Vec<u8>>> {
+		let Some(parent) = self.state.parent.as_ref() else {
+			return Ok(None);
+		};
+
+		// Get the evaluation from the parent.
+		let Some(bytes) = parent.try_get_evaluation_bytes(id).await? else {
+			return Ok(None);
+		};
+
+		// Create a write transaction.
+		let mut txn = self.state.database.env.begin_rw_txn()?;
+
+		// Add the evaluation to the database.
+		txn.put(
+			self.state.database.evaluations,
+			&id.as_bytes(),
+			&bytes,
+			lmdb::WriteFlags::empty(),
+		)?;
+
+		// Commit the transaction.
+		txn.commit()?;
+
+		Ok(Some(bytes))
+	}
+
+	pub async fn try_get_evaluation_children(
+		&self,
+		id: evaluation::Id,
+	) -> Result<Option<BoxStream<'static, evaluation::Id>>> {
 		// Attempt to get the evaluation children from the pending evaluations.
-		let state = self
-			.state
-			.pending_evaluations
-			.read()
-			.unwrap()
-			.get(&evaluation_id)
-			.cloned();
-		if let Some(state) = state {
+		'a: {
+			let state = self
+				.state
+				.pending_evaluations
+				.read()
+				.unwrap()
+				.get(&id)
+				.cloned();
+			let Some(state) = state else {
+				break 'a;
+			};
 			return Ok(Some(state.children()));
 		}
 
-		// TODO: Attempt to get the evaluation children from the database.
-
-		// TODO: Attempt to get the evaluation children from the parent.
+		// Attempt to get the evaluation children from the database or the parent.
+		'a: {
+			let Some(evaluation) = self.try_get_evaluation(id).await? else {
+				break 'a;
+			};
+			return Ok(Some(stream::iter(evaluation.children).boxed()));
+		}
 
 		Ok(None)
 	}
 
 	pub async fn try_get_evaluation_log(
 		&self,
-		evaluations_id: Rid,
+		id: evaluation::Id,
 	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
 		// Attempt to get the evaluation log from the pending evaluations.
 		let state = self
@@ -392,170 +499,80 @@ impl Server {
 			.pending_evaluations
 			.read()
 			.unwrap()
-			.get(&evaluations_id)
+			.get(&id)
 			.cloned();
 		if let Some(state) = state {
 			let log = state.log().await?;
 			return Ok(Some(log));
 		}
 
-		// TODO: Attempt to get the evaluation log from the database.
-
-		// TODO: Attempt to get the evaluation log from the parent.
+		// Attempt to get the evaluation children from the database or the parent.
+		'a: {
+			let Some(evaluation) = self.try_get_evaluation(id).await? else {
+				break 'a;
+			};
+			let client = &Client::Server(self.clone());
+			let blob = Blob::with_id(evaluation.log);
+			let bytes = blob.bytes(client).await?;
+			return Ok(Some(stream::once(async move { bytes }).boxed()));
+		}
 
 		Ok(None)
 	}
 
 	pub async fn try_get_evaluation_result(
 		&self,
-		evaluation_id: Rid,
-	) -> Result<Option<evaluation::Result<Id>>> {
+		id: evaluation::Id,
+	) -> Result<Option<evaluation::Result<crate::Id>>> {
 		// Attempt to get the evaluation result from the pending evaluations.
 		let state = self
 			.state
 			.pending_evaluations
 			.read()
 			.unwrap()
-			.get(&evaluation_id)
+			.get(&id)
 			.cloned();
 		if let Some(state) = state {
 			let result = state.result().await;
 			return Ok(Some(result));
 		}
 
-		// TODO: Attempt to get the evaluation result from the database.
-
-		// TODO: Attempt to get the evaluation result from the parent.
+		// Attempt to get the evaluation children from the database or the parent.
+		'a: {
+			let Some(evaluation) = self.try_get_evaluation(id).await? else {
+				break 'a;
+			};
+			return Ok(Some(evaluation.result));
+		}
 
 		Ok(None)
 	}
 
-	pub async fn evaluate(&self, build_id: build::Id) -> Result<Rid> {
+	pub async fn evaluate(&self, id: crate::Id) -> Result<evaluation::Id> {
 		// Attempt to get an existing evaluation.
-		if let Some(evaluation_id) = self.try_get_evaluation_for_build(build_id).await? {
+		if let Some(evaluation_id) = self.try_get_assignment(id).await? {
 			return Ok(evaluation_id);
 		}
 
 		// Create a new evaluation.
-		let evaluation_id = Rid::gen();
+		let evaluation_id = evaluation::Id::gen();
+		let state = todo!();
 		self.state
 			.pending_evaluations
 			.write()
 			.unwrap()
-			.insert(evaluation_id, todo!());
+			.insert(evaluation_id, state);
 		self.state
-			.pending_values_evaluations
+			.pending_assignments
 			.write()
 			.unwrap()
-			.insert(*build_id, evaluation_id);
+			.insert(id, evaluation_id);
+
+		// Spawn the task.
+		tokio::spawn(async move {
+			todo!();
+		});
+
 		Ok(evaluation_id)
 	}
 }
-
-// pub async fn get_package_diagnostics(
-// 	&self,
-// 	package_id: package::Id,
-// ) -> Result<Vec<language::Diagnostic>> {
-// 	todo!()
-// }
-
-// pub async fn get_package_doc(&self, package_id: package::Id) -> Result<()> {
-// 	todo!()
-// }
-
-// async fn store_direct(&self, server: &Server) -> Result<()> {
-// 	// If the handle is already stored, then return.
-// 	if self.id.read().unwrap().is_some() {
-// 		return Ok(());
-// 	}
-
-// 	let handle = self.clone();
-// 	let server = server.clone();
-// 	tokio::task::spawn_blocking(move || {
-// 		// Begin a write transaction.
-// 		let mut txn = server.state.database.env.begin_rw_txn()?;
-
-// 		// Collect the stored handles.
-// 		let mut stored = Vec::new();
-
-// 		// Store the handle and its unstored children recursively.
-// 		handle.store_direct_inner(&server, &mut txn, &mut stored)?;
-
-// 		// Commit the transaction.
-// 		txn.commit()?;
-
-// 		// Set the IDs of the stored handles.
-// 		for (id, handle) in stored {
-// 			handle.id.write().unwrap().replace(id);
-// 		}
-
-// 		Ok::<_, Error>(())
-// 	})
-// 	.await
-// 	.map_err(Error::other)
-// 	.wrap_err("Failed to join the store task.")?
-// 	.wrap_err("Failed to store the value.")?;
-// 	Ok(())
-// }
-
-// fn store_direct_inner(
-// 	&self,
-// 	server: &Server,
-// 	txn: &mut lmdb::RwTransaction,
-// 	stored: &mut Vec<(Id, Handle)>,
-// ) -> Result<()> {
-// 	// If the handle is already stored, then return.
-// 	if self.id.read().unwrap().is_some() {
-// 		return Ok(());
-// 	}
-
-// 	// Otherwise, it must be loaded, so get the value.
-// 	let value = self.value.read().unwrap();
-// 	let value = value.as_ref().unwrap();
-
-// 	// Store the children.
-// 	for child in value.children() {
-// 		child.store_direct_inner(server, txn, stored)?;
-// 	}
-
-// 	// Serialize the data.
-// 	let data = value.to_data();
-// 	let bytes = data.serialize()?;
-// 	let id = Id::new(self.kind(), &bytes);
-
-// 	// Add the value to the database.
-// 	txn.put(
-// 		server.state.database.values,
-// 		&id.as_bytes(),
-// 		&bytes,
-// 		lmdb::WriteFlags::empty(),
-// 	)?;
-
-// 	// Add to the stored handles.
-// 	stored.push((id, self.clone()));
-
-// 	Ok(())
-// }
-
-// async fn run_inner(&self, tg: &Server, parent: Option<Operation>) -> Result<Value> {
-// 	// If the operation has already run, then return its output.
-// 	let output = self.try_get_output(tg).await?;
-// 	if let Some(output) = output {
-// 		return Ok(output);
-// 	}
-
-// 	// Evaluate the operation.
-// 	let output = match self {
-// 		Build::Resource(resource) => resource.download_inner(tg).await?,
-// 		Build::Target(target) => target.build_inner(tg).await?,
-// 		Build::Task(task) => task.run_inner(tg).await?,
-// 	};
-
-// 	// Store the output.
-// 	output.store(tg).await?;
-
-// 	// Set the output.
-// 	self.set_output_local(tg, &output).await?;
-
-// 	Ok(output)
-// }

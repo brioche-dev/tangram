@@ -10,14 +10,14 @@ pub type Symbol = serde_json::Value;
 
 impl Module {
 	/// Get the docs for a module.
-	pub async fn docs(&self, tg: &Server) -> Result<Response> {
+	pub async fn docs(&self, server: &Server) -> Result<Response> {
 		// Create the language service request.
 		let request = service::Request::Doc(service::doc::Request {
 			module: self.clone(),
 		});
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Doc(response) = response else { return_error!("Unexpected response type.") };

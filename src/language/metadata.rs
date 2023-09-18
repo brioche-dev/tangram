@@ -7,14 +7,14 @@ use crate::{
 };
 
 impl Module {
-	pub async fn metadata(tg: &Server, text: &str) -> Result<package::Metadata> {
+	pub async fn metadata(server: &Server, text: &str) -> Result<package::Metadata> {
 		// Create the language service request.
 		let request = service::Request::Metadata(service::metadata::Request {
 			text: text.to_owned(),
 		});
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Metadata(response) = response else { return_error!("Unexpected response type.") };

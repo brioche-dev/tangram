@@ -31,7 +31,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = tg::Package::with_specifier(&self.tg, args.package)
+		let package = tg::Package::with_specifier(client, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
@@ -49,7 +49,7 @@ impl Cli {
 			env,
 			args_,
 		);
-		let output = target.build(&self.tg).await?;
+		let output = target.build(client).await?;
 
 		// Get the output artifact.
 		let artifact = output
@@ -57,7 +57,7 @@ impl Cli {
 			.wrap_err("Expected the output to be an artifact.")?;
 
 		// Check out the artifact.
-		let artifact_path = artifact.check_out_internal(&self.tg).await?;
+		let artifact_path = artifact.check_out_internal(client).await?;
 
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {

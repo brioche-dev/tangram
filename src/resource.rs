@@ -280,8 +280,17 @@ pub mod unpack {
 	}
 }
 
-#[derive(Clone, Debug, Error, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	Error,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[error(transparent)]
 pub struct Error {
+	#[tangram_serialize(id = 0)]
 	source: Box<evaluation::Error>,
 }

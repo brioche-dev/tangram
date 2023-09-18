@@ -283,6 +283,54 @@ impl Deserialize for Arc<str> {
 	}
 }
 
+impl<T> Serialize for Box<T>
+where
+	T: Serialize,
+{
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		self.as_ref().serialize(serializer)
+	}
+}
+
+impl<T> Deserialize for Box<T>
+where
+	T: Deserialize,
+{
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		Ok(Self::new(deserializer.deserialize()?))
+	}
+}
+
+impl<T> Serialize for Arc<T>
+where
+	T: Serialize,
+{
+	fn serialize<W>(&self, serializer: &mut Serializer<W>) -> Result<()>
+	where
+		W: Write,
+	{
+		self.as_ref().serialize(serializer)
+	}
+}
+
+impl<T> Deserialize for Arc<T>
+where
+	T: Deserialize,
+{
+	fn deserialize<R>(deserializer: &mut Deserializer<R>) -> Result<Self>
+	where
+		R: Read,
+	{
+		Ok(Self::new(deserializer.deserialize()?))
+	}
+}
+
 impl<T, U> Serialize for (T, U)
 where
 	T: Serialize,

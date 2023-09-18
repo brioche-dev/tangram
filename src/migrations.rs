@@ -1,7 +1,4 @@
-use crate::{
-	error::{return_error, Error, Result, WrapErr},
-	server::Server,
-};
+use crate::{return_error, Error, Result, Server, WrapErr};
 use futures::FutureExt;
 use std::path::Path;
 
@@ -74,8 +71,8 @@ async fn migration_0000(path: &Path) -> Result<()> {
 	// Create the evaluations database.
 	env.create_db("evaluations".into(), lmdb::DatabaseFlags::empty())?;
 
-	// Create the values_evaluations database.
-	env.create_db("values_evaluations".into(), lmdb::DatabaseFlags::empty())?;
+	// Create the assignments database.
+	env.create_db("assignments".into(), lmdb::DatabaseFlags::empty())?;
 
 	// Create the artifacts directory.
 	let artifacts_path = path.join("artifacts");

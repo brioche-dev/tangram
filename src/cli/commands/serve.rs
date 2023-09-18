@@ -46,36 +46,22 @@ impl Cli {
 		// Read the config.
 		let config = Self::read_config().await?;
 
-		// Get the preserve temps configuration.
-		let preserve_temps = args
-			.preserve_temps
-			.or(config.as_ref().and_then(|config| config.preserve_temps))
-			.unwrap_or(false);
-
-		// Get the sandbox configuration.
-		let sandbox_enabled = args
-			.sandbox_enabled
-			.or(config.as_ref().and_then(|config| config.sandbox_enabled))
-			.unwrap_or(true);
-
 		// Read the credentials.
 		let credentials = Self::read_credentials().await?;
 
-		// Get the origin URL.
-		let origin_url = config
+		// Get the parent URL.
+		let parent_url = config
 			.as_ref()
-			.and_then(|config| config.origin_url.as_ref())
+			.and_then(|config| config.parent_url.as_ref())
 			.cloned();
 
 		// Get the origin token.
-		let origin_token = credentials.map(|credentials| credentials.token);
+		let parent_token = credentials.map(|credentials| credentials.token);
 
 		// Create the options.
 		let options = tg::server::Options {
-			parent_token: origin_token,
-			parent_url: origin_url,
-			preserve_temps,
-			sandbox_enabled,
+			parent_token,
+			parent_url,
 		};
 
 		// Create the server.

@@ -27,6 +27,8 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
+		let client = &self.client;
+
 		// Create the package.
 		let package = tg::Package::with_specifier(&self.client, args.package)
 			.await
@@ -47,11 +49,22 @@ impl Cli {
 			args_,
 		);
 
-		// Get the output.
-		let output = target
-			.evaluate(&self.client)
-			.await
-			.wrap_err("Failed to build the target.")?;
+		// Build!
+		let id = target.id(client).await?;
+		let evaluation_id =
+			if let Some(evaluation_id) = client.try_get_assignment(id.into()).await? {
+				evaluation_id
+			} else {
+				client.evaluate(id.into()).await?
+			};
+		let result =
+			if let Some(evaluation) = client.try_get_evaluation_bytes(evaluation_id).await? {
+				let evaluation = tg::Evaluation::deserialize(&evaluation)?;
+				evaluation.result
+			} else {
+				client.get_evaluation_result(evaluation_id).await?
+			};
+		let output = result.map(tg::Handle::with_id).map_err(tg::Error::from)?;
 
 		if let Some(path) = args.output {
 			// Check out the output if requested.

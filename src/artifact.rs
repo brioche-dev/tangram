@@ -67,12 +67,7 @@ impl Handle {
 					Variant::Directory(directory) => {
 						directory.entries(client).await?.values().cloned().collect()
 					},
-					Variant::File(file) => file
-						.references(client)
-						.await?
-						.into_iter()
-						.cloned()
-						.collect(),
+					Variant::File(file) => file.references(client).await?.to_owned(),
 					Variant::Symlink(symlink) => symlink
 						.target(client)
 						.await?

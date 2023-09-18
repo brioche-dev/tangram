@@ -9,7 +9,7 @@ use crate::{
 impl Module {
 	pub async fn references(
 		&self,
-		tg: &Server,
+		server: &Server,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
 		// Create the language service request.
@@ -19,7 +19,7 @@ impl Module {
 		});
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::References(response) = response else { return_error!("Unexpected response type.") };

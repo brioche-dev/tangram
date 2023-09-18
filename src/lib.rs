@@ -17,6 +17,7 @@ pub use self::{
 	checksum::Checksum,
 	directory::Handle as Directory,
 	error::{Error, Result, WrapErr},
+	evaluation::Evaluation,
 	file::Handle as File,
 	id::Id,
 	kind::Kind,
@@ -44,9 +45,6 @@ pub mod artifact;
 pub mod blob;
 pub mod bool;
 pub mod build;
-pub mod evaluate;
-// pub mod pull;
-// pub mod push;
 pub mod bundle;
 pub mod bytes;
 pub mod checkin;
@@ -60,6 +58,7 @@ pub mod directory;
 #[cfg(feature = "server")]
 pub mod document;
 pub mod error;
+pub mod evaluate;
 pub mod evaluation;
 pub mod file;
 pub mod id;
@@ -74,6 +73,8 @@ pub mod number;
 pub mod object;
 pub mod package;
 pub mod placeholder;
+pub mod pull;
+pub mod push;
 pub mod relpath;
 pub mod resource;
 pub mod rid;

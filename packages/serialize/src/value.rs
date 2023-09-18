@@ -138,21 +138,3 @@ impl Deserialize for Value {
 		Ok(value)
 	}
 }
-
-impl Serialize for Box<Value> {
-	fn serialize<W>(&self, serializer: &mut crate::Serializer<W>) -> Result<()>
-	where
-		W: Write,
-	{
-		serializer.serialize(self)
-	}
-}
-
-impl Deserialize for Box<Value> {
-	fn deserialize<R>(deserializer: &mut crate::Deserializer<R>) -> Result<Self>
-	where
-		R: Read,
-	{
-		deserializer.deserialize()
-	}
-}

@@ -1,4 +1,4 @@
-use crate::error::{return_error, Error, Result};
+use crate::{return_error, Error, Result};
 
 #[derive(
 	Clone,

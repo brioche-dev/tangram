@@ -456,13 +456,41 @@ impl Data {
 #[macro_export]
 macro_rules! handle {
 	($t:ident) => {
-		impl From<Handle> for $crate::Handle {
-			fn from(value: Handle) -> Self {
+		impl self::Handle {
+			#[must_use]
+			pub fn with_id(id: self::Id) -> Self {
+				Self($crate::Handle::with_id(id.into()))
+			}
+
+			#[must_use]
+			pub fn with_value(value: self::Value) -> Self {
+				Self($crate::Handle::with_value(value.into()))
+			}
+
+			#[must_use]
+			pub fn expect_id(&self) -> self::Id {
+				self.0.expect_id().try_into().unwrap()
+			}
+
+			pub async fn id(&self, client: &$crate::Client) -> $crate::Result<self::Id> {
+				Ok(self.0.id(client).await?.try_into().unwrap())
+			}
+
+			pub async fn value(&self, client: &$crate::Client) -> $crate::Result<&self::Value> {
+				match self.0.value(client).await? {
+					$crate::Value::$t(value) => Ok(value),
+					_ => unreachable!(),
+				}
+			}
+		}
+
+		impl From<self::Handle> for $crate::Handle {
+			fn from(value: self::Handle) -> Self {
 				value.0
 			}
 		}
 
-		impl TryFrom<$crate::Handle> for Handle {
+		impl TryFrom<$crate::Handle> for self::Handle {
 			type Error = $crate::Error;
 
 			fn try_from(value: $crate::Handle) -> Result<Self, Self::Error> {
@@ -472,42 +500,14 @@ macro_rules! handle {
 				}
 			}
 		}
-
-		impl Handle {
-			#[must_use]
-			pub fn with_id(id: Id) -> Self {
-				Self($crate::Handle::with_id(id.into()))
-			}
-
-			#[must_use]
-			pub fn with_value(value: Value) -> Self {
-				Self($crate::Handle::with_value(value.into()))
-			}
-
-			#[must_use]
-			pub fn expect_id(&self) -> Id {
-				self.0.expect_id().try_into().unwrap()
-			}
-
-			pub async fn id(&self, client: &$crate::Client) -> $crate::Result<Id> {
-				Ok(self.0.id(client).await?.try_into().unwrap())
-			}
-
-			pub async fn value(&self, client: &$crate::Client) -> $crate::Result<&Value> {
-				match self.0.value(client).await? {
-					$crate::Value::$t(value) => Ok(value),
-					_ => unreachable!(),
-				}
-			}
-		}
 	};
 }
 
 #[macro_export]
 macro_rules! value {
 	($t:ident) => {
-		impl From<Value> for $crate::Value {
-			fn from(value: Value) -> Self {
+		impl From<self::Value> for $crate::Value {
+			fn from(value: self::Value) -> Self {
 				$crate::Value::$t(value)
 			}
 		}

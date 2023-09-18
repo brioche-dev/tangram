@@ -19,12 +19,12 @@ struct Key {
 impl Target {
 	/// Build the target.
 	#[tracing::instrument(skip(tg), ret)]
-	pub async fn build(&self, tg: &Server) -> Result<Value> {
+	pub async fn build(&self, server: &Server) -> Result<Value> {
 		let operation = Build::Target(self.clone());
 		operation.output(tg, None).await
 	}
 
-	pub(crate) async fn build_inner(&self, tg: &Server) -> Result<Value> {
+	pub(crate) async fn build_inner(&self, server: &Server) -> Result<Value> {
 		// Build the target on the server's local pool because it is a `!Send` future.
 		let output = tg
 			.local_pool

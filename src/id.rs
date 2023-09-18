@@ -1,12 +1,10 @@
-use crate::{
-	error::{Error, Result, WrapErr},
-	Kind,
-};
+use crate::{Error, Kind, Result, WrapErr};
 use byteorder::{NativeEndian, ReadBytesExt};
 use derive_more::{From, Into};
 
 pub const SIZE: usize = 32;
 
+/// A value ID.
 #[derive(
 	Clone,
 	Copy,

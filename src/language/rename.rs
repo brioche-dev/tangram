@@ -7,7 +7,11 @@ use crate::{
 };
 
 impl Module {
-	pub async fn rename(&self, tg: &Server, position: Position) -> Result<Option<Vec<Location>>> {
+	pub async fn rename(
+		&self,
+		server: &Server,
+		position: Position,
+	) -> Result<Option<Vec<Location>>> {
 		// Create the language service request.
 		let request = service::Request::Rename(service::rename::Request {
 			module: self.clone(),
@@ -15,7 +19,7 @@ impl Module {
 		});
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Rename(response) = response else { return_error!("Unexpected response type.") };

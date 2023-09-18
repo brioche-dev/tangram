@@ -7,7 +7,7 @@ use crate::{
 };
 
 impl Module {
-	pub async fn hover(&self, tg: &Server, position: Position) -> Result<Option<String>> {
+	pub async fn hover(&self, server: &Server, position: Position) -> Result<Option<String>> {
 		// Create the language service request.
 		let request = service::Request::Hover(service::hover::Request {
 			module: self.clone(),
@@ -15,7 +15,7 @@ impl Module {
 		});
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Hover(response) = response else { return_error!("Unexpected response type.") };

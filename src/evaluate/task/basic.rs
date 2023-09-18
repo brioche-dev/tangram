@@ -8,7 +8,7 @@ use crate::{
 };
 
 impl Task {
-	pub async fn run_inner_basic(&self, tg: &Server) -> Result<Value> {
+	pub async fn run_inner_basic(&self, server: &Server) -> Result<Value> {
 		// Check out the references.
 		self.check_out_references(tg)
 			.await

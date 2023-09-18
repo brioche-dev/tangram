@@ -1,8 +1,20 @@
 /// A position in a string, identified by zero-indexed line and character offsets. This type maps cleanly to the `Position` type in the Language Server Protocol. For maximum compatibility with the Language Server Protocol, character offsets use UTF-16 code units.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Debug,
+	Clone,
+	Copy,
+	PartialEq,
+	Eq,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct Position {
+	#[tangram_serialize(id = 0)]
 	pub line: u32,
+	#[tangram_serialize(id = 1)]
 	pub character: u32,
 }
 

@@ -5,41 +5,99 @@ use thiserror::Error;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An error.
-#[derive(Clone, Debug, Error, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	Error,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Error {
 	/// An error with a message.
-	#[error("{message}\n  {location}")]
-	Message {
-		message: String,
-		location: Location,
-		source: Option<Arc<Error>>,
-	},
+	#[error(transparent)]
+	#[tangram_serialize(id = 0)]
+	Message(#[from] Message),
 
 	/// A build error.
 	#[error(transparent)]
+	#[tangram_serialize(id = 1)]
 	Evaluation(#[from] crate::evaluation::Error),
 
 	/// A language service error.
 	#[error(transparent)]
+	#[tangram_serialize(id = 2)]
 	LanguageService(#[from] crate::language::service::error::Error),
 
 	/// Any other error.
-	#[error("{message}")]
-	Other {
-		message: String,
-		source: Option<Arc<Error>>,
-	},
+	#[error(transparent)]
+	#[tangram_serialize(id = 3)]
+	Other(#[from] Other),
+}
+
+#[derive(
+	Clone,
+	Debug,
+	Error,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+#[error("{message}\n  {location}")]
+pub struct Message {
+	#[tangram_serialize(id = 0)]
+	message: String,
+	#[tangram_serialize(id = 1)]
+	location: Location,
+	#[tangram_serialize(id = 2)]
+	source: Option<Arc<Error>>,
+}
+
+#[derive(
+	Clone,
+	Debug,
+	Error,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+#[error("{message}")]
+pub struct Other {
+	#[tangram_serialize(id = 0)]
+	message: String,
+	#[tangram_serialize(id = 1)]
+	source: Option<Arc<Error>>,
+}
+
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+pub struct Location {
+	#[tangram_serialize(id = 0)]
+	pub file: String,
+	#[tangram_serialize(id = 1)]
+	pub line: u32,
+	#[tangram_serialize(id = 2)]
+	pub column: u32,
 }
 
 impl Error {
 	#[track_caller]
 	pub fn message(message: impl std::fmt::Display) -> Error {
-		Error::Message {
+		Error::Message(Message {
 			message: message.to_string(),
 			location: Location::caller(),
 			source: None,
-		}
+		})
 	}
 
 	#[must_use]
@@ -49,47 +107,40 @@ impl Error {
 	}
 
 	pub fn other(error: impl std::error::Error) -> Self {
-		Self::Other {
+		Self::Other(Other {
 			message: error.to_string(),
 			source: error.source().map(|error| Arc::new(Self::other(error))),
-		}
+		})
 	}
 }
 
 #[cfg(feature = "client")]
 impl From<reqwest::Error> for Error {
 	fn from(error: reqwest::Error) -> Self {
-		Self::Other {
+		Self::Other(Other {
 			message: error.to_string(),
 			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		}
+		})
 	}
 }
 
 #[cfg(feature = "server")]
 impl From<lmdb::Error> for Error {
 	fn from(error: lmdb::Error) -> Self {
-		Self::Other {
+		Self::Other(Other {
 			message: error.to_string(),
 			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		}
+		})
 	}
 }
 
 impl From<std::io::Error> for Error {
 	fn from(error: std::io::Error) -> Error {
-		Error::Other {
+		Error::Other(Other {
 			message: error.to_string(),
 			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		}
+		})
 	}
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct Location {
-	pub file: String,
-	pub line: u32,
-	pub column: u32,
 }
 
 impl Location {
@@ -133,11 +184,11 @@ impl Error {
 		C: std::fmt::Display,
 		F: FnOnce() -> C,
 	{
-		Error::Message {
+		Error::Message(Message {
 			message: f().to_string(),
 			location: Location::caller(),
 			source: Some(Arc::new(self)),
-		}
+		})
 	}
 }
 

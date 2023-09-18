@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 pub struct Temp {
 	id: Rid,
 	path: PathBuf,
-	preserve: bool,
 }
 
 impl Temp {
@@ -13,8 +12,7 @@ impl Temp {
 	pub fn new(server: &Server) -> Temp {
 		let id = Rid::gen();
 		let path = server.temps_path().join(id.to_string());
-		let preserve = server.state.options.preserve_temps;
-		Temp { id, path, preserve }
+		Temp { id, path }
 	}
 
 	#[must_use]
@@ -30,11 +28,9 @@ impl Temp {
 
 impl Drop for Temp {
 	fn drop(&mut self) {
-		if !self.preserve {
-			let path = self.path.clone();
-			tokio::task::spawn(async move {
-				crate::util::rmrf(&path).await.ok();
-			});
-		}
+		let path = self.path.clone();
+		tokio::task::spawn(async move {
+			crate::util::rmrf(&path).await.ok();
+		});
 	}
 }

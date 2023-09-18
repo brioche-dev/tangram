@@ -1,7 +1,4 @@
-use crate::{
-	error::{error, Error, Result},
-	relpath::Relpath,
-};
+use crate::{error, relpath::Relpath, Error, Result};
 use itertools::Itertools;
 use std::path::PathBuf;
 

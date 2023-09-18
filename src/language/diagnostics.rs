@@ -23,12 +23,12 @@ pub enum Severity {
 }
 
 impl Module {
-	pub async fn diagnostics(tg: &Server) -> Result<Vec<Diagnostic>> {
+	pub async fn diagnostics(server: &Server) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Diagnostics(service::diagnostics::Request {});
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Diagnostics(response) = response else { return_error!("Unexpected response type.") };

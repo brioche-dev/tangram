@@ -8,10 +8,10 @@ use std::path::Path;
 use url::Url;
 
 impl Module {
-	pub async fn from_lsp(tg: &Server, url: Url) -> Result<module::Module> {
+	pub async fn from_lsp(server: &Server, url: Url) -> Result<module::Module> {
 		match url.scheme() {
 			"file" => {
-				let document = Document::for_path(tg, Path::new(url.path())).await?;
+				let document = Document::for_path(server, Path::new(url.path())).await?;
 				let module = Module::Document(document);
 				Ok(module)
 			},

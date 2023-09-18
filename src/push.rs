@@ -1,48 +1,40 @@
-use super::{block::TryAddBlockOutcome, Client};
-use crate::{
-	error::{return_error, Error, Result},
-	server::Server,
-};
+use crate::{error, return_error, Id, Result, Server};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
-use std::{io::Cursor, sync::Arc};
 
-impl Client {
-	/// Push a block.
+impl Server {
+	/// Push a value.
 	#[async_recursion]
 	#[must_use]
-	pub async fn push(&self, tg: &Server, block: Block) -> Result<()> {
-		// Attempt to add the block.
-		let bytes: Arc<[u8]> = block.bytes(tg).await?.into();
-		let reader = Cursor::new(bytes.clone());
-		let outcome = self.try_put_block(block.id(), reader).await?;
+	pub async fn push(&self, id: Id) -> Result<()> {
+		let Some(parent) = self.state.parent.as_ref() else {
+			return_error!("The server does not have a parent.");
+		};
 
-		// If the block was added, then return. Otherwise, push the missing children.
-		match outcome {
-			TryAddBlockOutcome::Added => return Ok(()),
-			TryAddBlockOutcome::MissingChildren(children) => {
+		// Attempt to put the value.
+		let bytes = self.get_value_bytes(id).await?;
+		let result = parent.try_put_value_bytes(id, &bytes).await?;
+
+		match result {
+			// If the value was added, then return.
+			Ok(_) => return Ok(()),
+
+			// Otherwise, push the missing children.
+			Err(children) => {
 				children
 					.into_iter()
-					.map(|id| async move {
-						let child = Block::with_id(id);
-						self.push(tg, child).await?;
-						Ok::<_, Error>(())
-					})
+					.map(|id| self.push(id))
 					.collect::<FuturesUnordered<_>>()
 					.try_collect()
 					.await?;
 			},
 		}
 
-		// Attempt to add the block again. This time, return an error if there are missing children.
-		let reader = Cursor::new(bytes.clone());
-		let outcome = self.try_put_block(block.id(), reader).await?;
-		match outcome {
-			TryAddBlockOutcome::Added => {},
-			TryAddBlockOutcome::MissingChildren(_) => {
-				return_error!("Failed to push the block.");
-			},
-		}
+		// Attempt to put the value again. This time, return an error if there are missing children.
+		parent
+			.try_put_value_bytes(id, &bytes)
+			.await?
+			.map_err(|_| error!("Failed to push the block."))?;
 
 		Ok(())
 	}

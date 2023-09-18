@@ -3,7 +3,21 @@ use byteorder::{NativeEndian, ReadBytesExt};
 
 pub const SIZE: usize = 16;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(
+	Debug,
+	Copy,
+	Clone,
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+#[serde(into = "String", try_from = "String")]
+#[tangram_serialize(into = "[u8; SIZE]", try_from = "[u8; SIZE]")]
 pub struct Rid([u8; SIZE]);
 
 impl Rid {
@@ -12,6 +26,7 @@ impl Rid {
 		Rid(rand::random())
 	}
 
+	#[must_use]
 	pub fn with_bytes(bytes: [u8; SIZE]) -> Self {
 		Self(bytes)
 	}
@@ -70,34 +85,17 @@ impl std::str::FromStr for Rid {
 	}
 }
 
-impl serde::Serialize for Rid {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: serde::Serializer,
-	{
-		serializer.serialize_str(&self.to_string())
+impl From<Rid> for String {
+	fn from(value: Rid) -> Self {
+		value.to_string()
 	}
 }
 
-impl<'de> serde::Deserialize<'de> for Rid {
-	fn deserialize<D>(deserializer: D) -> Result<Rid, D::Error>
-	where
-		D: serde::Deserializer<'de>,
-	{
-		struct IdVisitor;
-		impl<'de> serde::de::Visitor<'de> for IdVisitor {
-			type Value = Rid;
-			fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-				formatter.write_str("a string")
-			}
-			fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-			where
-				E: serde::de::Error,
-			{
-				value.parse().map_err(|_| E::custom("Invalid ID."))
-			}
-		}
-		deserializer.deserialize_str(IdVisitor)
+impl TryFrom<String> for Rid {
+	type Error = Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
 	}
 }
 

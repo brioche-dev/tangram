@@ -1,4 +1,4 @@
-use crate::error::{return_error, Error, Result, WrapErr};
+use crate::{return_error, Error, Result, WrapErr};
 use base64::Engine;
 
 #[derive(

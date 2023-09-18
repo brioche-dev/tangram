@@ -1,5 +1,10 @@
-use crate::{package, subpath::Subpath, target, Client, Package, Result};
-use std::collections::BTreeMap;
+use crate::{
+	evaluation, language::Position, package, subpath::Subpath, target, Client, Evaluation, Package,
+	Result,
+};
+use std::{collections::BTreeMap, sync::Arc};
+use thiserror::Error;
+use url::Url;
 
 crate::id!(Target);
 
@@ -78,8 +83,20 @@ impl Handle {
 		})
 	}
 
-	pub async fn evaluate(&self, client: &Client) -> Result<crate::Handle> {
-		todo!()
+	pub async fn output(&self, client: &Client) -> Result<evaluation::Result<crate::Handle>> {
+		let id = self.id(client).await?;
+		let evaluation_id =
+			if let Some(evaluation_id) = client.try_get_assignment(id.into()).await? {
+				evaluation_id
+			} else {
+				client.evaluate(id.into()).await?
+			};
+		if let Some(evaluation) = client.try_get_evaluation_bytes(evaluation_id).await? {
+			let evaluation = Evaluation::deserialize(&evaluation)?;
+			return Ok(evaluation.result.map(crate::Handle::with_id));
+		}
+		let result = client.get_evaluation_result(evaluation_id).await?;
+		Ok(result.map(crate::Handle::with_id))
 	}
 }
 
@@ -134,48 +151,90 @@ impl Data {
 	}
 }
 
-use crate::{module::position::Position, module::Module};
-use std::sync::Arc;
-use thiserror::Error;
-
 /// An error from a target.
-#[derive(Clone, Debug, Error, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	Error,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct Error {
+	#[tangram_serialize(id = 0)]
 	pub message: String,
+	#[tangram_serialize(id = 1)]
 	pub location: Option<Location>,
+	#[tangram_serialize(id = 2)]
 	pub stack_trace: Option<StackTrace>,
-	pub source: Option<Arc<crate::error::Error>>,
+	#[tangram_serialize(id = 3)]
+	pub source: Option<Arc<crate::Error>>,
 }
 
 /// A stack trace.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct StackTrace {
+	#[tangram_serialize(id = 0)]
 	pub stack_frames: Vec<StackFrame>,
 }
 
 /// A stack frame.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct StackFrame {
+	#[tangram_serialize(id = 0)]
 	pub location: Option<Location>,
 }
 
 /// A source location.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
+	#[tangram_serialize(id = 0)]
 	pub source: Source,
+	#[tangram_serialize(id = 1)]
 	pub position: Position,
 }
 
 /// A source.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Serialize,
+	serde::Deserialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum Source {
+	#[tangram_serialize(id = 0)]
 	Global(Option<String>),
-	Module(Module),
+	#[tangram_serialize(id = 1)]
+	Module(Url),
 }
 
 impl std::fmt::Display for Error {

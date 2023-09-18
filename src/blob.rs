@@ -1,5 +1,9 @@
 use crate::{blob, bytes::Bytes, return_error, Client, Error, Result};
-use futures::{future::BoxFuture, stream::StreamExt, TryStreamExt};
+use futures::{
+	future::BoxFuture,
+	stream::{self, StreamExt},
+	TryStreamExt,
+};
 use num::ToPrimitive;
 use pin_project::pin_project;
 use std::{io::Cursor, pin::Pin, task::Poll};
@@ -68,18 +72,18 @@ impl Handle {
 
 		// Create the tree.
 		while leaves.len() > MAX_BRANCH_CHILDREN {
-			leaves = futures::stream::iter(leaves)
+			leaves = stream::iter(leaves)
 				.chunks(MAX_BRANCH_CHILDREN)
 				.flat_map(|chunk| {
 					if chunk.len() == MAX_BRANCH_CHILDREN {
-						futures::stream::once(async move {
+						stream::once(async move {
 							let blob = Self::new(chunk);
 							let size = blob.size(client).await?;
 							Ok::<_, Error>((blob, size))
 						})
 						.boxed()
 					} else {
-						futures::stream::iter(chunk.into_iter().map(Result::Ok)).boxed()
+						stream::iter(chunk.into_iter().map(Result::Ok)).boxed()
 					}
 				})
 				.try_collect()

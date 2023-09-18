@@ -187,6 +187,7 @@ pub type Outgoing = http_body_util::combinators::BoxBody<
 	Box<dyn std::error::Error + Send + Sync + 'static>,
 >;
 
+/// An empty response body.
 #[must_use]
 pub fn empty() -> Outgoing {
 	http_body_util::Empty::new()
@@ -194,6 +195,8 @@ pub fn empty() -> Outgoing {
 		.boxed()
 }
 
+/// A full response body.
+#[must_use]
 pub fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
 	http_body_util::Full::new(chunk.into())
 		.map_err(|_| unreachable!())

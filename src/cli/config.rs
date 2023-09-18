@@ -12,13 +12,7 @@ pub struct Config {
 	pub autoenvs: Option<Vec<PathBuf>>,
 
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub origin_url: Option<Url>,
-
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub preserve_temps: Option<bool>,
-
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub sandbox_enabled: Option<bool>,
+	pub parent_url: Option<Url>,
 }
 
 impl Cli {

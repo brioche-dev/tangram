@@ -1,9 +1,6 @@
 use crate::{
-	error::{return_error, Result, WrapErr},
-	module::range::Range,
-	package::ROOT_MODULE_FILE_NAME,
-	server::Server,
-	subpath::Subpath,
+	module::range::Range, package::ROOT_MODULE_FILE_NAME, return_error, subpath::Subpath, Result,
+	Server, WrapErr,
 };
 use std::{
 	path::{Path, PathBuf},
@@ -80,7 +77,7 @@ impl Document {
 		Ok(document)
 	}
 
-	pub async fn for_path(tg: &Server, path: &Path) -> Result<Self> {
+	pub async fn for_path(server: &Server, path: &Path) -> Result<Self> {
 		// Find the package path by searching the path's ancestors for a root module.
 		let mut found = false;
 		let mut package_path = path.to_owned();
@@ -108,7 +105,7 @@ impl Document {
 			.wrap_err("Failed to parse the module path.")?;
 
 		// Create the document.
-		let document = Self::new(tg, package_path, module_path).await?;
+		let document = Self::new(server, package_path, module_path).await?;
 
 		Ok(document)
 	}

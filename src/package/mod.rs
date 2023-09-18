@@ -52,6 +52,12 @@ pub struct Data {
 	pub dependencies: Option<BTreeMap<Dependency, Id>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Metadata {
+	pub name: Option<String>,
+	pub version: Option<String>,
+}
+
 impl Handle {
 	pub async fn with_specifier(client: &Client, specifier: Specifier) -> Result<Self> {
 		match specifier {
@@ -266,10 +272,4 @@ impl Data {
 			)
 			.collect()
 	}
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Metadata {
-	pub name: Option<String>,
-	pub version: Option<String>,
 }

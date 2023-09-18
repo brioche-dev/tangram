@@ -6,12 +6,12 @@ use crate::{
 };
 
 impl Module {
-	pub async fn format(tg: &Server, text: String) -> Result<String> {
+	pub async fn format(server: &Server, text: String) -> Result<String> {
 		// Create the language service request.
 		let request = service::Request::Format(service::format::Request { text });
 
 		// Handle the language service request.
-		let response = tg.handle_language_service_request(request).await?;
+		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
 		let service::Response::Format(response) = response else {

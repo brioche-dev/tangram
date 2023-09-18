@@ -1,5 +1,5 @@
 use super::{send_notification, Sender, Server};
-use crate::{error::Result, language::Diagnostic, module::Module};
+use crate::{language::Diagnostic, module::Module, Result};
 use lsp_types as lsp;
 use std::collections::BTreeMap;
 
