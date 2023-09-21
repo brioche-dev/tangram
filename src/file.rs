@@ -1,10 +1,10 @@
-use crate::{artifact, blob, Client, Result};
+use crate::{artifact, blob, value, Client, Result};
 
 crate::id!(File);
 
 /// A file handle.
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(File);
 
@@ -112,7 +112,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		let contents = self.contents.clone().into();
 		let references = self
 			.references

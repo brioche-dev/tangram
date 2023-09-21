@@ -36,8 +36,8 @@ impl Cli {
 
 		// Create the target.
 		let env = [(
-			"host".to_owned(),
-			tg::Handle::with_value(tg::System::host()?.to_string().into()),
+			"TANGRAM_HOST".to_owned(),
+			tg::value::Handle::with_value(tg::System::host()?.to_string().into()),
 		)]
 		.into();
 		let args_ = Vec::new();
@@ -51,20 +51,11 @@ impl Cli {
 
 		// Build!
 		let id = target.id(client).await?;
-		let evaluation_id =
-			if let Some(evaluation_id) = client.try_get_assignment(id.into()).await? {
-				evaluation_id
-			} else {
-				client.evaluate(id.into()).await?
-			};
-		let result =
-			if let Some(evaluation) = client.try_get_evaluation_bytes(evaluation_id).await? {
-				let evaluation = tg::Evaluation::deserialize(&evaluation)?;
-				evaluation.result
-			} else {
-				client.get_evaluation_result(evaluation_id).await?
-			};
-		let output = result.map(tg::Handle::with_id).map_err(tg::Error::from)?;
+		let evaluation_id = client.evaluate(id.into()).await?;
+		let result = client.get_evaluation_result(evaluation_id).await?;
+		let output = result
+			.map(tg::value::Handle::with_id)
+			.map_err(tg::Error::from)?;
 
 		if let Some(path) = args.output {
 			// Check out the output if requested.

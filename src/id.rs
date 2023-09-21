@@ -1,4 +1,4 @@
-use crate::{Error, Kind, Result, WrapErr};
+use crate::{return_error, value::Kind, Error, Result, WrapErr};
 use byteorder::{NativeEndian, ReadBytesExt};
 use derive_more::{From, Into};
 
@@ -23,9 +23,37 @@ pub const SIZE: usize = 32;
 #[tangram_serialize(into = "[u8; SIZE]", try_from = "[u8; SIZE]")]
 pub struct Id([u8; SIZE]);
 
+// #[derive(Clone, Copy, Debug)]
+// pub enum Kind {
+// 	Null,
+// 	Bool,
+// 	Number,
+// 	String,
+// 	Bytes,
+// 	Relpath,
+// 	Subpath,
+// 	Blob,
+// 	Directory,
+// 	File,
+// 	Symlink,
+// 	Placeholder,
+// 	Template,
+// 	Package,
+// 	Resource,
+// 	Target,
+// 	Task,
+// 	Array,
+// 	Object,
+// }
+
 impl Id {
 	#[must_use]
-	pub fn new(kind: Kind, data: &[u8]) -> Self {
+	pub fn new_random(kind: Kind) -> Self {
+		Self(rand::random())
+	}
+
+	#[must_use]
+	pub fn new_hashed(kind: Kind, data: &[u8]) -> Self {
 		let hash = blake3::hash(data);
 		let mut bytes = *hash.as_bytes();
 		bytes[0] = kind.into();
@@ -112,6 +140,60 @@ impl std::hash::Hasher for Hasher {
 
 pub type BuildHasher = std::hash::BuildHasherDefault<Hasher>;
 
+impl From<Kind> for u8 {
+	fn from(value: Kind) -> Self {
+		match value {
+			Kind::Null => 0,
+			Kind::Bool => 1,
+			Kind::Number => 2,
+			Kind::String => 3,
+			Kind::Bytes => 4,
+			Kind::Relpath => 5,
+			Kind::Subpath => 6,
+			Kind::Blob => 7,
+			Kind::Directory => 8,
+			Kind::File => 9,
+			Kind::Symlink => 10,
+			Kind::Placeholder => 11,
+			Kind::Template => 12,
+			Kind::Package => 13,
+			Kind::Resource => 14,
+			Kind::Target => 15,
+			Kind::Task => 16,
+			Kind::Array => 17,
+			Kind::Object => 18,
+		}
+	}
+}
+
+impl TryFrom<u8> for Kind {
+	type Error = Error;
+
+	fn try_from(value: u8) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(Kind::Null),
+			1 => Ok(Kind::Bool),
+			2 => Ok(Kind::Number),
+			3 => Ok(Kind::String),
+			4 => Ok(Kind::Bytes),
+			5 => Ok(Kind::Relpath),
+			6 => Ok(Kind::Subpath),
+			7 => Ok(Kind::Blob),
+			8 => Ok(Kind::Directory),
+			9 => Ok(Kind::File),
+			10 => Ok(Kind::Symlink),
+			11 => Ok(Kind::Placeholder),
+			12 => Ok(Kind::Template),
+			13 => Ok(Kind::Package),
+			14 => Ok(Kind::Resource),
+			15 => Ok(Kind::Target),
+			16 => Ok(Kind::Task),
+			17 => Ok(Kind::Array),
+			18 => Ok(Kind::Object),
+			_ => return_error!("Invalid kind."),
+		}
+	}
+}
 #[macro_export]
 macro_rules! id {
 	() => {
@@ -175,7 +257,7 @@ macro_rules! id {
 
 			fn try_from(value: $crate::Id) -> Result<Self, Self::Error> {
 				match value.kind() {
-					$crate::Kind::$t => Ok(Self(value)),
+					$crate::value::Kind::$t => Ok(Self(value)),
 					_ => $crate::return_error!("Unexpected kind."),
 				}
 			}

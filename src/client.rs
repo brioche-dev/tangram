@@ -1,4 +1,4 @@
-use crate::{evaluation, return_error, Error, Result, Server, WrapErr};
+use crate::{return_error, run, Error, Result, Server, WrapErr};
 use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use std::sync::Arc;
@@ -60,15 +60,7 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn try_get_assignment(&self, id: crate::Id) -> Result<Option<evaluation::Id>> {
-		match self {
-			Self::Server(server) => server.try_get_assignment(id).await,
-			Self::Reqwest(_) => todo!(),
-		}
-	}
-
-	#[async_recursion]
-	pub async fn evaluate(&self, id: crate::Id) -> Result<evaluation::Id> {
+	pub async fn evaluate(&self, id: crate::Id) -> Result<run::Id> {
 		match self {
 			Self::Server(server) => server.evaluate(id).await,
 			Self::Reqwest(_) => todo!(),
@@ -76,7 +68,15 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn try_get_evaluation_bytes(&self, id: evaluation::Id) -> Result<Option<Vec<u8>>> {
+	pub async fn try_get_assignment(&self, id: crate::Id) -> Result<Option<run::Id>> {
+		match self {
+			Self::Server(server) => server.try_get_assignment(id).await,
+			Self::Reqwest(_) => todo!(),
+		}
+	}
+
+	#[async_recursion]
+	pub async fn try_get_evaluation_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
 		match self {
 			Self::Server(server) => server.try_get_evaluation_bytes(id).await,
 			Self::Reqwest(_) => todo!(),
@@ -86,8 +86,8 @@ impl Client {
 	#[async_recursion]
 	pub async fn try_get_evaluation_children(
 		&self,
-		id: evaluation::Id,
-	) -> Result<Option<BoxStream<evaluation::Id>>> {
+		id: run::Id,
+	) -> Result<Option<BoxStream<run::Id>>> {
 		match self {
 			Self::Server(server) => server.try_get_evaluation_children(id).await,
 			Self::Reqwest(_) => todo!(),
@@ -95,10 +95,7 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn try_get_evaluation_log(
-		&self,
-		id: evaluation::Id,
-	) -> Result<Option<BoxStream<Vec<u8>>>> {
+	pub async fn try_get_evaluation_log(&self, id: run::Id) -> Result<Option<BoxStream<Vec<u8>>>> {
 		match self {
 			Self::Server(server) => server.try_get_evaluation_log(id).await,
 			Self::Reqwest(_) => todo!(),
@@ -106,24 +103,23 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn get_evaluation_result(
-		&self,
-		id: evaluation::Id,
-	) -> Result<evaluation::Result<crate::Id>> {
-		self.try_get_evaluation_result(id)
-			.await?
-			.wrap_err("Expected the evaluation to exist.")
-	}
-
-	#[async_recursion]
 	pub async fn try_get_evaluation_result(
 		&self,
-		id: evaluation::Id,
-	) -> Result<Option<evaluation::Result<crate::Id>>> {
+		id: run::Id,
+	) -> Result<Option<run::Result<crate::Id>>> {
 		match self {
 			Self::Server(server) => server.try_get_evaluation_result(id).await,
 			Self::Reqwest(_) => todo!(),
 		}
+	}
+}
+
+impl Client {
+	#[async_recursion]
+	pub async fn get_evaluation_result(&self, id: run::Id) -> Result<run::Result<crate::Id>> {
+		self.try_get_evaluation_result(id)
+			.await?
+			.wrap_err("Expected the evaluation to exist.")
 	}
 }
 

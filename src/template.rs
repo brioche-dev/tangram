@@ -1,5 +1,5 @@
 pub use self::component::Value as Component;
-use crate::{artifact, Result};
+use crate::{artifact, value, Result};
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use itertools::Itertools;
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use std::{borrow::Cow, future::Future};
 crate::id!(Template);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Template);
 
@@ -56,7 +56,7 @@ impl Handle {
 			let id = id.as_str().parse().unwrap();
 
 			// Add an artifact component.
-			components.push(Component::Artifact(crate::Handle::with_id(id).try_into()?));
+			components.push(Component::Artifact(value::Handle::with_id(id).try_into()?));
 
 			// Advance the cursor to the end of the match.
 			i = match_.end();
@@ -155,7 +155,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		self.components
 			.iter()
 			.filter_map(|component| match component {

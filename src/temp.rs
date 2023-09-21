@@ -1,23 +1,17 @@
-use crate::{rid::Rid, server::Server};
+use crate::server::Server;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct Temp {
-	id: Rid,
 	path: PathBuf,
 }
 
 impl Temp {
 	#[must_use]
 	pub fn new(server: &Server) -> Temp {
-		let id = Rid::gen();
-		let path = server.temps_path().join(id.to_string());
-		Temp { id, path }
-	}
-
-	#[must_use]
-	pub fn id(&self) -> Rid {
-		self.id
+		let id: [u8; 16] = rand::random();
+		let path = server.temps_path().join(hex::encode(id));
+		Temp { path }
 	}
 
 	#[must_use]

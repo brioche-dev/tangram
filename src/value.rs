@@ -1,7 +1,7 @@
 use crate::{
 	array, blob, bool, bytes, directory, error, file, null, number, object, package, placeholder,
 	relpath, resource, return_error, string, subpath, symlink, target, task, template, value,
-	Client, Id, Kind, Result, WrapErr,
+	Client, Id, Result, WrapErr,
 };
 use async_recursion::async_recursion;
 use byteorder::{ReadBytesExt, WriteBytesExt};
@@ -18,25 +18,48 @@ pub struct Handle {
 /// A value variant.
 #[derive(Clone, Debug)]
 pub enum Variant {
-	Null(crate::Null),
-	Bool(crate::Bool),
-	Number(crate::Number),
-	String(crate::String),
-	Bytes(crate::Bytes),
-	Relpath(crate::Relpath),
-	Subpath(crate::Subpath),
-	Blob(crate::Blob),
-	Directory(crate::Directory),
-	File(crate::File),
-	Symlink(crate::Symlink),
-	Placeholder(crate::Placeholder),
-	Template(crate::Template),
-	Package(crate::Package),
-	Resource(crate::Resource),
-	Target(crate::Target),
-	Task(crate::Task),
-	Array(crate::Array),
-	Object(crate::Object),
+	Null(null::Handle),
+	Bool(bool::Handle),
+	Number(number::Handle),
+	String(string::Handle),
+	Bytes(bytes::Handle),
+	Relpath(relpath::Handle),
+	Subpath(subpath::Handle),
+	Blob(blob::Handle),
+	Directory(directory::Handle),
+	File(file::Handle),
+	Symlink(symlink::Handle),
+	Placeholder(placeholder::Handle),
+	Template(template::Handle),
+	Package(package::Handle),
+	Resource(resource::Handle),
+	Target(target::Handle),
+	Task(task::Handle),
+	Array(array::Handle),
+	Object(object::Handle),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Kind {
+	Null,
+	Bool,
+	Number,
+	String,
+	Bytes,
+	Relpath,
+	Subpath,
+	Blob,
+	Directory,
+	File,
+	Symlink,
+	Placeholder,
+	Template,
+	Package,
+	Resource,
+	Target,
+	Task,
+	Array,
+	Object,
 }
 
 /// A value.
@@ -303,7 +326,7 @@ impl Handle {
 		// Serialize the data.
 		let data = self.value.read().unwrap().as_ref().unwrap().to_data();
 		let data = data.serialize()?;
-		let id = Id::new(self.kind(), &data);
+		let id = Id::new_hashed(self.kind(), &data);
 
 		// Store the value.
 		client
@@ -459,12 +482,12 @@ macro_rules! handle {
 		impl self::Handle {
 			#[must_use]
 			pub fn with_id(id: self::Id) -> Self {
-				Self($crate::Handle::with_id(id.into()))
+				Self($crate::value::Handle::with_id(id.into()))
 			}
 
 			#[must_use]
 			pub fn with_value(value: self::Value) -> Self {
-				Self($crate::Handle::with_value(value.into()))
+				Self($crate::value::Handle::with_value(value.into()))
 			}
 
 			#[must_use]
@@ -478,24 +501,24 @@ macro_rules! handle {
 
 			pub async fn value(&self, client: &$crate::Client) -> $crate::Result<&self::Value> {
 				match self.0.value(client).await? {
-					$crate::Value::$t(value) => Ok(value),
+					$crate::value::Value::$t(value) => Ok(value),
 					_ => unreachable!(),
 				}
 			}
 		}
 
-		impl From<self::Handle> for $crate::Handle {
+		impl From<self::Handle> for $crate::value::Handle {
 			fn from(value: self::Handle) -> Self {
 				value.0
 			}
 		}
 
-		impl TryFrom<$crate::Handle> for self::Handle {
+		impl TryFrom<$crate::value::Handle> for self::Handle {
 			type Error = $crate::Error;
 
-			fn try_from(value: $crate::Handle) -> Result<Self, Self::Error> {
+			fn try_from(value: $crate::value::Handle) -> Result<Self, Self::Error> {
 				match value.kind() {
-					$crate::Kind::$t => Ok(Self(value)),
+					$crate::value::Kind::$t => Ok(Self(value)),
 					_ => $crate::return_error!("Unexpected kind."),
 				}
 			}
@@ -506,9 +529,9 @@ macro_rules! handle {
 #[macro_export]
 macro_rules! value {
 	($t:ident) => {
-		impl From<self::Value> for $crate::Value {
+		impl From<self::Value> for $crate::value::Value {
 			fn from(value: self::Value) -> Self {
-				$crate::Value::$t(value)
+				$crate::value::Value::$t(value)
 			}
 		}
 	};

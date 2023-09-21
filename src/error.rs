@@ -24,7 +24,7 @@ pub enum Error {
 	/// A build error.
 	#[error(transparent)]
 	#[tangram_serialize(id = 1)]
-	Evaluation(#[from] crate::evaluation::Error),
+	Evaluation(#[from] crate::run::Error),
 
 	/// A language service error.
 	#[error(transparent)]

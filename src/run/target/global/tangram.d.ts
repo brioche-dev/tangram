@@ -1,21 +1,14 @@
 /// <reference lib="es2023" />
 
 declare namespace tg {
-	export let assert: (
-		condition: unknown,
-		message?: string,
-	) => asserts condition;
-
-	export let unimplemented: (message?: string) => never;
-
-	export let unreachable: (message?: string) => never;
-
 	/** An artifact. */
 	export type Artifact = Directory | File | Symlink;
 
 	export namespace Artifact {
+		export type Id = string;
+
 		/** Get an artifact with an ID. */
-		export let withId: (id: Id) => Promise<Artifact>;
+		export let withId: (id: Artifact.Id) => Promise<Artifact>;
 
 		/** Check if a value is an `Artifact`. */
 		export let is: (value: unknown) => value is Artifact;
@@ -27,12 +20,21 @@ declare namespace tg {
 		export let assert: (value: unknown) => asserts value is Artifact;
 	}
 
+	export let assert: (
+		condition: unknown,
+		message?: string,
+	) => asserts condition;
+
+	export let unimplemented: (message?: string) => never;
+
+	export let unreachable: (message?: string) => never;
+
 	/** Create a blob. */
 	export let blob: (...args: Array<Unresolved<Blob.Arg>>) => Promise<Blob>;
 
 	export class Blob {
 		/** Get a blob with an ID. */
-		static withId(id: Id): Promise<Blob>;
+		static withId(id: Blob.Id): Promise<Blob>;
 
 		/** Create a blob. */
 		static new(...args: Array<Unresolved<Blob.Arg>>): Promise<Blob>;
@@ -47,7 +49,7 @@ declare namespace tg {
 		static assert(value: unknown): asserts value is Blob;
 
 		/* Get this blob's id. */
-		id(): Promise<Id>;
+		id(): Promise<Blob.Id>;
 
 		/** Get this blob's size. */
 		size(): Promise<number>;
@@ -60,23 +62,9 @@ declare namespace tg {
 	}
 
 	export namespace Blob {
+		export type Id = string;
+
 		export type Arg = undefined | string | Uint8Array | Blob | Array<Arg>;
-	}
-
-	export type Build = Resource | Target | Task;
-
-	export namespace Build {
-		/** Get a build with an ID. */
-		export let withId: (id: Id) => Promise<Build>;
-
-		/** Check if a value is a `Build`. */
-		export let is: (value: unknown) => value is Build;
-
-		/** Expect that a value is a `Build`. */
-		export let expect: (value: unknown) => Build;
-
-		/** Assert that a value is a `Build`. */
-		export let assert: (value: unknown) => asserts value is Build;
 	}
 
 	/** Compute the checksum of the provided bytes. */
@@ -105,7 +93,7 @@ declare namespace tg {
 	/** A directory. */
 	export class Directory {
 		/** Get a directory with an ID. */
-		static withId(id: Id): Promise<Directory>;
+		static withId(id: Directory.Id): Promise<Directory>;
 
 		/** Create a directory. */
 		static new(...args: Array<Unresolved<Directory.Arg>>): Promise<Directory>;
@@ -120,7 +108,7 @@ declare namespace tg {
 		static assert(value: unknown): asserts value is Directory;
 
 		/* Get this directory's id. */
-		id(): Promise<Id>;
+		id(): Promise<Directory.Id>;
 
 		/** Get the child at the specified path. This method throws an error if the path does not exist. */
 		get(arg: Subpath.Arg): Promise<Artifact>;
@@ -134,7 +122,7 @@ declare namespace tg {
 		/** Bundle this directory. */
 		bundle: () => Promise<Directory>;
 
-		/** Get an iterator of this directory's recursive entries. */
+		/** Get an async iterator of this directory's recursive entries. */
 		walk(): AsyncIterableIterator<[Subpath, Artifact]>;
 
 		/** Get an async iterator of this directory's entries. */
@@ -142,11 +130,13 @@ declare namespace tg {
 	}
 
 	export namespace Directory {
-		type Arg = undefined | Directory | Array<Arg> | ArgObject;
+		export type Id = string;
 
-		type ArgObject = { [key: string]: ArgObjectValue };
+		export type Arg = undefined | Directory | Array<Arg> | ArgObject;
 
-		type ArgObjectValue = undefined | Blob.Arg | Artifact | ArgObject;
+		type ArgObject = {
+			[key: string]: undefined | Blob.Arg | Artifact | ArgObject;
+		};
 	}
 
 	export namespace encoding {
@@ -191,7 +181,7 @@ declare namespace tg {
 	/** A file. */
 	export class File {
 		/** Get a file with an ID. */
-		static withId(id: Id): Promise<File>;
+		static withId(id: File.Id): Promise<File>;
 
 		/** Create a file. */
 		static new(...args: Array<Unresolved<File.Arg>>): Promise<File>;
@@ -206,7 +196,7 @@ declare namespace tg {
 		static assert(value: unknown): asserts value is File;
 
 		/* Get this file's id. */
-		id(): Promise<Id>;
+		id(): Promise<File.Id>;
 
 		/** Get this file's contents. */
 		contents(): Promise<Blob>;
@@ -228,6 +218,8 @@ declare namespace tg {
 	}
 
 	export namespace File {
+		export type Id = string;
+
 		export type Arg = Blob.Arg | File | Array<Arg> | ArgObject;
 
 		export type ArgObject = {
@@ -236,8 +228,6 @@ declare namespace tg {
 			references?: Array<Artifact>;
 		};
 	}
-
-	export type Id = string;
 
 	/** Include an artifact at a path relative to the module this function is called from. The path must be a string literal so that it can be statically analyzed. */
 	export let include: (path: string) => Promise<Artifact>;
@@ -364,8 +354,6 @@ declare namespace tg {
 			| Placeholder
 			| Template
 			| Package
-			| Resource
-			| Target
 			| Task
 			? T
 			: T extends Array<infer U extends Value>
@@ -402,8 +390,6 @@ declare namespace tg {
 		| Placeholder
 		| Template
 		| Package
-		| Resource
-		| Target
 		| Task
 		? T
 		: T extends Array<infer U extends Unresolved<Value>>
@@ -421,72 +407,6 @@ declare namespace tg {
 
 	export type MaybePromise<T> = T | Promise<T>;
 
-	/** Create a resource. */
-	export let resource: (arg: Resource.Arg) => Promise<Resource>;
-
-	/** Download a resource. */
-	export let download: (arg: Resource.Arg) => Promise<Artifact>;
-
-	export class Resource {
-		/** Get a resource with an ID. */
-		static withId(id: Id): Promise<Resource>;
-
-		/** Create a symlink. */
-		static new(target: Unresolved<Resource.Arg>): Promise<Resource>;
-
-		/** Check if a value is a `Resource`. */
-		static is(value: unknown): value is Resource;
-
-		/** Expect that a value is a `Resource`. */
-		static expect(value: unknown): Resource;
-
-		/** Assert that a value is a `Resource`. */
-		static assert(value: unknown): asserts value is Resource;
-
-		/* Get this resource's id. */
-		id(): Promise<Id>;
-
-		/** Get this resource's URL. */
-		url(): Promise<string>;
-
-		/** Get whether this resource should be unpacked. */
-		unpack(): Promise<Resource.UnpackFormat | undefined>;
-
-		/** Get this resource's checksum. */
-		checksum(): Promise<Checksum | undefined>;
-
-		/** Get whether this resource is unsafe. */
-		unsafe(): Promise<boolean>;
-
-		/** Download this resource. */
-		download(): Promise<Artifact>;
-	}
-
-	export namespace Resource {
-		export type Arg = {
-			/** The resource's URL. */
-			url: string;
-
-			/** The format to unpack the download with. */
-			unpack?: UnpackFormat;
-
-			/** The checksum to verify the resource. */
-			checksum?: Checksum;
-
-			/** Whether the resource should be downloaded without verifying its checksum. */
-			unsafe?: boolean;
-		};
-
-		export type UnpackFormat =
-			| ".tar"
-			| ".tar.bz2"
-			| ".tar.gz"
-			| ".tar.lz"
-			| ".tar.xz"
-			| ".tar.zstd"
-			| ".zip";
-	}
-
 	/** Create a symlink. */
 	export let symlink: (
 		...args: Array<Unresolved<Symlink.Arg>>
@@ -494,7 +414,7 @@ declare namespace tg {
 
 	export class Symlink {
 		/** Get a symlink with an ID. */
-		static withId(id: Id): Promise<Symlink>;
+		static withId(id: Symlink.Id): Promise<Symlink>;
 
 		/** Create a symlink. */
 		static new(...args: Array<Unresolved<Symlink.Arg>>): Promise<Symlink>;
@@ -509,7 +429,7 @@ declare namespace tg {
 		static assert(value: unknown): asserts value is Symlink;
 
 		/* Get this symlink's id. */
-		id(): Promise<Id>;
+		id(): Promise<Symlink.Id>;
 
 		/** Get this symlink's target. */
 		target(): Promise<Template>;
@@ -519,7 +439,9 @@ declare namespace tg {
 	}
 
 	export namespace Symlink {
-		type Arg = Relpath.Arg | Artifact | Template | Symlink | ArgObject;
+		export type Id = string;
+
+		export type Arg = Relpath.Arg | Artifact | Template | Symlink | ArgObject;
 
 		type ArgObject = {
 			artifact?: Artifact;
@@ -531,10 +453,11 @@ declare namespace tg {
 	export let system: (arg: System.Arg) => System;
 
 	export type System =
-		| "amd64_linux"
-		| "arm64_linux"
-		| "amd64_macos"
-		| "arm64_macos";
+		| "aarch64-darwin"
+		| "aarch64-linux"
+		| "js-js"
+		| "x86_64-darwin"
+		| "x86_64-linux";
 
 	export namespace System {
 		export type Arg = System | ArgObject;
@@ -544,9 +467,9 @@ declare namespace tg {
 			os: System.Os;
 		};
 
-		export type Arch = "amd64" | "arm64";
+		export type Arch = "aarch64" | "js" | "x86_64";
 
-		export type Os = "linux" | "macos";
+		export type Os = "darwin" | "js" | "linux";
 
 		/** Create a system. */
 		let new_: (arg: System.Arg) => System;
@@ -581,14 +504,6 @@ declare namespace tg {
 		f: (...args: A) => MaybePromise<R | void>,
 	): Promise<Target<A, R>>;
 
-	/** Build a target. */
-	export let build: <
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(
-		arg: Target.Arg<A, R>,
-	) => Promise<R>;
-
 	/** A target. */
 	export interface Target<
 		A extends Array<Value> = Array<Value>,
@@ -602,9 +517,6 @@ declare namespace tg {
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
 	> extends globalThis.Function {
-		/** Get a target with an ID. */
-		static withId(id: Id): Promise<Target>;
-
 		/** Check if a value is a `Target`. */
 		static is(value: unknown): value is Target;
 
@@ -613,32 +525,6 @@ declare namespace tg {
 
 		/** Assert that a value is a `Target`. */
 		static assert(value: unknown): asserts value is Target;
-
-		/* Get this target's id. */
-		id(): Promise<Id>;
-
-		/** The path to the module in the package where the target is defined. */
-		path(): Promise<Subpath>;
-
-		/** Get the target's name. */
-		name_(): Promise<string>;
-
-		/** Get this target's env. */
-		env(): Promise<Record<string, Value>>;
-
-		/** Get this target's args. */
-		args(): Promise<Array<Value>>;
-	}
-
-	export namespace Target {
-		export type Arg<
-			A extends Array<Value> = Array<Value>,
-			R extends Value = Value,
-		> = {
-			target: Target<A, R>;
-			env?: Unresolved<Record<string, Value>>;
-			args: Unresolved<A>;
-		};
 	}
 
 	/** Create a task. */
@@ -653,7 +539,7 @@ declare namespace tg {
 	/** A task. */
 	export class Task {
 		/** Get a task with an ID. */
-		static withId(id: Id): Promise<Task>;
+		static withId(id: Task.Id): Promise<Task>;
 
 		/** Create a task. */
 		static new(target: Unresolved<Task.Arg>): Promise<Task>;
@@ -668,7 +554,10 @@ declare namespace tg {
 		static assert(value: unknown): asserts value is Task;
 
 		/* Get this task's id. */
-		id(): Promise<Id>;
+		id(): Promise<Task.Id>;
+
+		/** Get this task's package. */
+		package(): Promise<string | undefined>;
 
 		/** Get this task's host. */
 		host(): Promise<System>;
@@ -676,11 +565,14 @@ declare namespace tg {
 		/** Get this task's executable. */
 		executable(): Promise<Template>;
 
-		/** Get this task's environment variables. */
-		env(): Promise<Record<string, Template>>;
+		/** Get this task's target. */
+		target(): Promise<string | undefined>;
 
-		/** Get this task's command line arguments. */
-		args(): Promise<Array<Template>>;
+		/** Get this task's environment. */
+		env(): Promise<Record<string, Value>>;
+
+		/** Get this task's arguments. */
+		args(): Promise<Array<Value>>;
 
 		/** Get this task's checksum. */
 		checksum(): Promise<Checksum | undefined>;
@@ -692,25 +584,33 @@ declare namespace tg {
 		network(): Promise<boolean>;
 
 		/** Run this task. */
-		run(): Promise<Promise<Artifact | undefined>>;
+		run(): Promise<Artifact | undefined>;
 	}
 
 	export namespace Task {
+		export type Id = string;
+
 		export type Arg = {
+			/** The task's package. */
+			package?: Package | undefined;
+
 			/** The system to run the task on. */
 			host: System;
 
 			/** The task's executable. */
 			executable: Template.Arg;
 
+			/** The task's target. */
+			target?: string | undefined;
+
 			/** The task's environment variables. */
-			env?: Record<string, Template.Arg>;
+			env?: Record<string, Value>;
 
 			/** The task's command line arguments. */
-			args?: Array<Template.Arg>;
+			args?: Array<Value>;
 
 			/** A checksum of the task's output. If a checksum is provided, then unsafe options can be used. */
-			checksum?: Checksum;
+			checksum?: Checksum | undefined;
 
 			/** If this flag is set, then unsafe options can be used without a checksum. */
 			unsafe?: boolean;
@@ -788,15 +688,15 @@ declare namespace tg {
 		| Placeholder
 		| Template
 		| Package
-		| Resource
-		| Target
 		| Task
 		| Array<Value>
 		| { [key: string]: Value };
 
 	export namespace Value {
+		export type Id = string;
+
 		/** Get a value with an ID. */
-		export let withId: (id: Id) => Promise<Value>;
+		export let withId: (id: Value.Id) => Promise<Value>;
 
 		/** Check if a value is `Value`. */
 		export let is: (value: unknown) => value is Value;

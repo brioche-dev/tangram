@@ -7,7 +7,7 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
-pub type Id = crate::Rid;
+pub type Id = crate::Id;
 
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
 pub struct Evaluation {

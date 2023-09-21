@@ -4,7 +4,7 @@ use crate::{
 	error::{Result, WrapErr},
 	module::{self, Module},
 	subpath::Subpath,
-	Artifact, Client, Package,
+	value, Artifact, Client, Package,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -24,7 +24,7 @@ pub mod specifier;
 crate::id!(Package);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Package);
 
@@ -146,8 +146,8 @@ impl Handle {
 
 					// Get the dependency package.
 					let Dependency::Path(dependency_relpath) = &dependency else {
-							unimplemented!();
-						};
+						unimplemented!();
+					};
 					let dependency_package_path = package_path.join(dependency_relpath.to_string());
 					let dependency_package =
 						Self::with_path(client, &dependency_package_path).await?;
@@ -241,7 +241,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		let mut children = vec![];
 		children.extend(
 			self.dependencies

@@ -1,11 +1,14 @@
-use crate::error::{return_error, Error, Result};
-use crate::subpath::Subpath;
+use crate::{
+	error::{return_error, Error, Result},
+	subpath::Subpath,
+	value,
+};
 use std::path::PathBuf;
 
 crate::id!(Relpath);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Relpath);
 

@@ -1,7 +1,8 @@
 use crate::{
 	document::{self, Document},
-	evaluation::{self},
-	id, language, return_error, rid, value, Blob, Client, Error, Evaluation, Result, WrapErr,
+	id, language,
+	run::{self},
+	value, Blob, Client, Error, Evaluation, Result, WrapErr,
 };
 use futures::{
 	stream::{self, BoxStream},
@@ -49,16 +50,12 @@ pub struct State {
 	/// The path to the directory where the server stores its data.
 	pub(crate) path: PathBuf,
 
-	/// The pending evaluations.
-	pub(crate) pending_evaluations:
-		std::sync::RwLock<HashMap<evaluation::Id, Arc<evaluation::State>, rid::BuildHasher>>,
-
-	/// The pending assignments.
-	pub(crate) pending_assignments:
-		std::sync::RwLock<HashMap<crate::Id, evaluation::Id, id::BuildHasher>>,
-
 	/// An HTTP client for downloading resources.
 	pub(crate) resource_http_client: reqwest::Client,
+
+	/// The running evaluations.
+	pub(crate) running_evaluations:
+		std::sync::RwLock<HashMap<run::Id, Arc<run::State>, id::BuildHasher>>,
 
 	/// A local pool for running targets.
 	pub(crate) target_local_pool: tokio_util::task::LocalPoolHandle,
@@ -130,14 +127,11 @@ impl Server {
 			None
 		};
 
-		// Create the pending evaluations.
-		let pending_evaluations = std::sync::RwLock::new(HashMap::default());
-
-		// Create the pending assignments.
-		let pending_assignments = std::sync::RwLock::new(HashMap::default());
-
 		// Create the HTTP client for downloading resources.
 		let resource_http_client = reqwest::Client::new();
+
+		// Create the running evaluations.
+		let running_evaluations = std::sync::RwLock::new(HashMap::default());
 
 		// Create the target local pool.
 		let target_local_pool = tokio_util::task::LocalPoolHandle::new(
@@ -158,9 +152,8 @@ impl Server {
 			options,
 			parent,
 			path,
-			pending_evaluations,
-			pending_assignments,
 			resource_http_client,
+			running_evaluations,
 			target_local_pool,
 			task_semaphore,
 		};
@@ -229,7 +222,7 @@ impl Server {
 		Ok(false)
 	}
 
-	pub fn get_value_exists_from_database(&self, id: crate::Id) -> Result<bool> {
+	pub(crate) fn get_value_exists_from_database(&self, id: crate::Id) -> Result<bool> {
 		let txn = self.state.database.env.begin_ro_txn()?;
 		match txn.get(self.state.database.values, &id.as_bytes()) {
 			Ok(_) => Ok(true),
@@ -238,7 +231,7 @@ impl Server {
 		}
 	}
 
-	pub async fn get_value_exists_from_parent(&self, id: crate::Id) -> Result<bool> {
+	async fn get_value_exists_from_parent(&self, id: crate::Id) -> Result<bool> {
 		if let Some(parent) = self.state.parent.as_ref() {
 			if parent.get_value_exists(id).await? {
 				return Ok(true);
@@ -276,7 +269,7 @@ impl Server {
 		}
 	}
 
-	pub async fn try_get_value_bytes_from_parent(&self, id: crate::Id) -> Result<Option<Vec<u8>>> {
+	async fn try_get_value_bytes_from_parent(&self, id: crate::Id) -> Result<Option<Vec<u8>>> {
 		let Some(parent) = self.state.parent.as_ref() else {
 			return Ok(None);
 		};
@@ -303,6 +296,7 @@ impl Server {
 		Ok(Some(bytes))
 	}
 
+	/// Attempt to put a value.
 	pub async fn try_put_value_bytes(
 		&self,
 		id: crate::Id,
@@ -344,58 +338,92 @@ impl Server {
 		Ok(Ok(()))
 	}
 
-	pub async fn try_get_assignment(&self, id: crate::Id) -> Result<Option<evaluation::Id>> {
-		// Attempt to get the assignment from the pending assignments.
-		if let Some(evaluation_id) = self.state.pending_assignments.read().unwrap().get(&id) {
-			return Ok(Some(*evaluation_id));
-		}
+	/// Evaluate a value.
+	pub async fn evaluate(&self, id: crate::Id) -> Result<run::Id> {
+		// Create a new evaluation.
+		let evaluation_id = todo!();
+		let state = Arc::new(run::State::new()?);
+		self.state
+			.running_evaluations
+			.write()
+			.unwrap()
+			.insert(evaluation_id, state);
 
+		// Create a write transaction.
+		let mut txn = self.state.database.env.begin_rw_txn()?;
+
+		// Add the assignment to the database.
+		txn.put(
+			self.state.database.assignments,
+			&id.as_bytes(),
+			&evaluation_id.as_bytes(),
+			lmdb::WriteFlags::empty(),
+		)?;
+
+		// Commit the transaction.
+		txn.commit()?;
+
+		Ok(evaluation_id)
+	}
+
+	pub async fn try_get_assignment(&self, id: crate::Id) -> Result<Option<run::Id>> {
 		// Attempt to get the assignment from the database.
-		if let Some(evaluation_id) = self.try_get_assignment_from_database(id).await? {
+		if let Some(evaluation_id) = self.try_get_assignment_from_database(id)? {
 			return Ok(Some(evaluation_id));
 		}
 
 		// Attempt to get the assignment from the parent.
-		if let Some(parent) = self.state.parent.as_ref() {
-			if let Some(evaluation_id) = parent.try_get_assignment(id).await? {
-				return Ok(Some(evaluation_id));
-			}
+		if let Some(evaluation_id) = self.try_get_assignment_from_parent(id).await? {
+			return Ok(Some(evaluation_id));
 		}
 
 		Ok(None)
 	}
 
-	pub async fn try_get_assignment_from_database(
-		&self,
-		id: crate::Id,
-	) -> Result<Option<evaluation::Id>> {
+	fn try_get_assignment_from_database(&self, id: crate::Id) -> Result<Option<run::Id>> {
 		// Get the assignment from the database.
-		let evaluation_id = {
-			let txn = self.state.database.env.begin_ro_txn()?;
-			match txn.get(self.state.database.assignments, &id.as_bytes()) {
-				Ok(evaluation_id) => evaluation::Id::with_bytes(
-					evaluation_id
-						.try_into()
-						.map_err(Error::other)
-						.wrap_err("Invalid ID.")?,
-				),
-				Err(lmdb::Error::NotFound) => return Ok(None),
-				Err(error) => return Err(error.into()),
-			}
+		let txn = self.state.database.env.begin_ro_txn()?;
+		match txn.get(self.state.database.assignments, &id.as_bytes()) {
+			Ok(evaluation_id) => Ok(Some(run::Id::with_bytes(
+				evaluation_id
+					.try_into()
+					.map_err(Error::other)
+					.wrap_err("Invalid ID.")?,
+			)?)),
+			Err(lmdb::Error::NotFound) => Ok(None),
+			Err(error) => Err(error.into()),
+		}
+	}
+
+	async fn try_get_assignment_from_parent(&self, id: crate::Id) -> Result<Option<run::Id>> {
+		// Get the parent.
+		let Some(parent) = self.state.parent.as_ref() else {
+			return Ok(None);
 		};
 
-		// Get the evaluation. If the evaluation's result is an error, then return None.
-		let Some(evaluation) = self.try_get_evaluation(evaluation_id).await? else {
-			return_error!("Expected the evaluation to exist.");
-		};
-		if evaluation.result.is_err() {
+		// Get the assignment.
+		let Some(evaluation_id) = parent.try_get_assignment(id).await? else {
 			return Ok(None);
-		}
+		};
+
+		// Create a write transaction.
+		let mut txn = self.state.database.env.begin_rw_txn()?;
+
+		// Add the assignment to the database.
+		txn.put(
+			self.state.database.assignments,
+			&id.as_bytes(),
+			&evaluation_id.as_bytes(),
+			lmdb::WriteFlags::empty(),
+		)?;
+
+		// Commit the transaction.
+		txn.commit()?;
 
 		Ok(Some(evaluation_id))
 	}
 
-	pub async fn try_get_evaluation(&self, id: evaluation::Id) -> Result<Option<Evaluation>> {
+	pub async fn try_get_evaluation(&self, id: run::Id) -> Result<Option<Evaluation>> {
 		let Some(bytes) = self.try_get_evaluation_bytes(id).await? else {
 			return Ok(None);
 		};
@@ -403,7 +431,7 @@ impl Server {
 		Ok(Some(evaluation))
 	}
 
-	pub async fn try_get_evaluation_bytes(&self, id: evaluation::Id) -> Result<Option<Vec<u8>>> {
+	pub async fn try_get_evaluation_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
 		// Attempt to get the evaluation from the database.
 		if let Some(bytes) = self.try_get_evaluation_bytes_from_database(id)? {
 			return Ok(Some(bytes));
@@ -417,10 +445,7 @@ impl Server {
 		Ok(None)
 	}
 
-	pub fn try_get_evaluation_bytes_from_database(
-		&self,
-		id: evaluation::Id,
-	) -> Result<Option<Vec<u8>>> {
+	fn try_get_evaluation_bytes_from_database(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
 		let txn = self.state.database.env.begin_ro_txn()?;
 		match txn.get(self.state.database.evaluations, &id.as_bytes()) {
 			Ok(evaluation) => Ok(Some(evaluation.to_owned())),
@@ -429,10 +454,7 @@ impl Server {
 		}
 	}
 
-	pub async fn try_get_evaluation_bytes_from_parent(
-		&self,
-		id: evaluation::Id,
-	) -> Result<Option<Vec<u8>>> {
+	async fn try_get_evaluation_bytes_from_parent(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
 		let Some(parent) = self.state.parent.as_ref() else {
 			return Ok(None);
 		};
@@ -461,13 +483,13 @@ impl Server {
 
 	pub async fn try_get_evaluation_children(
 		&self,
-		id: evaluation::Id,
-	) -> Result<Option<BoxStream<'static, evaluation::Id>>> {
-		// Attempt to get the evaluation children from the pending evaluations.
+		id: run::Id,
+	) -> Result<Option<BoxStream<'static, run::Id>>> {
+		// Attempt to get the evaluation children from the running evaluations.
 		'a: {
 			let state = self
 				.state
-				.pending_evaluations
+				.running_evaluations
 				.read()
 				.unwrap()
 				.get(&id)
@@ -491,12 +513,12 @@ impl Server {
 
 	pub async fn try_get_evaluation_log(
 		&self,
-		id: evaluation::Id,
+		id: run::Id,
 	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
-		// Attempt to get the evaluation log from the pending evaluations.
+		// Attempt to get the evaluation log from the running evaluations.
 		let state = self
 			.state
-			.pending_evaluations
+			.running_evaluations
 			.read()
 			.unwrap()
 			.get(&id)
@@ -506,12 +528,12 @@ impl Server {
 			return Ok(Some(log));
 		}
 
-		// Attempt to get the evaluation children from the database or the parent.
+		// Attempt to get the evaluation log from the database or the parent.
 		'a: {
 			let Some(evaluation) = self.try_get_evaluation(id).await? else {
 				break 'a;
 			};
-			let client = &Client::Server(self.clone());
+			let client = &Client::with_server(self.clone());
 			let blob = Blob::with_id(evaluation.log);
 			let bytes = blob.bytes(client).await?;
 			return Ok(Some(stream::once(async move { bytes }).boxed()));
@@ -522,12 +544,12 @@ impl Server {
 
 	pub async fn try_get_evaluation_result(
 		&self,
-		id: evaluation::Id,
-	) -> Result<Option<evaluation::Result<crate::Id>>> {
-		// Attempt to get the evaluation result from the pending evaluations.
+		id: run::Id,
+	) -> Result<Option<run::Result<crate::Id>>> {
+		// Attempt to get the evaluation result from the running evaluations.
 		let state = self
 			.state
-			.pending_evaluations
+			.running_evaluations
 			.read()
 			.unwrap()
 			.get(&id)
@@ -546,33 +568,5 @@ impl Server {
 		}
 
 		Ok(None)
-	}
-
-	pub async fn evaluate(&self, id: crate::Id) -> Result<evaluation::Id> {
-		// Attempt to get an existing evaluation.
-		if let Some(evaluation_id) = self.try_get_assignment(id).await? {
-			return Ok(evaluation_id);
-		}
-
-		// Create a new evaluation.
-		let evaluation_id = evaluation::Id::gen();
-		let state = todo!();
-		self.state
-			.pending_evaluations
-			.write()
-			.unwrap()
-			.insert(evaluation_id, state);
-		self.state
-			.pending_assignments
-			.write()
-			.unwrap()
-			.insert(id, evaluation_id);
-
-		// Spawn the task.
-		tokio::spawn(async move {
-			todo!();
-		});
-
-		Ok(evaluation_id)
 	}
 }

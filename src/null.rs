@@ -1,7 +1,9 @@
+use crate::value;
+
 crate::id!(Null);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Null);
 

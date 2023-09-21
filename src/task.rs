@@ -1,11 +1,11 @@
-use crate::{checksum::Checksum, system::System, template};
+use crate::{checksum::Checksum, system::System, template, value};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
 crate::id!(Task);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Task);
 
@@ -115,7 +115,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		self.executable
 			.children()
 			.into_iter()

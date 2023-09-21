@@ -1,11 +1,11 @@
-use crate::{error, relpath::Relpath, Error, Result};
+use crate::{error, relpath::Relpath, value, Error, Result};
 use itertools::Itertools;
 use std::path::PathBuf;
 
 crate::id!(Subpath);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Subpath);
 

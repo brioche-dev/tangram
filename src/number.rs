@@ -1,9 +1,11 @@
+use crate::value;
+
 pub type Number = f64;
 
 crate::id!(Number);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Number);
 

@@ -1,7 +1,4 @@
-use crate::{
-	evaluation, language::Position, package, subpath::Subpath, target, Client, Evaluation, Package,
-	Result,
-};
+use crate::{language::Position, package, subpath::Subpath, target, value, Package, Result};
 use std::{collections::BTreeMap, sync::Arc};
 use thiserror::Error;
 use url::Url;
@@ -9,7 +6,7 @@ use url::Url;
 crate::id!(Target);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Target);
 
@@ -26,10 +23,10 @@ pub struct Value {
 	pub name: String,
 
 	/// The target's environment variables.
-	pub env: BTreeMap<String, crate::Handle>,
+	pub env: BTreeMap<String, value::Handle>,
 
 	/// The target's arguments.
-	pub args: Vec<crate::Handle>,
+	pub args: Vec<value::Handle>,
 }
 
 crate::value!(Target);
@@ -71,8 +68,8 @@ impl Handle {
 		package: Package,
 		path: Subpath,
 		name: String,
-		env: BTreeMap<String, crate::Handle>,
-		args: Vec<crate::Handle>,
+		env: BTreeMap<String, value::Handle>,
+		args: Vec<value::Handle>,
 	) -> Self {
 		Self::with_value(Value {
 			package,
@@ -81,22 +78,6 @@ impl Handle {
 			env,
 			args,
 		})
-	}
-
-	pub async fn output(&self, client: &Client) -> Result<evaluation::Result<crate::Handle>> {
-		let id = self.id(client).await?;
-		let evaluation_id =
-			if let Some(evaluation_id) = client.try_get_assignment(id.into()).await? {
-				evaluation_id
-			} else {
-				client.evaluate(id.into()).await?
-			};
-		if let Some(evaluation) = client.try_get_evaluation_bytes(evaluation_id).await? {
-			let evaluation = Evaluation::deserialize(&evaluation)?;
-			return Ok(evaluation.result.map(crate::Handle::with_id));
-		}
-		let result = client.get_evaluation_result(evaluation_id).await?;
-		Ok(result.map(crate::Handle::with_id))
 	}
 }
 
@@ -110,9 +91,9 @@ impl Value {
 			env: data
 				.env
 				.into_iter()
-				.map(|(key, id)| (key, crate::Handle::with_id(id)))
+				.map(|(key, id)| (key, value::Handle::with_id(id)))
 				.collect(),
-			args: data.args.into_iter().map(crate::Handle::with_id).collect(),
+			args: data.args.into_iter().map(value::Handle::with_id).collect(),
 		}
 	}
 
@@ -127,12 +108,12 @@ impl Value {
 				.iter()
 				.map(|(key, value)| (key.clone(), value.expect_id()))
 				.collect(),
-			args: self.args.iter().map(crate::Handle::expect_id).collect(),
+			args: self.args.iter().map(value::Handle::expect_id).collect(),
 		}
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		let mut children = vec![];
 		children.push(self.package.clone().into());
 		children.extend(self.env.values().cloned());

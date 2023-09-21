@@ -1,8 +1,10 @@
+use crate::value;
+
 crate::id!(Placeholder);
 
 /// A placeholder handle.
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Placeholder);
 

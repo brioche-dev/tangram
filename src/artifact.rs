@@ -1,4 +1,4 @@
-use crate::{directory, file, id, return_error, symlink, Client, Error, Kind, Result};
+use crate::{directory, file, id, return_error, symlink, value, Client, Error, Result};
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use std::collections::{HashSet, VecDeque};
 
@@ -6,7 +6,7 @@ crate::id!();
 
 /// An artifact handle.
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 /// An artifact variant.
 #[derive(Clone, Debug)]
@@ -21,10 +21,18 @@ pub enum Variant {
 	Symlink(symlink::Handle),
 }
 
+/// An artifact kind.
+#[derive(Clone, Copy, Debug)]
+pub enum Kind {
+	Directory,
+	File,
+	Symlink,
+}
+
 impl Handle {
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {
-		Self(crate::Handle::with_id(id.into()))
+		Self(value::Handle::with_id(id.into()))
 	}
 
 	#[must_use]
@@ -39,9 +47,9 @@ impl Handle {
 	#[must_use]
 	pub fn variant(&self) -> Variant {
 		match self.0.kind() {
-			Kind::Directory => Variant::Directory(self.0.clone().try_into().unwrap()),
-			Kind::File => Variant::File(self.0.clone().try_into().unwrap()),
-			Kind::Symlink => Variant::Symlink(self.0.clone().try_into().unwrap()),
+			value::Kind::Directory => Variant::Directory(self.0.clone().try_into().unwrap()),
+			value::Kind::File => Variant::File(self.0.clone().try_into().unwrap()),
+			value::Kind::Symlink => Variant::Symlink(self.0.clone().try_into().unwrap()),
 			_ => unreachable!(),
 		}
 	}
@@ -103,7 +111,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_directory(&self) -> Option<directory::Handle> {
 		match self.0.kind() {
-			Kind::Directory => Some(self.0.clone().try_into().unwrap()),
+			value::Kind::Directory => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -111,7 +119,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_file(&self) -> Option<file::Handle> {
 		match self.0.kind() {
-			Kind::File => Some(self.0.clone().try_into().unwrap()),
+			value::Kind::File => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -119,7 +127,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_symlink(&self) -> Option<symlink::Handle> {
 		match self.0.kind() {
-			Kind::Symlink => Some(self.0.clone().try_into().unwrap()),
+			value::Kind::Symlink => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -136,24 +144,24 @@ impl TryFrom<crate::Id> for Id {
 
 	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
 		match value.kind() {
-			Kind::Directory | Kind::File | Kind::Symlink => Ok(Self(value)),
+			value::Kind::Directory | value::Kind::File | value::Kind::Symlink => Ok(Self(value)),
 			_ => return_error!("Expected an artifact ID."),
 		}
 	}
 }
 
-impl From<Handle> for crate::Handle {
+impl From<Handle> for value::Handle {
 	fn from(value: Handle) -> Self {
 		value.0
 	}
 }
 
-impl TryFrom<crate::Handle> for Handle {
+impl TryFrom<value::Handle> for Handle {
 	type Error = crate::Error;
 
-	fn try_from(value: crate::Handle) -> Result<Self, Self::Error> {
+	fn try_from(value: value::Handle) -> Result<Self, Self::Error> {
 		match value.kind() {
-			Kind::Directory | Kind::File | Kind::Symlink => Ok(Self(value)),
+			value::Kind::Directory | value::Kind::File | value::Kind::Symlink => Ok(Self(value)),
 			_ => return_error!("Expected an artifact value."),
 		}
 	}

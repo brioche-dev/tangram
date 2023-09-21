@@ -9,7 +9,7 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_get(&self, args: Args) -> Result<()> {
-		let handle = tg::Handle::with_id(args.id);
+		let handle = tg::value::Handle::with_id(args.id);
 		let value = handle.value(&self.client).await?;
 		println!("{value:?}");
 		Ok(())

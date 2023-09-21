@@ -17,10 +17,8 @@ pub use self::{
 	checksum::Checksum,
 	directory::Handle as Directory,
 	error::{Error, Result, WrapErr},
-	evaluation::Evaluation,
 	file::Handle as File,
 	id::Id,
-	kind::Kind,
 	module::Module,
 	null::Handle as Null,
 	number::Handle as Number,
@@ -29,7 +27,7 @@ pub use self::{
 	placeholder::Handle as Placeholder,
 	relpath::Handle as Relpath,
 	resource::Handle as Resource,
-	rid::Rid,
+	run::Evaluation,
 	string::Handle as String,
 	subpath::Handle as Subpath,
 	symlink::Handle as Symlink,
@@ -37,7 +35,7 @@ pub use self::{
 	target::Handle as Target,
 	task::Handle as Task,
 	template::Handle as Template,
-	value::{Handle, Value},
+	value::Handle as Value,
 };
 
 pub mod array;
@@ -58,11 +56,8 @@ pub mod directory;
 #[cfg(feature = "server")]
 pub mod document;
 pub mod error;
-pub mod evaluate;
-pub mod evaluation;
 pub mod file;
 pub mod id;
-pub mod kind;
 #[cfg(feature = "server")]
 pub mod language;
 #[cfg(feature = "server")]
@@ -77,7 +72,7 @@ pub mod pull;
 pub mod push;
 pub mod relpath;
 pub mod resource;
-pub mod rid;
+pub mod run;
 #[cfg(feature = "server")]
 pub mod serve;
 #[cfg(feature = "server")]

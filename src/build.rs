@@ -1,10 +1,10 @@
-use crate::{resource, return_error, target, task, Client, Kind};
+use crate::{resource, return_error, target, task, value, Client};
 
 crate::id!();
 
 /// A build handle.
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 /// A build variant.
 #[derive(Clone, Debug)]
@@ -22,7 +22,7 @@ pub enum Variant {
 impl Handle {
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {
-		Self(crate::Handle::with_id(id.into()))
+		Self(value::Handle::with_id(id.into()))
 	}
 
 	#[must_use]
@@ -37,9 +37,9 @@ impl Handle {
 	#[must_use]
 	pub fn variant(&self) -> Variant {
 		match self.0.kind() {
-			Kind::Resource => Variant::Resource(self.0.clone().try_into().unwrap()),
-			Kind::Target => Variant::Target(self.0.clone().try_into().unwrap()),
-			Kind::Task => Variant::Task(self.0.clone().try_into().unwrap()),
+			value::Kind::Resource => Variant::Resource(self.0.clone().try_into().unwrap()),
+			value::Kind::Target => Variant::Target(self.0.clone().try_into().unwrap()),
+			value::Kind::Task => Variant::Task(self.0.clone().try_into().unwrap()),
 			_ => unreachable!(),
 		}
 	}
@@ -47,7 +47,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_resource(&self) -> Option<resource::Handle> {
 		match self.0.kind() {
-			Kind::Resource => Some(self.0.clone().try_into().unwrap()),
+			value::Kind::Resource => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -55,7 +55,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_target(&self) -> Option<target::Handle> {
 		match self.0.kind() {
-			Kind::Target => Some(self.0.clone().try_into().unwrap()),
+			value::Kind::Target => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -63,7 +63,7 @@ impl Handle {
 	#[must_use]
 	pub fn as_task(&self) -> Option<task::Handle> {
 		match self.0.kind() {
-			Kind::Task => Some(self.0.clone().try_into().unwrap()),
+			value::Kind::Task => Some(self.0.clone().try_into().unwrap()),
 			_ => None,
 		}
 	}
@@ -80,24 +80,24 @@ impl TryFrom<crate::Id> for Id {
 
 	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
 		match value.kind() {
-			Kind::Resource | Kind::Target | Kind::Task => Ok(Self(value)),
+			value::Kind::Resource | value::Kind::Target | value::Kind::Task => Ok(Self(value)),
 			_ => return_error!("Expected a build ID."),
 		}
 	}
 }
 
-impl From<Handle> for crate::Handle {
+impl From<Handle> for value::Handle {
 	fn from(value: Handle) -> Self {
 		value.0
 	}
 }
 
-impl TryFrom<crate::Handle> for Handle {
+impl TryFrom<value::Handle> for Handle {
 	type Error = crate::Error;
 
-	fn try_from(value: crate::Handle) -> Result<Self, Self::Error> {
+	fn try_from(value: value::Handle) -> Result<Self, Self::Error> {
 		match value.kind() {
-			Kind::Resource | Kind::Target | Kind::Task => Ok(Self(value)),
+			value::Kind::Resource | value::Kind::Target | value::Kind::Task => Ok(Self(value)),
 			_ => return_error!("Expected a build value."),
 		}
 	}

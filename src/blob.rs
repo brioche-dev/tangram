@@ -1,4 +1,4 @@
-use crate::{blob, bytes::Bytes, return_error, Client, Error, Result};
+use crate::{blob, bytes::Bytes, return_error, value, Client, Error, Result};
 use futures::{
 	future::BoxFuture,
 	stream::{self, StreamExt},
@@ -16,7 +16,7 @@ const MAX_LEAF_SIZE: usize = 262_144;
 crate::id!(Blob);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Blob);
 
@@ -177,7 +177,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		match self {
 			Value::Branch(children) => children
 				.iter()

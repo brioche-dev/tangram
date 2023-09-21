@@ -1,9 +1,11 @@
+use crate::value;
+
 pub type String = std::string::String;
 
 crate::id!(String);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(String);
 

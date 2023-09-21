@@ -205,9 +205,9 @@ export class Directory {
 export namespace Directory {
 	export type Arg = undefined | Directory | Array<Arg> | ArgObject;
 
-	export type ArgObject = { [name: string]: ArgObjectValue };
-
-	export type ArgObjectValue = undefined | Blob.Arg | Artifact | ArgObject;
+	type ArgObject = {
+		[name: string]: undefined | Blob.Arg | Artifact | ArgObject;
+	};
 
 	export type Data = {
 		entries: Record<string, Artifact>;

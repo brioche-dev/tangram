@@ -1,9 +1,9 @@
-use crate::{artifact, template, Client, Result};
+use crate::{artifact, template, value, Client, Result};
 
 crate::id!(Symlink);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Symlink);
 
@@ -52,6 +52,7 @@ impl Handle {
 }
 
 impl Value {
+	#[allow(clippy::needless_pass_by_value)]
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
 		let target = template::Handle::with_id(data.target);
@@ -66,7 +67,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		vec![self.target.clone().into()]
 	}
 }

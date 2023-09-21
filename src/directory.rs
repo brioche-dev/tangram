@@ -1,7 +1,7 @@
 use crate::{
 	artifact,
 	subpath::{self, Subpath},
-	Client, Error, Result, WrapErr,
+	value, Client, Error, Result, WrapErr,
 };
 use async_recursion::async_recursion;
 use std::collections::BTreeMap;
@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 crate::id!(Directory);
 
 #[derive(Clone, Debug)]
-pub struct Handle(crate::Handle);
+pub struct Handle(value::Handle);
 
 crate::handle!(Directory);
 
@@ -128,7 +128,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Handle> {
+	pub fn children(&self) -> Vec<value::Handle> {
 		self.entries
 			.values()
 			.map(|child| child.clone().into())
