@@ -65,11 +65,8 @@ async fn migration_0000(path: &Path) -> Result<()> {
 	env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
 	let env = env_builder.open(&database_path)?;
 
-	// Create the values database.
-	env.create_db("values".into(), lmdb::DatabaseFlags::empty())?;
-
-	// Create the evaluations database.
-	env.create_db("evaluations".into(), lmdb::DatabaseFlags::empty())?;
+	// Create the objects database.
+	env.create_db("objects".into(), lmdb::DatabaseFlags::empty())?;
 
 	// Create the assignments database.
 	env.create_db("assignments".into(), lmdb::DatabaseFlags::empty())?;

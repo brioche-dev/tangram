@@ -1,16 +1,22 @@
-use crate::{blob, resource, return_error, target, task};
+use crate::{blob, return_error, value, Result, Value};
 use futures::{
 	stream::{self, BoxStream},
 	StreamExt,
 };
-use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
 pub type Id = crate::Id;
 
+#[derive(Clone, Debug)]
+pub struct Run {
+	pub children: Vec<self::Id>,
+	pub log: blob::Id,
+	pub result: Result<Value>,
+}
+
 #[derive(Clone, Debug, tangram_serialize::Deserialize, tangram_serialize::Serialize)]
-pub struct Evaluation {
+pub(crate) struct Data {
 	#[tangram_serialize(id = 0)]
 	pub children: Vec<self::Id>,
 
@@ -18,10 +24,10 @@ pub struct Evaluation {
 	pub log: blob::Id,
 
 	#[tangram_serialize(id = 2)]
-	pub result: Result<crate::Id>,
+	pub result: Result<value::Data>,
 }
 
-impl Evaluation {
+impl Data {
 	pub fn serialize(&self) -> crate::Result<Vec<u8>> {
 		let mut bytes = Vec::new();
 		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
@@ -39,50 +45,14 @@ impl Evaluation {
 	}
 }
 
-/// An evaluation result.
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-/// An evaluation error.
-#[derive(
-	Clone,
-	Debug,
-	Error,
-	serde::Serialize,
-	serde::Deserialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
-pub enum Error {
-	/// An error from a resource.
-	#[error(transparent)]
-	#[tangram_serialize(id = 0)]
-	Resource(#[from] resource::Error),
-
-	/// An error from a target.
-	#[error(transparent)]
-	#[tangram_serialize(id = 1)]
-	Target(#[from] target::Error),
-
-	/// An error from a task.
-	#[error(transparent)]
-	#[tangram_serialize(id = 2)]
-	Task(#[from] task::Error),
-
-	/// A cancellation.
-	#[error("The run was cancelled.")]
-	#[tangram_serialize(id = 3)]
-	Cancellation(()),
-}
-
 #[derive(Debug)]
 pub struct State {
-	task: Option<tokio::task::JoinHandle<Evaluation>>,
+	task: Option<tokio::task::JoinHandle<Run>>,
 	children: std::sync::Mutex<(Vec<self::Id>, tokio::sync::broadcast::Sender<self::Id>)>,
 	log: tokio::sync::Mutex<(tokio::fs::File, tokio::sync::broadcast::Sender<Vec<u8>>)>,
 	result: (
-		tokio::sync::watch::Sender<Option<Result<crate::Id>>>,
-		tokio::sync::watch::Receiver<Option<Result<crate::Id>>>,
+		tokio::sync::watch::Sender<Option<Result<Value>>>,
+		tokio::sync::watch::Receiver<Option<Result<Value>>>,
 	),
 }
 
@@ -114,7 +84,7 @@ impl State {
 		Ok(())
 	}
 
-	pub fn set_result(&self, result: Result<crate::Id>) {
+	pub fn set_result(&self, result: Result<Value>) {
 		self.result.0.send(Some(result)).ok();
 	}
 
@@ -139,7 +109,7 @@ impl State {
 		Ok(stream.boxed())
 	}
 
-	pub async fn result(&self) -> Result<crate::Id> {
+	pub async fn result(&self) -> Result<Value> {
 		self.result
 			.1
 			.clone()
@@ -150,3 +120,39 @@ impl State {
 			.unwrap()
 	}
 }
+
+// /// An evaluation result.
+// pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+// /// An evaluation error.
+// #[derive(
+// 	Clone,
+// 	Debug,
+// 	Error,
+// 	serde::Serialize,
+// 	serde::Deserialize,
+// 	tangram_serialize::Deserialize,
+// 	tangram_serialize::Serialize,
+// )]
+// #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+// pub enum Error {
+// 	/// An error from a resource.
+// 	#[error(transparent)]
+// 	#[tangram_serialize(id = 0)]
+// 	Resource(#[from] resource::Error),
+
+// 	/// An error from a target.
+// 	#[error(transparent)]
+// 	#[tangram_serialize(id = 1)]
+// 	Target(#[from] target::Error),
+
+// 	/// An error from a task.
+// 	#[error(transparent)]
+// 	#[tangram_serialize(id = 2)]
+// 	Task(#[from] task::Error),
+
+// 	/// A cancellation.
+// 	#[error("The run was cancelled.")]
+// 	#[tangram_serialize(id = 3)]
+// 	Cancellation(()),
+// }

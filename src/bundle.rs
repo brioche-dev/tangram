@@ -1,12 +1,13 @@
 use crate::{
-	artifact, directory, return_error, subpath::Subpath, template, Artifact, Client, Directory,
-	Error, File, Result, Symlink, WrapErr,
+	directory, return_error, subpath::Subpath, template, Artifact, Client, Directory, Error, File,
+	Result, Symlink, WrapErr,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use once_cell::sync::Lazy;
 
 static TANGRAM_ARTIFACTS_PATH: Lazy<Subpath> = Lazy::new(|| ".tangram/artifacts".parse().unwrap());
+
 static TANGRAM_RUN_SUBPATH: Lazy<Subpath> = Lazy::new(|| ".tangram/run".parse().unwrap());
 
 impl Artifact {
@@ -44,18 +45,16 @@ impl Artifact {
 		let artifacts_directory = Directory::new(entries);
 
 		// Create the bundle directory.
-		let bundle_directory: Artifact = match self.variant() {
+		let bundle_directory: Artifact = match self {
 			// If the artifact is a directory, use it as is.
-			artifact::Variant::Directory(directory) => directory.clone().into(),
+			Artifact::Directory(directory) => directory.clone().into(),
 
 			// If the artifact is an executable file, create a directory and place the executable at `.tangram/run`.
-			artifact::Variant::File(file) if file.executable(client).await? => {
-				directory::Builder::default()
-					.add(client, &TANGRAM_RUN_SUBPATH, file.clone().into())
-					.await?
-					.build()
-					.into()
-			},
+			Artifact::File(file) if file.executable(client).await? => directory::Builder::default()
+				.add(client, &TANGRAM_RUN_SUBPATH, file.clone().into())
+				.await?
+				.build()
+				.into(),
 
 			// Otherwise, return an error.
 			_ => return_error!("The artifact must be a directory or an executable file."),
@@ -87,9 +86,9 @@ impl Artifact {
 		client: &'async_recursion Client,
 		path: &Subpath,
 	) -> Result<Artifact> {
-		match self.variant() {
+		match self {
 			// If the artifact is a directory, then recurse to remove references from its entries.
-			artifact::Variant::Directory(directory) => {
+			Artifact::Directory(directory) => {
 				let entries = directory
 					.entries(client)
 					.await?
@@ -113,7 +112,7 @@ impl Artifact {
 			},
 
 			// If the artifact is a file, then return the file without any references.
-			artifact::Variant::File(file) => Ok(File::new(
+			Artifact::File(file) => Ok(File::new(
 				file.contents(client).await?.clone(),
 				file.executable(client).await?,
 				vec![],
@@ -121,12 +120,10 @@ impl Artifact {
 			.into()),
 
 			// If the artifact is a symlink, then return the symlink with its target rendered with artifacts pointing to `.tangram/artifacts/<id>`.
-			artifact::Variant::Symlink(symlink) => {
+			Artifact::Symlink(symlink) => {
 				// Render the target.
 				let target = symlink
 					.target(client)
-					.await?
-					.value(client)
 					.await?
 					.try_render(|component| async move {
 						match component {

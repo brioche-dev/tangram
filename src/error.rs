@@ -21,10 +21,10 @@ pub enum Error {
 	#[tangram_serialize(id = 0)]
 	Message(#[from] Message),
 
-	/// A build error.
-	#[error(transparent)]
-	#[tangram_serialize(id = 1)]
-	Evaluation(#[from] crate::run::Error),
+	/// A run error.
+	// #[error(transparent)]
+	// #[tangram_serialize(id = 1)]
+	// Run(#[from] crate::run::Error),
 
 	/// A language service error.
 	#[error(transparent)]

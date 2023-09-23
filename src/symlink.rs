@@ -1,18 +1,11 @@
-use crate::{artifact, template, value, Client, Result};
+use crate::{object, template, Artifact, Client, Result, Template};
 
-crate::id!(Symlink);
-
-#[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(Symlink);
+crate::object!(Symlink);
 
 #[derive(Clone, Debug)]
-pub struct Value {
-	pub target: template::Handle,
+pub(crate) struct Object {
+	pub target: Template,
 }
-
-crate::value!(Symlink);
 
 #[derive(
 	Clone,
@@ -22,22 +15,22 @@ crate::value!(Symlink);
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub struct Data {
+pub(crate) struct Data {
 	#[tangram_serialize(id = 0)]
-	pub target: crate::template::Id,
+	pub target: template::Data,
 }
 
 impl Handle {
 	#[must_use]
-	pub fn new(target: template::Handle) -> Self {
-		Self::with_value(Value { target })
+	pub fn new(target: Template) -> Self {
+		Self::with_object(Object { target })
 	}
 
-	pub async fn target(&self, client: &Client) -> Result<template::Handle> {
-		Ok(self.value(client).await?.target.clone())
+	pub async fn target(&self, client: &Client) -> Result<Template> {
+		Ok(self.object(client).await?.target.clone())
 	}
 
-	pub async fn resolve(&self, client: &Client) -> Result<Option<artifact::Handle>> {
+	pub async fn resolve(&self, client: &Client) -> Result<Option<Artifact>> {
 		self.resolve_from(client, None).await
 	}
 
@@ -45,36 +38,35 @@ impl Handle {
 	pub async fn resolve_from(
 		&self,
 		_client: &Client,
-		_from: Option<&Value>,
-	) -> Result<Option<artifact::Handle>> {
+		_from: Option<Artifact>,
+	) -> Result<Option<Artifact>> {
 		unimplemented!()
 	}
 }
 
-impl Value {
+impl Object {
+	#[must_use]
+	pub(crate) fn to_data(&self) -> Data {
+		let target = self.target.to_data();
+		Data { target }
+	}
+
 	#[allow(clippy::needless_pass_by_value)]
 	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		let target = template::Handle::with_id(data.target);
+	pub(crate) fn from_data(data: Data) -> Self {
+		let target = Template::from_data(data.target);
 		Self { target }
 	}
 
 	#[must_use]
-	pub fn to_data(&self) -> Data {
-		Data {
-			target: self.target.expect_id(),
-		}
-	}
-
-	#[must_use]
-	pub fn children(&self) -> Vec<value::Handle> {
-		vec![self.target.clone().into()]
+	pub fn children(&self) -> Vec<object::Handle> {
+		self.target.children()
 	}
 }
 
 impl Data {
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Id> {
-		vec![self.target.into()]
+	pub fn children(&self) -> Vec<object::Id> {
+		self.target.children()
 	}
 }

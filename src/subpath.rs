@@ -1,33 +1,6 @@
-use crate::{error, relpath::Relpath, value, Error, Result};
+use crate::{error, relpath::Relpath, Error, Result};
 use itertools::Itertools;
 use std::path::PathBuf;
-
-crate::id!(Subpath);
-
-#[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(Subpath);
-
-/// A subpath value.
-pub type Value = Subpath;
-
-crate::value!(Subpath);
-
-/// Subpath data.
-pub type Data = Subpath;
-
-impl Value {
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		data
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		self.clone()
-	}
-}
 
 /// A subpath.
 #[derive(

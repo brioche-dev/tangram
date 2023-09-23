@@ -1,36 +1,8 @@
 use crate::{
 	error::{return_error, Error, Result},
 	subpath::Subpath,
-	value,
 };
 use std::path::PathBuf;
-
-crate::id!(Relpath);
-
-#[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(Relpath);
-
-/// A relpath value.
-pub type Value = Relpath;
-
-crate::value!(Relpath);
-
-/// Relpath data.
-pub type Data = Relpath;
-
-impl Value {
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		data
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		self.clone()
-	}
-}
 
 /// A relative path.
 #[derive(

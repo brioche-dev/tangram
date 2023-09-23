@@ -1,20 +1,8 @@
-use crate::value;
-
-crate::id!(Placeholder);
-
-/// A placeholder handle.
+/// A placeholder.
 #[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(Placeholder);
-
-/// A placeholder value.
-#[derive(Clone, Debug)]
-pub struct Value {
+pub struct Placeholder {
 	pub name: String,
 }
-
-crate::value!(Placeholder);
 
 /// Placeholder data.
 #[derive(
@@ -25,21 +13,21 @@ crate::value!(Placeholder);
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub struct Data {
+pub(crate) struct Data {
 	#[tangram_serialize(id = 0)]
 	pub name: String,
 }
 
-impl Value {
+impl Placeholder {
 	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		Self { name: data.name }
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
+	pub(crate) fn to_data(&self) -> Data {
 		Data {
 			name: self.name.clone(),
 		}
+	}
+
+	#[must_use]
+	pub(crate) fn from_data(data: Data) -> Self {
+		Self { name: data.name }
 	}
 }

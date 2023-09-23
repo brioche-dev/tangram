@@ -34,28 +34,30 @@ impl Cli {
 			.await
 			.wrap_err("Failed to get the package.")?;
 
-		// Create the target.
+		// Create the task.
 		let env = [(
 			"TANGRAM_HOST".to_owned(),
-			tg::value::Handle::with_value(tg::System::host()?.to_string().into()),
+			tg::Value::String(tg::System::host()?.to_string()),
 		)]
 		.into();
 		let args_ = Vec::new();
-		let target = tg::Target::new(
-			package,
-			tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
-			args.target,
-			env,
-			args_,
-		);
+		let host = tg::System::js();
+		let executable = tg::Template::from_iter([
+			package.artifact(client).await?.clone().into(),
+			"/".to_owned().into(),
+			tg::package::ROOT_MODULE_FILE_NAME.to_owned().into(),
+		]);
+		let task = tg::task::Builder::new(host, executable)
+			.package(package)
+			.target(args.target)
+			.env(env)
+			.args(args_)
+			.build();
 
-		// Build!
-		let id = target.id(client).await?;
-		let evaluation_id = client.evaluate(id.into()).await?;
-		let result = client.get_evaluation_result(evaluation_id).await?;
-		let output = result
-			.map(tg::value::Handle::with_id)
-			.map_err(tg::Error::from)?;
+		// Run the task.
+		let run = task.run(client).await?;
+		let result = run.result(client, run).await?;
+		let output = result.map_err(tg::Error::from)?;
 
 		if let Some(path) = args.output {
 			// Check out the output if requested.

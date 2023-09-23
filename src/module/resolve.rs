@@ -109,11 +109,7 @@ impl Module {
 
 				// Get the specified package from the dependencies.
 				let client = &Client::with_server(server.clone());
-				let dependencies = package
-					.dependencies(client)
-					.await?
-					.as_ref()
-					.wrap_err("Expected the package to be locked.")?;
+				let dependencies = package.dependencies(client).await?;
 				let package = dependencies
 					.get(&dependency)
 					.cloned()

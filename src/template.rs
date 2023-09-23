@@ -1,23 +1,13 @@
-pub use self::component::Value as Component;
-use crate::{artifact, value, Result};
+pub use self::component::Component;
+use crate::{object, Artifact, Placeholder, Result};
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use itertools::Itertools;
-use std::path::PathBuf;
-use std::{borrow::Cow, future::Future};
-
-crate::id!(Template);
+use std::{borrow::Cow, future::Future, path::PathBuf};
 
 #[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(Template);
-
-#[derive(Clone, Debug)]
-pub struct Value {
-	pub components: Vec<component::Value>,
+pub struct Template {
+	pub components: Vec<Component>,
 }
-
-crate::value!(Template);
 
 #[derive(
 	Clone,
@@ -27,12 +17,57 @@ crate::value!(Template);
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub struct Data {
+pub(crate) struct Data {
 	#[tangram_serialize(id = 0)]
 	pub components: Vec<component::Data>,
 }
 
-impl Handle {
+impl Template {
+	#[must_use]
+	pub fn empty() -> Self {
+		Self { components: vec![] }
+	}
+
+	#[must_use]
+	pub fn components(&self) -> &[Component] {
+		&self.components
+	}
+
+	pub fn artifacts(&self) -> impl Iterator<Item = &Artifact> {
+		self.components
+			.iter()
+			.filter_map(|component| match component {
+				Component::Artifact(artifact) => Some(artifact),
+				_ => None,
+			})
+	}
+
+	pub fn try_render_sync<'a, F>(&'a self, mut f: F) -> Result<String>
+	where
+		F: (FnMut(&'a Component) -> Result<Cow<'a, str>>) + 'a,
+	{
+		let mut string = String::new();
+		for component in &self.components {
+			string.push_str(&f(component)?);
+		}
+		Ok(string)
+	}
+
+	pub async fn try_render<'a, F, Fut>(&'a self, f: F) -> Result<String>
+	where
+		F: FnMut(&'a Component) -> Fut,
+		Fut: Future<Output = Result<Cow<'a, str>>>,
+	{
+		Ok(self
+			.components
+			.iter()
+			.map(f)
+			.collect::<FuturesOrdered<_>>()
+			.try_collect::<Vec<_>>()
+			.await?
+			.join(""))
+	}
+
 	pub fn unrender(artifacts_paths: &[PathBuf], string: &str) -> Result<Self> {
 		// Create the regex.
 		let artifacts_paths = artifacts_paths
@@ -56,7 +91,7 @@ impl Handle {
 			let id = id.as_str().parse().unwrap();
 
 			// Add an artifact component.
-			components.push(Component::Artifact(value::Handle::with_id(id).try_into()?));
+			components.push(Component::Artifact(Artifact::with_id(id)));
 
 			// Advance the cursor to the end of the match.
 			i = match_.end();
@@ -68,98 +103,33 @@ impl Handle {
 		}
 
 		// Create the template.
-		Ok(Self::with_value(components.into()))
-	}
-}
-
-impl Value {
-	#[must_use]
-	pub fn empty() -> Self {
-		Self { components: vec![] }
+		Ok(Self { components })
 	}
 
-	#[must_use]
-	pub fn components(&self) -> &[component::Value] {
-		&self.components
-	}
-
-	pub fn artifacts(&self) -> impl Iterator<Item = &artifact::Handle> {
-		self.components
-			.iter()
-			.filter_map(|component| match component {
-				component::Value::Artifact(artifact) => Some(artifact),
-				_ => None,
-			})
-	}
-
-	pub fn try_render_sync<'a, F>(&'a self, mut f: F) -> Result<String>
-	where
-		F: (FnMut(&'a component::Value) -> Result<Cow<'a, str>>) + 'a,
-	{
-		let mut string = String::new();
-		for component in &self.components {
-			string.push_str(&f(component)?);
-		}
-		Ok(string)
-	}
-
-	pub async fn try_render<'a, F, Fut>(&'a self, f: F) -> Result<String>
-	where
-		F: FnMut(&'a component::Value) -> Fut,
-		Fut: Future<Output = Result<Cow<'a, str>>>,
-	{
-		Ok(self
+	pub(crate) fn to_data(&self) -> Data {
+		let components = self
 			.components
 			.iter()
-			.map(f)
-			.collect::<FuturesOrdered<_>>()
-			.try_collect::<Vec<_>>()
-			.await?
-			.join(""))
+			.map(Component::to_data)
+			.collect::<Vec<_>>();
+		Data { components }
 	}
 
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
+	pub(crate) fn from_data(data: Data) -> Self {
 		let components = data
 			.components
 			.into_iter()
-			.map(|component| match component {
-				component::Data::String(data) => component::Value::String(data),
-				component::Data::Artifact(data) => {
-					component::Value::Artifact(artifact::Handle::with_id(data))
-				},
-				component::Data::Placeholder(data) => {
-					component::Value::Placeholder(crate::placeholder::Value { name: data.name })
-				},
-			})
+			.map(Component::from_data)
 			.collect();
 		Self { components }
 	}
 
 	#[must_use]
-	pub fn to_data(&self) -> Data {
-		let components = self
-			.components
-			.iter()
-			.map(|component| match component {
-				component::Value::String(value) => component::Data::String(value.clone()),
-				component::Value::Artifact(value) => component::Data::Artifact(value.expect_id()),
-				component::Value::Placeholder(value) => {
-					component::Data::Placeholder(crate::placeholder::Data {
-						name: value.name.clone(),
-					})
-				},
-			})
-			.collect();
-		Data { components }
-	}
-
-	#[must_use]
-	pub fn children(&self) -> Vec<value::Handle> {
+	pub fn children(&self) -> Vec<object::Handle> {
 		self.components
 			.iter()
 			.filter_map(|component| match component {
-				component::Value::Artifact(artifact) => Some(artifact.clone().into()),
+				Component::Artifact(artifact) => Some(artifact.clone().into()),
 				_ => None,
 			})
 			.collect()
@@ -168,7 +138,7 @@ impl Value {
 
 impl Data {
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Id> {
+	pub fn children(&self) -> Vec<object::Id> {
 		self.components
 			.iter()
 			.filter_map(|component| match component {
@@ -179,76 +149,71 @@ impl Data {
 	}
 }
 
-impl From<Vec<component::Value>> for Handle {
-	fn from(value: Vec<component::Value>) -> Self {
-		Self::with_value(value.into())
+impl Component {
+	#[must_use]
+	pub fn as_string(&self) -> Option<&str> {
+		if let Self::String(string) = self {
+			Some(string)
+		} else {
+			None
+		}
 	}
-}
 
-impl From<component::Value> for Handle {
-	fn from(value: component::Value) -> Self {
-		Self::with_value(value.into())
+	#[must_use]
+	pub fn as_artifact(&self) -> Option<&Artifact> {
+		if let Self::Artifact(artifact) = self {
+			Some(artifact)
+		} else {
+			None
+		}
 	}
-}
 
-impl From<String> for Handle {
-	fn from(value: String) -> Self {
-		Self::with_value(value.into())
+	#[must_use]
+	pub fn as_placeholder(&self) -> Option<&Placeholder> {
+		if let Self::Placeholder(placeholder) = self {
+			Some(placeholder)
+		} else {
+			None
+		}
 	}
-}
 
-impl From<&str> for Handle {
-	fn from(value: &str) -> Self {
-		Self::with_value(value.into())
+	#[must_use]
+	pub fn into_string(self) -> Option<String> {
+		if let Self::String(string) = self {
+			Some(string)
+		} else {
+			None
+		}
 	}
-}
 
-impl FromIterator<component::Value> for Handle {
-	fn from_iter<I: IntoIterator<Item = component::Value>>(value: I) -> Self {
-		Self::with_value(Value::from_iter(value))
+	#[must_use]
+	pub fn into_artifact(self) -> Option<Artifact> {
+		if let Self::Artifact(artifact) = self {
+			Some(artifact)
+		} else {
+			None
+		}
 	}
-}
 
-impl From<Vec<component::Value>> for Value {
-	fn from(value: Vec<component::Value>) -> Self {
-		Value { components: value }
-	}
-}
-
-impl From<component::Value> for Value {
-	fn from(value: component::Value) -> Self {
-		vec![value].into()
-	}
-}
-
-impl From<String> for Value {
-	fn from(value: String) -> Self {
-		vec![component::Value::String(value)].into()
-	}
-}
-
-impl From<&str> for Value {
-	fn from(value: &str) -> Self {
-		value.to_owned().into()
-	}
-}
-
-impl FromIterator<component::Value> for Value {
-	fn from_iter<I: IntoIterator<Item = component::Value>>(value: I) -> Self {
-		Value {
-			components: value.into_iter().collect(),
+	#[must_use]
+	pub fn into_placeholder(self) -> Option<Placeholder> {
+		if let Self::Placeholder(placeholder) = self {
+			Some(placeholder)
+		} else {
+			None
 		}
 	}
 }
 
 pub mod component {
-	use crate::{artifact, placeholder};
+	use crate::{artifact, placeholder, Artifact, Placeholder};
+	use derive_more::From;
 
-	#[derive(Clone, Debug)]
-	pub enum Value {
+	#[derive(Clone, Debug, From)]
+	pub enum Component {
 		String(String),
-		Artifact(artifact::Handle),
-		Placeholder(placeholder::Value),
+		Artifact(Artifact),
+		Placeholder(Placeholder),
 	}
 
 	#[derive(
@@ -260,68 +225,62 @@ pub mod component {
 		tangram_serialize::Serialize,
 	)]
 	#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-	pub enum Data {
+	pub(crate) enum Data {
 		#[tangram_serialize(id = 0)]
-		String(crate::string::Data),
+		String(String),
 		#[tangram_serialize(id = 1)]
 		Artifact(artifact::Id),
 		#[tangram_serialize(id = 2)]
-		Placeholder(crate::placeholder::Data),
+		Placeholder(placeholder::Data),
 	}
 
-	impl Value {
-		#[must_use]
-		pub fn as_string(&self) -> Option<&str> {
-			if let Self::String(string) = self {
-				Some(string)
-			} else {
-				None
+	impl Component {
+		pub(crate) fn to_data(&self) -> Data {
+			match self {
+				Self::String(string) => Data::String(string.clone()),
+				Self::Artifact(artifact) => Data::Artifact(artifact.expect_id()),
+				Self::Placeholder(placeholder) => Data::Placeholder(placeholder.to_data()),
 			}
 		}
 
-		#[must_use]
-		pub fn as_artifact(&self) -> Option<&artifact::Handle> {
-			if let Self::Artifact(artifact) = self {
-				Some(artifact)
-			} else {
-				None
+		pub(crate) fn from_data(data: Data) -> Self {
+			match data {
+				Data::String(string) => Self::String(string),
+				Data::Artifact(id) => Self::Artifact(Artifact::with_id(id)),
+				Data::Placeholder(data) => Self::Placeholder(Placeholder::from_data(data)),
 			}
 		}
+	}
+}
 
-		#[must_use]
-		pub fn as_placeholder(&self) -> Option<&placeholder::Value> {
-			if let Self::Placeholder(placeholder) = self {
-				Some(placeholder)
-			} else {
-				None
-			}
-		}
+impl From<Component> for Template {
+	fn from(value: Component) -> Self {
+		vec![value].into()
+	}
+}
 
-		#[must_use]
-		pub fn into_string(self) -> Option<String> {
-			if let Self::String(string) = self {
-				Some(string)
-			} else {
-				None
-			}
-		}
+impl From<Vec<Component>> for Template {
+	fn from(value: Vec<Component>) -> Self {
+		Self { components: value }
+	}
+}
 
-		#[must_use]
-		pub fn into_artifact(self) -> Option<artifact::Handle> {
-			if let Self::Artifact(artifact) = self {
-				Some(artifact)
-			} else {
-				None
-			}
+impl FromIterator<Component> for Template {
+	fn from_iter<I: IntoIterator<Item = Component>>(value: I) -> Self {
+		Self {
+			components: value.into_iter().collect(),
 		}
+	}
+}
 
-		#[must_use]
-		pub fn into_placeholder(self) -> Option<placeholder::Value> {
-			if let Self::Placeholder(placeholder) = self {
-				Some(placeholder)
-			} else {
-				None
-			}
-		}
+impl From<String> for Template {
+	fn from(value: String) -> Self {
+		vec![Component::String(value)].into()
+	}
+}
+
+impl From<&str> for Template {
+	fn from(value: &str) -> Self {
+		value.to_owned().into()
 	}
 }

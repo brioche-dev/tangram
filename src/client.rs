@@ -1,4 +1,4 @@
-use crate::{return_error, run, Error, Result, Server, WrapErr};
+use crate::{object, return_error, Error, Result, Server, WrapErr};
 use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use std::sync::Arc;
@@ -32,96 +32,90 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn get_value_exists(&self, id: crate::Id) -> Result<bool> {
+	pub async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
 		match self {
-			Self::Server(server) => server.get_value_exists(id).await,
-			Self::Reqwest(client) => client.get_value_exists(id).await,
+			Self::Server(server) => server.get_object_exists(id).await,
+			Self::Reqwest(client) => client.get_object_exists(id).await,
 		}
 	}
 
 	#[async_recursion]
-	pub async fn try_get_value_bytes(&self, id: crate::Id) -> Result<Option<Vec<u8>>> {
+	pub async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
 		match self {
-			Self::Server(server) => server.try_get_value_bytes(id).await,
-			Self::Reqwest(client) => client.try_get_value_bytes(id).await,
+			Self::Server(server) => server.try_get_object_bytes(id).await,
+			Self::Reqwest(client) => client.try_get_object_bytes(id).await,
 		}
 	}
 
 	#[async_recursion]
-	pub async fn try_put_value_bytes(
+	pub async fn try_put_object_bytes(
 		&self,
-		id: crate::Id,
+		id: object::Id,
 		bytes: &[u8],
-	) -> Result<Result<(), Vec<crate::Id>>> {
+	) -> Result<Result<(), Vec<object::Id>>> {
 		match self {
-			Self::Server(server) => server.try_put_value_bytes(id, bytes).await,
-			Self::Reqwest(client) => client.try_put_value_bytes(id, bytes).await,
+			Self::Server(server) => server.try_put_object_bytes(id, bytes).await,
+			Self::Reqwest(client) => client.try_put_object_bytes(id, bytes).await,
 		}
 	}
 
-	#[async_recursion]
-	pub async fn evaluate(&self, id: crate::Id) -> Result<run::Id> {
-		match self {
-			Self::Server(server) => server.evaluate(id).await,
-			Self::Reqwest(_) => todo!(),
-		}
-	}
+	// 	#[async_recursion]
+	// 	pub async fn run_task(&self, id: task::Id) -> Result<run::Id> {
+	// 		match self {
+	// 			Self::Server(server) => server.evaluate(id).await,
+	// 			Self::Reqwest(_) => todo!(),
+	// 		}
+	// 	}
 
-	#[async_recursion]
-	pub async fn try_get_assignment(&self, id: crate::Id) -> Result<Option<run::Id>> {
-		match self {
-			Self::Server(server) => server.try_get_assignment(id).await,
-			Self::Reqwest(_) => todo!(),
-		}
-	}
+	// 	#[async_recursion]
+	// 	pub async fn try_get_run_for_task(&self, id: task::Id) -> Result<Option<run::Id>> {
+	// 		match self {
+	// 			Self::Server(server) => server.try_get_assignment(id).await,
+	// 			Self::Reqwest(_) => todo!(),
+	// 		}
+	// 	}
 
-	#[async_recursion]
-	pub async fn try_get_evaluation_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
-		match self {
-			Self::Server(server) => server.try_get_evaluation_bytes(id).await,
-			Self::Reqwest(_) => todo!(),
-		}
-	}
+	// 	#[async_recursion]
+	// 	pub async fn try_get_run_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
+	// 		match self {
+	// 			Self::Server(server) => server.try_get_run_bytes(id).await,
+	// 			Self::Reqwest(_) => todo!(),
+	// 		}
+	// 	}
 
-	#[async_recursion]
-	pub async fn try_get_evaluation_children(
-		&self,
-		id: run::Id,
-	) -> Result<Option<BoxStream<run::Id>>> {
-		match self {
-			Self::Server(server) => server.try_get_evaluation_children(id).await,
-			Self::Reqwest(_) => todo!(),
-		}
-	}
+	// 	#[async_recursion]
+	// 	pub async fn try_get_run_children(&self, id: run::Id) -> Result<Option<BoxStream<run::Id>>> {
+	// 		match self {
+	// 			Self::Server(server) => server.try_get_run_children(id).await,
+	// 			Self::Reqwest(_) => todo!(),
+	// 		}
+	// 	}
 
-	#[async_recursion]
-	pub async fn try_get_evaluation_log(&self, id: run::Id) -> Result<Option<BoxStream<Vec<u8>>>> {
-		match self {
-			Self::Server(server) => server.try_get_evaluation_log(id).await,
-			Self::Reqwest(_) => todo!(),
-		}
-	}
+	// 	#[async_recursion]
+	// 	pub async fn try_get_run_log(&self, id: run::Id) -> Result<Option<BoxStream<Vec<u8>>>> {
+	// 		match self {
+	// 			Self::Server(server) => server.try_get_run_log(id).await,
+	// 			Self::Reqwest(_) => todo!(),
+	// 		}
+	// 	}
 
-	#[async_recursion]
-	pub async fn try_get_evaluation_result(
-		&self,
-		id: run::Id,
-	) -> Result<Option<run::Result<crate::Id>>> {
-		match self {
-			Self::Server(server) => server.try_get_evaluation_result(id).await,
-			Self::Reqwest(_) => todo!(),
-		}
-	}
+	// 	#[async_recursion]
+	// 	pub async fn try_get_run_result(&self, id: run::Id) -> Result<Option<run::Result<object::Id>>> {
+	// 		match self {
+	// 			Self::Server(server) => server.try_get_run_result(id).await,
+	// 			Self::Reqwest(_) => todo!(),
+	// 		}
+	// 	}
 }
 
-impl Client {
-	#[async_recursion]
-	pub async fn get_evaluation_result(&self, id: run::Id) -> Result<run::Result<crate::Id>> {
-		self.try_get_evaluation_result(id)
-			.await?
-			.wrap_err("Expected the evaluation to exist.")
-	}
-}
+// impl Client {
+// 	#[async_recursion]
+// 	pub async fn get_run_result(&self, id: run::Id) -> Result<run::Result<object::Id>> {
+// 		self.try_get_run_result(id)
+// 			.await?
+// 			.wrap_err("Expected the run to exist.")
+// 	}
+// }
 
 #[derive(Clone, Debug)]
 pub struct Reqwest {
@@ -167,8 +161,8 @@ impl Reqwest {
 		request
 	}
 
-	pub async fn get_value_exists(&self, id: crate::Id) -> Result<bool> {
-		let request = self.request(http::Method::HEAD, &format!("/v1/values/{id}"));
+	pub async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
+		let request = self.request(http::Method::HEAD, &format!("/v1/objects/{id}"));
 		let response = request.send().await?;
 		match response.status() {
 			http::StatusCode::OK => Ok(true),
@@ -177,8 +171,8 @@ impl Reqwest {
 		}
 	}
 
-	pub async fn try_get_value_bytes(&self, id: crate::Id) -> Result<Option<Vec<u8>>> {
-		let request = self.request(http::Method::GET, &format!("/v1/values/{id}"));
+	pub async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
+		let request = self.request(http::Method::GET, &format!("/v1/objects/{id}"));
 		let response = request.send().await?;
 		match response.status() {
 			http::StatusCode::OK => {},
@@ -189,20 +183,21 @@ impl Reqwest {
 		Ok(Some(bytes.into()))
 	}
 
-	pub async fn try_put_value_bytes(
+	pub async fn try_put_object_bytes(
 		&self,
-		id: crate::Id,
+		id: object::Id,
 		bytes: &[u8],
-	) -> Result<Result<(), Vec<crate::Id>>> {
+	) -> Result<Result<(), Vec<object::Id>>> {
 		let request = self
-			.request(http::Method::PUT, &format!("/v1/values/{id}"))
+			.request(http::Method::PUT, &format!("/v1/objects/{id}"))
 			.body(bytes.to_owned());
 		let response = request.send().await?;
 		match response.status() {
 			http::StatusCode::OK => Ok(Ok(())),
 			http::StatusCode::BAD_REQUEST => {
 				let bytes = response.bytes().await?;
-				let missing_children = serde_json::from_slice(&bytes).map_err(Error::other)?;
+				let missing_children =
+					tangram_serialize::from_slice(&bytes).map_err(Error::other)?;
 				Ok(Err(missing_children))
 			},
 			_ => return_error!(r#"Unexpected status code "{}"."#, response.status()),

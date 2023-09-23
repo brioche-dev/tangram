@@ -58,14 +58,14 @@ impl Server {
 		let path = request.uri().path().to_owned();
 		let path_components = path.split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
-			(http::Method::HEAD, ["v1", "values", _]) => {
-				Some(self.handle_head_value_request(request).boxed())
+			(http::Method::HEAD, ["v1", "objects", _]) => {
+				Some(self.handle_head_object_request(request).boxed())
 			},
-			(http::Method::GET, ["v1", "values", _]) => {
-				Some(self.handle_get_value_request(request).boxed())
+			(http::Method::GET, ["v1", "objects", _]) => {
+				Some(self.handle_get_object_request(request).boxed())
 			},
-			(http::Method::PUT, ["v1", "values", _]) => {
-				Some(self.handle_put_value_request(request).boxed())
+			(http::Method::PUT, ["v1", "objects", _]) => {
+				Some(self.handle_put_object_request(request).boxed())
 			},
 			(_, _) => None,
 		};
@@ -77,20 +77,20 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_head_value_request(
+	pub async fn handle_head_object_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "values", id] = path_components.as_slice() else {
+		let ["v1", "objects", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
 		};
 		let Ok(id) = id.parse() else {
 			return Ok(bad_request());
 		};
 
-		let status = if self.get_value_exists(id).await? {
+		let status = if self.get_object_exists(id).await? {
 			http::StatusCode::OK
 		} else {
 			http::StatusCode::NOT_FOUND
@@ -105,23 +105,26 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_value_request(
+	pub async fn handle_get_object_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "values", id] = path_components.as_slice() else {
+		let ["v1", "objects", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
 		};
 		let Ok(id) = id.parse() else {
 			return Ok(bad_request());
 		};
 
-		let bytes = self.try_get_value_bytes(id).await?;
+		let bytes = self.try_get_object_bytes(id).await?;
 
 		let Some(bytes) = bytes else {
-			return Ok(http::Response::builder().status(http::StatusCode::NOT_FOUND).body(empty()).unwrap());
+			return Ok(http::Response::builder()
+				.status(http::StatusCode::NOT_FOUND)
+				.body(empty())
+				.unwrap());
 		};
 
 		// Create the body.
@@ -136,13 +139,13 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_put_value_request(
+	pub async fn handle_put_object_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "values", id] = path_components.as_slice() else {
+		let ["v1", "objects", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
 		};
 		let Ok(id) = id.parse() else {
@@ -160,8 +163,8 @@ impl Server {
 		let mut bytes = Vec::new();
 		body.read_to_end(&mut bytes).await?;
 
-		// Put the value.
-		let result = self.try_put_value_bytes(id, &bytes).await?;
+		// Put the object.
+		let result = self.try_put_object_bytes(id, &bytes).await?;
 
 		// If there are missing children, then return a bad request response.
 		if let Err(missing_children) = result {

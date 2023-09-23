@@ -1,126 +1,65 @@
 use crate::{
-	array, blob, bool, bytes, directory, error, file, null, number, object, package, placeholder,
-	relpath, resource, return_error, string, subpath, symlink, target, task, template, value,
-	Client, Id, Result, WrapErr,
-};
-use async_recursion::async_recursion;
-use byteorder::{ReadBytesExt, WriteBytesExt};
-use futures::{stream::FuturesUnordered, TryStreamExt};
-use std::sync::Arc;
-
-/// A value handle.
-#[derive(Clone, Debug)]
-pub struct Handle {
-	id: Arc<std::sync::RwLock<Option<Id>>>,
-	value: Arc<std::sync::RwLock<Option<Value>>>,
-}
-
-/// A value variant.
-#[derive(Clone, Debug)]
-pub enum Variant {
-	Null(null::Handle),
-	Bool(bool::Handle),
-	Number(number::Handle),
-	String(string::Handle),
-	Bytes(bytes::Handle),
-	Relpath(relpath::Handle),
-	Subpath(subpath::Handle),
-	Blob(blob::Handle),
-	Directory(directory::Handle),
-	File(file::Handle),
-	Symlink(symlink::Handle),
-	Placeholder(placeholder::Handle),
-	Template(template::Handle),
-	Package(package::Handle),
-	Resource(resource::Handle),
-	Target(target::Handle),
-	Task(task::Handle),
-	Array(array::Handle),
-	Object(object::Handle),
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Kind {
-	Null,
-	Bool,
-	Number,
-	String,
-	Bytes,
-	Relpath,
-	Subpath,
-	Blob,
-	Directory,
-	File,
-	Symlink,
-	Placeholder,
+	blob, directory, file, object, package, placeholder, return_error, symlink, task, template,
+	Blob, Bytes, Directory, File, Package, Placeholder, Relpath, Result, Subpath, Symlink, Task,
 	Template,
-	Package,
-	Resource,
-	Target,
-	Task,
-	Array,
-	Object,
-}
+};
+use byteorder::{ReadBytesExt, WriteBytesExt};
+use derive_more::{From, TryInto};
+use std::collections::BTreeMap;
 
 /// A value.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, From, TryInto)]
 pub enum Value {
 	/// A null value.
-	Null(null::Value),
+	Null(()),
 
 	/// A bool value.
-	Bool(bool::Value),
+	Bool(bool),
 
 	/// A number value.
-	Number(number::Value),
+	Number(f64),
 
 	/// A string value.
-	String(string::Value),
+	String(String),
 
 	/// A bytes value.
-	Bytes(bytes::Value),
+	Bytes(Bytes),
 
 	/// A relpath value.
-	Relpath(relpath::Value),
+	Relpath(Relpath),
 
 	/// A subpath value.
-	Subpath(subpath::Value),
+	Subpath(Subpath),
 
 	/// A blob value.
-	Blob(blob::Value),
+	Blob(Blob),
 
 	/// A directory value.
-	Directory(directory::Value),
+	Directory(Directory),
 
 	/// A file value.
-	File(file::Value),
+	File(File),
 
 	/// A symlink value.
-	Symlink(symlink::Value),
+	Symlink(Symlink),
 
 	/// A placeholder value.
-	Placeholder(placeholder::Value),
+	Placeholder(Placeholder),
 
 	/// A template value.
-	Template(template::Value),
+	Template(Template),
 
 	/// A package value.
-	Package(package::Value),
-
-	/// A resource value.
-	Resource(resource::Value),
-
-	/// A target value.
-	Target(target::Value),
+	Package(Package),
 
 	/// A task value.
-	Task(task::Value),
+	Task(Task),
 
 	/// An array value.
-	Array(array::Value),
+	Array(Vec<Value>),
 
-	/// An object value.
-	Object(object::Value),
+	/// A map value.
+	Map(BTreeMap<String, Value>),
 }
 
 /// Value data.
@@ -133,252 +72,71 @@ pub enum Value {
 	tangram_serialize::Serialize,
 )]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-pub enum Data {
+pub(crate) enum Data {
 	#[tangram_serialize(id = 0)]
-	Null(null::Data),
+	Null(()),
 
 	#[tangram_serialize(id = 1)]
-	Bool(bool::Data),
+	Bool(bool),
 
 	#[tangram_serialize(id = 2)]
-	Number(number::Data),
+	Number(f64),
 
 	#[tangram_serialize(id = 3)]
-	String(string::Data),
+	String(String),
 
 	#[tangram_serialize(id = 4)]
-	Bytes(bytes::Data),
+	Bytes(Bytes),
 
 	#[tangram_serialize(id = 5)]
-	Relpath(relpath::Data),
+	Relpath(Relpath),
 
 	#[tangram_serialize(id = 6)]
-	Subpath(subpath::Data),
+	Subpath(Subpath),
 
 	#[tangram_serialize(id = 7)]
-	Blob(blob::Data),
+	Blob(blob::Id),
 
+	/// A directory value.
 	#[tangram_serialize(id = 8)]
-	Directory(directory::Data),
+	Directory(directory::Id),
 
+	/// A file value.
 	#[tangram_serialize(id = 9)]
-	File(file::Data),
+	File(file::Id),
 
+	/// A symlink value.
 	#[tangram_serialize(id = 10)]
-	Symlink(symlink::Data),
+	Symlink(symlink::Id),
 
+	/// A placeholder value.
 	#[tangram_serialize(id = 11)]
 	Placeholder(placeholder::Data),
 
+	/// A template value.
 	#[tangram_serialize(id = 12)]
 	Template(template::Data),
 
+	/// A package value.
 	#[tangram_serialize(id = 13)]
-	Package(package::Data),
+	Package(package::Id),
 
+	/// A task value.
 	#[tangram_serialize(id = 14)]
-	Resource(resource::Data),
+	Task(task::Id),
 
+	/// An array value.
 	#[tangram_serialize(id = 15)]
-	Target(target::Data),
+	Array(Vec<Data>),
 
+	/// A map value.
 	#[tangram_serialize(id = 16)]
-	Task(task::Data),
-
-	#[tangram_serialize(id = 17)]
-	Array(array::Data),
-
-	#[tangram_serialize(id = 18)]
-	Object(object::Data),
-}
-
-impl Handle {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self {
-			id: Arc::new(std::sync::RwLock::new(Some(id))),
-			value: Arc::new(std::sync::RwLock::new(None)),
-		}
-	}
-
-	#[must_use]
-	pub fn with_value(value: Value) -> Self {
-		Self {
-			id: Arc::new(std::sync::RwLock::new(None)),
-			value: Arc::new(std::sync::RwLock::new(Some(value))),
-		}
-	}
-
-	#[must_use]
-	pub fn kind(&self) -> Kind {
-		if let Some(id) = *self.id.read().unwrap() {
-			return id.kind();
-		}
-		match self.value.read().unwrap().as_ref().unwrap() {
-			Value::Null(_) => Kind::Null,
-			Value::Bool(_) => Kind::Bool,
-			Value::Number(_) => Kind::Number,
-			Value::String(_) => Kind::String,
-			Value::Bytes(_) => Kind::Bytes,
-			Value::Relpath(_) => Kind::Relpath,
-			Value::Subpath(_) => Kind::Subpath,
-			Value::Blob(_) => Kind::Blob,
-			Value::Directory(_) => Kind::Directory,
-			Value::File(_) => Kind::File,
-			Value::Symlink(_) => Kind::Symlink,
-			Value::Placeholder(_) => Kind::Placeholder,
-			Value::Template(_) => Kind::Template,
-			Value::Package(_) => Kind::Package,
-			Value::Resource(_) => Kind::Resource,
-			Value::Target(_) => Kind::Target,
-			Value::Task(_) => Kind::Task,
-			Value::Array(_) => Kind::Array,
-			Value::Object(_) => Kind::Object,
-		}
-	}
-
-	#[must_use]
-	pub fn variant(&self) -> value::Variant {
-		match self.kind() {
-			Kind::Null => value::Variant::Null(self.clone().try_into().unwrap()),
-			Kind::Bool => value::Variant::Bool(self.clone().try_into().unwrap()),
-			Kind::Number => value::Variant::Number(self.clone().try_into().unwrap()),
-			Kind::String => value::Variant::String(self.clone().try_into().unwrap()),
-			Kind::Bytes => value::Variant::Bytes(self.clone().try_into().unwrap()),
-			Kind::Relpath => value::Variant::Relpath(self.clone().try_into().unwrap()),
-			Kind::Subpath => value::Variant::Subpath(self.clone().try_into().unwrap()),
-			Kind::Blob => value::Variant::Blob(self.clone().try_into().unwrap()),
-			Kind::Directory => value::Variant::Directory(self.clone().try_into().unwrap()),
-			Kind::File => value::Variant::File(self.clone().try_into().unwrap()),
-			Kind::Symlink => value::Variant::Symlink(self.clone().try_into().unwrap()),
-			Kind::Placeholder => value::Variant::Placeholder(self.clone().try_into().unwrap()),
-			Kind::Template => value::Variant::Template(self.clone().try_into().unwrap()),
-			Kind::Package => value::Variant::Package(self.clone().try_into().unwrap()),
-			Kind::Resource => value::Variant::Resource(self.clone().try_into().unwrap()),
-			Kind::Target => value::Variant::Target(self.clone().try_into().unwrap()),
-			Kind::Task => value::Variant::Task(self.clone().try_into().unwrap()),
-			Kind::Array => value::Variant::Array(self.clone().try_into().unwrap()),
-			Kind::Object => value::Variant::Object(self.clone().try_into().unwrap()),
-		}
-	}
-
-	pub(crate) fn expect_id(&self) -> Id {
-		self.id.read().unwrap().unwrap()
-	}
-
-	pub async fn id(&self, client: &Client) -> Result<Id> {
-		// Store the value.
-		self.store(client).await?;
-
-		// Return the ID.
-		Ok(self.id.read().unwrap().unwrap())
-	}
-
-	pub async fn value(&self, client: &Client) -> Result<&Value> {
-		// Load the value.
-		self.load(client).await?;
-
-		// Return a reference to the value.
-		Ok(unsafe { &*(self.value.read().unwrap().as_ref().unwrap() as *const Value) })
-	}
-
-	#[allow(clippy::unused_async)]
-	pub async fn load(&self, client: &Client) -> Result<()> {
-		// If the value is already loaded, then return.
-		if self.value.read().unwrap().is_some() {
-			return Ok(());
-		}
-
-		// Get the id.
-		let id = self.id.read().unwrap().unwrap();
-
-		// Get the data.
-		let Some(data) = client.try_get_value_bytes(id).await? else {
-			return_error!(r#"Failed to find value with id "{id}"."#);
-		};
-
-		// Create the value.
-		let data = value::Data::deserialize(&data)?;
-		let value = Value::from_data(data);
-
-		// Set the value.
-		self.value.write().unwrap().replace(value);
-
-		Ok(())
-	}
-
-	#[async_recursion]
-	pub async fn store(&self, client: &Client) -> Result<()> {
-		// If the value is already stored, then return.
-		if self.id.read().unwrap().is_some() {
-			return Ok(());
-		}
-
-		// Store the children.
-		let children = self.value.read().unwrap().as_ref().unwrap().children();
-		children
-			.into_iter()
-			.map(|child| async move { child.store(client).await })
-			.collect::<FuturesUnordered<_>>()
-			.try_collect()
-			.await?;
-
-		// Serialize the data.
-		let data = self.value.read().unwrap().as_ref().unwrap().to_data();
-		let data = data.serialize()?;
-		let id = Id::new_hashed(self.kind(), &data);
-
-		// Store the value.
-		client
-			.try_put_value_bytes(id, &data)
-			.await
-			.wrap_err("Failed to put the value.")?
-			.map_err(|_| error!("Expected all children to be stored."))?;
-
-		// Set the ID.
-		self.id.write().unwrap().replace(id);
-
-		Ok(())
-	}
+	Map(BTreeMap<String, Data>),
 }
 
 impl Value {
 	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		match data {
-			Data::Null(_) => Value::Null(()),
-			Data::Bool(data) => Value::Bool(data),
-			Data::Number(data) => Value::Number(data),
-			Data::String(data) => Value::String(data),
-			Data::Bytes(data) => Value::Bytes(data),
-			Data::Relpath(data) => Value::Relpath(relpath::Value::from_data(data)),
-			Data::Subpath(data) => Value::Subpath(subpath::Value::from_data(data)),
-			Data::Blob(data) => Value::Blob(blob::Value::from_data(data)),
-			Data::Directory(data) => Value::Directory(directory::Value::from_data(data)),
-			Data::File(data) => Value::File(file::Value::from_data(data)),
-			Data::Symlink(data) => Value::Symlink(symlink::Value::from_data(data)),
-			Data::Placeholder(data) => Value::Placeholder(placeholder::Value::from_data(data)),
-			Data::Template(data) => Value::Template(template::Value::from_data(data)),
-			Data::Package(data) => Value::Package(package::Value::from_data(data)),
-			Data::Resource(data) => Value::Resource(resource::Value::from_data(data)),
-			Data::Target(data) => Value::Target(target::Value::from_data(data)),
-			Data::Task(data) => Value::Task(task::Value::from_data(data)),
-			Data::Array(data) => {
-				let value = data.into_iter().map(Handle::with_id).collect::<Vec<_>>();
-				Value::Array(value)
-			},
-			Data::Object(data) => {
-				let value = data
-					.into_iter()
-					.map(|(key, value)| (key, Handle::with_id(value)))
-					.collect();
-				Value::Object(value)
-			},
-		}
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
+	pub(crate) fn to_data(&self) -> Data {
 		match self {
 			Value::Null(_) => Data::Null(()),
 			Value::Bool(value) => Data::Bool(*value),
@@ -387,28 +145,56 @@ impl Value {
 			Value::Bytes(value) => Data::Bytes(value.clone()),
 			Value::Relpath(value) => Data::Relpath(value.clone()),
 			Value::Subpath(value) => Data::Subpath(value.clone()),
-			Value::Blob(value) => Data::Blob(value.to_data()),
-			Value::Directory(value) => Data::Directory(value.to_data()),
-			Value::File(value) => Data::File(value.to_data()),
-			Value::Symlink(value) => Data::Symlink(value.to_data()),
+			Value::Blob(value) => Data::Blob(value.expect_id()),
+			Value::Directory(value) => Data::Directory(value.expect_id()),
+			Value::File(value) => Data::File(value.expect_id()),
+			Value::Symlink(value) => Data::Symlink(value.expect_id()),
 			Value::Placeholder(value) => Data::Placeholder(value.to_data()),
 			Value::Template(value) => Data::Template(value.to_data()),
-			Value::Package(value) => Data::Package(value.to_data()),
-			Value::Resource(value) => Data::Resource(value.to_data()),
-			Value::Target(value) => Data::Target(value.to_data()),
-			Value::Task(value) => Data::Task(value.to_data()),
-			Value::Array(value) => Data::Array(value.iter().map(Handle::expect_id).collect()),
-			Value::Object(value) => Data::Object(
+			Value::Package(value) => Data::Package(value.expect_id()),
+			Value::Task(value) => Data::Task(value.expect_id()),
+			Value::Array(value) => Data::Array(value.iter().map(Value::to_data).collect()),
+			Value::Map(value) => Data::Map(
 				value
 					.iter()
-					.map(|(key, value)| (key.clone(), value.expect_id()))
+					.map(|(key, value)| (key.clone(), value.to_data()))
 					.collect(),
 			),
 		}
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<Handle> {
+	pub(crate) fn from_data(data: Data) -> Self {
+		match data {
+			Data::Null(_) => Value::Null(()),
+			Data::Bool(bool) => Value::Bool(bool),
+			Data::Number(number) => Value::Number(number),
+			Data::String(string) => Value::String(string),
+			Data::Bytes(bytes) => Value::Bytes(bytes),
+			Data::Relpath(relpath) => Value::Relpath(relpath),
+			Data::Subpath(subpath) => Value::Subpath(subpath),
+			Data::Blob(id) => Value::Blob(Blob::with_id(id)),
+			Data::Directory(id) => Value::Directory(Directory::with_id(id)),
+			Data::File(id) => Value::File(File::with_id(id)),
+			Data::Symlink(id) => Value::Symlink(Symlink::with_id(id)),
+			Data::Placeholder(placeholder) => {
+				Value::Placeholder(Placeholder::from_data(placeholder))
+			},
+			Data::Template(template) => Value::Template(Template::from_data(template)),
+			Data::Package(id) => Value::Package(Package::with_id(id)),
+			Data::Task(id) => Value::Task(Task::with_id(id)),
+			Data::Array(data) => {
+				Value::Array(data.into_iter().map(Value::from_data).collect::<Vec<_>>())
+			},
+			Data::Map(data) => Value::Map(
+				data.into_iter()
+					.map(|(key, value)| (key, Value::from_data(value)))
+					.collect(),
+			),
+		}
+	}
+
+	pub fn children(&self) -> Vec<object::Handle> {
 		match self {
 			Self::Null(_)
 			| Self::Bool(_)
@@ -418,17 +204,15 @@ impl Value {
 			| Self::Relpath(_)
 			| Self::Subpath(_)
 			| Self::Placeholder(_) => vec![],
-			Self::Blob(blob) => blob.children(),
-			Self::Directory(directory) => directory.children(),
-			Self::File(file) => file.children(),
-			Self::Symlink(symlink) => symlink.children(),
+			Self::Blob(blob) => vec![blob.clone().into()],
+			Self::Directory(directory) => vec![directory.clone().into()],
+			Self::File(file) => vec![file.clone().into()],
+			Self::Symlink(symlink) => vec![symlink.clone().into()],
 			Self::Template(template) => template.children(),
-			Self::Package(package) => package.children(),
-			Self::Resource(resource) => resource.children(),
-			Self::Target(target) => target.children(),
-			Self::Task(task) => task.children(),
-			Self::Array(array) => array.clone(),
-			Self::Object(map) => map.values().cloned().collect(),
+			Self::Package(package) => vec![package.clone().into()],
+			Self::Task(task) => vec![task.clone().into()],
+			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
+			Self::Map(map) => map.values().flat_map(Self::children).collect(),
 		}
 	}
 }
@@ -451,7 +235,7 @@ impl Data {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<Id> {
+	pub fn children(&self) -> Vec<object::Id> {
 		match self {
 			Self::Null(_)
 			| Self::Bool(_)
@@ -461,78 +245,15 @@ impl Data {
 			| Self::Relpath(_)
 			| Self::Subpath(_)
 			| Self::Placeholder(_) => vec![],
-			Self::Blob(blob) => blob.children(),
-			Self::Directory(directory) => directory.children(),
-			Self::File(file) => file.children(),
-			Self::Symlink(symlink) => symlink.children(),
+			Self::Blob(id) => vec![(*id).into()],
+			Self::Directory(id) => vec![(*id).into()],
+			Self::File(id) => vec![(*id).into()],
+			Self::Symlink(id) => vec![(*id).into()],
 			Self::Template(template) => template.children(),
-			Self::Package(package) => package.children(),
-			Self::Resource(resource) => resource.children(),
-			Self::Target(target) => target.children(),
-			Self::Task(task) => task.children(),
-			Self::Array(array) => array.iter().copied().map(Into::into).collect(),
-			Self::Object(map) => map.values().copied().map(Into::into).collect(),
+			Self::Package(id) => vec![(*id).into()],
+			Self::Task(id) => vec![(*id).into()],
+			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
+			Self::Map(map) => map.values().flat_map(Self::children).collect(),
 		}
 	}
-}
-
-#[macro_export]
-macro_rules! handle {
-	($t:ident) => {
-		impl self::Handle {
-			#[must_use]
-			pub fn with_id(id: self::Id) -> Self {
-				Self($crate::value::Handle::with_id(id.into()))
-			}
-
-			#[must_use]
-			pub fn with_value(value: self::Value) -> Self {
-				Self($crate::value::Handle::with_value(value.into()))
-			}
-
-			#[must_use]
-			pub fn expect_id(&self) -> self::Id {
-				self.0.expect_id().try_into().unwrap()
-			}
-
-			pub async fn id(&self, client: &$crate::Client) -> $crate::Result<self::Id> {
-				Ok(self.0.id(client).await?.try_into().unwrap())
-			}
-
-			pub async fn value(&self, client: &$crate::Client) -> $crate::Result<&self::Value> {
-				match self.0.value(client).await? {
-					$crate::value::Value::$t(value) => Ok(value),
-					_ => unreachable!(),
-				}
-			}
-		}
-
-		impl From<self::Handle> for $crate::value::Handle {
-			fn from(value: self::Handle) -> Self {
-				value.0
-			}
-		}
-
-		impl TryFrom<$crate::value::Handle> for self::Handle {
-			type Error = $crate::Error;
-
-			fn try_from(value: $crate::value::Handle) -> Result<Self, Self::Error> {
-				match value.kind() {
-					$crate::value::Kind::$t => Ok(Self(value)),
-					_ => $crate::return_error!("Unexpected kind."),
-				}
-			}
-		}
-	};
-}
-
-#[macro_export]
-macro_rules! value {
-	($t:ident) => {
-		impl From<self::Value> for $crate::value::Value {
-			fn from(value: self::Value) -> Self {
-				$crate::value::Value::$t(value)
-			}
-		}
-	};
 }

@@ -1,25 +1,18 @@
 use crate::{
-	artifact,
+	artifact, error, object,
 	subpath::{self, Subpath},
-	value, Client, Error, Result, WrapErr,
+	Artifact, Client, Error, Result, WrapErr,
 };
 use async_recursion::async_recursion;
 use std::collections::BTreeMap;
 
-crate::id!(Directory);
+crate::object!(Directory);
 
 #[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(Directory);
-
-#[derive(Clone, Debug)]
-pub struct Value {
+pub(crate) struct Object {
 	/// The directory's entries.
-	pub entries: BTreeMap<String, artifact::Handle>,
+	pub entries: BTreeMap<String, Artifact>,
 }
-
-crate::value!(Directory);
 
 #[derive(
 	Clone,
@@ -29,30 +22,27 @@ crate::value!(Directory);
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub struct Data {
+pub(crate) struct Data {
 	/// The directory's entries.
 	#[tangram_serialize(id = 0)]
-	pub entries: BTreeMap<String, crate::artifact::Id>,
+	pub entries: BTreeMap<String, artifact::Id>,
 }
 
 impl Handle {
 	#[must_use]
-	pub fn new(entries: BTreeMap<String, artifact::Handle>) -> Self {
-		Self::with_value(Value { entries })
+	pub fn new(entries: BTreeMap<String, Artifact>) -> Self {
+		Self::with_object(Object { entries })
 	}
 
 	pub async fn builder(&self, client: &Client) -> Result<Builder> {
-		Ok(Builder::new(self.value(client).await?.entries.clone()))
+		Ok(Builder::new(self.object(client).await?.entries.clone()))
 	}
 
-	pub async fn entries(
-		&self,
-		client: &Client,
-	) -> Result<&BTreeMap<String, artifact::Handle>, Error> {
-		Ok(&self.value(client).await?.entries)
+	pub async fn entries(&self, client: &Client) -> Result<&BTreeMap<String, Artifact>, Error> {
+		Ok(&self.object(client).await?.entries)
 	}
 
-	pub async fn get(&self, client: &Client, path: &Subpath) -> Result<artifact::Handle> {
+	pub async fn get(&self, client: &Client, path: &Subpath) -> Result<Artifact> {
 		let artifact = self
 			.try_get(client, path)
 			.await?
@@ -60,13 +50,9 @@ impl Handle {
 		Ok(artifact)
 	}
 
-	pub async fn try_get(
-		&self,
-		client: &Client,
-		path: &Subpath,
-	) -> Result<Option<artifact::Handle>> {
+	pub async fn try_get(&self, client: &Client, path: &Subpath) -> Result<Option<Artifact>> {
 		// Track the current artifact.
-		let mut artifact: artifact::Handle = self.clone().into();
+		let mut artifact: Artifact = self.clone().into();
 
 		// Track the current subpath.
 		let mut current_subpath = subpath::Subpath::empty();
@@ -90,9 +76,9 @@ impl Handle {
 			artifact = entry;
 
 			// If the artifact is a symlink, then resolve it.
-			if let artifact::Variant::Symlink(symlink) = &artifact.variant() {
+			if let Artifact::Symlink(symlink) = &artifact {
 				match symlink
-					.resolve_from(client, Some(symlink.value(client).await?))
+					.resolve_from(client, Some(symlink.clone().into()))
 					.await
 					.wrap_err("Failed to resolve the symlink.")?
 				{
@@ -106,29 +92,29 @@ impl Handle {
 	}
 }
 
-impl Value {
+impl Object {
 	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		let entries = data
-			.entries
-			.into_iter()
-			.map(|(name, id)| (name, artifact::Handle::with_id(id)))
-			.collect();
-		Self { entries }
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
+	pub(crate) fn to_data(&self) -> Data {
 		let entries = self
 			.entries
 			.iter()
-			.map(|(name, handle)| (name.clone(), handle.expect_id()))
+			.map(|(name, artifact)| (name.clone(), artifact.expect_id()))
 			.collect();
 		Data { entries }
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<value::Handle> {
+	pub(crate) fn from_data(data: Data) -> Self {
+		let entries = data
+			.entries
+			.into_iter()
+			.map(|(name, id)| (name, Artifact::with_id(id)))
+			.collect();
+		Self { entries }
+	}
+
+	#[must_use]
+	pub fn children(&self) -> Vec<object::Handle> {
 		self.entries
 			.values()
 			.map(|child| child.clone().into())
@@ -138,19 +124,19 @@ impl Value {
 
 impl Data {
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Id> {
+	pub fn children(&self) -> Vec<object::Id> {
 		self.entries.values().copied().map(Into::into).collect()
 	}
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
-	entries: BTreeMap<String, artifact::Handle>,
+	entries: BTreeMap<String, Artifact>,
 }
 
 impl Builder {
 	#[must_use]
-	pub fn new(entries: BTreeMap<String, artifact::Handle>) -> Self {
+	pub fn new(entries: BTreeMap<String, Artifact>) -> Self {
 		Self { entries }
 	}
 
@@ -159,7 +145,7 @@ impl Builder {
 		mut self,
 		client: &Client,
 		path: &Subpath,
-		artifact: artifact::Handle,
+		artifact: Artifact,
 	) -> Result<Self> {
 		// Get the first component.
 		let name = path
@@ -221,7 +207,7 @@ impl Builder {
 					.builder(client)
 					.await?
 			} else {
-				return Err(crate::error!("The path does not exist."));
+				return Err(error!("The path does not exist."));
 			};
 
 			// Recurse.

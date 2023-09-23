@@ -8,41 +8,29 @@ pub use self::client::Client;
 #[cfg(feature = "server")]
 pub use self::server::Server;
 pub use self::{
-	array::Handle as Array,
-	artifact::Handle as Artifact,
-	blob::Handle as Blob,
-	bool::Handle as Bool,
-	build::Handle as Build,
-	bytes::Handle as Bytes,
+	artifact::Artifact,
+	blob::Blob,
+	bytes::Bytes,
 	checksum::Checksum,
-	directory::Handle as Directory,
+	directory::Directory,
 	error::{Error, Result, WrapErr},
-	file::Handle as File,
+	file::File,
 	id::Id,
 	module::Module,
-	null::Handle as Null,
-	number::Handle as Number,
-	object::Handle as Object,
-	package::Handle as Package,
-	placeholder::Handle as Placeholder,
-	relpath::Handle as Relpath,
-	resource::Handle as Resource,
-	run::Evaluation,
-	string::Handle as String,
-	subpath::Handle as Subpath,
-	symlink::Handle as Symlink,
+	package::Package,
+	placeholder::Placeholder,
+	relpath::Relpath,
+	run::Run,
+	subpath::Subpath,
+	symlink::Symlink,
 	system::System,
-	target::Handle as Target,
-	task::Handle as Task,
-	template::Handle as Template,
-	value::Handle as Value,
+	task::Task,
+	template::Template,
+	value::Value,
 };
 
-pub mod array;
 pub mod artifact;
 pub mod blob;
-pub mod bool;
-pub mod build;
 pub mod bundle;
 pub mod bytes;
 pub mod checkin;
@@ -63,25 +51,20 @@ pub mod language;
 #[cfg(feature = "server")]
 pub mod migrations;
 pub mod module;
-pub mod null;
-pub mod number;
 pub mod object;
 pub mod package;
 pub mod placeholder;
 pub mod pull;
 pub mod push;
 pub mod relpath;
-pub mod resource;
 pub mod run;
 #[cfg(feature = "server")]
 pub mod serve;
 #[cfg(feature = "server")]
 pub mod server;
-pub mod string;
 pub mod subpath;
 pub mod symlink;
 pub mod system;
-pub mod target;
 pub mod task;
 pub mod temp;
 pub mod template;

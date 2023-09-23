@@ -1,6 +1,6 @@
 use crate::{
-	artifact, return_error, subpath::Subpath, Artifact, Client, Directory, Error, File, Result,
-	Symlink, WrapErr,
+	return_error, subpath::Subpath, Artifact, Client, Directory, Error, File, Result, Symlink,
+	WrapErr,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
@@ -47,9 +47,9 @@ impl Artifact {
 		}
 
 		// Call the appropriate function for the artifact's type.
-		match self.variant() {
-			artifact::Variant::Directory(directory) => {
-				Self::check_out_directory(client, existing_artifact, &directory, path)
+		match self {
+			Artifact::Directory(directory) => {
+				Self::check_out_directory(client, existing_artifact, directory, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -57,8 +57,8 @@ impl Artifact {
 					})?;
 			},
 
-			artifact::Variant::File(file) => {
-				Self::check_out_file(client, existing_artifact, &file, path)
+			Artifact::File(file) => {
+				Self::check_out_file(client, existing_artifact, file, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -66,8 +66,8 @@ impl Artifact {
 					})?;
 			},
 
-			artifact::Variant::Symlink(symlink) => {
-				Self::check_out_symlink(client, existing_artifact, &symlink, path)
+			Artifact::Symlink(symlink) => {
+				Self::check_out_symlink(client, existing_artifact, symlink, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -87,9 +87,9 @@ impl Artifact {
 		path: &Path,
 	) -> Result<()> {
 		// Handle an existing artifact at the path.
-		match existing_artifact.map(Artifact::variant) {
+		match existing_artifact {
 			// If there is already a directory, then remove any extraneous entries.
-			Some(artifact::Variant::Directory(existing_directory)) => {
+			Some(Artifact::Directory(existing_directory)) => {
 				existing_directory
 					.entries(client)
 					.await?
@@ -126,8 +126,8 @@ impl Artifact {
 				let existing_artifact = &existing_artifact;
 				async move {
 					// Retrieve an existing artifact.
-					let existing_artifact = match existing_artifact.map(Artifact::variant) {
-						Some(artifact::Variant::Directory(existing_directory)) => {
+					let existing_artifact = match existing_artifact {
+						Some(Artifact::Directory(existing_directory)) => {
 							let name: Subpath = name.parse().wrap_err("Invalid entry name.")?;
 							existing_directory.try_get(client, &name).await?
 						},
@@ -211,8 +211,6 @@ impl Artifact {
 		// Render the target.
 		let target = symlink
 			.target(client)
-			.await?
-			.value(client)
 			.await?
 			.try_render(|component| async move {
 				match component {

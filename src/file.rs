@@ -1,27 +1,19 @@
-use crate::{artifact, blob, value, Client, Result};
+use crate::{artifact, blob, object, Artifact, Blob, Client, Result};
 
-crate::id!(File);
-
-/// A file handle.
-#[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(File);
+crate::object!(File);
 
 /// A file value.
 #[derive(Clone, Debug)]
-pub struct Value {
+pub(crate) struct Object {
 	/// The file's contents.
-	pub contents: blob::Handle,
+	pub contents: Blob,
 
 	/// Whether the file is executable.
 	pub executable: bool,
 
 	/// The file's references.
-	pub references: Vec<artifact::Handle>,
+	pub references: Vec<Artifact>,
 }
-
-crate::value!(File);
 
 /// File data.
 #[derive(
@@ -32,7 +24,7 @@ crate::value!(File);
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub struct Data {
+pub(crate) struct Data {
 	/// The file's contents.
 	#[tangram_serialize(id = 0)]
 	pub contents: blob::Id,
@@ -48,12 +40,8 @@ pub struct Data {
 
 impl Handle {
 	#[must_use]
-	pub fn new(
-		contents: blob::Handle,
-		executable: bool,
-		references: Vec<artifact::Handle>,
-	) -> Self {
-		Self::with_value(Value {
+	pub fn new(contents: blob::Handle, executable: bool, references: Vec<Artifact>) -> Self {
+		Self::with_object(Object {
 			contents,
 			executable,
 			references,
@@ -66,44 +54,24 @@ impl Handle {
 	}
 
 	pub async fn contents(&self, client: &Client) -> Result<&blob::Handle> {
-		Ok(&self.value(client).await?.contents)
+		Ok(&self.object(client).await?.contents)
 	}
 
 	pub async fn executable(&self, client: &Client) -> Result<bool> {
-		Ok(self.value(client).await?.executable)
+		Ok(self.object(client).await?.executable)
 	}
 
-	pub async fn references(&self, client: &Client) -> Result<&[artifact::Handle]> {
-		Ok(self.value(client).await?.references.as_slice())
+	pub async fn references(&self, client: &Client) -> Result<&[Artifact]> {
+		Ok(self.object(client).await?.references.as_slice())
 	}
 }
 
-impl Value {
+impl Object {
 	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		let contents = blob::Handle::with_id(data.contents);
-		let executable = data.executable;
-		let references = data
-			.references
-			.into_iter()
-			.map(artifact::Handle::with_id)
-			.collect();
-		Self {
-			contents,
-			executable,
-			references,
-		}
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
+	pub(crate) fn to_data(&self) -> Data {
 		let contents = self.contents.expect_id();
 		let executable = self.executable;
-		let references = self
-			.references
-			.iter()
-			.map(artifact::Handle::expect_id)
-			.collect();
+		let references = self.references.iter().map(Artifact::expect_id).collect();
 		Data {
 			contents,
 			executable,
@@ -112,7 +80,19 @@ impl Value {
 	}
 
 	#[must_use]
-	pub fn children(&self) -> Vec<value::Handle> {
+	pub(crate) fn from_data(data: Data) -> Self {
+		let contents = blob::Handle::with_id(data.contents);
+		let executable = data.executable;
+		let references = data.references.into_iter().map(Artifact::with_id).collect();
+		Self {
+			contents,
+			executable,
+			references,
+		}
+	}
+
+	#[must_use]
+	pub fn children(&self) -> Vec<object::Handle> {
 		let contents = self.contents.clone().into();
 		let references = self
 			.references
@@ -124,7 +104,7 @@ impl Value {
 
 impl Data {
 	#[must_use]
-	pub fn children(&self) -> Vec<crate::Id> {
+	pub fn children(&self) -> Vec<object::Id> {
 		std::iter::once(self.contents.into())
 			.chain(self.references.iter().copied().map(Into::into))
 			.collect()
@@ -134,7 +114,7 @@ impl Data {
 pub struct Builder {
 	contents: blob::Handle,
 	executable: bool,
-	references: Vec<artifact::Handle>,
+	references: Vec<Artifact>,
 }
 
 impl Builder {
@@ -160,7 +140,7 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn references(mut self, references: Vec<artifact::Handle>) -> Self {
+	pub fn references(mut self, references: Vec<Artifact>) -> Self {
 		self.references = references;
 		self
 	}

@@ -1,22 +1,8 @@
-use crate::value;
 #[cfg(feature = "server")]
 use crate::Result;
 use std::ops::Range;
 #[cfg(not(feature = "server"))]
 use std::sync::Arc;
-
-crate::id!(Bytes);
-
-#[derive(Clone, Debug)]
-pub struct Handle(value::Handle);
-
-crate::handle!(Bytes);
-
-pub type Value = Bytes;
-
-crate::value!(Bytes);
-
-pub type Data = Bytes;
 
 #[derive(Clone, Debug)]
 pub struct Bytes {
