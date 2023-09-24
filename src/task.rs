@@ -1,16 +1,18 @@
 use crate::{
-	checksum::Checksum, object, package, system::System, template, value, Client, Package, Result,
-	Run, Template, Value,
+	checksum::Checksum, id, object, package, system::System, template, value, Client, Package,
+	Result, Run, Template, Value,
 };
 use std::collections::BTreeMap;
-use thiserror::Error;
+
+#[derive(Clone, Debug)]
+pub struct Task(Handle);
 
 crate::object!(Task);
 
 /// A task object.
 #[derive(Clone, Debug)]
 pub(crate) struct Object {
-	/// The tasks's package.
+	/// The task's package.
 	pub package: Option<Package>,
 
 	/// The system to run the task on.
@@ -85,9 +87,28 @@ pub(crate) struct Data {
 	pub network: bool,
 }
 
-impl Handle {
+impl Task {
+	#[must_use]
+	pub fn handle(&self) -> &Handle {
+		&self.0
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self(Handle::with_id(id))
+	}
+
 	pub async fn run(&self, client: &Client) -> Result<Run> {
-		todo!()
+		Ok(Run::with_id(
+			client.run(self.handle().id(client).await?).await?,
+		))
+	}
+}
+
+impl Id {
+	#[must_use]
+	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+		Self(crate::Id::new_hashed(id::Kind::Task, bytes))
 	}
 }
 
@@ -95,7 +116,10 @@ impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
 		Data {
-			package: self.package.as_ref().map(Package::expect_id),
+			package: self
+				.package
+				.as_ref()
+				.map(|package| package.handle().expect_id()),
 			host: self.host,
 			target: self.target.clone(),
 			executable: self.executable.to_data(),
@@ -234,8 +258,8 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn build(self) -> Handle {
-		Handle::with_object(Object {
+	pub fn build(self) -> Task {
+		Task(Handle::with_object(Object {
 			package: self.package,
 			host: self.host,
 			executable: self.executable,
@@ -245,174 +269,6 @@ impl Builder {
 			checksum: self.checksum,
 			unsafe_: self.unsafe_,
 			network: self.network,
-		})
+		}))
 	}
 }
-
-/// An error from a task.
-#[derive(
-	Clone,
-	Debug,
-	Error,
-	serde::Serialize,
-	serde::Deserialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
-pub enum Error {
-	#[error(r#"The process exited with code {0}."#)]
-	#[tangram_serialize(id = 0)]
-	Code(i32),
-
-	#[error(r#"The process exited with signal {0}."#)]
-	#[tangram_serialize(id = 1)]
-	Signal(i32),
-}
-
-// /// An error from a target.
-// #[derive(
-// 	Clone,
-// 	Debug,
-// 	Error,
-// 	serde::Serialize,
-// 	serde::Deserialize,
-// 	tangram_serialize::Deserialize,
-// 	tangram_serialize::Serialize,
-// )]
-// #[serde(rename_all = "camelCase")]
-// pub struct Error {
-// 	#[tangram_serialize(id = 0)]
-// 	pub message: String,
-// 	#[tangram_serialize(id = 1)]
-// 	pub location: Option<Location>,
-// 	#[tangram_serialize(id = 2)]
-// 	pub stack_trace: Option<StackTrace>,
-// 	#[tangram_serialize(id = 3)]
-// 	pub source: Option<Arc<crate::Error>>,
-// }
-
-// /// A stack trace.
-// #[derive(
-// 	Clone,
-// 	Debug,
-// 	serde::Serialize,
-// 	serde::Deserialize,
-// 	tangram_serialize::Deserialize,
-// 	tangram_serialize::Serialize,
-// )]
-// #[serde(rename_all = "camelCase")]
-// pub struct StackTrace {
-// 	#[tangram_serialize(id = 0)]
-// 	pub stack_frames: Vec<StackFrame>,
-// }
-
-// /// A stack frame.
-// #[derive(
-// 	Clone,
-// 	Debug,
-// 	serde::Serialize,
-// 	serde::Deserialize,
-// 	tangram_serialize::Deserialize,
-// 	tangram_serialize::Serialize,
-// )]
-// #[serde(rename_all = "camelCase")]
-// pub struct StackFrame {
-// 	#[tangram_serialize(id = 0)]
-// 	pub location: Option<Location>,
-// }
-
-// /// A source location.
-// #[derive(
-// 	Clone,
-// 	Debug,
-// 	serde::Serialize,
-// 	serde::Deserialize,
-// 	tangram_serialize::Deserialize,
-// 	tangram_serialize::Serialize,
-// )]
-// #[serde(rename_all = "camelCase")]
-// pub struct Location {
-// 	#[tangram_serialize(id = 0)]
-// 	pub source: Source,
-// 	#[tangram_serialize(id = 1)]
-// 	pub position: Position,
-// }
-
-// /// A source.
-// #[derive(
-// 	Clone,
-// 	Debug,
-// 	serde::Serialize,
-// 	serde::Deserialize,
-// 	tangram_serialize::Deserialize,
-// 	tangram_serialize::Serialize,
-// )]
-// #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
-// pub enum Source {
-// 	#[tangram_serialize(id = 0)]
-// 	Global(Option<String>),
-// 	#[tangram_serialize(id = 1)]
-// 	Module(Url),
-// }
-
-// impl std::fmt::Display for Error {
-// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		// Write the message.
-// 		write!(f, "{}", self.message)?;
-
-// 		// Write the stack trace.
-// 		if let Some(stack_trace) = &self.stack_trace {
-// 			write!(f, "{stack_trace}")?;
-// 		}
-
-// 		Ok(())
-// 	}
-// }
-
-// impl std::fmt::Display for StackTrace {
-// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		for stack_frame in &self.stack_frames {
-// 			writeln!(f)?;
-// 			write!(f, "  {stack_frame}")?;
-// 		}
-// 		Ok(())
-// 	}
-// }
-
-// impl std::fmt::Display for StackFrame {
-// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		if let Some(location) = &self.location {
-// 			write!(f, "{location}")?;
-// 		} else {
-// 			write!(f, "[unknown]")?;
-// 		}
-// 		Ok(())
-// 	}
-// }
-
-// impl std::fmt::Display for Location {
-// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		let source = &self.source;
-// 		let line = self.position.line + 1;
-// 		let character = self.position.character + 1;
-// 		write!(f, "{source}:{line}:{character}")?;
-// 		Ok(())
-// 	}
-// }
-
-// impl std::fmt::Display for Source {
-// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		match self {
-// 			Source::Global(path) => {
-// 				let path = path.as_deref().unwrap_or("[unknown]");
-// 				write!(f, "global:{path}")?;
-// 			},
-
-// 			Source::Module(module) => {
-// 				write!(f, "{module}")?;
-// 			},
-// 		}
-// 		Ok(())
-// 	}
-// }

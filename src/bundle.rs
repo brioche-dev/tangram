@@ -1,6 +1,6 @@
 use crate::{
-	directory, return_error, subpath::Subpath, template, Artifact, Client, Directory, Error, File,
-	Result, Symlink, WrapErr,
+	directory, return_error, template, Artifact, Client, Directory, Error, File, Result, Subpath,
+	Symlink, WrapErr,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesOrdered, TryStreamExt};

@@ -11,7 +11,7 @@
 	"workspaces": [
 		"packages/eslint-plugin",
 		"packages/vscode",
-		"src/global",
+		"src/run/js/global",
 		"src/language/service"
 	]
 }

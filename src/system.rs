@@ -63,10 +63,12 @@ pub enum Os {
 }
 
 impl System {
+	#[must_use]
 	pub fn new(arch: Arch, os: Os) -> System {
 		System { arch, os }
 	}
 
+	#[must_use]
 	pub fn js() -> System {
 		System {
 			arch: Arch::Aarch64,

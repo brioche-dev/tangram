@@ -4,7 +4,7 @@ use include_dir::include_dir;
 
 const TANGRAM_D_TS: &str = include_str!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/src/run/target/global/tangram.d.ts"
+	"/src/run/js/global/tangram.d.ts"
 ));
 const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/lib");
 

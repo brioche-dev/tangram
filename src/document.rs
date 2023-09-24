@@ -1,6 +1,6 @@
 use crate::{
-	module::range::Range, package::ROOT_MODULE_FILE_NAME, return_error, subpath::Subpath, Result,
-	Server, WrapErr,
+	module::range::Range, package::ROOT_MODULE_FILE_NAME, return_error, Result, Server, Subpath,
+	WrapErr,
 };
 use std::{
 	path::{Path, PathBuf},

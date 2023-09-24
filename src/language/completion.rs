@@ -1,10 +1,5 @@
 use super::service;
-use crate::{
-	error::{return_error, Result},
-	module::position::Position,
-	module::Module,
-	server::Server,
-};
+use crate::{module::position::Position, module::Module, return_error, server::Server, Result};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +23,9 @@ impl Module {
 		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
-		let service::Response::Completion(response) = response else { return_error!("Unexpected response type.") };
+		let service::Response::Completion(response) = response else {
+			return_error!("Unexpected response type.")
+		};
 
 		Ok(response.entries)
 	}

@@ -1,4 +1,4 @@
-use crate::{bytes::Bytes, object, return_error, Client, Error, Result};
+use crate::{bytes::Bytes, id, object, return_error, Client, Error, Result};
 use futures::{
 	future::BoxFuture,
 	stream::{self, StreamExt},
@@ -12,6 +12,9 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek};
 const MAX_BRANCH_CHILDREN: usize = 1024;
 
 const MAX_LEAF_SIZE: usize = 262_144;
+
+#[derive(Clone, Debug)]
+pub struct Blob(Handle);
 
 crate::object!(Blob);
 
@@ -32,12 +35,22 @@ pub(crate) enum Object {
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub(crate) enum Data {
 	#[tangram_serialize(id = 0)]
-	Branch(Vec<(self::Id, u64)>),
+	Branch(Vec<(Id, u64)>),
 	#[tangram_serialize(id = 1)]
 	Leaf(Bytes),
 }
 
 impl Blob {
+	#[must_use]
+	pub fn handle(&self) -> &Handle {
+		&self.0
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self(Handle::with_id(id))
+	}
+
 	pub async fn with_reader(client: &Client, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
 		let mut leaves = Vec::new();
 		let mut bytes = vec![0u8; MAX_LEAF_SIZE];
@@ -59,7 +72,7 @@ impl Blob {
 			// Create, store, and add the leaf.
 			let bytes = Bytes::with_slice(&bytes[..position]);
 			let leaf = Self::new_leaf(bytes);
-			leaf.id(client).await?;
+			leaf.0.store(client).await?;
 			leaves.push((leaf, size));
 		}
 
@@ -98,23 +111,23 @@ impl Blob {
 
 	#[must_use]
 	pub fn empty() -> Self {
-		Self::with_object(self::Object::Leaf(Bytes::empty()))
+		Self(Handle::with_object(Object::Leaf(Bytes::empty())))
 	}
 
 	#[must_use]
 	pub fn new_branch(children: Vec<(Blob, u64)>) -> Self {
-		Self::with_object(self::Object::Branch(children))
+		Self(Handle::with_object(Object::Branch(children)))
 	}
 
 	#[must_use]
 	pub fn new_leaf(bytes: Bytes) -> Self {
-		Self::with_object(self::Object::Leaf(bytes))
+		Self(Handle::with_object(Object::Leaf(bytes)))
 	}
 
 	pub async fn size(&self, client: &Client) -> Result<u64> {
-		match self.object(client).await? {
-			self::Object::Branch(children) => Ok(children.iter().map(|(_, size)| size).sum()),
-			self::Object::Leaf(bytes) => Ok(bytes.len().to_u64().unwrap()),
+		match self.0.object(client).await? {
+			Object::Branch(children) => Ok(children.iter().map(|(_, size)| size).sum()),
+			Object::Leaf(bytes) => Ok(bytes.len().to_u64().unwrap()),
 		}
 	}
 
@@ -143,6 +156,13 @@ impl Blob {
 	}
 }
 
+impl Id {
+	#[must_use]
+	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+		Self(crate::Id::new_hashed(id::Kind::Blob, bytes))
+	}
+}
+
 impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
@@ -150,7 +170,7 @@ impl Object {
 			Self::Branch(branch) => Data::Branch(
 				branch
 					.iter()
-					.map(|(handle, size)| (handle.expect_id(), *size))
+					.map(|(blob, size)| (blob.0.expect_id(), *size))
 					.collect::<Vec<_>>(),
 			),
 			Self::Leaf(leaf) => Data::Leaf(leaf.clone()),
@@ -174,7 +194,7 @@ impl Object {
 		match self {
 			Self::Branch(children) => children
 				.iter()
-				.map(|(child, _)| child.clone().into())
+				.map(|(child, _)| child.0.clone().into())
 				.collect(),
 			Self::Leaf(_) => vec![],
 		}
@@ -230,8 +250,8 @@ impl AsyncRead for Reader {
 							let mut current_blob = blob.clone();
 							let mut current_blob_position = 0;
 							let bytes = 'outer: loop {
-								match &current_blob.object(&client).await? {
-									self::Object::Branch(children) => {
+								match &current_blob.0.object(&client).await? {
+									Object::Branch(children) => {
 										for (child, size) in children {
 											if position < current_blob_position + size {
 												current_blob = child.clone();
@@ -241,7 +261,7 @@ impl AsyncRead for Reader {
 										}
 										return_error!("The position is out of bounds.");
 									},
-									self::Object::Leaf(bytes) => {
+									Object::Leaf(bytes) => {
 										if position
 											< current_blob_position + bytes.len().to_u64().unwrap()
 										{

@@ -1,7 +1,6 @@
 use crate::{
 	blob, directory, file, object, package, placeholder, return_error, symlink, task, template,
-	Blob, Bytes, Directory, File, Package, Placeholder, Relpath, Result, Subpath, Symlink, Task,
-	Template,
+	Blob, Bytes, Directory, File, Package, Placeholder, Result, Symlink, Task, Template,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use derive_more::{From, TryInto};
@@ -24,12 +23,6 @@ pub enum Value {
 
 	/// A bytes value.
 	Bytes(Bytes),
-
-	/// A relpath value.
-	Relpath(Relpath),
-
-	/// A subpath value.
-	Subpath(Subpath),
 
 	/// A blob value.
 	Blob(Blob),
@@ -89,48 +82,33 @@ pub(crate) enum Data {
 	Bytes(Bytes),
 
 	#[tangram_serialize(id = 5)]
-	Relpath(Relpath),
-
-	#[tangram_serialize(id = 6)]
-	Subpath(Subpath),
-
-	#[tangram_serialize(id = 7)]
 	Blob(blob::Id),
 
-	/// A directory value.
-	#[tangram_serialize(id = 8)]
+	#[tangram_serialize(id = 6)]
 	Directory(directory::Id),
 
-	/// A file value.
-	#[tangram_serialize(id = 9)]
+	#[tangram_serialize(id = 7)]
 	File(file::Id),
 
-	/// A symlink value.
-	#[tangram_serialize(id = 10)]
+	#[tangram_serialize(id = 8)]
 	Symlink(symlink::Id),
 
-	/// A placeholder value.
-	#[tangram_serialize(id = 11)]
+	#[tangram_serialize(id = 9)]
 	Placeholder(placeholder::Data),
 
-	/// A template value.
-	#[tangram_serialize(id = 12)]
+	#[tangram_serialize(id = 10)]
 	Template(template::Data),
 
-	/// A package value.
-	#[tangram_serialize(id = 13)]
+	#[tangram_serialize(id = 11)]
 	Package(package::Id),
 
-	/// A task value.
-	#[tangram_serialize(id = 14)]
+	#[tangram_serialize(id = 12)]
 	Task(task::Id),
 
-	/// An array value.
-	#[tangram_serialize(id = 15)]
+	#[tangram_serialize(id = 13)]
 	Array(Vec<Data>),
 
-	/// A map value.
-	#[tangram_serialize(id = 16)]
+	#[tangram_serialize(id = 14)]
 	Map(BTreeMap<String, Data>),
 }
 
@@ -143,16 +121,14 @@ impl Value {
 			Value::Number(value) => Data::Number(*value),
 			Value::String(value) => Data::String(value.clone()),
 			Value::Bytes(value) => Data::Bytes(value.clone()),
-			Value::Relpath(value) => Data::Relpath(value.clone()),
-			Value::Subpath(value) => Data::Subpath(value.clone()),
-			Value::Blob(value) => Data::Blob(value.expect_id()),
-			Value::Directory(value) => Data::Directory(value.expect_id()),
-			Value::File(value) => Data::File(value.expect_id()),
-			Value::Symlink(value) => Data::Symlink(value.expect_id()),
+			Value::Blob(value) => Data::Blob(value.handle().expect_id()),
+			Value::Directory(value) => Data::Directory(value.handle().expect_id()),
+			Value::File(value) => Data::File(value.handle().expect_id()),
+			Value::Symlink(value) => Data::Symlink(value.handle().expect_id()),
 			Value::Placeholder(value) => Data::Placeholder(value.to_data()),
 			Value::Template(value) => Data::Template(value.to_data()),
-			Value::Package(value) => Data::Package(value.expect_id()),
-			Value::Task(value) => Data::Task(value.expect_id()),
+			Value::Package(value) => Data::Package(value.handle().expect_id()),
+			Value::Task(value) => Data::Task(value.handle().expect_id()),
 			Value::Array(value) => Data::Array(value.iter().map(Value::to_data).collect()),
 			Value::Map(value) => Data::Map(
 				value
@@ -171,8 +147,6 @@ impl Value {
 			Data::Number(number) => Value::Number(number),
 			Data::String(string) => Value::String(string),
 			Data::Bytes(bytes) => Value::Bytes(bytes),
-			Data::Relpath(relpath) => Value::Relpath(relpath),
-			Data::Subpath(subpath) => Value::Subpath(subpath),
 			Data::Blob(id) => Value::Blob(Blob::with_id(id)),
 			Data::Directory(id) => Value::Directory(Directory::with_id(id)),
 			Data::File(id) => Value::File(File::with_id(id)),
@@ -201,16 +175,14 @@ impl Value {
 			| Self::Number(_)
 			| Self::String(_)
 			| Self::Bytes(_)
-			| Self::Relpath(_)
-			| Self::Subpath(_)
 			| Self::Placeholder(_) => vec![],
-			Self::Blob(blob) => vec![blob.clone().into()],
-			Self::Directory(directory) => vec![directory.clone().into()],
-			Self::File(file) => vec![file.clone().into()],
-			Self::Symlink(symlink) => vec![symlink.clone().into()],
+			Self::Blob(blob) => vec![blob.handle().clone().into()],
+			Self::Directory(directory) => vec![directory.handle().clone().into()],
+			Self::File(file) => vec![file.handle().clone().into()],
+			Self::Symlink(symlink) => vec![symlink.handle().clone().into()],
 			Self::Template(template) => template.children(),
-			Self::Package(package) => vec![package.clone().into()],
-			Self::Task(task) => vec![task.clone().into()],
+			Self::Package(package) => vec![package.handle().clone().into()],
+			Self::Task(task) => vec![task.handle().clone().into()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
 		}
@@ -242,8 +214,6 @@ impl Data {
 			| Self::Number(_)
 			| Self::String(_)
 			| Self::Bytes(_)
-			| Self::Relpath(_)
-			| Self::Subpath(_)
 			| Self::Placeholder(_) => vec![],
 			Self::Blob(id) => vec![(*id).into()],
 			Self::Directory(id) => vec![(*id).into()],

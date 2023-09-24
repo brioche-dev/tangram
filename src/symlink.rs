@@ -1,4 +1,7 @@
-use crate::{object, template, Artifact, Client, Result, Template};
+use crate::{id, object, template, Artifact, Client, Result, Template};
+
+#[derive(Clone, Debug)]
+pub struct Symlink(Handle);
 
 crate::object!(Symlink);
 
@@ -20,14 +23,24 @@ pub(crate) struct Data {
 	pub target: template::Data,
 }
 
-impl Handle {
+impl Symlink {
+	#[must_use]
+	pub fn handle(&self) -> &Handle {
+		&self.0
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self(Handle::with_id(id))
+	}
+
 	#[must_use]
 	pub fn new(target: Template) -> Self {
-		Self::with_object(Object { target })
+		Self(Handle::with_object(Object { target }))
 	}
 
 	pub async fn target(&self, client: &Client) -> Result<Template> {
-		Ok(self.object(client).await?.target.clone())
+		Ok(self.0.object(client).await?.target.clone())
 	}
 
 	pub async fn resolve(&self, client: &Client) -> Result<Option<Artifact>> {
@@ -41,6 +54,13 @@ impl Handle {
 		_from: Option<Artifact>,
 	) -> Result<Option<Artifact>> {
 		unimplemented!()
+	}
+}
+
+impl Id {
+	#[must_use]
+	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+		Self(crate::Id::new_hashed(id::Kind::Symlink, bytes))
 	}
 }
 

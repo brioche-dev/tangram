@@ -1,4 +1,4 @@
-use crate::{error::Result, Cli};
+use crate::{error::Result, return_error, Cli};
 
 /// Get an object.
 #[derive(Debug, clap::Args)]
@@ -8,10 +8,8 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_get(&self, args: Args) -> Result<()> {
-		// let handle = tg::object::Handle::with_id(args.id);
-		// let object = handle.object(&self.client).await?;
-		// println!("{object:?}");
-		Ok(())
+	#[allow(clippy::unused_async)]
+	pub async fn command_get(&self, _args: Args) -> Result<()> {
+		return_error!("This command is not yet implemented.");
 	}
 }

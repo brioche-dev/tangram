@@ -1,12 +1,10 @@
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Relpath, Subpath } from "./path.ts";
+import { Package } from "./package.ts";
 import { Placeholder } from "./placeholder.ts";
-import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
-import { Target } from "./target.ts";
 import { Task } from "./task.ts";
 import { Template } from "./template.ts";
 
@@ -73,10 +71,6 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Promise) {
 		// Handle a promise.
 		return "(promise)";
-	} else if (value instanceof Relpath) {
-		return `(tg.relpath ${value.toString()})`;
-	} else if (value instanceof Subpath) {
-		return `(tg.subpath ${value.toString()})`;
 	} else if (value instanceof Blob) {
 		return `(tg.blob ${value.id()})`;
 	} else if (value instanceof Directory) {
@@ -99,10 +93,8 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			})
 			.join("");
 		return `(tg.template "${string}")`;
-	} else if (value instanceof Resource) {
-		return `(tg.resource "${value.id()}")`;
-	} else if (value instanceof Target) {
-		return `(tg.target "${value.id()}")`;
+	} else if (value instanceof Package) {
+		return `(tg.package "${value.id()}")`;
 	} else if (value instanceof Task) {
 		return `(tg.task "${value.id()}")`;
 	} else {

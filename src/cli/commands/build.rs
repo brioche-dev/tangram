@@ -56,7 +56,7 @@ impl Cli {
 
 		// Run the task.
 		let run = task.run(client).await?;
-		let result = run.result(client, run).await?;
+		let result = run.result(client).await?;
 		let output = result.map_err(tg::Error::from)?;
 
 		if let Some(path) = args.output {

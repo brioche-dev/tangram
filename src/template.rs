@@ -25,7 +25,9 @@ pub(crate) struct Data {
 impl Template {
 	#[must_use]
 	pub fn empty() -> Self {
-		Self { components: vec![] }
+		Self {
+			components: Vec::new(),
+		}
 	}
 
 	#[must_use]
@@ -78,7 +80,7 @@ impl Template {
 		let regex = regex::Regex::new(&regex).unwrap();
 
 		let mut i = 0;
-		let mut components = vec![];
+		let mut components = Vec::new();
 		for captures in regex.captures_iter(string) {
 			// Add the text leading up to the capture as a string component.
 			let match_ = captures.get(0).unwrap();
@@ -205,6 +207,38 @@ impl Component {
 	}
 }
 
+impl From<Component> for Template {
+	fn from(value: Component) -> Self {
+		vec![value].into()
+	}
+}
+
+impl From<Vec<Component>> for Template {
+	fn from(value: Vec<Component>) -> Self {
+		Self { components: value }
+	}
+}
+
+impl FromIterator<Component> for Template {
+	fn from_iter<I: IntoIterator<Item = Component>>(value: I) -> Self {
+		Self {
+			components: value.into_iter().collect(),
+		}
+	}
+}
+
+impl From<String> for Template {
+	fn from(value: String) -> Self {
+		vec![Component::String(value)].into()
+	}
+}
+
+impl From<&str> for Template {
+	fn from(value: &str) -> Self {
+		value.to_owned().into()
+	}
+}
+
 pub mod component {
 	use crate::{artifact, placeholder, Artifact, Placeholder};
 	use derive_more::From;
@@ -250,37 +284,5 @@ pub mod component {
 				Data::Placeholder(data) => Self::Placeholder(Placeholder::from_data(data)),
 			}
 		}
-	}
-}
-
-impl From<Component> for Template {
-	fn from(value: Component) -> Self {
-		vec![value].into()
-	}
-}
-
-impl From<Vec<Component>> for Template {
-	fn from(value: Vec<Component>) -> Self {
-		Self { components: value }
-	}
-}
-
-impl FromIterator<Component> for Template {
-	fn from_iter<I: IntoIterator<Item = Component>>(value: I) -> Self {
-		Self {
-			components: value.into_iter().collect(),
-		}
-	}
-}
-
-impl From<String> for Template {
-	fn from(value: String) -> Self {
-		vec![Component::String(value)].into()
-	}
-}
-
-impl From<&str> for Template {
-	fn from(value: &str) -> Self {
-		value.to_owned().into()
 	}
 }

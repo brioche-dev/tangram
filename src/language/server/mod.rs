@@ -1,7 +1,4 @@
-use crate::{
-	error::{return_error, Error, Result, WrapErr},
-	language::Diagnostic,
-};
+use crate::{language::Diagnostic, return_error, Error, Result, WrapErr};
 use futures::{future, FutureExt};
 use lsp::{notification::Notification, request::Request};
 use lsp_types as lsp;
@@ -286,7 +283,8 @@ where
 	Fut: Future<Output = crate::error::Result<T::Result>>,
 {
 	// Deserialize the params.
-	let Ok(params) = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null)) else {
+	let Ok(params) = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
+	else {
 		let error = jsonrpc::ResponseError {
 			code: jsonrpc::ResponseErrorCode::InvalidParams,
 			message: "Invalid params.".to_owned(),

@@ -1,6 +1,6 @@
 import { assert as assert_, unreachable } from "./assert.ts";
 import * as encoding from "./encoding.ts";
-import { Ref as Ref_ } from "./ref.ts";
+import { Object_ } from "./object.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
@@ -10,10 +10,10 @@ export let blob = async (...args: Array<Unresolved<Blob.Arg>>) => {
 };
 
 export class Blob {
-	#kind: Blob.Kind;
+	#handle: Object_.Handle;
 
-	constructor(arg: Blob.Fields) {
-		this.#kind = arg.kind;
+	constructor(handle: Object_.Handle) {
+		this.#handle = handle;
 	}
 
 	static async new(...args: Array<Unresolved<Blob.Arg>>): Promise<Blob> {
@@ -26,19 +26,11 @@ export class Blob {
 					if (arg === undefined) {
 						return [];
 					} else if (typeof arg === "string") {
-						return new Blob({
-							kind: {
-								kind: "leaf",
-								value: { bytes: encoding.utf8.encode(arg) },
-							},
-						});
+						return new Blob(
+							Object_.Handle.withObject(encoding.utf8.encode(arg)),
+						);
 					} else if (arg instanceof Uint8Array) {
-						return new Blob({
-							kind: {
-								kind: "leaf",
-								value: { bytes: arg },
-							},
-						});
+						return new Blob(Object_.Handle.withObject(arg));
 					} else if (arg instanceof Blob) {
 						return arg;
 					} else if (arg instanceof Array) {
@@ -50,18 +42,19 @@ export class Blob {
 			),
 		);
 		if (children.length === 0) {
-			return new Blob({
-				kind: { kind: "leaf", value: { bytes: new Uint8Array() } },
-			});
+			return new Blob(Object_.Handle.withObject(new Uint8Array()));
 		} else if (children.length === 1) {
 			return children[0]!;
 		} else {
-			let childrenWithSizes: Array<[Blob, number]> = await Promise.all(
-				children.map(async (child) => [child, await child.size()]),
+			return new Blob(
+				Object_.Handle.withObject(
+					await Promise.all(
+						children.map<Promise<[Blob, number]>>(async (child) => {
+							return [child, await child.size()];
+						}),
+					),
+				),
 			);
-			return new Blob({
-				kind: { kind: "branch", value: { children: childrenWithSizes } },
-			});
 		}
 	}
 
@@ -78,19 +71,12 @@ export class Blob {
 		assert_(Blob.is(value));
 	}
 
-	/** Get this blob's size. */
-	size(): number {
-		switch (this.#kind!.kind) {
-			case "branch": {
-				let size = 0;
-				for (let [_, childSize] of this.#kind.value.children) {
-					size += childSize;
-				}
-				return size;
-			}
-			case "leaf": {
-				return this.#kind.value.bytes.length;
-			}
+	async size(): Promise<number> {
+		let object = (await this.#handle.object()) as Blob.Object;
+		if (object instanceof Array) {
+			return object.map(([_, size]) => size).reduce((a, b) => a + b, 0);
+		} else {
+			return object.byteLength;
 		}
 	}
 
@@ -99,7 +85,7 @@ export class Blob {
 	}
 
 	async text(): Promise<string> {
-		return await syscall.blob.text(this);
+		return encoding.utf8.decode(await syscall.blob.bytes(this));
 	}
 }
 
@@ -125,15 +111,7 @@ export namespace Blob {
 		export let assert = (value: unknown): asserts value is Arg => {
 			assert_(is(value));
 		};
-
-		export class Ref extends Ref_<Blob> {}
 	}
 
-	export type Fields = {
-		kind: Kind;
-	};
-
-	export type Kind =
-		| { kind: "branch"; value: { children: Array<[Blob, number]> } }
-		| { kind: "leaf"; value: { bytes: Uint8Array } };
+	export type Object = Array<[Blob, number]> | Uint8Array;
 }

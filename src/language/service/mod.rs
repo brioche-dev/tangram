@@ -1,8 +1,5 @@
 use self::syscall::syscall;
-use crate::{
-	error::{Error, Result, WrapErr},
-	server::{Server, State},
-};
+use crate::{server, Error, Result, Server, WrapErr};
 use std::sync::{Arc, Weak};
 
 pub mod check;
@@ -103,7 +100,7 @@ impl Server {
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
 
 /// Run the language service.
-fn run_language_service(state: Weak<State>, mut request_receiver: RequestReceiver) {
+fn run_language_service(state: Weak<server::State>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
 	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);

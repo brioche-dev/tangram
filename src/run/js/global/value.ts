@@ -5,9 +5,7 @@ import { File } from "./file.ts";
 import { Package } from "./package.ts";
 import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
-import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
-import { Target } from "./target.ts";
 import { Task } from "./task.ts";
 import { Template } from "./template.ts";
 
@@ -26,17 +24,11 @@ export type Value =
 	| Placeholder
 	| Template
 	| Package
-	| Resource
-	| Target
 	| Task
 	| Array<Value>
 	| { [key: string]: Value };
 
 export namespace Value {
-	// export let withId = async (id: Id): Promise<Value> => {
-	// 	return await syscall.value.get(id);
-	// };
-
 	export let is = (value: unknown): value is Value => {
 		return (
 			value === undefined ||
@@ -53,8 +45,6 @@ export namespace Value {
 			value instanceof Placeholder ||
 			value instanceof Template ||
 			value instanceof Package ||
-			value instanceof Resource ||
-			value instanceof Target ||
 			value instanceof Task ||
 			value instanceof Array ||
 			typeof value === "object"

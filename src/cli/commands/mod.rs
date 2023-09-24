@@ -1,6 +1,6 @@
 use crate::{error::Result, Cli};
 use futures::FutureExt;
-use tg::subpath::Subpath;
+use tg::Subpath;
 
 mod add;
 mod autoenv;

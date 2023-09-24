@@ -8,9 +8,8 @@ use swc_core::{
 	common::{Globals, Mark, SourceMap, DUMMY_SP, GLOBALS},
 	ecma::{
 		ast::{
-			CallExpr, EsVersion, ExportDecl, ExportDefaultExpr, Expr, ExprOrSpread, Ident,
-			KeyValueProp, Lit, MemberExpr, MetaPropExpr, ObjectLit, Prop, PropOrSpread, Str,
-			VarDeclarator,
+			CallExpr, ExportDecl, ExportDefaultExpr, Expr, ExprOrSpread, Ident, KeyValueProp, Lit,
+			MemberExpr, MetaPropExpr, ObjectLit, Prop, PropOrSpread, Str, VarDeclarator,
 		},
 		codegen::{text_writer::JsWriter, Config, Emitter},
 		transforms::{
@@ -70,12 +69,7 @@ impl Module {
 			writer.set_indent_str("\t");
 
 			// Create the config.
-			let config = Config {
-				minify: false,
-				ascii_only: false,
-				omit_last_semi: false,
-				target: EsVersion::EsNext,
-			};
+			let config = Config::default();
 
 			// Create the emitter.
 			let mut emitter = Emitter {
@@ -161,10 +155,18 @@ impl VisitMut for TargetVisitor {
 		// Visit each declaration.
 		for decl in &mut decl.decls {
 			let VarDeclarator { name, init, .. } = decl;
-			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else { continue; };
-			let Some(init) = init.as_deref_mut() else { continue; };
-			let Some(expr) = init.as_mut_await_expr() else { continue; };
-			let Some(expr) = expr.arg.as_mut_call() else { continue; };
+			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else {
+				continue;
+			};
+			let Some(init) = init.as_deref_mut() else {
+				continue;
+			};
+			let Some(expr) = init.as_mut_await_expr() else {
+				continue;
+			};
+			let Some(expr) = expr.arg.as_mut_call() else {
+				continue;
+			};
 
 			// Visit the call.
 			self.visit_call(expr, Some(ident.to_string()));
@@ -180,15 +182,15 @@ impl TargetVisitor {
 		// Check if this is a call to tg.target.
 		let Some(callee) = n.callee.as_expr().and_then(|expr| expr.as_member()) else {
 			n.visit_mut_children_with(self);
-			return
+			return;
 		};
 		let Some(obj) = callee.obj.as_ident() else {
 			n.visit_mut_children_with(self);
-			return
+			return;
 		};
 		let Some(prop) = callee.prop.as_ident() else {
 			n.visit_mut_children_with(self);
-			return
+			return;
 		};
 		if !(&obj.sym == "tg" && &prop.sym == "target") {
 			n.visit_mut_children_with(self);
@@ -340,7 +342,10 @@ impl VisitMut for IncludeVisitor {
 			return;
 		}
 		let Some(arg) = n.args[0].expr.as_lit() else {
-			self.errors.push(Error::new("The argument to tg.include must be a string literal.", &loc));
+			self.errors.push(Error::new(
+				"The argument to tg.include must be a string literal.",
+				&loc,
+			));
 			return;
 		};
 

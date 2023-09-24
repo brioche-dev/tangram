@@ -1,8 +1,5 @@
 use super::Server;
-use crate::{
-	error::{Result, WrapErr},
-	id::Id,
-};
+use crate::{Id, Result, WrapErr};
 
 impl Server {
 	pub async fn clean(&self, _roots: Vec<Id>) -> Result<()> {

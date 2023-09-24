@@ -1,8 +1,4 @@
-use crate::{
-	error::{return_error, Error, WrapErr},
-	package::Dependency,
-	relpath::Relpath,
-};
+use crate::{package::Dependency, return_error, Error, Relpath, WrapErr};
 use url::Url;
 
 /// An import in a module.

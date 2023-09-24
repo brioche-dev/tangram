@@ -1,4 +1,4 @@
-use crate::{object, return_error, Error, Result, Server, WrapErr};
+use crate::{object, return_error, run, task, Error, Result, Server, Value, WrapErr};
 use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use std::sync::Arc;
@@ -59,63 +59,83 @@ impl Client {
 		}
 	}
 
-	// 	#[async_recursion]
-	// 	pub async fn run_task(&self, id: task::Id) -> Result<run::Id> {
-	// 		match self {
-	// 			Self::Server(server) => server.evaluate(id).await,
-	// 			Self::Reqwest(_) => todo!(),
-	// 		}
-	// 	}
+	#[async_recursion]
+	pub async fn run(&self, id: task::Id) -> Result<run::Id> {
+		match self {
+			Self::Server(server) => Ok(server.run(id).await?.id()),
+			Self::Reqwest(_) => todo!(),
+		}
+	}
 
-	// 	#[async_recursion]
-	// 	pub async fn try_get_run_for_task(&self, id: task::Id) -> Result<Option<run::Id>> {
-	// 		match self {
-	// 			Self::Server(server) => server.try_get_assignment(id).await,
-	// 			Self::Reqwest(_) => todo!(),
-	// 		}
-	// 	}
+	#[async_recursion]
+	pub async fn try_get_assignment(&self, id: task::Id) -> Result<Option<run::Id>> {
+		match self {
+			Self::Server(server) => server.try_get_assignment(id).await,
+			Self::Reqwest(_) => todo!(),
+		}
+	}
 
-	// 	#[async_recursion]
-	// 	pub async fn try_get_run_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
-	// 		match self {
-	// 			Self::Server(server) => server.try_get_run_bytes(id).await,
-	// 			Self::Reqwest(_) => todo!(),
-	// 		}
-	// 	}
+	#[async_recursion]
+	pub async fn try_get_run_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
+		match self {
+			Self::Server(server) => server.try_get_run_bytes(id).await,
+			Self::Reqwest(_) => todo!(),
+		}
+	}
 
-	// 	#[async_recursion]
-	// 	pub async fn try_get_run_children(&self, id: run::Id) -> Result<Option<BoxStream<run::Id>>> {
-	// 		match self {
-	// 			Self::Server(server) => server.try_get_run_children(id).await,
-	// 			Self::Reqwest(_) => todo!(),
-	// 		}
-	// 	}
+	#[async_recursion]
+	pub async fn try_get_run_children(
+		&self,
+		id: run::Id,
+	) -> Result<Option<BoxStream<'static, run::Id>>> {
+		match self {
+			Self::Server(server) => server.try_get_run_children(id).await,
+			Self::Reqwest(_) => todo!(),
+		}
+	}
 
-	// 	#[async_recursion]
-	// 	pub async fn try_get_run_log(&self, id: run::Id) -> Result<Option<BoxStream<Vec<u8>>>> {
-	// 		match self {
-	// 			Self::Server(server) => server.try_get_run_log(id).await,
-	// 			Self::Reqwest(_) => todo!(),
-	// 		}
-	// 	}
+	#[async_recursion]
+	pub async fn try_get_run_log(
+		&self,
+		id: run::Id,
+	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
+		match self {
+			Self::Server(server) => server.try_get_run_log(id).await,
+			Self::Reqwest(_) => todo!(),
+		}
+	}
 
-	// 	#[async_recursion]
-	// 	pub async fn try_get_run_result(&self, id: run::Id) -> Result<Option<run::Result<object::Id>>> {
-	// 		match self {
-	// 			Self::Server(server) => server.try_get_run_result(id).await,
-	// 			Self::Reqwest(_) => todo!(),
-	// 		}
-	// 	}
+	#[async_recursion]
+	pub async fn try_get_run_result(&self, id: run::Id) -> Result<Option<Result<Value>>> {
+		match self {
+			Self::Server(server) => server.try_get_run_result(id).await,
+			Self::Reqwest(_) => todo!(),
+		}
+	}
 }
 
-// impl Client {
-// 	#[async_recursion]
-// 	pub async fn get_run_result(&self, id: run::Id) -> Result<run::Result<object::Id>> {
-// 		self.try_get_run_result(id)
-// 			.await?
-// 			.wrap_err("Expected the run to exist.")
-// 	}
-// }
+impl Client {
+	#[async_recursion]
+	pub async fn get_run_children(&self, id: run::Id) -> Result<BoxStream<'static, run::Id>> {
+		self.try_get_run_children(id)
+			.await?
+			.wrap_err("Expected the run to exist.")
+	}
+
+	#[async_recursion]
+	pub async fn get_run_log(&self, id: run::Id) -> Result<BoxStream<'static, Vec<u8>>> {
+		self.try_get_run_log(id)
+			.await?
+			.wrap_err("Expected the run to exist.")
+	}
+
+	#[async_recursion]
+	pub async fn get_run_result(&self, id: run::Id) -> Result<Result<Value>> {
+		self.try_get_run_result(id)
+			.await?
+			.wrap_err("Expected the run to exist.")
+	}
+}
 
 #[derive(Clone, Debug)]
 pub struct Reqwest {

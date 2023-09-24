@@ -2,6 +2,7 @@ import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
 import { Directory, directory } from "./directory.ts";
+import { download, unpack } from "./download.ts";
 import * as encoding from "./encoding.ts";
 import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
@@ -11,7 +12,6 @@ import { log } from "./log.ts";
 import { Relpath, Subpath, relpath, subpath } from "./path.ts";
 import { Placeholder, placeholder } from "./placeholder.ts";
 import { resolve } from "./resolve.ts";
-import { download, resource } from "./resource.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import { System, system } from "./system.ts";
 import { Target, target, targets } from "./target.ts";
@@ -60,7 +60,6 @@ let tg = {
 	placeholder,
 	relpath,
 	resolve,
-	resource,
 	run,
 	subpath,
 	symlink,
@@ -70,6 +69,7 @@ let tg = {
 	task,
 	template,
 	unimplemented,
+	unpack,
 	unreachable,
 };
 Object.defineProperties(globalThis, {

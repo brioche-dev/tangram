@@ -1,10 +1,9 @@
-use crate::{
-	artifact, error, object,
-	subpath::{self, Subpath},
-	Artifact, Client, Error, Result, WrapErr,
-};
+use crate::{artifact, error, id, object, Artifact, Client, Error, Result, Subpath, WrapErr};
 use async_recursion::async_recursion;
 use std::collections::BTreeMap;
+
+#[derive(Clone, Debug)]
+pub struct Directory(Handle);
 
 crate::object!(Directory);
 
@@ -28,18 +27,28 @@ pub(crate) struct Data {
 	pub entries: BTreeMap<String, artifact::Id>,
 }
 
-impl Handle {
+impl Directory {
+	#[must_use]
+	pub fn handle(&self) -> &Handle {
+		&self.0
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self(Handle::with_id(id))
+	}
+
 	#[must_use]
 	pub fn new(entries: BTreeMap<String, Artifact>) -> Self {
-		Self::with_object(Object { entries })
+		Self(Handle::with_object(Object { entries }))
 	}
 
 	pub async fn builder(&self, client: &Client) -> Result<Builder> {
-		Ok(Builder::new(self.object(client).await?.entries.clone()))
+		Ok(Builder::new(self.0.object(client).await?.entries.clone()))
 	}
 
 	pub async fn entries(&self, client: &Client) -> Result<&BTreeMap<String, Artifact>, Error> {
-		Ok(&self.object(client).await?.entries)
+		Ok(&self.0.object(client).await?.entries)
 	}
 
 	pub async fn get(&self, client: &Client, path: &Subpath) -> Result<Artifact> {
@@ -55,7 +64,7 @@ impl Handle {
 		let mut artifact: Artifact = self.clone().into();
 
 		// Track the current subpath.
-		let mut current_subpath = subpath::Subpath::empty();
+		let mut current_subpath = Subpath::empty();
 
 		// Handle each path component.
 		for name in path.components() {
@@ -89,6 +98,13 @@ impl Handle {
 		}
 
 		Ok(Some(artifact))
+	}
+}
+
+impl Id {
+	#[must_use]
+	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+		Self(crate::Id::new_hashed(id::Kind::Directory, bytes))
 	}
 }
 
@@ -221,7 +237,7 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn build(self) -> Handle {
-		Handle::new(self.entries)
+	pub fn build(self) -> Directory {
+		Directory::new(self.entries)
 	}
 }

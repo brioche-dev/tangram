@@ -1,4 +1,6 @@
-use crate::{artifact, blob, directory, file, package, return_error, symlink, task, Error, Result};
+use crate::{
+	artifact, blob, directory, file, package, return_error, run, symlink, task, Error, Result,
+};
 use derive_more::{From, TryInto};
 
 /// An artifact kind.
@@ -33,6 +35,7 @@ pub enum Id {
 	Symlink(symlink::Id),
 	Package(package::Id),
 	Task(task::Id),
+	Run(run::Id),
 }
 
 /// An object handle.
@@ -44,6 +47,7 @@ pub enum Handle {
 	Symlink(symlink::Handle),
 	Package(package::Handle),
 	Task(task::Handle),
+	Run(run::Handle),
 }
 
 /// An object.
@@ -55,6 +59,7 @@ pub(crate) enum Object {
 	Symlink(symlink::Object),
 	Package(package::Object),
 	Task(task::Object),
+	Run(run::Object),
 }
 
 /// Object data.
@@ -66,6 +71,7 @@ pub(crate) enum Data {
 	Symlink(symlink::Data),
 	Package(package::Data),
 	Task(task::Data),
+	Run(run::Data),
 }
 
 impl Id {
@@ -78,6 +84,7 @@ impl Id {
 			Self::Symlink(id) => id.as_bytes(),
 			Self::Package(id) => id.as_bytes(),
 			Self::Task(id) => id.as_bytes(),
+			Self::Run(id) => id.as_bytes(),
 		}
 	}
 }
@@ -92,21 +99,9 @@ impl Handle {
 			Id::Symlink(id) => Self::Symlink(symlink::Handle::with_id(id)),
 			Id::Package(id) => Self::Package(package::Handle::with_id(id)),
 			Id::Task(id) => Self::Task(task::Handle::with_id(id)),
+			Id::Run(id) => Self::Run(run::Handle::with_id(id)),
 		}
 	}
-
-	// pub async fn object(&self, client: &crate::Client) -> Result<Object> {
-	// 	match self {
-	// 		Self::Blob(blob) => Ok(Object::Blob(blob.object(client).await?.clone())),
-	// 		Self::Directory(directory) => {
-	// 			Ok(Object::Directory(directory.object(client).await?.clone()))
-	// 		},
-	// 		Self::File(file) => Ok(Object::File(file.object(client).await?.clone())),
-	// 		Self::Symlink(symlink) => Ok(Object::Symlink(symlink.object(client).await?.clone())),
-	// 		Self::Package(package) => Ok(Object::Package(package.object(client).await?.clone())),
-	// 		Self::Task(task) => Ok(Object::Task(task.object(client).await?.clone())),
-	// 	}
-	// }
 
 	pub async fn store(&self, client: &crate::Client) -> Result<()> {
 		match self {
@@ -116,6 +111,7 @@ impl Handle {
 			Self::Symlink(symlink) => symlink.store(client).await,
 			Self::Package(package) => package.store(client).await,
 			Self::Task(task) => task.store(client).await,
+			Self::Run(run) => run.store(client).await,
 		}
 	}
 }
@@ -130,6 +126,7 @@ impl Object {
 			Self::Symlink(symlink) => symlink.children(),
 			Self::Package(package) => package.children(),
 			Self::Task(task) => task.children(),
+			Self::Run(run) => run.children(),
 		}
 	}
 }
@@ -144,6 +141,7 @@ impl Data {
 			Self::Symlink(data) => Ok(data.serialize()?),
 			Self::Package(data) => Ok(data.serialize()?),
 			Self::Task(data) => Ok(data.serialize()?),
+			Self::Run(data) => Ok(data.serialize()?),
 		}
 	}
 
@@ -155,6 +153,7 @@ impl Data {
 			self::Id::Symlink(_) => Ok(Self::Symlink(symlink::Data::deserialize(bytes)?)),
 			self::Id::Package(_) => Ok(Self::Package(package::Data::deserialize(bytes)?)),
 			self::Id::Task(_) => Ok(Self::Task(task::Data::deserialize(bytes)?)),
+			self::Id::Run(_) => Ok(Self::Run(run::Data::deserialize(bytes)?)),
 		}
 	}
 
@@ -166,6 +165,7 @@ impl Data {
 			Self::Symlink(data) => data.children(),
 			Self::Package(data) => data.children(),
 			Self::Task(data) => data.children(),
+			Self::Run(data) => data.children(),
 		}
 	}
 }
@@ -179,6 +179,7 @@ impl From<self::Id> for crate::Id {
 			self::Id::Symlink(id) => id.into(),
 			self::Id::Package(id) => id.into(),
 			self::Id::Task(id) => id.into(),
+			self::Id::Run(id) => id.into(),
 		}
 	}
 }
@@ -194,6 +195,7 @@ impl TryFrom<crate::Id> for self::Id {
 			crate::id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			crate::id::Kind::Package => Ok(Self::Package(value.try_into()?)),
 			crate::id::Kind::Task => Ok(Self::Task(value.try_into()?)),
+			crate::id::Kind::Run => Ok(Self::Run(value.try_into()?)),
 			_ => return_error!("Unexpected kind."),
 		}
 	}
@@ -208,6 +210,7 @@ impl std::fmt::Display for Id {
 			Self::Symlink(id) => write!(f, "{id}"),
 			Self::Package(id) => write!(f, "{id}"),
 			Self::Task(id) => write!(f, "{id}"),
+			Self::Run(id) => write!(f, "{id}"),
 		}
 	}
 }
@@ -249,27 +252,20 @@ macro_rules! object {
 		#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
 		pub struct Id($crate::Id);
 
-		pub type Handle = $t;
-
 		#[derive(Clone, Debug)]
-		pub struct $t {
+		pub struct Handle {
 			id: std::sync::Arc<std::sync::RwLock<Option<self::Id>>>,
 			object: std::sync::Arc<std::sync::RwLock<Option<self::Object>>>,
 		}
 
 		impl self::Id {
 			#[must_use]
-			pub fn new(data: &[u8]) -> Self {
-				Self($crate::Id::new_hashed($crate::id::Kind::$t, data))
-			}
-
-			#[must_use]
 			pub fn as_bytes(&self) -> [u8; $crate::id::SIZE] {
 				self.0.as_bytes()
 			}
 		}
 
-		impl $t {
+		impl self::Handle {
 			#[must_use]
 			pub fn with_id(id: self::Id) -> Self {
 				Self {
@@ -368,7 +364,7 @@ macro_rules! object {
 				let bytes = data.serialize()?;
 
 				// Create the ID.
-				let id = self::Id::new(&bytes);
+				let id = self::Id::with_data_bytes(&bytes);
 
 				// Store the object.
 				client

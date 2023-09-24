@@ -1,9 +1,5 @@
 use super::{service, Diagnostic};
-use crate::{
-	error::{return_error, Result},
-	module::Module,
-	server::Server,
-};
+use crate::{module::Module, return_error, server::Server, Result};
 
 impl Module {
 	/// Get all diagnostics for the provided modules.
@@ -15,7 +11,9 @@ impl Module {
 		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
-		let service::Response::Check(response) = response else { return_error!("Unexpected response type.") };
+		let service::Response::Check(response) = response else {
+			return_error!("Unexpected response type.")
+		};
 
 		Ok(response.diagnostics)
 	}

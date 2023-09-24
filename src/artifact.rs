@@ -57,45 +57,45 @@ pub enum Artifact {
 
 impl Artifact {
 	#[must_use]
-	pub fn with_id(id: self::Id) -> Self {
+	pub fn with_id(id: Id) -> Self {
 		match id {
-			self::Id::Directory(id) => Self::Directory(Directory::with_id(id)),
-			self::Id::File(id) => Self::File(File::with_id(id)),
-			self::Id::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
+			Id::Directory(id) => Self::Directory(Directory::with_id(id)),
+			Id::File(id) => Self::File(File::with_id(id)),
+			Id::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
 		}
 	}
 
-	pub async fn id(&self, client: &Client) -> Result<self::Id> {
+	pub async fn id(&self, client: &Client) -> Result<Id> {
 		match self {
-			Self::Directory(directory) => Ok(directory.id(client).await?.into()),
-			Self::File(file) => Ok(file.id(client).await?.into()),
-			Self::Symlink(symlink) => Ok(symlink.id(client).await?.into()),
+			Self::Directory(directory) => Ok(directory.handle().id(client).await?.into()),
+			Self::File(file) => Ok(file.handle().id(client).await?.into()),
+			Self::Symlink(symlink) => Ok(symlink.handle().id(client).await?.into()),
 		}
 	}
 
 	#[allow(clippy::unused_async)]
 	pub async fn load(&self, client: &Client) -> Result<()> {
 		match self {
-			Artifact::Directory(directory) => directory.load(client).await,
-			Artifact::File(file) => file.load(client).await,
-			Artifact::Symlink(symlink) => symlink.load(client).await,
+			Artifact::Directory(directory) => directory.handle().load(client).await,
+			Artifact::File(file) => file.handle().load(client).await,
+			Artifact::Symlink(symlink) => symlink.handle().load(client).await,
 		}
 	}
 
 	#[async_recursion::async_recursion]
 	pub async fn store(&self, client: &Client) -> Result<()> {
 		match self {
-			Artifact::Directory(directory) => directory.store(client).await,
-			Artifact::File(file) => file.store(client).await,
-			Artifact::Symlink(symlink) => symlink.store(client).await,
+			Artifact::Directory(directory) => directory.handle().store(client).await,
+			Artifact::File(file) => file.handle().store(client).await,
+			Artifact::Symlink(symlink) => symlink.handle().store(client).await,
 		}
 	}
 
-	pub(crate) fn expect_id(&self) -> self::Id {
+	pub(crate) fn expect_id(&self) -> Id {
 		match self {
-			Self::Directory(directory) => directory.expect_id().into(),
-			Self::File(file) => file.expect_id().into(),
-			Self::Symlink(symlink) => symlink.expect_id().into(),
+			Self::Directory(directory) => directory.handle().expect_id().into(),
+			Self::File(file) => file.handle().expect_id().into(),
+			Self::Symlink(symlink) => symlink.handle().expect_id().into(),
 		}
 	}
 
@@ -173,25 +173,25 @@ impl Artifact {
 	}
 }
 
-impl From<directory::Id> for self::Id {
+impl From<directory::Id> for Id {
 	fn from(id: directory::Id) -> Self {
 		Self::Directory(id)
 	}
 }
 
-impl From<file::Id> for self::Id {
+impl From<file::Id> for Id {
 	fn from(id: file::Id) -> Self {
 		Self::File(id)
 	}
 }
 
-impl From<symlink::Id> for self::Id {
+impl From<symlink::Id> for Id {
 	fn from(id: symlink::Id) -> Self {
 		Self::Symlink(id)
 	}
 }
 
-impl std::fmt::Display for self::Id {
+impl std::fmt::Display for Id {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::Directory(id) => write!(f, "{id}"),
@@ -201,7 +201,7 @@ impl std::fmt::Display for self::Id {
 	}
 }
 
-impl FromStr for self::Id {
+impl FromStr for Id {
 	type Err = Error;
 
 	fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
@@ -209,17 +209,17 @@ impl FromStr for self::Id {
 	}
 }
 
-impl From<self::Id> for crate::Id {
-	fn from(value: self::Id) -> Self {
+impl From<Id> for crate::Id {
+	fn from(value: Id) -> Self {
 		match value {
-			self::Id::Directory(id) => id.into(),
-			self::Id::File(id) => id.into(),
-			self::Id::Symlink(id) => id.into(),
+			Id::Directory(id) => id.into(),
+			Id::File(id) => id.into(),
+			Id::Symlink(id) => id.into(),
 		}
 	}
 }
 
-impl TryFrom<crate::Id> for self::Id {
+impl TryFrom<crate::Id> for Id {
 	type Error = Error;
 
 	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
@@ -276,9 +276,9 @@ impl TryFrom<Value> for Artifact {
 impl From<Artifact> for object::Handle {
 	fn from(object: Artifact) -> Self {
 		match object {
-			Artifact::Directory(directory) => object::Handle::Directory(directory),
-			Artifact::File(file) => object::Handle::File(file),
-			Artifact::Symlink(symlink) => object::Handle::Symlink(symlink),
+			Artifact::Directory(directory) => object::Handle::Directory(directory.handle().clone()),
+			Artifact::File(file) => object::Handle::File(file.handle().clone()),
+			Artifact::Symlink(symlink) => object::Handle::Symlink(symlink.handle().clone()),
 		}
 	}
 }

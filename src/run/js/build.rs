@@ -1,11 +1,10 @@
 use super::{from_v8, isolate::THREAD_LOCAL_ISOLATE, state::State, Target, ToV8};
 use crate::{
-	build::Build,
-	error::{Error, Result, WrapErr},
 	id::Id,
 	module::{self, Module},
 	server::Server,
 	value::Value,
+	Error, Result, WrapErr,
 };
 use std::rc::Rc;
 

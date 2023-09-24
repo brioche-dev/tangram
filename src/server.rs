@@ -1,6 +1,6 @@
 use crate::{
 	document::{self, Document},
-	id, language, object, Client, Error, Result, WrapErr,
+	id, language, object, run, task, Client, Error, Result, Run, Value, WrapErr,
 };
 use futures::{
 	stream::{self, BoxStream},
@@ -52,7 +52,7 @@ pub struct State {
 	pub(crate) resource_http_client: reqwest::Client,
 
 	/// The uncompleted runs.
-	// pub(crate) runs: std::sync::RwLock<HashMap<run::Id, Arc<run::State>, id::BuildHasher>>,
+	pub(crate) runs: std::sync::RwLock<HashMap<run::Id, Arc<run::State>, id::BuildHasher>>,
 
 	/// A local pool for running targets.
 	pub(crate) target_local_pool: tokio_util::task::LocalPoolHandle,
@@ -128,7 +128,7 @@ impl Server {
 		let resource_http_client = reqwest::Client::new();
 
 		// Create the uncompleted runs.
-		// let runs = std::sync::RwLock::new(HashMap::default());
+		let runs = std::sync::RwLock::new(HashMap::default());
 
 		// Create the target local pool.
 		let target_local_pool = tokio_util::task::LocalPoolHandle::new(
@@ -150,7 +150,7 @@ impl Server {
 			parent,
 			path,
 			resource_http_client,
-			// runs,
+			runs,
 			target_local_pool,
 			task_semaphore,
 		};
@@ -205,7 +205,7 @@ impl Server {
 		self.path().join("temps")
 	}
 
-	pub async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
+	pub(crate) async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
 		// Check if the object exists in the database.
 		if self.get_object_exists_from_database(id)? {
 			return Ok(true);
@@ -237,13 +237,13 @@ impl Server {
 		Ok(false)
 	}
 
-	pub async fn get_object_bytes(&self, id: object::Id) -> Result<Vec<u8>> {
+	pub(crate) async fn get_object_bytes(&self, id: object::Id) -> Result<Vec<u8>> {
 		self.try_get_object_bytes(id)
 			.await?
 			.wrap_err("Failed to get the object.")
 	}
 
-	pub async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
+	pub(crate) async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
 		// Attempt to get the object from the database.
 		if let Some(bytes) = self.try_get_object_bytes_from_database(id)? {
 			return Ok(Some(bytes));
@@ -294,7 +294,7 @@ impl Server {
 	}
 
 	/// Attempt to put a object.
-	pub async fn try_put_object_bytes(
+	pub(crate) async fn try_put_object_bytes(
 		&self,
 		id: object::Id,
 		bytes: &[u8],
@@ -332,210 +332,224 @@ impl Server {
 		Ok(Ok(()))
 	}
 
-	// /// Run a task.
-	// pub async fn run(&self, id: crate::Id) -> Result<run::Id> {
-	// 	// Create a new run.
-	// 	let run_id = run::Id::new();
-	// 	let state = Arc::new(run::State::new()?);
-	// 	self.state.runs.write().unwrap().insert(run_id, state);
+	/// Run a task.
+	pub(crate) async fn run(&self, task_id: task::Id) -> Result<Run> {
+		// Create a new run.
+		let run_id = run::Id::new();
+		let state = Arc::new(run::State::new(run_id)?);
+		self.state
+			.runs
+			.write()
+			.unwrap()
+			.insert(run_id, state.clone());
 
-	// 	// Create a write transaction.
-	// 	let mut txn = self.state.database.env.begin_rw_txn()?;
+		// Create a write transaction.
+		let mut txn = self.state.database.env.begin_rw_txn()?;
 
-	// 	// Add the assignment to the database.
-	// 	txn.put(
-	// 		self.state.database.assignments,
-	// 		&id.as_bytes(),
-	// 		&run_id.as_bytes(),
-	// 		lmdb::WriteFlags::empty(),
-	// 	)?;
+		// Add the assignment to the database.
+		txn.put(
+			self.state.database.assignments,
+			&task_id.as_bytes(),
+			&run_id.as_bytes(),
+			lmdb::WriteFlags::empty(),
+		)?;
 
-	// 	// Commit the transaction.
-	// 	txn.commit()?;
+		// Commit the transaction.
+		txn.commit()?;
 
-	// 	Ok(run_id)
-	// }
+		Ok(Run::with_state(state))
+	}
 
-	// pub async fn try_get_assignment(&self, id: crate::Id) -> Result<Option<run::Id>> {
-	// 	// Attempt to get the assignment from the database.
-	// 	if let Some(run_id) = self.try_get_assignment_from_database(id)? {
-	// 		return Ok(Some(run_id));
-	// 	}
+	pub(crate) async fn try_get_assignment(&self, id: task::Id) -> Result<Option<run::Id>> {
+		todo!()
+		// 	// Attempt to get the assignment from the database.
+		// 	if let Some(run_id) = self.try_get_assignment_from_database(id)? {
+		// 		return Ok(Some(run_id));
+		// 	}
 
-	// 	// Attempt to get the assignment from the parent.
-	// 	if let Some(run_id) = self.try_get_assignment_from_parent(id).await? {
-	// 		return Ok(Some(run_id));
-	// 	}
+		// 	// Attempt to get the assignment from the parent.
+		// 	if let Some(run_id) = self.try_get_assignment_from_parent(id).await? {
+		// 		return Ok(Some(run_id));
+		// 	}
 
-	// 	Ok(None)
-	// }
+		// 	Ok(None)
+	}
 
-	// fn try_get_assignment_from_database(&self, id: crate::Id) -> Result<Option<run::Id>> {
-	// 	// Get the assignment from the database.
-	// 	let txn = self.state.database.env.begin_ro_txn()?;
-	// 	match txn.get(self.state.database.assignments, &id.as_bytes()) {
-	// 		Ok(run_id) => Ok(Some(run::Id::with_bytes(
-	// 			run_id
-	// 				.try_into()
-	// 				.map_err(Error::other)
-	// 				.wrap_err("Invalid ID.")?,
-	// 		)?)),
-	// 		Err(lmdb::Error::NotFound) => Ok(None),
-	// 		Err(error) => Err(error.into()),
-	// 	}
-	// }
+	fn try_get_assignment_from_database(&self, id: task::Id) -> Result<Option<run::Id>> {
+		todo!()
+		// 	// Get the assignment from the database.
+		// 	let txn = self.state.database.env.begin_ro_txn()?;
+		// 	match txn.get(self.state.database.assignments, &id.as_bytes()) {
+		// 		Ok(run_id) => Ok(Some(run::Id::with_bytes(
+		// 			run_id
+		// 				.try_into()
+		// 				.map_err(Error::other)
+		// 				.wrap_err("Invalid ID.")?,
+		// 		)?)),
+		// 		Err(lmdb::Error::NotFound) => Ok(None),
+		// 		Err(error) => Err(error.into()),
+		// 	}
+	}
 
-	// async fn try_get_assignment_from_parent(&self, id: crate::Id) -> Result<Option<run::Id>> {
-	// 	// Get the parent.
-	// 	let Some(parent) = self.state.parent.as_ref() else {
-	// 		return Ok(None);
-	// 	};
+	async fn try_get_assignment_from_parent(&self, id: task::Id) -> Result<Option<run::Id>> {
+		todo!()
+		// 	// Get the parent.
+		// 	let Some(parent) = self.state.parent.as_ref() else {
+		// 		return Ok(None);
+		// 	};
 
-	// 	// Get the assignment.
-	// 	let Some(run_id) = parent.try_get_assignment(id).await? else {
-	// 		return Ok(None);
-	// 	};
+		// 	// Get the assignment.
+		// 	let Some(run_id) = parent.try_get_assignment(id).await? else {
+		// 		return Ok(None);
+		// 	};
 
-	// 	// Create a write transaction.
-	// 	let mut txn = self.state.database.env.begin_rw_txn()?;
+		// 	// Create a write transaction.
+		// 	let mut txn = self.state.database.env.begin_rw_txn()?;
 
-	// 	// Add the assignment to the database.
-	// 	txn.put(
-	// 		self.state.database.assignments,
-	// 		&id.as_bytes(),
-	// 		&run_id.as_bytes(),
-	// 		lmdb::WriteFlags::empty(),
-	// 	)?;
+		// 	// Add the assignment to the database.
+		// 	txn.put(
+		// 		self.state.database.assignments,
+		// 		&id.as_bytes(),
+		// 		&run_id.as_bytes(),
+		// 		lmdb::WriteFlags::empty(),
+		// 	)?;
 
-	// 	// Commit the transaction.
-	// 	txn.commit()?;
+		// 	// Commit the transaction.
+		// 	txn.commit()?;
 
-	// 	Ok(Some(run_id))
-	// }
+		// 	Ok(Some(run_id))
+	}
 
-	// pub async fn try_get_run(&self, id: run::Id) -> Result<Option<Run>> {
-	// 	let Some(bytes) = self.try_get_run_bytes(id).await? else {
-	// 		return Ok(None);
-	// 	};
-	// 	let run = Run::deserialize(&bytes)?;
-	// 	Ok(Some(run))
-	// }
+	pub(crate) async fn try_get_run(&self, id: run::Id) -> Result<Option<Run>> {
+		todo!()
+		// 	let Some(bytes) = self.try_get_run_bytes(id).await? else {
+		// 		return Ok(None);
+		// 	};
+		// 	let run = Run::deserialize(&bytes)?;
+		// 	Ok(Some(run))
+	}
 
-	// pub async fn try_get_run_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
-	// 	// Attempt to get the run from the database.
-	// 	if let Some(bytes) = self.try_get_run_bytes_from_database(id)? {
-	// 		return Ok(Some(bytes));
-	// 	}
+	pub(crate) async fn try_get_run_bytes(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
+		todo!()
+		// 	// Attempt to get the run from the database.
+		// 	if let Some(bytes) = self.try_get_run_bytes_from_database(id)? {
+		// 		return Ok(Some(bytes));
+		// 	}
 
-	// 	// Attempt to get the run from the parent.
-	// 	if let Some(bytes) = self.try_get_run_bytes_from_parent(id).await? {
-	// 		return Ok(Some(bytes));
-	// 	}
+		// 	// Attempt to get the run from the parent.
+		// 	if let Some(bytes) = self.try_get_run_bytes_from_parent(id).await? {
+		// 		return Ok(Some(bytes));
+		// 	}
 
-	// 	Ok(None)
-	// }
+		// 	Ok(None)
+	}
 
-	// fn try_get_run_bytes_from_database(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
-	// 	let txn = self.state.database.env.begin_ro_txn()?;
-	// 	match txn.get(self.state.database.runs, &id.as_bytes()) {
-	// 		Ok(run) => Ok(Some(run.to_owned())),
-	// 		Err(lmdb::Error::NotFound) => Ok(None),
-	// 		Err(error) => Err(error.into()),
-	// 	}
-	// }
+	fn try_get_run_bytes_from_database(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
+		todo!()
+		// 	let txn = self.state.database.env.begin_ro_txn()?;
+		// 	match txn.get(self.state.database.runs, &id.as_bytes()) {
+		// 		Ok(run) => Ok(Some(run.to_owned())),
+		// 		Err(lmdb::Error::NotFound) => Ok(None),
+		// 		Err(error) => Err(error.into()),
+		// 	}
+	}
 
-	// async fn try_get_run_bytes_from_parent(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
-	// 	let Some(parent) = self.state.parent.as_ref() else {
-	// 		return Ok(None);
-	// 	};
+	async fn try_get_run_bytes_from_parent(&self, id: run::Id) -> Result<Option<Vec<u8>>> {
+		todo!()
+		// 	let Some(parent) = self.state.parent.as_ref() else {
+		// 		return Ok(None);
+		// 	};
 
-	// 	// Get the run from the parent.
-	// 	let Some(bytes) = parent.try_get_run_bytes(id).await? else {
-	// 		return Ok(None);
-	// 	};
+		// 	// Get the run from the parent.
+		// 	let Some(bytes) = parent.try_get_run_bytes(id).await? else {
+		// 		return Ok(None);
+		// 	};
 
-	// 	// Create a write transaction.
-	// 	let mut txn = self.state.database.env.begin_rw_txn()?;
+		// 	// Create a write transaction.
+		// 	let mut txn = self.state.database.env.begin_rw_txn()?;
 
-	// 	// Add the run to the database.
-	// 	txn.put(
-	// 		self.state.database.runs,
-	// 		&id.as_bytes(),
-	// 		&bytes,
-	// 		lmdb::WriteFlags::empty(),
-	// 	)?;
+		// 	// Add the run to the database.
+		// 	txn.put(
+		// 		self.state.database.runs,
+		// 		&id.as_bytes(),
+		// 		&bytes,
+		// 		lmdb::WriteFlags::empty(),
+		// 	)?;
 
-	// 	// Commit the transaction.
-	// 	txn.commit()?;
+		// 	// Commit the transaction.
+		// 	txn.commit()?;
 
-	// 	Ok(Some(bytes))
-	// }
+		// 	Ok(Some(bytes))
+	}
 
-	// pub async fn try_get_run_children(
-	// 	&self,
-	// 	id: run::Id,
-	// ) -> Result<Option<BoxStream<'static, run::Id>>> {
-	// 	// Attempt to get the run children from the uncompleted runs.
-	// 	'a: {
-	// 		let state = self.state.runs.read().unwrap().get(&id).cloned();
-	// 		let Some(state) = state else {
-	// 			break 'a;
-	// 		};
-	// 		return Ok(Some(state.children()));
-	// 	}
+	pub(crate) async fn try_get_run_children(
+		&self,
+		id: run::Id,
+	) -> Result<Option<BoxStream<'static, run::Id>>> {
+		todo!()
+		// 	// Attempt to get the run children from the uncompleted runs.
+		// 	'a: {
+		// 		let state = self.state.runs.read().unwrap().get(&id).cloned();
+		// 		let Some(state) = state else {
+		// 			break 'a;
+		// 		};
+		// 		return Ok(Some(state.children()));
+		// 	}
 
-	// 	// Attempt to get the run children from the database or the parent.
-	// 	'a: {
-	// 		let Some(run) = self.try_get_run(id).await? else {
-	// 			break 'a;
-	// 		};
-	// 		return Ok(Some(stream::iter(run.children).boxed()));
-	// 	}
+		// 	// Attempt to get the run children from the database or the parent.
+		// 	'a: {
+		// 		let Some(run) = self.try_get_run(id).await? else {
+		// 			break 'a;
+		// 		};
+		// 		return Ok(Some(stream::iter(run.children).boxed()));
+		// 	}
 
-	// 	Ok(None)
-	// }
+		// 	Ok(None)
+	}
 
-	// pub async fn try_get_run_log(
-	// 	&self,
-	// 	id: run::Id,
-	// ) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
-	// 	// Attempt to get the run log from the uncompleted runs.
-	// 	let state = self.state.runs.read().unwrap().get(&id).cloned();
-	// 	if let Some(state) = state {
-	// 		let log = state.log().await?;
-	// 		return Ok(Some(log));
-	// 	}
+	pub(crate) async fn try_get_run_log(
+		&self,
+		id: run::Id,
+	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
+		todo!()
+		// 	// Attempt to get the run log from the uncompleted runs.
+		// 	let state = self.state.runs.read().unwrap().get(&id).cloned();
+		// 	if let Some(state) = state {
+		// 		let log = state.log().await?;
+		// 		return Ok(Some(log));
+		// 	}
 
-	// 	// Attempt to get the run log from the database or the parent.
-	// 	'a: {
-	// 		let Some(run) = self.try_get_run(id).await? else {
-	// 			break 'a;
-	// 		};
-	// 		let client = &Client::with_server(self.clone());
-	// 		let blob = Blob::with_id(run.log);
-	// 		let bytes = blob.bytes(client).await?;
-	// 		return Ok(Some(stream::once(async move { bytes }).boxed()));
-	// 	}
+		// 	// Attempt to get the run log from the database or the parent.
+		// 	'a: {
+		// 		let Some(run) = self.try_get_run(id).await? else {
+		// 			break 'a;
+		// 		};
+		// 		let client = &Client::with_server(self.clone());
+		// 		let blob = Blob::with_id(run.log);
+		// 		let bytes = blob.bytes(client).await?;
+		// 		return Ok(Some(stream::once(async move { bytes }).boxed()));
+		// }
 
-	// 	Ok(None)
-	// }
+		// 	Ok(None)
+	}
 
-	// pub async fn try_get_run_result(&self, id: run::Id) -> Result<Option<run::Result<crate::Id>>> {
-	// 	// Attempt to get the run result from the uncompleted runs.
-	// 	let state = self.state.runs.read().unwrap().get(&id).cloned();
-	// 	if let Some(state) = state {
-	// 		let result = state.result().await;
-	// 		return Ok(Some(result));
-	// 	}
+	pub(crate) async fn try_get_run_result(&self, id: run::Id) -> Result<Option<Result<Value>>> {
+		todo!()
+		// // Attempt to get the run result from the uncompleted runs.
+		// let state = self.state.runs.read().unwrap().get(&id).cloned();
+		// if let Some(state) = state {
+		// 	let result = state.result().await;
+		// 	return Ok(Some(result));
+		// }
 
-	// 	// Attempt to get the run children from the database or the parent.
-	// 	'a: {
-	// 		let Some(run) = self.try_get_run(id).await? else {
-	// 			break 'a;
-	// 		};
-	// 		return Ok(Some(run.result));
-	// 	}
+		// // Attempt to get the run children from the database or the parent.
+		// 'a: {
+		// 	let Some(run) = self.try_get_run(id).await? else {
+		// 		break 'a;
+		// 	};
+		// 	return Ok(Some(run.result));
+		// }
 
-	// 	Ok(None)
-	// }
+		// Ok(None)
+	}
 }

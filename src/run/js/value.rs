@@ -1,6 +1,11 @@
-use crate::{file::File, value::Value};
+use super::convert::{from_v8, FromV8, ToV8};
+use crate::{
+	blob, directory, file, package, return_error, symlink, task, template, Artifact, Blob, Bytes,
+	Checksum, Directory, Error, File, Package, Placeholder, Relpath, Result, Subpath, Symlink,
+	System, Task, Template, Value, WrapErr,
+};
 
-impl ToV8 for tg::Any {
+impl ToV8 for Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		match self {
 			Value::Null(value) => value.to_v8(scope),
@@ -8,8 +13,6 @@ impl ToV8 for tg::Any {
 			Value::Number(value) => value.to_v8(scope),
 			Value::String(value) => value.to_v8(scope),
 			Value::Bytes(value) => value.to_v8(scope),
-			Value::Relpath(value) => value.to_v8(scope),
-			Value::Subpath(value) => value.to_v8(scope),
 			Value::Blob(value) => value.to_v8(scope),
 			Value::Directory(value) => value.to_v8(scope),
 			Value::File(value) => value.to_v8(scope),
@@ -17,16 +20,14 @@ impl ToV8 for tg::Any {
 			Value::Placeholder(value) => value.to_v8(scope),
 			Value::Template(value) => value.to_v8(scope),
 			Value::Package(value) => value.to_v8(scope),
-			Value::Resource(value) => value.to_v8(scope),
-			Value::Target(value) => value.to_v8(scope),
 			Value::Task(value) => value.to_v8(scope),
 			Value::Array(value) => value.to_v8(scope),
-			Value::Object(value) => value.to_v8(scope),
+			Value::Map(value) => value.to_v8(scope),
 		}
 	}
 }
 
-impl FromV8 for tg::Any {
+impl FromV8 for Value {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -36,18 +37,6 @@ impl FromV8 for tg::Any {
 		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let bytes = v8::String::new_external_onebyte_static(scope, "Bytes".as_bytes()).unwrap();
-		let bytes = tg.get(scope, bytes.into()).unwrap();
-		let bytes = v8::Local::<v8::Function>::try_from(bytes).unwrap();
-
-		let relpath = v8::String::new_external_onebyte_static(scope, "Relpath".as_bytes()).unwrap();
-		let relpath = tg.get(scope, relpath.into()).unwrap();
-		let relpath = v8::Local::<v8::Function>::try_from(relpath).unwrap();
-
-		let subpath = v8::String::new_external_onebyte_static(scope, "Subpath".as_bytes()).unwrap();
-		let subpath = tg.get(scope, subpath.into()).unwrap();
-		let subpath = v8::Local::<v8::Function>::try_from(subpath).unwrap();
 
 		let blob = v8::String::new_external_onebyte_static(scope, "Blob".as_bytes()).unwrap();
 		let blob = tg.get(scope, blob.into()).unwrap();
@@ -80,15 +69,6 @@ impl FromV8 for tg::Any {
 		let package = tg.get(scope, package.into()).unwrap();
 		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
 
-		let resource =
-			v8::String::new_external_onebyte_static(scope, "Resource".as_bytes()).unwrap();
-		let resource = tg.get(scope, resource.into()).unwrap();
-		let resource = v8::Local::<v8::Function>::try_from(resource).unwrap();
-
-		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
-		let target = tg.get(scope, target.into()).unwrap();
-		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
-
 		let task = v8::String::new_external_onebyte_static(scope, "Task".as_bytes()).unwrap();
 		let task = tg.get(scope, task.into()).unwrap();
 		let task = v8::Local::<v8::Function>::try_from(task).unwrap();
@@ -101,12 +81,8 @@ impl FromV8 for tg::Any {
 			Ok(Value::Number(from_v8(scope, value)?))
 		} else if value.is_string() {
 			Ok(Value::String(from_v8(scope, value)?))
-		} else if value.instance_of(scope, bytes.into()).unwrap() {
+		} else if value.is_uint8_array() {
 			Ok(Value::Bytes(from_v8(scope, value)?))
-		} else if value.instance_of(scope, relpath.into()).unwrap() {
-			Ok(Value::Relpath(from_v8(scope, value)?))
-		} else if value.instance_of(scope, subpath.into()).unwrap() {
-			Ok(Value::Subpath(from_v8(scope, value)?))
 		} else if value.instance_of(scope, blob.into()).unwrap() {
 			Ok(Value::Blob(from_v8(scope, value)?))
 		} else if value.instance_of(scope, directory.into()).unwrap() {
@@ -121,32 +97,28 @@ impl FromV8 for tg::Any {
 			Ok(Value::Template(from_v8(scope, value)?))
 		} else if value.instance_of(scope, package.into()).unwrap() {
 			Ok(Value::Package(from_v8(scope, value)?))
-		} else if value.instance_of(scope, resource.into()).unwrap() {
-			Ok(Value::Resource(from_v8(scope, value)?))
-		} else if value.instance_of(scope, target.into()).unwrap() {
-			Ok(Value::Target(from_v8(scope, value)?))
 		} else if value.instance_of(scope, task.into()).unwrap() {
 			Ok(Value::Task(from_v8(scope, value)?))
 		} else if value.is_array() {
 			Ok(Value::Array(from_v8(scope, value)?))
 		} else if value.is_object() {
-			Ok(Value::Object(from_v8(scope, value)?))
+			Ok(Value::Map(from_v8(scope, value)?))
 		} else {
 			return_error!("Invalid value.");
 		}
 	}
 }
 
-impl ToV8 for tg::Bytes {
+impl ToV8 for Bytes {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let value = v8::ArrayBuffer::with_backing_store(scope, &self.buffer().0);
+		let value = v8::ArrayBuffer::with_backing_store(scope, self.buffer().backing_store());
 		let value =
 			v8::Uint8Array::new(scope, value, self.range().start, self.range().len()).unwrap();
 		Ok(value.into())
 	}
 }
 
-impl FromV8 for tg::Bytes {
+impl FromV8 for Bytes {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -158,19 +130,18 @@ impl FromV8 for tg::Bytes {
 			.buffer(scope)
 			.wrap_err("Expected the Uint8Array to have a buffer.")?
 			.get_backing_store();
-		let buffer = Buffer(backing_store);
 		let range = value.byte_offset()..(value.byte_offset() + value.byte_length());
-		Ok(Self { buffer, range })
+		Ok(Self::new(backing_store.into(), range))
 	}
 }
 
-impl ToV8 for tg::Relpath {
+impl ToV8 for Relpath {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for tg::Relpath {
+impl FromV8 for Relpath {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -181,13 +152,13 @@ impl FromV8 for tg::Relpath {
 	}
 }
 
-impl ToV8 for tg::Subpath {
+impl ToV8 for Subpath {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for tg::Subpath {
+impl FromV8 for Subpath {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -198,7 +169,7 @@ impl FromV8 for tg::Subpath {
 	}
 }
 
-impl ToV8 for tg::Blob {
+impl ToV8 for Blob {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -212,19 +183,11 @@ impl ToV8 for tg::Blob {
 
 		let object = blob.new_instance(scope, &[]).unwrap();
 
-		let key = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = match &self.kind {
-			Kind::Branch(sizes) => sizes.to_v8(scope)?,
-			Kind::Leaf(size) => size.to_v8(scope)?,
-		};
-		object.set_private(scope, key, value);
-
 		Ok(object.into())
 	}
 }
 
-impl FromV8 for tg::Blob {
+impl FromV8 for Blob {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -244,22 +207,46 @@ impl FromV8 for tg::Blob {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let kind = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
-		let kind = v8::Private::for_api(scope, Some(kind));
-		let kind = value.get_private(scope, kind).unwrap();
-		let kind = if kind.is_array() {
-			Kind::Branch(from_v8(scope, kind)?)
-		} else if kind.is_number() {
-			Kind::Leaf(from_v8(scope, kind)?)
-		} else {
-			return_error!("Expected a kind.");
-		};
-
-		Ok(Self { kind })
+		todo!()
 	}
 }
 
-impl ToV8 for tg::Artifact {
+impl ToV8 for blob::Object {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let object = v8::Object::new(scope);
+
+		let key = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+		let value = match self {
+			blob::Object::Branch(sizes) => sizes.to_v8(scope)?,
+			blob::Object::Leaf(size) => size.to_v8(scope)?,
+		};
+		object.set(scope, key.into(), value);
+
+		Ok(object.into())
+	}
+}
+
+impl FromV8 for blob::Object {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+		// let kind = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+		// let kind = value.get(scope, kind.into()).unwrap();
+		// let kind = if kind.is_array() {
+		// 	blob::Object::Branch(from_v8(scope, kind)?)
+		// } else if kind.is_number() {
+		// 	blob::Object::Leaf(from_v8(scope, kind)?)
+		// } else {
+		// 	return_error!("Expected a kind.");
+		// };
+
+		// Ok(kind)
+	}
+}
+
+impl ToV8 for Artifact {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		match self {
 			Self::Directory(directory) => directory.to_v8(scope),
@@ -269,7 +256,7 @@ impl ToV8 for tg::Artifact {
 	}
 }
 
-impl FromV8 for tg::Artifact {
+impl FromV8 for Artifact {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -307,7 +294,22 @@ impl FromV8 for tg::Artifact {
 	}
 }
 
-impl ToV8 for tg::Directory {
+impl ToV8 for Directory {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		todo!()
+	}
+}
+
+impl FromV8 for Directory {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
+}
+
+impl ToV8 for directory::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -323,15 +325,14 @@ impl ToV8 for tg::Directory {
 		let object = directory.new_instance(scope, &[]).unwrap();
 
 		let key = v8::String::new_external_onebyte_static(scope, "entries".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.entries.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		Ok(object.into())
 	}
 }
 
-impl FromV8 for tg::Directory {
+impl FromV8 for directory::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -353,14 +354,29 @@ impl FromV8 for tg::Directory {
 		let value = value.to_object(scope).unwrap();
 
 		let entries = v8::String::new_external_onebyte_static(scope, "entries".as_bytes()).unwrap();
-		let entries = v8::Private::for_api(scope, Some(entries));
-		let entries = value.get_private(scope, entries).unwrap();
+		let entries = value.get(scope, entries.into()).unwrap();
 		let entries = from_v8(scope, entries)?;
 
 		Ok(Self { entries })
 	}
 }
-impl ToV8 for tg::File {
+
+impl ToV8 for File {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		todo!()
+	}
+}
+
+impl FromV8 for File {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
+}
+
+impl ToV8 for file::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -375,25 +391,22 @@ impl ToV8 for tg::File {
 		let object = file.new_instance(scope, &[]).unwrap();
 
 		let key = v8::String::new_external_onebyte_static(scope, "contents".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.contents.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.executable.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "references".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.references.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		Ok(object.into())
 	}
 }
 
-impl FromV8 for tg::File {
+impl FromV8 for file::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -415,20 +428,17 @@ impl FromV8 for tg::File {
 
 		let contents =
 			v8::String::new_external_onebyte_static(scope, "contents".as_bytes()).unwrap();
-		let contents = v8::Private::for_api(scope, Some(contents));
-		let contents = value.get_private(scope, contents).unwrap();
+		let contents = value.get(scope, contents.into()).unwrap();
 		let contents = from_v8(scope, contents)?;
 
 		let executable =
 			v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
-		let executable = v8::Private::for_api(scope, Some(executable));
-		let executable = value.get_private(scope, executable).unwrap();
+		let executable = value.get(scope, executable.into()).unwrap();
 		let executable = from_v8(scope, executable)?;
 
 		let references =
 			v8::String::new_external_onebyte_static(scope, "references".as_bytes()).unwrap();
-		let references = v8::Private::for_api(scope, Some(references));
-		let references = value.get_private(scope, references).unwrap();
+		let references = value.get(scope, references.into()).unwrap();
 		let references = from_v8(scope, references)?;
 
 		Ok(Self {
@@ -439,7 +449,22 @@ impl FromV8 for tg::File {
 	}
 }
 
-impl ToV8 for tg::Symlink {
+impl ToV8 for Symlink {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		todo!()
+	}
+}
+
+impl FromV8 for Symlink {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
+}
+
+impl ToV8 for symlink::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -454,15 +479,14 @@ impl ToV8 for tg::Symlink {
 		let object = symlink.new_instance(scope, &[]).unwrap();
 
 		let key = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.target.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		Ok(object.into())
 	}
 }
 
-impl FromV8 for tg::Symlink {
+impl FromV8 for symlink::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -483,15 +507,14 @@ impl FromV8 for tg::Symlink {
 		let value = value.to_object(scope).unwrap();
 
 		let target = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
-		let target = v8::Private::for_api(scope, Some(target));
-		let target = value.get_private(scope, target).unwrap();
+		let target = value.get(scope, target.into()).unwrap();
 		let target = from_v8(scope, target)?;
 
 		Ok(Self { target })
 	}
 }
 
-impl ToV8 for tg::Placeholder {
+impl ToV8 for Placeholder {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -507,15 +530,14 @@ impl ToV8 for tg::Placeholder {
 		let object = placeholder.new_instance(scope, &[]).unwrap();
 
 		let key = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.name.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		Ok(object.into())
 	}
 }
 
-impl FromV8 for tg::Placeholder {
+impl FromV8 for Placeholder {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -537,15 +559,14 @@ impl FromV8 for tg::Placeholder {
 		let value = value.to_object(scope).unwrap();
 
 		let name = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
-		let name = v8::Private::for_api(scope, Some(name));
-		let name = value.get_private(scope, name).unwrap();
+		let name = value.get(scope, name.into()).unwrap();
 		let name = from_v8(scope, name)?;
 
 		Ok(Self { name })
 	}
 }
 
-impl ToV8 for tg::Template {
+impl ToV8 for Template {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -561,15 +582,14 @@ impl ToV8 for tg::Template {
 		let object = template.new_instance(scope, &[]).unwrap();
 
 		let key = v8::String::new_external_onebyte_static(scope, "components".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.components.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		Ok(object.into())
 	}
 }
 
-impl FromV8 for tg::Template {
+impl FromV8 for Template {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -592,8 +612,7 @@ impl FromV8 for tg::Template {
 
 		let components =
 			v8::String::new_external_onebyte_static(scope, "components".as_bytes()).unwrap();
-		let components = v8::Private::for_api(scope, Some(components));
-		let components = value.get_private(scope, components).unwrap();
+		let components = value.get(scope, components.into()).unwrap();
 		let components = from_v8(scope, components)?;
 
 		Ok(Self { components })
@@ -645,249 +664,52 @@ impl FromV8 for template::Component {
 	}
 }
 
-impl ToV8 for tg::Build {
-	fn to_v8<'a>(
-		&self,
-		scope: &mut v8::HandleScope<'a>,
-	) -> crate::error::Result<v8::Local<'a, v8::Value>> {
-		match self {
-			Self::Resource(resource) => resource.to_v8(scope),
-			Self::Target(target) => target.to_v8(scope),
-			Self::Task(task) => task.to_v8(scope),
-		}
-	}
-}
-
-impl FromV8 for tg::Build {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> crate::error::Result<Self> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let resource =
-			v8::String::new_external_onebyte_static(scope, "Resource".as_bytes()).unwrap();
-		let resource = tg.get(scope, resource.into()).unwrap();
-		let resource = v8::Local::<v8::Function>::try_from(resource).unwrap();
-
-		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
-		let target = tg.get(scope, target.into()).unwrap();
-		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
-
-		let task = v8::String::new_external_onebyte_static(scope, "Task".as_bytes()).unwrap();
-		let task = tg.get(scope, task.into()).unwrap();
-		let task = v8::Local::<v8::Function>::try_from(task).unwrap();
-
-		let build = if value.instance_of(scope, resource.into()).unwrap() {
-			Self::Resource(from_v8(scope, value)?)
-		} else if value.instance_of(scope, target.into()).unwrap() {
-			Self::Target(from_v8(scope, value)?)
-		} else if value.instance_of(scope, task.into()).unwrap() {
-			Self::Task(from_v8(scope, value)?)
-		} else {
-			return_error!("Expected a resource, target, or task.")
-		};
-
-		Ok(build)
-	}
-}
-
-impl ToV8 for tg::Resource {
+impl ToV8 for Package {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		// Get the global.
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let resource =
-			v8::String::new_external_onebyte_static(scope, "Resource".as_bytes()).unwrap();
-		let resource = tg.get(scope, resource.into()).unwrap();
-		let resource = v8::Local::<v8::Function>::try_from(resource).unwrap();
-
-		let object = resource.new_instance(scope, &[]).unwrap();
-
-		let key = v8::String::new_external_onebyte_static(scope, "url".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.url.to_string().to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "unpack".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.unpack.map(|unpack| unpack.to_string()).to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "checksum".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.checksum.to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "unsafe".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.unsafe_.to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		Ok(object.into())
+		todo!()
 	}
 }
 
-impl FromV8 for tg::Resource {
+impl FromV8 for Package {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let resource =
-			v8::String::new_external_onebyte_static(scope, "Resource".as_bytes()).unwrap();
-		let resource = tg.get(scope, resource.into()).unwrap();
-		let resource = v8::Local::<v8::Function>::try_from(resource).unwrap();
-
-		if !value.instance_of(scope, resource.into()).unwrap() {
-			return_error!("Expected a resource.");
-		}
-		let value = value.to_object(scope).unwrap();
-
-		let url = v8::String::new_external_onebyte_static(scope, "url".as_bytes()).unwrap();
-		let url = v8::Private::for_api(scope, Some(url));
-		let url = value.get_private(scope, url).unwrap();
-		let url: String = from_v8(scope, url)?;
-		let url = Url::parse(&url).map_err(crate::error::Error::other)?;
-
-		let unpack = v8::String::new_external_onebyte_static(scope, "unpack".as_bytes()).unwrap();
-		let unpack = v8::Private::for_api(scope, Some(unpack));
-		let unpack = value.get_private(scope, unpack).unwrap();
-		let unpack: Option<String> = from_v8(scope, unpack)?;
-		let unpack = unpack.map(|unpack| unpack.parse().unwrap());
-
-		let checksum =
-			v8::String::new_external_onebyte_static(scope, "checksum".as_bytes()).unwrap();
-		let checksum = v8::Private::for_api(scope, Some(checksum));
-		let checksum = value.get_private(scope, checksum).unwrap();
-		let checksum = from_v8(scope, checksum)?;
-
-		let unsafe_ = v8::String::new_external_onebyte_static(scope, "unsafe".as_bytes()).unwrap();
-		let unsafe_ = v8::Private::for_api(scope, Some(unsafe_));
-		let unsafe_ = value.get_private(scope, unsafe_).unwrap();
-		let unsafe_ = from_v8(scope, unsafe_)?;
-
-		Ok(Self {
-			url,
-			unpack,
-			checksum,
-			unsafe_,
-		})
+		todo!()
 	}
 }
 
-impl ToV8 for tg::Target {
+impl ToV8 for package::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
-		let target = tg.get(scope, target.into()).unwrap();
-		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
-
-		let object = target.new_instance(scope, &[]).unwrap();
-
-		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.package.to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "path".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.path.to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "name_".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.name.to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "env".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.env.to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "args".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.args.to_v8(scope)?;
-		object.set_private(scope, key, value);
-
-		Ok(object.into())
+		todo!()
 	}
 }
 
-impl FromV8 for tg::Target {
+impl FromV8 for package::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
-		let target = tg.get(scope, target.into()).unwrap();
-		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
-
-		if !value.instance_of(scope, target.into()).unwrap() {
-			return_error!("Expected a target.");
-		}
-		let value = value.to_object(scope).unwrap();
-
-		let package = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
-		let package = v8::Private::for_api(scope, Some(package));
-		let package = value.get_private(scope, package).unwrap();
-		let package = from_v8(scope, package)?;
-
-		let path = v8::String::new_external_onebyte_static(scope, "path".as_bytes()).unwrap();
-		let path = v8::Private::for_api(scope, Some(path));
-		let path = value.get_private(scope, path).unwrap();
-		let path = from_v8(scope, path)?;
-
-		let name = v8::String::new_external_onebyte_static(scope, "name_".as_bytes()).unwrap();
-		let name = v8::Private::for_api(scope, Some(name));
-		let name = value.get_private(scope, name).unwrap();
-		let name = from_v8(scope, name)?;
-
-		let env = v8::String::new_external_onebyte_static(scope, "env".as_bytes()).unwrap();
-		let env = v8::Private::for_api(scope, Some(env));
-		let env = value.get_private(scope, env).unwrap();
-		let env = from_v8(scope, env)?;
-
-		let args = v8::String::new_external_onebyte_static(scope, "args".as_bytes()).unwrap();
-		let args = v8::Private::for_api(scope, Some(args));
-		let args = value.get_private(scope, args).unwrap();
-		let args = from_v8(scope, args)?;
-
-		Ok(Self {
-			package,
-			path,
-			name,
-			env,
-			args,
-		})
+		todo!()
 	}
 }
 
-impl ToV8 for tg::Task {
+impl ToV8 for Task {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		todo!()
+	}
+}
+
+impl FromV8 for Task {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
+	}
+}
+
+impl ToV8 for task::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -902,46 +724,47 @@ impl ToV8 for tg::Task {
 
 		let object = task.new_instance(scope, &[]).unwrap();
 
+		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
+		let value = self.package.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
 		let key = v8::String::new_external_onebyte_static(scope, "host".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.host.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.executable.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
+		let value = self.target.to_v8(scope)?;
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "env".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.env.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "args".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.args.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "checksum".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.checksum.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "unsafe".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.unsafe_.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "network".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
 		let value = self.network.to_v8(scope)?;
-		object.set_private(scope, key, value);
+		object.set(scope, key.into(), value);
 
 		Ok(object.into())
 	}
 }
 
-impl FromV8 for tg::Task {
+impl FromV8 for task::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -961,51 +784,84 @@ impl FromV8 for tg::Task {
 		}
 		let value = value.to_object(scope).unwrap();
 
+		let package = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
+		let package = value.get(scope, package.into()).unwrap();
+		let package = from_v8(scope, package)?;
+
 		let host = v8::String::new_external_onebyte_static(scope, "host".as_bytes()).unwrap();
-		let host = v8::Private::for_api(scope, Some(host));
-		let host = value.get_private(scope, host).unwrap();
+		let host = value.get(scope, host.into()).unwrap();
 		let host = from_v8(scope, host)?;
 
 		let executable =
 			v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
-		let executable = v8::Private::for_api(scope, Some(executable));
-		let executable = value.get_private(scope, executable).unwrap();
+		let executable = value.get(scope, executable.into()).unwrap();
 		let executable = from_v8(scope, executable)?;
 
+		let target = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
+		let target = value.get(scope, target.into()).unwrap();
+		let target = from_v8(scope, target)?;
+
 		let env = v8::String::new_external_onebyte_static(scope, "env".as_bytes()).unwrap();
-		let env = v8::Private::for_api(scope, Some(env));
-		let env = value.get_private(scope, env).unwrap();
+		let env = value.get(scope, env.into()).unwrap();
 		let env = from_v8(scope, env)?;
 
 		let args = v8::String::new_external_onebyte_static(scope, "args".as_bytes()).unwrap();
-		let args = v8::Private::for_api(scope, Some(args));
-		let args = value.get_private(scope, args).unwrap();
+		let args = value.get(scope, args.into()).unwrap();
 		let args = from_v8(scope, args)?;
 
 		let checksum =
 			v8::String::new_external_onebyte_static(scope, "checksum".as_bytes()).unwrap();
-		let checksum = v8::Private::for_api(scope, Some(checksum));
-		let checksum = value.get_private(scope, checksum).unwrap();
+		let checksum = value.get(scope, checksum.into()).unwrap();
 		let checksum = from_v8(scope, checksum)?;
 
 		let unsafe_ = v8::String::new_external_onebyte_static(scope, "unsafe".as_bytes()).unwrap();
-		let unsafe_ = v8::Private::for_api(scope, Some(unsafe_));
-		let unsafe_ = value.get_private(scope, unsafe_).unwrap();
+		let unsafe_ = value.get(scope, unsafe_.into()).unwrap();
 		let unsafe_ = from_v8(scope, unsafe_)?;
 
 		let network = v8::String::new_external_onebyte_static(scope, "network".as_bytes()).unwrap();
-		let network = v8::Private::for_api(scope, Some(network));
-		let network = value.get_private(scope, network).unwrap();
+		let network = value.get(scope, network.into()).unwrap();
 		let network = from_v8(scope, network)?;
 
 		Ok(Self {
+			package,
 			host,
 			executable,
+			target,
 			env,
 			args,
 			checksum,
 			unsafe_,
 			network,
 		})
+	}
+}
+
+impl ToV8 for Checksum {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for Checksum {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		Self::try_from(String::from_v8(scope, value)?)
+	}
+}
+
+impl ToV8 for System {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for System {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		Self::try_from(String::from_v8(scope, value)?)
 	}
 }

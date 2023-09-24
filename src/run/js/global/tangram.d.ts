@@ -139,6 +139,21 @@ declare namespace tg {
 		};
 	}
 
+	/** Download the contents of a URL. */
+	export let download: (url: string) => Promise<Blob>;
+
+	/** Unpack a blob. */
+	export let unpack: (blob: Blob, format: UnpackFormat) => Promise<Artifact>;
+
+	export type UnpackFormat =
+		| ".tar"
+		| ".tar.bz2"
+		| ".tar.gz"
+		| ".tar.lz"
+		| ".tar.xz"
+		| ".tar.zstd"
+		| ".zip";
+
 	export namespace encoding {
 		export namespace base64 {
 			export let encode: (value: Uint8Array) => string;

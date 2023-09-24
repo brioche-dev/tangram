@@ -1,8 +1,10 @@
 import { Artifact } from "./artifact.ts";
 import { Blob } from "./blob.ts";
-import { Build } from "./build.ts";
 import { Checksum } from "./checksum.ts";
 import { Directory } from "./directory.ts";
+import { UnpackFormat } from "./download.ts";
+import { Object_ } from "./object.ts";
+import { Task } from "./task.ts";
 import { Value } from "./value.ts";
 
 declare global {
@@ -13,13 +15,13 @@ declare global {
 
 	function syscall(syscall: "blob_bytes", blob: Blob): Promise<Uint8Array>;
 
-	function syscall(syscall: "build_output", build: Build): Promise<Value>;
-
 	function syscall(
 		syscall: "checksum",
 		algorithm: Checksum.Algorithm,
 		bytes: string | Uint8Array,
 	): Checksum;
+
+	function syscall(syscall: "download", url: string): Promise<Blob>;
 
 	function syscall(
 		syscall: "encoding_base64_decode",
@@ -51,11 +53,19 @@ declare global {
 
 	function syscall(syscall: "encoding_yaml_encode", value: any): string;
 
+	function syscall(syscall: "load", id: Object_.Id): Promise<Object_>;
+
 	function syscall(syscall: "log", value: string): void;
 
-	function syscall(syscall: "value_load", value: Value): Promise<Value>;
+	function syscall(syscall: "store", object: Object_): Promise<Object_.Id>;
 
-	function syscall(syscall: "value_store", value: Value): Promise<Value>;
+	function syscall(syscall: "output", task: Task): Promise<Value>;
+
+	function syscall(
+		syscall: "unpack",
+		blob: Blob,
+		format: UnpackFormat,
+	): Promise<Artifact>;
 }
 
 export let artifact = {
@@ -78,10 +88,10 @@ export let blob = {
 	},
 };
 
-export let build = {
-	output: async (build: Build): Promise<Value> => {
+export let task = {
+	output: async (task: Task): Promise<Value> => {
 		try {
-			return await syscall("build_output", build);
+			return await syscall("output", task);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
@@ -94,6 +104,14 @@ export let checksum = (
 ): Checksum => {
 	try {
 		return syscall("checksum", algorithm, bytes);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
+
+export let download = async (url: string): Promise<Blob> => {
+	try {
+		return await syscall("download", url);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}
@@ -217,20 +235,31 @@ export let log = (value: string) => {
 	}
 };
 
-export let value = {
-	load: async (value: Value): Promise<Value> => {
+export let handle = {
+	load: async (id: Object_.Id): Promise<Object_> => {
 		try {
-			return await syscall("value_load", value);
+			return await syscall("load", id);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
 
-	store: async (value: Value): Promise<Value> => {
+	store: async (object: Object_): Promise<Object_.Id> => {
 		try {
-			return await syscall("value_store", value);
+			return await syscall("store", object);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
+};
+
+export let unpack = async (
+	blob: Blob,
+	format: UnpackFormat,
+): Promise<Artifact> => {
+	try {
+		return await syscall("unpack", blob, format);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
 };

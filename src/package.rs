@@ -1,11 +1,8 @@
 pub use self::{dependency::Dependency, specifier::Specifier};
 use crate::{
-	artifact, directory,
-	error::{Result, WrapErr},
+	artifact, directory, id,
 	module::{self, Module},
-	object,
-	subpath::Subpath,
-	Artifact, Client,
+	object, Artifact, Client, Result, Subpath, WrapErr,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -19,12 +16,15 @@ pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 /// The file name of the lockfile.
 pub const LOCKFILE_FILE_NAME: &str = "tangram.lock";
 
+#[derive(Clone, Debug)]
+pub struct Package(Handle);
+
 crate::object!(Package);
 
 #[derive(Clone, Debug)]
 pub(crate) struct Object {
 	pub artifact: Artifact,
-	pub dependencies: BTreeMap<Dependency, Handle>,
+	pub dependencies: BTreeMap<Dependency, Package>,
 }
 
 #[derive(
@@ -49,7 +49,17 @@ pub struct Metadata {
 	pub version: Option<String>,
 }
 
-impl Handle {
+impl Package {
+	#[must_use]
+	pub fn handle(&self) -> &Handle {
+		&self.0
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self(Handle::with_id(id))
+	}
+
 	pub async fn with_specifier(client: &Client, specifier: Specifier) -> Result<Self> {
 		match specifier {
 			Specifier::Path(path) => Ok(Self::with_path(client, &path).await?),
@@ -173,27 +183,34 @@ impl Handle {
 		let directory = directory.build();
 
 		// Create the package.
-		let package = Self::with_object(Object {
+		let package = Self(Handle::with_object(Object {
 			artifact: directory.into(),
 			dependencies,
-		});
+		}));
 
 		Ok(package)
 	}
 
 	pub async fn artifact(&self, client: &Client) -> Result<&Artifact> {
-		Ok(&self.object(client).await?.artifact)
+		Ok(&self.0.object(client).await?.artifact)
 	}
 
 	pub async fn dependencies(&self, client: &Client) -> Result<&BTreeMap<Dependency, Self>> {
-		Ok(&self.object(client).await?.dependencies)
+		Ok(&self.0.object(client).await?.dependencies)
 	}
 
 	pub async fn root_module(&self, client: &Client) -> Result<Module> {
 		Ok(Module::Normal(module::Normal {
-			package: self.id(client).await?,
+			package: self.0.id(client).await?,
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		}))
+	}
+}
+
+impl Id {
+	#[must_use]
+	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+		Self(crate::Id::new_hashed(id::Kind::Package, bytes))
 	}
 }
 
@@ -204,7 +221,7 @@ impl Object {
 		let dependencies = self
 			.dependencies
 			.iter()
-			.map(|(dependency, id)| (dependency.clone(), id.expect_id()))
+			.map(|(dependency, package)| (dependency.clone(), package.0.expect_id()))
 			.collect();
 		Data {
 			artifact,
@@ -218,7 +235,7 @@ impl Object {
 		let dependencies = data
 			.dependencies
 			.into_iter()
-			.map(|(dependency, id)| (dependency, Handle::with_id(id)))
+			.map(|(dependency, id)| (dependency, Package::with_id(id)))
 			.collect();
 		Self {
 			artifact,
@@ -228,16 +245,16 @@ impl Object {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Handle> {
-		let mut children = vec![];
-		children.extend(
-			self.dependencies
-				.values()
-				.cloned()
-				.map(Into::into)
-				.collect::<Vec<_>>(),
-		);
-		children.push(self.artifact.clone().into());
-		children
+		std::iter::empty()
+			.chain(
+				self.dependencies
+					.values()
+					.cloned()
+					.map(|package| package.0)
+					.map(Into::into),
+			)
+			.chain(std::iter::once(self.artifact.clone().into()))
+			.collect()
 	}
 }
 
@@ -250,10 +267,7 @@ impl Data {
 
 pub mod dependency {
 	pub use crate::package::specifier::Registry;
-	use crate::{
-		error::{Error, Result},
-		relpath::Relpath,
-	};
+	use crate::{Error, Relpath, Result};
 
 	/// A dependency on a package, either at a path or from the registry.
 	#[derive(
@@ -328,7 +342,7 @@ pub mod dependency {
 
 pub mod specifier {
 	use super::dependency;
-	use crate::error::{Error, Result};
+	use crate::{Error, Result};
 	use std::path::PathBuf;
 
 	/// A reference to a package, either at a path or from the registry.

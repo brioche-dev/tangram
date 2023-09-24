@@ -1,9 +1,5 @@
 use super::service;
-use crate::{
-	error::{return_error, Result},
-	module::Module,
-	server::Server,
-};
+use crate::{module::Module, return_error, server::Server, Result};
 
 impl Module {
 	pub async fn format(server: &Server, text: String) -> Result<String> {

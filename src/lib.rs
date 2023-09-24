@@ -18,10 +18,9 @@ pub use self::{
 	id::Id,
 	module::Module,
 	package::Package,
+	path::{Relpath, Subpath},
 	placeholder::Placeholder,
-	relpath::Relpath,
 	run::Run,
-	subpath::Subpath,
 	symlink::Symlink,
 	system::System,
 	task::Task,
@@ -53,16 +52,15 @@ pub mod migrations;
 pub mod module;
 pub mod object;
 pub mod package;
+pub mod path;
 pub mod placeholder;
 pub mod pull;
 pub mod push;
-pub mod relpath;
 pub mod run;
 #[cfg(feature = "server")]
 pub mod serve;
 #[cfg(feature = "server")]
 pub mod server;
-pub mod subpath;
 pub mod symlink;
 pub mod system;
 pub mod task;

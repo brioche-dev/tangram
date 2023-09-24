@@ -1,19 +1,18 @@
-import { Artifact } from "./artifact.ts";
 import { Checksum } from "./checksum.ts";
-import { Id } from "./id.ts";
+import { Object_ } from "./object.ts";
+import { Package } from "./package.ts";
 import { placeholder } from "./placeholder.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
+import { Value } from "./value.ts";
 
 export let task = async (arg: Unresolved<Task.Arg>): Promise<Task> => {
 	return await Task.new(arg);
 };
 
-export let run = async (
-	arg: Unresolved<Task.Arg>,
-): Promise<Artifact | undefined> => {
+export let run = async (arg: Unresolved<Task.Arg>): Promise<Value> => {
 	let task = await Task.new(arg);
 	let output = await task.run();
 	return output;
@@ -22,17 +21,18 @@ export let run = async (
 export let output = placeholder("output");
 
 export class Task {
-	#id: Id | undefined;
-	#data: Task.Data | undefined;
+	#handle: Object_.Handle;
 
-	constructor(arg: Task.Data) {
-		this.#data = arg;
+	constructor(handle: Object_.Handle) {
+		this.#handle = handle;
 	}
 
 	static async new(arg: Unresolved<Task.Arg>): Promise<Task> {
 		let resolvedArg = await resolve(arg);
+		let package_ = resolvedArg.package;
 		let host = resolvedArg.host;
 		let executable = await template(resolvedArg.executable);
+		let target = resolvedArg.target;
 		let env: Record<string, Template> = Object.fromEntries(
 			await Promise.all(
 				Object.entries(resolvedArg.env ?? {}).map(async ([key, value]) => [
@@ -47,73 +47,77 @@ export class Task {
 		let checksum = resolvedArg.checksum ?? undefined;
 		let unsafe = resolvedArg.unsafe ?? false;
 		let network = resolvedArg.network ?? false;
-		return new Task({
-			host,
-			executable,
-			env,
-			args,
-			checksum,
-			unsafe,
-			network,
-		});
+		return new Task(
+			Object_.Handle.withObject({
+				package: package_,
+				host,
+				executable,
+				target,
+				env,
+				args,
+				checksum,
+				unsafe,
+				network,
+			}),
+		);
 	}
 
-	async load(): Promise<void> {
-		if (!this.#data) {
-			this.#data = ((await syscall.value.load(this)) as Task).#data;
-		}
-	}
-
-	async store(): Promise<void> {
-		if (!this.#id) {
-			this.#id = ((await syscall.value.store(this)) as Task).#id;
-		}
+	async package(): Promise<Package | undefined> {
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.package;
 	}
 
 	async host(): Promise<System> {
-		await this.load();
-		return this.#data!.host;
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.host;
 	}
 
 	async executable(): Promise<Template> {
-		await this.load();
-		return this.#data!.executable;
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.executable;
 	}
 
-	async env(): Promise<Record<string, Template>> {
-		await this.load();
-		return this.#data!.env;
+	async target(): Promise<string | undefined> {
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.target;
 	}
 
-	async args(): Promise<Array<Template>> {
-		await this.load();
-		return this.#data!.args;
+	async env(): Promise<Record<string, Value>> {
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.env;
+	}
+
+	async args(): Promise<Array<Value>> {
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.args;
 	}
 
 	async checksum(): Promise<Checksum | undefined> {
-		await this.load();
-		return this.#data!.checksum;
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.checksum;
 	}
 
 	async unsafe(): Promise<boolean> {
-		await this.load();
-		return this.#data!.unsafe;
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.unsafe;
 	}
 
 	async network(): Promise<boolean> {
-		await this.load();
-		return this.#data!.network;
+		let object = (await this.#handle.object()) as Task.Object;
+		return object.network;
 	}
 
-	async run(): Promise<Artifact | undefined> {
-		return (await syscall.build.output(this)) as Artifact | undefined;
+	async run(): Promise<Value> {
+		return await syscall.task.output(this);
 	}
 }
 
 export namespace Task {
 	export type Arg = {
+		package?: Package | undefined;
 		host: System;
 		executable: Template.Arg;
+		target?: string | undefined;
 		env?: Record<string, Template.Arg>;
 		args?: Array<Template.Arg>;
 		checksum?: Checksum;
@@ -121,9 +125,11 @@ export namespace Task {
 		network?: boolean;
 	};
 
-	export type Data = {
+	export type Object = {
+		package: Package | undefined;
 		host: System;
 		executable: Template;
+		target: string | undefined;
 		env: Record<string, Template>;
 		args: Array<Template>;
 		checksum: Checksum | undefined;

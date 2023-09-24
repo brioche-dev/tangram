@@ -1,9 +1,8 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import { Id } from "./id.ts";
+import { Object_ } from "./object.ts";
 import { Unresolved, resolve } from "./resolve.ts";
-import * as syscall from "./syscall.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
 
 export let file = async (...args: Array<Unresolved<File.Arg>>) => {
@@ -11,11 +10,10 @@ export let file = async (...args: Array<Unresolved<File.Arg>>) => {
 };
 
 export class File {
-	#id: Id | undefined;
-	#data: File.Data | undefined;
+	#handle: Object_.Handle;
 
-	constructor(arg: File.Data) {
-		this.#data = arg;
+	constructor(handle: Object_.Handle) {
+		this.#handle = handle;
 	}
 
 	static async new(...args: Array<Unresolved<File.Arg>>): Promise<File> {
@@ -71,11 +69,13 @@ export class File {
 			{ contents: [], executable: false, references: [] },
 		);
 		let contents = await blob(...contentsArgs);
-		return new File({
-			contents,
-			executable,
-			references,
-		});
+		return new File(
+			Object_.Handle.withObject({
+				contents,
+				executable,
+				references,
+			}),
+		);
 	}
 
 	static is(value: unknown): value is File {
@@ -91,31 +91,19 @@ export class File {
 		assert_(File.is(value));
 	}
 
-	async load(): Promise<void> {
-		if (!this.#data) {
-			this.#data = ((await syscall.value.load(this)) as File).#data;
-		}
-	}
-
-	async store(): Promise<void> {
-		if (!this.#id) {
-			this.#id = ((await syscall.value.store(this)) as File).#id;
-		}
-	}
-
 	async contents(): Promise<Blob> {
-		await this.load();
-		return this.#data!.contents;
+		let object = (await this.#handle.object()) as File.Object;
+		return object.contents;
 	}
 
 	async executable(): Promise<boolean> {
-		await this.load();
-		return this.#data!.executable;
+		let object = (await this.#handle.object()) as File.Object;
+		return object.executable;
 	}
 
 	async references(): Promise<Array<Artifact>> {
-		await this.load();
-		return this.#data!.references;
+		let object = (await this.#handle.object()) as File.Object;
+		return object.references;
 	}
 
 	async size(): Promise<number> {
@@ -140,7 +128,7 @@ export namespace File {
 		references?: Array<Artifact>;
 	};
 
-	export type Data = {
+	export type Object = {
 		contents: Blob;
 		executable: boolean;
 		references: Array<Artifact>;

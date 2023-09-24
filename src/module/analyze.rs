@@ -1,10 +1,5 @@
 use super::{error::Error, parse, Import};
-use crate::{
-	error::{Result, WrapErr},
-	module::Module,
-	package::Metadata,
-	relpath::Relpath,
-};
+use crate::{package::Metadata, Module, Relpath, Result, WrapErr};
 use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 use swc_core::{
@@ -88,14 +83,22 @@ impl Visit for Visitor {
 		for decl in &decl.decls {
 			// Get the object from the declaration.
 			let VarDeclarator { name, init, .. } = decl;
-			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else { continue; };
+			let Some(ident) = name.as_ident().map(|ident| &ident.sym) else {
+				continue;
+			};
 			if ident != "metadata" {
 				continue;
 			}
-			let Some(init) = init.as_deref() else { continue; };
-			let Some(object) = init.as_object() else { continue; };
+			let Some(init) = init.as_deref() else {
+				continue;
+			};
+			let Some(object) = init.as_object() else {
+				continue;
+			};
 			let metadata = self.object_to_json(object);
-			let Ok(metadata) = serde_json::from_value(metadata) else { continue; };
+			let Ok(metadata) = serde_json::from_value(metadata) else {
+				continue;
+			};
 			self.metadata = Some(metadata);
 		}
 
@@ -150,13 +153,19 @@ impl Visit for Visitor {
 					return;
 				}
 				let Some(Lit::Str(arg)) = n.args[0].expr.as_lit() else {
-					self.errors.push(Error::new("The argument to tg.include must be a string literal.", &loc));
+					self.errors.push(Error::new(
+						"The argument to tg.include must be a string literal.",
+						&loc,
+					));
 					return;
 				};
 
 				// Parse the argument and add it to the set of includes.
 				let Ok(include) = arg.value.to_string().parse() else {
-					self.errors.push(Error::new("Failed to parse the argument to tg.include.", &loc));
+					self.errors.push(Error::new(
+						"Failed to parse the argument to tg.include.",
+						&loc,
+					));
 					return;
 				};
 				self.includes.insert(include);
@@ -227,10 +236,7 @@ impl Visitor {
 				Expr::Lit(Lit::Bool(value)) => serde_json::Value::Bool(value.value),
 				Expr::Lit(Lit::Num(value)) => {
 					let Some(value) = serde_json::Number::from_f64(value.value) else {
-						self.errors.push(Error::new(
-							"Invalid number.",
-							&loc,
-						));
+						self.errors.push(Error::new("Invalid number.", &loc));
 						continue;
 					};
 					serde_json::Value::Number(value)

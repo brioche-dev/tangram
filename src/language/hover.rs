@@ -1,10 +1,5 @@
 use super::service;
-use crate::{
-	error::{return_error, Result},
-	module::position::Position,
-	module::Module,
-	server::Server,
-};
+use crate::{module::position::Position, module::Module, return_error, server::Server, Result};
 
 impl Module {
 	pub async fn hover(&self, server: &Server, position: Position) -> Result<Option<String>> {
@@ -18,7 +13,9 @@ impl Module {
 		let response = server.handle_language_service_request(request).await?;
 
 		// Get the response.
-		let service::Response::Hover(response) = response else { return_error!("Unexpected response type.") };
+		let service::Response::Hover(response) = response else {
+			return_error!("Unexpected response type.")
+		};
 
 		// Get the text from the response.
 		let service::hover::Response { text } = response;

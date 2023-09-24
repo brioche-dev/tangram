@@ -150,6 +150,21 @@ pub struct Buffer(
 	#[cfg(feature = "server")] v8::SharedRef<v8::BackingStore>,
 );
 
+impl Buffer {
+	#[cfg(feature = "server")]
+	#[must_use]
+	pub fn backing_store(&self) -> &v8::SharedRef<v8::BackingStore> {
+		&self.0
+	}
+}
+
+#[cfg(feature = "server")]
+impl From<v8::SharedRef<v8::BackingStore>> for Buffer {
+	fn from(value: v8::SharedRef<v8::BackingStore>) -> Self {
+		Self(value)
+	}
+}
+
 impl AsRef<[u8]> for Buffer {
 	fn as_ref(&self) -> &[u8] {
 		#[cfg(not(feature = "server"))]

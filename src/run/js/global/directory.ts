@@ -2,7 +2,7 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { File, file } from "./file.ts";
-import { Id } from "./id.ts";
+import { Object_ } from "./object.ts";
 import { Subpath, subpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
@@ -13,11 +13,10 @@ export let directory = async (...args: Array<Unresolved<Directory.Arg>>) => {
 };
 
 export class Directory {
-	#id: Id | undefined;
-	#data: Directory.Data | undefined;
+	#handle: Object_.Handle;
 
-	constructor(arg: Directory.Data) {
-		this.#data = arg;
+	constructor(handle: Object_.Handle) {
+		this.#handle = handle;
 	}
 
 	static async new(
@@ -104,9 +103,7 @@ export class Directory {
 			return entries;
 		},
 		Promise.resolve({}));
-		return new Directory({
-			entries,
-		});
+		return new Directory(Object_.Handle.withObject({ entries }));
 	}
 
 	static is(value: unknown): value is Directory {
@@ -122,18 +119,6 @@ export class Directory {
 		assert_(Directory.is(value));
 	}
 
-	async load(): Promise<void> {
-		if (!this.#data) {
-			this.#data = ((await syscall.value.load(this)) as Directory).#data;
-		}
-	}
-
-	async store(): Promise<void> {
-		if (!this.#id) {
-			this.#id = ((await syscall.value.store(this)) as Directory).#id;
-		}
-	}
-
 	async get(arg: Subpath.Arg): Promise<Directory | File> {
 		let artifact = await this.tryGet(arg);
 		assert_(artifact, `Failed to get the directory entry "${arg}".`);
@@ -141,7 +126,7 @@ export class Directory {
 	}
 
 	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
-		await this.load();
+		let object = (await this.#handle.object()) as Directory.Object;
 		let artifact: Directory | File = this;
 		let currentSubpath = subpath();
 		arg = subpath(arg);
@@ -150,9 +135,7 @@ export class Directory {
 				return undefined;
 			}
 			currentSubpath.push(component);
-			let entry: Artifact | undefined = await artifact.#data!.entries[
-				component
-			];
+			let entry: Artifact | undefined = await object.entries[component];
 			if (entry === undefined) {
 				return undefined;
 			} else if (entry instanceof Symlink) {
@@ -195,8 +178,8 @@ export class Directory {
 	}
 
 	async *[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]> {
-		await this.load();
-		for (let [name, artifact] of Object.entries(this.#data!.entries)) {
+		let object = (await this.#handle.object()) as Directory.Object;
+		for (let [name, artifact] of Object.entries(object.entries)) {
 			yield [name, artifact];
 		}
 	}
@@ -209,7 +192,7 @@ export namespace Directory {
 		[name: string]: undefined | Blob.Arg | Artifact | ArgObject;
 	};
 
-	export type Data = {
+	export type Object = {
 		entries: Record<string, Artifact>;
 	};
 }

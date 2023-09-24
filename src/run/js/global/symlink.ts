@@ -2,10 +2,9 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Id } from "./id.ts";
+import { Object_ } from "./object.ts";
 import { Relpath, Subpath, relpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
-import * as syscall from "./syscall.ts";
 import { Template, t } from "./template.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
 
@@ -16,11 +15,10 @@ export let symlink = async (
 };
 
 export class Symlink {
-	#id: Id | undefined;
-	#data: Symlink.Data | undefined;
+	#handle: Object_.Handle;
 
-	constructor(arg: Symlink.Data) {
-		this.#data = arg;
+	constructor(handle: Object_.Handle) {
+		this.#handle = handle;
 	}
 
 	static async new(...args: Array<Unresolved<Symlink.Arg>>): Promise<Symlink> {
@@ -106,7 +104,7 @@ export class Symlink {
 			throw new Error("Invalid symlink.");
 		}
 
-		return new Symlink({ target });
+		return new Symlink(Object_.Handle.withObject({ target }));
 	}
 
 	static is(value: unknown): value is Symlink {
@@ -122,26 +120,14 @@ export class Symlink {
 		assert_(Symlink.is(value));
 	}
 
-	async load(): Promise<void> {
-		if (!this.#data) {
-			this.#data = ((await syscall.value.load(this)) as Symlink).#data;
-		}
-	}
-
-	async store(): Promise<void> {
-		if (!this.#id) {
-			this.#id = ((await syscall.value.store(this)) as Symlink).#id;
-		}
-	}
-
 	async target(): Promise<Template> {
-		await this.load();
-		return this.#data!.target;
+		let object = (await this.#handle.object()) as Symlink.Object;
+		return object.target;
 	}
 
 	async artifact(): Promise<Artifact | undefined> {
-		await this.load();
-		let firstComponent = this.#data!.target.components().at(0);
+		let target = await this.target();
+		let firstComponent = target.components().at(0);
 		if (Artifact.is(firstComponent)) {
 			return firstComponent;
 		} else {
@@ -150,8 +136,8 @@ export class Symlink {
 	}
 
 	async path(): Promise<Relpath> {
-		await this.load();
-		let [firstComponent, secondComponent] = this.#data!.target.components();
+		let target = await this.target();
+		let [firstComponent, secondComponent] = target.components();
 		if (typeof firstComponent === "string" && secondComponent === undefined) {
 			return relpath(firstComponent);
 		} else if (Artifact.is(firstComponent) && secondComponent === undefined) {
@@ -216,5 +202,5 @@ export namespace Symlink {
 		path?: string | Subpath;
 	};
 
-	export type Data = { target: Template };
+	export type Object = { target: Template };
 }
