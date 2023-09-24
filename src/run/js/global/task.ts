@@ -62,49 +62,48 @@ export class Task {
 		);
 	}
 
+	async id(): Promise<Task.Id> {
+		return (await this.#handle.id()) as Package.Id;
+	}
+
+	async object(): Promise<Task.Object> {
+		return (await this.#handle.object()) as Task.Object;
+	}
+
 	async package(): Promise<Package | undefined> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.package;
+		return (await this.object()).package;
 	}
 
 	async host(): Promise<System> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.host;
+		return (await this.object()).host;
 	}
 
 	async executable(): Promise<Template> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.executable;
+		return (await this.object()).executable;
 	}
 
 	async target(): Promise<string | undefined> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.target;
+		return (await this.object()).target;
 	}
 
 	async env(): Promise<Record<string, Value>> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.env;
+		return (await this.object()).env;
 	}
 
 	async args(): Promise<Array<Value>> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.args;
+		return (await this.object()).args;
 	}
 
 	async checksum(): Promise<Checksum | undefined> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.checksum;
+		return (await this.object()).checksum;
 	}
 
 	async unsafe(): Promise<boolean> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.unsafe;
+		return (await this.object()).unsafe;
 	}
 
 	async network(): Promise<boolean> {
-		let object = (await this.#handle.object()) as Task.Object;
-		return object.network;
+		return (await this.object()).network;
 	}
 
 	async run(): Promise<Value> {
@@ -124,6 +123,8 @@ export namespace Task {
 		unsafe?: boolean;
 		network?: boolean;
 	};
+
+	export type Id = string;
 
 	export type Object = {
 		package: Package | undefined;

@@ -14,12 +14,12 @@ const MAX_BRANCH_CHILDREN: usize = 1024;
 const MAX_LEAF_SIZE: usize = 262_144;
 
 #[derive(Clone, Debug)]
-pub struct Blob(Handle);
+pub struct Blob(object::Handle);
 
 crate::object!(Blob);
 
 #[derive(Clone, Debug)]
-pub(crate) enum Object {
+pub enum Object {
 	Branch(Vec<(Blob, u64)>),
 	Leaf(Bytes),
 }
@@ -40,15 +40,57 @@ pub(crate) enum Data {
 	Leaf(Bytes),
 }
 
+impl Id {
+	#[must_use]
+	pub fn new(bytes: &[u8]) -> Self {
+		Self(crate::Id::new_hashed(id::Kind::Blob, bytes))
+	}
+}
+
 impl Blob {
 	#[must_use]
-	pub fn handle(&self) -> &Handle {
-		&self.0
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
 	}
 
 	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(Handle::with_id(id))
+	pub fn with_object(object: Object) -> Self {
+		Self(object::Handle::with_object(object::Object::Blob(object)))
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		match self.0.expect_id() {
+			object::Id::Blob(id) => id,
+			_ => unreachable!(),
+		}
+	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		match self.0.expect_object() {
+			object::Object::Blob(object) => object,
+			_ => unreachable!(),
+		}
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(match self.0.id(client).await? {
+			object::Id::Blob(id) => id,
+			_ => unreachable!(),
+		})
+	}
+
+	pub async fn object(&self, client: &Client) -> Result<&Object> {
+		Ok(match self.0.object(client).await? {
+			object::Object::Blob(object) => object,
+			_ => unreachable!(),
+		})
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
+		&self.0
 	}
 
 	pub async fn with_reader(client: &Client, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
@@ -111,21 +153,27 @@ impl Blob {
 
 	#[must_use]
 	pub fn empty() -> Self {
-		Self(Handle::with_object(Object::Leaf(Bytes::empty())))
+		Self(object::Handle::with_object(object::Object::Blob(
+			Object::Leaf(Bytes::empty()),
+		)))
 	}
 
 	#[must_use]
 	pub fn new_branch(children: Vec<(Blob, u64)>) -> Self {
-		Self(Handle::with_object(Object::Branch(children)))
+		Self(object::Handle::with_object(object::Object::Blob(
+			Object::Branch(children),
+		)))
 	}
 
 	#[must_use]
 	pub fn new_leaf(bytes: Bytes) -> Self {
-		Self(Handle::with_object(Object::Leaf(bytes)))
+		Self(object::Handle::with_object(object::Object::Blob(
+			Object::Leaf(bytes),
+		)))
 	}
 
 	pub async fn size(&self, client: &Client) -> Result<u64> {
-		match self.0.object(client).await? {
+		match self.object(client).await? {
 			Object::Branch(children) => Ok(children.iter().map(|(_, size)| size).sum()),
 			Object::Leaf(bytes) => Ok(bytes.len().to_u64().unwrap()),
 		}
@@ -156,13 +204,6 @@ impl Blob {
 	}
 }
 
-impl Id {
-	#[must_use]
-	pub fn with_data_bytes(bytes: &[u8]) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::Blob, bytes))
-	}
-}
-
 impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
@@ -170,7 +211,7 @@ impl Object {
 			Self::Branch(branch) => Data::Branch(
 				branch
 					.iter()
-					.map(|(blob, size)| (blob.0.expect_id(), *size))
+					.map(|(blob, size)| (blob.expect_id(), *size))
 					.collect::<Vec<_>>(),
 			),
 			Self::Leaf(leaf) => Data::Leaf(leaf.clone()),
@@ -194,7 +235,7 @@ impl Object {
 		match self {
 			Self::Branch(children) => children
 				.iter()
-				.map(|(child, _)| child.0.clone().into())
+				.map(|(child, _)| child.handle().clone())
 				.collect(),
 			Self::Leaf(_) => vec![],
 		}
@@ -250,7 +291,7 @@ impl AsyncRead for Reader {
 							let mut current_blob = blob.clone();
 							let mut current_blob_position = 0;
 							let bytes = 'outer: loop {
-								match &current_blob.0.object(&client).await? {
+								match &current_blob.object(&client).await? {
 									Object::Branch(children) => {
 										for (child, size) in children {
 											if position < current_blob_position + size {

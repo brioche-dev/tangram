@@ -1,7 +1,9 @@
 use crate::{
-	artifact, blob, directory, file, package, return_error, run, symlink, task, Error, Result,
+	artifact, blob, directory, error, file, package, return_error, symlink, task, Client, Error,
+	Result, WrapErr,
 };
 use derive_more::{From, TryInto};
+use futures::stream::TryStreamExt;
 
 /// An artifact kind.
 #[derive(Clone, Copy, Debug)]
@@ -12,6 +14,7 @@ pub enum Kind {
 	Symlink,
 	Package,
 	Task,
+	// Run,
 }
 
 /// An object ID.
@@ -35,31 +38,26 @@ pub enum Id {
 	Symlink(symlink::Id),
 	Package(package::Id),
 	Task(task::Id),
-	Run(run::Id),
+	// Run(run::Id),
 }
 
 /// An object handle.
-#[derive(Clone, Debug, From, TryInto)]
-pub enum Handle {
-	Blob(blob::Handle),
-	Directory(directory::Handle),
-	File(file::Handle),
-	Symlink(symlink::Handle),
-	Package(package::Handle),
-	Task(task::Handle),
-	Run(run::Handle),
+#[derive(Clone, Debug)]
+pub struct Handle {
+	id: std::sync::Arc<std::sync::RwLock<Option<Id>>>,
+	object: std::sync::Arc<std::sync::RwLock<Option<Object>>>,
 }
 
 /// An object.
 #[derive(Clone, Debug, From, TryInto)]
-pub(crate) enum Object {
+pub enum Object {
 	Blob(blob::Object),
 	Directory(directory::Object),
 	File(file::Object),
 	Symlink(symlink::Object),
 	Package(package::Object),
 	Task(task::Object),
-	Run(run::Object),
+	// Run(run::Object),
 }
 
 /// Object data.
@@ -71,10 +69,36 @@ pub(crate) enum Data {
 	Symlink(symlink::Data),
 	Package(package::Data),
 	Task(task::Data),
-	Run(run::Data),
+	// Run(run::Data),
 }
 
 impl Id {
+	#[must_use]
+	pub fn new(kind: Kind, bytes: &[u8]) -> Self {
+		match kind {
+			Kind::Blob => Self::Blob(blob::Id::new(bytes)),
+			Kind::Directory => Self::Directory(directory::Id::new(bytes)),
+			Kind::File => Self::File(file::Id::new(bytes)),
+			Kind::Symlink => Self::Symlink(symlink::Id::new(bytes)),
+			Kind::Package => Self::Package(package::Id::new(bytes)),
+			Kind::Task => Self::Task(task::Id::new(bytes)),
+			// Kind::Run => Self::Run(run::Id::new()),
+		}
+	}
+
+	#[must_use]
+	pub fn kind(&self) -> Kind {
+		match self {
+			Self::Blob(_) => Kind::Blob,
+			Self::Directory(_) => Kind::Directory,
+			Self::File(_) => Kind::File,
+			Self::Symlink(_) => Kind::Symlink,
+			Self::Package(_) => Kind::Package,
+			Self::Task(_) => Kind::Task,
+			// Self::Run(_) => Kind::Run,
+		}
+	}
+
 	#[must_use]
 	pub fn as_bytes(&self) -> [u8; crate::id::SIZE] {
 		match self {
@@ -84,7 +108,7 @@ impl Id {
 			Self::Symlink(id) => id.as_bytes(),
 			Self::Package(id) => id.as_bytes(),
 			Self::Task(id) => id.as_bytes(),
-			Self::Run(id) => id.as_bytes(),
+			// Self::Run(id) => id.as_bytes(),
 		}
 	}
 }
@@ -92,31 +116,142 @@ impl Id {
 impl Handle {
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {
-		match id {
-			Id::Blob(id) => Self::Blob(blob::Handle::with_id(id)),
-			Id::Directory(id) => Self::Directory(directory::Handle::with_id(id)),
-			Id::File(id) => Self::File(file::Handle::with_id(id)),
-			Id::Symlink(id) => Self::Symlink(symlink::Handle::with_id(id)),
-			Id::Package(id) => Self::Package(package::Handle::with_id(id)),
-			Id::Task(id) => Self::Task(task::Handle::with_id(id)),
-			Id::Run(id) => Self::Run(run::Handle::with_id(id)),
+		Self {
+			id: std::sync::Arc::new(std::sync::RwLock::new(Some(id))),
+			object: std::sync::Arc::new(std::sync::RwLock::new(None)),
 		}
 	}
 
-	pub async fn store(&self, client: &crate::Client) -> Result<()> {
-		match self {
-			Self::Blob(blob) => blob.store(client).await,
-			Self::Directory(directory) => directory.store(client).await,
-			Self::File(file) => file.store(client).await,
-			Self::Symlink(symlink) => symlink.store(client).await,
-			Self::Package(package) => package.store(client).await,
-			Self::Task(task) => task.store(client).await,
-			Self::Run(run) => run.store(client).await,
+	#[must_use]
+	pub(crate) fn with_object(object: Object) -> Self {
+		Self {
+			id: std::sync::Arc::new(std::sync::RwLock::new(None)),
+			object: std::sync::Arc::new(std::sync::RwLock::new(Some(object))),
 		}
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		self.id.read().unwrap().unwrap()
+	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		unsafe { &*(self.object.read().unwrap().as_ref().unwrap() as *const Object) }
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		// Store the object.
+		self.store(client).await?;
+
+		// Return the ID.
+		Ok(self.id.read().unwrap().unwrap())
+	}
+
+	pub async fn object(&self, client: &Client) -> Result<&Object> {
+		// Load the object.
+		self.load(client).await?;
+
+		// Return a reference to the object.
+		Ok(unsafe { &*(self.object.read().unwrap().as_ref().unwrap() as *const Object) })
+	}
+
+	pub async fn load(&self, client: &Client) -> Result<()> {
+		// If the object is already loaded, then return.
+		if self.object.read().unwrap().is_some() {
+			return Ok(());
+		}
+
+		// Get the id.
+		let id = self.id.read().unwrap().unwrap();
+
+		// Get the kind.
+		let kind = id.kind();
+
+		// Get the data.
+		let Some(bytes) = client.try_get_object_bytes(id).await? else {
+			return_error!(r#"Failed to find object with id "{id}"."#);
+		};
+
+		// Deserialize the object.
+		let data = Data::deserialize(kind, &bytes)?;
+
+		// Create the object.
+		let object = Object::from_data(data);
+
+		// Set the object.
+		self.object.write().unwrap().replace(object);
+
+		Ok(())
+	}
+
+	#[async_recursion::async_recursion]
+	pub async fn store(&self, client: &Client) -> Result<()> {
+		// If the object is already stored, then return.
+		if self.id.read().unwrap().is_some() {
+			return Ok(());
+		}
+
+		// Create the data.
+		let data = self.object.read().unwrap().as_ref().unwrap().to_data();
+
+		// Store the children.
+		let children = self.object.read().unwrap().as_ref().unwrap().children();
+		children
+			.into_iter()
+			.map(|child| async move { child.store(client).await })
+			.collect::<futures::stream::FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+
+		// Serialize the data.
+		let bytes = data.serialize()?;
+
+		// Get the kind.
+		let kind = data.kind();
+
+		// Create the ID.
+		let id = Id::new(kind, &bytes);
+
+		// Store the object.
+		client
+			.try_put_object_bytes(id, &bytes)
+			.await
+			.wrap_err("Failed to put the object.")?
+			.map_err(|_| error!("Expected all children to be stored."))?;
+
+		// Set the ID.
+		self.id.write().unwrap().replace(id);
+
+		Ok(())
 	}
 }
 
 impl Object {
+	pub(crate) fn to_data(&self) -> Data {
+		match self {
+			Self::Blob(blob) => Data::Blob(blob.to_data()),
+			Self::Directory(directory) => Data::Directory(directory.to_data()),
+			Self::File(file) => Data::File(file.to_data()),
+			Self::Symlink(symlink) => Data::Symlink(symlink.to_data()),
+			Self::Package(package) => Data::Package(package.to_data()),
+			Self::Task(task) => Data::Task(task.to_data()),
+			// Self::Run(run) => Data::Run(run.to_data()),
+		}
+	}
+
+	pub(crate) fn from_data(data: Data) -> Self {
+		match data {
+			Data::Blob(data) => Self::Blob(blob::Object::from_data(data)),
+			Data::Directory(data) => Self::Directory(directory::Object::from_data(data)),
+			Data::File(data) => Self::File(file::Object::from_data(data)),
+			Data::Symlink(data) => Self::Symlink(symlink::Object::from_data(data)),
+			Data::Package(data) => Self::Package(package::Object::from_data(data)),
+			Data::Task(data) => Self::Task(task::Object::from_data(data)),
+			// Data::Run(data) => Self::Run(run::Object::from_data(data)),
+		}
+	}
+
 	#[must_use]
 	pub fn children(&self) -> Vec<Handle> {
 		match self {
@@ -126,7 +261,7 @@ impl Object {
 			Self::Symlink(symlink) => symlink.children(),
 			Self::Package(package) => package.children(),
 			Self::Task(task) => task.children(),
-			Self::Run(run) => run.children(),
+			// Self::Run(run) => run.children(),
 		}
 	}
 }
@@ -141,19 +276,19 @@ impl Data {
 			Self::Symlink(data) => Ok(data.serialize()?),
 			Self::Package(data) => Ok(data.serialize()?),
 			Self::Task(data) => Ok(data.serialize()?),
-			Self::Run(data) => Ok(data.serialize()?),
+			// Self::Run(data) => Ok(data.serialize()?),
 		}
 	}
 
-	pub fn deserialize(id: self::Id, bytes: &[u8]) -> Result<Self> {
-		match id {
-			self::Id::Blob(_) => Ok(Self::Blob(blob::Data::deserialize(bytes)?)),
-			self::Id::Directory(_) => Ok(Self::Directory(directory::Data::deserialize(bytes)?)),
-			self::Id::File(_) => Ok(Self::File(file::Data::deserialize(bytes)?)),
-			self::Id::Symlink(_) => Ok(Self::Symlink(symlink::Data::deserialize(bytes)?)),
-			self::Id::Package(_) => Ok(Self::Package(package::Data::deserialize(bytes)?)),
-			self::Id::Task(_) => Ok(Self::Task(task::Data::deserialize(bytes)?)),
-			self::Id::Run(_) => Ok(Self::Run(run::Data::deserialize(bytes)?)),
+	pub fn deserialize(kind: Kind, bytes: &[u8]) -> Result<Self> {
+		match kind {
+			Kind::Blob => Ok(Self::Blob(blob::Data::deserialize(bytes)?)),
+			Kind::Directory => Ok(Self::Directory(directory::Data::deserialize(bytes)?)),
+			Kind::File => Ok(Self::File(file::Data::deserialize(bytes)?)),
+			Kind::Symlink => Ok(Self::Symlink(symlink::Data::deserialize(bytes)?)),
+			Kind::Package => Ok(Self::Package(package::Data::deserialize(bytes)?)),
+			Kind::Task => Ok(Self::Task(task::Data::deserialize(bytes)?)),
+			// Kind::Run => Ok(Self::Run(run::Data::deserialize(bytes)?)),
 		}
 	}
 
@@ -165,7 +300,19 @@ impl Data {
 			Self::Symlink(data) => data.children(),
 			Self::Package(data) => data.children(),
 			Self::Task(data) => data.children(),
-			Self::Run(data) => data.children(),
+			// Self::Run(data) => data.children(),
+		}
+	}
+
+	pub fn kind(&self) -> Kind {
+		match self {
+			Self::Blob(_) => Kind::Blob,
+			Self::Directory(_) => Kind::Directory,
+			Self::File(_) => Kind::File,
+			Self::Symlink(_) => Kind::Symlink,
+			Self::Package(_) => Kind::Package,
+			Self::Task(_) => Kind::Task,
+			// Self::Run(_) => Kind::Run,
 		}
 	}
 }
@@ -179,7 +326,7 @@ impl From<self::Id> for crate::Id {
 			self::Id::Symlink(id) => id.into(),
 			self::Id::Package(id) => id.into(),
 			self::Id::Task(id) => id.into(),
-			self::Id::Run(id) => id.into(),
+			// self::Id::Run(id) => id.into(),
 		}
 	}
 }
@@ -195,7 +342,7 @@ impl TryFrom<crate::Id> for self::Id {
 			crate::id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			crate::id::Kind::Package => Ok(Self::Package(value.try_into()?)),
 			crate::id::Kind::Task => Ok(Self::Task(value.try_into()?)),
-			crate::id::Kind::Run => Ok(Self::Run(value.try_into()?)),
+			// crate::id::Kind::Run => Ok(Self::Run(value.try_into()?)),
 			_ => return_error!("Unexpected kind."),
 		}
 	}
@@ -210,7 +357,7 @@ impl std::fmt::Display for Id {
 			Self::Symlink(id) => write!(f, "{id}"),
 			Self::Package(id) => write!(f, "{id}"),
 			Self::Task(id) => write!(f, "{id}"),
-			Self::Run(id) => write!(f, "{id}"),
+			// Self::Run(id) => write!(f, "{id}"),
 		}
 	}
 }
@@ -252,131 +399,10 @@ macro_rules! object {
 		#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
 		pub struct Id($crate::Id);
 
-		#[derive(Clone, Debug)]
-		pub struct Handle {
-			id: std::sync::Arc<std::sync::RwLock<Option<self::Id>>>,
-			object: std::sync::Arc<std::sync::RwLock<Option<self::Object>>>,
-		}
-
 		impl self::Id {
 			#[must_use]
 			pub fn as_bytes(&self) -> [u8; $crate::id::SIZE] {
 				self.0.as_bytes()
-			}
-		}
-
-		impl self::Handle {
-			#[must_use]
-			pub fn with_id(id: self::Id) -> Self {
-				Self {
-					id: std::sync::Arc::new(std::sync::RwLock::new(Some(id))),
-					object: std::sync::Arc::new(std::sync::RwLock::new(None)),
-				}
-			}
-
-			#[must_use]
-			pub(crate) fn with_object(object: self::Object) -> Self {
-				Self {
-					id: std::sync::Arc::new(std::sync::RwLock::new(None)),
-					object: std::sync::Arc::new(std::sync::RwLock::new(Some(object))),
-				}
-			}
-
-			pub(crate) fn expect_id(&self) -> self::Id {
-				self.id.read().unwrap().unwrap()
-			}
-
-			pub(crate) fn expect_object(&self) -> &self::Object {
-				unsafe { &*(self.object.read().unwrap().as_ref().unwrap() as *const self::Object) }
-			}
-
-			pub async fn id(&self, client: &$crate::Client) -> $crate::Result<self::Id> {
-				// Store the object.
-				self.store(client).await?;
-
-				// Return the ID.
-				Ok(self.id.read().unwrap().unwrap())
-			}
-
-			pub(crate) async fn object(
-				&self,
-				client: &$crate::Client,
-			) -> $crate::Result<&self::Object> {
-				// Load the object.
-				self.load(client).await?;
-
-				// Return a reference to the object.
-				Ok(unsafe {
-					&*(self.object.read().unwrap().as_ref().unwrap() as *const self::Object)
-				})
-			}
-
-			#[allow(clippy::unused_async)]
-			pub async fn load(&self, client: &$crate::Client) -> $crate::Result<()> {
-				// If the object is already loaded, then return.
-				if self.object.read().unwrap().is_some() {
-					return Ok(());
-				}
-
-				// Get the id.
-				let id = self.id.read().unwrap().unwrap();
-
-				// Get the data.
-				let Some(bytes) = client.try_get_object_bytes(id.into()).await? else {
-					$crate::return_error!(r#"Failed to find object with id "{id}"."#);
-				};
-
-				// Deserialize the object.
-				let data = self::Data::deserialize(&bytes)?;
-
-				// Create the object.
-				let object = self::Object::from_data(data);
-
-				// Set the object.
-				self.object.write().unwrap().replace(object);
-
-				Ok(())
-			}
-
-			#[async_recursion::async_recursion]
-			pub async fn store(&self, client: &$crate::Client) -> $crate::Result<()> {
-				use futures::stream::TryStreamExt;
-				use $crate::WrapErr;
-
-				// If the object is already stored, then return.
-				if self.id.read().unwrap().is_some() {
-					return Ok(());
-				}
-
-				// Create the data.
-				let data = self.object.read().unwrap().as_ref().unwrap().to_data();
-
-				// Store the children.
-				let children = self.object.read().unwrap().as_ref().unwrap().children();
-				children
-					.into_iter()
-					.map(|child| async move { child.store(client).await })
-					.collect::<futures::stream::FuturesUnordered<_>>()
-					.try_collect()
-					.await?;
-
-				// Serialize the data.
-				let bytes = data.serialize()?;
-
-				// Create the ID.
-				let id = self::Id::with_data_bytes(&bytes);
-
-				// Store the object.
-				client
-					.try_put_object_bytes(id.into(), &bytes)
-					.await
-					.wrap_err("Failed to put the object.")?
-					.map_err(|_| $crate::error!("Expected all children to be stored."))?;
-
-				// Set the ID.
-				self.id.write().unwrap().replace(id);
-
-				Ok(())
 			}
 		}
 

@@ -91,19 +91,24 @@ export class File {
 		assert_(File.is(value));
 	}
 
+	async id(): Promise<File.Id> {
+		return (await this.#handle.id()) as File.Id;
+	}
+
+	async object(): Promise<File.Object> {
+		return (await this.#handle.object()) as File.Object;
+	}
+
 	async contents(): Promise<Blob> {
-		let object = (await this.#handle.object()) as File.Object;
-		return object.contents;
+		return (await this.object()).contents;
 	}
 
 	async executable(): Promise<boolean> {
-		let object = (await this.#handle.object()) as File.Object;
-		return object.executable;
+		return (await this.object()).executable;
 	}
 
 	async references(): Promise<Array<Artifact>> {
-		let object = (await this.#handle.object()) as File.Object;
-		return object.references;
+		return (await this.object()).references;
 	}
 
 	async size(): Promise<number> {
@@ -127,6 +132,8 @@ export namespace File {
 		executable?: boolean;
 		references?: Array<Artifact>;
 	};
+
+	export type Id = string;
 
 	export type Object = {
 		contents: Blob;

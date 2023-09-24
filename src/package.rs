@@ -17,12 +17,12 @@ pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 pub const LOCKFILE_FILE_NAME: &str = "tangram.lock";
 
 #[derive(Clone, Debug)]
-pub struct Package(Handle);
+pub struct Package(object::Handle);
 
 crate::object!(Package);
 
 #[derive(Clone, Debug)]
-pub(crate) struct Object {
+pub struct Object {
 	pub artifact: Artifact,
 	pub dependencies: BTreeMap<Dependency, Package>,
 }
@@ -51,13 +51,48 @@ pub struct Metadata {
 
 impl Package {
 	#[must_use]
-	pub fn handle(&self) -> &Handle {
-		&self.0
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
 	}
 
 	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(Handle::with_id(id))
+	pub fn with_object(object: Object) -> Self {
+		Self(object::Handle::with_object(object::Object::Package(object)))
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		match self.0.expect_id() {
+			object::Id::Package(id) => id,
+			_ => unreachable!(),
+		}
+	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		match self.0.expect_object() {
+			object::Object::Package(object) => object,
+			_ => unreachable!(),
+		}
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(match self.0.id(client).await? {
+			object::Id::Package(id) => id,
+			_ => unreachable!(),
+		})
+	}
+
+	pub async fn object(&self, client: &Client) -> Result<&Object> {
+		Ok(match self.0.object(client).await? {
+			object::Object::Package(object) => object,
+			_ => unreachable!(),
+		})
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
+		&self.0
 	}
 
 	pub async fn with_specifier(client: &Client, specifier: Specifier) -> Result<Self> {
@@ -183,25 +218,25 @@ impl Package {
 		let directory = directory.build();
 
 		// Create the package.
-		let package = Self(Handle::with_object(Object {
+		let package = Self::with_object(Object {
 			artifact: directory.into(),
 			dependencies,
-		}));
+		});
 
 		Ok(package)
 	}
 
 	pub async fn artifact(&self, client: &Client) -> Result<&Artifact> {
-		Ok(&self.0.object(client).await?.artifact)
+		Ok(&self.object(client).await?.artifact)
 	}
 
 	pub async fn dependencies(&self, client: &Client) -> Result<&BTreeMap<Dependency, Self>> {
-		Ok(&self.0.object(client).await?.dependencies)
+		Ok(&self.object(client).await?.dependencies)
 	}
 
 	pub async fn root_module(&self, client: &Client) -> Result<Module> {
 		Ok(Module::Normal(module::Normal {
-			package: self.0.id(client).await?,
+			package: self.id(client).await?,
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		}))
 	}
@@ -209,7 +244,7 @@ impl Package {
 
 impl Id {
 	#[must_use]
-	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+	pub fn new(bytes: &[u8]) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::Package, bytes))
 	}
 }
@@ -221,7 +256,7 @@ impl Object {
 		let dependencies = self
 			.dependencies
 			.iter()
-			.map(|(dependency, package)| (dependency.clone(), package.0.expect_id()))
+			.map(|(dependency, package)| (dependency.clone(), package.expect_id()))
 			.collect();
 		Data {
 			artifact,
@@ -250,10 +285,10 @@ impl Object {
 				self.dependencies
 					.values()
 					.cloned()
-					.map(|package| package.0)
+					.map(|package| package.handle().clone())
 					.map(Into::into),
 			)
-			.chain(std::iter::once(self.artifact.clone().into()))
+			.chain(std::iter::once(self.artifact.handle().clone()))
 			.collect()
 	}
 }

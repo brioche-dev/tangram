@@ -1,12 +1,12 @@
 use crate::{id, object, template, Artifact, Client, Result, Template};
 
 #[derive(Clone, Debug)]
-pub struct Symlink(Handle);
+pub struct Symlink(object::Handle);
 
 crate::object!(Symlink);
 
 #[derive(Clone, Debug)]
-pub(crate) struct Object {
+pub struct Object {
 	pub target: Template,
 }
 
@@ -25,22 +25,57 @@ pub(crate) struct Data {
 
 impl Symlink {
 	#[must_use]
-	pub fn handle(&self) -> &Handle {
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		Self(object::Handle::with_object(object::Object::Symlink(object)))
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		match self.0.expect_id() {
+			object::Id::Symlink(id) => id,
+			_ => unreachable!(),
+		}
+	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		match self.0.expect_object() {
+			object::Object::Symlink(object) => object,
+			_ => unreachable!(),
+		}
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(match self.0.id(client).await? {
+			object::Id::Symlink(id) => id,
+			_ => unreachable!(),
+		})
+	}
+
+	pub async fn object(&self, client: &Client) -> Result<&Object> {
+		Ok(match self.0.object(client).await? {
+			object::Object::Symlink(object) => object,
+			_ => unreachable!(),
+		})
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
 		&self.0
 	}
 
 	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(Handle::with_id(id))
-	}
-
-	#[must_use]
 	pub fn new(target: Template) -> Self {
-		Self(Handle::with_object(Object { target }))
+		Self::with_object(Object { target })
 	}
 
 	pub async fn target(&self, client: &Client) -> Result<Template> {
-		Ok(self.0.object(client).await?.target.clone())
+		Ok(self.object(client).await?.target.clone())
 	}
 
 	pub async fn resolve(&self, client: &Client) -> Result<Option<Artifact>> {
@@ -59,7 +94,7 @@ impl Symlink {
 
 impl Id {
 	#[must_use]
-	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+	pub fn new(bytes: &[u8]) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::Symlink, bytes))
 	}
 }

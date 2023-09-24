@@ -71,8 +71,16 @@ export class Blob {
 		assert_(Blob.is(value));
 	}
 
+	async id(): Promise<Blob.Id> {
+		return (await this.#handle.id()) as Blob.Id;
+	}
+
+	async object(): Promise<Blob.Object> {
+		return (await this.#handle.object()) as Blob.Object;
+	}
+
 	async size(): Promise<number> {
-		let object = (await this.#handle.object()) as Blob.Object;
+		let object = await this.object();
 		if (object instanceof Array) {
 			return object.map(([_, size]) => size).reduce((a, b) => a + b, 0);
 		} else {
@@ -112,6 +120,8 @@ export namespace Blob {
 			assert_(is(value));
 		};
 	}
+
+	export type Id = string;
 
 	export type Object = Array<[Blob, number]> | Uint8Array;
 }

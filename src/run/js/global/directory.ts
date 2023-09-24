@@ -119,6 +119,14 @@ export class Directory {
 		assert_(Directory.is(value));
 	}
 
+	async id(): Promise<Directory.Id> {
+		return (await this.#handle.id()) as Directory.Id;
+	}
+
+	async object(): Promise<Directory.Object> {
+		return (await this.#handle.object()) as Directory.Object;
+	}
+
 	async get(arg: Subpath.Arg): Promise<Directory | File> {
 		let artifact = await this.tryGet(arg);
 		assert_(artifact, `Failed to get the directory entry "${arg}".`);
@@ -126,7 +134,7 @@ export class Directory {
 	}
 
 	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
-		let object = (await this.#handle.object()) as Directory.Object;
+		let object = await this.object();
 		let artifact: Directory | File = this;
 		let currentSubpath = subpath();
 		arg = subpath(arg);
@@ -178,7 +186,7 @@ export class Directory {
 	}
 
 	async *[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]> {
-		let object = (await this.#handle.object()) as Directory.Object;
+		let object = await this.object();
 		for (let [name, artifact] of Object.entries(object.entries)) {
 			yield [name, artifact];
 		}
@@ -191,6 +199,8 @@ export namespace Directory {
 	type ArgObject = {
 		[name: string]: undefined | Blob.Arg | Artifact | ArgObject;
 	};
+
+	export type Id = string;
 
 	export type Object = {
 		entries: Record<string, Artifact>;

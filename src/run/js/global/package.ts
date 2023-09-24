@@ -22,18 +22,26 @@ export class Package {
 		assert_(Package.is(value));
 	}
 
+	async id(): Promise<Package.Id> {
+		return (await this.#handle.id()) as Package.Id;
+	}
+
+	async object(): Promise<Package.Object> {
+		return (await this.#handle.object()) as Package.Object;
+	}
+
 	async artifact(): Promise<Artifact> {
-		let object = (await this.#handle.object()) as Package.Object;
-		return object.artifact;
+		return (await this.object()).artifact;
 	}
 
 	async dependencies(): Promise<{ [dependency: string]: Package }> {
-		let object = (await this.#handle.object()) as Package.Object;
-		return object.dependencies;
+		return (await this.object()).dependencies;
 	}
 }
 
 export namespace Package {
+	export type Id = string;
+
 	export type Object = {
 		artifact: Artifact;
 		dependencies: { [dependency: string]: Package };

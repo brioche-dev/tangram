@@ -12,7 +12,7 @@ mod js;
 #[derive(Clone, Debug)]
 pub enum Run {
 	Uncompleted(Arc<State>),
-	Completed(Handle),
+	Completed(object::Handle),
 }
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ crate::object!(Run);
 #[derive(Clone, Debug)]
 pub struct Object {
 	/// The run's children.
-	pub children: Vec<self::Handle>,
+	pub children: Vec<Run>,
 
 	/// The run's log.
 	pub log: Blob,
@@ -73,7 +73,7 @@ impl Run {
 	pub fn id(&self) -> Id {
 		match self {
 			Self::Uncompleted(state) => state.id,
-			Self::Completed(handle) => handle.expect_id().clone(),
+			Self::Completed(run) => run.expect_id(),
 		}
 	}
 
@@ -101,18 +101,13 @@ impl Id {
 	pub fn new() -> Self {
 		Self(crate::Id::new_random(id::Kind::Run))
 	}
-
-	#[must_use]
-	pub fn with_data_bytes(_bytes: &[u8]) -> Self {
-		Self(crate::Id::new_random(id::Kind::Run))
-	}
 }
 
 impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
 		Data {
-			children: self.children.iter().map(Handle::expect_id).collect(),
+			children: self.children.iter().map(Run::expect_id).collect(),
 			log: self.log.handle().expect_id(),
 			result: self.result.clone().map(|value| value.to_data()),
 		}
@@ -121,7 +116,7 @@ impl Object {
 	#[must_use]
 	pub(crate) fn from_data(data: Data) -> Self {
 		Self {
-			children: data.children.into_iter().map(Handle::with_id).collect(),
+			children: data.children.into_iter().map(Run::with_id).collect(),
 			log: Blob::with_id(data.log),
 			result: data.result.map(value::Value::from_data),
 		}

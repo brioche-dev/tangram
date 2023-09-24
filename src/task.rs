@@ -1,17 +1,17 @@
 use crate::{
 	checksum::Checksum, id, object, package, system::System, template, value, Client, Package,
-	Result, Run, Template, Value,
+	Result, Template, Value,
 };
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug)]
-pub struct Task(Handle);
+pub struct Task(object::Handle);
 
 crate::object!(Task);
 
 /// A task object.
 #[derive(Clone, Debug)]
-pub(crate) struct Object {
+pub struct Object {
 	/// The task's package.
 	pub package: Option<Package>,
 
@@ -89,25 +89,58 @@ pub(crate) struct Data {
 
 impl Task {
 	#[must_use]
-	pub fn handle(&self) -> &Handle {
-		&self.0
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
 	}
 
 	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(Handle::with_id(id))
+	pub fn with_object(object: Object) -> Self {
+		Self(object::Handle::with_object(object::Object::Task(object)))
 	}
 
-	pub async fn run(&self, client: &Client) -> Result<Run> {
-		Ok(Run::with_id(
-			client.run(self.handle().id(client).await?).await?,
-		))
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		match self.0.expect_id() {
+			object::Id::Task(id) => id,
+			_ => unreachable!(),
+		}
 	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		match self.0.expect_object() {
+			object::Object::Task(object) => object,
+			_ => unreachable!(),
+		}
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(match self.0.id(client).await? {
+			object::Id::Task(id) => id,
+			_ => unreachable!(),
+		})
+	}
+
+	pub async fn object(&self, client: &Client) -> Result<&Object> {
+		Ok(match self.0.object(client).await? {
+			object::Object::Task(object) => object,
+			_ => unreachable!(),
+		})
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
+		&self.0
+	}
+
+	// pub async fn run(&self, client: &Client) -> Result<Run> {
+	// 	Ok(Run::with_id(client.run(self.id(client).await?).await?))
+	// }
 }
 
 impl Id {
 	#[must_use]
-	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+	pub fn new(bytes: &[u8]) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::Task, bytes))
 	}
 }
@@ -116,10 +149,7 @@ impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
 		Data {
-			package: self
-				.package
-				.as_ref()
-				.map(|package| package.handle().expect_id()),
+			package: self.package.as_ref().map(Package::expect_id),
 			host: self.host,
 			target: self.target.clone(),
 			executable: self.executable.to_data(),
@@ -259,7 +289,7 @@ impl Builder {
 
 	#[must_use]
 	pub fn build(self) -> Task {
-		Task(Handle::with_object(Object {
+		Task::with_object(Object {
 			package: self.package,
 			host: self.host,
 			executable: self.executable,
@@ -269,6 +299,6 @@ impl Builder {
 			checksum: self.checksum,
 			unsafe_: self.unsafe_,
 			network: self.network,
-		}))
+		})
 	}
 }

@@ -120,9 +120,16 @@ export class Symlink {
 		assert_(Symlink.is(value));
 	}
 
+	async id(): Promise<Symlink.Id> {
+		return (await this.#handle.id()) as Symlink.Id;
+	}
+
+	async object(): Promise<Symlink.Object> {
+		return (await this.#handle.object()) as Symlink.Object;
+	}
+
 	async target(): Promise<Template> {
-		let object = (await this.#handle.object()) as Symlink.Object;
-		return object.target;
+		return (await this.object()).target;
 	}
 
 	async artifact(): Promise<Artifact | undefined> {
@@ -201,6 +208,8 @@ export namespace Symlink {
 		artifact?: Artifact;
 		path?: string | Subpath;
 	};
+
+	export type Id = string;
 
 	export type Object = { target: Template };
 }

@@ -1,13 +1,13 @@
 use crate::{artifact, blob, id, object, Artifact, Blob, Client, Result};
 
 #[derive(Clone, Debug)]
-pub struct File(Handle);
+pub struct File(object::Handle);
 
 crate::object!(File);
 
 /// A file value.
 #[derive(Clone, Debug)]
-pub(crate) struct Object {
+pub struct Object {
 	/// The file's contents.
 	pub contents: Blob,
 
@@ -43,22 +43,57 @@ pub(crate) struct Data {
 
 impl File {
 	#[must_use]
-	pub fn handle(&self) -> &Handle {
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		Self(object::Handle::with_object(object::Object::File(object)))
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		match self.0.expect_id() {
+			object::Id::File(id) => id,
+			_ => unreachable!(),
+		}
+	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		match self.0.expect_object() {
+			object::Object::File(object) => object,
+			_ => unreachable!(),
+		}
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(match self.0.id(client).await? {
+			object::Id::File(id) => id,
+			_ => unreachable!(),
+		})
+	}
+
+	pub async fn object(&self, client: &Client) -> Result<&Object> {
+		Ok(match self.0.object(client).await? {
+			object::Object::File(object) => object,
+			_ => unreachable!(),
+		})
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
 		&self.0
 	}
 
 	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(Handle::with_id(id))
-	}
-
-	#[must_use]
 	pub fn new(contents: Blob, executable: bool, references: Vec<Artifact>) -> Self {
-		Self(Handle::with_object(Object {
+		Self(object::Handle::with_object(object::Object::File(Object {
 			contents,
 			executable,
 			references,
-		}))
+		})))
 	}
 
 	#[must_use]
@@ -67,21 +102,21 @@ impl File {
 	}
 
 	pub async fn contents(&self, client: &Client) -> Result<&Blob> {
-		Ok(&self.0.object(client).await?.contents)
+		Ok(&self.object(client).await?.contents)
 	}
 
 	pub async fn executable(&self, client: &Client) -> Result<bool> {
-		Ok(self.0.object(client).await?.executable)
+		Ok(self.object(client).await?.executable)
 	}
 
 	pub async fn references(&self, client: &Client) -> Result<&[Artifact]> {
-		Ok(self.0.object(client).await?.references.as_slice())
+		Ok(self.object(client).await?.references.as_slice())
 	}
 }
 
 impl Id {
 	#[must_use]
-	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+	pub fn new(bytes: &[u8]) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::File, bytes))
 	}
 }
@@ -89,7 +124,7 @@ impl Id {
 impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
-		let contents = self.contents.handle().expect_id();
+		let contents = self.contents.expect_id();
 		let executable = self.executable;
 		let references = self.references.iter().map(Artifact::expect_id).collect();
 		Data {
@@ -113,11 +148,11 @@ impl Object {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Handle> {
-		let contents = self.contents.handle().clone().into();
+		let contents = self.contents.handle().clone();
 		let references = self
 			.references
 			.iter()
-			.map(|reference| reference.clone().into());
+			.map(|reference| reference.handle().clone());
 		std::iter::once(contents).chain(references).collect()
 	}
 }

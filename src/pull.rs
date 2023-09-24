@@ -13,7 +13,7 @@ impl Server {
 		};
 
 		// Get the values's children.
-		let data = object::Data::deserialize(id, &bytes)?;
+		let data = object::Data::deserialize(id.kind(), &bytes)?;
 		data.children()
 			.into_iter()
 			.map(|id| self.pull(id))

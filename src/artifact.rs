@@ -67,35 +67,27 @@ impl Artifact {
 
 	pub async fn id(&self, client: &Client) -> Result<Id> {
 		match self {
-			Self::Directory(directory) => Ok(directory.handle().id(client).await?.into()),
-			Self::File(file) => Ok(file.handle().id(client).await?.into()),
-			Self::Symlink(symlink) => Ok(symlink.handle().id(client).await?.into()),
+			Self::Directory(directory) => Ok(directory.id(client).await?.into()),
+			Self::File(file) => Ok(file.id(client).await?.into()),
+			Self::Symlink(symlink) => Ok(symlink.id(client).await?.into()),
 		}
 	}
 
-	#[allow(clippy::unused_async)]
-	pub async fn load(&self, client: &Client) -> Result<()> {
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
 		match self {
-			Artifact::Directory(directory) => directory.handle().load(client).await,
-			Artifact::File(file) => file.handle().load(client).await,
-			Artifact::Symlink(symlink) => symlink.handle().load(client).await,
+			Self::Directory(directory) => directory.expect_id().into(),
+			Self::File(file) => file.expect_id().into(),
+			Self::Symlink(symlink) => symlink.expect_id().into(),
 		}
 	}
 
-	#[async_recursion::async_recursion]
-	pub async fn store(&self, client: &Client) -> Result<()> {
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
 		match self {
-			Artifact::Directory(directory) => directory.handle().store(client).await,
-			Artifact::File(file) => file.handle().store(client).await,
-			Artifact::Symlink(symlink) => symlink.handle().store(client).await,
-		}
-	}
-
-	pub(crate) fn expect_id(&self) -> Id {
-		match self {
-			Self::Directory(directory) => directory.handle().expect_id().into(),
-			Self::File(file) => file.handle().expect_id().into(),
-			Self::Symlink(symlink) => symlink.handle().expect_id().into(),
+			Self::Directory(directory) => directory.handle(),
+			Self::File(file) => file.handle(),
+			Self::Symlink(symlink) => symlink.handle(),
 		}
 	}
 
@@ -104,9 +96,6 @@ impl Artifact {
 		&self,
 		client: &Client,
 	) -> Result<HashSet<Id, id::BuildHasher>> {
-		// Store the handle.
-		self.store(client).await?;
-
 		// Create a queue of artifacts and a set of futures.
 		let mut references = HashSet::default();
 		let mut queue = VecDeque::new();
@@ -250,6 +239,16 @@ impl From<Symlink> for Artifact {
 	}
 }
 
+impl From<Artifact> for object::Handle {
+	fn from(object: Artifact) -> Self {
+		match object {
+			Artifact::Directory(directory) => directory.handle().clone(),
+			Artifact::File(file) => file.handle().clone(),
+			Artifact::Symlink(symlink) => symlink.handle().clone(),
+		}
+	}
+}
+
 impl From<Artifact> for Value {
 	fn from(object: Artifact) -> Self {
 		match object {
@@ -269,16 +268,6 @@ impl TryFrom<Value> for Artifact {
 			Value::File(file) => Ok(Self::File(file)),
 			Value::Symlink(symlink) => Ok(Self::Symlink(symlink)),
 			_ => return_error!("Expected an artifact."),
-		}
-	}
-}
-
-impl From<Artifact> for object::Handle {
-	fn from(object: Artifact) -> Self {
-		match object {
-			Artifact::Directory(directory) => object::Handle::Directory(directory.handle().clone()),
-			Artifact::File(file) => object::Handle::File(file.handle().clone()),
-			Artifact::Symlink(symlink) => object::Handle::Symlink(symlink.handle().clone()),
 		}
 	}
 }

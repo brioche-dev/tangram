@@ -3,12 +3,12 @@ use async_recursion::async_recursion;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug)]
-pub struct Directory(Handle);
+pub struct Directory(object::Handle);
 
 crate::object!(Directory);
 
 #[derive(Clone, Debug)]
-pub(crate) struct Object {
+pub struct Object {
 	/// The directory's entries.
 	pub entries: BTreeMap<String, Artifact>,
 }
@@ -29,26 +29,63 @@ pub(crate) struct Data {
 
 impl Directory {
 	#[must_use]
-	pub fn handle(&self) -> &Handle {
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		Self(object::Handle::with_object(object::Object::Directory(
+			object,
+		)))
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		match self.0.expect_id() {
+			object::Id::Directory(id) => id,
+			_ => unreachable!(),
+		}
+	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		match self.0.expect_object() {
+			object::Object::Directory(object) => object,
+			_ => unreachable!(),
+		}
+	}
+
+	pub async fn id(&self, client: &Client) -> Result<Id> {
+		Ok(match self.0.id(client).await? {
+			object::Id::Directory(id) => id,
+			_ => unreachable!(),
+		})
+	}
+
+	pub async fn object(&self, client: &Client) -> Result<&Object> {
+		Ok(match self.0.object(client).await? {
+			object::Object::Directory(object) => object,
+			_ => unreachable!(),
+		})
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
 		&self.0
 	}
 
 	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(Handle::with_id(id))
-	}
-
-	#[must_use]
 	pub fn new(entries: BTreeMap<String, Artifact>) -> Self {
-		Self(Handle::with_object(Object { entries }))
+		Self::with_object(Object { entries })
 	}
 
 	pub async fn builder(&self, client: &Client) -> Result<Builder> {
-		Ok(Builder::new(self.0.object(client).await?.entries.clone()))
+		Ok(Builder::new(self.object(client).await?.entries.clone()))
 	}
 
 	pub async fn entries(&self, client: &Client) -> Result<&BTreeMap<String, Artifact>, Error> {
-		Ok(&self.0.object(client).await?.entries)
+		Ok(&self.object(client).await?.entries)
 	}
 
 	pub async fn get(&self, client: &Client, path: &Subpath) -> Result<Artifact> {
@@ -103,7 +140,7 @@ impl Directory {
 
 impl Id {
 	#[must_use]
-	pub fn with_data_bytes(bytes: &[u8]) -> Self {
+	pub fn new(bytes: &[u8]) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::Directory, bytes))
 	}
 }
@@ -133,7 +170,7 @@ impl Object {
 	pub fn children(&self) -> Vec<object::Handle> {
 		self.entries
 			.values()
-			.map(|child| child.clone().into())
+			.map(|child| child.handle().clone())
 			.collect()
 	}
 }
