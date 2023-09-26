@@ -6,65 +6,68 @@ import { Symlink } from "./symlink.ts";
 import { Task } from "./task.ts";
 
 export type Object_ =
-	| Blob.Object
-	| Directory.Object
-	| File.Object
-	| Symlink.Object
-	| Package.Object
-	| Task.Object;
+	| { kind: "blob"; value: Blob.Object_ }
+	| { kind: "directory"; value: Directory.Object_ }
+	| { kind: "file"; value: File.Object_ }
+	| { kind: "symlink"; value: Symlink.Object_ }
+	| { kind: "package"; value: Package.Object_ }
+	| { kind: "task"; value: Task.Object_ };
 
 export namespace Object_ {
 	export type Id = string;
 
 	export class Handle {
-		#id: Id | undefined;
-		#object: Object_ | undefined;
+		#state: [Id | undefined, Object_ | undefined];
+
+		constructor(state: [Id | undefined, Object_ | undefined]) {
+			this.#state = state;
+		}
+
+		state(): [Id | undefined, Object_ | undefined] {
+			return this.#state;
+		}
 
 		static withId(id: Id): Handle {
-			let handle = new Handle();
-			handle.#id = id;
-			return handle;
+			return new Handle([id, undefined]);
 		}
 
 		static withObject(object: Object_): Handle {
-			let handle = new Handle();
-			handle.#object = object;
-			return handle;
+			return new Handle([undefined, object]);
 		}
 
 		expectId(): Id {
-			if (this.#id === undefined) {
+			if (this.#state[0] === undefined) {
 				throw new Error();
 			}
-			return this.#id;
+			return this.#state[0];
 		}
 
 		expectObject(): Object_ {
-			if (this.#object === undefined) {
+			if (this.#state[1] === undefined) {
 				throw new Error();
 			}
-			return this.#object;
+			return this.#state[1];
 		}
 
 		async id(): Promise<Id> {
 			await this.store();
-			return this.#id!;
+			return this.#state[0]!;
 		}
 
 		async object(): Promise<Object_> {
 			await this.load();
-			return this.#object!;
+			return this.#state[1]!;
 		}
 
 		async load() {
-			if (this.#object === undefined) {
-				this.#object = await syscall("load", this.#id!);
+			if (this.#state[1] === undefined) {
+				this.#state[1] = await syscall("load", this.#state[0]!);
 			}
 		}
 
 		async store() {
-			if (this.#id === undefined) {
-				this.#id = await syscall("store", this.#object!);
+			if (this.#state[0] === undefined) {
+				this.#state[0] = await syscall("store", this.#state[1]!);
 			}
 		}
 	}

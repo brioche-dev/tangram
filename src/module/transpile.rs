@@ -1,8 +1,5 @@
 use super::{error::Error, parse};
-use crate::{
-	error::{Result, WrapErr},
-	module::Module,
-};
+use crate::{module::Module, Result, WrapErr};
 use std::rc::Rc;
 use swc_core::{
 	common::{Globals, Mark, SourceMap, DUMMY_SP, GLOBALS},

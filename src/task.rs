@@ -1,25 +1,30 @@
 use crate::{
-	checksum::Checksum, id, object, package, system::System, template, value, Client, Package,
-	Result, Template, Value,
+	checksum::Checksum, object, package, system::System, template, value, Client, Package, Result,
+	Run, Template, Value,
 };
 use std::collections::BTreeMap;
+
+crate::id!(Task);
+crate::handle!(Task);
+crate::data!();
+
+#[derive(Clone, Copy, Debug)]
+pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
 pub struct Task(object::Handle);
 
-crate::object!(Task);
-
 /// A task object.
 #[derive(Clone, Debug)]
 pub struct Object {
-	/// The task's package.
-	pub package: Option<Package>,
-
 	/// The system to run the task on.
 	pub host: System,
 
 	/// The task's executable.
 	pub executable: Template,
+
+	/// The task's package.
+	pub package: Option<Package>,
 
 	/// The task's target.
 	pub target: Option<String>,
@@ -49,11 +54,7 @@ pub struct Object {
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub(crate) struct Data {
-	/// The target's package.
-	#[tangram_serialize(id = 0)]
-	pub package: Option<package::Id>,
-
+pub struct Data {
 	/// The system to run the task on.
 	#[tangram_serialize(id = 1)]
 	pub host: System,
@@ -61,6 +62,10 @@ pub(crate) struct Data {
 	/// The task's executable.
 	#[tangram_serialize(id = 3)]
 	pub executable: template::Data,
+
+	/// The target's package.
+	#[tangram_serialize(id = 0)]
+	pub package: Option<package::Id>,
 
 	/// The task's target.
 	#[tangram_serialize(id = 2)]
@@ -88,60 +93,11 @@ pub(crate) struct Data {
 }
 
 impl Task {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(object::Handle::with_id(id.into()))
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self(object::Handle::with_object(object::Object::Task(object)))
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		match self.0.expect_id() {
-			object::Id::Task(id) => id,
-			_ => unreachable!(),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_object(&self) -> &Object {
-		match self.0.expect_object() {
-			object::Object::Task(object) => object,
-			_ => unreachable!(),
-		}
-	}
-
-	pub async fn id(&self, client: &Client) -> Result<Id> {
-		Ok(match self.0.id(client).await? {
-			object::Id::Task(id) => id,
-			_ => unreachable!(),
-		})
-	}
-
-	pub async fn object(&self, client: &Client) -> Result<&Object> {
-		Ok(match self.0.object(client).await? {
-			object::Object::Task(object) => object,
-			_ => unreachable!(),
-		})
-	}
-
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		&self.0
-	}
-
-	// pub async fn run(&self, client: &Client) -> Result<Run> {
-	// 	Ok(Run::with_id(client.run(self.id(client).await?).await?))
-	// }
-}
-
-impl Id {
-	#[must_use]
-	pub fn new(bytes: &[u8]) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::Task, bytes))
+	pub async fn run(&self, client: &Client) -> Result<Run> {
+		let task_id = self.id(client).await?;
+		let run_id = client.get_or_create_run_for_task(task_id).await?;
+		let run = Run::with_id(run_id);
+		Ok(run)
 	}
 }
 
@@ -149,10 +105,10 @@ impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
 		Data {
-			package: self.package.as_ref().map(Package::expect_id),
 			host: self.host,
-			target: self.target.clone(),
 			executable: self.executable.to_data(),
+			package: self.package.as_ref().map(Package::expect_id),
+			target: self.target.clone(),
 			env: self
 				.env
 				.iter()
@@ -168,10 +124,10 @@ impl Object {
 	#[must_use]
 	pub(crate) fn from_data(data: Data) -> Self {
 		Self {
-			package: data.package.map(Package::with_id),
 			host: data.host,
-			target: data.target,
 			executable: Template::from_data(data.executable),
+			package: data.package.map(Package::with_id),
+			target: data.target,
 			env: data
 				.env
 				.into_iter()
@@ -187,6 +143,7 @@ impl Object {
 	pub fn children(&self) -> Vec<object::Handle> {
 		std::iter::empty()
 			.chain(self.executable.children())
+			.chain(self.package.iter().map(|package| package.handle().clone()))
 			.chain(self.env.values().flat_map(value::Value::children))
 			.chain(self.args.iter().flat_map(value::Value::children))
 			.collect()
@@ -198,6 +155,7 @@ impl Data {
 	pub fn children(&self) -> Vec<object::Id> {
 		std::iter::empty()
 			.chain(self.executable.children())
+			.chain(self.package.map(Into::into))
 			.chain(self.env.values().flat_map(value::Data::children))
 			.chain(self.args.iter().flat_map(value::Data::children))
 			.collect()
@@ -206,9 +164,9 @@ impl Data {
 
 #[derive(Clone, Debug)]
 pub struct Builder {
-	package: Option<Package>,
 	host: System,
 	executable: Template,
+	package: Option<Package>,
 	target: Option<String>,
 	env: BTreeMap<String, Value>,
 	args: Vec<Value>,
@@ -221,9 +179,9 @@ impl Builder {
 	#[must_use]
 	pub fn new(host: System, executable: Template) -> Self {
 		Self {
-			package: None,
 			host,
 			executable,
+			package: None,
 			target: None,
 			env: BTreeMap::new(),
 			args: Vec::new(),
@@ -234,13 +192,7 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn package(mut self, package: Package) -> Self {
-		self.package = Some(package);
-		self
-	}
-
-	#[must_use]
-	pub fn system(mut self, host: System) -> Self {
+	pub fn host(mut self, host: System) -> Self {
 		self.host = host;
 		self
 	}
@@ -248,6 +200,12 @@ impl Builder {
 	#[must_use]
 	pub fn executable(mut self, executable: Template) -> Self {
 		self.executable = executable;
+		self
+	}
+
+	#[must_use]
+	pub fn package(mut self, package: Package) -> Self {
+		self.package = Some(package);
 		self
 	}
 

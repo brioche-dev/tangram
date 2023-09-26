@@ -1,6 +1,8 @@
+import { unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
@@ -72,13 +74,17 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		// Handle a promise.
 		return "(promise)";
 	} else if (value instanceof Blob) {
-		return `(tg.blob ${value.id()})`;
+		let handle = stringifyHandle(value.handle(), visited);
+		return `(tg.blob ${handle})`;
 	} else if (value instanceof Directory) {
-		return `(tg.directory ${value.id()})`;
+		let handle = stringifyHandle(value.handle(), visited);
+		return `(tg.directory ${handle})`;
 	} else if (value instanceof File) {
-		return `(tg.file ${value.id()})`;
+		let handle = stringifyHandle(value.handle(), visited);
+		return `(tg.file ${handle})`;
 	} else if (value instanceof Symlink) {
-		return `(tg.symlink ${value.id()})`;
+		let handle = stringifyHandle(value.handle(), visited);
+		return `(tg.symlink ${handle})`;
 	} else if (value instanceof Placeholder) {
 		return `(tg.placeholder "${value.name()}")`;
 	} else if (value instanceof Template) {
@@ -94,9 +100,11 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			.join("");
 		return `(tg.template "${string}")`;
 	} else if (value instanceof Package) {
-		return `(tg.package "${value.id()}")`;
+		let handle = stringifyHandle(value.handle(), visited);
+		return `(tg.package "${handle}")`;
 	} else if (value instanceof Task) {
-		return `(tg.task "${value.id()}")`;
+		let handle = stringifyHandle(value.handle(), visited);
+		return `(tg.task "${handle}")`;
 	} else {
 		// Handle any other object.
 		let constructorName = "";
@@ -111,4 +119,18 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		);
 		return `${constructorName}{ ${entries.join(", ")} }`;
 	}
+};
+
+let stringifyHandle = (
+	handle: Object_.Handle,
+	visited: WeakSet<object>,
+): string => {
+	let [id, object] = handle.state();
+	if (id !== undefined) {
+		return id;
+	}
+	if (object !== undefined) {
+		return stringifyObject(object, visited);
+	}
+	return unreachable();
 };

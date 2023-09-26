@@ -1,7 +1,4 @@
-use crate::{
-	error::{return_error, Result},
-	Cli,
-};
+use crate::{return_error, Cli, Result};
 
 /// Check for outdated dependencies.
 #[derive(Debug, clap::Args)]

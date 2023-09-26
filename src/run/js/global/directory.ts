@@ -103,7 +103,9 @@ export class Directory {
 			return entries;
 		},
 		Promise.resolve({}));
-		return new Directory(Object_.Handle.withObject({ entries }));
+		return new Directory(
+			Object_.Handle.withObject({ kind: "directory", value: { entries } }),
+		);
 	}
 
 	static is(value: unknown): value is Directory {
@@ -123,22 +125,27 @@ export class Directory {
 		return (await this.#handle.id()) as Directory.Id;
 	}
 
-	async object(): Promise<Directory.Object> {
-		return (await this.#handle.object()) as Directory.Object;
+	async object(): Promise<Directory.Object_> {
+		let object = await this.#handle.object();
+		assert_(object.kind === "directory");
+		return object.value;
 	}
 
-	async get(arg: Subpath.Arg): Promise<Directory | File> {
+	handle(): Object_.Handle {
+		return this.#handle;
+	}
+
+	async get(arg: string): Promise<Directory | File> {
 		let artifact = await this.tryGet(arg);
 		assert_(artifact, `Failed to get the directory entry "${arg}".`);
 		return artifact;
 	}
 
-	async tryGet(arg: Subpath.Arg): Promise<Directory | File | undefined> {
+	async tryGet(arg: string): Promise<Directory | File | undefined> {
 		let object = await this.object();
 		let artifact: Directory | File = this;
 		let currentSubpath = subpath();
-		arg = subpath(arg);
-		for (let component of arg.components()) {
+		for (let component of subpath(arg).components()) {
 			if (!(artifact instanceof Directory)) {
 				return undefined;
 			}
@@ -149,7 +156,7 @@ export class Directory {
 			} else if (entry instanceof Symlink) {
 				let resolved = await entry.resolve({
 					artifact: this,
-					path: currentSubpath,
+					path: currentSubpath.toString(),
 				});
 				if (resolved === undefined) {
 					return undefined;
@@ -202,7 +209,7 @@ export namespace Directory {
 
 	export type Id = string;
 
-	export type Object = {
+	export type Object_ = {
 		entries: Record<string, Artifact>;
 	};
 }

@@ -3,7 +3,7 @@ import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Object_ } from "./object.ts";
-import { Relpath, Subpath, relpath } from "./path.ts";
+import { Relpath, relpath } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Template, t } from "./template.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
@@ -31,10 +31,6 @@ export class Symlink {
 					let arg = await resolve(unresolvedArg);
 					if (typeof arg === "string") {
 						return { path: relpath(arg) };
-					} else if (Relpath.is(arg)) {
-						return { path: relpath(arg) };
-					} else if (Subpath.is(arg)) {
-						return { path: arg.toRelpath() };
 					} else if (Artifact.is(arg)) {
 						return { artifact: arg };
 					} else if (arg instanceof Template) {
@@ -95,16 +91,18 @@ export class Symlink {
 		// Create the target.
 		let target;
 		if (artifact !== undefined && !path.isEmpty()) {
-			target = await t`${artifact}/${path}`;
+			target = await t`${artifact}/${path.toString()}`;
 		} else if (artifact !== undefined) {
 			target = await t`${artifact}`;
 		} else if (!path.isEmpty()) {
-			target = await t`${path}`;
+			target = await t`${path.toString()}`;
 		} else {
 			throw new Error("Invalid symlink.");
 		}
 
-		return new Symlink(Object_.Handle.withObject({ target }));
+		return new Symlink(
+			Object_.Handle.withObject({ kind: "symlink", value: { target } }),
+		);
 	}
 
 	static is(value: unknown): value is Symlink {
@@ -124,8 +122,14 @@ export class Symlink {
 		return (await this.#handle.id()) as Symlink.Id;
 	}
 
-	async object(): Promise<Symlink.Object> {
-		return (await this.#handle.object()) as Symlink.Object;
+	async object(): Promise<Symlink.Object_> {
+		let object = await this.#handle.object();
+		assert_(object.kind === "symlink");
+		return object.value;
+	}
+
+	handle(): Object_.Handle {
+		return this.#handle;
 	}
 
 	async target(): Promise<Template> {
@@ -180,13 +184,17 @@ export class Symlink {
 				throw new Error("Expected a directory.");
 			}
 			return await fromArtifact.tryGet(
-				(await (fromPath ?? relpath())).parent().join(path).toSubpath(),
+				(await (fromPath ?? relpath()))
+					.parent()
+					.join(path)
+					.toSubpath()
+					.toString(),
 			);
 		} else if (artifact !== undefined && !path.isEmpty()) {
 			if (!(artifact instanceof Directory)) {
 				throw new Error("Expected a directory.");
 			}
-			return await artifact.tryGet(path.toSubpath());
+			return await artifact.tryGet(path.toSubpath().toString());
 		} else {
 			throw new Error("Invalid symlink.");
 		}
@@ -196,8 +204,6 @@ export class Symlink {
 export namespace Symlink {
 	export type Arg =
 		| string
-		| Relpath
-		| Subpath
 		| Artifact
 		| Template
 		| Symlink
@@ -206,10 +212,10 @@ export namespace Symlink {
 
 	export type ArgObject = {
 		artifact?: Artifact;
-		path?: string | Subpath;
+		path?: string;
 	};
 
 	export type Id = string;
 
-	export type Object = { target: Template };
+	export type Object_ = { target: Template };
 }

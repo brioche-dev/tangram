@@ -1,11 +1,16 @@
-use crate::{artifact, error, id, object, Artifact, Client, Error, Result, Subpath, WrapErr};
+use crate::{artifact, error, object, Artifact, Client, Error, Result, Subpath, WrapErr};
 use async_recursion::async_recursion;
 use std::collections::BTreeMap;
 
+crate::id!(Directory);
+crate::handle!(Directory);
+crate::data!();
+
+#[derive(Clone, Copy, Debug)]
+pub struct Id(crate::Id);
+
 #[derive(Clone, Debug)]
 pub struct Directory(object::Handle);
-
-crate::object!(Directory);
 
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -21,60 +26,13 @@ pub struct Object {
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub(crate) struct Data {
+pub struct Data {
 	/// The directory's entries.
 	#[tangram_serialize(id = 0)]
 	pub entries: BTreeMap<String, artifact::Id>,
 }
 
 impl Directory {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(object::Handle::with_id(id.into()))
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self(object::Handle::with_object(object::Object::Directory(
-			object,
-		)))
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		match self.0.expect_id() {
-			object::Id::Directory(id) => id,
-			_ => unreachable!(),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_object(&self) -> &Object {
-		match self.0.expect_object() {
-			object::Object::Directory(object) => object,
-			_ => unreachable!(),
-		}
-	}
-
-	pub async fn id(&self, client: &Client) -> Result<Id> {
-		Ok(match self.0.id(client).await? {
-			object::Id::Directory(id) => id,
-			_ => unreachable!(),
-		})
-	}
-
-	pub async fn object(&self, client: &Client) -> Result<&Object> {
-		Ok(match self.0.object(client).await? {
-			object::Object::Directory(object) => object,
-			_ => unreachable!(),
-		})
-	}
-
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		&self.0
-	}
-
 	#[must_use]
 	pub fn new(entries: BTreeMap<String, Artifact>) -> Self {
 		Self::with_object(Object { entries })
@@ -135,13 +93,6 @@ impl Directory {
 		}
 
 		Ok(Some(artifact))
-	}
-}
-
-impl Id {
-	#[must_use]
-	pub fn new(bytes: &[u8]) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::Directory, bytes))
 	}
 }
 

@@ -111,10 +111,10 @@ declare namespace tg {
 		id(): Promise<Directory.Id>;
 
 		/** Get the child at the specified path. This method throws an error if the path does not exist. */
-		get(arg: Subpath.Arg): Promise<Artifact>;
+		get(arg: string): Promise<Artifact>;
 
 		/** Try to get the child at the specified path. This method returns `undefined` if the path does not exist. */
-		tryGet(arg: Subpath.Arg): Promise<Artifact | undefined>;
+		tryGet(arg: string): Promise<Artifact | undefined>;
 
 		/** Get this directory's entries. */
 		entries(): Promise<Record<string, Artifact>>;
@@ -123,7 +123,7 @@ declare namespace tg {
 		bundle: () => Promise<Directory>;
 
 		/** Get an async iterator of this directory's recursive entries. */
-		walk(): AsyncIterableIterator<[Subpath, Artifact]>;
+		walk(): AsyncIterableIterator<[string, Artifact]>;
 
 		/** Get an async iterator of this directory's entries. */
 		[Symbol.asyncIterator](): AsyncIterator<[string, Artifact]>;
@@ -140,7 +140,7 @@ declare namespace tg {
 	}
 
 	/** Download the contents of a URL. */
-	export let download: (url: string) => Promise<Blob>;
+	export let download: (url: string, checksum: Checksum) => Promise<Blob>;
 
 	/** Unpack a blob. */
 	export let unpack: (blob: Blob, format: UnpackFormat) => Promise<Artifact>;
@@ -258,71 +258,6 @@ declare namespace tg {
 		dependencies(): Promise<Record<string, Package>>;
 	}
 
-	/** Create a relative path. */
-	export let relpath: (...args: Array<Relpath.Arg>) => Relpath;
-
-	/** A relative path. */
-	export class Relpath {
-		/** Create a new relpath. */
-		static new(...args: Array<Relpath.Arg>): Relpath;
-
-		/** Check if a value is a `Relpath`. */
-		static is(value: unknown): value is Relpath;
-
-		/** Expect that a value is a `Relpath`. */
-		static expect(value: unknown): Relpath;
-
-		/** Assert that a value is a `Relpath`. */
-		static assert(value: unknown): asserts value is Relpath;
-
-		/** Get this relpath's parents. */
-		parents(): number;
-
-		/** Get this relpath's subpath. */
-		subpath(): Subpath;
-
-		/** Join this relpath with another relpath. */
-		join(other: Relpath.Arg): Relpath;
-
-		/** Render this relpath to a string. */
-		toString(): string;
-	}
-
-	export namespace Relpath {
-		export type Arg = undefined | string | Subpath | Relpath | Array<Arg>;
-	}
-
-	/** Create a subpath. */
-	export let subpath: (...args: Array<Subpath.Arg>) => Subpath;
-
-	/** A subpath. */
-	export class Subpath {
-		/** Create a new subpath. */
-		static new(...args: Array<Subpath.Arg>): Subpath;
-
-		/** Check if a value is a `Subpath`. */
-		static is(value: unknown): value is Subpath;
-
-		/** Expect that a value is a `Subpath`. */
-		static expect(value: unknown): Subpath;
-
-		/** Assert that a value is a `Subpath`. */
-		static assert(value: unknown): asserts value is Subpath;
-
-		/** Get this subpath's components. */
-		components(): Array<string>;
-
-		/** Join this subpath with another subpath. */
-		join(other: Subpath.Arg): Subpath;
-
-		/** Render this subpath to a string. */
-		toString(): string;
-	}
-
-	export namespace Subpath {
-		export type Arg = undefined | string | Subpath | Array<Arg>;
-	}
-
 	/** Create a placeholder. */
 	export let placeholder: (name: string) => Placeholder;
 
@@ -360,8 +295,6 @@ declare namespace tg {
 			| number
 			| string
 			| Uint8Array
-			| Relpath
-			| Subpath
 			| Blob
 			| Directory
 			| File
@@ -396,8 +329,6 @@ declare namespace tg {
 		| number
 		| string
 		| Uint8Array
-		| Relpath
-		| Subpath
 		| Blob
 		| Directory
 		| File
@@ -456,11 +387,17 @@ declare namespace tg {
 	export namespace Symlink {
 		export type Id = string;
 
-		export type Arg = Relpath.Arg | Artifact | Template | Symlink | ArgObject;
+		export type Arg =
+			| undefined
+			| string
+			| Artifact
+			| Template
+			| Symlink
+			| ArgObject;
 
 		type ArgObject = {
 			artifact?: Artifact;
-			path?: Subpath.Arg;
+			path?: string | undefined;
 		};
 	}
 
@@ -606,14 +543,14 @@ declare namespace tg {
 		export type Id = string;
 
 		export type Arg = {
-			/** The task's package. */
-			package?: Package | undefined;
-
 			/** The system to run the task on. */
 			host: System;
 
 			/** The task's executable. */
 			executable: Template.Arg;
+
+			/** The task's package. */
+			package?: Package | undefined;
 
 			/** The task's target. */
 			target?: string | undefined;
@@ -663,13 +600,7 @@ declare namespace tg {
 	}
 
 	export namespace Template {
-		export type Arg =
-			| undefined
-			| Template.Component
-			| Relpath
-			| Subpath
-			| Template
-			| Array<Arg>;
+		export type Arg = undefined | Template.Component | Template | Array<Arg>;
 
 		export type Component = string | Artifact | Placeholder;
 
@@ -694,8 +625,6 @@ declare namespace tg {
 		| number
 		| string
 		| Uint8Array
-		| Relpath
-		| Subpath
 		| Blob
 		| Directory
 		| File

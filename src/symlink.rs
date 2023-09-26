@@ -1,9 +1,14 @@
 use crate::{id, object, template, Artifact, Client, Result, Template};
 
+crate::id!(Symlink);
+crate::handle!(Symlink);
+crate::data!();
+
+#[derive(Clone, Copy, Debug)]
+pub struct Id(crate::Id);
+
 #[derive(Clone, Debug)]
 pub struct Symlink(object::Handle);
-
-crate::object!(Symlink);
 
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -18,57 +23,12 @@ pub struct Object {
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub(crate) struct Data {
+pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub target: template::Data,
 }
 
 impl Symlink {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(object::Handle::with_id(id.into()))
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self(object::Handle::with_object(object::Object::Symlink(object)))
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		match self.0.expect_id() {
-			object::Id::Symlink(id) => id,
-			_ => unreachable!(),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_object(&self) -> &Object {
-		match self.0.expect_object() {
-			object::Object::Symlink(object) => object,
-			_ => unreachable!(),
-		}
-	}
-
-	pub async fn id(&self, client: &Client) -> Result<Id> {
-		Ok(match self.0.id(client).await? {
-			object::Id::Symlink(id) => id,
-			_ => unreachable!(),
-		})
-	}
-
-	pub async fn object(&self, client: &Client) -> Result<&Object> {
-		Ok(match self.0.object(client).await? {
-			object::Object::Symlink(object) => object,
-			_ => unreachable!(),
-		})
-	}
-
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		&self.0
-	}
-
 	#[must_use]
 	pub fn new(target: Template) -> Self {
 		Self::with_object(Object { target })
@@ -89,13 +49,6 @@ impl Symlink {
 		_from: Option<Artifact>,
 	) -> Result<Option<Artifact>> {
 		unimplemented!()
-	}
-}
-
-impl Id {
-	#[must_use]
-	pub fn new(bytes: &[u8]) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::Symlink, bytes))
 	}
 }
 

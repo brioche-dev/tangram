@@ -1,6 +1,7 @@
 pub use self::{dependency::Dependency, specifier::Specifier};
 use crate::{
-	artifact, directory, id,
+	artifact, directory,
+	language::Diagnostic,
 	module::{self, Module},
 	object, Artifact, Client, Result, Subpath, WrapErr,
 };
@@ -16,10 +17,15 @@ pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 /// The file name of the lockfile.
 pub const LOCKFILE_FILE_NAME: &str = "tangram.lock";
 
+crate::id!(Package);
+crate::handle!(Package);
+crate::data!();
+
+#[derive(Clone, Copy, Debug)]
+pub struct Id(crate::Id);
+
 #[derive(Clone, Debug)]
 pub struct Package(object::Handle);
-
-crate::object!(Package);
 
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -35,7 +41,7 @@ pub struct Object {
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub(crate) struct Data {
+pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub artifact: artifact::Id,
 
@@ -50,51 +56,6 @@ pub struct Metadata {
 }
 
 impl Package {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(object::Handle::with_id(id.into()))
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self(object::Handle::with_object(object::Object::Package(object)))
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		match self.0.expect_id() {
-			object::Id::Package(id) => id,
-			_ => unreachable!(),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_object(&self) -> &Object {
-		match self.0.expect_object() {
-			object::Object::Package(object) => object,
-			_ => unreachable!(),
-		}
-	}
-
-	pub async fn id(&self, client: &Client) -> Result<Id> {
-		Ok(match self.0.id(client).await? {
-			object::Id::Package(id) => id,
-			_ => unreachable!(),
-		})
-	}
-
-	pub async fn object(&self, client: &Client) -> Result<&Object> {
-		Ok(match self.0.object(client).await? {
-			object::Object::Package(object) => object,
-			_ => unreachable!(),
-		})
-	}
-
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		&self.0
-	}
-
 	pub async fn with_specifier(client: &Client, specifier: Specifier) -> Result<Self> {
 		match specifier {
 			Specifier::Path(path) => Ok(Self::with_path(client, &path).await?),
@@ -234,18 +195,19 @@ impl Package {
 		Ok(&self.object(client).await?.dependencies)
 	}
 
+	pub async fn check(&self, client: &Client) -> Result<Vec<Diagnostic>> {
+		todo!()
+	}
+
+	pub async fn doc(&self, client: &Client) -> Result<serde_json::Value> {
+		todo!()
+	}
+
 	pub async fn root_module(&self, client: &Client) -> Result<Module> {
 		Ok(Module::Normal(module::Normal {
 			package: self.id(client).await?,
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 		}))
-	}
-}
-
-impl Id {
-	#[must_use]
-	pub fn new(bytes: &[u8]) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::Package, bytes))
 	}
 }
 

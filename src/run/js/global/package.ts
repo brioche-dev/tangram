@@ -26,8 +26,14 @@ export class Package {
 		return (await this.#handle.id()) as Package.Id;
 	}
 
-	async object(): Promise<Package.Object> {
-		return (await this.#handle.object()) as Package.Object;
+	async object(): Promise<Package.Object_> {
+		let object = await this.#handle.object();
+		assert_(object.kind === "package");
+		return object.value;
+	}
+
+	handle(): Object_.Handle {
+		return this.#handle;
 	}
 
 	async artifact(): Promise<Artifact> {
@@ -42,7 +48,7 @@ export class Package {
 export namespace Package {
 	export type Id = string;
 
-	export type Object = {
+	export type Object_ = {
 		artifact: Artifact;
 		dependencies: { [dependency: string]: Package };
 	};

@@ -1,6 +1,5 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
-import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
@@ -46,8 +45,6 @@ export class Template {
 					arg = await resolve(arg);
 					if (Template.Component.is(arg)) {
 						return arg;
-					} else if (arg instanceof Relpath || arg instanceof Subpath) {
-						return arg.toString();
 					} else if (arg instanceof Template) {
 						return arg.components();
 					} else if (arg instanceof Array) {
@@ -138,11 +135,5 @@ export namespace Template {
 }
 
 export namespace Template {
-	export type Arg =
-		| undefined
-		| Component
-		| Relpath
-		| Subpath
-		| Template
-		| Array<Arg>;
+	export type Arg = undefined | Component | Template | Array<Arg>;
 }

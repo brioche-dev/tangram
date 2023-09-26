@@ -1,9 +1,13 @@
 import { Artifact } from "./artifact.ts";
 import { Blob } from "./blob.ts";
+import { Checksum } from "./checksum.ts";
 import * as syscall from "./syscall.ts";
 
-export let download = async (url: string): Promise<Blob> => {
-	return await syscall.download(url);
+export let download = async (
+	url: string,
+	checksum: Checksum,
+): Promise<Blob> => {
+	return await syscall.download(url, checksum);
 };
 
 export let unpack = async (

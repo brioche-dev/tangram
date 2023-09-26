@@ -9,13 +9,14 @@ type Arg = {
 };
 
 export let include = async (arg: Arg): Promise<Artifact> => {
-	let artifact = await Artifact.withId(await arg.module.package);
+	let artifact = await arg.module.package.artifact();
 	Directory.assert(artifact);
 	let path = subpath(arg.module.path)
 		.toRelpath()
 		.parent()
 		.join(arg.path)
-		.toSubpath();
+		.toSubpath()
+		.toString();
 	let includedArtifact = await artifact.get(path);
 	return includedArtifact;
 };

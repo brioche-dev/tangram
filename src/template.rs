@@ -17,7 +17,7 @@ pub struct Template {
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub(crate) struct Data {
+pub struct Data {
 	#[tangram_serialize(id = 0)]
 	pub components: Vec<component::Data>,
 }
@@ -131,7 +131,7 @@ impl Template {
 		self.components
 			.iter()
 			.filter_map(|component| match component {
-				Component::Artifact(artifact) => Some(artifact.clone().into()),
+				Component::Artifact(artifact) => Some(artifact.handle().clone()),
 				_ => None,
 			})
 			.collect()
@@ -259,7 +259,7 @@ pub mod component {
 		tangram_serialize::Serialize,
 	)]
 	#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-	pub(crate) enum Data {
+	pub enum Data {
 		#[tangram_serialize(id = 0)]
 		String(String),
 		#[tangram_serialize(id = 1)]

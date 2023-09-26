@@ -1,7 +1,4 @@
-use crate::{
-	error::{Result, WrapErr},
-	Cli,
-};
+use crate::{return_error, Cli, Result, WrapErr};
 use url::Url;
 
 /// Pull a value.
@@ -14,10 +11,6 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_pull(&self, args: Args) -> Result<()> {
-		client
-			.pull(&self.tg, args.id)
-			.await
-			.wrap_err("Failed to push the artifact.")?;
-		Ok(())
+		return_error!("This command is not yet implemented.");
 	}
 }

@@ -1,4 +1,6 @@
+import { Package } from "./package.ts";
+
 export type Module = {
-	package: Id;
+	package: Package;
 	path: string;
 };

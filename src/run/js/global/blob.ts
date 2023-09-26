@@ -27,10 +27,15 @@ export class Blob {
 						return [];
 					} else if (typeof arg === "string") {
 						return new Blob(
-							Object_.Handle.withObject(encoding.utf8.encode(arg)),
+							Object_.Handle.withObject({
+								kind: "blob",
+								value: encoding.utf8.encode(arg),
+							}),
 						);
 					} else if (arg instanceof Uint8Array) {
-						return new Blob(Object_.Handle.withObject(arg));
+						return new Blob(
+							Object_.Handle.withObject({ kind: "blob", value: arg }),
+						);
 					} else if (arg instanceof Blob) {
 						return arg;
 					} else if (arg instanceof Array) {
@@ -42,18 +47,21 @@ export class Blob {
 			),
 		);
 		if (children.length === 0) {
-			return new Blob(Object_.Handle.withObject(new Uint8Array()));
+			return new Blob(
+				Object_.Handle.withObject({ kind: "blob", value: new Uint8Array() }),
+			);
 		} else if (children.length === 1) {
 			return children[0]!;
 		} else {
 			return new Blob(
-				Object_.Handle.withObject(
-					await Promise.all(
+				Object_.Handle.withObject({
+					kind: "blob",
+					value: await Promise.all(
 						children.map<Promise<[Blob, number]>>(async (child) => {
 							return [child, await child.size()];
 						}),
 					),
-				),
+				}),
 			);
 		}
 	}
@@ -75,8 +83,14 @@ export class Blob {
 		return (await this.#handle.id()) as Blob.Id;
 	}
 
-	async object(): Promise<Blob.Object> {
-		return (await this.#handle.object()) as Blob.Object;
+	async object(): Promise<Blob.Object_> {
+		let object = await this.#handle.object();
+		assert_(object.kind === "blob");
+		return object.value;
+	}
+
+	handle(): Object_.Handle {
+		return this.#handle;
 	}
 
 	async size(): Promise<number> {
@@ -123,5 +137,5 @@ export namespace Blob {
 
 	export type Id = string;
 
-	export type Object = Array<[Blob, number]> | Uint8Array;
+	export type Object_ = Array<[Blob, number]> | Uint8Array;
 }

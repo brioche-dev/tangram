@@ -1,4 +1,4 @@
-use crate::error::{return_error, Error, Result, WrapErr};
+use crate::{return_error, Error, Result, WrapErr};
 use num::ToPrimitive;
 use std::collections::BTreeMap;
 

@@ -1,8 +1,7 @@
 use crate::{
-	blob, directory, file, object, package, placeholder, return_error, symlink, task, template,
-	Blob, Bytes, Directory, File, Package, Placeholder, Result, Symlink, Task, Template,
+	blob, directory, file, object, package, placeholder, symlink, task, template, Artifact, Blob,
+	Bytes, Directory, File, Package, Placeholder, Symlink, Task, Template,
 };
-use byteorder::{ReadBytesExt, WriteBytesExt};
 use derive_more::{From, TryInto};
 use std::collections::BTreeMap;
 
@@ -65,7 +64,7 @@ pub enum Value {
 	tangram_serialize::Serialize,
 )]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-pub(crate) enum Data {
+pub enum Data {
 	#[tangram_serialize(id = 0)]
 	Null(()),
 
@@ -190,22 +189,6 @@ impl Value {
 }
 
 impl Data {
-	pub(crate) fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		bytes.write_u8(0)?;
-		tangram_serialize::to_writer(self, &mut bytes)?;
-		Ok(bytes)
-	}
-
-	pub(crate) fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version = bytes.read_u8()?;
-		if version != 0 {
-			return_error!(r#"Cannot deserialize a value with version "{version}"."#);
-		}
-		let value = tangram_serialize::from_reader(bytes)?;
-		Ok(value)
-	}
-
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		match self {
@@ -224,6 +207,138 @@ impl Data {
 			Self::Task(id) => vec![(*id).into()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
+		}
+	}
+}
+
+impl Value {
+	#[must_use]
+	pub fn as_null(&self) -> Option<&()> {
+		match self {
+			Self::Null(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_bool(&self) -> Option<&bool> {
+		match self {
+			Self::Bool(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_number(&self) -> Option<&f64> {
+		match self {
+			Self::Number(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_string(&self) -> Option<&String> {
+		match self {
+			Self::String(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_bytes(&self) -> Option<&Bytes> {
+		match self {
+			Self::Bytes(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_placeholder(&self) -> Option<&Placeholder> {
+		match self {
+			Self::Placeholder(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_blob(&self) -> Option<&Blob> {
+		match self {
+			Self::Blob(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_directory(&self) -> Option<&Directory> {
+		match self {
+			Self::Directory(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_file(&self) -> Option<&File> {
+		match self {
+			Self::File(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_symlink(&self) -> Option<&Symlink> {
+		match self {
+			Self::Symlink(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_artifact(&self) -> Option<Artifact> {
+		match self {
+			Self::Directory(value) => Some(Artifact::Directory(value.clone())),
+			Self::File(value) => Some(Artifact::File(value.clone())),
+			Self::Symlink(value) => Some(Artifact::Symlink(value.clone())),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_template(&self) -> Option<&Template> {
+		match self {
+			Self::Template(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_package(&self) -> Option<&Package> {
+		match self {
+			Self::Package(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_task(&self) -> Option<&Task> {
+		match self {
+			Self::Task(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_array(&self) -> Option<&Vec<Value>> {
+		match self {
+			Self::Array(value) => Some(value),
+			_ => None,
+		}
+	}
+
+	#[must_use]
+	pub fn as_map(&self) -> Option<&BTreeMap<String, Value>> {
+		match self {
+			Self::Map(value) => Some(value),
+			_ => None,
 		}
 	}
 }

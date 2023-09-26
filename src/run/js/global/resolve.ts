@@ -2,11 +2,8 @@ import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Package } from "./package.ts";
-import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
-import { Resource } from "./resource.ts";
 import { Symlink } from "./symlink.ts";
-import { Target } from "./target.ts";
 import { Task } from "./task.ts";
 import { Template } from "./template.ts";
 import { Value } from "./value.ts";
@@ -18,8 +15,6 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| number
 		| string
 		| Uint8Array
-		| Relpath
-		| Subpath
 		| Blob
 		| Directory
 		| File
@@ -27,8 +22,6 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| Placeholder
 		| Template
 		| Package
-		| Resource
-		| Target
 		| Task
 		? T
 		: T extends Array<infer U extends Value>
@@ -44,8 +37,6 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| number
 	| string
 	| Uint8Array
-	| Relpath
-	| Subpath
 	| Blob
 	| Directory
 	| File
@@ -53,8 +44,6 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| Placeholder
 	| Template
 	| Package
-	| Resource
-	| Target
 	| Task
 	? T
 	: T extends Promise<infer U extends Unresolved<Value>>
@@ -77,8 +66,6 @@ export let resolve = async <T extends Unresolved<Value>>(
 		typeof value === "number" ||
 		typeof value === "string" ||
 		value instanceof Uint8Array ||
-		value instanceof Relpath ||
-		value instanceof Subpath ||
 		value instanceof Blob ||
 		value instanceof Directory ||
 		value instanceof File ||
@@ -86,8 +73,6 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Placeholder ||
 		value instanceof Template ||
 		value instanceof Package ||
-		value instanceof Resource ||
-		value instanceof Target ||
 		value instanceof Task
 	) {
 		return value as unknown as Resolved<T>;

@@ -1,8 +1,5 @@
 use super::PackageArgs;
-use crate::{
-	error::{Result, WrapErr},
-	Cli,
-};
+use crate::{Cli, Result, WrapErr};
 use std::path::PathBuf;
 
 /// Build a target.
@@ -27,8 +24,6 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
-		let client = &self.client;
-
 		// Create the package.
 		let package = tg::Package::with_specifier(&self.client, args.package)
 			.await
@@ -37,16 +32,12 @@ impl Cli {
 		// Create the task.
 		let env = [(
 			"TANGRAM_HOST".to_owned(),
-			tg::Value::String(tg::System::host()?.to_string()),
+			tg::System::host()?.to_string().into(),
 		)]
 		.into();
 		let args_ = Vec::new();
 		let host = tg::System::js();
-		let executable = tg::Template::from_iter([
-			package.artifact(client).await?.clone().into(),
-			"/".to_owned().into(),
-			tg::package::ROOT_MODULE_FILE_NAME.to_owned().into(),
-		]);
+		let executable = tg::package::ROOT_MODULE_FILE_NAME.to_owned().into();
 		let task = tg::task::Builder::new(host, executable)
 			.package(package)
 			.target(args.target)
@@ -55,8 +46,8 @@ impl Cli {
 			.build();
 
 		// Run the task.
-		let run = task.run(client).await?;
-		let result = run.result(client).await?;
+		let run = task.run(&self.client).await?;
+		let result = run.result(&self.client).await?;
 		let output = result.map_err(tg::Error::from)?;
 
 		if let Some(path) = args.output {

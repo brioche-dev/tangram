@@ -1,7 +1,4 @@
-use crate::{
-	error::{return_error, Result},
-	Cli,
-};
+use crate::{return_error, Cli, Result};
 
 /// Print the dependency tree of a package.
 #[derive(Debug, clap::Args)]

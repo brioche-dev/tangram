@@ -1,8 +1,5 @@
 use super::PackageArgs;
-use crate::{
-	error::{return_error, Result, WrapErr},
-	Cli,
-};
+use crate::{return_error, Cli, Result, WrapErr};
 
 /// Check a package for errors.
 #[derive(Debug, clap::Args)]
@@ -22,11 +19,8 @@ impl Cli {
 			.await
 			.wrap_err("Failed to get the package.")?;
 
-		// Get the root module.
-		let root_module = package.root_module(&self.client).await?;
-
 		// Check the package for diagnostics.
-		let diagnostics = tg::Module::check(&self.client, vec![root_module]).await?;
+		let diagnostics = package.check(&self.client).await?;
 
 		// Print the diagnostics.
 		for diagnostic in &diagnostics {

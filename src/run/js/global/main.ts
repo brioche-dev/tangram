@@ -4,7 +4,6 @@ import { Blob, blob } from "./blob.ts";
 import { Directory, directory } from "./directory.ts";
 import { download, unpack } from "./download.ts";
 import * as encoding from "./encoding.ts";
-import { env } from "./env.ts";
 import { prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
 import { include } from "./include.ts";
@@ -52,7 +51,6 @@ let tg = {
 	directory,
 	download,
 	encoding,
-	env,
 	file,
 	include,
 	log,

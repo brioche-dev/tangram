@@ -1,3 +1,19 @@
+export let system = (arg: System.Arg): System => {
+	if (typeof arg === "string") {
+		return arg;
+	} else {
+		let { arch, os } = arg;
+		return `${arch}-${os}` as System;
+	}
+};
+
+export type System =
+	| "aarch64-darwin"
+	| "aarch64-linux"
+	| "js-js"
+	| "x86_64-darwin"
+	| "x86_64-linux";
+
 export namespace System {
 	export type Arg = System | ArgObject;
 
@@ -5,46 +21,33 @@ export namespace System {
 		arch: Arch;
 		os: Os;
 	};
-}
 
-export let system = (arg: System.Arg): System => {
-	if (typeof arg === "string") {
-		return arg;
-	} else {
-		let { arch, os } = arg;
-		return `${arch}_${os}` as System;
-	}
-};
+	export type Arch = "aarch64" | "js" | "x86_64";
 
-export type System =
-	| "amd64_linux"
-	| "arm64_linux"
-	| "amd64_macos"
-	| "arm64_macos";
-
-export namespace System {
-	export type Arch = "amd64" | "arm64";
-
-	export type Os = "linux" | "macos";
+	export type Os = "darwin" | "js" | "linux";
 
 	export let is = (value: unknown): value is System => {
 		return (
-			value === "amd64_linux" ||
-			value === "arm64_linux" ||
-			value === "amd64_macos" ||
-			value === "arm64_macos"
+			value === "aarch64-darwin" ||
+			value === "aarch64-linux" ||
+			value === "js-js" ||
+			value === "x86_64-darwin" ||
+			value === "x86_64-linux"
 		);
 	};
 
 	export let arch = (system: System): Arch => {
 		switch (system) {
-			case "amd64_linux":
-			case "amd64_macos": {
-				return "amd64";
+			case "aarch64-darwin":
+			case "aarch64-linux": {
+				return "aarch64";
 			}
-			case "arm64_linux":
-			case "arm64_macos": {
-				return "arm64";
+			case "js-js": {
+				return "js";
+			}
+			case "x86_64-linux":
+			case "x86_64-darwin": {
+				return "x86_64";
 			}
 			default: {
 				throw new Error("Invalid system.");
@@ -54,13 +57,16 @@ export namespace System {
 
 	export let os = (system: System): Os => {
 		switch (system) {
-			case "amd64_linux":
-			case "arm64_linux": {
-				return "linux";
+			case "aarch64-darwin":
+			case "x86_64-darwin": {
+				return "darwin";
 			}
-			case "amd64_macos":
-			case "arm64_macos": {
-				return "macos";
+			case "js-js": {
+				return "js";
+			}
+			case "x86_64-linux":
+			case "aarch64-linux": {
+				return "linux";
 			}
 			default: {
 				throw new Error("Invalid system.");

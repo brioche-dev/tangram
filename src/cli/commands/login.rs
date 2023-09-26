@@ -1,8 +1,4 @@
-use crate::{
-	credentials::Credentials,
-	error::{return_error, WrapErr},
-	Cli, Result,
-};
+use crate::{credentials::Credentials, return_error, Cli, Result, WrapErr};
 use std::time::{Duration, Instant};
 
 /// Log in to Tangram.

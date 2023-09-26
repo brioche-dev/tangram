@@ -1,8 +1,5 @@
 use super::{PackageArgs, RunArgs};
-use crate::{
-	error::{Result, WrapErr},
-	Cli,
-};
+use crate::{Cli, Result, WrapErr};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 
 /// Build the specified target from a package and execute a command from its output.
@@ -30,34 +27,39 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
-		// Get the package.
-		let package = tg::Package::with_specifier(client, args.package)
+		// Create the package.
+		let package = tg::Package::with_specifier(&self.client, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
-		// Build.
+		// Create the task.
 		let env = [(
-			"host".to_owned(),
-			tg::Value::from(tg::System::host()?.to_string()),
+			"TANGRAM_HOST".to_owned(),
+			tg::Value::String(tg::System::host()?.to_string()),
 		)]
 		.into();
 		let args_ = Vec::new();
-		let target = tg::Target::new(
-			package,
-			tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
-			args.target,
-			env,
-			args_,
-		);
-		let output = target.build(client).await?;
+		let host = tg::System::js();
+		let executable = tg::package::ROOT_MODULE_FILE_NAME.to_owned().into();
+		let task = tg::task::Builder::new(host, executable)
+			.package(package)
+			.target(args.target)
+			.env(env)
+			.args(args_)
+			.build();
+
+		// Run the task.
+		let run = task.run(&self.client).await?;
+		let result = run.result(&self.client).await?;
+		let output = result.map_err(tg::Error::from)?;
 
 		// Get the output artifact.
 		let artifact = output
-			.into_artifact()
+			.as_artifact()
 			.wrap_err("Expected the output to be an artifact.")?;
 
-		// Check out the artifact.
-		let artifact_path = artifact.check_out_internal(client).await?;
+		// Get the path to the artifact.
+		let artifact_path: PathBuf = todo!();
 
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {

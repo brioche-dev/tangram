@@ -3,7 +3,6 @@ import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Package } from "./package.ts";
-import { Relpath, Subpath } from "./path.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import { Task } from "./task.ts";
@@ -15,8 +14,6 @@ export type Value =
 	| number
 	| string
 	| Uint8Array
-	| Relpath
-	| Subpath
 	| Blob
 	| Directory
 	| File
@@ -36,8 +33,6 @@ export namespace Value {
 			typeof value === "number" ||
 			typeof value === "string" ||
 			value instanceof Uint8Array ||
-			value instanceof Relpath ||
-			value instanceof Subpath ||
 			value instanceof Blob ||
 			value instanceof Directory ||
 			value instanceof File ||

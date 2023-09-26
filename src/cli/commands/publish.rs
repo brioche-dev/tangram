@@ -1,7 +1,4 @@
-use crate::{
-	error::{Result, WrapErr},
-	Cli,
-};
+use crate::{Cli, Result, WrapErr};
 use std::path::PathBuf;
 
 /// Publish a package.

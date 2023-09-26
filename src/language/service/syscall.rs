@@ -1,8 +1,4 @@
-use crate::{
-	error::{return_error, Error, Result, WrapErr},
-	module::{self, Module},
-	server::{self, Server},
-};
+use crate::{module, return_error, server, Error, Module, Result, Server, WrapErr};
 use itertools::Itertools;
 use std::sync::Weak;
 

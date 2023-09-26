@@ -3,10 +3,7 @@ use super::{
 	state::{FutureOutput, State},
 	syscall::syscall,
 };
-use crate::{
-	error::{Error, Result},
-	server::Server,
-};
+use crate::{Error, Result, Server};
 use futures::{stream::FuturesUnordered, StreamExt};
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, rc::Rc, task::Poll};

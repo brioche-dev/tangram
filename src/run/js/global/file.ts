@@ -71,9 +71,8 @@ export class File {
 		let contents = await blob(...contentsArgs);
 		return new File(
 			Object_.Handle.withObject({
-				contents,
-				executable,
-				references,
+				kind: "file",
+				value: { contents, executable, references },
 			}),
 		);
 	}
@@ -95,8 +94,14 @@ export class File {
 		return (await this.#handle.id()) as File.Id;
 	}
 
-	async object(): Promise<File.Object> {
-		return (await this.#handle.object()) as File.Object;
+	async object(): Promise<File.Object_> {
+		let object = await this.#handle.object();
+		assert_(object.kind === "file");
+		return object.value;
+	}
+
+	handle(): Object_.Handle {
+		return this.#handle;
 	}
 
 	async contents(): Promise<Blob> {
@@ -135,7 +140,7 @@ export namespace File {
 
 	export type Id = string;
 
-	export type Object = {
+	export type Object_ = {
 		contents: Blob;
 		executable: boolean;
 		references: Array<Artifact>;

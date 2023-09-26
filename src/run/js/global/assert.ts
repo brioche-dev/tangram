@@ -14,3 +14,7 @@ export let unimplemented = (message?: string): never => {
 export let unreachable = (message?: string): never => {
 	throw new Error(message ?? "Reached unreachable code.");
 };
+
+export let todo = (): never => {
+	throw new Error("Reached todo.");
+};

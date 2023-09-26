@@ -1,3 +1,4 @@
+import { assert as assert_ } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
@@ -33,31 +34,25 @@ export class Task {
 		let host = resolvedArg.host;
 		let executable = await template(resolvedArg.executable);
 		let target = resolvedArg.target;
-		let env: Record<string, Template> = Object.fromEntries(
-			await Promise.all(
-				Object.entries(resolvedArg.env ?? {}).map(async ([key, value]) => [
-					key,
-					await template(value),
-				]),
-			),
-		);
-		let args = await Promise.all(
-			(resolvedArg.args ?? []).map(async (arg) => await template(arg)),
-		);
+		let env = resolvedArg.env ?? {};
+		let args = resolvedArg.args ?? [];
 		let checksum = resolvedArg.checksum ?? undefined;
 		let unsafe = resolvedArg.unsafe ?? false;
 		let network = resolvedArg.network ?? false;
 		return new Task(
 			Object_.Handle.withObject({
-				package: package_,
-				host,
-				executable,
-				target,
-				env,
-				args,
-				checksum,
-				unsafe,
-				network,
+				kind: "task",
+				value: {
+					package: package_,
+					host,
+					executable,
+					target,
+					env,
+					args,
+					checksum,
+					unsafe,
+					network,
+				},
 			}),
 		);
 	}
@@ -66,12 +61,14 @@ export class Task {
 		return (await this.#handle.id()) as Package.Id;
 	}
 
-	async object(): Promise<Task.Object> {
-		return (await this.#handle.object()) as Task.Object;
+	async object(): Promise<Task.Object_> {
+		let object = await this.#handle.object();
+		assert_(object.kind === "task");
+		return object.value;
 	}
 
-	async package(): Promise<Package | undefined> {
-		return (await this.object()).package;
+	handle(): Object_.Handle {
+		return this.#handle;
 	}
 
 	async host(): Promise<System> {
@@ -80,6 +77,10 @@ export class Task {
 
 	async executable(): Promise<Template> {
 		return (await this.object()).executable;
+	}
+
+	async package(): Promise<Package | undefined> {
+		return (await this.object()).package;
 	}
 
 	async target(): Promise<string | undefined> {
@@ -113,12 +114,12 @@ export class Task {
 
 export namespace Task {
 	export type Arg = {
-		package?: Package | undefined;
 		host: System;
 		executable: Template.Arg;
+		package?: Package | undefined;
 		target?: string | undefined;
-		env?: Record<string, Template.Arg>;
-		args?: Array<Template.Arg>;
+		env?: Record<string, Value>;
+		args?: Array<Value>;
 		checksum?: Checksum;
 		unsafe?: boolean;
 		network?: boolean;
@@ -126,13 +127,13 @@ export namespace Task {
 
 	export type Id = string;
 
-	export type Object = {
-		package: Package | undefined;
+	export type Object_ = {
 		host: System;
 		executable: Template;
+		package: Package | undefined;
 		target: string | undefined;
-		env: Record<string, Template>;
-		args: Array<Template>;
+		env: Record<string, Value>;
+		args: Array<Value>;
 		checksum: Checksum | undefined;
 		unsafe: boolean;
 		network: boolean;

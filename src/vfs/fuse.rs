@@ -1,12 +1,6 @@
 use crate::{
-	artifact::Artifact,
-	blob,
-	directory::Directory,
-	error::{Error, Result, WrapErr},
-	file::File,
-	server::Server,
-	symlink::Symlink,
-	template,
+	artifact::Artifact, blob, directory::Directory, file::File, server::Server, symlink::Symlink,
+	template, Error, Result, WrapErr,
 };
 use num::ToPrimitive;
 use std::{

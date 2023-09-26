@@ -1,11 +1,7 @@
 use super::Task;
 use crate::{
-	build::Build,
-	error::{error, return_error, Error, Result},
-	server::Server,
-	system::System,
-	template::Template,
-	value::Value,
+	build::Build, error, return_error, server::Server, system::System, template::Template,
+	value::Value, Error, Result,
 };
 use futures::{stream::FuturesUnordered, FutureExt, TryStreamExt};
 use itertools::Itertools;

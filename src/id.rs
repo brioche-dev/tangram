@@ -5,6 +5,7 @@ use derive_more::{From, Into};
 pub const SIZE: usize = 32;
 
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub enum Kind {
 	Blob,
 	Directory,
@@ -43,8 +44,8 @@ impl Id {
 	}
 
 	#[must_use]
-	pub fn new_hashed(kind: Kind, data: &[u8]) -> Self {
-		let hash = blake3::hash(data);
+	pub fn new_hashed(kind: Kind, bytes: &[u8]) -> Self {
+		let hash = blake3::hash(bytes);
 		let mut bytes = *hash.as_bytes();
 		bytes[0] = kind.into();
 		Self(bytes)
@@ -103,6 +104,20 @@ impl TryFrom<String> for Id {
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
+	}
+}
+
+impl From<Id> for Vec<u8> {
+	fn from(value: Id) -> Self {
+		value.as_bytes().to_vec()
+	}
+}
+
+impl TryFrom<&[u8]> for Id {
+	type Error = Error;
+
+	fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+		Self::with_bytes(value.try_into().map_err(Error::other)?)
 	}
 }
 

@@ -2,7 +2,7 @@ use super::Server;
 use crate::{Id, Result, WrapErr};
 
 impl Server {
-	pub async fn clean(&self, _roots: Vec<Id>) -> Result<()> {
+	pub async fn clean(&self) -> Result<()> {
 		// Delete all temps.
 		tokio::fs::remove_dir_all(&self.temps_path())
 			.await

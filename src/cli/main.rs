@@ -3,7 +3,10 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_safety_doc)]
 
-use self::{commands::Args, error::Result};
+use self::{
+	commands::Args,
+	error::{Error, Result, WrapErr},
+};
 use clap::Parser;
 use tracing_subscriber::prelude::*;
 

@@ -1,4 +1,4 @@
-use crate::{bytes::Bytes, id, object, return_error, Client, Error, Result};
+use crate::{bytes::Bytes, object, return_error, Client, Error, Result};
 use futures::{
 	future::BoxFuture,
 	stream::{self, StreamExt},
@@ -13,10 +13,15 @@ const MAX_BRANCH_CHILDREN: usize = 1024;
 
 const MAX_LEAF_SIZE: usize = 262_144;
 
+crate::id!(Blob);
+crate::handle!(Blob);
+crate::data!();
+
+#[derive(Clone, Copy, Debug)]
+pub struct Id(crate::Id);
+
 #[derive(Clone, Debug)]
 pub struct Blob(object::Handle);
-
-crate::object!(Blob);
 
 #[derive(Clone, Debug)]
 pub enum Object {
@@ -33,66 +38,14 @@ pub enum Object {
 	tangram_serialize::Serialize,
 )]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-pub(crate) enum Data {
+pub enum Data {
 	#[tangram_serialize(id = 0)]
 	Branch(Vec<(Id, u64)>),
 	#[tangram_serialize(id = 1)]
 	Leaf(Bytes),
 }
 
-impl Id {
-	#[must_use]
-	pub fn new(bytes: &[u8]) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::Blob, bytes))
-	}
-}
-
 impl Blob {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(object::Handle::with_id(id.into()))
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self(object::Handle::with_object(object::Object::Blob(object)))
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		match self.0.expect_id() {
-			object::Id::Blob(id) => id,
-			_ => unreachable!(),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_object(&self) -> &Object {
-		match self.0.expect_object() {
-			object::Object::Blob(object) => object,
-			_ => unreachable!(),
-		}
-	}
-
-	pub async fn id(&self, client: &Client) -> Result<Id> {
-		Ok(match self.0.id(client).await? {
-			object::Id::Blob(id) => id,
-			_ => unreachable!(),
-		})
-	}
-
-	pub async fn object(&self, client: &Client) -> Result<&Object> {
-		Ok(match self.0.object(client).await? {
-			object::Object::Blob(object) => object,
-			_ => unreachable!(),
-		})
-	}
-
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		&self.0
-	}
-
 	pub async fn with_reader(client: &Client, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
 		let mut leaves = Vec::new();
 		let mut bytes = vec![0u8; MAX_LEAF_SIZE];

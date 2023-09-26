@@ -1,4 +1,4 @@
-use crate::{error::Result, Cli};
+use crate::{error::Result, return_error, Cli};
 
 /// Run the language server.
 #[derive(Debug, clap::Args)]
@@ -7,12 +7,14 @@ pub struct Args {}
 
 impl Cli {
 	pub async fn command_lsp(&self, _args: Args) -> Result<()> {
-		// Create the language server.
-		let server = tg::language::Server::new(self.tg.clone());
+		return_error!("This command is not yet implemented.");
 
-		// Run the language server.
-		server.serve().await?;
+		// // Create the language server.
+		// let server = tg::language::Server::new(&self.client);
 
-		Ok(())
+		// // Run the language server.
+		// server.serve().await?;
+
+		// Ok(())
 	}
 }

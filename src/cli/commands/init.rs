@@ -1,7 +1,4 @@
-use crate::{
-	error::{return_error, Result, WrapErr},
-	Cli,
-};
+use crate::{return_error, Cli, Result, WrapErr};
 use indoc::formatdoc;
 use std::path::PathBuf;
 

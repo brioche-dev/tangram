@@ -21,7 +21,11 @@ declare global {
 		bytes: string | Uint8Array,
 	): Checksum;
 
-	function syscall(syscall: "download", url: string): Promise<Blob>;
+	function syscall(
+		syscall: "download",
+		url: string,
+		checksum: Checksum,
+	): Promise<Blob>;
 
 	function syscall(
 		syscall: "encoding_base64_decode",
@@ -109,9 +113,12 @@ export let checksum = (
 	}
 };
 
-export let download = async (url: string): Promise<Blob> => {
+export let download = async (
+	url: string,
+	checksum: Checksum,
+): Promise<Blob> => {
 	try {
-		return await syscall("download", url);
+		return await syscall("download", url, checksum);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}

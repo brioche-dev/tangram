@@ -1,10 +1,11 @@
 use super::Task;
 use crate::{
 	artifact::{self, Artifact},
-	error::{return_error, Result, WrapErr},
+	return_error,
 	server::Server,
 	temp::Temp,
 	value::Value,
+	Result, WrapErr,
 };
 use indoc::writedoc;
 use std::{

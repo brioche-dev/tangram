@@ -1,9 +1,14 @@
-use crate::{artifact, blob, id, object, Artifact, Blob, Client, Result};
+use crate::{artifact, blob, object, Artifact, Blob, Client, Result};
+
+crate::id!(File);
+crate::handle!(File);
+crate::data!();
+
+#[derive(Clone, Copy, Debug)]
+pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
 pub struct File(object::Handle);
-
-crate::object!(File);
 
 /// A file value.
 #[derive(Clone, Debug)]
@@ -27,7 +32,7 @@ pub struct Object {
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub(crate) struct Data {
+pub struct Data {
 	/// The file's contents.
 	#[tangram_serialize(id = 0)]
 	pub contents: blob::Id,
@@ -42,51 +47,6 @@ pub(crate) struct Data {
 }
 
 impl File {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(object::Handle::with_id(id.into()))
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self(object::Handle::with_object(object::Object::File(object)))
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		match self.0.expect_id() {
-			object::Id::File(id) => id,
-			_ => unreachable!(),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_object(&self) -> &Object {
-		match self.0.expect_object() {
-			object::Object::File(object) => object,
-			_ => unreachable!(),
-		}
-	}
-
-	pub async fn id(&self, client: &Client) -> Result<Id> {
-		Ok(match self.0.id(client).await? {
-			object::Id::File(id) => id,
-			_ => unreachable!(),
-		})
-	}
-
-	pub async fn object(&self, client: &Client) -> Result<&Object> {
-		Ok(match self.0.object(client).await? {
-			object::Object::File(object) => object,
-			_ => unreachable!(),
-		})
-	}
-
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		&self.0
-	}
-
 	#[must_use]
 	pub fn new(contents: Blob, executable: bool, references: Vec<Artifact>) -> Self {
 		Self(object::Handle::with_object(object::Object::File(Object {
@@ -111,13 +71,6 @@ impl File {
 
 	pub async fn references(&self, client: &Client) -> Result<&[Artifact]> {
 		Ok(self.object(client).await?.references.as_slice())
-	}
-}
-
-impl Id {
-	#[must_use]
-	pub fn new(bytes: &[u8]) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::File, bytes))
 	}
 }
 

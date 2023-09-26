@@ -1,9 +1,10 @@
 use crate::{
-	artifact, blob, directory, error, file, package, return_error, symlink, task, Client, Error,
-	Result, WrapErr,
+	artifact, blob, directory, error, file, id, package, return_error, run, symlink, task, Client,
+	Error, Result, WrapErr,
 };
 use derive_more::{From, TryInto};
 use futures::stream::TryStreamExt;
+use std::sync::Arc;
 
 /// An artifact kind.
 #[derive(Clone, Copy, Debug)]
@@ -14,7 +15,7 @@ pub enum Kind {
 	Symlink,
 	Package,
 	Task,
-	// Run,
+	Run,
 }
 
 /// An object ID.
@@ -38,15 +39,22 @@ pub enum Id {
 	Symlink(symlink::Id),
 	Package(package::Id),
 	Task(task::Id),
-	// Run(run::Id),
+	Run(run::Id),
 }
 
 /// An object handle.
 #[derive(Clone, Debug)]
 pub struct Handle {
-	id: std::sync::Arc<std::sync::RwLock<Option<Id>>>,
-	object: std::sync::Arc<std::sync::RwLock<Option<Object>>>,
+	state: Arc<std::sync::RwLock<(Option<Id>, Option<Object>)>>,
 }
+
+// #[derive(Debug)]
+// pub struct State {
+// 	loaded: bool,
+// 	stored: bool,
+// 	id: Option<Id>,
+// 	object: Option<Object>,
+// }
 
 /// An object.
 #[derive(Clone, Debug, From, TryInto)]
@@ -57,32 +65,57 @@ pub enum Object {
 	Symlink(symlink::Object),
 	Package(package::Object),
 	Task(task::Object),
-	// Run(run::Object),
+	Run(run::Object),
 }
 
 /// Object data.
-#[derive(Clone, Debug, From, TryInto)]
-pub(crate) enum Data {
+#[derive(Clone, Debug, From, TryInto, serde::Deserialize, serde::Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
+pub enum Data {
 	Blob(blob::Data),
 	Directory(directory::Data),
 	File(file::Data),
 	Symlink(symlink::Data),
 	Package(package::Data),
 	Task(task::Data),
-	// Run(run::Data),
+	Run(run::Data),
 }
 
 impl Id {
 	#[must_use]
 	pub fn new(kind: Kind, bytes: &[u8]) -> Self {
 		match kind {
-			Kind::Blob => Self::Blob(blob::Id::new(bytes)),
-			Kind::Directory => Self::Directory(directory::Id::new(bytes)),
-			Kind::File => Self::File(file::Id::new(bytes)),
-			Kind::Symlink => Self::Symlink(symlink::Id::new(bytes)),
-			Kind::Package => Self::Package(package::Id::new(bytes)),
-			Kind::Task => Self::Task(task::Id::new(bytes)),
-			// Kind::Run => Self::Run(run::Id::new()),
+			Kind::Blob => Self::Blob(
+				crate::Id::new_hashed(id::Kind::Blob, bytes)
+					.try_into()
+					.unwrap(),
+			),
+			Kind::Directory => Self::Directory(
+				crate::Id::new_hashed(id::Kind::Directory, bytes)
+					.try_into()
+					.unwrap(),
+			),
+			Kind::File => Self::File(
+				crate::Id::new_hashed(id::Kind::File, bytes)
+					.try_into()
+					.unwrap(),
+			),
+			Kind::Symlink => Self::Symlink(
+				crate::Id::new_hashed(id::Kind::Symlink, bytes)
+					.try_into()
+					.unwrap(),
+			),
+			Kind::Package => Self::Package(
+				crate::Id::new_hashed(id::Kind::Package, bytes)
+					.try_into()
+					.unwrap(),
+			),
+			Kind::Task => Self::Task(
+				crate::Id::new_hashed(id::Kind::Task, bytes)
+					.try_into()
+					.unwrap(),
+			),
+			Kind::Run => Self::Run(crate::Id::new_random(id::Kind::Run).try_into().unwrap()),
 		}
 	}
 
@@ -95,7 +128,7 @@ impl Id {
 			Self::Symlink(_) => Kind::Symlink,
 			Self::Package(_) => Kind::Package,
 			Self::Task(_) => Kind::Task,
-			// Self::Run(_) => Kind::Run,
+			Self::Run(_) => Kind::Run,
 		}
 	}
 
@@ -108,36 +141,44 @@ impl Id {
 			Self::Symlink(id) => id.as_bytes(),
 			Self::Package(id) => id.as_bytes(),
 			Self::Task(id) => id.as_bytes(),
-			// Self::Run(id) => id.as_bytes(),
+			Self::Run(id) => id.as_bytes(),
 		}
 	}
 }
 
 impl Handle {
+	pub(crate) fn with_state(state: (Option<Id>, Option<Object>)) -> Self {
+		Self {
+			state: Arc::new(std::sync::RwLock::new(state)),
+		}
+	}
+
+	pub(crate) fn state(&self) -> &std::sync::RwLock<(Option<Id>, Option<Object>)> {
+		&self.state
+	}
+
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {
 		Self {
-			id: std::sync::Arc::new(std::sync::RwLock::new(Some(id))),
-			object: std::sync::Arc::new(std::sync::RwLock::new(None)),
+			state: Arc::new(std::sync::RwLock::new((Some(id), None))),
 		}
 	}
 
 	#[must_use]
 	pub(crate) fn with_object(object: Object) -> Self {
 		Self {
-			id: std::sync::Arc::new(std::sync::RwLock::new(None)),
-			object: std::sync::Arc::new(std::sync::RwLock::new(Some(object))),
+			state: Arc::new(std::sync::RwLock::new((None, Some(object)))),
 		}
 	}
 
 	#[must_use]
 	pub fn expect_id(&self) -> Id {
-		self.id.read().unwrap().unwrap()
+		self.state.read().unwrap().0.unwrap()
 	}
 
 	#[must_use]
 	pub fn expect_object(&self) -> &Object {
-		unsafe { &*(self.object.read().unwrap().as_ref().unwrap() as *const Object) }
+		unsafe { &*(self.state.read().unwrap().1.as_ref().unwrap() as *const Object) }
 	}
 
 	pub async fn id(&self, client: &Client) -> Result<Id> {
@@ -145,7 +186,7 @@ impl Handle {
 		self.store(client).await?;
 
 		// Return the ID.
-		Ok(self.id.read().unwrap().unwrap())
+		Ok(self.state.read().unwrap().0.unwrap())
 	}
 
 	pub async fn object(&self, client: &Client) -> Result<&Object> {
@@ -153,17 +194,24 @@ impl Handle {
 		self.load(client).await?;
 
 		// Return a reference to the object.
-		Ok(unsafe { &*(self.object.read().unwrap().as_ref().unwrap() as *const Object) })
+		Ok(unsafe { &*(self.state.read().unwrap().1.as_ref().unwrap() as *const Object) })
+	}
+
+	pub async fn data(&self, client: &Client) -> Result<Data> {
+		// Load the object.
+		self.load(client).await?;
+
+		// Return the data.
+		Ok(self.state.read().unwrap().1.as_ref().unwrap().to_data())
 	}
 
 	pub async fn load(&self, client: &Client) -> Result<()> {
-		// If the object is already loaded, then return.
-		if self.object.read().unwrap().is_some() {
-			return Ok(());
-		}
-
-		// Get the id.
-		let id = self.id.read().unwrap().unwrap();
+		// Get the id. If the object is already loaded, then return.
+		let id = match &*self.state.read().unwrap() {
+			(Some(id), _) => *id,
+			(None, Some(_)) => return Ok(()),
+			_ => unreachable!(),
+		};
 
 		// Get the kind.
 		let kind = id.kind();
@@ -180,7 +228,7 @@ impl Handle {
 		let object = Object::from_data(data);
 
 		// Set the object.
-		self.object.write().unwrap().replace(object);
+		self.state.write().unwrap().1.replace(object);
 
 		Ok(())
 	}
@@ -188,21 +236,25 @@ impl Handle {
 	#[async_recursion::async_recursion]
 	pub async fn store(&self, client: &Client) -> Result<()> {
 		// If the object is already stored, then return.
-		if self.id.read().unwrap().is_some() {
-			return Ok(());
-		}
+		match &*self.state.read().unwrap() {
+			(Some(_), _) => return Ok(()),
+			(None, Some(_)) => {},
+			_ => unreachable!(),
+		};
 
-		// Create the data.
-		let data = self.object.read().unwrap().as_ref().unwrap().to_data();
+		// Get the children.
+		let children = self.state.read().unwrap().1.as_ref().unwrap().children();
 
 		// Store the children.
-		let children = self.object.read().unwrap().as_ref().unwrap().children();
 		children
 			.into_iter()
 			.map(|child| async move { child.store(client).await })
 			.collect::<futures::stream::FuturesUnordered<_>>()
 			.try_collect()
 			.await?;
+
+		// Get the data.
+		let data = self.state.read().unwrap().1.as_ref().unwrap().to_data();
 
 		// Serialize the data.
 		let bytes = data.serialize()?;
@@ -221,7 +273,7 @@ impl Handle {
 			.map_err(|_| error!("Expected all children to be stored."))?;
 
 		// Set the ID.
-		self.id.write().unwrap().replace(id);
+		self.state.write().unwrap().0.replace(id);
 
 		Ok(())
 	}
@@ -236,7 +288,7 @@ impl Object {
 			Self::Symlink(symlink) => Data::Symlink(symlink.to_data()),
 			Self::Package(package) => Data::Package(package.to_data()),
 			Self::Task(task) => Data::Task(task.to_data()),
-			// Self::Run(run) => Data::Run(run.to_data()),
+			Self::Run(task) => Data::Run(task.to_data()),
 		}
 	}
 
@@ -248,7 +300,7 @@ impl Object {
 			Data::Symlink(data) => Self::Symlink(symlink::Object::from_data(data)),
 			Data::Package(data) => Self::Package(package::Object::from_data(data)),
 			Data::Task(data) => Self::Task(task::Object::from_data(data)),
-			// Data::Run(data) => Self::Run(run::Object::from_data(data)),
+			Data::Run(data) => Self::Run(run::Object::from_data(data)),
 		}
 	}
 
@@ -261,7 +313,7 @@ impl Object {
 			Self::Symlink(symlink) => symlink.children(),
 			Self::Package(package) => package.children(),
 			Self::Task(task) => task.children(),
-			// Self::Run(run) => run.children(),
+			Self::Run(run) => run.children(),
 		}
 	}
 }
@@ -276,7 +328,7 @@ impl Data {
 			Self::Symlink(data) => Ok(data.serialize()?),
 			Self::Package(data) => Ok(data.serialize()?),
 			Self::Task(data) => Ok(data.serialize()?),
-			// Self::Run(data) => Ok(data.serialize()?),
+			Self::Run(data) => Ok(data.serialize()?),
 		}
 	}
 
@@ -288,10 +340,11 @@ impl Data {
 			Kind::Symlink => Ok(Self::Symlink(symlink::Data::deserialize(bytes)?)),
 			Kind::Package => Ok(Self::Package(package::Data::deserialize(bytes)?)),
 			Kind::Task => Ok(Self::Task(task::Data::deserialize(bytes)?)),
-			// Kind::Run => Ok(Self::Run(run::Data::deserialize(bytes)?)),
+			Kind::Run => Ok(Self::Run(run::Data::deserialize(bytes)?)),
 		}
 	}
 
+	#[must_use]
 	pub fn children(&self) -> Vec<self::Id> {
 		match self {
 			Self::Blob(data) => data.children(),
@@ -300,10 +353,11 @@ impl Data {
 			Self::Symlink(data) => data.children(),
 			Self::Package(data) => data.children(),
 			Self::Task(data) => data.children(),
-			// Self::Run(data) => data.children(),
+			Self::Run(data) => data.children(),
 		}
 	}
 
+	#[must_use]
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Blob(_) => Kind::Blob,
@@ -312,7 +366,7 @@ impl Data {
 			Self::Symlink(_) => Kind::Symlink,
 			Self::Package(_) => Kind::Package,
 			Self::Task(_) => Kind::Task,
-			// Self::Run(_) => Kind::Run,
+			Self::Run(_) => Kind::Run,
 		}
 	}
 }
@@ -326,7 +380,7 @@ impl From<self::Id> for crate::Id {
 			self::Id::Symlink(id) => id.into(),
 			self::Id::Package(id) => id.into(),
 			self::Id::Task(id) => id.into(),
-			// self::Id::Run(id) => id.into(),
+			self::Id::Run(id) => id.into(),
 		}
 	}
 }
@@ -342,8 +396,7 @@ impl TryFrom<crate::Id> for self::Id {
 			crate::id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			crate::id::Kind::Package => Ok(Self::Package(value.try_into()?)),
 			crate::id::Kind::Task => Ok(Self::Task(value.try_into()?)),
-			// crate::id::Kind::Run => Ok(Self::Run(value.try_into()?)),
-			_ => return_error!("Unexpected kind."),
+			crate::id::Kind::Run => Ok(Self::Run(value.try_into()?)),
 		}
 	}
 }
@@ -357,7 +410,7 @@ impl std::fmt::Display for Id {
 			Self::Symlink(id) => write!(f, "{id}"),
 			Self::Package(id) => write!(f, "{id}"),
 			Self::Task(id) => write!(f, "{id}"),
-			// Self::Run(id) => write!(f, "{id}"),
+			Self::Run(id) => write!(f, "{id}"),
 		}
 	}
 }
@@ -381,24 +434,71 @@ impl From<artifact::Id> for Id {
 }
 
 #[macro_export]
-macro_rules! object {
+macro_rules! handle {
 	($t:ident) => {
-		#[derive(
-			Clone,
-			Copy,
-			Debug,
-			Eq,
-			Ord,
-			PartialEq,
-			PartialOrd,
-			serde::Deserialize,
-			serde::Serialize,
-			tangram_serialize::Deserialize,
-			tangram_serialize::Serialize,
-		)]
-		#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
-		pub struct Id($crate::Id);
+		impl $t {
+			pub(crate) fn with_handle(handle: object::Handle) -> Self {
+				Self(handle)
+			}
 
+			#[must_use]
+			pub fn with_id(id: Id) -> Self {
+				Self(object::Handle::with_id(id.into()))
+			}
+
+			#[must_use]
+			pub fn with_object(object: Object) -> Self {
+				Self(object::Handle::with_object(object::Object::$t(object)))
+			}
+
+			#[must_use]
+			pub fn expect_id(&self) -> Id {
+				match self.0.expect_id() {
+					object::Id::$t(id) => id,
+					_ => unreachable!(),
+				}
+			}
+
+			#[must_use]
+			pub fn expect_object(&self) -> &Object {
+				match self.0.expect_object() {
+					object::Object::$t(object) => object,
+					_ => unreachable!(),
+				}
+			}
+
+			pub async fn id(&self, client: &Client) -> Result<Id> {
+				Ok(match self.0.id(client).await? {
+					object::Id::$t(id) => id,
+					_ => unreachable!(),
+				})
+			}
+
+			pub async fn object(&self, client: &Client) -> Result<&Object> {
+				Ok(match self.0.object(client).await? {
+					object::Object::$t(object) => object,
+					_ => unreachable!(),
+				})
+			}
+
+			pub async fn data(&self, client: &Client) -> Result<Data> {
+				Ok(match self.0.data(client).await? {
+					object::Data::$t(data) => data,
+					_ => unreachable!(),
+				})
+			}
+
+			#[must_use]
+			pub fn handle(&self) -> &object::Handle {
+				&self.0
+			}
+		}
+	};
+}
+
+#[macro_export]
+macro_rules! id {
+	($t:ident) => {
 		impl self::Id {
 			#[must_use]
 			pub fn as_bytes(&self) -> [u8; $crate::id::SIZE] {
@@ -406,29 +506,68 @@ macro_rules! object {
 			}
 		}
 
-		impl self::Data {
-			pub(crate) fn serialize(&self) -> $crate::Result<Vec<u8>> {
-				let mut bytes = Vec::new();
-				byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
-				tangram_serialize::to_writer(self, &mut bytes)?;
-				Ok(bytes)
-			}
-
-			pub(crate) fn deserialize(mut bytes: &[u8]) -> $crate::Result<Self> {
-				let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
-				if version != 0 {
-					$crate::return_error!(
-						r#"Cannot deserialize this object with version "{version}"."#
-					);
-				}
-				let value = tangram_serialize::from_reader(bytes)?;
-				Ok(value)
-			}
-		}
+		impl Eq for self::Id {}
 
 		impl std::hash::Hash for self::Id {
 			fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
 				std::hash::Hash::hash(&self.0, state);
+			}
+		}
+
+		impl Ord for self::Id {
+			fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+				self.0.cmp(&other.0)
+			}
+		}
+
+		impl PartialEq for self::Id {
+			fn eq(&self, other: &Self) -> bool {
+				self.0 == other.0
+			}
+		}
+
+		impl PartialOrd for self::Id {
+			fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+				self.0.partial_cmp(&other.0)
+			}
+		}
+
+		impl serde::Serialize for self::Id {
+			fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+				self.0.serialize(serializer)
+			}
+		}
+
+		impl<'de> serde::Deserialize<'de> for self::Id {
+			fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+				$crate::Id::deserialize(deserializer)?
+					.try_into()
+					.map_err(serde::de::Error::custom)
+			}
+		}
+
+		impl tangram_serialize::Serialize for self::Id {
+			fn serialize<W>(
+				&self,
+				serializer: &mut tangram_serialize::Serializer<W>,
+			) -> std::io::Result<()>
+			where
+				W: std::io::Write,
+			{
+				self.0.serialize(serializer)
+			}
+		}
+
+		impl tangram_serialize::Deserialize for self::Id {
+			fn deserialize<R>(
+				deserializer: &mut tangram_serialize::Deserializer<R>,
+			) -> std::io::Result<Self>
+			where
+				R: std::io::Read,
+			{
+				$crate::Id::deserialize(deserializer)?
+					.try_into()
+					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			}
 		}
 
@@ -447,20 +586,53 @@ macro_rules! object {
 			}
 		}
 
+		impl TryFrom<&[u8]> for self::Id {
+			type Error = $crate::Error;
+
+			fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+				Self::try_from($crate::Id::try_from(value)?)
+			}
+		}
+
 		impl From<self::Id> for $crate::Id {
-			fn from(object: self::Id) -> Self {
-				object.0
+			fn from(value: self::Id) -> Self {
+				value.0
 			}
 		}
 
 		impl TryFrom<$crate::Id> for self::Id {
 			type Error = $crate::Error;
 
-			fn try_from(object: $crate::Id) -> Result<Self, Self::Error> {
-				match object.kind() {
-					$crate::id::Kind::$t => Ok(Self(object)),
+			fn try_from(value: $crate::Id) -> Result<Self, Self::Error> {
+				match value.kind() {
+					$crate::id::Kind::$t => Ok(Self(value)),
 					_ => $crate::return_error!("Unexpected kind."),
 				}
+			}
+		}
+	};
+}
+
+#[macro_export]
+macro_rules! data {
+	() => {
+		impl self::Data {
+			pub(crate) fn serialize(&self) -> $crate::Result<Vec<u8>> {
+				let mut bytes = Vec::new();
+				byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
+				tangram_serialize::to_writer(self, &mut bytes)?;
+				Ok(bytes)
+			}
+
+			pub(crate) fn deserialize(mut bytes: &[u8]) -> $crate::Result<Self> {
+				let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+				if version != 0 {
+					$crate::return_error!(
+						r#"Cannot deserialize this object with version "{version}"."#
+					);
+				}
+				let value = tangram_serialize::from_reader(bytes)?;
+				Ok(value)
 			}
 		}
 	};
