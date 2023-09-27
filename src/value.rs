@@ -1,12 +1,13 @@
 use crate::{
-	blob, directory, file, object, package, placeholder, symlink, task, template, Artifact, Blob,
-	Bytes, Directory, File, Package, Placeholder, Symlink, Task, Template,
+	blob, directory, file, object, package, placeholder, symlink, task, template, Blob, Bytes,
+	Directory, File, Package, Placeholder, Symlink, Task, Template,
 };
-use derive_more::{From, TryInto};
+use derive_more::{From, TryInto, TryUnwrap};
 use std::collections::BTreeMap;
 
 /// A value.
-#[derive(Clone, Debug, From, TryInto)]
+#[derive(Clone, Debug, From, TryInto, TryUnwrap)]
+#[try_unwrap(ref)]
 pub enum Value {
 	/// A null value.
 	Null(()),
@@ -207,138 +208,6 @@ impl Data {
 			Self::Task(id) => vec![(*id).into()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
-		}
-	}
-}
-
-impl Value {
-	#[must_use]
-	pub fn as_null(&self) -> Option<&()> {
-		match self {
-			Self::Null(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_bool(&self) -> Option<&bool> {
-		match self {
-			Self::Bool(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_number(&self) -> Option<&f64> {
-		match self {
-			Self::Number(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_string(&self) -> Option<&String> {
-		match self {
-			Self::String(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_bytes(&self) -> Option<&Bytes> {
-		match self {
-			Self::Bytes(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_placeholder(&self) -> Option<&Placeholder> {
-		match self {
-			Self::Placeholder(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_blob(&self) -> Option<&Blob> {
-		match self {
-			Self::Blob(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_directory(&self) -> Option<&Directory> {
-		match self {
-			Self::Directory(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_file(&self) -> Option<&File> {
-		match self {
-			Self::File(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_symlink(&self) -> Option<&Symlink> {
-		match self {
-			Self::Symlink(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_artifact(&self) -> Option<Artifact> {
-		match self {
-			Self::Directory(value) => Some(Artifact::Directory(value.clone())),
-			Self::File(value) => Some(Artifact::File(value.clone())),
-			Self::Symlink(value) => Some(Artifact::Symlink(value.clone())),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_template(&self) -> Option<&Template> {
-		match self {
-			Self::Template(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_package(&self) -> Option<&Package> {
-		match self {
-			Self::Package(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_task(&self) -> Option<&Task> {
-		match self {
-			Self::Task(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_array(&self) -> Option<&Vec<Value>> {
-		match self {
-			Self::Array(value) => Some(value),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_map(&self) -> Option<&BTreeMap<String, Value>> {
-		match self {
-			Self::Map(value) => Some(value),
-			_ => None,
 		}
 	}
 }

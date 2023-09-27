@@ -2,6 +2,7 @@ use crate::{
 	directory, file, id, object, return_error, symlink, Client, Directory, Error, File, Result,
 	Symlink, Value,
 };
+use derive_more::{From, TryUnwrap};
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use std::{
 	collections::{HashSet, VecDeque},
@@ -22,6 +23,7 @@ pub enum Kind {
 	Copy,
 	Debug,
 	Eq,
+	From,
 	Hash,
 	PartialEq,
 	serde::Deserialize,
@@ -43,7 +45,8 @@ pub enum Id {
 }
 
 /// An artifact.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, From, TryUnwrap)]
+#[try_unwrap(ref)]
 pub enum Artifact {
 	/// A directory.
 	Directory(Directory),
@@ -136,48 +139,6 @@ impl Artifact {
 
 		Ok(references)
 	}
-
-	#[must_use]
-	pub fn as_directory(&self) -> Option<&Directory> {
-		match self {
-			Self::Directory(directory) => Some(directory),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_file(&self) -> Option<&File> {
-		match self {
-			Self::File(file) => Some(file),
-			_ => None,
-		}
-	}
-
-	#[must_use]
-	pub fn as_symlink(&self) -> Option<&Symlink> {
-		match self {
-			Self::Symlink(symlink) => Some(symlink),
-			_ => None,
-		}
-	}
-}
-
-impl From<directory::Id> for Id {
-	fn from(id: directory::Id) -> Self {
-		Self::Directory(id)
-	}
-}
-
-impl From<file::Id> for Id {
-	fn from(id: file::Id) -> Self {
-		Self::File(id)
-	}
-}
-
-impl From<symlink::Id> for Id {
-	fn from(id: symlink::Id) -> Self {
-		Self::Symlink(id)
-	}
 }
 
 impl std::fmt::Display for Id {
@@ -218,24 +179,6 @@ impl TryFrom<crate::Id> for Id {
 			id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			_ => return_error!("Expected an artifact ID."),
 		}
-	}
-}
-
-impl From<Directory> for Artifact {
-	fn from(value: Directory) -> Self {
-		Self::Directory(value)
-	}
-}
-
-impl From<File> for Artifact {
-	fn from(value: File) -> Self {
-		Self::File(value)
-	}
-}
-
-impl From<Symlink> for Artifact {
-	fn from(value: Symlink) -> Self {
-		Self::Symlink(value)
 	}
 }
 

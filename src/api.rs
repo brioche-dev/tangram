@@ -1,11 +1,20 @@
-pub mod login;
-pub mod user;
+use crate::{Id, Result};
+use std::sync::Arc;
+use url::Url;
 
-pub struct Client {}
+pub struct Client {
+	state: Arc<State>,
+}
+
+struct State {
+	url: Url,
+	client: reqwest::Client,
+	token: std::sync::RwLock<Option<String>>,
+}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Login {
-	pub id: Rid,
+	pub id: Id,
 	pub url: Url,
 	pub token: Option<String>,
 }
@@ -17,97 +26,76 @@ pub struct SearchResult {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct User {
-	pub id: Rid,
+	pub id: Id,
 	pub email: String,
 }
 
 impl Client {
+	#[must_use]
+	pub fn new() -> Self {
+		let state = Arc::new(State {
+			url: Url::parse("http://localhost:8477").unwrap(),
+			client: reqwest::Client::new(),
+			token: std::sync::RwLock::new(None),
+		});
+		Self { state }
+	}
+
 	pub async fn create_login(&self) -> Result<Login> {
-		// Send the request.
-		let mut url = self.url.clone();
-		url.set_path("/v1/logins");
 		let response = self
-			.request(reqwest::Method::POST, url)
+			.request(reqwest::Method::POST, "/v1/logins")
 			.send()
 			.await?
 			.error_for_status()?;
-
-		// Get the response.
 		let response = response.json().await?;
 		Ok(response)
 	}
-}
 
-impl Client {
-	pub async fn get_login(&self, id: Rid) -> Result<Login> {
-		// Send the request.
-		let mut url = self.url.clone();
-		url.set_path(&format!("/v1/logins/{id}"));
+	pub async fn get_login(&self, id: Id) -> Result<Login> {
 		let response = self
-			.request(reqwest::Method::GET, url)
+			.request(reqwest::Method::GET, &format!("/v1/logins/{id}"))
 			.send()
 			.await?
 			.error_for_status()?;
-
-		// Get the response.
 		let response = response.json().await?;
 		Ok(response)
 	}
-}
 
-impl Client {
-	pub async fn publish_package(&self, package: Package) -> Result<()> {
-		// Build the URL.
-		let id = package.id();
-		let mut url = self.url.clone();
-		let path = format!("/v1/packages/{id}");
-		url.set_path(&path);
-
-		// Send the request.
-		self.request(reqwest::Method::POST, url)
+	pub async fn publish_package(&self, name: &str) -> Result<()> {
+		self.request(reqwest::Method::POST, &format!("/v1/packages/{name}"))
 			.send()
 			.await?
 			.error_for_status()?;
-
 		Ok(())
 	}
-}
 
-impl Client {
 	pub async fn search_packages(&self, query: &str) -> Result<Vec<SearchResult>> {
-		// Build the URL.
-		let mut url = self.url.clone();
-		url.set_path("/v1/packages/search");
-		url.set_query(Some(&format!("query={query}")));
-
-		// Send the request.
+		let path = &format!("/v1/packages/search?query={query}");
 		let response = self
-			.request(reqwest::Method::GET, url)
+			.request(reqwest::Method::GET, path)
 			.send()
 			.await?
 			.error_for_status()?;
-
-		// Read the response body.
 		let response = response.json().await?;
-
 		Ok(response)
 	}
-}
 
-impl Client {
 	pub async fn get_current_user(&self) -> Result<User> {
-		// Send the request.
-		let mut url = self.url.clone();
-		url.set_path("/v1/user");
 		let response = self
-			.request(reqwest::Method::GET, url)
+			.request(reqwest::Method::GET, "/v1/user")
 			.send()
 			.await?
 			.error_for_status()?;
-
-		// Get the response.
 		let user = response.json().await?;
-
 		Ok(user)
+	}
+
+	fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
+		let url = format!("{}{}", self.state.url, path.strip_prefix('/').unwrap());
+		let mut request = self.state.client.request(method, url);
+		if let Some(token) = self.state.token.read().unwrap().as_ref() {
+			request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
+		}
+		request
 	}
 }

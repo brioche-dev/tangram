@@ -1,16 +1,17 @@
 #![allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
 use super::{
-	isolate::THREAD_LOCAL_ISOLATE,
-	state::{FutureOutput, State},
-	FromV8, ToV8,
+	convert::{from_v8, FromV8, ToV8},
+	FutureOutput, THREAD_LOCAL_ISOLATE,
 };
 use crate::{
-	checksum, return_error, Artifact, Blob, Bytes, Checksum, Error, Result, Server, Value, WrapErr,
+	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Error, Result, Server, Task,
+	Value, WrapErr,
 };
 use base64::Engine as _;
 use itertools::Itertools;
 use std::{future::Future, rc::Rc};
+use url::Url;
 
 pub fn syscall<'s>(
 	scope: &mut v8::HandleScope<'s>,
@@ -25,7 +26,7 @@ pub fn syscall<'s>(
 
 		Err(error) => {
 			// Throw the exception.
-			let exception = error.to_exception(scope);
+			let exception = error.to_v8(scope).expect("Failed to serialize the error.");
 			scope.throw_exception(exception);
 		},
 	}
@@ -42,10 +43,9 @@ fn syscall_inner<'s>(
 
 	// Invoke the syscall.
 	match name.as_str() {
-		"artifact_bundle" => syscall_async(scope, args, syscall_artifact_bundle),
-		"blob_bytes" => syscall_async(scope, args, syscall_blob_bytes),
-		"build_output" => syscall_async(scope, args, syscall_build_output),
+		"bundle" => syscall_async(scope, args, syscall_bundle),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
+		"download" => syscall_async(scope, args, syscall_download),
 		"encoding_base64_decode" => syscall_sync(scope, args, syscall_encoding_base64_decode),
 		"encoding_base64_encode" => syscall_sync(scope, args, syscall_encoding_base64_encode),
 		"encoding_hex_decode" => syscall_sync(scope, args, syscall_encoding_hex_decode),
@@ -58,28 +58,25 @@ fn syscall_inner<'s>(
 		"encoding_utf8_encode" => syscall_sync(scope, args, syscall_encoding_utf8_encode),
 		"encoding_yaml_decode" => syscall_sync(scope, args, syscall_encoding_yaml_decode),
 		"encoding_yaml_encode" => syscall_sync(scope, args, syscall_encoding_yaml_encode),
+		"load" => syscall_async(scope, args, syscall_load),
 		"log" => syscall_sync(scope, args, syscall_log),
-		"value_load" => syscall_async(scope, args, syscall_value_load),
-		"value_store" => syscall_async(scope, args, syscall_value_store),
+		"read" => syscall_async(scope, args, syscall_read),
+		"run" => syscall_async(scope, args, syscall_run),
+		"store" => syscall_async(scope, args, syscall_store),
+		"unpack" => syscall_async(scope, args, syscall_unpack),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
-async fn syscall_artifact_bundle(tg: Server, args: (Artifact,)) -> Result<Artifact> {
+async fn syscall_bundle(server: Server, args: (Artifact,)) -> Result<Artifact> {
 	let (artifact,) = args;
-	let artifact = artifact.bundle(&tg).await?;
+	let artifact = artifact.bundle(&server).await?;
 	Ok(artifact)
-}
-
-async fn syscall_blob_bytes(server: Server, args: (Blob,)) -> Result<Bytes> {
-	let (blob,) = args;
-	let bytes = blob.bytes(&server).await?;
-	Ok(bytes.into())
 }
 
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (checksum::Algorithm, Bytes),
 ) -> Result<Checksum> {
 	let (algorithm, bytes) = args;
@@ -89,9 +86,13 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
+async fn syscall_download(server: Server, args: (Url, Checksum)) -> Result<Blob> {
+	todo!()
+}
+
 fn syscall_encoding_base64_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (value,) = args;
@@ -104,7 +105,7 @@ fn syscall_encoding_base64_decode(
 
 fn syscall_encoding_base64_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -114,7 +115,7 @@ fn syscall_encoding_base64_encode(
 
 fn syscall_encoding_hex_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (hex,) = args;
@@ -129,7 +130,7 @@ fn syscall_encoding_hex_decode(
 
 fn syscall_encoding_hex_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (bytes,) = args;
@@ -140,7 +141,7 @@ fn syscall_encoding_hex_encode(
 
 fn syscall_encoding_json_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (String,),
 ) -> Result<serde_json::Value> {
 	let (json,) = args;
@@ -152,7 +153,7 @@ fn syscall_encoding_json_decode(
 
 fn syscall_encoding_json_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (serde_json::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -164,7 +165,7 @@ fn syscall_encoding_json_encode(
 
 fn syscall_encoding_toml_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (String,),
 ) -> Result<serde_toml::Value> {
 	let (toml,) = args;
@@ -176,7 +177,7 @@ fn syscall_encoding_toml_decode(
 
 fn syscall_encoding_toml_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (serde_toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -188,7 +189,7 @@ fn syscall_encoding_toml_encode(
 
 fn syscall_encoding_utf8_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (bytes,) = args;
@@ -200,7 +201,7 @@ fn syscall_encoding_utf8_decode(
 
 fn syscall_encoding_utf8_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (string,) = args;
@@ -210,7 +211,7 @@ fn syscall_encoding_utf8_encode(
 
 fn syscall_encoding_yaml_decode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (String,),
 ) -> Result<serde_yaml::Value> {
 	let (yaml,) = args;
@@ -222,7 +223,7 @@ fn syscall_encoding_yaml_decode(
 
 fn syscall_encoding_yaml_encode(
 	_scope: &mut v8::HandleScope,
-	_tg: Server,
+	_server: Server,
 	args: (serde_yaml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -232,10 +233,33 @@ fn syscall_encoding_yaml_encode(
 	Ok(yaml)
 }
 
-fn syscall_log(_scope: &mut v8::HandleScope, _tg: Server, args: (String,)) -> Result<()> {
+async fn syscall_load(server: Server, args: (object::Id,)) -> Result<object::Object> {
+	todo!()
+}
+
+fn syscall_log(_scope: &mut v8::HandleScope, _server: Server, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	println!("{string}");
 	Ok(())
+}
+
+async fn syscall_read(server: Server, args: (Blob,)) -> Result<Bytes> {
+	todo!()
+	// let (blob,) = args;
+	// let bytes = blob.bytes(&server).await?;
+	// Ok(bytes.into())
+}
+
+async fn syscall_run(server: Server, args: (Task,)) -> Result<Value> {
+	todo!()
+}
+
+async fn syscall_store(server: Server, args: (object::Object,)) -> Result<object::Id> {
+	todo!()
+}
+
+async fn syscall_unpack(server: Server, args: (Blob, ArchiveFormat)) -> Result<Artifact> {
+	todo!()
 }
 
 fn syscall_sync<'s, A, T, F>(
@@ -362,4 +386,130 @@ where
 	};
 
 	Ok(value)
+}
+
+#[derive(
+	Clone,
+	Copy,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
+#[serde(into = "String", try_from = "String")]
+#[tangram_serialize(into = "String", try_from = "String")]
+pub enum ArchiveFormat {
+	Tar,
+	TarBz2,
+	TarGz,
+	TarXz,
+	TarZstd,
+	Zip,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CompressionFormat {
+	Bz2,
+	Gz,
+	Xz,
+	Zstd,
+}
+
+impl std::fmt::Display for ArchiveFormat {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Tar => {
+				write!(f, ".tar")?;
+			},
+			Self::TarBz2 => {
+				write!(f, ".tar.bz2")?;
+			},
+			Self::TarGz => {
+				write!(f, ".tar.gz")?;
+			},
+			Self::TarXz => {
+				write!(f, ".tar.xz")?;
+			},
+			Self::TarZstd => {
+				write!(f, ".tar.zstd")?;
+			},
+			Self::Zip => {
+				write!(f, ".zip")?;
+			},
+		}
+		Ok(())
+	}
+}
+
+impl std::str::FromStr for ArchiveFormat {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s {
+			".tar" => Ok(Self::Tar),
+			".tar.bz2" => Ok(Self::TarBz2),
+			".tar.gz" => Ok(Self::TarGz),
+			".tar.xz" => Ok(Self::TarXz),
+			".tar.zstd" => Ok(Self::TarZstd),
+			".zip" => Ok(Self::Zip),
+			_ => return_error!("Invalid format."),
+		}
+	}
+}
+
+impl std::fmt::Display for CompressionFormat {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let string = match self {
+			Self::Bz2 => ".bz2",
+			Self::Gz => ".gz",
+			Self::Xz => ".xz",
+			Self::Zstd => ".zstd",
+		};
+		write!(f, "{string}")?;
+		Ok(())
+	}
+}
+
+impl std::str::FromStr for CompressionFormat {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s {
+			".bz2" => Ok(Self::Bz2),
+			".gz" => Ok(Self::Gz),
+			".xz" => Ok(Self::Xz),
+			".zstd" => Ok(Self::Zstd),
+			_ => return_error!("Invalid compression format."),
+		}
+	}
+}
+
+impl From<ArchiveFormat> for String {
+	fn from(value: ArchiveFormat) -> Self {
+		value.to_string()
+	}
+}
+
+impl TryFrom<String> for ArchiveFormat {
+	type Error = Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
+	}
+}
+
+impl ToV8 for ArchiveFormat {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for ArchiveFormat {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
+	}
 }

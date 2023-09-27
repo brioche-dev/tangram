@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{Id, Result, WrapErr};
+use crate::{Result, WrapErr};
 
 impl Server {
 	pub async fn clean(&self) -> Result<()> {

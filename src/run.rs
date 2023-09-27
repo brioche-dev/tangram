@@ -1,4 +1,4 @@
-use crate::{blob, id, object, value, Blob, Client, Result, Value};
+use crate::{blob, id, object, return_error, value, Blob, Client, Result, Value, WrapErr};
 use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
@@ -6,11 +6,9 @@ use futures::{
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
-mod js;
+// mod js;
 
 crate::id!(Run);
-crate::handle!(Run);
-crate::data!();
 
 #[derive(Clone, Copy, Debug)]
 pub struct Id(crate::Id);
@@ -19,21 +17,15 @@ pub struct Id(crate::Id);
 pub struct Run(object::Handle);
 
 #[derive(Clone, Debug)]
-pub enum Object {
-	Uncompleted,
-	Completed(Completed),
-}
-
-#[derive(Clone, Debug)]
-pub struct Completed {
+pub struct Object {
 	/// The run's children.
-	children: Vec<Run>,
+	pub children: Vec<Run>,
 
 	/// The run's log.
-	log: Blob,
+	pub log: Blob,
 
 	/// The run's result.
-	result: Result<Value>,
+	pub result: Result<Value>,
 }
 
 #[derive(
@@ -44,53 +36,36 @@ pub struct Completed {
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-pub enum Data {
+pub struct Data {
+	/// The run's children.
 	#[tangram_serialize(id = 0)]
-	Uncompleted(()),
+	pub children: Vec<Id>,
 
+	/// The run's log.
 	#[tangram_serialize(id = 1)]
-	Completed(data::Completed),
+	pub log: blob::Id,
+
+	/// The run's result.
+	#[tangram_serialize(id = 2)]
+	pub result: Result<value::Data>,
 }
 
-pub mod data {
-	use super::{blob, value, Id, Result};
-
-	#[derive(
-		Clone,
-		Debug,
-		serde::Deserialize,
-		serde::Serialize,
-		tangram_serialize::Deserialize,
-		tangram_serialize::Serialize,
-	)]
-	pub struct Completed {
-		/// The run's children.
-		#[tangram_serialize(id = 0)]
-		pub children: Vec<Id>,
-
-		/// The run's log.
-		#[tangram_serialize(id = 1)]
-		pub log: blob::Id,
-
-		/// The run's result.
-		#[tangram_serialize(id = 2)]
-		pub result: Result<value::Data>,
-	}
-}
-
+#[allow(clippy::type_complexity)]
 #[derive(Debug)]
 pub struct State {
 	/// The run's children.
-	children: std::sync::Mutex<(Vec<Run>, tokio::sync::broadcast::Sender<Result<Run>>)>,
+	children: std::sync::Mutex<(
+		Vec<Run>,
+		Option<tokio::sync::broadcast::Sender<Result<Run>>>,
+	)>,
 
 	/// The run's log.
 	log: tokio::sync::Mutex<(
 		tokio::fs::File,
-		tokio::sync::broadcast::Sender<Result<Vec<u8>>>,
+		Option<tokio::sync::broadcast::Sender<Result<Vec<u8>>>>,
 	)>,
 
 	/// The run's result.
-	#[allow(clippy::type_complexity)]
 	result: (
 		tokio::sync::watch::Sender<Option<Result<Value>>>,
 		tokio::sync::watch::Receiver<Option<Result<Value>>>,
@@ -98,44 +73,86 @@ pub struct State {
 }
 
 impl Run {
-	#[allow(clippy::new_without_default)]
 	#[must_use]
-	pub fn new() -> Self {
-		Self(object::Handle::with_state((
-			Some(Id::new().into()),
-			Some(Object::Uncompleted.into()),
-		)))
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		Self(object::Handle::with_object(object.into()))
+	}
+
+	#[must_use]
+	pub fn id(&self) -> Id {
+		self.0.expect_id().try_into().unwrap()
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
+		&self.0
+	}
+
+	pub async fn try_get_object(&self, client: &Client) -> Result<Option<&Object>> {
+		match self.0.try_get_object(client).await? {
+			Some(object::Object::Run(object)) => Ok(Some(object)),
+			None => Ok(None),
+			_ => unreachable!(),
+		}
 	}
 
 	pub async fn children(&self, client: &Client) -> Result<BoxStream<'static, Result<Self>>> {
-		let object = self.object(client).await?;
-		match object {
-			Object::Uncompleted => Ok(client
-				.get_run_children(self.expect_id())
+		self.try_get_children(client)
+			.await?
+			.wrap_err("Failed to get the run.")
+	}
+
+	pub async fn try_get_children(
+		&self,
+		client: &Client,
+	) -> Result<Option<BoxStream<'static, Result<Self>>>> {
+		if let Some(object) = self.try_get_object(client).await? {
+			Ok(Some(stream::iter(object.children.clone()).map(Ok).boxed()))
+		} else {
+			Ok(client
+				.try_get_run_children(self.id())
 				.await?
-				.map_ok(Run::with_id)
-				.boxed()),
-			Object::Completed(object) => Ok(stream::iter(object.children.clone()).map(Ok).boxed()),
+				.map(|children| children.map_ok(Run::with_id).boxed()))
 		}
 	}
 
 	pub async fn log(&self, client: &Client) -> Result<BoxStream<'static, Result<Vec<u8>>>> {
-		let object = self.object(client).await?;
-		match object {
-			Object::Uncompleted => Ok(client.get_run_log(self.expect_id()).await?.boxed()),
-			Object::Completed(object) => {
-				let log = object.log.clone();
-				let client = client.clone();
-				Ok(stream::once(async move { log.bytes(&client).await }).boxed())
-			},
+		self.try_get_log(client)
+			.await?
+			.wrap_err("Failed to get the run.")
+	}
+
+	pub async fn try_get_log(
+		&self,
+		client: &Client,
+	) -> Result<Option<BoxStream<'static, Result<Vec<u8>>>>> {
+		if let Some(object) = self.try_get_object(client).await? {
+			let log = object.log.clone();
+			let client = client.clone();
+			Ok(Some(
+				stream::once(async move { log.bytes(&client).await }).boxed(),
+			))
+		} else {
+			Ok(client.try_get_run_log(self.id()).await?)
 		}
 	}
 
 	pub async fn result(&self, client: &Client) -> Result<Result<Value>> {
-		let object = self.object(client).await?;
-		match object {
-			Object::Uncompleted => Ok(client.get_run_result(self.expect_id()).await?),
-			Object::Completed(object) => Ok(object.result.clone()),
+		self.try_get_result(client)
+			.await?
+			.wrap_err("Failed to get the run.")
+	}
+
+	pub async fn try_get_result(&self, client: &Client) -> Result<Option<Result<Value>>> {
+		if let Some(object) = self.try_get_object(client).await? {
+			Ok(Some(object.result.clone()))
+		} else {
+			Ok(client.try_get_run_result(self.id()).await?)
 		}
 	}
 }
@@ -151,88 +168,83 @@ impl Id {
 impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
-		match self {
-			Self::Uncompleted => Data::Uncompleted(()),
-			Self::Completed(completed) => {
-				let children = completed.children.iter().map(Run::expect_id).collect();
-				let log = completed.log.expect_id();
-				let result = completed.result.clone().map(|value| value.to_data());
-				Data::Completed(data::Completed {
-					children,
-					log,
-					result,
-				})
-			},
+		let children = self.children.iter().map(Run::id).collect();
+		let log = self.log.expect_id();
+		let result = self.result.clone().map(|value| value.to_data());
+		Data {
+			children,
+			log,
+			result,
 		}
 	}
 
 	#[must_use]
 	pub(crate) fn from_data(data: Data) -> Self {
-		match data {
-			Data::Uncompleted(()) => Self::Uncompleted,
-			Data::Completed(data) => {
-				let children = data.children.into_iter().map(Run::with_id).collect();
-				let log = Blob::with_id(data.log);
-				let result = data.result.map(value::Value::from_data);
-				let completed = Completed {
-					children,
-					log,
-					result,
-				};
-				Self::Completed(completed)
-			},
+		let children = data.children.into_iter().map(Run::with_id).collect();
+		let log = Blob::with_id(data.log);
+		let result = data.result.map(value::Value::from_data);
+		Self {
+			children,
+			log,
+			result,
 		}
 	}
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Handle> {
-		match self {
-			Self::Uncompleted => Vec::new(),
-			Self::Completed(completed) => {
-				let children = completed
-					.children
-					.iter()
-					.map(|child| child.handle().clone());
-				let log = std::iter::once(completed.log.handle().clone());
-				let result = completed
-					.result
-					.as_ref()
-					.ok()
-					.map(Value::children)
-					.into_iter()
-					.flatten();
-				std::iter::empty()
-					.chain(children)
-					.chain(log)
-					.chain(result)
-					.collect()
-			},
-		}
+		let children = self
+			.children
+			.iter()
+			.map(|child| object::Handle::with_id(child.id().into()));
+		let log = std::iter::once(self.log.handle().clone());
+		let result = self
+			.result
+			.as_ref()
+			.ok()
+			.map(Value::children)
+			.into_iter()
+			.flatten();
+		std::iter::empty()
+			.chain(children)
+			.chain(log)
+			.chain(result)
+			.collect()
 	}
 }
 
 impl Data {
+	pub(crate) fn serialize(&self) -> Result<Vec<u8>> {
+		let mut bytes = Vec::new();
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
+		tangram_serialize::to_writer(self, &mut bytes)?;
+		Ok(bytes)
+	}
+
+	pub(crate) fn deserialize(mut bytes: &[u8]) -> Result<Self> {
+		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		if version != 0 {
+			return_error!(r#"Cannot deserialize this object with version "{version}"."#);
+		}
+		let value = tangram_serialize::from_reader(bytes)?;
+		Ok(value)
+	}
+
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
-		match self {
-			Self::Uncompleted(()) => Vec::new(),
-			Self::Completed(data) => {
-				let children = data.children.iter().copied().map(Into::into);
-				let log = std::iter::once(data.log.into());
-				let result = data
-					.result
-					.as_ref()
-					.ok()
-					.map(value::Data::children)
-					.into_iter()
-					.flatten();
-				std::iter::empty()
-					.chain(children)
-					.chain(log)
-					.chain(result)
-					.collect()
-			},
-		}
+		let children = self.children.iter().copied().map(Into::into);
+		let log = std::iter::once(self.log.into());
+		let result = self
+			.result
+			.as_ref()
+			.ok()
+			.map(value::Data::children)
+			.into_iter()
+			.flatten();
+		std::iter::empty()
+			.chain(children)
+			.chain(log)
+			.chain(result)
+			.collect()
 	}
 }
 
@@ -243,8 +255,8 @@ impl State {
 		let (result_tx, result_rx) = tokio::sync::watch::channel(None);
 		let log_file = tokio::fs::File::from_std(tempfile::tempfile()?);
 		Ok(Self {
-			children: std::sync::Mutex::new((Vec::new(), children_tx)),
-			log: tokio::sync::Mutex::new((log_file, log_tx)),
+			children: std::sync::Mutex::new((Vec::new(), Some(children_tx))),
+			log: tokio::sync::Mutex::new((log_file, Some(log_tx))),
 			result: (result_tx, result_rx),
 		})
 	}
@@ -252,28 +264,37 @@ impl State {
 	pub fn add_child(&self, child: Run) {
 		let mut children = self.children.lock().unwrap();
 		children.0.push(child.clone());
-		children.1.send(Ok(child)).ok();
+		children.1.as_ref().unwrap().send(Ok(child)).ok();
 	}
 
 	pub async fn add_log(&self, bytes: Vec<u8>) -> Result<()> {
 		let mut log = self.log.lock().await;
 		log.0.seek(std::io::SeekFrom::End(0)).await?;
 		log.0.write_all(&bytes).await?;
-		log.1.send(Ok(bytes)).ok();
+		log.1.as_ref().unwrap().send(Ok(bytes)).ok();
 		Ok(())
 	}
 
-	pub fn set_result(&self, result: Result<Value>) {
-		self.result.0.send(Some(result)).ok();
+	pub async fn set_result(&self, result: Result<Value>) {
+		// Set the result.
+		self.result.0.send(Some(result)).unwrap();
+
+		// End the children and log streams.
+		self.children.lock().unwrap().1.take();
+		self.log.lock().await.1.take();
 	}
 
 	pub fn children(&self) -> BoxStream<'static, Result<Run>> {
 		let children = self.children.lock().unwrap();
-		let old = children.0.clone().into_iter().map(Ok);
-		let new = BroadcastStream::new(children.1.subscribe())
-			.filter_map(|result| async move { result.ok() });
-		let stream = stream::iter(old).chain(new);
-		stream.boxed()
+		let old = stream::iter(children.0.clone().into_iter().map(Ok));
+		let new = if let Some(new) = children.1.as_ref() {
+			BroadcastStream::new(new.subscribe())
+				.filter_map(|result| async move { result.ok() })
+				.boxed()
+		} else {
+			stream::empty().boxed()
+		};
+		old.chain(new).boxed()
 	}
 
 	pub async fn log(&self) -> Result<BoxStream<'static, Result<Vec<u8>>>> {
@@ -281,11 +302,16 @@ impl State {
 		log.0.seek(std::io::SeekFrom::Start(0)).await?;
 		let mut old = Vec::new();
 		log.0.read_to_end(&mut old).await?;
+		let old = stream::once(async move { Ok(old) });
 		log.0.seek(std::io::SeekFrom::End(0)).await?;
-		let new =
-			BroadcastStream::new(log.1.subscribe()).filter_map(|result| async move { result.ok() });
-		let stream = stream::once(async move { Ok(old) }).chain(new);
-		Ok(stream.boxed())
+		let new = if let Some(new) = log.1.as_ref() {
+			BroadcastStream::new(new.subscribe())
+				.filter_map(|result| async move { result.ok() })
+				.boxed()
+		} else {
+			stream::empty().boxed()
+		};
+		Ok(old.chain(new).boxed())
 	}
 
 	pub async fn result(&self) -> Result<Value> {

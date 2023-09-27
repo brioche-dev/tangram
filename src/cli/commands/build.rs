@@ -59,8 +59,8 @@ impl Cli {
 				.await
 				.wrap_err("Failed to check out the artifact.")?;
 		} else {
-			// TODO: Print the output.
-			// println!("{output}");
+			// Print the output.
+			println!("{output:?}");
 		}
 
 		Ok(())

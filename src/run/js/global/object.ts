@@ -17,58 +17,63 @@ export namespace Object_ {
 	export type Id = string;
 
 	export class Handle {
-		#state: [Id | undefined, Object_ | undefined];
+		#state: State;
 
-		constructor(state: [Id | undefined, Object_ | undefined]) {
+		constructor(state: State) {
 			this.#state = state;
 		}
 
-		state(): [Id | undefined, Object_ | undefined] {
+		state(): State {
 			return this.#state;
 		}
 
 		static withId(id: Id): Handle {
-			return new Handle([id, undefined]);
+			return new Handle({ id, object: undefined });
 		}
 
 		static withObject(object: Object_): Handle {
-			return new Handle([undefined, object]);
+			return new Handle({ id: undefined, object });
 		}
 
 		expectId(): Id {
-			if (this.#state[0] === undefined) {
+			if (this.#state.id === undefined) {
 				throw new Error();
 			}
-			return this.#state[0];
+			return this.#state.id;
 		}
 
 		expectObject(): Object_ {
-			if (this.#state[1] === undefined) {
+			if (this.#state.object === undefined) {
 				throw new Error();
 			}
-			return this.#state[1];
+			return this.#state.object;
 		}
 
 		async id(): Promise<Id> {
 			await this.store();
-			return this.#state[0]!;
+			return this.#state.id!;
 		}
 
 		async object(): Promise<Object_> {
 			await this.load();
-			return this.#state[1]!;
+			return this.#state.object!;
 		}
 
 		async load() {
-			if (this.#state[1] === undefined) {
-				this.#state[1] = await syscall("load", this.#state[0]!);
+			if (this.#state.object === undefined) {
+				this.#state.object = await syscall("load", this.#state.id!);
 			}
 		}
 
 		async store() {
-			if (this.#state[0] === undefined) {
-				this.#state[0] = await syscall("store", this.#state[1]!);
+			if (this.#state.id === undefined) {
+				this.#state.id = await syscall("store", this.#state.object!);
 			}
 		}
 	}
+
+	export type State = {
+		id: Id | undefined;
+		object: Object_ | undefined;
+	};
 }

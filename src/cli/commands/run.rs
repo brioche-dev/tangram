@@ -55,7 +55,7 @@ impl Cli {
 
 		// Get the output artifact.
 		let artifact = output
-			.as_artifact()
+			.try_into()
 			.wrap_err("Expected the output to be an artifact.")?;
 
 		// Get the path to the artifact.

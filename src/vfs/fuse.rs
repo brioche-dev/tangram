@@ -15,7 +15,7 @@ use zerocopy::{AsBytes, FromBytes};
 /// A FUSE server.
 #[derive(Clone)]
 pub struct Server {
-	tg: Server,
+	client: Client,
 	state: Arc<tokio::sync::RwLock<State>>,
 }
 

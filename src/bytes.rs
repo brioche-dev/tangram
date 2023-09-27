@@ -144,6 +144,18 @@ impl tangram_serialize::Deserialize for Bytes {
 	}
 }
 
+impl From<Box<[u8]>> for Bytes {
+	fn from(value: Box<[u8]>) -> Self {
+		Self::with_boxed_slice(value)
+	}
+}
+
+impl From<Vec<u8>> for Bytes {
+	fn from(value: Vec<u8>) -> Self {
+		Self::with_vec(value)
+	}
+}
+
 #[derive(Clone, Debug)]
 pub struct Buffer(
 	#[cfg(not(feature = "server"))] Arc<[u8]>,

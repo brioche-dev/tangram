@@ -1,8 +1,7 @@
-use crate::{artifact, blob, object, Artifact, Blob, Client, Result};
+use crate::{artifact, blob, object, return_error, Artifact, Blob, Client, Result};
 
 crate::id!(File);
 crate::handle!(File);
-crate::data!();
 
 #[derive(Clone, Copy, Debug)]
 pub struct Id(crate::Id);
@@ -111,6 +110,22 @@ impl Object {
 }
 
 impl Data {
+	pub(crate) fn serialize(&self) -> Result<Vec<u8>> {
+		let mut bytes = Vec::new();
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
+		tangram_serialize::to_writer(self, &mut bytes)?;
+		Ok(bytes)
+	}
+
+	pub(crate) fn deserialize(mut bytes: &[u8]) -> Result<Self> {
+		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		if version != 0 {
+			return_error!(r#"Cannot deserialize this object with version "{version}"."#);
+		}
+		let value = tangram_serialize::from_reader(bytes)?;
+		Ok(value)
+	}
+
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		std::iter::once(self.contents.into())

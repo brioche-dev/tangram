@@ -38,9 +38,16 @@ impl Module {
 
 				// Load the module.
 				let client = &Client::with_server(server.clone());
-				let directory = package.artifact(client).await?.as_directory().unwrap();
+				let directory = package
+					.artifact(client)
+					.await?
+					.try_unwrap_directory_ref()
+					.unwrap();
 				let entry = directory.get(client, &module.path).await?;
-				let file = entry.as_file().wrap_err("Expected a file.")?;
+				let file = entry
+					.try_unwrap_file_ref()
+					.ok()
+					.wrap_err("Expected a file.")?;
 				let text = file.contents(client).await?.text(client).await?;
 
 				Ok(text)

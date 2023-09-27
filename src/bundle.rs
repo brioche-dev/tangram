@@ -63,12 +63,13 @@ impl Artifact {
 		// Remove references from the bundle directory.
 		let bundle_directory = bundle_directory
 			.remove_references(client, &Subpath::empty())
-			.await?;
+			.await?
+			.try_unwrap_directory()
+			.ok()
+			.wrap_err("The artifact must be a directory.")?;
 
 		// Add the artifacts directory to the bundled artifact at `.tangram/artifacts`.
 		let bundle_directory = bundle_directory
-			.as_directory()
-			.wrap_err("The artifact must be a directory.")?
 			.builder(client)
 			.await?
 			.add(client, &TANGRAM_ARTIFACTS_PATH, artifacts_directory.into())

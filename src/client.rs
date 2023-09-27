@@ -27,7 +27,7 @@ impl Client {
 	pub fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
 		match self {
 			Self::Server(server) => &server.state.file_descriptor_semaphore,
-			Self::Reqwest(client) => &client.state.file_descriptor_semaphore,
+			Self::Reqwest(reqwest) => &reqwest.state.file_descriptor_semaphore,
 		}
 	}
 
@@ -35,7 +35,7 @@ impl Client {
 	pub async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
 		match self {
 			Self::Server(server) => server.get_object_exists(id).await,
-			Self::Reqwest(client) => client.get_object_exists(id).await,
+			Self::Reqwest(reqwest) => reqwest.get_object_exists(id).await,
 		}
 	}
 
@@ -43,14 +43,14 @@ impl Client {
 	pub async fn get_object_bytes(&self, id: object::Id) -> Result<Vec<u8>> {
 		self.try_get_object_bytes(id)
 			.await?
-			.wrap_err("Expected the object to exist.")
+			.wrap_err("Failed to get the object.")
 	}
 
 	#[async_recursion]
 	pub async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
 		match self {
 			Self::Server(server) => server.try_get_object_bytes(id).await,
-			Self::Reqwest(client) => client.try_get_object_bytes(id).await,
+			Self::Reqwest(reqwest) => reqwest.try_get_object_bytes(id).await,
 		}
 	}
 
@@ -62,7 +62,7 @@ impl Client {
 	) -> Result<Result<(), Vec<object::Id>>> {
 		match self {
 			Self::Server(server) => server.try_put_object_bytes(id, bytes).await,
-			Self::Reqwest(client) => client.try_put_object_bytes(id, bytes).await,
+			Self::Reqwest(reqwest) => reqwest.try_put_object_bytes(id, bytes).await,
 		}
 	}
 
@@ -89,7 +89,7 @@ impl Client {
 	) -> Result<BoxStream<'static, Result<run::Id>>> {
 		self.try_get_run_children(id)
 			.await?
-			.wrap_err("Expected the run to exist.")
+			.wrap_err("Failed to get the run.")
 	}
 
 	#[async_recursion]
@@ -107,7 +107,7 @@ impl Client {
 	pub async fn get_run_log(&self, id: run::Id) -> Result<BoxStream<'static, Result<Vec<u8>>>> {
 		self.try_get_run_log(id)
 			.await?
-			.wrap_err("Expected the run to exist.")
+			.wrap_err("Failed to get the run.")
 	}
 
 	#[async_recursion]
@@ -125,7 +125,7 @@ impl Client {
 	pub async fn get_run_result(&self, id: run::Id) -> Result<Result<Value>> {
 		self.try_get_run_result(id)
 			.await?
-			.wrap_err("Expected the run to exist.")
+			.wrap_err("Failed to get the run.")
 	}
 
 	#[async_recursion]

@@ -1,5 +1,5 @@
 pub use self::component::Component;
-use crate::{object, Artifact, Placeholder, Result};
+use crate::{object, Artifact, Result};
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use itertools::Itertools;
 use std::{borrow::Cow, future::Future, path::PathBuf};
@@ -148,62 +148,6 @@ impl Data {
 				_ => None,
 			})
 			.collect()
-	}
-}
-
-impl Component {
-	#[must_use]
-	pub fn as_string(&self) -> Option<&str> {
-		if let Self::String(string) = self {
-			Some(string)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
-	pub fn as_artifact(&self) -> Option<&Artifact> {
-		if let Self::Artifact(artifact) = self {
-			Some(artifact)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
-	pub fn as_placeholder(&self) -> Option<&Placeholder> {
-		if let Self::Placeholder(placeholder) = self {
-			Some(placeholder)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
-	pub fn into_string(self) -> Option<String> {
-		if let Self::String(string) = self {
-			Some(string)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
-	pub fn into_artifact(self) -> Option<Artifact> {
-		if let Self::Artifact(artifact) = self {
-			Some(artifact)
-		} else {
-			None
-		}
-	}
-
-	#[must_use]
-	pub fn into_placeholder(self) -> Option<Placeholder> {
-		if let Self::Placeholder(placeholder) = self {
-			Some(placeholder)
-		} else {
-			None
-		}
 	}
 }
 

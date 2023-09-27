@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_safety_doc)]
+#![allow(clippy::redundant_pattern)]
 
 #[cfg(feature = "client")]
 pub use self::client::Client;
@@ -28,6 +29,7 @@ pub use self::{
 	value::Value,
 };
 
+pub mod api;
 pub mod artifact;
 pub mod blob;
 pub mod bundle;
@@ -68,3 +70,4 @@ pub mod temp;
 pub mod template;
 pub mod util;
 pub mod value;
+pub mod vfs;

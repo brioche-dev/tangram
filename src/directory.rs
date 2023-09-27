@@ -1,10 +1,11 @@
-use crate::{artifact, error, object, Artifact, Client, Error, Result, Subpath, WrapErr};
+use crate::{
+	artifact, error, object, return_error, Artifact, Client, Error, Result, Subpath, WrapErr,
+};
 use async_recursion::async_recursion;
 use std::collections::BTreeMap;
 
 crate::id!(Directory);
 crate::handle!(Directory);
-crate::data!();
 
 #[derive(Clone, Copy, Debug)]
 pub struct Id(crate::Id);
@@ -64,7 +65,7 @@ impl Directory {
 		// Handle each path component.
 		for name in path.components() {
 			// The artifact must be a directory.
-			let Some(directory) = artifact.as_directory() else {
+			let Some(directory) = artifact.try_unwrap_directory_ref().ok() else {
 				return Ok(None);
 			};
 
@@ -127,6 +128,22 @@ impl Object {
 }
 
 impl Data {
+	pub(crate) fn serialize(&self) -> Result<Vec<u8>> {
+		let mut bytes = Vec::new();
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
+		tangram_serialize::to_writer(self, &mut bytes)?;
+		Ok(bytes)
+	}
+
+	pub(crate) fn deserialize(mut bytes: &[u8]) -> Result<Self> {
+		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		if version != 0 {
+			return_error!(r#"Cannot deserialize this object with version "{version}"."#);
+		}
+		let value = tangram_serialize::from_reader(bytes)?;
+		Ok(value)
+	}
+
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		self.entries.values().copied().map(Into::into).collect()
@@ -166,7 +183,8 @@ impl Builder {
 			// Get or create a child directory.
 			let builder = if let Some(child) = self.entries.get(name) {
 				child
-					.as_directory()
+					.try_unwrap_directory_ref()
+					.ok()
 					.wrap_err("Expected the artifact to be a directory.")?
 					.builder(client)
 					.await?
@@ -206,7 +224,8 @@ impl Builder {
 			// Get a child directory.
 			let builder = if let Some(child) = self.entries.get(name) {
 				child
-					.as_directory()
+					.try_unwrap_directory_ref()
+					.ok()
 					.wrap_err("Expected the artifact to be a directory.")?
 					.builder(client)
 					.await?

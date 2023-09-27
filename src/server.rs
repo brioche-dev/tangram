@@ -1,6 +1,7 @@
 use crate::{
 	document::{self, Document},
-	id, language, object, run, task, Client, Error, Result, Run, Value, WrapErr,
+	id, language, object, run, system, task, vfs, Blob, Client, Error, Result, Run, System, Task,
+	Value, WrapErr,
 };
 use futures::{
 	stream::{self, BoxStream},
@@ -12,6 +13,7 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
+use tokio_util::io::StreamReader;
 use url::Url;
 
 /// A server.
@@ -32,9 +34,15 @@ pub struct State {
 	/// A semaphore that prevents opening too many file descriptors.
 	pub(crate) file_descriptor_semaphore: tokio::sync::Semaphore,
 
+	/// An HTTP client for downloading resources.
+	pub(crate) http_client: reqwest::Client,
+
 	/// A channel sender to send requests to the language service.
 	pub(crate) language_service_request_sender:
 		std::sync::Mutex<Option<language::service::RequestSender>>,
+
+	/// A local pool for running JS tasks.
+	pub(crate) local_pool: tokio_util::task::LocalPoolHandle,
 
 	/// A handle to the main tokio runtime.
 	pub(crate) main_runtime_handle: tokio::runtime::Handle,
@@ -48,18 +56,14 @@ pub struct State {
 	/// The path to the directory where the server stores its data.
 	pub(crate) path: PathBuf,
 
-	/// An HTTP client for downloading resources.
-	pub(crate) resource_http_client: reqwest::Client,
+	/// A semaphore that limits the number of concurrent subprocesses.
+	pub(crate) process_semaphore: tokio::sync::Semaphore,
 
 	/// The server's uncompleted runs.
 	pub(crate) uncompleted_runs:
 		std::sync::RwLock<HashMap<run::Id, Arc<run::State>, id::BuildHasher>>,
 
-	/// A local pool for running targets.
-	pub(crate) target_local_pool: tokio_util::task::LocalPoolHandle,
-
-	/// A semaphore that limits the number of concurrent tasks.
-	pub(crate) task_semaphore: tokio::sync::Semaphore,
+	pub(crate) vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
 
 #[derive(Debug)]
@@ -108,8 +112,16 @@ impl Server {
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 
+		// Create the HTTP client for downloading resources.
+		let http_client = reqwest::Client::new();
+
 		// Create the sender for language service requests.
 		let language_service_request_sender = std::sync::Mutex::new(None);
+
+		// Create the local pool for running JS tasks.
+		let local_pool = tokio_util::task::LocalPoolHandle::new(
+			std::thread::available_parallelism().unwrap().get(),
+		);
 
 		// Get the curent tokio runtime handler.
 		let main_runtime_handle = tokio::runtime::Handle::current();
@@ -122,41 +134,52 @@ impl Server {
 			None
 		};
 
-		// Create the HTTP client for downloading resources.
-		let resource_http_client = reqwest::Client::new();
+		// Create the process semaphore.
+		let process_semaphore =
+			tokio::sync::Semaphore::new(std::thread::available_parallelism().unwrap().get());
 
 		// Create the runs.
 		let uncompleted_runs = std::sync::RwLock::new(HashMap::default());
 
-		// Create the target local pool.
-		let target_local_pool = tokio_util::task::LocalPoolHandle::new(
-			std::thread::available_parallelism().unwrap().get(),
-		);
-
-		// Create the task semaphore.
-		let task_semaphore =
-			tokio::sync::Semaphore::new(std::thread::available_parallelism().unwrap().get());
+		// Create the VFS server task.
+		let vfs_server_task = std::sync::Mutex::new(None);
 
 		// Create the state.
 		let state = State {
 			database,
 			documents,
 			file_descriptor_semaphore,
+			http_client,
 			language_service_request_sender,
+			local_pool,
 			main_runtime_handle,
 			options,
 			parent,
 			path,
-			resource_http_client,
+			process_semaphore,
 			uncompleted_runs,
-			target_local_pool,
-			task_semaphore,
+			vfs_server_task,
 		};
 
 		// Create the server.
 		let server = Server {
 			state: Arc::new(state),
 		};
+
+		// Start the VFS server.
+		server
+			.state
+			.vfs_server_task
+			.lock()
+			.unwrap()
+			.replace(tokio::spawn({
+				let path = server.artifacts_path();
+				let client = Client::with_server(server.clone());
+				async move {
+					let vfs_server = vfs::Server::new(path, client);
+					vfs_server.serve().await
+				}
+			}));
 
 		Ok(server)
 	}
@@ -387,11 +410,13 @@ impl Server {
 
 	/// Get or create a run for a task.
 	pub(crate) async fn get_or_create_run_for_task(&self, task_id: task::Id) -> Result<run::Id> {
-		let client = &Client::with_server(self.clone());
+		// Attempt to get the run for the task.
+		if let Some(run_id) = self.try_get_run_for_task(task_id).await? {
+			return Ok(run_id);
+		}
 
-		// Create a new run.
-		let run = Run::new();
-		let run_id = run.id(client).await?;
+		// Otherwise, create a new run.
+		let run_id = run::Id::new();
 		let state = Arc::new(run::State::new()?);
 		self.state
 			.uncompleted_runs
@@ -402,7 +427,7 @@ impl Server {
 		// Create a write transaction.
 		let mut txn = self.state.database.env.begin_rw_txn()?;
 
-		// Add the assignment to the database.
+		// Set the run for the task in the database.
 		txn.put(
 			self.state.database.assignments,
 			&task_id.as_bytes(),
@@ -413,9 +438,70 @@ impl Server {
 		// Commit the transaction.
 		txn.commit()?;
 
-		tokio::spawn(async move {
-			tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-			state.set_result(Ok(Value::String("Hello, World".to_owned())));
+		// Spawn the task.
+		tokio::spawn({
+			let task = Task::with_id(task_id);
+			let server = self.clone();
+			async move {
+				let client = &Client::with_server(server.clone());
+
+				let object = task.object(client).await?;
+
+				let result = match object.host.os() {
+					_ => Ok(Value::String("Hello, World".to_owned())),
+				};
+
+				// Set the result on the state.
+				state.set_result(result).await;
+
+				// Create the object.
+				let children = state.children().try_collect().await?;
+				let log = StreamReader::new(
+					state
+						.log()
+						.await?
+						.map_ok(::bytes::Bytes::from)
+						.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error)),
+				);
+				let log = Blob::with_reader(client, log).await?;
+				let result = state.result().await;
+				let object = run::Object {
+					children,
+					log,
+					result,
+				};
+
+				// Store the children.
+				object
+					.children()
+					.into_iter()
+					.map(|child| async move { child.store(client).await })
+					.collect::<futures::stream::FuturesUnordered<_>>()
+					.try_collect()
+					.await?;
+
+				// Get the data.
+				let data = object.to_data();
+				let bytes = data.serialize()?;
+
+				// Store the object.
+				client
+					.try_put_object_bytes(run_id.into(), &bytes)
+					.await
+					.wrap_err("Failed to put the object.")?
+					.ok()
+					.wrap_err("Expected all children to be stored.")?;
+
+				// Remove the run from the uncompleted runs.
+				server
+					.state
+					.uncompleted_runs
+					.write()
+					.unwrap()
+					.remove(&run_id);
+
+				Ok::<_, Error>(())
+			}
 		});
 
 		Ok(run_id)
@@ -425,33 +511,45 @@ impl Server {
 		&self,
 		id: run::Id,
 	) -> Result<Option<BoxStream<'static, Result<run::Id>>>> {
-		// Attempt to get the children from the uncompleted runs.
+		let client = &Client::with_server(self.clone());
+		let run = Run::with_id(id);
+
+		// Attempt to stream the children from the uncompleted runs.
+		let state = self
+			.state
+			.uncompleted_runs
+			.read()
+			.unwrap()
+			.get(&run.id())
+			.cloned();
+		if let Some(state) = state {
+			let children = state.children();
+			return Ok(Some(children.map_ok(|child| child.id()).boxed()));
+		}
+
+		// Attempt to get the children from the object.
 		'a: {
-			let state = self
-				.state
-				.uncompleted_runs
-				.read()
-				.unwrap()
-				.get(&id)
-				.cloned();
-			let Some(state) = state else {
+			let Some(object) = run.try_get_object(client).await? else {
 				break 'a;
 			};
 			return Ok(Some(
-				state
-					.children()
-					.map(|child| child.map(|child| child.expect_id()))
+				stream::iter(object.children.clone())
+					.map(|child| child.id())
+					.map(Ok)
 					.boxed(),
 			));
 		}
 
-		// 	// Attempt to get the children from the database or the parent.
-		// 	'a: {
-		// 		let Some(run) = self.try_get_run(id).await? else {
-		// 			break 'a;
-		// 		};
-		// 		return Ok(Some(stream::iter(run.children).boxed()));
-		// 	}
+		// Attempt to stream the children from the parent.
+		'a: {
+			let Some(parent) = self.state.parent.as_ref() else {
+				break 'a;
+			};
+			let Some(children) = parent.try_get_run_children(id).await? else {
+				break 'a;
+			};
+			return Ok(Some(children));
+		}
 
 		Ok(None)
 	}
@@ -460,55 +558,93 @@ impl Server {
 		&self,
 		id: run::Id,
 	) -> Result<Option<BoxStream<'static, Result<Vec<u8>>>>> {
-		// Attempt to get the log from the uncompleted runs.
+		let client = &Client::with_server(self.clone());
+		let run = Run::with_id(id);
+
+		// Attempt to stream the log from the uncompleted runs.
 		let state = self
 			.state
 			.uncompleted_runs
 			.read()
 			.unwrap()
-			.get(&id)
+			.get(&run.id())
 			.cloned();
 		if let Some(state) = state {
 			let log = state.log().await?;
 			return Ok(Some(log));
 		}
 
-		// 	// Attempt to get the log from the database or the parent.
-		// 	'a: {
-		// 		let Some(run) = self.try_get_run(id).await? else {
-		// 			break 'a;
-		// 		};
-		// 		let client = &Client::with_server(self.clone());
-		// 		let blob = Blob::with_id(run.log);
-		// 		let bytes = blob.bytes(client).await?;
-		// 		return Ok(Some(stream::once(async move { bytes }).boxed()));
-		// }
+		// Attempt to get the log from the object.
+		'a: {
+			let Some(object) = run.try_get_object(client).await? else {
+				break 'a;
+			};
+			let object = object.clone();
+			let client = client.clone();
+			return Ok(Some(
+				stream::once(async move { object.log.bytes(&client).await }).boxed(),
+			));
+		}
+
+		// Attempt to stream the log from the parent.
+		'a: {
+			let Some(parent) = self.state.parent.as_ref() else {
+				break 'a;
+			};
+			let Some(log) = parent.try_get_run_log(id).await? else {
+				break 'a;
+			};
+			return Ok(Some(log));
+		}
 
 		Ok(None)
 	}
 
 	pub(crate) async fn try_get_run_result(&self, id: run::Id) -> Result<Option<Result<Value>>> {
-		// Attempt to get the result from the uncompleted runs.
+		let client = &Client::with_server(self.clone());
+		let run = Run::with_id(id);
+
+		// Attempt to await the result from the uncompleted runs.
 		let state = self
 			.state
 			.uncompleted_runs
 			.read()
 			.unwrap()
-			.get(&id)
+			.get(&run.id())
 			.cloned();
 		if let Some(state) = state {
 			let result = state.result().await;
 			return Ok(Some(result));
 		}
 
-		// // Attempt to get the result from the database.
-		// 'a: {
-		// 	let Some(run) = self.try_get_run(id).await? else {
-		// 		break 'a;
-		// 	};
-		// 	return Ok(Some(run.result));
-		// }
+		// Attempt to get the result from the object.
+		'a: {
+			let Some(object) = run.try_get_object(client).await? else {
+				break 'a;
+			};
+			return Ok(Some(object.result.clone()));
+		}
+
+		// Attempt to await the result from the parent.
+		'a: {
+			let Some(parent) = self.state.parent.as_ref() else {
+				break 'a;
+			};
+			let Some(result) = parent.try_get_run_result(id).await? else {
+				break 'a;
+			};
+			return Ok(Some(result));
+		}
 
 		Ok(None)
+	}
+}
+
+impl Drop for Server {
+	fn drop(&mut self) {
+		// Abort the VFS server task.
+		if let Some(task) = self.state.vfs_server_task.lock().unwrap().take() {
+			task.abort();
+		}
 	}
 }

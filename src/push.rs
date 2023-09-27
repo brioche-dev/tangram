@@ -1,4 +1,4 @@
-use crate::{error, object, return_error, Result, Server};
+use crate::{object, return_error, Result, Server, WrapErr};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 
@@ -34,7 +34,8 @@ impl Server {
 		parent
 			.try_put_object_bytes(id, &bytes)
 			.await?
-			.map_err(|_| error!("Failed to push the block."))?;
+			.ok()
+			.wrap_err("Failed to push the block.")?;
 
 		Ok(())
 	}

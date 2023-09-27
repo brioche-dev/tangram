@@ -19,6 +19,7 @@ pub const API_URL: &str = "https://api.tangram.dev";
 
 struct Cli {
 	client: tg::Client,
+	api_client: tg::api::Client,
 }
 
 #[tokio::main]
@@ -63,8 +64,10 @@ async fn main_inner() -> Result<()> {
 		.await?,
 	);
 
+	let api_client = tg::api::Client::new();
+
 	// Create the CLI.
-	let cli = Cli { client };
+	let cli = Cli { client, api_client };
 
 	// Run the command.
 	cli.run(args).await?;

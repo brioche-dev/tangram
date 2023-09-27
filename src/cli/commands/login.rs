@@ -10,8 +10,7 @@ impl Cli {
 	pub async fn command_login(&self, _args: Args) -> Result<()> {
 		// Create a login.
 		let login = self
-			.tg
-			.api_client()
+			.api_client
 			.create_login()
 			.await
 			.wrap_err("Failed to create the login.")?;
@@ -29,8 +28,7 @@ impl Cli {
 				return_error!("Login timed out. Please try again.");
 			}
 			let login = self
-				.tg
-				.origin_client()
+				.api_client
 				.get_login(login.id)
 				.await
 				.wrap_err("Failed to get the login.")?;
@@ -41,10 +39,11 @@ impl Cli {
 		};
 
 		// Set the token.
-		self.tg.origin_client().set_token(Some(token.clone()));
+		self.client.set_token(Some(token.clone()));
+		self.api_client.set_token(Some(token.clone()));
 
 		// Get the user.
-		let user = self.tg.origin_client().get_current_user().await?;
+		let user = self.api_client().get_current_user().await?;
 
 		// Write the credentials.
 		let credentials = Credentials {

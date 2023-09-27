@@ -1,8 +1,8 @@
 use crate::{
-	artifact, blob, directory, error, file, id, package, return_error, run, symlink, task, Client,
-	Error, Result, WrapErr,
+	artifact, blob, directory, file, id, package, run, symlink, task, Client, Error, Result,
+	WrapErr,
 };
-use derive_more::{From, TryInto};
+use derive_more::{From, TryInto, TryUnwrap};
 use futures::stream::TryStreamExt;
 use std::sync::Arc;
 
@@ -25,6 +25,7 @@ pub enum Kind {
 	Debug,
 	From,
 	TryInto,
+	TryUnwrap,
 	serde::Deserialize,
 	serde::Serialize,
 	tangram_serialize::Deserialize,
@@ -45,16 +46,14 @@ pub enum Id {
 /// An object handle.
 #[derive(Clone, Debug)]
 pub struct Handle {
-	state: Arc<std::sync::RwLock<(Option<Id>, Option<Object>)>>,
+	state: Arc<std::sync::RwLock<State>>,
 }
 
-// #[derive(Debug)]
-// pub struct State {
-// 	loaded: bool,
-// 	stored: bool,
-// 	id: Option<Id>,
-// 	object: Option<Object>,
-// }
+#[derive(Debug)]
+pub struct State {
+	id: Option<Id>,
+	object: Option<Object>,
+}
 
 /// An object.
 #[derive(Clone, Debug, From, TryInto)]
@@ -147,38 +146,40 @@ impl Id {
 }
 
 impl Handle {
-	pub(crate) fn with_state(state: (Option<Id>, Option<Object>)) -> Self {
+	pub(crate) fn with_state(state: State) -> Self {
 		Self {
 			state: Arc::new(std::sync::RwLock::new(state)),
 		}
 	}
 
-	pub(crate) fn state(&self) -> &std::sync::RwLock<(Option<Id>, Option<Object>)> {
+	pub(crate) fn state(&self) -> &std::sync::RwLock<State> {
 		&self.state
 	}
 
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {
+		let state = State::with_id(id);
 		Self {
-			state: Arc::new(std::sync::RwLock::new((Some(id), None))),
+			state: Arc::new(std::sync::RwLock::new(state)),
 		}
 	}
 
 	#[must_use]
 	pub(crate) fn with_object(object: Object) -> Self {
+		let state = State::with_object(object);
 		Self {
-			state: Arc::new(std::sync::RwLock::new((None, Some(object)))),
+			state: Arc::new(std::sync::RwLock::new(state)),
 		}
 	}
 
 	#[must_use]
 	pub fn expect_id(&self) -> Id {
-		self.state.read().unwrap().0.unwrap()
+		self.state.read().unwrap().id.unwrap()
 	}
 
 	#[must_use]
 	pub fn expect_object(&self) -> &Object {
-		unsafe { &*(self.state.read().unwrap().1.as_ref().unwrap() as *const Object) }
+		unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) }
 	}
 
 	pub async fn id(&self, client: &Client) -> Result<Id> {
@@ -186,7 +187,7 @@ impl Handle {
 		self.store(client).await?;
 
 		// Return the ID.
-		Ok(self.state.read().unwrap().0.unwrap())
+		Ok(self.state.read().unwrap().id.unwrap())
 	}
 
 	pub async fn object(&self, client: &Client) -> Result<&Object> {
@@ -194,7 +195,19 @@ impl Handle {
 		self.load(client).await?;
 
 		// Return a reference to the object.
-		Ok(unsafe { &*(self.state.read().unwrap().1.as_ref().unwrap() as *const Object) })
+		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
+	}
+
+	pub async fn try_get_object(&self, client: &Client) -> Result<Option<&Object>> {
+		// Attempt to load the object.
+		if !self.try_load(client).await? {
+			return Ok(None);
+		}
+
+		// Return a reference to the object.
+		Ok(Some(unsafe {
+			&*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object)
+		}))
 	}
 
 	pub async fn data(&self, client: &Client) -> Result<Data> {
@@ -202,23 +215,38 @@ impl Handle {
 		self.load(client).await?;
 
 		// Return the data.
-		Ok(self.state.read().unwrap().1.as_ref().unwrap().to_data())
+		Ok(self
+			.state
+			.read()
+			.unwrap()
+			.object
+			.as_ref()
+			.unwrap()
+			.to_data())
 	}
 
 	pub async fn load(&self, client: &Client) -> Result<()> {
-		// Get the id. If the object is already loaded, then return.
-		let id = match &*self.state.read().unwrap() {
-			(Some(id), _) => *id,
-			(None, Some(_)) => return Ok(()),
-			_ => unreachable!(),
-		};
+		self.try_load(client)
+			.await?
+			.then_some(())
+			.wrap_err("Failed to load the object.")
+	}
+
+	pub async fn try_load(&self, client: &Client) -> Result<bool> {
+		// If the handle is loaded, then return.
+		if self.state.read().unwrap().object.is_some() {
+			return Ok(true);
+		}
+
+		// Get the ID.
+		let id = self.state.read().unwrap().id.unwrap();
 
 		// Get the kind.
 		let kind = id.kind();
 
 		// Get the data.
 		let Some(bytes) = client.try_get_object_bytes(id).await? else {
-			return_error!(r#"Failed to find object with id "{id}"."#);
+			return Ok(false);
 		};
 
 		// Deserialize the object.
@@ -227,23 +255,28 @@ impl Handle {
 		// Create the object.
 		let object = Object::from_data(data);
 
-		// Set the object.
-		self.state.write().unwrap().1.replace(object);
+		// Update the state.
+		self.state.write().unwrap().object.replace(object);
 
-		Ok(())
+		Ok(true)
 	}
 
 	#[async_recursion::async_recursion]
 	pub async fn store(&self, client: &Client) -> Result<()> {
-		// If the object is already stored, then return.
-		match &*self.state.read().unwrap() {
-			(Some(_), _) => return Ok(()),
-			(None, Some(_)) => {},
-			_ => unreachable!(),
-		};
+		// If the handle is stored, then return.
+		if self.state.read().unwrap().id.is_some() {
+			return Ok(());
+		}
 
 		// Get the children.
-		let children = self.state.read().unwrap().1.as_ref().unwrap().children();
+		let children = self
+			.state
+			.read()
+			.unwrap()
+			.object
+			.as_ref()
+			.unwrap()
+			.children();
 
 		// Store the children.
 		children
@@ -254,7 +287,14 @@ impl Handle {
 			.await?;
 
 		// Get the data.
-		let data = self.state.read().unwrap().1.as_ref().unwrap().to_data();
+		let data = self
+			.state
+			.read()
+			.unwrap()
+			.object
+			.as_ref()
+			.unwrap()
+			.to_data();
 
 		// Serialize the data.
 		let bytes = data.serialize()?;
@@ -270,12 +310,49 @@ impl Handle {
 			.try_put_object_bytes(id, &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
-			.map_err(|_| error!("Expected all children to be stored."))?;
+			.ok()
+			.wrap_err("Expected all children to be stored.")?;
 
-		// Set the ID.
-		self.state.write().unwrap().0.replace(id);
+		// Update the state.
+		self.state.write().unwrap().id.replace(id);
 
 		Ok(())
+	}
+}
+
+impl State {
+	#[must_use]
+	pub fn with_id_and_object(id: Id, object: Object) -> Self {
+		Self {
+			id: Some(id),
+			object: Some(object),
+		}
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self {
+			id: Some(id),
+			object: None,
+		}
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		Self {
+			id: None,
+			object: Some(object),
+		}
+	}
+
+	#[must_use]
+	pub fn id(&self) -> Option<Id> {
+		self.id
+	}
+
+	#[must_use]
+	pub fn object(&self) -> &Option<Object> {
+		&self.object
 	}
 }
 
@@ -468,24 +545,24 @@ macro_rules! handle {
 			}
 
 			pub async fn id(&self, client: &Client) -> Result<Id> {
-				Ok(match self.0.id(client).await? {
-					object::Id::$t(id) => id,
+				match self.0.id(client).await? {
+					object::Id::$t(id) => Ok(id),
 					_ => unreachable!(),
-				})
+				}
 			}
 
 			pub async fn object(&self, client: &Client) -> Result<&Object> {
-				Ok(match self.0.object(client).await? {
-					object::Object::$t(object) => object,
+				match self.0.object(client).await? {
+					object::Object::$t(object) => Ok(object),
 					_ => unreachable!(),
-				})
+				}
 			}
 
 			pub async fn data(&self, client: &Client) -> Result<Data> {
-				Ok(match self.0.data(client).await? {
-					object::Data::$t(data) => data,
+				match self.0.data(client).await? {
+					object::Data::$t(data) => Ok(data),
 					_ => unreachable!(),
-				})
+				}
 			}
 
 			#[must_use]
@@ -608,31 +685,6 @@ macro_rules! id {
 					$crate::id::Kind::$t => Ok(Self(value)),
 					_ => $crate::return_error!("Unexpected kind."),
 				}
-			}
-		}
-	};
-}
-
-#[macro_export]
-macro_rules! data {
-	() => {
-		impl self::Data {
-			pub(crate) fn serialize(&self) -> $crate::Result<Vec<u8>> {
-				let mut bytes = Vec::new();
-				byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
-				tangram_serialize::to_writer(self, &mut bytes)?;
-				Ok(bytes)
-			}
-
-			pub(crate) fn deserialize(mut bytes: &[u8]) -> $crate::Result<Self> {
-				let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
-				if version != 0 {
-					$crate::return_error!(
-						r#"Cannot deserialize this object with version "{version}"."#
-					);
-				}
-				let value = tangram_serialize::from_reader(bytes)?;
-				Ok(value)
 			}
 		}
 	};
