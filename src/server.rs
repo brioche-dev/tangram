@@ -1,4 +1,4 @@
-use crate::{id, task, Client, Error, Result};
+use crate::{id, task, vfs, Client, Error, Result};
 use futures::FutureExt;
 use http_body_util::BodyExt;
 use itertools::Itertools;
@@ -134,6 +134,20 @@ impl Server {
 
 		// Create the server.
 		let server = Server { state };
+
+		// Start the VFS server.
+		let client = Client::with_server(server.clone());
+		let kind = if cfg!(target_os = "linux") {
+			vfs::Kind::Fuse
+		} else {
+			vfs::Kind::Nfs(2049)
+		};
+
+		// Mount the VFS server.
+		let task = vfs::Server::new(kind, client)
+			.mount(server.artifacts_path())
+			.await?;
+		server.state.vfs_server_task.lock().unwrap().replace(task);
 
 		Ok(server)
 	}

@@ -1,6 +1,5 @@
 use self::{
 	convert::{from_v8, ToV8},
-	error::Error,
 	syscall::syscall,
 };
 use crate::{
@@ -15,7 +14,6 @@ use std::{
 };
 
 mod convert;
-mod error;
 mod syscall;
 
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/global.heapsnapshot"));

@@ -59,3 +59,5 @@ pub mod temp;
 pub mod template;
 pub mod util;
 pub mod value;
+#[cfg(feature = "server")]
+pub mod vfs;

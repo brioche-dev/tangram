@@ -110,7 +110,7 @@ varint-rs = "2"
 webbrowser = "0.8"
 xattr = { version = "1", optional = true }
 xz2 = { version = "0.1", optional = true }
-zerocopy = { version = "0.7", optional = true }
+zerocopy = { version = "0.7", optional = true, features = ["derive"] }
 zip = { version = "0.6", optional = true, default-features = false, features = [
   "aes-crypto",
   "deflate",
