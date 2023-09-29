@@ -1,6 +1,6 @@
 use crate::{
-	artifact, blob, directory, file, id, package, run, symlink, task, Client, Error, Result,
-	WrapErr,
+	artifact, blob, directory, file, id, package, return_error, run, symlink, task, Client, Error,
+	Result, WrapErr,
 };
 use derive_more::{From, TryInto, TryUnwrap};
 use futures::stream::TryStreamExt;
