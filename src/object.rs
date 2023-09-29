@@ -474,6 +474,7 @@ impl TryFrom<crate::Id> for self::Id {
 			crate::id::Kind::Package => Ok(Self::Package(value.try_into()?)),
 			crate::id::Kind::Task => Ok(Self::Task(value.try_into()?)),
 			crate::id::Kind::Run => Ok(Self::Run(value.try_into()?)),
+			_ => return_error!("Expected a valid object ID."),
 		}
 	}
 }

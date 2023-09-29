@@ -24,6 +24,12 @@ pub struct SearchResult {
 	pub name: String,
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct Package {
+	pub name: String,
+	pub versions: Vec<String>,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct User {
 	pub id: Id,

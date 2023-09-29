@@ -14,6 +14,9 @@ pub enum Kind {
 	Package,
 	Task,
 	Run,
+	User,
+	Login,
+	Token,
 }
 
 /// An ID.
@@ -107,6 +110,14 @@ impl TryFrom<String> for Id {
 	}
 }
 
+impl TryFrom<Vec<u8>> for Id {
+	type Error = Error;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		value.as_slice().try_into()
+	}
+}
+
 impl From<Id> for Vec<u8> {
 	fn from(value: Id) -> Self {
 		value.as_bytes().to_vec()
@@ -155,6 +166,9 @@ impl From<Kind> for u8 {
 			Kind::Package => 4,
 			Kind::Task => 5,
 			Kind::Run => 6,
+			Kind::User => 7,
+			Kind::Login => 8,
+			Kind::Token => 9,
 		}
 	}
 }
@@ -171,6 +185,9 @@ impl TryFrom<u8> for Kind {
 			4 => Ok(Kind::Package),
 			5 => Ok(Kind::Task),
 			6 => Ok(Kind::Run),
+			7 => Ok(Kind::User),
+			8 => Ok(Kind::Login),
+			9 => Ok(Kind::Token),
 			_ => return_error!("Invalid kind."),
 		}
 	}

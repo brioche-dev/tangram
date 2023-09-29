@@ -53,7 +53,7 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	// let client = tg::Client::with_url("http://localhost:8476".parse().unwrap(), None);
+	// let client = tg::Client::with_url("http://localhost:8477".parse().unwrap(), None);
 	let client = tg::Client::with_server(
 		tg::Server::new(
 			tg::util::dirs::home_directory_path()
