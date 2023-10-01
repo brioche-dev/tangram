@@ -5,192 +5,22 @@ use thiserror::Error;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An error.
-#[derive(
-	Clone,
-	Debug,
-	Error,
-	serde::Serialize,
-	serde::Deserialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
-pub enum Error {
-	/// An error with a message.
-	#[error(transparent)]
-	#[tangram_serialize(id = 0)]
-	Message(#[from] Message),
-
-	/// A run error.
-	// #[error(transparent)]
-	// #[tangram_serialize(id = 1)]
-	// Run(#[from] crate::run::Error),
-
-	/// A language service error.
-	#[error(transparent)]
-	#[tangram_serialize(id = 2)]
-	LanguageService(#[from] crate::language::service::error::Error),
-
-	/// Any other error.
-	#[error(transparent)]
-	#[tangram_serialize(id = 3)]
-	Other(#[from] Other),
-}
-
-#[derive(
-	Clone,
-	Debug,
-	Error,
-	serde::Serialize,
-	serde::Deserialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
-#[error("{message}\n  {location}")]
-pub struct Message {
-	#[tangram_serialize(id = 0)]
-	message: String,
-	#[tangram_serialize(id = 1)]
-	location: Location,
-	#[tangram_serialize(id = 2)]
-	source: Option<Arc<Error>>,
-}
-
-#[derive(
-	Clone,
-	Debug,
-	Error,
-	serde::Serialize,
-	serde::Deserialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, Error)]
 #[error("{message}")]
-pub struct Other {
-	#[tangram_serialize(id = 0)]
+pub struct Error {
 	message: String,
-	#[tangram_serialize(id = 1)]
+	location: Option<Location>,
 	source: Option<Arc<Error>>,
 }
 
-#[derive(
-	Clone,
-	Debug,
-	serde::Serialize,
-	serde::Deserialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug)]
 pub struct Location {
-	#[tangram_serialize(id = 0)]
 	pub file: String,
-	#[tangram_serialize(id = 1)]
 	pub line: u32,
-	#[tangram_serialize(id = 2)]
 	pub column: u32,
 }
 
-impl Error {
-	#[track_caller]
-	pub fn message(message: impl std::fmt::Display) -> Error {
-		Error::Message(Message {
-			message: message.to_string(),
-			location: Location::caller(),
-			source: None,
-		})
-	}
-
-	#[must_use]
-	#[track_caller]
-	pub fn last_os_error() -> Self {
-		Self::other(std::io::Error::last_os_error())
-	}
-
-	pub fn other(error: impl std::error::Error) -> Self {
-		Self::Other(Other {
-			message: error.to_string(),
-			source: error.source().map(|error| Arc::new(Self::other(error))),
-		})
-	}
-}
-
-#[cfg(feature = "client")]
-impl From<reqwest::Error> for Error {
-	fn from(error: reqwest::Error) -> Self {
-		Self::Other(Other {
-			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		})
-	}
-}
-
-#[cfg(feature = "server")]
-impl From<lmdb::Error> for Error {
-	fn from(error: lmdb::Error) -> Self {
-		Self::Other(Other {
-			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		})
-	}
-}
-
-impl From<std::io::Error> for Error {
-	fn from(error: std::io::Error) -> Error {
-		Error::Other(Other {
-			message: error.to_string(),
-			source: std::error::Error::source(&error).map(|error| Arc::new(Self::other(error))),
-		})
-	}
-}
-
-impl Location {
-	#[must_use]
-	#[track_caller]
-	pub fn caller() -> Location {
-		std::panic::Location::caller().into()
-	}
-}
-
-impl std::fmt::Display for Location {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}:{}:{}", self.file, self.line, self.column)
-	}
-}
-
-impl<'a> From<&'a std::panic::Location<'a>> for Location {
-	fn from(location: &'a std::panic::Location<'a>) -> Location {
-		Location {
-			file: location.file().to_owned(),
-			line: location.line(),
-			column: location.column(),
-		}
-	}
-}
-
-impl Error {
-	#[must_use]
-	#[track_caller]
-	pub fn wrap<C>(self, message: C) -> Error
-	where
-		C: std::fmt::Display,
-	{
-		self.wrap_with(|| message)
-	}
-
-	#[must_use]
-	#[track_caller]
-	pub fn wrap_with<C, F>(self, f: F) -> Error
-	where
-		C: std::fmt::Display,
-		F: FnOnce() -> C,
-	{
-		Error::Message(Message {
-			message: f().to_string(),
-			location: Location::caller(),
-			source: Some(Arc::new(self)),
-		})
-	}
-}
+pub struct Trace<'a>(&'a Error);
 
 pub trait WrapErr<T, E>: Sized {
 	#[track_caller]
@@ -208,9 +38,97 @@ pub trait WrapErr<T, E>: Sized {
 		F: FnOnce() -> C;
 }
 
+impl Error {
+	#[track_caller]
+	pub fn with_message(message: impl std::fmt::Display) -> Error {
+		Error {
+			message: message.to_string(),
+			location: Some(Location::caller()),
+			source: None,
+		}
+	}
+
+	pub fn with_error(error: impl std::error::Error) -> Self {
+		Self {
+			message: error.to_string(),
+			location: None,
+			source: error
+				.source()
+				.map(|error| Arc::new(Self::with_error(error))),
+		}
+	}
+
+	#[must_use]
+	pub fn trace(&self) -> Trace {
+		Trace(self)
+	}
+
+	#[must_use]
+	#[track_caller]
+	pub fn wrap<C>(self, message: C) -> Error
+	where
+		C: std::fmt::Display,
+	{
+		self.wrap_with(|| message)
+	}
+
+	#[must_use]
+	#[track_caller]
+	pub fn wrap_with<C, F>(self, f: F) -> Error
+	where
+		C: std::fmt::Display,
+		F: FnOnce() -> C,
+	{
+		Error {
+			message: f().to_string(),
+			location: Some(Location::caller()),
+			source: Some(Arc::new(self)),
+		}
+	}
+}
+
+impl Location {
+	#[must_use]
+	#[track_caller]
+	pub fn caller() -> Location {
+		std::panic::Location::caller().into()
+	}
+}
+
+impl<'a> From<&'a std::panic::Location<'a>> for Location {
+	fn from(location: &'a std::panic::Location<'a>) -> Location {
+		Location {
+			file: location.file().to_owned(),
+			line: location.line(),
+			column: location.column(),
+		}
+	}
+}
+
+impl std::fmt::Display for Location {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}:{}:{}", self.file, self.line, self.column)
+	}
+}
+
+impl<'a> std::fmt::Display for Trace<'a> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let mut error: &dyn std::error::Error = &self.0;
+		loop {
+			writeln!(f, "{error}")?;
+			if let Some(source) = error.source() {
+				error = source;
+			} else {
+				break;
+			}
+		}
+		Ok(())
+	}
+}
+
 impl<T, E> WrapErr<T, E> for Result<T, E>
 where
-	E: Into<Error>,
+	E: std::error::Error,
 {
 	#[track_caller]
 	fn wrap_err_with<C, F>(self, f: F) -> Result<T, Error>
@@ -220,7 +138,7 @@ where
 	{
 		match self {
 			Ok(value) => Ok(value),
-			Err(error) => Err(error.into().wrap_with(f)),
+			Err(error) => Err(Error::with_error(error).wrap_with(f)),
 		}
 	}
 }
@@ -234,15 +152,34 @@ impl<T> WrapErr<T, Error> for Option<T> {
 	{
 		match self {
 			Some(value) => Ok(value),
-			None => Err(Error::message(f())),
+			None => Err(Error::with_message(f())),
 		}
+	}
+}
+
+impl From<reqwest::Error> for Error {
+	fn from(error: reqwest::Error) -> Self {
+		Self::with_error(error)
+	}
+}
+
+#[cfg(feature = "server")]
+impl From<lmdb::Error> for Error {
+	fn from(error: lmdb::Error) -> Self {
+		Self::with_error(error)
+	}
+}
+
+impl From<std::io::Error> for Error {
+	fn from(error: std::io::Error) -> Error {
+		Self::with_error(error)
 	}
 }
 
 #[macro_export]
 macro_rules! error {
 	($($t:tt)*) => {{
-		$crate::error::Error::message(format!($($t)*))
+		$crate::error::Error::with_message(format!($($t)*))
 	}};
 }
 

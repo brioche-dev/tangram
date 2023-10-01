@@ -45,12 +45,11 @@ impl std::str::FromStr for Import {
 			// Otherwise, parse the string as a URL.
 			let url: Url = value
 				.parse()
-				.map_err(Error::other)
 				.wrap_err_with(|| format!(r#"Failed to parse the string "{value}" as a URL."#))?;
 
 			if url.scheme() == "tangram" {
 				// Parse the URL's path as a dependency.
-				let dependency = url.path().parse().map_err(Error::other).wrap_err_with(|| {
+				let dependency = url.path().parse().wrap_err_with(|| {
 					let path = url.path();
 					format!(r#"Failed to parse "{path}" as a dependency."#)
 				})?;

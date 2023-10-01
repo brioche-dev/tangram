@@ -54,7 +54,7 @@ flate2 = { version = "1", optional = true }
 fnv = "1"
 futures = "0.3"
 hex = { version = "0.4", features = ["serde"] }
-http = { version = "0.2", optional = true }
+http = "0.2"
 http-body = { version = "=1.0.0-rc.2", optional = true }
 http-body-util = { version = "=0.1.0-rc.3", optional = true }
 hyper = { version = "=1.0.0-rc.4", features = ["full"], optional = true }
@@ -71,7 +71,7 @@ pathdiff = "0.2"
 pin-project = "1"
 rand = "0.8"
 regex = "1"
-reqwest = { version = "0.11", optional = true, default-features = false, features = [
+reqwest = { version = "0.11", default-features = false, features = [
   "json",
   "stream",
   "rustls-tls",
@@ -125,22 +125,18 @@ http-body = { git = "https://github.com/hyperium/http-body" }
 http-body-util = { git = "https://github.com/hyperium/http-body" }
 
 [features]
-client = ["dep:http", "dep:reqwest"]
-default = ["client", "server"]
+default = ["server"]
 server = [
-  "client",
   "dep:bzip2",
   "dep:either",
   "dep:filetime",
   "dep:flate2",
-  "dep:http",
   "dep:http-body",
   "dep:http-body-util",
   "dep:hyper",
   "dep:hyper-util",
   "dep:lmdb-rkv",
   "dep:lsp-types",
-  "dep:reqwest",
   "dep:serde_toml",
   "dep:serde_v8",
   "dep:serde_yaml",

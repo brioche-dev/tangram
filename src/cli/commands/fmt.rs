@@ -1,4 +1,4 @@
-use crate::{error::Result, return_error, Cli};
+use crate::{return_error, Cli, Result};
 
 /// Format the files in a package.
 #[derive(Debug, clap::Args)]

@@ -1,5 +1,5 @@
 use super::{PackageArgs, RunArgs};
-use crate::{error::Result, Cli};
+use crate::{Cli, Result};
 
 /// Build a package's "env" export and run it.
 #[derive(Debug, clap::Args)]

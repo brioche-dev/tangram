@@ -92,6 +92,18 @@ pub struct Data {
 }
 
 impl Task {
+	pub async fn host(&self, client: &Client) -> Result<&System> {
+		Ok(&self.object(client).await?.host)
+	}
+
+	pub async fn executable(&self, client: &Client) -> Result<&Template> {
+		Ok(&self.object(client).await?.executable)
+	}
+
+	pub async fn package(&self, client: &Client) -> Result<&Option<Package>> {
+		Ok(&self.object(client).await?.package)
+	}
+
 	pub async fn run(&self, client: &Client) -> Result<Run> {
 		let task_id = self.id(client).await?;
 		let run_id = client.get_or_create_run_for_task(task_id).await?;
@@ -104,7 +116,7 @@ impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
 		Data {
-			host: self.host,
+			host: self.host.clone(),
 			executable: self.executable.to_data(),
 			package: self.package.as_ref().map(Package::expect_id),
 			target: self.target.clone(),

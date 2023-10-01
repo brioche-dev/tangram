@@ -6,17 +6,6 @@ use crate::{
 };
 use url::Url;
 
-pub mod analyze;
-pub mod error;
-pub mod import;
-pub mod load;
-pub mod parse;
-pub mod position;
-pub mod range;
-pub mod resolve;
-pub mod transpile;
-mod version;
-
 /// A module.
 #[derive(
 	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
@@ -99,14 +88,10 @@ impl TryFrom<Url> for Module {
 		let data = value.domain().wrap_err("The URL must have a domain.")?;
 
 		// Decode the domain.
-		let data = hex::decode(data)
-			.map_err(Error::other)
-			.wrap_err("Failed to deserialize the path as hex.")?;
+		let data = hex::decode(data).wrap_err("Failed to deserialize the path as hex.")?;
 
 		// Deserialize the domain.
-		let module = serde_json::from_slice(&data)
-			.map_err(Error::other)
-			.wrap_err("Failed to deserialize the module.")?;
+		let module = serde_json::from_slice(&data).wrap_err("Failed to deserialize the module.")?;
 
 		Ok(module)
 	}
@@ -124,7 +109,7 @@ impl std::str::FromStr for Module {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let url: Url = s.parse().map_err(Error::other)?;
+		let url: Url = s.parse().map_err(Error::with_error)?;
 		let module = url.try_into()?;
 		Ok(module)
 	}

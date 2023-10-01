@@ -1,9 +1,9 @@
-use crate::{language::Diagnostic, module};
+use crate::language::{Diagnostic, Module};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
-	pub modules: Vec<module::Module>,
+	pub modules: Vec<Module>,
 }
 
 #[derive(Debug, serde::Deserialize)]

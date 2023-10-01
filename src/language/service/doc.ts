@@ -1,9 +1,8 @@
+import { assert, todo } from "./assert.ts";
+import { Module } from "./module.ts";
 import { Range } from "./range.ts";
-import { Module } from "./syscall.ts";
-import * as syscall from "./syscall.ts";
 import { compilerOptions, host } from "./typescript.ts";
 import * as typescript from "./typescript.ts";
-import { assert } from "./util.ts";
 import ts from "typescript";
 
 declare module "typescript" {
@@ -1529,7 +1528,7 @@ let convertLocation = (node: ts.Node): Location => {
 			kind: "normal",
 			value: {
 				modulePath: module_.value.modulePath,
-				package: syscall.module_.unlockedPackage(module_),
+				packageId: todo(),
 			},
 		};
 	} else {

@@ -1,4 +1,4 @@
-use crate::{Id, Result};
+use crate::{Id, Result, WrapErr};
 use std::sync::Arc;
 use url::Url;
 
@@ -38,11 +38,11 @@ pub struct User {
 
 impl Client {
 	#[must_use]
-	pub fn new() -> Self {
+	pub fn new(url: Url, token: Option<String>) -> Self {
 		let state = Arc::new(State {
-			url: Url::parse("http://localhost:8477").unwrap(),
+			url,
 			client: reqwest::Client::new(),
-			token: std::sync::RwLock::new(None),
+			token: std::sync::RwLock::new(token),
 		});
 		Self { state }
 	}
@@ -51,9 +51,14 @@ impl Client {
 		let response = self
 			.request(reqwest::Method::POST, "/v1/logins")
 			.send()
-			.await?
-			.error_for_status()?;
-		let response = response.json().await?;
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("The response had a non-success status.")?;
+		let response = response
+			.json()
+			.await
+			.wrap_err("Failed to get the response JSON.")?;
 		Ok(response)
 	}
 
@@ -61,17 +66,24 @@ impl Client {
 		let response = self
 			.request(reqwest::Method::GET, &format!("/v1/logins/{id}"))
 			.send()
-			.await?
-			.error_for_status()?;
-		let response = response.json().await?;
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("The response had a non-success status.")?;
+		let response = response
+			.json()
+			.await
+			.wrap_err("Failed to get the response JSON.")?;
 		Ok(response)
 	}
 
 	pub async fn publish_package(&self, name: &str) -> Result<()> {
 		self.request(reqwest::Method::POST, &format!("/v1/packages/{name}"))
 			.send()
-			.await?
-			.error_for_status()?;
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("The response had a non-success status.")?;
 		Ok(())
 	}
 
@@ -80,9 +92,14 @@ impl Client {
 		let response = self
 			.request(reqwest::Method::GET, path)
 			.send()
-			.await?
-			.error_for_status()?;
-		let response = response.json().await?;
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("The response had a non-success status.")?;
+		let response = response
+			.json()
+			.await
+			.wrap_err("Failed to get the response JSON.")?;
 		Ok(response)
 	}
 
@@ -90,9 +107,14 @@ impl Client {
 		let response = self
 			.request(reqwest::Method::GET, "/v1/user")
 			.send()
-			.await?
-			.error_for_status()?;
-		let user = response.json().await?;
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("The response had a non-success status.")?;
+		let user = response
+			.json()
+			.await
+			.wrap_err("Faield to get the response JSON.")?;
 		Ok(user)
 	}
 

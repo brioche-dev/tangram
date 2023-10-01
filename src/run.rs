@@ -24,8 +24,8 @@ pub struct Object {
 	/// The run's log.
 	pub log: Blob,
 
-	/// The run's result.
-	pub result: Result<Value>,
+	/// The run's output.
+	pub output: Option<Value>,
 }
 
 #[derive(
@@ -45,9 +45,9 @@ pub struct Data {
 	#[tangram_serialize(id = 1)]
 	pub log: blob::Id,
 
-	/// The run's result.
+	/// The run's output.
 	#[tangram_serialize(id = 2)]
-	pub result: Result<value::Data>,
+	pub output: Option<value::Data>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -65,10 +65,10 @@ pub struct State {
 		Option<tokio::sync::broadcast::Sender<Result<Vec<u8>>>>,
 	)>,
 
-	/// The run's result.
-	result: (
-		tokio::sync::watch::Sender<Option<Result<Value>>>,
-		tokio::sync::watch::Receiver<Option<Result<Value>>>,
+	/// The run's output.
+	output: (
+		tokio::sync::watch::Sender<Option<Option<Value>>>,
+		tokio::sync::watch::Receiver<Option<Option<Value>>>,
 	),
 }
 
@@ -142,17 +142,17 @@ impl Run {
 		}
 	}
 
-	pub async fn result(&self, client: &Client) -> Result<Result<Value>> {
-		self.try_get_result(client)
+	pub async fn output(&self, client: &Client) -> Result<Option<Value>> {
+		self.try_get_output(client)
 			.await?
 			.wrap_err("Failed to get the run.")
 	}
 
-	pub async fn try_get_result(&self, client: &Client) -> Result<Option<Result<Value>>> {
+	pub async fn try_get_output(&self, client: &Client) -> Result<Option<Option<Value>>> {
 		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(object.result.clone()))
+			Ok(Some(object.output.clone()))
 		} else {
-			Ok(client.try_get_run_result(self.id()).await?)
+			Ok(client.try_get_run_output(self.id()).await?)
 		}
 	}
 }
@@ -170,11 +170,11 @@ impl Object {
 	pub(crate) fn to_data(&self) -> Data {
 		let children = self.children.iter().map(Run::id).collect();
 		let log = self.log.expect_id();
-		let result = self.result.clone().map(|value| value.to_data());
+		let output = self.output.clone().map(|value| value.to_data());
 		Data {
 			children,
 			log,
-			result,
+			output,
 		}
 	}
 
@@ -182,11 +182,11 @@ impl Object {
 	pub(crate) fn from_data(data: Data) -> Self {
 		let children = data.children.into_iter().map(Run::with_id).collect();
 		let log = Blob::with_id(data.log);
-		let result = data.result.map(value::Value::from_data);
+		let output = data.output.map(value::Value::from_data);
 		Self {
 			children,
 			log,
-			result,
+			output,
 		}
 	}
 
@@ -197,17 +197,16 @@ impl Object {
 			.iter()
 			.map(|child| object::Handle::with_id(child.id().into()));
 		let log = std::iter::once(self.log.handle().clone());
-		let result = self
-			.result
+		let output = self
+			.output
 			.as_ref()
-			.ok()
 			.map(Value::children)
 			.into_iter()
 			.flatten();
 		std::iter::empty()
 			.chain(children)
 			.chain(log)
-			.chain(result)
+			.chain(output)
 			.collect()
 	}
 }
@@ -233,17 +232,16 @@ impl Data {
 	pub fn children(&self) -> Vec<object::Id> {
 		let children = self.children.iter().copied().map(Into::into);
 		let log = std::iter::once(self.log.into());
-		let result = self
-			.result
+		let output = self
+			.output
 			.as_ref()
-			.ok()
 			.map(value::Data::children)
 			.into_iter()
 			.flatten();
 		std::iter::empty()
 			.chain(children)
 			.chain(log)
-			.chain(result)
+			.chain(output)
 			.collect()
 	}
 }
@@ -257,7 +255,7 @@ impl State {
 		Ok(Self {
 			children: std::sync::Mutex::new((Vec::new(), Some(children_tx))),
 			log: tokio::sync::Mutex::new((log_file, Some(log_tx))),
-			result: (result_tx, result_rx),
+			output: (result_tx, result_rx),
 		})
 	}
 
@@ -275,9 +273,9 @@ impl State {
 		Ok(())
 	}
 
-	pub async fn set_result(&self, result: Result<Value>) {
+	pub async fn set_output(&self, output: Option<Value>) {
 		// Set the result.
-		self.result.0.send(Some(result)).unwrap();
+		self.output.0.send(Some(output)).unwrap();
 
 		// End the children and log streams.
 		self.children.lock().unwrap().1.take();
@@ -314,8 +312,8 @@ impl State {
 		Ok(old.chain(new).boxed())
 	}
 
-	pub async fn result(&self) -> Result<Value> {
-		self.result
+	pub async fn output(&self) -> Option<Value> {
+		self.output
 			.1
 			.clone()
 			.wait_for(Option::is_some)

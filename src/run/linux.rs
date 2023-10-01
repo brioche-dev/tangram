@@ -224,9 +224,8 @@ impl Task {
 		}
 
 		// Create the socket.
-		let (mut host_socket, guest_socket) = tokio::net::UnixStream::pair()
-			.map_err(Error::other)
-			.wrap_err("Failed to create the socket pair.")?;
+		let (mut host_socket, guest_socket) =
+			tokio::net::UnixStream::pair().wrap_err("Failed to create the socket pair.")?;
 		let guest_socket = guest_socket.into_std()?;
 		guest_socket.set_nonblocking(false)?;
 
@@ -359,9 +358,8 @@ impl Task {
 		});
 
 		// Create the executable.
-		let executable = CString::new(executable)
-			.map_err(Error::other)
-			.wrap_err("The executable is not a valid C string.")?;
+		let executable =
+			CString::new(executable).wrap_err("The executable is not a valid C string.")?;
 
 		// Create `envp`.
 		let env = env
@@ -378,7 +376,7 @@ impl Task {
 		// Create `argv`.
 		let args: Vec<_> = args
 			.into_iter()
-			.map(|arg| CString::new(arg).map_err(Error::other))
+			.map(|arg| CString::new(arg).map_err(Error::with_error))
 			.try_collect()?;
 		let mut argv = Vec::with_capacity(1 + args.len() + 1);
 		argv.push(executable.clone());
@@ -389,12 +387,10 @@ impl Task {
 
 		// Get the root host path as a C string.
 		let root_host_path = CString::new(root_host_path.as_os_str().as_bytes())
-			.map_err(Error::other)
 			.wrap_err("The root host path is not a valid C string.")?;
 
 		// Get the working directory guest path as a C string.
 		let working_directory_guest_path = CString::new(WORKING_DIRECTORY_GUEST_PATH)
-			.map_err(Error::other)
 			.wrap_err("The working directory is not a valid C string.")?;
 
 		// Create the context.
@@ -412,10 +408,7 @@ impl Task {
 
 		// Spawn the root process.
 		let clone_flags = libc::CLONE_NEWUSER;
-		let clone_flags = clone_flags
-			.try_into()
-			.map_err(Error::other)
-			.wrap_err("Invalid clone flags.")?;
+		let clone_flags = clone_flags.try_into().wrap_err("Invalid clone flags.")?;
 		let mut clone_args = libc::clone_args {
 			flags: clone_flags,
 			stack: 0,
@@ -442,10 +435,7 @@ impl Task {
 		if ret == 0 {
 			root(&context);
 		}
-		let root_process_pid: libc::pid_t = ret
-			.try_into()
-			.map_err(Error::other)
-			.wrap_err("Invalid root process PID.")?;
+		let root_process_pid: libc::pid_t = ret.try_into().wrap_err("Invalid root process PID.")?;
 
 		// Receive the guest process's PID from the socket.
 		let guest_process_pid: libc::pid_t = host_socket
@@ -574,7 +564,6 @@ impl Task {
 			Ok(())
 		})
 		.await
-		.map_err(Error::other)
 		.wrap_err("Failed to join the process task.")?
 		.wrap_err("Failed to run the process.")?;
 

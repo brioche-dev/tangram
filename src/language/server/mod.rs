@@ -25,11 +25,14 @@ type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
 #[derive(Clone)]
 pub struct Server {
-	/// The Tangram server.
-	server: crate::Server,
+	/// The Tangram client.
+	client: crate::Client,
 
-	// The published diagnostics.
+	/// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
+
+	/// The document store.
+	document_store: document::Store,
 }
 
 impl Server {
@@ -53,7 +56,7 @@ impl Server {
 		// Create a task to send outgoing messages.
 		let outgoing_message_task = tokio::spawn(async move {
 			while let Some(outgoing_message) = outgoing_message_receiver.recv().await {
-				let body = serde_json::to_string(&outgoing_message).map_err(Error::other)?;
+				let body = serde_json::to_string(&outgoing_message).map_err(Error::with_error)?;
 				let head = format!("Content-Length: {}\r\n\r\n", body.len());
 				stdout.write_all(head.as_bytes()).await?;
 				stdout.write_all(body.as_bytes()).await?;
@@ -127,13 +130,11 @@ where
 		.get("Content-Length")
 		.wrap_err("Expected a Content-Length header.")?
 		.parse()
-		.map_err(Error::other)
 		.wrap_err("Failed to parse the Content-Length header value.")?;
 	let mut message: Vec<u8> = vec![0; content_length];
 	reader.read_exact(&mut message).await?;
-	let message = serde_json::from_slice(&message)
-		.map_err(Error::other)
-		.wrap_err("Failed to deserialize the message.")?;
+	let message =
+		serde_json::from_slice(&message).wrap_err("Failed to deserialize the message.")?;
 
 	Ok(message)
 }
@@ -323,7 +324,6 @@ where
 	Fut: Future<Output = crate::error::Result<()>>,
 {
 	let params = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
-		.map_err(Error::other)
 		.wrap_err("Failed to deserialize the request params.")
 		.unwrap();
 	let result = handler(sender.clone(), params).await;

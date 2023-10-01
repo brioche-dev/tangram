@@ -29,11 +29,10 @@ impl Cli {
 		let config = match tokio::fs::read(&path).await {
 			Ok(config) => config,
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-			Err(error) => return Err(Error::other(error)),
+			Err(error) => return Err(Error::with_error(error)),
 		};
-		let config = serde_json::from_slice(&config)
-			.map_err(Error::other)
-			.wrap_err("Failed to deserialize the config.")?;
+		let config =
+			serde_json::from_slice(&config).wrap_err("Failed to deserialize the config.")?;
 		Ok(config)
 	}
 
@@ -42,14 +41,11 @@ impl Cli {
 	}
 
 	pub async fn write_config_to_path(path: &Path, config: &Config) -> Result<()> {
-		let bytes = serde_json::to_vec(config).map_err(Error::other)?;
-		tokio::fs::write(&path, &bytes)
-			.await
-			.map_err(Error::other)
-			.wrap_err_with(|| {
-				let path = path.display();
-				format!(r#"Failed to write the config to "{path}"."#)
-			})?;
+		let bytes = serde_json::to_vec(config).map_err(Error::with_error)?;
+		tokio::fs::write(&path, &bytes).await.wrap_err_with(|| {
+			let path = path.display();
+			format!(r#"Failed to write the config to "{path}"."#)
+		})?;
 		Ok(())
 	}
 }

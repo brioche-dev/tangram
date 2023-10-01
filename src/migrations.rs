@@ -1,4 +1,4 @@
-use crate::{return_error, Error, Result, Server, WrapErr};
+use crate::{return_error, Result, Server, WrapErr};
 use futures::FutureExt;
 use std::path::Path;
 
@@ -17,7 +17,6 @@ impl Server {
 				version
 					.trim()
 					.parse::<usize>()
-					.map_err(Error::other)
 					.wrap_err("Failed to read the path format version.")?,
 			)
 		} else {

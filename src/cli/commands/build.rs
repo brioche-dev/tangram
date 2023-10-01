@@ -1,5 +1,5 @@
 use super::PackageArgs;
-use crate::{Cli, Result, WrapErr};
+use crate::{return_error, Cli, Result, WrapErr};
 use std::path::PathBuf;
 
 /// Build a target.
@@ -47,8 +47,9 @@ impl Cli {
 
 		// Run the task.
 		let run = task.run(&self.client).await?;
-		let result = run.result(&self.client).await?;
-		let output = result.map_err(tg::Error::from)?;
+		let Some(output) = run.output(&self.client).await? else {
+			return_error!("The build failed.");
+		};
 
 		if let Some(path) = args.output {
 			// Check out the output if requested.

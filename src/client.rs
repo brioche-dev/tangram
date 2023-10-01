@@ -1,4 +1,4 @@
-use crate::{object, return_error, run, task, Error, Result, Server, Value, WrapErr};
+use crate::{object, return_error, run, task, Result, Server, Value, WrapErr};
 use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use std::sync::Arc;
@@ -122,16 +122,16 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn get_run_result(&self, id: run::Id) -> Result<Result<Value>> {
-		self.try_get_run_result(id)
+	pub async fn get_run_output(&self, id: run::Id) -> Result<Option<Value>> {
+		self.try_get_run_output(id)
 			.await?
 			.wrap_err("Failed to get the run.")
 	}
 
 	#[async_recursion]
-	pub async fn try_get_run_result(&self, id: run::Id) -> Result<Option<Result<Value>>> {
+	pub async fn try_get_run_output(&self, id: run::Id) -> Result<Option<Option<Value>>> {
 		match self {
-			Self::Server(server) => server.try_get_run_result(id).await,
+			Self::Server(server) => server.try_get_run_output(id).await,
 			Self::Reqwest(_) => todo!(),
 		}
 	}
@@ -190,7 +190,10 @@ impl Reqwest {
 
 	pub async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
 		let request = self.request(http::Method::HEAD, &format!("/v1/objects/{id}"));
-		let response = request.send().await?;
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
 		match response.status() {
 			http::StatusCode::OK => Ok(true),
 			http::StatusCode::NOT_FOUND => Ok(false),
@@ -200,13 +203,19 @@ impl Reqwest {
 
 	pub async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
 		let request = self.request(http::Method::GET, &format!("/v1/objects/{id}"));
-		let response = request.send().await?;
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
 		match response.status() {
 			http::StatusCode::OK => {},
 			http::StatusCode::NOT_FOUND => return Ok(None),
 			_ => return_error!(r#"Unexpected status code "{}"."#, response.status()),
 		};
-		let bytes = response.bytes().await?;
+		let bytes = response
+			.bytes()
+			.await
+			.wrap_err("Failed to get the response bytes.")?;
 		Ok(Some(bytes.into()))
 	}
 
@@ -218,13 +227,19 @@ impl Reqwest {
 		let request = self
 			.request(http::Method::PUT, &format!("/v1/objects/{id}"))
 			.body(bytes.to_owned());
-		let response = request.send().await?;
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
 		match response.status() {
 			http::StatusCode::OK => Ok(Ok(())),
 			http::StatusCode::BAD_REQUEST => {
-				let bytes = response.bytes().await?;
-				let missing_children =
-					tangram_serialize::from_slice(&bytes).map_err(Error::other)?;
+				let bytes = response
+					.bytes()
+					.await
+					.wrap_err("Failed to get the response bytes.")?;
+				let missing_children = tangram_serialize::from_slice(&bytes)
+					.wrap_err("Failed to deserialize the missing children.")?;
 				Ok(Err(missing_children))
 			},
 			_ => return_error!(r#"Unexpected status code "{}"."#, response.status()),

@@ -56,7 +56,8 @@ pub struct State {
 }
 
 /// An object.
-#[derive(Clone, Debug, From, TryInto)]
+#[derive(Clone, Debug, From, TryInto, TryUnwrap)]
+#[try_unwrap(ref)]
 pub enum Object {
 	Blob(blob::Object),
 	Directory(directory::Object),

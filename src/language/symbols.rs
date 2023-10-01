@@ -1,5 +1,5 @@
-use super::service;
-use crate::{module::Module, return_error, server::Server, Result};
+use super::{service, Module};
+use crate::{return_error, server::Server, Result};
 
 impl Module {
 	pub async fn symbols(&self, server: &Server) -> Result<Option<Vec<service::symbols::Symbol>>> {

@@ -1,5 +1,5 @@
-use super::{error::Error, parse};
-use crate::{module::Module, Result, WrapErr};
+use super::{error::Error, parse, Module};
+use crate::{Result, WrapErr};
 use std::rc::Rc;
 use swc_core::{
 	common::{Globals, Mark, SourceMap, DUMMY_SP, GLOBALS},
@@ -79,19 +79,19 @@ impl Module {
 			// Emit the module.
 			emitter
 				.emit_module(&module)
-				.map_err(crate::error::Error::other)?;
+				.map_err(crate::error::Error::with_error)?;
 			let transpiled_text =
-				String::from_utf8(transpiled_text).map_err(crate::error::Error::other)?;
+				String::from_utf8(transpiled_text).map_err(crate::error::Error::with_error)?;
 
 			// Create the source map.
 			let mut output_source_map = Vec::new();
 			source_map
 				.build_source_map(&source_mappings)
 				.to_writer(&mut output_source_map)
-				.map_err(crate::error::Error::other)
+				.map_err(crate::error::Error::with_error)
 				.wrap_err("Failed to create the source map.")?;
 			let source_map =
-				String::from_utf8(output_source_map).map_err(crate::error::Error::other)?;
+				String::from_utf8(output_source_map).map_err(crate::error::Error::with_error)?;
 
 			// Create the output.
 			let output = Output {
@@ -379,7 +379,7 @@ impl VisitMut for IncludeVisitor {
 
 #[cfg(test)]
 mod tests {
-	use crate::module::Module;
+	use crate::language::Module;
 	use indoc::indoc;
 
 	#[test]

@@ -2,10 +2,10 @@
 
 use super::{
 	convert::{from_v8, FromV8, ToV8},
-	FutureOutput, THREAD_LOCAL_ISOLATE,
+	FutureOutput, State, THREAD_LOCAL_ISOLATE,
 };
 use crate::{
-	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Error, Result, Server, Task,
+	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Client, Error, Result, Task,
 	Value, WrapErr,
 };
 use base64::Engine as _;
@@ -37,9 +37,8 @@ fn syscall_inner<'s>(
 	args: &v8::FunctionCallbackArguments<'s>,
 ) -> Result<v8::Local<'s, v8::Value>> {
 	// Get the syscall name.
-	let name = String::from_v8(scope, args.get(0))
-		.map_err(Error::other)
-		.wrap_err("Failed to deserialize the syscall name.")?;
+	let name =
+		String::from_v8(scope, args.get(0)).wrap_err("Failed to deserialize the syscall name.")?;
 
 	// Invoke the syscall.
 	match name.as_str() {
@@ -68,15 +67,15 @@ fn syscall_inner<'s>(
 	}
 }
 
-async fn syscall_bundle(server: Server, args: (Artifact,)) -> Result<Artifact> {
+async fn syscall_bundle(client: Client, args: (Artifact,)) -> Result<Artifact> {
 	let (artifact,) = args;
-	let artifact = artifact.bundle(&server).await?;
+	let artifact = artifact.bundle(&client).await?;
 	Ok(artifact)
 }
 
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (checksum::Algorithm, Bytes),
 ) -> Result<Checksum> {
 	let (algorithm, bytes) = args;
@@ -86,26 +85,25 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
-async fn syscall_download(server: Server, args: (Url, Checksum)) -> Result<Blob> {
+async fn syscall_download(client: Client, args: (Url, Checksum)) -> Result<Blob> {
 	todo!()
 }
 
 fn syscall_encoding_base64_decode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (value,) = args;
 	let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
 		.decode(value)
-		.map_err(Error::other)
 		.wrap_err("Failed to decode the bytes.")?;
 	Ok(bytes.into())
 }
 
 fn syscall_encoding_base64_encode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -115,22 +113,18 @@ fn syscall_encoding_base64_encode(
 
 fn syscall_encoding_hex_decode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (hex,) = args;
-	let bytes = hex::decode(hex)
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the string as hex.")?;
-	let string = String::from_utf8(bytes)
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the bytes as UTF-8.")?;
+	let bytes = hex::decode(hex).wrap_err("Failed to decode the string as hex.")?;
+	let string = String::from_utf8(bytes).wrap_err("Failed to decode the bytes as UTF-8.")?;
 	Ok(string)
 }
 
 fn syscall_encoding_hex_encode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (bytes,) = args;
@@ -141,67 +135,58 @@ fn syscall_encoding_hex_encode(
 
 fn syscall_encoding_json_decode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (String,),
 ) -> Result<serde_json::Value> {
 	let (json,) = args;
-	let value = serde_json::from_str(&json)
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the string as json.")?;
+	let value = serde_json::from_str(&json).wrap_err("Failed to decode the string as json.")?;
 	Ok(value)
 }
 
 fn syscall_encoding_json_encode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (serde_json::Value,),
 ) -> Result<String> {
 	let (value,) = args;
-	let json = serde_json::to_string(&value)
-		.map_err(Error::other)
-		.wrap_err("Failed to encode the value.")?;
+	let json = serde_json::to_string(&value).wrap_err("Failed to encode the value.")?;
 	Ok(json)
 }
 
 fn syscall_encoding_toml_decode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (String,),
 ) -> Result<serde_toml::Value> {
 	let (toml,) = args;
-	let value = serde_toml::from_str(&toml)
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the string as toml.")?;
+	let value = serde_toml::from_str(&toml).wrap_err("Failed to decode the string as toml.")?;
 	Ok(value)
 }
 
 fn syscall_encoding_toml_encode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (serde_toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
-	let toml = serde_toml::to_string(&value)
-		.map_err(Error::other)
-		.wrap_err("Failed to encode the value.")?;
+	let toml = serde_toml::to_string(&value).wrap_err("Failed to encode the value.")?;
 	Ok(toml)
 }
 
 fn syscall_encoding_utf8_decode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (bytes,) = args;
 	let string = String::from_utf8(bytes.as_slice().to_owned())
-		.map_err(Error::other)
 		.wrap_err("Failed to decode the bytes as UTF-8.")?;
 	Ok(string)
 }
 
 fn syscall_encoding_utf8_encode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (string,) = args;
@@ -211,54 +196,49 @@ fn syscall_encoding_utf8_encode(
 
 fn syscall_encoding_yaml_decode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (String,),
 ) -> Result<serde_yaml::Value> {
 	let (yaml,) = args;
-	let value = serde_yaml::from_str(&yaml)
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the string as yaml.")?;
+	let value = serde_yaml::from_str(&yaml).wrap_err("Failed to decode the string as yaml.")?;
 	Ok(value)
 }
 
 fn syscall_encoding_yaml_encode(
 	_scope: &mut v8::HandleScope,
-	_server: Server,
+	_client: Client,
 	args: (serde_yaml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
-	let yaml = serde_yaml::to_string(&value)
-		.map_err(Error::other)
-		.wrap_err("Failed to encode the value.")?;
+	let yaml = serde_yaml::to_string(&value).wrap_err("Failed to encode the value.")?;
 	Ok(yaml)
 }
 
-async fn syscall_load(server: Server, args: (object::Id,)) -> Result<object::Object> {
+async fn syscall_load(client: Client, args: (object::Id,)) -> Result<object::Object> {
 	todo!()
 }
 
-fn syscall_log(_scope: &mut v8::HandleScope, _server: Server, args: (String,)) -> Result<()> {
+fn syscall_log(_scope: &mut v8::HandleScope, _client: Client, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	println!("{string}");
 	Ok(())
 }
 
-async fn syscall_read(server: Server, args: (Blob,)) -> Result<Bytes> {
-	todo!()
-	// let (blob,) = args;
-	// let bytes = blob.bytes(&server).await?;
-	// Ok(bytes.into())
+async fn syscall_read(client: Client, args: (Blob,)) -> Result<Bytes> {
+	let (blob,) = args;
+	let bytes = blob.bytes(&client).await?;
+	Ok(bytes.into())
 }
 
-async fn syscall_run(server: Server, args: (Task,)) -> Result<Value> {
-	todo!()
-}
-
-async fn syscall_store(server: Server, args: (object::Object,)) -> Result<object::Id> {
+async fn syscall_run(client: Client, args: (Task,)) -> Result<Value> {
 	todo!()
 }
 
-async fn syscall_unpack(server: Server, args: (Blob, ArchiveFormat)) -> Result<Artifact> {
+async fn syscall_store(client: Client, args: (object::Object,)) -> Result<object::Id> {
+	todo!()
+}
+
+async fn syscall_unpack(client: Client, args: (Blob, ArchiveFormat)) -> Result<Artifact> {
 	todo!()
 }
 
@@ -270,13 +250,13 @@ fn syscall_sync<'s, A, T, F>(
 where
 	A: FromV8,
 	T: ToV8,
-	F: FnOnce(&mut v8::HandleScope<'s>, Server, A) -> Result<T>,
+	F: FnOnce(&mut v8::HandleScope<'s>, Client, A) -> Result<T>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the server.
-	let tg = context.get_slot::<Server>(scope).unwrap().clone();
+	// Get the state.
+	let state = context.get_slot::<State>(scope).unwrap().clone();
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
@@ -286,7 +266,7 @@ where
 	let args = from_v8(scope, args.into()).wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
-	let value = f(scope, tg, args)?;
+	let value = f(scope, state.client.clone(), args)?;
 
 	// Move the value to v8.
 	let value = value
@@ -304,14 +284,11 @@ fn syscall_async<'s, A, T, F, Fut>(
 where
 	A: FromV8,
 	T: ToV8,
-	F: FnOnce(Server, A) -> Fut + 'static,
+	F: FnOnce(Client, A) -> Fut + 'static,
 	Fut: Future<Output = Result<T>>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
-
-	// Get the server.
-	let tg = context.get_slot::<Server>(scope).unwrap().clone();
 
 	// Get the state.
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
@@ -331,7 +308,7 @@ where
 
 	// Create the future.
 	let future = async move {
-		let result = syscall_async_inner(context.clone(), tg, args, f).await;
+		let result = syscall_async_inner(context.clone(), state.client.clone(), args, f).await;
 		FutureOutput {
 			context,
 			promise_resolver,
@@ -348,14 +325,14 @@ where
 
 async fn syscall_async_inner<'s, A, T, F, Fut>(
 	context: v8::Global<v8::Context>,
-	tg: Server,
+	client: Client,
 	args: v8::Global<v8::Array>,
 	f: F,
 ) -> Result<v8::Global<v8::Value>>
 where
 	A: FromV8,
 	T: ToV8,
-	F: FnOnce(Server, A) -> Fut,
+	F: FnOnce(Client, A) -> Fut,
 	Fut: Future<Output = Result<T>>,
 {
 	// Deserialize the args.
@@ -370,7 +347,7 @@ where
 	};
 
 	// Call the function.
-	let value = f(tg, args).await?;
+	let value = f(client, args).await?;
 
 	// Serialize the value.
 	let value = {

@@ -1,9 +1,9 @@
-use crate::{language::location::Location, module, module::position::Position};
+use crate::language::{location::Location, Module, Position};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
-	pub module: module::Module,
+	pub module: Module,
 	pub position: Position,
 }
 

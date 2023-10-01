@@ -1,4 +1,4 @@
-use crate::{error::Result, Cli};
+use crate::{Cli, Result};
 use futures::FutureExt;
 use tg::Subpath;
 

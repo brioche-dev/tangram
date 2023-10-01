@@ -110,8 +110,8 @@ export let fileNameFromModule = (module_: Module): string => {
 	if (module_.kind === "library") {
 		return `/library/${module_.value.modulePath}`;
 	} else {
-		let data = syscall.hex.encode(
-			syscall.utf8.encode(syscall.json.encode(module_)),
+		let data = syscall.encoding.hex.encode(
+			syscall.encoding.utf8.encode(syscall.encoding.json.encode(module_)),
 		);
 		return `/${data}.ts`;
 	}
@@ -125,8 +125,8 @@ export let moduleFromFileName = (fileName: string): Module => {
 		module_ = { kind: "library", value: { modulePath: path } };
 	} else {
 		let data = fileName.slice(1, -3);
-		module_ = syscall.json.decode(
-			syscall.utf8.decode(syscall.hex.decode(data)),
+		module_ = syscall.encoding.json.decode(
+			syscall.encoding.utf8.decode(syscall.encoding.hex.decode(data)),
 		) as Module;
 	}
 	return module_;

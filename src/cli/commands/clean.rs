@@ -1,4 +1,4 @@
-use crate::{error::Result, Cli};
+use crate::{Cli, Result};
 
 /// Remove unused objects.
 #[derive(Debug, clap::Args)]

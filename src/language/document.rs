@@ -1,8 +1,8 @@
 use crate::{
-	module::range::Range, package::ROOT_MODULE_FILE_NAME, return_error, Result, Server, Subpath,
-	WrapErr,
+	module::range::Range, package::ROOT_MODULE_FILE_NAME, return_error, Result, Subpath, WrapErr,
 };
 use std::{
+	collections::HashMap,
 	path::{Path, PathBuf},
 	time::SystemTime,
 };
@@ -50,8 +50,11 @@ pub struct Opened {
 	pub text: String,
 }
 
+/// A document store.
+pub struct Store(tokio::sync::RwLock<HashMap<Document, State, fnv::FnvBuildHasher>>);
+
 impl Document {
-	pub async fn new(server: &Server, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
+	pub async fn new(store: &Store, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
 		let path = package_path.join(module_path.to_string());
 
 		// Create the document.
@@ -61,7 +64,7 @@ impl Document {
 		};
 
 		// Lock the documents.
-		let mut documents = server.state.documents.write().await;
+		let mut documents = store.0.write().await;
 
 		// Set the state to unopened if it is not present.
 		if !documents.contains_key(&document) {
@@ -77,7 +80,7 @@ impl Document {
 		Ok(document)
 	}
 
-	pub async fn for_path(server: &Server, path: &Path) -> Result<Self> {
+	pub async fn for_path(store: &Store, path: &Path) -> Result<Self> {
 		// Find the package path by searching the path's ancestors for a root module.
 		let mut found = false;
 		let mut package_path = path.to_owned();
@@ -105,15 +108,15 @@ impl Document {
 			.wrap_err("Failed to parse the module path.")?;
 
 		// Create the document.
-		let document = Self::new(server, package_path, module_path).await?;
+		let document = Self::new(store, package_path, module_path).await?;
 
 		Ok(document)
 	}
 
 	/// Open a document.
-	pub async fn open(&self, server: &Server, version: i32, text: String) -> Result<()> {
+	pub async fn open(&self, store: &Store, version: i32, text: String) -> Result<()> {
 		// Lock the documents.
-		let mut documents = server.state.documents.write().await;
+		let mut documents = store.0.write().await;
 
 		// Set the state.
 		let state = State::Opened(Opened { version, text });
@@ -125,13 +128,13 @@ impl Document {
 	/// Update a document.
 	pub async fn update(
 		&self,
-		server: &Server,
+		store: &Store,
 		range: Option<Range>,
 		version: i32,
 		text: String,
 	) -> Result<()> {
 		// Lock the documents.
-		let mut documents = server.state.documents.write().await;
+		let mut documents = store.0.write().await;
 
 		// Get the state.
 		let Some(State::Opened(state)) = documents.get_mut(self) else {
@@ -157,9 +160,9 @@ impl Document {
 	}
 
 	/// Close a document.
-	pub async fn close(self, server: &Server) -> Result<()> {
+	pub async fn close(self, store: &Store) -> Result<()> {
 		// Lock the documents.
-		let mut documents = server.state.documents.write().await;
+		let mut documents = store.0.write().await;
 
 		// Remove the document.
 		documents.remove(&self);
@@ -174,9 +177,9 @@ impl Document {
 	}
 
 	/// Get the document's version.
-	pub async fn version(&self, server: &Server) -> Result<i32> {
+	pub async fn version(&self, store: &Store) -> Result<i32> {
 		// Lock the documents.
-		let mut documents = server.state.documents.write().await;
+		let mut documents = store.0.write().await;
 
 		// Get the state.
 		let state = documents.get_mut(self).unwrap();
@@ -198,14 +201,26 @@ impl Document {
 	}
 
 	/// Get the document's text.
-	pub async fn text(&self, server: &Server) -> Result<String> {
+	pub async fn text(&self, store: &Store) -> Result<String> {
 		let path = self.path();
-		let documents = server.state.documents.read().await;
+		let documents = store.0.read().await;
 		let document = documents.get(self).unwrap();
 		let text = match document {
 			State::Closed(_) => tokio::fs::read_to_string(&path).await?,
 			State::Opened(opened) => opened.text.clone(),
 		};
 		Ok(text)
+	}
+}
+
+impl Default for Store {
+	fn default() -> Self {
+		Self(Default::default())
+	}
+}
+
+impl Store {
+	pub fn new() -> Self {
+		Self::default()
 	}
 }

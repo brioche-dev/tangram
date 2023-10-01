@@ -1,5 +1,5 @@
 use super::{PackageArgs, RunArgs};
-use crate::{Cli, Result, WrapErr};
+use crate::{return_error, Cli, Result, WrapErr};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 
 /// Build the specified target from a package and execute a command from its output.
@@ -50,8 +50,9 @@ impl Cli {
 
 		// Run the task.
 		let run = task.run(&self.client).await?;
-		let result = run.result(&self.client).await?;
-		let output = result.map_err(tg::Error::from)?;
+		let Some(output) = run.output(&self.client).await? else {
+			return_error!("The build failed.");
+		};
 
 		// Get the output artifact.
 		let artifact = output

@@ -1,15 +1,5 @@
 import { TSESTree, visitorKeys } from "@typescript-eslint/typescript-estree";
 
-export let assert: (
-	condition: unknown,
-	message?: string,
-) => asserts condition = (condition, message) => {
-	if (!condition) {
-		message = message ?? "Failed assertion.";
-		throw new Error(message);
-	}
-};
-
 /** Visit each node in a tree. */
 export let visit = (
 	node: TSESTree.Node,

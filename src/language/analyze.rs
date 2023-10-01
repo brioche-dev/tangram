@@ -1,5 +1,5 @@
-use super::{error::Error, parse, Import};
-use crate::{package::Metadata, Module, Relpath, Result, WrapErr};
+use super::{Import, Module};
+use crate::{package::Metadata, Relpath, Result, WrapErr};
 use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 use swc_core::{

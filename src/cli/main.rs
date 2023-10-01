@@ -3,17 +3,14 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_safety_doc)]
 
-use self::{
-	commands::Args,
-	error::{Error, Result, WrapErr},
-};
+use self::commands::Args;
 use clap::Parser;
+use tg::error::{return_error, Error, Result, WrapErr};
 use tracing_subscriber::prelude::*;
 
 mod commands;
 mod config;
 mod credentials;
-mod error;
 
 pub const API_URL: &str = "https://api.tangram.dev";
 
@@ -33,16 +30,7 @@ async fn main() {
 	// If an error occurred, print the error trace and exit with a non-zero code.
 	if let Err(error) = result {
 		// Print the error trace.
-		eprintln!("An error occurred.");
-		let mut error: &dyn std::error::Error = &error;
-		loop {
-			eprintln!("{error}");
-			if let Some(source) = error.source() {
-				error = source;
-			} else {
-				break;
-			}
-		}
+		eprintln!("{}", error.trace());
 
 		// Exit with a non-zero code.
 		std::process::exit(1);
@@ -64,7 +52,7 @@ async fn main_inner() -> Result<()> {
 		.await?,
 	);
 
-	let api_client = tg::api::Client::new();
+	let api_client = tg::api::Client::new("http://localhost:8477".parse().unwrap(), None);
 
 	// Create the CLI.
 	let cli = Cli { client, api_client };

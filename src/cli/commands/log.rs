@@ -1,5 +1,5 @@
-use crate::{error::Result, return_error, Cli};
-use tg::id::Id;
+use crate::{return_error, Cli, Result};
+use tg::Id;
 
 /// Get the log for a build.
 #[derive(Debug, clap::Args)]

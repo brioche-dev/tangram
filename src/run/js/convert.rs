@@ -1,5 +1,5 @@
 use crate::{
-	blob, checksum, directory, file,
+	blob, checksum, directory, file, module,
 	object::{self, Object},
 	package, return_error, symlink, task, template, Artifact, Blob, Bytes, Checksum, Directory,
 	Error, File, Package, Placeholder, Relpath, Result, Subpath, Symlink, System, Task, Template,
@@ -63,9 +63,8 @@ impl FromV8 for bool {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let value = v8::Local::<v8::Boolean>::try_from(value)
-			.map_err(Error::other)
-			.wrap_err("Expected a boolean value.")?;
+		let value =
+			v8::Local::<v8::Boolean>::try_from(value).wrap_err("Expected a boolean value.")?;
 		let value = value.boolean_value(scope);
 		Ok(value)
 	}
@@ -83,7 +82,7 @@ impl FromV8 for u8 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_u8()
@@ -103,7 +102,7 @@ impl FromV8 for u16 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_u16()
@@ -123,7 +122,7 @@ impl FromV8 for u32 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_u32()
@@ -143,7 +142,7 @@ impl FromV8 for u64 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_u64()
@@ -163,7 +162,7 @@ impl FromV8 for i8 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_i8()
@@ -183,7 +182,7 @@ impl FromV8 for i16 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_i16()
@@ -203,7 +202,7 @@ impl FromV8 for i32 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_i32()
@@ -223,7 +222,7 @@ impl FromV8 for i64 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_i64()
@@ -243,7 +242,7 @@ impl FromV8 for f32 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")?
 			.to_f32()
@@ -263,7 +262,7 @@ impl FromV8 for f64 {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		v8::Local::<v8::Number>::try_from(value)
-			.map_err(Error::other)?
+			.wrap_err("Expected a number.")?
 			.number_value(scope)
 			.wrap_err("Expected a number.")
 	}
@@ -336,9 +335,7 @@ where
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let value = v8::Local::<v8::Array>::try_from(value)
-			.map_err(Error::other)
-			.wrap_err("Expected an array.")?;
+		let value = v8::Local::<v8::Array>::try_from(value).wrap_err("Expected an array.")?;
 		let value0 = value.get_index(scope, 0).wrap_err("Expected a value.")?;
 		let value0 = from_v8(scope, value0)?;
 		Ok((value0,))
@@ -367,9 +364,7 @@ where
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let value = v8::Local::<v8::Array>::try_from(value)
-			.map_err(Error::other)
-			.wrap_err("Expected an array.")?;
+		let value = v8::Local::<v8::Array>::try_from(value).wrap_err("Expected an array.")?;
 		let value0 = value.get_index(scope, 0).wrap_err("Expected a value.")?;
 		let value1 = value.get_index(scope, 1).wrap_err("Expected a value.")?;
 		let value0 = from_v8(scope, value0)?;
@@ -409,9 +404,7 @@ where
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let value = v8::Local::<v8::Array>::try_from(value)
-			.map_err(Error::other)
-			.wrap_err("Expected an array.")?;
+		let value = v8::Local::<v8::Array>::try_from(value).wrap_err("Expected an array.")?;
 		let len = value.length().to_usize().unwrap();
 		let mut output = Vec::with_capacity(len);
 		for i in 0..len {
@@ -448,9 +441,7 @@ where
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let value = v8::Local::<v8::Object>::try_from(value)
-			.map_err(Error::other)
-			.wrap_err("Expected an object.")?;
+		let value = v8::Local::<v8::Object>::try_from(value).wrap_err("Expected an object.")?;
 		let property_names = value
 			.get_own_property_names(scope, v8::GetPropertyNamesArgs::default())
 			.unwrap();
@@ -468,7 +459,7 @@ where
 
 impl ToV8 for serde_json::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::other)
+		serde_v8::to_v8(scope, self).map_err(Error::with_error)
 	}
 }
 
@@ -477,13 +468,13 @@ impl FromV8 for serde_json::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::other)
+		serde_v8::from_v8(scope, value).map_err(Error::with_error)
 	}
 }
 
 impl ToV8 for serde_toml::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::other)
+		serde_v8::to_v8(scope, self).map_err(Error::with_error)
 	}
 }
 
@@ -492,13 +483,13 @@ impl FromV8 for serde_toml::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::other)
+		serde_v8::from_v8(scope, value).map_err(Error::with_error)
 	}
 }
 
 impl ToV8 for serde_yaml::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::other)
+		serde_v8::to_v8(scope, self).map_err(Error::with_error)
 	}
 }
 
@@ -507,7 +498,7 @@ impl FromV8 for serde_yaml::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::other)
+		serde_v8::from_v8(scope, value).map_err(Error::with_error)
 	}
 }
 
@@ -631,9 +622,8 @@ impl FromV8 for Bytes {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let uint8_array = v8::Local::<v8::Uint8Array>::try_from(value)
-			.map_err(Error::other)
-			.wrap_err("Expected a Uint8Array.")?;
+		let uint8_array =
+			v8::Local::<v8::Uint8Array>::try_from(value).wrap_err("Expected a Uint8Array.")?;
 		let backing_store = uint8_array
 			.buffer(scope)
 			.wrap_err("Expected the Uint8Array to have a buffer.")?
@@ -1626,6 +1616,56 @@ impl FromV8 for Object {
 	}
 }
 
+impl ToV8 for module::Normal {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let object = v8::Object::new(scope);
+
+		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
+		let value = self.package.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
+		let value = self.executable.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "references".as_bytes()).unwrap();
+		let value = self.references.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		Ok(object.into())
+	}
+}
+
+impl FromV8 for module::Normal {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = value.to_object(scope).unwrap();
+
+		let contents =
+			v8::String::new_external_onebyte_static(scope, "contents".as_bytes()).unwrap();
+		let contents = value.get(scope, contents.into()).unwrap();
+		let contents = from_v8(scope, contents)?;
+
+		let executable =
+			v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
+		let executable = value.get(scope, executable.into()).unwrap();
+		let executable = from_v8(scope, executable)?;
+
+		let references =
+			v8::String::new_external_onebyte_static(scope, "references".as_bytes()).unwrap();
+		let references = value.get(scope, references.into()).unwrap();
+		let references = from_v8(scope, references)?;
+
+		Ok(Self {
+			contents,
+			executable,
+			references,
+		})
+	}
+}
+
 impl ToV8 for Checksum {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
@@ -1682,6 +1722,8 @@ impl FromV8 for Url {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		String::from_v8(scope, value)?.parse().map_err(Error::other)
+		String::from_v8(scope, value)?
+			.parse()
+			.wrap_err("Failed to parse the string as a URL.")
 	}
 }

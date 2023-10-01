@@ -1,9 +1,9 @@
-use crate::{module, module::range::Range};
+use crate::language::{Module, Range};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
-	pub module: module::Module,
+	pub module: Module,
 }
 
 #[derive(Debug, serde::Deserialize)]

@@ -143,7 +143,6 @@ fn run_language_service(state: Weak<server::State>, mut request_receiver: Reques
 
 		// Serialize the request.
 		let request = match serde_v8::to_v8(&mut try_catch_scope, &request)
-			.map_err(Error::other)
 			.wrap_err("Failed to serialize the request.")
 		{
 			Ok(request) => request,
@@ -168,7 +167,6 @@ fn run_language_service(state: Weak<server::State>, mut request_receiver: Reques
 
 		// Deserialize the response.
 		let response = match serde_v8::from_v8(&mut try_catch_scope, response)
-			.map_err(Error::other)
 			.wrap_err("Failed to deserialize the response.")
 		{
 			Ok(response) => response,

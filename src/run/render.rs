@@ -11,7 +11,7 @@ use std::{
 };
 
 impl Task {
-	pub(crate) async fn run_inner(&self, tg: &Server) -> Result<Value> {
+	pub(crate) async fn run_inner(&self, server: &Server) -> Result<Value> {
 		let _permit = tg.command_semaphore.acquire().await;
 		if tg.options.sandbox_enabled {
 			let host = self.host;

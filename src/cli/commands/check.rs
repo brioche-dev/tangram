@@ -14,42 +14,44 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
-		// Get the package.
-		let package = tg::Package::with_specifier(&self.client, args.package)
-			.await
-			.wrap_err("Failed to get the package.")?;
+		todo!()
 
-		// Check the package for diagnostics.
-		let diagnostics = package.check(&self.client).await?;
+		// // Get the package.
+		// let package = tg::Package::with_specifier(&self.client, args.package)
+		// 	.await
+		// 	.wrap_err("Failed to get the package.")?;
 
-		// Print the diagnostics.
-		for diagnostic in &diagnostics {
-			// Get the diagnostic location and message.
-			let tg::language::Diagnostic {
-				location, message, ..
-			} = diagnostic;
+		// // Check the package for diagnostics.
+		// let diagnostics = package.check(&self.client).await?;
 
-			// Print the location if one is available.
-			if let Some(location) = location {
-				let tg::language::Location { module, range, .. } = location;
-				let tg::language::Position { line, character } = range.start;
-				let line = line + 1;
-				let character = character + 1;
+		// // Print the diagnostics.
+		// for diagnostic in &diagnostics {
+		// 	// Get the diagnostic location and message.
+		// 	let tg::language::Diagnostic {
+		// 		location, message, ..
+		// 	} = diagnostic;
 
-				println!("{module}:{line}:{character}");
-			}
+		// 	// Print the location if one is available.
+		// 	if let Some(location) = location {
+		// 		let tg::language::Location { module, range, .. } = location;
+		// 		let tg::language::Position { line, character } = range.start;
+		// 		let line = line + 1;
+		// 		let character = character + 1;
 
-			// Print the diagnostic message.
-			println!("{message}");
+		// 		println!("{module}:{line}:{character}");
+		// 	}
 
-			// Print a newline.
-			println!();
-		}
+		// 	// Print the diagnostic message.
+		// 	println!("{message}");
 
-		if !diagnostics.is_empty() {
-			return_error!("Type checking failed.");
-		}
+		// 	// Print a newline.
+		// 	println!();
+		// }
 
-		Ok(())
+		// if !diagnostics.is_empty() {
+		// 	return_error!("Type checking failed.");
+		// }
+
+		// Ok(())
 	}
 }

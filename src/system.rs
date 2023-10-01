@@ -2,7 +2,6 @@ use crate::{return_error, Error, Result};
 
 #[derive(
 	Clone,
-	Copy,
 	Debug,
 	Eq,
 	Ord,

@@ -1,5 +1,6 @@
 use crate::{
-	return_error, Artifact, Client, Directory, Error, File, Result, Subpath, Symlink, WrapErr,
+	error, return_error, Artifact, Client, Directory, Error, File, Result, Subpath, Symlink,
+	WrapErr,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
@@ -214,7 +215,7 @@ impl Artifact {
 			.try_render(|component| async move {
 				match component {
 					crate::template::Component::String(string) => Ok(string.into()),
-					_ => Err(Error::message(
+					_ => Err(error!(
 						"Cannot check out a symlink whose target has non-string components.",
 					)),
 				}

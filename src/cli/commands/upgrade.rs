@@ -1,4 +1,4 @@
-use crate::{error::Result, Cli};
+use crate::{Cli, Result};
 
 /// Upgrade to the latest version of tangram.
 #[derive(Debug, clap::Args)]

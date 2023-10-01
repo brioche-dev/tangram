@@ -1,4 +1,4 @@
-use crate::{module, return_error, server, Error, Module, Result, Server, WrapErr};
+use crate::{language::Module, return_error, server, Result, Server, WrapErr};
 use itertools::Itertools;
 use std::sync::Weak;
 
@@ -64,20 +64,18 @@ fn syscall_documents(
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_hex_decode(
-	_tg: &Server,
+	_server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
 ) -> Result<serde_v8::ToJsBuffer> {
 	let (hex,) = args;
-	let bytes = hex::decode(hex)
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the string as hex.")?;
+	let bytes = hex::decode(hex).wrap_err("Failed to decode the string as hex.")?;
 	Ok(bytes.into())
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_hex_encode(
-	_tg: &Server,
+	_server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (serde_v8::JsBuffer,),
 ) -> Result<String> {
@@ -88,50 +86,50 @@ fn syscall_hex_encode(
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_json_decode(
-	_tg: &Server,
+	_server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
 ) -> Result<serde_json::Value> {
 	let (json,) = args;
-	let value = serde_json::from_str(&json)
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the string as json.")?;
+	let value = serde_json::from_str(&json).wrap_err("Failed to decode the string as json.")?;
 	Ok(value)
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn syscall_json_encode(
-	_tg: &Server,
+	_server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (serde_json::Value,),
 ) -> Result<String> {
 	let (value,) = args;
-	let json = serde_json::to_string(&value)
-		.map_err(Error::other)
-		.wrap_err("Failed to encode the value.")?;
+	let json = serde_json::to_string(&value).wrap_err("Failed to encode the value.")?;
 	Ok(json)
 }
 
 #[allow(clippy::unnecessary_wraps)]
-fn syscall_log(_tg: &Server, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
+fn syscall_log(_server: &Server, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	eprintln!("{string}");
 	Ok(())
 }
 
 fn syscall_module_load(
-	tg: &Server,
+	server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (module::Module,),
 ) -> Result<String> {
 	let (module,) = args;
-	tg.state.main_runtime_handle.clone().block_on(async move {
-		let text = module
-			.load(tg)
-			.await
-			.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
-		Ok(text)
-	})
+	server
+		.state
+		.main_runtime_handle
+		.clone()
+		.block_on(async move {
+			let text = module
+				.load(server)
+				.await
+				.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
+			Ok(text)
+		})
 }
 
 fn syscall_module_resolve(
@@ -178,15 +176,14 @@ fn syscall_utf8_decode(
 ) -> Result<String> {
 	let (bytes,) = args;
 	let bytes = bytes::Bytes::from(bytes);
-	let string = String::from_utf8(bytes.into())
-		.map_err(Error::other)
-		.wrap_err("Failed to decode the bytes as UTF-8.")?;
+	let string =
+		String::from_utf8(bytes.into()).wrap_err("Failed to decode the bytes as UTF-8.")?;
 	Ok(string)
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_utf8_encode(
-	_tg: &Server,
+	_server: &Server,
 	_scope: &mut v8::HandleScope,
 	args: (String,),
 ) -> Result<serde_v8::ToJsBuffer> {
@@ -221,17 +218,13 @@ where
 	let args = v8::Array::new_with_elements(scope, args.as_slice());
 
 	// Deserialize the args.
-	let args = serde_v8::from_v8(scope, args.into())
-		.map_err(Error::other)
-		.wrap_err("Failed to deserialize the args.")?;
+	let args = serde_v8::from_v8(scope, args.into()).wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
 	let value = f(&tg, scope, args)?;
 
 	// Serialize the value.
-	let value = serde_v8::to_v8(scope, &value)
-		.map_err(Error::other)
-		.wrap_err("Failed to serialize the value.")?;
+	let value = serde_v8::to_v8(scope, &value).wrap_err("Failed to serialize the value.")?;
 
 	Ok(value)
 }

@@ -1,5 +1,5 @@
 use super::PackageArgs;
-use crate::{error::Result, Cli};
+use crate::{Cli, Result};
 
 /// Build the target named "test" from the specified package.
 #[derive(Debug, clap::Args)]

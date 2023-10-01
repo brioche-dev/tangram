@@ -1,4 +1,4 @@
-use crate::{error::Result, Cli};
+use crate::{Cli, Result};
 
 /// Build a target from the specified package and execute a command from its output.
 #[derive(Debug, clap::Args)]
