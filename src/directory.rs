@@ -83,7 +83,7 @@ impl Directory {
 			// If the artifact is a symlink, then resolve it.
 			if let Artifact::Symlink(symlink) = &artifact {
 				match symlink
-					.resolve_from(client, Some(symlink.clone().into()))
+					.resolve_from(client, Some(symlink.clone()))
 					.await
 					.wrap_err("Failed to resolve the symlink.")?
 				{

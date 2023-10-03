@@ -2,11 +2,11 @@
 
 use super::{
 	convert::{from_v8, FromV8, ToV8},
-	FutureOutput, State, THREAD_LOCAL_ISOLATE,
+	State,
 };
 use crate::{
-	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Client, Error, Result, Task,
-	Value, WrapErr,
+	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Error, Result, Task, Value,
+	WrapErr,
 };
 use base64::Engine as _;
 use itertools::Itertools;
@@ -25,8 +25,8 @@ pub fn syscall<'s>(
 		},
 
 		Err(error) => {
-			// Throw the exception.
-			let exception = error.to_v8(scope).expect("Failed to serialize the error.");
+			// Throw an exception.
+			let exception = error.to_v8(scope).unwrap();
 			scope.throw_exception(exception);
 		},
 	}
@@ -67,15 +67,15 @@ fn syscall_inner<'s>(
 	}
 }
 
-async fn syscall_bundle(client: Client, args: (Artifact,)) -> Result<Artifact> {
+async fn syscall_bundle(state: Rc<State>, args: (Artifact,)) -> Result<Artifact> {
 	let (artifact,) = args;
-	let artifact = artifact.bundle(&client).await?;
+	let artifact = artifact.bundle(&state.client).await?;
 	Ok(artifact)
 }
 
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (checksum::Algorithm, Bytes),
 ) -> Result<Checksum> {
 	let (algorithm, bytes) = args;
@@ -85,13 +85,13 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
-async fn syscall_download(client: Client, args: (Url, Checksum)) -> Result<Blob> {
+async fn syscall_download(state: Rc<State>, args: (Url, Checksum)) -> Result<Blob> {
 	todo!()
 }
 
 fn syscall_encoding_base64_decode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (value,) = args;
@@ -103,7 +103,7 @@ fn syscall_encoding_base64_decode(
 
 fn syscall_encoding_base64_encode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -113,29 +113,28 @@ fn syscall_encoding_base64_encode(
 
 fn syscall_encoding_hex_decode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (Bytes,),
 ) -> Result<String> {
-	let (hex,) = args;
-	let bytes = hex::decode(hex).wrap_err("Failed to decode the string as hex.")?;
+	let (bytes,) = args;
+	let bytes = hex::decode(bytes).wrap_err("Failed to decode the string as hex.")?;
 	let string = String::from_utf8(bytes).wrap_err("Failed to decode the bytes as UTF-8.")?;
 	Ok(string)
 }
 
 fn syscall_encoding_hex_encode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
-	args: (String,),
-) -> Result<Bytes> {
+	_state: Rc<State>,
+	args: (Bytes,),
+) -> Result<String> {
 	let (bytes,) = args;
 	let hex = hex::encode(bytes);
-	let bytes = hex.into_bytes().into();
-	Ok(bytes)
+	Ok(hex)
 }
 
 fn syscall_encoding_json_decode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (String,),
 ) -> Result<serde_json::Value> {
 	let (json,) = args;
@@ -145,7 +144,7 @@ fn syscall_encoding_json_decode(
 
 fn syscall_encoding_json_encode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (serde_json::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -155,7 +154,7 @@ fn syscall_encoding_json_encode(
 
 fn syscall_encoding_toml_decode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (String,),
 ) -> Result<serde_toml::Value> {
 	let (toml,) = args;
@@ -165,7 +164,7 @@ fn syscall_encoding_toml_decode(
 
 fn syscall_encoding_toml_encode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (serde_toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -175,7 +174,7 @@ fn syscall_encoding_toml_encode(
 
 fn syscall_encoding_utf8_decode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (Bytes,),
 ) -> Result<String> {
 	let (bytes,) = args;
@@ -186,7 +185,7 @@ fn syscall_encoding_utf8_decode(
 
 fn syscall_encoding_utf8_encode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (String,),
 ) -> Result<Bytes> {
 	let (string,) = args;
@@ -196,7 +195,7 @@ fn syscall_encoding_utf8_encode(
 
 fn syscall_encoding_yaml_decode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (String,),
 ) -> Result<serde_yaml::Value> {
 	let (yaml,) = args;
@@ -206,7 +205,7 @@ fn syscall_encoding_yaml_decode(
 
 fn syscall_encoding_yaml_encode(
 	_scope: &mut v8::HandleScope,
-	_client: Client,
+	_state: Rc<State>,
 	args: (serde_yaml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -214,31 +213,44 @@ fn syscall_encoding_yaml_encode(
 	Ok(yaml)
 }
 
-async fn syscall_load(client: Client, args: (object::Id,)) -> Result<object::Object> {
-	todo!()
+async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::Object> {
+	let (id,) = args;
+	object::Handle::with_id(id)
+		.object(&state.client)
+		.await
+		.cloned()
 }
 
-fn syscall_log(_scope: &mut v8::HandleScope, _client: Client, args: (String,)) -> Result<()> {
+fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) -> Result<()> {
 	let (string,) = args;
-	println!("{string}");
+	let (sender, receiver) = std::sync::mpsc::channel();
+	state.main_runtime_handle.spawn({
+		let state = state.run.clone();
+		async move {
+			let result = state.add_log(string.into_bytes()).await;
+			sender.send(result).unwrap();
+		}
+	});
+	receiver.recv().unwrap()?;
 	Ok(())
 }
 
-async fn syscall_read(client: Client, args: (Blob,)) -> Result<Bytes> {
+async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
-	let bytes = blob.bytes(&client).await?;
+	let bytes = blob.bytes(&state.client).await?;
 	Ok(bytes.into())
 }
 
-async fn syscall_run(client: Client, args: (Task,)) -> Result<Value> {
+async fn syscall_run(state: Rc<State>, args: (Task,)) -> Result<Value> {
 	todo!()
 }
 
-async fn syscall_store(client: Client, args: (object::Object,)) -> Result<object::Id> {
-	todo!()
+async fn syscall_store(state: Rc<State>, args: (object::Object,)) -> Result<object::Id> {
+	let (object,) = args;
+	object::Handle::with_object(object).id(&state.client).await
 }
 
-async fn syscall_unpack(client: Client, args: (Blob, ArchiveFormat)) -> Result<Artifact> {
+async fn syscall_unpack(state: Rc<State>, args: (Blob, ArchiveFormat)) -> Result<Artifact> {
 	todo!()
 }
 
@@ -250,13 +262,13 @@ fn syscall_sync<'s, A, T, F>(
 where
 	A: FromV8,
 	T: ToV8,
-	F: FnOnce(&mut v8::HandleScope<'s>, Client, A) -> Result<T>,
+	F: FnOnce(&mut v8::HandleScope<'s>, Rc<State>, A) -> Result<T>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
 	// Get the state.
-	let state = context.get_slot::<State>(scope).unwrap().clone();
+	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
@@ -266,7 +278,7 @@ where
 	let args = from_v8(scope, args.into()).wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
-	let value = f(scope, state.client.clone(), args)?;
+	let value = f(scope, state, args)?;
 
 	// Move the value to v8.
 	let value = value
@@ -282,9 +294,9 @@ fn syscall_async<'s, A, T, F, Fut>(
 	f: F,
 ) -> Result<v8::Local<'s, v8::Value>>
 where
-	A: FromV8,
-	T: ToV8,
-	F: FnOnce(Client, A) -> Fut + 'static,
+	A: FromV8 + 'static,
+	T: ToV8 + 'static,
+	F: FnOnce(Rc<State>, A) -> Fut + 'static,
 	Fut: Future<Output = Result<T>>,
 {
 	// Get the context.
@@ -295,74 +307,34 @@ where
 
 	// Create the promise.
 	let promise_resolver = v8::PromiseResolver::new(scope).unwrap();
-	let value = promise_resolver.get_promise(scope);
+	let promise = promise_resolver.get_promise(scope);
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
 	let args = v8::Array::new_with_elements(scope, args.as_slice());
 
-	// Move the promise resolver and args to the global scope.
-	let context = v8::Global::new(scope, context);
+	// Deserialize the args.
+	let args = from_v8(scope, args.into()).wrap_err("Failed to deserialize the args.")?;
+
+	// Move the promise resolver to the global scope.
 	let promise_resolver = v8::Global::new(scope, promise_resolver);
-	let args = v8::Global::new(scope, args);
 
 	// Create the future.
-	let future = async move {
-		let result = syscall_async_inner(context.clone(), state.client.clone(), args, f).await;
-		FutureOutput {
-			context,
-			promise_resolver,
-			result,
+	let future = {
+		let state = state.clone();
+		async move {
+			let result = f(state, args)
+				.await
+				.map(|value| Box::new(value) as Box<dyn ToV8>);
+			(result, promise_resolver)
 		}
 	};
 	let future = Box::pin(future);
 
-	// Add the future to the context's future set.
+	// Add the future to the context's futures.
 	state.futures.borrow_mut().push(future);
 
-	Ok(value.into())
-}
-
-async fn syscall_async_inner<'s, A, T, F, Fut>(
-	context: v8::Global<v8::Context>,
-	client: Client,
-	args: v8::Global<v8::Array>,
-	f: F,
-) -> Result<v8::Global<v8::Value>>
-where
-	A: FromV8,
-	T: ToV8,
-	F: FnOnce(Client, A) -> Fut,
-	Fut: Future<Output = Result<T>>,
-{
-	// Deserialize the args.
-	let args = {
-		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-		let mut isolate = isolate.borrow_mut();
-		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
-		let context = v8::Local::new(&mut handle_scope, &context);
-		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-		let args = v8::Local::new(&mut context_scope, args);
-		from_v8(&mut context_scope, args.into()).wrap_err("Failed to deserialize the args.")?
-	};
-
-	// Call the function.
-	let value = f(client, args).await?;
-
-	// Serialize the value.
-	let value = {
-		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-		let mut isolate = isolate.borrow_mut();
-		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
-		let context = v8::Local::new(&mut handle_scope, &context);
-		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-		let value = value
-			.to_v8(&mut context_scope)
-			.wrap_err("Failed to serialize the value.")?;
-		v8::Global::new(&mut context_scope, value)
-	};
-
-	Ok(value)
+	Ok(promise.into())
 }
 
 #[derive(

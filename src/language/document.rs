@@ -1,9 +1,9 @@
-use crate::{
-	module::range::Range, package::ROOT_MODULE_FILE_NAME, return_error, Result, Subpath, WrapErr,
-};
+use super::Range;
+use crate::{package::ROOT_MODULE_FILE_NAME, return_error, Result, Subpath, WrapErr};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
+	sync::Arc,
 	time::SystemTime,
 };
 
@@ -51,7 +51,8 @@ pub struct Opened {
 }
 
 /// A document store.
-pub struct Store(tokio::sync::RwLock<HashMap<Document, State, fnv::FnvBuildHasher>>);
+#[derive(Clone, Debug)]
+pub struct Store(Arc<tokio::sync::RwLock<HashMap<Document, State, fnv::FnvBuildHasher>>>);
 
 impl Document {
 	pub async fn new(store: &Store, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
@@ -220,7 +221,8 @@ impl Default for Store {
 }
 
 impl Store {
-	pub fn new() -> Self {
-		Self::default()
+	pub async fn documents(&self) -> Vec<Document> {
+		let documents = self.0.read().await;
+		documents.keys().cloned().collect()
 	}
 }

@@ -1,16 +1,28 @@
-pub use self::import::Import;
-pub use crate::document::Document;
+use super::Document;
 use crate::{
 	error::{return_error, Error, Result, WrapErr},
 	package, Subpath,
 };
+use derive_more::{TryUnwrap, Unwrap};
 use url::Url;
 
 /// A module.
 #[derive(
-	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	Eq,
+	Hash,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	Unwrap,
+	TryUnwrap,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 #[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+#[unwrap(ref)]
+#[try_unwrap(ref)]
 pub enum Module {
 	/// A library module.
 	Library(Library),
@@ -32,26 +44,14 @@ pub struct Library {
 }
 
 #[derive(
-	Clone,
-	Debug,
-	Eq,
-	Hash,
-	Ord,
-	PartialEq,
-	PartialOrd,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
+	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Normal {
 	/// The module's package.
-	#[tangram_serialize(id = 0)]
 	pub package: package::Id,
 
 	/// The module's path.
-	#[tangram_serialize(id = 1)]
 	pub path: Subpath,
 }
 

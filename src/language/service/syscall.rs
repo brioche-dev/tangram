@@ -1,8 +1,14 @@
-use crate::{language::Module, return_error, server, Result, Server, WrapErr};
-use itertools::Itertools;
-use std::sync::Weak;
+#![allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
-#[allow(clippy::needless_pass_by_value)]
+use super::State;
+use crate::{
+	language::{Import, Module},
+	return_error, Bytes, Result, WrapErr,
+};
+use base64::Engine as _;
+use itertools::Itertools;
+use std::sync::Arc;
+
 pub fn syscall(
 	scope: &mut v8::HandleScope,
 	args: v8::FunctionCallbackArguments,
@@ -16,7 +22,8 @@ pub fn syscall(
 
 		Err(error) => {
 			// Throw an exception.
-			let exception = serde_v8::to_v8(scope, error).expect("Failed to serialize the error.");
+			let message = v8::String::new(scope, &error.to_string()).unwrap();
+			let exception = v8::Exception::error(scope, message);
 			scope.throw_exception(exception);
 		},
 	}
@@ -32,62 +39,91 @@ fn syscall_inner<'s>(
 	// Invoke the syscall.
 	match name.as_str() {
 		"documents" => syscall_sync(scope, args, syscall_documents),
-		"hex_decode" => syscall_sync(scope, args, syscall_hex_decode),
-		"hex_encode" => syscall_sync(scope, args, syscall_hex_encode),
-		"json_decode" => syscall_sync(scope, args, syscall_json_decode),
-		"json_encode" => syscall_sync(scope, args, syscall_json_encode),
+		"encoding_base64_decode" => syscall_sync(scope, args, syscall_encoding_base64_decode),
+		"encoding_base64_encode" => syscall_sync(scope, args, syscall_encoding_base64_encode),
+		"encoding_hex_decode" => syscall_sync(scope, args, syscall_encoding_hex_decode),
+		"encoding_hex_encode" => syscall_sync(scope, args, syscall_encoding_hex_encode),
+		"encoding_json_decode" => syscall_sync(scope, args, syscall_encoding_json_decode),
+		"encoding_json_encode" => syscall_sync(scope, args, syscall_encoding_json_encode),
+		"encoding_toml_decode" => syscall_sync(scope, args, syscall_encoding_toml_decode),
+		"encoding_toml_encode" => syscall_sync(scope, args, syscall_encoding_toml_encode),
+		"encoding_utf8_decode" => syscall_sync(scope, args, syscall_encoding_utf8_decode),
+		"encoding_utf8_encode" => syscall_sync(scope, args, syscall_encoding_utf8_encode),
+		"encoding_yaml_decode" => syscall_sync(scope, args, syscall_encoding_yaml_decode),
+		"encoding_yaml_encode" => syscall_sync(scope, args, syscall_encoding_yaml_encode),
 		"log" => syscall_sync(scope, args, syscall_log),
 		"module_load" => syscall_sync(scope, args, syscall_module_load),
 		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
 		"module_version" => syscall_sync(scope, args, syscall_module_version),
-		"utf8_decode" => syscall_sync(scope, args, syscall_utf8_decode),
-		"utf8_encode" => syscall_sync(scope, args, syscall_utf8_encode),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
 fn syscall_documents(
-	server: &Server,
 	_scope: &mut v8::HandleScope,
+	state: &State,
 	_args: (),
-) -> Result<Vec<module::Module>> {
-	server
-		.state
-		.main_runtime_handle
-		.clone()
-		.block_on(async move {
-			let documents = server.state.documents.read().await;
-			let modules = documents.keys().cloned().map(Module::Document).collect();
-			Ok(modules)
-		})
+) -> Result<Vec<Module>> {
+	state.main_runtime_handle.clone().block_on(async move {
+		if let Some(document_store) = state.document_store.as_ref() {
+			Ok(document_store
+				.documents()
+				.await
+				.into_iter()
+				.map(Module::Document)
+				.collect())
+		} else {
+			Ok(vec![])
+		}
+	})
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn syscall_hex_decode(
-	_server: &Server,
+fn syscall_encoding_base64_decode(
 	_scope: &mut v8::HandleScope,
+	_state: &State,
 	args: (String,),
-) -> Result<serde_v8::ToJsBuffer> {
-	let (hex,) = args;
-	let bytes = hex::decode(hex).wrap_err("Failed to decode the string as hex.")?;
+) -> Result<Bytes> {
+	let (value,) = args;
+	let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
+		.decode(value)
+		.wrap_err("Failed to decode the bytes.")?;
 	Ok(bytes.into())
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
-fn syscall_hex_encode(
-	_server: &Server,
+fn syscall_encoding_base64_encode(
 	_scope: &mut v8::HandleScope,
-	args: (serde_v8::JsBuffer,),
+	_state: &State,
+	args: (Bytes,),
+) -> Result<String> {
+	let (value,) = args;
+	let encoded = base64::engine::general_purpose::STANDARD_NO_PAD.encode(value);
+	Ok(encoded)
+}
+
+fn syscall_encoding_hex_decode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (Bytes,),
+) -> Result<String> {
+	let (bytes,) = args;
+	let bytes = hex::decode(bytes).wrap_err("Failed to decode the string as hex.")?;
+	let string = String::from_utf8(bytes).wrap_err("Failed to decode the bytes as UTF-8.")?;
+	Ok(string)
+}
+
+fn syscall_encoding_hex_encode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (Bytes,),
 ) -> Result<String> {
 	let (bytes,) = args;
 	let hex = hex::encode(bytes);
 	Ok(hex)
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn syscall_json_decode(
-	_server: &Server,
+fn syscall_encoding_json_decode(
 	_scope: &mut v8::HandleScope,
+	_state: &State,
 	args: (String,),
 ) -> Result<serde_json::Value> {
 	let (json,) = args;
@@ -95,10 +131,9 @@ fn syscall_json_decode(
 	Ok(value)
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn syscall_json_encode(
-	_server: &Server,
+fn syscall_encoding_json_encode(
 	_scope: &mut v8::HandleScope,
+	_state: &State,
 	args: (serde_json::Value,),
 ) -> Result<String> {
 	let (value,) = args;
@@ -106,72 +141,122 @@ fn syscall_json_encode(
 	Ok(json)
 }
 
-#[allow(clippy::unnecessary_wraps)]
-fn syscall_log(_server: &Server, _scope: &mut v8::HandleScope, args: (String,)) -> Result<()> {
+fn syscall_encoding_toml_decode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (String,),
+) -> Result<serde_toml::Value> {
+	let (toml,) = args;
+	let value = serde_toml::from_str(&toml).wrap_err("Failed to decode the string as toml.")?;
+	Ok(value)
+}
+
+fn syscall_encoding_toml_encode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (serde_toml::Value,),
+) -> Result<String> {
+	let (value,) = args;
+	let toml = serde_toml::to_string(&value).wrap_err("Failed to encode the value.")?;
+	Ok(toml)
+}
+
+fn syscall_encoding_utf8_decode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (Bytes,),
+) -> Result<String> {
+	let (bytes,) = args;
+	let string = String::from_utf8(bytes.as_slice().to_owned())
+		.wrap_err("Failed to decode the bytes as UTF-8.")?;
+	Ok(string)
+}
+
+fn syscall_encoding_utf8_encode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (String,),
+) -> Result<Bytes> {
+	let (string,) = args;
+	let bytes = string.into_bytes().into();
+	Ok(bytes)
+}
+
+fn syscall_encoding_yaml_decode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (String,),
+) -> Result<serde_yaml::Value> {
+	let (yaml,) = args;
+	let value = serde_yaml::from_str(&yaml).wrap_err("Failed to decode the string as yaml.")?;
+	Ok(value)
+}
+
+fn syscall_encoding_yaml_encode(
+	_scope: &mut v8::HandleScope,
+	_state: &State,
+	args: (serde_yaml::Value,),
+) -> Result<String> {
+	let (value,) = args;
+	let yaml = serde_yaml::to_string(&value).wrap_err("Failed to encode the value.")?;
+	Ok(yaml)
+}
+
+fn syscall_log(_scope: &mut v8::HandleScope, _state: &State, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	eprintln!("{string}");
 	Ok(())
 }
 
 fn syscall_module_load(
-	server: &Server,
 	_scope: &mut v8::HandleScope,
-	args: (module::Module,),
+	state: &State,
+	args: (Module,),
 ) -> Result<String> {
 	let (module,) = args;
-	server
-		.state
-		.main_runtime_handle
-		.clone()
-		.block_on(async move {
-			let text = module
-				.load(server)
-				.await
-				.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
-			Ok(text)
-		})
+	state.main_runtime_handle.clone().block_on(async move {
+		let text = module
+			.load(&state.client, state.document_store.as_ref())
+			.await
+			.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
+		Ok(text)
+	})
 }
 
 fn syscall_module_resolve(
-	server: &Server,
 	_scope: &mut v8::HandleScope,
-	args: (module::Module, module::Import),
-) -> Result<module::Module> {
+	state: &State,
+	args: (Module, Import),
+) -> Result<Module> {
 	let (module, specifier) = args;
-	server
-		.state
-		.main_runtime_handle
-		.clone()
-		.block_on(async move {
-			let module = module.resolve(server, &specifier).await.wrap_err_with(|| {
+	state.main_runtime_handle.clone().block_on(async move {
+		let module = module
+			.resolve(&state.client, state.document_store.as_ref(), &specifier)
+			.await
+			.wrap_err_with(|| {
 				format!(
 					r#"Failed to resolve specifier "{specifier}" relative to module "{module}"."#
 				)
 			})?;
-			Ok(module)
-		})
+		Ok(module)
+	})
 }
 
 fn syscall_module_version(
-	server: &Server,
 	_scope: &mut v8::HandleScope,
-	args: (module::Module,),
+	state: &State,
+	args: (Module,),
 ) -> Result<String> {
 	let (module,) = args;
-	server
-		.state
-		.main_runtime_handle
-		.clone()
-		.block_on(async move {
-			let version = module.version(server).await?;
-			Ok(version.to_string())
-		})
+	state.main_runtime_handle.clone().block_on(async move {
+		let version = module.version(state.document_store.as_ref()).await?;
+		Ok(version.to_string())
+	})
 }
 
-#[allow(clippy::needless_pass_by_value)]
 fn syscall_utf8_decode(
-	_server: &Server,
 	_scope: &mut v8::HandleScope,
+	_state: &State,
 	args: (serde_v8::JsBuffer,),
 ) -> Result<String> {
 	let (bytes,) = args;
@@ -181,10 +266,9 @@ fn syscall_utf8_decode(
 	Ok(string)
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn syscall_utf8_encode(
-	_server: &Server,
 	_scope: &mut v8::HandleScope,
+	_state: &State,
 	args: (String,),
 ) -> Result<serde_v8::ToJsBuffer> {
 	let (string,) = args;
@@ -200,18 +284,13 @@ fn syscall_sync<'s, A, T, F>(
 where
 	A: serde::de::DeserializeOwned,
 	T: serde::Serialize,
-	F: FnOnce(&Server, &mut v8::HandleScope<'s>, A) -> Result<T>,
+	F: FnOnce(&mut v8::HandleScope<'s>, &State, A) -> Result<T>,
 {
 	// Get the context.
 	let context = scope.get_current_context();
 
-	// Get the server.
-	let state = context
-		.get_slot::<Weak<server::State>>(scope)
-		.unwrap()
-		.upgrade()
-		.unwrap();
-	let tg = Server { state };
+	// Get the state.
+	let state = context.get_slot::<Arc<State>>(scope).unwrap().clone();
 
 	// Collect the args.
 	let args = (1..args.length()).map(|i| args.get(i)).collect_vec();
@@ -221,7 +300,7 @@ where
 	let args = serde_v8::from_v8(scope, args.into()).wrap_err("Failed to deserialize the args.")?;
 
 	// Call the function.
-	let value = f(&tg, scope, args)?;
+	let value = f(scope, &state, args)?;
 
 	// Serialize the value.
 	let value = serde_v8::to_v8(scope, &value).wrap_err("Failed to serialize the value.")?;

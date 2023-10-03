@@ -47,6 +47,10 @@ impl Client {
 		Self { state }
 	}
 
+	pub fn set_token(&self, token: Option<String>) {
+		*self.state.token.write().unwrap() = token;
+	}
+
 	pub async fn create_login(&self) -> Result<Login> {
 		let response = self
 			.request(reqwest::Method::POST, "/v1/logins")

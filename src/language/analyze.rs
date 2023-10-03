@@ -1,9 +1,9 @@
-use super::{Import, Module};
+use super::{parse, Import, Module};
 use crate::{package::Metadata, Relpath, Result, WrapErr};
 use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 use swc_core::{
-	common::{SourceMap, Span},
+	common::{Loc, SourceMap, Span},
 	ecma::{
 		ast::{
 			CallExpr, Callee, ExportAll, ExportDecl, Expr, ImportDecl, Lit, NamedExport, ObjectLit,
@@ -18,6 +18,12 @@ pub struct Output {
 	pub metadata: Option<Metadata>,
 	pub imports: HashSet<Import, fnv::FnvBuildHasher>,
 	pub includes: HashSet<Relpath, fnv::FnvBuildHasher>,
+}
+
+pub struct Error {
+	message: String,
+	line: usize,
+	column: usize,
 }
 
 impl Module {
@@ -39,7 +45,7 @@ impl Module {
 				.map(std::string::ToString::to_string)
 				.collect_vec()
 				.join("\n");
-			return Err(crate::error::Error::message(message));
+			return Err(crate::Error::with_message(message));
 		}
 
 		// Create the output.
@@ -50,6 +56,28 @@ impl Module {
 		};
 
 		Ok(output)
+	}
+}
+
+impl Error {
+	pub fn new(message: impl std::fmt::Display, loc: &Loc) -> Self {
+		let line = loc.line - 1;
+		let column = loc.col_display;
+		Self {
+			message: message.to_string(),
+			line,
+			column,
+		}
+	}
+}
+
+impl std::fmt::Display for Error {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let line = self.line + 1;
+		let column = self.column + 1;
+		let message = &self.message;
+		write!(f, "{line}:{column} {message}").unwrap();
+		Ok(())
 	}
 }
 

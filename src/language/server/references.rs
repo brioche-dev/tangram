@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{error::Result, module::Module};
+use crate::{language::Module, Result};
 use lsp_types as lsp;
 
 impl Server {
@@ -8,17 +8,16 @@ impl Server {
 		params: lsp::ReferenceParams,
 	) -> Result<Option<Vec<lsp::Location>>> {
 		// Get the module.
-		let module = Module::from_lsp(
-			&self.server,
-			params.text_document_position.text_document.uri,
-		)
-		.await?;
+		let module =
+			Module::from_lsp(self, params.text_document_position.text_document.uri).await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
 
 		// Get the references.
-		let locations = module.references(&self.server, position.into()).await?;
+		let locations = module
+			.references(&self.state.language_service, position.into())
+			.await?;
 		let Some(locations) = locations else {
 			return Ok(None);
 		};

@@ -103,11 +103,11 @@ export class Blob {
 	}
 
 	async bytes(): Promise<Uint8Array> {
-		return await syscall.blob.bytes(this);
+		return await syscall.read(this);
 	}
 
 	async text(): Promise<string> {
-		return encoding.utf8.decode(await syscall.blob.bytes(this));
+		return encoding.utf8.decode(await syscall.read(this));
 	}
 }
 

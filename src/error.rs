@@ -105,24 +105,27 @@ impl<'a> From<&'a std::panic::Location<'a>> for Location {
 	}
 }
 
-impl std::fmt::Display for Location {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}:{}:{}", self.file, self.line, self.column)
-	}
-}
-
 impl<'a> std::fmt::Display for Trace<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let mut error: &dyn std::error::Error = &self.0;
+		let mut error = self.0;
 		loop {
 			writeln!(f, "{error}")?;
-			if let Some(source) = error.source() {
+			if let Some(location) = &error.location {
+				writeln!(f, "  {location}")?;
+			}
+			if let Some(source) = &error.source {
 				error = source;
 			} else {
 				break;
 			}
 		}
 		Ok(())
+	}
+}
+
+impl std::fmt::Display for Location {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}:{}:{}", self.file, self.line, self.column)
 	}
 }
 

@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{error::Result, module::Module};
+use crate::{language::Module, Result};
 use lsp_types as lsp;
 
 pub struct VirtualTextDocument;
@@ -19,10 +19,12 @@ pub struct Params {
 impl Server {
 	pub async fn virtual_text_document(&self, params: Params) -> Result<Option<String>> {
 		// Get the module.
-		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
+		let module = Module::from_lsp(self, params.text_document.uri).await?;
 
 		// Load the file.
-		let text = module.load(&self.server).await?;
+		let text = module
+			.load(&self.state.client, Some(&self.state.document_store))
+			.await?;
 
 		Ok(Some(text))
 	}

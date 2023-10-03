@@ -1,15 +1,18 @@
 use super::{send_notification, Sender, Server};
-use crate::{language::Diagnostic, module::Module, Result};
+use crate::{
+	language::{Diagnostic, Module},
+	Result,
+};
 use lsp_types as lsp;
 use std::collections::BTreeMap;
 
 impl Server {
 	pub async fn update_diagnostics(&self, sender: &Sender) -> Result<()> {
 		// Get the diagnostics.
-		let diagnostics = Module::diagnostics(&self.server).await?;
+		let diagnostics = Module::diagnostics(&self.state.language_service).await?;
 
 		// Clear the existing diagnostics.
-		let mut existing_diagnostics = self.diagnostics.write().await;
+		let mut existing_diagnostics = self.state.diagnostics.write().await;
 		let mut diagnostics_for_module: BTreeMap<Module, Vec<Diagnostic>> = existing_diagnostics
 			.drain(..)
 			.filter_map(|diagnostic| {
@@ -31,7 +34,7 @@ impl Server {
 
 		// Publish the diagnostics.
 		for (module, diagnostics) in diagnostics_for_module {
-			let version = Some(module.version(&self.server).await?);
+			let version = Some(module.version(Some(&self.state.document_store)).await?);
 			let diagnostics = diagnostics.into_iter().map(Into::into).collect();
 			send_notification::<lsp::notification::PublishDiagnostics>(
 				sender,

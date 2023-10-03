@@ -43,7 +43,7 @@ impl Cli {
 		self.api_client.set_token(Some(token.clone()));
 
 		// Get the user.
-		let user = self.api_client().get_current_user().await?;
+		let user = self.api_client.get_current_user().await?;
 
 		// Write the credentials.
 		let credentials = Credentials {

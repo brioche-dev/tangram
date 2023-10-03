@@ -1,4 +1,4 @@
-use crate::{id, Client, Error, Result};
+use crate::{id, task, Client, Error, Result};
 use futures::FutureExt;
 use http_body_util::BodyExt;
 use itertools::Itertools;
@@ -31,15 +31,8 @@ pub struct State {
 	/// An HTTP client for downloading resources.
 	pub(crate) http_client: reqwest::Client,
 
-	/// A channel sender to send requests to the language service.
-	// pub(crate) language_service_request_sender:
-	// 	std::sync::Mutex<Option<language::service::RequestSender>>,
-
 	/// A local pool for running JS tasks.
 	pub(crate) local_pool: tokio_util::task::LocalPoolHandle,
-
-	/// A handle to the main tokio runtime.
-	pub(crate) main_runtime_handle: tokio::runtime::Handle,
 
 	/// The options the server was created with.
 	pub(crate) options: Options,
@@ -53,9 +46,11 @@ pub struct State {
 	/// A semaphore that limits the number of concurrent subprocesses.
 	pub(crate) process_semaphore: tokio::sync::Semaphore,
 
-	/// The server's uncompleted runs.
-	pub(crate) uncompleted_runs:
-		std::sync::RwLock<HashMap<crate::run::Id, Arc<crate::run::State>, id::BuildHasher>>,
+	/// The state of the server's running tasks.
+	pub(crate) running: std::sync::RwLock<(
+		HashMap<task::Id, crate::run::Id, id::BuildHasher>,
+		HashMap<crate::run::Id, Arc<crate::run::State>, id::BuildHasher>,
+	)>,
 }
 
 #[derive(Debug)]
@@ -104,16 +99,10 @@ impl Server {
 		// Create the HTTP client for downloading resources.
 		let http_client = reqwest::Client::new();
 
-		// Create the sender for language service requests.
-		// let language_service_request_sender = std::sync::Mutex::new(None);
-
 		// Create the local pool for running JS tasks.
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
 			std::thread::available_parallelism().unwrap().get(),
 		);
-
-		// Get the curent tokio runtime handler.
-		let main_runtime_handle = tokio::runtime::Handle::current();
 
 		// Create the parent client.
 		let parent = if let Some(url) = options.parent_url.as_ref() {
@@ -127,28 +116,24 @@ impl Server {
 		let process_semaphore =
 			tokio::sync::Semaphore::new(std::thread::available_parallelism().unwrap().get());
 
-		// Create the runs.
-		let uncompleted_runs = std::sync::RwLock::new(HashMap::default());
+		// Create the state of the server's running tasks.
+		let running = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
 
 		// Create the state.
-		let state = State {
+		let state = Arc::new(State {
 			database,
 			file_descriptor_semaphore,
 			http_client,
-			// language_service_request_sender,
 			local_pool,
-			main_runtime_handle,
 			options,
 			parent,
 			path,
 			process_semaphore,
-			uncompleted_runs,
-		};
+			running,
+		});
 
 		// Create the server.
-		let server = Server {
-			state: Arc::new(state),
-		};
+		let server = Server { state };
 
 		Ok(server)
 	}

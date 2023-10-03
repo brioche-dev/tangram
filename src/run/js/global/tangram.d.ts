@@ -532,9 +532,6 @@ declare namespace tg {
 		/** Get whether this task is unsafe. */
 		unsafe(): Promise<boolean>;
 
-		/** Get whether this task has the network enabled. */
-		network(): Promise<boolean>;
-
 		/** Run this task. */
 		run(): Promise<Artifact | undefined>;
 	}
@@ -561,14 +558,11 @@ declare namespace tg {
 			/** The task's command line arguments. */
 			args?: Array<Value>;
 
-			/** A checksum of the task's output. If a checksum is provided, then unsafe options can be used. */
+			/** If a checksum of the task's output is provided, then the task will have access to the network. */
 			checksum?: Checksum | undefined;
 
-			/** If this flag is set, then unsafe options can be used without a checksum. */
+			/** If the task is marked as unsafe, then it will have access to the network even if a checksum is not provided. */
 			unsafe?: boolean;
-
-			/** If this flag is set, then the task will have access to the network. This is an unsafe option. */
-			network?: boolean;
 		};
 	}
 

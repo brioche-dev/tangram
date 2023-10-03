@@ -125,7 +125,7 @@ let stringifyHandle = (
 	handle: Object_.Handle,
 	visited: WeakSet<object>,
 ): string => {
-	let [id, object] = handle.state();
+	let { id, object } = handle.state();
 	if (id !== undefined) {
 		return id;
 	}

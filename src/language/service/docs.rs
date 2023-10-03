@@ -1,4 +1,4 @@
-use crate::language::{docs::Symbol, Module};
+use crate::language::Module;
 use std::collections::BTreeMap;
 
 #[derive(Debug, serde::Serialize)]
@@ -10,6 +10,5 @@ pub struct Request {
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
-	pub exports: BTreeMap<String, Symbol>,
-	pub module: Module,
+	pub exports: BTreeMap<String, serde_json::Value>,
 }

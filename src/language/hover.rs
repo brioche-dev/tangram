@@ -1,16 +1,16 @@
-use super::service;
-use crate::{module::position::Position, module::Module, return_error, server::Server, Result};
+use super::{service, Module, Position, Service};
+use crate::{return_error, Result};
 
 impl Module {
-	pub async fn hover(&self, server: &Server, position: Position) -> Result<Option<String>> {
+	pub async fn hover(&self, service: &Service, position: Position) -> Result<Option<String>> {
 		// Create the language service request.
 		let request = service::Request::Hover(service::hover::Request {
 			module: self.clone(),
 			position,
 		});
 
-		// Handle the language service request.
-		let response = server.handle_language_service_request(request).await?;
+		// Perform the language service request.
+		let response = service.request(request).await?;
 
 		// Get the response.
 		let service::Response::Hover(response) = response else {

@@ -1,5 +1,5 @@
 use crate::{
-	blob, checksum, directory, file, module,
+	blob, checksum, directory, file,
 	object::{self, Object},
 	package, return_error, symlink, task, template, Artifact, Blob, Bytes, Checksum, Directory,
 	Error, File, Package, Placeholder, Relpath, Result, Subpath, Symlink, System, Task, Template,
@@ -680,12 +680,9 @@ impl ToV8 for Blob {
 		let blob = tg.get(scope, blob.into()).unwrap();
 		let blob = v8::Local::<v8::Function>::try_from(blob).unwrap();
 
-		let instance = blob.new_instance(scope, &[]).unwrap();
+		let handle = self.handle().to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.handle().to_v8(scope)?;
-		instance.set_private(scope, key, value);
+		let instance = blob.new_instance(scope, &[handle]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -805,12 +802,9 @@ impl ToV8 for Directory {
 		let directory = tg.get(scope, directory.into()).unwrap();
 		let directory = v8::Local::<v8::Function>::try_from(directory).unwrap();
 
-		let instance = directory.new_instance(scope, &[]).unwrap();
+		let handle = self.handle().to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.handle().to_v8(scope)?;
-		instance.set_private(scope, key, value);
+		let instance = directory.new_instance(scope, &[handle]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -885,12 +879,9 @@ impl ToV8 for File {
 		let file = tg.get(scope, file.into()).unwrap();
 		let file = v8::Local::<v8::Function>::try_from(file).unwrap();
 
-		let instance = file.new_instance(scope, &[]).unwrap();
+		let handle = self.handle().to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.handle().to_v8(scope)?;
-		instance.set_private(scope, key, value);
+		let instance = file.new_instance(scope, &[handle]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -987,12 +978,9 @@ impl ToV8 for Symlink {
 		let symlink = tg.get(scope, symlink.into()).unwrap();
 		let symlink = v8::Local::<v8::Function>::try_from(symlink).unwrap();
 
-		let instance = symlink.new_instance(scope, &[]).unwrap();
+		let handle = self.handle().to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.handle().to_v8(scope)?;
-		instance.set_private(scope, key, value);
+		let instance = symlink.new_instance(scope, &[handle]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1067,11 +1055,9 @@ impl ToV8 for Placeholder {
 		let placeholder = tg.get(scope, placeholder.into()).unwrap();
 		let placeholder = v8::Local::<v8::Function>::try_from(placeholder).unwrap();
 
-		let instance = placeholder.new_instance(scope, &[]).unwrap();
+		let name = self.name.to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
-		let value = self.name.to_v8(scope)?;
-		instance.set(scope, key.into(), value);
+		let instance = placeholder.new_instance(scope, &[name]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1119,11 +1105,9 @@ impl ToV8 for Template {
 		let template = tg.get(scope, template.into()).unwrap();
 		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
 
-		let instance = template.new_instance(scope, &[]).unwrap();
+		let components = self.components.to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "components".as_bytes()).unwrap();
-		let value = self.components.to_v8(scope)?;
-		instance.set(scope, key.into(), value);
+		let instance = template.new_instance(scope, &[components]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1216,12 +1200,9 @@ impl ToV8 for Package {
 		let package = tg.get(scope, package.into()).unwrap();
 		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
 
-		let instance = package.new_instance(scope, &[]).unwrap();
+		let handle = self.handle().to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.handle().to_v8(scope)?;
-		instance.set_private(scope, key, value);
+		let instance = package.new_instance(scope, &[handle]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1318,12 +1299,9 @@ impl ToV8 for Task {
 		let task = tg.get(scope, task.into()).unwrap();
 		let task = v8::Local::<v8::Function>::try_from(task).unwrap();
 
-		let instance = task.new_instance(scope, &[]).unwrap();
+		let handle = self.handle().to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.handle().to_v8(scope)?;
-		instance.set_private(scope, key, value);
+		let instance = task.new_instance(scope, &[handle]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1394,10 +1372,6 @@ impl ToV8 for task::Object {
 		let value = self.unsafe_.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
-		let key = v8::String::new_external_onebyte_static(scope, "network".as_bytes()).unwrap();
-		let value = self.network.to_v8(scope)?;
-		object.set(scope, key.into(), value);
-
 		Ok(object.into())
 	}
 }
@@ -1443,10 +1417,6 @@ impl FromV8 for task::Object {
 		let unsafe_ = value.get(scope, unsafe_.into()).unwrap();
 		let unsafe_ = from_v8(scope, unsafe_)?;
 
-		let network = v8::String::new_external_onebyte_static(scope, "network".as_bytes()).unwrap();
-		let network = value.get(scope, network.into()).unwrap();
-		let network = from_v8(scope, network)?;
-
 		Ok(Self {
 			host,
 			executable,
@@ -1456,7 +1426,6 @@ impl FromV8 for task::Object {
 			args,
 			checksum,
 			unsafe_,
-			network,
 		})
 	}
 }
@@ -1492,12 +1461,9 @@ impl ToV8 for object::Handle {
 		let handle = object_.get(scope, handle.into()).unwrap();
 		let handle = v8::Local::<v8::Function>::try_from(handle).unwrap();
 
-		let instance = handle.new_instance(scope, &[]).unwrap();
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let key = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
-		let key = v8::Private::for_api(scope, Some(key));
-		let value = self.state().read().unwrap().to_v8(scope)?;
-		instance.set_private(scope, key, value);
+		let instance = handle.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1616,56 +1582,6 @@ impl FromV8 for Object {
 	}
 }
 
-impl ToV8 for module::Normal {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let object = v8::Object::new(scope);
-
-		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
-		let value = self.package.to_v8(scope)?;
-		object.set(scope, key.into(), value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
-		let value = self.executable.to_v8(scope)?;
-		object.set(scope, key.into(), value);
-
-		let key = v8::String::new_external_onebyte_static(scope, "references".as_bytes()).unwrap();
-		let value = self.references.to_v8(scope)?;
-		object.set(scope, key.into(), value);
-
-		Ok(object.into())
-	}
-}
-
-impl FromV8 for module::Normal {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let value = value.to_object(scope).unwrap();
-
-		let contents =
-			v8::String::new_external_onebyte_static(scope, "contents".as_bytes()).unwrap();
-		let contents = value.get(scope, contents.into()).unwrap();
-		let contents = from_v8(scope, contents)?;
-
-		let executable =
-			v8::String::new_external_onebyte_static(scope, "executable".as_bytes()).unwrap();
-		let executable = value.get(scope, executable.into()).unwrap();
-		let executable = from_v8(scope, executable)?;
-
-		let references =
-			v8::String::new_external_onebyte_static(scope, "references".as_bytes()).unwrap();
-		let references = value.get(scope, references.into()).unwrap();
-		let references = from_v8(scope, references)?;
-
-		Ok(Self {
-			contents,
-			executable,
-			references,
-		})
-	}
-}
-
 impl ToV8 for Checksum {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
@@ -1725,5 +1641,20 @@ impl FromV8 for Url {
 		String::from_v8(scope, value)?
 			.parse()
 			.wrap_err("Failed to parse the string as a URL.")
+	}
+}
+
+impl ToV8 for Error {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		todo!()
+	}
+}
+
+impl FromV8 for Error {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		todo!()
 	}
 }

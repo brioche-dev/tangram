@@ -1,6 +1,8 @@
 pub use self::{dependency::Dependency, specifier::Specifier};
 use crate::{
-	artifact, directory, object, return_error, Artifact, Client, Result, Subpath, WrapErr,
+	artifact, directory,
+	language::{self, module, Module},
+	object, return_error, Artifact, Client, Result, Subpath, WrapErr,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -62,126 +64,125 @@ impl Package {
 	/// Create a package from a path.
 	#[async_recursion]
 	pub async fn with_path(client: &Client, package_path: &Path) -> Result<Self> {
-		todo!()
-		// // Create a builder for the directory.
-		// let mut directory = directory::Builder::default();
+		// Create a builder for the directory.
+		let mut directory = directory::Builder::default();
 
-		// // Create the dependencies map.
-		// let mut dependency_packages: Vec<Self> = Vec::new();
-		// let mut dependencies: BTreeMap<Dependency, Self> = BTreeMap::default();
+		// Create the dependencies map.
+		let mut dependency_packages: Vec<Self> = Vec::new();
+		let mut dependencies: BTreeMap<Dependency, Self> = BTreeMap::default();
 
-		// // Create a queue of module paths to visit and a visited set.
-		// let mut queue: VecDeque<Subpath> =
-		// 	VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
-		// let mut visited: HashSet<Subpath, fnv::FnvBuildHasher> = HashSet::default();
+		// Create a queue of module paths to visit and a visited set.
+		let mut queue: VecDeque<Subpath> =
+			VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
+		let mut visited: HashSet<Subpath, fnv::FnvBuildHasher> = HashSet::default();
 
-		// // Add each module and its includes to the directory.
-		// while let Some(module_subpath) = queue.pop_front() {
-		// 	// Get the module's path.
-		// 	let module_path = package_path.join(module_subpath.to_string());
+		// Add each module and its includes to the directory.
+		while let Some(module_subpath) = queue.pop_front() {
+			// Get the module's path.
+			let module_path = package_path.join(module_subpath.to_string());
 
-		// 	// Add the module to the package directory.
-		// 	let artifact = Artifact::check_in(client, &module_path).await?;
-		// 	directory = directory.add(client, &module_subpath, artifact).await?;
+			// Add the module to the package directory.
+			let artifact = Artifact::check_in(client, &module_path).await?;
+			directory = directory.add(client, &module_subpath, artifact).await?;
 
-		// 	// Get the module's text.
-		// 	let permit = client.file_descriptor_semaphore().acquire().await;
-		// 	let text = tokio::fs::read_to_string(&module_path)
-		// 		.await
-		// 		.wrap_err("Failed to read the module.")?;
-		// 	drop(permit);
+			// Get the module's text.
+			let permit = client.file_descriptor_semaphore().acquire().await;
+			let text = tokio::fs::read_to_string(&module_path)
+				.await
+				.wrap_err("Failed to read the module.")?;
+			drop(permit);
 
-		// 	// Analyze the module.
-		// 	let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
+			// Analyze the module.
+			let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
 
-		// 	// Add the includes to the package directory.
-		// 	for include_path in analyze_output.includes {
-		// 		// Get the included artifact's path in the package.
-		// 		let included_artifact_subpath = module_subpath
-		// 			.clone()
-		// 			.into_relpath()
-		// 			.parent()
-		// 			.join(include_path.clone())
-		// 			.try_into_subpath()
-		// 			.wrap_err("Invalid include path.")?;
+			// Add the includes to the package directory.
+			for include_path in analyze_output.includes {
+				// Get the included artifact's path in the package.
+				let included_artifact_subpath = module_subpath
+					.clone()
+					.into_relpath()
+					.parent()
+					.join(include_path.clone())
+					.try_into_subpath()
+					.wrap_err("Invalid include path.")?;
 
-		// 		// Get the included artifact's path.
-		// 		let included_artifact_path =
-		// 			package_path.join(included_artifact_subpath.to_string());
+				// Get the included artifact's path.
+				let included_artifact_path =
+					package_path.join(included_artifact_subpath.to_string());
 
-		// 		// Check in the artifact at the included path.
-		// 		let included_artifact = Artifact::check_in(client, &included_artifact_path).await?;
+				// Check in the artifact at the included path.
+				let included_artifact = Artifact::check_in(client, &included_artifact_path).await?;
 
-		// 		// Add the included artifact to the directory.
-		// 		directory = directory
-		// 			.add(client, &included_artifact_subpath, included_artifact)
-		// 			.await?;
-		// 	}
+				// Add the included artifact to the directory.
+				directory = directory
+					.add(client, &included_artifact_subpath, included_artifact)
+					.await?;
+			}
 
-		// 	// Recurse into the dependencies.
-		// 	for import in &analyze_output.imports {
-		// 		if let module::Import::Dependency(dependency) = import {
-		// 			// Ignore duplicate dependencies.
-		// 			if dependencies.contains_key(dependency) {
-		// 				continue;
-		// 			}
+			// Recurse into the dependencies.
+			for import in &analyze_output.imports {
+				if let language::Import::Dependency(dependency) = import {
+					// Ignore duplicate dependencies.
+					if dependencies.contains_key(dependency) {
+						continue;
+					}
 
-		// 			// Convert the module dependency to a package dependency.
-		// 			let dependency = match dependency {
-		// 				Dependency::Path(dependency_path) => Dependency::Path(
-		// 					module_subpath
-		// 						.clone()
-		// 						.into_relpath()
-		// 						.parent()
-		// 						.join(dependency_path.clone()),
-		// 				),
-		// 				Dependency::Registry(_) => dependency.clone(),
-		// 			};
+					// Convert the module dependency to a package dependency.
+					let dependency = match dependency {
+						Dependency::Path(dependency_path) => Dependency::Path(
+							module_subpath
+								.clone()
+								.into_relpath()
+								.parent()
+								.join(dependency_path.clone()),
+						),
+						Dependency::Registry(_) => dependency.clone(),
+					};
 
-		// 			// Get the dependency package.
-		// 			let Dependency::Path(dependency_relpath) = &dependency else {
-		// 				unimplemented!();
-		// 			};
-		// 			let dependency_package_path = package_path.join(dependency_relpath.to_string());
-		// 			let dependency_package =
-		// 				Self::with_path(client, &dependency_package_path).await?;
+					// Get the dependency package.
+					let Dependency::Path(dependency_relpath) = &dependency else {
+						unimplemented!();
+					};
+					let dependency_package_path = package_path.join(dependency_relpath.to_string());
+					let dependency_package =
+						Self::with_path(client, &dependency_package_path).await?;
 
-		// 			// Add the dependency.
-		// 			dependencies.insert(dependency.clone(), dependency_package.clone());
-		// 			dependency_packages.push(dependency_package);
-		// 		}
-		// 	}
+					// Add the dependency.
+					dependencies.insert(dependency.clone(), dependency_package.clone());
+					dependency_packages.push(dependency_package);
+				}
+			}
 
-		// 	// Add the module subpath to the visited set.
-		// 	visited.insert(module_subpath.clone());
+			// Add the module subpath to the visited set.
+			visited.insert(module_subpath.clone());
 
-		// 	// Add the unvisited path imports to the queue.
-		// 	for import in &analyze_output.imports {
-		// 		if let module::Import::Path(import) = import {
-		// 			let imported_module_subpath = module_subpath
-		// 				.clone()
-		// 				.into_relpath()
-		// 				.parent()
-		// 				.join(import.clone())
-		// 				.try_into_subpath()
-		// 				.wrap_err("Failed to resolve the module path.")?;
-		// 			if !visited.contains(&imported_module_subpath) {
-		// 				queue.push_back(imported_module_subpath);
-		// 			}
-		// 		}
-		// 	}
-		// }
+			// Add the unvisited path imports to the queue.
+			for import in &analyze_output.imports {
+				if let language::Import::Path(import) = import {
+					let imported_module_subpath = module_subpath
+						.clone()
+						.into_relpath()
+						.parent()
+						.join(import.clone())
+						.try_into_subpath()
+						.wrap_err("Failed to resolve the module path.")?;
+					if !visited.contains(&imported_module_subpath) {
+						queue.push_back(imported_module_subpath);
+					}
+				}
+			}
+		}
 
-		// // Create the package directory.
-		// let directory = directory.build();
+		// Create the package directory.
+		let directory = directory.build();
 
-		// // Create the package.
-		// let package = Self::with_object(Object {
-		// 	artifact: directory.into(),
-		// 	dependencies,
-		// });
+		// Create the package.
+		let package = Self::with_object(Object {
+			artifact: directory.into(),
+			dependencies,
+		});
 
-		// Ok(package)
+		Ok(package)
 	}
 
 	pub async fn artifact(&self, client: &Client) -> Result<&Artifact> {
@@ -191,21 +192,6 @@ impl Package {
 	pub async fn dependencies(&self, client: &Client) -> Result<&BTreeMap<Dependency, Self>> {
 		Ok(&self.object(client).await?.dependencies)
 	}
-
-	// pub async fn check(&self, client: &Client) -> Result<Vec<Diagnostic>> {
-	// 	todo!()
-	// }
-
-	// pub async fn doc(&self, client: &Client) -> Result<serde_json::Value> {
-	// 	todo!()
-	// }
-
-	// pub async fn root_module(&self, client: &Client) -> Result<Module> {
-	// 	Ok(Module::Normal(module::Normal {
-	// 		package: self.id(client).await?,
-	// 		path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
-	// 	}))
-	// }
 }
 
 impl Object {

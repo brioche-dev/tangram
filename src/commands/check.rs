@@ -21,8 +21,11 @@ impl Cli {
 		// 	.await
 		// 	.wrap_err("Failed to get the package.")?;
 
+		// // Create the language service.
+		// let language_service = tg::language::Service::new(self.client.clone(), None);
+
 		// // Check the package for diagnostics.
-		// let diagnostics = package.check(&self.client).await?;
+		// let diagnostics = package.check(&self.client, &language_service).await?;
 
 		// // Print the diagnostics.
 		// for diagnostic in &diagnostics {

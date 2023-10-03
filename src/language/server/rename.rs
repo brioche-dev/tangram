@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{error::Result, module::Module};
+use crate::{language::Module, Result};
 use lsp_types as lsp;
 use std::collections::HashMap;
 use url::Url;
@@ -8,29 +8,31 @@ impl Server {
 	#[allow(clippy::similar_names)]
 	pub async fn rename(&self, params: lsp::RenameParams) -> Result<Option<lsp::WorkspaceEdit>> {
 		// Get the module.
-		let module = Module::from_lsp(
-			&self.server,
-			params.text_document_position.text_document.uri,
-		)
-		.await?;
+		let module =
+			Module::from_lsp(self, params.text_document_position.text_document.uri).await?;
 
 		// Get the position for the request.
 		let position = params.text_document_position.position;
 		let new_text = &params.new_name;
 
 		// Get the references.
-		let locations = module.rename(&self.server, position.into()).await?;
+		let locations = module
+			.rename(&self.state.language_service, position.into())
+			.await?;
 
 		// If there are no references, then return None.
 		let Some(locations) = locations else {
-		return Ok(None);
-	};
+			return Ok(None);
+		};
 
 		// Convert the changes.
 		let mut document_changes = HashMap::<Url, lsp::TextDocumentEdit>::new();
 		for location in locations {
 			// Get the version.
-			let version = location.module.version(&self.server).await?;
+			let version = location
+				.module
+				.version(Some(&self.state.document_store))
+				.await?;
 
 			// Create the URI.
 			let uri = location.module.to_lsp();

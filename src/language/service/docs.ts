@@ -17,7 +17,6 @@ export type Request = {
 };
 
 export type Response = {
-	module: Module;
 	exports: { [key: string]: Symbol };
 };
 
@@ -275,10 +274,7 @@ export let handle = (request: Request): Response => {
 		exports[export_.getName()] = convertSymbol(typeChecker, export_);
 	}
 
-	let declaration = symbol.getDeclarations()?.[0];
-	if (!declaration) throw new Error();
 	return {
-		module: convertLocation(declaration).module,
 		exports,
 	};
 };

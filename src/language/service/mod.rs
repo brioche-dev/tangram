@@ -1,21 +1,41 @@
+pub use self::error::Error;
 use self::syscall::syscall;
-use crate::{server, Error, Result, Server, WrapErr};
-use std::sync::{Arc, Weak};
+use super::document;
+use crate::{Client, Result, WrapErr};
+use std::sync::Arc;
 
 pub mod check;
 pub mod completion;
 pub mod definition;
 pub mod diagnostics;
-pub mod doc;
+pub mod docs;
 pub mod error;
-mod exception;
 pub mod format;
 pub mod hover;
-pub mod metadata;
 pub mod references;
 pub mod rename;
 pub mod symbols;
 mod syscall;
+
+const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
+
+pub const SOURCE_MAP: &[u8] = include_bytes!(concat!(
+	env!("CARGO_MANIFEST_DIR"),
+	"/assets/language_service.js.map"
+));
+
+#[derive(Clone, Debug)]
+pub struct Service {
+	state: Arc<State>,
+}
+
+#[derive(Debug)]
+struct State {
+	client: Client,
+	document_store: Option<document::Store>,
+	main_runtime_handle: tokio::runtime::Handle,
+	request_sender: RequestSender,
+}
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "request")]
@@ -24,10 +44,9 @@ pub enum Request {
 	Completion(completion::Request),
 	Definition(definition::Request),
 	Diagnostics(diagnostics::Request),
-	Doc(doc::Request),
+	Docs(docs::Request),
 	Format(format::Request),
 	Hover(hover::Request),
-	Metadata(metadata::Request),
 	References(references::Request),
 	Rename(rename::Request),
 	Symbols(symbols::Request),
@@ -40,10 +59,9 @@ pub enum Response {
 	Completion(completion::Response),
 	Definition(definition::Response),
 	Diagnostics(diagnostics::Response),
-	Doc(doc::Response),
+	Docs(docs::Response),
 	Format(format::Response),
 	Hover(hover::Response),
-	Metadata(metadata::Response),
 	References(references::Response),
 	Rename(rename::Response),
 	Symbols(symbols::Response),
@@ -54,42 +72,43 @@ pub type RequestReceiver = tokio::sync::mpsc::UnboundedReceiver<(Request, Respon
 pub type ResponseSender = tokio::sync::oneshot::Sender<Result<Response>>;
 pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
-impl Server {
-	pub async fn handle_language_service_request(&self, request: Request) -> Result<Response> {
-		// Spawn the language service if necessary.
-		let request_sender = self
-			.state
-			.language_service_request_sender
-			.lock()
-			.unwrap()
-			.get_or_insert_with(|| {
-				// Create the language service request sender and receiver.
-				let (request_sender, request_receiver) =
-					tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
+impl Service {
+	#[must_use]
+	pub fn new(client: Client, document_store: Option<document::Store>) -> Self {
+		// Create the language service request sender and receiver.
+		let (request_sender, request_receiver) =
+			tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
 
-				// Spawn a thread to run the language service.
-				std::thread::spawn({
-					let state = Arc::downgrade(&self.state);
-					move || run_language_service(state, request_receiver)
-				});
+		// Create the state.
+		let state = Arc::new(State {
+			client,
+			document_store,
+			main_runtime_handle: tokio::runtime::Handle::current(),
+			request_sender,
+		});
 
-				request_sender
-			})
-			.clone();
+		// Spawn a thread to run the language service.
+		std::thread::spawn({
+			let state = state.clone();
+			move || run_language_service(state, request_receiver)
+		});
 
+		Self { state }
+	}
+
+	pub async fn request(&self, request: Request) -> Result<Response> {
 		// Create a oneshot channel for the response.
 		let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
 
 		// Send the request.
-		request_sender
+		self.state
+			.request_sender
 			.send((request, response_sender))
-			.ok()
 			.wrap_err("Failed to send the language service request.")?;
 
 		// Receive the response.
 		let response = response_receiver
 			.await
-			.ok()
 			.wrap_err("Failed to receive a response for the language service request.")?
 			.wrap_err("The language service returned an error.")?;
 
@@ -97,10 +116,8 @@ impl Server {
 	}
 }
 
-const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language_service.heapsnapshot"));
-
 /// Run the language service.
-fn run_language_service(state: Weak<server::State>, mut request_receiver: RequestReceiver) {
+fn run_language_service(state: Arc<State>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
 	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);
@@ -110,7 +127,7 @@ fn run_language_service(state: Weak<server::State>, mut request_receiver: Reques
 	let context = v8::Context::new(&mut handle_scope);
 	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
-	// Set the server state on the context.
+	// Set the service state on the context.
 	context.set_slot(&mut context_scope, state);
 
 	// Add the syscall function to the global.
@@ -159,9 +176,10 @@ fn run_language_service(state: Weak<server::State>, mut request_receiver: Reques
 		// Handle a js exception.
 		let Some(response) = response else {
 			let exception = try_catch_scope.exception().unwrap();
-			let error =
-				self::Error::from_language_service_exception(&mut try_catch_scope, exception);
-			response_sender.send(Err(error)).unwrap();
+			let error = Error::new(&mut try_catch_scope, exception);
+			response_sender
+				.send(Err(crate::Error::with_error(error)))
+				.unwrap();
 			continue;
 		};
 

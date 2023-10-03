@@ -1,5 +1,5 @@
-use super::Module;
-use crate::{Client, Package, Result, Server, WrapErr};
+use super::{document, Module};
+use crate::{Client, Package, Result, WrapErr};
 use include_dir::include_dir;
 
 const TANGRAM_D_TS: &str = include_str!(concat!(
@@ -10,7 +10,11 @@ const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/lib");
 
 impl Module {
 	/// Load the module.
-	pub async fn load(&self, server: &Server) -> Result<String> {
+	pub async fn load(
+		&self,
+		client: &Client,
+		document_store: Option<&document::Store>,
+	) -> Result<String> {
 		match self {
 			// Load a library module.
 			Self::Library(module) => {
@@ -29,7 +33,7 @@ impl Module {
 			},
 
 			// Load a module from a document.
-			Self::Document(document) => document.text(server).await,
+			Self::Document(document) => document.text(document_store.unwrap()).await,
 
 			// Load a module from a package.
 			Self::Normal(module) => {
@@ -37,7 +41,6 @@ impl Module {
 				let package = Package::with_id(module.package);
 
 				// Load the module.
-				let client = &Client::with_server(server.clone());
 				let directory = package
 					.artifact(client)
 					.await?

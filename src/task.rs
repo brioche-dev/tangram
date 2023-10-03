@@ -34,14 +34,11 @@ pub struct Object {
 	/// The task's command line arguments.
 	pub args: Vec<Value>,
 
-	/// A checksum of the task's output. If a checksum is provided, then unsafe options can be used.
+	/// If a checksum of the task's output is provided, then the task will have access to the network.
 	pub checksum: Option<Checksum>,
 
-	/// If this flag is set, then unsafe options can be used without a checksum.
+	/// If the task is marked as unsafe, then it will have access to the network even if a checksum is not provided.
 	pub unsafe_: bool,
-
-	/// If this flag is set, then the task will have access to the network. This is an unsafe option.
-	pub network: bool,
 }
 
 /// A task.
@@ -55,19 +52,19 @@ pub struct Object {
 )]
 pub struct Data {
 	/// The system to run the task on.
-	#[tangram_serialize(id = 1)]
+	#[tangram_serialize(id = 0)]
 	pub host: System,
 
 	/// The task's executable.
-	#[tangram_serialize(id = 3)]
+	#[tangram_serialize(id = 1)]
 	pub executable: template::Data,
 
 	/// The target's package.
-	#[tangram_serialize(id = 0)]
+	#[tangram_serialize(id = 2)]
 	pub package: Option<package::Id>,
 
 	/// The task's target.
-	#[tangram_serialize(id = 2)]
+	#[tangram_serialize(id = 3)]
 	pub target: Option<String>,
 
 	/// The task's environment variables.
@@ -78,17 +75,13 @@ pub struct Data {
 	#[tangram_serialize(id = 5)]
 	pub args: Vec<value::Data>,
 
-	/// A checksum of the task's output. If a checksum is provided, then unsafe options can be used.
+	/// If a checksum of the task's output is provided, then the task will have access to the network.
 	#[tangram_serialize(id = 6)]
 	pub checksum: Option<Checksum>,
 
-	/// If this flag is set, then unsafe options can be used without a checksum.
+	/// If the task is marked as unsafe, then it will have access to the network even if a checksum is not provided.
 	#[tangram_serialize(id = 7)]
 	pub unsafe_: bool,
-
-	/// If this flag is set, then the task will have access to the network. This is an unsafe option.
-	#[tangram_serialize(id = 8)]
-	pub network: bool,
 }
 
 impl Task {
@@ -128,7 +121,6 @@ impl Object {
 			args: self.args.iter().map(Value::to_data).collect(),
 			checksum: self.checksum.clone(),
 			unsafe_: self.unsafe_,
-			network: self.network,
 		}
 	}
 
@@ -147,7 +139,6 @@ impl Object {
 			args: data.args.into_iter().map(Value::from_data).collect(),
 			checksum: data.checksum,
 			unsafe_: data.unsafe_,
-			network: data.network,
 		}
 	}
 
@@ -267,12 +258,6 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn network(mut self, network: bool) -> Self {
-		self.network = network;
-		self
-	}
-
-	#[must_use]
 	pub fn build(self) -> Task {
 		Task::with_object(Object {
 			package: self.package,
@@ -283,7 +268,6 @@ impl Builder {
 			args: self.args,
 			checksum: self.checksum,
 			unsafe_: self.unsafe_,
-			network: self.network,
 		})
 	}
 }

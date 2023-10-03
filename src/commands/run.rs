@@ -55,12 +55,16 @@ impl Cli {
 		};
 
 		// Get the output artifact.
-		let artifact = output
+		let artifact: tg::Artifact = output
 			.try_into()
 			.wrap_err("Expected the output to be an artifact.")?;
 
 		// Get the path to the artifact.
-		let artifact_path: PathBuf = todo!();
+		let artifact_path: PathBuf = tg::util::dirs::home_directory_path()
+			.wrap_err("Failed to find the user home directory.")?
+			.join(".tangram")
+			.join("artifacts")
+			.join(artifact.id(&self.client).await?.to_string());
 
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {

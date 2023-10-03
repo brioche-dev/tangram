@@ -1,8 +1,8 @@
-use super::{error::Error, parse, Module};
+use super::{parse, Module};
 use crate::{Result, WrapErr};
 use std::rc::Rc;
 use swc_core::{
-	common::{Globals, Mark, SourceMap, DUMMY_SP, GLOBALS},
+	common::{Globals, Loc, Mark, SourceMap, DUMMY_SP, GLOBALS},
 	ecma::{
 		ast::{
 			CallExpr, ExportDecl, ExportDefaultExpr, Expr, ExprOrSpread, Ident, KeyValueProp, Lit,
@@ -21,6 +21,12 @@ use swc_core::{
 pub struct Output {
 	pub transpiled_text: String,
 	pub source_map: String,
+}
+
+pub struct Error {
+	message: String,
+	line: usize,
+	column: usize,
 }
 
 impl Module {
@@ -104,6 +110,28 @@ impl Module {
 	}
 }
 
+impl Error {
+	pub fn new(message: impl std::fmt::Display, loc: &Loc) -> Self {
+		let line = loc.line - 1;
+		let column = loc.col_display;
+		Self {
+			message: message.to_string(),
+			line,
+			column,
+		}
+	}
+}
+
+impl std::fmt::Display for Error {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let line = self.line + 1;
+		let column = self.column + 1;
+		let message = &self.message;
+		write!(f, "{line}:{column} {message}").unwrap();
+		Ok(())
+	}
+}
+
 struct TargetVisitor {
 	source_map: Rc<SourceMap>,
 	errors: Vec<Error>,
@@ -124,14 +152,8 @@ impl VisitMut for TargetVisitor {
 	}
 
 	fn visit_mut_export_default_expr(&mut self, n: &mut ExportDefaultExpr) {
-		// Check that this is an await expression.
-		let Some(expr) = n.expr.as_mut_await_expr() else {
-			n.visit_mut_children_with(self);
-			return;
-		};
-
 		// Check that this is a call expression.
-		let Some(expr) = expr.arg.as_mut_call() else {
+		let Some(expr) = n.expr.as_mut_call() else {
 			n.visit_mut_children_with(self);
 			return;
 		};
@@ -158,15 +180,12 @@ impl VisitMut for TargetVisitor {
 			let Some(init) = init.as_deref_mut() else {
 				continue;
 			};
-			let Some(expr) = init.as_mut_await_expr() else {
-				continue;
-			};
-			let Some(expr) = expr.arg.as_mut_call() else {
+			let Some(call) = init.as_mut_call() else {
 				continue;
 			};
 
 			// Visit the call.
-			self.visit_call(expr, Some(ident.to_string()));
+			self.visit_call(call, Some(ident.to_string()));
 		}
 
 		n.visit_mut_children_with(self);
@@ -386,13 +405,13 @@ mod tests {
 	fn test_export_default_target() {
 		let text = indoc!(
 			r#"
-				export default await tg.target(() => {});
+				export default tg.target(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export default await tg.target({
+				export default tg.target({
 					function: ()=>{},
 					module: import.meta.module,
 					name: "default"
@@ -406,13 +425,13 @@ mod tests {
 	fn test_export_named_target() {
 		let text = indoc!(
 			r#"
-				export let named = await tg.target(() => {});
+				export let named = tg.target(() => {});
 			"#
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
 			r#"
-				export let named = await tg.target({
+				export let named = tg.target({
 					function: ()=>{},
 					module: import.meta.module,
 					name: "named"

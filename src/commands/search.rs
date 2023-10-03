@@ -1,6 +1,6 @@
-use crate::{error::Result, Cli};
+use crate::{Cli, Result};
 
-/// Search for a package.
+/// Search for packages.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -10,7 +10,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_search(&self, args: Args) -> Result<()> {
 		// Perform the search.
-		let packages = self.tg.origin_client().search_packages(&args.query).await?;
+		let packages = self.api_client.search_packages(&args.query).await?;
 
 		// Print the package names.
 		if packages.is_empty() {

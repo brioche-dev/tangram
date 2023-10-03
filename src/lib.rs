@@ -2,7 +2,6 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_safety_doc)]
-#![allow(clippy::redundant_pattern)]
 
 pub use self::client::Client;
 #[cfg(feature = "server")]
@@ -42,16 +41,14 @@ pub mod directory;
 pub mod error;
 pub mod file;
 pub mod id;
-// #[cfg(feature = "server")]
-// pub mod language;
+#[cfg(feature = "server")]
+pub mod language;
 #[cfg(feature = "server")]
 pub mod migrations;
 pub mod object;
 pub mod package;
 pub mod path;
 pub mod placeholder;
-pub mod pull;
-pub mod push;
 pub mod run;
 #[cfg(feature = "server")]
 pub mod server;

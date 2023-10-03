@@ -23,7 +23,7 @@ impl Module {
 		// Parse the text.
 		let module = parser.parse_module().map_err(|error| {
 			let message = error.kind().msg().to_string();
-			Error::message(message)
+			Error::with_message(message)
 		})?;
 
 		Ok(Output { module, source_map })

@@ -1,22 +1,19 @@
-use super::service::{self, doc::Response};
-use crate::{module::Module, return_error, server::Server, Result};
-
-// #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub type Symbol = serde_json::Value;
+use super::{service, Module, Service};
+use crate::{return_error, Result};
 
 impl Module {
 	/// Get the docs for a module.
-	pub async fn docs(&self, server: &Server) -> Result<Response> {
+	pub async fn docs(&self, service: &Service) -> Result<service::docs::Response> {
 		// Create the language service request.
-		let request = service::Request::Doc(service::doc::Request {
+		let request = service::Request::Docs(service::docs::Request {
 			module: self.clone(),
 		});
 
-		// Handle the language service request.
-		let response = server.handle_language_service_request(request).await?;
+		// Perform the language service request.
+		let response = service.request(request).await?;
 
 		// Get the response.
-		let service::Response::Doc(response) = response else {
+		let service::Response::Docs(response) = response else {
 			return_error!("Unexpected response type.")
 		};
 

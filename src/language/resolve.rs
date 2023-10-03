@@ -1,14 +1,18 @@
-use super::{Import, Library, Module};
+use super::{document, module, Document, Import, Module};
 use crate::{
-	document::Document,
 	package::{Dependency, ROOT_MODULE_FILE_NAME},
-	return_error, Client, Package, Result, Server, WrapErr,
+	return_error, Client, Package, Result, WrapErr,
 };
 
 impl Module {
 	/// Resolve a module.
 	#[allow(clippy::too_many_lines)]
-	pub async fn resolve(&self, server: &Server, import: &Import) -> Result<Self> {
+	pub async fn resolve(
+		&self,
+		client: &Client,
+		document_store: Option<&document::Store>,
+		import: &Import,
+	) -> Result<Self> {
 		match (self, import) {
 			(Self::Library(module), Import::Path(path)) => {
 				let path = module
@@ -19,7 +23,7 @@ impl Module {
 					.join(path.clone())
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
-				Ok(Self::Library(Library { path }))
+				Ok(Self::Library(module::Library { path }))
 			},
 
 			(Self::Library(_), Import::Dependency(_)) => {
@@ -46,9 +50,12 @@ impl Module {
 					return_error!(r#"Could not find a module at path "{path}"."#);
 				}
 
+				// Create the document.
+				let document =
+					Document::new(document_store.unwrap(), package_path, module_subpath).await?;
+
 				// Create the module.
-				let module =
-					Self::Document(Document::new(server, package_path, module_subpath).await?);
+				let module = Self::Document(document);
 
 				Ok(module)
 			},
@@ -67,9 +74,14 @@ impl Module {
 				// The module path is the root module.
 				let module_path = ROOT_MODULE_FILE_NAME.parse().unwrap();
 
-				Ok(Self::Document(
-					Document::new(server, package_path, module_path).await?,
-				))
+				// Create the document.
+				let document =
+					Document::new(document_store.unwrap(), package_path, module_path).await?;
+
+				// Create the module.
+				let module = Self::Document(document);
+
+				Ok(module)
 			},
 
 			(Self::Document(_), Import::Dependency(Dependency::Registry(_))) => {
@@ -85,7 +97,7 @@ impl Module {
 					.join(path.clone())
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
-				Ok(Self::Normal(super::Normal {
+				Ok(Self::Normal(module::Normal {
 					package: module.package,
 					path,
 				}))
@@ -108,7 +120,6 @@ impl Module {
 				let package = Package::with_id(module.package);
 
 				// Get the specified package from the dependencies.
-				let client = &Client::with_server(server.clone());
 				let dependencies = package.dependencies(client).await?;
 				let package = dependencies
 					.get(&dependency)
@@ -116,7 +127,10 @@ impl Module {
 					.wrap_err("Expected the dependencies to contain the dependency.")?;
 
 				// Get the root module.
-				let module = package.root_module(client).await?;
+				let module = Module::Normal(module::Normal {
+					package: package.id(client).await?,
+					path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+				});
 
 				Ok(module)
 			},

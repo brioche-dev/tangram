@@ -1,4 +1,7 @@
-use crate::{language::Diagnostic, return_error, Error, Result, WrapErr};
+use crate::{
+	language::{self, Diagnostic},
+	return_error, Client, Error, Result, WrapErr,
+};
 use futures::{future, FutureExt};
 use lsp::{notification::Notification, request::Request};
 use lsp_types as lsp;
@@ -23,26 +26,39 @@ mod virtual_text_document;
 type _Receiver = tokio::sync::mpsc::UnboundedReceiver<jsonrpc::Message>;
 type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Server {
+	state: Arc<State>,
+}
+
+#[derive(Debug)]
+struct State {
 	/// The Tangram client.
-	client: crate::Client,
+	client: Client,
 
 	/// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
 
 	/// The document store.
-	document_store: document::Store,
+	document_store: language::document::Store,
+
+	/// The language service.
+	language_service: language::Service,
 }
 
 impl Server {
 	#[must_use]
-	pub fn new(server: crate::Server) -> Self {
+	pub fn new(client: crate::Client) -> Self {
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
-		Self {
-			server,
+		let document_store = language::document::Store::default();
+		let language_service = language::Service::new(client.clone(), Some(document_store.clone()));
+		let state = Arc::new(State {
+			client,
 			diagnostics,
-		}
+			document_store,
+			language_service,
+		});
+		Self { state }
 	}
 
 	pub async fn serve(self) -> Result<()> {
@@ -281,7 +297,7 @@ async fn handle_request<T, F, Fut>(sender: &Sender, request: jsonrpc::Request, h
 where
 	T: lsp::request::Request,
 	F: Fn(T::Params) -> Fut,
-	Fut: Future<Output = crate::error::Result<T::Result>>,
+	Fut: Future<Output = crate::Result<T::Result>>,
 {
 	// Deserialize the params.
 	let Ok(params) = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
@@ -321,7 +337,7 @@ async fn handle_notification<T, F, Fut>(sender: &Sender, request: jsonrpc::Notif
 where
 	T: lsp::notification::Notification,
 	F: Fn(Sender, T::Params) -> Fut,
-	Fut: Future<Output = crate::error::Result<()>>,
+	Fut: Future<Output = crate::Result<()>>,
 {
 	let params = serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))
 		.wrap_err("Failed to deserialize the request params.")

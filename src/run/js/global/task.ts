@@ -38,7 +38,6 @@ export class Task {
 		let args = resolvedArg.args ?? [];
 		let checksum = resolvedArg.checksum ?? undefined;
 		let unsafe = resolvedArg.unsafe ?? false;
-		let network = resolvedArg.network ?? false;
 		return new Task(
 			Object_.Handle.withObject({
 				kind: "task",
@@ -51,7 +50,6 @@ export class Task {
 					args,
 					checksum,
 					unsafe,
-					network,
 				},
 			}),
 		);
@@ -103,12 +101,8 @@ export class Task {
 		return (await this.object()).unsafe;
 	}
 
-	async network(): Promise<boolean> {
-		return (await this.object()).network;
-	}
-
 	async run(): Promise<Value> {
-		return await syscall.task.output(this);
+		return await syscall.run(this);
 	}
 }
 
@@ -122,7 +116,6 @@ export namespace Task {
 		args?: Array<Value>;
 		checksum?: Checksum;
 		unsafe?: boolean;
-		network?: boolean;
 	};
 
 	export type Id = string;
@@ -136,6 +129,5 @@ export namespace Task {
 		args: Array<Value>;
 		checksum: Checksum | undefined;
 		unsafe: boolean;
-		network: boolean;
 	};
 }

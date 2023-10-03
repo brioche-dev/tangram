@@ -178,7 +178,7 @@ export class Directory {
 	}
 
 	async bundle(): Promise<Directory> {
-		return await syscall.artifact.bundle(this);
+		return await syscall.bundle(this);
 	}
 
 	async *walk(): AsyncIterableIterator<[Subpath, Artifact]> {

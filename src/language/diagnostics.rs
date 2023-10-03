@@ -1,5 +1,5 @@
-use super::{location::Location, service};
-use crate::{module::Module, return_error, server::Server, Result};
+use super::{service, Location, Module, Service};
+use crate::{return_error, Result};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,12 +19,12 @@ pub enum Severity {
 }
 
 impl Module {
-	pub async fn diagnostics(server: &Server) -> Result<Vec<Diagnostic>> {
+	pub async fn diagnostics(service: &Service) -> Result<Vec<Diagnostic>> {
 		// Create the language service request.
 		let request = service::Request::Diagnostics(service::diagnostics::Request {});
 
-		// Handle the language service request.
-		let response = server.handle_language_service_request(request).await?;
+		// Perform the language service request.
+		let response = service.request(request).await?;
 
 		// Get the response.
 		let service::Response::Diagnostics(response) = response else {

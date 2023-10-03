@@ -45,7 +45,7 @@ impl Symlink {
 	pub async fn resolve_from(
 		&self,
 		_client: &Client,
-		_from: Option<Artifact>,
+		_from: Option<Self>,
 	) -> Result<Option<Artifact>> {
 		unimplemented!()
 	}

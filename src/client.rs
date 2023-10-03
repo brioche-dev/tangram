@@ -23,6 +23,13 @@ impl Client {
 		Self::Reqwest(Reqwest::new(url, token))
 	}
 
+	pub fn set_token(&self, token: Option<String>) {
+		match self {
+			Self::Server(_) => {},
+			Self::Reqwest(reqwest) => reqwest.set_token(token),
+		}
+	}
+
 	#[must_use]
 	pub fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
 		match self {
@@ -164,15 +171,13 @@ impl Reqwest {
 			.http2_prior_knowledge()
 			.build()
 			.unwrap();
-		let state = State {
+		let state = Arc::new(State {
 			url,
 			token: std::sync::RwLock::new(token),
 			client,
 			file_descriptor_semaphore: tokio::sync::Semaphore::new(16),
-		};
-		Self {
-			state: Arc::new(state),
-		}
+		});
+		Self { state }
 	}
 
 	pub fn set_token(&self, token: Option<String>) {

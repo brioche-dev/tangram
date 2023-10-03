@@ -1,4 +1,4 @@
-use crate::{run, task, Blob, Client, Error, Result, Run, Server, Task, Value, WrapErr};
+use crate::{run, system, task, Blob, Client, Error, Result, Run, Server, Task, Value, WrapErr};
 use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
@@ -10,6 +10,11 @@ use tokio_util::io::StreamReader;
 impl Server {
 	/// Attempt to get the run for a task.
 	pub(crate) async fn try_get_run_for_task(&self, id: task::Id) -> Result<Option<run::Id>> {
+		// Attempt to get the run for the task from the running state.
+		if let Some(run_id) = self.state.running.read().unwrap().0.get(&id).copied() {
+			return Ok(Some(run_id));
+		}
+
 		// Attempt to get the run for the task from the database.
 		if let Some(run_id) = self.try_get_run_for_task_from_database(id)? {
 			return Ok(Some(run_id));
@@ -46,20 +51,6 @@ impl Server {
 			return Ok(None);
 		};
 
-		// Create a write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
-
-		// Set the run for the task in the database.
-		txn.put(
-			self.state.database.assignments,
-			&id.as_bytes(),
-			&run_id.as_bytes(),
-			lmdb::WriteFlags::empty(),
-		)?;
-
-		// Commit the transaction.
-		txn.commit()?;
-
 		Ok(Some(run_id))
 	}
 
@@ -70,28 +61,14 @@ impl Server {
 			return Ok(run_id);
 		}
 
-		// Otherwise, create a new run.
+		// Otherwise, create a new run and add it to the server's state.
 		let run_id = run::Id::new();
 		let state = Arc::new(run::State::new()?);
-		self.state
-			.uncompleted_runs
-			.write()
-			.unwrap()
-			.insert(run_id, state.clone());
-
-		// Create a write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
-
-		// Set the run for the task in the database.
-		txn.put(
-			self.state.database.assignments,
-			&task_id.as_bytes(),
-			&run_id.as_bytes(),
-			lmdb::WriteFlags::empty(),
-		)?;
-
-		// Commit the transaction.
-		txn.commit()?;
+		{
+			let mut running = self.state.running.write().unwrap();
+			running.0.insert(task_id, run_id);
+			running.1.insert(run_id, state.clone());
+		}
 
 		// Spawn the task.
 		tokio::spawn({
@@ -103,7 +80,8 @@ impl Server {
 				let object = task.object(client).await?;
 
 				let output = match object.host.os() {
-					_ => Some(Value::String("Hello, World".to_owned())),
+					system::Os::Js => server.run_js(&task, &state).await?,
+					_ => todo!(),
 				};
 
 				// Set the result on the state.
@@ -137,6 +115,8 @@ impl Server {
 
 				// Get the data.
 				let data = object.to_data();
+
+				// Serialize the data.
 				let bytes = data.serialize()?;
 
 				// Store the object.
@@ -147,13 +127,22 @@ impl Server {
 					.ok()
 					.wrap_err("Expected all children to be stored.")?;
 
-				// Remove the run from the uncompleted runs.
-				server
-					.state
-					.uncompleted_runs
-					.write()
-					.unwrap()
-					.remove(&run_id);
+				// Create a write transaction.
+				let mut txn = server.state.database.env.begin_rw_txn()?;
+
+				// Set the run for the task in the database.
+				txn.put(
+					server.state.database.assignments,
+					&task_id.as_bytes(),
+					&run_id.as_bytes(),
+					lmdb::WriteFlags::empty(),
+				)?;
+
+				// Commit the transaction.
+				txn.commit()?;
+
+				// Remove the run from the running state.
+				server.state.running.write().unwrap().1.remove(&run_id);
 
 				Ok::<_, Error>(())
 			}
@@ -169,14 +158,8 @@ impl Server {
 		let client = &Client::with_server(self.clone());
 		let run = Run::with_id(id);
 
-		// Attempt to stream the children from the uncompleted runs.
-		let state = self
-			.state
-			.uncompleted_runs
-			.read()
-			.unwrap()
-			.get(&run.id())
-			.cloned();
+		// Attempt to stream the children from the running state.
+		let state = self.state.running.read().unwrap().1.get(&run.id()).cloned();
 		if let Some(state) = state {
 			let children = state.children();
 			return Ok(Some(children.map_ok(|child| child.id()).boxed()));
@@ -216,14 +199,8 @@ impl Server {
 		let client = &Client::with_server(self.clone());
 		let run = Run::with_id(id);
 
-		// Attempt to stream the log from the uncompleted runs.
-		let state = self
-			.state
-			.uncompleted_runs
-			.read()
-			.unwrap()
-			.get(&run.id())
-			.cloned();
+		// Attempt to stream the log from the running state.
+		let state = self.state.running.read().unwrap().1.get(&run.id()).cloned();
 		if let Some(state) = state {
 			let log = state.log().await?;
 			return Ok(Some(log));
@@ -259,14 +236,8 @@ impl Server {
 		let client = &Client::with_server(self.clone());
 		let run = Run::with_id(id);
 
-		// Attempt to await the output from the uncompleted runs.
-		let state = self
-			.state
-			.uncompleted_runs
-			.read()
-			.unwrap()
-			.get(&run.id())
-			.cloned();
+		// Attempt to await the output from the running state.
+		let state = self.state.running.read().unwrap().1.get(&run.id()).cloned();
 		if let Some(state) = state {
 			let output = state.output().await;
 			return Ok(Some(output));

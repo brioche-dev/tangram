@@ -1,11 +1,11 @@
 use super::Server;
 use crate::{
-	error::Result,
 	language::{
 		self,
 		service::symbols::{Kind, Symbol},
+		Module,
 	},
-	module::Module,
+	Result,
 };
 use lsp_types as lsp;
 
@@ -15,10 +15,10 @@ impl Server {
 		params: lsp::DocumentSymbolParams,
 	) -> Result<Option<lsp::DocumentSymbolResponse>> {
 		// Get the module.
-		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
+		let module = Module::from_lsp(self, params.text_document.uri).await?;
 
 		// Get the document symbols.
-		let symbols = module.symbols(&self.server).await?;
+		let symbols = module.symbols(&self.state.language_service).await?;
 		let Some(symbols) = symbols else {
 			return Ok(None);
 		};

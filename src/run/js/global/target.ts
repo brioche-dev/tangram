@@ -1,12 +1,11 @@
-import { assert as assert_ } from "./assert.ts";
+import { assert as assert_, todo } from "./assert.ts";
 import { json } from "./encoding.ts";
-import { env } from "./env.ts";
 import { Module } from "./module.ts";
 import { MaybePromise, Unresolved } from "./resolve.ts";
 import { Task } from "./task.ts";
 import { Value } from "./value.ts";
 
-export let targets: Record<string, Function> = {};
+export let functions: Record<string, Function> = {};
 
 export type TargetArg<
 	A extends Array<Value> = Array<Value>,
@@ -17,12 +16,12 @@ export type TargetArg<
 	name: string;
 };
 
-export let target = async <
+export let target = <
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 >(
 	arg: TargetArg<A, R>,
-): Promise<Target<A, R>> => {
+): Target<A, R> => {
 	// Create the target.
 	let target = new Target<A, R>({
 		module: arg.module,
@@ -31,11 +30,14 @@ export let target = async <
 
 	// Register the target function.
 	let key = json.encode({
-		module: arg.module,
+		module: {
+			package: arg.module.package.handle().expectId(),
+			path: arg.module.path,
+		},
 		name: arg.name,
 	});
-	assert_(targets[key] === undefined);
-	targets[key] = arg.function;
+	assert_(functions[key] === undefined);
+	functions[key] = arg.function;
 
 	return target;
 };
@@ -74,7 +76,7 @@ export class Target<
 					package: target.#module.package,
 					target: target.#name,
 					args,
-					env: env.get(),
+					env: todo(),
 				});
 				return await task.run();
 			},

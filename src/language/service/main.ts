@@ -2,11 +2,10 @@ import * as check from "./check.ts";
 import * as completion from "./completion.ts";
 import * as definition from "./definition.ts";
 import * as diagnostics from "./diagnostics.ts";
-import * as doc from "./doc.ts";
+import * as docs from "./docs.ts";
 import { prepareStackTrace } from "./error.ts";
 import * as format from "./format.ts";
 import * as hover from "./hover.ts";
-import * as metadata from "./metadata.ts";
 import * as references from "./references.ts";
 import * as rename from "./rename.ts";
 import * as symbols from "./symbols.ts";
@@ -21,10 +20,9 @@ type Request =
 	| { kind: "completion"; request: completion.Request }
 	| { kind: "definition"; request: definition.Request }
 	| { kind: "diagnostics"; request: diagnostics.Request }
-	| { kind: "doc"; request: doc.Request }
+	| { kind: "docs"; request: docs.Request }
 	| { kind: "format"; request: format.Request }
 	| { kind: "hover"; request: hover.Request }
-	| { kind: "metadata"; request: metadata.Request }
 	| { kind: "references"; request: references.Request }
 	| { kind: "rename"; request: rename.Request }
 	| { kind: "symbols"; request: symbols.Request };
@@ -34,10 +32,9 @@ type Response =
 	| { kind: "completion"; response: completion.Response }
 	| { kind: "definition"; response: definition.Response }
 	| { kind: "diagnostics"; response: diagnostics.Response }
-	| { kind: "doc"; response: doc.Response }
+	| { kind: "docs"; response: docs.Response }
 	| { kind: "format"; response: format.Response }
 	| { kind: "hover"; response: hover.Response }
-	| { kind: "metadata"; response: metadata.Response }
 	| { kind: "references"; response: references.Response }
 	| { kind: "rename"; response: rename.Response }
 	| { kind: "symbols"; response: symbols.Response };
@@ -60,9 +57,9 @@ let handle = ({ kind, request }: Request): Response => {
 			let response = diagnostics.handle(request);
 			return { kind: "diagnostics", response };
 		}
-		case "doc": {
-			let response = doc.handle(request);
-			return { kind: "doc", response };
+		case "docs": {
+			let response = docs.handle(request);
+			return { kind: "docs", response };
 		}
 		case "format": {
 			let response = format.handle(request);
@@ -71,10 +68,6 @@ let handle = ({ kind, request }: Request): Response => {
 		case "hover": {
 			let response = hover.handle(request);
 			return { kind: "hover", response };
-		}
-		case "metadata": {
-			let response = metadata.handle(request);
-			return { kind: "metadata", response };
 		}
 		case "references": {
 			let response = references.handle(request);

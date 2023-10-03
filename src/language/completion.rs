@@ -1,5 +1,5 @@
-use super::service;
-use crate::{module::position::Position, module::Module, return_error, server::Server, Result};
+use super::{service, Module, Position, Service};
+use crate::{return_error, Result};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,7 +10,7 @@ pub struct Entry {
 impl Module {
 	pub async fn completion(
 		&self,
-		server: &Server,
+		service: &Service,
 		position: Position,
 	) -> Result<Option<Vec<Entry>>> {
 		// Create the language service request.
@@ -19,8 +19,8 @@ impl Module {
 			position,
 		});
 
-		// Handle the language service request.
-		let response = server.handle_language_service_request(request).await?;
+		// Perform the language service request.
+		let response = service.request(request).await?;
 
 		// Get the response.
 		let service::Response::Completion(response) = response else {

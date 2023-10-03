@@ -15,18 +15,22 @@ pub struct Args {
 impl Cli {
 	pub async fn command_doc(&self, args: Args) -> Result<()> {
 		todo!()
+
 		// // Get the package.
 		// let package = tg::Package::with_specifier(&self.client, args.package)
 		// 	.await
 		// 	.wrap_err("Failed to get the package.")?;
 
-		// // Get the doc.
-		// let doc = package.doc(&self.client).await?;
+		// // Create the language service.
+		// let language_service = tg::language::Service::new(self.client.clone(), None);
 
-		// // Render the doc to JSON.
-		// let json = serde_json::to_string_pretty(&doc).map_err(Error::with_error)?;
+		// // Get the docs.
+		// let docs = package.docs(&self.client, &language_service).await?;
 
-		// // Print the doc.
+		// // Render the docs to JSON.
+		// let json = serde_json::to_string_pretty(&docs).map_err(Error::with_error)?;
+
+		// // Print the docs.
 		// println!("{json}");
 
 		// Ok(())

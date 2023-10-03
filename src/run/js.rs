@@ -3,13 +3,15 @@ use self::{
 	syscall::syscall,
 };
 use crate::{
-	module::{self, position::Position},
-	package, return_error, run, Client, Error, Module, Result, Server, Task, Value, WrapErr,
+	language::{self, Import, Module, Position},
+	run, Client, Error, Package, Result, Server, Task, Value, WrapErr,
 };
 use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
-use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, sync::Arc, task::Poll};
+use std::{
+	cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, sync::Arc, task::Poll,
+};
 
 mod convert;
 mod syscall;
@@ -20,17 +22,20 @@ const SOURCE_MAP: &[u8] =
 	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/global.js.map"));
 
 struct State {
-	main_runtime_handle: tokio::runtime::Handle,
-	server: Server,
-	state: Arc<run::State>,
+	client: Client,
+	futures: Rc<RefCell<Futures>>,
 	global_source_map: Option<SourceMap>,
 	loaded_modules: Rc<RefCell<Vec<LoadedModule>>>,
-	futures: Rc<RefCell<FuturesUnordered<LocalBoxFuture<'static, FutureOutput>>>>,
+	main_runtime_handle: tokio::runtime::Handle,
+	run: Arc<run::State>,
 }
 
-#[derive(Debug)]
+type Futures = FuturesUnordered<
+	LocalBoxFuture<'static, (Result<Box<dyn ToV8>>, v8::Global<v8::PromiseResolver>)>,
+>;
+
 struct LoadedModule {
-	module: module::Normal,
+	module: Module,
 	v8_identity_hash: NonZeroI32,
 	v8_module: v8::Global<v8::Module>,
 	text: String,
@@ -38,35 +43,16 @@ struct LoadedModule {
 	source_map: Option<SourceMap>,
 }
 
-struct FutureOutput {
-	context: v8::Global<v8::Context>,
-	promise_resolver: v8::Global<v8::PromiseResolver>,
-	result: Result<v8::Global<v8::Value>>,
-}
-
-thread_local! {
-	pub static THREAD_LOCAL_ISOLATE: Rc<RefCell<v8::OwnedIsolate>> = {
-		// Create the isolate params.
-		let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
-
-		// Create the isolate.
-		let mut isolate = v8::Isolate::new(params);
-
-		// Set the host initialize import meta object callback.
-		isolate.set_host_initialize_import_meta_object_callback(host_initialize_import_meta_object_callback);
-
-		Rc::new(RefCell::new(isolate))
-	};
-}
-
 impl Server {
-	pub async fn run_js(&self, task: Task, state: Arc<run::State>) -> Result<Value> {
+	pub async fn run_js(&self, task: &Task, state: &Arc<run::State>) -> Result<Option<Value>> {
 		// Build the target on the server's local pool because it is a `!Send` future.
 		let output = self
 			.state
 			.local_pool
 			.spawn_pinned({
 				let server = self.clone();
+				let task = task.clone();
+				let state = state.clone();
 				let main_runtime_handle = tokio::runtime::Handle::current();
 				move || async move { server.run_js_inner(task, state, main_runtime_handle).await }
 			})
@@ -82,19 +68,34 @@ impl Server {
 		task: Task,
 		state: Arc<run::State>,
 		main_runtime_handle: tokio::runtime::Handle,
-	) -> Result<Value> {
-		// Create the context.
-		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-		let mut isolate = isolate.borrow_mut();
-		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
+	) -> Result<Option<Value>> {
+		let client = Client::with_server(self.clone());
+
+		// Create the isolate params.
+		let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
+
+		// Create the isolate.
+		let mut isolate = v8::Isolate::new(params);
+
+		// Set the host import module dynamically callback.
+		isolate
+			.set_host_import_module_dynamically_callback(host_import_module_dynamically_callback);
+
+		// Set the host initialize import meta object callback.
+		isolate.set_host_initialize_import_meta_object_callback(
+			host_initialize_import_meta_object_callback,
+		);
+
+		// Create and enter the context.
+		let mut handle_scope = v8::HandleScope::new(&mut isolate);
 		let context = v8::Context::new(&mut handle_scope);
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
 		// Create the state.
 		let state = Rc::new(State {
 			main_runtime_handle,
-			server: self.clone(),
-			state,
+			client,
+			run: state,
 			global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 			loaded_modules: Rc::new(RefCell::new(Vec::new())),
 			futures: Rc::new(RefCell::new(FuturesUnordered::new())),
@@ -113,49 +114,39 @@ impl Server {
 			.set(&mut context_scope, syscall_string.into(), syscall.into())
 			.unwrap();
 
-		// Create a try catch scope.
-		let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
-		let undefined = v8::undefined(&mut try_catch_scope);
-
 		// Get the tg global.
-		let global = context.global(&mut try_catch_scope);
+		let global = context.global(&mut context_scope);
 		let tg =
-			v8::String::new_external_onebyte_static(&mut try_catch_scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(&mut try_catch_scope, tg.into()).unwrap();
+			v8::String::new_external_onebyte_static(&mut context_scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(&mut context_scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
 		// Get the main function.
-		let main = v8::String::new_external_onebyte_static(&mut try_catch_scope, "main".as_bytes())
-			.unwrap();
-		let main = tg.get(&mut try_catch_scope, main.into()).unwrap();
+		let main =
+			v8::String::new_external_onebyte_static(&mut context_scope, "main".as_bytes()).unwrap();
+		let main = tg.get(&mut context_scope, main.into()).unwrap();
 		let main = v8::Local::<v8::Function>::try_from(main).unwrap();
 
 		// Call the main function.
-		let task = task.to_v8(&mut try_catch_scope).unwrap();
-		let output = main.call(&mut try_catch_scope, undefined.into(), &[task]);
-		let Some(output) = output else {
-			let exception = try_catch_scope.exception().unwrap();
-			let error = error_from_exception(&mut try_catch_scope, &state, exception);
-			return Err(error);
-		};
+		let undefined = v8::undefined(&mut context_scope);
+		let task = task.to_v8(&mut context_scope).unwrap();
+		let output = main
+			.call(&mut context_scope, undefined.into(), &[task])
+			.unwrap();
 
 		// Make the output and context global.
-		let output = v8::Global::new(&mut try_catch_scope, output);
-		let context = v8::Global::new(&mut try_catch_scope, context);
+		let output = v8::Global::new(&mut context_scope, output);
+		let context = v8::Global::new(&mut context_scope, context);
 
 		// Exit the context.
-		drop(try_catch_scope);
 		drop(context_scope);
 		drop(handle_scope);
-		drop(isolate);
 
 		// Await the output.
-		let output = await_value(context.clone(), output).await?;
+		let output = await_value(&mut isolate, context.clone(), state.clone(), output).await?;
 
 		// Enter the context.
-		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-		let mut isolate = isolate.borrow_mut();
-		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
+		let mut handle_scope = v8::HandleScope::new(&mut isolate);
 		let context = v8::Local::new(&mut handle_scope, context.clone());
 		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
 
@@ -168,138 +159,84 @@ impl Server {
 		// Exit the context.
 		drop(context_scope);
 		drop(handle_scope);
-		drop(isolate);
 
 		Ok(output)
 	}
 }
 
-pub extern "C" fn host_initialize_import_meta_object_callback(
-	context: v8::Local<v8::Context>,
-	module: v8::Local<v8::Module>,
-	meta: v8::Local<v8::Object>,
-) {
-	// Create the scope.
-	let mut scope = unsafe { v8::CallbackScope::new(context) };
-
-	// Get the state.
-	let state = context.get_slot::<Rc<State>>(&mut scope).unwrap().clone();
+/// Implement V8's dynamic import callback.
+fn host_import_module_dynamically_callback<'s>(
+	scope: &mut v8::HandleScope<'s>,
+	_host_defined_options: v8::Local<'s, v8::Data>,
+	resource_name: v8::Local<'s, v8::Value>,
+	specifier: v8::Local<'s, v8::String>,
+	_import_assertions: v8::Local<'s, v8::FixedArray>,
+) -> Option<v8::Local<'s, v8::Promise>> {
+	// Get the resource name.
+	let resource_name = resource_name.to_string(scope).unwrap();
+	let resource_name = resource_name.to_rust_string_lossy(scope);
 
 	// Get the module.
-	let identity_hash = module.get_identity_hash();
-	let module = state
-		.loaded_modules
-		.borrow()
-		.iter()
-		.find(|module| module.v8_identity_hash == identity_hash)
-		.unwrap()
-		.module
-		.clone();
-	let module = module.to_v8(&mut scope).unwrap();
-
-	// Set import.meta.module.
-	let module_string =
-		v8::String::new_external_onebyte_static(&mut scope, "module".as_bytes()).unwrap();
-	meta.set(&mut scope, module_string.into(), module).unwrap();
-}
-
-async fn await_value(
-	context: v8::Global<v8::Context>,
-	value: v8::Global<v8::Value>,
-) -> Result<v8::Global<v8::Value>> {
-	poll_fn(move |cx| await_value_inner(context.clone(), value.clone(), cx)).await
-}
-
-fn await_value_inner(
-	context: v8::Global<v8::Context>,
-	value: v8::Global<v8::Value>,
-	cx: &mut std::task::Context<'_>,
-) -> Poll<Result<v8::Global<v8::Value>>> {
-	// Get the state.
-	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-	let mut isolate = isolate.borrow_mut();
-	let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
-	let context = v8::Local::new(&mut handle_scope, context);
-	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-	let state = context
-		.get_slot::<Rc<State>>(&mut context_scope)
-		.unwrap()
-		.clone();
-	drop(context_scope);
-	let context = v8::Global::new(&mut handle_scope, context);
-	drop(handle_scope);
-	drop(isolate);
-
-	// Poll the context's futures and resolve or reject all that are ready.
-	loop {
-		// Poll the context's futures.
-		let output = match state.futures.borrow_mut().poll_next_unpin(cx) {
-			Poll::Ready(Some(output)) => output,
-			Poll::Ready(None) => break,
-			Poll::Pending => return Poll::Pending,
-		};
-		let FutureOutput {
-			context,
-			promise_resolver,
-			result,
-		} = output;
-
-		// Get the thread local isolate and enter the context.
-		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-		let mut isolate = isolate.borrow_mut();
-		let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
-		let context = v8::Local::new(&mut handle_scope, context);
-		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-
-		// Resolve or reject the promise.
-		let promise_resolver = v8::Local::new(&mut context_scope, promise_resolver);
-		match result {
-			Ok(value) => {
-				// Resolve the promise.
-				let value = v8::Local::new(&mut context_scope, value);
-				promise_resolver.resolve(&mut context_scope, value);
-			},
+	let module = if resource_name == "[global]" {
+		let module = specifier.to_rust_string_lossy(scope);
+		match Module::from_str(&module) {
+			Ok(module) => module,
 			Err(error) => {
-				// Reject the promise.
-				let exception = error
-					.to_v8(&mut context_scope)
-					.expect("Failed to serialize the error.");
-				promise_resolver.reject(&mut context_scope, exception);
+				return None;
+			},
+		}
+	} else {
+		// Get the module.
+		let module = match Module::from_str(&resource_name) {
+			Ok(module) => module,
+			Err(error) => {
+				return None;
 			},
 		};
-	}
 
-	// Enter the context.
-	let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
-	let mut isolate = isolate.borrow_mut();
-	let mut handle_scope = v8::HandleScope::new(isolate.as_mut());
-	let context = v8::Local::new(&mut handle_scope, context);
-	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
-
-	// Handle the value.
-	let value = v8::Local::new(&mut context_scope, value);
-	match v8::Local::<v8::Promise>::try_from(value) {
-		Err(_) => {
-			let value = v8::Global::new(&mut context_scope, value);
-			Poll::Ready(Ok::<_, Error>(value))
-		},
-
-		Ok(promise) => match promise.state() {
-			v8::PromiseState::Pending => Poll::Pending,
-
-			v8::PromiseState::Fulfilled => {
-				let value = promise.result(&mut context_scope);
-				let value = v8::Global::new(&mut context_scope, value);
-				Poll::Ready(Ok(value))
+		// Get the import.
+		let import = specifier.to_rust_string_lossy(scope);
+		let import = match Import::from_str(&import) {
+			Ok(import) => import,
+			Err(error) => {
+				let exception = v8::String::new(scope, "Invalid import specifier.")
+					.unwrap()
+					.into();
+				scope.throw_exception(exception);
+				return None;
 			},
+		};
 
-			v8::PromiseState::Rejected => {
-				let exception = promise.result(&mut context_scope);
-				let error = error_from_exception(&mut context_scope, &state, exception);
-				Poll::Ready(Err(error))
+		match resolve_module(scope, &module, &import) {
+			Ok(module) => module,
+			Err(error) => {
+				return None;
 			},
+		}
+	};
+
+	// Load the module.
+	let module = match load_module(scope, &module) {
+		Ok(module) => module,
+		Err(error) => {
+			return None;
 		},
-	}
+	};
+
+	// Instantiate the module.
+	let output = module.instantiate_module(scope, resolve_module_callback);
+	if output.is_none() {
+		return None;
+	};
+
+	// Evaluate the module.
+	let Some(output) = module.evaluate(scope) else {
+		return None;
+	};
+
+	let promise = v8::Local::<v8::Promise>::try_from(output).unwrap();
+
+	Some(promise)
 }
 
 /// Implement V8's module resolution callback.
@@ -322,6 +259,7 @@ fn resolve_module_callback<'s>(
 	}
 }
 
+#[allow(clippy::too_many_lines)]
 fn resolve_module_callback_inner<'s>(
 	context: v8::Local<'s, v8::Context>,
 	specifier: v8::Local<'s, v8::String>,
@@ -334,33 +272,44 @@ fn resolve_module_callback_inner<'s>(
 	// Get the state.
 	let state = context.get_slot::<Rc<State>>(&mut scope).unwrap().clone();
 
-	// Parse the specifier.
-	let specifier = specifier.to_rust_string_lossy(&mut scope);
-	let import: module::Import = specifier.parse()?;
-
-	// Get the referrer.
-	let referrer_identity_hash = referrer.get_identity_hash();
+	// Get the module.
+	let identity_hash = referrer.get_identity_hash();
 	let module = state
 		.loaded_modules
 		.borrow()
 		.iter()
-		.find(|module| module.v8_identity_hash == referrer_identity_hash)
+		.find(|module| module.v8_identity_hash == identity_hash)
 		.wrap_err_with(|| {
-			format!(
-				r#"Unable to find the referrer module with identity hash "{referrer_identity_hash}"."#
-			)
+			format!(r#"Unable to find the module with identity hash "{identity_hash}"."#)
 		})?
 		.module
 		.clone();
 
-	// Resolve.
+	// Get the import.
+	let specifier = specifier.to_rust_string_lossy(&mut scope);
+	let import = Import::from_str(&specifier).wrap_err("Failed to parse the import.")?;
+
+	// Resolve the module.
+	let module =
+		resolve_module(&mut scope, &module, &import).wrap_err("Failed to resolve the module.")?;
+
+	// Load the module.
+	let module = load_module(&mut scope, &module).wrap_err("Failed to load the module.")?;
+
+	Ok(module)
+}
+
+/// Resolve a module.
+fn resolve_module(scope: &mut v8::HandleScope, module: &Module, import: &Import) -> Result<Module> {
+	let context = scope.get_current_context();
+	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
-		let client = Client::with_server(state.server.clone());
-		let import = import.clone();
+		let client = state.client.clone();
 		let module = module.clone();
+		let import = import.clone();
 		async move {
-			let module = module.resolve(&client, &import).await;
+			let module = module.resolve(&client, None, &import).await;
 			sender.send(module).unwrap();
 		}
 	});
@@ -368,12 +317,16 @@ fn resolve_module_callback_inner<'s>(
 		.recv()
 		.unwrap()
 		.wrap_err_with(|| format!(r#"Failed to resolve "{import}" relative to "{module}"."#))?;
+	Ok(module)
+}
 
-	// Get the context.
+/// Load a module.
+fn load_module<'s>(
+	scope: &mut v8::HandleScope<'s>,
+	module: &Module,
+) -> Result<v8::Local<'s, v8::Module>> {
 	let context = scope.get_current_context();
-
-	// Get the state.
-	let state = context.get_slot::<Rc<State>>(&mut scope).unwrap().clone();
+	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 
 	// Return a cached module if this module has already been loaded.
 	if let Some(module) = state
@@ -382,7 +335,7 @@ fn resolve_module_callback_inner<'s>(
 		.iter()
 		.find(|cached_module| &cached_module.module == module)
 	{
-		let module = v8::Local::new(&mut scope, &module.v8_module);
+		let module = v8::Local::new(scope, &module.v8_module);
 		return Ok(module);
 	}
 
@@ -412,34 +365,23 @@ fn resolve_module_callback_inner<'s>(
 	// Load the module.
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
+		let client = state.client.clone();
 		let module = module.clone();
 		async move {
-			// Load the module.
-			let text = match module.load(&tg).await {
-				Ok(text) => text,
-				Err(error) => return sender.send(Err(error)).unwrap(),
-			};
-
-			// Transpile the module.
-			let Module::Normal(_) = module else {
-				return sender
-					.send(Err(Error::message("The module must be a normal module.")))
-					.unwrap();
-			};
-			let output = match Module::transpile(text.clone()) {
-				Ok(transpile_output) => transpile_output,
-				Err(error) => return sender.send(Err(error)).unwrap(),
-			};
-
-			// Send the output.
-			let output = (text, output.transpiled_text, output.source_map);
-			sender.send(Ok(output)).unwrap();
+			let result = module.load(&client, None).await;
+			sender.send(result).unwrap();
 		}
 	});
-	let (text, transpiled_text, source_map) = receiver
+	let text = receiver
 		.recv()
 		.unwrap()
 		.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
+
+	// Transpile the module.
+	let language::transpile::Output {
+		transpiled_text,
+		source_map,
+	} = Module::transpile(text.clone()).wrap_err("Failed to transpile the module.")?;
 	let source_map =
 		SourceMap::from_slice(source_map.as_bytes()).wrap_err("Failed to parse the source map.")?;
 
@@ -456,7 +398,7 @@ fn resolve_module_callback_inner<'s>(
 	drop(try_catch_scope);
 
 	// Cache the module.
-	state.loaded_modules.borrow_mut().push(state::Module {
+	state.loaded_modules.borrow_mut().push(LoadedModule {
 		v8_identity_hash: v8_module.get_identity_hash(),
 		v8_module: v8::Global::new(scope, v8_module),
 		module: module.clone(),
@@ -465,7 +407,127 @@ fn resolve_module_callback_inner<'s>(
 		source_map: Some(source_map),
 	});
 
-	Ok(module)
+	Ok(v8_module)
+}
+
+/// Implement V8's import.meta callback.
+extern "C" fn host_initialize_import_meta_object_callback(
+	context: v8::Local<v8::Context>,
+	module: v8::Local<v8::Module>,
+	meta: v8::Local<v8::Object>,
+) {
+	// Create the scope.
+	let mut scope = unsafe { v8::CallbackScope::new(context) };
+
+	// Get the state.
+	let state = context.get_slot::<Rc<State>>(&mut scope).unwrap().clone();
+
+	// Get the module.
+	let identity_hash = module.get_identity_hash();
+	let module = state
+		.loaded_modules
+		.borrow()
+		.iter()
+		.find(|module| module.v8_identity_hash == identity_hash)
+		.unwrap()
+		.module
+		.clone();
+	let module = module.unwrap_normal_ref();
+
+	// Create the module object.
+	let object = v8::Object::new(&mut scope);
+
+	let key = v8::String::new_external_onebyte_static(&mut scope, "package".as_bytes()).unwrap();
+	let value = Package::with_id(module.package).to_v8(&mut scope).unwrap();
+	object.set(&mut scope, key.into(), value);
+
+	let key = v8::String::new_external_onebyte_static(&mut scope, "path".as_bytes()).unwrap();
+	let value = module.path.to_v8(&mut scope).unwrap();
+	object.set(&mut scope, key.into(), value);
+
+	// Set import.meta.module.
+	let module_string =
+		v8::String::new_external_onebyte_static(&mut scope, "module".as_bytes()).unwrap();
+	meta.set(&mut scope, module_string.into(), object.into())
+		.unwrap();
+}
+
+async fn await_value(
+	isolate: &mut v8::OwnedIsolate,
+	context: v8::Global<v8::Context>,
+	state: Rc<State>,
+	value: v8::Global<v8::Value>,
+) -> Result<v8::Global<v8::Value>> {
+	poll_fn(move |cx| await_value_inner(isolate, context.clone(), &state, value.clone(), cx)).await
+}
+
+fn await_value_inner(
+	isolate: &mut v8::OwnedIsolate,
+	context: v8::Global<v8::Context>,
+	state: &State,
+	value: v8::Global<v8::Value>,
+	cx: &mut std::task::Context<'_>,
+) -> Poll<Result<v8::Global<v8::Value>>> {
+	// Poll the context's futures and resolve or reject all that are ready.
+	loop {
+		// Poll the context's futures.
+		let (result, promise_resolver) = match state.futures.borrow_mut().poll_next_unpin(cx) {
+			Poll::Ready(Some(output)) => output,
+			Poll::Ready(None) => break,
+			Poll::Pending => return Poll::Pending,
+		};
+
+		// Enter the context.
+		let mut handle_scope = v8::HandleScope::new(isolate);
+		let context = v8::Local::new(&mut handle_scope, context.clone());
+		let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
+
+		// Resolve or reject the promise.
+		let promise_resolver = v8::Local::new(&mut context_scope, promise_resolver);
+		match result.and_then(|value| value.to_v8(&mut context_scope)) {
+			Ok(value) => {
+				// Resolve the promise.
+				promise_resolver.resolve(&mut context_scope, value);
+			},
+			Err(error) => {
+				// Reject the promise.
+				let exception = error
+					.to_v8(&mut context_scope)
+					.expect("Failed to serialize the error.");
+				promise_resolver.reject(&mut context_scope, exception);
+			},
+		};
+	}
+
+	// Enter the context.
+	let mut handle_scope = v8::HandleScope::new(isolate);
+	let context = v8::Local::new(&mut handle_scope, context);
+	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
+
+	// Handle the value.
+	let value = v8::Local::new(&mut context_scope, value);
+	match v8::Local::<v8::Promise>::try_from(value) {
+		Err(_) => {
+			let value = v8::Global::new(&mut context_scope, value);
+			Poll::Ready(Ok::<_, Error>(value))
+		},
+
+		Ok(promise) => match promise.state() {
+			v8::PromiseState::Pending => Poll::Pending,
+
+			v8::PromiseState::Fulfilled => {
+				let value = promise.result(&mut context_scope);
+				let value = v8::Global::new(&mut context_scope, value);
+				Poll::Ready(Ok(value))
+			},
+
+			v8::PromiseState::Rejected => {
+				let exception = promise.result(&mut context_scope);
+				let error = error_from_exception(&mut context_scope, &state, exception);
+				Poll::Ready(Err(error))
+			},
+		},
+	}
 }
 
 #[allow(clippy::too_many_lines)]
@@ -497,13 +559,6 @@ fn error_from_exception(
 		is_promise_all: bool,
 		// is_promise_any: bool,
 		promise_index: Option<u32>,
-	}
-
-	// If the exception is not a native error, then attempt to deserialize it as a Tangram Error.
-	if !exception.is_native_error() {
-		if let Ok(error) = serde_v8::from_v8(scope, exception) {
-			return error;
-		}
 	}
 
 	// Get the message.
@@ -570,13 +625,19 @@ fn error_from_exception(
 		None
 	};
 
+	eprintln!("{message}");
+	if let Some(location) = location {
+		eprintln!("{location}");
+	}
+	if let Some(stack_trace) = stack_trace {
+		eprintln!("{stack_trace}");
+	}
+	if let Some(source) = source {
+		eprintln!("{source}");
+	}
+
 	// Create the error.
-	Error::Run(build::Error::Target(super::Error {
-		message,
-		location,
-		stack_trace,
-		source,
-	}))
+	Error::with_message(message)
 }
 
 fn get_location(state: &State, file_name: Option<&str>, position: Position) -> Option<Location> {
@@ -635,5 +696,78 @@ fn get_location(state: &State, file_name: Option<&str>, position: Position) -> O
 	} else {
 		// Otherwise, the location cannot be determined.
 		None
+	}
+}
+
+/// A stack trace.
+#[derive(Clone, Debug)]
+pub struct StackTrace {
+	pub stack_frames: Vec<StackFrame>,
+}
+
+/// A stack frame.
+#[derive(Clone, Debug)]
+pub struct StackFrame {
+	pub location: Option<Location>,
+}
+
+/// A source location.
+#[derive(Clone, Debug)]
+pub struct Location {
+	pub source: Source,
+	pub position: Position,
+}
+
+/// A source.
+#[derive(Clone, Debug)]
+pub enum Source {
+	Global(Option<String>),
+	Module(Module),
+}
+
+impl std::fmt::Display for StackTrace {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		for stack_frame in &self.stack_frames {
+			writeln!(f)?;
+			write!(f, "  {stack_frame}")?;
+		}
+		Ok(())
+	}
+}
+
+impl std::fmt::Display for StackFrame {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		if let Some(location) = &self.location {
+			write!(f, "{location}")?;
+		} else {
+			write!(f, "[unknown]")?;
+		}
+		Ok(())
+	}
+}
+
+impl std::fmt::Display for Location {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let source = &self.source;
+		let line = self.position.line + 1;
+		let character = self.position.character + 1;
+		write!(f, "{source}:{line}:{character}")?;
+		Ok(())
+	}
+}
+
+impl std::fmt::Display for Source {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Source::Global(path) => {
+				let path = path.as_deref().unwrap_or("[unknown]");
+				write!(f, "global:{path}")?;
+			},
+
+			Source::Module(module) => {
+				write!(f, "{module}")?;
+			},
+		}
+		Ok(())
 	}
 }

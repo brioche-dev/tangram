@@ -6,7 +6,7 @@ use futures::{
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
-// mod js;
+mod js;
 
 crate::id!(Run);
 

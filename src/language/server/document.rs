@@ -1,5 +1,5 @@
 use super::{Sender, Server};
-use crate::{error::Result, module::Module};
+use crate::{language::Module, Result};
 use lsp_types as lsp;
 
 impl Server {
@@ -9,13 +9,15 @@ impl Server {
 		params: lsp::DidOpenTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
+		let module = Module::from_lsp(self, params.text_document.uri).await?;
 
 		// Open the document.
 		if let Module::Document(document) = module {
 			let version = params.text_document.version;
 			let text = params.text_document.text;
-			document.open(&self.server, version, text).await?;
+			document
+				.open(&self.state.document_store, version, text)
+				.await?;
 		}
 
 		// Update all diagnostics.
@@ -30,14 +32,14 @@ impl Server {
 		params: lsp::DidChangeTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
+		let module = Module::from_lsp(self, params.text_document.uri).await?;
 
 		if let Module::Document(document) = module {
 			// Apply the changes.
 			for change in params.content_changes {
 				document
 					.update(
-						&self.server,
+						&self.state.document_store,
 						change.range.map(Into::into),
 						params.text_document.version,
 						change.text,
@@ -58,11 +60,11 @@ impl Server {
 		params: lsp::DidCloseTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = Module::from_lsp(&self.server, params.text_document.uri).await?;
+		let module = Module::from_lsp(self, params.text_document.uri).await?;
 
 		if let Module::Document(document) = module {
 			// Close the document.
-			document.close(&self.server).await?;
+			document.close(&self.state.document_store).await?;
 		}
 
 		// Update all diagnostics.
