@@ -225,9 +225,9 @@ fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) 
 	let (string,) = args;
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
-		let state = state.run.clone();
+		let run_state = state.run_state.clone();
 		async move {
-			let result = state.add_log(string.into_bytes()).await;
+			let result = run_state.add_log(string.into_bytes()).await;
 			sender.send(result).unwrap();
 		}
 	});

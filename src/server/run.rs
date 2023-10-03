@@ -80,7 +80,29 @@ impl Server {
 				let object = task.object(client).await?;
 
 				let output = match object.host.os() {
-					system::Os::Js => server.run_js(&task, &state).await?,
+					system::Os::Js => {
+						// Build the target on the server's local pool because it is a `!Send` future.
+						server
+							.state
+							.local_pool
+							.spawn_pinned({
+								let client = client.clone();
+								let task = task.clone();
+								let state = state.clone();
+								let main_runtime_handle = tokio::runtime::Handle::current();
+								move || async move {
+									crate::run::js::run(
+										client.clone(),
+										task,
+										state,
+										main_runtime_handle,
+									)
+									.await
+								}
+							})
+							.await
+							.wrap_err("Failed to join the task.")?
+					},
 					_ => todo!(),
 				};
 

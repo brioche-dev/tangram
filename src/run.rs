@@ -6,7 +6,7 @@ use futures::{
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
-mod js;
+pub mod js;
 
 crate::id!(Run);
 
@@ -297,7 +297,7 @@ impl State {
 
 	pub async fn log(&self) -> Result<BoxStream<'static, Result<Vec<u8>>>> {
 		let mut log = self.log.lock().await;
-		log.0.seek(std::io::SeekFrom::Start(0)).await?;
+		log.0.rewind().await?;
 		let mut old = Vec::new();
 		log.0.read_to_end(&mut old).await?;
 		let old = stream::once(async move { Ok(old) });
