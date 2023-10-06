@@ -1,3 +1,4 @@
+use derive_more::Display;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -5,14 +6,20 @@ use thiserror::Error;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An error.
+#[derive(Debug, Display)]
+pub struct Error(Box<dyn std::error::Error + Send + Sync + 'static>);
+
+/// A message error.
 #[derive(Clone, Debug, Error)]
 #[error("{message}")]
-pub struct Error {
-	message: String,
-	location: Option<Location>,
-	source: Option<Arc<Error>>,
+pub struct Message {
+	pub message: String,
+	pub location: Option<Location>,
+	pub stack: Option<Vec<Location>>,
+	pub source: Option<Arc<Error>>,
 }
 
+/// An error location.
 #[derive(Clone, Debug)]
 pub struct Location {
 	pub file: String,
@@ -20,8 +27,10 @@ pub struct Location {
 	pub column: u32,
 }
 
+/// An error trace.
 pub struct Trace<'a>(&'a Error);
 
+/// An extension trait for wrapping an error with a message.
 pub trait WrapErr<T, E>: Sized {
 	#[track_caller]
 	fn wrap_err<M>(self, message: M) -> Result<T, Error>
@@ -40,22 +49,14 @@ pub trait WrapErr<T, E>: Sized {
 
 impl Error {
 	#[track_caller]
-	pub fn with_message(message: impl std::fmt::Display) -> Error {
-		Error {
+	pub fn with_message(message: impl std::fmt::Display) -> Self {
+		Message {
 			message: message.to_string(),
-			location: Some(Location::caller()),
+			location: Some(std::panic::Location::caller().into()),
+			stack: None,
 			source: None,
 		}
-	}
-
-	pub fn with_error(error: impl std::error::Error) -> Self {
-		Self {
-			message: error.to_string(),
-			location: None,
-			source: error
-				.source()
-				.map(|error| Arc::new(Self::with_error(error))),
-		}
+		.into()
 	}
 
 	#[must_use]
@@ -65,7 +66,7 @@ impl Error {
 
 	#[must_use]
 	#[track_caller]
-	pub fn wrap<C>(self, message: C) -> Error
+	pub fn wrap<C>(self, message: C) -> Self
 	where
 		C: std::fmt::Display,
 	{
@@ -74,30 +75,47 @@ impl Error {
 
 	#[must_use]
 	#[track_caller]
-	pub fn wrap_with<C, F>(self, f: F) -> Error
+	pub fn wrap_with<C, F>(self, f: F) -> Self
 	where
 		C: std::fmt::Display,
 		F: FnOnce() -> C,
 	{
-		Error {
+		Message {
 			message: f().to_string(),
-			location: Some(Location::caller()),
+			location: Some(std::panic::Location::caller().into()),
+			stack: None,
 			source: Some(Arc::new(self)),
 		}
+		.into()
 	}
 }
 
-impl Location {
-	#[must_use]
-	#[track_caller]
-	pub fn caller() -> Location {
-		std::panic::Location::caller().into()
+impl std::ops::Deref for Error {
+	type Target = dyn std::error::Error + Send + Sync + 'static;
+
+	fn deref(&self) -> &Self::Target {
+		&*self.0
+	}
+}
+
+impl From<Error> for Box<dyn std::error::Error + Send + Sync + 'static> {
+	fn from(error: Error) -> Self {
+		error.0
+	}
+}
+
+impl<E> From<E> for Error
+where
+	E: std::error::Error + Send + Sync + 'static,
+{
+	fn from(error: E) -> Self {
+		Self(Box::new(error))
 	}
 }
 
 impl<'a> From<&'a std::panic::Location<'a>> for Location {
-	fn from(location: &'a std::panic::Location<'a>) -> Location {
-		Location {
+	fn from(location: &'a std::panic::Location<'a>) -> Self {
+		Self {
 			file: location.file().to_owned(),
 			line: location.line(),
 			column: location.column(),
@@ -107,13 +125,27 @@ impl<'a> From<&'a std::panic::Location<'a>> for Location {
 
 impl<'a> std::fmt::Display for Trace<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let mut error = self.0;
+		let mut first = true;
+		let mut error = &*(self.0).0 as &(dyn std::error::Error + 'static);
 		loop {
-			writeln!(f, "{error}")?;
-			if let Some(location) = &error.location {
-				writeln!(f, "  {location}")?;
+			if !first {
+				writeln!(f)?;
 			}
-			if let Some(source) = &error.source {
+			first = false;
+			if let Some(error) = error.downcast_ref::<Message>() {
+				let message = &error.message;
+				write!(f, "{message}")?;
+				if let Some(location) = &error.location {
+					write!(f, " {location}")?;
+				}
+				for location in error.stack.iter().flatten() {
+					writeln!(f)?;
+					write!(f, "  {location}")?;
+				}
+			} else {
+				write!(f, "{error}")?;
+			}
+			if let Some(source) = std::error::Error::source(error) {
 				error = source;
 			} else {
 				break;
@@ -131,7 +163,7 @@ impl std::fmt::Display for Location {
 
 impl<T, E> WrapErr<T, E> for Result<T, E>
 where
-	E: std::error::Error,
+	E: Into<Error>,
 {
 	#[track_caller]
 	fn wrap_err_with<C, F>(self, f: F) -> Result<T, Error>
@@ -141,7 +173,7 @@ where
 	{
 		match self {
 			Ok(value) => Ok(value),
-			Err(error) => Err(Error::with_error(error).wrap_with(f)),
+			Err(error) => Err(error.into().wrap_with(f)),
 		}
 	}
 }
@@ -157,25 +189,6 @@ impl<T> WrapErr<T, Error> for Option<T> {
 			Some(value) => Ok(value),
 			None => Err(Error::with_message(f())),
 		}
-	}
-}
-
-impl From<reqwest::Error> for Error {
-	fn from(error: reqwest::Error) -> Self {
-		Self::with_error(error)
-	}
-}
-
-#[cfg(feature = "server")]
-impl From<lmdb::Error> for Error {
-	fn from(error: lmdb::Error) -> Self {
-		Self::with_error(error)
-	}
-}
-
-impl From<std::io::Error> for Error {
-	fn from(error: std::io::Error) -> Error {
-		Self::with_error(error)
 	}
 }
 

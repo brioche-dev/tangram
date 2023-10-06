@@ -85,14 +85,12 @@
 		]
 	},
 	"dependencies": {
-		"vscode-languageclient": "^8.0.2"
+		"vscode-languageclient": "^9.0.1"
 	},
 	"description": "Tangram integration and language support for Visual Studio Code.",
 	"devDependencies": {
-		"@types/node": "^20.2.3",
 		"@types/vscode": "^1.75.0",
-		"@vscode/vsce": "^2.17.0",
-		"esbuild": "^0.18.0"
+		"@vscode/vsce": "^2.17.0"
 	},
 	"displayName": "Tangram",
 	"engines": {

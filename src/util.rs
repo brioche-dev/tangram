@@ -28,7 +28,7 @@ pub async fn rmrf(path: &Path) -> Result<()> {
 }
 
 pub mod dirs {
-	use crate::{error, Error, Result};
+	use crate::{error, Result};
 	use std::path::PathBuf;
 
 	#[must_use]
@@ -58,7 +58,7 @@ pub mod dirs {
 	pub fn home_directory_path() -> Result<PathBuf> {
 		#[cfg(any(target_os = "linux", target_os = "macos"))]
 		return match std::env::var("HOME") {
-			Err(error) => Err(Error::with_error(error)),
+			Err(error) => Err(error.into()),
 			Ok(value) if value.is_empty() => {
 				Err(error!(r#"The "HOME" environment variable is not set."#))
 			},

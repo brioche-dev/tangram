@@ -26,9 +26,9 @@ impl Cli {
 		let credentials = match tokio::fs::read(&path).await {
 			Ok(credentials) => credentials,
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-			Err(error) => return Err(Error::with_error(error)),
+			Err(error) => return Err(error.into()),
 		};
-		let credentials = serde_json::from_slice(&credentials).map_err(Error::with_error)?;
+		let credentials = serde_json::from_slice(&credentials)?;
 		Ok(credentials)
 	}
 
@@ -37,10 +37,8 @@ impl Cli {
 	}
 
 	pub async fn write_credentials_to_path(path: &Path, credentials: &Credentials) -> Result<()> {
-		let credentials = serde_json::to_string(credentials).map_err(Error::with_error)?;
-		tokio::fs::write(path, &credentials)
-			.await
-			.map_err(Error::with_error)?;
+		let credentials = serde_json::to_string(credentials)?;
+		tokio::fs::write(path, &credentials).await?;
 		Ok(())
 	}
 }

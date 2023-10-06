@@ -90,7 +90,7 @@ impl std::str::FromStr for Id {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		use hex::FromHex;
-		let bytes = <_>::from_hex(s).map_err(Error::with_error)?;
+		let bytes = <_>::from_hex(s)?;
 		let id = Self::with_bytes(bytes)?;
 		Ok(id)
 	}
@@ -128,7 +128,7 @@ impl TryFrom<&[u8]> for Id {
 	type Error = Error;
 
 	fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-		Self::with_bytes(value.try_into().map_err(Error::with_error)?)
+		Self::with_bytes(value.try_into()?)
 	}
 }
 

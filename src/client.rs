@@ -33,7 +33,7 @@ impl Client {
 	#[must_use]
 	pub fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
 		match self {
-			Self::Server(server) => &server.state.file_descriptor_semaphore,
+			Self::Server(server) => &server.file_descriptor_semaphore(),
 			Self::Reqwest(reqwest) => &reqwest.state.file_descriptor_semaphore,
 		}
 	}
@@ -90,10 +90,7 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn get_run_children(
-		&self,
-		id: run::Id,
-	) -> Result<BoxStream<'static, Result<run::Id>>> {
+	pub async fn get_run_children(&self, id: run::Id) -> Result<BoxStream<'static, run::Id>> {
 		self.try_get_run_children(id)
 			.await?
 			.wrap_err("Failed to get the run.")
@@ -103,7 +100,7 @@ impl Client {
 	pub async fn try_get_run_children(
 		&self,
 		id: run::Id,
-	) -> Result<Option<BoxStream<'static, Result<run::Id>>>> {
+	) -> Result<Option<BoxStream<'static, run::Id>>> {
 		match self {
 			Self::Server(server) => server.try_get_run_children(id).await,
 			Self::Reqwest(_) => todo!(),
@@ -111,7 +108,7 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn get_run_log(&self, id: run::Id) -> Result<BoxStream<'static, Result<Vec<u8>>>> {
+	pub async fn get_run_log(&self, id: run::Id) -> Result<BoxStream<'static, Vec<u8>>> {
 		self.try_get_run_log(id)
 			.await?
 			.wrap_err("Failed to get the run.")
@@ -121,7 +118,7 @@ impl Client {
 	pub async fn try_get_run_log(
 		&self,
 		id: run::Id,
-	) -> Result<Option<BoxStream<'static, Result<Vec<u8>>>>> {
+	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
 		match self {
 			Self::Server(server) => server.try_get_run_log(id).await,
 			Self::Reqwest(_) => todo!(),

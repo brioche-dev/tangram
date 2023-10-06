@@ -398,7 +398,7 @@ pub mod specifier {
 		fn from_str(value: &str) -> Result<Specifier> {
 			if value.starts_with('/') || value.starts_with('.') {
 				// If the string starts with `/` or `.`, then parse the string as a path.
-				let specifier = value.parse().map_err(Error::with_error)?;
+				let specifier = value.parse()?;
 				Ok(Specifier::Path(specifier))
 			} else {
 				// Otherwise, parse the string as a registry specifier.

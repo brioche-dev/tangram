@@ -376,7 +376,7 @@ impl Task {
 		// Create `argv`.
 		let args: Vec<_> = args
 			.into_iter()
-			.map(|arg| CString::new(arg).map_err(Error::with_error))
+			.map(|arg| CString::new(arg))
 			.try_collect()?;
 		let mut argv = Vec::with_capacity(1 + args.len() + 1);
 		argv.push(executable.clone());

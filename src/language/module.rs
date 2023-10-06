@@ -109,7 +109,7 @@ impl std::str::FromStr for Module {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let url: Url = s.parse().map_err(Error::with_error)?;
+		let url: Url = s.parse()?;
 		let module = url.try_into()?;
 		Ok(module)
 	}

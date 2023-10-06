@@ -110,13 +110,13 @@ impl Server {
 				state.set_output(output).await;
 
 				// Create the object.
-				let children = state.children().try_collect().await?;
+				let children = state.children().collect().await;
 				let log = StreamReader::new(
 					state
 						.log()
 						.await?
-						.map_ok(::bytes::Bytes::from)
-						.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error)),
+						.map(::bytes::Bytes::from)
+						.map(Ok::<_, std::io::Error>),
 				);
 				let log = Blob::with_reader(client, log).await?;
 				let output = state.output().await;
@@ -176,7 +176,7 @@ impl Server {
 	pub(crate) async fn try_get_run_children(
 		&self,
 		id: run::Id,
-	) -> Result<Option<BoxStream<'static, Result<run::Id>>>> {
+	) -> Result<Option<BoxStream<'static, run::Id>>> {
 		let client = &Client::with_server(self.clone());
 		let run = Run::with_id(id);
 
@@ -184,7 +184,7 @@ impl Server {
 		let state = self.state.running.read().unwrap().1.get(&run.id()).cloned();
 		if let Some(state) = state {
 			let children = state.children();
-			return Ok(Some(children.map_ok(|child| child.id()).boxed()));
+			return Ok(Some(children.map(|child| child.id()).boxed()));
 		}
 
 		// Attempt to get the children from the object.
@@ -195,7 +195,6 @@ impl Server {
 			return Ok(Some(
 				stream::iter(object.children.clone())
 					.map(|child| child.id())
-					.map(Ok)
 					.boxed(),
 			));
 		}
@@ -217,7 +216,7 @@ impl Server {
 	pub(crate) async fn try_get_run_log(
 		&self,
 		id: run::Id,
-	) -> Result<Option<BoxStream<'static, Result<Vec<u8>>>>> {
+	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
 		let client = &Client::with_server(self.clone());
 		let run = Run::with_id(id);
 
@@ -235,9 +234,8 @@ impl Server {
 			};
 			let object = object.clone();
 			let client = client.clone();
-			return Ok(Some(
-				stream::once(async move { object.log.bytes(&client).await }).boxed(),
-			));
+			let bytes = object.log.bytes(&client).await?;
+			return Ok(Some(stream::once(async move { bytes }).boxed()));
 		}
 
 		// Attempt to stream the log from the parent.

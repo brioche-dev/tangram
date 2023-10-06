@@ -17,40 +17,43 @@ mod run;
 /// A server.
 #[derive(Clone, Debug)]
 pub struct Server {
-	pub(crate) state: Arc<State>,
+	state: Arc<State>,
 }
 
 #[derive(Debug)]
 pub struct State {
 	/// The database.
-	pub(crate) database: Database,
+	database: Database,
 
 	/// A semaphore that prevents opening too many file descriptors.
-	pub(crate) file_descriptor_semaphore: tokio::sync::Semaphore,
+	file_descriptor_semaphore: tokio::sync::Semaphore,
 
 	/// An HTTP client for downloading resources.
-	pub(crate) http_client: reqwest::Client,
+	http_client: reqwest::Client,
 
 	/// A local pool for running JS tasks.
-	pub(crate) local_pool: tokio_util::task::LocalPoolHandle,
+	local_pool: tokio_util::task::LocalPoolHandle,
 
 	/// The options the server was created with.
-	pub(crate) options: Options,
+	options: Options,
 
 	/// A client for communicating with the parent.
-	pub(crate) parent: Option<Client>,
+	parent: Option<Client>,
 
 	/// The path to the directory where the server stores its data.
-	pub(crate) path: PathBuf,
+	path: PathBuf,
 
 	/// A semaphore that limits the number of concurrent subprocesses.
-	pub(crate) process_semaphore: tokio::sync::Semaphore,
+	process_semaphore: tokio::sync::Semaphore,
 
 	/// The state of the server's running tasks.
-	pub(crate) running: std::sync::RwLock<(
+	running: std::sync::RwLock<(
 		HashMap<task::Id, crate::run::Id, id::BuildHasher>,
 		HashMap<crate::run::Id, Arc<crate::run::State>, id::BuildHasher>,
 	)>,
+
+	/// The VFS server task.
+	vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
 
 #[derive(Debug)]
@@ -119,6 +122,9 @@ impl Server {
 		// Create the state of the server's running tasks.
 		let running = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
 
+		// Create the VFS server task.
+		let vfs_server_task = std::sync::Mutex::new(None);
+
 		// Create the state.
 		let state = Arc::new(State {
 			database,
@@ -130,24 +136,25 @@ impl Server {
 			path,
 			process_semaphore,
 			running,
+			vfs_server_task,
 		});
 
 		// Create the server.
 		let server = Server { state };
 
-		// Start the VFS server.
-		let client = Client::with_server(server.clone());
-		let kind = if cfg!(target_os = "linux") {
-			vfs::Kind::Fuse
-		} else {
-			vfs::Kind::Nfs(2049)
-		};
+		// // Start the VFS server.
+		// let client = Client::with_server(server.clone());
+		// let kind = if cfg!(target_os = "linux") {
+		// 	vfs::Kind::Fuse
+		// } else {
+		// 	vfs::Kind::Nfs(2049)
+		// };
 
-		// Mount the VFS server.
-		let task = vfs::Server::new(kind, client)
-			.mount(server.artifacts_path())
-			.await?;
-		server.state.vfs_server_task.lock().unwrap().replace(task);
+		// // Mount the VFS server.
+		// let task = vfs::Server::new(kind, client)
+		// 	.mount(server.artifacts_path())
+		// 	.await?;
+		// server.state.vfs_server_task.lock().unwrap().replace(task);
 
 		Ok(server)
 	}
@@ -172,10 +179,13 @@ impl Server {
 		self.path().join("temps")
 	}
 
+	#[must_use]
+	pub fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
+		&self.state.file_descriptor_semaphore
+	}
+
 	pub async fn serve(self, addr: SocketAddr) -> Result<()> {
-		let listener = tokio::net::TcpListener::bind(&addr)
-			.await
-			.map_err(Error::with_error)?;
+		let listener = tokio::net::TcpListener::bind(&addr).await?;
 		tracing::info!("🚀 Serving on {}.", addr);
 		loop {
 			let (stream, _) = listener.accept().await?;
@@ -236,7 +246,7 @@ impl Server {
 			(_, _) => None,
 		};
 		let response = if let Some(response) = response {
-			Some(response.await.map_err(Error::with_error)?)
+			Some(response.await?)
 		} else {
 			None
 		};

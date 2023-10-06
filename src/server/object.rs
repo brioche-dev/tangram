@@ -96,7 +96,7 @@ impl Server {
 
 		// If there are missing children, then return a bad request response.
 		if let Err(missing_children) = result {
-			let body = serde_json::to_vec(&missing_children).map_err(Error::with_error)?;
+			let body = serde_json::to_vec(&missing_children)?;
 			let response = http::Response::builder()
 				.status(http::StatusCode::BAD_REQUEST)
 				.body(full(body))

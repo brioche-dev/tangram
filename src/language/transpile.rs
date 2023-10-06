@@ -83,21 +83,16 @@ impl Module {
 			};
 
 			// Emit the module.
-			emitter
-				.emit_module(&module)
-				.map_err(crate::error::Error::with_error)?;
-			let transpiled_text =
-				String::from_utf8(transpiled_text).map_err(crate::error::Error::with_error)?;
+			emitter.emit_module(&module)?;
+			let transpiled_text = String::from_utf8(transpiled_text)?;
 
 			// Create the source map.
 			let mut output_source_map = Vec::new();
 			source_map
 				.build_source_map(&source_mappings)
 				.to_writer(&mut output_source_map)
-				.map_err(crate::error::Error::with_error)
 				.wrap_err("Failed to create the source map.")?;
-			let source_map =
-				String::from_utf8(output_source_map).map_err(crate::error::Error::with_error)?;
+			let source_map = String::from_utf8(output_source_map)?;
 
 			// Create the output.
 			let output = Output {

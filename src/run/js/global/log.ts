@@ -69,7 +69,7 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			.join(", ")}]`;
 	} else if (value instanceof Error) {
 		// Handle an error.
-		return value.stack ?? "";
+		return value.message;
 	} else if (value instanceof Promise) {
 		// Handle a promise.
 		return "(promise)";

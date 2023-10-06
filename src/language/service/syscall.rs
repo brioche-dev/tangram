@@ -254,28 +254,6 @@ fn syscall_module_version(
 	})
 }
 
-fn syscall_utf8_decode(
-	_scope: &mut v8::HandleScope,
-	_state: &State,
-	args: (serde_v8::JsBuffer,),
-) -> Result<String> {
-	let (bytes,) = args;
-	let bytes = bytes::Bytes::from(bytes);
-	let string =
-		String::from_utf8(bytes.into()).wrap_err("Failed to decode the bytes as UTF-8.")?;
-	Ok(string)
-}
-
-fn syscall_utf8_encode(
-	_scope: &mut v8::HandleScope,
-	_state: &State,
-	args: (String,),
-) -> Result<serde_v8::ToJsBuffer> {
-	let (string,) = args;
-	let bytes = string.into_bytes().into();
-	Ok(bytes)
-}
-
 fn syscall_sync<'s, A, T, F>(
 	scope: &mut v8::HandleScope<'s>,
 	args: &v8::FunctionCallbackArguments,

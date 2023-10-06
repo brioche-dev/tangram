@@ -29,6 +29,8 @@ async fn main() {
 
 	// If an error occurred, print the error trace and exit with a non-zero code.
 	if let Err(error) = result {
+		eprintln!("An error occurred.");
+
 		// Print the error trace.
 		eprintln!("{}", error.trace());
 

@@ -72,7 +72,7 @@ impl Server {
 		// Create a task to send outgoing messages.
 		let outgoing_message_task = tokio::spawn(async move {
 			while let Some(outgoing_message) = outgoing_message_receiver.recv().await {
-				let body = serde_json::to_string(&outgoing_message).map_err(Error::with_error)?;
+				let body = serde_json::to_string(&outgoing_message)?;
 				let head = format!("Content-Length: {}\r\n\r\n", body.len());
 				stdout.write_all(head.as_bytes()).await?;
 				stdout.write_all(body.as_bytes()).await?;

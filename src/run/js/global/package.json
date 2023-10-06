@@ -1,7 +1,4 @@
 {
-	"dependencies": {
-		"esbuild": "^0.18.0"
-	},
 	"name": "@tangramdotdev/global",
 	"private": true,
 	"scripts": {

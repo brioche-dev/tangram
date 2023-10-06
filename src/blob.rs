@@ -151,7 +151,7 @@ impl Blob {
 
 	pub async fn text(&self, client: &Client) -> Result<String> {
 		let bytes = self.bytes(client).await?;
-		let string = String::from_utf8(bytes).map_err(Error::with_error)?;
+		let string = String::from_utf8(bytes)?;
 		Ok(string)
 	}
 }

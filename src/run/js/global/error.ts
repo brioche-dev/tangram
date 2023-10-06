@@ -1,3 +1,24 @@
+export class Error {
+	message: string;
+	location: Location | undefined;
+	stack: Array<Location> | undefined;
+	source: Error | undefined;
+
+	constructor(
+		message: string,
+		location?: Location,
+		stack?: Array<Location>,
+		source?: Error,
+	) {
+		this.message = message;
+		this.location = location;
+		this.stack = stack;
+		this.source = source;
+	}
+}
+
+type Location = { file: string; line: number; column: number };
+
 export let prepareStackTrace = (
 	_error: unknown,
 	structuredStackTrace: Array<CallSite>,

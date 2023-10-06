@@ -28,7 +28,7 @@ impl Cli {
 		// let docs = package.docs(&self.client, &language_service).await?;
 
 		// // Render the docs to JSON.
-		// let json = serde_json::to_string_pretty(&docs).map_err(Error::with_error)?;
+		// let json = serde_json::to_string_pretty(&docs)?;
 
 		// // Print the docs.
 		// println!("{json}");

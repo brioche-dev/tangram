@@ -1,12 +1,12 @@
 use crate::{
-	blob, checksum, directory, file,
+	blob, checksum, directory, error, file,
 	object::{self, Object},
 	package, return_error, symlink, task, template, Artifact, Blob, Bytes, Checksum, Directory,
 	Error, File, Package, Placeholder, Relpath, Result, Subpath, Symlink, System, Task, Template,
 	Value, WrapErr,
 };
 use num::ToPrimitive;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 use url::Url;
 
 pub fn to_v8<'a, T>(scope: &mut v8::HandleScope<'a>, value: &T) -> Result<v8::Local<'a, v8::Value>>
@@ -316,6 +316,27 @@ where
 	}
 }
 
+impl<T> ToV8 for Arc<T>
+where
+	T: ToV8,
+{
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_v8(scope)
+	}
+}
+
+impl<T> FromV8 for Arc<T>
+where
+	T: FromV8,
+{
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		Ok(Self::new(from_v8(scope, value)?))
+	}
+}
+
 impl<T1> ToV8 for (T1,)
 where
 	T1: ToV8,
@@ -459,7 +480,7 @@ where
 
 impl ToV8 for serde_json::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::with_error)
+		serde_v8::to_v8(scope, self).map_err(Into::into)
 	}
 }
 
@@ -468,13 +489,13 @@ impl FromV8 for serde_json::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::with_error)
+		serde_v8::from_v8(scope, value).map_err(Into::into)
 	}
 }
 
 impl ToV8 for serde_toml::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::with_error)
+		serde_v8::to_v8(scope, self).map_err(Into::into)
 	}
 }
 
@@ -483,13 +504,13 @@ impl FromV8 for serde_toml::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::with_error)
+		serde_v8::from_v8(scope, value).map_err(Into::into)
 	}
 }
 
 impl ToV8 for serde_yaml::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Error::with_error)
+		serde_v8::to_v8(scope, self).map_err(Into::into)
 	}
 }
 
@@ -498,7 +519,7 @@ impl FromV8 for serde_yaml::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Error::with_error)
+		serde_v8::from_v8(scope, value).map_err(Into::into)
 	}
 }
 
@@ -1646,7 +1667,29 @@ impl FromV8 for Url {
 
 impl ToV8 for Error {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		todo!()
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let error = v8::String::new_external_onebyte_static(scope, "Error".as_bytes()).unwrap();
+		let error = tg.get(scope, error.into()).unwrap();
+		let error = v8::Local::<v8::Function>::try_from(error).unwrap();
+
+		if let Some(self_) = self.downcast_ref::<error::Message>() {
+			let message = self_.message.to_v8(scope)?;
+			let location = self_.location.to_v8(scope)?;
+			let stack = self_.stack.to_v8(scope)?;
+			let source = self_.source.to_v8(scope)?;
+			Ok(error
+				.new_instance(scope, &[message, location, stack, source])
+				.unwrap()
+				.into())
+		} else {
+			let message = self.to_string().to_v8(scope)?;
+			Ok(error.new_instance(scope, &[message]).unwrap().into())
+		}
 	}
 }
 
@@ -1655,6 +1698,87 @@ impl FromV8 for Error {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		todo!()
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let error = v8::String::new_external_onebyte_static(scope, "Error".as_bytes()).unwrap();
+		let error = tg.get(scope, error.into()).unwrap();
+		let error = v8::Local::<v8::Function>::try_from(error).unwrap();
+
+		if !value.instance_of(scope, error.into()).unwrap() {
+			return_error!("Expected an error.");
+		}
+		let value = value.to_object(scope).unwrap();
+
+		let message = v8::String::new_external_onebyte_static(scope, "message".as_bytes()).unwrap();
+		let message = value.get(scope, message.into()).unwrap();
+		let message = from_v8(scope, message)?;
+
+		let location =
+			v8::String::new_external_onebyte_static(scope, "location".as_bytes()).unwrap();
+		let location = value.get(scope, location.into()).unwrap();
+		let location = from_v8(scope, location)?;
+
+		let stack = v8::String::new_external_onebyte_static(scope, "stack".as_bytes()).unwrap();
+		let stack = value.get(scope, stack.into()).unwrap();
+		let stack = from_v8(scope, stack)?;
+
+		let source = v8::String::new_external_onebyte_static(scope, "source".as_bytes()).unwrap();
+		let source = value.get(scope, source.into()).unwrap();
+		let source = from_v8(scope, source)?;
+
+		Ok(error::Message {
+			message,
+			location,
+			stack,
+			source,
+		}
+		.into())
+	}
+}
+
+impl ToV8 for error::Location {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let object = v8::Object::new(scope);
+
+		let key = v8::String::new_external_onebyte_static(scope, "file".as_bytes()).unwrap();
+		let value = self.file.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "line".as_bytes()).unwrap();
+		let value = self.line.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "column".as_bytes()).unwrap();
+		let value = self.column.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		Ok(object.into())
+	}
+}
+
+impl FromV8 for error::Location {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = value.to_object(scope).unwrap();
+
+		let file = v8::String::new_external_onebyte_static(scope, "file".as_bytes()).unwrap();
+		let file = value.get(scope, file.into()).unwrap();
+		let file = from_v8(scope, file)?;
+
+		let line = v8::String::new_external_onebyte_static(scope, "line".as_bytes()).unwrap();
+		let line = value.get(scope, line.into()).unwrap();
+		let line = from_v8(scope, line)?;
+
+		let column = v8::String::new_external_onebyte_static(scope, "column".as_bytes()).unwrap();
+		let column = value.get(scope, column.into()).unwrap();
+		let column = from_v8(scope, column)?;
+
+		Ok(Self { file, line, column })
 	}
 }

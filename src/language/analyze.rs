@@ -21,9 +21,9 @@ pub struct Output {
 }
 
 pub struct Error {
-	message: String,
-	line: usize,
-	column: usize,
+	pub message: String,
+	pub line: usize,
+	pub column: usize,
 }
 
 impl Module {
@@ -42,7 +42,7 @@ impl Module {
 		if !errors.is_empty() {
 			let message = errors
 				.iter()
-				.map(std::string::ToString::to_string)
+				.map(ToString::to_string)
 				.collect_vec()
 				.join("\n");
 			return Err(crate::Error::with_message(message));

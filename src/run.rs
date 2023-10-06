@@ -1,8 +1,9 @@
-use crate::{blob, id, object, return_error, value, Blob, Client, Result, Value, WrapErr};
+use crate::{blob, id, object, return_error, value, Blob, Client, Error, Result, Value, WrapErr};
 use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
 };
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -54,16 +55,15 @@ pub struct Data {
 #[derive(Debug)]
 pub struct State {
 	/// The run's children.
-	children: std::sync::Mutex<(
-		Vec<Run>,
-		Option<tokio::sync::broadcast::Sender<Result<Run>>>,
-	)>,
+	children: std::sync::Mutex<(Vec<Run>, Option<tokio::sync::broadcast::Sender<Run>>)>,
 
 	/// The run's log.
-	log: tokio::sync::Mutex<(
-		tokio::fs::File,
-		Option<tokio::sync::broadcast::Sender<Result<Vec<u8>>>>,
-	)>,
+	log: Arc<
+		tokio::sync::Mutex<(
+			tokio::fs::File,
+			Option<tokio::sync::broadcast::Sender<Vec<u8>>>,
+		)>,
+	>,
 
 	/// The run's output.
 	output: (
@@ -101,7 +101,7 @@ impl Run {
 		}
 	}
 
-	pub async fn children(&self, client: &Client) -> Result<BoxStream<'static, Result<Self>>> {
+	pub async fn children(&self, client: &Client) -> Result<BoxStream<'static, Self>> {
 		self.try_get_children(client)
 			.await?
 			.wrap_err("Failed to get the run.")
@@ -110,18 +110,18 @@ impl Run {
 	pub async fn try_get_children(
 		&self,
 		client: &Client,
-	) -> Result<Option<BoxStream<'static, Result<Self>>>> {
+	) -> Result<Option<BoxStream<'static, Self>>> {
 		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(stream::iter(object.children.clone()).map(Ok).boxed()))
+			Ok(Some(stream::iter(object.children.clone()).boxed()))
 		} else {
 			Ok(client
 				.try_get_run_children(self.id())
 				.await?
-				.map(|children| children.map_ok(Run::with_id).boxed()))
+				.map(|children| children.map(Run::with_id).boxed()))
 		}
 	}
 
-	pub async fn log(&self, client: &Client) -> Result<BoxStream<'static, Result<Vec<u8>>>> {
+	pub async fn log(&self, client: &Client) -> Result<BoxStream<'static, Vec<u8>>> {
 		self.try_get_log(client)
 			.await?
 			.wrap_err("Failed to get the run.")
@@ -130,13 +130,12 @@ impl Run {
 	pub async fn try_get_log(
 		&self,
 		client: &Client,
-	) -> Result<Option<BoxStream<'static, Result<Vec<u8>>>>> {
+	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			let log = object.log.clone();
 			let client = client.clone();
-			Ok(Some(
-				stream::once(async move { log.bytes(&client).await }).boxed(),
-			))
+			let bytes = log.bytes(&client).await?;
+			Ok(Some(stream::once(async move { bytes }).boxed()))
 		} else {
 			Ok(client.try_get_run_log(self.id()).await?)
 		}
@@ -254,7 +253,7 @@ impl State {
 		let log_file = tokio::fs::File::from_std(tempfile::tempfile()?);
 		Ok(Self {
 			children: std::sync::Mutex::new((Vec::new(), Some(children_tx))),
-			log: tokio::sync::Mutex::new((log_file, Some(log_tx))),
+			log: Arc::new(tokio::sync::Mutex::new((log_file, Some(log_tx)))),
 			output: (result_tx, result_rx),
 		})
 	}
@@ -262,15 +261,19 @@ impl State {
 	pub fn add_child(&self, child: Run) {
 		let mut children = self.children.lock().unwrap();
 		children.0.push(child.clone());
-		children.1.as_ref().unwrap().send(Ok(child)).ok();
+		children.1.as_ref().unwrap().send(child).ok();
 	}
 
-	pub async fn add_log(&self, bytes: Vec<u8>) -> Result<()> {
-		let mut log = self.log.lock().await;
-		log.0.seek(std::io::SeekFrom::End(0)).await?;
-		log.0.write_all(&bytes).await?;
-		log.1.as_ref().unwrap().send(Ok(bytes)).ok();
-		Ok(())
+	pub fn add_log(&self, bytes: Vec<u8>) {
+		tokio::spawn({
+			let log = self.log.clone();
+			async move {
+				let mut log = log.lock().await;
+				log.0.seek(std::io::SeekFrom::End(0)).await.ok();
+				log.0.write_all(&bytes).await.ok();
+				log.1.as_ref().unwrap().send(bytes).ok();
+			}
+		});
 	}
 
 	pub async fn set_output(&self, output: Option<Value>) {
@@ -282,9 +285,9 @@ impl State {
 		self.log.lock().await.1.take();
 	}
 
-	pub fn children(&self) -> BoxStream<'static, Result<Run>> {
+	pub fn children(&self) -> BoxStream<'static, Run> {
 		let children = self.children.lock().unwrap();
-		let old = stream::iter(children.0.clone().into_iter().map(Ok));
+		let old = stream::iter(children.0.clone());
 		let new = if let Some(new) = children.1.as_ref() {
 			BroadcastStream::new(new.subscribe())
 				.filter_map(|result| async move { result.ok() })
@@ -295,12 +298,12 @@ impl State {
 		old.chain(new).boxed()
 	}
 
-	pub async fn log(&self) -> Result<BoxStream<'static, Result<Vec<u8>>>> {
+	pub async fn log(&self) -> Result<BoxStream<'static, Vec<u8>>> {
 		let mut log = self.log.lock().await;
 		log.0.rewind().await?;
 		let mut old = Vec::new();
 		log.0.read_to_end(&mut old).await?;
-		let old = stream::once(async move { Ok(old) });
+		let old = stream::once(async move { old });
 		log.0.seek(std::io::SeekFrom::End(0)).await?;
 		let new = if let Some(new) = log.1.as_ref() {
 			BroadcastStream::new(new.subscribe())

@@ -51,7 +51,7 @@ pub struct Opened {
 }
 
 /// A document store.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Store(Arc<tokio::sync::RwLock<HashMap<Document, State, fnv::FnvBuildHasher>>>);
 
 impl Document {
@@ -211,12 +211,6 @@ impl Document {
 			State::Opened(opened) => opened.text.clone(),
 		};
 		Ok(text)
-	}
-}
-
-impl Default for Store {
-	fn default() -> Self {
-		Self(Default::default())
 	}
 }
 

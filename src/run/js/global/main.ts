@@ -4,7 +4,7 @@ import { Blob, blob } from "./blob.ts";
 import { Directory, directory } from "./directory.ts";
 import { download, unpack } from "./download.ts";
 import * as encoding from "./encoding.ts";
-import { prepareStackTrace } from "./error.ts";
+import { Error as Error_, prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
 import { include } from "./include.ts";
 import { log } from "./log.ts";
@@ -76,6 +76,7 @@ let tg = {
 	Artifact,
 	Blob,
 	Directory,
+	Error: Error_,
 	File,
 	Object_,
 	Package,

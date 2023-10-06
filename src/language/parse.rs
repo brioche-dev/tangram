@@ -1,5 +1,5 @@
 use super::Module;
-use crate::error::{Error, Result};
+use crate::{error, Result};
 use std::rc::Rc;
 use swc_core::{
 	common::{FileName, SourceMap},
@@ -21,10 +21,9 @@ impl Module {
 		let mut parser = Parser::new(syntax, input, None);
 
 		// Parse the text.
-		let module = parser.parse_module().map_err(|error| {
-			let message = error.kind().msg().to_string();
-			Error::with_message(message)
-		})?;
+		let module = parser
+			.parse_module()
+			.map_err(|error| error!("{}", error.into_kind().msg()))?;
 
 		Ok(Output { module, source_map })
 	}

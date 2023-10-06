@@ -177,9 +177,7 @@ fn run_language_service(state: Arc<State>, mut request_receiver: RequestReceiver
 		let Some(response) = response else {
 			let exception = try_catch_scope.exception().unwrap();
 			let error = Error::new(&mut try_catch_scope, exception);
-			response_sender
-				.send(Err(crate::Error::with_error(error)))
-				.unwrap();
+			response_sender.send(Err(error.into())).unwrap();
 			continue;
 		};
 
