@@ -103,7 +103,7 @@ pub enum Data {
 	Package(package::Id),
 
 	#[tangram_serialize(id = 12)]
-	Task(target::Id),
+	Target(target::Id),
 
 	#[tangram_serialize(id = 13)]
 	Array(Vec<Data>),
@@ -128,7 +128,7 @@ impl Value {
 			Value::Placeholder(value) => Data::Placeholder(value.to_data()),
 			Value::Template(value) => Data::Template(value.to_data()),
 			Value::Package(value) => Data::Package(value.expect_id()),
-			Value::Target(value) => Data::Task(value.expect_id()),
+			Value::Target(value) => Data::Target(value.expect_id()),
 			Value::Array(value) => Data::Array(value.iter().map(Value::to_data).collect()),
 			Value::Map(value) => Data::Map(
 				value
@@ -156,7 +156,7 @@ impl Value {
 			},
 			Data::Template(template) => Value::Template(Template::from_data(template)),
 			Data::Package(id) => Value::Package(Package::with_id(id)),
-			Data::Task(id) => Value::Target(Target::with_id(id)),
+			Data::Target(id) => Value::Target(Target::with_id(id)),
 			Data::Array(data) => {
 				Value::Array(data.into_iter().map(Value::from_data).collect::<Vec<_>>())
 			},
@@ -205,7 +205,7 @@ impl Data {
 			Self::Symlink(id) => vec![(*id).into()],
 			Self::Template(template) => template.children(),
 			Self::Package(id) => vec![(*id).into()],
-			Self::Task(id) => vec![(*id).into()],
+			Self::Target(id) => vec![(*id).into()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
 		}

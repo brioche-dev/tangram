@@ -111,7 +111,7 @@ impl Id {
 					.unwrap(),
 			),
 			Kind::Target => Self::Target(
-				crate::Id::new_hashed(id::Kind::Task, bytes)
+				crate::Id::new_hashed(id::Kind::Target, bytes)
 					.try_into()
 					.unwrap(),
 			),
@@ -473,7 +473,7 @@ impl TryFrom<crate::Id> for self::Id {
 			crate::id::Kind::File => Ok(Self::File(value.try_into()?)),
 			crate::id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			crate::id::Kind::Package => Ok(Self::Package(value.try_into()?)),
-			crate::id::Kind::Task => Ok(Self::Target(value.try_into()?)),
+			crate::id::Kind::Target => Ok(Self::Target(value.try_into()?)),
 			crate::id::Kind::Build => Ok(Self::Build(value.try_into()?)),
 			_ => return_error!("Expected a valid object ID."),
 		}

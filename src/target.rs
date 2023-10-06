@@ -4,7 +4,7 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-crate::id!(Task);
+crate::id!(Target);
 crate::handle!(Target);
 
 #[derive(Clone, Copy, Debug)]
