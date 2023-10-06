@@ -175,12 +175,12 @@ impl VisitMut for TargetVisitor {
 			let Some(init) = init.as_deref_mut() else {
 				continue;
 			};
-			let Some(call) = init.as_mut_call() else {
+			let Some(expr) = init.as_mut_call() else {
 				continue;
 			};
 
 			// Visit the call.
-			self.visit_call(call, Some(ident.to_string()));
+			self.visit_call(expr, Some(ident.to_string()));
 		}
 
 		n.visit_mut_children_with(self);
@@ -267,12 +267,6 @@ impl TargetVisitor {
 			},
 		};
 
-		// Create the function property.
-		let f_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-			key: Ident::new("function".into(), n.span).into(),
-			value: Box::new(f.clone().into()),
-		})));
-
 		// Create the module property.
 		let import_meta = Expr::MetaProp(MetaPropExpr {
 			span: DUMMY_SP,
@@ -301,9 +295,15 @@ impl TargetVisitor {
 			value: Box::new(value),
 		})));
 
+		// Create the function property.
+		let function_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+			key: Ident::new("function".into(), n.span).into(),
+			value: Box::new(f.clone().into()),
+		})));
+
 		// Create the object.
 		let object = ObjectLit {
-			props: vec![f_prop, module_prop, name_prop],
+			props: vec![module_prop, name_prop, function_prop],
 			span: DUMMY_SP,
 		};
 
@@ -407,9 +407,9 @@ mod tests {
 		let right = indoc!(
 			r#"
 				export default tg.target({
-					function: ()=>{},
 					module: import.meta.module,
-					name: "default"
+					name: "default",
+					function: ()=>{}
 				});
 			"#
 		);
@@ -427,9 +427,9 @@ mod tests {
 		let right = indoc!(
 			r#"
 				export let named = tg.target({
-					function: ()=>{},
 					module: import.meta.module,
-					name: "named"
+					name: "named",
+					function: ()=>{}
 				});
 			"#
 		);
@@ -447,9 +447,9 @@ mod tests {
 		let right = indoc!(
 			r#"
 				tg.target({
-					function: ()=>{},
 					module: import.meta.module,
-					name: "named"
+					name: "named",
+					function: ()=>{}
 				});
 			"#
 		);

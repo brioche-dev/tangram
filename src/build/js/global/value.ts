@@ -5,7 +5,7 @@ import { File } from "./file.ts";
 import { Package } from "./package.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
-import { Task } from "./task.ts";
+import { Target } from "./target.ts";
 import { Template } from "./template.ts";
 
 export type Value =
@@ -21,7 +21,7 @@ export type Value =
 	| Placeholder
 	| Template
 	| Package
-	| Task
+	| Target
 	| Array<Value>
 	| { [key: string]: Value };
 
@@ -40,7 +40,7 @@ export namespace Value {
 			value instanceof Placeholder ||
 			value instanceof Template ||
 			value instanceof Package ||
-			value instanceof Task ||
+			value instanceof Target ||
 			value instanceof Array ||
 			typeof value === "object"
 		);

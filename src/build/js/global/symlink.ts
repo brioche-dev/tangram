@@ -25,9 +25,9 @@ export class Symlink {
 		// Get the artifact and path.
 		let { artifact, path } = flatten(
 			await Promise.all(
-				args.map(async function map(
-					unresolvedArg,
-				): Promise<MaybeNestedArray<{ artifact?: Artifact; path?: Relpath }>> {
+				args.map(async function map(unresolvedArg): Promise<
+					MaybeNestedArray<{ artifact?: Artifact; path?: Relpath }>
+				> {
 					let arg = await resolve(unresolvedArg);
 					if (typeof arg === "string") {
 						return { path: relpath(arg) };

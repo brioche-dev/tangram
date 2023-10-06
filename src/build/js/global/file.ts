@@ -43,7 +43,7 @@ export class File {
 						};
 					} else if (arg instanceof Array) {
 						return await Promise.all(arg.map(map));
-					} else if (arg instanceof Object) {
+					} else if (typeof arg === "object") {
 						return {
 							contents: arg.contents,
 							executable: arg.executable,

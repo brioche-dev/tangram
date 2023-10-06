@@ -1,47 +1,47 @@
 use crate::{
-	checksum::Checksum, object, package, return_error, system::System, template, value, Client,
-	Package, Result, Run, Template, Value,
+	checksum::Checksum, object, package, return_error, system::System, template, value, Build,
+	Client, Package, Result, Template, Value,
 };
 use std::collections::BTreeMap;
 
 crate::id!(Task);
-crate::handle!(Task);
+crate::handle!(Target);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
-pub struct Task(object::Handle);
+pub struct Target(object::Handle);
 
-/// A task object.
+/// A target object.
 #[derive(Clone, Debug)]
 pub struct Object {
-	/// The system to run the task on.
+	/// The system to build the target on.
 	pub host: System,
 
-	/// The task's executable.
+	/// The target's executable.
 	pub executable: Template,
 
-	/// The task's package.
+	/// The target's package.
 	pub package: Option<Package>,
 
-	/// The task's target.
-	pub target: Option<String>,
+	/// The target's name.
+	pub name: Option<String>,
 
-	/// The task's environment variables.
+	/// The target's environment variables.
 	pub env: BTreeMap<String, Value>,
 
-	/// The task's command line arguments.
+	/// The target's command line arguments.
 	pub args: Vec<Value>,
 
-	/// If a checksum of the task's output is provided, then the task will have access to the network.
+	/// If a checksum of the target's output is provided, then the target will have access to the network.
 	pub checksum: Option<Checksum>,
 
-	/// If the task is marked as unsafe, then it will have access to the network even if a checksum is not provided.
+	/// If the target is marked as unsafe, then it will have access to the network even if a checksum is not provided.
 	pub unsafe_: bool,
 }
 
-/// A task.
+/// Target data.
 #[derive(
 	Clone,
 	Debug,
@@ -51,7 +51,7 @@ pub struct Object {
 	tangram_serialize::Serialize,
 )]
 pub struct Data {
-	/// The system to run the task on.
+	/// The system to build the target on.
 	#[tangram_serialize(id = 0)]
 	pub host: System,
 
@@ -65,7 +65,7 @@ pub struct Data {
 
 	/// The task's target.
 	#[tangram_serialize(id = 3)]
-	pub target: Option<String>,
+	pub name: Option<String>,
 
 	/// The task's environment variables.
 	#[tangram_serialize(id = 4)]
@@ -75,16 +75,16 @@ pub struct Data {
 	#[tangram_serialize(id = 5)]
 	pub args: Vec<value::Data>,
 
-	/// If a checksum of the task's output is provided, then the task will have access to the network.
+	/// If a checksum of the task's output is provided, then the target will have access to the network.
 	#[tangram_serialize(id = 6)]
 	pub checksum: Option<Checksum>,
 
-	/// If the task is marked as unsafe, then it will have access to the network even if a checksum is not provided.
+	/// If the target is marked as unsafe, then it will have access to the network even if a checksum is not provided.
 	#[tangram_serialize(id = 7)]
 	pub unsafe_: bool,
 }
 
-impl Task {
+impl Target {
 	pub async fn host(&self, client: &Client) -> Result<&System> {
 		Ok(&self.object(client).await?.host)
 	}
@@ -97,11 +97,11 @@ impl Task {
 		Ok(&self.object(client).await?.package)
 	}
 
-	pub async fn run(&self, client: &Client) -> Result<Run> {
-		let task_id = self.id(client).await?;
-		let run_id = client.get_or_create_run_for_task(task_id).await?;
-		let run = Run::with_id(run_id);
-		Ok(run)
+	pub async fn build(&self, client: &Client) -> Result<Build> {
+		let target_id = self.id(client).await?;
+		let build_id = client.get_or_create_build_for_target(target_id).await?;
+		let build = Build::with_id(build_id);
+		Ok(build)
 	}
 }
 
@@ -112,7 +112,7 @@ impl Object {
 			host: self.host.clone(),
 			executable: self.executable.to_data(),
 			package: self.package.as_ref().map(Package::expect_id),
-			target: self.target.clone(),
+			name: self.name.clone(),
 			env: self
 				.env
 				.iter()
@@ -130,7 +130,7 @@ impl Object {
 			host: data.host,
 			executable: Template::from_data(data.executable),
 			package: data.package.map(Package::with_id),
-			target: data.target,
+			name: data.name,
 			env: data
 				.env
 				.into_iter()
@@ -185,12 +185,11 @@ pub struct Builder {
 	host: System,
 	executable: Template,
 	package: Option<Package>,
-	target: Option<String>,
+	name: Option<String>,
 	env: BTreeMap<String, Value>,
 	args: Vec<Value>,
 	checksum: Option<Checksum>,
 	unsafe_: bool,
-	network: bool,
 }
 
 impl Builder {
@@ -200,12 +199,11 @@ impl Builder {
 			host,
 			executable,
 			package: None,
-			target: None,
+			name: None,
 			env: BTreeMap::new(),
 			args: Vec::new(),
 			checksum: None,
 			unsafe_: false,
-			network: false,
 		}
 	}
 
@@ -228,8 +226,8 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn target(mut self, target: String) -> Self {
-		self.target = Some(target);
+	pub fn name(mut self, name: String) -> Self {
+		self.name = Some(name);
 		self
 	}
 
@@ -258,12 +256,12 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn build(self) -> Task {
-		Task::with_object(Object {
+	pub fn build(self) -> Target {
+		Target::with_object(Object {
 			package: self.package,
 			host: self.host,
 			executable: self.executable,
-			target: self.target,
+			name: self.name,
 			env: self.env,
 			args: self.args,
 			checksum: self.checksum,

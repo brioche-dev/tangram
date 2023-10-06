@@ -1,6 +1,6 @@
 use crate::{
-	blob, directory, file, object, package, placeholder, symlink, task, template, Blob, Bytes,
-	Directory, File, Package, Placeholder, Symlink, Task, Template,
+	blob, directory, file, object, package, placeholder, symlink, target, template, Blob, Bytes,
+	Directory, File, Package, Placeholder, Symlink, Target, Template,
 };
 use derive_more::{From, TryInto, TryUnwrap};
 use std::collections::BTreeMap;
@@ -45,8 +45,8 @@ pub enum Value {
 	/// A package value.
 	Package(Package),
 
-	/// A task value.
-	Task(Task),
+	/// A target value.
+	Target(Target),
 
 	/// An array value.
 	Array(Vec<Value>),
@@ -103,7 +103,7 @@ pub enum Data {
 	Package(package::Id),
 
 	#[tangram_serialize(id = 12)]
-	Task(task::Id),
+	Task(target::Id),
 
 	#[tangram_serialize(id = 13)]
 	Array(Vec<Data>),
@@ -128,7 +128,7 @@ impl Value {
 			Value::Placeholder(value) => Data::Placeholder(value.to_data()),
 			Value::Template(value) => Data::Template(value.to_data()),
 			Value::Package(value) => Data::Package(value.expect_id()),
-			Value::Task(value) => Data::Task(value.expect_id()),
+			Value::Target(value) => Data::Task(value.expect_id()),
 			Value::Array(value) => Data::Array(value.iter().map(Value::to_data).collect()),
 			Value::Map(value) => Data::Map(
 				value
@@ -156,7 +156,7 @@ impl Value {
 			},
 			Data::Template(template) => Value::Template(Template::from_data(template)),
 			Data::Package(id) => Value::Package(Package::with_id(id)),
-			Data::Task(id) => Value::Task(Task::with_id(id)),
+			Data::Task(id) => Value::Target(Target::with_id(id)),
 			Data::Array(data) => {
 				Value::Array(data.into_iter().map(Value::from_data).collect::<Vec<_>>())
 			},
@@ -182,7 +182,7 @@ impl Value {
 			Self::Symlink(symlink) => vec![symlink.handle().clone()],
 			Self::Template(template) => template.children(),
 			Self::Package(package) => vec![package.handle().clone()],
-			Self::Task(task) => vec![task.handle().clone()],
+			Self::Target(target) => vec![target.handle().clone()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
 		}

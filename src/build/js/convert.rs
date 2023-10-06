@@ -1,8 +1,8 @@
 use crate::{
 	blob, checksum, directory, error, file,
 	object::{self, Object},
-	package, return_error, symlink, task, template, Artifact, Blob, Bytes, Checksum, Directory,
-	Error, File, Package, Placeholder, Relpath, Result, Subpath, Symlink, System, Task, Template,
+	package, return_error, symlink, target, template, Artifact, Blob, Bytes, Checksum, Directory,
+	Error, File, Package, Placeholder, Relpath, Result, Subpath, Symlink, System, Target, Template,
 	Value, WrapErr,
 };
 use num::ToPrimitive;
@@ -321,7 +321,7 @@ where
 	T: ToV8,
 {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		self.to_v8(scope)
+		self.as_ref().to_v8(scope)
 	}
 }
 
@@ -538,7 +538,7 @@ impl ToV8 for Value {
 			Value::Placeholder(value) => value.to_v8(scope),
 			Value::Template(value) => value.to_v8(scope),
 			Value::Package(value) => value.to_v8(scope),
-			Value::Task(value) => value.to_v8(scope),
+			Value::Target(value) => value.to_v8(scope),
 			Value::Array(value) => value.to_v8(scope),
 			Value::Map(value) => value.to_v8(scope),
 		}
@@ -587,9 +587,9 @@ impl FromV8 for Value {
 		let package = tg.get(scope, package.into()).unwrap();
 		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
 
-		let task = v8::String::new_external_onebyte_static(scope, "Task".as_bytes()).unwrap();
-		let task = tg.get(scope, task.into()).unwrap();
-		let task = v8::Local::<v8::Function>::try_from(task).unwrap();
+		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
+		let target = tg.get(scope, target.into()).unwrap();
+		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
 
 		if value.is_null_or_undefined() {
 			Ok(Value::Null(()))
@@ -615,8 +615,8 @@ impl FromV8 for Value {
 			Ok(Value::Template(from_v8(scope, value)?))
 		} else if value.instance_of(scope, package.into()).unwrap() {
 			Ok(Value::Package(from_v8(scope, value)?))
-		} else if value.instance_of(scope, task.into()).unwrap() {
-			Ok(Value::Task(from_v8(scope, value)?))
+		} else if value.instance_of(scope, target.into()).unwrap() {
+			Ok(Value::Target(from_v8(scope, value)?))
 		} else if value.is_array() {
 			Ok(Value::Array(from_v8(scope, value)?))
 		} else if value.is_object() {
@@ -1308,7 +1308,7 @@ impl FromV8 for package::Object {
 	}
 }
 
-impl ToV8 for Task {
+impl ToV8 for Target {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1316,19 +1316,19 @@ impl ToV8 for Task {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let task = v8::String::new_external_onebyte_static(scope, "Task".as_bytes()).unwrap();
-		let task = tg.get(scope, task.into()).unwrap();
-		let task = v8::Local::<v8::Function>::try_from(task).unwrap();
+		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
+		let target = tg.get(scope, target.into()).unwrap();
+		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
 
 		let handle = self.handle().to_v8(scope)?;
 
-		let instance = task.new_instance(scope, &[handle]).unwrap();
+		let instance = target.new_instance(scope, &[handle]).unwrap();
 
 		Ok(instance.into())
 	}
 }
 
-impl FromV8 for Task {
+impl FromV8 for Target {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1339,12 +1339,12 @@ impl FromV8 for Task {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let task = v8::String::new_external_onebyte_static(scope, "Task".as_bytes()).unwrap();
-		let task = tg.get(scope, task.into()).unwrap();
-		let task = v8::Local::<v8::Function>::try_from(task).unwrap();
+		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
+		let target = tg.get(scope, target.into()).unwrap();
+		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
 
-		if !value.instance_of(scope, task.into()).unwrap() {
-			return_error!("Expected a task.");
+		if !value.instance_of(scope, target.into()).unwrap() {
+			return_error!("Expected a target.");
 		}
 		let value = value.to_object(scope).unwrap();
 
@@ -1357,13 +1357,9 @@ impl FromV8 for Task {
 	}
 }
 
-impl ToV8 for task::Object {
+impl ToV8 for target::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
-
-		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
-		let value = self.package.to_v8(scope)?;
-		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "host".as_bytes()).unwrap();
 		let value = self.host.to_v8(scope)?;
@@ -1373,8 +1369,12 @@ impl ToV8 for task::Object {
 		let value = self.executable.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
-		let key = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
-		let value = self.target.to_v8(scope)?;
+		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
+		let value = self.package.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
+		let value = self.name.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "env".as_bytes()).unwrap();
@@ -1397,7 +1397,7 @@ impl ToV8 for task::Object {
 	}
 }
 
-impl FromV8 for task::Object {
+impl FromV8 for target::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1417,9 +1417,9 @@ impl FromV8 for task::Object {
 		let package = value.get(scope, package.into()).unwrap();
 		let package = from_v8(scope, package)?;
 
-		let target = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
-		let target = value.get(scope, target.into()).unwrap();
-		let target = from_v8(scope, target)?;
+		let name = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
+		let name = value.get(scope, name.into()).unwrap();
+		let name = from_v8(scope, name)?;
 
 		let env = v8::String::new_external_onebyte_static(scope, "env".as_bytes()).unwrap();
 		let env = value.get(scope, env.into()).unwrap();
@@ -1442,7 +1442,7 @@ impl FromV8 for task::Object {
 			host,
 			executable,
 			package,
-			target,
+			name,
 			env,
 			args,
 			checksum,
@@ -1567,8 +1567,8 @@ impl ToV8 for Object {
 			Self::File(file) => ("file", file.to_v8(scope)?),
 			Self::Symlink(symlink) => ("symlink", symlink.to_v8(scope)?),
 			Self::Package(package) => ("package", package.to_v8(scope)?),
-			Self::Task(task) => ("task", task.to_v8(scope)?),
-			Self::Run(_) => unreachable!(),
+			Self::Target(target) => ("target", target.to_v8(scope)?),
+			Self::Build(_) => unreachable!(),
 		};
 		let object = v8::Object::new(scope);
 		let key = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
@@ -1596,7 +1596,7 @@ impl FromV8 for Object {
 			"file" => Self::File(from_v8(scope, value)?),
 			"symlink" => Self::Symlink(from_v8(scope, value)?),
 			"package" => Self::Package(from_v8(scope, value)?),
-			"task" => Self::Task(from_v8(scope, value)?),
+			"target" => Self::Target(from_v8(scope, value)?),
 			_ => unreachable!(),
 		};
 		Ok(value)

@@ -5,7 +5,7 @@ use super::{
 	State,
 };
 use crate::{
-	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Error, Result, Task, Value,
+	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Error, Result, Target, Value,
 	WrapErr,
 };
 use base64::Engine as _;
@@ -42,6 +42,7 @@ fn syscall_inner<'s>(
 
 	// Invoke the syscall.
 	match name.as_str() {
+		"build" => syscall_async(scope, args, syscall_build),
 		"bundle" => syscall_async(scope, args, syscall_bundle),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
 		"download" => syscall_async(scope, args, syscall_download),
@@ -60,11 +61,14 @@ fn syscall_inner<'s>(
 		"load" => syscall_async(scope, args, syscall_load),
 		"log" => syscall_sync(scope, args, syscall_log),
 		"read" => syscall_async(scope, args, syscall_read),
-		"run" => syscall_async(scope, args, syscall_run),
 		"store" => syscall_async(scope, args, syscall_store),
 		"unpack" => syscall_async(scope, args, syscall_unpack),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
+}
+
+async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
+	todo!()
 }
 
 async fn syscall_bundle(state: Rc<State>, args: (Artifact,)) -> Result<Artifact> {
@@ -224,7 +228,7 @@ async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::O
 fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) -> Result<()> {
 	let (string,) = args;
 	eprintln!("{string}");
-	state.run_state.add_log(string.into_bytes());
+	state.progress.add_log(string.into_bytes());
 	Ok(())
 }
 
@@ -232,10 +236,6 @@ async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
 	let bytes = blob.bytes(&state.client).await?;
 	Ok(bytes.into())
-}
-
-async fn syscall_run(state: Rc<State>, args: (Task,)) -> Result<Value> {
-	todo!()
 }
 
 async fn syscall_store(state: Rc<State>, args: (object::Object,)) -> Result<object::Id> {

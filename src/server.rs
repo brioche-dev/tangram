@@ -1,4 +1,4 @@
-use crate::{id, task, vfs, Client, Error, Result};
+use crate::{id, target, vfs, Client, Error, Result};
 use futures::FutureExt;
 use http_body_util::BodyExt;
 use itertools::Itertools;
@@ -11,8 +11,8 @@ use std::{
 };
 use url::Url;
 
+mod build;
 mod object;
-mod run;
 
 /// A server.
 #[derive(Clone, Debug)]
@@ -31,7 +31,7 @@ pub struct State {
 	/// An HTTP client for downloading resources.
 	http_client: reqwest::Client,
 
-	/// A local pool for running JS tasks.
+	/// A local pool for running JS builds.
 	local_pool: tokio_util::task::LocalPoolHandle,
 
 	/// The options the server was created with.
@@ -46,10 +46,10 @@ pub struct State {
 	/// A semaphore that limits the number of concurrent subprocesses.
 	process_semaphore: tokio::sync::Semaphore,
 
-	/// The state of the server's running tasks.
+	/// The state of the server's running builds.
 	running: std::sync::RwLock<(
-		HashMap<task::Id, crate::run::Id, id::BuildHasher>,
-		HashMap<crate::run::Id, Arc<crate::run::State>, id::BuildHasher>,
+		HashMap<target::Id, crate::build::Id, id::BuildHasher>,
+		HashMap<crate::build::Id, Arc<crate::build::State>, id::BuildHasher>,
 	)>,
 
 	/// The VFS server task.
@@ -102,7 +102,7 @@ impl Server {
 		// Create the HTTP client for downloading resources.
 		let http_client = reqwest::Client::new();
 
-		// Create the local pool for running JS tasks.
+		// Create the local pool for running JS builds.
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
 			std::thread::available_parallelism().unwrap().get(),
 		);
@@ -119,7 +119,7 @@ impl Server {
 		let process_semaphore =
 			tokio::sync::Semaphore::new(std::thread::available_parallelism().unwrap().get());
 
-		// Create the state of the server's running tasks.
+		// Create the state of the server's running builds.
 		let running = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
 
 		// Create the VFS server task.

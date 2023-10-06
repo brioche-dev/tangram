@@ -1,7 +1,7 @@
-use crate::{blob, id, object, return_error, value, Blob, Client, Error, Result, Value, WrapErr};
+use crate::{blob, id, object, return_error, value, Blob, Client, Result, Value, WrapErr};
 use futures::{
 	stream::{self, BoxStream},
-	StreamExt, TryStreamExt,
+	StreamExt,
 };
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
@@ -9,18 +9,18 @@ use tokio_stream::wrappers::BroadcastStream;
 
 pub mod js;
 
-crate::id!(Run);
+crate::id!(Build);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
-pub struct Run(object::Handle);
+pub struct Build(object::Handle);
 
 #[derive(Clone, Debug)]
 pub struct Object {
 	/// The run's children.
-	pub children: Vec<Run>,
+	pub children: Vec<Build>,
 
 	/// The run's log.
 	pub log: Blob,
@@ -55,7 +55,7 @@ pub struct Data {
 #[derive(Debug)]
 pub struct State {
 	/// The run's children.
-	children: std::sync::Mutex<(Vec<Run>, Option<tokio::sync::broadcast::Sender<Run>>)>,
+	children: std::sync::Mutex<(Vec<Build>, Option<tokio::sync::broadcast::Sender<Build>>)>,
 
 	/// The run's log.
 	log: Arc<
@@ -72,7 +72,7 @@ pub struct State {
 	),
 }
 
-impl Run {
+impl Build {
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {
 		Self(object::Handle::with_id(id.into()))
@@ -95,7 +95,7 @@ impl Run {
 
 	pub async fn try_get_object(&self, client: &Client) -> Result<Option<&Object>> {
 		match self.0.try_get_object(client).await? {
-			Some(object::Object::Run(object)) => Ok(Some(object)),
+			Some(object::Object::Build(object)) => Ok(Some(object)),
 			None => Ok(None),
 			_ => unreachable!(),
 		}
@@ -104,7 +104,7 @@ impl Run {
 	pub async fn children(&self, client: &Client) -> Result<BoxStream<'static, Self>> {
 		self.try_get_children(client)
 			.await?
-			.wrap_err("Failed to get the run.")
+			.wrap_err("Failed to get the build.")
 	}
 
 	pub async fn try_get_children(
@@ -115,16 +115,16 @@ impl Run {
 			Ok(Some(stream::iter(object.children.clone()).boxed()))
 		} else {
 			Ok(client
-				.try_get_run_children(self.id())
+				.try_get_build_children(self.id())
 				.await?
-				.map(|children| children.map(Run::with_id).boxed()))
+				.map(|children| children.map(Build::with_id).boxed()))
 		}
 	}
 
 	pub async fn log(&self, client: &Client) -> Result<BoxStream<'static, Vec<u8>>> {
 		self.try_get_log(client)
 			.await?
-			.wrap_err("Failed to get the run.")
+			.wrap_err("Failed to get the build.")
 	}
 
 	pub async fn try_get_log(
@@ -137,21 +137,21 @@ impl Run {
 			let bytes = log.bytes(&client).await?;
 			Ok(Some(stream::once(async move { bytes }).boxed()))
 		} else {
-			Ok(client.try_get_run_log(self.id()).await?)
+			Ok(client.try_get_build_log(self.id()).await?)
 		}
 	}
 
 	pub async fn output(&self, client: &Client) -> Result<Option<Value>> {
 		self.try_get_output(client)
 			.await?
-			.wrap_err("Failed to get the run.")
+			.wrap_err("Failed to get the build.")
 	}
 
 	pub async fn try_get_output(&self, client: &Client) -> Result<Option<Option<Value>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.output.clone()))
 		} else {
-			Ok(client.try_get_run_output(self.id()).await?)
+			Ok(client.try_get_build_output(self.id()).await?)
 		}
 	}
 }
@@ -160,14 +160,14 @@ impl Id {
 	#[allow(clippy::new_without_default)]
 	#[must_use]
 	pub fn new() -> Self {
-		Self(crate::Id::new_random(id::Kind::Run))
+		Self(crate::Id::new_random(id::Kind::Build))
 	}
 }
 
 impl Object {
 	#[must_use]
 	pub(crate) fn to_data(&self) -> Data {
-		let children = self.children.iter().map(Run::id).collect();
+		let children = self.children.iter().map(Build::id).collect();
 		let log = self.log.expect_id();
 		let output = self.output.clone().map(|value| value.to_data());
 		Data {
@@ -179,7 +179,7 @@ impl Object {
 
 	#[must_use]
 	pub(crate) fn from_data(data: Data) -> Self {
-		let children = data.children.into_iter().map(Run::with_id).collect();
+		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
 		let output = data.output.map(value::Value::from_data);
 		Self {
@@ -258,7 +258,7 @@ impl State {
 		})
 	}
 
-	pub fn add_child(&self, child: Run) {
+	pub fn add_child(&self, child: Build) {
 		let mut children = self.children.lock().unwrap();
 		children.0.push(child.clone());
 		children.1.as_ref().unwrap().send(child).ok();
@@ -285,7 +285,7 @@ impl State {
 		self.log.lock().await.1.take();
 	}
 
-	pub fn children(&self) -> BoxStream<'static, Run> {
+	pub fn children(&self) -> BoxStream<'static, Build> {
 		let children = self.children.lock().unwrap();
 		let old = stream::iter(children.0.clone());
 		let new = if let Some(new) = children.1.as_ref() {

@@ -4,7 +4,7 @@ import { File } from "./file.ts";
 import { Package } from "./package.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
-import { Task } from "./task.ts";
+import { Target } from "./target.ts";
 import { Template } from "./template.ts";
 import { Value } from "./value.ts";
 
@@ -22,7 +22,7 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| Placeholder
 		| Template
 		| Package
-		| Task
+		| Target
 		? T
 		: T extends Array<infer U extends Value>
 		? Array<Unresolved<U>>
@@ -44,7 +44,7 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| Placeholder
 	| Template
 	| Package
-	| Task
+	| Target
 	? T
 	: T extends Promise<infer U extends Unresolved<Value>>
 	? Resolved<U>
@@ -73,7 +73,7 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Placeholder ||
 		value instanceof Template ||
 		value instanceof Package ||
-		value instanceof Task
+		value instanceof Target
 	) {
 		return value as unknown as Resolved<T>;
 	} else if (value instanceof Array) {

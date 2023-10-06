@@ -31,6 +31,7 @@ impl FromStr for Kind {
 }
 
 impl Server {
+	#[must_use]
 	pub fn new(kind: Kind, client: crate::Client) -> Server {
 		match kind {
 			Kind::Fuse => Server::Fuse(fuse::Server::new(client)),

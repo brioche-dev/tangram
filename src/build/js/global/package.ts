@@ -46,6 +46,13 @@ export class Package {
 }
 
 export namespace Package {
+	export type Arg = Package | Array<Arg> | ArgObject;
+
+	export type ArgObject = {
+		artifact: Artifact;
+		dependencies?: { [dependency: string]: Package.Arg };
+	};
+
 	export type Id = string;
 
 	export type Object_ = {

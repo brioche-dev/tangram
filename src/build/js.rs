@@ -3,9 +3,9 @@ use self::{
 	syscall::syscall,
 };
 use crate::{
-	error,
+	build, error,
 	language::{self, Import, Module},
-	run, Client, Error, Package, Result, Task, Value, WrapErr,
+	Client, Error, Package, Result, Target, Value, WrapErr,
 };
 use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
 use num::ToPrimitive;
@@ -28,7 +28,7 @@ struct State {
 	global_source_map: Option<SourceMap>,
 	loaded_modules: Rc<RefCell<Vec<LoadedModule>>>,
 	main_runtime_handle: tokio::runtime::Handle,
-	run_state: Arc<run::State>,
+	progress: Arc<build::State>,
 }
 
 type Futures = FuturesUnordered<
@@ -45,8 +45,8 @@ struct LoadedModule {
 #[allow(clippy::too_many_lines)]
 pub async fn run(
 	client: Client,
-	task: Task,
-	state: Arc<run::State>,
+	target: Target,
+	state: Arc<build::State>,
 	main_runtime_handle: tokio::runtime::Handle,
 ) -> Option<Value> {
 	// Create the isolate params.
@@ -72,7 +72,7 @@ pub async fn run(
 	let state = Rc::new(State {
 		main_runtime_handle,
 		client,
-		run_state: state,
+		progress: state,
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 		loaded_modules: Rc::new(RefCell::new(Vec::new())),
 		futures: Rc::new(RefCell::new(FuturesUnordered::new())),
@@ -104,9 +104,9 @@ pub async fn run(
 
 	// Call the main function.
 	let undefined = v8::undefined(&mut context_scope);
-	let task = task.to_v8(&mut context_scope).unwrap();
+	let target = target.to_v8(&mut context_scope).unwrap();
 	let output = main
-		.call(&mut context_scope, undefined.into(), &[task])
+		.call(&mut context_scope, undefined.into(), &[target])
 		.unwrap();
 
 	// Make the output and context global.
@@ -186,7 +186,8 @@ pub async fn run(
 		Ok(output) => output,
 		Err(error) => {
 			let trace = error.trace().to_string();
-			state.run_state.add_log(trace.into_bytes());
+			eprintln!("{trace}");
+			state.progress.add_log(trace.into_bytes());
 			return None;
 		},
 	};

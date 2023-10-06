@@ -4,10 +4,12 @@ import { Checksum } from "./checksum.ts";
 import { Directory } from "./directory.ts";
 import { UnpackFormat } from "./download.ts";
 import { Object_ } from "./object.ts";
-import { Task } from "./task.ts";
+import { Target } from "./target.ts";
 import { Value } from "./value.ts";
 
 declare global {
+	function syscall(syscall: "build", target: Target): Promise<Value>;
+
 	function syscall(syscall: "bundle", artifact: Artifact): Promise<Directory>;
 
 	function syscall(
@@ -58,8 +60,6 @@ declare global {
 
 	function syscall(syscall: "read", blob: Blob): Promise<Uint8Array>;
 
-	function syscall(syscall: "run", task: Task): Promise<Value>;
-
 	function syscall(syscall: "store", object: Object_): Promise<Object_.Id>;
 
 	function syscall(
@@ -68,6 +68,14 @@ declare global {
 		format: UnpackFormat,
 	): Promise<Artifact>;
 }
+
+export let build = async (target: Target): Promise<Value> => {
+	try {
+		return await syscall("build", target);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
 
 export let bundle = async (artifact: Artifact): Promise<Directory> => {
 	try {
@@ -228,14 +236,6 @@ export let load = async (id: Object_.Id): Promise<Object_> => {
 export let read = async (blob: Blob): Promise<Uint8Array> => {
 	try {
 		return await syscall("read", blob);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
-};
-
-export let run = async (task: Task): Promise<Value> => {
-	try {
-		return await syscall("run", task);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}

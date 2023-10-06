@@ -19,24 +19,24 @@ where
 		Ok(())
 	}
 
-	pub fn encode_int(&mut self, v: i32) -> Result<(), Error> {
-		self.encode_n(v.to_be_bytes())
+	pub fn encode_int(&mut self, value: i32) -> Result<(), Error> {
+		self.encode_n(value.to_be_bytes())
 	}
 
-	pub fn encode_uint(&mut self, v: u32) -> Result<(), Error> {
-		self.encode_n(v.to_be_bytes())
+	pub fn encode_uint(&mut self, value: u32) -> Result<(), Error> {
+		self.encode_n(value.to_be_bytes())
 	}
 
-	pub fn encode_hyper_int(&mut self, v: i64) -> Result<(), Error> {
-		self.encode_n(v.to_be_bytes())
+	pub fn encode_hyper_int(&mut self, value: i64) -> Result<(), Error> {
+		self.encode_n(value.to_be_bytes())
 	}
 
-	pub fn encode_hyper_uint(&mut self, v: u64) -> Result<(), Error> {
-		self.encode_n(v.to_be_bytes())
+	pub fn encode_hyper_uint(&mut self, value: u64) -> Result<(), Error> {
+		self.encode_n(value.to_be_bytes())
 	}
 
-	pub fn encode_bool(&mut self, v: bool) -> Result<(), Error> {
-		self.encode_int(if v { 1 } else { 0 })
+	pub fn encode_bool(&mut self, value: bool) -> Result<(), Error> {
+		self.encode_int(value.into())
 	}
 
 	pub fn encode_opaque(&mut self, bytes: &[u8]) -> Result<(), Error> {
@@ -58,24 +58,24 @@ where
 		Ok(())
 	}
 
-	pub fn encode_str(&mut self, v: &str) -> Result<(), Error> {
-		self.encode_opaque(v.as_bytes())?;
+	pub fn encode_str(&mut self, value: &str) -> Result<(), Error> {
+		self.encode_opaque(value.as_bytes())?;
 		Ok(())
 	}
 
-	pub fn encode<T>(&mut self, v: &T) -> Result<(), Error>
+	pub fn encode<T>(&mut self, value: &T) -> Result<(), Error>
 	where
 		T: ToXdr,
 	{
-		v.encode(self)
+		value.encode(self)
 	}
 
-	pub fn encode_array<T>(&mut self, v: &[T]) -> Result<(), Error>
+	pub fn encode_array<T>(&mut self, value: &[T]) -> Result<(), Error>
 	where
 		T: ToXdr,
 	{
-		self.encode_uint(v.len().to_u32().unwrap())?;
-		for entity in v {
+		self.encode_uint(value.len().to_u32().unwrap())?;
+		for entity in value {
 			self.encode(entity)?;
 		}
 		Ok(())

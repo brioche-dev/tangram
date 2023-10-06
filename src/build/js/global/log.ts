@@ -7,7 +7,7 @@ import { Package } from "./package.ts";
 import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
-import { Task } from "./task.ts";
+import { Target } from "./target.ts";
 import { Template } from "./template.ts";
 
 /** Write to the log. */
@@ -102,9 +102,9 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Package) {
 		let handle = stringifyHandle(value.handle(), visited);
 		return `(tg.package "${handle}")`;
-	} else if (value instanceof Task) {
+	} else if (value instanceof Target) {
 		let handle = stringifyHandle(value.handle(), visited);
-		return `(tg.task "${handle}")`;
+		return `(tg.target "${handle}")`;
 	} else {
 		// Handle any other object.
 		let constructorName = "";

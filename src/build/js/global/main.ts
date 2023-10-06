@@ -15,16 +15,15 @@ import { Placeholder, placeholder } from "./placeholder.ts";
 import { resolve } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import { System, system } from "./system.ts";
-import { Target, functions, target } from "./target.ts";
-import { Task, output, run, task } from "./task.ts";
+import { Target, build, functions, output, target } from "./target.ts";
 import { Template, t, template } from "./template.ts";
 import { Value } from "./value.ts";
 
-let main = async (task: Task): Promise<Value> => {
+let main = async (target: Target): Promise<Value> => {
 	// Load the executable.
-	let package_ = await task.package();
+	let package_ = await target.package();
 	let packageId = await package_?.id();
-	let executable = await task.executable();
+	let executable = await target.executable();
 	let path = executable.components()[0];
 	let module_ = { kind: "normal", value: { package: packageId, path } };
 	let data = encoding.hex.encode(
@@ -34,15 +33,15 @@ let main = async (task: Task): Promise<Value> => {
 	await import(url);
 
 	// Get the target.
-	let target = await task.target();
-	if (!target) {
-		throw new Error("The task must have a target.");
+	let name = await target.name_();
+	if (!name) {
+		throw new Error("The target must have a name.");
 	}
 
 	// Get the function.
 	let key = encoding.json.encode({
 		module: { package: packageId, path },
-		name: target,
+		name,
 	});
 	let function_ = functions[key];
 	if (!function_) {
@@ -50,7 +49,7 @@ let main = async (task: Task): Promise<Value> => {
 	}
 
 	// Get the args.
-	let args = await task.args();
+	let args = await target.args();
 
 	// Call the function.
 	let output = await function_(...args);
@@ -86,11 +85,11 @@ let tg = {
 	Symlink,
 	System,
 	Target,
-	Task,
 	Template,
 	Value,
 	assert,
 	blob,
+	build,
 	directory,
 	download,
 	encoding,
@@ -102,12 +101,10 @@ let tg = {
 	placeholder,
 	relpath,
 	resolve,
-	run,
 	subpath,
 	symlink,
 	system,
 	target,
-	task,
 	template,
 	unimplemented,
 	unpack,

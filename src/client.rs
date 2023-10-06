@@ -1,4 +1,4 @@
-use crate::{object, return_error, run, task, Result, Server, Value, WrapErr};
+use crate::{build, object, return_error, target, Result, Server, Value, WrapErr};
 use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use std::sync::Arc;
@@ -33,7 +33,7 @@ impl Client {
 	#[must_use]
 	pub fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
 		match self {
-			Self::Server(server) => &server.file_descriptor_semaphore(),
+			Self::Server(server) => server.file_descriptor_semaphore(),
 			Self::Reqwest(reqwest) => &reqwest.state.file_descriptor_semaphore,
 		}
 	}
@@ -74,68 +74,68 @@ impl Client {
 	}
 
 	#[async_recursion]
-	pub async fn try_get_run_for_task(&self, id: task::Id) -> Result<Option<run::Id>> {
+	pub async fn try_get_build_for_target(&self, id: target::Id) -> Result<Option<build::Id>> {
 		match self {
-			Self::Server(server) => server.try_get_run_for_task(id).await,
+			Self::Server(server) => server.try_get_build_for_target(id).await,
 			Self::Reqwest(_) => todo!(),
 		}
 	}
 
 	#[async_recursion]
-	pub async fn get_or_create_run_for_task(&self, id: task::Id) -> Result<run::Id> {
+	pub async fn get_or_create_build_for_target(&self, id: target::Id) -> Result<build::Id> {
 		match self {
-			Self::Server(server) => Ok(server.get_or_create_run_for_task(id).await?),
+			Self::Server(server) => Ok(server.get_or_create_build_for_target(id).await?),
 			Self::Reqwest(_) => todo!(),
 		}
 	}
 
 	#[async_recursion]
-	pub async fn get_run_children(&self, id: run::Id) -> Result<BoxStream<'static, run::Id>> {
-		self.try_get_run_children(id)
+	pub async fn get_build_children(&self, id: build::Id) -> Result<BoxStream<'static, build::Id>> {
+		self.try_get_build_children(id)
 			.await?
-			.wrap_err("Failed to get the run.")
+			.wrap_err("Failed to get the build.")
 	}
 
 	#[async_recursion]
-	pub async fn try_get_run_children(
+	pub async fn try_get_build_children(
 		&self,
-		id: run::Id,
-	) -> Result<Option<BoxStream<'static, run::Id>>> {
+		id: build::Id,
+	) -> Result<Option<BoxStream<'static, build::Id>>> {
 		match self {
-			Self::Server(server) => server.try_get_run_children(id).await,
+			Self::Server(server) => server.try_get_build_children(id).await,
 			Self::Reqwest(_) => todo!(),
 		}
 	}
 
 	#[async_recursion]
-	pub async fn get_run_log(&self, id: run::Id) -> Result<BoxStream<'static, Vec<u8>>> {
-		self.try_get_run_log(id)
+	pub async fn get_build_log(&self, id: build::Id) -> Result<BoxStream<'static, Vec<u8>>> {
+		self.try_get_build_log(id)
 			.await?
-			.wrap_err("Failed to get the run.")
+			.wrap_err("Failed to get the build.")
 	}
 
 	#[async_recursion]
-	pub async fn try_get_run_log(
+	pub async fn try_get_build_log(
 		&self,
-		id: run::Id,
+		id: build::Id,
 	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
 		match self {
-			Self::Server(server) => server.try_get_run_log(id).await,
+			Self::Server(server) => server.try_get_build_log(id).await,
 			Self::Reqwest(_) => todo!(),
 		}
 	}
 
 	#[async_recursion]
-	pub async fn get_run_output(&self, id: run::Id) -> Result<Option<Value>> {
-		self.try_get_run_output(id)
+	pub async fn get_build_output(&self, id: build::Id) -> Result<Option<Value>> {
+		self.try_get_build_output(id)
 			.await?
-			.wrap_err("Failed to get the run.")
+			.wrap_err("Failed to get the build.")
 	}
 
 	#[async_recursion]
-	pub async fn try_get_run_output(&self, id: run::Id) -> Result<Option<Option<Value>>> {
+	pub async fn try_get_build_output(&self, id: build::Id) -> Result<Option<Option<Value>>> {
 		match self {
-			Self::Server(server) => server.try_get_run_output(id).await,
+			Self::Server(server) => server.try_get_build_output(id).await,
 			Self::Reqwest(_) => todo!(),
 		}
 	}

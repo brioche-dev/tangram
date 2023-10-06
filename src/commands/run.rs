@@ -32,7 +32,7 @@ impl Cli {
 			.await
 			.wrap_err("Failed to get the package.")?;
 
-		// Create the task.
+		// Create the target.
 		let env = [(
 			"TANGRAM_HOST".to_owned(),
 			tg::Value::String(tg::System::host()?.to_string()),
@@ -41,16 +41,16 @@ impl Cli {
 		let args_ = Vec::new();
 		let host = tg::System::js();
 		let executable = tg::package::ROOT_MODULE_FILE_NAME.to_owned().into();
-		let task = tg::task::Builder::new(host, executable)
+		let target = tg::target::Builder::new(host, executable)
 			.package(package)
-			.target(args.target)
+			.name(args.target)
 			.env(env)
 			.args(args_)
 			.build();
 
-		// Run the task.
-		let run = task.run(&self.client).await?;
-		let Some(output) = run.output(&self.client).await? else {
+		// Build the target.
+		let build = target.build(&self.client).await?;
+		let Some(output) = build.output(&self.client).await? else {
 			return_error!("The build failed.");
 		};
 

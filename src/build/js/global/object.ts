@@ -3,7 +3,15 @@ import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
-import { Task } from "./task.ts";
+import { Target } from "./target.ts";
+
+export type Kind =
+	| "blob"
+	| "directory"
+	| "file"
+	| "symlink"
+	| "package"
+	| "target";
 
 export type Object_ =
 	| { kind: "blob"; value: Blob.Object_ }
@@ -11,7 +19,7 @@ export type Object_ =
 	| { kind: "file"; value: File.Object_ }
 	| { kind: "symlink"; value: Symlink.Object_ }
 	| { kind: "package"; value: Package.Object_ }
-	| { kind: "task"; value: Task.Object_ };
+	| { kind: "target"; value: Target.Object_ };
 
 export namespace Object_ {
 	export type Id = string;

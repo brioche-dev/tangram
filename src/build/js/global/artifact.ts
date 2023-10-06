@@ -1,4 +1,4 @@
-import { assert as assert_, todo } from "./assert.ts";
+import { assert as assert_ } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Symlink } from "./symlink.ts";
@@ -8,16 +8,8 @@ export type Artifact = Directory | File | Symlink;
 export namespace Artifact {
 	export type Id = string;
 
-	export let withId = async (id: Id): Promise<Artifact> => {
-		return todo();
-	};
-
 	export let is = (value: unknown): value is Artifact => {
-		return (
-			value instanceof Directory ||
-			value instanceof File ||
-			value instanceof Symlink
-		);
+		return Directory.is(value) || File.is(value) || Symlink.is(value);
 	};
 
 	export let expect = (value: unknown): Artifact => {

@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_safety_doc)]
+#![allow(clippy::redundant_pattern)]
 
 pub use self::client::Client;
 #[cfg(feature = "server")]
@@ -9,6 +10,7 @@ pub use self::server::Server;
 pub use self::{
 	artifact::Artifact,
 	blob::Blob,
+	build::Build,
 	bytes::Bytes,
 	checksum::Checksum,
 	directory::Directory,
@@ -18,10 +20,9 @@ pub use self::{
 	package::Package,
 	path::{Relpath, Subpath},
 	placeholder::Placeholder,
-	run::Run,
 	symlink::Symlink,
 	system::System,
-	task::Task,
+	target::Target,
 	template::Template,
 	value::Value,
 };
@@ -29,6 +30,7 @@ pub use self::{
 pub mod api;
 pub mod artifact;
 pub mod blob;
+pub mod build;
 pub mod bundle;
 pub mod bytes;
 pub mod checkin;
@@ -49,12 +51,11 @@ pub mod object;
 pub mod package;
 pub mod path;
 pub mod placeholder;
-pub mod run;
 #[cfg(feature = "server")]
 pub mod server;
 pub mod symlink;
 pub mod system;
-pub mod task;
+pub mod target;
 pub mod temp;
 pub mod template;
 pub mod util;

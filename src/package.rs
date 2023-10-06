@@ -1,7 +1,7 @@
 pub use self::{dependency::Dependency, specifier::Specifier};
 use crate::{
 	artifact, directory,
-	language::{self, module, Module},
+	language::{self, Module},
 	object, return_error, Artifact, Client, Result, Subpath, WrapErr,
 };
 use async_recursion::async_recursion;

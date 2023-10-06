@@ -31,17 +31,14 @@ export class Directory {
 			let entries = await promiseEntries;
 			if (arg === undefined) {
 				// If the arg is undefined, then continue.
-			} else if (arg instanceof Directory) {
+			} else if (Directory.is(arg)) {
 				// If the arg is a directory, then apply each entry.
 				for (let [name, entry] of Object.entries(await arg.entries())) {
 					// Get an existing entry.
 					let existingEntry = entries[name];
 
 					// Merge the existing entry with the entry if they are both directories.
-					if (
-						existingEntry instanceof Directory &&
-						entry instanceof Directory
-					) {
+					if (Directory.is(existingEntry) && Directory.is(entry)) {
 						entry = await Directory.new(existingEntry, entry);
 					}
 
@@ -67,7 +64,7 @@ export class Directory {
 					let existingEntry = entries[name];
 
 					// Remove the entry if it is not a directory.
-					if (!(existingEntry instanceof Directory)) {
+					if (!Directory.is(existingEntry)) {
 						existingEntry = undefined;
 					}
 
@@ -101,8 +98,7 @@ export class Directory {
 				return unreachable();
 			}
 			return entries;
-		},
-		Promise.resolve({}));
+		}, Promise.resolve({}));
 		return new Directory(
 			Object_.Handle.withObject({ kind: "directory", value: { entries } }),
 		);
@@ -146,14 +142,14 @@ export class Directory {
 		let artifact: Directory | File = this;
 		let currentSubpath = subpath();
 		for (let component of subpath(arg).components()) {
-			if (!(artifact instanceof Directory)) {
+			if (!Directory.is(artifact)) {
 				return undefined;
 			}
 			currentSubpath.push(component);
-			let entry: Artifact | undefined = await object.entries[component];
+			let entry: Artifact | undefined = object.entries[component];
 			if (entry === undefined) {
 				return undefined;
-			} else if (entry instanceof Symlink) {
+			} else if (Symlink.is(entry)) {
 				let resolved = await entry.resolve({
 					artifact: this,
 					path: currentSubpath.toString(),

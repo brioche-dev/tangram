@@ -39,9 +39,9 @@ export class Template {
 		// Collect the components.
 		let components = flatten(
 			await Promise.all(
-				args.map(async function map(
-					arg,
-				): Promise<MaybeNestedArray<Template.Component>> {
+				args.map(async function map(arg): Promise<
+					MaybeNestedArray<Template.Component>
+				> {
 					arg = await resolve(arg);
 					if (Template.Component.is(arg)) {
 						return arg;

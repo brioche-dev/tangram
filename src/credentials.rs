@@ -1,4 +1,4 @@
-use crate::{Cli, Error, Result};
+use crate::{Cli, Result};
 use std::path::{Path, PathBuf};
 use tg::util::dirs::user_config_directory_path;
 

@@ -1,6 +1,6 @@
 use crate::{
-	artifact, blob, directory, file, id, package, return_error, run, symlink, task, Client, Error,
-	Result, WrapErr,
+	artifact, blob, build, directory, file, id, package, return_error, symlink, target, Client,
+	Error, Result, WrapErr,
 };
 use derive_more::{From, TryInto, TryUnwrap};
 use futures::stream::TryStreamExt;
@@ -14,8 +14,8 @@ pub enum Kind {
 	File,
 	Symlink,
 	Package,
-	Task,
-	Run,
+	Target,
+	Build,
 }
 
 /// An object ID.
@@ -39,8 +39,8 @@ pub enum Id {
 	File(file::Id),
 	Symlink(symlink::Id),
 	Package(package::Id),
-	Task(task::Id),
-	Run(run::Id),
+	Target(target::Id),
+	Build(build::Id),
 }
 
 /// An object handle.
@@ -64,8 +64,8 @@ pub enum Object {
 	File(file::Object),
 	Symlink(symlink::Object),
 	Package(package::Object),
-	Task(task::Object),
-	Run(run::Object),
+	Target(target::Object),
+	Build(build::Object),
 }
 
 /// Object data.
@@ -77,8 +77,8 @@ pub enum Data {
 	File(file::Data),
 	Symlink(symlink::Data),
 	Package(package::Data),
-	Task(task::Data),
-	Run(run::Data),
+	Target(target::Data),
+	Build(build::Data),
 }
 
 impl Id {
@@ -110,12 +110,12 @@ impl Id {
 					.try_into()
 					.unwrap(),
 			),
-			Kind::Task => Self::Task(
+			Kind::Target => Self::Target(
 				crate::Id::new_hashed(id::Kind::Task, bytes)
 					.try_into()
 					.unwrap(),
 			),
-			Kind::Run => Self::Run(crate::Id::new_random(id::Kind::Run).try_into().unwrap()),
+			Kind::Build => Self::Build(crate::Id::new_random(id::Kind::Build).try_into().unwrap()),
 		}
 	}
 
@@ -127,8 +127,8 @@ impl Id {
 			Self::File(_) => Kind::File,
 			Self::Symlink(_) => Kind::Symlink,
 			Self::Package(_) => Kind::Package,
-			Self::Task(_) => Kind::Task,
-			Self::Run(_) => Kind::Run,
+			Self::Target(_) => Kind::Target,
+			Self::Build(_) => Kind::Build,
 		}
 	}
 
@@ -140,8 +140,8 @@ impl Id {
 			Self::File(id) => id.as_bytes(),
 			Self::Symlink(id) => id.as_bytes(),
 			Self::Package(id) => id.as_bytes(),
-			Self::Task(id) => id.as_bytes(),
-			Self::Run(id) => id.as_bytes(),
+			Self::Target(id) => id.as_bytes(),
+			Self::Build(id) => id.as_bytes(),
 		}
 	}
 }
@@ -365,8 +365,8 @@ impl Object {
 			Self::File(file) => Data::File(file.to_data()),
 			Self::Symlink(symlink) => Data::Symlink(symlink.to_data()),
 			Self::Package(package) => Data::Package(package.to_data()),
-			Self::Task(task) => Data::Task(task.to_data()),
-			Self::Run(task) => Data::Run(task.to_data()),
+			Self::Target(target) => Data::Target(target.to_data()),
+			Self::Build(build) => Data::Build(build.to_data()),
 		}
 	}
 
@@ -377,8 +377,8 @@ impl Object {
 			Data::File(data) => Self::File(file::Object::from_data(data)),
 			Data::Symlink(data) => Self::Symlink(symlink::Object::from_data(data)),
 			Data::Package(data) => Self::Package(package::Object::from_data(data)),
-			Data::Task(data) => Self::Task(task::Object::from_data(data)),
-			Data::Run(data) => Self::Run(run::Object::from_data(data)),
+			Data::Target(data) => Self::Target(target::Object::from_data(data)),
+			Data::Build(data) => Self::Build(build::Object::from_data(data)),
 		}
 	}
 
@@ -390,8 +390,8 @@ impl Object {
 			Self::File(file) => file.children(),
 			Self::Symlink(symlink) => symlink.children(),
 			Self::Package(package) => package.children(),
-			Self::Task(task) => task.children(),
-			Self::Run(run) => run.children(),
+			Self::Target(target) => target.children(),
+			Self::Build(build) => build.children(),
 		}
 	}
 }
@@ -405,8 +405,8 @@ impl Data {
 			Self::File(data) => Ok(data.serialize()?),
 			Self::Symlink(data) => Ok(data.serialize()?),
 			Self::Package(data) => Ok(data.serialize()?),
-			Self::Task(data) => Ok(data.serialize()?),
-			Self::Run(data) => Ok(data.serialize()?),
+			Self::Target(data) => Ok(data.serialize()?),
+			Self::Build(data) => Ok(data.serialize()?),
 		}
 	}
 
@@ -417,8 +417,8 @@ impl Data {
 			Kind::File => Ok(Self::File(file::Data::deserialize(bytes)?)),
 			Kind::Symlink => Ok(Self::Symlink(symlink::Data::deserialize(bytes)?)),
 			Kind::Package => Ok(Self::Package(package::Data::deserialize(bytes)?)),
-			Kind::Task => Ok(Self::Task(task::Data::deserialize(bytes)?)),
-			Kind::Run => Ok(Self::Run(run::Data::deserialize(bytes)?)),
+			Kind::Target => Ok(Self::Target(target::Data::deserialize(bytes)?)),
+			Kind::Build => Ok(Self::Build(build::Data::deserialize(bytes)?)),
 		}
 	}
 
@@ -430,8 +430,8 @@ impl Data {
 			Self::File(data) => data.children(),
 			Self::Symlink(data) => data.children(),
 			Self::Package(data) => data.children(),
-			Self::Task(data) => data.children(),
-			Self::Run(data) => data.children(),
+			Self::Target(data) => data.children(),
+			Self::Build(data) => data.children(),
 		}
 	}
 
@@ -443,8 +443,8 @@ impl Data {
 			Self::File(_) => Kind::File,
 			Self::Symlink(_) => Kind::Symlink,
 			Self::Package(_) => Kind::Package,
-			Self::Task(_) => Kind::Task,
-			Self::Run(_) => Kind::Run,
+			Self::Target(_) => Kind::Target,
+			Self::Build(_) => Kind::Build,
 		}
 	}
 }
@@ -457,8 +457,8 @@ impl From<self::Id> for crate::Id {
 			self::Id::File(id) => id.into(),
 			self::Id::Symlink(id) => id.into(),
 			self::Id::Package(id) => id.into(),
-			self::Id::Task(id) => id.into(),
-			self::Id::Run(id) => id.into(),
+			self::Id::Target(id) => id.into(),
+			self::Id::Build(id) => id.into(),
 		}
 	}
 }
@@ -473,8 +473,8 @@ impl TryFrom<crate::Id> for self::Id {
 			crate::id::Kind::File => Ok(Self::File(value.try_into()?)),
 			crate::id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			crate::id::Kind::Package => Ok(Self::Package(value.try_into()?)),
-			crate::id::Kind::Task => Ok(Self::Task(value.try_into()?)),
-			crate::id::Kind::Run => Ok(Self::Run(value.try_into()?)),
+			crate::id::Kind::Task => Ok(Self::Target(value.try_into()?)),
+			crate::id::Kind::Build => Ok(Self::Build(value.try_into()?)),
 			_ => return_error!("Expected a valid object ID."),
 		}
 	}
@@ -488,8 +488,8 @@ impl std::fmt::Display for Id {
 			Self::File(id) => write!(f, "{id}"),
 			Self::Symlink(id) => write!(f, "{id}"),
 			Self::Package(id) => write!(f, "{id}"),
-			Self::Task(id) => write!(f, "{id}"),
-			Self::Run(id) => write!(f, "{id}"),
+			Self::Target(id) => write!(f, "{id}"),
+			Self::Build(id) => write!(f, "{id}"),
 		}
 	}
 }
