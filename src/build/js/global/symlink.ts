@@ -34,8 +34,8 @@ export class Symlink {
 					} else if (Artifact.is(arg)) {
 						return { artifact: arg };
 					} else if (arg instanceof Template) {
-						assert_(arg.components().length <= 2);
-						let [firstComponent, secondComponent] = arg.components();
+						assert_(arg.components.length <= 2);
+						let [firstComponent, secondComponent] = arg.components;
 						if (
 							typeof firstComponent === "string" &&
 							secondComponent === undefined
@@ -128,7 +128,7 @@ export class Symlink {
 		return object.value;
 	}
 
-	handle(): Object_.Handle {
+	get handle(): Object_.Handle {
 		return this.#handle;
 	}
 
@@ -138,7 +138,7 @@ export class Symlink {
 
 	async artifact(): Promise<Artifact | undefined> {
 		let target = await this.target();
-		let firstComponent = target.components().at(0);
+		let firstComponent = target.components.at(0);
 		if (Artifact.is(firstComponent)) {
 			return firstComponent;
 		} else {
@@ -148,7 +148,7 @@ export class Symlink {
 
 	async path(): Promise<Relpath> {
 		let target = await this.target();
-		let [firstComponent, secondComponent] = target.components();
+		let [firstComponent, secondComponent] = target.components;
 		if (typeof firstComponent === "string" && secondComponent === undefined) {
 			return relpath(firstComponent);
 		} else if (Artifact.is(firstComponent) && secondComponent === undefined) {

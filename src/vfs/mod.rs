@@ -1,9 +1,7 @@
-#![allow(dead_code)]
-use derive_more::FromStr;
-use tokio::task::JoinHandle;
-
 use crate::Result;
+use derive_more::FromStr;
 use std::path::PathBuf;
+use tokio::task::JoinHandle;
 
 mod fuse;
 mod nfs;
@@ -24,7 +22,7 @@ impl FromStr for Kind {
 	fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
 		match s {
 			"fuse" => Ok(Self::Fuse),
-			"nfs" => Ok(Self::Nfs(2049)), // TOOD parse the port
+			"nfs" => Ok(Self::Nfs(2049)),
 			_ => Err(r#"Expected "fuse" or "nfs"."#),
 		}
 	}

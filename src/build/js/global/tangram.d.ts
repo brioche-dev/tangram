@@ -32,6 +32,9 @@ declare namespace tg {
 	/** Create a blob. */
 	export let blob: (...args: Array<Unresolved<Blob.Arg>>) => Promise<Blob>;
 
+	/** Download the contents of a URL. */
+	export let download: (url: string, checksum: Checksum) => Promise<Blob>;
+
 	/** A blob. */
 	export class Blob {
 		/** Get a blob with an ID. */
@@ -39,6 +42,9 @@ declare namespace tg {
 
 		/** Create a blob. */
 		static new(...args: Array<Unresolved<Blob.Arg>>): Promise<Blob>;
+
+		/** Download the contents of a URL. */
+		static download(url: string, checksum: Checksum): Promise<Blob>;
 
 		/** Check if a value is a `Blob`. */
 		static is(value: unknown): value is Blob;
@@ -60,12 +66,22 @@ declare namespace tg {
 
 		/** Get this blob as a string. */
 		text(): Promise<string>;
+
+		/** Decompress this blob. */
+		decompress(format: Blob.CompressionFormat): Promise<Blob>;
+
+		/** Extract an artifact from this blob. */
+		extract(format: Blob.ArchiveFormat): Promise<Artifact>;
 	}
 
 	export namespace Blob {
 		export type Arg = undefined | string | Uint8Array | Blob | Array<Arg>;
 
 		export type Id = string;
+
+		type ArchiveFormat = ".tar" | ".zip";
+
+		type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zstd";
 	}
 
 	/** Compute the checksum of the provided bytes. */
@@ -111,14 +127,14 @@ declare namespace tg {
 		/* Get this directory's id. */
 		id(): Promise<Directory.Id>;
 
+		/** Get this directory's entries. */
+		entries(): Promise<Record<string, Artifact>>;
+
 		/** Get the child at the specified path. This method throws an error if the path does not exist. */
 		get(arg: string): Promise<Artifact>;
 
 		/** Try to get the child at the specified path. This method returns `undefined` if the path does not exist. */
 		tryGet(arg: string): Promise<Artifact | undefined>;
-
-		/** Get this directory's entries. */
-		entries(): Promise<Record<string, Artifact>>;
 
 		/** Bundle this directory. */
 		bundle: () => Promise<Directory>;
@@ -139,21 +155,6 @@ declare namespace tg {
 
 		export type Id = string;
 	}
-
-	/** Download the contents of a URL. */
-	export let download: (url: string, checksum: Checksum) => Promise<Blob>;
-
-	/** Unpack a blob. */
-	export let unpack: (blob: Blob, format: UnpackFormat) => Promise<Artifact>;
-
-	type UnpackFormat =
-		| ".tar"
-		| ".tar.bz2"
-		| ".tar.gz"
-		| ".tar.lz"
-		| ".tar.xz"
-		| ".tar.zstd"
-		| ".zip";
 
 	export namespace encoding {
 		export namespace base64 {
@@ -290,7 +291,7 @@ declare namespace tg {
 		static assert(value: unknown): asserts value is Placeholder;
 
 		/** Get this placeholder's name. */
-		name(): string;
+		get name(): string;
 	}
 
 	/**
@@ -534,7 +535,7 @@ declare namespace tg {
 		unsafe(): Promise<boolean>;
 
 		/** Build this target. */
-		build(): Promise<R>;
+		build(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
 	}
 
 	export namespace Target {
@@ -593,7 +594,7 @@ declare namespace tg {
 		): Promise<Template>;
 
 		/** Get this template's components. */
-		components(): Array<Template.Component>;
+		get components(): Array<Template.Component>;
 	}
 
 	export namespace Template {

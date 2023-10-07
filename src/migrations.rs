@@ -74,9 +74,5 @@ async fn migration_0000(path: &Path) -> Result<()> {
 	let artifacts_path = path.join("artifacts");
 	tokio::fs::create_dir_all(&artifacts_path).await?;
 
-	// Create the temps directory.
-	let temps_path = path.join("temps");
-	tokio::fs::create_dir_all(&temps_path).await?;
-
 	Ok(())
 }

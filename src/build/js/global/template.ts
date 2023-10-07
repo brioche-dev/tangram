@@ -46,7 +46,7 @@ export class Template {
 					if (Template.Component.is(arg)) {
 						return arg;
 					} else if (arg instanceof Template) {
-						return arg.components();
+						return arg.components;
 					} else if (arg instanceof Array) {
 						return await Promise.all(arg.map(map));
 					} else {
@@ -102,7 +102,7 @@ export class Template {
 	): Promise<Template> {
 		let separatorTemplate = await template(separator);
 		let argTemplates = await Promise.all(args.map((arg) => template(arg)));
-		argTemplates = argTemplates.filter((arg) => arg.components().length > 0);
+		argTemplates = argTemplates.filter((arg) => arg.components.length > 0);
 		let templates = [];
 		for (let i = 0; i < argTemplates.length; i++) {
 			if (i > 0) {
@@ -115,8 +115,8 @@ export class Template {
 		return template(...templates);
 	}
 
-	components(): Array<Template.Component> {
-		return [...this.#components];
+	get components(): Array<Template.Component> {
+		return this.#components;
 	}
 }
 

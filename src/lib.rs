@@ -56,7 +56,6 @@ pub mod server;
 pub mod symlink;
 pub mod system;
 pub mod target;
-pub mod temp;
 pub mod template;
 pub mod util;
 pub mod value;

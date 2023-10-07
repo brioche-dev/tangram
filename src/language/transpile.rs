@@ -35,7 +35,7 @@ impl Module {
 		GLOBALS.set(&globals, move || {
 			// Parse the text.
 			let parse::Output {
-				mut module,
+				mut program,
 				source_map,
 			} = Module::parse(text)?;
 
@@ -54,11 +54,11 @@ impl Module {
 			// Visit the module.
 			let unresolved_mark = Mark::new();
 			let top_level_mark = Mark::new();
-			module.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, true));
-			module.visit_mut_with(&mut target_visitor);
-			module.visit_mut_with(&mut include_visitor);
-			module.visit_mut_with(&mut strip(top_level_mark));
-			module.visit_mut_with(&mut fixer(None));
+			program.visit_mut_with(&mut resolver(unresolved_mark, top_level_mark, true));
+			program.visit_mut_with(&mut target_visitor);
+			program.visit_mut_with(&mut include_visitor);
+			program.visit_mut_with(&mut strip(top_level_mark));
+			program.visit_mut_with(&mut fixer(None));
 
 			// Create the writer.
 			let mut transpiled_text = Vec::new();
@@ -83,7 +83,7 @@ impl Module {
 			};
 
 			// Emit the module.
-			emitter.emit_module(&module)?;
+			emitter.emit_program(&program)?;
 			let transpiled_text = String::from_utf8(transpiled_text)?;
 
 			// Create the source map.

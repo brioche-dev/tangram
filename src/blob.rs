@@ -44,6 +44,20 @@ pub enum Data {
 	Leaf(Bytes),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum ArchiveFormat {
+	Tar,
+	Zip,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CompressionFormat {
+	Bz2,
+	Gz,
+	Xz,
+	Zstd,
+}
+
 impl Blob {
 	pub async fn with_reader(client: &Client, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
 		let mut leaves = Vec::new();
@@ -348,5 +362,86 @@ impl AsyncSeek for Reader {
 		_cx: &mut std::task::Context<'_>,
 	) -> Poll<std::io::Result<u64>> {
 		Poll::Ready(Ok(self.position))
+	}
+}
+
+impl std::fmt::Display for ArchiveFormat {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Tar => {
+				write!(f, ".tar")?;
+			},
+			Self::Zip => {
+				write!(f, ".zip")?;
+			},
+		}
+		Ok(())
+	}
+}
+
+impl std::str::FromStr for ArchiveFormat {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s {
+			".tar" => Ok(Self::Tar),
+			".zip" => Ok(Self::Zip),
+			_ => return_error!("Invalid format."),
+		}
+	}
+}
+
+impl From<ArchiveFormat> for String {
+	fn from(value: ArchiveFormat) -> Self {
+		value.to_string()
+	}
+}
+
+impl TryFrom<String> for ArchiveFormat {
+	type Error = Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
+	}
+}
+
+impl std::fmt::Display for CompressionFormat {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let string = match self {
+			Self::Bz2 => ".bz2",
+			Self::Gz => ".gz",
+			Self::Xz => ".xz",
+			Self::Zstd => ".zstd",
+		};
+		write!(f, "{string}")?;
+		Ok(())
+	}
+}
+
+impl std::str::FromStr for CompressionFormat {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s {
+			".bz2" => Ok(Self::Bz2),
+			".gz" => Ok(Self::Gz),
+			".xz" => Ok(Self::Xz),
+			".zstd" => Ok(Self::Zstd),
+			_ => return_error!("Invalid compression format."),
+		}
+	}
+}
+
+impl From<CompressionFormat> for String {
+	fn from(value: CompressionFormat) -> Self {
+		value.to_string()
+	}
+}
+
+impl TryFrom<String> for CompressionFormat {
+	type Error = Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
 	}
 }

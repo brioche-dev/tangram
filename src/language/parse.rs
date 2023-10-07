@@ -7,7 +7,7 @@ use swc_core::{
 };
 
 pub struct Output {
-	pub module: swc_core::ecma::ast::Module,
+	pub program: swc_core::ecma::ast::Program,
 	pub source_map: Rc<SourceMap>,
 }
 
@@ -21,10 +21,13 @@ impl Module {
 		let mut parser = Parser::new(syntax, input, None);
 
 		// Parse the text.
-		let module = parser
-			.parse_module()
+		let program = parser
+			.parse_program()
 			.map_err(|error| error!("{}", error.into_kind().msg()))?;
 
-		Ok(Output { module, source_map })
+		Ok(Output {
+			program,
+			source_map,
+		})
 	}
 }

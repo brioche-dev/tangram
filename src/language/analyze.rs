@@ -30,12 +30,14 @@ impl Module {
 	#[tracing::instrument(skip(text))]
 	pub fn analyze(text: String) -> Result<Output> {
 		// Parse the text.
-		let parse::Output { module, source_map } =
-			Module::parse(text).wrap_err("Failed to parse the module.")?;
+		let parse::Output {
+			program,
+			source_map,
+		} = Module::parse(text).wrap_err("Failed to parse the module.")?;
 
 		// Create the visitor and visit the module.
 		let mut visitor = Visitor::new(source_map);
-		module.visit_with(&mut visitor);
+		program.visit_with(&mut visitor);
 
 		// Handle any errors.
 		let errors = visitor.errors;

@@ -24,7 +24,6 @@ pub enum Kind {
 	Debug,
 	Eq,
 	From,
-	Hash,
 	PartialEq,
 	serde::Deserialize,
 	serde::Serialize,
@@ -178,6 +177,16 @@ impl TryFrom<crate::Id> for Id {
 			id::Kind::File => Ok(Self::File(value.try_into()?)),
 			id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			_ => return_error!("Expected an artifact ID."),
+		}
+	}
+}
+
+impl std::hash::Hash for Id {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		match self {
+			Id::Directory(id) => std::hash::Hash::hash(id, state),
+			Id::File(id) => std::hash::Hash::hash(id, state),
+			Id::Symlink(id) => std::hash::Hash::hash(id, state),
 		}
 	}
 }

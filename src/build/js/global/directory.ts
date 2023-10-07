@@ -127,7 +127,7 @@ export class Directory {
 		return object.value;
 	}
 
-	handle(): Object_.Handle {
+	get handle(): Object_.Handle {
 		return this.#handle;
 	}
 
@@ -138,7 +138,6 @@ export class Directory {
 	}
 
 	async tryGet(arg: string): Promise<Directory | File | undefined> {
-		let object = await this.object();
 		let artifact: Directory | File = this;
 		let currentSubpath = subpath();
 		for (let component of subpath(arg).components()) {
@@ -146,7 +145,7 @@ export class Directory {
 				return undefined;
 			}
 			currentSubpath.push(component);
-			let entry: Artifact | undefined = object.entries[component];
+			let entry: Artifact | undefined = (await artifact.entries())[component];
 			if (entry === undefined) {
 				return undefined;
 			} else if (Symlink.is(entry)) {

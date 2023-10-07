@@ -1,8 +1,7 @@
 import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
-import { Blob, blob } from "./blob.ts";
+import { Blob, blob, download } from "./blob.ts";
 import { Directory, directory } from "./directory.ts";
-import { download, unpack } from "./download.ts";
 import * as encoding from "./encoding.ts";
 import { Error as Error_, prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
@@ -10,7 +9,6 @@ import { include } from "./include.ts";
 import { log } from "./log.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { Relpath, Subpath, relpath, subpath } from "./path.ts";
 import { Placeholder, placeholder } from "./placeholder.ts";
 import { resolve } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
@@ -24,7 +22,7 @@ let main = async (target: Target): Promise<Value> => {
 	let package_ = await target.package();
 	let packageId = await package_?.id();
 	let executable = await target.executable();
-	let path = executable.components()[0];
+	let path = executable.components[0];
 	let module_ = { kind: "normal", value: { package: packageId, path } };
 	let data = encoding.hex.encode(
 		encoding.utf8.encode(encoding.json.encode(module_)),
@@ -80,8 +78,6 @@ let tg = {
 	Object_,
 	Package,
 	Placeholder,
-	Relpath,
-	Subpath,
 	Symlink,
 	System,
 	Target,
@@ -99,15 +95,12 @@ let tg = {
 	main,
 	output,
 	placeholder,
-	relpath,
 	resolve,
-	subpath,
 	symlink,
 	system,
 	target,
 	template,
 	unimplemented,
-	unpack,
 	unreachable,
 };
 Object.defineProperties(globalThis, {

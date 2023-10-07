@@ -62,6 +62,10 @@ impl Cli {
 		} else {
 			// Print the output.
 			println!("{output:?}");
+			if let Ok(artifact) = tg::Artifact::try_from(output) {
+				let id = artifact.handle().id(&self.client).await?;
+				println!("{id:?}");
+			}
 		}
 
 		Ok(())

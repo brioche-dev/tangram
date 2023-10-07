@@ -17,7 +17,7 @@ export class Placeholder {
 		return value instanceof Placeholder;
 	}
 
-	name(): string {
+	get name(): string {
 		return this.#name;
 	}
 }

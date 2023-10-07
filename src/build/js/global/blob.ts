@@ -1,4 +1,6 @@
+import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
+import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
 import { Object_ } from "./object.ts";
 import { Unresolved, resolve } from "./resolve.ts";
@@ -7,6 +9,13 @@ import { MaybeNestedArray, flatten } from "./util.ts";
 
 export let blob = async (...args: Array<Unresolved<Blob.Arg>>) => {
 	return await Blob.new(...args);
+};
+
+export let download = async (
+	url: string,
+	checksum: Checksum,
+): Promise<Blob> => {
+	return await Blob.download(url, checksum);
 };
 
 export class Blob {
@@ -66,6 +75,10 @@ export class Blob {
 		}
 	}
 
+	static async download(url: string, checksum: Checksum): Promise<Blob> {
+		return await syscall.download(url, checksum);
+	}
+
 	static is(value: unknown): value is Blob {
 		return value instanceof Blob;
 	}
@@ -89,7 +102,7 @@ export class Blob {
 		return object.value;
 	}
 
-	handle(): Object_.Handle {
+	get handle(): Object_.Handle {
 		return this.#handle;
 	}
 
@@ -108,6 +121,14 @@ export class Blob {
 
 	async text(): Promise<string> {
 		return encoding.utf8.decode(await syscall.read(this));
+	}
+
+	async decompress(format: Blob.CompressionFormat): Promise<Blob> {
+		return await syscall.decompress(this, format);
+	}
+
+	async extract(format: Blob.ArchiveFormat): Promise<Artifact> {
+		return await syscall.extract(this, format);
 	}
 }
 
@@ -138,4 +159,8 @@ export namespace Blob {
 	export type Id = string;
 
 	export type Object_ = Array<[Blob, number]> | Uint8Array;
+
+	export type ArchiveFormat = ".tar" | ".zip";
+
+	export type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zstd";
 }

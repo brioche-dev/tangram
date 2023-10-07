@@ -117,8 +117,8 @@ impl<'a> From<&'a std::panic::Location<'a>> for Location {
 	fn from(location: &'a std::panic::Location<'a>) -> Self {
 		Self {
 			file: location.file().to_owned(),
-			line: location.line(),
-			column: location.column(),
+			line: location.line() - 1,
+			column: location.column() - 1,
 		}
 	}
 }
@@ -157,7 +157,7 @@ impl<'a> std::fmt::Display for Trace<'a> {
 
 impl std::fmt::Display for Location {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}:{}:{}", self.file, self.line, self.column)
+		write!(f, "{}:{}:{}", self.file, self.line + 1, self.column + 1)
 	}
 }
 

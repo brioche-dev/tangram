@@ -323,11 +323,8 @@ impl Handle {
 
 impl State {
 	#[must_use]
-	pub fn with_id_and_object(id: Id, object: Object) -> Self {
-		Self {
-			id: Some(id),
-			object: Some(object),
-		}
+	pub fn with_id_and_object(id: Option<Id>, object: Option<Object>) -> Self {
+		Self { id, object }
 	}
 
 	#[must_use]
@@ -508,6 +505,20 @@ impl From<artifact::Id> for Id {
 			artifact::Id::Directory(id) => Self::Directory(id),
 			artifact::Id::File(id) => Self::File(id),
 			artifact::Id::Symlink(id) => Self::Symlink(id),
+		}
+	}
+}
+
+impl std::hash::Hash for Id {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		match self {
+			Id::Blob(id) => std::hash::Hash::hash(id, state),
+			Id::Directory(id) => std::hash::Hash::hash(id, state),
+			Id::File(id) => std::hash::Hash::hash(id, state),
+			Id::Symlink(id) => std::hash::Hash::hash(id, state),
+			Id::Package(id) => std::hash::Hash::hash(id, state),
+			Id::Target(id) => std::hash::Hash::hash(id, state),
+			Id::Build(id) => std::hash::Hash::hash(id, state),
 		}
 	}
 }

@@ -5,12 +5,15 @@ use super::{
 	State,
 };
 use crate::{
-	checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Error, Result, Target, Value,
-	WrapErr,
+	blob, checksum, object, return_error, util::tokio_util::SyncIoBridge, Artifact, Blob, Bytes,
+	Checksum, Result, Target, Value, WrapErr,
 };
 use base64::Engine as _;
+use futures::TryStreamExt;
 use itertools::Itertools;
 use std::{future::Future, rc::Rc};
+use tokio::io::AsyncRead;
+use tokio_util::io::StreamReader;
 use url::Url;
 
 pub fn syscall<'s>(
@@ -45,6 +48,7 @@ fn syscall_inner<'s>(
 		"build" => syscall_async(scope, args, syscall_build),
 		"bundle" => syscall_async(scope, args, syscall_bundle),
 		"checksum" => syscall_sync(scope, args, syscall_checksum),
+		"decompress" => syscall_async(scope, args, syscall_decompress),
 		"download" => syscall_async(scope, args, syscall_download),
 		"encoding_base64_decode" => syscall_sync(scope, args, syscall_encoding_base64_decode),
 		"encoding_base64_encode" => syscall_sync(scope, args, syscall_encoding_base64_encode),
@@ -58,17 +62,22 @@ fn syscall_inner<'s>(
 		"encoding_utf8_encode" => syscall_sync(scope, args, syscall_encoding_utf8_encode),
 		"encoding_yaml_decode" => syscall_sync(scope, args, syscall_encoding_yaml_decode),
 		"encoding_yaml_encode" => syscall_sync(scope, args, syscall_encoding_yaml_encode),
+		"extract" => syscall_async(scope, args, syscall_extract),
 		"load" => syscall_async(scope, args, syscall_load),
 		"log" => syscall_sync(scope, args, syscall_log),
 		"read" => syscall_async(scope, args, syscall_read),
 		"store" => syscall_async(scope, args, syscall_store),
-		"unpack" => syscall_async(scope, args, syscall_unpack),
 		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
 async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
-	todo!()
+	let (target,) = args;
+	let build = target.build(&state.client).await?;
+	let Some(output) = build.output(&state.client).await? else {
+		return_error!("The build failed.");
+	};
+	Ok(output)
 }
 
 async fn syscall_bundle(state: Rc<State>, args: (Artifact,)) -> Result<Artifact> {
@@ -89,8 +98,45 @@ fn syscall_checksum(
 	Ok(checksum)
 }
 
+async fn syscall_decompress(
+	state: Rc<State>,
+	args: (Blob, blob::CompressionFormat),
+) -> Result<Blob> {
+	let (blob, format) = args;
+	let reader = blob.reader(&state.client).await?;
+	let reader = tokio::io::BufReader::new(reader);
+	let reader: Box<dyn AsyncRead + Unpin> = match format {
+		blob::CompressionFormat::Bz2 => {
+			Box::new(async_compression::tokio::bufread::BzDecoder::new(reader))
+		},
+		blob::CompressionFormat::Gz => {
+			Box::new(async_compression::tokio::bufread::GzipDecoder::new(reader))
+		},
+		blob::CompressionFormat::Xz => {
+			Box::new(async_compression::tokio::bufread::XzDecoder::new(reader))
+		},
+		blob::CompressionFormat::Zstd => {
+			Box::new(async_compression::tokio::bufread::ZstdDecoder::new(reader))
+		},
+	};
+	let blob = Blob::with_reader(&state.client, reader).await?;
+	Ok(blob)
+}
+
 async fn syscall_download(state: Rc<State>, args: (Url, Checksum)) -> Result<Blob> {
-	todo!()
+	let (url, checksum) = args;
+	let response = reqwest::get(url).await?.error_for_status()?;
+	let mut checksum_writer = checksum::Writer::new(checksum.algorithm());
+	let stream = response
+		.bytes_stream()
+		.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
+		.inspect_ok(|chunk| checksum_writer.update(chunk));
+	let blob = Blob::with_reader(&state.client, StreamReader::new(stream)).await?;
+	let actual = checksum_writer.finalize();
+	if actual != checksum {
+		return_error!(r#"The checksum did not match. Expected "{checksum}" but got "{actual}"."#);
+	}
+	Ok(blob)
 }
 
 fn syscall_encoding_base64_decode(
@@ -217,6 +263,50 @@ fn syscall_encoding_yaml_encode(
 	Ok(yaml)
 }
 
+async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) -> Result<Artifact> {
+	let (blob, format) = args;
+
+	// Create the reader.
+	let reader = blob.reader(&state.client).await?;
+
+	// Create a temp.
+	let tempdir = tempfile::TempDir::new()?;
+	let path = tempdir.path().join("archive");
+
+	// Extract in a blocking task.
+	tokio::task::spawn_blocking({
+		let reader = SyncIoBridge::new(reader);
+		let path = path.clone();
+		move || -> Result<_> {
+			match format {
+				blob::ArchiveFormat::Tar => {
+					let mut archive = tar::Archive::new(reader);
+					archive.set_preserve_permissions(false);
+					archive.set_unpack_xattrs(false);
+					archive.unpack(path)?;
+				},
+				blob::ArchiveFormat::Zip => {
+					let mut archive =
+						zip::ZipArchive::new(reader).wrap_err("Failed to read the zip archive.")?;
+					archive
+						.extract(&path)
+						.wrap_err("Failed to extract the zip archive.")?;
+				},
+			}
+			Ok(())
+		}
+	})
+	.await
+	.unwrap()?;
+
+	// Check in the unpack temp path.
+	let artifact = Artifact::check_in(&state.client, &path)
+		.await
+		.wrap_err("Failed to check in the extracted archive.")?;
+
+	Ok(artifact)
+}
+
 async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::Object> {
 	let (id,) = args;
 	object::Handle::with_id(id)
@@ -241,10 +331,6 @@ async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
 async fn syscall_store(state: Rc<State>, args: (object::Object,)) -> Result<object::Id> {
 	let (object,) = args;
 	object::Handle::with_object(object).id(&state.client).await
-}
-
-async fn syscall_unpack(state: Rc<State>, args: (Blob, ArchiveFormat)) -> Result<Artifact> {
-	todo!()
 }
 
 fn syscall_sync<'s, A, T, F>(
@@ -328,130 +414,4 @@ where
 	state.futures.borrow_mut().push(future);
 
 	Ok(promise.into())
-}
-
-#[derive(
-	Clone,
-	Copy,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
-#[serde(into = "String", try_from = "String")]
-#[tangram_serialize(into = "String", try_from = "String")]
-pub enum ArchiveFormat {
-	Tar,
-	TarBz2,
-	TarGz,
-	TarXz,
-	TarZstd,
-	Zip,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum CompressionFormat {
-	Bz2,
-	Gz,
-	Xz,
-	Zstd,
-}
-
-impl std::fmt::Display for ArchiveFormat {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			Self::Tar => {
-				write!(f, ".tar")?;
-			},
-			Self::TarBz2 => {
-				write!(f, ".tar.bz2")?;
-			},
-			Self::TarGz => {
-				write!(f, ".tar.gz")?;
-			},
-			Self::TarXz => {
-				write!(f, ".tar.xz")?;
-			},
-			Self::TarZstd => {
-				write!(f, ".tar.zstd")?;
-			},
-			Self::Zip => {
-				write!(f, ".zip")?;
-			},
-		}
-		Ok(())
-	}
-}
-
-impl std::str::FromStr for ArchiveFormat {
-	type Err = Error;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s {
-			".tar" => Ok(Self::Tar),
-			".tar.bz2" => Ok(Self::TarBz2),
-			".tar.gz" => Ok(Self::TarGz),
-			".tar.xz" => Ok(Self::TarXz),
-			".tar.zstd" => Ok(Self::TarZstd),
-			".zip" => Ok(Self::Zip),
-			_ => return_error!("Invalid format."),
-		}
-	}
-}
-
-impl std::fmt::Display for CompressionFormat {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let string = match self {
-			Self::Bz2 => ".bz2",
-			Self::Gz => ".gz",
-			Self::Xz => ".xz",
-			Self::Zstd => ".zstd",
-		};
-		write!(f, "{string}")?;
-		Ok(())
-	}
-}
-
-impl std::str::FromStr for CompressionFormat {
-	type Err = Error;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s {
-			".bz2" => Ok(Self::Bz2),
-			".gz" => Ok(Self::Gz),
-			".xz" => Ok(Self::Xz),
-			".zstd" => Ok(Self::Zstd),
-			_ => return_error!("Invalid compression format."),
-		}
-	}
-}
-
-impl From<ArchiveFormat> for String {
-	fn from(value: ArchiveFormat) -> Self {
-		value.to_string()
-	}
-}
-
-impl TryFrom<String> for ArchiveFormat {
-	type Error = Error;
-
-	fn try_from(value: String) -> Result<Self, Self::Error> {
-		value.parse()
-	}
-}
-
-impl ToV8 for ArchiveFormat {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		self.to_string().to_v8(scope)
-	}
-}
-
-impl FromV8 for ArchiveFormat {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		String::from_v8(scope, value)?.parse()
-	}
 }

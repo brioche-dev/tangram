@@ -45,7 +45,7 @@ export function target<
 		let arg = args[0];
 		let key = json.encode({
 			module: {
-				package: arg.module.package.handle().expectId(),
+				package: arg.module.package.handle.expectId(),
 				path: arg.module.path,
 			},
 			name: arg.name,
@@ -224,7 +224,7 @@ export class Target<
 		return object.value;
 	}
 
-	handle(): Object_.Handle {
+	get handle(): Object_.Handle {
 		return this.#handle;
 	}
 

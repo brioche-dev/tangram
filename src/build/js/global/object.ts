@@ -31,7 +31,7 @@ export namespace Object_ {
 			this.#state = state;
 		}
 
-		state(): State {
+		get state(): State {
 			return this.#state;
 		}
 

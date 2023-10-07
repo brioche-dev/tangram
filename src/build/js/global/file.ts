@@ -100,7 +100,7 @@ export class File {
 		return object.value;
 	}
 
-	handle(): Object_.Handle {
+	get handle(): Object_.Handle {
 		return this.#handle;
 	}
 
