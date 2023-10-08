@@ -10,7 +10,6 @@ import * as syscall from "./syscall.ts";
 import { Target } from "./target.ts";
 import { Template } from "./template.ts";
 
-/** Write to the log. */
 export let log = (...args: Array<unknown>) => {
 	let string = args.map((arg) => stringify(arg)).join(" ");
 	syscall.log(string);
@@ -54,24 +53,17 @@ let stringifyInner = (value: unknown, visited: WeakSet<object>): string => {
 };
 
 let stringifyObject = (value: object, visited: WeakSet<object>): string => {
-	// If the value is in the visited set, then indicate that this is a circular reference.
 	if (visited.has(value)) {
 		return "(circular)";
 	}
-
-	// Add the value to the visited set.
 	visited.add(value);
-
 	if (value instanceof Array) {
-		// Handle an array.
 		return `[${value
 			.map((value) => stringifyInner(value, visited))
 			.join(", ")}]`;
 	} else if (value instanceof Error) {
-		// Handle an error.
 		return value.message;
 	} else if (value instanceof Promise) {
-		// Handle a promise.
 		return "(promise)";
 	} else if (value instanceof Blob) {
 		let handle = stringifyHandle(value.handle, visited);
@@ -105,7 +97,6 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.target "${handle}")`;
 	} else {
-		// Handle any other object.
 		let constructorName = "";
 		if (
 			value.constructor !== undefined &&

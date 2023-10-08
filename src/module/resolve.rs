@@ -16,14 +16,14 @@ impl Module {
 		match (self, import) {
 			(Self::Library(module), Import::Path(path)) => {
 				let path = module
-					.module_path
+					.path
 					.clone()
 					.into_relpath()
 					.parent()
 					.join(path.clone())
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
-				Ok(Self::Library(Library { module_path: path }))
+				Ok(Self::Library(Library { path }))
 			},
 
 			(Self::Library(_), Import::Dependency(_)) => {

@@ -8,7 +8,7 @@
 // 	}),
 // );
 
-tg.target("test", async () => {
+export let test = tg.target(async () => {
 	await testDirectory();
 	await testFile();
 	await testSymlink();

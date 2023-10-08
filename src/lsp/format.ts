@@ -1,7 +1,7 @@
 import * as eslint from "./eslint.ts";
-import * as syscall from "./syscall.ts";
 import * as eslint_ from "eslint";
-import prettierTypescriptPlugin from "prettier/parser-typescript";
+import * as prettierPluginEstree from "prettier/plugins/estree";
+import * as prettierPluginTypescript from "prettier/plugins/typescript";
 import * as prettier from "prettier/standalone";
 
 export type Request = {
@@ -16,7 +16,7 @@ export type Response = {
 let prettierOptions = {
 	useTabs: true,
 	parser: "typescript",
-	plugins: [prettierTypescriptPlugin],
+	plugins: [prettierPluginEstree, prettierPluginTypescript],
 };
 
 // Create the ESLint config.
@@ -30,12 +30,12 @@ let eslintConfig: eslint_.Linter.Config = {
 	parser: "@typescript-eslint/parser",
 };
 
-export let handle = (request: Request): Response => {
+export let handle = async (request: Request): Promise<Response> => {
 	let text = request.text;
 
 	// Format the text with Prettier.
 	try {
-		text = syscall.resolve(prettier.format(text, prettierOptions));
+		text = await prettier.format(text, prettierOptions);
 	} catch {
 		// Ignore errors.
 	}

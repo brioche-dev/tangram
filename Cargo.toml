@@ -119,6 +119,9 @@ zip = { version = "0.6", optional = true, default-features = false, features = [
 http-body = { git = "https://github.com/hyperium/http-body" }
 http-body-util = { git = "https://github.com/hyperium/http-body" }
 hyper-util = { git = "https://github.com/hyperium/hyper-util" }
+tokio = { git = "https://github.com/tokio-rs/tokio" }
+tokio-stream = { git = "https://github.com/tokio-rs/tokio" }
+tokio-util = { git = "https://github.com/tokio-rs/tokio" }
 
 [features]
 default = ["server"]

@@ -1,9 +1,8 @@
 use self::syscall::syscall;
-use crate::{error, module, return_error, Client, Error, Module, Result, WrapErr};
+use crate::{module, return_error, Client, Error, Module, Result, WrapErr};
 use derive_more::Unwrap;
 use futures::{future, FutureExt};
 use lsp_types as lsp;
-use sourcemap::SourceMap;
 use std::{collections::HashMap, future::Future, path::Path, sync::Arc};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use url::Url;
@@ -14,6 +13,7 @@ mod definition;
 mod diagnostics;
 mod docs;
 mod document;
+mod error;
 mod format;
 mod hover;
 mod initialize;
@@ -133,13 +133,12 @@ impl Server {
 		self.state
 			.request_sender
 			.send((request, response_sender))
-			.wrap_err("Failed to send the language service request.")?;
+			.wrap_err("Failed to send the request.")?;
 
 		// Receive the response.
 		let response = response_receiver
 			.await
-			.wrap_err("Failed to receive a response for the language service request.")?
-			.wrap_err("The language service returned an error.")?;
+			.wrap_err("Failed to receive a response for the request.")??;
 
 		Ok(response)
 	}
@@ -494,78 +493,63 @@ fn run_request_handler(state: Arc<State>, mut request_receiver: RequestReceiver)
 	let mut isolate = v8::Isolate::new(params);
 
 	// Create the context.
-	let mut handle_scope = v8::HandleScope::new(&mut isolate);
-	let context = v8::Context::new(&mut handle_scope);
-	let mut context_scope = v8::ContextScope::new(&mut handle_scope, context);
+	let scope = &mut v8::HandleScope::new(&mut isolate);
+	let context = v8::Context::new(scope);
+	let scope = &mut v8::ContextScope::new(scope, context);
 
 	// Set the service state on the context.
-	context.set_slot(&mut context_scope, state);
+	context.set_slot(scope, state);
 
 	// Add the syscall function to the global.
 	let syscall_string =
-		v8::String::new_external_onebyte_static(&mut context_scope, "syscall".as_bytes()).unwrap();
-	let syscall_function = v8::Function::new(&mut context_scope, syscall).unwrap();
+		v8::String::new_external_onebyte_static(scope, "syscall".as_bytes()).unwrap();
+	let syscall_function = v8::Function::new(scope, syscall).unwrap();
 	context
-		.global(&mut context_scope)
-		.set(
-			&mut context_scope,
-			syscall_string.into(),
-			syscall_function.into(),
-		)
+		.global(scope)
+		.set(scope, syscall_string.into(), syscall_function.into())
 		.unwrap();
 
 	// Get the handle function.
-	let handle_string =
-		v8::String::new_external_onebyte_static(&mut context_scope, "handle".as_bytes()).unwrap();
-	let handle_function = v8::Local::<v8::Function>::try_from(
-		context
-			.global(&mut context_scope)
-			.get(&mut context_scope, handle_string.into())
-			.unwrap(),
-	)
-	.unwrap();
+	let global = context.global(scope);
+	let lsp = v8::String::new_external_onebyte_static(scope, "lsp".as_bytes()).unwrap();
+	let lsp = global.get(scope, lsp.into()).unwrap();
+	let lsp = v8::Local::<v8::Object>::try_from(lsp).unwrap();
+	let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
+	let handle = lsp.get(scope, handle.into()).unwrap();
+	let handle = v8::Local::<v8::Function>::try_from(handle).unwrap();
 
 	while let Some((request, response_sender)) = request_receiver.blocking_recv() {
 		// Create a try catch scope.
-		let mut try_catch_scope = v8::TryCatch::new(&mut context_scope);
+		let scope = &mut v8::TryCatch::new(scope);
 
 		// Serialize the request.
-		let request = match serde_v8::to_v8(&mut try_catch_scope, &request)
-			.wrap_err("Failed to serialize the request.")
-		{
-			Ok(request) => request,
-			Err(error) => {
+		let request =
+			match serde_v8::to_v8(scope, &request).wrap_err("Failed to serialize the request.") {
+				Ok(request) => request,
+				Err(error) => {
+					response_sender.send(Err(error)).unwrap();
+					continue;
+				},
+			};
+
+		// Call the handle function.
+		let receiver = v8::undefined(scope).into();
+		let response = handle.call(scope, receiver, &[request]).unwrap();
+		let response = v8::Local::<v8::Promise>::try_from(response).unwrap();
+
+		let response = match response.state() {
+			v8::PromiseState::Pending => unreachable!(),
+			v8::PromiseState::Fulfilled => response.result(scope),
+			v8::PromiseState::Rejected => {
+				let exception = response.result(scope);
+				let error = error::from_exception(scope, exception);
 				response_sender.send(Err(error)).unwrap();
 				continue;
 			},
 		};
 
-		// Call the handle function.
-		let receiver = v8::undefined(&mut try_catch_scope).into();
-		let response = handle_function.call(&mut try_catch_scope, receiver, &[request]);
-
-		// Handle a js exception.
-		let Some(response) = response else {
-			let exception = try_catch_scope.exception().unwrap();
-			let error = crate::runtime::js::error::from_exception(
-				&mut try_catch_scope,
-				exception,
-				&|_, line, column| {
-					let source_map = SourceMap::from_slice(SOURCE_MAP).unwrap();
-					let token = source_map.lookup_token(line, column).unwrap();
-					let file = token.get_source().unwrap();
-					let file = file.strip_prefix("../").unwrap().to_owned();
-					let line = token.get_src_line();
-					let column = token.get_src_col();
-					Some(error::Location { file, line, column })
-				},
-			);
-			response_sender.send(Err(error)).unwrap();
-			continue;
-		};
-
 		// Deserialize the response.
-		let response = match serde_v8::from_v8(&mut try_catch_scope, response)
+		let response = match serde_v8::from_v8(scope, response)
 			.wrap_err("Failed to deserialize the response.")
 		{
 			Ok(response) => response,

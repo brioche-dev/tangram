@@ -3,9 +3,10 @@ import * as completion from "./completion.ts";
 import * as definition from "./definition.ts";
 import * as diagnostics from "./diagnostics.ts";
 import * as docs from "./docs.ts";
-import { prepareStackTrace } from "./error.ts";
+import { Error as Error_, prepareStackTrace } from "./error.ts";
 import * as format from "./format.ts";
 import * as hover from "./hover.ts";
+import { log } from "./log.ts";
 import * as references from "./references.ts";
 import * as rename from "./rename.ts";
 import * as symbols from "./symbols.ts";
@@ -13,6 +14,14 @@ import * as symbols from "./symbols.ts";
 // Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
 	prepareStackTrace: { value: prepareStackTrace },
+});
+
+// Create the console global.
+let console = {
+	log,
+};
+Object.defineProperties(globalThis, {
+	console: { value: console },
 });
 
 type Request =
@@ -39,7 +48,7 @@ type Response =
 	| { kind: "rename"; response: rename.Response }
 	| { kind: "symbols"; response: symbols.Response };
 
-let handle = ({ kind, request }: Request): Response => {
+let handle = async ({ kind, request }: Request): Promise<Response> => {
 	switch (kind) {
 		case "check": {
 			let response = check.handle(request);
@@ -62,7 +71,7 @@ let handle = ({ kind, request }: Request): Response => {
 			return { kind: "docs", response };
 		}
 		case "format": {
-			let response = format.handle(request);
+			let response = await format.handle(request);
 			return { kind: "format", response };
 		}
 		case "hover": {
@@ -85,7 +94,7 @@ let handle = ({ kind, request }: Request): Response => {
 };
 
 let lsp = {
-	Error,
+	Error: Error_,
 	handle,
 };
 Object.defineProperties(globalThis, {

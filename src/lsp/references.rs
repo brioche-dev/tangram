@@ -54,7 +54,7 @@ impl Server {
 		module: &Module,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::References(Request {
 			module: module.clone(),
 			position,

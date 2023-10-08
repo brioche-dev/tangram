@@ -56,7 +56,7 @@ pub enum Module {
 #[serde(rename_all = "camelCase")]
 pub struct Library {
 	/// The module's path.
-	pub module_path: Subpath,
+	pub path: Subpath,
 }
 
 #[derive(
@@ -77,7 +77,7 @@ impl From<Module> for Url {
 		let data = hex::encode(serde_json::to_string(&value).unwrap());
 
 		let path = match value {
-			Module::Library(library) => format!("/{}", library.module_path),
+			Module::Library(library) => format!("/{}", library.path),
 			Module::Document(document) => {
 				format!("/{}/{}", document.package_path.display(), document.path)
 			},

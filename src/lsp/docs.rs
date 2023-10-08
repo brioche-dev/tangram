@@ -17,7 +17,7 @@ pub struct Response {
 impl Server {
 	/// Get the docs for a module.
 	pub async fn docs(&self, module: &Module) -> Result<Response> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::Docs(Request {
 			module: module.clone(),
 		});

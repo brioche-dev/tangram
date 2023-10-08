@@ -47,7 +47,7 @@ impl Server {
 	}
 
 	pub async fn hover(&self, module: &Module, position: Position) -> Result<Option<String>> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::Hover(Request {
 			module: module.clone(),
 			position,

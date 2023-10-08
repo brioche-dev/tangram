@@ -122,7 +122,7 @@ export let moduleFromFileName = (fileName: string): Module => {
 	let module_: Module;
 	if (fileName.startsWith("/library/")) {
 		let path = fileName.slice(9);
-		module_ = { kind: "library", value: { path: path } };
+		module_ = { kind: "library", value: { path } };
 	} else {
 		let data = fileName.slice(1, -3);
 		module_ = syscall.encoding.json.decode(

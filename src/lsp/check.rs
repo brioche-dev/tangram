@@ -16,7 +16,7 @@ pub struct Response {
 impl Server {
 	/// Get all diagnostics for the provided modules.
 	pub async fn check(&self, modules: Vec<Module>) -> Result<Vec<Diagnostic>> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::Check(Request { modules });
 
 		// Perform the request.

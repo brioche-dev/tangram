@@ -57,7 +57,7 @@ impl Server {
 	}
 
 	pub async fn diagnostics(&self) -> Result<Vec<Diagnostic>> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::Diagnostics(Request {});
 
 		// Perform the request.

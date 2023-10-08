@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{module::Range, Module, Result};
+use crate::{module::Range, Result};
 use lsp_types as lsp;
 
 #[derive(Debug, serde::Serialize)]
@@ -43,7 +43,7 @@ impl Server {
 	}
 
 	pub async fn format(&self, text: String) -> Result<String> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::Format(Request { text });
 
 		// Perform the request.
@@ -52,6 +52,7 @@ impl Server {
 		Ok(response.text)
 	}
 }
+
 // #[cfg(test)]
 // mod tests {
 // 	use crate::{language::Module, server, Server};

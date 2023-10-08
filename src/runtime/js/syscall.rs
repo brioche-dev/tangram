@@ -2,18 +2,18 @@
 
 use super::{
 	convert::{from_v8, FromV8, ToV8},
-	State,
+	error, State,
 };
 use crate::{
-	blob, checksum, object, return_error, util::tokio_util::SyncIoBridge, Artifact, Blob, Bytes,
-	Checksum, Result, Target, Value, WrapErr,
+	blob, checksum, object, return_error, Artifact, Blob, Bytes, Checksum, Result, Target, Value,
+	WrapErr,
 };
 use base64::Engine as _;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use std::{future::Future, rc::Rc};
 use tokio::io::AsyncRead;
-use tokio_util::io::StreamReader;
+use tokio_util::io::{StreamReader, SyncIoBridge};
 use url::Url;
 
 pub fn syscall<'s>(
@@ -29,7 +29,7 @@ pub fn syscall<'s>(
 
 		Err(error) => {
 			// Throw an exception.
-			let exception = error.to_v8(scope).unwrap();
+			let exception = error::to_exception(scope, &error);
 			scope.throw_exception(exception);
 		},
 	}

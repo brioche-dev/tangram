@@ -1,4 +1,7 @@
-use super::{convert::from_v8, State};
+use super::{
+	convert::{from_v8, ToV8},
+	State,
+};
 use crate::{error, Error, Module};
 use num::ToPrimitive;
 use std::{str::FromStr, sync::Arc};
@@ -28,13 +31,18 @@ struct V8CallSite {
 	promise_index: Option<u32>,
 }
 
-pub type GetLocation = dyn Fn(Option<&str>, u32, u32) -> Option<error::Location>;
+pub(super) fn to_exception<'s>(
+	scope: &mut v8::HandleScope<'s>,
+	error: &Error,
+) -> v8::Local<'s, v8::Value> {
+	error.to_v8(scope).unwrap()
+}
 
 #[allow(clippy::too_many_lines)]
-pub fn from_exception<'s>(
+pub(super) fn from_exception<'s>(
+	state: &State,
 	scope: &mut v8::HandleScope<'s>,
 	exception: v8::Local<'s, v8::Value>,
-	get_location: &GetLocation,
 ) -> Error {
 	let context = scope.get_current_context();
 	let global = context.global(scope);
@@ -61,7 +69,7 @@ pub fn from_exception<'s>(
 		.map(|resource_name| resource_name.to_rust_string_lossy(scope));
 	let line = message_.get_line_number(scope).unwrap().to_u32().unwrap() - 1;
 	let column = message_.get_start_column().to_u32().unwrap();
-	let location = get_location(resource_name.as_deref(), line, column);
+	let location = get_location(state, resource_name.as_deref(), line, column);
 
 	// Get the stack trace.
 	let stack = v8::String::new_external_onebyte_static(scope, "stack".as_bytes()).unwrap();
@@ -75,11 +83,10 @@ pub fn from_exception<'s>(
 			.call_sites
 			.iter()
 			.filter_map(|call_site| {
-				// Get the location.
 				let file_name = call_site.file_name.as_deref();
 				let line: u32 = call_site.line_number? - 1;
 				let column: u32 = call_site.column_number?;
-				let location = get_location(file_name, line, column)?;
+				let location = get_location(state, file_name, line, column)?;
 				Some(location)
 			})
 			.collect();
@@ -96,7 +103,7 @@ pub fn from_exception<'s>(
 		.and_then(|exception| exception.get(scope, cause_string.into()))
 		.and_then(|value| value.to_object(scope))
 	{
-		let error = from_exception(scope, cause.into(), get_location);
+		let error = from_exception(state, scope, cause.into());
 		Some(Arc::new(error))
 	} else {
 		None
@@ -112,7 +119,7 @@ pub fn from_exception<'s>(
 	.into()
 }
 
-pub(super) fn get_location(
+fn get_location(
 	state: &State,
 	file: Option<&str>,
 	line: u32,

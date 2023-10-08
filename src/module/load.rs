@@ -18,7 +18,7 @@ impl Module {
 		match self {
 			// Load a library module.
 			Self::Library(module) => {
-				let path = module.module_path.to_string();
+				let path = module.path.to_string();
 				let text = match path.as_str() {
 					"tangram.d.ts" => TANGRAM_D_TS,
 					_ => LIB

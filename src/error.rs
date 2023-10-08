@@ -10,7 +10,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub struct Error(Box<dyn std::error::Error + Send + Sync + 'static>);
 
 /// A message error.
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, serde::Deserialize, serde::Serialize)]
 #[error("{message}")]
 pub struct Message {
 	pub message: String,
@@ -20,7 +20,7 @@ pub struct Message {
 }
 
 /// An error location.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Location {
 	pub file: String,
 	pub line: u32,
@@ -113,6 +113,45 @@ where
 	}
 }
 
+impl From<Error> for Message {
+	fn from(value: Error) -> Self {
+		match value.0.downcast() {
+			Ok(message) => *message,
+			Err(error) => error.as_ref().into(),
+		}
+	}
+}
+
+impl From<&(dyn std::error::Error + Send + Sync + 'static)> for Message {
+	fn from(value: &(dyn std::error::Error + Send + Sync + 'static)) -> Self {
+		Self {
+			message: value.to_string(),
+			location: None,
+			stack: None,
+			source: value
+				.source()
+				.map(Message::from)
+				.map(Error::from)
+				.map(Arc::new),
+		}
+	}
+}
+
+impl From<&(dyn std::error::Error + 'static)> for Message {
+	fn from(value: &(dyn std::error::Error + 'static)) -> Self {
+		Self {
+			message: value.to_string(),
+			location: None,
+			stack: None,
+			source: value
+				.source()
+				.map(Message::from)
+				.map(Error::from)
+				.map(Arc::new),
+		}
+	}
+}
+
 impl<'a> From<&'a std::panic::Location<'a>> for Location {
 	fn from(location: &'a std::panic::Location<'a>) -> Self {
 		Self {
@@ -158,6 +197,24 @@ impl<'a> std::fmt::Display for Trace<'a> {
 impl std::fmt::Display for Location {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{}:{}:{}", self.file, self.line + 1, self.column + 1)
+	}
+}
+
+impl serde::Serialize for Error {
+	fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		Message::from(self.0.as_ref()).serialize(serializer)
+	}
+}
+
+impl<'de> serde::Deserialize<'de> for Error {
+	fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		Message::deserialize(deserializer).map(Into::into)
 	}
 }
 

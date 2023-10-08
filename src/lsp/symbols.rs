@@ -83,7 +83,7 @@ impl Server {
 	}
 
 	pub async fn symbols(&self, module: &Module) -> Result<Option<Vec<Symbol>>> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::Symbols(Request {
 			module: module.clone(),
 		});

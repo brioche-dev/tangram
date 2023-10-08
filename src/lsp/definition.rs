@@ -19,7 +19,7 @@ pub struct Response {
 }
 
 impl Server {
-	pub(super) async fn handle_definition_request(
+	pub async fn handle_definition_request(
 		&self,
 		params: lsp::GotoDefinitionParams,
 	) -> Result<Option<lsp::GotoDefinitionResponse>> {
@@ -57,7 +57,7 @@ impl Server {
 		module: &Module,
 		position: Position,
 	) -> Result<Option<Vec<Location>>> {
-		// Create the language service request.
+		// Create the request.
 		let request = super::Request::Definition(Request {
 			module: module.clone(),
 			position,

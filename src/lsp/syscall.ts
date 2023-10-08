@@ -49,9 +49,6 @@ declare global {
 
 	/** Get the version of a module. */
 	function syscall(name: "module_version", module: Module): string;
-
-	/** Resolve a promise. */
-	function syscall<T>(name: "resolve", promise: Promise<T>): T;
 }
 
 export let documents = (): Array<Module> => {
@@ -204,12 +201,4 @@ export let module_ = {
 			throw new Error("The syscall failed.", { cause });
 		}
 	},
-};
-
-export let resolve = <T>(value: Promise<T>): T => {
-	try {
-		return syscall("resolve", value);
-	} catch (cause) {
-		throw new Error("The syscall failed.", { cause });
-	}
 };

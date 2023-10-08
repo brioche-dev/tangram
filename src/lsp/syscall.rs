@@ -1,6 +1,6 @@
 #![allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
-use super::State;
+use super::{error, State};
 use crate::{
 	module::{Import, Module},
 	return_error, Bytes, Result, WrapErr,
@@ -22,8 +22,7 @@ pub fn syscall(
 
 		Err(error) => {
 			// Throw an exception.
-			let message = v8::String::new(scope, &error.to_string()).unwrap();
-			let exception = v8::Exception::error(scope, message);
+			let exception = error::to_exception(scope, &error);
 			scope.throw_exception(exception);
 		},
 	}
