@@ -1,8 +1,8 @@
 pub use self::{dependency::Dependency, specifier::Specifier};
 use crate::{
 	artifact, directory,
-	language::{self, Module},
-	object, return_error, Artifact, Client, Result, Subpath, WrapErr,
+	module::{self, Import},
+	object, return_error, Artifact, Client, Module, Result, Subpath, WrapErr,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -121,7 +121,7 @@ impl Package {
 
 			// Recurse into the dependencies.
 			for import in &analyze_output.imports {
-				if let language::Import::Dependency(dependency) = import {
+				if let Import::Dependency(dependency) = import {
 					// Ignore duplicate dependencies.
 					if dependencies.contains_key(dependency) {
 						continue;
@@ -158,7 +158,7 @@ impl Package {
 
 			// Add the unvisited path imports to the queue.
 			for import in &analyze_output.imports {
-				if let language::Import::Path(import) = import {
+				if let Import::Path(import) = import {
 					let imported_module_subpath = module_subpath
 						.clone()
 						.into_relpath()
@@ -191,6 +191,13 @@ impl Package {
 
 	pub async fn dependencies(&self, client: &Client) -> Result<&BTreeMap<Dependency, Self>> {
 		Ok(&self.object(client).await?.dependencies)
+	}
+
+	pub async fn root_module(&self, client: &Client) -> Result<Module> {
+		Ok(Module::Normal(module::Normal {
+			package_id: self.id(client).await?,
+			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+		}))
 	}
 }
 

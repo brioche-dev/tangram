@@ -5,7 +5,7 @@
 
 use self::commands::Args;
 use clap::Parser;
-use tg::error::{return_error, Error, Result, WrapErr};
+use tg::error::{return_error, Result, WrapErr};
 use tracing_subscriber::prelude::*;
 
 mod commands;
@@ -44,15 +44,11 @@ async fn main_inner() -> Result<()> {
 	let args = Args::parse();
 
 	// let client = tg::Client::with_url("http://localhost:8477".parse().unwrap(), None);
-	let client = tg::Client::with_server(
-		tg::Server::new(
-			tg::util::dirs::home_directory_path()
-				.unwrap()
-				.join(".tangram"),
-			tg::server::Options::default(),
-		)
-		.await?,
-	);
+	let path = tg::util::dirs::home_directory_path()
+		.unwrap()
+		.join(".tangram");
+	let server = tg::Server::new(path, None).await?;
+	let client = tg::Client::with_server(server);
 
 	let api_client = tg::api::Client::new("http://localhost:8477".parse().unwrap(), None);
 

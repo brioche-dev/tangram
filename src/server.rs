@@ -1,4 +1,4 @@
-use crate::{id, target, vfs, Client, Error, Result};
+use crate::{id, target, Client, Result};
 use futures::FutureExt;
 use http_body_util::BodyExt;
 use itertools::Itertools;
@@ -9,10 +9,9 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Arc,
 };
-use url::Url;
 
-mod build;
-mod object;
+pub mod build;
+pub mod object;
 
 /// A server.
 #[derive(Clone, Debug)]
@@ -28,14 +27,8 @@ pub struct State {
 	/// A semaphore that prevents opening too many file descriptors.
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 
-	/// An HTTP client for downloading resources.
-	http_client: reqwest::Client,
-
 	/// A local pool for running JS builds.
 	local_pool: tokio_util::task::LocalPoolHandle,
-
-	/// The options the server was created with.
-	options: Options,
 
 	/// A client for communicating with the parent.
 	parent: Option<Client>,
@@ -47,14 +40,15 @@ pub struct State {
 	process_semaphore: tokio::sync::Semaphore,
 
 	/// The state of the server's running builds.
-	running: std::sync::RwLock<(
-		HashMap<target::Id, crate::build::Id, id::BuildHasher>,
-		HashMap<crate::build::Id, Arc<crate::build::State>, id::BuildHasher>,
-	)>,
-
-	/// The VFS server task.
-	vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+	running: std::sync::RwLock<(BuildForTargetMap, BuildStateMap)>,
+	//
+	// /// The VFS server task.
+	// vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
+
+type BuildForTargetMap = HashMap<target::Id, crate::build::Id, id::BuildHasher>;
+
+type BuildStateMap = HashMap<crate::build::Id, Arc<self::build::State>, id::BuildHasher>;
 
 #[derive(Debug)]
 pub struct Database {
@@ -63,14 +57,8 @@ pub struct Database {
 	pub(crate) assignments: lmdb::Database,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Options {
-	pub parent_token: Option<String>,
-	pub parent_url: Option<Url>,
-}
-
 impl Server {
-	pub async fn new(path: PathBuf, options: Options) -> Result<Server> {
+	pub async fn new(path: PathBuf, parent: Option<Client>) -> Result<Server> {
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
 
@@ -99,21 +87,10 @@ impl Server {
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 
-		// Create the HTTP client for downloading resources.
-		let http_client = reqwest::Client::new();
-
 		// Create the local pool for running JS builds.
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
 			std::thread::available_parallelism().unwrap().get(),
 		);
-
-		// Create the parent client.
-		let parent = if let Some(url) = options.parent_url.as_ref() {
-			let token = options.parent_token.clone();
-			Some(Client::with_url(url.clone(), token))
-		} else {
-			None
-		};
 
 		// Create the process semaphore.
 		let process_semaphore =
@@ -123,20 +100,18 @@ impl Server {
 		let running = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
 
 		// Create the VFS server task.
-		let vfs_server_task = std::sync::Mutex::new(None);
+		// let vfs_server_task = std::sync::Mutex::new(None);
 
 		// Create the state.
 		let state = Arc::new(State {
 			database,
 			file_descriptor_semaphore,
-			http_client,
 			local_pool,
-			options,
 			parent,
 			path,
 			process_semaphore,
 			running,
-			vfs_server_task,
+			// vfs_server_task,
 		});
 
 		// Create the server.

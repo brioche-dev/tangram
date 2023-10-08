@@ -1,4 +1,4 @@
-use crate::{Cli, Result, WrapErr};
+use crate::{Cli, Result, WrapErr, API_URL};
 use std::{
 	net::{IpAddr, SocketAddr},
 	path::PathBuf,
@@ -41,20 +41,17 @@ impl Cli {
 		// Get the parent URL.
 		let parent_url = config
 			.as_ref()
-			.and_then(|config| config.parent_url.as_ref())
-			.cloned();
+			.and_then(|config| config.parent_url.as_ref().cloned())
+			.unwrap_or_else(|| API_URL.parse().unwrap());
 
-		// Get the origin token.
+		// Get the parent token.
 		let parent_token = credentials.map(|credentials| credentials.token);
 
-		// Create the options.
-		let options = tg::server::Options {
-			parent_token,
-			parent_url,
-		};
+		// Create the parent.
+		let parent = tg::Client::with_url(parent_url, parent_token);
 
 		// Create the server.
-		let server = tg::Server::new(path, options).await?;
+		let server = tg::Server::new(path, Some(parent)).await?;
 
 		// Serve.
 		let addr = SocketAddr::new(args.host, args.port);

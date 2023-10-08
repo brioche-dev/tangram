@@ -15,9 +15,8 @@ impl Server {
 				if client.server_verifier == arg.verifier {
 					client.confirmed = true;
 					return NFS4_OK;
-				} else {
-					return NFS4ERR_CLID_INUSE;
 				}
+				return NFS4ERR_CLID_INUSE;
 			}
 		}
 		NFS4ERR_STALE_CLIENTID

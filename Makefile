@@ -7,8 +7,8 @@ check: $(NODE_MODULES)
 	cargo clippy --all
 	npm run --workspaces --if-present check
 
-global: $(NODE_MODULES)
-	npm run -w @tangramdotdev/global build
+runtime: $(NODE_MODULES)
+	npm run -w @tangramdotdev/runtime build
 
-language_service: $(NODE_MODULES)
-	npm run -w @tangramdotdev/language-service build
+lsp: $(NODE_MODULES)
+	npm run -w @tangramdotdev/lsp build

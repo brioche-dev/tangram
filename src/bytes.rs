@@ -184,11 +184,11 @@ impl AsRef<[u8]> for Buffer {
 			&self.0
 		}
 		#[cfg(feature = "server")]
-		unsafe {
-			std::slice::from_raw_parts(
-				self.0.data().unwrap().as_ptr().cast::<u8>(),
-				self.0.byte_length(),
-			)
+		{
+			let Some(data) = self.0.data() else {
+				return &[];
+			};
+			unsafe { std::slice::from_raw_parts(data.as_ptr().cast::<u8>(), self.0.byte_length()) }
 		}
 	}
 }

@@ -14,21 +14,21 @@ fn main() {
 
 	#[cfg(feature = "server")]
 	{
-		// Create the language service snapshot.
+		// Create the lsp snapshot.
 		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-		println!("cargo:rerun-if-changed=assets/language_service.js");
-		let path = out_dir_path.join("language_service.heapsnapshot");
-		let snapshot = create_snapshot("assets/language_service.js");
+		println!("cargo:rerun-if-changed=assets/lsp.js");
+		let path = out_dir_path.join("lsp.heapsnapshot");
+		let snapshot = create_snapshot("assets/lsp.js");
 		std::fs::write(path, snapshot).unwrap();
 	}
 
 	#[cfg(feature = "server")]
 	{
-		// Create the global snapshot.
+		// Create the runtime snapshot.
 		let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-		println!("cargo:rerun-if-changed=assets/global.js");
-		let path = out_dir_path.join("global.heapsnapshot");
-		let snapshot = create_snapshot("assets/global.js");
+		println!("cargo:rerun-if-changed=assets/runtime.js");
+		let path = out_dir_path.join("runtime.heapsnapshot");
+		let snapshot = create_snapshot("assets/runtime.js");
 		std::fs::write(path, snapshot).unwrap();
 	}
 }
@@ -48,7 +48,8 @@ fn create_snapshot(path: impl AsRef<std::path::Path>) -> v8::StartupData {
 	let code = std::fs::read_to_string(path).unwrap();
 	let code = v8::String::new(&mut context_scope, &code).unwrap();
 	let resource_name =
-		v8::String::new_external_onebyte_static(&mut context_scope, "[global]".as_bytes()).unwrap();
+		v8::String::new_external_onebyte_static(&mut context_scope, "[runtime]".as_bytes())
+			.unwrap();
 	let resource_line_offset = 0;
 	let resource_column_offset = 0;
 	let resource_is_shared_cross_origin = false;

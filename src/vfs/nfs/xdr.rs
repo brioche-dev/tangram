@@ -89,14 +89,14 @@ pub struct Decoder<'d> {
 #[derive(Debug)]
 pub enum Error {
 	UnexpectedEof,
-	Utf8Error(Utf8Error),
+	Utf8(Utf8Error),
 	Io(std::io::Error),
 	Custom(String),
 }
 
 impl From<Utf8Error> for Error {
 	fn from(value: Utf8Error) -> Self {
-		Self::Utf8Error(value)
+		Self::Utf8(value)
 	}
 }
 

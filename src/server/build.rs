@@ -1,5 +1,6 @@
 use crate::{
-	build, system, target, Blob, Build, Client, Error, Result, Server, Target, Value, WrapErr,
+	build, runtime, system, target, Blob, Build, Client, Error, Result, Server, Target, Value,
+	WrapErr,
 };
 use futures::{
 	stream::{self, BoxStream},
@@ -7,7 +8,25 @@ use futures::{
 };
 use lmdb::Transaction;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio_stream::wrappers::BroadcastStream;
 use tokio_util::io::StreamReader;
+
+#[allow(clippy::type_complexity)]
+#[derive(Debug)]
+pub struct State {
+	children: std::sync::Mutex<(Vec<Build>, Option<tokio::sync::broadcast::Sender<Build>>)>,
+	log: Arc<
+		tokio::sync::Mutex<(
+			tokio::fs::File,
+			Option<tokio::sync::broadcast::Sender<Vec<u8>>>,
+		)>,
+	>,
+	output: (
+		tokio::sync::watch::Sender<Option<Option<Value>>>,
+		tokio::sync::watch::Receiver<Option<Option<Value>>>,
+	),
+}
 
 impl Server {
 	/// Attempt to get the build for a target.
@@ -74,7 +93,7 @@ impl Server {
 
 		// Otherwise, create a new build and add it to the server's state.
 		let build_id = build::Id::new();
-		let state = Arc::new(build::State::new()?);
+		let state = Arc::new(State::new()?);
 		{
 			let mut running = self.state.running.write().unwrap();
 			running.0.insert(target_id, build_id);
@@ -102,7 +121,7 @@ impl Server {
 								let state = state.clone();
 								let main_runtime_handle = tokio::runtime::Handle::current();
 								move || async move {
-									crate::build::js::run(
+									runtime::js::run(
 										client.clone(),
 										target,
 										state,
@@ -318,5 +337,88 @@ impl Server {
 		}
 
 		Ok(None)
+	}
+}
+
+impl State {
+	pub fn new() -> Result<Self> {
+		let (children_tx, _) = tokio::sync::broadcast::channel(1024);
+		let (log_tx, _) = tokio::sync::broadcast::channel(1024);
+		let (result_tx, result_rx) = tokio::sync::watch::channel(None);
+		let log_file = tokio::fs::File::from_std(tempfile::tempfile()?);
+		Ok(Self {
+			children: std::sync::Mutex::new((Vec::new(), Some(children_tx))),
+			log: Arc::new(tokio::sync::Mutex::new((log_file, Some(log_tx)))),
+			output: (result_tx, result_rx),
+		})
+	}
+
+	pub fn add_child(&self, child: Build) {
+		let mut children = self.children.lock().unwrap();
+		children.0.push(child.clone());
+		children.1.as_ref().unwrap().send(child).ok();
+	}
+
+	pub fn add_log(&self, bytes: Vec<u8>) {
+		tokio::spawn({
+			eprintln!("{}", std::str::from_utf8(&bytes).unwrap());
+			let log = self.log.clone();
+			async move {
+				let mut log = log.lock().await;
+				log.0.seek(std::io::SeekFrom::End(0)).await.ok();
+				log.0.write_all(&bytes).await.ok();
+				log.1.as_ref().unwrap().send(bytes).ok();
+			}
+		});
+	}
+
+	pub async fn set_output(&self, output: Option<Value>) {
+		// Set the result.
+		self.output.0.send(Some(output)).unwrap();
+
+		// End the children and log streams.
+		self.children.lock().unwrap().1.take();
+		self.log.lock().await.1.take();
+	}
+
+	pub fn children(&self) -> BoxStream<'static, Build> {
+		let children = self.children.lock().unwrap();
+		let old = stream::iter(children.0.clone());
+		let new = if let Some(new) = children.1.as_ref() {
+			BroadcastStream::new(new.subscribe())
+				.filter_map(|result| async move { result.ok() })
+				.boxed()
+		} else {
+			stream::empty().boxed()
+		};
+		old.chain(new).boxed()
+	}
+
+	pub async fn log(&self) -> Result<BoxStream<'static, Vec<u8>>> {
+		let mut log = self.log.lock().await;
+		log.0.rewind().await?;
+		let mut old = Vec::new();
+		log.0.read_to_end(&mut old).await?;
+		let old = stream::once(async move { old });
+		log.0.seek(std::io::SeekFrom::End(0)).await?;
+		let new = if let Some(new) = log.1.as_ref() {
+			BroadcastStream::new(new.subscribe())
+				.filter_map(|result| async move { result.ok() })
+				.boxed()
+		} else {
+			stream::empty().boxed()
+		};
+		Ok(old.chain(new).boxed())
+	}
+
+	pub async fn output(&self) -> Option<Value> {
+		self.output
+			.1
+			.clone()
+			.wait_for(Option::is_some)
+			.await
+			.unwrap()
+			.clone()
+			.unwrap()
 	}
 }

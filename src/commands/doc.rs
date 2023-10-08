@@ -1,5 +1,5 @@
 use super::PackageArgs;
-use crate::{Cli, Error, Result, WrapErr};
+use crate::{Cli, Result, WrapErr};
 
 /// Print the docs for a package.
 #[derive(Debug, clap::Args)]
@@ -14,25 +14,25 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_doc(&self, args: Args) -> Result<()> {
-		todo!()
+		// Get the package.
+		let package = tg::Package::with_specifier(&self.client, args.package)
+			.await
+			.wrap_err("Failed to get the package.")?;
 
-		// // Get the package.
-		// let package = tg::Package::with_specifier(&self.client, args.package)
-		// 	.await
-		// 	.wrap_err("Failed to get the package.")?;
+		// Create the language server.
+		let server = tg::lsp::Server::new(self.client.clone());
 
-		// // Create the language service.
-		// let language_service = tg::language::Service::new(self.client.clone(), None);
+		// Get the docs.
+		let docs = server
+			.docs(&package.root_module(&self.client).await?)
+			.await?;
 
-		// // Get the docs.
-		// let docs = package.docs(&self.client, &language_service).await?;
+		// Render the docs to JSON.
+		let json = serde_json::to_string_pretty(&docs)?;
 
-		// // Render the docs to JSON.
-		// let json = serde_json::to_string_pretty(&docs)?;
+		// Print the docs.
+		println!("{json}");
 
-		// // Print the docs.
-		// println!("{json}");
-
-		// Ok(())
+		Ok(())
 	}
 }

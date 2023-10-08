@@ -17,6 +17,7 @@ pub use self::{
 	error::{Error, Result, WrapErr},
 	file::File,
 	id::Id,
+	module::Module,
 	package::Package,
 	path::{Relpath, Subpath},
 	placeholder::Placeholder,
@@ -44,13 +45,15 @@ pub mod error;
 pub mod file;
 pub mod id;
 #[cfg(feature = "server")]
-pub mod language;
+pub mod lsp;
 #[cfg(feature = "server")]
 pub mod migrations;
+pub mod module;
 pub mod object;
 pub mod package;
 pub mod path;
 pub mod placeholder;
+pub mod runtime;
 #[cfg(feature = "server")]
 pub mod server;
 pub mod symlink;
@@ -59,5 +62,5 @@ pub mod target;
 pub mod template;
 pub mod util;
 pub mod value;
-#[cfg(feature = "server")]
-pub mod vfs;
+// #[cfg(feature = "server")]
+// pub mod vfs;
