@@ -24,7 +24,7 @@ impl Cli {
 
 		// Check out the artifact.
 		tg::Artifact::with_id(args.id)
-			.check_out(&self.client, &path)
+			.check_out(self.client.as_ref(), &path)
 			.await
 			.wrap_err("Failed to check out the artifact.")?;
 

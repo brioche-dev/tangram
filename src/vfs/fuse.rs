@@ -311,7 +311,7 @@ impl Server {
 	) -> Result<Response, i32> {
 		let node_id = NodeId(header.nodeid);
 		let node = self.get_node(node_id).await?;
-		let response = node.fuse_attr_out(&self.client).await?;
+		let response = node.fuse_attr_out(self.client.as_ref()).await?;
 		Ok(Response::GetAttr(response))
 	}
 
@@ -357,7 +357,7 @@ impl Server {
 		let child_node = self.get_or_create_child_node(parent_node, &name).await?;
 
 		// Create the response.
-		let response = child_node.fuse_entry_out(&self.client).await?;
+		let response = child_node.fuse_entry_out(self.client.as_ref()).await?;
 
 		Ok(Response::Lookup(response))
 	}
@@ -380,8 +380,11 @@ impl Server {
 			},
 			NodeKind::Directory { .. } => FileHandleData::Directory,
 			NodeKind::File { file, .. } => {
-				let contents = file.contents(&self.client).await.map_err(|_| libc::EIO)?;
-				let Ok(reader) = contents.reader(&self.client).await else {
+				let contents = file
+					.contents(self.client.as_ref())
+					.await
+					.map_err(|_| libc::EIO)?;
+				let Ok(reader) = contents.reader(self.client.as_ref()).await else {
 					tracing::error!("Failed to create reader!");
 					return Err(libc::EIO);
 				};
@@ -472,7 +475,7 @@ impl Server {
 		// Create the response.
 		let mut response = Vec::new();
 		let names = directory
-			.entries(&self.client)
+			.entries(self.client.as_ref())
 			.await
 			.map_err(|_| libc::EIO)?
 			.keys()
@@ -514,7 +517,7 @@ impl Server {
 			};
 			if plus {
 				let entry = sys::fuse_direntplus {
-					entry_out: node.fuse_entry_out(&self.client).await?,
+					entry_out: node.fuse_entry_out(self.client.as_ref()).await?,
 					dirent: entry,
 				};
 				response.extend_from_slice(entry.as_bytes());
@@ -540,9 +543,10 @@ impl Server {
 
 		// Get the target.
 		let target: Template = match &node.kind {
-			NodeKind::Symlink { symlink, .. } => {
-				symlink.target(&self.client).await.map_err(|_| libc::EIO)?
-			},
+			NodeKind::Symlink { symlink, .. } => symlink
+				.target(self.client.as_ref())
+				.await
+				.map_err(|_| libc::EIO)?,
 			_ => return Err(libc::EIO),
 		};
 
@@ -552,7 +556,10 @@ impl Server {
 			match component {
 				template::Component::String(string) => response.push_str(string),
 				template::Component::Artifact(artifact) => {
-					let id = artifact.id(&self.client).await.map_err(|_| libc::EIO)?;
+					let id = artifact
+						.id(self.client.as_ref())
+						.await
+						.map_err(|_| libc::EIO)?;
 					for _ in 0..node.depth() {
 						response.push_str("../");
 					}
@@ -646,7 +653,7 @@ impl Server {
 			},
 
 			NodeKind::Directory { directory, .. } => {
-				let entries = directory.entries(&self.client).await.map_err(|e| {
+				let entries = directory.entries(self.client.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get directory entries.");
 					libc::EIO
 				})?;
@@ -667,8 +674,14 @@ impl Server {
 				}
 			},
 			Artifact::File(file) => {
-				let contents = file.contents(&self.client).await.map_err(|_| libc::EIO)?;
-				let size = contents.size(&self.client).await.map_err(|_| libc::EIO)?;
+				let contents = file
+					.contents(self.client.as_ref())
+					.await
+					.map_err(|_| libc::EIO)?;
+				let size = contents
+					.size(self.client.as_ref())
+					.await
+					.map_err(|_| libc::EIO)?;
 				NodeKind::File { file, size }
 			},
 			Artifact::Symlink(symlink) => NodeKind::Symlink { symlink },
@@ -712,7 +725,7 @@ impl Node {
 		}
 	}
 
-	async fn mode(&self, client: &Client) -> Result<u32, i32> {
+	async fn mode(&self, client: &dyn Client) -> Result<u32, i32> {
 		let mode = match &self.kind {
 			NodeKind::Root { .. } | NodeKind::Directory { .. } => libc::S_IFDIR | 0o555,
 			NodeKind::File { file, .. } => {
@@ -731,7 +744,7 @@ impl Node {
 		}
 	}
 
-	async fn fuse_entry_out(&self, client: &Client) -> Result<sys::fuse_entry_out, i32> {
+	async fn fuse_entry_out(&self, client: &dyn Client) -> Result<sys::fuse_entry_out, i32> {
 		let nodeid = self.id.0;
 		let attr_out = self.fuse_attr_out(client).await?;
 		let entry_out = sys::fuse_entry_out {
@@ -746,7 +759,7 @@ impl Node {
 		Ok(entry_out)
 	}
 
-	async fn fuse_attr_out(&self, client: &Client) -> Result<sys::fuse_attr_out, i32> {
+	async fn fuse_attr_out(&self, client: &dyn Client) -> Result<sys::fuse_attr_out, i32> {
 		let nodeid = self.id.0;
 		let nlink: u32 = match &self.kind {
 			NodeKind::Root { .. } => 2,

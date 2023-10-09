@@ -26,7 +26,7 @@ impl Server {
 		let NodeKind::Symlink { symlink } = &node.kind else {
 			return ResOp::Err(NFS4ERR_INVAL);
 		};
-		let Ok(target) = symlink.target(&self.client).await else {
+		let Ok(target) = symlink.target(self.client.as_ref()).await else {
 			return ResOp::Err(NFS4ERR_IO);
 		};
 		let mut response = String::new();
@@ -36,7 +36,7 @@ impl Server {
 					response.extend(string.chars());
 				},
 				template::Component::Artifact(artifact) => {
-					let Ok(id) = artifact.id(&self.client).await else {
+					let Ok(id) = artifact.id(self.client.as_ref()).await else {
 						return ResOp::Err(NFS4ERR_IO);
 					};
 					for _ in 0..node.depth() {

@@ -44,7 +44,7 @@ impl Server {
 
 		let entries = match &node.kind {
 			NodeKind::Directory { directory, .. } => {
-				let Ok(entries) = directory.entries(&self.client).await else {
+				let Ok(entries) = directory.entries(self.client.as_ref()).await else {
 					return ResOp::Err(NFS4ERR_IO);
 				};
 				entries.clone()

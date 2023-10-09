@@ -25,7 +25,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
 		// Create the package.
-		let package = tg::Package::with_specifier(&self.client, args.package)
+		let package = tg::Package::with_specifier(self.client.as_ref(), args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
@@ -46,8 +46,8 @@ impl Cli {
 			.build();
 
 		// Build the target.
-		let build = target.build(&self.client).await?;
-		let Some(output) = build.output(&self.client).await? else {
+		let build = target.build(self.client.as_ref()).await?;
+		let Some(output) = build.output(self.client.as_ref()).await? else {
 			return_error!("The build failed.");
 		};
 
@@ -56,14 +56,14 @@ impl Cli {
 			let artifact = tg::Artifact::try_from(output)
 				.wrap_err("Expected the output to be an artifact.")?;
 			artifact
-				.check_out(&self.client, &path)
+				.check_out(self.client.as_ref(), &path)
 				.await
 				.wrap_err("Failed to check out the artifact.")?;
 		} else {
 			// Print the output.
 			println!("{output:?}");
 			if let Ok(artifact) = tg::Artifact::try_from(output) {
-				let id = artifact.handle().id(&self.client).await?;
+				let id = artifact.handle().id(self.client.as_ref()).await?;
 				println!("{id:?}");
 			}
 		}

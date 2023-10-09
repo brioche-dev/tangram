@@ -26,7 +26,7 @@ impl Server {
 
 		// Load the file.
 		let text = module
-			.load(&self.state.client, Some(&self.state.document_store))
+			.load(self.state.client.as_ref(), Some(&self.state.document_store))
 			.await?;
 
 		Ok(Some(text))

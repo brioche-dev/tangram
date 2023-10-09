@@ -48,10 +48,10 @@ impl Cli {
 		let parent_token = credentials.map(|credentials| credentials.token);
 
 		// Create the parent.
-		let parent = tg::Client::with_url(parent_url, parent_token);
+		let parent = tg::client::Reqwest::new(parent_url, parent_token);
 
 		// Create the server.
-		let server = tg::Server::new(path, Some(parent)).await?;
+		let server = tg::Server::new(path, Some(Box::new(parent))).await?;
 
 		// Serve.
 		let addr = SocketAddr::new(args.host, args.port);

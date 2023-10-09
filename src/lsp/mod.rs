@@ -41,7 +41,7 @@ pub struct Server {
 #[derive(Debug)]
 struct State {
 	/// The Tangram client.
-	client: Client,
+	client: Box<dyn Client>,
 
 	/// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<module::Diagnostic>>>,
@@ -93,7 +93,7 @@ pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Server {
 	#[must_use]
-	pub fn new(client: crate::Client) -> Self {
+	pub fn new(client: &dyn Client) -> Self {
 		// Create the published diagnostics.
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
@@ -109,7 +109,7 @@ impl Server {
 
 		// Create the state.
 		let state = Arc::new(State {
-			client,
+			client: client.clone_box(),
 			diagnostics,
 			document_store,
 			request_sender,

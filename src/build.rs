@@ -59,7 +59,7 @@ impl Build {
 		&self.0
 	}
 
-	pub async fn try_get_object(&self, client: &Client) -> Result<Option<&Object>> {
+	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
 		match self.0.try_get_object(client).await? {
 			Some(object::Object::Build(object)) => Ok(Some(object)),
 			None => Ok(None),
@@ -67,7 +67,7 @@ impl Build {
 		}
 	}
 
-	pub async fn children(&self, client: &Client) -> Result<BoxStream<'static, Self>> {
+	pub async fn children(&self, client: &dyn Client) -> Result<BoxStream<'static, Self>> {
 		self.try_get_children(client)
 			.await?
 			.wrap_err("Failed to get the build.")
@@ -75,7 +75,7 @@ impl Build {
 
 	pub async fn try_get_children(
 		&self,
-		client: &Client,
+		client: &dyn Client,
 	) -> Result<Option<BoxStream<'static, Self>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(stream::iter(object.children.clone()).boxed()))
@@ -87,7 +87,7 @@ impl Build {
 		}
 	}
 
-	pub async fn log(&self, client: &Client) -> Result<BoxStream<'static, Vec<u8>>> {
+	pub async fn log(&self, client: &dyn Client) -> Result<BoxStream<'static, Vec<u8>>> {
 		self.try_get_log(client)
 			.await?
 			.wrap_err("Failed to get the build.")
@@ -95,25 +95,24 @@ impl Build {
 
 	pub async fn try_get_log(
 		&self,
-		client: &Client,
+		client: &dyn Client,
 	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			let log = object.log.clone();
-			let client = client.clone();
-			let bytes = log.bytes(&client).await?;
+			let bytes = log.bytes(client).await?;
 			Ok(Some(stream::once(async move { bytes }).boxed()))
 		} else {
 			Ok(client.try_get_build_log(self.id()).await?)
 		}
 	}
 
-	pub async fn output(&self, client: &Client) -> Result<Option<Value>> {
+	pub async fn output(&self, client: &dyn Client) -> Result<Option<Value>> {
 		self.try_get_output(client)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	pub async fn try_get_output(&self, client: &Client) -> Result<Option<Option<Value>>> {
+	pub async fn try_get_output(&self, client: &dyn Client) -> Result<Option<Option<Value>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.output.clone()))
 		} else {

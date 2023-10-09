@@ -67,7 +67,7 @@ impl Artifact {
 		}
 	}
 
-	pub async fn id(&self, client: &Client) -> Result<Id> {
+	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
 		match self {
 			Self::Directory(directory) => Ok(directory.id(client).await?.into()),
 			Self::File(file) => Ok(file.id(client).await?.into()),
@@ -96,7 +96,7 @@ impl Artifact {
 	/// Collect an artifact's recursive references.
 	pub async fn recursive_references(
 		&self,
-		client: &Client,
+		client: &dyn Client,
 	) -> Result<HashSet<Id, id::BuildHasher>> {
 		// Create a queue of artifacts and a set of futures.
 		let mut references = HashSet::default();

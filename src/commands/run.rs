@@ -28,7 +28,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
 		// Create the package.
-		let package = tg::Package::with_specifier(&self.client, args.package)
+		let package = tg::Package::with_specifier(self.client.as_ref(), args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
@@ -49,8 +49,8 @@ impl Cli {
 			.build();
 
 		// Build the target.
-		let build = target.build(&self.client).await?;
-		let Some(output) = build.output(&self.client).await? else {
+		let build = target.build(self.client.as_ref()).await?;
+		let Some(output) = build.output(self.client.as_ref()).await? else {
 			return_error!("The build failed.");
 		};
 
@@ -64,7 +64,7 @@ impl Cli {
 			.wrap_err("Failed to find the user home directory.")?
 			.join(".tangram")
 			.join("artifacts")
-			.join(artifact.id(&self.client).await?.to_string());
+			.join(artifact.id(self.client.as_ref()).await?.to_string());
 
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {

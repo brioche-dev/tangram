@@ -43,7 +43,7 @@ impl Server {
 			},
 			NodeKind::Symlink { .. } => flags::ACCESS4_READ,
 			NodeKind::File { file, .. } => {
-				let is_executable = match file.executable(&self.client).await {
+				let is_executable = match file.executable(self.client.as_ref()).await {
 					Ok(b) => b,
 					Err(e) => {
 						tracing::error!(?e, "Failed to lookup executable bit for file.");

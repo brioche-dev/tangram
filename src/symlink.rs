@@ -33,18 +33,18 @@ impl Symlink {
 		Self::with_object(Object { target })
 	}
 
-	pub async fn target(&self, client: &Client) -> Result<Template> {
+	pub async fn target(&self, client: &dyn Client) -> Result<Template> {
 		Ok(self.object(client).await?.target.clone())
 	}
 
-	pub async fn resolve(&self, client: &Client) -> Result<Option<Artifact>> {
+	pub async fn resolve(&self, client: &dyn Client) -> Result<Option<Artifact>> {
 		self.resolve_from(client, None).await
 	}
 
 	#[allow(clippy::unused_async)]
 	pub async fn resolve_from(
 		&self,
-		_client: &Client,
+		_client: &dyn Client,
 		_from: Option<Self>,
 	) -> Result<Option<Artifact>> {
 		unimplemented!()

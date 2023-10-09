@@ -54,7 +54,7 @@ pub struct Metadata {
 }
 
 impl Package {
-	pub async fn with_specifier(client: &Client, specifier: Specifier) -> Result<Self> {
+	pub async fn with_specifier(client: &dyn Client, specifier: Specifier) -> Result<Self> {
 		match specifier {
 			Specifier::Path(path) => Ok(Self::with_path(client, &path).await?),
 			Specifier::Registry(_) => unimplemented!(),
@@ -63,7 +63,7 @@ impl Package {
 
 	/// Create a package from a path.
 	#[async_recursion]
-	pub async fn with_path(client: &Client, package_path: &Path) -> Result<Self> {
+	pub async fn with_path(client: &dyn Client, package_path: &Path) -> Result<Self> {
 		// Create a builder for the directory.
 		let mut directory = directory::Builder::default();
 
@@ -185,15 +185,15 @@ impl Package {
 		Ok(package)
 	}
 
-	pub async fn artifact(&self, client: &Client) -> Result<&Artifact> {
+	pub async fn artifact(&self, client: &dyn Client) -> Result<&Artifact> {
 		Ok(&self.object(client).await?.artifact)
 	}
 
-	pub async fn dependencies(&self, client: &Client) -> Result<&BTreeMap<Dependency, Self>> {
+	pub async fn dependencies(&self, client: &dyn Client) -> Result<&BTreeMap<Dependency, Self>> {
 		Ok(&self.object(client).await?.dependencies)
 	}
 
-	pub async fn root_module(&self, client: &Client) -> Result<Module> {
+	pub async fn root_module(&self, client: &dyn Client) -> Result<Module> {
 		Ok(Module::Normal(module::Normal {
 			package_id: self.id(client).await?,
 			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),

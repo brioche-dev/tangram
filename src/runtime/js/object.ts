@@ -5,14 +5,6 @@ import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
 
-export type Kind =
-	| "blob"
-	| "directory"
-	| "file"
-	| "symlink"
-	| "package"
-	| "target";
-
 export type Object_ =
 	| { kind: "blob"; value: Blob.Object_ }
 	| { kind: "directory"; value: Directory.Object_ }

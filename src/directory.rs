@@ -39,15 +39,15 @@ impl Directory {
 		Self::with_object(Object { entries })
 	}
 
-	pub async fn builder(&self, client: &Client) -> Result<Builder> {
+	pub async fn builder(&self, client: &dyn Client) -> Result<Builder> {
 		Ok(Builder::new(self.object(client).await?.entries.clone()))
 	}
 
-	pub async fn entries(&self, client: &Client) -> Result<&BTreeMap<String, Artifact>, Error> {
+	pub async fn entries(&self, client: &dyn Client) -> Result<&BTreeMap<String, Artifact>, Error> {
 		Ok(&self.object(client).await?.entries)
 	}
 
-	pub async fn get(&self, client: &Client, path: &Subpath) -> Result<Artifact> {
+	pub async fn get(&self, client: &dyn Client, path: &Subpath) -> Result<Artifact> {
 		let artifact = self
 			.try_get(client, path)
 			.await?
@@ -55,7 +55,7 @@ impl Directory {
 		Ok(artifact)
 	}
 
-	pub async fn try_get(&self, client: &Client, path: &Subpath) -> Result<Option<Artifact>> {
+	pub async fn try_get(&self, client: &dyn Client, path: &Subpath) -> Result<Option<Artifact>> {
 		// Track the current artifact.
 		let mut artifact: Artifact = self.clone().into();
 
@@ -164,7 +164,7 @@ impl Builder {
 	#[async_recursion]
 	pub async fn add(
 		mut self,
-		client: &Client,
+		client: &dyn Client,
 		path: &Subpath,
 		artifact: Artifact,
 	) -> Result<Self> {
@@ -207,7 +207,7 @@ impl Builder {
 	}
 
 	#[async_recursion]
-	pub async fn remove(mut self, client: &Client, path: &Subpath) -> Result<Self> {
+	pub async fn remove(mut self, client: &dyn Client, path: &Subpath) -> Result<Self> {
 		// Get the first component.
 		let name = path
 			.components()

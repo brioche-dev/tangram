@@ -8,7 +8,7 @@ pub struct Args {}
 impl Cli {
 	pub async fn command_lsp(&self, _args: Args) -> Result<()> {
 		// Create the language server.
-		let server = tg::lsp::Server::new(self.client.clone());
+		let server = tg::lsp::Server::new(self.client.as_ref());
 
 		// Run the language server.
 		server.serve().await?;

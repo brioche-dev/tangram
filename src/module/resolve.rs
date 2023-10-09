@@ -9,7 +9,7 @@ impl Module {
 	#[allow(clippy::too_many_lines)]
 	pub async fn resolve(
 		&self,
-		client: &Client,
+		client: &dyn Client,
 		document_store: Option<&document::Store>,
 		import: &Import,
 	) -> Result<Self> {

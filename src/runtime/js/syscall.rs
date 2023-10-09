@@ -73,8 +73,8 @@ fn syscall_inner<'s>(
 
 async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 	let (target,) = args;
-	let build = target.build(&state.client).await?;
-	let Some(output) = build.output(&state.client).await? else {
+	let build = target.build(state.client.as_ref()).await?;
+	let Some(output) = build.output(state.client.as_ref()).await? else {
 		return_error!("The build failed.");
 	};
 	Ok(output)
@@ -82,7 +82,7 @@ async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 
 async fn syscall_bundle(state: Rc<State>, args: (Artifact,)) -> Result<Artifact> {
 	let (artifact,) = args;
-	let artifact = artifact.bundle(&state.client).await?;
+	let artifact = artifact.bundle(state.client.as_ref()).await?;
 	Ok(artifact)
 }
 
@@ -103,7 +103,7 @@ async fn syscall_decompress(
 	args: (Blob, blob::CompressionFormat),
 ) -> Result<Blob> {
 	let (blob, format) = args;
-	let reader = blob.reader(&state.client).await?;
+	let reader = blob.reader(state.client.as_ref()).await?;
 	let reader = tokio::io::BufReader::new(reader);
 	let reader: Box<dyn AsyncRead + Unpin> = match format {
 		blob::CompressionFormat::Bz2 => {
@@ -119,7 +119,7 @@ async fn syscall_decompress(
 			Box::new(async_compression::tokio::bufread::ZstdDecoder::new(reader))
 		},
 	};
-	let blob = Blob::with_reader(&state.client, reader).await?;
+	let blob = Blob::with_reader(state.client.as_ref(), reader).await?;
 	Ok(blob)
 }
 
@@ -131,7 +131,7 @@ async fn syscall_download(state: Rc<State>, args: (Url, Checksum)) -> Result<Blo
 		.bytes_stream()
 		.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 		.inspect_ok(|chunk| checksum_writer.update(chunk));
-	let blob = Blob::with_reader(&state.client, StreamReader::new(stream)).await?;
+	let blob = Blob::with_reader(state.client.as_ref(), StreamReader::new(stream)).await?;
 	let actual = checksum_writer.finalize();
 	if actual != checksum {
 		return_error!(r#"The checksum did not match. Expected "{checksum}" but got "{actual}"."#);
@@ -266,7 +266,7 @@ async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) ->
 	let (blob, format) = args;
 
 	// Create the reader.
-	let reader = blob.reader(&state.client).await?;
+	let reader = blob.reader(state.client.as_ref()).await?;
 
 	// Create a temp.
 	let tempdir = tempfile::TempDir::new()?;
@@ -299,7 +299,7 @@ async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) ->
 	.unwrap()?;
 
 	// Check in the unpack temp path.
-	let artifact = Artifact::check_in(&state.client, &path)
+	let artifact = Artifact::check_in(state.client.as_ref(), &path)
 		.await
 		.wrap_err("Failed to check in the extracted archive.")?;
 
@@ -309,7 +309,7 @@ async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) ->
 async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::Object> {
 	let (id,) = args;
 	object::Handle::with_id(id)
-		.object(&state.client)
+		.object(state.client.as_ref())
 		.await
 		.cloned()
 }
@@ -323,13 +323,15 @@ fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) 
 
 async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
-	let bytes = blob.bytes(&state.client).await?;
+	let bytes = blob.bytes(state.client.as_ref()).await?;
 	Ok(bytes.into())
 }
 
 async fn syscall_store(state: Rc<State>, args: (object::Object,)) -> Result<object::Id> {
 	let (object,) = args;
-	object::Handle::with_object(object).id(&state.client).await
+	object::Handle::with_object(object)
+		.id(state.client.as_ref())
+		.await
 }
 
 fn syscall_sync<'s, A, T, F>(

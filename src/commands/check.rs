@@ -15,16 +15,16 @@ pub struct Args {
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = tg::Package::with_specifier(&self.client, args.package)
+		let package = tg::Package::with_specifier(self.client.as_ref(), args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
 		// Create the language server.
-		let server = tg::lsp::Server::new(self.client.clone());
+		let server = tg::lsp::Server::new(self.client.as_ref());
 
 		// Check the package for diagnostics.
 		let diagnostics = server
-			.check(vec![package.root_module(&self.client).await?])
+			.check(vec![package.root_module(self.client.as_ref()).await?])
 			.await?;
 
 		// Print the diagnostics.

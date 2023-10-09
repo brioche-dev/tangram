@@ -7,7 +7,7 @@ use futures::{stream::FuturesUnordered, TryStreamExt};
 use std::{os::unix::prelude::PermissionsExt, path::Path};
 
 impl Artifact {
-	pub async fn check_out(&self, client: &Client, path: &Path) -> Result<()> {
+	pub async fn check_out(&self, client: &dyn Client, path: &Path) -> Result<()> {
 		// Bundle the artifact.
 		let artifact = self
 			.bundle(client)
@@ -31,7 +31,7 @@ impl Artifact {
 
 	async fn check_out_inner(
 		&self,
-		client: &Client,
+		client: &dyn Client,
 		existing_artifact: Option<&Artifact>,
 		path: &Path,
 	) -> Result<()> {
@@ -81,7 +81,7 @@ impl Artifact {
 
 	#[async_recursion]
 	async fn check_out_directory(
-		client: &Client,
+		client: &dyn Client,
 		existing_artifact: Option<&'async_recursion Artifact>,
 		directory: &Directory,
 		path: &Path,
@@ -151,7 +151,7 @@ impl Artifact {
 	}
 
 	async fn check_out_file(
-		client: &Client,
+		client: &dyn Client,
 		existing_artifact: Option<&Artifact>,
 		file: &File,
 		path: &Path,
@@ -192,7 +192,7 @@ impl Artifact {
 	}
 
 	async fn check_out_symlink(
-		client: &Client,
+		client: &dyn Client,
 		existing_artifact: Option<&Artifact>,
 		symlink: &Symlink,
 		path: &Path,

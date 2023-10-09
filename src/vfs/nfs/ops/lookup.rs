@@ -79,7 +79,7 @@ impl Server {
 			},
 
 			NodeKind::Directory { directory, .. } => {
-				let entries = directory.entries(&self.client).await.map_err(|e| {
+				let entries = directory.entries(self.client.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get directory entries.");
 					NFS4ERR_IO
 				})?;
@@ -98,11 +98,11 @@ impl Server {
 				}
 			},
 			Artifact::File(file) => {
-				let contents = file.contents(&self.client).await.map_err(|e| {
+				let contents = file.contents(self.client.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get file contents.");
 					NFS4ERR_IO
 				})?;
-				let size = contents.size(&self.client).await.map_err(|e| {
+				let size = contents.size(self.client.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get size of file's contents.");
 					NFS4ERR_IO
 				})?;

@@ -12,7 +12,7 @@ static TANGRAM_RUN_SUBPATH: Lazy<Subpath> = Lazy::new(|| ".tangram/run".parse().
 
 impl Artifact {
 	/// Bundle an artifact with all of its recursive references at `.tangram/artifacts`.
-	pub async fn bundle(&self, client: &Client) -> Result<Artifact> {
+	pub async fn bundle(&self, client: &dyn Client) -> Result<Artifact> {
 		// Collect the artifact's recursive references.
 		let references = self.recursive_references(client).await?;
 
@@ -84,7 +84,7 @@ impl Artifact {
 	#[async_recursion]
 	async fn remove_references(
 		&self,
-		client: &'async_recursion Client,
+		client: &'async_recursion dyn Client,
 		path: &Subpath,
 	) -> Result<Artifact> {
 		match self {

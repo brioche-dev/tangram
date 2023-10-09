@@ -15,8 +15,7 @@ mod credentials;
 pub const API_URL: &str = "https://api.tangram.dev";
 
 struct Cli {
-	client: tg::Client,
-	api_client: tg::api::Client,
+	client: Box<dyn tg::Client>,
 }
 
 #[tokio::main]
@@ -48,12 +47,11 @@ async fn main_inner() -> Result<()> {
 		.unwrap()
 		.join(".tangram");
 	let server = tg::Server::new(path, None).await?;
-	let client = tg::Client::with_server(server);
-
-	let api_client = tg::api::Client::new("http://localhost:8477".parse().unwrap(), None);
 
 	// Create the CLI.
-	let cli = Cli { client, api_client };
+	let cli = Cli {
+		client: Box::new(server),
+	};
 
 	// Run the command.
 	cli.run(args).await?;

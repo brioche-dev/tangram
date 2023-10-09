@@ -12,7 +12,7 @@ impl Module {
 	/// Load the module.
 	pub async fn load(
 		&self,
-		client: &Client,
+		client: &dyn Client,
 		document_store: Option<&document::Store>,
 	) -> Result<String> {
 		match self {

@@ -15,16 +15,16 @@ pub struct Args {
 impl Cli {
 	pub async fn command_doc(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = tg::Package::with_specifier(&self.client, args.package)
+		let package = tg::Package::with_specifier(self.client.as_ref(), args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
 		// Create the language server.
-		let server = tg::lsp::Server::new(self.client.clone());
+		let server = tg::lsp::Server::new(self.client.as_ref());
 
 		// Get the docs.
 		let docs = server
-			.docs(&package.root_module(&self.client).await?)
+			.docs(&package.root_module(self.client.as_ref()).await?)
 			.await?;
 
 		// Render the docs to JSON.

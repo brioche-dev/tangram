@@ -183,7 +183,7 @@ impl Handle {
 		unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) }
 	}
 
-	pub async fn id(&self, client: &Client) -> Result<Id> {
+	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
 		// Store the object.
 		self.store(client).await?;
 
@@ -191,7 +191,7 @@ impl Handle {
 		Ok(self.state.read().unwrap().id.unwrap())
 	}
 
-	pub async fn object(&self, client: &Client) -> Result<&Object> {
+	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
 		// Load the object.
 		self.load(client).await?;
 
@@ -199,7 +199,7 @@ impl Handle {
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
 	}
 
-	pub async fn try_get_object(&self, client: &Client) -> Result<Option<&Object>> {
+	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
 		// Attempt to load the object.
 		if !self.try_load(client).await? {
 			return Ok(None);
@@ -211,7 +211,7 @@ impl Handle {
 		}))
 	}
 
-	pub async fn data(&self, client: &Client) -> Result<Data> {
+	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		// Load the object.
 		self.load(client).await?;
 
@@ -226,14 +226,14 @@ impl Handle {
 			.to_data())
 	}
 
-	pub async fn load(&self, client: &Client) -> Result<()> {
+	pub async fn load(&self, client: &dyn Client) -> Result<()> {
 		self.try_load(client)
 			.await?
 			.then_some(())
 			.wrap_err("Failed to load the object.")
 	}
 
-	pub async fn try_load(&self, client: &Client) -> Result<bool> {
+	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
 		// If the handle is loaded, then return.
 		if self.state.read().unwrap().object.is_some() {
 			return Ok(true);
@@ -263,7 +263,7 @@ impl Handle {
 	}
 
 	#[async_recursion::async_recursion]
-	pub async fn store(&self, client: &Client) -> Result<()> {
+	pub async fn store(&self, client: &dyn Client) -> Result<()> {
 		// If the handle is stored, then return.
 		if self.state.read().unwrap().id.is_some() {
 			return Ok(());
@@ -557,21 +557,21 @@ macro_rules! handle {
 				}
 			}
 
-			pub async fn id(&self, client: &Client) -> Result<Id> {
+			pub async fn id(&self, client: &dyn Client) -> Result<Id> {
 				match self.0.id(client).await? {
 					object::Id::$t(id) => Ok(id),
 					_ => unreachable!(),
 				}
 			}
 
-			pub async fn object(&self, client: &Client) -> Result<&Object> {
+			pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
 				match self.0.object(client).await? {
 					object::Object::$t(object) => Ok(object),
 					_ => unreachable!(),
 				}
 			}
 
-			pub async fn data(&self, client: &Client) -> Result<Data> {
+			pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 				match self.0.data(client).await? {
 					object::Data::$t(data) => Ok(data),
 					_ => unreachable!(),

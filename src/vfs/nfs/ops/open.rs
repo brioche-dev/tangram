@@ -54,11 +54,11 @@ impl Server {
 		};
 
 		if let NodeKind::File { file, .. } = &self.get_node(fh.node).await.unwrap().kind {
-			let Ok(blob) = file.contents(&self.client).await else {
+			let Ok(blob) = file.contents(self.client.as_ref()).await else {
 				tracing::error!("Failed to get file's content.");
 				return ResOp::Err(NFS4ERR_IO);
 			};
-			let Ok(reader) = blob.reader(&self.client).await else {
+			let Ok(reader) = blob.reader(self.client.as_ref()).await else {
 				tracing::error!("Failed to create blob reader.");
 				return ResOp::Err(NFS4ERR_IO);
 			};

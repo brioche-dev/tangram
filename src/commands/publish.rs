@@ -13,15 +13,16 @@ impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_publish(&self, args: Args) -> Result<()> {
 		// Create the package.
-		let package = tg::Package::with_path(&self.client, &args.package).await?;
+		let package = tg::Package::with_path(self.client.as_ref(), &args.package).await?;
 
-		// Push the package.
+		// Get the package ID.
+		let id = package.id(self.client.as_ref()).await?;
 
 		// Publish the package.
-		// self.api_client
-		// 	.publish_package(package)
-		// 	.await
-		// 	.wrap_err("Failed to publish the package.")?;
+		self.client
+			.publish_package(id)
+			.await
+			.wrap_err("Failed to publish the package.")?;
 
 		Ok(())
 	}

@@ -28,7 +28,6 @@ pub use self::{
 	value::Value,
 };
 
-pub mod api;
 pub mod artifact;
 pub mod blob;
 pub mod build;

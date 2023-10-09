@@ -14,7 +14,7 @@ impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_fmt(&self, args: Args) -> Result<()> {
 		// Create the language server.
-		let server = tg::lsp::Server::new(self.client.clone());
+		let server = tg::lsp::Server::new(self.client.as_ref());
 
 		let path = args.path.join(ROOT_MODULE_FILE_NAME);
 		let text = tokio::fs::read_to_string(&path).await?;

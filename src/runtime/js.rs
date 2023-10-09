@@ -25,7 +25,7 @@ const SOURCE_MAP: &[u8] = include_bytes!(concat!(
 ));
 
 struct State {
-	client: Client,
+	client: Box<dyn Client>,
 	futures: Rc<RefCell<Futures>>,
 	global_source_map: Option<SourceMap>,
 	loaded_modules: Rc<RefCell<Vec<LoadedModule>>>,
@@ -46,7 +46,7 @@ struct LoadedModule {
 
 #[allow(clippy::too_many_lines)]
 pub async fn run(
-	client: Client,
+	client: &dyn Client,
 	target: Target,
 	progress: Arc<server::build::State>,
 	main_runtime_handle: tokio::runtime::Handle,
@@ -68,7 +68,7 @@ pub async fn run(
 	// Create the state.
 	let state = Rc::new(State {
 		main_runtime_handle,
-		client,
+		client: client.clone_box(),
 		progress,
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 		loaded_modules: Rc::new(RefCell::new(Vec::new())),
@@ -331,11 +331,11 @@ fn resolve_module(scope: &mut v8::HandleScope, module: &Module, import: &Import)
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
-		let client = state.client.clone();
+		let client = state.client.clone_box();
 		let module = module.clone();
 		let import = import.clone();
 		async move {
-			let module = module.resolve(&client, None, &import).await;
+			let module = module.resolve(client.as_ref(), None, &import).await;
 			sender.send(module).unwrap();
 		}
 	});
@@ -400,10 +400,10 @@ fn load_module<'s>(
 	// Load the module.
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
-		let client = state.client.clone();
+		let client = state.client.clone_box();
 		let module = module.clone();
 		async move {
-			let result = module.load(&client, None).await;
+			let result = module.load(client.as_ref(), None).await;
 			sender.send(result).unwrap();
 		}
 	});

@@ -1,6 +1,5 @@
 use crate::{
-	build, runtime, system, target, Blob, Build, Client, Error, Result, Server, Target, Value,
-	WrapErr,
+	build, runtime, system, target, Blob, Build, Error, Result, Server, Target, Value, WrapErr,
 };
 use futures::{
 	stream::{self, BoxStream},
@@ -86,6 +85,8 @@ impl Server {
 		&self,
 		target_id: target::Id,
 	) -> Result<build::Id> {
+		let target = Target::with_id(target_id);
+
 		// Attempt to get the build for the target.
 		if let Some(build_id) = self.try_get_build_for_target(target_id).await? {
 			return Ok(build_id);
@@ -102,12 +103,9 @@ impl Server {
 
 		// Spawn the task.
 		tokio::spawn({
-			let target = Target::with_id(target_id);
 			let server = self.clone();
 			async move {
-				let client = &Client::with_server(server.clone());
-
-				let object = target.object(client).await?;
+				let object = target.object(&server).await?;
 
 				let output = match object.host.os() {
 					system::Os::Js => {
@@ -116,18 +114,13 @@ impl Server {
 							.state
 							.local_pool
 							.spawn_pinned({
-								let client = client.clone();
+								let server = server.clone();
 								let target = target.clone();
 								let state = state.clone();
 								let main_runtime_handle = tokio::runtime::Handle::current();
 								move || async move {
-									runtime::js::run(
-										client.clone(),
-										target,
-										state,
-										main_runtime_handle,
-									)
-									.await
+									runtime::js::run(&server, target, state, main_runtime_handle)
+										.await
 								}
 							})
 							.await
@@ -148,7 +141,7 @@ impl Server {
 						.map(::bytes::Bytes::from)
 						.map(Ok::<_, std::io::Error>),
 				);
-				let log = Blob::with_reader(client, log).await?;
+				let log = Blob::with_reader(&server, log).await?;
 				let output = state.output().await;
 				let object = build::Object {
 					children,
@@ -160,7 +153,10 @@ impl Server {
 				object
 					.children()
 					.into_iter()
-					.map(|child| async move { child.store(client).await })
+					.map(|child| {
+						let server = server.clone();
+						async move { child.store(&server).await }
+					})
 					.collect::<futures::stream::FuturesUnordered<_>>()
 					.try_collect()
 					.await?;
@@ -172,7 +168,7 @@ impl Server {
 				let bytes = data.serialize()?;
 
 				// Store the object.
-				client
+				server
 					.try_put_object_bytes(build_id.into(), &bytes)
 					.await
 					.wrap_err("Failed to put the object.")?
@@ -207,7 +203,6 @@ impl Server {
 		&self,
 		id: build::Id,
 	) -> Result<Option<BoxStream<'static, build::Id>>> {
-		let client = &Client::with_server(self.clone());
 		let build = Build::with_id(id);
 
 		// Attempt to stream the children from the running state.
@@ -226,7 +221,7 @@ impl Server {
 
 		// Attempt to get the children from the object.
 		'a: {
-			let Some(object) = build.try_get_object(client).await? else {
+			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
 			return Ok(Some(
@@ -254,7 +249,6 @@ impl Server {
 		&self,
 		id: build::Id,
 	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
-		let client = &Client::with_server(self.clone());
 		let build = Build::with_id(id);
 
 		// Attempt to stream the log from the running state.
@@ -273,12 +267,11 @@ impl Server {
 
 		// Attempt to get the log from the object.
 		'a: {
-			let Some(object) = build.try_get_object(client).await? else {
+			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
 			let object = object.clone();
-			let client = client.clone();
-			let bytes = object.log.bytes(&client).await?;
+			let bytes = object.log.bytes(self).await?;
 			return Ok(Some(stream::once(async move { bytes }).boxed()));
 		}
 
@@ -300,7 +293,6 @@ impl Server {
 		&self,
 		id: build::Id,
 	) -> Result<Option<Option<Value>>> {
-		let client = &Client::with_server(self.clone());
 		let build = Build::with_id(id);
 
 		// Attempt to await the output from the running state.
@@ -319,7 +311,7 @@ impl Server {
 
 		// Attempt to get the output from the object.
 		'a: {
-			let Some(object) = build.try_get_object(client).await? else {
+			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
 			return Ok(Some(object.output.clone()));

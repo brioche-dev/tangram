@@ -1,5 +1,6 @@
-use crate::{id, target, Client, Result};
-use futures::FutureExt;
+use crate::{client, id, package, target, Client, Id, Result, Value};
+use async_trait::async_trait;
+use futures::{stream::BoxStream, FutureExt};
 use http_body_util::BodyExt;
 use itertools::Itertools;
 use std::{
@@ -31,13 +32,10 @@ pub struct State {
 	local_pool: tokio_util::task::LocalPoolHandle,
 
 	/// A client for communicating with the parent.
-	parent: Option<Client>,
+	parent: Option<Box<dyn Client>>,
 
 	/// The path to the directory where the server stores its data.
 	path: PathBuf,
-
-	/// A semaphore that limits the number of concurrent subprocesses.
-	process_semaphore: tokio::sync::Semaphore,
 
 	/// The state of the server's running builds.
 	running: std::sync::RwLock<(BuildForTargetMap, BuildStateMap)>,
@@ -58,7 +56,7 @@ pub struct Database {
 }
 
 impl Server {
-	pub async fn new(path: PathBuf, parent: Option<Client>) -> Result<Server> {
+	pub async fn new(path: PathBuf, parent: Option<Box<dyn Client>>) -> Result<Server> {
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path).await?;
 
@@ -92,10 +90,6 @@ impl Server {
 			std::thread::available_parallelism().unwrap().get(),
 		);
 
-		// Create the process semaphore.
-		let process_semaphore =
-			tokio::sync::Semaphore::new(std::thread::available_parallelism().unwrap().get());
-
 		// Create the state of the server's running builds.
 		let running = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
 
@@ -109,7 +103,6 @@ impl Server {
 			local_pool,
 			parent,
 			path,
-			process_semaphore,
 			running,
 			// vfs_server_task,
 		});
@@ -118,7 +111,6 @@ impl Server {
 		let server = Server { state };
 
 		// // Start the VFS server.
-		// let client = Client::with_server(server.clone());
 		// let kind = if cfg!(target_os = "linux") {
 		// 	vfs::Kind::Fuse
 		// } else {
@@ -226,6 +218,95 @@ impl Server {
 			None
 		};
 		Ok(response)
+	}
+}
+
+#[async_trait]
+impl Client for Server {
+	fn clone_box(&self) -> Box<dyn Client> {
+		Box::new(self.clone())
+	}
+
+	fn set_token(&self, _token: Option<String>) {}
+
+	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
+		&self.state.file_descriptor_semaphore
+	}
+
+	async fn get_object_exists(&self, id: crate::object::Id) -> Result<bool> {
+		self.get_object_exists(id).await
+	}
+
+	async fn get_object_bytes(&self, id: crate::object::Id) -> Result<Vec<u8>> {
+		self.get_object_bytes(id).await
+	}
+
+	async fn try_get_object_bytes(&self, id: crate::object::Id) -> Result<Option<Vec<u8>>> {
+		self.try_get_object_bytes(id).await
+	}
+
+	async fn try_put_object_bytes(
+		&self,
+		id: crate::object::Id,
+		bytes: &[u8],
+	) -> Result<Result<(), Vec<crate::object::Id>>> {
+		self.try_put_object_bytes(id, bytes).await
+	}
+
+	async fn try_get_build_for_target(
+		&self,
+		id: crate::target::Id,
+	) -> Result<Option<crate::build::Id>> {
+		self.try_get_build_for_target(id).await
+	}
+
+	async fn get_or_create_build_for_target(
+		&self,
+		id: crate::target::Id,
+	) -> Result<crate::build::Id> {
+		self.get_or_create_build_for_target(id).await
+	}
+
+	async fn try_get_build_children(
+		&self,
+		id: crate::build::Id,
+	) -> Result<Option<BoxStream<'static, crate::build::Id>>> {
+		self.try_get_build_children(id).await
+	}
+
+	async fn try_get_build_log(
+		&self,
+		id: crate::build::Id,
+	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
+		self.try_get_build_log(id).await
+	}
+
+	async fn try_get_build_output(&self, id: crate::build::Id) -> Result<Option<Option<Value>>> {
+		self.try_get_build_output(id).await
+	}
+
+	async fn clean(&self) -> Result<()> {
+		self.clean().await
+	}
+
+	async fn create_login(&self) -> Result<client::Login> {
+		todo!()
+	}
+
+	async fn get_login(&self, _id: Id) -> Result<client::Login> {
+		todo!()
+	}
+
+	async fn publish_package(&self, _id: package::Id) -> Result<()> {
+		todo!()
+	}
+
+	async fn search_packages(&self, _query: &str) -> Result<Vec<client::SearchResult>> {
+		todo!()
+	}
+
+	async fn get_current_user(&self) -> Result<client::User> {
+		todo!()
 	}
 }
 

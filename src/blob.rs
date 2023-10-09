@@ -59,7 +59,10 @@ pub enum CompressionFormat {
 }
 
 impl Blob {
-	pub async fn with_reader(client: &Client, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
+	pub async fn with_reader(
+		client: &dyn Client,
+		mut reader: impl AsyncRead + Unpin,
+	) -> Result<Self> {
 		let mut leaves = Vec::new();
 		let mut bytes = vec![0u8; MAX_LEAF_SIZE];
 		loop {
@@ -138,32 +141,32 @@ impl Blob {
 		)))
 	}
 
-	pub async fn size(&self, client: &Client) -> Result<u64> {
+	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
 		match self.object(client).await? {
 			Object::Branch(children) => Ok(children.iter().map(|(_, size)| size).sum()),
 			Object::Leaf(bytes) => Ok(bytes.len().to_u64().unwrap()),
 		}
 	}
 
-	pub async fn reader(&self, client: &Client) -> Result<Reader> {
+	pub async fn reader(&self, client: &dyn Client) -> Result<Reader> {
 		let size = self.size(client).await?;
 		Ok(Reader {
 			blob: self.clone(),
 			size,
-			client: client.clone(),
+			client: client.clone_box(),
 			position: 0,
 			state: State::Empty,
 		})
 	}
 
-	pub async fn bytes(&self, client: &Client) -> Result<Vec<u8>> {
+	pub async fn bytes(&self, client: &dyn Client) -> Result<Vec<u8>> {
 		let mut reader = self.reader(client).await?;
 		let mut bytes = Vec::new();
 		reader.read_to_end(&mut bytes).await?;
 		Ok(bytes)
 	}
 
-	pub async fn text(&self, client: &Client) -> Result<String> {
+	pub async fn text(&self, client: &dyn Client) -> Result<String> {
 		let bytes = self.bytes(client).await?;
 		let string = String::from_utf8(bytes)?;
 		Ok(string)
@@ -238,7 +241,7 @@ impl Data {
 #[pin_project]
 pub struct Reader {
 	blob: Blob,
-	client: Client,
+	client: Box<dyn Client>,
 	position: u64,
 	size: u64,
 	state: State,
@@ -267,13 +270,13 @@ impl AsyncRead for Reader {
 					}
 					let future = {
 						let blob = this.blob.clone();
-						let client = this.client.clone();
+						let client = this.client.clone_box();
 						let position = *this.position;
 						async move {
 							let mut current_blob = blob.clone();
 							let mut current_blob_position = 0;
 							let bytes = 'outer: loop {
-								match &current_blob.object(&client).await? {
+								match &current_blob.object(client.as_ref()).await? {
 									Object::Branch(children) => {
 										for (child, size) in children {
 											if position < current_blob_position + size {

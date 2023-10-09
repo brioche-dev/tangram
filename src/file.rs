@@ -60,15 +60,15 @@ impl File {
 		Builder::new(contents)
 	}
 
-	pub async fn contents(&self, client: &Client) -> Result<&Blob> {
+	pub async fn contents(&self, client: &dyn Client) -> Result<&Blob> {
 		Ok(&self.object(client).await?.contents)
 	}
 
-	pub async fn executable(&self, client: &Client) -> Result<bool> {
+	pub async fn executable(&self, client: &dyn Client) -> Result<bool> {
 		Ok(self.object(client).await?.executable)
 	}
 
-	pub async fn references(&self, client: &Client) -> Result<&[Artifact]> {
+	pub async fn references(&self, client: &dyn Client) -> Result<&[Artifact]> {
 		Ok(self.object(client).await?.references.as_slice())
 	}
 }

@@ -21,13 +21,13 @@ pub struct Options {
 }
 
 impl Artifact {
-	pub async fn check_in(client: &Client, path: &Path) -> Result<Self> {
+	pub async fn check_in(client: &dyn Client, path: &Path) -> Result<Self> {
 		Self::check_in_with_options(client, path, &Options::default()).await
 	}
 
 	#[async_recursion]
 	pub async fn check_in_with_options(
-		client: &Client,
+		client: &dyn Client,
 		path: &Path,
 		options: &Options,
 	) -> Result<Self> {
@@ -67,7 +67,7 @@ impl Artifact {
 	}
 
 	async fn check_in_directory(
-		client: &Client,
+		client: &dyn Client,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,
@@ -109,7 +109,7 @@ impl Artifact {
 	}
 
 	async fn check_in_file(
-		client: &Client,
+		client: &dyn Client,
 		path: &Path,
 		metadata: &Metadata,
 		_options: &Options,
@@ -146,7 +146,7 @@ impl Artifact {
 	}
 
 	async fn check_in_symlink(
-		_client: &Client,
+		_client: &dyn Client,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,

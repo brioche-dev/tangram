@@ -85,19 +85,19 @@ pub struct Data {
 }
 
 impl Target {
-	pub async fn host(&self, client: &Client) -> Result<&System> {
+	pub async fn host(&self, client: &dyn Client) -> Result<&System> {
 		Ok(&self.object(client).await?.host)
 	}
 
-	pub async fn executable(&self, client: &Client) -> Result<&Template> {
+	pub async fn executable(&self, client: &dyn Client) -> Result<&Template> {
 		Ok(&self.object(client).await?.executable)
 	}
 
-	pub async fn package(&self, client: &Client) -> Result<&Option<Package>> {
+	pub async fn package(&self, client: &dyn Client) -> Result<&Option<Package>> {
 		Ok(&self.object(client).await?.package)
 	}
 
-	pub async fn build(&self, client: &Client) -> Result<Build> {
+	pub async fn build(&self, client: &dyn Client) -> Result<Build> {
 		let target_id = self.id(client).await?;
 		let build_id = client.get_or_create_build_for_target(target_id).await?;
 		let build = Build::with_id(build_id);
