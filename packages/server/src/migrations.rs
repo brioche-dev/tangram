@@ -72,8 +72,12 @@ async fn migration_0000(path: &Path) -> Result<()> {
 	// Create the assignments database.
 	env.create_db("assignments".into(), lmdb::DatabaseFlags::empty())?;
 
+	// Create the trackers database
+	env.create_db("trackers".into(), lmdb::DatabaseFlags::empty())?;
+
 	// Create the artifacts directory.
 	let artifacts_path = path.join("artifacts");
+
 	tokio::fs::create_dir_all(&artifacts_path).await?;
 
 	// Create the tmp directory.

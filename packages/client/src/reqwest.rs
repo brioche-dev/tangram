@@ -1,6 +1,8 @@
 use crate::{
 	build, id, object, package, target, user, user::Login, value, Client, Handle, Id, Result,
 	Value, WrapErr,
+	artifact, Artifact,
+	Package,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -8,10 +10,16 @@ use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
 };
-use std::sync::{Arc, Weak};
 use tokio::io::AsyncReadExt;
 use tokio_util::io::StreamReader;
-use url::Url;
+
+use std::{
+	os::unix::prelude::OsStrExt,
+	path::{Path, PathBuf},
+	sync::{Arc, Weak},
+
+};
+use url::{Host, Url};
 
 #[derive(Clone, Debug)]
 pub struct Reqwest {
@@ -24,11 +32,31 @@ struct State {
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	token: std::sync::RwLock<Option<String>>,
 	url: Url,
+	is_local: bool,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct GetForPathBody {
+	path: PathBuf,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct SetForPathBody {
+	path: PathBuf,
+	id: Id,
 }
 
 impl Reqwest {
 	#[must_use]
 	pub fn new(url: Url, token: Option<String>) -> Self {
+		let is_local = url
+			.host()
+			.map(|host| match host {
+				Host::Domain(domain) => domain == "localhost",
+				Host::Ipv4(ip) => ip.is_loopback(),
+				Host::Ipv6(ip) => ip.is_loopback(),
+			})
+			.unwrap_or(false);
 		let client = reqwest::Client::builder()
 			.http2_prior_knowledge()
 			.build()
@@ -38,6 +66,7 @@ impl Reqwest {
 			token: std::sync::RwLock::new(token),
 			client,
 			file_descriptor_semaphore: tokio::sync::Semaphore::new(16),
+			is_local,
 		});
 		Self { state }
 	}
@@ -325,7 +354,87 @@ impl Client for Reqwest {
 		let user = response
 			.json()
 			.await
-			.wrap_err("Faield to get the response JSON.")?;
+			.wrap_err("Failed to get the response JSON.")?;
 		Ok(user)
+	}
+
+	fn is_local(&self) -> bool {
+		self.state.is_local
+	}
+
+	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>> {
+		let body = GetForPathBody { path: path.into() };
+		let body = serde_json::to_vec(&body)?;
+		let response = self
+			.request(reqwest::Method::GET, "/v1/artifact/path")
+			.body(body)
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
+
+		if response.status().is_success() {
+			let id: Id = response.json().await?;
+			let artifact = artifact::Artifact::with_id(id.try_into()?);
+			Ok(Some(artifact))
+		} else if response.status().as_u16() == 404 {
+			Ok(None)
+		} else {
+			Err(response.error_for_status()
+				.wrap_err("The response had a non-successful status.")
+				.unwrap_err())
+		}
+	}
+
+	async fn set_artifact_for_path(&self, path: &Path, artifact: Artifact) -> Result<()> {
+		let path = path.into();
+		let id = artifact.id(self).await?.into();
+		let body = SetForPathBody { path, id };
+		let body = serde_json::to_vec(&body)?;
+		self.request(reqwest::Method::PUT, "/v1/artifact/path")
+			.body(body)
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("The response had a non-success status.")?;
+		Ok(())
+	}
+
+	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<Package>> {
+		let body = GetForPathBody { path: path.into() };
+		let body = serde_json::to_vec(&body)?;
+		let response = self
+			.request(reqwest::Method::GET, "/v1/package/path")
+			.body(body)
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
+
+		if response.status().is_success() {
+			let id: Id = response.json().await?;
+			let package = package::Package::with_id(id.try_into()?);
+			Ok(Some(package))
+		} else if response.status().as_u16() == 404 {
+			Ok(None)
+		} else {
+			Err(response.error_for_status()
+				.wrap_err("The response had a non-successful status.")
+				.unwrap_err())
+		}
+	}
+
+	async fn set_package_for_path(&self, path: &Path, package: Package) -> Result<()> {
+		let path = path.into();
+		let id = package.id(self).await?.into();
+		let body = SetForPathBody { path, id };
+		let body = serde_json::to_vec(&body)?;
+		self.request(reqwest::Method::PUT, "/v1/package/path")
+			.body(body)
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("The response had a non-success status.")?;
+		Ok(())
 	}
 }
