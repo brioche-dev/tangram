@@ -114,7 +114,7 @@ pub enum Data {
 
 impl Value {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		match self {
 			Value::Null(_) => Data::Null(()),
 			Value::Bool(value) => Data::Bool(*value),
@@ -140,7 +140,7 @@ impl Value {
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		match data {
 			Data::Null(_) => Value::Null(()),
 			Data::Bool(bool) => Value::Bool(bool),

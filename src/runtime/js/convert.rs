@@ -1555,7 +1555,7 @@ impl FromV8 for object::State {
 		let object = value.get(scope, object.into()).unwrap();
 		let object = from_v8(scope, object)?;
 
-		Ok(Self::with_id_and_object(id, object))
+		Ok(Self::new(id, object))
 	}
 }
 

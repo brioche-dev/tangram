@@ -175,7 +175,7 @@ impl Blob {
 
 impl Object {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		match self {
 			Self::Branch(branch) => Data::Branch(
 				branch
@@ -188,7 +188,7 @@ impl Object {
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		match data {
 			Data::Branch(data) => Self::Branch(
 				data.into_iter()

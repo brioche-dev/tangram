@@ -2,7 +2,7 @@ pub use self::reqwest::Reqwest;
 use crate::{build, object, package, target, Id, Result, Value, WrapErr};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use std::fmt::Debug;
+use std::{fmt::Debug, path::Path};
 use url::Url;
 
 mod reqwest;
@@ -35,6 +35,8 @@ pub struct User {
 #[async_trait]
 pub trait Client: Debug + Send + Sync + 'static {
 	fn clone_box(&self) -> Box<dyn Client>;
+
+	fn path(&self) -> Option<&Path>;
 
 	fn set_token(&self, token: Option<String>);
 
@@ -92,7 +94,7 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn create_login(&self) -> Result<Login>;
 
-	async fn get_login(&self, id: Id) -> Result<Login>;
+	async fn get_login(&self, id: Id) -> Result<Option<Login>>;
 
 	async fn publish_package(&self, id: package::Id) -> Result<()>;
 

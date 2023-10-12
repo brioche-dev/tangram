@@ -227,6 +227,10 @@ impl Client for Server {
 		Box::new(self.clone())
 	}
 
+	fn path(&self) -> Option<&Path> {
+		Some(self.path())
+	}
+
 	fn set_token(&self, _token: Option<String>) {}
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
@@ -289,23 +293,23 @@ impl Client for Server {
 		self.clean().await
 	}
 
-	async fn create_login(&self) -> Result<client::Login> {
+	async fn create_login(&self) -> Result<crate::client::Login> {
 		todo!()
 	}
 
-	async fn get_login(&self, _id: Id) -> Result<client::Login> {
+	async fn get_login(&self, _id: crate::Id) -> Result<Option<crate::client::Login>> {
 		todo!()
 	}
 
-	async fn publish_package(&self, _id: package::Id) -> Result<()> {
+	async fn publish_package(&self, _id: crate::package::Id) -> Result<()> {
 		todo!()
 	}
 
-	async fn search_packages(&self, _query: &str) -> Result<Vec<client::SearchResult>> {
+	async fn search_packages(&self, _query: &str) -> Result<Vec<crate::client::SearchResult>> {
 		todo!()
 	}
 
-	async fn get_current_user(&self) -> Result<client::User> {
+	async fn get_current_user(&self) -> Result<crate::client::User> {
 		todo!()
 	}
 }

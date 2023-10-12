@@ -99,7 +99,7 @@ impl Directory {
 
 impl Object {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		let entries = self
 			.entries
 			.iter()
@@ -109,7 +109,7 @@ impl Object {
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		let entries = data
 			.entries
 			.into_iter()

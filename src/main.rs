@@ -42,7 +42,7 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	// let client = tg::Client::with_url("http://localhost:8477".parse().unwrap(), None);
+	// Create the server.
 	let path = tg::util::dirs::home_directory_path()
 		.unwrap()
 		.join(".tangram");

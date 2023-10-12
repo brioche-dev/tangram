@@ -57,8 +57,8 @@ impl Template {
 
 	pub async fn try_render<'a, F, Fut>(&'a self, f: F) -> Result<String>
 	where
-		F: FnMut(&'a Component) -> Fut,
-		Fut: Future<Output = Result<Cow<'a, str>>>,
+		F: (FnMut(&'a Component) -> Fut) + 'a,
+		Fut: Future<Output = Result<String>> + 'a,
 	{
 		Ok(self
 			.components
@@ -108,7 +108,7 @@ impl Template {
 		Ok(Self { components })
 	}
 
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		let components = self
 			.components
 			.iter()
@@ -117,7 +117,7 @@ impl Template {
 		Data { components }
 	}
 
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		let components = data
 			.components
 			.into_iter()
@@ -213,7 +213,7 @@ pub mod component {
 	}
 
 	impl Component {
-		pub(crate) fn to_data(&self) -> Data {
+		pub fn to_data(&self) -> Data {
 			match self {
 				Self::String(string) => Data::String(string.clone()),
 				Self::Artifact(artifact) => Data::Artifact(artifact.expect_id()),
@@ -221,7 +221,7 @@ pub mod component {
 			}
 		}
 
-		pub(crate) fn from_data(data: Data) -> Self {
+		pub fn from_data(data: Data) -> Self {
 			match data {
 				Data::String(string) => Self::String(string),
 				Data::Artifact(id) => Self::Artifact(Artifact::with_id(id)),

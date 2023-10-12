@@ -20,14 +20,14 @@ pub struct Data {
 
 impl Placeholder {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		Data {
 			name: self.name.clone(),
 		}
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		Self { name: data.name }
 	}
 }

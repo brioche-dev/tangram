@@ -51,6 +51,10 @@ impl Client for Reqwest {
 		Box::new(self.clone())
 	}
 
+	fn path(&self) -> Option<&std::path::Path> {
+		None
+	}
+
 	fn set_token(&self, token: Option<String>) {
 		*self.state.token.write().unwrap() = token;
 	}
@@ -162,7 +166,7 @@ impl Client for Reqwest {
 		Ok(response)
 	}
 
-	async fn get_login(&self, id: Id) -> Result<Login> {
+	async fn get_login(&self, id: Id) -> Result<Option<Login>> {
 		let response = self
 			.request(reqwest::Method::GET, &format!("/v1/logins/{id}"))
 			.send()

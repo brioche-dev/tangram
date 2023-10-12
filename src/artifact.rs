@@ -1,6 +1,6 @@
 use crate::{
-	directory, file, id, object, return_error, symlink, Client, Directory, Error, File, Result,
-	Symlink, Value,
+	checksum, directory, file, id, object, return_error, symlink, Checksum, Client, Directory,
+	Error, File, Result, Symlink, Value,
 };
 use derive_more::{From, TryUnwrap};
 use futures::stream::{FuturesUnordered, TryStreamExt};
@@ -91,6 +91,14 @@ impl Artifact {
 			Self::File(file) => file.handle(),
 			Self::Symlink(symlink) => symlink.handle(),
 		}
+	}
+
+	pub async fn checksum(
+		&self,
+		client: &dyn Client,
+		algorithm: checksum::Algorithm,
+	) -> Result<Checksum> {
+		todo!()
 	}
 
 	/// Collect an artifact's recursive references.

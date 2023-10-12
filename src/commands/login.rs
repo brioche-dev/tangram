@@ -31,7 +31,8 @@ impl Cli {
 				.client
 				.get_login(login.id)
 				.await
-				.wrap_err("Failed to get the login.")?;
+				.wrap_err("Failed to get the login.")?
+				.wrap_err("Expected the login to exist.")?;
 			if let Some(token) = login.token {
 				break token;
 			}

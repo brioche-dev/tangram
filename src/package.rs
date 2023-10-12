@@ -203,7 +203,7 @@ impl Package {
 
 impl Object {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		let artifact = self.artifact.expect_id();
 		let dependencies = self
 			.dependencies
@@ -217,7 +217,7 @@ impl Object {
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		let artifact = Artifact::with_id(data.artifact);
 		let dependencies = data
 			.dependencies

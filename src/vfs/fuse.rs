@@ -907,9 +907,6 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 	);
 	tracing::info!("Got /dev/fuse fd: {fd}");
 
-	// let mut status = 0;
-	// libc::waitpid(pid, std::ptr::addr_of_mut!(status), 0);
-	// tracing::info!("fusermount3 exited with status {status}.");
 	if fd > 0 {
 		libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
 	}

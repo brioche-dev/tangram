@@ -75,7 +75,7 @@ impl File {
 
 impl Object {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		let contents = self.contents.expect_id();
 		let executable = self.executable;
 		let references = self.references.iter().map(Artifact::expect_id).collect();
@@ -87,7 +87,7 @@ impl Object {
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		let contents = Blob::with_id(data.contents);
 		let executable = data.executable;
 		let references = data.references.into_iter().map(Artifact::with_id).collect();

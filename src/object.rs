@@ -323,7 +323,8 @@ impl Handle {
 
 impl State {
 	#[must_use]
-	pub fn with_id_and_object(id: Option<Id>, object: Option<Object>) -> Self {
+	pub fn new(id: Option<Id>, object: Option<Object>) -> Self {
+		assert!(id.is_some() || object.is_some());
 		Self { id, object }
 	}
 
@@ -355,7 +356,8 @@ impl State {
 }
 
 impl Object {
-	pub(crate) fn to_data(&self) -> Data {
+	#[must_use]
+	pub fn to_data(&self) -> Data {
 		match self {
 			Self::Blob(blob) => Data::Blob(blob.to_data()),
 			Self::Directory(directory) => Data::Directory(directory.to_data()),
@@ -367,7 +369,8 @@ impl Object {
 		}
 	}
 
-	pub(crate) fn from_data(data: Data) -> Self {
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
 		match data {
 			Data::Blob(data) => Self::Blob(blob::Object::from_data(data)),
 			Data::Directory(data) => Self::Directory(directory::Object::from_data(data)),

@@ -53,14 +53,14 @@ impl Symlink {
 
 impl Object {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		let target = self.target.to_data();
 		Data { target }
 	}
 
 	#[allow(clippy::needless_pass_by_value)]
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		let target = Template::from_data(data.target);
 		Self { target }
 	}

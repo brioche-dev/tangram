@@ -97,6 +97,26 @@ impl Target {
 		Ok(&self.object(client).await?.package)
 	}
 
+	pub async fn name(&self, client: &dyn Client) -> Result<&Option<String>> {
+		Ok(&self.object(client).await?.name)
+	}
+
+	pub async fn env(&self, client: &dyn Client) -> Result<&BTreeMap<String, Value>> {
+		Ok(&self.object(client).await?.env)
+	}
+
+	pub async fn args(&self, client: &dyn Client) -> Result<&Vec<Value>> {
+		Ok(&self.object(client).await?.args)
+	}
+
+	pub async fn checksum(&self, client: &dyn Client) -> Result<&Option<Checksum>> {
+		Ok(&self.object(client).await?.checksum)
+	}
+
+	pub async fn unsafe_(&self, client: &dyn Client) -> Result<bool> {
+		Ok(self.object(client).await?.unsafe_)
+	}
+
 	pub async fn build(&self, client: &dyn Client) -> Result<Build> {
 		let target_id = self.id(client).await?;
 		let build_id = client.get_or_create_build_for_target(target_id).await?;
@@ -107,7 +127,7 @@ impl Target {
 
 impl Object {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		Data {
 			host: self.host.clone(),
 			executable: self.executable.to_data(),
@@ -125,7 +145,7 @@ impl Object {
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		Self {
 			host: data.host,
 			executable: Template::from_data(data.executable),

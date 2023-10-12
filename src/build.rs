@@ -131,7 +131,7 @@ impl Id {
 
 impl Object {
 	#[must_use]
-	pub(crate) fn to_data(&self) -> Data {
+	pub fn to_data(&self) -> Data {
 		let children = self.children.iter().map(Build::id).collect();
 		let log = self.log.expect_id();
 		let output = self.output.clone().map(|value| value.to_data());
@@ -143,7 +143,7 @@ impl Object {
 	}
 
 	#[must_use]
-	pub(crate) fn from_data(data: Data) -> Self {
+	pub fn from_data(data: Data) -> Self {
 		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
 		let output = data.output.map(value::Value::from_data);
