@@ -15,8 +15,8 @@
 	},
 	"workspaces": [
 		"packages/eslint-plugin",
-		"packages/vscode",
-		"src/runtime/js",
-		"src/lsp"
+		"packages/lsp",
+		"packages/runtime",
+		"packages/vscode"
 	]
 }

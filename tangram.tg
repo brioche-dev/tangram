@@ -1,13 +1,3 @@
-// export let source = await tg.target(() =>
-// 	tg.directory({
-// 		["Cargo.toml"]: tg.include("Cargo.toml"),
-// 		["Cargo.lock"]: tg.include("Cargo.lock"),
-// 		["src"]: tg.include("./src"),
-// 		["packages"]: tg.include("./packages"),
-// 		["assets"]: tg.include("./assets"),
-// 	}),
-// );
-
 export let test = tg.target(async () => {
 	await testDirectory();
 	await testFile();

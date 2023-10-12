@@ -2,11 +2,14 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_safety_doc)]
+#![allow(clippy::redundant_pattern)]
 
 pub use self::{deserializer::Deserializer, kind::Kind, serializer::Serializer, value::Value};
 use std::io::{Read, Result, Write};
 pub use tangram_serialize_macro::{Deserialize, Serialize};
 
+#[cfg(feature = "bytes")]
+mod bytes;
 pub mod deserializer;
 pub mod kind;
 pub mod serializer;

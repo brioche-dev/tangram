@@ -1,72 +1,59 @@
 [workspace]
-members = ["packages/serialize"]
+default-members = ["packages/cli"]
+members = [
+  "packages/cli",
+  "packages/client",
+  "packages/lsp",
+  "packages/runtime",
+  "packages/serialize",
+  "packages/server",
+]
 
 [workspace.package]
 authors = ["Tangram <root@tangram.dev"]
 description = "Tangram is a programmable build system and package manager that makes your builds simple, reproducible, cacheable, and distributable."
 edition = "2021"
-homepage = "https://github.com/tangramdotdev/tangram"
+homepage = "https://www.tangram.dev"
 license = "MIT"
 repository = "https://github.com/tangramdotdev/tangram"
 version = "0.0.0"
 
 [workspace.dependencies]
-tangram_serialize = { path = "packages/serialize" }
-
-[package]
-name = "tg"
-
-description = { workspace = true }
-edition = { workspace = true }
-homepage = { workspace = true }
-license = { workspace = true }
-publish = false
-repository = { workspace = true }
-version = { workspace = true }
-
-[lib]
-path = "src/lib.rs"
-
-[[bin]]
-name = "tg"
-path = "src/main.rs"
-
-[build-dependencies]
-v8 = { version = "=0.79.1", optional = true }
-
-[dev-dependencies]
-pretty_assertions = "1"
-proptest = "1"
-
-[dependencies]
 async-compression = { version = "0.4", features = ["all"] }
 async-recursion = "1"
 async-trait = "0.1"
 base64 = "0.21"
 blake3 = "1"
-byteorder = "1.4"
-bytes = "1"
+byteorder = "1"
+bytes = { version = "1", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 derive_more = { version = "=1.0.0-beta.3", features = ["full"] }
-either = { version = "1", optional = true, features = ["serde"] }
+either = { version = "1", features = ["serde"] }
 fnv = "1"
 futures = "0.3"
+heck = "0.4"
 hex = { version = "0.4", features = ["serde"] }
 http = "0.2"
-http-body = { version = "=1.0.0-rc.2", optional = true }
-http-body-util = { version = "=0.1.0-rc.3", optional = true }
-hyper = { version = "=1.0.0-rc.4", features = ["full"], optional = true }
-hyper-util = { version = "=0.0.0", optional = true }
+http-body = { version = "=1.0.0-rc.2" }
+http-body-util = { version = "=0.1.0-rc.3" }
+hyper = { version = "=1.0.0-rc.4", features = ["full"] }
+hyper-util = { version = "=0.0.0" }
 include_dir = "0.7"
 indoc = "2"
 itertools = "0.11"
 libc = "0.2"
-lmdb-rkv = { version = "0.14", optional = true }
-lsp-types = { version = "0.94", optional = true }
+lmdb-rkv = { version = "0.14" }
+lsp-types = { version = "0.94" }
 num = "0.4"
+num-derive = "0.4"
+num-traits = "0.2"
 once_cell = "1"
 pathdiff = "0.2"
 pin-project = "1"
+pretty_assertions = "1"
+proc-macro2 = "1"
+proptest = "1"
+quote = "1"
 rand = "0.8"
 regex = "1"
 reqwest = { version = "0.11", default-features = false, features = [
@@ -76,9 +63,9 @@ reqwest = { version = "0.11", default-features = false, features = [
 ] }
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
-serde_toml = { package = "toml", version = "0.8", optional = true }
-serde_v8 = { version = "=0.130.0", optional = true }
-serde_yaml = { version = "0.9", optional = true }
+serde_toml = { package = "toml", version = "0.8" }
+serde_v8 = { version = "=0.130.0" }
+serde_yaml = { version = "0.9" }
 sha2 = "0.10"
 sourcemap = "7"
 swc_core = { version = "=0.83.41", features = [
@@ -93,8 +80,14 @@ swc_core = { version = "=0.83.41", features = [
   "ecma_transforms_typescript",
   "ecma_visit",
 ] }
-tangram_serialize = { workspace = true }
-tar = { version = "0.4", optional = true }
+syn = { version = "1", features = ["full"] }
+tangram_cli = { path = "packages/cli" }
+tangram_client = { path = "packages/client" }
+tangram_lsp = { path = "packages/lsp" }
+tangram_runtime = { path = "packages/runtime" }
+tangram_serialize = { path = "packages/serialize" }
+tangram_server = { path = "packages/server" }
+tar = { version = "0.4" }
 tempfile = "3"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
@@ -102,13 +95,13 @@ tokio-stream = { version = "0.1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-url = "2"
-v8 = { version = "=0.79.1", optional = true }
+url = { version = "2", features = ["serde"] }
+v8 = { version = "=0.79.1" }
 varint-rs = "2"
 webbrowser = "0.8"
-xattr = { version = "1", optional = true }
-zerocopy = { version = "0.7", optional = true, features = ["derive"] }
-zip = { version = "0.6", optional = true, default-features = false, features = [
+xattr = { version = "1" }
+zerocopy = { version = "0.7", features = ["derive"] }
+zip = { version = "0.6", default-features = false, features = [
   "aes-crypto",
   "deflate",
   "bzip2",
@@ -122,26 +115,6 @@ hyper-util = { git = "https://github.com/hyperium/hyper-util" }
 tokio = { git = "https://github.com/tokio-rs/tokio" }
 tokio-stream = { git = "https://github.com/tokio-rs/tokio" }
 tokio-util = { git = "https://github.com/tokio-rs/tokio" }
-
-[features]
-default = ["server"]
-server = [
-  "dep:either",
-  "dep:http-body",
-  "dep:http-body-util",
-  "dep:hyper",
-  "dep:hyper-util",
-  "dep:lmdb-rkv",
-  "dep:lsp-types",
-  "dep:serde_toml",
-  "dep:serde_v8",
-  "dep:serde_yaml",
-  "dep:tar",
-  "dep:v8",
-  "dep:xattr",
-  "dep:zerocopy",
-  "dep:zip",
-]
 
 [profile.dev.package.blake3]
 opt-level = 3

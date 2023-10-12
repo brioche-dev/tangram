@@ -1,0 +1,45 @@
+[package]
+name = "tangram_client"
+
+description = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = false
+repository = { workspace = true }
+version = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[dependencies]
+async-recursion = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+blake3 = { workspace = true }
+byteorder = { workspace = true }
+bytes = { workspace = true }
+derive_more = { workspace = true }
+fnv = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+include_dir = { workspace = true }
+indoc = { workspace = true }
+itertools = { workspace = true }
+num = { workspace = true }
+once_cell = { workspace = true }
+pin-project = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+swc_core = { workspace = true }
+tangram_serialize = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+xattr = { workspace = true }
