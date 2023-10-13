@@ -111,7 +111,7 @@ impl Server {
 			.unwrap())
 	}
 
-	pub(crate) async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
+	pub async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
 		// Check if the object exists in the database.
 		if self.get_object_exists_from_database(id)? {
 			return Ok(true);
@@ -125,7 +125,7 @@ impl Server {
 		Ok(false)
 	}
 
-	pub(crate) fn get_object_exists_from_database(&self, id: object::Id) -> Result<bool> {
+	pub fn get_object_exists_from_database(&self, id: object::Id) -> Result<bool> {
 		let txn = self.state.database.env.begin_ro_txn()?;
 		match txn.get(self.state.database.objects, &id.as_bytes()) {
 			Ok(_) => Ok(true),
@@ -143,13 +143,13 @@ impl Server {
 		Ok(false)
 	}
 
-	pub(crate) async fn get_object_bytes(&self, id: object::Id) -> Result<Vec<u8>> {
+	pub async fn get_object_bytes(&self, id: object::Id) -> Result<Vec<u8>> {
 		self.try_get_object_bytes(id)
 			.await?
 			.wrap_err("Failed to get the object.")
 	}
 
-	pub(crate) async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
+	pub async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
 		// Attempt to get the object from the database.
 		if let Some(bytes) = self.try_get_object_bytes_from_database(id)? {
 			return Ok(Some(bytes));
@@ -200,7 +200,7 @@ impl Server {
 	}
 
 	/// Attempt to put a object.
-	pub(crate) async fn try_put_object_bytes(
+	pub async fn try_put_object_bytes(
 		&self,
 		id: object::Id,
 		bytes: &[u8],

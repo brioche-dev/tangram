@@ -127,8 +127,7 @@ pub(super) fn from_exception<'s>(
 fn get_location(line: u32, column: u32) -> error::Location {
 	let source_map = SourceMap::from_slice(SOURCE_MAP).unwrap();
 	let token = source_map.lookup_token(line, column).unwrap();
-	let file = token.get_source().unwrap();
-	let file = file.strip_prefix("../").unwrap().to_owned();
+	let file = token.get_source().unwrap().to_owned();
 	let line = token.get_src_line();
 	let column = token.get_src_col();
 	error::Location { file, line, column }

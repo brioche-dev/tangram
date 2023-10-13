@@ -8,7 +8,7 @@ use lmdb::Transaction;
 use std::sync::Arc;
 use tangram_client as tg;
 use tangram_client::{build, system, target, Blob, Build, Error, Result, Target, Value, WrapErr};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_util::io::StreamReader;
 
@@ -17,28 +17,36 @@ pub struct Progress {
 	state: Arc<State>,
 }
 
-#[allow(clippy::type_complexity)]
 #[derive(Debug)]
 struct State {
-	children: std::sync::Mutex<(Vec<Build>, Option<tokio::sync::broadcast::Sender<Build>>)>,
-	log: Arc<
-		tokio::sync::Mutex<(
-			tokio::fs::File,
-			Option<tokio::sync::broadcast::Sender<Vec<u8>>>,
-		)>,
-	>,
-	output: (
-		tokio::sync::watch::Sender<Option<Option<Value>>>,
-		tokio::sync::watch::Receiver<Option<Option<Value>>>,
-	),
+	children: std::sync::Mutex<ChildrenState>,
+	log: Arc<tokio::sync::Mutex<LogState>>,
+	logger: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>,
+	logger_task: tokio::task::JoinHandle<Result<()>>,
+	output: OutputState,
+}
+
+#[derive(Debug)]
+struct ChildrenState {
+	children: Vec<Build>,
+	sender: Option<tokio::sync::broadcast::Sender<Build>>,
+}
+
+#[derive(Debug)]
+struct LogState {
+	file: tokio::fs::File,
+	sender: Option<tokio::sync::broadcast::Sender<Vec<u8>>>,
+}
+
+#[derive(Debug)]
+struct OutputState {
+	sender: tokio::sync::watch::Sender<Option<Option<Value>>>,
+	receiver: tokio::sync::watch::Receiver<Option<Option<Value>>>,
 }
 
 impl Server {
 	/// Attempt to get the build for a target.
-	pub(crate) async fn try_get_build_for_target(
-		&self,
-		id: target::Id,
-	) -> Result<Option<build::Id>> {
+	pub async fn try_get_build_for_target(&self, id: target::Id) -> Result<Option<build::Id>> {
 		// Attempt to get the build for the target from the running state.
 		if let Some(build_id) = self.state.running.read().unwrap().0.get(&id).copied() {
 			return Ok(Some(build_id));
@@ -87,10 +95,7 @@ impl Server {
 	}
 
 	/// Get or create a build for a target.
-	pub(crate) async fn get_or_create_build_for_target(
-		&self,
-		target_id: target::Id,
-	) -> Result<build::Id> {
+	pub async fn get_or_create_build_for_target(&self, target_id: target::Id) -> Result<build::Id> {
 		let target = Target::with_id(target_id);
 
 		// Attempt to get the build for the target.
@@ -113,7 +118,7 @@ impl Server {
 			async move {
 				let object = target.object(&server).await?;
 
-				let output = match object.host.os() {
+				match object.host.os() {
 					system::Os::Js => {
 						// Build the target on the server's local pool because it is a `!Send` future.
 						server
@@ -140,20 +145,17 @@ impl Server {
 					_ => todo!(),
 				};
 
-				// Set the result on the state.
-				// state.set_output(output).await;
-
 				// Create the object.
-				let children = progress.children().collect().await;
+				let children = progress.children_stream().collect().await;
 				let log = StreamReader::new(
 					progress
-						.log()
+						.log_stream()
 						.await?
 						.map(Bytes::from)
 						.map(Ok::<_, std::io::Error>),
 				);
 				let log = Blob::with_reader(&server, log).await?;
-				let output = progress.output().await;
+				let output = progress.wait_for_output().await;
 				let object = build::Object {
 					children,
 					log,
@@ -210,7 +212,7 @@ impl Server {
 		Ok(build_id)
 	}
 
-	pub(crate) async fn try_get_build_children(
+	pub async fn try_get_build_children(
 		&self,
 		id: build::Id,
 	) -> Result<Option<BoxStream<'static, build::Id>>> {
@@ -226,7 +228,7 @@ impl Server {
 			.get(&build.id())
 			.cloned();
 		if let Some(state) = state {
-			let children = state.children();
+			let children = state.children_stream();
 			return Ok(Some(children.map(|child| child.id()).boxed()));
 		}
 
@@ -256,7 +258,7 @@ impl Server {
 		Ok(None)
 	}
 
-	pub(crate) async fn try_get_build_log(
+	pub async fn try_get_build_log(
 		&self,
 		id: build::Id,
 	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
@@ -272,7 +274,7 @@ impl Server {
 			.get(&build.id())
 			.cloned();
 		if let Some(state) = state {
-			let log = state.log().await?;
+			let log = state.log_stream().await?;
 			return Ok(Some(log));
 		}
 
@@ -300,10 +302,7 @@ impl Server {
 		Ok(None)
 	}
 
-	pub(crate) async fn try_get_build_output(
-		&self,
-		id: build::Id,
-	) -> Result<Option<Option<Value>>> {
+	pub async fn try_get_build_output(&self, id: build::Id) -> Result<Option<Option<Value>>> {
 		let build = Build::with_id(id);
 
 		// Attempt to await the output from the running state.
@@ -316,7 +315,7 @@ impl Server {
 			.get(&build.id())
 			.cloned();
 		if let Some(state) = state {
-			let output = state.output().await;
+			let output = state.wait_for_output().await;
 			return Ok(Some(output));
 		}
 
@@ -345,65 +344,93 @@ impl Server {
 
 impl Progress {
 	pub fn new() -> Result<Self> {
-		let (children_tx, _) = tokio::sync::broadcast::channel(1024);
-		let (log_tx, _) = tokio::sync::broadcast::channel(1024);
-		let (result_tx, result_rx) = tokio::sync::watch::channel(None);
-		let log_file = tokio::fs::File::from_std(tempfile::tempfile()?);
+		// Create the children state.
+		let children = std::sync::Mutex::new(ChildrenState {
+			children: Vec::new(),
+			sender: Some(tokio::sync::broadcast::channel(1024).0),
+		});
+
+		// Create the log state.
+		let log = Arc::new(tokio::sync::Mutex::new(LogState {
+			file: tokio::fs::File::from_std(tempfile::tempfile()?),
+			sender: Some(tokio::sync::broadcast::channel(1024).0),
+		}));
+
+		// Spawn the logger task.
+		let (logger_sender, mut logger_receiver) =
+			tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+		let logger = std::sync::Mutex::new(Some(logger_sender));
+		let logger_task = tokio::spawn({
+			let log = log.clone();
+			async move {
+				while let Some(bytes) = logger_receiver.recv().await {
+					let mut log = log.lock().await;
+					log.file.seek(std::io::SeekFrom::End(0)).await?;
+					log.file.write_all(&bytes).await?;
+					log.sender.as_ref().unwrap().send(bytes).ok();
+				}
+				Ok(())
+			}
+		});
+
+		// Create the output state.
+		let (output_sender, output_receiver) = tokio::sync::watch::channel(None);
+		let output = OutputState {
+			sender: output_sender,
+			receiver: output_receiver,
+		};
+
 		Ok(Self {
 			state: Arc::new(State {
-				children: std::sync::Mutex::new((Vec::new(), Some(children_tx))),
-				log: Arc::new(tokio::sync::Mutex::new((log_file, Some(log_tx)))),
-				output: (result_tx, result_rx),
+				children,
+				log,
+				logger,
+				logger_task,
+				output,
 			}),
 		})
 	}
 
-	pub fn progress(&self) -> Box<dyn tangram_runtime::Progress> {
-		todo!()
+	pub fn children_stream(&self) -> BoxStream<'static, Build> {
+		let state = self.state.children.lock().unwrap();
+		let old = stream::iter(state.children.clone());
+		let new = if let Some(sender) = state.sender.as_ref() {
+			BroadcastStream::new(sender.subscribe())
+				.filter_map(|result| async move { result.ok() })
+				.boxed()
+		} else {
+			stream::empty().boxed()
+		};
+		old.chain(new).boxed()
 	}
 
-	pub fn children(&self) -> BoxStream<'static, Build> {
-		todo!()
-		// let children = self.children.lock().unwrap();
-		// let old = stream::iter(children.0.clone());
-		// let new = if let Some(new) = children.1.as_ref() {
-		// 	BroadcastStream::new(new.subscribe())
-		// 		.filter_map(|result| async move { result.ok() })
-		// 		.boxed()
-		// } else {
-		// 	stream::empty().boxed()
-		// };
-		// old.chain(new).boxed()
+	pub async fn log_stream(&self) -> Result<BoxStream<'static, Vec<u8>>> {
+		let mut log = self.state.log.lock().await;
+		log.file.rewind().await?;
+		let mut old = Vec::new();
+		log.file.read_to_end(&mut old).await?;
+		let old = stream::once(async move { old });
+		log.file.seek(std::io::SeekFrom::End(0)).await?;
+		let new = if let Some(sender) = log.sender.as_ref() {
+			BroadcastStream::new(sender.subscribe())
+				.filter_map(|result| async move { result.ok() })
+				.boxed()
+		} else {
+			stream::empty().boxed()
+		};
+		Ok(old.chain(new).boxed())
 	}
 
-	pub async fn log(&self) -> Result<BoxStream<'static, Vec<u8>>> {
-		todo!()
-		// let mut log = self.log.lock().await;
-		// log.0.rewind().await?;
-		// let mut old = Vec::new();
-		// log.0.read_to_end(&mut old).await?;
-		// let old = stream::once(async move { old });
-		// log.0.seek(std::io::SeekFrom::End(0)).await?;
-		// let new = if let Some(new) = log.1.as_ref() {
-		// 	BroadcastStream::new(new.subscribe())
-		// 		.filter_map(|result| async move { result.ok() })
-		// 		.boxed()
-		// } else {
-		// 	stream::empty().boxed()
-		// };
-		// Ok(old.chain(new).boxed())
-	}
-
-	pub async fn output(&self) -> Option<Value> {
-		todo!()
-		// self.output
-		// 	.1
-		// 	.clone()
-		// 	.wait_for(Option::is_some)
-		// 	.await
-		// 	.unwrap()
-		// 	.clone()
-		// 	.unwrap()
+	pub async fn wait_for_output(&self) -> Option<Value> {
+		self.state
+			.output
+			.receiver
+			.clone()
+			.wait_for(Option::is_some)
+			.await
+			.unwrap()
+			.clone()
+			.unwrap()
 	}
 }
 
@@ -413,42 +440,26 @@ impl tangram_runtime::Progress for Progress {
 	}
 
 	fn child(&self, child: tg::Build) {
-		todo!()
+		let mut state = self.state.children.lock().unwrap();
+		state.children.push(child.clone());
+		state.sender.as_ref().unwrap().send(child).ok();
 	}
 
 	fn log(&self, bytes: Vec<u8>) {
-		todo!()
+		eprintln!("{}", std::str::from_utf8(&bytes).unwrap());
+		self.state
+			.logger
+			.lock()
+			.unwrap()
+			.as_ref()
+			.unwrap()
+			.send(bytes)
+			.unwrap();
 	}
 
 	fn output(&self, output: Option<tg::Value>) {
-		todo!()
+		self.state.output.sender.send(Some(output)).unwrap();
+		self.state.children.lock().unwrap().sender.take();
+		self.state.logger.lock().unwrap().take();
 	}
 }
-
-// pub fn add_child(&self, child: Build) {
-// 	let mut children = self.children.lock().unwrap();
-// 	children.0.push(child.clone());
-// 	children.1.as_ref().unwrap().send(child).ok();
-// }
-
-// pub fn add_log(&self, bytes: Vec<u8>) {
-// 	tokio::spawn({
-// 		eprintln!("{}", std::str::from_utf8(&bytes).unwrap());
-// 		let log = self.log.clone();
-// 		async move {
-// 			let mut log = log.lock().await;
-// 			log.0.seek(std::io::SeekFrom::End(0)).await.ok();
-// 			log.0.write_all(&bytes).await.ok();
-// 			log.1.as_ref().unwrap().send(bytes).ok();
-// 		}
-// 	});
-// }
-
-// pub async fn set_output(&self, output: Option<Value>) {
-// 	// Set the result.
-// 	self.output.0.send(Some(output)).unwrap();
-
-// 	// End the children and log streams.
-// 	self.children.lock().unwrap().1.take();
-// 	self.log.lock().await.1.take();
-// }

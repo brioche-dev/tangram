@@ -630,31 +630,32 @@ impl FromV8 for Value {
 
 impl ToV8 for Bytes {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		todo!()
-		// let array_buffer =
-		// 	v8::ArrayBuffer::with_backing_store(scope, self.buffer().backing_store());
-		// let uint8_array =
-		// 	v8::Uint8Array::new(scope, array_buffer, self.range().start, self.range().len())
-		// 		.unwrap();
-		// Ok(uint8_array.into())
+		let bytes = self.to_vec();
+		let len = bytes.len();
+		let backing_store = v8::ArrayBuffer::new_backing_store_from_vec(bytes).make_shared();
+		let array_buffer = v8::ArrayBuffer::with_backing_store(scope, &backing_store);
+		let uint8_array = v8::Uint8Array::new(scope, array_buffer, 0, len).unwrap();
+		Ok(uint8_array.into())
 	}
 }
 
 impl FromV8 for Bytes {
 	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
+		_scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		todo!()
-		// let uint8_array =
-		// 	v8::Local::<v8::Uint8Array>::try_from(value).wrap_err("Expected a Uint8Array.")?;
-		// let backing_store = uint8_array
-		// 	.buffer(scope)
-		// 	.wrap_err("Expected the Uint8Array to have a buffer.")?
-		// 	.get_backing_store();
-		// let range =
-		// 	uint8_array.byte_offset()..(uint8_array.byte_offset() + uint8_array.byte_length());
-		// Ok(Self::new(backing_store.into(), range))
+		let uint8_array =
+			v8::Local::<v8::Uint8Array>::try_from(value).wrap_err("Expected a Uint8Array.")?;
+		let slice = unsafe {
+			let ptr = uint8_array
+				.data()
+				.cast::<u8>()
+				.add(uint8_array.byte_offset());
+			let len = uint8_array.byte_length();
+			std::slice::from_raw_parts(ptr, len)
+		};
+		let bytes = Bytes::copy_from_slice(slice);
+		Ok(bytes)
 	}
 }
 

@@ -48,12 +48,11 @@ async fn main_inner() -> Result<()> {
 	initialize_v8();
 
 	// Create the server.
-	let path = home_directory_path().unwrap().join(".tangram");
-	let server = tangram_server::Server::new(path, None).await?;
+	let client = tangram_client::Reqwest::new("http://localhost:8476".parse().unwrap(), None);
 
 	// Create the CLI.
 	let cli = Cli {
-		client: Box::new(server),
+		client: Box::new(client),
 	};
 
 	// Run the command.

@@ -93,14 +93,6 @@ impl Artifact {
 		}
 	}
 
-	pub async fn checksum(
-		&self,
-		client: &dyn Client,
-		algorithm: checksum::Algorithm,
-	) -> Result<Checksum> {
-		todo!()
-	}
-
 	/// Collect an artifact's recursive references.
 	pub async fn recursive_references(
 		&self,

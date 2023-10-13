@@ -2832,6 +2832,7 @@ dependencies = [
 name = "tangram_cli"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "clap",
  "futures",
  "indoc",
@@ -2842,6 +2843,7 @@ dependencies = [
  "tangram_lsp",
  "tangram_server",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "url",

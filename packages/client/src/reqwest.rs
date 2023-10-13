@@ -1,11 +1,6 @@
 use crate::{
-	build,
-	login::Login,
-	object,
-	package::{self, SearchResult},
-	return_error, target,
-	user::User,
-	Client, Id, Result, Value, WrapErr,
+	build, login::Login, object, package, return_error, target, user, Client, Id, Result, Value,
+	WrapErr,
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -197,7 +192,7 @@ impl Client for Reqwest {
 		Ok(())
 	}
 
-	async fn search_packages(&self, query: &str) -> Result<Vec<SearchResult>> {
+	async fn search_packages(&self, query: &str) -> Result<Vec<package::SearchResult>> {
 		let path = &format!("/v1/packages/search?query={query}");
 		let response = self
 			.request(reqwest::Method::GET, path)
@@ -213,7 +208,7 @@ impl Client for Reqwest {
 		Ok(response)
 	}
 
-	async fn get_current_user(&self) -> Result<User> {
+	async fn get_current_user(&self) -> Result<user::User> {
 		let response = self
 			.request(reqwest::Method::GET, "/v1/user")
 			.send()

@@ -14,6 +14,7 @@ name = "tg"
 path = "src/main.rs"
 
 [dependencies]
+bytes = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
@@ -24,6 +25,7 @@ tangram_client = { workspace = true }
 tangram_lsp = { workspace = true }
 tangram_server = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }

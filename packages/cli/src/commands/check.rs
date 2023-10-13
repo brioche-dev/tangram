@@ -16,7 +16,7 @@ pub struct Args {
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
 		// Get the package.
-		let package = tg::Package::with_specifier(self.client.as_ref(), args.package)
+		let package = tg::Package::with_specifier(self.client.as_ref(), args.package.clone())
 			.await
 			.wrap_err("Failed to get the package.")?;
 

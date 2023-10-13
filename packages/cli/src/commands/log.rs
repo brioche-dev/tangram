@@ -1,18 +1,38 @@
 use crate::{return_error, Cli, Result};
+use bytes::Bytes;
+use futures::StreamExt;
 use tangram_client as tg;
-use tg::Id;
+use tokio::io::AsyncBufReadExt;
 
 /// Get the log for a build.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
-	/// The ID of the build to get logs for.
-	pub id: Id,
+	/// The ID of the build or target to get the log for.
+	pub id: tg::Id,
 }
 
 impl Cli {
 	#[allow(clippy::unused_async)]
-	pub async fn command_log(&self, _args: Args) -> Result<()> {
-		return_error!("This command is not yet implemented.");
+	pub async fn command_log(&self, args: Args) -> Result<()> {
+		let build = if let Ok(id) = tg::build::Id::try_from(args.id) {
+			tg::Build::with_id(id)
+		} else if let Ok(id) = tg::target::Id::try_from(args.id) {
+			tg::Target::with_id(id).build(self.client.as_ref()).await?
+		} else {
+			return_error!("The ID must be a target or build ID.");
+		};
+
+		// Write the log to stdout.
+		let log = build.log(self.client.as_ref()).await?;
+		let log = tokio_util::io::StreamReader::new(
+			log.map(|chunk| Ok::<_, std::io::Error>(Bytes::from(chunk))),
+		);
+		let mut lines = log.lines();
+		while let Some(line) = lines.next_line().await? {
+			println!("{line}");
+		}
+
+		Ok(())
 	}
 }

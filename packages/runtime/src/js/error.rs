@@ -128,8 +128,7 @@ fn get_location(
 	if file.map_or(false, |resource_name| resource_name == "[runtime]") {
 		if let Some(global_source_map) = state.global_source_map.as_ref() {
 			let token = global_source_map.lookup_token(line, column).unwrap();
-			let file = token.get_source().unwrap();
-			let file = file.strip_prefix("../").unwrap().to_owned();
+			let file = token.get_source().unwrap().to_owned();
 			let line = token.get_src_line();
 			let column = token.get_src_col();
 			Some(error::Location { file, line, column })

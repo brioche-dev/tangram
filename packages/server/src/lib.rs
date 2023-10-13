@@ -11,6 +11,7 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_client::Result;
+use tg::WrapErr;
 
 mod build;
 mod clean;
@@ -18,6 +19,7 @@ mod migrations;
 mod object;
 mod package;
 mod user;
+// mod vfs;
 
 /// A server.
 #[derive(Clone, Debug)]
@@ -290,23 +292,48 @@ impl tg::Client for Server {
 	}
 
 	async fn create_login(&self) -> Result<tg::login::Login> {
-		todo!()
+		self.state
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.create_login()
+			.await
 	}
 
-	async fn get_login(&self, _id: tg::Id) -> Result<Option<tg::login::Login>> {
-		todo!()
+	async fn get_login(&self, id: tg::Id) -> Result<Option<tg::login::Login>> {
+		self.state
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.get_login(id)
+			.await
 	}
 
-	async fn publish_package(&self, _id: tg::package::Id) -> Result<()> {
-		todo!()
+	async fn publish_package(&self, id: tg::package::Id) -> Result<()> {
+		self.state
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.publish_package(id)
+			.await
 	}
 
-	async fn search_packages(&self, _query: &str) -> Result<Vec<tg::package::SearchResult>> {
-		todo!()
+	async fn search_packages(&self, query: &str) -> Result<Vec<tg::package::SearchResult>> {
+		self.state
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.search_packages(query)
+			.await
 	}
 
 	async fn get_current_user(&self) -> Result<tg::user::User> {
-		todo!()
+		self.state
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.get_current_user()
+			.await
 	}
 }
 

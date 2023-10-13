@@ -9,7 +9,7 @@ use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client::{
 	module::{self, Import, Module},
-	Client, Result, Target, Value, WrapErr,
+	Client, Result, Target, WrapErr,
 };
 
 mod convert;
@@ -49,7 +49,7 @@ pub async fn run(
 	target: Target,
 	progress: &dyn Progress,
 	main_runtime_handle: tokio::runtime::Handle,
-) -> Option<Value> {
+) {
 	// Create the isolate params.
 	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 
@@ -185,16 +185,16 @@ pub async fn run(
 	})
 	.await;
 
-	let output = match output {
-		Ok(output) => output,
+	match output {
+		Ok(output) => {
+			state.progress.output(Some(output));
+		},
 		Err(error) => {
 			let trace = error.trace().to_string();
 			state.progress.log(trace.into_bytes());
-			return None;
+			state.progress.output(None);
 		},
 	};
-
-	Some(output)
 }
 
 /// Implement V8's dynamic import callback.

@@ -7,6 +7,14 @@ use tangram_client as tg;
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
+	/// If this flag is set, then the command will exit immediately instead of waiting for the build's output.
+	#[arg(short, long)]
+	pub detach: bool,
+
+	/// The path to check out the output to.
+	#[arg(short, long)]
+	pub output: Option<PathBuf>,
+
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
 	pub package: tg::package::Specifier,
@@ -17,10 +25,6 @@ pub struct Args {
 	/// The name of the target to build.
 	#[arg(default_value = "default")]
 	pub target: String,
-
-	/// The path to check out the output to.
-	#[arg(short, long)]
-	pub output: Option<PathBuf>,
 }
 
 impl Cli {
@@ -48,26 +52,30 @@ impl Cli {
 
 		// Build the target.
 		let build = target.build(self.client.as_ref()).await?;
+
+		// If the detach flag is set, then exit.
+		if args.detach {
+			println!("{}", build.id());
+			return Ok(());
+		}
+
+		// Wait for the build's output.
 		let Some(output) = build.output(self.client.as_ref()).await? else {
 			return_error!("The build failed.");
 		};
 
+		// Check out the output if requested.
 		if let Some(path) = args.output {
-			// Check out the output if requested.
-			let artifact = tg::Artifact::try_from(output)
+			let artifact = tg::Artifact::try_from(output.clone())
 				.wrap_err("Expected the output to be an artifact.")?;
 			artifact
 				.check_out(self.client.as_ref(), &path)
 				.await
 				.wrap_err("Failed to check out the artifact.")?;
-		} else {
-			// Print the output.
-			println!("{output:?}");
-			if let Ok(artifact) = tg::Artifact::try_from(output) {
-				let id = artifact.handle().id(self.client.as_ref()).await?;
-				println!("{id:?}");
-			}
 		}
+
+		// Print the output.
+		println!("{output:?}");
 
 		Ok(())
 	}
