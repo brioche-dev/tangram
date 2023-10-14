@@ -6,9 +6,9 @@
 
 use self::syscall::syscall;
 use derive_more::Unwrap;
-use futures::{future, FutureExt};
+use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
-use std::{collections::HashMap, future::Future, path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 use tangram_client::{
 	module::{self, diagnostic::Severity, Diagnostic, Position, Range},
 	return_error, Client, Error, Module, Result, WrapErr,
@@ -101,7 +101,7 @@ pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Server {
 	#[must_use]
-	pub fn new(client: &dyn Client) -> Self {
+	pub fn new(client: &dyn Client, main_runtime_handle: tokio::runtime::Handle) -> Self {
 		// Create the published diagnostics.
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
@@ -111,9 +111,6 @@ impl Server {
 		// Create the request sender and receiver.
 		let (request_sender, request_receiver) =
 			tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
-
-		// Get the main tokio runtime handle.
-		let main_runtime_handle = tokio::runtime::Handle::current();
 
 		// Create the state.
 		let state = Arc::new(State {

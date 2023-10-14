@@ -142,13 +142,6 @@ impl Artifact {
 									.to_string();
 								Ok(path)
 							},
-
-							// Placeholder components are not allowed.
-							template::Component::Placeholder(_) => {
-								return_error!(
-									"Cannot remove references from a symlink whose target has placeholders."
-								);
-							},
 						}
 					})
 					.await?

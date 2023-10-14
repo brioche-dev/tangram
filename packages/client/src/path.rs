@@ -21,10 +21,10 @@ use std::path::PathBuf;
 #[serde(into = "String", try_from = "String")]
 pub struct Relpath {
 	/// The number of leading parent components.
-	pub(crate) parents: usize,
+	parents: usize,
 
 	/// The subpath.
-	pub(crate) subpath: Subpath,
+	subpath: Subpath,
 }
 
 /// A subpath.
@@ -45,7 +45,7 @@ pub struct Relpath {
 #[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub struct Subpath {
-	pub(crate) components: Vec<String>,
+	components: Vec<String>,
 }
 
 impl Relpath {

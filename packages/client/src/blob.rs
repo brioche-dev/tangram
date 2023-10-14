@@ -3,7 +3,7 @@ use bytes::Bytes;
 use futures::{
 	future::BoxFuture,
 	stream::{self, StreamExt},
-	TryStreamExt,
+	Future, TryStreamExt,
 };
 use num::ToPrimitive;
 use pin_project::pin_project;
@@ -213,17 +213,17 @@ impl Object {
 }
 
 impl Data {
-	pub(crate) fn serialize(&self) -> Result<Vec<u8>> {
+	pub fn serialize(&self) -> Result<Vec<u8>> {
 		let mut bytes = Vec::new();
 		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
 		tangram_serialize::to_writer(self, &mut bytes)?;
 		Ok(bytes)
 	}
 
-	pub(crate) fn deserialize(mut bytes: &[u8]) -> Result<Self> {
+	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
 		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
 		if version != 0 {
-			return_error!(r#"Cannot deserialize this object with version "{version}"."#);
+			return_error!(r#"Cannot deserialize with version "{version}"."#);
 		}
 		let value = tangram_serialize::from_reader(bytes)?;
 		Ok(value)
@@ -254,8 +254,6 @@ pub enum State {
 	Full(Cursor<Bytes>),
 }
 
-unsafe impl Sync for State {}
-
 impl AsyncRead for Reader {
 	fn poll_read(
 		self: std::pin::Pin<&mut Self>,
@@ -277,7 +275,7 @@ impl AsyncRead for Reader {
 							let mut current_blob = blob.clone();
 							let mut current_blob_position = 0;
 							let bytes = 'outer: loop {
-								match &current_blob.object(client.as_ref()).await? {
+								match current_blob.object(client.as_ref()).await? {
 									Object::Branch(children) => {
 										for (child, size) in children {
 											if position < current_blob_position + size {

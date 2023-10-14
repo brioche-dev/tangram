@@ -96,7 +96,7 @@ pub struct SpecData {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) struct Time {
+pub struct Time {
 	pub seconds: i64,
 	pub nanos: u32,
 }

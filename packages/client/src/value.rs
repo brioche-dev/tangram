@@ -1,6 +1,6 @@
 use crate::{
-	blob, directory, file, object, package, placeholder, symlink, target, template, Blob,
-	Directory, File, Package, Placeholder, Symlink, Target, Template,
+	blob, directory, file, object, package, return_error, symlink, target, template, Blob,
+	Directory, File, Package, Result, Symlink, Target, Template,
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
@@ -36,9 +36,6 @@ pub enum Value {
 
 	/// A symlink value.
 	Symlink(Symlink),
-
-	/// A placeholder value.
-	Placeholder(Placeholder),
 
 	/// A template value.
 	Template(Template),
@@ -95,21 +92,18 @@ pub enum Data {
 	Symlink(symlink::Id),
 
 	#[tangram_serialize(id = 9)]
-	Placeholder(placeholder::Data),
-
-	#[tangram_serialize(id = 10)]
 	Template(template::Data),
 
-	#[tangram_serialize(id = 11)]
+	#[tangram_serialize(id = 10)]
 	Package(package::Id),
 
-	#[tangram_serialize(id = 12)]
+	#[tangram_serialize(id = 11)]
 	Target(target::Id),
 
-	#[tangram_serialize(id = 13)]
+	#[tangram_serialize(id = 12)]
 	Array(Vec<Data>),
 
-	#[tangram_serialize(id = 14)]
+	#[tangram_serialize(id = 13)]
 	Map(BTreeMap<String, Data>),
 }
 
@@ -126,7 +120,6 @@ impl Value {
 			Value::Directory(value) => Data::Directory(value.expect_id()),
 			Value::File(value) => Data::File(value.expect_id()),
 			Value::Symlink(value) => Data::Symlink(value.expect_id()),
-			Value::Placeholder(value) => Data::Placeholder(value.to_data()),
 			Value::Template(value) => Data::Template(value.to_data()),
 			Value::Package(value) => Data::Package(value.expect_id()),
 			Value::Target(value) => Data::Target(value.expect_id()),
@@ -152,9 +145,6 @@ impl Value {
 			Data::Directory(id) => Value::Directory(Directory::with_id(id)),
 			Data::File(id) => Value::File(File::with_id(id)),
 			Data::Symlink(id) => Value::Symlink(Symlink::with_id(id)),
-			Data::Placeholder(placeholder) => {
-				Value::Placeholder(Placeholder::from_data(placeholder))
-			},
 			Data::Template(template) => Value::Template(Template::from_data(template)),
 			Data::Package(id) => Value::Package(Package::with_id(id)),
 			Data::Target(id) => Value::Target(Target::with_id(id)),
@@ -171,12 +161,9 @@ impl Value {
 
 	pub fn children(&self) -> Vec<object::Handle> {
 		match self {
-			Self::Null(_)
-			| Self::Bool(_)
-			| Self::Number(_)
-			| Self::String(_)
-			| Self::Bytes(_)
-			| Self::Placeholder(_) => vec![],
+			Self::Null(_) | Self::Bool(_) | Self::Number(_) | Self::String(_) | Self::Bytes(_) => {
+				vec![]
+			},
 			Self::Blob(blob) => vec![blob.handle().clone()],
 			Self::Directory(directory) => vec![directory.handle().clone()],
 			Self::File(file) => vec![file.handle().clone()],
@@ -191,15 +178,28 @@ impl Value {
 }
 
 impl Data {
+	pub fn serialize(&self) -> Result<Vec<u8>> {
+		let mut bytes = Vec::new();
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
+		tangram_serialize::to_writer(self, &mut bytes)?;
+		Ok(bytes)
+	}
+
+	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
+		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		if version != 0 {
+			return_error!(r#"Cannot deserialize with version "{version}"."#);
+		}
+		let value = tangram_serialize::from_reader(bytes)?;
+		Ok(value)
+	}
+
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		match self {
-			Self::Null(_)
-			| Self::Bool(_)
-			| Self::Number(_)
-			| Self::String(_)
-			| Self::Bytes(_)
-			| Self::Placeholder(_) => vec![],
+			Self::Null(_) | Self::Bool(_) | Self::Number(_) | Self::String(_) | Self::Bytes(_) => {
+				vec![]
+			},
 			Self::Blob(id) => vec![(*id).into()],
 			Self::Directory(id) => vec![(*id).into()],
 			Self::File(id) => vec![(*id).into()],

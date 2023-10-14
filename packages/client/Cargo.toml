@@ -40,6 +40,7 @@ swc_core = { workspace = true }
 tangram_serialize = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 xattr = { workspace = true }

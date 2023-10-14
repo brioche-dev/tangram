@@ -4,7 +4,6 @@ import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { placeholder } from "./placeholder.ts";
 import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
@@ -73,8 +72,6 @@ export let build = async (
 	let output = await target.build();
 	return output;
 };
-
-export let output = placeholder("output");
 
 export interface Target<
 	A extends Array<Value> = Array<Value>,

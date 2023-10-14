@@ -4,7 +4,7 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::redundant_pattern)]
 
-use self::{commands::Args, util::dirs::home_directory_path};
+use self::commands::Args;
 use clap::Parser;
 use tangram_client as tg;
 use tg::error::{error, return_error, Result, WrapErr};
@@ -47,8 +47,12 @@ async fn main_inner() -> Result<()> {
 	// Initialize V8.
 	initialize_v8();
 
-	// Create the server.
-	let client = tangram_client::Reqwest::new("http://localhost:8476".parse().unwrap(), None);
+	// Create the client.
+	let path = crate::util::dirs::home_directory_path()
+		.unwrap()
+		.join(".tangram");
+	let client = tangram_server::Server::new(path, None).await?;
+	// let client = tangram_client::Reqwest::new("http://localhost:8476".parse().unwrap(), None);
 
 	// Create the CLI.
 	let cli = Cli {

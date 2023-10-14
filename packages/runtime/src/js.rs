@@ -191,7 +191,7 @@ pub async fn run(
 		},
 		Err(error) => {
 			let trace = error.trace().to_string();
-			state.progress.log(trace.into_bytes());
+			state.progress.log(trace.into());
 			state.progress.output(None);
 		},
 	};

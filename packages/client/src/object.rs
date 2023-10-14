@@ -690,6 +690,14 @@ macro_rules! id {
 			}
 		}
 
+		impl TryFrom<Vec<u8>> for self::Id {
+			type Error = $crate::Error;
+
+			fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+				Self::try_from($crate::Id::try_from(value)?)
+			}
+		}
+
 		impl From<self::Id> for $crate::Id {
 			fn from(value: self::Id) -> Self {
 				value.0

@@ -21,7 +21,8 @@ impl Cli {
 			.wrap_err("Failed to get the package.")?;
 
 		// Create the language server.
-		let server = tangram_lsp::Server::new(self.client.as_ref());
+		let server =
+			tangram_lsp::Server::new(self.client.as_ref(), tokio::runtime::Handle::current());
 
 		// Check the package for diagnostics.
 		let diagnostics = server

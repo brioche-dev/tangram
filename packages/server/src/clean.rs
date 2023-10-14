@@ -3,6 +3,6 @@ use tangram_client::{return_error, Result};
 
 impl Server {
 	pub async fn clean(&self) -> Result<()> {
-		return_error!("Cleaning is not yet implemented.");
+		return_error!("This is not yet implemented.");
 	}
 }

@@ -1,7 +1,8 @@
 use crate::{blob, id, object, return_error, value, Blob, Client, Result, Value, WrapErr};
+use bytes::Bytes;
 use futures::{
 	stream::{self, BoxStream},
-	StreamExt,
+	StreamExt, TryStreamExt,
 };
 
 crate::id!(Build);
@@ -39,14 +40,52 @@ pub struct Data {
 }
 
 impl Build {
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self(object::Handle::with_id(id.into()))
+	pub async fn new(
+		client: &dyn Client,
+		id: Id,
+		children: Vec<Build>,
+		log: Blob,
+		output: Option<Value>,
+	) -> Result<Self> {
+		// Create the object.
+		let object = Object {
+			children,
+			log,
+			output,
+		};
+
+		// Store the children.
+		object
+			.children()
+			.into_iter()
+			.map(|child| async move { child.store(client).await })
+			.collect::<futures::stream::FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+
+		// Get the data.
+		let data = object.to_data();
+
+		// Serialize the data.
+		let bytes = data.serialize()?;
+
+		// Store the object.
+		client
+			.try_put_object_bytes(id.into(), &bytes)
+			.await
+			.wrap_err("Failed to put the object.")?
+			.ok()
+			.wrap_err("Expected all children to be stored.")?;
+
+		Ok(Self(object::Handle::with_state(object::State::new(
+			Some(id.into()),
+			Some(object.into()),
+		))))
 	}
 
 	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self(object::Handle::with_object(object.into()))
+	pub fn with_id(id: Id) -> Self {
+		Self(object::Handle::with_id(id.into()))
 	}
 
 	#[must_use]
@@ -67,7 +106,7 @@ impl Build {
 		}
 	}
 
-	pub async fn children(&self, client: &dyn Client) -> Result<BoxStream<'static, Self>> {
+	pub async fn children(&self, client: &dyn Client) -> Result<BoxStream<'static, Result<Self>>> {
 		self.try_get_children(client)
 			.await?
 			.wrap_err("Failed to get the build.")
@@ -76,18 +115,18 @@ impl Build {
 	pub async fn try_get_children(
 		&self,
 		client: &dyn Client,
-	) -> Result<Option<BoxStream<'static, Self>>> {
+	) -> Result<Option<BoxStream<'static, Result<Self>>>> {
 		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(stream::iter(object.children.clone()).boxed()))
+			Ok(Some(stream::iter(object.children.clone()).map(Ok).boxed()))
 		} else {
 			Ok(client
 				.try_get_build_children(self.id())
 				.await?
-				.map(|children| children.map(Build::with_id).boxed()))
+				.map(|children| children.map_ok(Build::with_id).boxed()))
 		}
 	}
 
-	pub async fn log(&self, client: &dyn Client) -> Result<BoxStream<'static, Vec<u8>>> {
+	pub async fn log(&self, client: &dyn Client) -> Result<BoxStream<'static, Result<Bytes>>> {
 		self.try_get_log(client)
 			.await?
 			.wrap_err("Failed to get the build.")
@@ -96,11 +135,11 @@ impl Build {
 	pub async fn try_get_log(
 		&self,
 		client: &dyn Client,
-	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
+	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			let log = object.log.clone();
 			let bytes = log.bytes(client).await?;
-			Ok(Some(stream::once(async move { bytes }).boxed()))
+			Ok(Some(stream::once(async move { Ok(bytes.into()) }).boxed()))
 		} else {
 			Ok(client.try_get_build_log(self.id()).await?)
 		}
@@ -186,7 +225,7 @@ impl Data {
 	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
 		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
 		if version != 0 {
-			return_error!(r#"Cannot deserialize this object with version "{version}"."#);
+			return_error!(r#"Cannot deserialize with version "{version}"."#);
 		}
 		let value = tangram_serialize::from_reader(bytes)?;
 		Ok(value)

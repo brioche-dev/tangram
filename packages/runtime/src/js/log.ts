@@ -4,7 +4,6 @@ import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 import { Target } from "./target.ts";
@@ -77,8 +76,6 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Symlink) {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.symlink ${handle})`;
-	} else if (value instanceof Placeholder) {
-		return `(tg.placeholder "${value.name}")`;
 	} else if (value instanceof Template) {
 		let string = value.components
 			.map((component) => {

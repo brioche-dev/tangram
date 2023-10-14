@@ -16,7 +16,6 @@ pub use self::{
 	module::Module,
 	package::Package,
 	path::{Relpath, Subpath},
-	placeholder::Placeholder,
 	reqwest::Reqwest,
 	symlink::Symlink,
 	system::System,
@@ -24,8 +23,9 @@ pub use self::{
 	template::Template,
 	value::Value,
 };
-use self::{login::Login, user::User};
+use self::{user::Login, user::User};
 use async_trait::async_trait;
+use bytes::Bytes;
 use futures::stream::BoxStream;
 use std::{fmt::Debug, path::Path};
 
@@ -40,12 +40,10 @@ pub mod directory;
 pub mod error;
 pub mod file;
 pub mod id;
-pub mod login;
 pub mod module;
 pub mod object;
 pub mod package;
 pub mod path;
-pub mod placeholder;
 pub mod reqwest;
 pub mod symlink;
 pub mod system;
@@ -86,7 +84,10 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn get_or_create_build_for_target(&self, id: target::Id) -> Result<build::Id>;
 
-	async fn get_build_children(&self, id: build::Id) -> Result<BoxStream<'static, build::Id>> {
+	async fn get_build_children(
+		&self,
+		id: build::Id,
+	) -> Result<BoxStream<'static, Result<build::Id>>> {
 		self.try_get_build_children(id)
 			.await?
 			.wrap_err("Failed to get the build.")
@@ -95,16 +96,18 @@ pub trait Client: Debug + Send + Sync + 'static {
 	async fn try_get_build_children(
 		&self,
 		id: build::Id,
-	) -> Result<Option<BoxStream<'static, build::Id>>>;
+	) -> Result<Option<BoxStream<'static, Result<build::Id>>>>;
 
-	async fn get_build_log(&self, id: build::Id) -> Result<BoxStream<'static, Vec<u8>>> {
+	async fn get_build_log(&self, id: build::Id) -> Result<BoxStream<'static, Result<Bytes>>> {
 		self.try_get_build_log(id)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	async fn try_get_build_log(&self, id: build::Id)
-		-> Result<Option<BoxStream<'static, Vec<u8>>>>;
+	async fn try_get_build_log(
+		&self,
+		id: build::Id,
+	) -> Result<Option<BoxStream<'static, Result<Bytes>>>>;
 
 	async fn get_build_output(&self, id: build::Id) -> Result<Option<Value>> {
 		self.try_get_build_output(id)

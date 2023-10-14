@@ -2,7 +2,6 @@ import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Package } from "./package.ts";
-import { Placeholder } from "./placeholder.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
 import { Template } from "./template.ts";
@@ -19,7 +18,6 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| Directory
 		| File
 		| Symlink
-		| Placeholder
 		| Template
 		| Package
 		| Target
@@ -41,7 +39,6 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| Directory
 	| File
 	| Symlink
-	| Placeholder
 	| Template
 	| Package
 	| Target
@@ -70,7 +67,6 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||
-		value instanceof Placeholder ||
 		value instanceof Template ||
 		value instanceof Package ||
 		value instanceof Target

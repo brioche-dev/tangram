@@ -1,6 +1,5 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
-import { Placeholder } from "./placeholder.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
 
@@ -121,15 +120,11 @@ export class Template {
 }
 
 export namespace Template {
-	export type Component = string | Artifact | Placeholder;
+	export type Component = string | Artifact;
 
 	export namespace Component {
 		export let is = (value: unknown): value is Component => {
-			return (
-				typeof value === "string" ||
-				Artifact.is(value) ||
-				value instanceof Placeholder
-			);
+			return typeof value === "string" || Artifact.is(value);
 		};
 	}
 }

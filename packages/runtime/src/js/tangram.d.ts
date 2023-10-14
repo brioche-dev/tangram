@@ -273,27 +273,6 @@ declare namespace tg {
 		export type Id = string;
 	}
 
-	/** Create a placeholder. */
-	export let placeholder: (name: string) => Placeholder;
-
-	/** A placeholder. */
-	export class Placeholder {
-		/** Create a new placeholder. */
-		static new(name: string): Placeholder;
-
-		/** Check if a value is a `Placeholder`. */
-		static is(value: unknown): value is Placeholder;
-
-		/** Expect that a value is a `Placeholder`. */
-		static expect(value: unknown): Placeholder;
-
-		/** Assert that a value is a `Placeholder`. */
-		static assert(value: unknown): asserts value is Placeholder;
-
-		/** Get this placeholder's name. */
-		get name(): string;
-	}
-
 	/**
 	 * This computed type takes a type `T` and returns the union of all possible types that will return `T` by calling `resolve`. Here are some examples:
 	 *
@@ -314,7 +293,6 @@ declare namespace tg {
 			| Directory
 			| File
 			| Symlink
-			| Placeholder
 			| Template
 			| Package
 			| Target
@@ -348,7 +326,6 @@ declare namespace tg {
 		| Directory
 		| File
 		| Symlink
-		| Placeholder
 		| Template
 		| Package
 		| Target
@@ -474,9 +451,6 @@ declare namespace tg {
 		R extends Value = Value,
 	>(...args: Array<Unresolved<Target.Arg>>): Promise<Target<A, R>>;
 
-	/** The placeholder for the output of a target. */
-	export let output: Placeholder;
-
 	/** A target. */
 	export interface Target<
 		A extends Array<Value> = Array<Value>,
@@ -600,7 +574,7 @@ declare namespace tg {
 	export namespace Template {
 		export type Arg = undefined | Template.Component | Template | Array<Arg>;
 
-		export type Component = string | Artifact | Placeholder;
+		export type Component = string | Artifact;
 
 		export namespace Component {
 			/** Check if a value is a `Template.Component`. */
@@ -627,7 +601,6 @@ declare namespace tg {
 		| Directory
 		| File
 		| Symlink
-		| Placeholder
 		| Template
 		| Package
 		| Target

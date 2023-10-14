@@ -6,9 +6,9 @@ use super::{
 };
 use base64::Engine as _;
 use bytes::Bytes;
-use futures::TryStreamExt;
+use futures::{Future, TryStreamExt};
 use itertools::Itertools;
-use std::{future::Future, rc::Rc};
+use std::rc::Rc;
 use tangram_client::{
 	blob, checksum, object, return_error, Artifact, Blob, Checksum, Result, Target, Value, WrapErr,
 };
@@ -21,7 +21,38 @@ pub fn syscall<'s>(
 	args: v8::FunctionCallbackArguments<'s>,
 	mut return_value: v8::ReturnValue,
 ) {
-	match syscall_inner(scope, &args) {
+	// Get the syscall name.
+	let name = String::from_v8(scope, args.get(0)).unwrap();
+
+	// Invoke the syscall.
+	let result = match name.as_str() {
+		"build" => syscall_async(scope, &args, syscall_build),
+		"bundle" => syscall_async(scope, &args, syscall_bundle),
+		"checksum" => syscall_sync(scope, &args, syscall_checksum),
+		"decompress" => syscall_async(scope, &args, syscall_decompress),
+		"download" => syscall_async(scope, &args, syscall_download),
+		"encoding_base64_decode" => syscall_sync(scope, &args, syscall_encoding_base64_decode),
+		"encoding_base64_encode" => syscall_sync(scope, &args, syscall_encoding_base64_encode),
+		"encoding_hex_decode" => syscall_sync(scope, &args, syscall_encoding_hex_decode),
+		"encoding_hex_encode" => syscall_sync(scope, &args, syscall_encoding_hex_encode),
+		"encoding_json_decode" => syscall_sync(scope, &args, syscall_encoding_json_decode),
+		"encoding_json_encode" => syscall_sync(scope, &args, syscall_encoding_json_encode),
+		"encoding_toml_decode" => syscall_sync(scope, &args, syscall_encoding_toml_decode),
+		"encoding_toml_encode" => syscall_sync(scope, &args, syscall_encoding_toml_encode),
+		"encoding_utf8_decode" => syscall_sync(scope, &args, syscall_encoding_utf8_decode),
+		"encoding_utf8_encode" => syscall_sync(scope, &args, syscall_encoding_utf8_encode),
+		"encoding_yaml_decode" => syscall_sync(scope, &args, syscall_encoding_yaml_decode),
+		"encoding_yaml_encode" => syscall_sync(scope, &args, syscall_encoding_yaml_encode),
+		"extract" => syscall_async(scope, &args, syscall_extract),
+		"load" => syscall_async(scope, &args, syscall_load),
+		"log" => syscall_sync(scope, &args, syscall_log),
+		"read" => syscall_async(scope, &args, syscall_read),
+		"store" => syscall_async(scope, &args, syscall_store),
+		_ => unreachable!(r#"Unknown syscall "{name}"."#),
+	};
+
+	// Handle the result.
+	match result {
 		Ok(value) => {
 			// Set the return value.
 			return_value.set(value);
@@ -32,42 +63,6 @@ pub fn syscall<'s>(
 			let exception = error::to_exception(scope, &error);
 			scope.throw_exception(exception);
 		},
-	}
-}
-
-fn syscall_inner<'s>(
-	scope: &mut v8::HandleScope<'s>,
-	args: &v8::FunctionCallbackArguments<'s>,
-) -> Result<v8::Local<'s, v8::Value>> {
-	// Get the syscall name.
-	let name =
-		String::from_v8(scope, args.get(0)).wrap_err("Failed to deserialize the syscall name.")?;
-
-	// Invoke the syscall.
-	match name.as_str() {
-		"build" => syscall_async(scope, args, syscall_build),
-		"bundle" => syscall_async(scope, args, syscall_bundle),
-		"checksum" => syscall_sync(scope, args, syscall_checksum),
-		"decompress" => syscall_async(scope, args, syscall_decompress),
-		"download" => syscall_async(scope, args, syscall_download),
-		"encoding_base64_decode" => syscall_sync(scope, args, syscall_encoding_base64_decode),
-		"encoding_base64_encode" => syscall_sync(scope, args, syscall_encoding_base64_encode),
-		"encoding_hex_decode" => syscall_sync(scope, args, syscall_encoding_hex_decode),
-		"encoding_hex_encode" => syscall_sync(scope, args, syscall_encoding_hex_encode),
-		"encoding_json_decode" => syscall_sync(scope, args, syscall_encoding_json_decode),
-		"encoding_json_encode" => syscall_sync(scope, args, syscall_encoding_json_encode),
-		"encoding_toml_decode" => syscall_sync(scope, args, syscall_encoding_toml_decode),
-		"encoding_toml_encode" => syscall_sync(scope, args, syscall_encoding_toml_encode),
-		"encoding_utf8_decode" => syscall_sync(scope, args, syscall_encoding_utf8_decode),
-		"encoding_utf8_encode" => syscall_sync(scope, args, syscall_encoding_utf8_encode),
-		"encoding_yaml_decode" => syscall_sync(scope, args, syscall_encoding_yaml_decode),
-		"encoding_yaml_encode" => syscall_sync(scope, args, syscall_encoding_yaml_encode),
-		"extract" => syscall_async(scope, args, syscall_extract),
-		"load" => syscall_async(scope, args, syscall_load),
-		"log" => syscall_sync(scope, args, syscall_log),
-		"read" => syscall_async(scope, args, syscall_read),
-		"store" => syscall_async(scope, args, syscall_store),
-		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
@@ -316,7 +311,7 @@ async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::O
 
 fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) -> Result<()> {
 	let (string,) = args;
-	state.progress.log(string.into_bytes());
+	state.progress.log(string.into());
 	Ok(())
 }
 

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use futures::{stream::BoxStream, FutureExt};
+use bytes::Bytes;
+use futures::{future, stream::BoxStream, FutureExt};
 use http_body_util::BodyExt;
 use itertools::Itertools;
 use std::{
@@ -56,10 +57,10 @@ type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, tg::id::BuildHas
 type BuildStateMap = HashMap<tg::build::Id, self::build::Progress, tg::id::BuildHasher>;
 
 #[derive(Debug)]
-pub struct Database {
-	pub(crate) env: lmdb::Environment,
-	pub(crate) objects: lmdb::Database,
-	pub(crate) assignments: lmdb::Database,
+struct Database {
+	env: lmdb::Environment,
+	objects: lmdb::Database,
+	assignments: lmdb::Database,
 }
 
 impl Server {
@@ -181,47 +182,59 @@ impl Server {
 	}
 
 	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
-		match self.handle_request_inner(request).await {
-			Ok(Some(response)) => response,
-			Ok(None) => http::Response::builder()
+		let method = request.method().clone();
+		let path = request.uri().path().to_owned();
+		let path_components = path.split('/').skip(1).collect_vec();
+		let response = match (method, path_components.as_slice()) {
+			// Objects
+			(http::Method::HEAD, ["v1", "objects", _]) => {
+				self.handle_head_object_request(request).map(Some).boxed()
+			},
+			(http::Method::GET, ["v1", "objects", _]) => {
+				self.handle_get_object_request(request).map(Some).boxed()
+			},
+			(http::Method::PUT, ["v1", "objects", _]) => {
+				self.handle_put_object_request(request).map(Some).boxed()
+			},
+
+			// Builds
+			(http::Method::GET, ["v1", "targets", _, "build"]) => self
+				.handle_try_get_build_for_target_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::POST, ["v1", "targets", _, "build"]) => self
+				.handle_get_or_create_build_for_target_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::GET, ["v1", "builds", _, "children"]) => self
+				.handle_try_get_build_children_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::GET, ["v1", "builds", _, "logs"]) => {
+				self.handle_get_build_log_request(request).map(Some).boxed()
+			},
+			(http::Method::GET, ["v1", "builds", _, "output"]) => self
+				.handle_try_get_build_output_request(request)
+				.map(Some)
+				.boxed(),
+
+			(_, _) => future::ready(None).boxed(),
+		}
+		.await;
+		match response {
+			None => http::Response::builder()
 				.status(http::StatusCode::NOT_FOUND)
 				.body(full("Not found."))
 				.unwrap(),
-			Err(error) => {
+			Some(Err(error)) => {
 				tracing::error!(?error);
 				http::Response::builder()
 					.status(http::StatusCode::INTERNAL_SERVER_ERROR)
 					.body(full("Internal server error."))
 					.unwrap()
 			},
+			Some(Ok(response)) => response,
 		}
-	}
-
-	async fn handle_request_inner(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<Option<http::Response<Outgoing>>> {
-		let method = request.method().clone();
-		let path = request.uri().path().to_owned();
-		let path_components = path.split('/').skip(1).collect_vec();
-		let response = match (method, path_components.as_slice()) {
-			(http::Method::HEAD, ["v1", "objects", _]) => {
-				Some(self.handle_head_object_request(request).boxed())
-			},
-			(http::Method::GET, ["v1", "objects", _]) => {
-				Some(self.handle_get_object_request(request).boxed())
-			},
-			(http::Method::PUT, ["v1", "objects", _]) => {
-				Some(self.handle_put_object_request(request).boxed())
-			},
-			(_, _) => None,
-		};
-		let response = if let Some(response) = response {
-			Some(response.await?)
-		} else {
-			None
-		};
-		Ok(response)
 	}
 }
 
@@ -272,14 +285,14 @@ impl tg::Client for Server {
 	async fn try_get_build_children(
 		&self,
 		id: tg::build::Id,
-	) -> Result<Option<BoxStream<'static, tg::build::Id>>> {
+	) -> Result<Option<BoxStream<'static, Result<tg::build::Id>>>> {
 		self.try_get_build_children(id).await
 	}
 
 	async fn try_get_build_log(
 		&self,
 		id: tg::build::Id,
-	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
+	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		self.try_get_build_log(id).await
 	}
 
@@ -291,7 +304,7 @@ impl tg::Client for Server {
 		self.clean().await
 	}
 
-	async fn create_login(&self) -> Result<tg::login::Login> {
+	async fn create_login(&self) -> Result<tg::user::Login> {
 		self.state
 			.parent
 			.as_ref()
@@ -300,7 +313,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn get_login(&self, id: tg::Id) -> Result<Option<tg::login::Login>> {
+	async fn get_login(&self, id: tg::Id) -> Result<Option<tg::user::Login>> {
 		self.state
 			.parent
 			.as_ref()
@@ -338,7 +351,7 @@ impl tg::Client for Server {
 }
 
 pub type Incoming = hyper::body::Incoming;
-pub type Outgoing = http_body_util::combinators::BoxBody<
+pub type Outgoing = http_body_util::combinators::UnsyncBoxBody<
 	::bytes::Bytes,
 	Box<dyn std::error::Error + Send + Sync + 'static>,
 >;
@@ -348,7 +361,7 @@ pub type Outgoing = http_body_util::combinators::BoxBody<
 pub fn empty() -> Outgoing {
 	http_body_util::Empty::new()
 		.map_err(|_| unreachable!())
-		.boxed()
+		.boxed_unsync()
 }
 
 /// A full response body.
@@ -356,7 +369,7 @@ pub fn empty() -> Outgoing {
 pub fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
 	http_body_util::Full::new(chunk.into())
 		.map_err(|_| unreachable!())
-		.boxed()
+		.boxed_unsync()
 }
 
 /// 200

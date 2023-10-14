@@ -1,10 +1,16 @@
 use crate::{
-	build, login::Login, object, package, return_error, target, user, Client, Id, Result, Value,
+	build, id, object, package, target, user, user::Login, value, Client, Id, Result, Value,
 	WrapErr,
 };
 use async_trait::async_trait;
-use futures::stream::BoxStream;
+use bytes::Bytes;
+use futures::{
+	stream::{self, BoxStream},
+	StreamExt, TryStreamExt,
+};
 use std::sync::Arc;
+use tokio::io::AsyncReadExt;
+use tokio_util::io::StreamReader;
 use url::Url;
 
 #[derive(Clone, Debug)]
@@ -70,11 +76,13 @@ impl Client for Reqwest {
 			.send()
 			.await
 			.wrap_err("Failed to send the request.")?;
-		match response.status() {
-			http::StatusCode::OK => Ok(true),
-			http::StatusCode::NOT_FOUND => Ok(false),
-			_ => return_error!(r#"Unexpected status code "{}"."#, response.status()),
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(false);
 		}
+		response
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		Ok(true)
 	}
 
 	async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
@@ -83,11 +91,12 @@ impl Client for Reqwest {
 			.send()
 			.await
 			.wrap_err("Failed to send the request.")?;
-		match response.status() {
-			http::StatusCode::OK => {},
-			http::StatusCode::NOT_FOUND => return Ok(None),
-			_ => return_error!(r#"Unexpected status code "{}"."#, response.status()),
-		};
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		let response = response
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
 		let bytes = response
 			.bytes()
 			.await
@@ -107,49 +116,138 @@ impl Client for Reqwest {
 			.send()
 			.await
 			.wrap_err("Failed to send the request.")?;
-		match response.status() {
-			http::StatusCode::OK => Ok(Ok(())),
-			http::StatusCode::BAD_REQUEST => {
-				let bytes = response
-					.bytes()
-					.await
-					.wrap_err("Failed to get the response bytes.")?;
-				let missing_children = tangram_serialize::from_slice(&bytes)
-					.wrap_err("Failed to deserialize the missing children.")?;
-				Ok(Err(missing_children))
-			},
-			_ => return_error!(r#"Unexpected status code "{}"."#, response.status()),
+		if response.status() == http::StatusCode::BAD_REQUEST {
+			let bytes = response
+				.bytes()
+				.await
+				.wrap_err("Failed to get the response body.")?;
+			let missing_children = tangram_serialize::from_slice(&bytes)
+				.wrap_err("Failed to deserialize the body.")?;
+			return Ok(Err(missing_children));
 		}
+		response
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		Ok(Ok(()))
 	}
 
-	async fn try_get_build_for_target(&self, _id: target::Id) -> Result<Option<build::Id>> {
-		todo!()
+	async fn try_get_build_for_target(&self, id: target::Id) -> Result<Option<build::Id>> {
+		let request = self.request(http::Method::PUT, &format!("/v1/targets/{id}/build"));
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		let response = response
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		let bytes = response
+			.bytes()
+			.await
+			.wrap_err("Failed to get the response body.")?;
+		let id =
+			tangram_serialize::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		Ok(Some(id))
 	}
 
-	async fn get_or_create_build_for_target(&self, _id: target::Id) -> Result<build::Id> {
-		todo!()
+	async fn get_or_create_build_for_target(&self, id: target::Id) -> Result<build::Id> {
+		let request = self.request(http::Method::PUT, &format!("/v1/targets/{id}/build"));
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		let bytes = response
+			.bytes()
+			.await
+			.wrap_err("Failed to get the response body.")?;
+		let id =
+			tangram_serialize::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		Ok(id)
 	}
 
 	async fn try_get_build_children(
 		&self,
-		_id: build::Id,
-	) -> Result<Option<BoxStream<'static, build::Id>>> {
-		todo!()
+		id: build::Id,
+	) -> Result<Option<BoxStream<'static, Result<build::Id>>>> {
+		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/children"));
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		let response = response
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		let reader = StreamReader::new(
+			response
+				.bytes_stream()
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error)),
+		);
+		let children = stream::try_unfold(reader, |mut reader| async {
+			let mut bytes = vec![0u8; id::SIZE];
+			match reader.read_exact(&mut bytes).await {
+				Ok(_) => {},
+				Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+				Err(error) => return Err(error),
+			};
+			let id = build::Id::try_from(bytes)
+				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+			Ok(Some((id, reader)))
+		})
+		.map_err(Into::into)
+		.boxed();
+		Ok(Some(children))
 	}
 
 	async fn try_get_build_log(
 		&self,
-		_id: build::Id,
-	) -> Result<Option<BoxStream<'static, Vec<u8>>>> {
-		todo!()
+		id: build::Id,
+	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
+		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/log"));
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		let response = response
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		let log = response.bytes_stream().map_err(Into::into).boxed();
+		Ok(Some(log))
 	}
 
-	async fn try_get_build_output(&self, _id: build::Id) -> Result<Option<Option<Value>>> {
-		todo!()
+	async fn try_get_build_output(&self, id: build::Id) -> Result<Option<Option<Value>>> {
+		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/log"));
+		let response = request
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		let response = response
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		let bytes = response
+			.bytes()
+			.await
+			.wrap_err("Failed to read the response body.")?;
+		let output = serde_json::from_slice::<Option<value::Data>>(&bytes)
+			.wrap_err("Failed to deserialize the response body.")?
+			.map(Value::from_data);
+		Ok(Some(output))
 	}
 
 	async fn clean(&self) -> Result<()> {
-		todo!()
+		unimplemented!()
 	}
 
 	async fn create_login(&self) -> Result<Login> {
@@ -159,7 +257,7 @@ impl Client for Reqwest {
 			.await
 			.wrap_err("Failed to send the request.")?
 			.error_for_status()
-			.wrap_err("The response had a non-success status.")?;
+			.wrap_err("Expected the status to be success.")?;
 		let response = response
 			.json()
 			.await
@@ -174,7 +272,7 @@ impl Client for Reqwest {
 			.await
 			.wrap_err("Failed to send the request.")?
 			.error_for_status()
-			.wrap_err("The response had a non-success status.")?;
+			.wrap_err("Expected the status to be success.")?;
 		let response = response
 			.json()
 			.await
@@ -188,7 +286,7 @@ impl Client for Reqwest {
 			.await
 			.wrap_err("Failed to send the request.")?
 			.error_for_status()
-			.wrap_err("The response had a non-success status.")?;
+			.wrap_err("Expected the status to be success.")?;
 		Ok(())
 	}
 
@@ -200,7 +298,7 @@ impl Client for Reqwest {
 			.await
 			.wrap_err("Failed to send the request.")?
 			.error_for_status()
-			.wrap_err("The response had a non-success status.")?;
+			.wrap_err("Expected the status to be success.")?;
 		let response = response
 			.json()
 			.await
@@ -215,7 +313,7 @@ impl Client for Reqwest {
 			.await
 			.wrap_err("Failed to send the request.")?
 			.error_for_status()
-			.wrap_err("The response had a non-success status.")?;
+			.wrap_err("Expected the status to be success.")?;
 		let user = response
 			.json()
 			.await

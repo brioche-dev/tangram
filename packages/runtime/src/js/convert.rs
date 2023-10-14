@@ -5,8 +5,7 @@ use tangram_client::{
 	blob, checksum, directory, error, file,
 	object::{self, Object},
 	package, return_error, symlink, target, template, Artifact, Blob, Checksum, Directory, Error,
-	File, Package, Placeholder, Relpath, Result, Subpath, Symlink, System, Target, Template, Value,
-	WrapErr,
+	File, Package, Relpath, Result, Subpath, Symlink, System, Target, Template, Value, WrapErr,
 };
 use url::Url;
 
@@ -536,7 +535,6 @@ impl ToV8 for Value {
 			Value::Directory(value) => value.to_v8(scope),
 			Value::File(value) => value.to_v8(scope),
 			Value::Symlink(value) => value.to_v8(scope),
-			Value::Placeholder(value) => value.to_v8(scope),
 			Value::Template(value) => value.to_v8(scope),
 			Value::Package(value) => value.to_v8(scope),
 			Value::Target(value) => value.to_v8(scope),
@@ -574,11 +572,6 @@ impl FromV8 for Value {
 		let symlink = tg.get(scope, symlink.into()).unwrap();
 		let symlink = v8::Local::<v8::Function>::try_from(symlink).unwrap();
 
-		let placeholder =
-			v8::String::new_external_onebyte_static(scope, "Placeholder".as_bytes()).unwrap();
-		let placeholder = tg.get(scope, placeholder.into()).unwrap();
-		let placeholder = v8::Local::<v8::Function>::try_from(placeholder).unwrap();
-
 		let template =
 			v8::String::new_external_onebyte_static(scope, "Template".as_bytes()).unwrap();
 		let template = tg.get(scope, template.into()).unwrap();
@@ -610,8 +603,6 @@ impl FromV8 for Value {
 			Ok(Value::File(from_v8(scope, value)?))
 		} else if value.instance_of(scope, symlink.into()).unwrap() {
 			Ok(Value::Symlink(from_v8(scope, value)?))
-		} else if value.instance_of(scope, placeholder.into()).unwrap() {
-			Ok(Value::Placeholder(from_v8(scope, value)?))
 		} else if value.instance_of(scope, template.into()).unwrap() {
 			Ok(Value::Template(from_v8(scope, value)?))
 		} else if value.instance_of(scope, package.into()).unwrap() {
@@ -1059,56 +1050,6 @@ impl FromV8 for symlink::Object {
 	}
 }
 
-impl ToV8 for Placeholder {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let placeholder =
-			v8::String::new_external_onebyte_static(scope, "Placeholder".as_bytes()).unwrap();
-		let placeholder = tg.get(scope, placeholder.into()).unwrap();
-		let placeholder = v8::Local::<v8::Function>::try_from(placeholder).unwrap();
-
-		let name = self.name.to_v8(scope)?;
-
-		let instance = placeholder.new_instance(scope, &[name]).unwrap();
-
-		Ok(instance.into())
-	}
-}
-
-impl FromV8 for Placeholder {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let placeholder =
-			v8::String::new_external_onebyte_static(scope, "Placeholder".as_bytes()).unwrap();
-		let placeholder = tg.get(scope, placeholder.into()).unwrap();
-		let placeholder = v8::Local::<v8::Function>::try_from(placeholder).unwrap();
-
-		if !value.instance_of(scope, placeholder.into()).unwrap() {
-			return_error!("Expected a placeholder.");
-		}
-		let value = value.to_object(scope).unwrap();
-
-		let name = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
-		let name = value.get(scope, name.into()).unwrap();
-		let name = from_v8(scope, name)?;
-
-		Ok(Self { name })
-	}
-}
-
 impl ToV8 for Template {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
@@ -1165,7 +1106,6 @@ impl ToV8 for template::Component {
 		match self {
 			Self::String(string) => string.to_v8(scope),
 			Self::Artifact(artifact) => artifact.to_v8(scope),
-			Self::Placeholder(placeholder) => placeholder.to_v8(scope),
 		}
 	}
 }
@@ -1194,11 +1134,6 @@ impl FromV8 for template::Component {
 		let symlink = tg.get(scope, symlink.into()).unwrap();
 		let symlink = v8::Local::<v8::Function>::try_from(symlink).unwrap();
 
-		let placeholder =
-			v8::String::new_external_onebyte_static(scope, "Placeholder".as_bytes()).unwrap();
-		let placeholder = tg.get(scope, placeholder.into()).unwrap();
-		let placeholder = v8::Local::<v8::Function>::try_from(placeholder).unwrap();
-
 		let component = if value.is_string() {
 			Self::String(from_v8(scope, value)?)
 		} else if value.instance_of(scope, directory.into()).unwrap()
@@ -1206,10 +1141,8 @@ impl FromV8 for template::Component {
 			|| value.instance_of(scope, symlink.into()).unwrap()
 		{
 			Self::Artifact(from_v8(scope, value)?)
-		} else if value.instance_of(scope, placeholder.into()).unwrap() {
-			Self::Placeholder(from_v8(scope, value)?)
 		} else {
-			return_error!("Expected a string, artifact, or placeholder.")
+			return_error!("Expected a string or artifact.")
 		};
 
 		Ok(component)

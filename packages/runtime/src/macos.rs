@@ -74,13 +74,6 @@ pub async fn run_inner_macos(
 	// 		.into_os_string()
 	// 		.into_string()
 	// 		.unwrap()),
-	// 	crate::template::Component::Placeholder(placeholder) => {
-	// 		if placeholder.name == "output" {
-	// 			Ok(output_path.as_os_str().to_str().unwrap().to_owned())
-	// 		} else {
-	// 			Err(error!(r#"Invalid placeholder "{}"."#, placeholder.name))
-	// 		}
-	// 	},
 	// }
 
 	// Render the executable.

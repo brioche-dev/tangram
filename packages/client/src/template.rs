@@ -1,8 +1,8 @@
 pub use self::component::Component;
 use crate::{object, Artifact, Result};
-use futures::{stream::FuturesOrdered, TryStreamExt};
+use futures::{stream::FuturesOrdered, Future, TryStreamExt};
 use itertools::Itertools;
-use std::{borrow::Cow, future::Future, path::PathBuf};
+use std::{borrow::Cow, path::PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct Template {
@@ -184,14 +184,13 @@ impl From<&str> for Template {
 }
 
 pub mod component {
-	use crate::{artifact, placeholder, Artifact, Placeholder};
+	use crate::{artifact, Artifact};
 	use derive_more::From;
 
 	#[derive(Clone, Debug, From)]
 	pub enum Component {
 		String(String),
 		Artifact(Artifact),
-		Placeholder(Placeholder),
 	}
 
 	#[derive(
@@ -208,8 +207,6 @@ pub mod component {
 		String(String),
 		#[tangram_serialize(id = 1)]
 		Artifact(artifact::Id),
-		#[tangram_serialize(id = 2)]
-		Placeholder(placeholder::Data),
 	}
 
 	impl Component {
@@ -218,7 +215,6 @@ pub mod component {
 			match self {
 				Self::String(string) => Data::String(string.clone()),
 				Self::Artifact(artifact) => Data::Artifact(artifact.expect_id()),
-				Self::Placeholder(placeholder) => Data::Placeholder(placeholder.to_data()),
 			}
 		}
 
@@ -227,7 +223,6 @@ pub mod component {
 			match data {
 				Data::String(string) => Self::String(string),
 				Data::Artifact(id) => Self::Artifact(Artifact::with_id(id)),
-				Data::Placeholder(data) => Self::Placeholder(Placeholder::from_data(data)),
 			}
 		}
 	}

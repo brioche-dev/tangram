@@ -1,6 +1,6 @@
 use crate::{return_error, Cli, Result};
 use bytes::Bytes;
-use futures::StreamExt;
+use futures::TryStreamExt;
 use tangram_client as tg;
 use tokio::io::AsyncBufReadExt;
 
@@ -25,9 +25,10 @@ impl Cli {
 
 		// Write the log to stdout.
 		let log = build.log(self.client.as_ref()).await?;
-		let log = tokio_util::io::StreamReader::new(
-			log.map(|chunk| Ok::<_, std::io::Error>(Bytes::from(chunk))),
-		);
+		let log =
+			tokio_util::io::StreamReader::new(log.map_ok(Bytes::from).map_err(|error| {
+				std::io::Error::new(std::io::ErrorKind::Other, error.to_string())
+			}));
 		let mut lines = log.lines();
 		while let Some(line) = lines.next_line().await? {
 			println!("{line}");

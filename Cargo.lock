@@ -2883,6 +2883,7 @@ dependencies = [
  "tangram_serialize",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
  "xattr",

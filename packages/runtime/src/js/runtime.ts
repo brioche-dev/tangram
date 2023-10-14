@@ -10,11 +10,10 @@ import { log } from "./log.ts";
 import { main } from "./main.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { Placeholder, placeholder } from "./placeholder.ts";
 import { resolve } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import { System, system } from "./system.ts";
-import { Target, build, output, target } from "./target.ts";
+import { Target, build, target } from "./target.ts";
 import { Template, t, template } from "./template.ts";
 import { Value } from "./value.ts";
 
@@ -40,7 +39,6 @@ let tg = {
 	File,
 	Object_,
 	Package,
-	Placeholder,
 	Symlink,
 	System,
 	Target,
@@ -56,8 +54,6 @@ let tg = {
 	include,
 	log,
 	main,
-	output,
-	placeholder,
 	resolve,
 	symlink,
 	system,

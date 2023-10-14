@@ -565,9 +565,6 @@ impl Server {
 					}
 					response.push_str(&id.to_string());
 				},
-				template::Component::Placeholder(_) => {
-					return Err(libc::EIO);
-				},
 			}
 		}
 		let response = CString::new(response).unwrap();

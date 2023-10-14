@@ -44,10 +44,6 @@ impl Server {
 					}
 					response.push_str(&id.to_string());
 				},
-				template::Component::Placeholder(_) => {
-					tracing::error!("Cannot render placeholders in symlinks in the tangram VFS.");
-					return ResOp::Err(NFS4ERR_IO);
-				},
 			}
 		}
 

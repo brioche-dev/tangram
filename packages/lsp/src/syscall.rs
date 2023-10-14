@@ -7,15 +7,41 @@ use itertools::Itertools;
 use std::sync::Arc;
 use tangram_client::{
 	module::{Import, Module},
-	return_error, Result, WrapErr,
+	Result, WrapErr,
 };
 
-pub fn syscall(
-	scope: &mut v8::HandleScope,
-	args: v8::FunctionCallbackArguments,
+pub fn syscall<'s>(
+	scope: &mut v8::HandleScope<'s>,
+	args: v8::FunctionCallbackArguments<'s>,
 	mut return_value: v8::ReturnValue,
 ) {
-	match syscall_inner(scope, &args) {
+	// Get the syscall name.
+	let name: String = serde_v8::from_v8(scope, args.get(0)).unwrap();
+
+	// Invoke the syscall.
+	let result = match name.as_str() {
+		"documents" => syscall_sync(scope, &args, syscall_documents),
+		"encoding_base64_decode" => syscall_sync(scope, &args, syscall_encoding_base64_decode),
+		"encoding_base64_encode" => syscall_sync(scope, &args, syscall_encoding_base64_encode),
+		"encoding_hex_decode" => syscall_sync(scope, &args, syscall_encoding_hex_decode),
+		"encoding_hex_encode" => syscall_sync(scope, &args, syscall_encoding_hex_encode),
+		"encoding_json_decode" => syscall_sync(scope, &args, syscall_encoding_json_decode),
+		"encoding_json_encode" => syscall_sync(scope, &args, syscall_encoding_json_encode),
+		"encoding_toml_decode" => syscall_sync(scope, &args, syscall_encoding_toml_decode),
+		"encoding_toml_encode" => syscall_sync(scope, &args, syscall_encoding_toml_encode),
+		"encoding_utf8_decode" => syscall_sync(scope, &args, syscall_encoding_utf8_decode),
+		"encoding_utf8_encode" => syscall_sync(scope, &args, syscall_encoding_utf8_encode),
+		"encoding_yaml_decode" => syscall_sync(scope, &args, syscall_encoding_yaml_decode),
+		"encoding_yaml_encode" => syscall_sync(scope, &args, syscall_encoding_yaml_encode),
+		"log" => syscall_sync(scope, &args, syscall_log),
+		"module_load" => syscall_sync(scope, &args, syscall_module_load),
+		"module_resolve" => syscall_sync(scope, &args, syscall_module_resolve),
+		"module_version" => syscall_sync(scope, &args, syscall_module_version),
+		_ => unreachable!(r#"Unknown syscall "{name}"."#),
+	};
+
+	// Handle the result.
+	match result {
 		Ok(value) => {
 			// Set the return value.
 			return_value.set(value);
@@ -26,36 +52,6 @@ pub fn syscall(
 			let exception = error::to_exception(scope, &error);
 			scope.throw_exception(exception);
 		},
-	}
-}
-
-fn syscall_inner<'s>(
-	scope: &mut v8::HandleScope<'s>,
-	args: &v8::FunctionCallbackArguments,
-) -> Result<v8::Local<'s, v8::Value>> {
-	// Get the syscall name.
-	let name: String = serde_v8::from_v8(scope, args.get(0)).unwrap();
-
-	// Invoke the syscall.
-	match name.as_str() {
-		"documents" => syscall_sync(scope, args, syscall_documents),
-		"encoding_base64_decode" => syscall_sync(scope, args, syscall_encoding_base64_decode),
-		"encoding_base64_encode" => syscall_sync(scope, args, syscall_encoding_base64_encode),
-		"encoding_hex_decode" => syscall_sync(scope, args, syscall_encoding_hex_decode),
-		"encoding_hex_encode" => syscall_sync(scope, args, syscall_encoding_hex_encode),
-		"encoding_json_decode" => syscall_sync(scope, args, syscall_encoding_json_decode),
-		"encoding_json_encode" => syscall_sync(scope, args, syscall_encoding_json_encode),
-		"encoding_toml_decode" => syscall_sync(scope, args, syscall_encoding_toml_decode),
-		"encoding_toml_encode" => syscall_sync(scope, args, syscall_encoding_toml_encode),
-		"encoding_utf8_decode" => syscall_sync(scope, args, syscall_encoding_utf8_decode),
-		"encoding_utf8_encode" => syscall_sync(scope, args, syscall_encoding_utf8_encode),
-		"encoding_yaml_decode" => syscall_sync(scope, args, syscall_encoding_yaml_decode),
-		"encoding_yaml_encode" => syscall_sync(scope, args, syscall_encoding_yaml_encode),
-		"log" => syscall_sync(scope, args, syscall_log),
-		"module_load" => syscall_sync(scope, args, syscall_module_load),
-		"module_resolve" => syscall_sync(scope, args, syscall_module_resolve),
-		"module_version" => syscall_sync(scope, args, syscall_module_version),
-		_ => return_error!(r#"Unknown syscall "{name}"."#),
 	}
 }
 
