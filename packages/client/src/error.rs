@@ -48,6 +48,14 @@ pub trait WrapErr<T, E>: Sized {
 }
 
 impl Error {
+	pub fn new(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+		Self(Box::new(error))
+	}
+
+	pub fn with_boxed_error(error: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
+		Self(error)
+	}
+
 	#[track_caller]
 	pub fn with_message(message: impl std::fmt::Display) -> Self {
 		Message {
