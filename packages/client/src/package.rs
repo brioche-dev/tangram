@@ -75,6 +75,12 @@ impl Package {
 	/// Create a package from a path.
 	#[async_recursion]
 	pub async fn with_path(client: &dyn Client, package_path: &Path) -> Result<Self> {
+		if client.is_local() {
+			if let Some(package) = client.try_get_package_for_path(package_path).await? {
+				return Ok(package);
+			}
+		}
+
 		// Create a builder for the directory.
 		let mut directory = directory::Builder::default();
 
@@ -192,6 +198,12 @@ impl Package {
 			artifact: directory.into(),
 			dependencies,
 		});
+
+		if client.is_local() {
+			client
+				.set_package_for_path(package_path, package.clone())
+				.await?;
+		}
 
 		Ok(package)
 	}

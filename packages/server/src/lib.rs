@@ -3,21 +3,25 @@ use bytes::Bytes;
 use futures::{future, stream::BoxStream, FutureExt};
 use http_body_util::BodyExt;
 use itertools::Itertools;
+use lmdb::{Cursor, Transaction};
 use std::{
 	collections::HashMap,
 	convert::Infallible,
+	ffi::OsStr,
 	net::SocketAddr,
+	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
-use tg::Result;
-use tg::WrapErr;
+use tg::{Result, WrapErr};
+use fsm::Fsm;
 
 mod build;
 mod clean;
 mod migrations;
 mod object;
+mod fsm;
 // mod vfs;
 
 /// A server.
@@ -55,6 +59,7 @@ struct State {
 	//
 	// /// The VFS server task.
 	// vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+	fsm: tokio::sync::RwLock<Option<Fsm>>,
 }
 
 type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, tg::id::BuildHasher>;
@@ -66,6 +71,7 @@ struct Database {
 	env: lmdb::Environment,
 	objects: lmdb::Database,
 	assignments: lmdb::Database,
+	trackers: lmdb::Database,
 }
 
 impl Server {
@@ -86,10 +92,15 @@ impl Server {
 		let env = env_builder.open(&database_path)?;
 		let objects = env.open_db(Some("objects"))?;
 		let assignments = env.open_db(Some("assignments"))?;
+		let trackers = env.open_db(Some("trackers"))?;
+
+		delete_directory_trackers(&env, trackers)?;
+
 		let database = Database {
 			env,
 			objects,
 			assignments,
+			trackers,
 		};
 
 		// Create the file system semaphore.
@@ -105,6 +116,7 @@ impl Server {
 
 		// Create the VFS server task.
 		// let vfs_server_task = std::sync::Mutex::new(None);
+		let fsm = tokio::sync::RwLock::new(None);
 
 		// Create the state.
 		let state = Arc::new(State {
@@ -115,10 +127,14 @@ impl Server {
 			path,
 			running,
 			// vfs_server_task,
+			fsm,
 		});
 
 		// Create the server.
+
 		let server = Server { state };
+		let fsm = Fsm::new(Arc::downgrade(&server.state))?;
+		server.state.fsm.write().await.replace(fsm);
 
 		// // Start the VFS server.
 		// let kind = if cfg!(target_os = "linux") {
@@ -221,6 +237,16 @@ impl Server {
 				.handle_try_get_build_result_request(request)
 				.map(Some)
 				.boxed(),
+			(http::Method::GET, ["v1", _, "path"]) => {
+				self.handle_get_object_for_path_request(request)
+					.map(Some)
+					.boxed()
+			},
+			(http::Method::PUT, ["v1", _, "path"]) => {
+				self.handle_put_object_for_path_request(request)
+					.map(Some)
+					.boxed()
+			},
 
 			(_, _) => future::ready(None).boxed(),
 		}
@@ -366,6 +392,22 @@ impl tg::Client for Server {
 			.get_current_user()
 			.await
 	}
+
+	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<tg::Artifact>> {
+		self.try_get_artifact_for_path(path).await
+	}
+
+	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<tg::Package>> {
+		self.try_get_package_for_path(path).await
+	}
+
+	async fn set_artifact_for_path(&self, path: &Path, artifact: tg::Artifact) -> Result<()> {
+		self.set_artifact_for_path(path, artifact).await
+	}
+
+	async fn set_package_for_path(&self, path: &Path, package: tg::Package) -> Result<()> {
+		self.set_package_for_path(path, package).await
+	}
 }
 
 pub type Incoming = hyper::body::Incoming;
@@ -415,4 +457,27 @@ pub fn not_found() -> http::Response<Outgoing> {
 		.status(http::StatusCode::NOT_FOUND)
 		.body(full("Not found."))
 		.unwrap()
+}
+
+fn delete_directory_trackers(env: &lmdb::Environment, trackers: lmdb::Database) -> Result<()> {
+	let paths = {
+		let txn = env.begin_ro_txn()?;
+		let mut cursor = txn.open_ro_cursor(trackers)?;
+		cursor
+			.iter()
+			.filter_map(|entry| {
+				let (path, _) = entry.ok()?;
+				let path = PathBuf::from(OsStr::from_bytes(path));
+				path.is_dir().then_some(path)
+			})
+			.collect::<Vec<_>>()
+	};
+
+	let mut txn = env.begin_rw_txn()?;
+	for path in paths {
+		let key = path.as_os_str().as_bytes();
+		let _ = txn.del(trackers, &key, None);
+	}
+	txn.commit()?;
+	Ok(())
 }

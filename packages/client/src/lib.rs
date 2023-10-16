@@ -61,6 +61,10 @@ pub trait Handle: Debug + Send + Sync + 'static {
 /// A client.
 #[async_trait]
 pub trait Client: Debug + Send + Sync + 'static {
+	fn is_local(&self) -> bool {
+		false
+	}
+
 	fn clone_box(&self) -> Box<dyn Client>;
 
 	fn downgrade(&self) -> Box<dyn Handle>;
@@ -135,4 +139,12 @@ pub trait Client: Debug + Send + Sync + 'static {
 	async fn search_packages(&self, query: &str) -> Result<Vec<package::SearchResult>>;
 
 	async fn get_current_user(&self) -> Result<User>;
+
+	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>>;
+
+	async fn set_artifact_for_path(&self, path: &Path, artifact: Artifact) -> Result<()>;
+
+	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<Package>>;
+
+	async fn set_package_for_path(&self, path: &Path, package: Package) -> Result<()>;
 }
