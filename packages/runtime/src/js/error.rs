@@ -82,6 +82,7 @@ pub(super) fn from_exception<'s>(
 		let stack = stack
 			.call_sites
 			.iter()
+			.rev()
 			.filter_map(|call_site| {
 				let file_name = call_site.file_name.as_deref();
 				let line: u32 = call_site.line_number? - 1;

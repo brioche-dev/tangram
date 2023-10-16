@@ -10,10 +10,9 @@ use lmdb::Transaction;
 use std::sync::Arc;
 use tangram_client as tg;
 use tangram_client::{build, system, target, Blob, Build, Result, Target, Value, WrapErr};
-use tg::return_error;
+use tg::{return_error, Client};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
-use tokio_util::io::StreamReader;
 
 #[derive(Clone, Debug)]
 pub struct Progress {
@@ -22,10 +21,11 @@ pub struct Progress {
 
 #[derive(Debug)]
 struct State {
+	id: build::Id,
 	children: std::sync::Mutex<ChildrenState>,
 	log: Arc<tokio::sync::Mutex<LogState>>,
 	logger: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<Bytes>>>,
-	logger_task: tokio::task::JoinHandle<Result<()>>,
+	logger_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 	output: OutputState,
 }
 
@@ -127,7 +127,7 @@ impl Server {
 	) -> Result<hyper::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "builds", id, "logs"] = path_components.as_slice() else {
+		let [_, "builds", id, "log"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
@@ -187,7 +187,7 @@ impl Server {
 		}
 
 		// Attempt to get the build for the target from the parent.
-		if let Some(build_id) = self.try_get_build_for_target_from_parent(id).await? {
+		if let Ok(Some(build_id)) = self.try_get_build_for_target_from_parent(id).await {
 			return Ok(Some(build_id));
 		}
 
@@ -230,9 +230,9 @@ impl Server {
 			return Ok(build_id);
 		}
 
-		// Otherwise, create a new build and add it to the server's state.
+		// Otherwise, create a new build and add its progress to the server.
 		let build_id = build::Id::new();
-		let progress = Progress::new()?;
+		let progress = Progress::new(build_id)?;
 		{
 			let mut running = self.state.running.write().unwrap();
 			running.0.insert(target_id, build_id);
@@ -277,23 +277,19 @@ impl Server {
 						}
 					})
 					.await
-					.wrap_err("Failed to join the task.")?
+					.wrap_err("Failed to join the task.")?;
 			},
-			_ => unimplemented!(),
+			system::Os::Darwin => {
+				#[cfg(target_os = "macos")]
+				tangram_runtime::darwin::run(self, target, &progress).await;
+				#[cfg(not(target_os = "macos"))]
+				return_error!("Cannot run a darwin build on this host.");
+			},
+			system::Os::Linux => unimplemented!(),
 		};
 
-		// Create and store the build object.
-		let children = progress.children_stream().try_collect().await?;
-		let log = StreamReader::new(
-			progress
-				.log_stream()
-				.await?
-				.map_ok(Bytes::from)
-				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error)),
-		);
-		let log = Blob::with_reader(self, log).await?;
-		let output = progress.wait_for_output().await;
-		let _build = Build::new(self, build_id, children, log, output).await?;
+		// Finish the build.
+		let _build = progress.finish(self).await?;
 
 		// Create a write transaction.
 		let mut txn = self.state.database.env.begin_rw_txn()?;
@@ -422,7 +418,7 @@ impl Server {
 }
 
 impl Progress {
-	pub fn new() -> Result<Self> {
+	pub fn new(id: build::Id) -> Result<Self> {
 		// Create the children state.
 		let children = std::sync::Mutex::new(ChildrenState {
 			children: Vec::new(),
@@ -438,7 +434,7 @@ impl Progress {
 		// Spawn the logger task.
 		let (logger_sender, mut logger_receiver) = tokio::sync::mpsc::unbounded_channel::<Bytes>();
 		let logger = std::sync::Mutex::new(Some(logger_sender));
-		let logger_task = tokio::spawn({
+		let logger_task = std::sync::Mutex::new(Some(tokio::spawn({
 			let log = log.clone();
 			async move {
 				while let Some(bytes) = logger_receiver.recv().await {
@@ -449,7 +445,7 @@ impl Progress {
 				}
 				Ok(())
 			}
-		});
+		})));
 
 		// Create the output state.
 		let (output_sender, output_receiver) = tokio::sync::watch::channel(None);
@@ -460,6 +456,7 @@ impl Progress {
 
 		Ok(Self {
 			state: Arc::new(State {
+				id,
 				children,
 				log,
 				logger,
@@ -510,6 +507,34 @@ impl Progress {
 			.clone()
 			.unwrap()
 	}
+
+	pub async fn finish(self, client: &dyn Client) -> Result<Build> {
+		// Drop the children sender.
+		self.state.children.lock().unwrap().sender.take();
+
+		// Drop the logger sender and wait for the logger task to finish.
+		self.state.logger.lock().unwrap().take();
+		let logger_task = self.state.logger_task.lock().unwrap().take().unwrap();
+		logger_task.await.unwrap()?;
+
+		// Get the children.
+		let children = self.state.children.lock().unwrap().children.clone();
+
+		// Get the log.
+		let log = {
+			let mut state = self.state.log.lock().await;
+			state.file.rewind().await?;
+			Blob::with_reader(client, &mut state.file).await?
+		};
+
+		// Get the output.
+		let output = self.state.output.receiver.borrow().clone().unwrap();
+
+		// Create the build.
+		let build = Build::new(client, self.state.id, children, log, output).await?;
+
+		Ok(build)
+	}
 }
 
 impl tangram_runtime::Progress for Progress {
@@ -517,10 +542,10 @@ impl tangram_runtime::Progress for Progress {
 		Box::new(self.clone())
 	}
 
-	fn child(&self, child: tg::Build) {
+	fn child(&self, child: &tg::Build) {
 		let mut state = self.state.children.lock().unwrap();
 		state.children.push(child.clone());
-		state.sender.as_ref().unwrap().send(child).ok();
+		state.sender.as_ref().unwrap().send(child.clone()).ok();
 	}
 
 	fn log(&self, bytes: Bytes) {
@@ -537,7 +562,5 @@ impl tangram_runtime::Progress for Progress {
 
 	fn output(&self, output: Option<tg::Value>) {
 		self.state.output.sender.send(Some(output)).unwrap();
-		self.state.children.lock().unwrap().sender.take();
-		self.state.logger.lock().unwrap().take();
 	}
 }

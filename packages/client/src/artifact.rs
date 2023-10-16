@@ -93,6 +93,16 @@ impl Artifact {
 		}
 	}
 
+	/// Compute an artifact's checksum.
+	#[allow(clippy::unused_async)]
+	pub async fn checksum(
+		&self,
+		_client: &dyn Client,
+		_algorithm: checksum::Algorithm,
+	) -> Result<Checksum> {
+		unimplemented!()
+	}
+
 	/// Collect an artifact's recursive references.
 	pub async fn recursive_references(
 		&self,

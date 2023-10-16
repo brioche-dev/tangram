@@ -42,9 +42,11 @@ export class Template {
 					MaybeNestedArray<Template.Component>
 				> {
 					arg = await resolve(arg);
-					if (Template.Component.is(arg)) {
+					if (arg === undefined) {
+						return [];
+					} else if (Template.Component.is(arg)) {
 						return arg;
-					} else if (arg instanceof Template) {
+					} else if (Template.is(arg)) {
 						return arg.components;
 					} else if (arg instanceof Array) {
 						return await Promise.all(arg.map(map));
@@ -120,6 +122,19 @@ export class Template {
 }
 
 export namespace Template {
+	export type Arg = undefined | Component | Template | Array<Arg>;
+
+	export namespace Arg {
+		export let is = (value: unknown): value is Arg => {
+			return (
+				value === undefined ||
+				Component.is(value) ||
+				Template.is(value) ||
+				(value instanceof Array && value.every((value) => Arg.is(value)))
+			);
+		};
+	}
+
 	export type Component = string | Artifact;
 
 	export namespace Component {
@@ -127,8 +142,4 @@ export namespace Template {
 			return typeof value === "string" || Artifact.is(value);
 		};
 	}
-}
-
-export namespace Template {
-	export type Arg = undefined | Component | Template | Array<Arg>;
 }

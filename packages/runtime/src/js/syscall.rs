@@ -69,6 +69,7 @@ pub fn syscall<'s>(
 async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 	let (target,) = args;
 	let build = target.build(state.client.as_ref()).await?;
+	state.progress.child(&build);
 	let Some(output) = build.output(state.client.as_ref()).await? else {
 		return_error!("The build failed.");
 	};

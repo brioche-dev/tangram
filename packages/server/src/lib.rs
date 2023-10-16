@@ -46,7 +46,7 @@ struct State {
 	path: PathBuf,
 
 	/// The state of the server's running builds.
-	running: std::sync::RwLock<(BuildForTargetMap, BuildStateMap)>,
+	running: std::sync::RwLock<(BuildForTargetMap, BuildProgressMap)>,
 	//
 	// /// The VFS server task.
 	// vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
@@ -54,7 +54,7 @@ struct State {
 
 type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, tg::id::BuildHasher>;
 
-type BuildStateMap = HashMap<tg::build::Id, self::build::Progress, tg::id::BuildHasher>;
+type BuildProgressMap = HashMap<tg::build::Id, self::build::Progress, tg::id::BuildHasher>;
 
 #[derive(Debug)]
 struct Database {
@@ -170,7 +170,9 @@ impl Server {
 						hyper::service::service_fn(move |request| {
 							let server = server.clone();
 							async move {
+								tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
 								let response = server.handle_request(request).await;
+								tracing::info!(status = ?response.status(), "Sending response.");
 								Ok::<_, Infallible>(response)
 							}
 						}),
@@ -183,8 +185,7 @@ impl Server {
 
 	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
 		let method = request.method().clone();
-		let path = request.uri().path().to_owned();
-		let path_components = path.split('/').skip(1).collect_vec();
+		let path_components = request.uri().path().split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
 			// Objects
 			(http::Method::HEAD, ["v1", "objects", _]) => {
@@ -210,7 +211,7 @@ impl Server {
 				.handle_try_get_build_children_request(request)
 				.map(Some)
 				.boxed(),
-			(http::Method::GET, ["v1", "builds", _, "logs"]) => {
+			(http::Method::GET, ["v1", "builds", _, "log"]) => {
 				self.handle_get_build_log_request(request).map(Some).boxed()
 			},
 			(http::Method::GET, ["v1", "builds", _, "output"]) => self

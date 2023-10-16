@@ -3,7 +3,7 @@ use bytes::Bytes;
 use futures::{
 	future::BoxFuture,
 	stream::{self, StreamExt},
-	Future, TryStreamExt,
+	TryStreamExt,
 };
 use num::ToPrimitive;
 use pin_project::pin_project;

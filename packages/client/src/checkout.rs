@@ -215,8 +215,8 @@ impl Artifact {
 			.try_render(|component| async move {
 				match component {
 					crate::template::Component::String(string) => Ok(string.into()),
-					_ => Err(error!(
-						"Cannot check out a symlink whose target has non-string components.",
+					crate::template::Component::Artifact(_) => Err(error!(
+						"Cannot check out a symlink whose target contains artifacts.",
 					)),
 				}
 			})

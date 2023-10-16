@@ -1,7 +1,7 @@
 import { assert } from "./assert.ts";
 import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
-import { Target, functions } from "./target.ts";
+import { Target, functions, setCurrent } from "./target.ts";
 import { Value } from "./value.ts";
 
 export let main = async (target: Target): Promise<Value> => {
@@ -31,6 +31,9 @@ export let main = async (target: Target): Promise<Value> => {
 	if (!function_) {
 		throw new Error("Failed to find the function.");
 	}
+
+	// Set the current target.
+	setCurrent(target);
 
 	// Get the args.
 	let args = await target.args();

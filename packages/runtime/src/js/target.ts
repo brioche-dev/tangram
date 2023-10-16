@@ -11,6 +11,12 @@ import { Template, template } from "./template.ts";
 import { MaybeNestedArray, flatten } from "./util.ts";
 import { Value } from "./value.ts";
 
+export let current: Target;
+
+export let setCurrent = (target: Target) => {
+	current = target;
+};
+
 export let functions: Record<string, Function> = {};
 
 type FunctionArg<
@@ -54,12 +60,21 @@ export function target<
 		let package_ = Package.withId(module_.value.packageId);
 
 		// Create the target.
-		return Target.new({
-			host: "js-js",
-			executable: module_.value.path,
-			package: package_,
-			name: arg.name,
-		});
+		return new Target(
+			Object_.Handle.withObject({
+				kind: "target",
+				value: {
+					host: "js-js",
+					executable: new Template([module_.value.path]),
+					package: package_,
+					name: arg.name,
+					args: [],
+					env: {},
+					checksum: undefined,
+					unsafe: false,
+				},
+			}),
+		);
 	} else {
 		return Target.new(...args);
 	}
@@ -68,9 +83,7 @@ export function target<
 export let build = async (
 	...args: Array<Unresolved<Target.Arg>>
 ): Promise<Value> => {
-	let target = await Target.new(...args);
-	let output = await target.build();
-	return output;
+	return await (await target(...args)).build();
 };
 
 export interface Target<
@@ -136,22 +149,37 @@ export class Target<
 						}>
 					> {
 						let arg = await resolve(unresolvedArg);
-						if (arg instanceof Template) {
-							return {};
-						} else if (arg instanceof Target) {
-							return {};
+						if (Template.Arg.is(arg)) {
+							return {
+								host: (await current.env())["TANGRAM_HOST"] as System,
+								executable: await template("/bin/sh"),
+								args_: ["-c", await template(arg)],
+							};
+						} else if (Target.is(arg)) {
+							return {
+								host: await arg.host(),
+								executable: await arg.executable(),
+								package_: await arg.package(),
+								name: await arg.name_(),
+								env: await arg.env(),
+								args_: await arg.args(),
+								checksum: await arg.checksum(),
+								unsafe_: await arg.unsafe(),
+							};
 						} else if (arg instanceof Array) {
 							return await Promise.all(arg.map(map));
 						} else if (typeof arg === "object") {
 							return {
 								host: arg.host,
-								executable: await template(arg.executable),
+								executable: arg.executable
+									? await template(arg.executable)
+									: undefined,
 								package_: arg.package,
-								name,
-								env,
-								args_,
-								checksum,
-								unsafe_,
+								name: arg.name,
+								env: arg.env,
+								args_: arg.args,
+								checksum: arg.checksum,
+								unsafe_: arg.unsafe,
 							};
 						} else {
 							return unreachable();
@@ -272,7 +300,7 @@ export class Target<
 }
 
 export namespace Target {
-	export type Arg = Template | Target | Array<Arg> | ArgObject;
+	export type Arg = Template.Arg | Target | Array<Arg> | ArgObject;
 
 	export type ArgObject = {
 		host?: System;

@@ -49,7 +49,7 @@ export class Blob {
 						return new Blob(
 							Object_.Handle.withObject({ kind: "blob", value: arg }),
 						);
-					} else if (arg instanceof Blob) {
+					} else if (Blob.is(arg)) {
 						return arg;
 					} else if (arg instanceof Array) {
 						return await Promise.all(arg.map(map));
@@ -145,7 +145,7 @@ export namespace Blob {
 				value === undefined ||
 				typeof value === "string" ||
 				value instanceof Uint8Array ||
-				value instanceof Blob ||
+				Blob.is(value) ||
 				(value instanceof Array && value.every(Arg.is))
 			);
 		};

@@ -50,10 +50,6 @@ export class Relpath {
 		}, new Relpath());
 	}
 
-	static is(value: unknown): value is Relpath {
-		return value instanceof Relpath;
-	}
-
 	isEmpty(): boolean {
 		return this.#parents == 0 && this.#subpath.isEmpty();
 	}
@@ -106,14 +102,12 @@ export class Relpath {
 }
 
 export namespace Relpath {
-	export type Arg = undefined | string | Subpath | Relpath | Array<Arg>;
+	export type Arg = Subpath.Arg | Relpath | Array<Arg>;
 
 	export namespace Arg {
 		export let is = (value: unknown): value is Relpath.Arg => {
 			return (
-				value === undefined ||
-				typeof value === "string" ||
-				value instanceof Subpath ||
+				Subpath.Arg.is(value) ||
 				value instanceof Relpath ||
 				(value instanceof Array && value.every(Relpath.Arg.is))
 			);
@@ -139,10 +133,6 @@ export class Subpath {
 
 	static new(...args: Array<Subpath.Arg>): Subpath {
 		return Relpath.new(...args).toSubpath();
-	}
-
-	static is(value: unknown): value is Subpath {
-		return value instanceof Subpath;
 	}
 
 	components(): Array<string> {
@@ -181,4 +171,24 @@ export class Subpath {
 
 export namespace Subpath {
 	export type Arg = undefined | string | Subpath | Array<Arg>;
+
+	export namespace Arg {
+		export let is = (value: unknown): value is Subpath.Arg => {
+			return (
+				value === undefined ||
+				typeof value === "string" ||
+				value instanceof Subpath ||
+				(value instanceof Array && value.every(Subpath.Arg.is))
+			);
+		};
+
+		export let expect = (value: unknown): Subpath.Arg => {
+			assert_(is(value));
+			return value;
+		};
+
+		export let assert = (value: unknown): asserts value is Subpath.Arg => {
+			assert_(is(value));
+		};
+	}
 }

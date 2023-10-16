@@ -1,3 +1,5 @@
+use crate::not_found;
+
 use super::{bad_request, empty, full, Incoming, Outgoing, Server};
 use futures::{stream, StreamExt, TryStreamExt};
 use lmdb::Transaction;
@@ -18,13 +20,14 @@ impl Server {
 			return Ok(bad_request());
 		};
 
-		let status = if self.get_object_exists(id).await? {
+		let exists = self.get_object_exists(id).await?;
+
+		// Create the response.
+		let status = if exists {
 			http::StatusCode::OK
 		} else {
 			http::StatusCode::NOT_FOUND
 		};
-
-		// Create the response.
 		let response = http::Response::builder()
 			.status(status)
 			.body(empty())
@@ -46,22 +49,14 @@ impl Server {
 			return Ok(bad_request());
 		};
 
-		let bytes = self.try_get_object_bytes(id).await?;
-
-		let Some(bytes) = bytes else {
-			return Ok(http::Response::builder()
-				.status(http::StatusCode::NOT_FOUND)
-				.body(empty())
-				.unwrap());
+		let Some(bytes) = self.try_get_object_bytes(id).await? else {
+			return Ok(not_found());
 		};
-
-		// Create the body.
-		let body = full(bytes);
 
 		// Create the response.
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
-			.body(body)
+			.body(full(bytes))
 			.unwrap();
 
 		Ok(response)
@@ -118,7 +113,7 @@ impl Server {
 		}
 
 		// Check if the object exists in the parent.
-		if self.get_object_exists_from_parent(id).await? {
+		if let Ok(true) = self.get_object_exists_from_parent(id).await {
 			return Ok(true);
 		}
 
@@ -156,7 +151,7 @@ impl Server {
 		};
 
 		// Attempt to get the object from the parent.
-		if let Some(bytes) = self.try_get_object_bytes_from_parent(id).await? {
+		if let Ok(Some(bytes)) = self.try_get_object_bytes_from_parent(id).await {
 			return Ok(Some(bytes));
 		};
 

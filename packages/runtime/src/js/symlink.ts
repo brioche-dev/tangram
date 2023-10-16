@@ -37,7 +37,7 @@ export class Symlink {
 						return { path: relpath(arg) };
 					} else if (Artifact.is(arg)) {
 						return { artifact: arg };
-					} else if (arg instanceof Template) {
+					} else if (Template.is(arg)) {
 						assert_(arg.components.length <= 2);
 						let [firstComponent, secondComponent] = arg.components;
 						if (
@@ -62,7 +62,7 @@ export class Symlink {
 						} else {
 							throw new Error("Invalid template.");
 						}
-					} else if (arg instanceof Symlink) {
+					} else if (Symlink.is(arg)) {
 						return {
 							artifact: await arg.artifact(),
 							path: await arg.path(),
@@ -172,19 +172,19 @@ export class Symlink {
 	): Promise<Directory | File | undefined> {
 		from = from ? await symlink(from) : undefined;
 		let fromArtifact = await from?.artifact();
-		if (fromArtifact instanceof Symlink) {
+		if (Symlink.is(fromArtifact)) {
 			fromArtifact = await fromArtifact.resolve();
 		}
 		let fromPath = from?.path();
 		let artifact = await this.artifact();
-		if (artifact instanceof Symlink) {
+		if (Symlink.is(artifact)) {
 			artifact = await artifact.resolve();
 		}
 		let path = await this.path();
 		if (artifact !== undefined && path.isEmpty()) {
 			return artifact;
 		} else if (artifact === undefined && !path.isEmpty()) {
-			if (!(fromArtifact instanceof Directory)) {
+			if (!Directory.is(fromArtifact)) {
 				throw new Error("Expected a directory.");
 			}
 			return await fromArtifact.tryGet(
@@ -195,7 +195,7 @@ export class Symlink {
 					.toString(),
 			);
 		} else if (artifact !== undefined && !path.isEmpty()) {
-			if (!(artifact instanceof Directory)) {
+			if (!Directory.is(artifact)) {
 				throw new Error("Expected a directory.");
 			}
 			return await artifact.tryGet(path.toSubpath().toString());

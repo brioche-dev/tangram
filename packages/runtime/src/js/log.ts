@@ -64,19 +64,19 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		return value.message;
 	} else if (value instanceof Promise) {
 		return "(promise)";
-	} else if (value instanceof Blob) {
+	} else if (Blob.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.blob ${handle})`;
-	} else if (value instanceof Directory) {
+	} else if (Directory.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.directory ${handle})`;
-	} else if (value instanceof File) {
+	} else if (File.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.file ${handle})`;
-	} else if (value instanceof Symlink) {
+	} else if (Symlink.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.symlink ${handle})`;
-	} else if (value instanceof Template) {
+	} else if (Template.is(value)) {
 		let string = value.components
 			.map((component) => {
 				if (typeof component === "string") {
@@ -87,10 +87,10 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			})
 			.join("");
 		return `(tg.template "${string}")`;
-	} else if (value instanceof Package) {
+	} else if (Package.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.package "${handle}")`;
-	} else if (value instanceof Target) {
+	} else if (Target.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
 		return `(tg.target "${handle}")`;
 	} else {

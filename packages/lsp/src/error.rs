@@ -88,6 +88,7 @@ pub(super) fn from_exception<'s>(
 		let stack = stack
 			.call_sites
 			.iter()
+			.rev()
 			.filter_map(|call_site| {
 				let line: u32 = call_site.line_number? - 1;
 				let column: u32 = call_site.column_number?;

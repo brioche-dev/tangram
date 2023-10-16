@@ -39,8 +39,8 @@ impl Template {
 		self.components
 			.iter()
 			.filter_map(|component| match component {
+				Component::String(_) => None,
 				Component::Artifact(artifact) => Some(artifact),
-				_ => None,
 			})
 	}
 
@@ -131,8 +131,8 @@ impl Template {
 		self.components
 			.iter()
 			.filter_map(|component| match component {
+				Component::String(_) => None,
 				Component::Artifact(artifact) => Some(artifact.handle().clone()),
-				_ => None,
 			})
 			.collect()
 	}
@@ -144,8 +144,8 @@ impl Data {
 		self.components
 			.iter()
 			.filter_map(|component| match component {
+				component::Data::String(_) => None,
 				component::Data::Artifact(id) => Some((*id).into()),
-				_ => None,
 			})
 			.collect()
 	}

@@ -52,6 +52,7 @@ impl Error {
 		Self(Box::new(error))
 	}
 
+	#[must_use]
 	pub fn with_boxed_error(error: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
 		Self(error)
 	}

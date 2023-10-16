@@ -36,7 +36,7 @@ impl Cli {
 		// Create the target.
 		let env = [(
 			"TANGRAM_HOST".to_owned(),
-			tg::Value::String(tg::System::host()?.to_string()),
+			tg::System::host()?.to_string().into(),
 		)]
 		.into();
 		let args_ = Vec::new();

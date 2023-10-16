@@ -132,7 +132,7 @@ impl Client for Reqwest {
 	}
 
 	async fn try_get_build_for_target(&self, id: target::Id) -> Result<Option<build::Id>> {
-		let request = self.request(http::Method::PUT, &format!("/v1/targets/{id}/build"));
+		let request = self.request(http::Method::GET, &format!("/v1/targets/{id}/build"));
 		let response = request
 			.send()
 			.await
@@ -147,13 +147,12 @@ impl Client for Reqwest {
 			.bytes()
 			.await
 			.wrap_err("Failed to get the response body.")?;
-		let id =
-			tangram_serialize::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 		Ok(Some(id))
 	}
 
 	async fn get_or_create_build_for_target(&self, id: target::Id) -> Result<build::Id> {
-		let request = self.request(http::Method::PUT, &format!("/v1/targets/{id}/build"));
+		let request = self.request(http::Method::POST, &format!("/v1/targets/{id}/build"));
 		let response = request
 			.send()
 			.await
@@ -164,8 +163,7 @@ impl Client for Reqwest {
 			.bytes()
 			.await
 			.wrap_err("Failed to get the response body.")?;
-		let id =
-			tangram_serialize::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 		Ok(id)
 	}
 
@@ -225,7 +223,7 @@ impl Client for Reqwest {
 	}
 
 	async fn try_get_build_output(&self, id: build::Id) -> Result<Option<Option<Value>>> {
-		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/log"));
+		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/output"));
 		let response = request
 			.send()
 			.await

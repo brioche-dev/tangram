@@ -48,11 +48,11 @@ async fn main_inner() -> Result<()> {
 	initialize_v8();
 
 	// Create the client.
-	let path = crate::util::dirs::home_directory_path()
-		.unwrap()
-		.join(".tangram");
-	let client = tangram_server::Server::new(path, None).await?;
-	// let client = tangram_client::Reqwest::new("http://localhost:8476".parse().unwrap(), None);
+	// let path = crate::util::dirs::home_directory_path()
+	// 	.unwrap()
+	// 	.join(".tangram");
+	// let client = tangram_server::Server::new(path, None).await?;
+	let client = tangram_client::Reqwest::new("http://localhost:8476".parse().unwrap(), None);
 
 	// Create the CLI.
 	let cli = Cli {

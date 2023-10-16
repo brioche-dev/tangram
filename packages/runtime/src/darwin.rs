@@ -1,22 +1,34 @@
-use crate::{
-	checkin, error, return_error, server, value::Value, Artifact, Client, Error, Result, Target,
-	Template, WrapErr,
-};
+use super::Progress;
+use crate::util::render;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use indoc::writedoc;
 use std::{
+	collections::BTreeMap,
 	ffi::{CStr, CString},
 	fmt::Write,
 	os::unix::prelude::OsStrExt,
-	sync::Arc,
 };
+use tangram_client as tg;
+use tangram_client::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
 
-#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
-pub async fn run_inner_macos(
+pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
+	match run_inner(client, target, progress).await {
+		Ok(output) => {
+			progress.output(Some(output));
+		},
+		Err(error) => {
+			progress.log(error.trace().to_string().into());
+			progress.output(None);
+		},
+	}
+}
+
+#[allow(clippy::too_many_lines)]
+pub async fn run_inner(
 	client: &dyn Client,
 	target: Target,
-	progress: &dyn Progress,
-) -> Result<Option<Value>> {
+	_progress: &dyn Progress,
+) -> Result<Value> {
 	// Get the server path.
 	let server_path = client.path().unwrap().to_owned();
 
@@ -51,43 +63,22 @@ pub async fn run_inner_macos(
 		.await
 		.wrap_err("Failed to create the working directory.")?;
 
-	// Create a closure that renders a template with the artifacts and output guest paths.
-	let render = {
-		let client = client.clone();
-		let artifacts_path = artifacts_path.clone();
-		let output_path = output_path.clone();
-		move |template: Template| async move {
-			template
-				.try_render(move |component| {
-					let client = client.clone();
-					let artifacts_path = artifacts_path.clone();
-					let output_path = output_path.clone();
-					async move { Ok("ello".to_owned()) }
-				})
-				.await
-		}
-	};
-	// match component {
-	// 	crate::template::Component::String(string) => Ok(string.clone()),
-	// 	crate::template::Component::Artifact(artifact) => Ok(artifacts_path
-	// 		.join(artifact.id(client).await?.to_string())
-	// 		.into_os_string()
-	// 		.into_string()
-	// 		.unwrap()),
-	// }
-
 	// Render the executable.
 	let executable = target.executable(client).await?;
-	let executable = render(executable.clone()).await?;
+	let executable = render(
+		&Value::Template(executable.clone()),
+		client,
+		&artifacts_path,
+	)
+	.await?;
 
 	// Render the env.
 	let env = target.env(client).await?;
-	let env: std::collections::BTreeMap<String, String> = env
+	let mut env: BTreeMap<String, String> = env
 		.iter()
-		.map(|(key, value)| async move {
+		.map(|(key, value)| async {
 			let key = key.clone();
-			let value = value.try_unwrap_template_ref().unwrap();
-			let value = render(value.clone()).await?;
+			let value = render(value, client, &artifacts_path).await?;
 			Ok::<_, Error>((key, value))
 		})
 		.collect::<FuturesOrdered<_>>()
@@ -98,9 +89,9 @@ pub async fn run_inner_macos(
 	let args = target.args(client).await?;
 	let args: Vec<String> = args
 		.iter()
-		.map(|value| {
-			let value = value.try_unwrap_template_ref().unwrap();
-			render(value.clone())
+		.map(|value| async {
+			let value = render(value, client, &artifacts_path).await?;
+			Ok::<_, Error>(value)
 		})
 		.collect::<FuturesOrdered<_>>()
 		.try_collect()
@@ -123,6 +114,12 @@ pub async fn run_inner_macos(
 	env.insert(
 		"TANGRAM_SOCKET".to_owned(),
 		socket_path.to_str().unwrap().to_owned(),
+	);
+
+	// Set `$OUTPUT`.
+	env.insert(
+		"OUTPUT".to_owned(),
+		output_path.to_str().unwrap().to_owned(),
 	);
 
 	// Create the sandbox profile.
@@ -332,7 +329,7 @@ pub async fn run_inner_macos(
 	// Create the output.
 	let value = if tokio::fs::try_exists(&output_path).await? {
 		// Check in the output.
-		let options = checkin::Options {
+		let options = tg::checkin::Options {
 			artifacts_paths: vec![artifacts_path],
 		};
 		let artifact = Artifact::check_in_with_options(client, &output_path, &options)
@@ -357,7 +354,7 @@ pub async fn run_inner_macos(
 		Value::Null(())
 	};
 
-	Ok(Some(value))
+	Ok(value)
 }
 
 extern "C" {
