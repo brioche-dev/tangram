@@ -14,7 +14,6 @@ use tokio::io::AsyncReadExt;
 use tokio_util::io::StreamReader;
 
 use std::{
-	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 
