@@ -5,7 +5,8 @@ use base64::Engine as _;
 use bytes::Bytes;
 use itertools::Itertools;
 use std::sync::Arc;
-use tangram_client::{
+use tangram_client as tg;
+use tg::{
 	module::{Import, Module},
 	Result, WrapErr,
 };
@@ -196,7 +197,7 @@ fn syscall_encoding_yaml_encode(
 
 fn syscall_log(_scope: &mut v8::HandleScope, _state: &State, args: (String,)) -> Result<()> {
 	let (string,) = args;
-	eprintln!("{string}");
+	tracing::debug!("{string}");
 	Ok(())
 }
 

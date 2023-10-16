@@ -1,6 +1,7 @@
 use super::Server;
 use lsp_types as lsp;
-use tangram_client::{module::Range, return_error, Module, Result};
+use tangram_client as tg;
+use tg::{module::Range, return_error, Module, Result};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

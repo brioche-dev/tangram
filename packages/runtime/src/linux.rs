@@ -1,623 +1,567 @@
-use super::Task;
-use crate::{
-	artifact::{self, Artifact},
-	build, return_error,
-	server::Server,
-	system::System,
-	task,
-	temp::Temp,
-	value::Value,
-	Error, Result, WrapErr,
-};
+use crate::{util::render, Progress};
+use futures::{stream::FuturesOrdered, TryStreamExt};
 use indoc::formatdoc;
 use itertools::Itertools;
 use std::{
-	ffi::{CStr, CString},
-	os::{
-		fd::{AsRawFd, FromRawFd},
-		unix::ffi::OsStrExt,
-	},
+	collections::BTreeMap,
+	ffi::CString,
+	os::{fd::AsRawFd, unix::ffi::OsStrExt},
 	path::{Path, PathBuf},
 };
+use tangram_client as tg;
+use tg::{return_error, system::Arch, Artifact, Client, Error, Result, Target, Value, WrapErr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-mod fuse;
 
 /// The home directory guest path.
 const HOME_DIRECTORY_GUEST_PATH: &str = "/home/tangram";
 
-/// The socket guest path.
-const SOCKET_GUEST_PATH: &str = "/socket";
+/// The output parent directory guest path.
+const OUTPUT_PARENT_DIRECTORY_GUEST_PATH: &str = "/output";
 
-/// The tangram directory guest path.
-const TANGRAM_DIRECTORY_GUEST_PATH: &str = "/.tangram";
-
-/// The UID for the tangram user.
-const TANGRAM_UID: libc::uid_t = 1000;
+/// The server guest path.
+const SERVER_DIRECTORY_GUEST_PATH: &str = "/.tangram";
 
 /// The GID for the tangram user.
 const TANGRAM_GID: libc::gid_t = 1000;
 
+/// The UID for the tangram user.
+const TANGRAM_UID: libc::uid_t = 1000;
+
 /// The working directory guest path.
 const WORKING_DIRECTORY_GUEST_PATH: &str = "/home/tangram/work";
 
-const ENV_AMD64_LINUX: &[u8] = include_bytes!(concat!(
+const ENV_AARCH64_LINUX: &[u8] = include_bytes!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/src/linux/bin/env_amd64_linux"
+	"/src/linux/bin/env_aarch64_linux"
 ));
 
-const ENV_ARM64_LINUX: &[u8] = include_bytes!(concat!(
+const ENV_X8664_LINUX: &[u8] = include_bytes!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/src/linux/bin/env_arm64_linux"
+	"/src/linux/bin/env_x86_64_linux"
 ));
 
-const SH_AMD64_LINUX: &[u8] = include_bytes!(concat!(
+const SH_AARCH64_LINUX: &[u8] = include_bytes!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/src/linux/bin/sh_amd64_linux"
+	"/src/linux/bin/sh_aarch64_linux"
 ));
 
-const SH_ARM64_LINUX: &[u8] = include_bytes!(concat!(
+const SH_X8664_LINUX: &[u8] = include_bytes!(concat!(
 	env!("CARGO_MANIFEST_DIR"),
-	"/src/linux/bin/sh_arm64_linux"
+	"/src/linux/bin/sh_x86_64_linux"
 ));
 
-impl Task {
-	#[allow(clippy::too_many_lines, clippy::similar_names)]
-	pub async fn run_inner_linux(&self, tg: &Server) -> Result<Value> {
-		// Check out the references.
-		self.check_out_references(tg)
-			.await
-			.wrap_err("Failed to check out the references.")?;
-
-		// Create a temp for the root.
-		let root_temp = Temp::new(tg);
-		let root_host_path = root_temp.path().to_owned();
-		tokio::fs::create_dir_all(&root_host_path)
-			.await
-			.wrap_err("Failed to create the root directory.")?;
-
-		// Add `/usr/bin/env` and `/bin/sh` to the root.
-		let env_path = root_host_path.join("usr/bin/env");
-		let sh_path = root_host_path.join("bin/sh");
-		let (env_bytes, sh_bytes) = match self.host {
-			System::Amd64Linux => (ENV_AMD64_LINUX, SH_AMD64_LINUX),
-			System::Arm64Linux => (ENV_ARM64_LINUX, SH_ARM64_LINUX),
-			_ => unreachable!(),
-		};
-		tokio::fs::create_dir_all(&env_path.parent().unwrap()).await?;
-		tokio::fs::OpenOptions::new()
-			.write(true)
-			.create(true)
-			.mode(0o755)
-			.open(&env_path)
-			.await?
-			.write_all(env_bytes)
-			.await?;
-		tokio::fs::create_dir_all(&sh_path.parent().unwrap()).await?;
-		tokio::fs::OpenOptions::new()
-			.write(true)
-			.create(true)
-			.mode(0o755)
-			.open(&sh_path)
-			.await?
-			.write_all(sh_bytes)
-			.await?;
-
-		// Create a temp for the output.
-		let output_temp = Temp::new(tg);
-
-		// Create the host and guest paths for the output parent directory.
-		let output_parent_directory_host_path = output_temp.path().to_owned();
-		let output_parent_directory_guest_path =
-			PathBuf::from(format!("/.tangram/temps/{}", output_temp.id()));
-		tokio::fs::create_dir_all(&output_parent_directory_host_path)
-			.await
-			.wrap_err("Failed to create the output parent directory.")?;
-
-		// Create the host and guest paths for the output.
-		let output_host_path = output_parent_directory_host_path.join("output");
-		let output_guest_path = output_parent_directory_guest_path.join("output");
-
-		// Create the host and guest paths for the artifacts directory.
-		let _artifacts_directory_guest_path = tg.artifacts_path();
-		let artifacts_directory_guest_path =
-			Path::new(TANGRAM_DIRECTORY_GUEST_PATH).join("artifacts");
-
-		// Create the host and guest paths for the home directory.
-		let home_directory_host_path =
-			root_host_path.join(HOME_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
-		let _home_directory_guest_path = PathBuf::from(HOME_DIRECTORY_GUEST_PATH);
-		tokio::fs::create_dir_all(&home_directory_host_path)
-			.await
-			.wrap_err(r#"Failed to create the home directory."#)?;
-
-		// Create the host and guest paths for the working directory.
-		let working_directory_host_path =
-			root_host_path.join(WORKING_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
-		tokio::fs::create_dir_all(&working_directory_host_path)
-			.await
-			.wrap_err(r#"Failed to create the working directory."#)?;
-
-		// Render the executable, env, and args.
-		let (executable, mut env, args) =
-			self.render(&artifacts_directory_guest_path, &output_guest_path)?;
-
-		// Enable unsafe options if a checksum was provided or if the unsafe flag was set.
-		let enable_unsafe = self.checksum.is_some() || self.unsafe_;
-
-		// Verify the safety constraints.
-		if !enable_unsafe && self.network {
-			return_error!("Network access is not allowed in safe processes.");
-		}
-
-		// Handle the network flag.
-		let network_enabled = self.network;
-
-		// Set `$HOME`.
-		env.insert("HOME".to_owned(), HOME_DIRECTORY_GUEST_PATH.to_owned());
-
-		// Set `$TANGRAM_PATH`.
-		env.insert(
-			"TANGRAM_PATH".to_owned(),
-			TANGRAM_DIRECTORY_GUEST_PATH.to_owned(),
-		);
-
-		// Set `$TG_PLACEHOLDER_OUTPUT`.
-		env.insert(
-			"TANGRAM_PLACEHOLDER_OUTPUT".to_owned(),
-			output_guest_path.to_str().unwrap().to_owned(),
-		);
-
-		// Set `$TANGRAM_SOCKET`.
-		env.insert(String::from("TANGRAM_SOCKET"), SOCKET_GUEST_PATH.to_owned());
-
-		// Create /etc.
-		tokio::fs::create_dir_all(root_host_path.join("etc"))
-			.await
-			.wrap_err("Failed to create /etc.")?;
-
-		// Create /etc/passwd.
-		tokio::fs::write(
-			root_host_path.join("etc/passwd"),
-			formatdoc!(
-				r#"
-					root:!:0:0:root:/nonexistent:/bin/false
-					tangram:!:{TANGRAM_UID}:{TANGRAM_GID}:tangram:{HOME_DIRECTORY_GUEST_PATH}:/bin/false
-					nobody:!:65534:65534:nobody:/nonexistent:/bin/false
-				"#
-			),
-		)
-		.await
-		.wrap_err("Failed to create /etc/passwd.")?;
-
-		// Create /etc/group.
-		tokio::fs::write(
-			root_host_path.join("etc/group"),
-			formatdoc!(
-				r#"
-					tangram:x:{TANGRAM_GID}:tangram
-				"#
-			),
-		)
-		.await
-		.wrap_err("Failed to create /etc/group.")?;
-
-		// Create /etc/nsswitch.conf.
-		tokio::fs::write(
-			root_host_path.join("etc/nsswitch.conf"),
-			formatdoc!(
-				r#"
-					passwd: files compat
-					shadow: files compat
-					hosts: files dns compat
-				"#
-			),
-		)
-		.await
-		.wrap_err("Failed to create /etc/nsswitch.conf.")?;
-
-		// If network access is enabled, then copy /etc/resolv.conf from the host.
-		if network_enabled {
-			tokio::fs::copy("/etc/resolv.conf", root_host_path.join("etc/resolv.conf"))
-				.await
-				.wrap_err("Failed to copy /etc/resolv.conf.")?;
-		}
-
-		// Create the socket.
-		let (mut host_socket, guest_socket) =
-			tokio::net::UnixStream::pair().wrap_err("Failed to create the socket pair.")?;
-		let guest_socket = guest_socket.into_std()?;
-		guest_socket.set_nonblocking(false)?;
-
-		// Create the mounts.
-		let mut mounts = Vec::new();
-
-		// Create the fuse mount.
-		let fuse_guest_path = Path::new("/.tangram/artifacts");
-		let fuse_host_path = root_host_path.join(fuse_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(&fuse_host_path)
-			.await
-			.wrap_err("Failed to create the mountpoint for the FUSE filesystem.")?;
-		let fuse_host_path = CString::new(fuse_host_path.as_os_str().as_bytes()).unwrap();
-
-		// Add /dev to the mounts.
-		let dev_host_path = Path::new("/dev");
-		let dev_guest_path = Path::new("/dev");
-		let dev_source_path = dev_host_path;
-		let dev_target_path = root_host_path.join(dev_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(&dev_target_path)
-			.await
-			.wrap_err(r#"Failed to create the mountpoint for "/dev"."#)?;
-		let dev_source_path = CString::new(dev_source_path.as_os_str().as_bytes()).unwrap();
-		let dev_target_path = CString::new(dev_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: dev_source_path,
-			target: dev_target_path,
-			fstype: None,
-			flags: libc::MS_BIND | libc::MS_REC,
-			data: None,
-			readonly: false,
-		});
-
-		// Add /proc to the mounts.
-		let proc_host_path = Path::new("/proc");
-		let proc_guest_path = Path::new("/proc");
-		let proc_source_path = proc_host_path;
-		let proc_target_path = root_host_path.join(proc_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(&proc_target_path)
-			.await
-			.wrap_err(r#"Failed to create the mount point for "/proc"."#)?;
-		let proc_source_path = CString::new(proc_source_path.as_os_str().as_bytes()).unwrap();
-		let proc_target_path = CString::new(proc_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: proc_source_path,
-			target: proc_target_path,
-			fstype: Some(CString::new("proc").unwrap()),
-			flags: 0,
-			data: None,
-			readonly: false,
-		});
-
-		// Add /tmp to the mounts.
-		let tmp_host_path = Path::new("/tmp");
-		let tmp_guest_path = Path::new("/tmp");
-		let tmp_source_path = tmp_host_path;
-		let tmp_target_path = root_host_path.join(tmp_guest_path.strip_prefix("/").unwrap());
-		tokio::fs::create_dir_all(&tmp_target_path)
-			.await
-			.wrap_err(r#"Failed to create the mount point for "/tmp"."#)?;
-		let tmp_source_path = CString::new(tmp_source_path.as_os_str().as_bytes()).unwrap();
-		let tmp_target_path = CString::new(tmp_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: tmp_source_path,
-			target: tmp_target_path,
-			fstype: Some(CString::new("tmpfs").unwrap()),
-			flags: 0,
-			data: None,
-			readonly: false,
-		});
-
-		// Add the tangram directory to the mounts.
-		let tangram_directory_source_path = tg.path();
-		let tangram_directory_guest_path = "/.tangram";
-		let tangram_directory_target_path =
-			root_host_path.join(tangram_directory_guest_path.strip_prefix('/').unwrap());
-		tokio::fs::create_dir_all(&tangram_directory_target_path)
-			.await
-			.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
-		let tangram_directory_source_path =
-			CString::new(tangram_directory_source_path.as_os_str().as_bytes()).unwrap();
-		let tangram_directory_target_path =
-			CString::new(tangram_directory_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: tangram_directory_source_path,
-			target: tangram_directory_target_path,
-			fstype: None,
-			flags: libc::MS_BIND | libc::MS_REC,
-			data: None,
-			readonly: false,
-		});
-
-		// Add the home directory to the mounts.
-		let home_directory_source_path = home_directory_host_path.clone();
-		let home_directory_target_path = home_directory_host_path.clone();
-		let home_directory_source_path =
-			CString::new(home_directory_source_path.as_os_str().as_bytes()).unwrap();
-		let home_directory_target_path =
-			CString::new(home_directory_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: home_directory_source_path,
-			target: home_directory_target_path,
-			fstype: None,
-			flags: libc::MS_BIND | libc::MS_REC,
-			data: None,
-			readonly: false,
-		});
-
-		// Add the output parent directory to the mounts.
-		let output_parent_directory_source_path = output_parent_directory_host_path.clone();
-		let output_parent_directory_target_path = root_host_path.join(
-			output_parent_directory_guest_path
-				.strip_prefix("/")
-				.unwrap(),
-		);
-		tokio::fs::create_dir_all(&output_parent_directory_target_path)
-			.await
-			.wrap_err(r#"Failed to create the mount point for the output parent directory."#)?;
-		let output_parent_directory_source_path =
-			CString::new(output_parent_directory_source_path.as_os_str().as_bytes()).unwrap();
-		let output_parent_directory_target_path =
-			CString::new(output_parent_directory_target_path.as_os_str().as_bytes()).unwrap();
-		mounts.push(Mount {
-			source: output_parent_directory_source_path,
-			target: output_parent_directory_target_path,
-			fstype: None,
-			flags: libc::MS_BIND | libc::MS_REC,
-			data: None,
-			readonly: false,
-		});
-
-		// Create the executable.
-		let executable =
-			CString::new(executable).wrap_err("The executable is not a valid C string.")?;
-
-		// Create `envp`.
-		let env = env
-			.into_iter()
-			.map(|(key, value)| format!("{key}={value}"))
-			.map(|entry| CString::new(entry).unwrap())
-			.collect_vec();
-		let mut envp = Vec::with_capacity(env.len() + 1);
-		for entry in env {
-			envp.push(entry);
-		}
-		let envp = CStringVec::new(envp);
-
-		// Create `argv`.
-		let args: Vec<_> = args
-			.into_iter()
-			.map(|arg| CString::new(arg))
-			.try_collect()?;
-		let mut argv = Vec::with_capacity(1 + args.len() + 1);
-		argv.push(executable.clone());
-		for arg in args {
-			argv.push(arg);
-		}
-		let argv = CStringVec::new(argv);
-
-		// Get the root host path as a C string.
-		let root_host_path = CString::new(root_host_path.as_os_str().as_bytes())
-			.wrap_err("The root host path is not a valid C string.")?;
-
-		// Get the working directory guest path as a C string.
-		let working_directory_guest_path = CString::new(WORKING_DIRECTORY_GUEST_PATH)
-			.wrap_err("The working directory is not a valid C string.")?;
-
-		// Create the context.
-		let context = Context {
-			argv,
-			envp,
-			executable,
-			fuse_host_path,
-			guest_socket,
-			mounts,
-			network_enabled,
-			root_host_path,
-			working_directory_guest_path,
-		};
-
-		// Spawn the root process.
-		let clone_flags = libc::CLONE_NEWUSER;
-		let clone_flags = clone_flags.try_into().wrap_err("Invalid clone flags.")?;
-		let mut clone_args = libc::clone_args {
-			flags: clone_flags,
-			stack: 0,
-			stack_size: 0,
-			pidfd: 0,
-			child_tid: 0,
-			parent_tid: 0,
-			exit_signal: 0,
-			tls: 0,
-			set_tid: 0,
-			set_tid_size: 0,
-			cgroup: 0,
-		};
-		let ret = unsafe {
-			libc::syscall(
-				libc::SYS_clone3,
-				std::ptr::addr_of_mut!(clone_args),
-				std::mem::size_of::<libc::clone_args>(),
-			)
-		};
-		if ret == -1 {
-			return Err(Error::last_os_error().wrap("Failed to spawn the root process."));
-		}
-		if ret == 0 {
-			root(&context);
-		}
-		let root_process_pid: libc::pid_t = ret.try_into().wrap_err("Invalid root process PID.")?;
-
-		// Receive the guest process's PID from the socket.
-		let guest_process_pid: libc::pid_t = host_socket
-			.read_i32_le()
-			.await
-			.wrap_err("Failed to receive the PID of the guest process from the socket.")?;
-
-		// Write the guest process's UID map.
-		let uid = unsafe { libc::getuid() };
-		tokio::fs::write(
-			format!("/proc/{guest_process_pid}/uid_map"),
-			format!("{TANGRAM_UID} {uid} 1\n"),
-		)
-		.await
-		.wrap_err("Failed to set the UID map.")?;
-
-		// Deny setgroups to the process.
-		tokio::fs::write(format!("/proc/{guest_process_pid}/setgroups"), "deny")
-			.await
-			.wrap_err("Failed to disable setgroups.")?;
-
-		// Write the guest process's GID map.
-		let gid = unsafe { libc::getgid() };
-		tokio::fs::write(
-			format!("/proc/{guest_process_pid}/gid_map"),
-			format!("{TANGRAM_GID} {gid} 1\n"),
-		)
-		.await
-		.wrap_err("Failed to set the GID map.")?;
-
-		// Notify the guest process that it can continue.
-		host_socket
-			.write_u8(1)
-			.await
-			.wrap_err("Failed to notify the guest process that it can continue.")?;
-
-		// Receive the FUSE file descriptor from the guest process.
-		let host_socket = host_socket.into_std()?;
-		host_socket.set_nonblocking(false)?;
-		let fuse_file = unsafe {
-			// Create the control message.
-			let mut control = [0u8; unsafe { libc::CMSG_SPACE(4) as usize }];
-			let mut msg = libc::msghdr {
-				msg_name: std::ptr::null_mut(),
-				msg_namelen: 0,
-				msg_iov: [libc::iovec {
-					iov_base: [0u8; 8].as_mut_ptr().cast(),
-					iov_len: 8,
-				}]
-				.as_mut_ptr(),
-				msg_iovlen: 1,
-				msg_control: control.as_mut_ptr().cast(),
-				msg_controllen: std::mem::size_of_val(&control),
-				msg_flags: 0,
-			};
-
-			// Receive the message.
-			let ret = libc::recvmsg(host_socket.as_raw_fd(), std::ptr::addr_of_mut!(msg), 0);
-			if ret == -1 {
-				return Err(std::io::Error::last_os_error())?;
-			}
-			if ret == 0 {
-				return Err(std::io::Error::new(
-					std::io::ErrorKind::UnexpectedEof,
-					"Unexpected EOF.",
-				))?;
-			}
-
-			// Read the file descriptor.
-			let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
-			if cmsg.is_null() {
-				return Err(std::io::Error::new(
-					std::io::ErrorKind::UnexpectedEof,
-					"Unexpected EOF.",
-				))?;
-			}
-			let mut fd: std::os::unix::io::RawFd = 0;
-			libc::memcpy(
-				std::ptr::addr_of_mut!(fd).cast(),
-				libc::CMSG_DATA(cmsg).cast(),
-				std::mem::size_of_val(&fd),
-			);
-
-			tokio::fs::File::from_raw_fd(fd)
-		};
-		let mut host_socket = tokio::net::UnixStream::from_std(host_socket)?;
-
-		// Run the FUSE server.
-		let fuse_server = fuse::Server::new(tg.clone());
-		let fuse_task = tokio::task::spawn(fuse_server.serve(fuse_file));
-
-		// Receive the exit status of the guest process from the root process.
-		let kind = host_socket
-			.read_u8()
-			.await
-			.wrap_err("Failed to receive the exit status kind from the root process.")?;
-		let value = host_socket
-			.read_i32_le()
-			.await
-			.wrap_err("Failed to receive the exit status value from the root process.")?;
-		let exit_status = match kind {
-			0 => ExitStatus::Code(value),
-			1 => ExitStatus::Signal(value),
-			_ => unreachable!(),
-		};
-
-		// Wait for the root process to exit.
-		tokio::task::spawn_blocking(move || {
-			let mut status: libc::c_int = 0;
-			let ret = unsafe { libc::waitpid(root_process_pid, &mut status, libc::__WALL) };
-			if ret == -1 {
-				return Err(Error::last_os_error().wrap("Failed to wait for the root process."));
-			}
-			let root_process_exit_status = if libc::WIFEXITED(status) {
-				let status = libc::WEXITSTATUS(status);
-				ExitStatus::Code(status)
-			} else if libc::WIFSIGNALED(status) {
-				let signal = libc::WTERMSIG(status);
-				ExitStatus::Signal(signal)
-			} else {
-				unreachable!();
-			};
-			if root_process_exit_status != ExitStatus::Code(0) {
-				return_error!("The root process did not exit successfully.");
-			}
-			Ok(())
-		})
-		.await
-		.wrap_err("Failed to join the process task.")?
-		.wrap_err("Failed to run the process.")?;
-
-		// Stop the FUSE server.
-		fuse_task.abort();
-
-		// Handle the guest process's exit status.
-		match exit_status {
-			ExitStatus::Code(0) => {},
-			ExitStatus::Code(code) => {
-				return Err(Error::Build(build::Error::Task(task::Error::Code(code))))
-			},
-			ExitStatus::Signal(signal) => {
-				return Err(Error::Build(build::Error::Task(task::Error::Signal(
-					signal,
-				))))
-			},
-		};
-
-		tracing::debug!(?output_host_path, "Checking in the process output.");
-
-		// Create the output.
-		let value = if tokio::fs::try_exists(&output_host_path).await? {
-			// Check in the output.
-			let options = artifact::checkin::Options {
-				artifacts_paths: vec![artifacts_directory_guest_path],
-			};
-			let artifact = Artifact::check_in_with_options(tg, &output_host_path, &options)
-				.await
-				.wrap_err("Failed to check in the output.")?;
-
-			tracing::info!(?artifact, "Checked in the process output.");
-
-			// Verify the checksum if one was provided.
-			if let Some(expected) = self.checksum.clone() {
-				let actual = artifact
-					.checksum(tg, expected.algorithm())
-					.await
-					.wrap_err("Failed to compute the checksum.")?;
-				if expected != actual {
-					return_error!(
-						r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#
-					);
-				}
-
-				tracing::debug!("Validated the checksum.");
-			}
-			Value::Artifact(artifact)
-		} else {
-			Value::Null
-		};
-
-		Ok(value)
+pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
+	match run_inner(client, target, progress).await {
+		Ok(output) => {
+			progress.result(Ok(output));
+		},
+		Err(error) => {
+			progress.log(error.trace().to_string().into());
+			progress.result(Err(error));
+		},
 	}
+}
+
+#[allow(clippy::too_many_lines, clippy::similar_names)]
+pub async fn run_inner(
+	client: &dyn Client,
+	target: Target,
+	_progress: &dyn Progress,
+) -> Result<Value> {
+	// Get the server directory path.
+	let server_directory_host_path = client.path().unwrap().to_owned();
+	let server_directory_guest_path = PathBuf::from(SERVER_DIRECTORY_GUEST_PATH);
+
+	// Create a tempdir for the root.
+	let root_directory_tempdir = tempfile::TempDir::new_in(server_directory_host_path.join("tmp"))?;
+	let root_directory_host_path = root_directory_tempdir.path().to_owned();
+	tokio::fs::create_dir_all(&root_directory_host_path)
+		.await
+		.wrap_err("Failed to create the root directory.")?;
+
+	// Add `/usr/bin/env` and `/bin/sh` to the root.
+	let env_path = root_directory_host_path.join("usr/bin/env");
+	let sh_path = root_directory_host_path.join("bin/sh");
+	let (env_bytes, sh_bytes) = match target.host(client).await?.arch() {
+		Arch::Aarch64 => (ENV_AARCH64_LINUX, SH_AARCH64_LINUX),
+		Arch::X8664 => (ENV_X8664_LINUX, SH_X8664_LINUX),
+		_ => unreachable!(),
+	};
+	tokio::fs::create_dir_all(&env_path.parent().unwrap()).await?;
+	tokio::fs::OpenOptions::new()
+		.write(true)
+		.create(true)
+		.mode(0o755)
+		.open(&env_path)
+		.await?
+		.write_all(env_bytes)
+		.await?;
+	tokio::fs::create_dir_all(&sh_path.parent().unwrap()).await?;
+	tokio::fs::OpenOptions::new()
+		.write(true)
+		.create(true)
+		.mode(0o755)
+		.open(&sh_path)
+		.await?
+		.write_all(sh_bytes)
+		.await?;
+
+	// Create a tempdir for the output.
+	let output_tempdir = tempfile::TempDir::new()?;
+
+	// Create the host and guest paths for the output parent directory.
+	let output_parent_directory_host_path = output_tempdir.path().to_owned();
+	let output_parent_directory_guest_path = PathBuf::from(OUTPUT_PARENT_DIRECTORY_GUEST_PATH);
+	tokio::fs::create_dir_all(&output_parent_directory_host_path)
+		.await
+		.wrap_err("Failed to create the output parent directory.")?;
+
+	// Create the host and guest paths for the output.
+	let output_host_path = output_parent_directory_host_path.join("output");
+	let output_guest_path = output_parent_directory_guest_path.join("output");
+
+	// Create the host and guest paths for the artifacts directory.
+	let _artifacts_directory_host_path = server_directory_host_path.join("artifacts");
+	let artifacts_directory_guest_path = server_directory_guest_path.join("artifacts");
+
+	// Create the host and guest paths for the home directory.
+	let home_directory_host_path =
+		root_directory_host_path.join(HOME_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
+	let home_directory_guest_path = PathBuf::from(HOME_DIRECTORY_GUEST_PATH);
+	tokio::fs::create_dir_all(&home_directory_host_path)
+		.await
+		.wrap_err(r#"Failed to create the home directory."#)?;
+
+	// Create the host and guest paths for the working directory.
+	let working_directory_host_path =
+		root_directory_host_path.join(WORKING_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
+	tokio::fs::create_dir_all(&working_directory_host_path)
+		.await
+		.wrap_err(r#"Failed to create the working directory."#)?;
+
+	// Render the executable.
+	let executable = target.executable(client).await?;
+	let executable = render(
+		&Value::Template(executable.clone()),
+		client,
+		&artifacts_directory_guest_path,
+	)
+	.await?;
+
+	// Render the env.
+	let env = target.env(client).await?;
+	let mut env: BTreeMap<String, String> = env
+		.iter()
+		.map(|(key, value)| async {
+			let key = key.clone();
+			let value = render(value, client, &artifacts_directory_guest_path).await?;
+			Ok::<_, Error>((key, value))
+		})
+		.collect::<FuturesOrdered<_>>()
+		.try_collect()
+		.await?;
+
+	// Render the args.
+	let args = target.args(client).await?;
+	let args: Vec<String> = args
+		.iter()
+		.map(|value| async {
+			let value = render(value, client, &artifacts_directory_guest_path).await?;
+			Ok::<_, Error>(value)
+		})
+		.collect::<FuturesOrdered<_>>()
+		.try_collect()
+		.await?;
+
+	// Enable the network if a checksum was provided or if the unsafe flag was set.
+	let network_enabled =
+		target.checksum(client).await?.is_some() || target.unsafe_(client).await?;
+
+	// Set `$HOME`.
+	env.insert(
+		"HOME".to_owned(),
+		home_directory_guest_path.to_str().unwrap().to_owned(),
+	);
+
+	// Set `$OUTPUT`.
+	env.insert(
+		"OUTPUT".to_owned(),
+		output_guest_path.to_str().unwrap().to_owned(),
+	);
+
+	// Create /etc.
+	tokio::fs::create_dir_all(root_directory_host_path.join("etc"))
+		.await
+		.wrap_err("Failed to create /etc.")?;
+
+	// Create /etc/passwd.
+	tokio::fs::write(
+		root_directory_host_path.join("etc/passwd"),
+		formatdoc!(
+			r#"
+				root:!:0:0:root:/nonexistent:/bin/false
+				tangram:!:{TANGRAM_UID}:{TANGRAM_GID}:tangram:{HOME_DIRECTORY_GUEST_PATH}:/bin/false
+				nobody:!:65534:65534:nobody:/nonexistent:/bin/false
+			"#
+		),
+	)
+	.await
+	.wrap_err("Failed to create /etc/passwd.")?;
+
+	// Create /etc/group.
+	tokio::fs::write(
+		root_directory_host_path.join("etc/group"),
+		formatdoc!(
+			r#"
+				tangram:x:{TANGRAM_GID}:tangram
+			"#
+		),
+	)
+	.await
+	.wrap_err("Failed to create /etc/group.")?;
+
+	// Create /etc/nsswitch.conf.
+	tokio::fs::write(
+		root_directory_host_path.join("etc/nsswitch.conf"),
+		formatdoc!(
+			r#"
+				passwd: files compat
+				shadow: files compat
+				hosts: files dns compat
+			"#
+		),
+	)
+	.await
+	.wrap_err("Failed to create /etc/nsswitch.conf.")?;
+
+	// If network access is enabled, then copy /etc/resolv.conf from the host.
+	if network_enabled {
+		tokio::fs::copy(
+			"/etc/resolv.conf",
+			root_directory_host_path.join("etc/resolv.conf"),
+		)
+		.await
+		.wrap_err("Failed to copy /etc/resolv.conf.")?;
+	}
+
+	// Create the socket.
+	let (mut host_socket, guest_socket) =
+		tokio::net::UnixStream::pair().wrap_err("Failed to create the socket pair.")?;
+	let guest_socket = guest_socket.into_std()?;
+	guest_socket.set_nonblocking(false)?;
+
+	// Create the mounts.
+	let mut mounts = Vec::new();
+
+	// Add /dev to the mounts.
+	let dev_host_path = Path::new("/dev");
+	let dev_guest_path = Path::new("/dev");
+	let dev_source_path = dev_host_path;
+	let dev_target_path = root_directory_host_path.join(dev_guest_path.strip_prefix("/").unwrap());
+	tokio::fs::create_dir_all(&dev_target_path)
+		.await
+		.wrap_err(r#"Failed to create the mountpoint for "/dev"."#)?;
+	let dev_source_path = CString::new(dev_source_path.as_os_str().as_bytes()).unwrap();
+	let dev_target_path = CString::new(dev_target_path.as_os_str().as_bytes()).unwrap();
+	mounts.push(Mount {
+		source: dev_source_path,
+		target: dev_target_path,
+		fstype: None,
+		flags: libc::MS_BIND | libc::MS_REC,
+		data: None,
+		readonly: false,
+	});
+
+	// Add /proc to the mounts.
+	let proc_host_path = Path::new("/proc");
+	let proc_guest_path = Path::new("/proc");
+	let proc_source_path = proc_host_path;
+	let proc_target_path =
+		root_directory_host_path.join(proc_guest_path.strip_prefix("/").unwrap());
+	tokio::fs::create_dir_all(&proc_target_path)
+		.await
+		.wrap_err(r#"Failed to create the mount point for "/proc"."#)?;
+	let proc_source_path = CString::new(proc_source_path.as_os_str().as_bytes()).unwrap();
+	let proc_target_path = CString::new(proc_target_path.as_os_str().as_bytes()).unwrap();
+	mounts.push(Mount {
+		source: proc_source_path,
+		target: proc_target_path,
+		fstype: Some(CString::new("proc").unwrap()),
+		flags: 0,
+		data: None,
+		readonly: false,
+	});
+
+	// Add /tmp to the mounts.
+	let tmp_host_path = Path::new("/tmp");
+	let tmp_guest_path = Path::new("/tmp");
+	let tmp_source_path = tmp_host_path;
+	let tmp_target_path = root_directory_host_path.join(tmp_guest_path.strip_prefix("/").unwrap());
+	tokio::fs::create_dir_all(&tmp_target_path)
+		.await
+		.wrap_err(r#"Failed to create the mount point for "/tmp"."#)?;
+	let tmp_source_path = CString::new(tmp_source_path.as_os_str().as_bytes()).unwrap();
+	let tmp_target_path = CString::new(tmp_target_path.as_os_str().as_bytes()).unwrap();
+	mounts.push(Mount {
+		source: tmp_source_path,
+		target: tmp_target_path,
+		fstype: Some(CString::new("tmpfs").unwrap()),
+		flags: 0,
+		data: None,
+		readonly: false,
+	});
+
+	// Add the server directory to the mounts.
+	let server_directory_source_path = &server_directory_host_path;
+	let server_directory_target_path =
+		root_directory_host_path.join(server_directory_guest_path.strip_prefix("/").unwrap());
+	tokio::fs::create_dir_all(&server_directory_target_path)
+		.await
+		.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
+	let server_directory_source_path =
+		CString::new(server_directory_source_path.as_os_str().as_bytes()).unwrap();
+	let server_directory_target_path =
+		CString::new(server_directory_target_path.as_os_str().as_bytes()).unwrap();
+	mounts.push(Mount {
+		source: server_directory_source_path,
+		target: server_directory_target_path,
+		fstype: None,
+		flags: libc::MS_BIND | libc::MS_REC,
+		data: None,
+		readonly: false,
+	});
+
+	// Add the home directory to the mounts.
+	let home_directory_source_path = home_directory_host_path.clone();
+	let home_directory_target_path = home_directory_host_path.clone();
+	let home_directory_source_path =
+		CString::new(home_directory_source_path.as_os_str().as_bytes()).unwrap();
+	let home_directory_target_path =
+		CString::new(home_directory_target_path.as_os_str().as_bytes()).unwrap();
+	mounts.push(Mount {
+		source: home_directory_source_path,
+		target: home_directory_target_path,
+		fstype: None,
+		flags: libc::MS_BIND | libc::MS_REC,
+		data: None,
+		readonly: false,
+	});
+
+	// Add the output parent directory to the mounts.
+	let output_parent_directory_source_path = output_parent_directory_host_path.clone();
+	let output_parent_directory_target_path = root_directory_host_path.join(
+		output_parent_directory_guest_path
+			.strip_prefix("/")
+			.unwrap(),
+	);
+	tokio::fs::create_dir_all(&output_parent_directory_target_path)
+		.await
+		.wrap_err(r#"Failed to create the mount point for the output parent directory."#)?;
+	let output_parent_directory_source_path =
+		CString::new(output_parent_directory_source_path.as_os_str().as_bytes()).unwrap();
+	let output_parent_directory_target_path =
+		CString::new(output_parent_directory_target_path.as_os_str().as_bytes()).unwrap();
+	mounts.push(Mount {
+		source: output_parent_directory_source_path,
+		target: output_parent_directory_target_path,
+		fstype: None,
+		flags: libc::MS_BIND | libc::MS_REC,
+		data: None,
+		readonly: false,
+	});
+
+	// Create the executable.
+	let executable =
+		CString::new(executable).wrap_err("The executable is not a valid C string.")?;
+
+	// Create `envp`.
+	let env = env
+		.into_iter()
+		.map(|(key, value)| format!("{key}={value}"))
+		.map(|entry| CString::new(entry).unwrap())
+		.collect_vec();
+	let mut envp = Vec::with_capacity(env.len() + 1);
+	for entry in env {
+		envp.push(entry);
+	}
+	let envp = CStringVec::new(envp);
+
+	// Create `argv`.
+	let args: Vec<_> = args.into_iter().map(CString::new).try_collect()?;
+	let mut argv = Vec::with_capacity(1 + args.len() + 1);
+	argv.push(executable.clone());
+	for arg in args {
+		argv.push(arg);
+	}
+	let argv = CStringVec::new(argv);
+
+	// Get the root directory host path as a C string.
+	let root_directory_host_path = CString::new(root_directory_host_path.as_os_str().as_bytes())
+		.wrap_err("The root directory host path is not a valid C string.")?;
+
+	// Get the working directory guest path as a C string.
+	let working_directory_guest_path = CString::new(WORKING_DIRECTORY_GUEST_PATH)
+		.wrap_err("The working directory is not a valid C string.")?;
+
+	// Create the context.
+	let context = Context {
+		argv,
+		envp,
+		executable,
+		guest_socket,
+		mounts,
+		network_enabled,
+		root_directory_host_path,
+		working_directory_guest_path,
+	};
+
+	// Spawn the root process.
+	let clone_flags = libc::CLONE_NEWUSER;
+	let clone_flags = clone_flags.try_into().wrap_err("Invalid clone flags.")?;
+	let mut clone_args = libc::clone_args {
+		flags: clone_flags,
+		stack: 0,
+		stack_size: 0,
+		pidfd: 0,
+		child_tid: 0,
+		parent_tid: 0,
+		exit_signal: 0,
+		tls: 0,
+		set_tid: 0,
+		set_tid_size: 0,
+		cgroup: 0,
+	};
+	let ret = unsafe {
+		libc::syscall(
+			libc::SYS_clone3,
+			std::ptr::addr_of_mut!(clone_args),
+			std::mem::size_of::<libc::clone_args>(),
+		)
+	};
+	if ret == -1 {
+		return Err(std::io::Error::last_os_error()).wrap_err("Failed to spawn the root process.");
+	}
+	if ret == 0 {
+		root(&context);
+	}
+	let root_process_pid: libc::pid_t = ret.try_into().wrap_err("Invalid root process PID.")?;
+
+	// Receive the guest process's PID from the socket.
+	let guest_process_pid: libc::pid_t = host_socket
+		.read_i32_le()
+		.await
+		.wrap_err("Failed to receive the PID of the guest process from the socket.")?;
+
+	// Write the guest process's UID map.
+	let uid = unsafe { libc::getuid() };
+	tokio::fs::write(
+		format!("/proc/{guest_process_pid}/uid_map"),
+		format!("{TANGRAM_UID} {uid} 1\n"),
+	)
+	.await
+	.wrap_err("Failed to set the UID map.")?;
+
+	// Deny setgroups to the process.
+	tokio::fs::write(format!("/proc/{guest_process_pid}/setgroups"), "deny")
+		.await
+		.wrap_err("Failed to disable setgroups.")?;
+
+	// Write the guest process's GID map.
+	let gid = unsafe { libc::getgid() };
+	tokio::fs::write(
+		format!("/proc/{guest_process_pid}/gid_map"),
+		format!("{TANGRAM_GID} {gid} 1\n"),
+	)
+	.await
+	.wrap_err("Failed to set the GID map.")?;
+
+	// Notify the guest process that it can continue.
+	host_socket
+		.write_u8(1)
+		.await
+		.wrap_err("Failed to notify the guest process that it can continue.")?;
+
+	// Receive the exit status of the guest process from the root process.
+	let kind = host_socket
+		.read_u8()
+		.await
+		.wrap_err("Failed to receive the exit status kind from the root process.")?;
+	let value = host_socket
+		.read_i32_le()
+		.await
+		.wrap_err("Failed to receive the exit status value from the root process.")?;
+	let exit_status = match kind {
+		0 => ExitStatus::Code(value),
+		1 => ExitStatus::Signal(value),
+		_ => unreachable!(),
+	};
+
+	// Wait for the root process to exit.
+	tokio::task::spawn_blocking(move || {
+		let mut status: libc::c_int = 0;
+		let ret = unsafe { libc::waitpid(root_process_pid, &mut status, libc::__WALL) };
+		if ret == -1 {
+			return Err(std::io::Error::last_os_error())
+				.wrap_err("Failed to wait for the root process.");
+		}
+		let root_process_exit_status = if libc::WIFEXITED(status) {
+			let status = libc::WEXITSTATUS(status);
+			ExitStatus::Code(status)
+		} else if libc::WIFSIGNALED(status) {
+			let signal = libc::WTERMSIG(status);
+			ExitStatus::Signal(signal)
+		} else {
+			unreachable!();
+		};
+		if root_process_exit_status != ExitStatus::Code(0) {
+			return_error!("The root process did not exit successfully.");
+		}
+		Ok(())
+	})
+	.await
+	.wrap_err("Failed to join the process task.")?
+	.wrap_err("Failed to run the process.")?;
+
+	// Handle the guest process's exit status.
+	match exit_status {
+		ExitStatus::Code(0) => {},
+		ExitStatus::Code(code) => {
+			return_error!(r#"The process exited with code "{code}"."#);
+		},
+		ExitStatus::Signal(signal) => {
+			return_error!(r#"The process exited with signal "{signal}"."#);
+		},
+	};
+
+	// Create the output.
+	let value = if tokio::fs::try_exists(&output_host_path).await? {
+		// Check in the output.
+		let options = tg::checkin::Options {
+			artifacts_paths: vec![artifacts_directory_guest_path],
+		};
+		let artifact = Artifact::check_in_with_options(client, &output_host_path, &options)
+			.await
+			.wrap_err("Failed to check in the output.")?;
+
+		// Verify the checksum if one was provided.
+		if let Some(expected) = target.checksum(client).await?.clone() {
+			let actual = artifact
+				.checksum(client, expected.algorithm())
+				.await
+				.wrap_err("Failed to compute the checksum.")?;
+			if expected != actual {
+				return_error!(
+					r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#
+				);
+			}
+		}
+
+		artifact.into()
+	} else {
+		Value::Null(())
+	};
+
+	Ok(value)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -804,75 +748,10 @@ fn guest(context: &Context) {
 			}
 		}
 
-		// Open the FUSE file.
-		let fuse_fd = libc::open(
-			CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0").as_ptr(),
-			libc::O_RDWR | libc::O_NONBLOCK,
-		);
-
-		// Mount the FUSE filesystem.
-		let src = CStr::from_bytes_with_nul_unchecked(b"/dev/fuse\0");
-		let fstype = CStr::from_bytes_with_nul_unchecked(b"fuse\0");
-		let flags = libc::MS_RDONLY | libc::MS_NODEV | libc::MS_NOSUID;
-		let data = format!(
-			"fd={fd},rootmode=40755,user_id={uid},group_id={gid},allow_other,default_permissions\0",
-			fd = fuse_fd,
-			uid = libc::getuid(),
-			gid = libc::getgid(),
-		);
-		let ret = libc::mount(
-			src.as_ptr(),
-			context.fuse_host_path.as_ptr(),
-			fstype.as_ptr(),
-			flags,
-			data.as_bytes().as_ptr().cast(),
-		);
-		if ret != 0 {
-			abort_errno!("Failed to mount the FUSE filesystem.");
-		}
-
-		// Send the FUSE file descriptor to the host process.
-		{
-			// Create the control message.
-			let mut control = [0u8; unsafe { libc::CMSG_SPACE(4) as usize }];
-			let mut msg = libc::msghdr {
-				msg_name: std::ptr::null_mut(),
-				msg_namelen: 0,
-				msg_iov: [libc::iovec {
-					iov_base: [0u8; 8].as_mut_ptr().cast(),
-					iov_len: 8,
-				}]
-				.as_mut_ptr(),
-				msg_iovlen: 1,
-				msg_control: control.as_mut_ptr().cast(),
-				msg_controllen: std::mem::size_of_val(&control),
-				msg_flags: 0,
-			};
-
-			// Configure the control message.
-			let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
-			(*cmsg).cmsg_level = libc::SOL_SOCKET;
-			(*cmsg).cmsg_type = libc::SCM_RIGHTS;
-			(*cmsg).cmsg_len = libc::CMSG_LEN(4) as usize;
-
-			// Write the file descriptor to the cmsg header's data.
-			libc::memcpy(
-				libc::CMSG_DATA(cmsg).cast(),
-				std::ptr::addr_of!(fuse_fd).cast(),
-				std::mem::size_of_val(&fuse_fd),
-			);
-
-			// Send the message.
-			let ret = libc::sendmsg(context.guest_socket.as_raw_fd(), std::ptr::addr_of!(msg), 0);
-			if ret < 0 {
-				abort_errno!("Failed to send the FUSE file descriptor to the host.");
-			}
-		}
-
 		// Mount the root.
 		let ret = libc::mount(
-			context.root_host_path.as_ptr(),
-			context.root_host_path.as_ptr(),
+			context.root_directory_host_path.as_ptr(),
+			context.root_directory_host_path.as_ptr(),
 			std::ptr::null(),
 			libc::MS_BIND | libc::MS_PRIVATE | libc::MS_REC,
 			std::ptr::null(),
@@ -882,7 +761,7 @@ fn guest(context: &Context) {
 		}
 
 		// Change the working directory to the pivoted root.
-		let ret = libc::chdir(context.root_host_path.as_ptr());
+		let ret = libc::chdir(context.root_directory_host_path.as_ptr());
 		if ret == -1 {
 			abort_errno!("Failed to change directory to the root.");
 		}
@@ -938,9 +817,6 @@ struct Context {
 	/// The executable.
 	executable: CString,
 
-	/// The host path to the FUSE filesystem mountpoint.
-	fuse_host_path: CString,
-
 	/// The file descriptor of the guest side of the socket.
 	guest_socket: std::os::unix::net::UnixStream,
 
@@ -951,7 +827,7 @@ struct Context {
 	network_enabled: bool,
 
 	/// The host path to the root.
-	root_host_path: CString,
+	root_directory_host_path: CString,
 
 	/// The guest path to the working directory.
 	working_directory_guest_path: CString,
@@ -998,17 +874,21 @@ enum ExitStatus {
 
 macro_rules! abort {
 	($($t:tt)*) => {{
-		eprintln!("Error: {}", format_args!($($t)*));
+		eprintln!("An error occurred in the linux runtime guest process.");
+		eprintln!("{}", format_args!($($t)*));
 		std::process::exit(1)
 	}};
 }
+
 use abort;
 
 macro_rules! abort_errno {
 	($($t:tt)*) => {{
-		eprintln!("Error: {}", format_args!($($t)*));
-		eprintln!("\t{}", std::io::Error::last_os_error());
+		eprintln!("An error occurred in the linux runtime guest process.");
+		eprintln!("{}", format_args!($($t)*));
+		eprintln!("{}", std::io::Error::last_os_error());
 		std::process::exit(1)
 	}};
 }
+
 use abort_errno;

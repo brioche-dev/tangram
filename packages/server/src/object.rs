@@ -3,7 +3,8 @@ use crate::not_found;
 use super::{bad_request, empty, full, Incoming, Outgoing, Server};
 use futures::{stream, StreamExt, TryStreamExt};
 use lmdb::Transaction;
-use tangram_client::{object, return_error, Error, Result, WrapErr};
+use tangram_client as tg;
+use tg::{object, return_error, Error, Result, WrapErr};
 use tokio::io::AsyncReadExt;
 
 impl Server {
@@ -201,7 +202,8 @@ impl Server {
 		bytes: &[u8],
 	) -> Result<Result<(), Vec<object::Id>>> {
 		// Deserialize the data.
-		let data = object::Data::deserialize(id.kind(), bytes)?;
+		let data = object::Data::deserialize(id.kind(), bytes)
+			.wrap_err("Failed to serialize the data.")?;
 
 		// Check if there are any missing children.
 		let missing_children = stream::iter(data.children())

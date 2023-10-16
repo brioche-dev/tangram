@@ -11,15 +11,13 @@ use std::{
 	sync::Arc,
 };
 use tangram_client as tg;
-use tangram_client::Result;
+use tg::Result;
 use tg::WrapErr;
 
 mod build;
 mod clean;
 mod migrations;
 mod object;
-mod package;
-mod user;
 // mod vfs;
 
 /// A server.
@@ -214,8 +212,8 @@ impl Server {
 			(http::Method::GET, ["v1", "builds", _, "log"]) => {
 				self.handle_get_build_log_request(request).map(Some).boxed()
 			},
-			(http::Method::GET, ["v1", "builds", _, "output"]) => self
-				.handle_try_get_build_output_request(request)
+			(http::Method::GET, ["v1", "builds", _, "result"]) => self
+				.handle_try_get_build_result_request(request)
 				.map(Some)
 				.boxed(),
 
@@ -297,8 +295,8 @@ impl tg::Client for Server {
 		self.try_get_build_log(id).await
 	}
 
-	async fn try_get_build_output(&self, id: tg::build::Id) -> Result<Option<Option<tg::Value>>> {
-		self.try_get_build_output(id).await
+	async fn try_get_build_result(&self, id: tg::build::Id) -> Result<Option<Result<tg::Value>>> {
+		self.try_get_build_result(id).await
 	}
 
 	async fn clean(&self) -> Result<()> {

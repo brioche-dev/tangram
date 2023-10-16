@@ -9,7 +9,8 @@ use derive_more::Unwrap;
 use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
 use std::{collections::HashMap, path::Path, sync::Arc};
-use tangram_client::{
+use tangram_client as tg;
+use tg::{
 	module::{self, diagnostic::Severity, Diagnostic, Position, Range},
 	return_error, Client, Error, Module, Result, WrapErr,
 };

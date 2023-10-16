@@ -109,13 +109,13 @@ pub trait Client: Debug + Send + Sync + 'static {
 		id: build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>>;
 
-	async fn get_build_output(&self, id: build::Id) -> Result<Option<Value>> {
-		self.try_get_build_output(id)
+	async fn get_build_result(&self, id: build::Id) -> Result<Result<Value>> {
+		self.try_get_build_result(id)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	async fn try_get_build_output(&self, id: build::Id) -> Result<Option<Option<Value>>>;
+	async fn try_get_build_result(&self, id: build::Id) -> Result<Option<Result<Value>>>;
 
 	async fn clean(&self) -> Result<()>;
 

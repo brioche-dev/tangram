@@ -1,7 +1,8 @@
 use super::Server;
 use futures::FutureExt;
 use std::path::Path;
-use tangram_client::{return_error, Result, WrapErr};
+use tangram_client as tg;
+use tg::{return_error, Result, WrapErr};
 
 impl Server {
 	pub async fn migrate(path: &Path) -> Result<()> {
@@ -74,6 +75,10 @@ async fn migration_0000(path: &Path) -> Result<()> {
 	// Create the artifacts directory.
 	let artifacts_path = path.join("artifacts");
 	tokio::fs::create_dir_all(&artifacts_path).await?;
+
+	// Create the tmp directory.
+	let tmp_path = path.join("tmp");
+	tokio::fs::create_dir_all(&tmp_path).await?;
 
 	Ok(())
 }

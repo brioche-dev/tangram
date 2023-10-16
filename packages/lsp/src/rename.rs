@@ -2,7 +2,8 @@ use super::Server;
 use crate::{convert_lsp_position, convert_range};
 use lsp_types as lsp;
 use std::collections::HashMap;
-use tangram_client::{
+use tangram_client as tg;
+use tg::{
 	module::{Location, Module, Position},
 	return_error, Result,
 };

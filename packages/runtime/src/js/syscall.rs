@@ -9,7 +9,8 @@ use bytes::Bytes;
 use futures::{Future, TryStreamExt};
 use itertools::Itertools;
 use std::rc::Rc;
-use tangram_client::{
+use tangram_client as tg;
+use tg::{
 	blob, checksum, object, return_error, Artifact, Blob, Checksum, Result, Target, Value, WrapErr,
 };
 use tokio::io::AsyncRead;
@@ -70,9 +71,10 @@ async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 	let (target,) = args;
 	let build = target.build(state.client.as_ref()).await?;
 	state.progress.child(&build);
-	let Some(output) = build.output(state.client.as_ref()).await? else {
-		return_error!("The build failed.");
-	};
+	let output = build
+		.result(state.client.as_ref())
+		.await?
+		.wrap_err("The build failed.")?;
 	Ok(output)
 }
 

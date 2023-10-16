@@ -1,5 +1,5 @@
 use super::{PackageArgs, RunArgs};
-use crate::{return_error, util::dirs::home_directory_path, Cli, Result, WrapErr};
+use crate::{util::dirs::home_directory_path, Cli, Result, WrapErr};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_client as tg;
 
@@ -51,9 +51,12 @@ impl Cli {
 
 		// Build the target.
 		let build = target.build(self.client.as_ref()).await?;
-		let Some(output) = build.output(self.client.as_ref()).await? else {
-			return_error!("The build failed.");
-		};
+
+		// Wait for the build's output.
+		let output = build
+			.result(self.client.as_ref())
+			.await?
+			.wrap_err("The build failed.")?;
 
 		// Get the output artifact.
 		let artifact: tg::Artifact = output

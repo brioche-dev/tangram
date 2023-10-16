@@ -222,8 +222,8 @@ impl Client for Reqwest {
 		Ok(Some(log))
 	}
 
-	async fn try_get_build_output(&self, id: build::Id) -> Result<Option<Option<Value>>> {
-		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/output"));
+	async fn try_get_build_result(&self, id: build::Id) -> Result<Option<Result<Value>>> {
+		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/result"));
 		let response = request
 			.send()
 			.await
@@ -238,10 +238,10 @@ impl Client for Reqwest {
 			.bytes()
 			.await
 			.wrap_err("Failed to read the response body.")?;
-		let output = serde_json::from_slice::<Option<value::Data>>(&bytes)
+		let result = serde_json::from_slice::<Result<value::Data>>(&bytes)
 			.wrap_err("Failed to deserialize the response body.")?
 			.map(Value::from_data);
-		Ok(Some(output))
+		Ok(Some(result))
 	}
 
 	async fn clean(&self) -> Result<()> {

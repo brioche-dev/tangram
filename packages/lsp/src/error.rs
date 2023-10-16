@@ -1,8 +1,8 @@
 use super::SOURCE_MAP;
 use num::ToPrimitive;
 use sourcemap::SourceMap;
-use std::sync::Arc;
-use tangram_client::{error, Error};
+use tangram_client as tg;
+use tg::{error, Error};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,26 +103,15 @@ pub(super) fn from_exception<'s>(
 
 	// Get the source.
 	let cause_string = v8::String::new_external_onebyte_static(scope, "cause".as_bytes()).unwrap();
-	let source = if let Some(cause) = exception
+	let source = exception
 		.is_native_error()
 		.then(|| exception.to_object(scope).unwrap())
 		.and_then(|exception| exception.get(scope, cause_string.into()))
 		.and_then(|value| value.to_object(scope))
-	{
-		let error = from_exception(scope, cause.into());
-		Some(Arc::new(error))
-	} else {
-		None
-	};
+		.map(|cause| from_exception(scope, cause.into()));
 
 	// Create the error.
-	error::Message {
-		message,
-		location,
-		stack,
-		source,
-	}
-	.into()
+	Error::new(message, location, stack, source)
 }
 
 fn get_location(line: u32, column: u32) -> error::Location {

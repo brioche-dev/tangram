@@ -17,7 +17,7 @@ pub struct Build(object::Handle);
 pub struct Object {
 	pub children: Vec<Build>,
 	pub log: Blob,
-	pub output: Option<Value>,
+	pub result: Result<Value>,
 }
 
 #[derive(
@@ -36,7 +36,7 @@ pub struct Data {
 	pub log: blob::Id,
 
 	#[tangram_serialize(id = 2)]
-	pub output: Option<value::Data>,
+	pub result: Result<value::Data>,
 }
 
 impl Build {
@@ -45,13 +45,13 @@ impl Build {
 		id: Id,
 		children: Vec<Build>,
 		log: Blob,
-		output: Option<Value>,
+		result: Result<Value>,
 	) -> Result<Self> {
 		// Create the object.
 		let object = Object {
 			children,
 			log,
-			output,
+			result,
 		};
 
 		// Store the children.
@@ -145,17 +145,17 @@ impl Build {
 		}
 	}
 
-	pub async fn output(&self, client: &dyn Client) -> Result<Option<Value>> {
-		self.try_get_output(client)
+	pub async fn result(&self, client: &dyn Client) -> Result<Result<Value>> {
+		self.try_get_result(client)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	pub async fn try_get_output(&self, client: &dyn Client) -> Result<Option<Option<Value>>> {
+	pub async fn try_get_result(&self, client: &dyn Client) -> Result<Option<Result<Value>>> {
 		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(object.output.clone()))
+			Ok(Some(object.result.clone()))
 		} else {
-			Ok(client.try_get_build_output(self.id()).await?)
+			Ok(client.try_get_build_result(self.id()).await?)
 		}
 	}
 }
@@ -173,11 +173,11 @@ impl Object {
 	pub fn to_data(&self) -> Data {
 		let children = self.children.iter().map(Build::id).collect();
 		let log = self.log.expect_id();
-		let output = self.output.clone().map(|value| value.to_data());
+		let result = self.result.clone().map(|value| value.to_data());
 		Data {
 			children,
 			log,
-			output,
+			result,
 		}
 	}
 
@@ -185,11 +185,11 @@ impl Object {
 	pub fn from_data(data: Data) -> Self {
 		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
-		let output = data.output.map(value::Value::from_data);
+		let result = data.result.map(value::Value::from_data);
 		Self {
 			children,
 			log,
-			output,
+			result,
 		}
 	}
 
@@ -200,8 +200,8 @@ impl Object {
 			.iter()
 			.map(|child| object::Handle::with_id(child.id().into()));
 		let log = std::iter::once(self.log.handle().clone());
-		let output = self
-			.output
+		let result = self
+			.result
 			.as_ref()
 			.map(Value::children)
 			.into_iter()
@@ -209,7 +209,7 @@ impl Object {
 		std::iter::empty()
 			.chain(children)
 			.chain(log)
-			.chain(output)
+			.chain(result)
 			.collect()
 	}
 }
@@ -235,8 +235,8 @@ impl Data {
 	pub fn children(&self) -> Vec<object::Id> {
 		let children = self.children.iter().copied().map(Into::into);
 		let log = std::iter::once(self.log.into());
-		let output = self
-			.output
+		let result = self
+			.result
 			.as_ref()
 			.map(value::Data::children)
 			.into_iter()
@@ -244,7 +244,7 @@ impl Data {
 		std::iter::empty()
 			.chain(children)
 			.chain(log)
-			.chain(output)
+			.chain(result)
 			.collect()
 	}
 }

@@ -1,5 +1,5 @@
 use super::PackageArgs;
-use crate::{return_error, Cli, Result, WrapErr};
+use crate::{Cli, Result, WrapErr};
 use std::path::PathBuf;
 use tangram_client as tg;
 
@@ -60,9 +60,11 @@ impl Cli {
 		}
 
 		// Wait for the build's output.
-		let Some(output) = build.output(self.client.as_ref()).await? else {
-			return_error!("The build failed.");
-		};
+		let output = build
+			.result(self.client.as_ref())
+			.await
+			.wrap_err("Failed to get the build result.")?
+			.wrap_err("The build failed.")?;
 
 		// Check out the output if requested.
 		if let Some(path) = args.output {

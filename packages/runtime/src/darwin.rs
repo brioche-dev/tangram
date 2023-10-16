@@ -9,16 +9,16 @@ use std::{
 	os::unix::prelude::OsStrExt,
 };
 use tangram_client as tg;
-use tangram_client::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
+use tg::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
 
 pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 	match run_inner(client, target, progress).await {
 		Ok(output) => {
-			progress.output(Some(output));
+			progress.result(Ok(output));
 		},
 		Err(error) => {
 			progress.log(error.trace().to_string().into());
-			progress.output(None);
+			progress.result(Err(error));
 		},
 	}
 }
@@ -30,14 +30,14 @@ pub async fn run_inner(
 	_progress: &dyn Progress,
 ) -> Result<Value> {
 	// Get the server path.
-	let server_path = client.path().unwrap().to_owned();
+	let server_directory_path = client.path().unwrap().to_owned();
 
 	// Get the artifacts path.
-	let artifacts_path = server_path.join(".artifacts");
+	let artifacts_directory_path = server_directory_path.join(".artifacts");
 
 	// Create a tempdir for the root.
-	let root_tempdir = tempfile::TempDir::new()?;
-	let root_path = root_tempdir.path().to_owned();
+	let root_directory_tempdir = tempfile::TempDir::new()?;
+	let root_directory_path = root_directory_tempdir.path().to_owned();
 
 	// Create a tempdir for the output.
 	let output_tempdir = tempfile::TempDir::new()?;
@@ -52,13 +52,13 @@ pub async fn run_inner(
 	let output_path = output_parent_directory_path.join("output");
 
 	// Create the home directory.
-	let home_directory_path = root_path.join("Users/tangram");
+	let home_directory_path = root_directory_path.join("Users/tangram");
 	tokio::fs::create_dir_all(&home_directory_path)
 		.await
 		.wrap_err("Failed to create the home directory.")?;
 
 	// Create the working directory.
-	let working_directory_path = root_path.join("Users/tangram/work");
+	let working_directory_path = root_directory_path.join("Users/tangram/work");
 	tokio::fs::create_dir_all(&working_directory_path)
 		.await
 		.wrap_err("Failed to create the working directory.")?;
@@ -68,7 +68,7 @@ pub async fn run_inner(
 	let executable = render(
 		&Value::Template(executable.clone()),
 		client,
-		&artifacts_path,
+		&artifacts_directory_path,
 	)
 	.await?;
 
@@ -78,7 +78,7 @@ pub async fn run_inner(
 		.iter()
 		.map(|(key, value)| async {
 			let key = key.clone();
-			let value = render(value, client, &artifacts_path).await?;
+			let value = render(value, client, &artifacts_directory_path).await?;
 			Ok::<_, Error>((key, value))
 		})
 		.collect::<FuturesOrdered<_>>()
@@ -90,7 +90,7 @@ pub async fn run_inner(
 	let args: Vec<String> = args
 		.iter()
 		.map(|value| async {
-			let value = render(value, client, &artifacts_path).await?;
+			let value = render(value, client, &artifacts_directory_path).await?;
 			Ok::<_, Error>(value)
 		})
 		.collect::<FuturesOrdered<_>>()
@@ -101,19 +101,10 @@ pub async fn run_inner(
 	let network_enabled =
 		target.checksum(client).await?.is_some() || target.unsafe_(client).await?;
 
-	// Create the socket path.
-	let socket_path = root_path.join("socket");
-
 	// Set `$HOME`.
 	env.insert(
 		"HOME".to_owned(),
 		home_directory_path.to_str().unwrap().to_owned(),
-	);
-
-	// Set `$TANGRAM_SOCKET`.
-	env.insert(
-		"TANGRAM_SOCKET".to_owned(),
-		socket_path.to_str().unwrap().to_owned(),
 	);
 
 	// Set `$OUTPUT`.
@@ -230,7 +221,7 @@ pub async fn run_inner(
 				;; Disable global network access.
 				(deny network*)
 
-				;; Allow network access to localhost and Unix sockets
+				;; Allow network access to localhost and Unix sockets.
 				(allow network* (remote ip "localhost:*"))
 				(allow network* (remote unix-socket))
 			"#
@@ -247,7 +238,7 @@ pub async fn run_inner(
 			(allow file-read* (subpath {0}))
 			(allow file-write* (subpath {0}))
 		"#,
-		escape(server_path.as_os_str().as_bytes())
+		escape(server_directory_path.as_os_str().as_bytes())
 	)
 	.unwrap();
 
@@ -330,7 +321,7 @@ pub async fn run_inner(
 	let value = if tokio::fs::try_exists(&output_path).await? {
 		// Check in the output.
 		let options = tg::checkin::Options {
-			artifacts_paths: vec![artifacts_path],
+			artifacts_paths: vec![artifacts_directory_path],
 		};
 		let artifact = Artifact::check_in_with_options(client, &output_path, &options)
 			.await

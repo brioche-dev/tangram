@@ -6,24 +6,46 @@ use thiserror::Error;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An error.
-#[derive(Debug, Display)]
-pub struct Error(Box<dyn std::error::Error + Send + Sync + 'static>);
+#[derive(Clone, Debug, Display)]
+pub struct Error(Arc<Inner>);
 
 /// A message error.
-#[derive(Clone, Debug, Error, serde::Deserialize, serde::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	Error,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 #[error("{message}")]
-pub struct Message {
-	pub message: String,
-	pub location: Option<Location>,
-	pub stack: Option<Vec<Location>>,
-	pub source: Option<Arc<Error>>,
+struct Inner {
+	#[tangram_serialize(id = 0)]
+	message: String,
+	#[tangram_serialize(id = 1)]
+	location: Option<Location>,
+	#[tangram_serialize(id = 2)]
+	stack: Option<Vec<Location>>,
+	#[tangram_serialize(id = 3)]
+	source: Option<Error>,
 }
 
 /// An error location.
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(
+	Clone,
+	Debug,
+	serde::Deserialize,
+	serde::Serialize,
+	tangram_serialize::Deserialize,
+	tangram_serialize::Serialize,
+)]
 pub struct Location {
+	#[tangram_serialize(id = 0)]
 	pub file: String,
+	#[tangram_serialize(id = 1)]
 	pub line: u32,
+	#[tangram_serialize(id = 2)]
 	pub column: u32,
 }
 
@@ -48,24 +70,58 @@ pub trait WrapErr<T, E>: Sized {
 }
 
 impl Error {
-	pub fn new(error: impl std::error::Error + Send + Sync + 'static) -> Self {
-		Self(Box::new(error))
-	}
-
 	#[must_use]
-	pub fn with_boxed_error(error: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
-		Self(error)
+	pub fn new(
+		message: String,
+		location: Option<Location>,
+		stack: Option<Vec<Location>>,
+		source: Option<Error>,
+	) -> Self {
+		Self(Arc::new(Inner {
+			message,
+			location,
+			stack,
+			source,
+		}))
 	}
 
 	#[track_caller]
 	pub fn with_message(message: impl std::fmt::Display) -> Self {
-		Message {
+		Self(Arc::new(Inner {
 			message: message.to_string(),
 			location: Some(std::panic::Location::caller().into()),
 			stack: None,
 			source: None,
-		}
-		.into()
+		}))
+	}
+
+	pub fn with_error(error: impl std::error::Error) -> Self {
+		Self(Arc::new(Inner {
+			message: error.to_string(),
+			location: None,
+			stack: None,
+			source: error.source().map(Into::into),
+		}))
+	}
+
+	#[must_use]
+	pub fn message(&self) -> &String {
+		&self.0.message
+	}
+
+	#[must_use]
+	pub fn location(&self) -> &Option<Location> {
+		&self.0.location
+	}
+
+	#[must_use]
+	pub fn stack(&self) -> &Option<Vec<Location>> {
+		&self.0.stack
+	}
+
+	#[must_use]
+	pub fn source(&self) -> &Option<Error> {
+		&self.0.source
 	}
 
 	#[must_use]
@@ -89,13 +145,12 @@ impl Error {
 		C: std::fmt::Display,
 		F: FnOnce() -> C,
 	{
-		Message {
+		Self(Arc::new(Inner {
 			message: f().to_string(),
 			location: Some(std::panic::Location::caller().into()),
 			stack: None,
-			source: Some(Arc::new(self)),
-		}
-		.into()
+			source: Some(self),
+		}))
 	}
 }
 
@@ -109,54 +164,32 @@ impl std::ops::Deref for Error {
 
 impl From<Error> for Box<dyn std::error::Error + Send + Sync + 'static> {
 	fn from(error: Error) -> Self {
-		error.0
+		Arc::try_unwrap(error.0)
+			.unwrap_or_else(|error| error.as_ref().clone())
+			.into()
 	}
 }
 
 impl<E> From<E> for Error
 where
-	E: std::error::Error + Send + Sync + 'static,
+	E: std::error::Error,
 {
 	fn from(error: E) -> Self {
-		Self(Box::new(error))
+		Self::with_error(error)
 	}
 }
 
-impl From<Error> for Message {
-	fn from(value: Error) -> Self {
-		match value.0.downcast() {
-			Ok(message) => *message,
-			Err(error) => error.as_ref().into(),
-		}
-	}
-}
-
-impl From<&(dyn std::error::Error + Send + Sync + 'static)> for Message {
-	fn from(value: &(dyn std::error::Error + Send + Sync + 'static)) -> Self {
-		Self {
-			message: value.to_string(),
-			location: None,
-			stack: None,
-			source: value
-				.source()
-				.map(Message::from)
-				.map(Error::from)
-				.map(Arc::new),
-		}
-	}
-}
-
-impl From<&(dyn std::error::Error + 'static)> for Message {
+impl From<&(dyn std::error::Error + 'static)> for Inner {
 	fn from(value: &(dyn std::error::Error + 'static)) -> Self {
-		Self {
-			message: value.to_string(),
-			location: None,
-			stack: None,
-			source: value
-				.source()
-				.map(Message::from)
-				.map(Error::from)
-				.map(Arc::new),
+		if let Some(value) = value.downcast_ref::<Self>() {
+			value.clone()
+		} else {
+			Self {
+				message: value.to_string(),
+				location: None,
+				stack: None,
+				source: value.source().map(Into::into),
+			}
 		}
 	}
 }
@@ -174,26 +207,22 @@ impl<'a> From<&'a std::panic::Location<'a>> for Location {
 impl<'a> std::fmt::Display for Trace<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let mut first = true;
-		let mut error = &*(self.0).0 as &(dyn std::error::Error + 'static);
+		let mut error = self.0;
 		loop {
 			if !first {
 				writeln!(f)?;
 			}
 			first = false;
-			if let Some(error) = error.downcast_ref::<Message>() {
-				let message = &error.message;
-				write!(f, "{message}")?;
-				if let Some(location) = &error.location {
-					write!(f, " {location}")?;
-				}
-				for location in error.stack.iter().flatten() {
-					writeln!(f)?;
-					write!(f, "  {location}")?;
-				}
-			} else {
-				write!(f, "{error}")?;
+			let message = error.message();
+			write!(f, "{message}")?;
+			if let Some(location) = error.location() {
+				write!(f, " {location}")?;
 			}
-			if let Some(source) = std::error::Error::source(error) {
+			for location in error.stack().iter().flatten() {
+				writeln!(f)?;
+				write!(f, "  {location}")?;
+			}
+			if let Some(source) = error.source() {
 				error = source;
 			} else {
 				break;
@@ -214,7 +243,7 @@ impl serde::Serialize for Error {
 	where
 		S: serde::Serializer,
 	{
-		Message::from(self.0.as_ref()).serialize(serializer)
+		self.0.serialize(serializer)
 	}
 }
 
@@ -223,7 +252,27 @@ impl<'de> serde::Deserialize<'de> for Error {
 	where
 		D: serde::Deserializer<'de>,
 	{
-		Message::deserialize(deserializer).map(Into::into)
+		Ok(Self(<_>::deserialize(deserializer)?))
+	}
+}
+
+impl tangram_serialize::Serialize for Error {
+	fn serialize<W>(&self, serializer: &mut tangram_serialize::Serializer<W>) -> std::io::Result<()>
+	where
+		W: std::io::Write,
+	{
+		self.0.serialize(serializer)
+	}
+}
+
+impl tangram_serialize::Deserialize for Error {
+	fn deserialize<R>(
+		deserializer: &mut tangram_serialize::Deserializer<R>,
+	) -> std::io::Result<Self>
+	where
+		R: std::io::Read,
+	{
+		Ok(Self(deserializer.deserialize()?))
 	}
 }
 

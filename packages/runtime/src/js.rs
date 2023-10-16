@@ -7,7 +7,8 @@ use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
-use tangram_client::{
+use tangram_client as tg;
+use tg::{
 	module::{self, Import, Module},
 	Client, Result, Target, WrapErr,
 };
@@ -187,12 +188,11 @@ pub async fn run(
 
 	match output {
 		Ok(output) => {
-			state.progress.output(Some(output));
+			state.progress.result(Ok(output));
 		},
 		Err(error) => {
-			let trace = error.trace().to_string();
-			state.progress.log(trace.into());
-			state.progress.output(None);
+			state.progress.log(error.trace().to_string().into());
+			state.progress.result(Err(error));
 		},
 	};
 }

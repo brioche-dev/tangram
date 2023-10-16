@@ -1,5 +1,6 @@
 use super::Server;
-use tangram_client::{return_error, Result};
+use tangram_client as tg;
+use tg::{return_error, Result};
 
 impl Server {
 	pub async fn clean(&self) -> Result<()> {

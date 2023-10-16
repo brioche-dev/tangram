@@ -252,8 +252,8 @@ impl Handle {
 			return Ok(false);
 		};
 
-		// Deserialize the object.
-		let data = Data::deserialize(kind, &bytes)?;
+		// Deserialize the data.
+		let data = Data::deserialize(kind, &bytes).wrap_err("Failed to deserialize the data.")?;
 
 		// Create the object.
 		let object = Object::from_data(data);

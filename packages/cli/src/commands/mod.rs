@@ -27,7 +27,6 @@ mod remove;
 mod run;
 mod search;
 mod serve;
-mod server;
 mod shell;
 mod test;
 mod tree;

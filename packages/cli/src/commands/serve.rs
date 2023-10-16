@@ -51,7 +51,7 @@ impl Cli {
 		let parent = tangram_client::reqwest::Reqwest::new(parent_url, parent_token);
 
 		// Create the server.
-		let server = tangram_server::Server::new(path, Some(Box::new(parent))).await?;
+		let server = tangram_server::Server::new(path, None).await?;
 
 		// Serve.
 		let addr = SocketAddr::new(args.host, args.port);

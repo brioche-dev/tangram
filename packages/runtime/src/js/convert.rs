@@ -1,7 +1,8 @@
 use bytes::Bytes;
 use num::ToPrimitive;
 use std::{collections::BTreeMap, sync::Arc};
-use tangram_client::{
+use tangram_client as tg;
+use tg::{
 	blob, checksum, directory, error, file,
 	object::{self, Object},
 	package, return_error, symlink, target, template, Artifact, Blob, Checksum, Directory, Error,
@@ -1616,23 +1617,6 @@ impl FromV8 for System {
 	}
 }
 
-impl ToV8 for Url {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		self.to_string().to_v8(scope)
-	}
-}
-
-impl FromV8 for Url {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		String::from_v8(scope, value)?
-			.parse()
-			.wrap_err("Failed to parse the string as a URL.")
-	}
-}
-
 impl ToV8 for Error {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
@@ -1645,19 +1629,14 @@ impl ToV8 for Error {
 		let error = tg.get(scope, error.into()).unwrap();
 		let error = v8::Local::<v8::Function>::try_from(error).unwrap();
 
-		if let Some(self_) = self.downcast_ref::<error::Message>() {
-			let message = self_.message.to_v8(scope)?;
-			let location = self_.location.to_v8(scope)?;
-			let stack = self_.stack.to_v8(scope)?;
-			let source = self_.source.to_v8(scope)?;
-			Ok(error
-				.new_instance(scope, &[message, location, stack, source])
-				.unwrap()
-				.into())
-		} else {
-			let message = self.to_string().to_v8(scope)?;
-			Ok(error.new_instance(scope, &[message]).unwrap().into())
-		}
+		let message = self.message().to_v8(scope)?;
+		let location = self.location().to_v8(scope)?;
+		let stack = self.stack().to_v8(scope)?;
+		let source = self.source().to_v8(scope)?;
+		Ok(error
+			.new_instance(scope, &[message, location, stack, source])
+			.unwrap()
+			.into())
 	}
 }
 
@@ -1698,13 +1677,7 @@ impl FromV8 for Error {
 		let source = value.get(scope, source.into()).unwrap();
 		let source = from_v8(scope, source)?;
 
-		Ok(error::Message {
-			message,
-			location,
-			stack,
-			source,
-		}
-		.into())
+		Ok(Error::new(message, location, stack, source))
 	}
 }
 
@@ -1748,5 +1721,22 @@ impl FromV8 for error::Location {
 		let column = from_v8(scope, column)?;
 
 		Ok(Self { file, line, column })
+	}
+}
+
+impl ToV8 for Url {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for Url {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?
+			.parse()
+			.wrap_err("Failed to parse the string as a URL.")
 	}
 }

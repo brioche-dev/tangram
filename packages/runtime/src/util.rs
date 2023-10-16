@@ -1,5 +1,6 @@
 use std::path::Path;
-use tangram_client::{template, Artifact, Client, Result, Value};
+use tangram_client as tg;
+use tg::{template, Artifact, Client, Result, Value};
 
 /// Render a value.
 pub async fn render(value: &Value, client: &dyn Client, artifacts_path: &Path) -> Result<String> {

@@ -9,7 +9,7 @@ use http_body_util::StreamBody;
 use lmdb::Transaction;
 use std::sync::Arc;
 use tangram_client as tg;
-use tangram_client::{build, system, target, Blob, Build, Result, Target, Value, WrapErr};
+use tg::{build, system, target, Blob, Build, Result, Target, Value, WrapErr};
 use tg::{return_error, Client};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
@@ -26,7 +26,7 @@ struct State {
 	log: Arc<tokio::sync::Mutex<LogState>>,
 	logger: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<Bytes>>>,
 	logger_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
-	output: OutputState,
+	result: ResultState,
 }
 
 #[derive(Debug)]
@@ -42,9 +42,9 @@ struct LogState {
 }
 
 #[derive(Debug)]
-struct OutputState {
-	sender: tokio::sync::watch::Sender<Option<Option<Value>>>,
-	receiver: tokio::sync::watch::Receiver<Option<Option<Value>>>,
+struct ResultState {
+	sender: tokio::sync::watch::Sender<Option<Result<Value>>>,
+	receiver: tokio::sync::watch::Receiver<Option<Result<Value>>>,
 }
 
 impl Server {
@@ -148,24 +148,24 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_try_get_build_output_request(
+	pub async fn handle_try_get_build_result_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "builds", id, "output"] = path_components.as_slice() else {
+		let [_, "builds", id, "result"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
-		// Get the output.
-		let Some(output) = self.try_get_build_output(id).await? else {
+		// Get the result.
+		let Some(result) = self.try_get_build_result(id).await? else {
 			return Ok(not_found());
 		};
 
 		// Create the response.
-		let body = serde_json::to_vec(&output.map(|value| value.to_data()))
+		let body = serde_json::to_vec(&result.map(|value| value.to_data()))
 			.wrap_err("Failed to serialize the response.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
@@ -285,7 +285,12 @@ impl Server {
 				#[cfg(not(target_os = "macos"))]
 				return_error!("Cannot run a darwin build on this host.");
 			},
-			system::Os::Linux => unimplemented!(),
+			system::Os::Linux => {
+				#[cfg(target_os = "linux")]
+				tangram_runtime::linux::run(self, target, &progress).await;
+				#[cfg(not(target_os = "linux"))]
+				return_error!("Cannot run a linux build on this host.");
+			},
 		};
 
 		// Finish the build.
@@ -385,32 +390,32 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn try_get_build_output(&self, id: build::Id) -> Result<Option<Option<Value>>> {
-		// Attempt to await the output from the running state.
+	pub async fn try_get_build_result(&self, id: build::Id) -> Result<Option<Result<Value>>> {
+		// Attempt to await the result from the running state.
 		let state = self.state.running.read().unwrap().1.get(&id).cloned();
 		if let Some(state) = state {
-			let output = state.wait_for_output().await;
-			return Ok(Some(output));
+			let result = state.wait_for_result().await;
+			return Ok(Some(result));
 		}
 
-		// Attempt to get the output from the object.
+		// Attempt to get the result from the object.
 		'a: {
 			let build = Build::with_id(id);
 			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
-			return Ok(Some(object.output.clone()));
+			return Ok(Some(object.result.clone()));
 		}
 
-		// Attempt to await the output from the parent.
+		// Attempt to await the result from the parent.
 		'a: {
 			let Some(parent) = self.state.parent.as_ref() else {
 				break 'a;
 			};
-			let Some(output) = parent.try_get_build_output(id).await? else {
+			let Some(result) = parent.try_get_build_result(id).await? else {
 				break 'a;
 			};
-			return Ok(Some(output));
+			return Ok(Some(result));
 		}
 
 		Ok(None)
@@ -432,12 +437,12 @@ impl Progress {
 		}));
 
 		// Spawn the logger task.
-		let (logger_sender, mut logger_receiver) = tokio::sync::mpsc::unbounded_channel::<Bytes>();
-		let logger = std::sync::Mutex::new(Some(logger_sender));
+		let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<Bytes>();
+		let logger = std::sync::Mutex::new(Some(sender));
 		let logger_task = std::sync::Mutex::new(Some(tokio::spawn({
 			let log = log.clone();
 			async move {
-				while let Some(bytes) = logger_receiver.recv().await {
+				while let Some(bytes) = receiver.recv().await {
 					let mut log = log.lock().await;
 					log.file.seek(std::io::SeekFrom::End(0)).await?;
 					log.file.write_all(&bytes).await?;
@@ -447,12 +452,9 @@ impl Progress {
 			}
 		})));
 
-		// Create the output state.
-		let (output_sender, output_receiver) = tokio::sync::watch::channel(None);
-		let output = OutputState {
-			sender: output_sender,
-			receiver: output_receiver,
-		};
+		// Create the result state.
+		let (sender, receiver) = tokio::sync::watch::channel(None);
+		let result = ResultState { sender, receiver };
 
 		Ok(Self {
 			state: Arc::new(State {
@@ -461,7 +463,7 @@ impl Progress {
 				log,
 				logger,
 				logger_task,
-				output,
+				result,
 			}),
 		})
 	}
@@ -496,9 +498,9 @@ impl Progress {
 		Ok(old.chain(new).boxed())
 	}
 
-	pub async fn wait_for_output(&self) -> Option<Value> {
+	pub async fn wait_for_result(&self) -> Result<Value> {
 		self.state
-			.output
+			.result
 			.receiver
 			.clone()
 			.wait_for(Option::is_some)
@@ -527,11 +529,11 @@ impl Progress {
 			Blob::with_reader(client, &mut state.file).await?
 		};
 
-		// Get the output.
-		let output = self.state.output.receiver.borrow().clone().unwrap();
+		// Get the result.
+		let result = self.state.result.receiver.borrow().clone().unwrap();
 
 		// Create the build.
-		let build = Build::new(client, self.state.id, children, log, output).await?;
+		let build = Build::new(client, self.state.id, children, log, result).await?;
 
 		Ok(build)
 	}
@@ -560,7 +562,7 @@ impl tangram_runtime::Progress for Progress {
 			.unwrap();
 	}
 
-	fn output(&self, output: Option<tg::Value>) {
-		self.state.output.sender.send(Some(output)).unwrap();
+	fn result(&self, result: Result<tg::Value>) {
+		self.state.result.sender.send(Some(result)).unwrap();
 	}
 }
