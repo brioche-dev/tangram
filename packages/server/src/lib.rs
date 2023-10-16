@@ -131,9 +131,9 @@ impl Server {
 		});
 
 		// Create the server.
-		let server = Server { state };
 
-		let watcher = Watcher::new(server.clone())?;
+		let server = Server { state };
+		let watcher = Watcher::new(Arc::downgrade(&server.state))?;
 		server.state.watcher.write().await.replace(watcher);
 
 		// // Start the VFS server.

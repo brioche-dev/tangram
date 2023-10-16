@@ -3,11 +3,12 @@ use lmdb::Transaction;
 use std::{
 	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
+	sync::Weak,
 };
 use tangram_client::{self as tg, error, return_error, Result};
 use tokio::io::AsyncReadExt;
 
-use crate::{bad_request, empty, full, Incoming, Outgoing, Server};
+use crate::{bad_request, empty, full, Incoming, Outgoing, Server, State};
 
 #[derive(Debug)]
 pub struct Watcher {
@@ -273,7 +274,7 @@ impl Server {
 }
 
 impl Watcher {
-	pub fn new(server: Server) -> Result<Self> {
+	pub(crate) fn new(server_state: Weak<State>) -> Result<Self> {
 		use notify::Watcher;
 
 		let (sender, mut receiver) = tokio::sync::mpsc::channel::<PathBuf>(128);
@@ -291,6 +292,11 @@ impl Watcher {
 			}
 
 			for path in event.paths {
+				let Some(state) = server_state.upgrade() else {
+					// This means that we have outlived the underlying server.
+					return;
+				};
+				let server = Server { state };
 				let _ = server.delete_tracker(&path);
 			}
 		};
