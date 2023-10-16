@@ -116,7 +116,7 @@ impl Server {
 
 		// Create the VFS server task.
 		// let vfs_server_task = std::sync::Mutex::new(None);
-		let watcher = tokio::sync::RwLock::new(None);
+		let fsm = tokio::sync::RwLock::new(None);
 
 		// Create the state.
 		let state = Arc::new(State {
@@ -127,14 +127,14 @@ impl Server {
 			path,
 			running,
 			// vfs_server_task,
-			fsm: watcher,
+			fsm,
 		});
 
 		// Create the server.
 
 		let server = Server { state };
-		// let watcher = Fsm::new(server.downgrade());
-		// server.state.fsm.write().await.replace(watcher);
+		let fsm = Fsm::new(Arc::downgrade(&server.state))?;
+		server.state.fsm.write().await.replace(fsm);
 
 		// // Start the VFS server.
 		// let kind = if cfg!(target_os = "linux") {
