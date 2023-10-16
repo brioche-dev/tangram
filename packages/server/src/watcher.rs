@@ -255,14 +255,19 @@ impl Server {
 	fn delete_tracker(&self, path: &Path) -> Result<()> {
 		tracing::debug!(?path, "Removing tracker.");
 		let mut txn = self.state.database.env.begin_rw_txn()?;
-		let key = canonicalize(path);
-		match txn.del(self.state.database.trackers, &key, None) {
-			Err(e) => {
-				tracing::info!(?e, ?path, "Failed to remove tracker.");
-				return Err(e.into());
-			},
-			_ => txn.commit()?,
+		let mut path = path.to_owned();
+		loop {
+			let key = canonicalize(path.as_ref());
+			match txn.del(self.state.database.trackers, &key, None) {
+				Err(e) if e == lmdb::Error::NotFound => break,
+				Err(e) => return Err(e.into()),
+				_ => (),
+			}
+			if !path.pop() {
+				break;
+			}
 		}
+		txn.commit()?;
 		Ok(())
 	}
 }
@@ -285,10 +290,8 @@ impl Watcher {
 				return;
 			}
 
-			for mut path in event.paths {
-				while let Ok(_) = server.delete_tracker(&path) {
-					path.pop();
-				}
+			for path in event.paths {
+				let _ = server.delete_tracker(&path);
 			}
 		};
 
