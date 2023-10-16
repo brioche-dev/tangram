@@ -14,8 +14,7 @@ use std::{
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
-use tg::Result;
-use tg::WrapErr;
+use tg::{Result, WrapErr};
 use watcher::Watcher;
 
 mod build;
@@ -239,10 +238,14 @@ impl Server {
 				.map(Some)
 				.boxed(),
 			(http::Method::GET, ["v1", _, "path"]) => {
-				Some(self.handle_get_object_for_path_request(request).boxed())
+				self.handle_get_object_for_path_request(request)
+					.map(Some)
+					.boxed()
 			},
 			(http::Method::PUT, ["v1", _, "path"]) => {
-				Some(self.handle_put_object_for_path_request(request).boxed())
+				self.handle_put_object_for_path_request(request)
+					.map(Some)
+					.boxed()
 			},
 
 			(_, _) => future::ready(None).boxed(),

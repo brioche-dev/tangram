@@ -140,8 +140,8 @@ impl Server {
 				let Ok(id) = body.id.try_into() else {
 					return Ok(bad_request());
 				};
-				let artifact = tg::Artifact::with_id(id);
-				self.set_artifact_for_path(&body.path, artifact).await?;
+				let package = tg::Package::with_id(id);
+				self.set_package_for_path(&body.path, package).await?;
 			},
 			_ => return_error!("Unexpected path."),
 		}
@@ -198,7 +198,7 @@ impl Server {
 	fn get_or_clear_tracker(&self, path: &Path, mtime: u128) -> Result<Option<Tracker>> {
 		let tracker: Option<Tracker> = {
 			let txn = self.state.database.env.begin_ro_txn()?;
-			let key = path.as_os_str().as_bytes();
+			let key = canonicalize(path);
 			match txn.get(self.state.database.trackers, &key) {
 				Ok(data) => Some(serde_json::from_slice(data)?),
 				Err(lmdb::Error::NotFound) => None,
@@ -207,7 +207,7 @@ impl Server {
 		};
 
 		if let Some(tracker) = tracker.as_ref() {
-			tracing::debug!(?tracker, "Found tracker.");
+			tracing::debug!(?path, ?tracker, "Found tracker.");
 			if tracker.mtime != mtime {
 				tracing::debug!("mtime mismatch: clearing tracker.");
 				self.delete_tracker(path)?;
@@ -218,7 +218,7 @@ impl Server {
 		Ok(tracker)
 	}
 
-	async fn put_tracker(&self, path: PathBuf, tracker: Tracker) -> Result<()> {
+	async fn put_tracker(&self, path: &Path, tracker: Tracker) -> Result<()> {
 		tracing::debug!(?path, ?tracker, "Adding tracker.");
 		self.state
 			.watcher
@@ -227,13 +227,13 @@ impl Server {
 			.as_ref()
 			.unwrap()
 			.sender
-			.send(path.clone())
+			.send(path.into())
 			.await?;
 
 		// Add the tracker to the database
 		{
 			let mut txn = self.state.database.env.begin_rw_txn()?;
-			let key = path.as_os_str().as_bytes();
+			let key = canonicalize(path);
 			let data = serde_json::to_vec(&tracker)?;
 			txn.put(
 				self.state.database.trackers,
@@ -247,7 +247,7 @@ impl Server {
 		// Update the notifier.
 		{
 			let watcher = self.state.watcher.read().await;
-			let _ = watcher.as_ref().unwrap().sender.send(path).await;
+			let _ = watcher.as_ref().unwrap().sender.send(path.into()).await;
 			Ok(())
 		}
 	}
@@ -255,9 +255,12 @@ impl Server {
 	fn delete_tracker(&self, path: &Path) -> Result<()> {
 		tracing::debug!(?path, "Removing tracker.");
 		let mut txn = self.state.database.env.begin_rw_txn()?;
-		let key = path.as_os_str().as_bytes();
+		let key = canonicalize(path);
 		match txn.del(self.state.database.trackers, &key, None) {
-			Err(e) => return Err(e.into()),
+			Err(e) => {
+				tracing::info!(?e, ?path, "Failed to remove tracker.");
+				return Err(e.into());
+			},
 			_ => txn.commit()?,
 		}
 		Ok(())
@@ -313,4 +316,13 @@ async fn get_mtime(path: &Path) -> Result<u128> {
 		.unwrap()
 		.as_micros();
 	Ok(mtime)
+}
+
+fn canonicalize(path: &Path) -> &'_ [u8] {
+	let path = path.as_os_str().as_bytes();
+	if path.ends_with(b"/") {
+		&path[0..path.len() - 1]
+	} else {
+		path
+	}
 }
