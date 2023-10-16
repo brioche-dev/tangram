@@ -1,6 +1,6 @@
 use crate::{
-	build, id, object, package, target, user, user::Login, value, Client, Id, Result, Value,
-	WrapErr,
+	build, id, object, package, target, user, user::Login, value, Client, Handle, Id, Result,
+	Value, WrapErr,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -8,7 +8,7 @@ use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
 };
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::io::AsyncReadExt;
 use tokio_util::io::StreamReader;
 use url::Url;
@@ -52,10 +52,20 @@ impl Reqwest {
 	}
 }
 
+impl Handle for Weak<State> {
+	fn upgrade(&self) -> Option<Box<dyn Client>> {
+		todo!()
+	}
+}
+
 #[async_trait]
 impl Client for Reqwest {
 	fn clone_box(&self) -> Box<dyn Client> {
 		Box::new(self.clone())
+	}
+
+	fn downgrade(&self) -> Box<dyn Handle> {
+		Box::new(Arc::downgrade(&self.state))
 	}
 
 	fn path(&self) -> Option<&std::path::Path> {

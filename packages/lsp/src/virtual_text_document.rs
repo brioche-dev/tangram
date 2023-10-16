@@ -21,12 +21,14 @@ impl Server {
 		&self,
 		params: Params,
 	) -> Result<Option<String>> {
+		let client = self.state.client.upgrade().unwrap();
+
 		// Get the module.
 		let module = self.convert_lsp_url(&params.text_document.uri).await?;
 
 		// Load the file.
 		let text = module
-			.load(self.state.client.as_ref(), Some(&self.state.document_store))
+			.load(client.as_ref(), Some(&self.state.document_store))
 			.await?;
 
 		Ok(Some(text))

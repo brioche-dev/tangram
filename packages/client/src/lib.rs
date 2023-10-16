@@ -53,10 +53,17 @@ pub mod user;
 pub mod util;
 pub mod value;
 
+/// A client handle.
+pub trait Handle: Debug + Send + Sync + 'static {
+	fn upgrade(&self) -> Option<Box<dyn Client>>;
+}
+
 /// A client.
 #[async_trait]
 pub trait Client: Debug + Send + Sync + 'static {
 	fn clone_box(&self) -> Box<dyn Client>;
+
+	fn downgrade(&self) -> Box<dyn Handle>;
 
 	fn path(&self) -> Option<&Path>;
 

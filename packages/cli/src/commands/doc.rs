@@ -22,7 +22,7 @@ impl Cli {
 
 		// Create the language server.
 		let server =
-			tangram_lsp::Server::new(self.client.as_ref(), tokio::runtime::Handle::current());
+			tangram_lsp::Server::new(self.client.downgrade(), tokio::runtime::Handle::current());
 
 		// Get the docs.
 		let docs = server

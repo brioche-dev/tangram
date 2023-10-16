@@ -208,8 +208,9 @@ fn syscall_module_load(
 ) -> Result<String> {
 	let (module,) = args;
 	state.main_runtime_handle.clone().block_on(async move {
+		let client = state.client.upgrade().unwrap();
 		let text = module
-			.load(state.client.as_ref(), Some(&state.document_store))
+			.load(client.as_ref(), Some(&state.document_store))
 			.await
 			.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
 		Ok(text)
@@ -223,12 +224,9 @@ fn syscall_module_resolve(
 ) -> Result<Module> {
 	let (module, specifier) = args;
 	state.main_runtime_handle.clone().block_on(async move {
+		let client = state.client.upgrade().unwrap();
 		let module = module
-			.resolve(
-				state.client.as_ref(),
-				Some(&state.document_store),
-				&specifier,
-			)
+			.resolve(client.as_ref(), Some(&state.document_store), &specifier)
 			.await
 			.wrap_err_with(|| {
 				format!(

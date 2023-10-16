@@ -9,7 +9,7 @@ impl Cli {
 	pub async fn command_lsp(&self, _args: Args) -> Result<()> {
 		// Create the language server.
 		let server =
-			tangram_lsp::Server::new(self.client.as_ref(), tokio::runtime::Handle::current());
+			tangram_lsp::Server::new(self.client.downgrade(), tokio::runtime::Handle::current());
 
 		// Run the language server.
 		server.serve().await?;

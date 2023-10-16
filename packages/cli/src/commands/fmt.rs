@@ -16,7 +16,7 @@ impl Cli {
 	pub async fn command_fmt(&self, args: Args) -> Result<()> {
 		// Create the language server.
 		let server =
-			tangram_lsp::Server::new(self.client.as_ref(), tokio::runtime::Handle::current());
+			tangram_lsp::Server::new(self.client.downgrade(), tokio::runtime::Handle::current());
 
 		let path = args.path.join(ROOT_MODULE_FILE_NAME);
 		let text = tokio::fs::read_to_string(&path).await?;

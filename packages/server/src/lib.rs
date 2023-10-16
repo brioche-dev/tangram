@@ -8,7 +8,7 @@ use std::{
 	convert::Infallible,
 	net::SocketAddr,
 	path::{Path, PathBuf},
-	sync::Arc,
+	sync::{Arc, Weak},
 };
 use tangram_client as tg;
 use tg::Result;
@@ -26,6 +26,13 @@ pub struct Server {
 	state: Arc<State>,
 }
 
+/// A server handle.
+#[derive(Clone, Debug)]
+pub struct Handle {
+	state: Weak<State>,
+}
+
+/// Server state.
 #[derive(Debug)]
 struct State {
 	/// The database.
@@ -235,10 +242,24 @@ impl Server {
 	}
 }
 
+impl tg::Handle for Handle {
+	fn upgrade(&self) -> Option<Box<dyn tg::Client>> {
+		self.state
+			.upgrade()
+			.map(|state| Box::new(Server { state }) as Box<dyn tg::Client>)
+	}
+}
+
 #[async_trait]
 impl tg::Client for Server {
 	fn clone_box(&self) -> Box<dyn tg::Client> {
 		Box::new(self.clone())
+	}
+
+	fn downgrade(&self) -> Box<dyn tg::Handle> {
+		Box::new(Handle {
+			state: Arc::downgrade(&self.state),
+		})
 	}
 
 	fn path(&self) -> Option<&Path> {

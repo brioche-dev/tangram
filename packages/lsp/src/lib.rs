@@ -12,7 +12,7 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use tangram_client as tg;
 use tg::{
 	module::{self, diagnostic::Severity, Diagnostic, Position, Range},
-	return_error, Client, Error, Module, Result, WrapErr,
+	return_error, Error, Module, Result, WrapErr,
 };
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use url::Url;
@@ -49,8 +49,8 @@ pub struct Server {
 
 #[derive(Debug)]
 struct State {
-	/// The Tangram client.
-	client: Box<dyn Client>,
+	/// The Tangram client handle.
+	client: Box<dyn tg::Handle>,
 
 	/// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<module::Diagnostic>>>,
@@ -102,7 +102,7 @@ pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Server {
 	#[must_use]
-	pub fn new(client: &dyn Client, main_runtime_handle: tokio::runtime::Handle) -> Self {
+	pub fn new(client: Box<dyn tg::Handle>, main_runtime_handle: tokio::runtime::Handle) -> Self {
 		// Create the published diagnostics.
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
@@ -115,7 +115,7 @@ impl Server {
 
 		// Create the state.
 		let state = Arc::new(State {
-			client: client.clone_box(),
+			client,
 			diagnostics,
 			document_store,
 			request_sender,
