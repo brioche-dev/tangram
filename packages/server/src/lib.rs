@@ -15,13 +15,13 @@ use std::{
 };
 use tangram_client as tg;
 use tg::{Result, WrapErr};
-use watcher::Watcher;
+use fsm::Fsm;
 
 mod build;
 mod clean;
 mod migrations;
 mod object;
-mod watcher;
+mod fsm;
 // mod vfs;
 
 /// A server.
@@ -59,7 +59,7 @@ struct State {
 	//
 	// /// The VFS server task.
 	// vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
-	watcher: tokio::sync::RwLock<Option<Watcher>>,
+	fsm: tokio::sync::RwLock<Option<Fsm>>,
 }
 
 type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, tg::id::BuildHasher>;
@@ -127,14 +127,14 @@ impl Server {
 			path,
 			running,
 			// vfs_server_task,
-			watcher,
+			fsm: watcher,
 		});
 
 		// Create the server.
 
 		let server = Server { state };
-		let watcher = Watcher::new(Arc::downgrade(&server.state))?;
-		server.state.watcher.write().await.replace(watcher);
+		// let watcher = Fsm::new(server.downgrade());
+		// server.state.fsm.write().await.replace(watcher);
 
 		// // Start the VFS server.
 		// let kind = if cfg!(target_os = "linux") {

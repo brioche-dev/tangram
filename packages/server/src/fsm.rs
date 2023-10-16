@@ -11,7 +11,7 @@ use tokio::io::AsyncReadExt;
 use crate::{bad_request, empty, full, Incoming, Outgoing, Server, State};
 
 #[derive(Debug)]
-pub struct Watcher {
+pub struct Fsm {
 	task: tokio::task::JoinHandle<()>,
 	sender: tokio::sync::mpsc::Sender<PathBuf>,
 }
@@ -38,7 +38,7 @@ struct SetForPathBody {
 	id: tg::Id,
 }
 
-impl Drop for Watcher {
+impl Drop for Fsm {
 	fn drop(&mut self) {
 		self.task.abort();
 	}
@@ -222,7 +222,7 @@ impl Server {
 	async fn put_tracker(&self, path: &Path, tracker: Tracker) -> Result<()> {
 		tracing::debug!(?path, ?tracker, "Adding tracker.");
 		self.state
-			.watcher
+			.fsm
 			.read()
 			.await
 			.as_ref()
@@ -247,7 +247,7 @@ impl Server {
 
 		// Update the notifier.
 		{
-			let watcher = self.state.watcher.read().await;
+			let watcher = self.state.fsm.read().await;
 			let _ = watcher.as_ref().unwrap().sender.send(path.into()).await;
 			Ok(())
 		}
@@ -273,7 +273,7 @@ impl Server {
 	}
 }
 
-impl Watcher {
+impl Fsm {
 	pub(crate) fn new(server_state: Weak<State>) -> Result<Self> {
 		use notify::Watcher;
 
