@@ -119,9 +119,7 @@ impl Server {
 		// } else {
 		// 	vfs::Kind::Nfs(2049)
 		// };
-
-		// // Mount the VFS server.
-		// let task = vfs::Server::new(kind, client)
+		// let task = vfs::Server::new(kind, server.clone())
 		// 	.mount(server.artifacts_path())
 		// 	.await?;
 		// server.state.vfs_server_task.lock().unwrap().replace(task);

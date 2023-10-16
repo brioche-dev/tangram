@@ -1,7 +1,3 @@
-use crate::{
-	artifact::Artifact, blob, directory::Directory, file::File, symlink::Symlink, template, Client,
-	Error, Result, Template, WrapErr,
-};
 use num::ToPrimitive;
 use std::{
 	collections::BTreeMap,
@@ -10,6 +6,10 @@ use std::{
 	os::{fd::FromRawFd, unix::prelude::OsStrExt},
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
+};
+use tangram_client::{
+	artifact::Artifact, blob, directory::Directory, file::File, symlink::Symlink, template, Client,
+	Error, Result, Template, WrapErr,
 };
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use zerocopy::{AsBytes, FromBytes};

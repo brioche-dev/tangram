@@ -165,8 +165,11 @@ impl Server {
 		};
 
 		// Create the response.
-		let body = serde_json::to_vec(&result.map(|value| value.to_data()))
-			.wrap_err("Failed to serialize the response.")?;
+		let result = match result {
+			Ok(value) => Ok(value.data(self).await?),
+			Err(error) => Err(error),
+		};
+		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the response.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(full(body))

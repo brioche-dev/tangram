@@ -31,18 +31,8 @@ pub async fn render(value: &Value, client: &dyn Client, artifacts_path: &Path) -
 			.await;
 	}
 
-	// Store the value's object.
-	match &value {
-		Value::Directory(directory) => directory.handle().store(client).await?,
-		Value::File(file) => file.handle().store(client).await?,
-		Value::Symlink(symlink) => symlink.handle().store(client).await?,
-		Value::Package(package) => package.handle().store(client).await?,
-		Value::Target(target) => target.handle().store(client).await?,
-		_ => {},
-	}
-
 	// Get the data.
-	let data = value.to_data();
+	let data = value.data(client).await?;
 
 	// Render the data.
 	let string = serde_json::to_string(&data)?;

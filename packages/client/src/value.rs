@@ -1,5 +1,5 @@
 use crate::{
-	blob, directory, file, object, package, return_error, symlink, target, template, Blob,
+	blob, directory, file, object, package, return_error, symlink, target, template, Blob, Client,
 	Directory, File, Package, Result, Symlink, Target, Template,
 };
 use bytes::Bytes;
@@ -108,6 +108,18 @@ pub enum Data {
 }
 
 impl Value {
+	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+		match self {
+			Value::Directory(directory) => directory.handle().store(client).await?,
+			Value::File(file) => file.handle().store(client).await?,
+			Value::Symlink(symlink) => symlink.handle().store(client).await?,
+			Value::Package(package) => package.handle().store(client).await?,
+			Value::Target(target) => target.handle().store(client).await?,
+			_ => {},
+		}
+		Ok(self.to_data())
+	}
+
 	#[must_use]
 	pub fn to_data(&self) -> Data {
 		match self {
