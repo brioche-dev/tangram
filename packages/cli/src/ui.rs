@@ -1,11 +1,4 @@
-use std::{
-	collections::{BTreeMap, HashSet},
-	rc::{Rc, Weak},
-	task::Poll,
-};
-
 use crossterm as ct;
-use futures::stream::BoxStream;
 use itertools::Itertools;
 use ratatui as tui;
 use tangram_client as tg;
@@ -62,7 +55,7 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 		}
 
 		terminal.draw(|frame| {
-			let layout: Rc<[tui::prelude::Rect]> = tui::layout::Layout::default()
+			let layout = tui::layout::Layout::default()
 				.direction(tui::layout::Direction::Vertical)
 				.margin(1)
 				.constraints([
@@ -91,7 +84,6 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 
 struct State {
 	builds: Vec<BuildState>,
-	skip: usize,
 	selected: usize,
 }
 
@@ -131,11 +123,21 @@ impl State {
 		build.children.clear();
 	}
 
-	fn render(&self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
-		// First we create the layout.
+	fn render(&mut self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
+		let skip = self.selected / area.height as usize;
 		let mut offset = 0;
-		for build in &self.builds {
-			offset = build.render(frame, "", self.selected, self.skip, offset, area, 0);
+		for (index, build) in self.builds.iter().enumerate() {
+			let is_last_child = index == self.builds.len() - 1;
+			offset = build.render(
+				frame,
+				is_last_child,
+				"",
+				self.selected,
+				skip,
+				offset,
+				area,
+				0,
+			);
 		}
 	}
 }
@@ -159,6 +161,7 @@ impl BuildState {
 	fn render(
 		&self,
 		frame: &mut Frame<'_>,
+		is_last_child: bool,
 		tree_str: &str,
 		selected: usize,
 		skip: usize,
@@ -167,7 +170,6 @@ impl BuildState {
 		depth: u16,
 	) -> usize {
 		let count = area.height as usize;
-
 		if (skip..(skip + count)).contains(&offset) {
 			let id = &self.id;
 			let name = &self.name;
@@ -193,16 +195,22 @@ impl BuildState {
 
 		let mut offset = offset + 1;
 		for (index, child) in self.children.iter().enumerate() {
-			let end = if index == (self.children.len() - 1) {
-				"└─"
-			} else {
-				"├─"
-			};
+			let last_child = index == self.children.len() - 1;
+			let end = if last_child { "└─" } else { "├─" };
 			let tree_str = (0..depth)
-				.map(|_| "│ ")
+				.map(|_| if is_last_child { "  " } else { "│ " })
 				.chain(Some(end).into_iter())
 				.join("");
-			offset = child.render(frame, &tree_str, selected, skip, offset, area, depth + 1);
+			offset = child.render(
+				frame,
+				last_child,
+				&tree_str,
+				selected,
+				skip,
+				offset,
+				area,
+				depth + 1,
+			);
 		}
 
 		offset
@@ -211,12 +219,11 @@ impl BuildState {
 
 fn dummy_state() -> State {
 	State {
-		skip: 0,
 		selected: 0,
 		builds: vec![
 			BuildState::with_name("target_1"),
 			BuildState::with_name("target_3"),
-            BuildState::with_name("target_10"),
+			BuildState::with_name("target_10"),
 		],
 	}
 }
@@ -251,48 +258,19 @@ fn get_children(name: &str) -> Vec<BuildState> {
 			BuildState::with_name("target_8"),
 			BuildState::with_name("target_9"),
 		],
-        "target_10" => vec![
+		"target_10" => vec![
 			BuildState::with_name("target_11"),
 			BuildState::with_name("target_12"),
 			BuildState::with_name("target_16"),
 			BuildState::with_name("target_17"),
-        ],
-        "target_12" => vec![
+		],
+		"target_12" => vec![
 			BuildState::with_name("target_13"),
 			BuildState::with_name("target_14"),
-            BuildState::with_name("target_15"),
-        ],
+			BuildState::with_name("target_15"),
+		],
 		_ => vec![],
 	}
-}
-
-fn find_build<'a>(builds: &'a [BuildState], which: usize) -> Option<&'a BuildState> {
-	fn inner<'a>(
-		offset: usize,
-		which: usize,
-		build: &'a BuildState,
-	) -> Result<&'a BuildState, usize> {
-		if offset == which {
-			return Ok(build);
-		}
-		let mut offset = offset + 1;
-		for child in &build.children {
-			match inner(offset, which, child) {
-				Ok(found) => return Ok(found),
-				Err(o) => offset = offset,
-			}
-		}
-		return Err(offset);
-	}
-
-	let mut offset = 0;
-	for build in builds {
-		match inner(offset, which, build) {
-			Ok(found) => return Some(found),
-			Err(o) => offset = o,
-		}
-	}
-	None
 }
 
 fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a mut BuildState> {
@@ -323,3 +301,32 @@ fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a 
 	}
 	None
 }
+
+// fn find_build<'a>(builds: &'a [BuildState], which: usize) -> Option<&'a BuildState> {
+// 	fn inner<'a>(
+// 		offset: usize,
+// 		which: usize,
+// 		build: &'a BuildState,
+// 	) -> Result<&'a BuildState, usize> {
+// 		if offset == which {
+// 			return Ok(build);
+// 		}
+// 		let mut offset = offset + 1;
+// 		for child in &build.children {
+// 			match inner(offset, which, child) {
+// 				Ok(found) => return Ok(found),
+// 				Err(o) => offset = offset,
+// 			}
+// 		}
+// 		return Err(offset);
+// 	}
+
+// 	let mut offset = 0;
+// 	for build in builds {
+// 		match inner(offset, which, build) {
+// 			Ok(found) => return Some(found),
+// 			Err(o) => offset = o,
+// 		}
+// 	}
+// 	None
+// }
