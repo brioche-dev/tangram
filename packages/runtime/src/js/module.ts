@@ -1,5 +1,6 @@
 import { assert } from "./assert.ts";
 import { encoding } from "./syscall.ts";
+import { URL } from "whatwg-url";
 
 export type Module =
 	| { kind: "document"; value: Document }
@@ -28,13 +29,10 @@ export namespace Module {
 		return `tangram://${data}/${module.value.path}`;
 	};
 
-	export let fromUrl = (url: string): Module => {
-		let match = url.match(/^tangram:\/\/(.*)\/(.*)$/);
-		assert(match);
-		let [_, data, _path] = match;
-		assert(data !== undefined);
+	export let fromUrl = (string: string): Module => {
+		let url = new URL(string);
 		return encoding.json.decode(
-			encoding.utf8.decode(encoding.hex.decode(data)),
+			encoding.utf8.decode(encoding.hex.decode(url.host)),
 		) as Module;
 	};
 }
