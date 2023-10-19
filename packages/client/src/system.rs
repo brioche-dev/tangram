@@ -170,6 +170,7 @@ impl std::str::FromStr for Arch {
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		let system = match s {
 			"aarch64" => Arch::Aarch64,
+			"js" => Arch::Js,
 			"x86_64" => Arch::X8664,
 			_ => return_error!(r#"Invalid arch "{s}"."#),
 		};
