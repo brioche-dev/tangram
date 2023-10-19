@@ -1,6 +1,38 @@
 /// <reference lib="es2023" />
 
 declare namespace tg {
+	/** The arguments to a constructor. */
+	export type Args<T extends Value> = Array<
+		Unresolved<Args.MaybeNestedArray<T>>
+	>;
+
+	export namespace Args {
+		export type Mutation<T extends Value = Value> =
+			| { kind: "unset" }
+			| { kind: "set"; value: T }
+			| { kind: "set_if_unset"; value: T }
+			| {
+					kind: "prepend";
+					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+			  }
+			| {
+					kind: "append";
+					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+			  };
+
+		export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
+
+		export type MutationObject<T extends { [key: string]: Value }> = {
+			[K in keyof T]?: MaybeNestedArray<Mutation<T[K]>>;
+		};
+
+		/** Compute the result of applying all arguments supplied to a constructor. */
+		export let apply: <A extends Value, R extends { [key: string]: Value }>(
+			args: Args<A>,
+			map: (arg: A) => Promise<MaybeNestedArray<MutationObject<R>>>
+		) => Promise<Partial<R>>;
+	}
+
 	/** An artifact. */
 	export type Artifact = Directory | File | Symlink;
 
@@ -22,7 +54,7 @@ declare namespace tg {
 
 	export let assert: (
 		condition: unknown,
-		message?: string,
+		message?: string
 	) => asserts condition;
 
 	export let unimplemented: (message?: string) => never;
@@ -87,7 +119,7 @@ declare namespace tg {
 	/** Compute the checksum of the provided bytes. */
 	export let checksum: (
 		algorithm: Checksum.Algorithm,
-		bytes: string | Uint8Array,
+		bytes: string | Uint8Array
 	) => Checksum;
 
 	export type Checksum = string;
@@ -97,7 +129,7 @@ declare namespace tg {
 
 		export let new_: (
 			algorithm: Algorithm,
-			bytes: string | Uint8Array,
+			bytes: string | Uint8Array
 		) => Checksum;
 		export { new_ as new };
 	}
@@ -340,7 +372,7 @@ declare namespace tg {
 
 	/** Resolve all deeply nested promises in an unresolved value. */
 	export let resolve: <T extends Unresolved<Value>>(
-		value: T,
+		value: T
 	) => Promise<Resolved<T>>;
 
 	export type MaybePromise<T> = T | Promise<T>;
@@ -438,23 +470,23 @@ declare namespace tg {
 	/** Create a target. */
 	export function target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
+		R extends Value = Value
 	>(function_: (...args: A) => MaybePromise<R | void>): Target<A, R>;
 	export function target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
+		R extends Value = Value
 	>(...args: Array<Unresolved<Target.Arg>>): Promise<Target<A, R>>;
 
 	/** Create and build a target. */
 	export function build<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
+		R extends Value = Value
 	>(...args: Array<Unresolved<Target.Arg>>): Promise<Target<A, R>>;
 
 	/** A target. */
 	export interface Target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
+		R extends Value = Value
 	> {
 		/** Build this target. */
 		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
@@ -462,14 +494,14 @@ declare namespace tg {
 
 	export class Target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
+		R extends Value = Value
 	> extends globalThis.Function {
 		/** Get a target with an ID. */
 		static withId(id: Target.Id): Target;
 
 		/** Create a target. */
 		static new<A extends Array<Value> = Array<Value>, R extends Value = Value>(
-			arg: (...args: A) => MaybePromise<R | void> | Unresolved<Target.Arg>,
+			arg: (...args: A) => MaybePromise<R | void> | Unresolved<Target.Arg>
 		): Promise<Target<A, R>>;
 
 		/** Check if a value is a `Target`. */
@@ -585,7 +617,7 @@ declare namespace tg {
 
 			/** Assert that a value is a `Template.Component`. */
 			export let assert: (
-				value: unknown,
+				value: unknown
 			) => asserts value is Template.Component;
 		}
 	}

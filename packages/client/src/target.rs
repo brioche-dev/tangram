@@ -28,10 +28,10 @@ pub struct Object {
 	/// The target's name.
 	pub name: Option<String>,
 
-	/// The target's environment variables.
+	/// The target's env.
 	pub env: BTreeMap<String, Value>,
 
-	/// The target's command line arguments.
+	/// The target's args.
 	pub args: Vec<Value>,
 
 	/// If a checksum of the target's output is provided, then the target will have access to the network.

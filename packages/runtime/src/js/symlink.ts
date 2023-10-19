@@ -1,16 +1,14 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Object_ } from "./object.ts";
 import { Relpath, relpath } from "./path.ts";
-import { Unresolved, resolve } from "./resolve.ts";
+import { Unresolved } from "./resolve.ts";
 import { Template, t } from "./template.ts";
-import { MaybeNestedArray, flatten } from "./util.ts";
 
-export let symlink = async (
-	...args: Array<Unresolved<Symlink.Arg>>
-): Promise<Symlink> => {
+export let symlink = async (...args: Args<Symlink.Arg>): Promise<Symlink> => {
 	return await Symlink.new(...args);
 };
 
@@ -25,74 +23,66 @@ export class Symlink {
 		return new Symlink(Object_.Handle.withId(id));
 	}
 
-	static async new(...args: Array<Unresolved<Symlink.Arg>>): Promise<Symlink> {
-		// Get the artifact and path.
-		let { artifact, path } = flatten(
-			await Promise.all(
-				args.map(async function map(unresolvedArg): Promise<
-					MaybeNestedArray<{ artifact?: Artifact; path?: Relpath }>
-				> {
-					let arg = await resolve(unresolvedArg);
-					if (typeof arg === "string") {
-						return { path: relpath(arg) };
-					} else if (Artifact.is(arg)) {
-						return { artifact: arg };
-					} else if (Template.is(arg)) {
-						assert_(arg.components.length <= 2);
-						let [firstComponent, secondComponent] = arg.components;
-						if (
-							typeof firstComponent === "string" &&
-							secondComponent === undefined
-						) {
-							return { path: relpath(firstComponent) };
-						} else if (
-							Artifact.is(firstComponent) &&
-							secondComponent === undefined
-						) {
-							return { artifact: firstComponent };
-						} else if (
-							Artifact.is(firstComponent) &&
-							typeof secondComponent === "string"
-						) {
-							assert_(secondComponent.startsWith("/"));
-							return {
-								artifact: firstComponent,
-								path: relpath(secondComponent.slice(1)),
-							};
-						} else {
-							throw new Error("Invalid template.");
-						}
-					} else if (Symlink.is(arg)) {
+	static async new(...args: Args<Symlink.Arg>): Promise<Symlink> {
+		type Apply = {
+			artifact: Artifact | undefined;
+			path: Array<string> | undefined;
+		};
+		let { artifact, path: path_ } = await Args.apply<Symlink.Arg, Apply>(
+			args,
+			async (arg) => {
+				if (typeof arg === "string") {
+					return { path: { kind: "append" as const, value: arg } };
+				} else if (Artifact.is(arg)) {
+					return { artifact: { kind: "set" as const, value: arg } };
+				} else if (Template.is(arg)) {
+					assert_(arg.components.length <= 2);
+					let [firstComponent, secondComponent] = arg.components;
+					if (
+						typeof firstComponent === "string" &&
+						secondComponent === undefined
+					) {
+						return { path: { kind: "set" as const, value: [firstComponent] } };
+					} else if (
+						Artifact.is(firstComponent) &&
+						secondComponent === undefined
+					) {
 						return {
-							artifact: await arg.artifact(),
-							path: await arg.path(),
+							artifact: { kind: "set" as const, value: firstComponent },
 						};
-					} else if (arg instanceof Array) {
-						return await Promise.all(arg.map(map));
-					} else if (typeof arg === "object") {
+					} else if (
+						Artifact.is(firstComponent) &&
+						typeof secondComponent === "string"
+					) {
+						assert_(secondComponent.startsWith("/"));
 						return {
-							artifact: arg.artifact,
-							path: relpath(arg.path),
+							artifact: { kind: "set" as const, value: firstComponent },
+							path: { kind: "set" as const, value: [secondComponent.slice(1)] },
 						};
 					} else {
-						return unreachable();
+						throw new Error("Invalid template.");
 					}
-				}),
-			),
-		).reduce<{ artifact: Artifact | undefined; path: Relpath }>(
-			(value, { artifact, path }) => {
-				if (artifact !== undefined) {
-					value.artifact = artifact;
-					value.path = path ?? relpath();
+				} else if (Symlink.is(arg)) {
+					return {
+						artifact: { kind: "set" as const, value: await arg.artifact() },
+						path: {
+							kind: "set" as const,
+							value: [(await arg.path()).toString()],
+						},
+					};
+				} else if (typeof arg === "object") {
+					return {
+						artifact: { kind: "set" as const, value: arg.artifact },
+						path: { kind: "set" as const, value: arg.path ? [arg.path] : [] },
+					};
 				} else {
-					value.path = value.path.join(path);
+					return unreachable();
 				}
-				return value;
-			},
-			{ artifact: undefined, path: relpath() },
+			}
 		);
 
 		// Create the target.
+		let path = relpath(...(path_ ?? []));
 		let target;
 		if (artifact !== undefined && !path.isEmpty()) {
 			target = await t`${artifact}/${path.toString()}`;
@@ -105,7 +95,7 @@ export class Symlink {
 		}
 
 		return new Symlink(
-			Object_.Handle.withObject({ kind: "symlink", value: { target } }),
+			Object_.Handle.withObject({ kind: "symlink", value: { target } })
 		);
 	}
 
@@ -168,7 +158,7 @@ export class Symlink {
 	}
 
 	async resolve(
-		from?: Unresolved<Symlink.Arg>,
+		from?: Unresolved<Symlink.Arg>
 	): Promise<Directory | File | undefined> {
 		from = from ? await symlink(from) : undefined;
 		let fromArtifact = await from?.artifact();
@@ -192,7 +182,7 @@ export class Symlink {
 					.parent()
 					.join(path)
 					.toSubpath()
-					.toString(),
+					.toString()
 			);
 		} else if (artifact !== undefined && !path.isEmpty()) {
 			if (!Directory.is(artifact)) {
@@ -206,13 +196,7 @@ export class Symlink {
 }
 
 export namespace Symlink {
-	export type Arg =
-		| string
-		| Artifact
-		| Template
-		| Symlink
-		| Array<Arg>
-		| ArgObject;
+	export type Arg = string | Artifact | Template | Symlink | ArgObject;
 
 	export type ArgObject = {
 		artifact?: Artifact;

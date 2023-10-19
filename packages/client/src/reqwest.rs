@@ -1,8 +1,6 @@
 use crate::{
-	build, id, object, package, target, user, user::Login, value, Client, Handle, Id, Result,
-	Value, WrapErr,
-	artifact, Artifact,
-	Package,
+	artifact, build, id, object, package, target, user, user::Login, value, Artifact, Client,
+	Handle, Id, Package, Result, Value, WrapErr,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -16,7 +14,6 @@ use tokio_util::io::StreamReader;
 use std::{
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
-
 };
 use url::{Host, Url};
 
@@ -82,7 +79,8 @@ impl Reqwest {
 
 impl Handle for Weak<State> {
 	fn upgrade(&self) -> Option<Box<dyn Client>> {
-		todo!()
+		self.upgrade()
+			.map(|state| Box::new(Reqwest { state }) as Box<dyn Client>)
 	}
 }
 
@@ -378,7 +376,8 @@ impl Client for Reqwest {
 		} else if response.status().as_u16() == 404 {
 			Ok(None)
 		} else {
-			Err(response.error_for_status()
+			Err(response
+				.error_for_status()
 				.wrap_err("The response had a non-successful status.")
 				.unwrap_err())
 		}
@@ -416,7 +415,8 @@ impl Client for Reqwest {
 		} else if response.status().as_u16() == 404 {
 			Ok(None)
 		} else {
-			Err(response.error_for_status()
+			Err(response
+				.error_for_status()
 				.wrap_err("The response had a non-successful status.")
 				.unwrap_err())
 		}

@@ -1,14 +1,14 @@
+import { Args, flatten } from "./args.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
+import { MaybePromise, Unresolved } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
-import { MaybeNestedArray, flatten } from "./util.ts";
 import { Value } from "./value.ts";
 
 export let current: Target;
@@ -35,13 +35,11 @@ export function target<
 export function target<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
->(...args: Array<Unresolved<Target.Arg>>): Promise<Target<A, R>>;
+>(...args: Args<Target.Arg>): Promise<Target<A, R>>;
 export function target<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
->(
-	...args: [FunctionArg<A, R>] | Array<Unresolved<Target.Arg>>
-): MaybePromise<Target<A, R>> {
+>(...args: [FunctionArg<A, R>] | Args<Target.Arg>): MaybePromise<Target<A, R>> {
 	if (
 		args.length === 1 &&
 		typeof args[0] === "object" &&
@@ -130,90 +128,134 @@ export class Target<
 	static async new<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
-	>(...args: Array<Unresolved<Target.Arg>>): Promise<Target<A, R>> {
-		let { host, executable, package_, name, env, args_, checksum, unsafe_ } =
-			flatten(
-				await Promise.all(
-					args.map(async function map(
-						unresolvedArg: Unresolved<Target.Arg>,
-					): Promise<
-						MaybeNestedArray<{
-							host?: System;
-							executable?: Template;
-							package_?: Package;
-							name?: string;
-							env?: Record<string, Value>;
-							args_?: Array<Value>;
-							checksum?: Checksum;
-							unsafe_?: boolean;
-						}>
-					> {
-						let arg = await resolve(unresolvedArg);
-						if (Template.Arg.is(arg)) {
-							return {
-								host: (await current.env())["TANGRAM_HOST"] as System,
-								executable: await template("/bin/sh"),
-								args_: ["-c", await template(arg)],
-							};
-						} else if (Target.is(arg)) {
-							return {
-								host: await arg.host(),
-								executable: await arg.executable(),
-								package_: await arg.package(),
-								name: await arg.name_(),
-								env: await arg.env(),
-								args_: await arg.args(),
-								checksum: await arg.checksum(),
-								unsafe_: await arg.unsafe(),
-							};
-						} else if (arg instanceof Array) {
-							return await Promise.all(arg.map(map));
-						} else if (typeof arg === "object") {
-							return {
-								host: arg.host,
-								executable: arg.executable
-									? await template(arg.executable)
-									: undefined,
-								package_: arg.package,
-								name: arg.name,
-								env: arg.env,
-								args_: arg.args,
-								checksum: arg.checksum,
-								unsafe_: arg.unsafe,
-							};
-						} else {
-							return unreachable();
-						}
-					}),
-				),
-			).reduce<{
-				host?: System;
-				executable?: Template;
-				package_?: Package;
-				name?: string;
-				env?: Record<string, Value>;
-				args_?: Array<Value>;
-				checksum?: Checksum;
-				unsafe_?: boolean;
-			}>((a, b) => {
-				return {
-					host: a.host ?? b.host,
-					executable: a.executable ?? b.executable,
-					package_: a.package_ ?? b.package_,
-					name: a.name ?? b.name,
-					env: { ...(a.env ?? {}), ...(b.env ?? {}) },
-					args_: [...(a.args_ ?? []), ...(b.args_ ?? [])],
-					checksum: a.checksum ?? b.checksum,
-					unsafe_: a.unsafe_ ?? b.unsafe_,
+	>(...args: Args<Target.Arg>): Promise<Target<A, R>> {
+		type Apply = {
+			host?: System;
+			executable?: Template;
+			package?: Package | undefined;
+			name?: string | undefined;
+			env?:
+				| Record<string, Value>
+				| Array<Record<string, EnvMutation>>
+				| undefined;
+			args: Array<Value>;
+			checksum?: Checksum | undefined;
+			unsafe?: boolean;
+		};
+		let {
+			host,
+			executable,
+			package: package_,
+			name,
+			env: env_,
+			args: args_,
+			checksum,
+			unsafe: unsafe_,
+		} = await Args.apply<Target.Arg, Apply>(args, async (arg) => {
+			if (Template.Arg.is(arg)) {
+				let host = {
+					kind: "set" as const,
+					value: (await current.env())["TANGRAM_HOST"] as System,
 				};
-			}, {});
+				let executable = {
+					kind: "set" as const,
+					value: await template("/bin/sh"),
+				};
+				let args_ = {
+					kind: "set" as const,
+					value: ["-c", await template(arg)],
+				};
+				return { host, executable, args_ };
+			} else if (Target.is(arg)) {
+				let host = { kind: "set" as const, value: await arg.host() };
+				let executable = {
+					kind: "set" as const,
+					value: await arg.executable(),
+				};
+				let package_ = { kind: "set" as const, value: await arg.package() };
+				let name = { kind: "set" as const, value: await arg.name_() };
+				let env = { kind: "set" as const, value: await arg.env() };
+				let args_ = { kind: "set" as const, value: await arg.args() };
+				let checksum = { kind: "set" as const, value: await arg.checksum() };
+				let unsafe = { kind: "set" as const, value: await arg.unsafe() };
+				return {
+					host,
+					executable,
+					package: package_,
+					name,
+					env,
+					args_,
+					checksum,
+					unsafe,
+				};
+			} else if (typeof arg === "object") {
+				let object: Args.MutationObject<Apply> = {};
+				if ("host" in arg) {
+					object.host = {
+						kind: "set" as const,
+						value: arg.host,
+					};
+				}
+				if ("executable" in arg) {
+					object.executable = {
+						kind: "set" as const,
+						value: await template(arg.executable),
+					};
+				}
+				if ("package" in arg) {
+					object.package = {
+						kind: "set" as const,
+						value: arg.package,
+					};
+				}
+				if ("name" in arg) {
+					object.name = {
+						kind: "set" as const,
+						value: arg.name,
+					};
+				}
+				if ("env" in arg) {
+					object.env =
+						arg.env === undefined
+							? { kind: "unset" }
+							: {
+									kind: "append" as const,
+									value: arg.env,
+							  };
+				}
+				if ("args" in arg) {
+					object.args = {
+						kind: "append" as const,
+						value: arg.args,
+					};
+				}
+				if ("checksum" in arg) {
+					object.checksum = {
+						kind: "set" as const,
+						value: arg.checksum,
+					};
+				}
+				if ("unsafe" in arg) {
+					object.unsafe = {
+						kind: "set" as const,
+						value: arg.unsafe,
+					};
+				}
+				return object;
+			} else {
+				return unreachable();
+			}
+		});
 		if (!host) {
 			throw new Error("Cannot create a target without a host.");
 		}
 		if (!executable) {
 			throw new Error("Cannot create a target without an executable.");
 		}
-		env ??= {};
+		let env =
+			env_ && env_ instanceof Array
+				? await processEnvMutations({}, ...(env_ ?? []))
+				: env_ ?? {};
 		args_ ??= [];
 		unsafe_ ??= false;
 		return new Target(
@@ -300,16 +342,16 @@ export class Target<
 }
 
 export namespace Target {
-	export type Arg = Template.Arg | Target | Array<Arg> | ArgObject;
+	export type Arg = Template.Arg | Target | ArgObject;
 
 	export type ArgObject = {
 		host?: System;
 		executable?: Template.Arg;
-		package?: Package;
-		name?: string;
-		env?: Record<string, Value>;
+		package?: Package | undefined;
+		name?: string | undefined;
+		env?: Record<string, EnvMutation> | undefined;
 		args?: Array<Value>;
-		checksum?: Checksum;
+		checksum?: Checksum | undefined;
 		unsafe?: boolean;
 	};
 
@@ -326,3 +368,76 @@ export namespace Target {
 		unsafe: boolean;
 	};
 }
+
+type EnvMutation =
+	| Template.Arg
+	| { kind: "unset" }
+	| { kind: "set"; value: Template.Arg }
+	| { kind: "set_if_unset"; value: Template.Arg }
+	| {
+			kind: "append";
+			value: Args.MaybeNestedArray<Template.Arg>;
+			separator?: Template.Arg;
+	  }
+	| {
+			kind: "prepend";
+			value: Args.MaybeNestedArray<Template.Arg>;
+			separator?: Template.Arg;
+	  };
+
+/** Collect a list of env mutations into a single environment. */
+let processEnvMutations = async (
+	init: Record<string, Value>,
+	...args: Array<Record<string, EnvMutation>>
+): Promise<Record<string, Value>> => {
+	let env = { ...init };
+	for (let arg of args) {
+		// Apply mutations for a single argument.
+		for (let [key, mutation] of Object.entries(arg)) {
+			await mutateEnv(env, key, mutation);
+		}
+	}
+	return env;
+};
+
+/** Mutate an env object in-place. */
+let mutateEnv = async (
+	env: Record<string, Value>,
+	key: string,
+	mutation: EnvMutation,
+) => {
+	if (Template.Arg.is(mutation)) {
+		mutation = { kind: "set", value: mutation };
+	}
+	if (mutation.kind === "unset") {
+		delete env[key];
+	} else if (mutation.kind === "set") {
+		env[key] = mutation.value;
+	} else if (mutation.kind === "set_if_unset") {
+		if (!(key in env)) {
+			env[key] = mutation.value;
+		}
+	} else if (mutation.kind === "append") {
+		if (!(key in env)) {
+			env[key] = await template();
+		}
+		let t = env[key];
+		assert_(Template.Arg.is(t));
+		env[key] = await Template.join(
+			mutation.separator ?? "",
+			t,
+			...flatten(mutation.value),
+		);
+	} else if (mutation.kind === "prepend") {
+		if (!(key in env)) {
+			env[key] = await template();
+		}
+		let t = env[key];
+		assert_(Template.Arg.is(t));
+		env[key] = await Template.join(
+			mutation.separator ?? "",
+			...flatten(mutation.value),
+			t,
+		);
+	}
+};

@@ -1,5 +1,6 @@
 {
 	"compilerOptions": {
+		"exactOptionalPropertyTypes": true,
 		"lib": ["esnext"],
 		"module": "commonjs",
 		"noEmit": true,

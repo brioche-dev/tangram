@@ -1,14 +1,14 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
-import { Unresolved, resolve } from "./resolve.ts";
-import { MaybeNestedArray, flatten } from "./util.ts";
+import { Unresolved } from "./resolve.ts";
 
 export let t = async (
 	strings: TemplateStringsArray,
-	...placeholders: Array<Unresolved<Template.Arg>>
+	...placeholders: Args<Template.Arg>
 ): Promise<Template> => {
 	// Collect the strings and placeholders.
-	let components: Array<Unresolved<Template.Arg>> = [];
+	let components: Args<Template.Arg> = [];
 	for (let i = 0; i < strings.length - 1; i++) {
 		let string = strings[i]!;
 		components.push(string);
@@ -19,9 +19,7 @@ export let t = async (
 	return await template(...components);
 };
 
-export let template = (
-	...args: Array<Unresolved<Template.Arg>>
-): Promise<Template> => {
+export let template = (...args: Args<Template.Arg>): Promise<Template> => {
 	return Template.new(...args);
 };
 
@@ -32,36 +30,29 @@ export class Template {
 		this.#components = components;
 	}
 
-	static async new(
-		...args: Array<Unresolved<Template.Arg>>
-	): Promise<Template> {
-		// Collect the components.
-		let components = flatten(
-			await Promise.all(
-				args.map(async function map(arg): Promise<
-					MaybeNestedArray<Template.Component>
-				> {
-					arg = await resolve(arg);
-					if (arg === undefined) {
-						return [];
-					} else if (Template.Component.is(arg)) {
-						return arg;
-					} else if (Template.is(arg)) {
-						return arg.components;
-					} else if (arg instanceof Array) {
-						return await Promise.all(arg.map(map));
-					} else {
-						return unreachable();
-					}
-				}),
-			),
-		).reduce<Array<Template.Component>>((components, component) => {
-			components.push(component);
-			return components;
-		}, []);
+	static async new(...args: Args<Template.Arg>): Promise<Template> {
+		type Apply = {
+			components: Array<Template.Component>;
+		};
+		let { components } = await Args.apply<Template.Arg, Apply>(
+			args,
+			async (arg) => {
+				if (arg === undefined) {
+					return {};
+				} else if (Template.Component.is(arg)) {
+					return { components: { kind: "append" as const, value: arg } };
+				} else if (Template.is(arg)) {
+					return {
+						components: { kind: "append" as const, value: arg.components },
+					};
+				} else {
+					return unreachable();
+				}
+			}
+		);
 
 		// Normalize the components.
-		components = components.reduce<Array<Template.Component>>(
+		components = (components ?? []).reduce<Array<Template.Component>>(
 			(components, component) => {
 				let lastComponent = components.at(-1);
 				if (component === "") {
@@ -77,7 +68,7 @@ export class Template {
 				}
 				return components;
 			},
-			[],
+			[]
 		);
 
 		return new Template(components);
