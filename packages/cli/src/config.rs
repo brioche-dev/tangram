@@ -1,5 +1,8 @@
-use crate::{util::dirs::user_config_directory_path, Cli, Result, WrapErr};
+use crate::{util::dirs::user_config_directory_path, Cli};
 use std::path::{Path, PathBuf};
+use tangram_client as tg;
+use tangram_client::Wrap;
+use tg::{Result, WrapErr};
 use url::Url;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -28,7 +31,7 @@ impl Cli {
 		let config = match tokio::fs::read(&path).await {
 			Ok(config) => config,
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-			Err(error) => return Err(error.into()),
+			Err(error) => return Err(error.wrap("Failed to read the config.")),
 		};
 		let config =
 			serde_json::from_slice(&config).wrap_err("Failed to deserialize the config.")?;
@@ -40,7 +43,7 @@ impl Cli {
 	}
 
 	pub async fn write_config_to_path(path: &Path, config: &Config) -> Result<()> {
-		let bytes = serde_json::to_vec(config)?;
+		let bytes = serde_json::to_vec(config).wrap_err("Failed to serialize the config.")?;
 		tokio::fs::write(&path, &bytes).await.wrap_err_with(|| {
 			let path = path.display();
 			format!(r#"Failed to write the config to "{path}"."#)

@@ -17,7 +17,7 @@ export class Error {
 	}
 }
 
-type Location = { file: string; line: number; column: number };
+type Location = { source: string; line: number; column: number };
 
 export let prepareStackTrace = (
 	_error: unknown,

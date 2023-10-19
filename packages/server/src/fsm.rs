@@ -1,3 +1,4 @@
+use crate::{bad_request, empty, full, Incoming, Outgoing, Server, State, WrapErr};
 use futures::TryStreamExt;
 use lmdb::Transaction;
 use std::{
@@ -6,9 +7,8 @@ use std::{
 	sync::Weak,
 };
 use tangram_client::{self as tg, error, return_error, Result};
+use tg::Wrap;
 use tokio::io::AsyncReadExt;
-
-use crate::{bad_request, empty, full, Incoming, Outgoing, Server, State};
 
 #[derive(Debug)]
 pub struct Fsm {
@@ -172,7 +172,7 @@ impl Server {
 			artifact: Some(artifact),
 			package: None,
 		});
-		self.put_tracker(path.into(), tracker).await
+		self.put_tracker(path, tracker).await
 	}
 
 	pub async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<tg::Package>> {
@@ -192,16 +192,21 @@ impl Server {
 			artifact: None,
 			package: Some(package),
 		});
-		self.put_tracker(path.into(), tracker).await
+		self.put_tracker(path, tracker).await
 	}
 
 	// Attempt to retrieve a tracker for a given path. If the mtimes mistmatch, clear the tracker.
 	fn get_or_clear_tracker(&self, path: &Path, mtime: u128) -> Result<Option<Tracker>> {
 		let tracker: Option<Tracker> = {
-			let txn = self.state.database.env.begin_ro_txn()?;
+			let txn = self
+				.state
+				.database
+				.env
+				.begin_ro_txn()
+				.wrap_err("Failed to begin the transaction.")?;
 			let key = canonicalize(path);
 			match txn.get(self.state.database.trackers, &key) {
-				Ok(data) => Some(serde_json::from_slice(data)?),
+				Ok(data) => Some(serde_json::from_slice(data).wrap_err("Failed to deserialize.")?),
 				Err(lmdb::Error::NotFound) => None,
 				Err(e) => return Err(e.into()),
 			}
@@ -229,11 +234,17 @@ impl Server {
 			.unwrap()
 			.sender
 			.send(path.into())
-			.await?;
+			.await
+			.unwrap();
 
 		// Add the tracker to the database
 		{
-			let mut txn = self.state.database.env.begin_rw_txn()?;
+			let mut txn = self
+				.state
+				.database
+				.env
+				.begin_rw_txn()
+				.wrap_err("Failed to begin the transaction.")?;
 			let key = canonicalize(path);
 			let data = serde_json::to_vec(&tracker)?;
 			txn.put(
@@ -242,7 +253,7 @@ impl Server {
 				&data,
 				lmdb::WriteFlags::empty(),
 			)?;
-			txn.commit()?;
+			txn.commit().wrap_err("Failed to commit the transaction.")?;
 		}
 
 		// Update the notifier.
@@ -255,20 +266,25 @@ impl Server {
 
 	fn delete_tracker(&self, path: &Path) -> Result<()> {
 		tracing::debug!(?path, "Removing tracker.");
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self
+			.state
+			.database
+			.env
+			.begin_rw_txn()
+			.wrap_err("Failed to begin the transaction.")?;
 		let mut path = path.to_owned();
 		loop {
 			let key = canonicalize(path.as_ref());
 			match txn.del(self.state.database.trackers, &key, None) {
-				Err(e) if e == lmdb::Error::NotFound => break,
-				Err(e) => return Err(e.into()),
+				Err(error) if error == lmdb::Error::NotFound => break,
+				Err(error) => return Err(error.wrap("Failed to delete the tracker.")),
 				_ => (),
 			}
 			if !path.pop() {
 				break;
 			}
 		}
-		txn.commit()?;
+		txn.commit().wrap_err("Failed to commit the transaction.")?;
 		Ok(())
 	}
 }
@@ -318,9 +334,12 @@ impl Fsm {
 }
 
 async fn get_mtime(path: &Path) -> Result<u128> {
-	let metadata = tokio::fs::symlink_metadata(path).await?;
+	let metadata = tokio::fs::symlink_metadata(path)
+		.await
+		.wrap_err("Failed to get the symlink metadata.")?;
 	let mtime = metadata
-		.modified()?
+		.modified()
+		.wrap_err("Failed to get the last modification time.")?
 		.duration_since(std::time::UNIX_EPOCH)
 		.unwrap()
 		.as_micros();

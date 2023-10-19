@@ -1,15 +1,13 @@
-use std::{
-	collections::{BTreeMap, HashMap},
-	sync::{Arc, Weak},
-};
-
-use num::ToPrimitive;
-
 use super::{
 	ops::set_client_id::CallbackClient,
 	types::{StateId, NFS4_VERIFIER_SIZE},
 };
 use crate::{blob, Directory, File, Symlink};
+use num::ToPrimitive;
+use std::{
+	collections::{BTreeMap, HashMap},
+	sync::{Arc, Weak},
+};
 
 #[derive(Clone)]
 pub struct State {

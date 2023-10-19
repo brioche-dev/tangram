@@ -1,6 +1,6 @@
 use crate::{
-	blob, directory, file, object, package, return_error, symlink, target, template, Blob, Client,
-	Directory, File, Package, Result, Symlink, Target, Template,
+	blob, directory, error, file, object, package, symlink, target, template, Blob, Client,
+	Directory, File, Package, Result, Symlink, Target, Template, WrapErr,
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
@@ -192,17 +192,19 @@ impl Value {
 impl Data {
 	pub fn serialize(&self) -> Result<Vec<u8>> {
 		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
-		tangram_serialize::to_writer(self, &mut bytes)?;
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
+			.wrap_err("Failed to write the version.")?;
+		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
 		Ok(bytes)
 	}
 
 	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		let version =
+			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
 		if version != 0 {
-			return_error!(r#"Cannot deserialize with version "{version}"."#);
+			return Err(error!(r#"Cannot deserialize with version "{version}"."#));
 		}
-		let value = tangram_serialize::from_reader(bytes)?;
+		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
 		Ok(value)
 	}
 

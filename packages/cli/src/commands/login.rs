@@ -1,5 +1,7 @@
-use crate::{credentials::Credentials, return_error, Cli, Result, WrapErr};
+use crate::{credentials::Credentials, Cli};
 use std::time::{Duration, Instant};
+use tangram_client as tg;
+use tg::{return_error, Result, WrapErr};
 
 /// Log in to Tangram.
 #[derive(Debug, clap::Args)]
@@ -16,7 +18,8 @@ impl Cli {
 			.wrap_err("Failed to create the login.")?;
 
 		// Open the browser to the login URL.
-		webbrowser::open(login.url.as_ref())?;
+		webbrowser::open(login.url.as_ref())
+			.wrap_err("Failed to open the browser to the login URL.")?;
 		eprintln!("To log in, please open your browser to:\n\n{}\n", login.url);
 
 		// Poll.

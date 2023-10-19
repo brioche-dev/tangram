@@ -1,4 +1,4 @@
-use crate::{blob, id, object, return_error, value, Blob, Client, Result, Value, WrapErr};
+use crate::{blob, id, object, return_error, value, Blob, Client, Error, Result, Value, WrapErr};
 use bytes::Bytes;
 use futures::{
 	stream::{self, BoxStream},
@@ -17,7 +17,7 @@ pub struct Build(object::Handle);
 pub struct Object {
 	pub children: Vec<Build>,
 	pub log: Blob,
-	pub result: Result<Value>,
+	pub result: Result<Value, Error>,
 }
 
 #[derive(
@@ -36,7 +36,7 @@ pub struct Data {
 	pub log: blob::Id,
 
 	#[tangram_serialize(id = 2)]
-	pub result: Result<value::Data>,
+	pub result: Result<value::Data, Error>,
 }
 
 impl Build {
@@ -45,7 +45,7 @@ impl Build {
 		id: Id,
 		children: Vec<Build>,
 		log: Blob,
-		result: Result<Value>,
+		result: Result<Value, Error>,
 	) -> Result<Self> {
 		// Create the object.
 		let object = Object {
@@ -145,13 +145,16 @@ impl Build {
 		}
 	}
 
-	pub async fn result(&self, client: &dyn Client) -> Result<Result<Value>> {
+	pub async fn result(&self, client: &dyn Client) -> Result<Result<Value, Error>> {
 		self.try_get_result(client)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	pub async fn try_get_result(&self, client: &dyn Client) -> Result<Option<Result<Value>>> {
+	pub async fn try_get_result(
+		&self,
+		client: &dyn Client,
+	) -> Result<Option<Result<Value, Error>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.result.clone()))
 		} else {
@@ -217,17 +220,19 @@ impl Object {
 impl Data {
 	pub fn serialize(&self) -> Result<Vec<u8>> {
 		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
-		tangram_serialize::to_writer(self, &mut bytes)?;
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
+			.wrap_err("Failed to write the version.")?;
+		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
 		Ok(bytes)
 	}
 
 	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		let version =
+			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
 		if version != 0 {
 			return_error!(r#"Cannot deserialize with version "{version}"."#);
 		}
-		let value = tangram_serialize::from_reader(bytes)?;
+		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
 		Ok(value)
 	}
 

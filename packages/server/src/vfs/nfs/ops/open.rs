@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
-use tokio::sync::RwLock;
-
 use crate::vfs::nfs::{
 	server::{Context, Server},
 	state::NodeKind,
 	types::*,
 	xdr::{FromXdr, ToXdr},
 };
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
 pub struct Arg {

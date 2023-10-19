@@ -69,8 +69,12 @@ impl Document {
 
 		// Set the state to unopened if it is not present.
 		if !documents.contains_key(&document) {
-			let metadata = tokio::fs::metadata(&path).await?;
-			let modified = metadata.modified()?;
+			let metadata = tokio::fs::metadata(&path)
+				.await
+				.wrap_err("Failed to get the metadata.")?;
+			let modified = metadata
+				.modified()
+				.wrap_err("Failed to get the last modification time.")?;
 			let state = State::Closed(Closed {
 				version: 0,
 				modified,
@@ -86,7 +90,10 @@ impl Document {
 		let mut found = false;
 		let mut package_path = path.to_owned();
 		while package_path.pop() {
-			if tokio::fs::try_exists(&package_path.join(ROOT_MODULE_FILE_NAME)).await? {
+			if tokio::fs::try_exists(&package_path.join(ROOT_MODULE_FILE_NAME))
+				.await
+				.wrap_err("Failed to determine if the path exists.")?
+			{
 				found = true;
 				break;
 			}
@@ -187,8 +194,12 @@ impl Document {
 
 		let version = match state {
 			State::Closed(closed) => {
-				let metadata = tokio::fs::metadata(self.path()).await?;
-				let modified = metadata.modified()?;
+				let metadata = tokio::fs::metadata(self.path())
+					.await
+					.wrap_err("Failed to get the metadata.")?;
+				let modified = metadata
+					.modified()
+					.wrap_err("Failed to get the last modification time.")?;
 				if modified > closed.modified {
 					closed.modified = modified;
 					closed.version += 1;
@@ -207,7 +218,9 @@ impl Document {
 		let documents = store.0.read().await;
 		let document = documents.get(self).unwrap();
 		let text = match document {
-			State::Closed(_) => tokio::fs::read_to_string(&path).await?,
+			State::Closed(_) => tokio::fs::read_to_string(&path)
+				.await
+				.wrap_err("Failed to read the file.")?,
 			State::Opened(opened) => opened.text.clone(),
 		};
 		Ok(text)

@@ -1,4 +1,6 @@
-use crate::{return_error, Cli, Result};
+use crate::Cli;
+use tangram_client as tg;
+use tg::{return_error, Result};
 
 /// Check for outdated dependencies.
 #[derive(Debug, clap::Args)]

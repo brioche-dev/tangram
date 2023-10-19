@@ -1,7 +1,6 @@
+use super::types::NFS4ERR_IO;
 use num::ToPrimitive;
 use std::{io::IoSlice, str::Utf8Error};
-
-use super::types::NFS4ERR_IO;
 
 pub struct Encoder<W> {
 	output: W,

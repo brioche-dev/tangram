@@ -1,7 +1,8 @@
 use super::{PackageArgs, RunArgs};
-use crate::{util::dirs::home_directory_path, Cli, Result, WrapErr};
+use crate::{util::dirs::home_directory_path, Cli};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_client as tg;
+use tg::{Result, Wrap, WrapErr};
 
 /// Build the specified target from a package and execute a command from its output.
 #[derive(Debug, clap::Args)]
@@ -90,6 +91,6 @@ impl Cli {
 		Err(std::process::Command::new(executable_path)
 			.args(args.trailing_args)
 			.exec()
-			.into())
+			.wrap("Failed to execute the command."))
 	}
 }

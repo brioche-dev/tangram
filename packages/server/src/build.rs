@@ -9,8 +9,9 @@ use http_body_util::StreamBody;
 use lmdb::Transaction;
 use std::sync::Arc;
 use tangram_client as tg;
-use tg::{build, system, target, Blob, Build, Result, Target, Value, WrapErr};
-use tg::{return_error, Client};
+use tg::{
+	build, return_error, system, target, Blob, Build, Client, Result, Target, Value, Wrap, WrapErr,
+};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -200,11 +201,16 @@ impl Server {
 	/// Attempt to get the build for the target from the database.
 	fn try_get_build_for_target_from_database(&self, id: target::Id) -> Result<Option<build::Id>> {
 		// Get the build for the target from the database.
-		let txn = self.state.database.env.begin_ro_txn()?;
+		let txn = self
+			.state
+			.database
+			.env
+			.begin_ro_txn()
+			.wrap_err("Failed to begin the transaction.")?;
 		match txn.get(self.state.database.assignments, &id.as_bytes()) {
 			Ok(build_id) => Ok(Some(build_id.try_into().wrap_err("Invalid ID.")?)),
 			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => Err(error.into()),
+			Err(error) => Err(error.wrap("Failed to get the assignment.")),
 		}
 	}
 
@@ -300,7 +306,12 @@ impl Server {
 		let _build = progress.finish(self).await?;
 
 		// Create a write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self
+			.state
+			.database
+			.env
+			.begin_rw_txn()
+			.wrap_err("Failed to begin the transaction.")?;
 
 		// Set the build for the target.
 		txn.put(
@@ -308,10 +319,11 @@ impl Server {
 			&target_id.as_bytes(),
 			&build_id.as_bytes(),
 			lmdb::WriteFlags::empty(),
-		)?;
+		)
+		.wrap_err("Failed to store the item.")?;
 
 		// Commit the transaction.
-		txn.commit()?;
+		txn.commit().wrap_err("Failed to commit the transaction.")?;
 
 		// Remove the state of the running build.
 		self.state.running.write().unwrap().1.remove(&build_id);
@@ -435,7 +447,9 @@ impl Progress {
 
 		// Create the log state.
 		let log = Arc::new(tokio::sync::Mutex::new(LogState {
-			file: tokio::fs::File::from_std(tempfile::tempfile()?),
+			file: tokio::fs::File::from_std(
+				tempfile::tempfile().wrap_err("Failed to create the temporary file.")?,
+			),
 			sender: Some(tokio::sync::broadcast::channel(1024).0),
 		}));
 
@@ -447,8 +461,14 @@ impl Progress {
 			async move {
 				while let Some(bytes) = receiver.recv().await {
 					let mut log = log.lock().await;
-					log.file.seek(std::io::SeekFrom::End(0)).await?;
-					log.file.write_all(&bytes).await?;
+					log.file
+						.seek(std::io::SeekFrom::End(0))
+						.await
+						.wrap_err("Failed to seek.")?;
+					log.file
+						.write_all(&bytes)
+						.await
+						.wrap_err("Failed to write the log.")?;
 					log.sender.as_ref().unwrap().send(bytes).ok();
 				}
 				Ok(())
@@ -476,7 +496,7 @@ impl Progress {
 		let old = stream::iter(state.children.clone()).map(Ok);
 		let new = if let Some(sender) = state.sender.as_ref() {
 			BroadcastStream::new(sender.subscribe())
-				.map_err(Into::into)
+				.map_err(|err| err.wrap("Failed to create the stream."))
 				.boxed()
 		} else {
 			stream::empty().boxed()
@@ -486,14 +506,23 @@ impl Progress {
 
 	pub async fn log_stream(&self) -> Result<BoxStream<'static, Result<Bytes>>> {
 		let mut log = self.state.log.lock().await;
-		log.file.rewind().await?;
+		log.file
+			.rewind()
+			.await
+			.wrap_err("Failed to rewind the log file.")?;
 		let mut old = Vec::new();
-		log.file.read_to_end(&mut old).await?;
+		log.file
+			.read_to_end(&mut old)
+			.await
+			.wrap_err("Failed to read the log.")?;
 		let old = stream::once(async move { Ok(old.into()) });
-		log.file.seek(std::io::SeekFrom::End(0)).await?;
+		log.file
+			.seek(std::io::SeekFrom::End(0))
+			.await
+			.wrap_err("Failed to seek in the log file.")?;
 		let new = if let Some(sender) = log.sender.as_ref() {
 			BroadcastStream::new(sender.subscribe())
-				.map_err(Into::into)
+				.map_err(|err| err.wrap("Failed to create the stream."))
 				.boxed()
 		} else {
 			stream::empty().boxed()
@@ -528,7 +557,7 @@ impl Progress {
 		// Get the log.
 		let log = {
 			let mut state = self.state.log.lock().await;
-			state.file.rewind().await?;
+			state.file.rewind().await.wrap_err("Failed to seek.")?;
 			Blob::with_reader(client, &mut state.file).await?
 		};
 

@@ -7,7 +7,7 @@
 use self::commands::Args;
 use clap::Parser;
 use tangram_client as tg;
-use tg::error::{error, return_error, Result, WrapErr};
+use tg::{error, Result};
 use tracing_subscriber::prelude::*;
 
 mod commands;

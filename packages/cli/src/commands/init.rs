@@ -1,6 +1,8 @@
-use crate::{return_error, Cli, Result, WrapErr};
+use crate::Cli;
 use indoc::formatdoc;
 use std::path::PathBuf;
+use tangram_client as tg;
+use tg::{return_error, Result, Wrap, WrapErr};
 
 /// Initialize a new package.
 #[derive(Debug, clap::Args)]
@@ -30,7 +32,7 @@ impl Cli {
 					format!(r#"Failed to create the directory at "{path}"."#)
 				})?;
 			},
-			Err(error) => return Err(error.into()),
+			Err(error) => return Err(error.wrap("Failed to get the metadata for the path.")),
 		};
 
 		// Define the files to generate.
@@ -46,7 +48,9 @@ impl Cli {
 
 		// Write the files.
 		for (path, contents) in files {
-			tokio::fs::write(&path, &contents).await?;
+			tokio::fs::write(&path, &contents)
+				.await
+				.wrap_err("Failed to write the file.")?;
 		}
 
 		Ok(())

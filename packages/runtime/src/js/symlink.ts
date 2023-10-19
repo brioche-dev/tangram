@@ -6,7 +6,7 @@ import { File } from "./file.ts";
 import { Object_ } from "./object.ts";
 import { Relpath, relpath } from "./path.ts";
 import { Unresolved } from "./resolve.ts";
-import { Template, t } from "./template.ts";
+import { Template, template } from "./template.ts";
 
 export let symlink = async (...args: Args<Symlink.Arg>): Promise<Symlink> => {
 	return await Symlink.new(...args);
@@ -88,11 +88,11 @@ export class Symlink {
 		let path = relpath(...(path_ ?? []));
 		let target;
 		if (artifact !== undefined && !path.isEmpty()) {
-			target = await t`${artifact}/${path.toString()}`;
+			target = await template(artifact, "/", path.toString());
 		} else if (artifact !== undefined) {
-			target = await t`${artifact}`;
+			target = await template(artifact);
 		} else if (!path.isEmpty()) {
-			target = await t`${path.toString()}`;
+			target = await template(path.toString());
 		} else {
 			throw new Error("Invalid symlink.");
 		}

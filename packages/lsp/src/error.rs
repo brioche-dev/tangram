@@ -1,8 +1,8 @@
 use super::SOURCE_MAP;
 use num::ToPrimitive;
 use sourcemap::SourceMap;
+use std::sync::Arc;
 use tangram_client as tg;
-use tg::{error, Error};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +31,7 @@ struct V8CallSite {
 
 pub(super) fn to_exception<'s>(
 	scope: &mut v8::HandleScope<'s>,
-	error: &Error,
+	error: &tg::Error,
 ) -> v8::Local<'s, v8::Value> {
 	let context = scope.get_current_context();
 	let global = context.global(scope);
@@ -53,7 +53,7 @@ pub(super) fn to_exception<'s>(
 pub(super) fn from_exception<'s>(
 	scope: &mut v8::HandleScope<'s>,
 	exception: v8::Local<'s, v8::Value>,
-) -> Error {
+) -> tg::Error {
 	let context = scope.get_current_context();
 	let global = context.global(scope);
 	let lsp = v8::String::new_external_onebyte_static(scope, "lsp".as_bytes()).unwrap();
@@ -108,17 +108,27 @@ pub(super) fn from_exception<'s>(
 		.then(|| exception.to_object(scope).unwrap())
 		.and_then(|exception| exception.get(scope, cause_string.into()))
 		.and_then(|value| value.to_object(scope))
-		.map(|cause| from_exception(scope, cause.into()));
+		.map(|cause| from_exception(scope, cause.into()))
+		.map(|error| Arc::new(error) as _);
 
 	// Create the error.
-	Error::new(message, location, stack, source)
+	tg::Error {
+		message,
+		location,
+		stack,
+		source,
+	}
 }
 
-fn get_location(line: u32, column: u32) -> error::Location {
+fn get_location(line: u32, column: u32) -> tg::error::Location {
 	let source_map = SourceMap::from_slice(SOURCE_MAP).unwrap();
 	let token = source_map.lookup_token(line, column).unwrap();
-	let file = token.get_source().unwrap().to_owned();
+	let source = token.get_source().unwrap().to_owned();
 	let line = token.get_src_line();
 	let column = token.get_src_col();
-	error::Location { file, line, column }
+	tg::error::Location {
+		source,
+		line,
+		column,
+	}
 }

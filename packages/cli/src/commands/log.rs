@@ -1,7 +1,8 @@
-use crate::{return_error, Cli, Result};
+use crate::Cli;
 use bytes::Bytes;
 use futures::TryStreamExt;
 use tangram_client as tg;
+use tg::{return_error, Result, WrapErr};
 use tokio::io::AsyncBufReadExt;
 
 /// Get the log for a build.
@@ -30,7 +31,11 @@ impl Cli {
 				std::io::Error::new(std::io::ErrorKind::Other, error.to_string())
 			}));
 		let mut lines = log.lines();
-		while let Some(line) = lines.next_line().await? {
+		while let Some(line) = lines
+			.next_line()
+			.await
+			.wrap_err("Failed to get the next line in the stream.")?
+		{
 			println!("{line}");
 		}
 

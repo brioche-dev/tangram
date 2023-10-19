@@ -1,4 +1,6 @@
-use crate::{Cli, Result};
+use crate::Cli;
+use tangram_client as tg;
+use tg::{Result, WrapErr};
 
 /// Upgrade to the latest version of tangram.
 #[derive(Debug, clap::Args)]
@@ -11,7 +13,8 @@ impl Cli {
 		tokio::process::Command::new("/bin/sh")
 			.args(["-c", "curl -sSL https://www.tangram.dev/install.sh | sh"])
 			.status()
-			.await?;
+			.await
+			.wrap_err("Failed to run the installer.")?;
 		Ok(())
 	}
 }

@@ -90,7 +90,7 @@ impl std::str::FromStr for Id {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		use hex::FromHex;
-		let bytes = <_>::from_hex(s)?;
+		let bytes = <_>::from_hex(s).wrap_err("Failed to convert from hex.")?;
 		let id = Self::with_bytes(bytes)?;
 		Ok(id)
 	}
@@ -128,7 +128,11 @@ impl TryFrom<&[u8]> for Id {
 	type Error = Error;
 
 	fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-		Self::with_bytes(value.try_into()?)
+		Self::with_bytes(
+			value
+				.try_into()
+				.wrap_err("Failed to convert the slice to fixed size array.")?,
+		)
 	}
 }
 

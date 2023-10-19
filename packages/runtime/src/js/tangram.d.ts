@@ -1,5 +1,13 @@
 /// <reference lib="es2023" />
 
+/**
+ * Create a Tangram template with a JavaScript tagged template.
+ */
+declare function tg(
+	strings: TemplateStringsArray,
+	...placeholders: tg.Args<tg.Template.Arg>
+): Promise<tg.Template>;
+
 declare namespace tg {
 	/** The arguments to a constructor. */
 	export type Args<T extends Value> = Array<
@@ -654,14 +662,6 @@ declare namespace tg {
 		export let assert: (value: unknown) => asserts value is Value;
 	}
 }
-
-/**
- * Create a Tangram template with a JavaScript tagged template.
- */
-declare let t: (
-	strings: TemplateStringsArray,
-	...placeholders: Array<tg.Unresolved<tg.Template.Arg>>
-) => Promise<tg.Template>;
 
 declare let console: {
 	/** Write to the log. */

@@ -75,11 +75,11 @@ impl Package {
 	/// Create a package from a path.
 	#[async_recursion]
 	pub async fn with_path(client: &dyn Client, package_path: &Path) -> Result<Self> {
-		if client.is_local() {
-			if let Some(package) = client.try_get_package_for_path(package_path).await? {
-				return Ok(package);
-			}
-		}
+		// if client.is_local() {
+		// 	if let Some(package) = client.try_get_package_for_path(package_path).await? {
+		// 		return Ok(package);
+		// 	}
+		// }
 
 		// Create a builder for the directory.
 		let mut directory = directory::Builder::default();
@@ -199,11 +199,11 @@ impl Package {
 			dependencies,
 		});
 
-		if client.is_local() {
-			client
-				.set_package_for_path(package_path, package.clone())
-				.await?;
-		}
+		// if client.is_local() {
+		// 	client
+		// 		.set_package_for_path(package_path, package.clone())
+		// 		.await?;
+		// }
 
 		Ok(package)
 	}
@@ -271,17 +271,19 @@ impl Object {
 impl Data {
 	pub fn serialize(&self) -> Result<Vec<u8>> {
 		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
-		tangram_serialize::to_writer(self, &mut bytes)?;
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
+			.wrap_err("Failed to write the version.")?;
+		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
 		Ok(bytes)
 	}
 
 	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		let version =
+			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
 		if version != 0 {
 			return_error!(r#"Cannot deserialize with version "{version}"."#);
 		}
-		let value = tangram_serialize::from_reader(bytes)?;
+		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
 		Ok(value)
 	}
 
@@ -368,7 +370,7 @@ pub mod dependency {
 
 pub mod specifier {
 	use super::dependency;
-	use crate::{Error, Result};
+	use crate::{Error, Result, WrapErr};
 	use std::path::PathBuf;
 
 	/// A reference to a package, either at a path or from the registry.
@@ -428,7 +430,7 @@ pub mod specifier {
 		fn from_str(value: &str) -> Result<Specifier> {
 			if value.starts_with('/') || value.starts_with('.') {
 				// If the string starts with `/` or `.`, then parse the string as a path.
-				let specifier = value.parse()?;
+				let specifier = value.parse().wrap_err("Failed to parse the specifier.")?;
 				Ok(Specifier::Path(specifier))
 			} else {
 				// Otherwise, parse the string as a registry specifier.

@@ -3,7 +3,7 @@ use super::{
 	State,
 };
 use num::ToPrimitive;
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 use tangram_client as tg;
 use tg::{error, Error, Module};
 
@@ -104,10 +104,16 @@ pub(super) fn from_exception<'s>(
 		.then(|| exception.to_object(scope).unwrap())
 		.and_then(|exception| exception.get(scope, cause_string.into()))
 		.and_then(|value| value.to_object(scope))
-		.map(|cause| from_exception(state, scope, cause.into()));
+		.map(|cause| from_exception(state, scope, cause.into()))
+		.map(|error| Arc::new(error) as _);
 
 	// Create the error.
-	Error::new(message, location, stack, source)
+	Error {
+		message,
+		location,
+		stack,
+		source,
+	}
 }
 
 fn get_location(
@@ -119,16 +125,20 @@ fn get_location(
 	if file.map_or(false, |resource_name| resource_name == "[runtime]") {
 		if let Some(global_source_map) = state.global_source_map.as_ref() {
 			let token = global_source_map.lookup_token(line, column).unwrap();
-			let file = token.get_source().unwrap().to_owned();
+			let source = token.get_source().unwrap().to_owned();
 			let line = token.get_src_line();
 			let column = token.get_src_col();
-			Some(error::Location { file, line, column })
+			Some(error::Location {
+				source,
+				line,
+				column,
+			})
 		} else {
 			None
 		}
 	} else if let Some(module) = file.and_then(|resource_name| Module::from_str(resource_name).ok())
 	{
-		let file = module.to_string();
+		let source = module.to_string();
 		let modules = state.loaded_modules.borrow();
 		let (line, column) = if let Some(source_map) = modules
 			.iter()
@@ -140,7 +150,11 @@ fn get_location(
 		} else {
 			(line, column)
 		};
-		Some(error::Location { file, line, column })
+		Some(error::Location {
+			source,
+			line,
+			column,
+		})
 	} else {
 		None
 	}

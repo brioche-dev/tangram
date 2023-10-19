@@ -1,5 +1,7 @@
-use crate::{Cli, Result, WrapErr};
+use crate::Cli;
 use std::path::PathBuf;
+use tangram_client as tg;
+use tg::{Result, WrapErr};
 
 /// Create a new package.
 #[derive(Debug, clap::Args)]

@@ -1,5 +1,7 @@
-use crate::{return_error, Cli, Result};
+use crate::Cli;
 use std::path::PathBuf;
+use tangram_client as tg;
+use tg::{return_error, Result};
 
 /// Update a package's dependencies.
 #[derive(Debug, clap::Args)]

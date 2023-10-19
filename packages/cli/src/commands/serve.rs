@@ -1,8 +1,10 @@
-use crate::{util::dirs::home_directory_path, Cli, Result, WrapErr, API_URL};
+use crate::{util::dirs::home_directory_path, Cli, API_URL};
 use std::{
 	net::{IpAddr, SocketAddr},
 	path::PathBuf,
 };
+use tangram_client as tg;
+use tg::{Result, WrapErr};
 
 /// Run a server.
 #[derive(Debug, clap::Args)]

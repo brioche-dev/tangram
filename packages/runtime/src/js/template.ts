@@ -3,22 +3,6 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Unresolved } from "./resolve.ts";
 
-export let t = async (
-	strings: TemplateStringsArray,
-	...placeholders: Args<Template.Arg>
-): Promise<Template> => {
-	// Collect the strings and placeholders.
-	let components: Args<Template.Arg> = [];
-	for (let i = 0; i < strings.length - 1; i++) {
-		let string = strings[i]!;
-		components.push(string);
-		let placeholder = placeholders[i]!;
-		components.push(placeholder);
-	}
-	components.push(strings[strings.length - 1]!);
-	return await template(...components);
-};
-
 export let template = (...args: Args<Template.Arg>): Promise<Template> => {
 	return Template.new(...args);
 };

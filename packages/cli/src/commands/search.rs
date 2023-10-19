@@ -1,4 +1,6 @@
-use crate::{Cli, Result};
+use crate::Cli;
+use tangram_client as tg;
+use tg::Result;
 
 /// Search for packages.
 #[derive(Debug, clap::Args)]

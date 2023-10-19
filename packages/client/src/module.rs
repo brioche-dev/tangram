@@ -3,8 +3,8 @@ pub use self::{
 	position::Position, range::Range,
 };
 use crate::{
-	error::{return_error, Error, Result, WrapErr},
-	package, Subpath,
+	error::{return_error, Result, WrapErr},
+	package, Error, Subpath,
 };
 use derive_more::{TryUnwrap, Unwrap};
 use url::Url;
@@ -123,7 +123,7 @@ impl std::str::FromStr for Module {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let url: Url = s.parse()?;
+		let url: Url = s.parse().wrap_err("Failed to parse the URL.")?;
 		let module = url.try_into()?;
 		Ok(module)
 	}

@@ -15,13 +15,12 @@ use std::{
 };
 use tangram_client as tg;
 use tg::{Result, WrapErr};
-use fsm::Fsm;
 
 mod build;
 mod clean;
+// mod fsm;
 mod migrations;
 mod object;
-mod fsm;
 // mod vfs;
 
 /// A server.
@@ -45,6 +44,9 @@ struct State {
 	/// A semaphore that prevents opening too many file descriptors.
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 
+	/// The file system monitor task.
+	// fsm_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+
 	/// A local pool for running JS builds.
 	local_pool: tokio_util::task::LocalPoolHandle,
 
@@ -56,10 +58,8 @@ struct State {
 
 	/// The state of the server's running builds.
 	running: std::sync::RwLock<(BuildForTargetMap, BuildProgressMap)>,
-	//
-	// /// The VFS server task.
-	// vfs_server_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
-	fsm: tokio::sync::RwLock<Option<Fsm>>,
+	// /// The VFS task.
+	// vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
 
 type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, tg::id::BuildHasher>;
@@ -71,13 +71,15 @@ struct Database {
 	env: lmdb::Environment,
 	objects: lmdb::Database,
 	assignments: lmdb::Database,
-	trackers: lmdb::Database,
+	_trackers: lmdb::Database,
 }
 
 impl Server {
 	pub async fn new(path: PathBuf, parent: Option<Box<dyn tg::Client>>) -> Result<Server> {
 		// Ensure the path exists.
-		tokio::fs::create_dir_all(&path).await?;
+		tokio::fs::create_dir_all(&path)
+			.await
+			.wrap_err("Failed to create the directory.")?;
 
 		// Migrate the path.
 		Self::migrate(&path).await?;
@@ -89,10 +91,18 @@ impl Server {
 		env_builder.set_max_dbs(3);
 		env_builder.set_max_readers(1024);
 		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
-		let env = env_builder.open(&database_path)?;
-		let objects = env.open_db(Some("objects"))?;
-		let assignments = env.open_db(Some("assignments"))?;
-		let trackers = env.open_db(Some("trackers"))?;
+		let env = env_builder
+			.open(&database_path)
+			.wrap_err("Failed to open an environment.")?;
+		let objects = env
+			.open_db(Some("objects"))
+			.wrap_err("Failed to open the objects database.")?;
+		let assignments = env
+			.open_db(Some("assignments"))
+			.wrap_err("Failed to open the assignments database.")?;
+		let trackers = env
+			.open_db(Some("trackers"))
+			.wrap_err("Failed to open the trackers datatabse.")?;
 
 		delete_directory_trackers(&env, trackers)?;
 
@@ -100,11 +110,14 @@ impl Server {
 			env,
 			objects,
 			assignments,
-			trackers,
+			_trackers: trackers,
 		};
 
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
+
+		// Create the FSM task.
+		// let fsm_task = tokio::sync::Mutex::new(None);
 
 		// Create the local pool for running JS builds.
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
@@ -114,9 +127,8 @@ impl Server {
 		// Create the state of the server's running builds.
 		let running = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
 
-		// Create the VFS server task.
-		// let vfs_server_task = std::sync::Mutex::new(None);
-		let fsm = tokio::sync::RwLock::new(None);
+		// Create the VFS task.
+		// let vfs_task = std::sync::Mutex::new(None);
 
 		// Create the state.
 		let state = Arc::new(State {
@@ -126,26 +138,23 @@ impl Server {
 			parent,
 			path,
 			running,
-			// vfs_server_task,
-			fsm,
+			// vfs_task,
 		});
 
 		// Create the server.
-
 		let server = Server { state };
-		let fsm = Fsm::new(Arc::downgrade(&server.state))?;
-		server.state.fsm.write().await.replace(fsm);
+
+		// // Start the FSM server.
+		// let fsm = Fsm::new(Arc::downgrade(&server.state))?;
+		// server.state.fsm.write().await.replace(fsm);
 
 		// // Start the VFS server.
-		// let kind = if cfg!(target_os = "linux") {
-		// 	vfs::Kind::Fuse
-		// } else {
-		// 	vfs::Kind::Nfs(2049)
-		// };
-		// let task = vfs::Server::new(kind, server.clone())
+		// let vfs = vfs::Server::new(&server);
+		// let task = vfs
 		// 	.mount(server.artifacts_path())
-		// 	.await?;
-		// server.state.vfs_server_task.lock().unwrap().replace(task);
+		// 	.await
+		// 	.wrap_err("Failed to mount the VFS.")?;
+		// server.state.vfs_task.lock().unwrap().replace(task);
 
 		Ok(server)
 	}
@@ -176,10 +185,15 @@ impl Server {
 	}
 
 	pub async fn serve(self, addr: SocketAddr) -> Result<()> {
-		let listener = tokio::net::TcpListener::bind(&addr).await?;
+		let listener = tokio::net::TcpListener::bind(&addr)
+			.await
+			.wrap_err("Failed to create a new tcp listener.")?;
 		tracing::info!("🚀 Serving on {}.", addr);
 		loop {
-			let (stream, _) = listener.accept().await?;
+			let (stream, _) = listener
+				.accept()
+				.await
+				.wrap_err("Failed to accept new incoming connections.")?;
 			let stream = hyper_util::rt::TokioIo::new(stream);
 			let server = self.clone();
 			tokio::spawn(async move {
@@ -237,17 +251,14 @@ impl Server {
 				.handle_try_get_build_result_request(request)
 				.map(Some)
 				.boxed(),
-			(http::Method::GET, ["v1", _, "path"]) => {
-				self.handle_get_object_for_path_request(request)
-					.map(Some)
-					.boxed()
-			},
-			(http::Method::PUT, ["v1", _, "path"]) => {
-				self.handle_put_object_for_path_request(request)
-					.map(Some)
-					.boxed()
-			},
-
+			// (http::Method::GET, ["v1", _, "path"]) => self
+			// 	.handle_get_object_for_path_request(request)
+			// 	.map(Some)
+			// 	.boxed(),
+			// (http::Method::PUT, ["v1", _, "path"]) => self
+			// 	.handle_put_object_for_path_request(request)
+			// 	.map(Some)
+			// 	.boxed(),
 			(_, _) => future::ready(None).boxed(),
 		}
 		.await;
@@ -282,7 +293,7 @@ impl tg::Client for Server {
 		Box::new(self.clone())
 	}
 
-	fn downgrade(&self) -> Box<dyn tg::Handle> {
+	fn downgrade_box(&self) -> Box<dyn tg::Handle> {
 		Box::new(Handle {
 			state: Arc::downgrade(&self.state),
 		})
@@ -461,8 +472,12 @@ pub fn not_found() -> http::Response<Outgoing> {
 
 fn delete_directory_trackers(env: &lmdb::Environment, trackers: lmdb::Database) -> Result<()> {
 	let paths = {
-		let txn = env.begin_ro_txn()?;
-		let mut cursor = txn.open_ro_cursor(trackers)?;
+		let txn = env
+			.begin_ro_txn()
+			.wrap_err("Failed to begin the transaction.")?;
+		let mut cursor = txn
+			.open_ro_cursor(trackers)
+			.wrap_err("Failed to open the cursor.")?;
 		cursor
 			.iter()
 			.filter_map(|entry| {
@@ -473,11 +488,13 @@ fn delete_directory_trackers(env: &lmdb::Environment, trackers: lmdb::Database) 
 			.collect::<Vec<_>>()
 	};
 
-	let mut txn = env.begin_rw_txn()?;
+	let mut txn = env
+		.begin_rw_txn()
+		.wrap_err("Failed to begin the transaction.")?;
 	for path in paths {
 		let key = path.as_os_str().as_bytes();
 		let _ = txn.del(trackers, &key, None);
 	}
-	txn.commit()?;
+	txn.commit().wrap_err("Failed to commit the transaction.")?;
 	Ok(())
 }

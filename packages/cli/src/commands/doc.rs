@@ -1,6 +1,7 @@
 use super::PackageArgs;
-use crate::{Cli, Result, WrapErr};
+use crate::Cli;
 use tangram_client as tg;
+use tg::{Result, WrapErr};
 
 /// Print the docs for a package.
 #[derive(Debug, clap::Args)]
@@ -21,8 +22,10 @@ impl Cli {
 			.wrap_err("Failed to get the package.")?;
 
 		// Create the language server.
-		let server =
-			tangram_lsp::Server::new(self.client.downgrade(), tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(
+			self.client.downgrade_box(),
+			tokio::runtime::Handle::current(),
+		);
 
 		// Get the docs.
 		let docs = server
@@ -30,7 +33,7 @@ impl Cli {
 			.await?;
 
 		// Render the docs to JSON.
-		let json = serde_json::to_string_pretty(&docs)?;
+		let json = serde_json::to_string_pretty(&docs).wrap_err("Failed to serialize to json.")?;
 
 		// Print the docs.
 		println!("{json}");

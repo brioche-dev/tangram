@@ -1,5 +1,6 @@
-use crate::{return_error, Cli, Result};
+use crate::Cli;
 use tangram_client as tg;
+use tg::{return_error, Result};
 
 /// Remove a dependency from a package.
 #[derive(Debug, clap::Args)]

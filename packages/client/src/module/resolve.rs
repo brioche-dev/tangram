@@ -1,5 +1,6 @@
 use super::{document, Document, Import, Library, Module, Normal};
 use crate::{
+	error,
 	package::{Dependency, ROOT_MODULE_FILE_NAME},
 	return_error, Client, Package, Result, WrapErr,
 };
@@ -26,9 +27,9 @@ impl Module {
 				Ok(Self::Library(Library { path }))
 			},
 
-			(Self::Library(_), Import::Dependency(_)) => {
-				return_error!(r#"Cannot resolve a dependency import from a library module."#);
-			},
+			(Self::Library(_), Import::Dependency(_)) => Err(error!(
+				r#"Cannot resolve a dependency import from a library module."#
+			)),
 
 			(Self::Document(document), Import::Path(path)) => {
 				// Resolve the module path.
@@ -44,7 +45,9 @@ impl Module {
 
 				// Ensure that the module exists.
 				let module_path = package_path.join(module_subpath.to_string());
-				let exists = tokio::fs::try_exists(&module_path).await?;
+				let exists = tokio::fs::try_exists(&module_path)
+					.await
+					.wrap_err("Failed to determine if the path exists.")?;
 				if !exists {
 					let path = module_path.display();
 					return_error!(r#"Could not find a module at path "{path}"."#);
@@ -69,7 +72,9 @@ impl Module {
 					.parent()
 					.join(dependency_path.clone());
 				let package_path = document.package_path.join(dependency_path.to_string());
-				let package_path = tokio::fs::canonicalize(package_path).await?;
+				let package_path = tokio::fs::canonicalize(package_path)
+					.await
+					.wrap_err("Failed to canonicalize the path.")?;
 
 				// The module path is the root module.
 				let module_path = ROOT_MODULE_FILE_NAME.parse().unwrap();

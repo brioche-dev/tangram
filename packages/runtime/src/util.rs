@@ -1,6 +1,6 @@
 use std::path::Path;
 use tangram_client as tg;
-use tg::{template, Artifact, Client, Result, Value};
+use tg::{template, Artifact, Client, Result, Value, WrapErr};
 
 /// Render a value.
 pub async fn render(value: &Value, client: &dyn Client, artifacts_path: &Path) -> Result<String> {
@@ -35,7 +35,7 @@ pub async fn render(value: &Value, client: &dyn Client, artifacts_path: &Path) -
 	let data = value.data(client).await?;
 
 	// Render the data.
-	let string = serde_json::to_string(&data)?;
+	let string = serde_json::to_string(&data).wrap_err("Failed to serialize the value.")?;
 
 	Ok(string)
 }

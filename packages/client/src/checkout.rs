@@ -15,7 +15,10 @@ impl Artifact {
 			.wrap_err("Failed to bundle the artifact.")?;
 
 		// Check in an existing artifact at the path.
-		let existing_artifact = if tokio::fs::try_exists(path).await? {
+		let existing_artifact = if tokio::fs::try_exists(path)
+			.await
+			.wrap_err("Failed to determine if the path exists.")?
+		{
 			Some(Self::check_in(client, path).await?)
 		} else {
 			None
@@ -109,11 +112,15 @@ impl Artifact {
 			// If there is an existing artifact at the path and it is not a directory, then remove it, create a directory, and continue.
 			Some(_) => {
 				crate::util::rmrf(path).await?;
-				tokio::fs::create_dir_all(path).await?;
+				tokio::fs::create_dir_all(path)
+					.await
+					.wrap_err("Failed to create the directory.")?;
 			},
 			// If there is no artifact at this path, then create a directory.
 			None => {
-				tokio::fs::create_dir_all(path).await?;
+				tokio::fs::create_dir_all(path)
+					.await
+					.wrap_err("Failed to create the directory.")?;
 			},
 		}
 
@@ -171,7 +178,9 @@ impl Artifact {
 		let permit = client.file_descriptor_semaphore().acquire().await;
 		tokio::io::copy(
 			&mut file.contents(client).await?.reader(client).await?,
-			&mut tokio::fs::File::create(path).await?,
+			&mut tokio::fs::File::create(path)
+				.await
+				.wrap_err("Failed to create the file.")?,
 		)
 		.await
 		.wrap_err("Failed to copy the blob.")?;
@@ -180,7 +189,9 @@ impl Artifact {
 		// Make the file executable if necessary.
 		if file.executable(client).await? {
 			let permissions = std::fs::Permissions::from_mode(0o755);
-			tokio::fs::set_permissions(path, permissions).await?;
+			tokio::fs::set_permissions(path, permissions)
+				.await
+				.wrap_err("Failed to set the permissions.")?;
 		}
 
 		// Check that the file has no references.
@@ -223,7 +234,9 @@ impl Artifact {
 			.await?;
 
 		// Create the symlink.
-		tokio::fs::symlink(target, path).await?;
+		tokio::fs::symlink(target, path)
+			.await
+			.wrap_err("Failed to create the symlink")?;
 
 		Ok(())
 	}

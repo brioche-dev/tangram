@@ -1,11 +1,10 @@
-use num::ToPrimitive;
-
 use crate::vfs::nfs::{
 	server::{Context, Server},
 	state::NodeKind,
 	types::*,
 	xdr::{FromXdr, ToXdr},
 };
+use num::ToPrimitive;
 
 #[derive(Debug, Clone)]
 pub struct Arg {

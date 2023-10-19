@@ -481,7 +481,7 @@ where
 
 impl ToV8 for serde_json::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Into::into)
+		serde_v8::to_v8(scope, self).wrap_err("Failed to serialize the value.")
 	}
 }
 
@@ -490,13 +490,13 @@ impl FromV8 for serde_json::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Into::into)
+		serde_v8::from_v8(scope, value).wrap_err("Failed to deserialize the value.")
 	}
 }
 
 impl ToV8 for serde_toml::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Into::into)
+		serde_v8::to_v8(scope, self).wrap_err("Failed to serialize the value.")
 	}
 }
 
@@ -505,13 +505,13 @@ impl FromV8 for serde_toml::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Into::into)
+		serde_v8::from_v8(scope, value).wrap_err("Failed to deserialize the value.")
 	}
 }
 
 impl ToV8 for serde_yaml::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		serde_v8::to_v8(scope, self).map_err(Into::into)
+		serde_v8::to_v8(scope, self).wrap_err("Failed to serialize the value.")
 	}
 }
 
@@ -520,7 +520,7 @@ impl FromV8 for serde_yaml::Value {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		serde_v8::from_v8(scope, value).map_err(Into::into)
+		serde_v8::from_v8(scope, value).wrap_err("Failed to deserialize the value.")
 	}
 }
 
@@ -1629,14 +1629,16 @@ impl ToV8 for Error {
 		let error = tg.get(scope, error.into()).unwrap();
 		let error = v8::Local::<v8::Function>::try_from(error).unwrap();
 
-		let message = self.message().to_v8(scope)?;
-		let location = self.location().to_v8(scope)?;
-		let stack = self.stack().to_v8(scope)?;
-		let source = self.source().to_v8(scope)?;
-		Ok(error
+		let message = self.message.to_v8(scope)?;
+		let location = self.location.to_v8(scope)?;
+		let stack = self.stack.to_v8(scope)?;
+		let source = self.source.to_v8(scope)?;
+
+		let instance = error
 			.new_instance(scope, &[message, location, stack, source])
-			.unwrap()
-			.into())
+			.unwrap();
+
+		Ok(instance.into())
 	}
 }
 
@@ -1675,9 +1677,14 @@ impl FromV8 for Error {
 
 		let source = v8::String::new_external_onebyte_static(scope, "source".as_bytes()).unwrap();
 		let source = value.get(scope, source.into()).unwrap();
-		let source = from_v8(scope, source)?;
+		let source = from_v8::<Option<Error>>(scope, source)?.map(|error| Arc::new(error) as _);
 
-		Ok(Error::new(message, location, stack, source))
+		Ok(Error {
+			message,
+			location,
+			stack,
+			source,
+		})
 	}
 }
 
@@ -1685,8 +1692,8 @@ impl ToV8 for error::Location {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
-		let key = v8::String::new_external_onebyte_static(scope, "file".as_bytes()).unwrap();
-		let value = self.file.to_v8(scope)?;
+		let key = v8::String::new_external_onebyte_static(scope, "source".as_bytes()).unwrap();
+		let value = self.source.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "line".as_bytes()).unwrap();
@@ -1708,9 +1715,9 @@ impl FromV8 for error::Location {
 	) -> Result<Self> {
 		let value = value.to_object(scope).unwrap();
 
-		let file = v8::String::new_external_onebyte_static(scope, "file".as_bytes()).unwrap();
-		let file = value.get(scope, file.into()).unwrap();
-		let file = from_v8(scope, file)?;
+		let source = v8::String::new_external_onebyte_static(scope, "source".as_bytes()).unwrap();
+		let source = value.get(scope, source.into()).unwrap();
+		let source = from_v8(scope, source)?;
 
 		let line = v8::String::new_external_onebyte_static(scope, "line".as_bytes()).unwrap();
 		let line = value.get(scope, line.into()).unwrap();
@@ -1720,7 +1727,11 @@ impl FromV8 for error::Location {
 		let column = value.get(scope, column.into()).unwrap();
 		let column = from_v8(scope, column)?;
 
-		Ok(Self { file, line, column })
+		Ok(Self {
+			source,
+			line,
+			column,
+		})
 	}
 }
 

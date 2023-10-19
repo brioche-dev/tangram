@@ -1,1 +1,4 @@
-export default tg.target(() => tg.build(t`echo "Hello, World!" > $OUTPUT`));
+import { x } from "./other.tg";
+
+// export default tg.target(() => tg.build(t`echo "Hello, World!" > $OUTPUT`));
+export default tg.target(() => x);

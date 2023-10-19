@@ -31,11 +31,11 @@ impl Artifact {
 		path: &Path,
 		options: &Options,
 	) -> Result<Self> {
-		if client.is_local() {
-			if let Some(artifact) = client.try_get_artifact_for_path(path).await? {
-				return Ok(artifact);
-			}
-		}
+		// if client.is_local() {
+		// 	if let Some(artifact) = client.try_get_artifact_for_path(path).await? {
+		// 		return Ok(artifact);
+		// 	}
+		// }
 
 		// Get the metadata for the file system object at the path.
 		let metadata = tokio::fs::symlink_metadata(path).await.wrap_err_with(|| {
@@ -69,9 +69,9 @@ impl Artifact {
 			return_error!("The path must point to a directory, file, or symlink.")
 		};
 
-		if client.is_local() {
-			client.set_artifact_for_path(path, artifact.clone()).await?;
-		}
+		// if client.is_local() {
+		// 	client.set_artifact_for_path(path, artifact.clone()).await?;
+		// }
 
 		Ok(artifact)
 	}
@@ -89,7 +89,11 @@ impl Artifact {
 				.await
 				.wrap_err("Failed to read the directory.")?;
 			let mut names = Vec::new();
-			while let Some(entry) = read_dir.next_entry().await? {
+			while let Some(entry) = read_dir
+				.next_entry()
+				.await
+				.wrap_err("Failed to get the directory entry.")?
+			{
 				let name = entry
 					.file_name()
 					.to_str()

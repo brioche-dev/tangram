@@ -7,10 +7,12 @@ use std::{
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 };
+use tangram_client as tg;
 use tangram_client::{
 	artifact::Artifact, blob, directory::Directory, file::File, symlink::Symlink, template, Client,
-	Error, Result, Template, WrapErr,
+	Result, Template, WrapErr,
 };
+use tg::Wrap;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -19,7 +21,7 @@ mod sys;
 /// A FUSE server.
 #[derive(Clone)]
 pub struct Server {
-	client: Client,
+	client: Arc<dyn Client>,
 	state: Arc<tokio::sync::RwLock<State>>,
 }
 
@@ -118,7 +120,8 @@ enum Response {
 
 impl Server {
 	/// Create a server.
-	pub fn new(client: Client) -> Self {
+	pub fn new(client: &dyn tg::Client) -> Self {
+		let client = Arc::from(client.clone_box());
 		let root = Arc::new_cyclic(|root| Node {
 			id: ROOT_NODE_ID,
 			parent: root.clone(),
@@ -134,8 +137,7 @@ impl Server {
 	}
 
 	/// Serve.
-	#[allow(clippy::too_many_lines)]
-	pub fn serve(self, mut fuse_file: std::fs::File) -> Result<()> {
+	pub fn serve(&self, mut fuse_file: std::fs::File) -> Result<()> {
 		// Create a buffer to read requests into.
 		let mut request_buffer = vec![0u8; 1024 * 1024 + 4096];
 
@@ -154,7 +156,7 @@ impl Server {
 					Some(libc::ENODEV) => return Ok(()),
 
 					// Otherwise, return the error.
-					_ => return Err(error.into()),
+					_ => return Err(error.wrap("Failed to read the request.")),
 				},
 			};
 			let request_bytes = &request_buffer[..request_size];
@@ -164,10 +166,6 @@ impl Server {
 				.wrap_err("Failed to deserialize the request header.")?;
 			let request_header_len = std::mem::size_of::<sys::fuse_in_header>();
 			let request_data = &request_bytes[request_header_len..];
-			tracing::info!(
-				"FUSE request: {} ({request_size} bytes)",
-				request_header.opcode
-			);
 			let request_data = match request_header.opcode {
 				sys::fuse_opcode::FUSE_DESTROY => {
 					break;
@@ -200,7 +198,9 @@ impl Server {
 			};
 
 			// Spawn a task to handle the request.
-			let mut fuse_file = fuse_file.try_clone()?;
+			let mut fuse_file = fuse_file
+				.try_clone()
+				.wrap_err("Failed to clone the FUSE file.")?;
 			let server = self.clone();
 			tokio::spawn(async move {
 				// Handle the request and get the response.
@@ -375,7 +375,6 @@ impl Server {
 		// Create the file handle.
 		let file_handle_data = match &node.kind {
 			NodeKind::Root { .. } => {
-				tracing::error!("Cannot open the root directory.");
 				return Err(libc::EPERM);
 			},
 			NodeKind::Directory { .. } => FileHandleData::Directory,
@@ -385,7 +384,6 @@ impl Server {
 					.await
 					.map_err(|_| libc::EIO)?;
 				let Ok(reader) = contents.reader(self.client.as_ref()).await else {
-					tracing::error!("Failed to create reader!");
 					return Err(libc::EIO);
 				};
 				FileHandleData::File { reader }
@@ -650,10 +648,10 @@ impl Server {
 			},
 
 			NodeKind::Directory { directory, .. } => {
-				let entries = directory.entries(self.client.as_ref()).await.map_err(|e| {
-					tracing::error!(?e, "Failed to get directory entries.");
-					libc::EIO
-				})?;
+				let entries = directory
+					.entries(self.client.as_ref())
+					.await
+					.map_err(|_| libc::EIO)?;
 				entries.get(name).ok_or(libc::ENOENT)?.clone()
 			},
 
@@ -741,6 +739,14 @@ impl Node {
 		}
 	}
 
+	fn depth(&self) -> usize {
+		if self.id == ROOT_NODE_ID {
+			0
+		} else {
+			1 + self.parent.upgrade().unwrap().depth()
+		}
+	}
+
 	async fn fuse_entry_out(&self, client: &dyn Client) -> Result<sys::fuse_entry_out, i32> {
 		let nodeid = self.id.0;
 		let attr_out = self.fuse_attr_out(client).await?;
@@ -795,19 +801,9 @@ pub async fn mount(mountpoint: PathBuf) -> crate::Result<std::fs::File> {
 	unmount(&mountpoint).await?;
 	let result = unsafe { mount_inner(&mountpoint) };
 	if result.is_err() {
-		let _ = unmount(&mountpoint).await;
+		unmount(&mountpoint).await?;
 	}
 	result
-}
-
-async fn unmount(mountpoint: &Path) -> crate::Result<()> {
-	tokio::process::Command::new("fusermount3")
-		.arg("-q")
-		.arg("-u")
-		.arg(mountpoint)
-		.status()
-		.await?;
-	Ok(())
 }
 
 unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
@@ -818,10 +814,9 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 		format!("rootmode=40755,user_id={uid},group_id={gid},default_permissions,auto_unmount\0");
 
 	let mut fds = [0, 0];
-	let ec = libc::socketpair(libc::PF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr());
-	if ec != 0 {
-		tracing::error!("socketpair() failed.");
-		Err(std::io::Error::last_os_error())?;
+	let ret = libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr());
+	if ret != 0 {
+		Err(std::io::Error::last_os_error()).wrap_err("Failed to create the socket pair.")?;
 	}
 
 	let fusermount3 = std::ffi::CString::new("/usr/bin/fusermount3").unwrap();
@@ -830,10 +825,9 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 	// Fork.
 	let pid = libc::fork();
 	if pid == -1 {
-		tracing::error!("fork() failed.");
 		libc::close(fds[0]);
 		libc::close(fds[1]);
-		Err(std::io::Error::last_os_error())?;
+		Err(std::io::Error::last_os_error()).wrap_err("Failed to fork.")?;
 	}
 
 	// Exec the program.
@@ -860,7 +854,6 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 	}
 	libc::close(fds[0]);
 
-	// RECVFD
 	// Create the control message.
 	let mut control = [0u8; unsafe { libc::CMSG_SPACE(4) as usize }];
 	let mut msg = libc::msghdr {
@@ -877,15 +870,15 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 		msg_flags: 0,
 	};
 
-	// Receive the message.
-	tracing::info!("Calling recvmsg");
+	// Receive the control message.
 	let ret = libc::recvmsg(fds[1], std::ptr::addr_of_mut!(msg), 0);
 	if ret == -1 {
-		return Err(std::io::Error::last_os_error().into());
+		return Err(std::io::Error::last_os_error().wrap("Failed to receive the message."));
 	}
 	if ret == 0 {
 		return Err(
-			std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF.").into(),
+			std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF.")
+				.wrap("Unexpected EOF."),
 		);
 	}
 
@@ -893,7 +886,8 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 	let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
 	if cmsg.is_null() {
 		return Err(
-			std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF.").into(),
+			std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF.")
+				.wrap("Unexpected EOF."),
 		);
 	}
 	let mut fd: std::os::unix::io::RawFd = 0;
@@ -902,7 +896,6 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 		libc::CMSG_DATA(cmsg).cast(),
 		std::mem::size_of_val(&fd),
 	);
-	tracing::info!("Got /dev/fuse fd: {fd}");
 
 	if fd > 0 {
 		libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
@@ -911,12 +904,13 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 	Ok(std::fs::File::from_raw_fd(fd))
 }
 
-impl Node {
-	fn depth(self: &Arc<Self>) -> usize {
-		if self.id == ROOT_NODE_ID {
-			0
-		} else {
-			1 + self.parent.upgrade().unwrap().depth()
-		}
-	}
+async fn unmount(mountpoint: &Path) -> crate::Result<()> {
+	tokio::process::Command::new("fusermount3")
+		.arg("-q")
+		.arg("-u")
+		.arg(mountpoint)
+		.status()
+		.await
+		.wrap_err("Failed to execute the unmount command.")?;
+	Ok(())
 }

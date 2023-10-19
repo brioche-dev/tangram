@@ -1,4 +1,4 @@
-use crate::{return_error, Error, Result};
+use crate::{return_error, Error};
 
 #[derive(
 	Clone,
@@ -75,7 +75,7 @@ impl System {
 		}
 	}
 
-	pub fn host() -> Result<System> {
+	pub fn host() -> Result<System, Error> {
 		let host = if false {
 			unreachable!()
 		} else if cfg!(all(target_arch = "aarch64", target_os = "linux")) {

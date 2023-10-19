@@ -3,6 +3,7 @@ pub mod dirs {
 
 	use crate::{error, Result};
 	use std::path::PathBuf;
+	use tangram_client::Wrap;
 
 	#[must_use]
 	pub fn global_config_directory_path() -> PathBuf {
@@ -31,7 +32,7 @@ pub mod dirs {
 	pub fn home_directory_path() -> Result<PathBuf> {
 		#[cfg(any(target_os = "linux", target_os = "macos"))]
 		return match std::env::var("HOME") {
-			Err(error) => Err(error.into()),
+			Err(error) => Err(error.wrap("Failed to get the home directory path.")),
 			Ok(value) if value.is_empty() => {
 				Err(error!(r#"The "HOME" environment variable is not set."#))
 			},

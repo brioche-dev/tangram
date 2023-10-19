@@ -1,5 +1,6 @@
-use crate::{Cli, Result};
+use crate::Cli;
 use tangram_client as tg;
+use tg::Result;
 
 /// Get an object.
 #[derive(Debug, clap::Args)]

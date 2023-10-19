@@ -9,7 +9,9 @@ use std::{
 	path::{Path, PathBuf},
 };
 use tangram_client as tg;
-use tg::{return_error, system::Arch, Artifact, Client, Error, Result, Target, Value, WrapErr};
+use tg::{
+	return_error, system::Arch, Artifact, Client, Error, Result, Target, Value, Wrap, WrapErr,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// The home directory guest path.
@@ -73,7 +75,8 @@ pub async fn run_inner(
 	let server_directory_guest_path = PathBuf::from(SERVER_DIRECTORY_GUEST_PATH);
 
 	// Create a tempdir for the root.
-	let root_directory_tempdir = tempfile::TempDir::new_in(server_directory_host_path.join("tmp"))?;
+	let root_directory_tempdir = tempfile::TempDir::new_in(server_directory_host_path.join("tmp"))
+		.wrap_err("Failed to create temporary directory.")?;
 	let root_directory_host_path = root_directory_tempdir.path().to_owned();
 	tokio::fs::create_dir_all(&root_directory_host_path)
 		.await
@@ -87,27 +90,36 @@ pub async fn run_inner(
 		Arch::X8664 => (ENV_X8664_LINUX, SH_X8664_LINUX),
 		_ => unreachable!(),
 	};
-	tokio::fs::create_dir_all(&env_path.parent().unwrap()).await?;
+	tokio::fs::create_dir_all(&env_path.parent().unwrap())
+		.await
+		.wrap_err("Failed to create the directory.")?;
 	tokio::fs::OpenOptions::new()
 		.write(true)
 		.create(true)
 		.mode(0o755)
 		.open(&env_path)
-		.await?
+		.await
+		.wrap_err("Failed to open the file.")?
 		.write_all(env_bytes)
-		.await?;
-	tokio::fs::create_dir_all(&sh_path.parent().unwrap()).await?;
+		.await
+		.wrap_err("Failed to write the buffer.")?;
+	tokio::fs::create_dir_all(&sh_path.parent().unwrap())
+		.await
+		.wrap_err("Failed to create the directory.")?;
 	tokio::fs::OpenOptions::new()
 		.write(true)
 		.create(true)
 		.mode(0o755)
 		.open(&sh_path)
-		.await?
+		.await
+		.wrap_err("Failed to open the file.")?
 		.write_all(sh_bytes)
-		.await?;
+		.await
+		.wrap_err("Failed to write the buffer.")?;
 
 	// Create a tempdir for the output.
-	let output_tempdir = tempfile::TempDir::new()?;
+	let output_tempdir =
+		tempfile::TempDir::new().wrap_err("Failed to crate the temporary directory.")?;
 
 	// Create the host and guest paths for the output parent directory.
 	let output_parent_directory_host_path = output_tempdir.path().to_owned();
@@ -247,8 +259,12 @@ pub async fn run_inner(
 	// Create the socket.
 	let (mut host_socket, guest_socket) =
 		tokio::net::UnixStream::pair().wrap_err("Failed to create the socket pair.")?;
-	let guest_socket = guest_socket.into_std()?;
-	guest_socket.set_nonblocking(false)?;
+	let guest_socket = guest_socket
+		.into_std()
+		.wrap_err("Failed to convert the Unix Stream.")?;
+	guest_socket
+		.set_nonblocking(false)
+		.wrap_err("Failed to set nonblocking mode.")?;
 
 	// Create the mounts.
 	let mut mounts = Vec::new();
@@ -387,7 +403,11 @@ pub async fn run_inner(
 	let envp = CStringVec::new(envp);
 
 	// Create `argv`.
-	let args: Vec<_> = args.into_iter().map(CString::new).try_collect()?;
+	let args: Vec<_> = args
+		.into_iter()
+		.map(CString::new)
+		.try_collect()
+		.wrap_err("Failed to convert the args.")?;
 	let mut argv = Vec::with_capacity(1 + args.len() + 1);
 	argv.push(executable.clone());
 	for arg in args {
@@ -439,7 +459,7 @@ pub async fn run_inner(
 		)
 	};
 	if ret == -1 {
-		return Err(std::io::Error::last_os_error()).wrap_err("Failed to spawn the root process.");
+		return Err(std::io::Error::last_os_error().wrap("Failed to spawn the root process."));
 	}
 	if ret == 0 {
 		root(&context);
@@ -534,7 +554,10 @@ pub async fn run_inner(
 	};
 
 	// Create the output.
-	let value = if tokio::fs::try_exists(&output_host_path).await? {
+	let value = if tokio::fs::try_exists(&output_host_path)
+		.await
+		.wrap_err("Failed to determine in the path exists.")?
+	{
 		// Check in the output.
 		let options = tg::checkin::Options {
 			artifacts_paths: vec![artifacts_directory_guest_path],

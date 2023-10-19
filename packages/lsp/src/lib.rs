@@ -160,11 +160,18 @@ impl Server {
 		// Create a task to send outgoing messages.
 		let outgoing_message_task = tokio::spawn(async move {
 			while let Some(outgoing_message) = outgoing_message_receiver.recv().await {
-				let body = serde_json::to_string(&outgoing_message)?;
+				let body = serde_json::to_string(&outgoing_message)
+					.wrap_err("Failed to serialize the message.")?;
 				let head = format!("Content-Length: {}\r\n\r\n", body.len());
-				stdout.write_all(head.as_bytes()).await?;
-				stdout.write_all(body.as_bytes()).await?;
-				stdout.flush().await?;
+				stdout
+					.write_all(head.as_bytes())
+					.await
+					.wrap_err("Failed to write the head.")?;
+				stdout
+					.write_all(body.as_bytes())
+					.await
+					.wrap_err("Failed to write the body.")?;
+				stdout.flush().await.wrap_err("Failed to flush stdout.")?;
 			}
 			Ok::<_, Error>(())
 		});
@@ -261,7 +268,10 @@ where
 		.parse()
 		.wrap_err("Failed to parse the Content-Length header value.")?;
 	let mut message: Vec<u8> = vec![0; content_length];
-	reader.read_exact(&mut message).await?;
+	reader
+		.read_exact(&mut message)
+		.await
+		.wrap_err("Failed to read the message.")?;
 	let message =
 		serde_json::from_slice(&message).wrap_err("Failed to deserialize the message.")?;
 

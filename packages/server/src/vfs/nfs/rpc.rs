@@ -1,9 +1,7 @@
-use std::io::IoSlice;
-
-use num::ToPrimitive;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
 use super::xdr::{self, Error, FromXdr, ToXdr};
+use num::ToPrimitive;
+use std::io::IoSlice;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 #[derive(Copy, Clone, Debug)]
 #[repr(i32)]

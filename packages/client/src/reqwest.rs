@@ -1,6 +1,6 @@
 use crate::{
 	artifact, build, id, object, package, target, user, user::Login, value, Artifact, Client,
-	Handle, Id, Package, Result, Value, WrapErr,
+	Error, Handle, Id, Package, Result, Value, Wrap, WrapErr,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -8,14 +8,13 @@ use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
 };
-use tokio::io::AsyncReadExt;
-use tokio_util::io::StreamReader;
-
 use std::{
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 };
-use url::{Host, Url};
+use tokio::io::AsyncReadExt;
+use tokio_util::io::StreamReader;
+use url::Url;
 
 #[derive(Clone, Debug)]
 pub struct Reqwest {
@@ -45,14 +44,11 @@ struct SetForPathBody {
 impl Reqwest {
 	#[must_use]
 	pub fn new(url: Url, token: Option<String>) -> Self {
-		let is_local = url
-			.host()
-			.map(|host| match host {
-				Host::Domain(domain) => domain == "localhost",
-				Host::Ipv4(ip) => ip.is_loopback(),
-				Host::Ipv6(ip) => ip.is_loopback(),
-			})
-			.unwrap_or(false);
+		let is_local = url.host().map_or(false, |host| match host {
+			url::Host::Domain(domain) => domain == "localhost",
+			url::Host::Ipv4(ip) => ip.is_loopback(),
+			url::Host::Ipv6(ip) => ip.is_loopback(),
+		});
 		let client = reqwest::Client::builder()
 			.http2_prior_knowledge()
 			.build()
@@ -90,7 +86,7 @@ impl Client for Reqwest {
 		Box::new(self.clone())
 	}
 
-	fn downgrade(&self) -> Box<dyn Handle> {
+	fn downgrade_box(&self) -> Box<dyn Handle> {
 		Box::new(Arc::downgrade(&self.state))
 	}
 
@@ -228,13 +224,11 @@ impl Client for Reqwest {
 			match reader.read_exact(&mut bytes).await {
 				Ok(_) => {},
 				Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
-				Err(error) => return Err(error),
+				Err(error) => return Err(error.wrap("Failed to read from the reader.")),
 			};
-			let id = build::Id::try_from(bytes)
-				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+			let id = build::Id::try_from(bytes)?;
 			Ok(Some((id, reader)))
 		})
-		.map_err(Into::into)
 		.boxed();
 		Ok(Some(children))
 	}
@@ -254,11 +248,14 @@ impl Client for Reqwest {
 		let response = response
 			.error_for_status()
 			.wrap_err("Expected the status to be success.")?;
-		let log = response.bytes_stream().map_err(Into::into).boxed();
+		let log = response
+			.bytes_stream()
+			.map_err(|error| error.wrap("Failed to read from the response stream."))
+			.boxed();
 		Ok(Some(log))
 	}
 
-	async fn try_get_build_result(&self, id: build::Id) -> Result<Option<Result<Value>>> {
+	async fn try_get_build_result(&self, id: build::Id) -> Result<Option<Result<Value, Error>>> {
 		let request = self.request(http::Method::GET, &format!("/v1/builds/{id}/result"));
 		let response = request
 			.send()
@@ -274,7 +271,7 @@ impl Client for Reqwest {
 			.bytes()
 			.await
 			.wrap_err("Failed to read the response body.")?;
-		let result = serde_json::from_slice::<Result<value::Data>>(&bytes)
+		let result = serde_json::from_slice::<Result<value::Data, Error>>(&bytes)
 			.wrap_err("Failed to deserialize the response body.")?
 			.map(Value::from_data);
 		Ok(Some(result))
@@ -361,16 +358,18 @@ impl Client for Reqwest {
 
 	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>> {
 		let body = GetForPathBody { path: path.into() };
-		let body = serde_json::to_vec(&body)?;
+		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
 		let response = self
 			.request(reqwest::Method::GET, "/v1/artifact/path")
 			.body(body)
 			.send()
 			.await
 			.wrap_err("Failed to send the request.")?;
-
 		if response.status().is_success() {
-			let id: Id = response.json().await?;
+			let id: Id = response
+				.json()
+				.await
+				.wrap_err("Failed to deserialize the response as json.")?;
 			let artifact = artifact::Artifact::with_id(id.try_into()?);
 			Ok(Some(artifact))
 		} else if response.status().as_u16() == 404 {
@@ -378,7 +377,7 @@ impl Client for Reqwest {
 		} else {
 			Err(response
 				.error_for_status()
-				.wrap_err("The response had a non-successful status.")
+				.wrap_err("The response had a non-success status.")
 				.unwrap_err())
 		}
 	}
@@ -387,7 +386,7 @@ impl Client for Reqwest {
 		let path = path.into();
 		let id = artifact.id(self).await?.into();
 		let body = SetForPathBody { path, id };
-		let body = serde_json::to_vec(&body)?;
+		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
 		self.request(reqwest::Method::PUT, "/v1/artifact/path")
 			.body(body)
 			.send()
@@ -400,7 +399,7 @@ impl Client for Reqwest {
 
 	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<Package>> {
 		let body = GetForPathBody { path: path.into() };
-		let body = serde_json::to_vec(&body)?;
+		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
 		let response = self
 			.request(reqwest::Method::GET, "/v1/package/path")
 			.body(body)
@@ -409,7 +408,10 @@ impl Client for Reqwest {
 			.wrap_err("Failed to send the request.")?;
 
 		if response.status().is_success() {
-			let id: Id = response.json().await?;
+			let id: Id = response
+				.json()
+				.await
+				.wrap_err("Failed to deserialize the reponse as json.")?;
 			let package = package::Package::with_id(id.try_into()?);
 			Ok(Some(package))
 		} else if response.status().as_u16() == 404 {
@@ -417,7 +419,7 @@ impl Client for Reqwest {
 		} else {
 			Err(response
 				.error_for_status()
-				.wrap_err("The response had a non-successful status.")
+				.wrap_err("The response had a non-success status.")
 				.unwrap_err())
 		}
 	}
@@ -426,7 +428,7 @@ impl Client for Reqwest {
 		let path = path.into();
 		let id = package.id(self).await?.into();
 		let body = SetForPathBody { path, id };
-		let body = serde_json::to_vec(&body)?;
+		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
 		self.request(reqwest::Method::PUT, "/v1/package/path")
 			.body(body)
 			.send()

@@ -1,10 +1,9 @@
-use crate::not_found;
-
 use super::{bad_request, empty, full, Incoming, Outgoing, Server};
+use crate::not_found;
 use futures::{stream, StreamExt, TryStreamExt};
 use lmdb::Transaction;
 use tangram_client as tg;
-use tg::{object, return_error, Error, Result, WrapErr};
+use tg::{object, return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::AsyncReadExt;
 
 impl Server {
@@ -85,14 +84,17 @@ impl Server {
 
 		// Read the body.
 		let mut bytes = Vec::new();
-		body.read_to_end(&mut bytes).await?;
+		body.read_to_end(&mut bytes)
+			.await
+			.wrap_err("Failed to read the body.")?;
 
 		// Put the object.
 		let result = self.try_put_object_bytes(id, &bytes).await?;
 
 		// If there are missing children, then return a bad request response.
 		if let Err(missing_children) = result {
-			let body = serde_json::to_vec(&missing_children)?;
+			let body = serde_json::to_vec(&missing_children)
+				.wrap_err("Failed to serialize the missing children.")?;
 			let response = http::Response::builder()
 				.status(http::StatusCode::BAD_REQUEST)
 				.body(full(body))
@@ -122,11 +124,16 @@ impl Server {
 	}
 
 	pub fn get_object_exists_from_database(&self, id: object::Id) -> Result<bool> {
-		let txn = self.state.database.env.begin_ro_txn()?;
+		let txn = self
+			.state
+			.database
+			.env
+			.begin_ro_txn()
+			.wrap_err("Failed to create the transaction.")?;
 		match txn.get(self.state.database.objects, &id.as_bytes()) {
 			Ok(_) => Ok(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
-			Err(error) => Err(error.into()),
+			Err(error) => Err(error.wrap("Failed to get the object.")),
 		}
 	}
 
@@ -160,11 +167,16 @@ impl Server {
 	}
 
 	pub fn try_get_object_bytes_from_database(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
-		let txn = self.state.database.env.begin_ro_txn()?;
+		let txn = self
+			.state
+			.database
+			.env
+			.begin_ro_txn()
+			.wrap_err("Failed to create the transaction.")?;
 		match txn.get(self.state.database.objects, &id.as_bytes()) {
 			Ok(data) => Ok(Some(data.to_owned())),
 			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => Err(error.into()),
+			Err(error) => Err(error.wrap("Failed to get the object.")),
 		}
 	}
 
@@ -179,7 +191,12 @@ impl Server {
 		};
 
 		// Create a write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self
+			.state
+			.database
+			.env
+			.begin_rw_txn()
+			.wrap_err("Failed to create the transaction.")?;
 
 		// Add the object to the database.
 		txn.put(
@@ -187,10 +204,11 @@ impl Server {
 			&id.as_bytes(),
 			&bytes,
 			lmdb::WriteFlags::empty(),
-		)?;
+		)
+		.wrap_err("Failed to put the object.")?;
 
 		// Commit the transaction.
-		txn.commit()?;
+		txn.commit().wrap_err("Failed to commit the transaction.")?;
 
 		Ok(Some(bytes))
 	}
@@ -219,7 +237,12 @@ impl Server {
 		}
 
 		// Create a write transaction.
-		let mut txn = self.state.database.env.begin_rw_txn()?;
+		let mut txn = self
+			.state
+			.database
+			.env
+			.begin_rw_txn()
+			.wrap_err("Failed to create the transaction.")?;
 
 		// Add the object to the database.
 		txn.put(
@@ -227,10 +250,11 @@ impl Server {
 			&id.as_bytes(),
 			&bytes,
 			lmdb::WriteFlags::empty(),
-		)?;
+		)
+		.wrap_err("Failed to put the object.")?;
 
 		// Commit the transaction.
-		txn.commit()?;
+		txn.commit().wrap_err("Failed to commit the transaction.")?;
 
 		Ok(Ok(()))
 	}

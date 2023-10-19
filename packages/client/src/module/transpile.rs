@@ -81,8 +81,11 @@ impl Module {
 			};
 
 			// Emit the module.
-			emitter.emit_program(&program)?;
-			let transpiled_text = String::from_utf8(transpiled_text)?;
+			emitter
+				.emit_program(&program)
+				.wrap_err("Failed to emit the program.")?;
+			let transpiled_text = String::from_utf8(transpiled_text)
+				.wrap_err("Failed to convert bytes to string.")?;
 
 			// Create the source map.
 			let mut output_source_map = Vec::new();
@@ -90,7 +93,8 @@ impl Module {
 				.build_source_map(&source_mappings)
 				.to_writer(&mut output_source_map)
 				.wrap_err("Failed to create the source map.")?;
-			let source_map = String::from_utf8(output_source_map)?;
+			let source_map = String::from_utf8(output_source_map)
+				.wrap_err("Failed to convert bytes to string.")?;
 
 			// Create the output.
 			let output = Output {

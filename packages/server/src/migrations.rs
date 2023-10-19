@@ -2,7 +2,7 @@ use super::Server;
 use futures::FutureExt;
 use std::path::Path;
 use tangram_client as tg;
-use tg::{return_error, Result, WrapErr};
+use tg::{return_error, Result, Wrap, WrapErr};
 
 impl Server {
 	pub async fn migrate(path: &Path) -> Result<()> {
@@ -12,7 +12,7 @@ impl Server {
 		let version = match tokio::fs::read_to_string(path.join("version")).await {
 			Ok(version) => Some(version),
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-			Err(error) => return Err(error.into()),
+			Err(error) => return Err(error.wrap("Failed to read the path format version.")),
 		};
 		let version = if let Some(version) = version {
 			Some(
@@ -46,7 +46,9 @@ impl Server {
 			migration.await?;
 
 			// Update the version.
-			tokio::fs::write(path.join("version"), version.to_string()).await?;
+			tokio::fs::write(path.join("version"), version.to_string())
+				.await
+				.wrap_err("Failed to write the path format version.")?;
 		}
 
 		Ok(())
@@ -58,30 +60,41 @@ async fn migration_0000(path: &Path) -> Result<()> {
 
 	// Create the database.
 	let database_path = path.join("database");
-	tokio::fs::File::create(&database_path).await?;
+	tokio::fs::File::create(&database_path)
+		.await
+		.wrap_err("Failed to create the database.")?;
 
 	// Open the database.
 	let mut env_builder = lmdb::Environment::new();
 	env_builder.set_max_dbs(3);
 	env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
-	let env = env_builder.open(&database_path)?;
+	let env = env_builder
+		.open(&database_path)
+		.wrap_err("Failed to open the database.")?;
 
 	// Create the objects database.
-	env.create_db("objects".into(), lmdb::DatabaseFlags::empty())?;
+	env.create_db("objects".into(), lmdb::DatabaseFlags::empty())
+		.wrap_err("Failed to create the objects database.")?;
 
 	// Create the assignments database.
-	env.create_db("assignments".into(), lmdb::DatabaseFlags::empty())?;
+	env.create_db("assignments".into(), lmdb::DatabaseFlags::empty())
+		.wrap_err("Failed to create the assignments database.")?;
 
 	// Create the trackers database
-	env.create_db("trackers".into(), lmdb::DatabaseFlags::empty())?;
+	env.create_db("trackers".into(), lmdb::DatabaseFlags::empty())
+		.wrap_err("Failed to create the trackers database.")?;
 
 	// Create the artifacts directory.
 	let artifacts_path = path.join("artifacts");
-	tokio::fs::create_dir_all(&artifacts_path).await?;
+	tokio::fs::create_dir_all(&artifacts_path)
+		.await
+		.wrap_err("Failed to create the artifacts directory.")?;
 
 	// Create the tmp directory.
 	let tmp_path = path.join("tmp");
-	tokio::fs::create_dir_all(&tmp_path).await?;
+	tokio::fs::create_dir_all(&tmp_path)
+		.await
+		.wrap_err("Failed to create the tmp directory.")?;
 
 	Ok(())
 }

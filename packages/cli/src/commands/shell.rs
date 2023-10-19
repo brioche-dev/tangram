@@ -1,6 +1,7 @@
 use super::{PackageArgs, RunArgs};
-use crate::{Cli, Result};
+use crate::Cli;
 use tangram_client as tg;
+use tg::Result;
 
 /// Build a package's "shell" export and run it.
 #[derive(Debug, clap::Args)]

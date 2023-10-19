@@ -1,5 +1,5 @@
 use super::{parse, Import, Module};
-use crate::{package::Metadata, Relpath, Result, WrapErr};
+use crate::{error, package::Metadata, Relpath, Result, WrapErr};
 use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 use swc::ecma::{ast, visit::VisitWith};
@@ -39,7 +39,7 @@ impl Module {
 				.map(ToString::to_string)
 				.collect_vec()
 				.join("\n");
-			return Err(crate::Error::with_message(message));
+			return Err(error!("{message}"));
 		}
 
 		// Create the output.

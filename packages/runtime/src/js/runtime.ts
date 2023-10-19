@@ -15,7 +15,7 @@ import { resolve } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import { System, system } from "./system.ts";
 import { Target, build, target } from "./target.ts";
-import { Template, t, template } from "./template.ts";
+import { Template, template } from "./template.ts";
 import { Value } from "./value.ts";
 
 // Set `Error.prepareStackTrace`.
@@ -32,7 +32,22 @@ Object.defineProperties(globalThis, {
 });
 
 // Create the tg global.
-let tg = {
+async function tg(
+	strings: TemplateStringsArray,
+	...placeholders: Args<Template.Arg>
+): Promise<Template> {
+	// Collect the strings and placeholders.
+	let components: Args<Template.Arg> = [];
+	for (let i = 0; i < strings.length - 1; i++) {
+		let string = strings[i]!;
+		components.push(string);
+		let placeholder = placeholders[i]!;
+		components.push(placeholder);
+	}
+	components.push(strings[strings.length - 1]!);
+	return await template(...components);
+}
+Object.assign(tg, {
 	Args,
 	Artifact,
 	Blob,
@@ -63,8 +78,7 @@ let tg = {
 	template,
 	unimplemented,
 	unreachable,
-};
+});
 Object.defineProperties(globalThis, {
 	tg: { value: tg },
-	t: { value: t },
 });

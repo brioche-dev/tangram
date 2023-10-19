@@ -1,6 +1,7 @@
 use super::PackageArgs;
-use crate::{return_error, Cli, Result, WrapErr};
+use crate::Cli;
 use tangram_client as tg;
+use tg::{return_error, Result, WrapErr};
 
 /// Check a package for errors.
 #[derive(Debug, clap::Args)]
@@ -21,8 +22,10 @@ impl Cli {
 			.wrap_err("Failed to get the package.")?;
 
 		// Create the language server.
-		let server =
-			tangram_lsp::Server::new(self.client.downgrade(), tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(
+			self.client.downgrade_box(),
+			tokio::runtime::Handle::current(),
+		);
 
 		// Check the package for diagnostics.
 		let diagnostics = server

@@ -73,7 +73,8 @@ async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 	state.progress.child(&build);
 	let output = build
 		.result(state.client.as_ref())
-		.await?
+		.await
+		.wrap_err("Failed to get the build result.")?
 		.wrap_err("The build failed.")?;
 	Ok(output)
 }
@@ -123,7 +124,11 @@ async fn syscall_decompress(
 
 async fn syscall_download(state: Rc<State>, args: (Url, Checksum)) -> Result<Blob> {
 	let (url, checksum) = args;
-	let response = reqwest::get(url).await?.error_for_status()?;
+	let response = reqwest::get(url)
+		.await
+		.wrap_err("Failed to perform the request.")?
+		.error_for_status()
+		.wrap_err("Expected a sucess status.")?;
 	let mut checksum_writer = checksum::Writer::new(checksum.algorithm());
 	let stream = response
 		.bytes_stream()
@@ -267,7 +272,7 @@ async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) ->
 	let reader = blob.reader(state.client.as_ref()).await?;
 
 	// Create a temp.
-	let tempdir = tempfile::TempDir::new()?;
+	let tempdir = tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
 	let path = tempdir.path().join("archive");
 
 	// Extract in a blocking task.
@@ -280,7 +285,7 @@ async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) ->
 					let mut archive = tar::Archive::new(reader);
 					archive.set_preserve_permissions(false);
 					archive.set_unpack_xattrs(false);
-					archive.unpack(path)?;
+					archive.unpack(path).wrap_err("Failed to unpack.")?;
 				},
 				blob::ArchiveFormat::Zip => {
 					let mut archive =

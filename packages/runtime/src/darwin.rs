@@ -36,11 +36,13 @@ pub async fn run_inner(
 	let artifacts_directory_path = server_directory_path.join(".artifacts");
 
 	// Create a tempdir for the root.
-	let root_directory_tempdir = tempfile::TempDir::new()?;
+	let root_directory_tempdir =
+		tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
 	let root_directory_path = root_directory_tempdir.path().to_owned();
 
 	// Create a tempdir for the output.
-	let output_tempdir = tempfile::TempDir::new()?;
+	let output_tempdir =
+		tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
 
 	// Create the output parent directory.
 	let output_parent_directory_path = output_tempdir.path().to_owned();
@@ -318,7 +320,10 @@ pub async fn run_inner(
 	}
 
 	// Create the output.
-	let value = if tokio::fs::try_exists(&output_path).await? {
+	let value = if tokio::fs::try_exists(&output_path)
+		.await
+		.wrap_err("Failed to determine if the path exists.")?
+	{
 		// Check in the output.
 		let options = tg::checkin::Options {
 			artifacts_paths: vec![artifacts_directory_path],

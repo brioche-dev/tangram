@@ -1,7 +1,7 @@
-use crate::{Cli, Result};
+use crate::Cli;
 use futures::FutureExt;
 use tangram_client as tg;
-use tg::Subpath;
+use tg::{Result, Subpath};
 
 mod add;
 mod autoenv;

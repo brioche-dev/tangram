@@ -1,4 +1,4 @@
-use crate::{object, return_error, Client, Error, Result};
+use crate::{object, return_error, Client, Error, Result, WrapErr};
 use bytes::Bytes;
 use futures::{
 	future::BoxFuture,
@@ -70,7 +70,10 @@ impl Blob {
 			// Read up to `MAX_LEAF_BLOCK_DATA_SIZE` bytes from the reader.
 			let mut position = 0;
 			loop {
-				let n = reader.read(&mut bytes[position..]).await?;
+				let n = reader
+					.read(&mut bytes[position..])
+					.await
+					.wrap_err("Failed to read from the reader.")?;
 				position += n;
 				if n == 0 || position == bytes.len() {
 					break;
@@ -163,13 +166,17 @@ impl Blob {
 	pub async fn bytes(&self, client: &dyn Client) -> Result<Vec<u8>> {
 		let mut reader = self.reader(client).await?;
 		let mut bytes = Vec::new();
-		reader.read_to_end(&mut bytes).await?;
+		reader
+			.read_to_end(&mut bytes)
+			.await
+			.wrap_err("Failed to read the blob.")?;
 		Ok(bytes)
 	}
 
 	pub async fn text(&self, client: &dyn Client) -> Result<String> {
 		let bytes = self.bytes(client).await?;
-		let string = String::from_utf8(bytes)?;
+		let string =
+			String::from_utf8(bytes).wrap_err("Failed to decode the blob's bytes as UTF-8.")?;
 		Ok(string)
 	}
 }
@@ -215,17 +222,19 @@ impl Object {
 impl Data {
 	pub fn serialize(&self) -> Result<Vec<u8>> {
 		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)?;
-		tangram_serialize::to_writer(self, &mut bytes)?;
+		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
+			.wrap_err("Failed to write the version.")?;
+		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
 		Ok(bytes)
 	}
 
 	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version = byteorder::ReadBytesExt::read_u8(&mut bytes)?;
+		let version =
+			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
 		if version != 0 {
 			return_error!(r#"Cannot deserialize with version "{version}"."#);
 		}
-		let value = tangram_serialize::from_reader(bytes)?;
+		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
 		Ok(value)
 	}
 
@@ -253,6 +262,8 @@ pub enum State {
 	Reading(BoxFuture<'static, Result<Cursor<Bytes>>>),
 	Full(Cursor<Bytes>),
 }
+
+unsafe impl Sync for State {}
 
 impl AsyncRead for Reader {
 	fn poll_read(
