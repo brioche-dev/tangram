@@ -1,4 +1,7 @@
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::{
+	collections::{BTreeMap, HashMap},
+	os::fd::{AsRawFd, FromRawFd, OwnedFd},
+};
 
 use crossterm as ct;
 use itertools::Itertools;
@@ -31,27 +34,61 @@ pub fn ui() -> tg::Result<()> {
 }
 
 fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
-	let mut state = dummy_state();
+	// Add our keybaard event handlers.
+	let mut commands = Commands::new();
+	commands.add_command(
+		"Exit",
+		[(ct::event::KeyCode::Esc, ct::event::KeyModifiers::NONE)],
+		|_| {},
+	);
+	commands.add_command(
+		"Up",
+		[
+			(ct::event::KeyCode::Up, ct::event::KeyModifiers::NONE),
+			(ct::event::KeyCode::Char('j'), ct::event::KeyModifiers::NONE),
+		],
+		|state| state.scroll_up(),
+	);
+	commands.add_command(
+		"Down",
+		[
+			(ct::event::KeyCode::Down, ct::event::KeyModifiers::NONE),
+			(ct::event::KeyCode::Char('k'), ct::event::KeyModifiers::NONE),
+		],
+		|state| state.scroll_down(),
+	);
+	commands.add_command(
+		"Open",
+		[
+			(ct::event::KeyCode::Right, ct::event::KeyModifiers::NONE),
+			(ct::event::KeyCode::Char('l'), ct::event::KeyModifiers::NONE),
+		],
+		|state| state.expand(),
+	);
+	commands.add_command(
+		"Close",
+		[
+			(ct::event::KeyCode::Left, ct::event::KeyModifiers::NONE),
+			(ct::event::KeyCode::Char('h'), ct::event::KeyModifiers::NONE),
+		],
+		|state| state.collapse(),
+	);
+	commands.add_command(
+		"Rotate",
+		[(ct::event::KeyCode::Char('r'), ct::event::KeyModifiers::NONE)],
+		|state| state.rotate(),
+	);
 
+	// Create our dummy state.
+	let mut state = default_state();
 	loop {
 		if ct::event::poll(std::time::Duration::from_millis(16))? {
 			let event = ct::event::read()?;
 			match event {
-				ct::event::Event::Key(event) => match event.code {
-					ct::event::KeyCode::Esc => break,
-					ct::event::KeyCode::Up => state.scroll_up(),
-					ct::event::KeyCode::Down => state.scroll_down(),
-					ct::event::KeyCode::Left => state.collapse(),
-					ct::event::KeyCode::Right => state.expand(),
-					ct::event::KeyCode::Char(c) => match c {
-						'j' => state.scroll_up(),
-						'k' => state.scroll_down(),
-						'h' => state.collapse(),
-						'l' => state.expand(),
-						'r' => state.rotate(),
-						_ => (),
-					},
-					_ => (),
+				// Special handling for the exit code.
+				ct::event::Event::Key(event) if event.code == ct::event::KeyCode::Esc => break,
+				ct::event::Event::Key(event) => {
+					commands.handle_key_event(event, &mut state);
 				},
 				_ => (),
 			}
@@ -67,14 +104,9 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 				])
 				.split(frame.size());
 
-			// let block = tui::widgets::Block::default()
-			// 	.title("Tangram")
-			// 	.borders(tui::widgets::Borders::ALL);
-
-			let text = tui::widgets::Paragraph::new(tui::text::Text::from("Press Esc to exit."));
-			// frame.render_widget(block, layout[0]);
-			frame.render_widget(text, layout[1]);
-
+			// let text = tui::widgets::Paragraph::new(tui::text::Text::from("Press Esc to exit."));
+			// frame.render_widget(text, layout[1]);
+			commands.render(frame, layout[1]);
 			let area = tui::layout::Layout::default()
 				.margin(0)
 				.constraints([tui::layout::Constraint::Percentage(100)])
@@ -172,7 +204,7 @@ impl State {
 	}
 
 	fn render_build_tree(&mut self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
-		let page_size = area.height as usize;
+		let page_size = area.height as usize - 1;
 		let skip = page_size * (self.selected / page_size);
 
 		let vlayout = tui::layout::Layout::default()
@@ -185,13 +217,13 @@ impl State {
 		let hlayout = tui::layout::Layout::default()
 			.direction(tui::layout::Direction::Horizontal)
 			.constraints([
-				tui::layout::Constraint::Max(10),
-				tui::layout::Constraint::Max(10),
 				tui::layout::Constraint::Min(12),
+				tui::layout::Constraint::Max(10),
+				tui::layout::Constraint::Max(10),
 			])
 			.split(vlayout[0]);
 
-		for (string, area) in ["Build ID", "Duration", "Target"]
+		for (string, area) in ["Target", "Duration", "ID"]
 			.into_iter()
 			.zip(hlayout.into_iter())
 		{
@@ -200,6 +232,7 @@ impl State {
 		}
 
 		let mut offset = 0;
+		// let tree_layout = tui::layout::
 		for (index, build) in self.builds.iter().enumerate() {
 			let is_last_child = index == self.builds.len() - 1;
 			offset = build.render(
@@ -264,9 +297,9 @@ impl BuildState {
 				.direction(tui::layout::Direction::Horizontal)
 				.margin(0)
 				.constraints([
-					tui::layout::Constraint::Max(8),
-					tui::layout::Constraint::Max(8),
 					tui::layout::Constraint::Min(12),
+					tui::layout::Constraint::Max(8),
+					tui::layout::Constraint::Max(8),
 				])
 				.split(area);
 
@@ -282,7 +315,7 @@ impl BuildState {
 				tui::style::Style::default()
 			};
 
-			for (text, area) in [id, time, &tree].into_iter().zip(layout.into_iter()) {
+			for (text, area) in [&tree, time, id].into_iter().zip(layout.into_iter()) {
 				let text = tui::text::Text::from(text.as_ref() as &str);
 				let widget = tui::widgets::Paragraph::new(text).style(style);
 				frame.render_widget(widget, *area);
@@ -313,7 +346,7 @@ impl BuildState {
 	}
 }
 
-fn dummy_state() -> State {
+fn default_state() -> State {
 	State {
 		log: "... doing stuff ...\n".into(),
 		selected: 0,
@@ -325,24 +358,6 @@ fn dummy_state() -> State {
 		],
 	}
 }
-
-// R: Rotate (top bottom, left right)
-// J/K: Up/Down
-// H/L: Open/Close
-// One dividing line between tree and output
-//
-
-/*
-
-	<ID> <NAME>
-	<ID> ├─<NAME>
-	<ID> │ ├─<NAME>
-	<ID> │ └─<NAME>
-	<ID> └─<NAME>
-
-	// render line
-	<id> <space> <tree string> <name>
-*/
 
 fn get_children(name: &str) -> Vec<BuildState> {
 	match name {
@@ -400,35 +415,6 @@ fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a 
 	None
 }
 
-// fn find_build<'a>(builds: &'a [BuildState], which: usize) -> Option<&'a BuildState> {
-// 	fn inner<'a>(
-// 		offset: usize,
-// 		which: usize,
-// 		build: &'a BuildState,
-// 	) -> Result<&'a BuildState, usize> {
-// 		if offset == which {
-// 			return Ok(build);
-// 		}
-// 		let mut offset = offset + 1;
-// 		for child in &build.children {
-// 			match inner(offset, which, child) {
-// 				Ok(found) => return Ok(found),
-// 				Err(o) => offset = offset,
-// 			}
-// 		}
-// 		return Err(offset);
-// 	}
-
-// 	let mut offset = 0;
-// 	for build in builds {
-// 		match inner(offset, which, build) {
-// 			Ok(found) => return Some(found),
-// 			Err(o) => offset = o,
-// 		}
-// 	}
-// 	None
-// }
-
 struct DevTty {
 	fd: std::os::fd::OwnedFd,
 }
@@ -461,4 +447,118 @@ impl std::io::Write for DevTty {
 	fn flush(&mut self) -> std::io::Result<()> {
 		Ok(())
 	}
+}
+
+struct Commands {
+	actions: BTreeMap<String, Box<dyn Fn(&mut State)>>,
+	bindings: HashMap<KeyBinding, String>,
+	order: Vec<String>,
+}
+
+#[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Hash)]
+struct KeyBinding(ct::event::KeyCode, ct::event::KeyModifiers);
+
+impl Commands {
+	fn new() -> Self {
+		Self {
+			actions: BTreeMap::default(),
+			bindings: HashMap::default(),
+			order: Vec::new(),
+		}
+	}
+
+	fn add_command(
+		&mut self,
+		name: &str,
+		bindings: impl IntoIterator<Item = (ct::event::KeyCode, ct::event::KeyModifiers)>,
+		action: impl Fn(&mut State) + 'static,
+	) {
+		let action: Box<dyn Fn(&mut State)> = Box::new(action);
+		self.actions.insert(name.into(), action);
+		for binding in bindings {
+			self.bindings
+				.insert(KeyBinding(binding.0, binding.1), name.into());
+		}
+	}
+
+	fn render(&self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
+		let mut actions = BTreeMap::default();
+
+		for (binding, action) in &self.bindings {
+			actions
+				.entry(action.to_owned())
+				.or_insert(Vec::default())
+				.push(display_binding(binding))
+		}
+
+		let texts = actions
+			.into_iter()
+			.map(|(action, bindings)| format!("{action}: {}", bindings.join("/")))
+			.collect::<Vec<_>>();
+
+		let layout = tui::layout::Layout::default()
+			.direction(tui::layout::Direction::Horizontal)
+			.constraints(
+				(0..texts.len())
+					.map(|_| tui::layout::Constraint::Ratio(1, texts.len() as u32))
+					.collect::<Vec<_>>(),
+			)
+			.split(area);
+
+		for (text, area) in texts.into_iter().zip(layout.into_iter()) {
+			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(text));
+			frame.render_widget(widget, *area);
+		}
+	}
+
+	fn handle_key_event(&self, event: ct::event::KeyEvent, state: &mut State) {
+		let binding = KeyBinding(event.code, event.modifiers);
+		if let Some(name) = self.bindings.get(&binding) {
+			let action = self.actions.get(name).unwrap();
+			action(state);
+		}
+	}
+}
+
+fn display_binding(binding: &KeyBinding) -> String {
+	let mut buf = String::new();
+	for modifier in binding.1 {
+		match modifier {
+			ct::event::KeyModifiers::SHIFT => buf.push('⇧'),
+			ct::event::KeyModifiers::CONTROL => buf.push('⌃'),
+			ct::event::KeyModifiers::ALT => buf.push_str("ALT"),
+			ct::event::KeyModifiers::SUPER => buf.push('⌘'),
+			ct::event::KeyModifiers::HYPER => buf.push('⌥'),
+			ct::event::KeyModifiers::META => buf.push('⌥'),
+			_ => continue,
+		}
+		buf.push('+')
+	}
+
+	match binding.0 {
+		ct::event::KeyCode::Backspace => buf.push('⌫'),
+		ct::event::KeyCode::Enter => buf.push('⏎'),
+		ct::event::KeyCode::Left => buf.push('←'),
+		ct::event::KeyCode::Right => buf.push('→'),
+		ct::event::KeyCode::Up => buf.push('↑'),
+		ct::event::KeyCode::Down => buf.push('↓'),
+		ct::event::KeyCode::Home => buf.push('⇱'),
+		ct::event::KeyCode::End => buf.push_str("⇲"),
+		ct::event::KeyCode::PageUp => buf.push('⇞'),
+		ct::event::KeyCode::PageDown => buf.push('⇟'),
+		ct::event::KeyCode::Tab => buf.push('⇥'),
+		ct::event::KeyCode::BackTab => buf.push('⭰'),
+		ct::event::KeyCode::Delete => buf.push('⌦'),
+		ct::event::KeyCode::Insert => buf.push_str("Insert"),
+		ct::event::KeyCode::F(num) => {
+			buf.push('F');
+			buf.push_str(&num.to_string());
+		},
+		ct::event::KeyCode::Char(char) => buf.extend(char.to_uppercase()),
+		ct::event::KeyCode::Null => buf.push('\0'),
+		ct::event::KeyCode::Esc => buf.push('⎋'),
+		ct::event::KeyCode::CapsLock => buf.push('⇪'),
+		key => buf.push_str(&format!("{key:?}")),
+	}
+	buf
 }
