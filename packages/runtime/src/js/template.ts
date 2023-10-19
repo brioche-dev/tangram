@@ -48,7 +48,7 @@ export class Template {
 				} else {
 					return unreachable();
 				}
-			}
+			},
 		);
 
 		// Normalize the components.
@@ -68,7 +68,7 @@ export class Template {
 				}
 				return components;
 			},
-			[]
+			[],
 		);
 
 		return new Template(components);
@@ -113,7 +113,7 @@ export class Template {
 }
 
 export namespace Template {
-	export type Arg = undefined | Component | Template | Array<Arg>;
+	export type Arg = undefined | Component | Template;
 
 	export namespace Arg {
 		export let is = (value: unknown): value is Arg => {

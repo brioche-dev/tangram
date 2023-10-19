@@ -29,7 +29,7 @@ declare namespace tg {
 		/** Compute the result of applying all arguments supplied to a constructor. */
 		export let apply: <A extends Value, R extends { [key: string]: Value }>(
 			args: Args<A>,
-			map: (arg: A) => Promise<MaybeNestedArray<MutationObject<R>>>
+			map: (arg: A) => Promise<MaybeNestedArray<MutationObject<R>>>,
 		) => Promise<Partial<R>>;
 	}
 
@@ -54,7 +54,7 @@ declare namespace tg {
 
 	export let assert: (
 		condition: unknown,
-		message?: string
+		message?: string,
 	) => asserts condition;
 
 	export let unimplemented: (message?: string) => never;
@@ -62,7 +62,7 @@ declare namespace tg {
 	export let unreachable: (message?: string) => never;
 
 	/** Create a blob. */
-	export let blob: (...args: Array<Unresolved<Blob.Arg>>) => Promise<Blob>;
+	export let blob: (...args: Args<Blob.Arg>) => Promise<Blob>;
 
 	/** Download the contents of a URL. */
 	export let download: (url: string, checksum: Checksum) => Promise<Blob>;
@@ -73,7 +73,7 @@ declare namespace tg {
 		static withId(id: Blob.Id): Blob;
 
 		/** Create a blob. */
-		static new(...args: Array<Unresolved<Blob.Arg>>): Promise<Blob>;
+		static new(...args: Args<Blob.Arg>): Promise<Blob>;
 
 		/** Download the contents of a URL. */
 		static download(url: string, checksum: Checksum): Promise<Blob>;
@@ -107,7 +107,7 @@ declare namespace tg {
 	}
 
 	export namespace Blob {
-		export type Arg = undefined | string | Uint8Array | Blob | Array<Arg>;
+		export type Arg = undefined | string | Uint8Array | Blob;
 
 		export type Id = string;
 
@@ -119,7 +119,7 @@ declare namespace tg {
 	/** Compute the checksum of the provided bytes. */
 	export let checksum: (
 		algorithm: Checksum.Algorithm,
-		bytes: string | Uint8Array
+		bytes: string | Uint8Array,
 	) => Checksum;
 
 	export type Checksum = string;
@@ -129,7 +129,7 @@ declare namespace tg {
 
 		export let new_: (
 			algorithm: Algorithm,
-			bytes: string | Uint8Array
+			bytes: string | Uint8Array,
 		) => Checksum;
 		export { new_ as new };
 	}
@@ -221,7 +221,7 @@ declare namespace tg {
 	}
 
 	/** Create a file. */
-	export let file: (...args: Array<Unresolved<File.Arg>>) => Promise<File>;
+	export let file: (...args: Args<File.Arg>) => Promise<File>;
 
 	/** A file. */
 	export class File {
@@ -229,7 +229,7 @@ declare namespace tg {
 		static withId(id: File.Id): File;
 
 		/** Create a file. */
-		static new(...args: Array<Unresolved<File.Arg>>): Promise<File>;
+		static new(...args: Args<File.Arg>): Promise<File>;
 
 		/** Check if a value is a `File`. */
 		static is(value: unknown): value is File;
@@ -263,7 +263,7 @@ declare namespace tg {
 	}
 
 	export namespace File {
-		export type Arg = Blob.Arg | File | Array<Arg> | ArgObject;
+		export type Arg = Blob.Arg | File | ArgObject;
 
 		export type ArgObject = {
 			contents: Blob.Arg;
@@ -372,22 +372,20 @@ declare namespace tg {
 
 	/** Resolve all deeply nested promises in an unresolved value. */
 	export let resolve: <T extends Unresolved<Value>>(
-		value: T
+		value: T,
 	) => Promise<Resolved<T>>;
 
 	export type MaybePromise<T> = T | Promise<T>;
 
 	/** Create a symlink. */
-	export let symlink: (
-		...args: Array<Unresolved<Symlink.Arg>>
-	) => Promise<Symlink>;
+	export let symlink: (...args: Args<Symlink.Arg>) => Promise<Symlink>;
 
 	export class Symlink {
 		/** Get a symlink with an ID. */
 		static withId(id: Symlink.Id): Symlink;
 
 		/** Create a symlink. */
-		static new(...args: Array<Unresolved<Symlink.Arg>>): Promise<Symlink>;
+		static new(...args: Args<Symlink.Arg>): Promise<Symlink>;
 
 		/** Check if a value is a `Symlink`. */
 		static is(value: unknown): value is Symlink;
@@ -470,23 +468,23 @@ declare namespace tg {
 	/** Create a target. */
 	export function target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value
+		R extends Value = Value,
 	>(function_: (...args: A) => MaybePromise<R | void>): Target<A, R>;
 	export function target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value
-	>(...args: Array<Unresolved<Target.Arg>>): Promise<Target<A, R>>;
+		R extends Value = Value,
+	>(...args: Args<Target.Arg>): Promise<Target<A, R>>;
 
 	/** Create and build a target. */
 	export function build<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value
-	>(...args: Array<Unresolved<Target.Arg>>): Promise<Target<A, R>>;
+		R extends Value = Value,
+	>(...args: Args<Target.Arg>): Promise<Target<A, R>>;
 
 	/** A target. */
 	export interface Target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value
+		R extends Value = Value,
 	> {
 		/** Build this target. */
 		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
@@ -494,14 +492,14 @@ declare namespace tg {
 
 	export class Target<
 		A extends Array<Value> = Array<Value>,
-		R extends Value = Value
+		R extends Value = Value,
 	> extends globalThis.Function {
 		/** Get a target with an ID. */
 		static withId(id: Target.Id): Target;
 
 		/** Create a target. */
 		static new<A extends Array<Value> = Array<Value>, R extends Value = Value>(
-			arg: (...args: A) => MaybePromise<R | void> | Unresolved<Target.Arg>
+			...args: Args<Target.Arg>
 		): Promise<Target<A, R>>;
 
 		/** Check if a value is a `Target`. */
@@ -545,7 +543,7 @@ declare namespace tg {
 	}
 
 	export namespace Target {
-		export type Arg = Template | Target | Array<Arg> | ArgObject;
+		export type Arg = Template | Target | ArgObject;
 
 		type ArgObject = {
 			/** The system to build the target on. */
@@ -576,13 +574,14 @@ declare namespace tg {
 		export type Id = string;
 	}
 
+	/** The currently executing target. */
+	export let current: Target;
+
 	/** Create a template. */
-	export let template: (
-		...args: Array<Unresolved<Template.Arg>>
-	) => Promise<Template>;
+	export let template: (...args: Args<Template.Arg>) => Promise<Template>;
 
 	export class Template {
-		static new(...args: Array<Unresolved<Template.Arg>>): Promise<Template>;
+		static new(...args: Args<Template.Arg>): Promise<Template>;
 
 		/** Check if a value is a `Template`. */
 		static is(value: unknown): value is Template;
@@ -604,7 +603,7 @@ declare namespace tg {
 	}
 
 	export namespace Template {
-		export type Arg = undefined | Template.Component | Template | Array<Arg>;
+		export type Arg = undefined | Template.Component | Template;
 
 		export type Component = string | Artifact;
 
@@ -617,7 +616,7 @@ declare namespace tg {
 
 			/** Assert that a value is a `Template.Component`. */
 			export let assert: (
-				value: unknown
+				value: unknown,
 			) => asserts value is Template.Component;
 		}
 	}

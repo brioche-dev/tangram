@@ -31,6 +31,9 @@ export class Symlink {
 		let { artifact, path: path_ } = await Args.apply<Symlink.Arg, Apply>(
 			args,
 			async (arg) => {
+				if (arg === "undefined") {
+					return { artifact: { kind: "unset" as const } };
+				}
 				if (typeof arg === "string") {
 					return { path: { kind: "append" as const, value: arg } };
 				} else if (Artifact.is(arg)) {
@@ -78,7 +81,7 @@ export class Symlink {
 				} else {
 					return unreachable();
 				}
-			}
+			},
 		);
 
 		// Create the target.
@@ -95,7 +98,7 @@ export class Symlink {
 		}
 
 		return new Symlink(
-			Object_.Handle.withObject({ kind: "symlink", value: { target } })
+			Object_.Handle.withObject({ kind: "symlink", value: { target } }),
 		);
 	}
 
@@ -158,7 +161,7 @@ export class Symlink {
 	}
 
 	async resolve(
-		from?: Unresolved<Symlink.Arg>
+		from?: Unresolved<Symlink.Arg>,
 	): Promise<Directory | File | undefined> {
 		from = from ? await symlink(from) : undefined;
 		let fromArtifact = await from?.artifact();
@@ -182,7 +185,7 @@ export class Symlink {
 					.parent()
 					.join(path)
 					.toSubpath()
-					.toString()
+					.toString(),
 			);
 		} else if (artifact !== undefined && !path.isEmpty()) {
 			if (!Directory.is(artifact)) {
@@ -196,11 +199,17 @@ export class Symlink {
 }
 
 export namespace Symlink {
-	export type Arg = string | Artifact | Template | Symlink | ArgObject;
+	export type Arg =
+		| undefined
+		| string
+		| Artifact
+		| Template
+		| Symlink
+		| ArgObject;
 
 	export type ArgObject = {
 		artifact?: Artifact;
-		path?: string;
+		path?: string | undefined;
 	};
 
 	export type Id = string;
