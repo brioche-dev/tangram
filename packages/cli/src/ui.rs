@@ -1,15 +1,17 @@
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
 use crossterm as ct;
 use itertools::Itertools;
 use ratatui as tui;
 use tangram_client as tg;
 
-type Backend = tui::backend::CrosstermBackend<std::io::Stdout>;
+type Backend = tui::backend::CrosstermBackend<DevTty>;
 type Frame<'a> = tui::Frame<'a, Backend>;
 type Terminal = tui::Terminal<Backend>;
 
 pub fn ui() -> tg::Result<()> {
 	ct::terminal::enable_raw_mode()?;
-	let backend = tui::backend::CrosstermBackend::new(std::io::stdout());
+	let backend = tui::backend::CrosstermBackend::new(DevTty::open()?);
 	let mut terminal = tui::Terminal::new(backend)?;
 	ct::execute!(
 		terminal.backend_mut(),
@@ -46,6 +48,7 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 						'k' => state.scroll_down(),
 						'h' => state.collapse(),
 						'l' => state.expand(),
+						'r' => state.rotate(),
 						_ => (),
 					},
 					_ => (),
@@ -57,23 +60,23 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 		terminal.draw(|frame| {
 			let layout = tui::layout::Layout::default()
 				.direction(tui::layout::Direction::Vertical)
-				.margin(1)
+				.margin(0)
 				.constraints([
 					tui::layout::Constraint::Percentage(90),
 					tui::layout::Constraint::Percentage(10),
 				])
 				.split(frame.size());
-			// eprintln!("drawing");
-			let block = tui::widgets::Block::default()
-				.title("Tangram")
-				.borders(tui::widgets::Borders::ALL);
+
+			// let block = tui::widgets::Block::default()
+			// 	.title("Tangram")
+			// 	.borders(tui::widgets::Borders::ALL);
 
 			let text = tui::widgets::Paragraph::new(tui::text::Text::from("Press Esc to exit."));
-			frame.render_widget(block, layout[0]);
+			// frame.render_widget(block, layout[0]);
 			frame.render_widget(text, layout[1]);
 
 			let area = tui::layout::Layout::default()
-				.margin(1)
+				.margin(0)
 				.constraints([tui::layout::Constraint::Percentage(100)])
 				.split(layout[0]);
 			state.render(frame, area[0]);
@@ -84,6 +87,8 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 
 struct State {
 	builds: Vec<BuildState>,
+	rotation: Rotation,
+	log: String,
 	selected: usize,
 }
 
@@ -94,9 +99,24 @@ struct BuildState {
 	children: Vec<Self>,
 }
 
+#[derive(Copy, Clone, Debug)]
+enum Rotation {
+	Vertical,
+	Horizontal,
+}
+
 impl State {
+	fn rotate(&mut self) {
+		self.rotation = match self.rotation {
+			Rotation::Vertical => Rotation::Horizontal,
+			Rotation::Horizontal => Rotation::Vertical,
+		};
+		println!("rotation: {:?}", self.rotation);
+	}
+
 	fn scroll_up(&mut self) {
 		self.selected = self.selected.saturating_sub(1);
+		println!("selected: {}", self.selected);
 	}
 
 	fn scroll_down(&mut self) {
@@ -105,6 +125,7 @@ impl State {
 			.iter()
 			.fold(self.builds.len(), |acc, build| acc + build.len());
 		self.selected = self.selected.saturating_add(1).min(len.saturating_sub(1));
+		println!("selected: {}", self.selected);
 	}
 
 	fn expand(&mut self) {
@@ -113,6 +134,7 @@ impl State {
 			return;
 		};
 		build.children = get_children(&build.name);
+		println!("expand: {}", build.name);
 	}
 
 	fn collapse(&mut self) {
@@ -121,10 +143,62 @@ impl State {
 			return;
 		};
 		build.children.clear();
+		println!("collapse: {}", build.name);
 	}
 
 	fn render(&mut self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
-		let skip = self.selected / area.height as usize;
+		let (direction, border) = match self.rotation {
+			Rotation::Horizontal => (
+				tui::layout::Direction::Horizontal,
+				tui::widgets::Borders::LEFT,
+			),
+			Rotation::Vertical => (tui::layout::Direction::Vertical, tui::widgets::Borders::TOP),
+		};
+
+		let layout = tui::layout::Layout::default()
+			.direction(direction)
+			.margin(0)
+			.constraints([
+				tui::layout::Constraint::Percentage(50),
+				tui::layout::Constraint::Percentage(50),
+			])
+			.split(area);
+
+		let block = tui::widgets::Block::default().borders(border);
+		frame.render_widget(block, layout[1]);
+
+		self.render_build_tree(frame, layout[0]);
+		self.render_build_log(frame, layout[1]);
+	}
+
+	fn render_build_tree(&mut self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
+		let page_size = area.height as usize;
+		let skip = page_size * (self.selected / page_size);
+
+		let vlayout = tui::layout::Layout::default()
+			.direction(tui::layout::Direction::Vertical)
+			.constraints([
+				tui::layout::Constraint::Max(1),
+				tui::layout::Constraint::Min(1),
+			])
+			.split(area);
+		let hlayout = tui::layout::Layout::default()
+			.direction(tui::layout::Direction::Horizontal)
+			.constraints([
+				tui::layout::Constraint::Max(10),
+				tui::layout::Constraint::Max(10),
+				tui::layout::Constraint::Min(12),
+			])
+			.split(vlayout[0]);
+
+		for (string, area) in ["Build ID", "Duration", "Target"]
+			.into_iter()
+			.zip(hlayout.into_iter())
+		{
+			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(string));
+			frame.render_widget(widget, *area);
+		}
+
 		let mut offset = 0;
 		for (index, build) in self.builds.iter().enumerate() {
 			let is_last_child = index == self.builds.len() - 1;
@@ -135,10 +209,20 @@ impl State {
 				self.selected,
 				skip,
 				offset,
-				area,
+				vlayout[1],
 				0,
 			);
 		}
+	}
+
+	fn render_build_log(&self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
+		let area = tui::layout::Layout::default()
+			.margin(1)
+			.constraints([tui::layout::Constraint::Percentage(100)])
+			.split(area)[0];
+		let text = tui::text::Text::from(&self.log as &str);
+		let widget = tui::widgets::Paragraph::new(text);
+		frame.render_widget(widget, area);
 	}
 }
 
@@ -171,10 +255,25 @@ impl BuildState {
 	) -> usize {
 		let count = area.height as usize;
 		if (skip..(skip + count)).contains(&offset) {
+			let y = (offset - skip) as u16 + area.y;
+			let x = area.x + area.x;
+			let w = area.width - area.x - 1;
+			let h = 1;
+			let area = tui::prelude::Rect::new(x, y, w, h);
+			let layout = tui::layout::Layout::default()
+				.direction(tui::layout::Direction::Horizontal)
+				.margin(0)
+				.constraints([
+					tui::layout::Constraint::Max(8),
+					tui::layout::Constraint::Max(8),
+					tui::layout::Constraint::Min(12),
+				])
+				.split(area);
+
 			let id = &self.id;
 			let name = &self.name;
 			let time = &self.time;
-			let text = tui::text::Text::from(format!("{id} {time} {tree_str}{name}"));
+			let tree = format!("{tree_str}{name}");
 			let style = if selected == offset {
 				tui::style::Style::default()
 					.bg(tui::style::Color::White)
@@ -182,15 +281,12 @@ impl BuildState {
 			} else {
 				tui::style::Style::default()
 			};
-			let widget = tui::widgets::Paragraph::new(text).style(style);
 
-			let y = (offset - skip) as u16 + area.y;
-			let x = area.x + area.x;
-			let w = area.width - area.x - 1;
-			let h = 1;
-
-			let area = tui::prelude::Rect::new(x, y, w, h);
-			frame.render_widget(widget, area);
+			for (text, area) in [id, time, &tree].into_iter().zip(layout.into_iter()) {
+				let text = tui::text::Text::from(text.as_ref() as &str);
+				let widget = tui::widgets::Paragraph::new(text).style(style);
+				frame.render_widget(widget, *area);
+			}
 		}
 
 		let mut offset = offset + 1;
@@ -219,7 +315,9 @@ impl BuildState {
 
 fn dummy_state() -> State {
 	State {
+		log: "... doing stuff ...\n".into(),
 		selected: 0,
+		rotation: Rotation::Horizontal,
 		builds: vec![
 			BuildState::with_name("target_1"),
 			BuildState::with_name("target_3"),
@@ -330,3 +428,37 @@ fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a 
 // 	}
 // 	None
 // }
+
+struct DevTty {
+	fd: std::os::fd::OwnedFd,
+}
+
+impl DevTty {
+	fn open() -> std::io::Result<Self> {
+		unsafe {
+			let fd = libc::open(b"/dev/tty\0".as_ptr().cast(), libc::O_RDWR);
+			if fd < 0 {
+				return Err(std::io::Error::last_os_error());
+			}
+			let fd = OwnedFd::from_raw_fd(fd);
+			Ok(Self { fd })
+		}
+	}
+}
+
+impl std::io::Write for DevTty {
+	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+		unsafe {
+			let fd = self.fd.as_raw_fd();
+			let ret = libc::write(fd, buf.as_ptr().cast(), buf.len());
+			if ret < 0 {
+				return Err(std::io::Error::last_os_error());
+			} else {
+				Ok(ret as usize)
+			}
+		}
+	}
+	fn flush(&mut self) -> std::io::Result<()> {
+		Ok(())
+	}
+}
