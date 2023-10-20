@@ -1,4 +1,7 @@
-import { x } from "./other/other.tg";
+export let targetsWithArgs = tg.target(() => {
+	return buildString("world");
+});
 
-// export default tg.target(() => tg.build(t`echo "Hello, World!" > $OUTPUT`));
-export default tg.target(() => x());
+export let buildString = tg.target((name: string) => {
+	return `Hello ${name}!`;
+});

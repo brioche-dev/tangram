@@ -184,7 +184,7 @@ export class Target<
 					package: package_,
 					name,
 					env,
-					args_,
+					args: args_,
 					checksum,
 					unsafe,
 				};
