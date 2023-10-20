@@ -1,3 +1,5 @@
+import { assert as assert_ } from "./assert.ts";
+
 export let system = (arg: System.Arg): System => {
 	if (typeof arg === "string") {
 		return arg;
@@ -14,6 +16,11 @@ export type System =
 	| "x86_64-darwin"
 	| "x86_64-linux";
 
+export declare namespace System {
+	let new_: (arg: System.Arg) => System;
+	export { new_ as new };
+}
+
 export namespace System {
 	export type Arg = System | ArgObject;
 
@@ -25,6 +32,10 @@ export namespace System {
 	export type Arch = "aarch64" | "js" | "x86_64";
 
 	export type Os = "darwin" | "js" | "linux";
+	export let new_ = (arg: System.Arg): System => {
+		return system(arg);
+	};
+	System.new = new_;
 
 	export let is = (value: unknown): value is System => {
 		return (
@@ -34,6 +45,15 @@ export namespace System {
 			value === "x86_64-darwin" ||
 			value === "x86_64-linux"
 		);
+	};
+
+	export let expect = (value: unknown): System => {
+		assert_(System.is(value));
+		return value;
+	};
+
+	export let assert = (value: unknown): asserts value is System => {
+		assert_(System.is(value));
 	};
 
 	export let arch = (system: System): Arch => {

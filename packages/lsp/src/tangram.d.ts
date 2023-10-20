@@ -454,7 +454,7 @@ declare namespace tg {
 		export type Os = "darwin" | "js" | "linux";
 
 		/** Create a system. */
-		let new_: (arg: System.Arg) => System;
+		export let new_: (arg: System.Arg) => System;
 		export { new_ as new };
 
 		/** Check if a value is a `System`. */
