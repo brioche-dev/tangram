@@ -14,7 +14,7 @@ import { Package } from "./package.ts";
 import { resolve } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import { System, system } from "./system.ts";
-import { Target, build, target } from "./target.ts";
+import { Target, build, getCurrent, target } from "./target.ts";
 import { Template, template } from "./template.ts";
 import { Value } from "./value.ts";
 
@@ -72,6 +72,10 @@ Object.assign(tg, {
 	template,
 	unimplemented,
 	unreachable,
+});
+
+Object.defineProperties(tg, {
+	current: { get: getCurrent },
 });
 
 Object.defineProperties(globalThis, {

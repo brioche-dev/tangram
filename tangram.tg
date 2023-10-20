@@ -1,7 +1,7 @@
-export let targetsWithArgs = tg.target(() => {
+export let targetWithArgs = tg.target(() => {
 	return buildString("world");
 });
 
-export let buildString = tg.target((name: string) => {
-	return `Hello ${name}!`;
+export let buildString = tg.target(async (name: string) => {
+	return `Hello ${await tg.current.name_()}!`;
 });

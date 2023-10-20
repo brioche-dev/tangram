@@ -582,7 +582,7 @@ declare namespace tg {
 		export type Id = string;
 	}
 
-	/** The currently executing target. */
+	/** The currently building target. */
 	export let current: Target;
 
 	/** Create a template. */
@@ -663,6 +663,7 @@ declare namespace tg {
 	}
 }
 
+// @ts-ignore
 declare let console: {
 	/** Write to the log. */
 	log: (...args: Array<unknown>) => void;

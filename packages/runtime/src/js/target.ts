@@ -11,8 +11,10 @@ import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
 import { Value } from "./value.ts";
 
-export let current: Target;
-
+let current: Target;
+export let getCurrent = (): Target => {
+	return current;
+};
 export let setCurrent = (target: Target) => {
 	current = target;
 };
@@ -155,7 +157,7 @@ export class Target<
 			if (Template.Arg.is(arg)) {
 				let host = {
 					kind: "set" as const,
-					value: (await current.env())["TANGRAM_HOST"] as System,
+					value: (await getCurrent().env())["TANGRAM_HOST"] as System,
 				};
 				let executable = {
 					kind: "set" as const,
