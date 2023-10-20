@@ -8,6 +8,8 @@ use itertools::Itertools;
 use ratatui as tui;
 use tangram_client as tg;
 
+mod event_stream;
+
 type Backend = tui::backend::CrosstermBackend<DevTty>;
 type Frame<'a> = tui::Frame<'a, Backend>;
 type Terminal = tui::Terminal<Backend>;
@@ -93,14 +95,13 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 				_ => (),
 			}
 		}
-
 		terminal.draw(|frame| {
 			let layout = tui::layout::Layout::default()
 				.direction(tui::layout::Direction::Vertical)
 				.margin(0)
 				.constraints([
-					tui::layout::Constraint::Percentage(90),
-					tui::layout::Constraint::Percentage(10),
+					tui::layout::Constraint::Min(10),
+					tui::layout::Constraint::Max(1),
 				])
 				.split(frame.size());
 
@@ -126,9 +127,17 @@ struct State {
 
 struct BuildState {
 	id: String,
+	status: BuildStatus,
 	name: String,
 	time: String,
 	children: Vec<Self>,
+}
+
+#[derive(Clone, Copy)]
+enum BuildStatus {
+	InProgress,
+	Successful,
+	Error,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -143,12 +152,10 @@ impl State {
 			Rotation::Vertical => Rotation::Horizontal,
 			Rotation::Horizontal => Rotation::Vertical,
 		};
-		println!("rotation: {:?}", self.rotation);
 	}
 
 	fn scroll_up(&mut self) {
 		self.selected = self.selected.saturating_sub(1);
-		println!("selected: {}", self.selected);
 	}
 
 	fn scroll_down(&mut self) {
@@ -157,7 +164,6 @@ impl State {
 			.iter()
 			.fold(self.builds.len(), |acc, build| acc + build.len());
 		self.selected = self.selected.saturating_add(1).min(len.saturating_sub(1));
-		println!("selected: {}", self.selected);
 	}
 
 	fn expand(&mut self) {
@@ -166,7 +172,6 @@ impl State {
 			return;
 		};
 		build.children = get_children(&build.name);
-		println!("expand: {}", build.name);
 	}
 
 	fn collapse(&mut self) {
@@ -175,7 +180,6 @@ impl State {
 			return;
 		};
 		build.children.clear();
-		println!("collapse: {}", build.name);
 	}
 
 	fn render(&mut self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
@@ -263,6 +267,7 @@ impl BuildState {
 	fn with_name(name: &str) -> Self {
 		Self {
 			id: "<ID>".into(),
+			status: BuildStatus::InProgress,
 			name: name.into(),
 			time: "123.45".into(),
 			children: vec![],
@@ -298,6 +303,7 @@ impl BuildState {
 				.margin(0)
 				.constraints([
 					tui::layout::Constraint::Min(12),
+					tui::layout::Constraint::Max(2),
 					tui::layout::Constraint::Max(8),
 					tui::layout::Constraint::Max(8),
 				])
@@ -315,11 +321,11 @@ impl BuildState {
 				tui::style::Style::default()
 			};
 
-			for (text, area) in [&tree, time, id].into_iter().zip(layout.into_iter()) {
-				let text = tui::text::Text::from(text.as_ref() as &str);
-				let widget = tui::widgets::Paragraph::new(text).style(style);
-				frame.render_widget(widget, *area);
-			}
+			frame.render_widget(tui::widgets::Paragraph::new(tui::text::Text::from(tree)).style(style), layout[0]);
+			frame.render_widget(Status::new(self.status), layout[1]);
+			frame.render_widget(tui::widgets::Paragraph::new(tui::text::Text::from(time.as_ref() as &str)).style(style), layout[2]);
+			frame.render_widget(tui::widgets::Paragraph::new(tui::text::Text::from(id.as_ref() as &str)).style(style), layout[3]);
+
 		}
 
 		let mut offset = offset + 1;
@@ -452,7 +458,6 @@ impl std::io::Write for DevTty {
 struct Commands {
 	actions: BTreeMap<String, Box<dyn Fn(&mut State)>>,
 	bindings: HashMap<KeyBinding, String>,
-	order: Vec<String>,
 }
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Hash)]
@@ -463,7 +468,6 @@ impl Commands {
 		Self {
 			actions: BTreeMap::default(),
 			bindings: HashMap::default(),
-			order: Vec::new(),
 		}
 	}
 
@@ -549,7 +553,6 @@ fn display_binding(binding: &KeyBinding) -> String {
 		ct::event::KeyCode::Tab => buf.push('⇥'),
 		ct::event::KeyCode::BackTab => buf.push('⭰'),
 		ct::event::KeyCode::Delete => buf.push('⌦'),
-		ct::event::KeyCode::Insert => buf.push_str("Insert"),
 		ct::event::KeyCode::F(num) => {
 			buf.push('F');
 			buf.push_str(&num.to_string());
@@ -561,4 +564,27 @@ fn display_binding(binding: &KeyBinding) -> String {
 		key => buf.push_str(&format!("{key:?}")),
 	}
 	buf
+}
+
+struct Status(BuildStatus);
+impl Status {
+	fn new(status: BuildStatus) -> Self {
+		Self(status)
+	}
+}
+
+impl tui::widgets::Widget for Status {
+	fn render(self, area: tui::prelude::Rect, buf: &mut tui::prelude::Buffer) {
+		let char = match self.0 {
+			BuildStatus::InProgress => {
+				const STRING: &str = "⣾⣽⣻⢿⡿⣟⣯⣷";
+				let index = unsafe { libc::rand() } as usize % 8;
+				STRING.chars().nth(index).unwrap()
+			}
+			BuildStatus::Successful => '✅',
+			BuildStatus::Error => '❌',
+		};
+		let string = format!("{char}");
+		buf.set_string(area.x, area.y, string, tui::style::Style::default());
+	}
 }
