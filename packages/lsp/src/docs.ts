@@ -79,14 +79,14 @@ type FunctionSignature = {
 
 type InterfaceDeclaration = {
 	location: Location;
-	indexSignature?: IndexSignature;
+	indexSignature: IndexSignature | undefined;
 	properties: { [key: string]: InterfaceProperty };
 	constructSignatures: Array<ConstructSignature>;
 };
 
 type InterfaceProperty = {
 	type: Type;
-	readonly?: boolean;
+	readonly: boolean | undefined;
 };
 
 type NamespaceDeclaration = {
@@ -146,8 +146,8 @@ type Parameter = {
 };
 
 type TypeParameter = {
-	constraint?: Type;
-	default?: Type;
+	constraint: Type | undefined;
+	default: Type | undefined;
 };
 
 type IndexedAccessType = {
@@ -187,12 +187,12 @@ type MappedType = {
 	type: Type;
 	typeParameterName: string;
 	constraint: Type;
-	nameType?: Type;
+	nameType: Type | undefined;
 };
 
 type ObjectType = {
 	properties: { [key: string]: ObjectProperty };
-	indexSignature?: IndexSignature;
+	indexSignature: IndexSignature | undefined;
 	constructSignatures: Array<ConstructSignature>;
 };
 
@@ -210,7 +210,7 @@ type IndexSignature = {
 type PredicateType = {
 	name: string;
 	asserts: boolean;
-	type?: Type;
+	type: Type | undefined;
 };
 
 type ReferenceType = {
@@ -373,14 +373,6 @@ let convertSymbol = (
 			value: interfaceDeclaration,
 		}));
 		declarations.push(...interfaceDeclarations);
-	}
-
-	// Handle default export Property as Variable.
-	if (
-		ts.SymbolFlags.Property & moduleExport.flags &&
-		moduleExport.getName() == "default"
-	) {
-		exports.push(convertVariableSymbol(typeChecker, moduleExport));
 	}
 
 	return { declarations };
@@ -1190,7 +1182,6 @@ let convertTypeNode = (
 			value: convertIntersectionTypeNode(typeChecker, node),
 		};
 	} else if (keywordSet.has(node.kind)) {
-		let value = node.kind.toString();
 		return { kind: "keyword", value: convertKeywordType(node.kind) };
 	} else if (ts.isLiteralTypeNode(node)) {
 		return {

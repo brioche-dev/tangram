@@ -9,7 +9,7 @@ export type Request = {
 };
 
 export type Response = {
-	text?: string;
+	text: string | undefined;
 };
 
 export let handle = (request: Request): Response => {

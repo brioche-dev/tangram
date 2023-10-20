@@ -6,9 +6,5 @@
 		"check": "tsc && eslint . && prettier --check .",
 		"fmt": "prettier --write ."
 	},
-	"type": "module",
-	"dependencies": {
-		"@types/whatwg-url": "^11.0.2",
-		"whatwg-url": "^13.0.0"
-	}
+	"type": "module"
 }

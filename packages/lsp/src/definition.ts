@@ -10,7 +10,7 @@ export type Request = {
 };
 
 export type Response = {
-	locations?: Array<Location>;
+	locations: Array<Location> | undefined;
 };
 
 export let handle = (request: Request): Response => {

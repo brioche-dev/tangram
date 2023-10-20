@@ -11,17 +11,12 @@ import * as references from "./references.ts";
 import * as rename from "./rename.ts";
 import * as symbols from "./symbols.ts";
 
-// Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
 	prepareStackTrace: { value: prepareStackTrace },
 });
 
-// Create the console global.
-let console = {
-	log,
-};
 Object.defineProperties(globalThis, {
-	console: { value: console },
+	console: { value: { log } },
 });
 
 type Request =
@@ -97,6 +92,7 @@ let lsp = {
 	Error: Error_,
 	handle,
 };
+
 Object.defineProperties(globalThis, {
 	lsp: { value: lsp },
 });

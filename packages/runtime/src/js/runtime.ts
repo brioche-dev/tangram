@@ -18,25 +18,18 @@ import { Target, build, target } from "./target.ts";
 import { Template, template } from "./template.ts";
 import { Value } from "./value.ts";
 
-// Set `Error.prepareStackTrace`.
 Object.defineProperties(Error, {
 	prepareStackTrace: { value: prepareStackTrace },
 });
 
-// Create the console global.
-let console = {
-	log,
-};
 Object.defineProperties(globalThis, {
-	console: { value: console },
+	console: { value: { log } },
 });
 
-// Create the tg global.
 async function tg(
 	strings: TemplateStringsArray,
 	...placeholders: Args<Template.Arg>
 ): Promise<Template> {
-	// Collect the strings and placeholders.
 	let components: Args<Template.Arg> = [];
 	for (let i = 0; i < strings.length - 1; i++) {
 		let string = strings[i]!;
@@ -47,6 +40,7 @@ async function tg(
 	components.push(strings[strings.length - 1]!);
 	return await template(...components);
 }
+
 Object.assign(tg, {
 	Args,
 	Artifact,
@@ -79,6 +73,7 @@ Object.assign(tg, {
 	unimplemented,
 	unreachable,
 });
+
 Object.defineProperties(globalThis, {
 	tg: { value: tg },
 });

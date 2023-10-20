@@ -9,7 +9,7 @@ export type Request = {
 };
 
 export type Response = {
-	entries?: Array<CompletionEntry>;
+	entries: Array<CompletionEntry> | undefined;
 };
 
 export type CompletionEntry = {

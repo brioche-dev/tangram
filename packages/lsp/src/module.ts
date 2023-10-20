@@ -29,9 +29,9 @@ export namespace Module {
 	};
 
 	export let fromUrl = (url: string): Module => {
-		let match = url.match(/^tangram:\/\/(.*)\/(.*)$/);
+		let match = url.match(/^tangram:\/\/([0-9a-f]+)/);
 		assert(match);
-		let [_, data, _path] = match;
+		let [_, data] = match;
 		assert(data !== undefined);
 		return encoding.json.decode(
 			encoding.utf8.decode(encoding.hex.decode(data)),

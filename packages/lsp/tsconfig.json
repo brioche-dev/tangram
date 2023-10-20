@@ -7,7 +7,10 @@
 		"moduleResolution": "bundler",
 		"noEmit": true,
 		"noUncheckedIndexedAccess": true,
+		"noUnusedLocals": true,
 		"strict": true,
-		"target": "esnext"
-	}
+		"target": "esnext",
+		"types": []
+	},
+	"exclude": ["src/lib", "src/tangram.d.ts"]
 }
