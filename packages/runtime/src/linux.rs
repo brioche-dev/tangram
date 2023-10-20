@@ -68,7 +68,7 @@ pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 pub async fn run_inner(
 	client: &dyn Client,
 	target: Target,
-	_progress: &dyn Progress,
+	progress: &dyn Progress,
 ) -> Result<Value> {
 	// Get the server directory path.
 	let server_directory_host_path = client.path().unwrap().to_owned();
@@ -427,6 +427,11 @@ pub async fn run_inner(
 	let working_directory_guest_path = CString::new(WORKING_DIRECTORY_GUEST_PATH)
 		.wrap_err("The working directory is not a valid C string.")?;
 
+	// Get ready to redirect stdout/stderr
+	let (log_send, log_recv) =
+		tokio::net::UnixStream::pair().wrap_err("Failed to create stdout socket.")?;
+	let log = log_send.as_raw_fd();
+
 	// Create the context.
 	let context = Context {
 		argv,
@@ -437,6 +442,7 @@ pub async fn run_inner(
 		network_enabled,
 		root_directory_host_path,
 		working_directory_guest_path,
+		log,
 	};
 
 	// Spawn the root process.
@@ -468,6 +474,11 @@ pub async fn run_inner(
 	if ret == 0 {
 		root(&context);
 	}
+
+	// Spawn the handler.
+	drop(log_send);
+	let io_task = stream_log_to_progress(log_recv, progress);
+
 	let root_process_pid: libc::pid_t = ret.try_into().wrap_err("Invalid root process PID.")?;
 
 	// Receive the guest process's PID from the socket.
@@ -588,6 +599,8 @@ pub async fn run_inner(
 		Value::Null(())
 	};
 
+	// Join the task.
+	let _ = io_task.await;
 	Ok(value)
 }
 
@@ -601,11 +614,11 @@ fn root(context: &Context) {
 		}
 
 		// Duplicate stdout and stderr to stderr.
-		let ret = libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO);
+		let ret = libc::dup2(context.log, libc::STDOUT_FILENO);
 		if ret == -1 {
 			abort_errno!("Failed to duplicate stdout to the log.");
 		}
-		let ret = libc::dup2(libc::STDERR_FILENO, libc::STDERR_FILENO);
+		let ret = libc::dup2(context.log, libc::STDERR_FILENO);
 		if ret == -1 {
 			abort_errno!("Failed to duplicate stderr to the log.");
 		}
@@ -858,6 +871,9 @@ struct Context {
 
 	/// The guest path to the working directory.
 	working_directory_guest_path: CString,
+
+	/// The file descriptor for streaming to the log.
+	log: i32,
 }
 
 unsafe impl Send for Context {}
@@ -919,3 +935,25 @@ macro_rules! abort_errno {
 }
 
 use abort_errno;
+
+fn stream_log_to_progress(
+	mut log: tokio::net::UnixStream,
+	progress: &dyn Progress,
+) -> tokio::task::JoinHandle<()> {
+	let progress = progress.clone_box();
+	tokio::task::spawn(async move {
+		let mut chunk = vec![0; 512];
+		loop {
+			match log.read(&mut chunk).await {
+				Ok(size) if size == 0 => break,
+				Err(_) => break,
+				Ok(size) => {
+					let bytes = &chunk[0..size];
+					let string = String::from_utf8_lossy(bytes);
+					tracing::debug!(?string, "Logged data.");
+					progress.log(bytes.to_vec().into());
+				},
+			}
+		}
+	})
+}
