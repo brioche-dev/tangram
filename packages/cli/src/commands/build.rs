@@ -1,5 +1,5 @@
 use super::PackageArgs;
-use crate::Cli;
+use crate::{ui, Cli};
 use std::path::PathBuf;
 use tangram_client as tg;
 use tangram_package::PackageExt;
@@ -27,6 +27,10 @@ pub struct Args {
 	/// The name of the target to build.
 	#[arg(default_value = "default")]
 	pub target: String,
+
+	/// Enable an interactive TUI.
+	#[arg(short, long, default_value = "false")]
+	pub interactive: bool,
 }
 
 impl Cli {
@@ -62,6 +66,11 @@ impl Cli {
 		if args.detach {
 			println!("{}", build.id());
 			return Ok(());
+		}
+
+		// Create the ui.
+		if args.interactive {
+			ui::ui(self.client.as_ref(), build.clone())?;
 		}
 
 		// Wait for the build's output.
