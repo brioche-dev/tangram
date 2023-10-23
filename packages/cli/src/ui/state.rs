@@ -1,5 +1,6 @@
 use ratatui as tui;
 use tangram_client as tg;
+use tui::prelude::Direction;
 
 use super::event_stream::EventStream;
 
@@ -25,7 +26,16 @@ pub enum Status {
 }
 
 impl App {
-	fn select_log(&mut self, client: &dyn tg::Client, event_stream: &EventStream) {
+	pub fn new(root: tg::Build) -> Self {
+		Self {
+			selected: 0,
+			direction: Direction::Horizontal,
+			log: "".into(),
+			builds: vec![Build::with_build(root)],
+		}
+	}
+
+	pub fn select_log(&mut self, event_stream: &EventStream) {
 		let build = self.selected_build().build.clone();
 		self.log.clear();
 		event_stream.set_log(build)
@@ -43,14 +53,13 @@ impl App {
 		self.selected = self.selected.saturating_add(1).min(len.saturating_sub(1));
 	}
 
-	pub fn expand(&mut self, client: &dyn tg::Client) {
+	pub fn expand(&mut self) {
 		let build = self.selected_build_mut();
 		build.is_expanded = true;
 	}
 
 	pub fn collapse(&mut self) {
 		let build = self.selected_build_mut();
-		build.is_expanded = true;
 		build.is_expanded = false;
 	}
 
@@ -61,8 +70,8 @@ impl App {
 		}
 	}
 
-	fn build_by_id_mut(&self, id: tg::build::Id) -> Option<&'_ mut Build> {
-		find_build_by_id_mut(&mut self.builds, id)
+	pub fn find_build(&mut self, build: tg::Build) -> &'_ mut Build {
+		find_build_by_id_mut(&mut self.builds, build).unwrap()
 	}
 
 	fn selected_build(&self) -> &'_ Build {
@@ -132,7 +141,7 @@ fn find_build_mut<'a>(builds: &'a mut [Build], which: usize) -> Option<&'a mut B
 	None
 }
 
-fn find_build_by_id_mut<'a>(builds: &'a mut [Build], id: tg::build::Id) -> Option<&'a mut Build> {
+fn find_build_by_id_mut<'a>(builds: &'a mut [Build], build_: tg::Build) -> Option<&'a mut Build> {
 	fn inner<'a>(id: tg::build::Id, build: &'a mut Build) -> Option<&'a mut Build> {
 		if build.build.id() == id {
 			return Some(build);
@@ -145,7 +154,7 @@ fn find_build_by_id_mut<'a>(builds: &'a mut [Build], id: tg::build::Id) -> Optio
 		None
 	}
 	for build in builds {
-		if let Some(found) = inner(id, build) {
+		if let Some(found) = inner(build_.id(), build) {
 			return Some(found);
 		}
 	}
@@ -153,6 +162,15 @@ fn find_build_by_id_mut<'a>(builds: &'a mut [Build], id: tg::build::Id) -> Optio
 }
 
 impl Build {
+	pub fn with_build(build: tg::Build) -> Self {
+		Self {
+			build,
+			status: Status::InProgress,
+			children: vec![],
+			is_expanded: false,
+		}
+	}
+
 	fn len(&self) -> usize {
 		self.children
 			.iter()

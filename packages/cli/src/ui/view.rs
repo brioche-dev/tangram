@@ -5,7 +5,7 @@ use itertools::Itertools;
 use ratatui as tui;
 use tui::{
 	prelude::*,
-	widgets::{Block, Borders, Widget},
+	widgets::{Block, Borders, Paragraph, Widget},
 };
 
 impl App {
@@ -24,7 +24,7 @@ impl App {
 		let block = Block::default().borders(border);
 		frame.render_widget(block, layout[1]);
 		self.view_builds(frame, layout[0]);
-		// self.view_log(frame, layout[1]);
+		self.view_log(frame, layout[1]);
 	}
 
 	fn view_builds(&self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
@@ -47,10 +47,7 @@ impl App {
 			])
 			.split(vlayout[0]);
 
-		for (string, area) in ["Target", "Duration", "ID"]
-			.into_iter()
-			.zip(hlayout.into_iter())
-		{
+		for (string, area) in ["ID", "Status", "id"].into_iter().zip(hlayout.into_iter()) {
 			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(string));
 			frame.render_widget(widget, *area);
 		}
@@ -70,6 +67,12 @@ impl App {
 				0,
 			);
 		}
+	}
+
+	fn view_log(&self, frame: &mut Frame<'_>, area: Rect) {
+		let text = Text::from(self.log.as_str());
+		let widget = Paragraph::new(text);
+		frame.render_widget(widget, area);
 	}
 }
 

@@ -13,10 +13,12 @@ pub struct KeyBinding(ct::event::KeyCode, ct::event::KeyModifiers);
 
 impl Controller {
 	pub fn new() -> Self {
-		Self {
+		let controller = Self {
 			actions: BTreeMap::default(),
 			bindings: HashMap::default(),
-		}
+		};
+
+		controller
 	}
 
 	pub fn add_command(
