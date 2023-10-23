@@ -2,7 +2,7 @@ pub use self::{dependency::Dependency, specifier::Specifier};
 use crate::{
 	artifact, directory,
 	module::{self, Import},
-	object, return_error, Artifact, Client, Module, Result, Subpath, WrapErr,
+	object, return_error, Artifact, Client, Directory, File, Module, Result, Subpath, WrapErr,
 };
 use async_recursion::async_recursion;
 use std::{
@@ -69,6 +69,28 @@ impl Package {
 		match specifier {
 			Specifier::Path(path) => Ok(Self::with_path(client, &path).await?),
 			Specifier::Registry(_) => unimplemented!(),
+		}
+	}
+
+	pub async fn try_get_metadata(&self, client: &dyn Client) -> Result<Metadata> {
+		let module = self.root_module(client).await?.unwrap_normal();
+		let directory = self
+			.artifact(client)
+			.await?
+			.clone()
+			.try_unwrap_directory()
+			.unwrap();
+		let file = directory
+			.get(client, &module.path)
+			.await?
+			.try_unwrap_file()
+			.unwrap();
+		let text = file.contents(client).await?.text(client).await?;
+		let output = Module::analyze(text)?;
+		if let Some(metadata) = output.metadata {
+			Ok(metadata)
+		} else {
+			return_error!("Missing package metadata.")
 		}
 	}
 

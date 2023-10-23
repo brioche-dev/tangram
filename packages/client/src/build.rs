@@ -1,4 +1,7 @@
-use crate::{blob, id, object, return_error, value, Blob, Client, Error, Result, Value, WrapErr};
+use crate::{
+	blob, id, object, return_error, target, value, Blob, Client, Error, Result, Target, Value,
+	WrapErr,
+};
 use bytes::Bytes;
 use futures::{
 	stream::{self, BoxStream},
@@ -18,6 +21,7 @@ pub struct Object {
 	pub children: Vec<Build>,
 	pub log: Blob,
 	pub result: Result<Value, Error>,
+	pub target: Target,
 }
 
 #[derive(
@@ -37,6 +41,9 @@ pub struct Data {
 
 	#[tangram_serialize(id = 2)]
 	pub result: Result<value::Data, Error>,
+
+	#[tangram_serialize(id = 3)]
+	pub target: target::Id,
 }
 
 impl Build {
@@ -46,12 +53,14 @@ impl Build {
 		children: Vec<Build>,
 		log: Blob,
 		result: Result<Value, Error>,
+		target: Target,
 	) -> Result<Self> {
 		// Create the object.
 		let object = Object {
 			children,
 			log,
 			result,
+			target,
 		};
 
 		// Store the children.
@@ -177,10 +186,12 @@ impl Object {
 		let children = self.children.iter().map(Build::id).collect();
 		let log = self.log.expect_id();
 		let result = self.result.clone().map(|value| value.to_data());
+		let target = self.target.expect_id();
 		Data {
 			children,
 			log,
 			result,
+			target,
 		}
 	}
 
@@ -189,10 +200,12 @@ impl Object {
 		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
 		let result = data.result.map(value::Value::from_data);
+		let target = Target::with_id(data.target);
 		Self {
 			children,
 			log,
 			result,
+			target,
 		}
 	}
 
