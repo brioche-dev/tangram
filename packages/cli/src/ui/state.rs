@@ -5,9 +5,9 @@ use tui::prelude::Direction;
 use super::event_stream::EventStream;
 
 pub struct App {
+	pub highlighted: usize,
 	pub selected: usize,
 	pub direction: tui::layout::Direction,
-	pub log: String,
 	pub builds: Vec<Build>,
 }
 
@@ -16,6 +16,7 @@ pub struct Build {
 	pub status: Status,
 	pub is_expanded: bool,
 	pub children: Vec<Self>,
+	pub log: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -28,21 +29,21 @@ pub enum Status {
 impl App {
 	pub fn new(root: tg::Build) -> Self {
 		Self {
-			selected: 0,
+			highlighted: 0,
 			direction: Direction::Horizontal,
-			log: "".into(),
+			selected: 0,
 			builds: vec![Build::with_build(root)],
 		}
 	}
 
 	pub fn select_log(&mut self, event_stream: &EventStream) {
-		let build = self.selected_build().build.clone();
-		self.log.clear();
+		let build = self.highlighted_build().build.clone();
+		self.selected = self.highlighted;
 		event_stream.set_log(build)
 	}
 
 	pub fn scroll_up(&mut self) {
-		self.selected = self.selected.saturating_sub(1);
+		self.highlighted = self.highlighted.saturating_sub(1);
 	}
 
 	pub fn scroll_down(&mut self) {
@@ -50,16 +51,19 @@ impl App {
 			.builds
 			.iter()
 			.fold(self.builds.len(), |acc, build| acc + build.len());
-		self.selected = self.selected.saturating_add(1).min(len.saturating_sub(1));
+		self.highlighted = self
+			.highlighted
+			.saturating_add(1)
+			.min(len.saturating_sub(1));
 	}
 
 	pub fn expand(&mut self) {
-		let build = self.selected_build_mut();
+		let build = self.highlighted_build_mut();
 		build.is_expanded = true;
 	}
 
 	pub fn collapse(&mut self) {
-		let build = self.selected_build_mut();
+		let build = self.highlighted_build_mut();
 		build.is_expanded = false;
 	}
 
@@ -74,12 +78,16 @@ impl App {
 		find_build_by_id_mut(&mut self.builds, build).unwrap()
 	}
 
-	fn selected_build(&self) -> &'_ Build {
+	pub fn selected_build(&self) -> &'_ Build {
 		find_build(&self.builds, self.selected).unwrap()
 	}
 
-	fn selected_build_mut(&mut self) -> &'_ mut Build {
-		find_build_mut(&mut self.builds, self.selected).unwrap()
+	fn highlighted_build(&self) -> &'_ Build {
+		find_build(&self.builds, self.highlighted).unwrap()
+	}
+
+	fn highlighted_build_mut(&mut self) -> &'_ mut Build {
+		find_build_mut(&mut self.builds, self.highlighted).unwrap()
 	}
 }
 
@@ -168,6 +176,7 @@ impl Build {
 			status: Status::InProgress,
 			children: vec![],
 			is_expanded: false,
+			log: None,
 		}
 	}
 

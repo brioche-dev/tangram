@@ -118,13 +118,16 @@ fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build) -> s
 
 		for event in events.poll() {
 			match event {
-				Event::Log(bytes) => {
-					println!("Displaying log: {bytes:?}");
-					let string = match String::from_utf8(bytes) {
+				Event::Log(event) => {
+					let string = match String::from_utf8(event.log) {
 						Ok(string) => string,
 						Err(e) => e.to_string(),
 					};
-					state.log.push_str(&string);
+					let build = state.find_build(event.build);
+					match &mut build.log {
+						Some(existing) => existing.push_str(string.as_str()),
+						None => build.log = Some(string),
+					}
 				},
 				Event::Child(event) => {
 					let ChildEvent { parent, child } = event;

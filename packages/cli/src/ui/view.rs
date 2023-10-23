@@ -29,7 +29,7 @@ impl App {
 
 	fn view_builds(&self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
 		let page_size = area.height as usize - 1;
-		let skip = page_size * (self.selected / page_size);
+		let skip = page_size * (self.highlighted / page_size);
 
 		let vlayout = tui::layout::Layout::default()
 			.direction(tui::layout::Direction::Vertical)
@@ -60,7 +60,7 @@ impl App {
 				frame,
 				is_last_child,
 				"",
-				self.selected,
+				self.highlighted,
 				skip,
 				offset,
 				vlayout[1],
@@ -70,7 +70,9 @@ impl App {
 	}
 
 	fn view_log(&self, frame: &mut Frame<'_>, area: Rect) {
-		let text = Text::from(self.log.as_str());
+		let build = self.selected_build();
+		let log = build.log.as_deref().unwrap_or("");
+		let text = Text::from(log);
 		let widget = Paragraph::new(text);
 		frame.render_widget(widget, area);
 	}

@@ -7,8 +7,14 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 #[derive(Debug)]
 pub enum Event {
 	Child(ChildEvent),
-	Log(Vec<u8>),
+	Log(LogEvent),
 	Completed(CompleteEvent),
+}
+
+#[derive(Debug)]
+pub struct LogEvent {
+	pub build: tg::Build,
+	pub log: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -41,7 +47,7 @@ impl EventStream {
 		let client = client.clone_box();
 		let task = tokio::task::spawn(async move {
 			// Create the log stream.
-			let Ok(log) = build.log(client.as_ref()).await else {
+			let Ok(log) = log_stream(client.as_ref(), build.clone()).await else {
 				tracing::error!("Failed to get the log stream of the root build.");
 				return;
 			};
@@ -62,7 +68,7 @@ impl EventStream {
 			loop {
 				// First, see if the UI has requested us monitor another build's log.
 				if let Ok(build) = log_receiver.try_recv() {
-					if let Ok(new_log) = build.log(client.as_ref()).await {
+					if let Ok(new_log) = log_stream(client.as_ref(), build).await {
 						log = new_log.fuse();
 					}
 				}
@@ -93,9 +99,9 @@ impl EventStream {
 							// Handle any logs.
 							log = log.next() => {
 								// TODO handle errors.
-								if let Some(Ok(log)) = log {
-									println!("Pushing log: {log:#?}");
-									events.push(Event::Log(log.to_vec()));
+								if let Some(event) = log {
+									println!("log event: {event:#?}");
+									events.push(Event::Log(event));
 								}
 							}
 
@@ -163,4 +169,19 @@ fn completion_stream(client: &dyn tg::Client, build: tg::Build) -> BoxStream<Eve
 	})
 	.boxed();
 	stream
+}
+
+async fn log_stream(client: &dyn tg::Client, build: tg::Build) -> tg::Result<BoxStream<LogEvent>> {
+	let stream = build.log(client).await?;
+	let id = build.id();
+	let stream = stream
+		.filter_map(move |bytes| async move {
+			let bytes = bytes.ok()?;
+			let log = bytes.to_vec();
+			let build = tg::Build::with_id(id);
+			let event = LogEvent { build, log };
+			Some(event)
+		})
+		.boxed();
+	Ok(stream)
 }
