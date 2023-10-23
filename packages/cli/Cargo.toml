@@ -40,4 +40,4 @@ tracing-subscriber = { workspace = true }
 url = { workspace = true }
 v8 = { workspace = true }
 webbrowser = { workspace = true }
-libc = { workpsace = true }
+libc = { workspace = true }
