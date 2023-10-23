@@ -303,7 +303,8 @@ impl Server {
 		};
 
 		// Finish the build.
-		let _build = progress.finish(self).await?;
+		let target = Target::with_id(target_id);
+		let _build = progress.finish(self, target).await?;
 
 		// Create a write transaction.
 		let mut txn = self
@@ -542,7 +543,7 @@ impl Progress {
 			.unwrap()
 	}
 
-	pub async fn finish(self, client: &dyn Client) -> Result<Build> {
+	pub async fn finish(self, client: &dyn Client, target: Target) -> Result<Build> {
 		// Drop the children sender.
 		self.state.children.lock().unwrap().sender.take();
 
@@ -565,7 +566,7 @@ impl Progress {
 		let result = self.state.result.receiver.borrow().clone().unwrap();
 
 		// Create the build.
-		let build = Build::new(client, self.state.id, children, log, result).await?;
+		let build = Build::new(client, self.state.id, children, log, result, target).await?;
 
 		Ok(build)
 	}
