@@ -7,35 +7,51 @@ use crossterm as ct;
 use itertools::Itertools;
 use ratatui as tui;
 use tangram_client as tg;
+use tg::WrapErr;
 
+use self::event_stream::{Event, EventStream};
+mod controller;
 mod event_stream;
+mod state;
+mod view;
 
 type Backend = tui::backend::CrosstermBackend<DevTty>;
 type Frame<'a> = tui::Frame<'a, Backend>;
 type Terminal = tui::Terminal<Backend>;
 
-pub fn ui() -> tg::Result<()> {
-	ct::terminal::enable_raw_mode()?;
+pub fn ui(client: &dyn tg::Client, root: tg::Build) -> tg::Result<()> {
+	ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
 	let backend = tui::backend::CrosstermBackend::new(DevTty::open()?);
-	let mut terminal = tui::Terminal::new(backend)?;
+	let mut terminal =
+		tui::Terminal::new(backend).wrap_err("Failed to create terminal backend.")?;
 	ct::execute!(
 		terminal.backend_mut(),
 		ct::event::EnableMouseCapture,
 		ct::terminal::EnterAlternateScreen,
-	)?;
+	)
+	.wrap_err("Failed to setup TUI")?;
 
-	do_ui(&mut terminal)?;
+	let event_stream = EventStream::new(std::time::Duration::from_millis(20), client, root.clone());
+	let root = BuildState::with_id(root.id());
+	let state = State::new(root);
+	do_ui(&mut terminal, state, client, event_stream).wrap_err("Failed to create TUI.")?;
 
 	ct::execute!(
 		terminal.backend_mut(),
 		ct::event::DisableMouseCapture,
 		ct::terminal::LeaveAlternateScreen
-	)?;
-	ct::terminal::disable_raw_mode()?;
+	)
+	.wrap_err("Failed to shutdown TUI.")?;
+	ct::terminal::disable_raw_mode().wrap_err("Failed to disable terminal raw mode")?;
 	todo!()
 }
 
-fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
+fn do_ui(
+	terminal: &mut Terminal,
+	mut state: State,
+	client: &dyn tg::Client,
+	event_stream: EventStream,
+) -> std::io::Result<()> {
 	// Add our keybaard event handlers.
 	let mut commands = Commands::new();
 	commands.add_command(
@@ -65,7 +81,7 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 			(ct::event::KeyCode::Right, ct::event::KeyModifiers::NONE),
 			(ct::event::KeyCode::Char('l'), ct::event::KeyModifiers::NONE),
 		],
-		|state| state.expand(),
+		|state| state.expand(client),
 	);
 	commands.add_command(
 		"Close",
@@ -80,10 +96,16 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 		[(ct::event::KeyCode::Char('r'), ct::event::KeyModifiers::NONE)],
 		|state| state.rotate(),
 	);
+	commands.add_command(
+		"Select",
+		[(ct::event::KeyCode::Enter, ct::event::KeyModifiers::NONE)],
+		|state| {
+			state.select(client, &event_stream);
+		},
+	);
 
-	// Create our dummy state.
-	let mut state = default_state();
 	loop {
+		// Handle events.
 		if ct::event::poll(std::time::Duration::from_millis(16))? {
 			let event = ct::event::read()?;
 			match event {
@@ -95,6 +117,25 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 				_ => (),
 			}
 		}
+		for event in event_stream.poll() {
+			match event {
+				Event::Log(bytes) => {
+					let string = match String::from_utf8(bytes) {
+						Ok(string) => string,
+						Err(e) => e.to_string(),
+					};
+					state.log_state.push_str(&string);
+				},
+				Event::Child(child) => {
+					if let Some(build) = find_build_by_id_mut(&mut state.builds, child.parent) {
+						build.children.push(BuildState::with_id(child.child));
+					}
+				},
+				_ => (), // TODO: handle completions, errors, etc.
+			}
+		}
+
+		// Render the UI.
 		terminal.draw(|frame| {
 			let layout = tui::layout::Layout::default()
 				.direction(tui::layout::Direction::Vertical)
@@ -121,15 +162,14 @@ fn do_ui(terminal: &mut Terminal) -> std::io::Result<()> {
 struct State {
 	builds: Vec<BuildState>,
 	rotation: Rotation,
-	log: String,
 	selected: usize,
+	log_state: String,
 }
 
 struct BuildState {
-	id: String,
+	id: tg::build::Id,
 	status: BuildStatus,
-	name: String,
-	time: String,
+	expanded: bool,
 	children: Vec<Self>,
 }
 
@@ -147,6 +187,24 @@ enum Rotation {
 }
 
 impl State {
+	fn new(root: BuildState) -> Self {
+		Self {
+			builds: vec![root],
+			rotation: Rotation::Horizontal,
+			selected: 0,
+			log_state: "".into(),
+		}
+	}
+
+	fn select(&mut self, client: &dyn tg::Client, event_stream: &EventStream) {
+		let Some(build) = find_build_mut(&mut self.builds, self.selected) else {
+			return;
+		};
+		let build = tg::Build::with_id(build.id.clone());
+		self.log_state.clear();
+		event_stream.set_log(build)
+	}
+
 	fn rotate(&mut self) {
 		self.rotation = match self.rotation {
 			Rotation::Vertical => Rotation::Horizontal,
@@ -166,12 +224,12 @@ impl State {
 		self.selected = self.selected.saturating_add(1).min(len.saturating_sub(1));
 	}
 
-	fn expand(&mut self) {
+	fn expand(&mut self, client: &dyn tg::Client) {
 		let which = self.selected;
 		let Some(build) = find_build_mut(&mut self.builds, which) else {
 			return;
 		};
-		build.children = get_children(&build.name);
+		build.expanded = true;
 	}
 
 	fn collapse(&mut self) {
@@ -179,7 +237,7 @@ impl State {
 		let Some(build) = find_build_mut(&mut self.builds, which) else {
 			return;
 		};
-		build.children.clear();
+		build.expanded = false;
 	}
 
 	fn render(&mut self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
@@ -257,20 +315,19 @@ impl State {
 			.margin(1)
 			.constraints([tui::layout::Constraint::Percentage(100)])
 			.split(area)[0];
-		let text = tui::text::Text::from(&self.log as &str);
+		let text = tui::text::Text::from(&self.log_state as &str);
 		let widget = tui::widgets::Paragraph::new(text);
 		frame.render_widget(widget, area);
 	}
 }
 
 impl BuildState {
-	fn with_name(name: &str) -> Self {
+	fn with_id(id: tg::build::Id) -> Self {
 		Self {
-			id: "<ID>".into(),
 			status: BuildStatus::InProgress,
-			name: name.into(),
-			time: "123.45".into(),
+			id: id.clone(),
 			children: vec![],
+			expanded: false,
 		}
 	}
 
@@ -310,8 +367,7 @@ impl BuildState {
 				.split(area);
 
 			let id = &self.id;
-			let name = &self.name;
-			let time = &self.time;
+			let name = &self.id.to_string();
 			let tree = format!("{tree_str}{name}");
 			let style = if selected == offset {
 				tui::style::Style::default()
@@ -321,14 +377,22 @@ impl BuildState {
 				tui::style::Style::default()
 			};
 
-			frame.render_widget(tui::widgets::Paragraph::new(tui::text::Text::from(tree)).style(style), layout[0]);
+			frame.render_widget(
+				tui::widgets::Paragraph::new(tui::text::Text::from(tree)).style(style),
+				layout[0],
+			);
 			frame.render_widget(Status::new(self.status), layout[1]);
-			frame.render_widget(tui::widgets::Paragraph::new(tui::text::Text::from(time.as_ref() as &str)).style(style), layout[2]);
-			frame.render_widget(tui::widgets::Paragraph::new(tui::text::Text::from(id.as_ref() as &str)).style(style), layout[3]);
-
+			frame.render_widget(
+				tui::widgets::Paragraph::new(tui::text::Text::from(id.to_string())).style(style),
+				layout[3],
+			);
 		}
 
 		let mut offset = offset + 1;
+		if !self.expanded {
+			return offset;
+		}
+
 		for (index, child) in self.children.iter().enumerate() {
 			let last_child = index == self.children.len() - 1;
 			let end = if last_child { "└─" } else { "├─" };
@@ -350,46 +414,39 @@ impl BuildState {
 
 		offset
 	}
+
+	fn poll_for_children(&mut self) {}
 }
 
-fn default_state() -> State {
-	State {
-		log: "... doing stuff ...\n".into(),
-		selected: 0,
-		rotation: Rotation::Horizontal,
-		builds: vec![
-			BuildState::with_name("target_1"),
-			BuildState::with_name("target_3"),
-			BuildState::with_name("target_10"),
-		],
+fn find_build<'a>(builds: &'a [BuildState], which: usize) -> Option<&'a BuildState> {
+	fn inner<'a>(
+		offset: usize,
+		which: usize,
+		build: &'a BuildState,
+	) -> Result<&'a BuildState, usize> {
+		if offset == which {
+			return Ok(build);
+		}
+		let mut offset = offset + 1;
+		if !build.expanded {
+			return Err(offset);
+		}
+		for child in &mut build.children {
+			match inner(offset, which, child) {
+				Ok(found) => return Ok(found),
+				Err(o) => offset = o,
+			}
+		}
+		return Err(offset);
 	}
-}
-
-fn get_children(name: &str) -> Vec<BuildState> {
-	match name {
-		"target_1" => vec![BuildState::with_name("target_2")],
-		"target_3" => vec![
-			BuildState::with_name("target_4"),
-			BuildState::with_name("target_5"),
-			BuildState::with_name("target_7"),
-		],
-		"target_7" => vec![
-			BuildState::with_name("target_8"),
-			BuildState::with_name("target_9"),
-		],
-		"target_10" => vec![
-			BuildState::with_name("target_11"),
-			BuildState::with_name("target_12"),
-			BuildState::with_name("target_16"),
-			BuildState::with_name("target_17"),
-		],
-		"target_12" => vec![
-			BuildState::with_name("target_13"),
-			BuildState::with_name("target_14"),
-			BuildState::with_name("target_15"),
-		],
-		_ => vec![],
+	let mut offset = 0;
+	for build in builds {
+		match inner(offset, which, build) {
+			Ok(found) => return Some(found),
+			Err(o) => offset = o,
+		}
 	}
+	None
 }
 
 fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a mut BuildState> {
@@ -402,6 +459,9 @@ fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a 
 			return Ok(build);
 		}
 		let mut offset = offset + 1;
+		if !build.expanded {
+			return Err(offset);
+		}
 		for child in &mut build.children {
 			match inner(offset, which, child) {
 				Ok(found) => return Ok(found),
@@ -410,7 +470,6 @@ fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a 
 		}
 		return Err(offset);
 	}
-
 	let mut offset = 0;
 	for build in builds {
 		match inner(offset, which, build) {
@@ -421,16 +480,39 @@ fn find_build_mut<'a>(builds: &'a mut [BuildState], which: usize) -> Option<&'a 
 	None
 }
 
+fn find_build_by_id_mut<'a>(
+	builds: &'a mut [BuildState],
+	id: tg::build::Id,
+) -> Option<&'a mut BuildState> {
+	fn inner<'a>(id: tg::build::Id, build: &'a mut BuildState) -> Option<&'a mut BuildState> {
+		if build.id == id {
+			return Some(build);
+		}
+		for child in &mut build.children {
+			if let Some(found) = inner(id, child) {
+				return Some(found);
+			}
+		}
+		None
+	}
+	for build in builds {
+		if let Some(found) = inner(id, build) {
+			return Some(found);
+		}
+	}
+	None
+}
+
 struct DevTty {
 	fd: std::os::fd::OwnedFd,
 }
 
 impl DevTty {
-	fn open() -> std::io::Result<Self> {
+	fn open() -> tg::Result<Self> {
 		unsafe {
 			let fd = libc::open(b"/dev/tty\0".as_ptr().cast(), libc::O_RDWR);
 			if fd < 0 {
-				return Err(std::io::Error::last_os_error());
+				Err(std::io::Error::last_os_error()).wrap_err("Failed to open /dev/tty")?;
 			}
 			let fd = OwnedFd::from_raw_fd(fd);
 			Ok(Self { fd })
@@ -580,7 +662,7 @@ impl tui::widgets::Widget for Status {
 				const STRING: &str = "⣾⣽⣻⢿⡿⣟⣯⣷";
 				let index = unsafe { libc::rand() } as usize % 8;
 				STRING.chars().nth(index).unwrap()
-			}
+			},
 			BuildStatus::Successful => '✅',
 			BuildStatus::Error => '❌',
 		};
