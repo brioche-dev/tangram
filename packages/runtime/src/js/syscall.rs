@@ -13,8 +13,7 @@ use tangram_client as tg;
 use tg::{
 	blob, checksum, object, return_error, Artifact, Blob, Checksum, Result, Target, Value, WrapErr,
 };
-use tokio::io::AsyncRead;
-use tokio_util::io::{StreamReader, SyncIoBridge};
+use tokio_util::io::StreamReader;
 use url::Url;
 
 pub fn syscall<'s>(
@@ -102,23 +101,7 @@ async fn syscall_decompress(
 	args: (Blob, blob::CompressionFormat),
 ) -> Result<Blob> {
 	let (blob, format) = args;
-	let reader = blob.reader(state.client.as_ref()).await?;
-	let reader = tokio::io::BufReader::new(reader);
-	let reader: Box<dyn AsyncRead + Unpin> = match format {
-		blob::CompressionFormat::Bz2 => {
-			Box::new(async_compression::tokio::bufread::BzDecoder::new(reader))
-		},
-		blob::CompressionFormat::Gz => {
-			Box::new(async_compression::tokio::bufread::GzipDecoder::new(reader))
-		},
-		blob::CompressionFormat::Xz => {
-			Box::new(async_compression::tokio::bufread::XzDecoder::new(reader))
-		},
-		blob::CompressionFormat::Zstd => {
-			Box::new(async_compression::tokio::bufread::ZstdDecoder::new(reader))
-		},
-	};
-	let blob = Blob::with_reader(state.client.as_ref(), reader).await?;
+	let blob = blob.decompress(state.client.as_ref(), format).await?;
 	Ok(blob)
 }
 
@@ -267,45 +250,7 @@ fn syscall_encoding_yaml_encode(
 
 async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) -> Result<Artifact> {
 	let (blob, format) = args;
-
-	// Create the reader.
-	let reader = blob.reader(state.client.as_ref()).await?;
-
-	// Create a temp.
-	let tempdir = tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
-	let path = tempdir.path().join("archive");
-
-	// Extract in a blocking task.
-	tokio::task::spawn_blocking({
-		let reader = SyncIoBridge::new(reader);
-		let path = path.clone();
-		move || -> Result<_> {
-			match format {
-				blob::ArchiveFormat::Tar => {
-					let mut archive = tar::Archive::new(reader);
-					archive.set_preserve_permissions(false);
-					archive.set_unpack_xattrs(false);
-					archive.unpack(path).wrap_err("Failed to unpack.")?;
-				},
-				blob::ArchiveFormat::Zip => {
-					let mut archive =
-						zip::ZipArchive::new(reader).wrap_err("Failed to read the zip archive.")?;
-					archive
-						.extract(&path)
-						.wrap_err("Failed to extract the zip archive.")?;
-				},
-			}
-			Ok(())
-		}
-	})
-	.await
-	.unwrap()?;
-
-	// Check in the unpack temp path.
-	let artifact = Artifact::check_in(state.client.as_ref(), &path)
-		.await
-		.wrap_err("Failed to check in the extracted archive.")?;
-
+	let artifact = blob.extract(state.client.as_ref(), format).await?;
 	Ok(artifact)
 }
 

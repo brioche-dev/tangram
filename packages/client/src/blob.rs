@@ -1,4 +1,4 @@
-use crate::{object, return_error, Client, Error, Result, WrapErr};
+use crate::{object, return_error, Artifact, Client, Error, Result, WrapErr};
 use bytes::Bytes;
 use futures::{
 	future::BoxFuture,
@@ -9,6 +9,7 @@ use num::ToPrimitive;
 use pin_project::pin_project;
 use std::{io::Cursor, pin::Pin, task::Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek};
+use tokio_util::io::SyncIoBridge;
 
 const MAX_BRANCH_CHILDREN: usize = 1024;
 
@@ -87,7 +88,7 @@ impl Blob {
 			// Create, store, and add the leaf.
 			let bytes = Bytes::copy_from_slice(&bytes[..position]);
 			let leaf = Self::new_leaf(bytes);
-			leaf.0.store(client).await?;
+			leaf.store(client).await?;
 			leaves.push((leaf, size));
 		}
 
@@ -178,6 +179,72 @@ impl Blob {
 		let string =
 			String::from_utf8(bytes).wrap_err("Failed to decode the blob's bytes as UTF-8.")?;
 		Ok(string)
+	}
+
+	pub async fn decompress(&self, client: &dyn Client, format: CompressionFormat) -> Result<Blob> {
+		let reader = self.reader(client).await?;
+		let reader = tokio::io::BufReader::new(reader);
+		let reader: Box<dyn AsyncRead + Unpin> = match format {
+			CompressionFormat::Bz2 => {
+				Box::new(async_compression::tokio::bufread::BzDecoder::new(reader))
+			},
+			CompressionFormat::Gz => {
+				Box::new(async_compression::tokio::bufread::GzipDecoder::new(reader))
+			},
+			CompressionFormat::Xz => {
+				Box::new(async_compression::tokio::bufread::XzDecoder::new(reader))
+			},
+			CompressionFormat::Zstd => {
+				Box::new(async_compression::tokio::bufread::ZstdDecoder::new(reader))
+			},
+		};
+		let blob = Blob::with_reader(client, reader).await?;
+		Ok(blob)
+	}
+
+	pub async fn extract(&self, client: &dyn Client, format: ArchiveFormat) -> Result<Artifact> {
+		// Create the reader.
+		let reader = self.reader(client).await?;
+
+		// Create a temp.
+		let tempdir =
+			tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
+		let path = tempdir.path().join("archive");
+
+		// Extract in a blocking task.
+		tokio::task::spawn_blocking({
+			let reader = SyncIoBridge::new(reader);
+			let path = path.clone();
+			move || -> Result<_> {
+				match format {
+					ArchiveFormat::Tar => {
+						let mut archive = tar::Archive::new(reader);
+						archive.set_preserve_permissions(false);
+						archive.set_unpack_xattrs(false);
+						archive
+							.unpack(path)
+							.wrap_err("Failed to extract the archive.")?;
+					},
+					ArchiveFormat::Zip => {
+						let mut archive = zip::ZipArchive::new(reader)
+							.wrap_err("Failed to extract the archive.")?;
+						archive
+							.extract(&path)
+							.wrap_err("Failed to extract the archive.")?;
+					},
+				}
+				Ok(())
+			}
+		})
+		.await
+		.unwrap()?;
+
+		// Check in the extracted artifact.
+		let artifact = Artifact::check_in(client, &path)
+			.await
+			.wrap_err("Failed to check in the extracted archive.")?;
+
+		Ok(artifact)
 	}
 }
 

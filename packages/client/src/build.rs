@@ -46,6 +46,14 @@ pub struct Data {
 	pub result: Result<value::Data, Error>,
 }
 
+impl Id {
+	#[allow(clippy::new_without_default)]
+	#[must_use]
+	pub fn new() -> Self {
+		Self(crate::Id::new_random(id::Kind::Build))
+	}
+}
+
 impl Build {
 	pub async fn new(
 		client: &dyn Client,
@@ -172,14 +180,6 @@ impl Build {
 		} else {
 			Ok(client.try_get_build_result(self.id()).await?)
 		}
-	}
-}
-
-impl Id {
-	#[allow(clippy::new_without_default)]
-	#[must_use]
-	pub fn new() -> Self {
-		Self(crate::Id::new_random(id::Kind::Build))
 	}
 }
 

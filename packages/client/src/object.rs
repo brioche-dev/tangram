@@ -570,6 +570,14 @@ macro_rules! handle {
 				}
 			}
 
+			pub async fn load(&self, client: &dyn Client) -> Result<()> {
+				self.0.load(client).await
+			}
+
+			pub async fn store(&self, client: &dyn Client) -> Result<()> {
+				self.0.store(client).await
+			}
+
 			#[must_use]
 			pub fn handle(&self) -> &object::Handle {
 				&self.0

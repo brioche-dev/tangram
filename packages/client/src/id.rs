@@ -162,8 +162,8 @@ impl std::fmt::Display for Id {
 impl std::str::FromStr for Id {
 	type Err = Error;
 
-	fn from_str(string: &str) -> Result<Self, Self::Err> {
-		let string = string.get(4..).wrap_err("Invalid ID.")?;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		let string = s.get(4..).wrap_err("Invalid ID.")?;
 		let bytes = hex::decode(string).wrap_err("Invalid ID.")?;
 		let id = Self::with_bytes(bytes)?;
 		Ok(id)

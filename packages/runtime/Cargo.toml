@@ -13,7 +13,6 @@ version = { workspace = true }
 v8 = { workspace = true }
 
 [dependencies]
-async-compression = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true }
@@ -33,10 +32,8 @@ serde_yaml = { workspace = true }
 sourcemap = { workspace = true }
 tangram_client = { workspace = true }
 tangram_lsp = { workspace = true }
-tar = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
 v8 = { workspace = true }
-zip = { workspace = true }
