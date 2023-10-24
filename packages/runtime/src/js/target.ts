@@ -163,11 +163,11 @@ export class Target<
 					kind: "set" as const,
 					value: await template("/bin/sh"),
 				};
-				let args_ = {
+				let args = {
 					kind: "set" as const,
 					value: ["-c", await template(arg)],
 				};
-				return { host, executable, args_ };
+				return { host, executable, args };
 			} else if (Target.is(arg)) {
 				let host = { kind: "set" as const, value: await arg.host() };
 				let executable = {

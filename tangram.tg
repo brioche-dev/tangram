@@ -1,2 +1,15 @@
-export default tg.target(() => tg.file("Hello, World!"));
-// export default tg.target(`echo "Hello, World!" > $OUTPUT`);
+export default tg.target(async () => {
+  tg.log("starting");
+  for (let i = 0; i < 10; i++) {
+    await syscall("sleep", 1);
+    console.log("before", i);
+  }
+  tg.log("building a child");
+  let output = await tg.build(`echo "Hello, World!" > $OUTPUT`);
+  tg.log("done!");
+  for (let i = 0; i < 10; i++) {
+    await syscall("sleep", 1);
+    console.log("after", i);
+  }
+  return output;
+});

@@ -385,6 +385,9 @@ declare namespace tg {
 
 	export type MaybePromise<T> = T | Promise<T>;
 
+	/** Sleep for the specified duration in seconds. */
+	export let sleep: (duration: number) => Promise<void>;
+
 	/** Create a symlink. */
 	export let symlink: (...args: Args<Symlink.Arg>) => Promise<Symlink>;
 

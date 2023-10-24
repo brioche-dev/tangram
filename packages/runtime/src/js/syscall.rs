@@ -47,6 +47,7 @@ pub fn syscall<'s>(
 		"load" => syscall_async(scope, &args, syscall_load),
 		"log" => syscall_sync(scope, &args, syscall_log),
 		"read" => syscall_async(scope, &args, syscall_read),
+		"sleep" => syscall_async(scope, &args, syscall_sleep),
 		"store" => syscall_async(scope, &args, syscall_store),
 		_ => unreachable!(r#"Unknown syscall "{name}"."#),
 	};
@@ -272,6 +273,13 @@ async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
 	let bytes = blob.bytes(state.client.as_ref()).await?;
 	Ok(bytes.into())
+}
+
+async fn syscall_sleep(state: Rc<State>, args: (f64,)) -> Result<()> {
+	let (duration,) = args;
+	let duration = std::time::Duration::from_secs_f64(duration);
+	tokio::time::sleep(duration).await;
+	Ok(())
 }
 
 async fn syscall_store(state: Rc<State>, args: (object::Object,)) -> Result<object::Id> {

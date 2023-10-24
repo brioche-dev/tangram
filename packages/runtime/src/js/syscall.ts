@@ -72,6 +72,8 @@ declare global {
 	function syscall(syscall: "read", blob: Blob): Promise<Uint8Array>;
 
 	function syscall(syscall: "store", object: Object_): Promise<Object_.Id>;
+
+	function syscall(syscall: "sleep", duration: number): Promise<void>;
 }
 
 export let build = async (target: Target): Promise<Value> => {
@@ -271,6 +273,14 @@ export let read = async (blob: Blob): Promise<Uint8Array> => {
 export let store = async (object: Object_): Promise<Object_.Id> => {
 	try {
 		return await syscall("store", object);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
+
+export let sleep = async (duration: number): Promise<void> => {
+	try {
+		return await syscall("sleep", duration);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}

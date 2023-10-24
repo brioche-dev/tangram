@@ -10,7 +10,7 @@ import { Target } from "./target.ts";
 import { Template } from "./template.ts";
 
 export let log = (...args: Array<unknown>) => {
-	let string = args.map((arg) => stringify(arg)).join(" ");
+	let string = args.map((arg) => stringify(arg)).join(" ") + "\n";
 	syscall.log(string);
 };
 

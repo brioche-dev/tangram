@@ -12,6 +12,7 @@ import { main } from "./main.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
 import { resolve } from "./resolve.ts";
+import { sleep } from "./sleep.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import { System, system } from "./system.ts";
 import { Target, build, getCurrent, target } from "./target.ts";
@@ -66,6 +67,7 @@ Object.assign(tg, {
 	log,
 	main,
 	resolve,
+	sleep,
 	symlink,
 	system,
 	target,
