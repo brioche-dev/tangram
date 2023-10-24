@@ -1,14 +1,14 @@
+use futures::StreamExt;
 use ratatui as tui;
 use tangram_client as tg;
 use tui::prelude::Direction;
-
-use super::event_stream::EventStream;
 
 pub struct App {
 	pub highlighted: usize,
 	pub selected: usize,
 	pub direction: tui::layout::Direction,
 	pub builds: Vec<Build>,
+	pub log: Log,
 }
 
 pub struct Build {
@@ -16,7 +16,7 @@ pub struct Build {
 	pub status: Status,
 	pub is_expanded: bool,
 	pub children: Vec<Self>,
-	pub log: Option<String>,
+	pub info: String,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -27,19 +27,21 @@ pub enum Status {
 }
 
 impl App {
-	pub fn new(root: tg::Build) -> Self {
+	pub fn new(client: &dyn tg::Client, root: tg::Build, root_info: String) -> Self {
+		let log = Log::new(client, &root);
 		Self {
 			highlighted: 0,
 			direction: Direction::Horizontal,
 			selected: 0,
-			builds: vec![Build::with_build(root)],
+			builds: vec![Build::with_build(root, root_info)],
+			log,
 		}
 	}
 
-	pub fn select_log(&mut self, event_stream: &EventStream) {
-		let build = self.highlighted_build().build.clone();
+	pub fn select(&mut self, client: &dyn tg::Client) {
 		self.selected = self.highlighted;
-		event_stream.set_log(build)
+		let build = self.selected_build();
+		self.log = Log::new(client, &build.build);
 	}
 
 	pub fn scroll_up(&mut self) {
@@ -82,9 +84,9 @@ impl App {
 		find_build(&self.builds, self.selected).unwrap()
 	}
 
-	fn highlighted_build(&self) -> &'_ Build {
-		find_build(&self.builds, self.highlighted).unwrap()
-	}
+	// fn highlighted_build(&self) -> &'_ Build {
+	// 	find_build(&self.builds, self.highlighted).unwrap()
+	// }
 
 	fn highlighted_build_mut(&mut self) -> &'_ mut Build {
 		find_build_mut(&mut self.builds, self.highlighted).unwrap()
@@ -170,13 +172,13 @@ fn find_build_by_id_mut<'a>(builds: &'a mut [Build], build_: tg::Build) -> Optio
 }
 
 impl Build {
-	pub fn with_build(build: tg::Build) -> Self {
+	pub fn with_build(build: tg::Build, info: String) -> Self {
 		Self {
 			build,
 			status: Status::InProgress,
 			children: vec![],
 			is_expanded: false,
-			log: None,
+			info,
 		}
 	}
 
@@ -184,5 +186,72 @@ impl Build {
 		self.children
 			.iter()
 			.fold(self.children.len(), |acc, child| acc + child.len())
+	}
+}
+
+pub struct Log {
+	pub text: String,
+	receiver: tokio::sync::mpsc::UnboundedReceiver<String>,
+	_task: tokio::task::JoinHandle<()>,
+}
+
+impl Log {
+	pub fn new(client: &dyn tg::Client, build: &tg::Build) -> Self {
+		println!("Creating new log {}", build.id());
+		let build = build.clone();
+		let client = client.clone_box();
+		let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+
+		let task = tokio::task::spawn(async move {
+			println!("Spawned log task.");
+
+			// Why does this deadlock until the EventStream is dropped?
+			let mut log = match build.log(client.as_ref()).await {
+				Ok(log) => log,
+				Err(e) => {
+					println!("Failed to get log stream.");
+					let _ = sender.send(e.to_string());
+					return;
+				}
+			};
+
+			println!("Created new log stream.");
+			while !sender.is_closed() {
+				println!("Awaiting message.");
+				let result = tokio::time::timeout(std::time::Duration::from_millis(500), async {
+					match log.next().await {
+						Some(message) => {
+							match message.map(|bytes| String::from_utf8(bytes.to_vec())) {
+								Ok(Ok(message)) => Some(message),
+								Ok(Err(e)) => Some(e.to_string()),
+								Err(e) => Some(e.to_string())
+							}
+						}
+						None => None
+					}
+				}).await;
+				if let Ok(Some(message)) = result {
+					if let Err(_) = sender.send(message) {
+						break;
+					}
+				} else {
+					println!("Log task timeout.");
+				}
+			}
+			println!("Closing log stream.");
+		});
+
+		let text = "".into();
+		Self {
+			text,
+			receiver,
+			_task: task
+		}
+	}
+
+	pub fn update(&mut self) {
+		if let Ok(recv) = self.receiver.try_recv() {
+			self.text.push_str(recv.as_str());
+		}
 	}
 }

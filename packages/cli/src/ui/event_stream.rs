@@ -1,13 +1,15 @@
-use std::{rc::Rc, sync::RwLock};
+use std::sync::{RwLock, Arc};
 
-use futures::{select, stream::BoxStream, StreamExt};
+use futures::{
+	stream::BoxStream,
+	StreamExt,
+};
 use tangram_client as tg;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 #[derive(Debug)]
 pub enum Event {
 	Child(ChildEvent),
-	Log(LogEvent),
 	Completed(CompleteEvent),
 }
 
@@ -21,6 +23,7 @@ pub struct LogEvent {
 pub struct ChildEvent {
 	pub parent: tg::Build,
 	pub child: tg::Build,
+	pub info: String,
 }
 
 #[derive(Debug)]
@@ -31,28 +34,19 @@ pub struct CompleteEvent {
 
 #[derive(Clone)]
 pub struct EventStream {
-	inner: Rc<RwLock<Inner>>,
+	inner: Arc<RwLock<Inner>>,
 }
 
 struct Inner {
-	log_sender: UnboundedSender<tg::Build>,
 	event_receiver: UnboundedReceiver<Vec<Event>>,
 	task: tokio::task::JoinHandle<()>,
 }
 
 impl EventStream {
 	pub fn new(timeout: std::time::Duration, client: &dyn tg::Client, build: tg::Build) -> Self {
-		let (log_sender, mut log_receiver) = tokio::sync::mpsc::unbounded_channel::<tg::Build>();
 		let (event_sender, event_receiver) = tokio::sync::mpsc::unbounded_channel();
 		let client = client.clone_box();
 		let task = tokio::task::spawn(async move {
-			// Create the log stream.
-			let Ok(log) = log_stream(client.as_ref(), build.clone()).await else {
-				tracing::error!("Failed to get the log stream of the root build.");
-				return;
-			};
-			let mut log = log.fuse();
-
 			// Create the child build stream of the root build.
 			let Ok(children) = child_stream(client.as_ref(), build.clone()).await else {
 				tracing::error!("Failed to get the children of the root build.");
@@ -66,63 +60,36 @@ impl EventStream {
 			// Create a SelectAll over the child and completion event streams.
 			let mut event_streams = futures::stream::select_all([children, completion]);
 			loop {
-				// First, see if the UI has requested us monitor another build's log.
-				if let Ok(build) = log_receiver.try_recv() {
-					if let Ok(new_log) = log_stream(client.as_ref(), build).await {
-						log = new_log.fuse();
-					}
-				}
-
 				// Collect all the events that occur during the timeout.
 				let mut events = vec![];
-				let _ = tokio::time::timeout(timeout, async {
-					loop {
-						select! {
-							// Handle new children and completions.
-							event = event_streams.next() => {
-								// TODO handle errors.
-								if let Some(event) = event {
-									if let Event::Child(event) = &event {
-										let completion = completion_stream(client.as_ref(), event.child.clone());
-										event_streams.push(completion.fuse());
 
-										// Add the children of this build to the event stream.
-										if let Ok(grandchildren) = child_stream(client.as_ref(), event.child.clone()).await {
-											event_streams.push(grandchildren.fuse());
+				let _error = tokio::time::timeout(timeout, async {
+					while let Some(event) = event_streams.next().await {
+						if let Event::Child(event) = &event {
+							let completion =
+								completion_stream(client.as_ref(), event.child.clone());
+							event_streams.push(completion.fuse());
 
-										}
-									};
-									events.push(event);
-								}
-							}
-
-							// Handle any logs.
-							log = log.next() => {
-								// TODO handle errors.
-								if let Some(event) = log {
-									println!("log event: {event:#?}");
-									events.push(Event::Log(event));
-								}
-							}
-
-							// If all the streams have been completed, we're done and can exit.
-							complete => {
-								break
+							// Add the children of this build to the event stream.
+							if let Ok(grandchildren) =
+								child_stream(client.as_ref(), event.child.clone()).await
+							{
+								event_streams.push(grandchildren.fuse());
 							}
 						};
+						events.push(event);
 					}
 				})
 				.await;
-
 				// If the event sender has been dropped, we can exit the main loop.
 				if let Err(_) = event_sender.send(events) {
+					println!("Closing event stream.");
 					break;
 				}
 			}
 		});
 
-		let inner = Rc::new(RwLock::new(Inner {
-			log_sender,
+		let inner = Arc::new(RwLock::new(Inner {
 			event_receiver,
 			task,
 		}));
@@ -132,11 +99,6 @@ impl EventStream {
 	pub fn poll(&self) -> Vec<Event> {
 		let mut inner = self.inner.write().unwrap();
 		inner.event_receiver.try_recv().unwrap_or_default()
-	}
-
-	pub fn set_log(&self, log: tg::Build) {
-		let inner = self.inner.read().unwrap();
-		let _ = inner.log_sender.send(log);
 	}
 }
 
@@ -152,9 +114,15 @@ async fn child_stream(client: &dyn tg::Client, build: tg::Build) -> tg::Result<B
 	let children = build.children(client).await?;
 	let stream = children
 		.filter_map(move |child| async move {
+			let client = client.clone_box();
 			let parent = tg::Build::with_id(id);
 			let child = child.ok()?;
-			Some(Event::Child(ChildEvent { parent, child }))
+			let info = info_string(client.as_ref(), &child).await;
+			Some(Event::Child(ChildEvent {
+				parent,
+				child,
+				info,
+			}))
 		})
 		.boxed();
 	Ok(stream)
@@ -171,17 +139,30 @@ fn completion_stream(client: &dyn tg::Client, build: tg::Build) -> BoxStream<Eve
 	stream
 }
 
-async fn log_stream(client: &dyn tg::Client, build: tg::Build) -> tg::Result<BoxStream<LogEvent>> {
-	let stream = build.log(client).await?;
-	let id = build.id();
-	let stream = stream
-		.filter_map(move |bytes| async move {
-			let bytes = bytes.ok()?;
-			let log = bytes.to_vec();
-			let build = tg::Build::with_id(id);
-			let event = LogEvent { build, log };
-			Some(event)
-		})
-		.boxed();
-	Ok(stream)
+pub async fn info_string(client: &dyn tg::Client, build: &tg::Build) -> String {
+	let target = match build.target(client).await {
+		Ok(target) => target,
+		Err(e) => return format!("Error: {e}"),
+	};
+
+	let name = match target.name(client).await {
+		Ok(Some(name)) => name.clone(),
+		Ok(None) => "<unknown>".into(),
+		Err(e) => format!("Error: {e}"),
+	};
+
+	let package = match target.package(client).await {
+		Ok(Some(package)) => match package.try_get_metadata(client).await {
+			Ok(tg::package::Metadata { name, version }) => {
+				let name = name.as_deref().unwrap_or("<unknown>");
+				let version = version.as_deref().unwrap_or("<unknown>");
+				format!("{name}@{version}")
+			},
+			Err(e) => format!("Error: {e}"),
+		},
+		Ok(None) => "<unknown>".into(),
+		Err(e) => format!("Error: {e}"),
+	};
+
+	format!("{package}: {name}")
 }

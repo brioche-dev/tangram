@@ -4,7 +4,7 @@ use super::state::App;
 use crossterm as ct;
 
 pub struct Controller {
-	pub actions: BTreeMap<String, Box<dyn Fn(&mut App)>>,
+	pub actions: BTreeMap<String, Box<dyn Fn(&mut App) + Send + 'static>>,
 	pub bindings: HashMap<KeyBinding, String>,
 }
 
@@ -25,9 +25,9 @@ impl Controller {
 		&mut self,
 		name: &str,
 		bindings: impl IntoIterator<Item = (ct::event::KeyCode, ct::event::KeyModifiers)>,
-		action: impl Fn(&mut App) + 'static,
+		action: impl Fn(&mut App) + Send + 'static,
 	) {
-		let action: Box<dyn Fn(&mut App)> = Box::new(action);
+		let action = Box::new(action);
 		self.actions.insert(name.into(), action);
 		for binding in bindings {
 			self.bindings

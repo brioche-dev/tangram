@@ -54,7 +54,7 @@ impl Cli {
 		let executable = tg::package::ROOT_MODULE_FILE_NAME.to_owned().into();
 		let target = tg::target::Builder::new(host, executable)
 			.package(package)
-			.name(args.target)
+			.name(args.target.clone())
 			.env(env)
 			.args(args_)
 			.build();
@@ -70,7 +70,13 @@ impl Cli {
 
 		// Create the ui.
 		if args.interactive {
-			ui::ui(self.client.as_ref(), build.clone())?;
+			let client = self.client.clone_box();
+			let build = build.clone();
+			let target = args.target.clone();
+			let task = tokio::task::spawn(async move {
+				ui::ui(client.as_ref(), build, target).await
+			});
+			let _ = task.await;
 		}
 
 		// Wait for the build's output.

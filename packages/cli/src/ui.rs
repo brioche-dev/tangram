@@ -11,7 +11,7 @@ use self::{
 	state::{App, Build, Status},
 };
 mod controller;
-mod event_stream;
+pub mod event_stream;
 mod state;
 mod view;
 
@@ -19,7 +19,7 @@ type Backend = tui::backend::CrosstermBackend<DevTty>;
 type Frame<'a> = tui::Frame<'a, Backend>;
 type Terminal = tui::Terminal<Backend>;
 
-pub fn ui(client: &dyn tg::Client, root: tg::Build) -> tg::Result<()> {
+pub async fn ui(client: &dyn tg::Client, root: tg::Build, root_info: String) -> tg::Result<()> {
 	ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
 	let backend = tui::backend::CrosstermBackend::new(DevTty::open()?);
 	let mut terminal =
@@ -31,7 +31,8 @@ pub fn ui(client: &dyn tg::Client, root: tg::Build) -> tg::Result<()> {
 	)
 	.wrap_err("Failed to setup TUI")?;
 
-	inner(&mut terminal, client, root).wrap_err("Failed to run TUI.")?;
+	let _ = inner(&mut terminal, client, root, root_info).await.wrap_err("Failed to run TUI.");
+	let _ = terminal.clear();
 
 	ct::execute!(
 		terminal.backend_mut(),
@@ -43,10 +44,10 @@ pub fn ui(client: &dyn tg::Client, root: tg::Build) -> tg::Result<()> {
 	Ok(())
 }
 
-fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build) -> std::io::Result<()> {
+async fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build, root_info: String) -> std::io::Result<()> {
 	// Create the state, event stream, and controller.
 	let mut controller = Controller::new();
-	let mut state = App::new(root.clone());
+	let mut state = App::new(client, root.clone(), root_info);
 	let events = EventStream::new(std::time::Duration::from_millis(20), client, root.clone());
 
 	// Add the key bindings. Note that these closures take client and events by ref, which means that the Controller instance cannot outlive this function's scope.s
@@ -92,17 +93,20 @@ fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build) -> s
 		[(ct::event::KeyCode::Char('r'), ct::event::KeyModifiers::NONE)],
 		|state| state.rotate(),
 	);
-	let events_ = events.clone();
+	let client_ = client.clone_box();
 	controller.add_command(
 		"Select",
 		[(ct::event::KeyCode::Enter, ct::event::KeyModifiers::NONE)],
 		move |state| {
-			state.select_log(&events_);
+			state.select(client_.as_ref());
 		},
 	);
 
 	// Main loop.
 	loop {
+		// Yield back to the runtime to avoid starving the thread.
+		tokio::task::yield_now().await;
+
 		// Handle events.
 		if ct::event::poll(std::time::Duration::from_millis(16))? {
 			let event = ct::event::read()?;
@@ -116,23 +120,13 @@ fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build) -> s
 			}
 		}
 
+		state.log.update();
 		for event in events.poll() {
 			match event {
-				Event::Log(event) => {
-					let string = match String::from_utf8(event.log) {
-						Ok(string) => string,
-						Err(e) => e.to_string(),
-					};
-					let build = state.find_build(event.build);
-					match &mut build.log {
-						Some(existing) => existing.push_str(string.as_str()),
-						None => build.log = Some(string),
-					}
-				},
 				Event::Child(event) => {
-					let ChildEvent { parent, child } = event;
+					let ChildEvent { parent, child, info } = event;
 					let parent = state.find_build(parent);
-					parent.children.push(Build::with_build(child));
+					parent.children.push(Build::with_build(child, info));
 				},
 				Event::Completed(completion) => {
 					let build = state.find_build(completion.build);
@@ -155,14 +149,11 @@ fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build) -> s
 				])
 				.split(frame.size());
 
+			state.view(frame, layout[0]);
 			controller.view(frame, layout[1]);
-			let area = tui::layout::Layout::default()
-				.margin(0)
-				.constraints([tui::layout::Constraint::Percentage(100)])
-				.split(layout[0]);
-			state.view(frame, area[0]);
 		})?;
 	}
+
 	Ok(())
 }
 

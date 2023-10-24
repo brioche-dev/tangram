@@ -3,9 +3,10 @@ use std::collections::BTreeMap;
 use super::{controller::Controller, state::*, Frame};
 use itertools::Itertools;
 use ratatui as tui;
+
 use tui::{
 	prelude::*,
-	widgets::{Block, Borders, Paragraph, Widget},
+	widgets::{Block, Borders, Paragraph, Widget, Wrap},
 };
 
 impl App {
@@ -24,7 +25,7 @@ impl App {
 		let block = Block::default().borders(border);
 		frame.render_widget(block, layout[1]);
 		self.view_builds(frame, layout[0]);
-		self.view_log(frame, layout[1]);
+		self.log.view(frame, layout[1]);
 	}
 
 	fn view_builds(&self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
@@ -47,7 +48,7 @@ impl App {
 			])
 			.split(vlayout[0]);
 
-		for (string, area) in ["ID", "Status", "id"].into_iter().zip(hlayout.into_iter()) {
+		for (string, area) in ["Name", "Status", "ID"].into_iter().zip(hlayout.into_iter()) {
 			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(string));
 			frame.render_widget(widget, *area);
 		}
@@ -67,14 +68,6 @@ impl App {
 				0,
 			);
 		}
-	}
-
-	fn view_log(&self, frame: &mut Frame<'_>, area: Rect) {
-		let build = self.selected_build();
-		let log = build.log.as_deref().unwrap_or("");
-		let text = Text::from(log);
-		let widget = Paragraph::new(text);
-		frame.render_widget(widget, area);
 	}
 }
 
@@ -109,8 +102,9 @@ impl Build {
 				.split(area);
 
 			let id = &self.build.id();
-			let name = id.to_string();
-			let tree = format!("{tree_str}{name}");
+			let name = self.info.as_str();
+			let indicator = if self.children.is_empty() { "" } else {">"};
+			let tree = format!("{tree_str}{name} {indicator}");
 			let style = if selected == offset {
 				tui::style::Style::default()
 					.bg(tui::style::Color::White)
@@ -203,5 +197,17 @@ impl Controller {
 			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(text));
 			frame.render_widget(widget, *area);
 		}
+	}
+}
+
+impl Log {
+	fn view(&self, frame: &mut Frame<'_>, mut area: Rect) {
+		area.x += 1;
+		area.width -= 1;
+		let text = Text::from(self.text.as_str());
+		let wrap = Wrap { trim: false };
+		let paragraph = Paragraph::new(text)
+			.wrap(wrap);
+		frame.render_widget(paragraph, area);
 	}
 }
