@@ -7,7 +7,8 @@ use derive_more::{From, TryInto, TryUnwrap};
 use std::collections::BTreeMap;
 
 /// A value.
-#[derive(Clone, Debug, From, TryInto, TryUnwrap)]
+#[derive(Clone, Debug, From, TryInto, serde::Serialize, serde::Deserialize, TryUnwrap)]
+#[serde(into = "Data", try_from = "Data")]
 #[try_unwrap(ref)]
 pub enum Value {
 	/// A null value.
@@ -117,58 +118,7 @@ impl Value {
 			Value::Target(target) => target.handle().store(client).await?,
 			_ => {},
 		}
-		Ok(self.to_data())
-	}
-
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		match self {
-			Value::Null(_) => Data::Null(()),
-			Value::Bool(value) => Data::Bool(*value),
-			Value::Number(value) => Data::Number(*value),
-			Value::String(value) => Data::String(value.clone()),
-			Value::Bytes(value) => Data::Bytes(value.clone()),
-			Value::Blob(value) => Data::Blob(value.expect_id()),
-			Value::Directory(value) => Data::Directory(value.expect_id()),
-			Value::File(value) => Data::File(value.expect_id()),
-			Value::Symlink(value) => Data::Symlink(value.expect_id()),
-			Value::Template(value) => Data::Template(value.to_data()),
-			Value::Package(value) => Data::Package(value.expect_id()),
-			Value::Target(value) => Data::Target(value.expect_id()),
-			Value::Array(value) => Data::Array(value.iter().map(Value::to_data).collect()),
-			Value::Map(value) => Data::Map(
-				value
-					.iter()
-					.map(|(key, value)| (key.clone(), value.to_data()))
-					.collect(),
-			),
-		}
-	}
-
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		match data {
-			Data::Null(_) => Value::Null(()),
-			Data::Bool(bool) => Value::Bool(bool),
-			Data::Number(number) => Value::Number(number),
-			Data::String(string) => Value::String(string),
-			Data::Bytes(bytes) => Value::Bytes(bytes),
-			Data::Blob(id) => Value::Blob(Blob::with_id(id)),
-			Data::Directory(id) => Value::Directory(Directory::with_id(id)),
-			Data::File(id) => Value::File(File::with_id(id)),
-			Data::Symlink(id) => Value::Symlink(Symlink::with_id(id)),
-			Data::Template(template) => Value::Template(Template::from_data(template)),
-			Data::Package(id) => Value::Package(Package::with_id(id)),
-			Data::Target(id) => Value::Target(Target::with_id(id)),
-			Data::Array(data) => {
-				Value::Array(data.into_iter().map(Value::from_data).collect::<Vec<_>>())
-			},
-			Data::Map(data) => Value::Map(
-				data.into_iter()
-					.map(|(key, value)| (key, Value::from_data(value)))
-					.collect(),
-			),
-		}
+		Ok(self.clone().into())
 	}
 
 	pub fn children(&self) -> Vec<object::Handle> {
@@ -214,15 +164,142 @@ impl Data {
 			Self::Null(_) | Self::Bool(_) | Self::Number(_) | Self::String(_) | Self::Bytes(_) => {
 				vec![]
 			},
-			Self::Blob(id) => vec![(*id).into()],
-			Self::Directory(id) => vec![(*id).into()],
-			Self::File(id) => vec![(*id).into()],
-			Self::Symlink(id) => vec![(*id).into()],
+			Self::Blob(id) => vec![id.clone().into()],
+			Self::Directory(id) => vec![id.clone().into()],
+			Self::File(id) => vec![id.clone().into()],
+			Self::Symlink(id) => vec![id.clone().into()],
 			Self::Template(template) => template.children(),
-			Self::Package(id) => vec![(*id).into()],
-			Self::Target(id) => vec![(*id).into()],
+			Self::Package(id) => vec![id.clone().into()],
+			Self::Target(id) => vec![id.clone().into()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
 		}
+	}
+}
+
+impl From<Value> for Data {
+	fn from(value: Value) -> Self {
+		match value {
+			Value::Null(_) => Self::Null(()),
+			Value::Bool(bool) => Self::Bool(bool),
+			Value::Number(number) => Self::Number(number),
+			Value::String(string) => Self::String(string.clone()),
+			Value::Bytes(bytes) => Self::Bytes(bytes.clone()),
+			Value::Blob(blob) => Self::Blob(blob.expect_id().clone()),
+			Value::Directory(directory) => Self::Directory(directory.expect_id().clone()),
+			Value::File(file) => Self::File(file.expect_id().clone()),
+			Value::Symlink(symlink) => Self::Symlink(symlink.expect_id().clone()),
+			Value::Template(template) => Self::Template(template.to_data().clone()),
+			Value::Package(package) => Self::Package(package.expect_id().clone()),
+			Value::Target(target) => Self::Target(target.expect_id().clone()),
+			Value::Array(array) => Self::Array(array.into_iter().map(Into::into).collect()),
+			Value::Map(map) => Self::Map(
+				map.into_iter()
+					.map(|(key, value)| (key.clone(), value.into()))
+					.collect(),
+			),
+		}
+	}
+}
+
+impl From<Data> for Value {
+	fn from(value: Data) -> Self {
+		match value {
+			Data::Null(_) => Self::Null(()),
+			Data::Bool(bool) => Self::Bool(bool),
+			Data::Number(number) => Self::Number(number),
+			Data::String(string) => Self::String(string),
+			Data::Bytes(bytes) => Self::Bytes(bytes),
+			Data::Blob(id) => Self::Blob(Blob::with_id(id)),
+			Data::Directory(id) => Self::Directory(Directory::with_id(id)),
+			Data::File(id) => Self::File(File::with_id(id)),
+			Data::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
+			Data::Template(template) => Self::Template(Template::from_data(template)),
+			Data::Package(id) => Self::Package(Package::with_id(id)),
+			Data::Target(id) => Self::Target(Target::with_id(id)),
+			Data::Array(array) => {
+				Self::Array(array.into_iter().map(Into::into).collect::<Vec<_>>())
+			},
+			Data::Map(map) => Self::Map(
+				map.into_iter()
+					.map(|(key, value)| (key, value.into()))
+					.collect(),
+			),
+		}
+	}
+}
+
+impl std::fmt::Display for Value {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Value::Null(_) => {
+				write!(f, "null")?;
+			},
+			Value::Bool(bool) => {
+				write!(f, "{bool}")?;
+			},
+			Value::Number(number) => {
+				write!(f, "{number}")?;
+			},
+			Value::String(string) => {
+				write!(f, "\"{string}\"")?;
+			},
+			Value::Bytes(bytes) => {
+				write!(f, "{}", hex::encode(bytes))?;
+			},
+			Value::Blob(blob) => {
+				write!(f, "{}", blob.expect_id())?;
+			},
+			Value::Directory(directory) => {
+				write!(f, "{}", directory.expect_id())?;
+			},
+			Value::File(file) => {
+				write!(f, "{}", file.expect_id())?;
+			},
+			Value::Symlink(symlink) => {
+				write!(f, "{}", symlink.expect_id())?;
+			},
+			Value::Template(template) => {
+				write!(f, "`")?;
+				for component in template.components() {
+					match component {
+						template::Component::String(string) => {
+							write!(f, "{string}")?;
+						},
+						template::Component::Artifact(artifact) => {
+							write!(f, "${{{}}}", artifact.expect_id())?;
+						},
+					}
+				}
+				write!(f, "`")?;
+			},
+			Value::Package(package) => {
+				write!(f, "{}", package.expect_id())?;
+			},
+			Value::Target(target) => {
+				write!(f, "{}", target.expect_id())?;
+			},
+			Value::Array(array) => {
+				write!(f, "[")?;
+				for (i, value) in array.iter().enumerate() {
+					write!(f, "{value}")?;
+					if i < array.len() - 1 {
+						write!(f, ", ")?;
+					}
+				}
+				write!(f, "]")?;
+			},
+			Value::Map(map) => {
+				write!(f, "[")?;
+				for (i, (key, value)) in map.iter().enumerate() {
+					write!(f, "{key}:{value}")?;
+					if i < map.len() - 1 {
+						write!(f, ", ")?;
+					}
+				}
+				write!(f, "]")?;
+			},
+		}
+		Ok(())
 	}
 }

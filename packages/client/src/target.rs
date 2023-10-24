@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 crate::id!(Target);
 crate::handle!(Target);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
@@ -131,14 +131,14 @@ impl Object {
 		Data {
 			host: self.host.clone(),
 			executable: self.executable.to_data(),
-			package: self.package.as_ref().map(Package::expect_id),
+			package: self.package.as_ref().map(Package::expect_id).cloned(),
 			name: self.name.clone(),
 			env: self
 				.env
 				.iter()
-				.map(|(key, value)| (key.clone(), value.to_data()))
+				.map(|(key, value)| (key.clone(), value.clone().into()))
 				.collect(),
-			args: self.args.iter().map(Value::to_data).collect(),
+			args: self.args.iter().cloned().map(Into::into).collect(),
 			checksum: self.checksum.clone(),
 			unsafe_: self.unsafe_,
 		}
@@ -154,9 +154,9 @@ impl Object {
 			env: data
 				.env
 				.into_iter()
-				.map(|(key, data)| (key, Value::from_data(data)))
+				.map(|(key, data)| (key, data.into()))
 				.collect(),
-			args: data.args.into_iter().map(Value::from_data).collect(),
+			args: data.args.into_iter().map(Into::into).collect(),
 			checksum: data.checksum,
 			unsafe_: data.unsafe_,
 		}
@@ -195,7 +195,7 @@ impl Data {
 	pub fn children(&self) -> Vec<object::Id> {
 		std::iter::empty()
 			.chain(self.executable.children())
-			.chain(self.package.map(Into::into))
+			.chain(self.package.clone().map(Into::into))
 			.chain(self.env.values().flat_map(value::Data::children))
 			.chain(self.args.iter().flat_map(value::Data::children))
 			.collect()

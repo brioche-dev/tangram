@@ -1,9 +1,6 @@
-use super::{document, Document, Import, Library, Module, Normal};
-use crate::{
-	error,
-	package::{Dependency, ROOT_MODULE_FILE_NAME},
-	return_error, Client, Package, Result, WrapErr,
-};
+use crate::{document, Document, Import, Library, Module, Normal};
+use tangram_client as tg;
+use tg::{error, return_error, Client, Package, Result, WrapErr};
 
 impl Module {
 	/// Resolve a module.
@@ -63,7 +60,10 @@ impl Module {
 				Ok(module)
 			},
 
-			(Self::Document(document), Import::Dependency(Dependency::Path(dependency_path))) => {
+			(
+				Self::Document(document),
+				Import::Dependency(tg::package::Dependency::Path(dependency_path)),
+			) => {
 				// Resolve the package path.
 				let dependency_path = document
 					.path
@@ -77,7 +77,7 @@ impl Module {
 					.wrap_err("Failed to canonicalize the path.")?;
 
 				// The module path is the root module.
-				let module_path = ROOT_MODULE_FILE_NAME.parse().unwrap();
+				let module_path = tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap();
 
 				// Create the document.
 				let document =
@@ -89,7 +89,7 @@ impl Module {
 				Ok(module)
 			},
 
-			(Self::Document(_), Import::Dependency(Dependency::Registry(_))) => {
+			(Self::Document(_), Import::Dependency(tg::package::Dependency::Registry(_))) => {
 				unimplemented!()
 			},
 
@@ -103,7 +103,7 @@ impl Module {
 					.try_into_subpath()
 					.wrap_err("Failed to resolve the module path.")?;
 				Ok(Self::Normal(Normal {
-					package_id: module.package_id,
+					package_id: module.package_id.clone(),
 					path,
 				}))
 			},
@@ -112,17 +112,19 @@ impl Module {
 				// Convert the module dependency to a package dependency.
 				let module_subpath = module.path.clone();
 				let dependency = match dependency {
-					Dependency::Path(dependency_path) => Dependency::Path(
-						module_subpath
-							.into_relpath()
-							.parent()
-							.join(dependency_path.clone()),
-					),
-					Dependency::Registry(_) => dependency.clone(),
+					tg::package::Dependency::Path(dependency_path) => {
+						tg::package::Dependency::Path(
+							module_subpath
+								.into_relpath()
+								.parent()
+								.join(dependency_path.clone()),
+						)
+					},
+					tg::package::Dependency::Registry(_) => dependency.clone(),
 				};
 
 				// Get the package.
-				let package = Package::with_id(module.package_id);
+				let package = Package::with_id(module.package_id.clone());
 
 				// Get the specified package from the dependencies.
 				let dependencies = package.dependencies(client).await?;
@@ -133,8 +135,8 @@ impl Module {
 
 				// Get the root module.
 				let module = Module::Normal(Normal {
-					package_id: package.id(client).await?,
-					path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+					package_id: package.id(client).await?.clone(),
+					path: tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
 				});
 
 				Ok(module)

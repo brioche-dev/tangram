@@ -3,7 +3,7 @@ use crate::{object, return_error, template, Artifact, Client, Result, Template, 
 crate::id!(Symlink);
 crate::handle!(Symlink);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]

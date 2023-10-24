@@ -1,7 +1,8 @@
-use super::{send_notification, Sender, Server};
-use crate::{convert_diagnostic, module::Diagnostic, return_error, Module, Result};
+use crate::{return_error, send_notification, Diagnostic, Module, Sender, Server};
 use lsp_types as lsp;
 use std::collections::BTreeMap;
+use tangram_client as tg;
+use tg::Result;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +43,7 @@ impl Server {
 		// Publish the diagnostics.
 		for (module, diagnostics) in diagnostics_for_module {
 			let version = Some(module.version(Some(&self.state.document_store)).await?);
-			let diagnostics = diagnostics.into_iter().map(convert_diagnostic).collect();
+			let diagnostics = diagnostics.into_iter().map(Into::into).collect();
 			send_notification::<lsp::notification::PublishDiagnostics>(
 				sender,
 				lsp::PublishDiagnosticsParams {

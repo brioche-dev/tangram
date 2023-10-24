@@ -494,13 +494,13 @@ impl FromV8 for serde_json::Value {
 	}
 }
 
-impl ToV8 for serde_toml::Value {
+impl ToV8 for toml::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		serde_v8::to_v8(scope, self).wrap_err("Failed to serialize the value.")
 	}
 }
 
-impl FromV8 for serde_toml::Value {
+impl FromV8 for toml::Value {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,

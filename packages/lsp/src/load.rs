@@ -1,12 +1,10 @@
 use super::{document, Module};
-use crate::{Client, Package, Result, WrapErr};
 use include_dir::include_dir;
+use tangram_client as tg;
+use tg::{Client, Package, Result, WrapErr};
 
-const TANGRAM_D_TS: &str = include_str!(concat!(
-	env!("CARGO_MANIFEST_DIR"),
-	"/../lsp/src/tangram.d.ts"
-));
-const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/../lsp/src/lib");
+const TANGRAM_D_TS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/tangram.d.ts"));
+const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/src/lib");
 
 impl Module {
 	/// Load the module.
@@ -38,7 +36,7 @@ impl Module {
 			// Load a module from a package.
 			Self::Normal(module) => {
 				// Get the package.
-				let package = Package::with_id(module.package_id);
+				let package = Package::with_id(module.package_id.clone());
 
 				// Load the module.
 				let directory = package

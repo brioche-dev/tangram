@@ -6,8 +6,7 @@ use std::{
 	path::{Path, PathBuf},
 	sync::Weak,
 };
-use tangram_client::{self as tg, error, return_error, Result};
-use tg::Wrap;
+use tg::{error, return_error, Result, Wrap};
 use tokio::io::AsyncReadExt;
 
 #[derive(Debug)]

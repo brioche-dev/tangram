@@ -1,5 +1,4 @@
-use super::Server;
-use crate::{convert_lsp_position, module::Position, Module, Result};
+use crate::{Module, Position, Result, Server};
 use lsp_types as lsp;
 
 #[derive(Debug, serde::Serialize)]
@@ -29,7 +28,7 @@ impl Server {
 		let position = params.text_document_position_params.position;
 
 		// Get the hover info.
-		let hover = self.hover(&module, convert_lsp_position(position)).await?;
+		let hover = self.hover(&module, position.into()).await?;
 		let Some(hover) = hover else {
 			return Ok(None);
 		};

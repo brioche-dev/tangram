@@ -1,13 +1,14 @@
-use super::{parse, Import, Module};
-use crate::{error, package::Metadata, Relpath, Result, WrapErr};
+use crate::{parse, Import, Module};
 use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 use swc::ecma::{ast, visit::VisitWith};
 use swc_core as swc;
+use tangram_client as tg;
+use tg::{error, Relpath, Result, WrapErr};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Output {
-	pub metadata: Option<Metadata>,
+	pub metadata: Option<tg::package::Metadata>,
 	pub imports: HashSet<Import, fnv::FnvBuildHasher>,
 	pub includes: HashSet<Relpath, fnv::FnvBuildHasher>,
 }
@@ -79,7 +80,7 @@ impl std::fmt::Display for Error {
 struct Visitor {
 	source_map: Rc<swc::common::SourceMap>,
 	errors: Vec<Error>,
-	metadata: Option<Metadata>,
+	metadata: Option<tg::package::Metadata>,
 	imports: HashSet<Import, fnv::FnvBuildHasher>,
 	includes: HashSet<Relpath, fnv::FnvBuildHasher>,
 }
@@ -300,7 +301,7 @@ mod tests {
 			export * as namespaceExport from "./namespace_export.tg";
 		"#;
 		let left = Module::analyze(text.to_owned()).unwrap();
-		let metadata = Metadata {
+		let metadata = tg::package::Metadata {
 			name: Some("name".to_owned()),
 			version: Some("version".to_owned()),
 		};

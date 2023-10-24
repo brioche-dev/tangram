@@ -1,5 +1,6 @@
-use super::Server;
-use crate::{module::Diagnostic, Module, Result};
+use crate::{Diagnostic, Module, Server};
+use tangram_client as tg;
+use tg::Result;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

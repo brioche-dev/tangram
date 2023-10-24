@@ -13,7 +13,6 @@ pub use self::{
 	error::{Error, Result, Wrap, WrapErr},
 	file::File,
 	id::Id,
-	module::Module,
 	package::Package,
 	path::{Relpath, Subpath},
 	reqwest::Reqwest,
@@ -39,7 +38,6 @@ pub mod directory;
 pub mod error;
 pub mod file;
 pub mod id;
-pub mod module;
 pub mod object;
 pub mod package;
 pub mod path;
@@ -74,38 +72,38 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore;
 
-	async fn get_object_exists(&self, id: object::Id) -> Result<bool>;
+	async fn get_object_exists(&self, id: &object::Id) -> Result<bool>;
 
-	async fn get_object_bytes(&self, id: object::Id) -> Result<Vec<u8>> {
+	async fn get_object_bytes(&self, id: &object::Id) -> Result<Vec<u8>> {
 		Ok(self
 			.try_get_object_bytes(id)
 			.await?
 			.wrap_err("Failed to get the object.")?)
 	}
 
-	async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>>;
+	async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Vec<u8>>>;
 
 	async fn try_put_object_bytes(
 		&self,
-		id: object::Id,
+		id: &object::Id,
 		bytes: &[u8],
 	) -> Result<Result<(), Vec<object::Id>>>;
 
 	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>>;
 
-	async fn set_artifact_for_path(&self, path: &Path, artifact: Artifact) -> Result<()>;
+	async fn set_artifact_for_path(&self, path: &Path, artifact: &Artifact) -> Result<()>;
 
 	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<Package>>;
 
-	async fn set_package_for_path(&self, path: &Path, package: Package) -> Result<()>;
+	async fn set_package_for_path(&self, path: &Path, package: &Package) -> Result<()>;
 
-	async fn try_get_build_for_target(&self, id: target::Id) -> Result<Option<build::Id>>;
+	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>>;
 
-	async fn get_or_create_build_for_target(&self, id: target::Id) -> Result<build::Id>;
+	async fn get_or_create_build_for_target(&self, id: &target::Id) -> Result<build::Id>;
 
 	async fn get_build_children(
 		&self,
-		id: build::Id,
+		id: &build::Id,
 	) -> Result<BoxStream<'static, Result<build::Id>>> {
 		Ok(self
 			.try_get_build_children(id)
@@ -115,10 +113,10 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn try_get_build_children(
 		&self,
-		id: build::Id,
+		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<build::Id>>>>;
 
-	async fn get_build_log(&self, id: build::Id) -> Result<BoxStream<'static, Result<Bytes>>> {
+	async fn get_build_log(&self, id: &build::Id) -> Result<BoxStream<'static, Result<Bytes>>> {
 		Ok(self
 			.try_get_build_log(id)
 			.await?
@@ -127,25 +125,25 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn try_get_build_log(
 		&self,
-		id: build::Id,
+		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>>;
 
-	async fn get_build_result(&self, id: build::Id) -> Result<Result<Value, Error>> {
+	async fn get_build_result(&self, id: &build::Id) -> Result<Result<Value, Error>> {
 		Ok(self
 			.try_get_build_result(id)
 			.await?
 			.wrap_err("Failed to get the build.")?)
 	}
 
-	async fn try_get_build_result(&self, id: build::Id) -> Result<Option<Result<Value, Error>>>;
+	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
 
 	async fn clean(&self) -> Result<()>;
 
 	async fn create_login(&self) -> Result<user::Login>;
 
-	async fn get_login(&self, id: Id) -> Result<Option<user::Login>>;
+	async fn get_login(&self, id: &Id) -> Result<Option<user::Login>>;
 
-	async fn publish_package(&self, id: package::Id) -> Result<()>;
+	async fn publish_package(&self, id: &package::Id) -> Result<()>;
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<package::SearchResult>>;
 

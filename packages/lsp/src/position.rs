@@ -1,20 +1,10 @@
+use lsp_types as lsp;
+
 /// A position in a string, identified by zero-indexed line and character offsets. This type maps cleanly to the `Position` type in the Language Server Protocol. For maximum compatibility with the Language Server Protocol, character offsets use UTF-16 code units.
-#[derive(
-	Debug,
-	Clone,
-	Copy,
-	PartialEq,
-	Eq,
-	serde::Serialize,
-	serde::Deserialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Position {
-	#[tangram_serialize(id = 0)]
 	pub line: u32,
-	#[tangram_serialize(id = 1)]
 	pub character: u32,
 }
 
@@ -178,5 +168,23 @@ mod tests {
 				character: 0
 			}
 		);
+	}
+}
+
+impl From<Position> for lsp::Position {
+	fn from(value: Position) -> Self {
+		Self {
+			line: value.line,
+			character: value.character,
+		}
+	}
+}
+
+impl From<lsp::Position> for Position {
+	fn from(value: lsp::Position) -> Self {
+		Position {
+			line: value.line,
+			character: value.character,
+		}
 	}
 }

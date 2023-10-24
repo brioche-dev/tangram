@@ -1,4 +1,5 @@
-use super::position::Position;
+use crate::Position;
+use lsp_types as lsp;
 
 /// A range in a string, such as a text editor selection. The end is exclusive. This type maps cleanly to the `Range` type in the Language Server Protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -191,5 +192,23 @@ mod tests {
 				},
 			}
 		);
+	}
+}
+
+impl From<Range> for lsp::Range {
+	fn from(value: Range) -> Self {
+		Self {
+			start: value.start.into(),
+			end: value.end.into(),
+		}
+	}
+}
+
+impl From<lsp::Range> for Range {
+	fn from(value: lsp::Range) -> Self {
+		Self {
+			start: value.start.into(),
+			end: value.end.into(),
+		}
 	}
 }

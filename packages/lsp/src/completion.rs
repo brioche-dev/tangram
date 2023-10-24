@@ -1,6 +1,7 @@
-use super::Server;
-use crate::{convert_lsp_position, module::Position, return_error, Module, Result};
+use crate::{Module, Position, Server};
 use lsp_types as lsp;
+use tangram_client as tg;
+use tg::{return_error, Result};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,9 +36,7 @@ impl Server {
 		let position = params.text_document_position.position;
 
 		// Get the completion entries.
-		let entries = self
-			.completion(&module, convert_lsp_position(position))
-			.await?;
+		let entries = self.completion(&module, position.into()).await?;
 		let Some(entries) = entries else {
 			return Ok(None);
 		};

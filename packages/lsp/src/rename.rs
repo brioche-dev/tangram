@@ -1,12 +1,8 @@
-use super::Server;
-use crate::{convert_lsp_position, convert_range};
+use crate::{Location, Module, Position, Server};
 use lsp_types as lsp;
 use std::collections::HashMap;
 use tangram_client as tg;
-use tg::{
-	module::{Location, Module, Position},
-	return_error, Result,
-};
+use tg::{return_error, Result};
 use url::Url;
 
 #[derive(Debug, serde::Serialize)]
@@ -38,7 +34,7 @@ impl Server {
 		let new_text = &params.new_name;
 
 		// Get the references.
-		let locations = self.rename(&module, convert_lsp_position(position)).await?;
+		let locations = self.rename(&module, position.into()).await?;
 
 		// If there are no references, then return None.
 		let Some(locations) = locations else {
@@ -75,7 +71,7 @@ impl Server {
 				.unwrap()
 				.edits
 				.push(lsp::OneOf::Left(lsp::TextEdit {
-					range: convert_range(location.range),
+					range: location.range.into(),
 					new_text: new_text.clone(),
 				}));
 		}

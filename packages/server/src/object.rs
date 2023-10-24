@@ -20,7 +20,7 @@ impl Server {
 			return Ok(bad_request());
 		};
 
-		let exists = self.get_object_exists(id).await?;
+		let exists = self.get_object_exists(&id).await?;
 
 		// Create the response.
 		let status = if exists {
@@ -49,7 +49,7 @@ impl Server {
 			return Ok(bad_request());
 		};
 
-		let Some(bytes) = self.try_get_object_bytes(id).await? else {
+		let Some(bytes) = self.try_get_object_bytes(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -89,7 +89,7 @@ impl Server {
 			.wrap_err("Failed to read the body.")?;
 
 		// Put the object.
-		let result = self.try_put_object_bytes(id, &bytes).await?;
+		let result = self.try_put_object_bytes(&id, &bytes).await?;
 
 		// If there are missing children, then return a bad request response.
 		if let Err(missing_children) = result {
@@ -109,7 +109,7 @@ impl Server {
 			.unwrap())
 	}
 
-	pub async fn get_object_exists(&self, id: object::Id) -> Result<bool> {
+	pub async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
 		// Check if the object exists in the database.
 		if self.get_object_exists_from_database(id)? {
 			return Ok(true);
@@ -123,21 +123,21 @@ impl Server {
 		Ok(false)
 	}
 
-	pub fn get_object_exists_from_database(&self, id: object::Id) -> Result<bool> {
+	pub fn get_object_exists_from_database(&self, id: &object::Id) -> Result<bool> {
 		let txn = self
 			.state
 			.database
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		match txn.get(self.state.database.objects, &id.as_bytes()) {
+		match txn.get(self.state.database.objects, &id.to_bytes()) {
 			Ok(_) => Ok(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.wrap("Failed to get the object.")),
 		}
 	}
 
-	async fn get_object_exists_from_parent(&self, id: object::Id) -> Result<bool> {
+	async fn get_object_exists_from_parent(&self, id: &object::Id) -> Result<bool> {
 		if let Some(parent) = self.state.parent.as_ref() {
 			if parent.get_object_exists(id).await? {
 				return Ok(true);
@@ -146,13 +146,13 @@ impl Server {
 		Ok(false)
 	}
 
-	pub async fn get_object_bytes(&self, id: object::Id) -> Result<Vec<u8>> {
+	pub async fn get_object_bytes(&self, id: &object::Id) -> Result<Vec<u8>> {
 		self.try_get_object_bytes(id)
 			.await?
 			.wrap_err("Failed to get the object.")
 	}
 
-	pub async fn try_get_object_bytes(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
+	pub async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Vec<u8>>> {
 		// Attempt to get the object from the database.
 		if let Some(bytes) = self.try_get_object_bytes_from_database(id)? {
 			return Ok(Some(bytes));
@@ -166,21 +166,21 @@ impl Server {
 		Ok(None)
 	}
 
-	pub fn try_get_object_bytes_from_database(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
+	pub fn try_get_object_bytes_from_database(&self, id: &object::Id) -> Result<Option<Vec<u8>>> {
 		let txn = self
 			.state
 			.database
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		match txn.get(self.state.database.objects, &id.as_bytes()) {
+		match txn.get(self.state.database.objects, &id.to_bytes()) {
 			Ok(data) => Ok(Some(data.to_owned())),
 			Err(lmdb::Error::NotFound) => Ok(None),
 			Err(error) => Err(error.wrap("Failed to get the object.")),
 		}
 	}
 
-	async fn try_get_object_bytes_from_parent(&self, id: object::Id) -> Result<Option<Vec<u8>>> {
+	async fn try_get_object_bytes_from_parent(&self, id: &object::Id) -> Result<Option<Vec<u8>>> {
 		let Some(parent) = self.state.parent.as_ref() else {
 			return Ok(None);
 		};
@@ -201,7 +201,7 @@ impl Server {
 		// Add the object to the database.
 		txn.put(
 			self.state.database.objects,
-			&id.as_bytes(),
+			&id.to_bytes(),
 			&bytes,
 			lmdb::WriteFlags::empty(),
 		)
@@ -216,7 +216,7 @@ impl Server {
 	/// Attempt to put a object.
 	pub async fn try_put_object_bytes(
 		&self,
-		id: object::Id,
+		id: &object::Id,
 		bytes: &[u8],
 	) -> Result<Result<(), Vec<object::Id>>> {
 		// Deserialize the data.
@@ -227,7 +227,7 @@ impl Server {
 		let missing_children = stream::iter(data.children())
 			.map(Ok)
 			.try_filter_map(|id| async move {
-				let exists = self.get_object_exists(id).await?;
+				let exists = self.get_object_exists(&id).await?;
 				Ok::<_, Error>(if exists { None } else { Some(id) })
 			})
 			.try_collect::<Vec<_>>()
@@ -247,7 +247,7 @@ impl Server {
 		// Add the object to the database.
 		txn.put(
 			self.state.database.objects,
-			&id.as_bytes(),
+			&id.to_bytes(),
 			&bytes,
 			lmdb::WriteFlags::empty(),
 		)

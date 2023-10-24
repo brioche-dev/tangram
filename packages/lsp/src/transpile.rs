@@ -1,5 +1,4 @@
-use super::{parse, Module};
-use crate::{Result, WrapErr};
+use crate::{parse, Module, Result, WrapErr};
 use std::rc::Rc;
 use swc::ecma::{ast, visit::VisitMutWith};
 use swc_core as swc;

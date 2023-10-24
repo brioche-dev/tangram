@@ -1,3 +1,4 @@
+use self::progress::Progress;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{future, stream::BoxStream, FutureExt};
@@ -21,7 +22,7 @@ mod clean;
 // mod fsm;
 mod migrations;
 mod object;
-// mod vfs;
+mod progress;
 
 /// A server.
 #[derive(Clone, Debug)]
@@ -62,9 +63,9 @@ struct State {
 	// vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
 
-type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, tg::id::BuildHasher>;
+type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, fnv::FnvBuildHasher>;
 
-type BuildProgressMap = HashMap<tg::build::Id, self::build::Progress, tg::id::BuildHasher>;
+type BuildProgressMap = HashMap<tg::build::Id, Progress, fnv::FnvBuildHasher>;
 
 #[derive(Debug)]
 struct Database {
@@ -309,49 +310,49 @@ impl tg::Client for Server {
 		&self.state.file_descriptor_semaphore
 	}
 
-	async fn get_object_exists(&self, id: tg::object::Id) -> Result<bool> {
+	async fn get_object_exists(&self, id: &tg::object::Id) -> Result<bool> {
 		self.get_object_exists(id).await
 	}
 
-	async fn get_object_bytes(&self, id: tg::object::Id) -> Result<Vec<u8>> {
+	async fn get_object_bytes(&self, id: &tg::object::Id) -> Result<Vec<u8>> {
 		self.get_object_bytes(id).await
 	}
 
-	async fn try_get_object_bytes(&self, id: tg::object::Id) -> Result<Option<Vec<u8>>> {
+	async fn try_get_object_bytes(&self, id: &tg::object::Id) -> Result<Option<Vec<u8>>> {
 		self.try_get_object_bytes(id).await
 	}
 
 	async fn try_put_object_bytes(
 		&self,
-		id: tg::object::Id,
+		id: &tg::object::Id,
 		bytes: &[u8],
 	) -> Result<Result<(), Vec<tg::object::Id>>> {
 		self.try_put_object_bytes(id, bytes).await
 	}
 
-	async fn try_get_build_for_target(&self, id: tg::target::Id) -> Result<Option<tg::build::Id>> {
+	async fn try_get_build_for_target(&self, id: &tg::target::Id) -> Result<Option<tg::build::Id>> {
 		self.try_get_build_for_target(id).await
 	}
 
-	async fn get_or_create_build_for_target(&self, id: tg::target::Id) -> Result<tg::build::Id> {
+	async fn get_or_create_build_for_target(&self, id: &tg::target::Id) -> Result<tg::build::Id> {
 		self.get_or_create_build_for_target(id).await
 	}
 
 	async fn try_get_build_children(
 		&self,
-		id: tg::build::Id,
+		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<tg::build::Id>>>> {
 		self.try_get_build_children(id).await
 	}
 
 	async fn try_get_build_log(
 		&self,
-		id: tg::build::Id,
+		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		self.try_get_build_log(id).await
 	}
 
-	async fn try_get_build_result(&self, id: tg::build::Id) -> Result<Option<Result<tg::Value>>> {
+	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
 		self.try_get_build_result(id).await
 	}
 
@@ -368,7 +369,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn get_login(&self, id: tg::Id) -> Result<Option<tg::user::Login>> {
+	async fn get_login(&self, id: &tg::Id) -> Result<Option<tg::user::Login>> {
 		self.state
 			.parent
 			.as_ref()
@@ -377,7 +378,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn publish_package(&self, id: tg::package::Id) -> Result<()> {
+	async fn publish_package(&self, id: &tg::package::Id) -> Result<()> {
 		self.state
 			.parent
 			.as_ref()
@@ -412,11 +413,11 @@ impl tg::Client for Server {
 		self.try_get_package_for_path(path).await
 	}
 
-	async fn set_artifact_for_path(&self, path: &Path, artifact: tg::Artifact) -> Result<()> {
+	async fn set_artifact_for_path(&self, path: &Path, artifact: &tg::Artifact) -> Result<()> {
 		self.set_artifact_for_path(path, artifact).await
 	}
 
-	async fn set_package_for_path(&self, path: &Path, package: tg::Package) -> Result<()> {
+	async fn set_package_for_path(&self, path: &Path, package: &tg::Package) -> Result<()> {
 		self.set_package_for_path(path, package).await
 	}
 }

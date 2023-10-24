@@ -208,19 +208,19 @@ fn syscall_encoding_toml_decode(
 	_scope: &mut v8::HandleScope,
 	_state: Rc<State>,
 	args: (String,),
-) -> Result<serde_toml::Value> {
+) -> Result<toml::Value> {
 	let (toml,) = args;
-	let value = serde_toml::from_str(&toml).wrap_err("Failed to decode the string as toml.")?;
+	let value = toml::from_str(&toml).wrap_err("Failed to decode the string as toml.")?;
 	Ok(value)
 }
 
 fn syscall_encoding_toml_encode(
 	_scope: &mut v8::HandleScope,
 	_state: Rc<State>,
-	args: (serde_toml::Value,),
+	args: (toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
-	let toml = serde_toml::to_string(&value).wrap_err("Failed to encode the value.")?;
+	let toml = toml::to_string(&value).wrap_err("Failed to encode the value.")?;
 	Ok(toml)
 }
 
@@ -331,9 +331,9 @@ async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
 
 async fn syscall_store(state: Rc<State>, args: (object::Object,)) -> Result<object::Id> {
 	let (object,) = args;
-	object::Handle::with_object(object)
-		.id(state.client.as_ref())
-		.await
+	let handle = object::Handle::with_object(object);
+	let id = handle.id(state.client.as_ref()).await?;
+	Ok(id.clone())
 }
 
 fn syscall_sync<'s, A, T, F>(

@@ -1,4 +1,5 @@
-use crate::{package::Dependency, return_error, Error, Relpath, WrapErr};
+use tangram_client as tg;
+use tg::{package::Dependency, return_error, Error, Relpath, WrapErr};
 use url::Url;
 
 /// An import in a module.

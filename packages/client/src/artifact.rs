@@ -20,10 +20,10 @@ pub enum Kind {
 /// An artifact ID.
 #[derive(
 	Clone,
-	Copy,
 	Debug,
 	Eq,
 	From,
+	Hash,
 	PartialEq,
 	serde::Deserialize,
 	serde::Serialize,
@@ -69,18 +69,18 @@ impl Artifact {
 
 	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
 		match self {
-			Self::Directory(directory) => Ok(directory.id(client).await?.into()),
-			Self::File(file) => Ok(file.id(client).await?.into()),
-			Self::Symlink(symlink) => Ok(symlink.id(client).await?.into()),
+			Self::Directory(directory) => Ok(directory.id(client).await?.clone().into()),
+			Self::File(file) => Ok(file.id(client).await?.clone().into()),
+			Self::Symlink(symlink) => Ok(symlink.id(client).await?.clone().into()),
 		}
 	}
 
 	#[must_use]
 	pub fn expect_id(&self) -> Id {
 		match self {
-			Self::Directory(directory) => directory.expect_id().into(),
-			Self::File(file) => file.expect_id().into(),
-			Self::Symlink(symlink) => symlink.expect_id().into(),
+			Self::Directory(directory) => directory.expect_id().clone().into(),
+			Self::File(file) => file.expect_id().clone().into(),
+			Self::Symlink(symlink) => symlink.expect_id().clone().into(),
 		}
 	}
 
@@ -107,7 +107,7 @@ impl Artifact {
 	pub async fn recursive_references(
 		&self,
 		client: &dyn Client,
-	) -> Result<HashSet<Id, id::BuildHasher>> {
+	) -> Result<HashSet<Id, fnv::FnvBuildHasher>> {
 		// Create a queue of artifacts and a set of futures.
 		let mut references = HashSet::default();
 		let mut queue = VecDeque::new();
@@ -187,16 +187,6 @@ impl TryFrom<crate::Id> for Id {
 			id::Kind::File => Ok(Self::File(value.try_into()?)),
 			id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
 			_ => return_error!("Expected an artifact ID."),
-		}
-	}
-}
-
-impl std::hash::Hash for Id {
-	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		match self {
-			Id::Directory(id) => std::hash::Hash::hash(id, state),
-			Id::File(id) => std::hash::Hash::hash(id, state),
-			Id::Symlink(id) => std::hash::Hash::hash(id, state),
 		}
 	}
 }

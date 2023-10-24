@@ -4,9 +4,11 @@ members = [
   "packages/cli",
   "packages/client",
   "packages/lsp",
+  "packages/package",
   "packages/runtime",
   "packages/serialize",
   "packages/server",
+  "packages/vfs",
 ]
 
 [workspace.package]
@@ -64,7 +66,6 @@ reqwest = { version = "0.11", default-features = false, features = [
 ] }
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
-serde_toml = { package = "toml", version = "0.8" }
 serde_v8 = { version = "=0.130.0" }
 serde_yaml = { version = "0.9" }
 sha2 = "0.10"
@@ -85,6 +86,7 @@ syn = { version = "1", features = ["full"] }
 tangram_cli = { path = "packages/cli" }
 tangram_client = { path = "packages/client" }
 tangram_lsp = { path = "packages/lsp" }
+tangram_package = { path = "packages/package" }
 tangram_runtime = { path = "packages/runtime" }
 tangram_serialize = { path = "packages/serialize" }
 tangram_server = { path = "packages/server" }
@@ -94,6 +96,7 @@ thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
+toml = { version = "0.8" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = { version = "2", features = ["serde"] }

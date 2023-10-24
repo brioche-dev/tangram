@@ -27,11 +27,12 @@ num = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_toml = { workspace = true }
+toml = { workspace = true }
 serde_v8 = { workspace = true }
 serde_yaml = { workspace = true }
 sourcemap = { workspace = true }
 tangram_client = { workspace = true }
+tangram_lsp = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

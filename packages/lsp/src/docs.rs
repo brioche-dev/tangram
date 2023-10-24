@@ -1,5 +1,4 @@
-use super::Server;
-use crate::{return_error, Module, Result};
+use crate::{return_error, Module, Result, Server};
 use std::collections::BTreeMap;
 
 #[derive(Debug, serde::Serialize)]

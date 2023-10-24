@@ -8,11 +8,10 @@ use std::{
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
-use tangram_client::{
+use tg::{
 	artifact::Artifact, blob, directory::Directory, file::File, symlink::Symlink, template, Client,
-	Result, Template, WrapErr,
+	Result, Template, Wrap, WrapErr,
 };
-use tg::Wrap;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use zerocopy::{AsBytes, FromBytes};
 

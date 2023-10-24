@@ -8,10 +8,8 @@ use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client as tg;
-use tg::{
-	module::{self, Import, Module},
-	Client, Result, Target, WrapErr,
-};
+use tangram_lsp::{Import, Module};
+use tg::{Client, Result, Target, WrapErr};
 
 mod convert;
 mod error;
@@ -420,7 +418,7 @@ fn load_module<'s>(
 	};
 
 	// Transpile the module.
-	let module::transpile::Output {
+	let tangram_lsp::transpile::Output {
 		transpiled_text,
 		source_map,
 	} = match Module::transpile(text).wrap_err("Failed to transpile the module.") {

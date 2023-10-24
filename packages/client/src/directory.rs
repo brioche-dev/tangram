@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 crate::id!(Directory);
 crate::handle!(Directory);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
@@ -146,7 +146,7 @@ impl Data {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
-		self.entries.values().copied().map(Into::into).collect()
+		self.entries.values().cloned().map(Into::into).collect()
 	}
 }
 

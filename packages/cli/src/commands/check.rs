@@ -1,6 +1,7 @@
 use super::PackageArgs;
 use crate::Cli;
 use tangram_client as tg;
+use tangram_package::PackageExt;
 use tg::{return_error, Result, WrapErr};
 
 /// Check a package for errors.
@@ -35,7 +36,7 @@ impl Cli {
 		// Print the diagnostics.
 		for diagnostic in &diagnostics {
 			// Get the diagnostic location and message.
-			let tg::module::Diagnostic {
+			let tangram_lsp::Diagnostic {
 				location, message, ..
 			} = diagnostic;
 

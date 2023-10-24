@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{full, not_found, Incoming, Outgoing};
+use crate::{full, not_found, Incoming, Outgoing, Progress};
 use bytes::Bytes;
 use futures::{
 	stream::{self, BoxStream},
@@ -7,46 +7,8 @@ use futures::{
 };
 use http_body_util::StreamBody;
 use lmdb::Transaction;
-use std::sync::Arc;
 use tangram_client as tg;
-use tg::{
-	build, return_error, system, target, Blob, Build, Client, Result, Target, Value, Wrap, WrapErr,
-};
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-use tokio_stream::wrappers::BroadcastStream;
-
-#[derive(Clone, Debug)]
-pub struct Progress {
-	state: Arc<State>,
-}
-
-#[derive(Debug)]
-struct State {
-	id: build::Id,
-	children: std::sync::Mutex<ChildrenState>,
-	log: Arc<tokio::sync::Mutex<LogState>>,
-	logger: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<Bytes>>>,
-	logger_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
-	result: ResultState,
-}
-
-#[derive(Debug)]
-struct ChildrenState {
-	children: Vec<Build>,
-	sender: Option<tokio::sync::broadcast::Sender<Build>>,
-}
-
-#[derive(Debug)]
-struct LogState {
-	file: tokio::fs::File,
-	sender: Option<tokio::sync::broadcast::Sender<Bytes>>,
-}
-
-#[derive(Debug)]
-struct ResultState {
-	sender: tokio::sync::watch::Sender<Option<Result<Value>>>,
-	receiver: tokio::sync::watch::Receiver<Option<Result<Value>>>,
-}
+use tg::{build, return_error, system, target, Build, Result, Target, Value, Wrap, WrapErr};
 
 impl Server {
 	pub async fn handle_try_get_build_for_target_request(
@@ -61,7 +23,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the build for the target.
-		let Some(build_id) = self.try_get_build_for_target(id).await? else {
+		let Some(build_id) = self.try_get_build_for_target(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -83,7 +45,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get or create the build for the target.
-		let build_id = self.get_or_create_build_for_target(id).await?;
+		let build_id = self.get_or_create_build_for_target(&id).await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&build_id).wrap_err("Failed to serialize the response.")?;
@@ -103,7 +65,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get the children.
-		let Some(children) = self.try_get_build_children(id).await? else {
+		let Some(children) = self.try_get_build_children(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -111,7 +73,9 @@ impl Server {
 		let body = Outgoing::new(StreamBody::new(
 			children
 				.map_ok(|id| {
-					hyper::body::Frame::data(Bytes::copy_from_slice(id.as_bytes().as_slice()))
+					let mut id = serde_json::to_string(&id).unwrap();
+					id.push('\n');
+					hyper::body::Frame::data(Bytes::from(id))
 				})
 				.map_err(Into::into),
 		));
@@ -134,7 +98,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get the log.
-		let Some(log) = self.try_get_build_log(id).await? else {
+		let Some(log) = self.try_get_build_log(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -161,7 +125,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get the result.
-		let Some(result) = self.try_get_build_result(id).await? else {
+		let Some(result) = self.try_get_build_result(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -179,9 +143,9 @@ impl Server {
 	}
 
 	/// Attempt to get the build for a target.
-	pub async fn try_get_build_for_target(&self, id: target::Id) -> Result<Option<build::Id>> {
+	pub async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>> {
 		// Attempt to get the build for the target from the running state.
-		if let Some(build_id) = self.state.running.read().unwrap().0.get(&id).copied() {
+		if let Some(build_id) = self.state.running.read().unwrap().0.get(id).cloned() {
 			return Ok(Some(build_id));
 		}
 
@@ -199,7 +163,7 @@ impl Server {
 	}
 
 	/// Attempt to get the build for the target from the database.
-	fn try_get_build_for_target_from_database(&self, id: target::Id) -> Result<Option<build::Id>> {
+	fn try_get_build_for_target_from_database(&self, id: &target::Id) -> Result<Option<build::Id>> {
 		// Get the build for the target from the database.
 		let txn = self
 			.state
@@ -207,7 +171,7 @@ impl Server {
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to begin the transaction.")?;
-		match txn.get(self.state.database.assignments, &id.as_bytes()) {
+		match txn.get(self.state.database.assignments, &id.to_bytes()) {
 			Ok(build_id) => Ok(Some(build_id.try_into().wrap_err("Invalid ID.")?)),
 			Err(lmdb::Error::NotFound) => Ok(None),
 			Err(error) => Err(error.wrap("Failed to get the assignment.")),
@@ -217,7 +181,7 @@ impl Server {
 	/// Attempt to get the build for the target from the parent.
 	async fn try_get_build_for_target_from_parent(
 		&self,
-		id: target::Id,
+		id: &target::Id,
 	) -> Result<Option<build::Id>> {
 		// Get the parent.
 		let Some(parent) = self.state.parent.as_ref() else {
@@ -233,7 +197,12 @@ impl Server {
 	}
 
 	/// Get or create a build for a target.
-	pub async fn get_or_create_build_for_target(&self, target_id: target::Id) -> Result<build::Id> {
+	pub async fn get_or_create_build_for_target(
+		&self,
+		target_id: &target::Id,
+	) -> Result<build::Id> {
+		let target = Target::with_id(target_id.clone());
+
 		// Attempt to get the build for the target.
 		if let Some(build_id) = self.try_get_build_for_target(target_id).await? {
 			return Ok(build_id);
@@ -241,16 +210,18 @@ impl Server {
 
 		// Otherwise, create a new build and add its progress to the server.
 		let build_id = build::Id::new();
-		let progress = Progress::new(build_id)?;
+		let progress = Progress::new(build_id.clone(), target)?;
 		{
 			let mut running = self.state.running.write().unwrap();
-			running.0.insert(target_id, build_id);
-			running.1.insert(build_id, progress.clone());
+			running.0.insert(target_id.clone(), build_id.clone());
+			running.1.insert(build_id.clone(), progress.clone());
 		}
 
 		// Spawn the task.
 		tokio::spawn({
 			let server = self.clone();
+			let target_id = target_id.clone();
+			let build_id = build_id.clone();
 			async move { server.build_inner(target_id, build_id, progress).await }
 		});
 
@@ -264,7 +235,7 @@ impl Server {
 		progress: Progress,
 	) -> Result<()> {
 		// Build the target.
-		let target = Target::with_id(target_id);
+		let target = Target::with_id(target_id.clone());
 		match target.host(self).await?.os() {
 			system::Os::Js => {
 				// Build the target on the server's local pool because it is a `!Send` future.
@@ -303,8 +274,7 @@ impl Server {
 		};
 
 		// Finish the build.
-		let target = Target::with_id(target_id);
-		let _build = progress.finish(self, target).await?;
+		let _build = progress.finish(self).await?;
 
 		// Create a write transaction.
 		let mut txn = self
@@ -317,8 +287,8 @@ impl Server {
 		// Set the build for the target.
 		txn.put(
 			self.state.database.assignments,
-			&target_id.as_bytes(),
-			&build_id.as_bytes(),
+			&target_id.to_bytes(),
+			&build_id.to_bytes(),
 			lmdb::WriteFlags::empty(),
 		)
 		.wrap_err("Failed to store the item.")?;
@@ -334,24 +304,24 @@ impl Server {
 
 	pub async fn try_get_build_children(
 		&self,
-		id: build::Id,
+		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<build::Id>>>> {
 		// Attempt to stream the children from the running state.
-		let state = self.state.running.read().unwrap().1.get(&id).cloned();
+		let state = self.state.running.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			let children = state.children_stream();
-			return Ok(Some(children.map_ok(|child| child.id()).boxed()));
+			return Ok(Some(children.map_ok(|child| child.id().clone()).boxed()));
 		}
 
 		// Attempt to get the children from the object.
 		'a: {
-			let build = Build::with_id(id);
+			let build = Build::with_id(id.clone());
 			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
 			return Ok(Some(
 				stream::iter(object.children.clone())
-					.map(|child| child.id())
+					.map(|child| child.id().clone())
 					.map(Ok)
 					.boxed(),
 			));
@@ -373,10 +343,10 @@ impl Server {
 
 	pub async fn try_get_build_log(
 		&self,
-		id: build::Id,
+		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		// Attempt to stream the log from the running state.
-		let state = self.state.running.read().unwrap().1.get(&id).cloned();
+		let state = self.state.running.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			let log = state.log_stream().await?;
 			return Ok(Some(log));
@@ -384,7 +354,7 @@ impl Server {
 
 		// Attempt to get the log from the object.
 		'a: {
-			let build = Build::with_id(id);
+			let build = Build::with_id(id.clone());
 			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
@@ -406,9 +376,9 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn try_get_build_result(&self, id: build::Id) -> Result<Option<Result<Value>>> {
+	pub async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value>>> {
 		// Attempt to await the result from the running state.
-		let state = self.state.running.read().unwrap().1.get(&id).cloned();
+		let state = self.state.running.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			let result = state.wait_for_result().await;
 			return Ok(Some(result));
@@ -416,7 +386,7 @@ impl Server {
 
 		// Attempt to get the result from the object.
 		'a: {
-			let build = Build::with_id(id);
+			let build = Build::with_id(id.clone());
 			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
@@ -435,167 +405,5 @@ impl Server {
 		}
 
 		Ok(None)
-	}
-}
-
-impl Progress {
-	pub fn new(id: build::Id) -> Result<Self> {
-		// Create the children state.
-		let children = std::sync::Mutex::new(ChildrenState {
-			children: Vec::new(),
-			sender: Some(tokio::sync::broadcast::channel(1024).0),
-		});
-
-		// Create the log state.
-		let log = Arc::new(tokio::sync::Mutex::new(LogState {
-			file: tokio::fs::File::from_std(
-				tempfile::tempfile().wrap_err("Failed to create the temporary file.")?,
-			),
-			sender: Some(tokio::sync::broadcast::channel(1024).0),
-		}));
-
-		// Spawn the logger task.
-		let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<Bytes>();
-		let logger = std::sync::Mutex::new(Some(sender));
-		let logger_task = std::sync::Mutex::new(Some(tokio::spawn({
-			let log = log.clone();
-			async move {
-				while let Some(bytes) = receiver.recv().await {
-					let mut log = log.lock().await;
-					log.file
-						.seek(std::io::SeekFrom::End(0))
-						.await
-						.wrap_err("Failed to seek.")?;
-					log.file
-						.write_all(&bytes)
-						.await
-						.wrap_err("Failed to write the log.")?;
-					log.sender.as_ref().unwrap().send(bytes).ok();
-				}
-				Ok(())
-			}
-		})));
-
-		// Create the result state.
-		let (sender, receiver) = tokio::sync::watch::channel(None);
-		let result = ResultState { sender, receiver };
-
-		Ok(Self {
-			state: Arc::new(State {
-				id,
-				children,
-				log,
-				logger,
-				logger_task,
-				result,
-			}),
-		})
-	}
-
-	pub fn children_stream(&self) -> BoxStream<'static, Result<Build>> {
-		let state = self.state.children.lock().unwrap();
-		let old = stream::iter(state.children.clone()).map(Ok);
-		let new = if let Some(sender) = state.sender.as_ref() {
-			BroadcastStream::new(sender.subscribe())
-				.map_err(|err| err.wrap("Failed to create the stream."))
-				.boxed()
-		} else {
-			stream::empty().boxed()
-		};
-		old.chain(new).boxed()
-	}
-
-	pub async fn log_stream(&self) -> Result<BoxStream<'static, Result<Bytes>>> {
-		let mut log = self.state.log.lock().await;
-		log.file
-			.rewind()
-			.await
-			.wrap_err("Failed to rewind the log file.")?;
-		let mut old = Vec::new();
-		log.file
-			.read_to_end(&mut old)
-			.await
-			.wrap_err("Failed to read the log.")?;
-		let old = stream::once(async move { Ok(old.into()) });
-		log.file
-			.seek(std::io::SeekFrom::End(0))
-			.await
-			.wrap_err("Failed to seek in the log file.")?;
-		let new = if let Some(sender) = log.sender.as_ref() {
-			BroadcastStream::new(sender.subscribe())
-				.map_err(|err| err.wrap("Failed to create the stream."))
-				.boxed()
-		} else {
-			stream::empty().boxed()
-		};
-		Ok(old.chain(new).boxed())
-	}
-
-	pub async fn wait_for_result(&self) -> Result<Value> {
-		self.state
-			.result
-			.receiver
-			.clone()
-			.wait_for(Option::is_some)
-			.await
-			.unwrap()
-			.clone()
-			.unwrap()
-	}
-
-	pub async fn finish(self, client: &dyn Client, target: Target) -> Result<Build> {
-		// Drop the children sender.
-		self.state.children.lock().unwrap().sender.take();
-
-		// Drop the logger sender and wait for the logger task to finish.
-		self.state.logger.lock().unwrap().take();
-		let logger_task = self.state.logger_task.lock().unwrap().take().unwrap();
-		logger_task.await.unwrap()?;
-
-		// Get the children.
-		let children = self.state.children.lock().unwrap().children.clone();
-
-		// Get the log.
-		let log = {
-			let mut state = self.state.log.lock().await;
-			state.file.rewind().await.wrap_err("Failed to seek.")?;
-			Blob::with_reader(client, &mut state.file).await?
-		};
-
-		// Get the result.
-		let result = self.state.result.receiver.borrow().clone().unwrap();
-
-		// Create the build.
-		let build = Build::new(client, self.state.id, children, log, result, target).await?;
-
-		Ok(build)
-	}
-}
-
-impl tangram_runtime::Progress for Progress {
-	fn clone_box(&self) -> Box<dyn tangram_runtime::Progress> {
-		Box::new(self.clone())
-	}
-
-	fn child(&self, child: &tg::Build) {
-		let mut state = self.state.children.lock().unwrap();
-		state.children.push(child.clone());
-		state.sender.as_ref().unwrap().send(child.clone()).ok();
-	}
-
-	fn log(&self, bytes: Bytes) {
-		eprintln!("{}", std::str::from_utf8(&bytes).unwrap());
-		self.state
-			.logger
-			.lock()
-			.unwrap()
-			.as_ref()
-			.unwrap()
-			.send(bytes)
-			.unwrap();
-	}
-
-	fn result(&self, result: Result<tg::Value>) {
-		self.state.result.sender.send(Some(result)).unwrap();
 	}
 }

@@ -2,6 +2,7 @@ use super::{PackageArgs, RunArgs};
 use crate::{util::dirs::home_directory_path, Cli};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_client as tg;
+use tangram_package::PackageExt;
 use tg::{Result, Wrap, WrapErr};
 
 /// Build the specified target from a package and execute a command from its output.

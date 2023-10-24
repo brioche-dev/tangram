@@ -1,8 +1,7 @@
 use crate::{util::dirs::user_config_directory_path, Cli};
 use std::path::{Path, PathBuf};
 use tangram_client as tg;
-use tangram_client::Wrap;
-use tg::{Result, WrapErr};
+use tg::{Result, Wrap, WrapErr};
 use url::Url;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]

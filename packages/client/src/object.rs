@@ -2,6 +2,7 @@ use crate::{
 	artifact, blob, build, directory, file, id, package, return_error, symlink, target, Client,
 	Error, Result, WrapErr,
 };
+use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
 use futures::stream::TryStreamExt;
 use std::sync::Arc;
@@ -21,7 +22,6 @@ pub enum Kind {
 /// An object ID.
 #[derive(
 	Clone,
-	Copy,
 	Debug,
 	From,
 	TryInto,
@@ -133,15 +133,15 @@ impl Id {
 	}
 
 	#[must_use]
-	pub fn as_bytes(&self) -> [u8; crate::id::SIZE] {
+	pub fn to_bytes(&self) -> Bytes {
 		match self {
-			Self::Blob(id) => id.as_bytes(),
-			Self::Directory(id) => id.as_bytes(),
-			Self::File(id) => id.as_bytes(),
-			Self::Symlink(id) => id.as_bytes(),
-			Self::Package(id) => id.as_bytes(),
-			Self::Target(id) => id.as_bytes(),
-			Self::Build(id) => id.as_bytes(),
+			Self::Blob(id) => id.to_bytes(),
+			Self::Directory(id) => id.to_bytes(),
+			Self::File(id) => id.to_bytes(),
+			Self::Symlink(id) => id.to_bytes(),
+			Self::Package(id) => id.to_bytes(),
+			Self::Target(id) => id.to_bytes(),
+			Self::Build(id) => id.to_bytes(),
 		}
 	}
 }
@@ -176,8 +176,8 @@ impl Handle {
 	}
 
 	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		self.state.read().unwrap().id.unwrap()
+	pub fn expect_id(&self) -> &Id {
+		unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) }
 	}
 
 	#[must_use]
@@ -185,12 +185,12 @@ impl Handle {
 		unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) }
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
+	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
 		// Store the object.
 		self.store(client).await?;
 
-		// Return the ID.
-		Ok(self.state.read().unwrap().id.unwrap())
+		// Return a reference to the ID.
+		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
 	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
@@ -242,7 +242,7 @@ impl Handle {
 		}
 
 		// Get the ID.
-		let id = self.state.read().unwrap().id.unwrap();
+		let id = self.expect_id();
 
 		// Get the kind.
 		let kind = id.kind();
@@ -310,7 +310,7 @@ impl Handle {
 
 		// Store the object.
 		client
-			.try_put_object_bytes(id, &bytes)
+			.try_put_object_bytes(&id, &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()
@@ -347,8 +347,8 @@ impl State {
 	}
 
 	#[must_use]
-	pub fn id(&self) -> Option<Id> {
-		self.id
+	pub fn id(&self) -> &Option<Id> {
+		&self.id
 	}
 
 	#[must_use]
@@ -514,20 +514,6 @@ impl From<artifact::Id> for Id {
 	}
 }
 
-impl std::hash::Hash for Id {
-	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		match self {
-			Id::Blob(id) => std::hash::Hash::hash(id, state),
-			Id::Directory(id) => std::hash::Hash::hash(id, state),
-			Id::File(id) => std::hash::Hash::hash(id, state),
-			Id::Symlink(id) => std::hash::Hash::hash(id, state),
-			Id::Package(id) => std::hash::Hash::hash(id, state),
-			Id::Target(id) => std::hash::Hash::hash(id, state),
-			Id::Build(id) => std::hash::Hash::hash(id, state),
-		}
-	}
-}
-
 #[macro_export]
 macro_rules! handle {
 	($t:ident) => {
@@ -548,7 +534,7 @@ macro_rules! handle {
 			}
 
 			#[must_use]
-			pub fn expect_id(&self) -> Id {
+			pub fn expect_id(&self) -> &Id {
 				match self.0.expect_id() {
 					object::Id::$t(id) => id,
 					_ => unreachable!(),
@@ -563,7 +549,7 @@ macro_rules! handle {
 				}
 			}
 
-			pub async fn id(&self, client: &dyn Client) -> Result<Id> {
+			pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
 				match self.0.id(client).await? {
 					object::Id::$t(id) => Ok(id),
 					_ => unreachable!(),
@@ -597,34 +583,8 @@ macro_rules! id {
 	($t:ident) => {
 		impl self::Id {
 			#[must_use]
-			pub fn as_bytes(&self) -> [u8; $crate::id::SIZE] {
-				self.0.as_bytes()
-			}
-		}
-
-		impl Eq for self::Id {}
-
-		impl std::hash::Hash for self::Id {
-			fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-				std::hash::Hash::hash(&self.0, state);
-			}
-		}
-
-		impl Ord for self::Id {
-			fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-				self.0.cmp(&other.0)
-			}
-		}
-
-		impl PartialEq for self::Id {
-			fn eq(&self, other: &Self) -> bool {
-				self.0 == other.0
-			}
-		}
-
-		impl PartialOrd for self::Id {
-			fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-				self.0.partial_cmp(&other.0)
+			pub fn to_bytes(&self) -> ::bytes::Bytes {
+				self.0.to_bytes()
 			}
 		}
 

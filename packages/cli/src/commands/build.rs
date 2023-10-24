@@ -2,6 +2,7 @@ use super::PackageArgs;
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_client as tg;
+use tangram_package::PackageExt;
 use tg::{Result, WrapErr};
 
 /// Build a target.
@@ -78,7 +79,7 @@ impl Cli {
 		}
 
 		// Print the output.
-		println!("{output:?}");
+		println!("{output}");
 
 		Ok(())
 	}

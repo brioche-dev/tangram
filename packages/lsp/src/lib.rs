@@ -5,34 +5,46 @@
 #![allow(clippy::redundant_pattern)]
 
 use self::syscall::syscall;
-use derive_more::Unwrap;
+pub use self::{
+	diagnostic::Diagnostic, document::Document, import::Import, location::Location,
+	position::Position, range::Range,
+};
+use derive_more::{TryUnwrap, Unwrap};
 use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
 use std::{collections::HashMap, path::Path, sync::Arc};
 use tangram_client as tg;
-use tg::{
-	module::{self, diagnostic::Severity, Diagnostic, Position, Range},
-	return_error, Error, Module, Result, WrapErr,
-};
+use tg::{return_error, Error, Result, WrapErr};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use url::Url;
 
-mod check;
-mod completion;
-mod definition;
-mod diagnostics;
-mod docs;
-mod document;
-mod error;
-mod format;
-mod hover;
-mod initialize;
-mod jsonrpc;
-mod references;
-mod rename;
-mod symbols;
-mod syscall;
-mod virtual_text_document;
+pub mod analyze;
+pub mod check;
+pub mod completion;
+pub mod definition;
+pub mod diagnostic;
+pub mod diagnostics;
+pub mod docs;
+pub mod document;
+pub mod error;
+pub mod format;
+pub mod hover;
+pub mod import;
+pub mod initialize;
+pub mod jsonrpc;
+pub mod load;
+pub mod location;
+pub mod parse;
+pub mod position;
+pub mod range;
+pub mod references;
+pub mod rename;
+pub mod resolve;
+pub mod symbols;
+pub mod syscall;
+pub mod transpile;
+pub mod version;
+pub mod virtual_text_document;
 
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/lsp.heapsnapshot"));
 
@@ -53,16 +65,65 @@ struct State {
 	client: Box<dyn tg::Handle>,
 
 	/// The published diagnostics.
-	diagnostics: Arc<tokio::sync::RwLock<Vec<module::Diagnostic>>>,
+	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
 
 	/// The document store.
-	document_store: module::document::Store,
+	document_store: document::Store,
 
 	/// The request sender.
 	request_sender: RequestSender,
 
 	/// A handle to the main tokio runtime.
 	main_runtime_handle: tokio::runtime::Handle,
+}
+
+/// A module.
+#[derive(
+	Clone,
+	Debug,
+	Eq,
+	Hash,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	Unwrap,
+	TryUnwrap,
+	serde::Deserialize,
+	serde::Serialize,
+)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+#[unwrap(ref)]
+#[try_unwrap(ref)]
+pub enum Module {
+	/// A library module.
+	Library(Library),
+
+	/// A document module.
+	Document(Document),
+
+	/// A normal module.
+	Normal(Normal),
+}
+
+#[derive(
+	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct Library {
+	/// The module's path.
+	pub path: tg::Subpath,
+}
+
+#[derive(
+	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct Normal {
+	/// The module's package ID.
+	pub package_id: tg::package::Id,
+
+	/// The module's path.
+	pub path: tg::Subpath,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -107,7 +168,7 @@ impl Server {
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
 		// Create the document store.
-		let document_store = module::document::Store::default();
+		let document_store = document::Store::default();
 
 		// Create the request sender and receiver.
 		let (request_sender, request_receiver) =
@@ -211,8 +272,7 @@ impl Server {
 		match url.scheme() {
 			"file" => {
 				let document =
-					module::Document::for_path(&self.state.document_store, Path::new(url.path()))
-						.await?;
+					Document::for_path(&self.state.document_store, Path::new(url.path())).await?;
 				let module = Module::Document(document);
 				Ok(module)
 			},
@@ -580,56 +640,74 @@ fn run_request_handler(state: Arc<State>, mut request_receiver: RequestReceiver)
 	}
 }
 
-fn convert_diagnostic(value: Diagnostic) -> lsp::Diagnostic {
-	let range = value
-		.location
-		.map(|location| convert_range(location.range))
-		.unwrap_or_default();
-	let severity = Some(convert_severity(value.severity));
-	let source = Some("tangram".to_owned());
-	let message = value.message;
-	lsp::Diagnostic {
-		range,
-		severity,
-		source,
-		message,
-		..Default::default()
+impl From<Module> for Url {
+	fn from(value: Module) -> Self {
+		// Serialize and encode the module.
+		let data = hex::encode(serde_json::to_string(&value).unwrap());
+
+		let path = match value {
+			Module::Library(library) => format!("/{}", library.path),
+			Module::Document(document) => {
+				format!("/{}/{}", document.package_path.display(), document.path)
+			},
+			Module::Normal(normal) => format!("/{}", normal.path),
+		};
+
+		// Create the URL.
+		format!("tangram://{data}{path}").parse().unwrap()
 	}
 }
 
-fn convert_severity(value: Severity) -> lsp::DiagnosticSeverity {
-	match value {
-		Severity::Error => lsp::DiagnosticSeverity::ERROR,
-		Severity::Warning => lsp::DiagnosticSeverity::WARNING,
-		Severity::Information => lsp::DiagnosticSeverity::INFORMATION,
-		Severity::Hint => lsp::DiagnosticSeverity::HINT,
+impl TryFrom<Url> for Module {
+	type Error = Error;
+
+	fn try_from(value: Url) -> Result<Self, Self::Error> {
+		// Ensure the scheme is "tangram".
+		if value.scheme() != "tangram" {
+			return_error!("The URL has an invalid scheme.");
+		}
+
+		// Get the domain.
+		let data = value.domain().wrap_err("The URL must have a domain.")?;
+
+		// Decode the domain.
+		let data = hex::decode(data).wrap_err("Failed to deserialize the path as hex.")?;
+
+		// Deserialize the domain.
+		let module = serde_json::from_slice(&data).wrap_err("Failed to deserialize the module.")?;
+
+		Ok(module)
 	}
 }
 
-fn convert_range(value: Range) -> lsp::Range {
-	lsp::Range {
-		start: convert_position(value.start),
-		end: convert_position(value.end),
+impl std::fmt::Display for Module {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let url: Url = self.clone().into();
+		write!(f, "{url}")?;
+		Ok(())
 	}
 }
 
-fn convert_lsp_range(value: lsp::Range) -> Range {
-	Range {
-		start: convert_lsp_position(value.start),
-		end: convert_lsp_position(value.end),
+impl std::str::FromStr for Module {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		let url: Url = s.parse().wrap_err("Failed to parse the URL.")?;
+		let module = url.try_into()?;
+		Ok(module)
 	}
 }
 
-fn convert_position(value: Position) -> lsp::Position {
-	lsp::Position {
-		line: value.line,
-		character: value.character,
+impl From<Module> for String {
+	fn from(value: Module) -> Self {
+		value.to_string()
 	}
 }
 
-fn convert_lsp_position(value: lsp::Position) -> Position {
-	Position {
-		line: value.line,
-		character: value.character,
+impl TryFrom<String> for Module {
+	type Error = Error;
+
+	fn try_from(value: String) -> Result<Self, Self::Error> {
+		value.parse()
 	}
 }

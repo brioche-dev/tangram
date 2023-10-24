@@ -10,7 +10,7 @@ use futures::{
 
 crate::id!(Build);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
@@ -18,10 +18,10 @@ pub struct Build(object::Handle);
 
 #[derive(Clone, Debug)]
 pub struct Object {
+	pub target: Target,
 	pub children: Vec<Build>,
 	pub log: Blob,
 	pub result: Result<Value, Error>,
-	pub target: Target,
 }
 
 #[derive(
@@ -34,33 +34,33 @@ pub struct Object {
 )]
 pub struct Data {
 	#[tangram_serialize(id = 0)]
-	pub children: Vec<Id>,
+	pub target: target::Id,
 
 	#[tangram_serialize(id = 1)]
-	pub log: blob::Id,
+	pub children: Vec<Id>,
 
 	#[tangram_serialize(id = 2)]
-	pub result: Result<value::Data, Error>,
+	pub log: blob::Id,
 
 	#[tangram_serialize(id = 3)]
-	pub target: target::Id,
+	pub result: Result<value::Data, Error>,
 }
 
 impl Build {
 	pub async fn new(
 		client: &dyn Client,
 		id: Id,
+		target: Target,
 		children: Vec<Build>,
 		log: Blob,
 		result: Result<Value, Error>,
-		target: Target,
 	) -> Result<Self> {
 		// Create the object.
 		let object = Object {
+			target,
 			children,
 			log,
 			result,
-			target,
 		};
 
 		// Store the children.
@@ -80,7 +80,7 @@ impl Build {
 
 		// Store the object.
 		client
-			.try_put_object_bytes(id.into(), &bytes)
+			.try_put_object_bytes(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()
@@ -98,8 +98,11 @@ impl Build {
 	}
 
 	#[must_use]
-	pub fn id(&self) -> Id {
-		self.0.expect_id().try_into().unwrap()
+	pub fn id(&self) -> &Id {
+		match self.0.expect_id() {
+			object::Id::Build(id) => id,
+			_ => unreachable!(),
+		}
 	}
 
 	#[must_use]
@@ -183,29 +186,29 @@ impl Id {
 impl Object {
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		let children = self.children.iter().map(Build::id).collect();
-		let log = self.log.expect_id();
-		let result = self.result.clone().map(|value| value.to_data());
-		let target = self.target.expect_id();
+		let target = self.target.expect_id().clone();
+		let children = self.children.iter().map(Build::id).cloned().collect();
+		let log = self.log.expect_id().clone();
+		let result = self.result.clone().map(Into::into);
 		Data {
+			target,
 			children,
 			log,
 			result,
-			target,
 		}
 	}
 
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
+		let target = Target::with_id(data.target);
 		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
-		let result = data.result.map(value::Value::from_data);
-		let target = Target::with_id(data.target);
+		let result = data.result.map(Into::into);
 		Self {
+			target,
 			children,
 			log,
 			result,
-			target,
 		}
 	}
 
@@ -214,7 +217,7 @@ impl Object {
 		let children = self
 			.children
 			.iter()
-			.map(|child| object::Handle::with_id(child.id().into()));
+			.map(|child| object::Handle::with_id(child.id().clone().into()));
 		let log = std::iter::once(self.log.handle().clone());
 		let result = self
 			.result
@@ -251,8 +254,8 @@ impl Data {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
-		let children = self.children.iter().copied().map(Into::into);
-		let log = std::iter::once(self.log.into());
+		let children = self.children.iter().cloned().map(Into::into);
+		let log = std::iter::once(self.log.clone().into());
 		let result = self
 			.result
 			.as_ref()

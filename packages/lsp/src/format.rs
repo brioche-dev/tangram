@@ -1,5 +1,4 @@
-use super::Server;
-use crate::{convert_range, module::Range, Result};
+use crate::{Range, Result, Server};
 use lsp_types as lsp;
 
 #[derive(Debug, serde::Serialize)]
@@ -37,7 +36,7 @@ impl Server {
 
 		// Create the edit.
 		let edit = lsp::TextEdit {
-			range: convert_range(range),
+			range: range.into(),
 			new_text: formatted_text,
 		};
 

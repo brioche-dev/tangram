@@ -16,9 +16,9 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_log(&self, args: Args) -> Result<()> {
-		let build = if let Ok(id) = tg::build::Id::try_from(args.id) {
+		let build = if let Ok(id) = tg::build::Id::try_from(args.id.clone()) {
 			tg::Build::with_id(id)
-		} else if let Ok(id) = tg::target::Id::try_from(args.id) {
+		} else if let Ok(id) = tg::target::Id::try_from(args.id.clone()) {
 			tg::Target::with_id(id).build(self.client.as_ref()).await?
 		} else {
 			return_error!("The ID must be a target or build ID.");

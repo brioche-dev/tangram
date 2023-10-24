@@ -5,7 +5,8 @@ use super::{
 use num::ToPrimitive;
 use std::{str::FromStr, sync::Arc};
 use tangram_client as tg;
-use tg::{error, Error, Module};
+use tangram_lsp::Module;
+use tg::{error, Error};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -17,7 +17,7 @@ const MAX_LEAF_SIZE: usize = 262_144;
 crate::id!(Blob);
 crate::handle!(Blob);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
@@ -188,7 +188,7 @@ impl Object {
 			Self::Branch(branch) => Data::Branch(
 				branch
 					.iter()
-					.map(|(blob, size)| (blob.expect_id(), *size))
+					.map(|(blob, size)| (blob.expect_id().clone(), *size))
 					.collect::<Vec<_>>(),
 			),
 			Self::Leaf(leaf) => Data::Leaf(leaf.clone()),
@@ -241,7 +241,7 @@ impl Data {
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		match self {
-			Data::Branch(children) => children.iter().map(|(child, _)| (*child).into()).collect(),
+			Data::Branch(children) => children.iter().map(|(id, _)| id.clone().into()).collect(),
 			Data::Leaf(_) => vec![],
 		}
 	}

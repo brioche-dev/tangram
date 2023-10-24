@@ -2938,6 +2938,7 @@ dependencies = [
  "serde_json",
  "tangram_client",
  "tangram_lsp",
+ "tangram_package",
  "tangram_server",
  "tokio",
  "tokio-util",
@@ -2969,20 +2970,20 @@ dependencies = [
  "num",
  "once_cell",
  "pin-project",
- "proptest",
  "rand",
  "regex",
  "reqwest",
  "serde",
  "serde_json",
  "sha2",
- "swc_core",
  "tangram_serialize",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "url",
+ "varint-rs",
  "xattr",
 ]
 
@@ -2993,19 +2994,23 @@ dependencies = [
  "base64 0.21.4",
  "bytes",
  "derive_more 1.0.0-beta.3",
+ "fnv",
  "futures",
  "hex",
+ "include_dir",
  "indoc",
  "itertools",
  "lsp-types",
  "num",
  "once_cell",
  "pretty_assertions",
+ "proptest",
  "serde",
  "serde_json",
  "serde_v8",
  "serde_yaml",
  "sourcemap 7.0.0",
+ "swc_core",
  "tangram_client",
  "tempfile",
  "tokio",
@@ -3013,6 +3018,17 @@ dependencies = [
  "tracing",
  "url",
  "v8",
+]
+
+[[package]]
+name = "tangram_package"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "fnv",
+ "tangram_client",
+ "tangram_lsp",
+ "tokio",
 ]
 
 [[package]]
@@ -3037,6 +3053,7 @@ dependencies = [
  "serde_yaml",
  "sourcemap 7.0.0",
  "tangram_client",
+ "tangram_lsp",
  "tar",
  "tempfile",
  "tokio",
@@ -3080,6 +3097,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "derive_more 1.0.0-beta.3",
+ "fnv",
  "futures",
  "http",
  "http-body-util",
@@ -3103,6 +3121,14 @@ dependencies = [
  "url",
  "xattr",
  "zerocopy",
+]
+
+[[package]]
+name = "tangram_vfs"
+version = "0.0.0"
+dependencies = [
+ "tangram_client",
+ "tokio",
 ]
 
 [[package]]
@@ -3538,6 +3564,12 @@ name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
+
+[[package]]
+name = "varint-rs"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f54a172d0620933a27a4360d3db3e2ae0dd6cceae9730751a036bbf182c4b23"
 
 [[package]]
 name = "vergen"

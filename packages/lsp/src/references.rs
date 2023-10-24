@@ -1,11 +1,7 @@
-use super::Server;
-use crate::{convert_lsp_position, convert_range};
+use crate::{Location, Module, Position, Server};
 use lsp_types as lsp;
 use tangram_client as tg;
-use tg::{
-	module::{Location, Module, Position},
-	return_error, Result,
-};
+use tg::{return_error, Result};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,9 +30,7 @@ impl Server {
 		let position = params.text_document_position.position;
 
 		// Get the references.
-		let locations = self
-			.references(&module, convert_lsp_position(position))
-			.await?;
+		let locations = self.references(&module, position.into()).await?;
 		let Some(locations) = locations else {
 			return Ok(None);
 		};
@@ -46,7 +40,7 @@ impl Server {
 			.into_iter()
 			.map(|location| lsp::Location {
 				uri: self.convert_module(&location.module),
-				range: convert_range(location.range),
+				range: location.range.into(),
 			})
 			.collect();
 

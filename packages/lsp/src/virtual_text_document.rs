@@ -1,6 +1,7 @@
-use super::Server;
-use crate::Result;
+use crate::Server;
 use lsp_types as lsp;
+use tangram_client as tg;
+use tg::Result;
 
 pub struct VirtualTextDocument;
 

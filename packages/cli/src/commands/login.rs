@@ -32,7 +32,7 @@ impl Cli {
 			}
 			let login = self
 				.client
-				.get_login(login.id)
+				.get_login(&login.id)
 				.await
 				.wrap_err("Failed to get the login.")?
 				.wrap_err("Expected the login to exist.")?;

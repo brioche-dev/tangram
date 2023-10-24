@@ -145,7 +145,7 @@ impl Data {
 			.iter()
 			.filter_map(|component| match component {
 				component::Data::String(_) => None,
-				component::Data::Artifact(id) => Some((*id).into()),
+				component::Data::Artifact(id) => Some(id.clone().into()),
 			})
 			.collect()
 	}

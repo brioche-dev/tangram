@@ -1,15 +1,12 @@
 #![allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
-use super::{error, State};
+use crate::{error, Import, Module, State};
 use base64::Engine as _;
 use bytes::Bytes;
 use itertools::Itertools;
 use std::sync::Arc;
 use tangram_client as tg;
-use tg::{
-	module::{Import, Module},
-	Result, WrapErr,
-};
+use tg::{Result, WrapErr};
 
 pub fn syscall<'s>(
 	scope: &mut v8::HandleScope<'s>,
@@ -138,19 +135,19 @@ fn syscall_encoding_toml_decode(
 	_scope: &mut v8::HandleScope,
 	_state: &State,
 	args: (String,),
-) -> Result<serde_toml::Value> {
+) -> Result<toml::Value> {
 	let (toml,) = args;
-	let value = serde_toml::from_str(&toml).wrap_err("Failed to decode the string as toml.")?;
+	let value = toml::from_str(&toml).wrap_err("Failed to decode the string as toml.")?;
 	Ok(value)
 }
 
 fn syscall_encoding_toml_encode(
 	_scope: &mut v8::HandleScope,
 	_state: &State,
-	args: (serde_toml::Value,),
+	args: (toml::Value,),
 ) -> Result<String> {
 	let (value,) = args;
-	let toml = serde_toml::to_string(&value).wrap_err("Failed to encode the value.")?;
+	let toml = toml::to_string(&value).wrap_err("Failed to encode the value.")?;
 	Ok(toml)
 }
 

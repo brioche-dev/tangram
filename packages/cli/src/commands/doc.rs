@@ -1,6 +1,7 @@
 use super::PackageArgs;
 use crate::Cli;
 use tangram_client as tg;
+use tangram_package::PackageExt;
 use tg::{Result, WrapErr};
 
 /// Print the docs for a package.

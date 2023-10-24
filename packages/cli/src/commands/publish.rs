@@ -1,6 +1,7 @@
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_client as tg;
+use tangram_package::PackageExt;
 use tg::{Result, WrapErr};
 
 /// Publish a package.

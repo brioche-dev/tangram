@@ -26,7 +26,7 @@ impl Artifact {
 			.into_iter()
 			.map(|id| {
 				async move {
-					let artifact = Artifact::with_id(id);
+					let artifact = Artifact::with_id(id.clone());
 
 					// Create the path for the reference at `.tangram/artifacts/<id>`.
 					let path = TANGRAM_ARTIFACTS_PATH

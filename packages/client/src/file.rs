@@ -3,7 +3,7 @@ use crate::{artifact, blob, object, return_error, Artifact, Blob, Client, Result
 crate::id!(File);
 crate::handle!(File);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
@@ -76,7 +76,7 @@ impl File {
 impl Object {
 	#[must_use]
 	pub fn to_data(&self) -> Data {
-		let contents = self.contents.expect_id();
+		let contents = self.contents.expect_id().clone();
 		let executable = self.executable;
 		let references = self.references.iter().map(Artifact::expect_id).collect();
 		Data {
@@ -130,8 +130,8 @@ impl Data {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
-		std::iter::once(self.contents.into())
-			.chain(self.references.iter().copied().map(Into::into))
+		std::iter::once(self.contents.clone().into())
+			.chain(self.references.iter().cloned().map(Into::into))
 			.collect()
 	}
 }
