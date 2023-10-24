@@ -121,7 +121,7 @@ declare namespace tg {
 
 		type ArchiveFormat = ".tar" | ".zip";
 
-		type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zstd";
+		type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zstd" | ".zst";
 	}
 
 	/** Compute the checksum of the provided bytes. */

@@ -491,7 +491,7 @@ impl std::fmt::Display for CompressionFormat {
 			Self::Bz2 => ".bz2",
 			Self::Gz => ".gz",
 			Self::Xz => ".xz",
-			Self::Zstd => ".zstd",
+			Self::Zstd => ".zst",
 		};
 		write!(f, "{string}")?;
 		Ok(())
@@ -506,7 +506,7 @@ impl std::str::FromStr for CompressionFormat {
 			".bz2" => Ok(Self::Bz2),
 			".gz" => Ok(Self::Gz),
 			".xz" => Ok(Self::Xz),
-			".zstd" => Ok(Self::Zstd),
+			".zst" | ".zstd" => Ok(Self::Zstd),
 			_ => return_error!("Invalid compression format."),
 		}
 	}

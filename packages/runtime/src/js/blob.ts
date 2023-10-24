@@ -163,5 +163,11 @@ export namespace Blob {
 
 	export type ArchiveFormat = ".tar" | ".zip";
 
-	export type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zstd";
+	export type CompressionFormat =
+		| ".bz2"
+		| ".gz"
+		| ".lz"
+		| ".xz"
+		| ".zstd"
+		| ".zst";
 }
