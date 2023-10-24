@@ -48,26 +48,17 @@ impl App {
 			])
 			.split(vlayout[0]);
 
-		for (string, area) in ["Name", "Status", "ID"].into_iter().zip(hlayout.into_iter()) {
+		for (string, area) in ["Name", "Status", "ID"]
+			.into_iter()
+			.zip(hlayout.into_iter())
+		{
 			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(string));
 			frame.render_widget(widget, *area);
 		}
 
-		let mut offset = 0;
-		// let tree_layout = tui::layout::
-		for (index, build) in self.builds.iter().enumerate() {
-			let is_last_child = index == self.builds.len() - 1;
-			offset = build.view(
-				frame,
-				is_last_child,
-				"",
-				self.highlighted,
-				skip,
-				offset,
-				vlayout[1],
-				0,
-			);
-		}
+		// TODO: clean this up.
+		self.build
+			.view(frame, true, "", self.highlighted, skip, 0, vlayout[0], 0);
 	}
 }
 
@@ -103,7 +94,7 @@ impl Build {
 
 			let id = &self.build.id();
 			let name = self.info.as_str();
-			let indicator = if self.children.is_empty() { "" } else {">"};
+			let indicator = if self.children.is_empty() { "" } else { ">" };
 			let tree = format!("{tree_str}{name} {indicator}");
 			let style = if selected == offset {
 				tui::style::Style::default()
@@ -206,8 +197,7 @@ impl Log {
 		area.width -= 1;
 		let text = Text::from(self.text.as_str());
 		let wrap = Wrap { trim: false };
-		let paragraph = Paragraph::new(text)
-			.wrap(wrap);
+		let paragraph = Paragraph::new(text).wrap(wrap);
 		frame.render_widget(paragraph, area);
 	}
 }

@@ -31,7 +31,9 @@ pub async fn ui(client: &dyn tg::Client, root: tg::Build, root_info: String) -> 
 	)
 	.wrap_err("Failed to setup TUI")?;
 
-	let _ = inner(&mut terminal, client, root, root_info).await.wrap_err("Failed to run TUI.");
+	let _ = inner(&mut terminal, client, root, root_info)
+		.await
+		.wrap_err("Failed to run TUI.");
 	let _ = terminal.clear();
 
 	ct::execute!(
@@ -44,7 +46,12 @@ pub async fn ui(client: &dyn tg::Client, root: tg::Build, root_info: String) -> 
 	Ok(())
 }
 
-async fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build, root_info: String) -> std::io::Result<()> {
+async fn inner(
+	terminal: &mut Terminal,
+	client: &dyn tg::Client,
+	root: tg::Build,
+	root_info: String,
+) -> std::io::Result<()> {
 	// Create the state, event stream, and controller.
 	let mut controller = Controller::new();
 	let mut state = App::new(client, root.clone(), root_info);
@@ -120,23 +127,9 @@ async fn inner(terminal: &mut Terminal, client: &dyn tg::Client, root: tg::Build
 			}
 		}
 
+		// Update the log and build tree states.
 		state.log.update();
-		for event in events.poll() {
-			match event {
-				Event::Child(event) => {
-					let ChildEvent { parent, child, info } = event;
-					let parent = state.find_build(parent);
-					parent.children.push(Build::with_build(child, info));
-				},
-				Event::Completed(completion) => {
-					let build = state.find_build(completion.build);
-					build.status = match completion.result {
-						Ok(_) => Status::Successful,
-						Err(_) => Status::Error,
-					};
-				},
-			}
-		}
+		state.build.update();
 
 		// Render the UI.
 		terminal.draw(|frame| {

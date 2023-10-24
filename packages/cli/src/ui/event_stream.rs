@@ -1,9 +1,6 @@
-use std::sync::{RwLock, Arc};
+use std::sync::{Arc, RwLock};
 
-use futures::{
-	stream::BoxStream,
-	StreamExt,
-};
+use futures::{stream::BoxStream, StreamExt};
 use tangram_client as tg;
 use tokio::sync::mpsc::UnboundedReceiver;
 

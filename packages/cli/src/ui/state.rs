@@ -3,11 +3,13 @@ use ratatui as tui;
 use tangram_client as tg;
 use tui::prelude::Direction;
 
+use super::event_stream::info_string;
+
 pub struct App {
 	pub highlighted: usize,
 	pub selected: usize,
 	pub direction: tui::layout::Direction,
-	pub builds: Vec<Build>,
+	pub build: Build,
 	pub log: Log,
 }
 
@@ -17,6 +19,8 @@ pub struct Build {
 	pub is_expanded: bool,
 	pub children: Vec<Self>,
 	pub info: String,
+	pub result_receiver: tokio::sync::oneshot::Receiver<tg::Result<tg::Value>>,
+	pub children_receiver: tokio::sync::mpsc::UnboundedReceiver<Self>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -33,7 +37,7 @@ impl App {
 			highlighted: 0,
 			direction: Direction::Horizontal,
 			selected: 0,
-			builds: vec![Build::with_build(root, root_info)],
+			build: Build::with_build(client, root, root_info),
 			log,
 		}
 	}
@@ -49,10 +53,7 @@ impl App {
 	}
 
 	pub fn scroll_down(&mut self) {
-		let len = self
-			.builds
-			.iter()
-			.fold(self.builds.len(), |acc, build| acc + build.len());
+		let len = self.build.len();
 		self.highlighted = self
 			.highlighted
 			.saturating_add(1)
@@ -76,109 +77,99 @@ impl App {
 		}
 	}
 
-	pub fn find_build(&mut self, build: tg::Build) -> &'_ mut Build {
-		find_build_by_id_mut(&mut self.builds, build).unwrap()
-	}
-
 	pub fn selected_build(&self) -> &'_ Build {
-		find_build(&self.builds, self.selected).unwrap()
+		self.build.find(self.selected).unwrap()
 	}
-
-	// fn highlighted_build(&self) -> &'_ Build {
-	// 	find_build(&self.builds, self.highlighted).unwrap()
-	// }
 
 	fn highlighted_build_mut(&mut self) -> &'_ mut Build {
-		find_build_mut(&mut self.builds, self.highlighted).unwrap()
+		self.build.find_mut(self.highlighted).unwrap()
 	}
-}
-
-fn find_build<'a>(builds: &'a [Build], which: usize) -> Option<&'a Build> {
-	fn inner<'a>(offset: usize, which: usize, build: &'a Build) -> Result<&'a Build, usize> {
-		if offset == which {
-			return Ok(build);
-		}
-		let mut offset = offset + 1;
-		if !build.is_expanded {
-			return Err(offset);
-		}
-		for child in &build.children {
-			match inner(offset, which, child) {
-				Ok(found) => return Ok(found),
-				Err(o) => offset = o,
-			}
-		}
-		return Err(offset);
-	}
-	let mut offset = 0;
-	for build in builds {
-		match inner(offset, which, build) {
-			Ok(found) => return Some(found),
-			Err(o) => offset = o,
-		}
-	}
-	None
-}
-
-fn find_build_mut<'a>(builds: &'a mut [Build], which: usize) -> Option<&'a mut Build> {
-	fn inner<'a>(
-		offset: usize,
-		which: usize,
-		build: &'a mut Build,
-	) -> Result<&'a mut Build, usize> {
-		if offset == which {
-			return Ok(build);
-		}
-		let mut offset = offset + 1;
-		if !build.is_expanded {
-			return Err(offset);
-		}
-		for child in &mut build.children {
-			match inner(offset, which, child) {
-				Ok(found) => return Ok(found),
-				Err(o) => offset = o,
-			}
-		}
-		return Err(offset);
-	}
-	let mut offset = 0;
-	for build in builds {
-		match inner(offset, which, build) {
-			Ok(found) => return Some(found),
-			Err(o) => offset = o,
-		}
-	}
-	None
-}
-
-fn find_build_by_id_mut<'a>(builds: &'a mut [Build], build_: tg::Build) -> Option<&'a mut Build> {
-	fn inner<'a>(id: tg::build::Id, build: &'a mut Build) -> Option<&'a mut Build> {
-		if build.build.id() == id {
-			return Some(build);
-		}
-		for child in &mut build.children {
-			if let Some(found) = inner(id, child) {
-				return Some(found);
-			}
-		}
-		None
-	}
-	for build in builds {
-		if let Some(found) = inner(build_.id(), build) {
-			return Some(found);
-		}
-	}
-	None
 }
 
 impl Build {
-	pub fn with_build(build: tg::Build, info: String) -> Self {
+	pub fn find(&self, which: usize) -> Option<&'_ Self> {
+		fn inner<'a>(offset: usize, which: usize, build: &'a Build) -> Result<&'a Build, usize> {
+			if offset == which {
+				return Ok(build);
+			}
+			let mut offset = offset + 1;
+			if !build.is_expanded {
+				return Err(offset);
+			}
+			for child in &build.children {
+				match inner(offset, which, child) {
+					Ok(found) => return Ok(found),
+					Err(o) => offset = o,
+				}
+			}
+			return Err(offset);
+		}
+
+		inner(0, which, self).ok()
+	}
+
+	fn find_mut(&mut self, which: usize) -> Option<&'_ mut Self> {
+		fn inner<'a>(
+			offset: usize,
+			which: usize,
+			build: &'a mut Build,
+		) -> Result<&'a mut Build, usize> {
+			if offset == which {
+				return Ok(build);
+			}
+			let mut offset = offset + 1;
+			if !build.is_expanded {
+				return Err(offset);
+			}
+			for child in &mut build.children {
+				match inner(offset, which, child) {
+					Ok(found) => return Ok(found),
+					Err(o) => offset = o,
+				}
+			}
+			return Err(offset);
+		}
+
+		inner(0, which, self).ok()
+	}
+
+	pub fn with_build(client: &dyn tg::Client, build: tg::Build, info: String) -> Self {
+		let (children_sender, children_receiver) = tokio::sync::mpsc::unbounded_channel();
+		let client_ = client.clone_box();
+		let build_ = build.clone();
+
+		tokio::task::spawn(async move {
+			let Ok(mut children) = build_.children(client_.as_ref()).await else {
+				return;
+			};
+			while let Some(Ok(child)) = children.next().await {
+				let info = info_string(client_.as_ref(), &child).await;
+				let child = Self::with_build(client_.as_ref(), child, info);
+				if let Err(_) = children_sender.send(child) {
+					break;
+				}
+			}
+		});
+
+		let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
+		let client_ = client.clone_box();
+		let build_ = build.clone();
+		tokio::task::spawn(async move {
+			let result = build_
+				.result(client_.as_ref())
+				.await
+				.and_then(|result| result);
+			let _ = result_sender.send(result);
+		});
+
 		Self {
 			build,
 			status: Status::InProgress,
 			children: vec![],
 			is_expanded: false,
 			info,
+			children_receiver,
+			result_receiver,
 		}
 	}
 
@@ -186,6 +177,19 @@ impl Build {
 		self.children
 			.iter()
 			.fold(self.children.len(), |acc, child| acc + child.len())
+	}
+
+	pub fn update(&mut self) {
+		if let Ok(child) = self.children_receiver.try_recv() {
+			self.children.push(child);
+		}
+		if let Ok(result) = self.result_receiver.try_recv() {
+			self.status = match result {
+				Ok(_) => Status::Successful,
+				Err(_) => Status::Error,
+			}
+		}
+		self.children.iter_mut().for_each(Self::update);
 	}
 }
 
@@ -212,7 +216,7 @@ impl Log {
 					println!("Failed to get log stream.");
 					let _ = sender.send(e.to_string());
 					return;
-				}
+				},
 			};
 
 			println!("Created new log stream.");
@@ -224,12 +228,13 @@ impl Log {
 							match message.map(|bytes| String::from_utf8(bytes.to_vec())) {
 								Ok(Ok(message)) => Some(message),
 								Ok(Err(e)) => Some(e.to_string()),
-								Err(e) => Some(e.to_string())
+								Err(e) => Some(e.to_string()),
 							}
-						}
-						None => None
+						},
+						None => None,
 					}
-				}).await;
+				})
+				.await;
 				if let Ok(Some(message)) = result {
 					if let Err(_) = sender.send(message) {
 						break;
@@ -245,7 +250,7 @@ impl Log {
 		Self {
 			text,
 			receiver,
-			_task: task
+			_task: task,
 		}
 	}
 

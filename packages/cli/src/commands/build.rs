@@ -73,9 +73,8 @@ impl Cli {
 			let client = self.client.clone_box();
 			let build = build.clone();
 			let target = args.target.clone();
-			let task = tokio::task::spawn(async move {
-				ui::ui(client.as_ref(), build, target).await
-			});
+			let task =
+				tokio::task::spawn(async move { ui::ui(client.as_ref(), build, target).await });
 			let _ = task.await;
 		}
 
