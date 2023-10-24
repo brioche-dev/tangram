@@ -275,7 +275,7 @@ async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
 	Ok(bytes.into())
 }
 
-async fn syscall_sleep(state: Rc<State>, args: (f64,)) -> Result<()> {
+async fn syscall_sleep(_state: Rc<State>, args: (f64,)) -> Result<()> {
 	let (duration,) = args;
 	let duration = std::time::Duration::from_secs_f64(duration);
 	tokio::time::sleep(duration).await;
