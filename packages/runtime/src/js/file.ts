@@ -1,7 +1,7 @@
-import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
+import { Args, apply } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 
 export let file = async (...args: Args<File.Arg>) => {
@@ -21,63 +21,45 @@ export class File {
 
 	static async new(...args: Args<File.Arg>): Promise<File> {
 		type Apply = {
-			contents: Array<Blob.Arg>;
-			executable: Array<boolean>;
-			references: Array<Artifact>;
+			contents?: Blob.Arg | undefined;
+			executable?: boolean | undefined;
+			references?: Array<Artifact> | undefined;
 		};
 		let {
-			contents: contentsArgs,
-			executable: executableArgs,
-			references,
-		} = await Args.apply<File.Arg, Apply>(args, async (arg) => {
-			if (Blob.Arg.is(arg)) {
-				return { contents: { kind: "append" as const, value: arg } };
+			contents: contents_,
+			executable: executable_,
+			references: references_,
+		} = await apply<File.Arg, Apply>(args, async (arg) => {
+			if (arg === undefined) {
+				return {};
+			} else if (
+				typeof arg === "string" ||
+				arg instanceof Uint8Array ||
+				arg instanceof Blob
+			) {
+				return { contents: await blob(arg) };
 			} else if (File.is(arg)) {
-				let contents = {
-					kind: "append" as const,
-					value: await arg.contents(),
-				};
-				let executable = {
-					kind: "append" as const,
-					value: await arg.executable(),
-				};
-				let references = {
-					kind: "append" as const,
-					value: await arg.references(),
-				};
 				return {
-					contents,
-					executable,
-					references,
+					contents: await arg.contents(),
+					executable: await arg.executable(),
+					references: await arg.references(),
+				};
+			} else if (arg instanceof Array) {
+				let f = await File.new(...arg);
+				return {
+					contents: await f.contents(),
+					executable: await f.executable(),
+					references: await f.references(),
 				};
 			} else if (typeof arg === "object") {
-				let object: Args.MutationObject<Apply> = {};
-				if ("contents" in arg) {
-					object.contents = {
-						kind: "append" as const,
-						value: arg.contents,
-					};
-				}
-				if ("executable" in arg) {
-					object.executable = {
-						kind: "append" as const,
-						value: arg.executable,
-					};
-				}
-				if ("references" in arg) {
-					object.references = {
-						kind: "append" as const,
-						value: arg.references,
-					};
-				}
-				return object;
+				return arg;
 			} else {
 				return unreachable();
 			}
 		});
-		let contents = await blob(contentsArgs);
-		let executable = (executableArgs ?? []).some((executable) => executable);
-		references ??= [];
+		let contents = await blob(contents_);
+		let executable = executable_ ?? false;
+		let references = references_ ?? [];
 		return new File(
 			Object_.Handle.withObject({
 				kind: "file",
@@ -139,12 +121,19 @@ export class File {
 }
 
 export namespace File {
-	export type Arg = Blob.Arg | File | ArgObject;
+	export type Arg =
+		| undefined
+		| string
+		| Uint8Array
+		| Blob
+		| File
+		| ArgObject
+		| Array<Arg>;
 
 	export type ArgObject = {
-		contents?: Blob.Arg;
-		executable?: boolean;
-		references?: Array<Artifact>;
+		contents?: Blob.Arg | undefined;
+		executable?: boolean | undefined;
+		references?: Array<Artifact> | undefined;
 	};
 
 	export type Id = string;

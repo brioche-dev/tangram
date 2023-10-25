@@ -23,7 +23,7 @@ export class Template {
 			async (arg) => {
 				if (arg === undefined) {
 					return {};
-				} else if (Template.Component.is(arg)) {
+				} else if (typeof arg === "string" || Artifact.is(arg)) {
 					return { components: { kind: "append" as const, value: arg } };
 				} else if (Template.is(arg)) {
 					return {
@@ -99,22 +99,5 @@ export class Template {
 export namespace Template {
 	export type Arg = undefined | Component | Template;
 
-	export namespace Arg {
-		export let is = (value: unknown): value is Arg => {
-			return (
-				value === undefined ||
-				Component.is(value) ||
-				Template.is(value) ||
-				(value instanceof Array && value.every((value) => Arg.is(value)))
-			);
-		};
-	}
-
 	export type Component = string | Artifact;
-
-	export namespace Component {
-		export let is = (value: unknown): value is Component => {
-			return typeof value === "string" || Artifact.is(value);
-		};
-	}
 }

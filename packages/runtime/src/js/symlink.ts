@@ -31,13 +31,17 @@ export class Symlink {
 		let { artifact, path: path_ } = await Args.apply<Symlink.Arg, Apply>(
 			args,
 			async (arg) => {
-				if (arg === "undefined") {
-					return { artifact: { kind: "unset" as const } };
-				}
-				if (typeof arg === "string") {
-					return { path: { kind: "append" as const, value: arg } };
+				if (arg === undefined) {
+					return {};
+				} else if (typeof arg === "string") {
+					return {
+						path: { kind: "append" as const, value: arg },
+					};
 				} else if (Artifact.is(arg)) {
-					return { artifact: { kind: "set" as const, value: arg } };
+					return {
+						artifact: { kind: "set" as const, value: arg },
+						path: { kind: "unset" as const },
+					};
 				} else if (Template.is(arg)) {
 					assert_(arg.components.length <= 2);
 					let [firstComponent, secondComponent] = arg.components;
@@ -45,13 +49,16 @@ export class Symlink {
 						typeof firstComponent === "string" &&
 						secondComponent === undefined
 					) {
-						return { path: { kind: "set" as const, value: [firstComponent] } };
+						return {
+							path: { kind: "append" as const, value: [firstComponent] },
+						};
 					} else if (
 						Artifact.is(firstComponent) &&
 						secondComponent === undefined
 					) {
 						return {
 							artifact: { kind: "set" as const, value: firstComponent },
+							path: { kind: "unset" as const },
 						};
 					} else if (
 						Artifact.is(firstComponent) &&
@@ -73,6 +80,8 @@ export class Symlink {
 							value: [(await arg.path()).toString()],
 						},
 					};
+				} else if (arg instanceof Array) {
+					return unreachable();
 				} else if (typeof arg === "object") {
 					return {
 						artifact: { kind: "set" as const, value: arg.artifact },
@@ -205,7 +214,8 @@ export namespace Symlink {
 		| Artifact
 		| Template
 		| Symlink
-		| ArgObject;
+		| ArgObject
+		| Array<Arg>;
 
 	export type ArgObject = {
 		artifact?: Artifact;

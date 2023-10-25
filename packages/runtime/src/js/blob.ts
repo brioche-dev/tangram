@@ -1,8 +1,8 @@
-import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
-import { assert as assert_, unreachable } from "./assert.ts";
+import { assert as assert_, unimplemented, unreachable } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
+import { Args, apply } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
 
@@ -29,47 +29,58 @@ export class Blob {
 	}
 
 	static async new(...args: Args<Blob.Arg>): Promise<Blob> {
-		type Apply = { children: Array<Uint8Array> };
-		let { children } = await Args.apply<Blob.Arg, Apply>(args, async (arg) => {
+		type Apply = { children: Array<Blob> };
+		let { children } = await apply<Blob.Arg, Apply>(args, async (arg) => {
 			if (arg === undefined) {
-				return { children: [] };
+				return {};
 			} else if (typeof arg === "string") {
+				let blob = new Blob(
+					Object_.Handle.withObject({
+						kind: "blob",
+						value: encoding.utf8.encode(arg),
+					}),
+				);
 				return {
 					children: {
-						kind: "append" as const,
-						value: encoding.utf8.encode(arg),
+						kind: "append_array" as const,
+						value: [blob],
 					},
 				};
 			} else if (arg instanceof Uint8Array) {
+				let blob = new Blob(
+					Object_.Handle.withObject({ kind: "blob", value: arg }),
+				);
 				return {
 					children: {
-						kind: "append" as const,
-						value: arg,
+						kind: "append_array" as const,
+						value: [blob],
 					},
 				};
 			} else if (Blob.is(arg)) {
 				return {
-					children: { kind: "append" as const, value: await arg.bytes() },
+					children: {
+						kind: "append_array" as const,
+						value: [arg],
+					},
 				};
+			} else if (arg instanceof Array) {
+				return unimplemented();
 			} else {
 				return unreachable();
 			}
 		});
 		if (!children || children.length === 0) {
-			children = [new Uint8Array()];
+			let blob = new Blob(
+				Object_.Handle.withObject({ kind: "blob", value: new Uint8Array() }),
+			);
+			children = [blob];
 		}
 		return new Blob(
 			Object_.Handle.withObject({
 				kind: "blob",
 				value: await Promise.all(
 					children.map<Promise<[Blob, number]>>(async (child) => {
-						let childBlob = new Blob(
-							Object_.Handle.withObject({
-								kind: "blob",
-								value: child,
-							}),
-						);
-						return [childBlob, await childBlob.size()];
+						return [child, await child.size()];
 					}),
 				),
 			}),
@@ -134,28 +145,7 @@ export class Blob {
 }
 
 export namespace Blob {
-	export type Arg = undefined | string | Uint8Array | Blob;
-
-	export namespace Arg {
-		export let is = (value: unknown): value is Arg => {
-			return (
-				value === undefined ||
-				typeof value === "string" ||
-				value instanceof Uint8Array ||
-				Blob.is(value) ||
-				(value instanceof Array && value.every(Arg.is))
-			);
-		};
-
-		export let expect = (value: unknown): Arg => {
-			assert_(is(value));
-			return value;
-		};
-
-		export let assert = (value: unknown): asserts value is Arg => {
-			assert_(is(value));
-		};
-	}
+	export type Arg = undefined | string | Uint8Array | Blob | Array<Arg>;
 
 	export type Id = string;
 

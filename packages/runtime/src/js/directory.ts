@@ -87,14 +87,17 @@ export class Directory {
 						// If there are no trailing path components, then create the artifact specified by the value.
 						if (value === undefined) {
 							delete entries[name];
-						} else if (Blob.Arg.is(value)) {
+						} else if (
+							typeof value === "string" ||
+							value instanceof Uint8Array ||
+							value instanceof Blob
+						) {
 							let newEntry = await file(value);
 							entries[name] = newEntry;
 						} else if (File.is(value) || Symlink.is(value)) {
 							entries[name] = value;
 						} else {
-							let newEntry = await Directory.new(existingEntry, value);
-							entries[name] = newEntry;
+							entries[name] = await Directory.new(existingEntry, value);
 						}
 					}
 				}
@@ -200,10 +203,16 @@ export class Directory {
 }
 
 export namespace Directory {
-	export type Arg = undefined | Directory | Array<Arg> | ArgObject;
+	export type Arg = undefined | Directory | ArgObject | Array<Arg>;
 
 	type ArgObject = {
-		[name: string]: undefined | Blob.Arg | Artifact | ArgObject;
+		[name: string]:
+			| undefined
+			| string
+			| Uint8Array
+			| Blob
+			| Artifact
+			| ArgObject;
 	};
 
 	export type Id = string;

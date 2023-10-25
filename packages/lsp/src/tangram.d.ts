@@ -10,41 +10,105 @@ declare function tg(
 
 declare namespace tg {
 	/** The arguments to a constructor. */
-	export type Args<T extends Value> = Array<
-		Unresolved<Args.MaybeNestedArray<T>>
+	export type Args<T extends Exclude<Value, Array<Value>>> = Array<
+		Unresolved<MaybeNestedArray<MaybeMutation<T>>>
 	>;
 
+	export type MaybeMutation<T extends Value> = T | Mutation<T>;
+
+	export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
+
 	export namespace Args {
-		export type Mutation<T extends Value = Value> =
+		/** A description of mutations applied to the keys in an object. */
+		export type MutationObject<
+			T extends { [key: string]: Value } = { [key: string]: Value },
+		> = {
+			[K in keyof T]?: MaybeNestedArray<MaybeMutation<T[K]>>;
+		};
+
+		/** Apply the mutations specified by resolving and mapping an array of arguments. */
+		export let apply: <
+			A extends Value = Value,
+			R extends { [key: string]: Value } = { [key: string]: Value },
+		>(
+			args: Args<A>,
+			map: (arg: A) => Promise<MaybeNestedArray<MutationObject<R>>>,
+		) => Promise<Partial<R>>;
+	}
+
+	/** Create a mutation. */
+	export function mutation<T extends Value = Value>(
+		arg: Mutation.Arg<T>,
+	): Mutation<T>;
+
+	export class Mutation<T extends Value = Value> {
+		static new<T extends Value = Value>(
+			args: Mutation.Arg<T>,
+		): Promise<Mutation<T>>;
+
+		/** Check if a value is a `tg.Template`. */
+		static is(value: unknown): value is Template;
+
+		/** Expect that a value is a `tg.Template`. */
+		static expect(value: unknown): Template;
+
+		/** Assert that a value is a `tg.Template`. */
+		static assert(value: unknown): asserts value is Template;
+	}
+
+	export namespace Mutation {
+		export type Arg<T extends Value = Value> =
 			| { kind: "unset" }
 			| { kind: "set"; value: T }
 			| { kind: "set_if_unset"; value: T }
 			| {
-					kind: "prepend";
+					kind: "prepend_array";
 					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
 			  }
 			| {
-					kind: "append";
+					kind: "append_array";
 					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+			  }
+			| {
+					kind: "prepend_template";
+					value: T extends Template.Arg ? Template.Arg : never;
+					separator: Template.Arg;
+			  }
+			| {
+					kind: "append_template";
+					value: T extends Template.Arg ? Template.Arg : never;
+					separator: Template.Arg;
 			  };
 
-		export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
-
-		export type MutationObject<T extends { [key: string]: Value }> = {
-			[K in keyof T]?: MaybeNestedArray<Mutation<T[K]>>;
-		};
-
-		/** Compute the result of applying all arguments supplied to a constructor. */
-		export let apply: <A extends Value, R extends { [key: string]: Value }>(
-			args: Args<A>,
-			map: (arg: A) => Promise<MaybeNestedArray<MutationObject<R>>>,
-		) => Promise<Partial<R>>;
+		export type Object_ =
+			| { kind: "unset" }
+			| { kind: "set"; value: Value }
+			| { kind: "set_if_unset"; value: Value }
+			| {
+					kind: "prepend_array";
+					value: Array<Value>;
+			  }
+			| {
+					kind: "append_array";
+					value: Array<Value>;
+			  }
+			| {
+					kind: "prepend_template";
+					value: Template;
+					separator: Template;
+			  }
+			| {
+					kind: "append_template";
+					value: Template;
+					separator: Template;
+			  };
 	}
 
 	/** An artifact. */
 	export type Artifact = Directory | File | Symlink;
 
 	export namespace Artifact {
+		/** An artifact ID. */
 		export type Id = string;
 
 		/** Get an artifact with an ID. */
@@ -60,13 +124,16 @@ declare namespace tg {
 		export let assert: (value: unknown) => asserts value is Artifact;
 	}
 
+	/** Assert that a condition is truthy. If not, throw an error with an optional message. */
 	export let assert: (
 		condition: unknown,
 		message?: string,
 	) => asserts condition;
 
+	/** Throw an error indicating that unimplemented code has been reached. */
 	export let unimplemented: (message?: string) => never;
 
+	/** Throw an error indicating that unreachable code has been reached. */
 	export let unreachable: (message?: string) => never;
 
 	/** Create a blob. */
@@ -86,13 +153,13 @@ declare namespace tg {
 		/** Download the contents of a URL. */
 		static download(url: string, checksum: Checksum): Promise<Blob>;
 
-		/** Check if a value is a `Blob`. */
+		/** Check if a value is a `tg.Blob`. */
 		static is(value: unknown): value is Blob;
 
-		/** Expect that a value is a `Blob`. */
+		/** Expect that a value is a `tg.Blob`. */
 		static expect(value: unknown): Blob;
 
-		/** Assert that a value is a `Blob`. */
+		/** Assert that a value is a `tg.Blob`. */
 		static assert(value: unknown): asserts value is Blob;
 
 		/* Get this blob's id. */
@@ -115,26 +182,28 @@ declare namespace tg {
 	}
 
 	export namespace Blob {
-		export type Arg = undefined | string | Uint8Array | Blob;
+		export type Arg = undefined | string | Uint8Array | Blob | Array<Arg>;
 
 		export type Id = string;
 
-		type ArchiveFormat = ".tar" | ".zip";
+		export type ArchiveFormat = ".tar" | ".zip";
 
-		type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zstd" | ".zst";
+		export type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zst";
 	}
 
-	/** Compute the checksum of the provided bytes. */
+	/** Compute the checksum of the provided bytes with the specified algorithm. */
 	export let checksum: (
 		algorithm: Checksum.Algorithm,
 		bytes: string | Uint8Array,
 	) => Checksum;
 
+	/** A checksum. */
 	export type Checksum = string;
 
 	export namespace Checksum {
 		export type Algorithm = "blake3" | "sha256" | "sha512";
 
+		/** Compute the checksum of the provided bytes with the specified algorithm. */
 		export let new_: (
 			algorithm: Algorithm,
 			bytes: string | Uint8Array,
@@ -143,9 +212,7 @@ declare namespace tg {
 	}
 
 	/** Create a directory. */
-	export let directory: (
-		...args: Array<Unresolved<Directory.Arg>>
-	) => Promise<Directory>;
+	export let directory: (...args: Args<Directory.Arg>) => Promise<Directory>;
 
 	/** A directory. */
 	export class Directory {
@@ -153,15 +220,15 @@ declare namespace tg {
 		static withId(id: Directory.Id): Directory;
 
 		/** Create a directory. */
-		static new(...args: Array<Unresolved<Directory.Arg>>): Promise<Directory>;
+		static new(...args: Args<Directory.Arg>): Promise<Directory>;
 
-		/** Check if a value is a `Directory`. */
+		/** Check if a value is a `tg.Directory`. */
 		static is(value: unknown): value is Directory;
 
-		/** Expect that a value is a `Directory`. */
+		/** Expect that a value is a `tg.Directory`. */
 		static expect(value: unknown): Directory;
 
-		/** Assert that a value is a `Directory`. */
+		/** Assert that a value is a `tg.Directory`. */
 		static assert(value: unknown): asserts value is Directory;
 
 		/* Get this directory's id. */
@@ -187,10 +254,16 @@ declare namespace tg {
 	}
 
 	export namespace Directory {
-		export type Arg = undefined | Directory | Array<Arg> | ArgObject;
+		export type Arg = undefined | Directory | ArgObject | Array<Arg>;
 
 		type ArgObject = {
-			[key: string]: undefined | Blob.Arg | Artifact | ArgObject;
+			[key: string]:
+				| undefined
+				| string
+				| Uint8Array
+				| Blob
+				| Artifact
+				| ArgObject;
 		};
 
 		export type Id = string;
@@ -239,13 +312,13 @@ declare namespace tg {
 		/** Create a file. */
 		static new(...args: Args<File.Arg>): Promise<File>;
 
-		/** Check if a value is a `File`. */
+		/** Check if a value is a `tg.File`. */
 		static is(value: unknown): value is File;
 
-		/** Expect that a value is a `File`. */
+		/** Expect that a value is a `tg.File`. */
 		static expect(value: unknown): File;
 
-		/** Assert that a value is a `File`. */
+		/** Assert that a value is a `tg.File`. */
 		static assert(value: unknown): asserts value is File;
 
 		/* Get this file's id. */
@@ -271,7 +344,14 @@ declare namespace tg {
 	}
 
 	export namespace File {
-		export type Arg = Blob.Arg | File | ArgObject;
+		export type Arg =
+			| undefined
+			| string
+			| Uint8Array
+			| Blob
+			| File
+			| ArgObject
+			| Array<Arg>;
 
 		export type ArgObject = {
 			contents: Blob.Arg;
@@ -293,13 +373,13 @@ declare namespace tg {
 		/** Get a package with an ID. */
 		static withId(id: Package.Id): Package;
 
-		/** Check if a value is a `Package`. */
+		/** Check if a value is a `tg.Package`. */
 		static is(value: unknown): value is Package;
 
-		/** Expect that a value is a `Package`. */
+		/** Expect that a value is a `tg.Package`. */
 		static expect(value: unknown): Package;
 
-		/** Assert that a value is a `Package`. */
+		/** Assert that a value is a `tg.Package`. */
 		static assert(value: unknown): asserts value is Package;
 
 		/** Get this package's artifact. */
@@ -312,6 +392,13 @@ declare namespace tg {
 	export namespace Package {
 		export type Id = string;
 	}
+
+	/** Resolve all deeply nested promises in an unresolved value. */
+	export let resolve: <T extends Unresolved<Value>>(
+		value: T,
+	) => Promise<Resolved<T>>;
+
+	export type MaybePromise<T> = T | Promise<T>;
 
 	/**
 	 * This computed type takes a type `T` and returns the union of all possible types that will return `T` by calling `resolve`. Here are some examples:
@@ -334,6 +421,7 @@ declare namespace tg {
 			| File
 			| Symlink
 			| Template
+			| Mutation
 			| Package
 			| Target
 			? T
@@ -378,19 +466,13 @@ declare namespace tg {
 		? Resolved<U>
 		: never;
 
-	/** Resolve all deeply nested promises in an unresolved value. */
-	export let resolve: <T extends Unresolved<Value>>(
-		value: T,
-	) => Promise<Resolved<T>>;
-
-	export type MaybePromise<T> = T | Promise<T>;
-
 	/** Sleep for the specified duration in seconds. */
 	export let sleep: (duration: number) => Promise<void>;
 
 	/** Create a symlink. */
 	export let symlink: (...args: Args<Symlink.Arg>) => Promise<Symlink>;
 
+	/** A symlink. */
 	export class Symlink {
 		/** Get a symlink with an ID. */
 		static withId(id: Symlink.Id): Symlink;
@@ -398,13 +480,13 @@ declare namespace tg {
 		/** Create a symlink. */
 		static new(...args: Args<Symlink.Arg>): Promise<Symlink>;
 
-		/** Check if a value is a `Symlink`. */
+		/** Check if a value is a `tg.Symlink`. */
 		static is(value: unknown): value is Symlink;
 
-		/** Expect that a value is a `Symlink`. */
+		/** Expect that a value is a `tg.Symlink`. */
 		static expect(value: unknown): Symlink;
 
-		/** Assert that a value is a `Symlink`. */
+		/** Assert that a value is a `tg.Symlink`. */
 		static assert(value: unknown): asserts value is Symlink;
 
 		/* Get this symlink's id. */
@@ -460,13 +542,13 @@ declare namespace tg {
 		export let new_: (arg: System.Arg) => System;
 		export { new_ as new };
 
-		/** Check if a value is a `System`. */
+		/** Check if a value is a `tg.System`. */
 		export let is: (value: unknown) => value is System;
 
-		/** Expect that a value is a `System`. */
+		/** Expect that a value is a `tg.System`. */
 		export let expect: (value: unknown) => System;
 
-		/** Assert that a value is a `System`. */
+		/** Assert that a value is a `tg.System`. */
 		export let assert: (value: unknown) => asserts value is System;
 
 		/** Get a system's arch. */
@@ -487,10 +569,7 @@ declare namespace tg {
 	>(...args: Args<Target.Arg>): Promise<Target<A, R>>;
 
 	/** Create and build a target. */
-	export function build<
-		A extends Array<Value> = Array<Value>,
-		R extends Value = Value,
-	>(...args: Args<Target.Arg>): Promise<Target<A, R>>;
+	export let build: (...args: Args<Target.Arg>) => Promise<Value>;
 
 	/** A target. */
 	export interface Target<
@@ -501,6 +580,7 @@ declare namespace tg {
 		(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
 	}
 
+	/** A target. */
 	export class Target<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
@@ -513,13 +593,13 @@ declare namespace tg {
 			...args: Args<Target.Arg>
 		): Promise<Target<A, R>>;
 
-		/** Check if a value is a `Target`. */
+		/** Check if a value is a `tg.Target`. */
 		static is(value: unknown): value is Target;
 
-		/** Expect that a value is a `Target`. */
+		/** Expect that a value is a `tg.Target`. */
 		static expect(value: unknown): Target;
 
-		/** Assert that a value is a `Target`. */
+		/** Assert that a value is a `tg.Target`. */
 		static assert(value: unknown): asserts value is Target;
 
 		/* Get this target's id. */
@@ -554,9 +634,16 @@ declare namespace tg {
 	}
 
 	export namespace Target {
-		export type Arg = Template | Target | ArgObject;
+		export type Arg =
+			| undefined
+			| string
+			| Artifact
+			| Template
+			| Target
+			| ArgObject
+			| Array<Arg>;
 
-		type ArgObject = {
+		export type ArgObject = {
 			/** The system to build the target on. */
 			host?: System;
 
@@ -570,7 +657,7 @@ declare namespace tg {
 			name?: string | undefined;
 
 			/** The target's environment variables. */
-			env?: Record<string, Value>;
+			env?: Args.MutationObject;
 
 			/** The target's command line arguments. */
 			args?: Array<Value>;
@@ -591,16 +678,17 @@ declare namespace tg {
 	/** Create a template. */
 	export let template: (...args: Args<Template.Arg>) => Promise<Template>;
 
+	/** A template. */
 	export class Template {
 		static new(...args: Args<Template.Arg>): Promise<Template>;
 
-		/** Check if a value is a `Template`. */
+		/** Check if a value is a `tg.Template`. */
 		static is(value: unknown): value is Template;
 
-		/** Expect that a value is a `Template`. */
+		/** Expect that a value is a `tg.Template`. */
 		static expect(value: unknown): Template;
 
-		/** Assert that a value is a `Template`. */
+		/** Assert that a value is a `tg.Template`. */
 		static assert(value: unknown): asserts value is Template;
 
 		/** Join an array of templates with a separator. */
@@ -614,25 +702,12 @@ declare namespace tg {
 	}
 
 	export namespace Template {
-		export type Arg = undefined | Template.Component | Template;
+		export type Arg = undefined | Component | Template | Array<Arg>;
 
 		export type Component = string | Artifact;
-
-		export namespace Component {
-			/** Check if a value is a `Template.Component`. */
-			export let is: (value: unknown) => value is Template.Component;
-
-			/** Expect that a value is a `Template.Component`. */
-			export let expect: (value: unknown) => Template.Component;
-
-			/** Assert that a value is a `Template.Component`. */
-			export let assert: (
-				value: unknown,
-			) => asserts value is Template.Component;
-		}
 	}
 
-	/** `Value` is the union of all types that can be used as the input or output of Tangram targets. */
+	/** The union of all types that can be used as the input or output of Tangram targets. */
 	export type Value =
 		| undefined
 		| boolean
@@ -644,6 +719,7 @@ declare namespace tg {
 		| File
 		| Symlink
 		| Template
+		| Mutation
 		| Package
 		| Target
 		| Array<Value>
@@ -655,13 +731,13 @@ declare namespace tg {
 		/** Get a value with an ID. */
 		export let withId: (id: Value.Id) => Value;
 
-		/** Check if a value is `Value`. */
+		/** Check if a value is a `tg.Value`. */
 		export let is: (value: unknown) => value is Value;
 
-		/** Expect that a value is `Value`. */
+		/** Expect that a value is a `tg.Value`. */
 		export let expect: (value: unknown) => Value;
 
-		/** Assert that a value is `Value`. */
+		/** Assert that a value is a `tg.Value`. */
 		export let assert: (value: unknown) => asserts value is Value;
 	}
 }

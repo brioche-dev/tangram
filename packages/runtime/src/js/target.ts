@@ -1,11 +1,12 @@
-import { Args, flatten } from "./args.ts";
+import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
+import { Args, MaybePromise, apply as apply_ } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { MaybePromise, Unresolved } from "./resolve.ts";
+import { Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
@@ -113,7 +114,7 @@ export class Target<
 			},
 			apply: async (_target, _, args) => {
 				let target = await Target.new(this_ as any, {
-					args: args as Array<Value>,
+					args: (await resolve(args)) as Array<Value>,
 				});
 				return await target.build();
 			},
@@ -136,11 +137,8 @@ export class Target<
 			executable?: Template;
 			package?: Package | undefined;
 			name?: string | undefined;
-			env?:
-				| Record<string, Value>
-				| Array<Record<string, EnvMutation>>
-				| undefined;
-			args: Array<Value>;
+			env?: Array<Args.MutationObject>;
+			args?: Array<Value>;
 			checksum?: Checksum | undefined;
 			unsafe?: boolean;
 		};
@@ -153,8 +151,12 @@ export class Target<
 			args: args_,
 			checksum,
 			unsafe: unsafe_,
-		} = await Args.apply<Target.Arg, Apply>(args, async (arg) => {
-			if (Template.Arg.is(arg)) {
+		} = await apply_<Target.Arg, Apply>(args, async (arg) => {
+			if (
+				typeof arg === "string" ||
+				Artifact.is(arg) ||
+				arg instanceof Template
+			) {
 				let host = {
 					kind: "set" as const,
 					value: (await getCurrent().env())["TANGRAM_HOST"] as System,
@@ -176,7 +178,17 @@ export class Target<
 				};
 				let package_ = { kind: "set" as const, value: await arg.package() };
 				let name = { kind: "set" as const, value: await arg.name_() };
-				let env = { kind: "set" as const, value: await arg.env() };
+				let env_ = {
+					kind: "set" as const,
+					value: [
+						Object.fromEntries(
+							Object.entries(await arg.env()).map(([key, value]) => [
+								key,
+								{ kind: "set" as const, value },
+							]),
+						),
+					],
+				};
 				let args_ = { kind: "set" as const, value: await arg.args() };
 				let checksum = { kind: "set" as const, value: await arg.checksum() };
 				let unsafe = { kind: "set" as const, value: await arg.unsafe() };
@@ -185,7 +197,7 @@ export class Target<
 					executable,
 					package: package_,
 					name,
-					env,
+					env: env_,
 					args: args_,
 					checksum,
 					unsafe,
@@ -217,13 +229,10 @@ export class Target<
 					};
 				}
 				if ("env" in arg) {
-					object.env =
-						arg.env === undefined
-							? { kind: "unset" }
-							: {
-									kind: "append" as const,
-									value: arg.env,
-							  };
+					object.env = {
+						kind: "append" as const,
+						value: arg.env,
+					};
 				}
 				if ("args" in arg) {
 					object.args = {
@@ -254,10 +263,10 @@ export class Target<
 		if (!executable) {
 			throw new Error("Cannot create a target without an executable.");
 		}
-		let env =
-			env_ && env_ instanceof Array
-				? await processEnvMutations({}, ...(env_ ?? []))
-				: env_ ?? {};
+		let env = await Args.apply<Args.MutationObject, { [key: string]: Value }>(
+			env_ ?? [],
+			async (arg) => arg,
+		);
 		args_ ??= [];
 		unsafe_ ??= false;
 		return new Target(
@@ -344,14 +353,21 @@ export class Target<
 }
 
 export namespace Target {
-	export type Arg = Template.Arg | Target | ArgObject;
+	export type Arg =
+		| undefined
+		| string
+		| Artifact
+		| Template
+		| Target
+		| ArgObject
+		| Array<Arg>;
 
 	export type ArgObject = {
 		host?: System;
 		executable?: Template.Arg;
 		package?: Package | undefined;
 		name?: string | undefined;
-		env?: Record<string, EnvMutation> | undefined;
+		env?: Record<string, Args.Mutation<Value>>;
 		args?: Array<Value>;
 		checksum?: Checksum | undefined;
 		unsafe?: boolean;
@@ -370,76 +386,3 @@ export namespace Target {
 		unsafe: boolean;
 	};
 }
-
-type EnvMutation =
-	| Template.Arg
-	| { kind: "unset" }
-	| { kind: "set"; value: Template.Arg }
-	| { kind: "set_if_unset"; value: Template.Arg }
-	| {
-			kind: "append";
-			value: Args.MaybeNestedArray<Template.Arg>;
-			separator?: Template.Arg;
-	  }
-	| {
-			kind: "prepend";
-			value: Args.MaybeNestedArray<Template.Arg>;
-			separator?: Template.Arg;
-	  };
-
-/** Collect a list of env mutations into a single environment. */
-let processEnvMutations = async (
-	init: Record<string, Value>,
-	...args: Array<Record<string, EnvMutation>>
-): Promise<Record<string, Value>> => {
-	let env = { ...init };
-	for (let arg of args) {
-		// Apply mutations for a single argument.
-		for (let [key, mutation] of Object.entries(arg)) {
-			await mutateEnv(env, key, mutation);
-		}
-	}
-	return env;
-};
-
-/** Mutate an env object in-place. */
-let mutateEnv = async (
-	env: Record<string, Value>,
-	key: string,
-	mutation: EnvMutation,
-) => {
-	if (Template.Arg.is(mutation)) {
-		mutation = { kind: "set", value: mutation };
-	}
-	if (mutation.kind === "unset") {
-		delete env[key];
-	} else if (mutation.kind === "set") {
-		env[key] = mutation.value;
-	} else if (mutation.kind === "set_if_unset") {
-		if (!(key in env)) {
-			env[key] = mutation.value;
-		}
-	} else if (mutation.kind === "append") {
-		if (!(key in env)) {
-			env[key] = await template();
-		}
-		let t = env[key];
-		assert_(Template.Arg.is(t));
-		env[key] = await Template.join(
-			mutation.separator ?? "",
-			t,
-			...flatten(mutation.value),
-		);
-	} else if (mutation.kind === "prepend") {
-		if (!(key in env)) {
-			env[key] = await template();
-		}
-		let t = env[key];
-		assert_(Template.Arg.is(t));
-		env[key] = await Template.join(
-			mutation.separator ?? "",
-			...flatten(mutation.value),
-			t,
-		);
-	}
-};

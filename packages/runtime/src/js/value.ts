@@ -2,6 +2,7 @@ import { assert as assert_ } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Mutation } from "./mutation.ts";
 import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
@@ -18,6 +19,7 @@ export type Value =
 	| File
 	| Symlink
 	| Template
+	| Mutation
 	| Package
 	| Target
 	| Array<Value>
