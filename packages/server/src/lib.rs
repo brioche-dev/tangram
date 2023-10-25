@@ -221,15 +221,9 @@ impl Server {
 		let method = request.method().clone();
 		let path_components = request.uri().path().split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
-			// Objects
-			(http::Method::HEAD, ["v1", "objects", _]) => {
-				self.handle_head_object_request(request).map(Some).boxed()
-			},
-			(http::Method::GET, ["v1", "objects", _]) => {
-				self.handle_get_object_request(request).map(Some).boxed()
-			},
-			(http::Method::PUT, ["v1", "objects", _]) => {
-				self.handle_put_object_request(request).map(Some).boxed()
+			// Clean
+			(http::Method::POST, ["v1", "clean"]) => {
+				self.handle_clean_request(request).map(Some).boxed()
 			},
 
 			// Builds
@@ -260,6 +254,18 @@ impl Server {
 			// 	.handle_put_object_for_path_request(request)
 			// 	.map(Some)
 			// 	.boxed(),
+
+			// Objects
+			(http::Method::HEAD, ["v1", "objects", _]) => {
+				self.handle_head_object_request(request).map(Some).boxed()
+			},
+			(http::Method::GET, ["v1", "objects", _]) => {
+				self.handle_get_object_request(request).map(Some).boxed()
+			},
+			(http::Method::PUT, ["v1", "objects", _]) => {
+				self.handle_put_object_request(request).map(Some).boxed()
+			},
+
 			(_, _) => future::ready(None).boxed(),
 		}
 		.await;

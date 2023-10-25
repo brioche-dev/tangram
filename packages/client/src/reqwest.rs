@@ -359,7 +359,13 @@ impl Client for Reqwest {
 	}
 
 	async fn clean(&self) -> Result<()> {
-		unimplemented!()
+		self.request(reqwest::Method::POST, "/v1/clean")
+			.send()
+			.await
+			.wrap_err("Failed to send the request.")?
+			.error_for_status()
+			.wrap_err("Expected the status to be success.")?;
+		Ok(())
 	}
 
 	async fn create_login(&self) -> Result<Login> {
