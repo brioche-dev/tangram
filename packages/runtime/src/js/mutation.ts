@@ -13,7 +13,7 @@ export type Args<T extends Value = Value> = Array<
 	Unresolved<MaybeNestedArray<MaybeMutationMap<T>>>
 >;
 
-type MaybeMutationMap<T extends Value = Value> = T extends
+export type MaybeMutationMap<T extends Value = Value> = T extends
 	| undefined
 	| boolean
 	| number
@@ -33,7 +33,7 @@ type MaybeMutationMap<T extends Value = Value> = T extends
 	: never;
 
 export type MutationMap<T extends { [key: string]: Value }> = {
-	[K in keyof T]?: MaybeNestedArray<MaybeMutation<T[K]>>;
+	[K in keyof T]?: MaybeMutation<T[K]>;
 };
 
 export type MaybeMutation<T extends Value = Value> = T | Mutation<T>;

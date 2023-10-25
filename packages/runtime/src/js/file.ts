@@ -1,7 +1,14 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import { Args, apply } from "./mutation.ts";
+import {
+	Args,
+	MaybeMutationMap,
+	Mutation,
+	MutationMap,
+	apply,
+	mutation,
+} from "./mutation.ts";
 import { Object_ } from "./object.ts";
 
 export let file = async (...args: Args<File.Arg>) => {
@@ -21,9 +28,9 @@ export class File {
 
 	static async new(...args: Args<File.Arg>): Promise<File> {
 		type Apply = {
-			contents?: Blob.Arg | undefined;
-			executable?: boolean | undefined;
-			references?: Array<Artifact> | undefined;
+			contents?: Blob.Arg;
+			executable?: boolean;
+			references?: Array<Artifact>;
 		};
 		let {
 			contents: contents_,
@@ -37,7 +44,7 @@ export class File {
 				arg instanceof Uint8Array ||
 				arg instanceof Blob
 			) {
-				return { contents: await blob(arg) };
+				return { contents: arg };
 			} else if (File.is(arg)) {
 				return {
 					contents: await arg.contents(),
@@ -131,9 +138,9 @@ export namespace File {
 		| Array<Arg>;
 
 	export type ArgObject = {
-		contents?: Blob.Arg | undefined;
-		executable?: boolean | undefined;
-		references?: Array<Artifact> | undefined;
+		contents?: Blob.Arg;
+		executable?: boolean;
+		references?: Array<Artifact>;
 	};
 
 	export type Id = string;
@@ -144,3 +151,33 @@ export namespace File {
 		references: Array<Artifact>;
 	};
 }
+
+let func = async () => {
+	let f1 = File.new("hello", {
+		references: [File.new("ref1")],
+	});
+
+	let fileArg = {
+		references: [File.new("ref1")],
+	};
+	let f2 = File.new("hello", fileArg);
+
+	let refMutation = await mutation({
+		kind: "append_array" as const,
+		value: [File.new("ref1")],
+	});
+
+	let refMutationTyped = await mutation<Array<Artifact>>({
+		kind: "append_array" as const,
+		value: [File.new("ref1")],
+	});
+	let fileArgMutation = {
+		references: refMutation,
+	};
+
+	let fileArgMutationTyped: MaybeMutationMap<File.ArgObject> = {
+		references: refMutationTyped,
+	};
+
+	let f3 = File.new("hello", fileArgMutationTyped);
+};
