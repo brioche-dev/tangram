@@ -13,6 +13,8 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_checkin(&self, args: Args) -> Result<()> {
+		let client = self.client.as_deref().unwrap();
+
 		// Get the path.
 		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 		if let Some(path_arg) = &args.path {
@@ -20,10 +22,10 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let artifact = tg::Artifact::check_in(self.client.as_ref(), &path).await?;
+		let artifact = tg::Artifact::check_in(client, &path).await?;
 
 		// Print the ID.
-		let id = artifact.id(self.client.as_ref()).await?;
+		let id = artifact.id(client).await?;
 		println!("{id}");
 
 		Ok(())

@@ -17,20 +17,20 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
+		let client = self.client.as_deref().unwrap();
+
 		// Get the package.
-		let package = tg::Package::with_specifier(self.client.as_ref(), args.package.clone())
+		let package = tg::Package::with_specifier(client, args.package.clone())
 			.await
 			.wrap_err("Failed to get the package.")?;
 
 		// Create the language server.
-		let server = tangram_lsp::Server::new(
-			self.client.downgrade_box(),
-			tokio::runtime::Handle::current(),
-		);
+		let server =
+			tangram_lsp::Server::new(client.downgrade_box(), tokio::runtime::Handle::current());
 
 		// Check the package for diagnostics.
 		let diagnostics = server
-			.check(vec![package.root_module(self.client.as_ref()).await?])
+			.check(vec![package.root_module(client).await?])
 			.await?;
 
 		// Print the diagnostics.

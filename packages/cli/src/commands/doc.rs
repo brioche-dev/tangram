@@ -17,21 +17,19 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_doc(&self, args: Args) -> Result<()> {
+		let client = self.client.as_deref().unwrap();
+
 		// Get the package.
-		let package = tg::Package::with_specifier(self.client.as_ref(), args.package)
+		let package = tg::Package::with_specifier(client, args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
 		// Create the language server.
-		let server = tangram_lsp::Server::new(
-			self.client.downgrade_box(),
-			tokio::runtime::Handle::current(),
-		);
+		let server =
+			tangram_lsp::Server::new(client.downgrade_box(), tokio::runtime::Handle::current());
 
 		// Get the docs.
-		let docs = server
-			.docs(&package.root_module(self.client.as_ref()).await?)
-			.await?;
+		let docs = server.docs(&package.root_module(client).await?).await?;
 
 		// Render the docs to JSON.
 		let json = serde_json::to_string_pretty(&docs).wrap_err("Failed to serialize to json.")?;

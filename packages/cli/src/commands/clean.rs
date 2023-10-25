@@ -9,8 +9,9 @@ pub struct Args {}
 
 impl Cli {
 	pub async fn command_clean(&self, _args: Args) -> Result<()> {
+		let client = self.client.as_deref().unwrap();
 		// Clean.
-		self.client.clean().await?;
+		client.clean().await?;
 
 		Ok(())
 	}

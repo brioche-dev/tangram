@@ -16,6 +16,8 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_checkout(&self, args: Args) -> Result<()> {
+		let client = self.client.as_deref().unwrap();
+
 		// Get the path.
 		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 		if let Some(path_arg) = &args.path {
@@ -26,7 +28,7 @@ impl Cli {
 
 		// Check out the artifact.
 		tg::Artifact::with_id(args.id)
-			.check_out(self.client.as_ref(), &path)
+			.check_out(client, &path)
 			.await
 			.wrap_err("Failed to check out the artifact.")?;
 

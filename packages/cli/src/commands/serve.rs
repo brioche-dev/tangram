@@ -51,7 +51,7 @@ impl Cli {
 
 		// Create the parent.
 		let _parent = tangram_client::hyper::Hyper::new(
-			tangram_client::hyper::Addr::Url(parent_url),
+			tangram_client::hyper::Addr::Inet(parent_url),
 			parent_token,
 		);
 

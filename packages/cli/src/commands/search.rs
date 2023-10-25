@@ -11,8 +11,10 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_search(&self, args: Args) -> Result<()> {
+		let client = self.client.as_deref().unwrap();
+
 		// Perform the search.
-		let packages = self.client.search_packages(&args.query).await?;
+		let packages = client.search_packages(&args.query).await?;
 
 		// Print the package names.
 		if packages.is_empty() {

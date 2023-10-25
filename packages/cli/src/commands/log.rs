@@ -16,16 +16,18 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_log(&self, args: Args) -> Result<()> {
+		let client = self.client.as_deref().unwrap();
+
 		let build = if let Ok(id) = tg::build::Id::try_from(args.id.clone()) {
 			tg::Build::with_id(id)
 		} else if let Ok(id) = tg::target::Id::try_from(args.id.clone()) {
-			tg::Target::with_id(id).build(self.client.as_ref()).await?
+			tg::Target::with_id(id).build(client).await?
 		} else {
 			return_error!("The ID must be a target or build ID.");
 		};
 
 		// Write the log to stdout.
-		let log = build.log(self.client.as_ref()).await?;
+		let log = build.log(client).await?;
 		let log =
 			tokio_util::io::StreamReader::new(log.map_ok(Bytes::from).map_err(|error| {
 				std::io::Error::new(std::io::ErrorKind::Other, error.to_string())

@@ -6,6 +6,7 @@
 
 use self::commands::Args;
 use clap::Parser;
+use commands::Command;
 use tangram_client as tg;
 use tg::{error, Result};
 use tracing_subscriber::prelude::*;
@@ -18,7 +19,7 @@ mod util;
 pub const API_URL: &str = "https://api.tangram.dev";
 
 struct Cli {
-	client: Box<dyn tg::Client>,
+	client: Option<Box<dyn tg::Client>>,
 }
 
 #[tokio::main]
@@ -53,12 +54,16 @@ async fn main_inner() -> Result<()> {
 	// 	.join(".tangram");
 	// let client = tangram_server::Server::new(path, None).await?;
 	let url = "http://localhost:8476".parse().unwrap();
-	let client = tangram_client::hyper::Hyper::new(tangram_client::hyper::Addr::Url(url), None);
+	let client = if let Command::Serve(_) = &args.command {
+		None
+	} else {
+		let client =
+			tangram_client::hyper::Hyper::new(tangram_client::hyper::Addr::Inet(url), None).await?;
+		Some(Box::new(client) as Box<dyn tg::Client>)
+	};
 
 	// Create the CLI.
-	let cli = Cli {
-		client: Box::new(client),
-	};
+	let cli = Cli { client };
 
 	// Run the command.
 	cli.run(args).await?;
