@@ -1,12 +1,15 @@
 use bytes::Bytes;
 use num::ToPrimitive;
+use serde_v8::Serializable;
 use std::{collections::BTreeMap, sync::Arc};
 use tangram_client as tg;
 use tg::{
-	blob, checksum, directory, error, file,
+	blob, checksum, directory, error, file, mutation,
+	mutation::ArrayMutation,
 	object::{self, Object},
 	package, return_error, symlink, target, template, Artifact, Blob, Checksum, Directory, Error,
-	File, Package, Relpath, Result, Subpath, Symlink, System, Target, Template, Value, WrapErr,
+	File, Mutation, Package, Relpath, Result, Subpath, Symlink, System, Target, Template, Value,
+	WrapErr,
 };
 use url::Url;
 
@@ -537,6 +540,7 @@ impl ToV8 for Value {
 			Value::File(value) => value.to_v8(scope),
 			Value::Symlink(value) => value.to_v8(scope),
 			Value::Template(value) => value.to_v8(scope),
+			Value::Mutation(value) => value.to_v8(scope),
 			Value::Package(value) => value.to_v8(scope),
 			Value::Target(value) => value.to_v8(scope),
 			Value::Array(value) => value.to_v8(scope),
@@ -578,6 +582,11 @@ impl FromV8 for Value {
 		let template = tg.get(scope, template.into()).unwrap();
 		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
 
+		let mutation =
+			v8::String::new_external_onebyte_static(scope, "Mutation".as_bytes()).unwrap();
+		let mutation = tg.get(scope, mutation.into()).unwrap();
+		let mutation = v8::Local::<v8::Function>::try_from(mutation).unwrap();
+
 		let package = v8::String::new_external_onebyte_static(scope, "Package".as_bytes()).unwrap();
 		let package = tg.get(scope, package.into()).unwrap();
 		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
@@ -606,6 +615,8 @@ impl FromV8 for Value {
 			Ok(Value::Symlink(from_v8(scope, value)?))
 		} else if value.instance_of(scope, template.into()).unwrap() {
 			Ok(Value::Template(from_v8(scope, value)?))
+		} else if value.instance_of(scope, mutation.into()).unwrap() {
+			Ok(Value::Mutation(from_v8(scope, value)?))
 		} else if value.instance_of(scope, package.into()).unwrap() {
 			Ok(Value::Package(from_v8(scope, value)?))
 		} else if value.instance_of(scope, target.into()).unwrap() {
@@ -1147,6 +1158,169 @@ impl FromV8 for template::Component {
 		};
 
 		Ok(component)
+	}
+}
+
+impl ToV8 for Mutation {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let mutation =
+			v8::String::new_external_onebyte_static(scope, "Mutation".as_bytes()).unwrap();
+		let mutation = tg.get(scope, mutation.into()).unwrap();
+		let mutation = v8::Local::<v8::Function>::try_from(mutation).unwrap();
+
+		let object = v8::Object::new(scope);
+		match self {
+			Mutation::Unset(_) => {
+				let key =
+					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+				let value = "unset".to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+			},
+			Mutation::Set(val) => {
+				let key =
+					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+				let value = "set".to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+				let value = val.clone().to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+			},
+			Mutation::SetIfUnset(val) => {
+				let key =
+					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+				let value = "set_if_unset".to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+				let value = val.clone().to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+			},
+			Mutation::ArrayAppend(mutation) => {
+				let key =
+					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+				let value = "array_append".to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+				let value = mutation.value.to_v8(scope)?;
+				object.set(scope, key.into(), value);
+			},
+			Mutation::ArrayPrepend(mutation) => {
+				let key =
+					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+				let value = "array_prepend".to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+				let value = mutation.value.to_v8(scope)?;
+				object.set(scope, key.into(), value);
+			},
+			Mutation::TemplateAppend(mutation) => {
+				let key =
+					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+				let value = "template_append".to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+				let value = mutation.value.to_v8(scope)?;
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
+				let value = mutation.separator.to_v8(scope)?;
+				object.set(scope, key.into(), value);
+			},
+			Mutation::TemplatePrepend(mutation) => {
+				let key =
+					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+				let value = "template_prepend".to_v8(scope).unwrap();
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+				let value = mutation.value.to_v8(scope)?;
+				object.set(scope, key.into(), value);
+
+				let key =
+					v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
+				let value = mutation.separator.to_v8(scope)?;
+				object.set(scope, key.into(), value);
+			},
+		}
+		Ok(object.into())
+	}
+}
+
+impl FromV8 for Mutation {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = value.to_object(scope).unwrap();
+
+		let kind = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+		let kind = value.get(scope, kind.into()).unwrap();
+		let kind = String::from_v8(scope, kind)?;
+
+		if kind == "unset" {
+			return Ok(Mutation::Unset(()));
+		}
+
+		let val = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+		let val = value.get(scope, val.into()).unwrap();
+
+		if kind == "set" {
+			let val = Value::from_v8(scope, val)?;
+			return Ok(Mutation::Set(Box::new(val)));
+		}
+		if kind == "set_if_unset" {
+			let val = Value::from_v8(scope, val)?;
+			return Ok(Mutation::SetIfUnset(Box::new(val)));
+		}
+
+		let template = Template::from_v8(scope, val)?;
+		if kind == "array_append" {
+			return Ok(Mutation::ArrayAppend(mutation::ArrayMutation {
+				value: template,
+			}));
+		}
+		if kind == "array_prepend" {
+			return Ok(Mutation::ArrayPrepend(mutation::ArrayMutation {
+				value: template,
+			}));
+		}
+
+		let separator =
+			v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
+		let separator = value.get(scope, separator.into()).unwrap();
+		let separator = Template::from_v8(scope, separator)?;
+
+		if kind == "template_append" {
+			return Ok(Mutation::TemplateAppend(mutation::TemplateMutation {
+				value: template,
+				separator,
+			}));
+		}
+		if kind == "template_prepend" {
+			return Ok(Mutation::TemplatePrepend(mutation::TemplateMutation {
+				value: template,
+				separator,
+			}));
+		}
+
+		return_error!("Invalid mutation.");
 	}
 }
 

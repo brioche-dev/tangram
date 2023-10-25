@@ -73,7 +73,7 @@ impl fmt::Display for Mutation {
 
 #[derive(Debug, Clone)]
 pub struct ArrayMutation {
-	value: Template,
+	pub value: Template,
 }
 
 impl ArrayMutation {
@@ -94,8 +94,8 @@ impl ArrayMutation {
 
 #[derive(Debug, Clone)]
 pub struct TemplateMutation {
-	value: Template,
-	separator: Template,
+	pub value: Template,
+	pub separator: Template,
 }
 
 impl TemplateMutation {
