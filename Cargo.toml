@@ -8,6 +8,7 @@ members = [
   "packages/runtime",
   "packages/serialize",
   "packages/server",
+  "packages/util",
   "packages/vfs",
 ]
 
@@ -92,6 +93,7 @@ tangram_package = { path = "packages/package" }
 tangram_runtime = { path = "packages/runtime" }
 tangram_serialize = { path = "packages/serialize" }
 tangram_server = { path = "packages/server" }
+tangram_util = { path = "packages/util" }
 tar = { version = "0.4" }
 tempfile = "3"
 thiserror = "1"

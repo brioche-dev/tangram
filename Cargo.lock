@@ -3025,6 +3025,7 @@ dependencies = [
  "tangram_serialize",
  "tar",
  "tempfile",
+ "tangram_util",
  "thiserror",
  "tokio",
  "tokio-rustls 0.25.0-alpha.1",
@@ -3161,6 +3162,7 @@ dependencies = [
  "serde_json",
  "tangram_client",
  "tangram_runtime",
+ "tangram_util",
  "tempfile",
  "tokio",
  "tokio-stream",
@@ -3169,6 +3171,24 @@ dependencies = [
  "url",
  "xattr",
  "zerocopy",
+]
+
+[[package]]
+name = "tangram_util"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "http",
+ "http-body 1.0.0-rc.2",
+ "http-body-util",
+ "hyper 1.0.0-rc.4",
+ "hyper-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

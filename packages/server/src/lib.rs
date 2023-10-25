@@ -2,7 +2,6 @@ use self::progress::Progress;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{future, stream::BoxStream, FutureExt};
-use http_body_util::BodyExt;
 use itertools::Itertools;
 use lmdb::{Cursor, Transaction};
 use std::{
@@ -15,6 +14,7 @@ use std::{
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
+use tangram_util::{full, Incoming, Outgoing};
 use tg::{Result, WrapErr};
 
 mod build;
@@ -426,55 +426,6 @@ impl tg::Client for Server {
 	async fn set_package_for_path(&self, path: &Path, package: &tg::Package) -> Result<()> {
 		self.set_package_for_path(path, package).await
 	}
-}
-
-pub type Incoming = hyper::body::Incoming;
-pub type Outgoing = http_body_util::combinators::UnsyncBoxBody<
-	::bytes::Bytes,
-	Box<dyn std::error::Error + Send + Sync + 'static>,
->;
-
-/// An empty response body.
-#[must_use]
-pub fn empty() -> Outgoing {
-	http_body_util::Empty::new()
-		.map_err(|_| unreachable!())
-		.boxed_unsync()
-}
-
-/// A full response body.
-#[must_use]
-pub fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
-	http_body_util::Full::new(chunk.into())
-		.map_err(|_| unreachable!())
-		.boxed_unsync()
-}
-
-/// 200
-#[must_use]
-pub fn ok() -> http::Response<Outgoing> {
-	http::Response::builder()
-		.status(http::StatusCode::OK)
-		.body(empty())
-		.unwrap()
-}
-
-/// 400
-#[must_use]
-pub fn bad_request() -> http::Response<Outgoing> {
-	http::Response::builder()
-		.status(http::StatusCode::BAD_REQUEST)
-		.body(full("Bad request."))
-		.unwrap()
-}
-
-/// 404
-#[must_use]
-pub fn not_found() -> http::Response<Outgoing> {
-	http::Response::builder()
-		.status(http::StatusCode::NOT_FOUND)
-		.body(full("Not found."))
-		.unwrap()
 }
 
 fn delete_directory_trackers(env: &lmdb::Environment, trackers: lmdb::Database) -> Result<()> {
