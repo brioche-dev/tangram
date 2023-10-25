@@ -52,7 +52,8 @@ async fn main_inner() -> Result<()> {
 	// 	.unwrap()
 	// 	.join(".tangram");
 	// let client = tangram_server::Server::new(path, None).await?;
-	let client = tangram_client::Reqwest::new("http://localhost:8476".parse().unwrap(), None);
+	let url = "http://localhost:8476".parse().unwrap();
+	let client = tangram_client::hyper::Hyper::new(tangram_client::hyper::Addr::Url(url), None);
 
 	// Create the CLI.
 	let cli = Cli {

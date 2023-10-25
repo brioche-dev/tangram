@@ -1,15 +1,13 @@
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::{RwLock, Weak};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use derive_more::FromStr;
 use futures::stream::BoxStream;
-use futures::{Stream, StreamExt, TryStreamExt};
-use hyper::body::Frame;
-use tangram_util::{empty, full, BodyExt, Incoming, Outgoing, ResponseExt, bytes_stream};
+use futures::{StreamExt, TryStreamExt};
+use tangram_util::{bytes_stream, empty, full, BodyExt, Incoming, Outgoing, ResponseExt};
 use tokio::io::AsyncBufReadExt;
 use tokio::net::{TcpStream, UnixStream};
 use tokio_rustls::{TlsConnector, TlsStream};
@@ -29,10 +27,10 @@ pub struct Hyper {
 
 #[derive(Debug)]
 struct State {
-	sender: tokio::sync::Mutex<hyper::client::conn::http2::SendRequest<Outgoing>>,
+	addr: Addr,
+	sender: tokio::sync::Mutex<Option<hyper::client::conn::http2::SendRequest<Outgoing>>>,
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	token: std::sync::RwLock<Option<String>>,
-	url: Option<Url>,
 	is_local: bool,
 }
 
@@ -47,6 +45,7 @@ struct SetForPathBody {
 	id: Id,
 }
 
+#[derive(Debug)]
 pub enum Addr {
 	Url(Url),
 	Socket(PathBuf),
@@ -60,7 +59,7 @@ impl Handle for Weak<State> {
 }
 
 impl Hyper {
-	pub async fn new(addr: Addr, token: Option<String>) -> Result<Self> {
+	pub fn new(addr: Addr, token: Option<String>) -> Self {
 		let is_local = match &addr {
 			Addr::Url(url) => url.host().map_or(false, |host| match host {
 				url::Host::Domain(domain) => domain == "localhost",
@@ -70,58 +69,25 @@ impl Hyper {
 			Addr::Socket(_) => true,
 		};
 
-		let exec = hyper_util::rt::TokioExecutor::new();
-		let (sender, url) = match &addr {
-			Addr::Url(url) if url.scheme() == "https" => {
-				let stream = tcp_stream(&url).await?;
-				let stream = tls_stream(stream, url, None).await?;
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
-					.await
-					.wrap_err("Failed to create hyper stream.")?;
-				tokio::spawn(connection);
-				(sender, Some(url.clone()))
-			},
-			Addr::Url(url) => {
-				let stream = tcp_stream(url).await?;
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
-					.await
-					.wrap_err("Failed to create hyper stream.")?;
-				tokio::spawn(connection);
-				(sender, Some(url.clone()))
-			},
-			Addr::Socket(path) => {
-				let stream = socket_stream(path).await?;
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
-					.await
-					.wrap_err("Failed to create hyper stream.")?;
-				tokio::spawn(connection);
-				(sender, None)
-			},
-		};
-
-		let sender = tokio::sync::Mutex::new(sender);
+		let sender = tokio::sync::Mutex::new(None);
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 		let token = RwLock::new(token);
 		let state = Arc::new(State {
+			addr,
 			sender,
 			token,
 			is_local,
 			file_descriptor_semaphore,
-			url,
 		});
 
-		Ok(Self { state })
+		Self { state }
 	}
 
 	fn request(&self, method: http::Method, path: &str) -> http::request::Builder {
-		let uri = match &self.state.url {
-			Some(uri) => format!("{}{}", uri, path.strip_prefix('/').unwrap()),
-			None => path.into(),
+		let uri = match &self.state.addr {
+			Addr::Url(url) => format!("{}{}", url, path.strip_prefix('/').unwrap()),
+			Addr::Socket(_) => path.into(),
 		};
-
 		http::request::Builder::default().uri(uri).method(method)
 	}
 
@@ -132,7 +98,43 @@ impl Hyper {
 	) -> Result<http::Response<Incoming>> {
 		let request = request.body(body).wrap_err("Failed to create request.")?;
 		let mut sender = self.state.sender.lock().await;
+		if sender.is_none() {
+			let exec = hyper_util::rt::TokioExecutor::new();
+			let sender_ = match &self.state.addr {
+				Addr::Url(url) if url.scheme() == "https" => {
+					let stream = tcp_stream(&url).await?;
+					let stream = tls_stream(stream, url, None).await?;
+					let io = hyper_util::rt::TokioIo::new(stream);
+					let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
+						.await
+						.wrap_err("Failed to create hyper stream.")?;
+					tokio::spawn(connection);
+					sender
+				},
+				Addr::Url(url) => {
+					let stream = tcp_stream(url).await?;
+					let io = hyper_util::rt::TokioIo::new(stream);
+					let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
+						.await
+						.wrap_err("Failed to create hyper stream.")?;
+					tokio::spawn(connection);
+					sender
+				},
+				Addr::Socket(path) => {
+					let stream = socket_stream(path).await?;
+					let io = hyper_util::rt::TokioIo::new(stream);
+					let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
+						.await
+						.wrap_err("Failed to create hyper stream.")?;
+					tokio::spawn(connection);
+					sender
+				},
+			};
+			*sender = Some(sender_);
+		}
 		sender
+			.as_mut()
+			.unwrap()
 			.send_request(request)
 			.await
 			.wrap_err("Failed to send request.")
@@ -140,8 +142,7 @@ impl Hyper {
 }
 
 async fn tcp_stream(url: &Url) -> Result<TcpStream> {
-	let addr = SocketAddr::from_str(url.host_str().unwrap())
-		.wrap_err("Failed to get socket addr from hostname.")?;
+	let addr = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
 	let stream = TcpStream::connect(addr)
 		.await
 		.wrap_err("Failed to connect to url.")?;
