@@ -2,6 +2,7 @@ use crate::{
 	branch, directory, file, leaf, mutation, object, package, symlink, target, template, Branch,
 	Client, Directory, File, Leaf, Mutation, Package, Result, Symlink, Target, Template, WrapErr,
 };
+use async_compression::futures::write;
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
 use futures::{stream::FuturesUnordered, TryStreamExt};
