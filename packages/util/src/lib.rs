@@ -3,6 +3,7 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt};
 use http::Response;
 use http_body::Frame;
+use http_body_util::BodyStream;
 use tokio::io::AsyncReadExt;
 
 pub type Incoming = hyper::body::Incoming;
@@ -48,20 +49,13 @@ pub fn bad_request() -> http::Response<Outgoing> {
 }
 
 pub fn bytes_stream(body: Incoming) -> impl Stream<Item = hyper::Result<Bytes>> {
-	use hyper::body::Body;
-	let mut body = Box::pin(body);
-	let stream = futures::stream::poll_fn(move |cx| {
-		let body = body.as_mut();
-		body.poll_frame(cx)
-	})
-	.filter_map(|frame| async {
+	BodyStream::new(body).filter_map(|frame| async {
 		match frame.map(Frame::into_data) {
 			Ok(Ok(bytes)) => Some(Ok(bytes)),
 			Err(e) => Some(Err(e)),
 			Ok(Err(_frame)) => None,
 		}
-	});
-	stream
+	})
 }
 
 /// 404
