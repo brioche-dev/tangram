@@ -5,7 +5,6 @@ use std::{collections::BTreeMap, sync::Arc};
 use tangram_client as tg;
 use tg::{
 	blob, checksum, directory, error, file, mutation,
-	mutation::ArrayMutation,
 	object::{self, Object},
 	package, return_error, symlink, target, template, Artifact, Blob, Checksum, Directory, Error,
 	File, Mutation, Package, Relpath, Result, Subpath, Symlink, System, Target, Template, Value,
@@ -1163,17 +1162,6 @@ impl FromV8 for template::Component {
 
 impl ToV8 for Mutation {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let mutation =
-			v8::String::new_external_onebyte_static(scope, "Mutation".as_bytes()).unwrap();
-		let mutation = tg.get(scope, mutation.into()).unwrap();
-		let mutation = v8::Local::<v8::Function>::try_from(mutation).unwrap();
-
 		let object = v8::Object::new(scope);
 		match self {
 			Mutation::Unset(_) => {
