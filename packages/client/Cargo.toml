@@ -42,6 +42,7 @@ sha2 = { workspace = true }
 tangram_serialize = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
+tangram_util = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
