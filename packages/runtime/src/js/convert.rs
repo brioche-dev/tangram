@@ -1256,10 +1256,28 @@ impl FromV8 for Mutation {
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let mutation =
+			v8::String::new_external_onebyte_static(scope, "Mutation".as_bytes()).unwrap();
+		let mutation = tg.get(scope, mutation.into()).unwrap();
+		let mutation = v8::Local::<v8::Function>::try_from(mutation).unwrap();
+
+		if !value.instance_of(scope, mutation.into()).unwrap() {
+			return_error!("Expected a mutation.");
+		}
 		let value = value.to_object(scope).unwrap();
 
+		let inner = v8::String::new_external_onebyte_static(scope, "inner".as_bytes()).unwrap();
+		let inner = value.get(scope, inner.into()).unwrap();
+		let inner = inner.to_object(scope).unwrap();
+
 		let kind = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
-		let kind = value.get(scope, kind.into()).unwrap();
+		let kind = inner.get(scope, kind.into()).unwrap();
 		let kind = String::from_v8(scope, kind)?;
 
 		if kind == "unset" {
@@ -1267,7 +1285,7 @@ impl FromV8 for Mutation {
 		}
 
 		let val = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-		let val = value.get(scope, val.into()).unwrap();
+		let val = inner.get(scope, val.into()).unwrap();
 
 		if kind == "set" {
 			let val = Value::from_v8(scope, val)?;
@@ -1292,7 +1310,7 @@ impl FromV8 for Mutation {
 
 		let separator =
 			v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
-		let separator = value.get(scope, separator.into()).unwrap();
+		let separator = inner.get(scope, separator.into()).unwrap();
 		let separator = Template::from_v8(scope, separator)?;
 
 		if kind == "template_append" {
