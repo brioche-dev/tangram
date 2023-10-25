@@ -1,8 +1,8 @@
 import { Artifact } from "./artifact.ts";
-import { assert as assert_, unimplemented, unreachable } from "./assert.ts";
+import { assert as assert_, unreachable } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
-import { Args, apply } from "./mutation.ts";
+import { Args, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
 
@@ -41,30 +41,28 @@ export class Blob {
 					}),
 				);
 				return {
-					children: {
-						kind: "append_array" as const,
+					children: await mutation({
+						kind: "array_append" as const,
 						value: [blob],
-					},
+					}),
 				};
 			} else if (arg instanceof Uint8Array) {
 				let blob = new Blob(
 					Object_.Handle.withObject({ kind: "blob", value: arg }),
 				);
 				return {
-					children: {
-						kind: "append_array" as const,
+					children: await mutation({
+						kind: "array_append" as const,
 						value: [blob],
-					},
+					}),
 				};
 			} else if (Blob.is(arg)) {
 				return {
-					children: {
-						kind: "append_array" as const,
+					children: await mutation({
+						kind: "array_append" as const,
 						value: [arg],
-					},
+					}),
 				};
-			} else if (arg instanceof Array) {
-				return unimplemented();
 			} else {
 				return unreachable();
 			}

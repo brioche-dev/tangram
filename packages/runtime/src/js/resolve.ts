@@ -1,7 +1,7 @@
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { MaybePromise } from "./mutation.ts";
+import { Mutation } from "./mutation.ts";
 import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
@@ -20,6 +20,7 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| File
 		| Symlink
 		| Template
+		| Mutation
 		| Package
 		| Target
 		? T
@@ -41,6 +42,7 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| File
 	| Symlink
 	| Template
+	| Mutation
 	| Package
 	| Target
 	? T
@@ -51,6 +53,8 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	: T extends { [key: string]: Unresolved<Value> }
 	? { [K in keyof T]: Resolved<T[K]> }
 	: never;
+
+export type MaybePromise<T> = T | Promise<T>;
 
 export let resolve = async <T extends Unresolved<Value>>(
 	value: T,
@@ -67,6 +71,7 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof File ||
 		value instanceof Symlink ||
 		value instanceof Template ||
+		value instanceof Mutation ||
 		value instanceof Package ||
 		value instanceof Target
 	) {

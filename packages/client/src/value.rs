@@ -95,16 +95,19 @@ pub enum Data {
 	#[tangram_serialize(id = 9)]
 	Template(template::Data),
 
-	#[tangram_serialize(id = 10)]
+	// #[tangram_serialize(id = 10)]
+	// Mutation(mutation::Data),
+	//
+	#[tangram_serialize(id = 11)]
 	Package(package::Id),
 
-	#[tangram_serialize(id = 11)]
+	#[tangram_serialize(id = 12)]
 	Target(target::Id),
 
-	#[tangram_serialize(id = 12)]
+	#[tangram_serialize(id = 13)]
 	Array(Vec<Data>),
 
-	#[tangram_serialize(id = 13)]
+	#[tangram_serialize(id = 14)]
 	Map(BTreeMap<String, Data>),
 }
 

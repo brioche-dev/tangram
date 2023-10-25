@@ -3,10 +3,17 @@ import { assert as assert_, unreachable } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
-import { Args, MaybePromise, apply as apply_ } from "./mutation.ts";
+import {
+	Args,
+	MaybeNestedArray,
+	MutationMap,
+	apply,
+	flatten,
+	mutation,
+} from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { Unresolved, resolve } from "./resolve.ts";
+import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
@@ -134,125 +141,42 @@ export class Target<
 	>(...args: Args<Target.Arg>): Promise<Target<A, R>> {
 		type Apply = {
 			host?: System;
-			executable?: Template;
+			executable?: Template.Arg;
 			package?: Package | undefined;
 			name?: string | undefined;
-			env?: Array<Args.MutationObject>;
+			env?: MaybeNestedArray<MutationMap>;
 			args?: Array<Value>;
 			checksum?: Checksum | undefined;
 			unsafe?: boolean;
 		};
 		let {
 			host,
-			executable,
+			executable: executable_,
 			package: package_,
 			name,
 			env: env_,
 			args: args_,
 			checksum,
 			unsafe: unsafe_,
-		} = await apply_<Target.Arg, Apply>(args, async (arg) => {
+		} = await apply<Target.Arg, Apply>(args, async (arg) => {
 			if (
 				typeof arg === "string" ||
 				Artifact.is(arg) ||
 				arg instanceof Template
 			) {
-				let host = {
-					kind: "set" as const,
-					value: (await getCurrent().env())["TANGRAM_HOST"] as System,
-				};
-				let executable = {
-					kind: "set" as const,
-					value: await template("/bin/sh"),
-				};
-				let args = {
-					kind: "set" as const,
-					value: ["-c", await template(arg)],
-				};
-				return { host, executable, args };
-			} else if (Target.is(arg)) {
-				let host = { kind: "set" as const, value: await arg.host() };
-				let executable = {
-					kind: "set" as const,
-					value: await arg.executable(),
-				};
-				let package_ = { kind: "set" as const, value: await arg.package() };
-				let name = { kind: "set" as const, value: await arg.name_() };
-				let env_ = {
-					kind: "set" as const,
-					value: [
-						Object.fromEntries(
-							Object.entries(await arg.env()).map(([key, value]) => [
-								key,
-								{ kind: "set" as const, value },
-							]),
-						),
-					],
-				};
-				let args_ = { kind: "set" as const, value: await arg.args() };
-				let checksum = { kind: "set" as const, value: await arg.checksum() };
-				let unsafe = { kind: "set" as const, value: await arg.unsafe() };
 				return {
-					host,
-					executable,
-					package: package_,
-					name,
-					env: env_,
-					args: args_,
-					checksum,
-					unsafe,
+					host: (await getCurrent().env())["TANGRAM_HOST"] as System,
+					executable: "/bin/sh",
+					args: ["-c", arg],
 				};
+			} else if (Target.is(arg)) {
+				return await arg.object();
 			} else if (typeof arg === "object") {
-				let object: Args.MutationObject<Apply> = {};
-				if ("host" in arg) {
-					object.host = {
-						kind: "set" as const,
-						value: arg.host,
-					};
-				}
-				if ("executable" in arg) {
-					object.executable = {
-						kind: "set" as const,
-						value: await template(arg.executable),
-					};
-				}
-				if ("package" in arg) {
-					object.package = {
-						kind: "set" as const,
-						value: arg.package,
-					};
-				}
-				if ("name" in arg) {
-					object.name = {
-						kind: "set" as const,
-						value: arg.name,
-					};
-				}
-				if ("env" in arg) {
-					object.env = {
-						kind: "append" as const,
-						value: arg.env,
-					};
-				}
-				if ("args" in arg) {
-					object.args = {
-						kind: "append" as const,
-						value: arg.args,
-					};
-				}
-				if ("checksum" in arg) {
-					object.checksum = {
-						kind: "set" as const,
-						value: arg.checksum,
-					};
-				}
-				if ("unsafe" in arg) {
-					object.unsafe = {
-						kind: "set" as const,
-						value: arg.unsafe,
-					};
-				}
-				return object;
+				return {
+					...arg,
+					env: await mutation({ kind: "array_append", value: [arg.env] }),
+					args: await mutation({ kind: "array_append", value: [arg.args] }),
+				};
 			} else {
 				return unreachable();
 			}
@@ -260,13 +184,11 @@ export class Target<
 		if (!host) {
 			throw new Error("Cannot create a target without a host.");
 		}
-		if (!executable) {
+		if (!executable_) {
 			throw new Error("Cannot create a target without an executable.");
 		}
-		let env = await Args.apply<Args.MutationObject, { [key: string]: Value }>(
-			env_ ?? [],
-			async (arg) => arg,
-		);
+		let executable = await template(executable_);
+		let env = await apply(flatten(env_ ?? []), async (arg) => arg);
 		args_ ??= [];
 		unsafe_ ??= false;
 		return new Target(
@@ -367,7 +289,7 @@ export namespace Target {
 		executable?: Template.Arg;
 		package?: Package | undefined;
 		name?: string | undefined;
-		env?: Record<string, Args.Mutation<Value>>;
+		env?: MutationMap;
 		args?: Array<Value>;
 		checksum?: Checksum | undefined;
 		unsafe?: boolean;

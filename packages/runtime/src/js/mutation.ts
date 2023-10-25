@@ -1,3 +1,4 @@
+import { Artifact } from "./artifact.ts";
 import { assert, assert as assert_ } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
@@ -24,6 +25,7 @@ export type MaybeMutationMap<T extends Value = Value> = T extends
 	| File
 	| Symlink
 	| Template
+	| Mutation
 	| Package
 	| Target
 	| Array<infer _U extends Value>
@@ -32,7 +34,9 @@ export type MaybeMutationMap<T extends Value = Value> = T extends
 	? MutationMap<T>
 	: never;
 
-export type MutationMap<T extends { [key: string]: Value }> = {
+export type MutationMap<
+	T extends { [key: string]: Value } = { [key: string]: Value },
+> = {
 	[K in keyof T]?: MaybeMutation<T[K]>;
 };
 
@@ -40,25 +44,27 @@ export type MaybeMutation<T extends Value = Value> = T | Mutation<T>;
 
 export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
 
-export type MaybePromise<T> = T | Promise<T>;
-
 export let apply = async <
 	A extends Value = Value,
 	R extends { [key: string]: Value } = { [key: string]: Value },
 >(
 	args: Args<A>,
-	map: (arg: A) => Promise<MaybeNestedArray<MutationMap<R>>>,
+	map: (
+		arg: Exclude<A, Array<Value>>,
+	) => Promise<MaybeNestedArray<MutationMap<R>>>,
 ): Promise<Partial<R>> => {
 	return flatten(
 		await Promise.all(
-			flatten(await Promise.all(args.map(resolve))).map((arg) => map(arg as A)),
+			flatten(await Promise.all(args.map(resolve))).map((arg) =>
+				map(arg as unknown as Exclude<A, Array<Value>>),
+			),
 		),
 	).reduce(async (object, mutations) => {
 		for (let [key, mutation] of Object.entries(mutations)) {
-			await mutate(object, key, mutation);
+			await mutate(await object, key, mutation);
 		}
 		return object;
-	}, {});
+	}, Promise.resolve({}));
 };
 
 /** Create a mutation. */
@@ -79,11 +85,11 @@ export class Mutation<T extends Value = Value> {
 		unresolvedArg: Unresolved<Mutation.Arg<T>>,
 	): Promise<Mutation<T>> {
 		let arg = await resolve(unresolvedArg);
-		if (arg.kind === "prepend_array" || arg.kind === "append_array") {
+		if (arg.kind === "array_prepend" || arg.kind === "array_append") {
 			return new Mutation({ kind: arg.kind, value: flatten(arg.value) });
 		} else if (
-			arg.kind === "prepend_template" ||
-			arg.kind === "append_template"
+			arg.kind === "template_prepend" ||
+			arg.kind === "template_append"
 		) {
 			return new Mutation({
 				kind: arg.kind,
@@ -124,22 +130,22 @@ export namespace Mutation {
 		| { kind: "set"; value: T }
 		| { kind: "set_if_unset"; value: T }
 		| {
-				kind: "prepend_array";
+				kind: "array_prepend";
 				value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
 		  }
 		| {
-				kind: "append_array";
+				kind: "array_append";
 				value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
 		  }
 		| {
-				kind: "prepend_template";
+				kind: "template_prepend";
 				value: T extends Template.Arg ? Template.Arg : never;
-				separator: Template.Arg;
+				separator?: Template.Arg;
 		  }
 		| {
-				kind: "append_template";
+				kind: "template_append";
 				value: T extends Template.Arg ? Template.Arg : never;
-				separator: Template.Arg;
+				separator?: Template.Arg;
 		  };
 
 	export type Inner =
@@ -147,20 +153,20 @@ export namespace Mutation {
 		| { kind: "set"; value: Value }
 		| { kind: "set_if_unset"; value: Value }
 		| {
-				kind: "prepend_array";
+				kind: "array_prepend";
 				value: Array<Value>;
 		  }
 		| {
-				kind: "append_array";
+				kind: "array_append";
 				value: Array<Value>;
 		  }
 		| {
-				kind: "prepend_template";
+				kind: "template_prepend";
 				value: Template;
 				separator: Template;
 		  }
 		| {
-				kind: "append_template";
+				kind: "template_append";
 				value: Template;
 				separator: Template;
 		  };
@@ -186,33 +192,51 @@ let mutate = async (
 		if (!(key in object)) {
 			object[key] = mutation.inner.value;
 		}
-	} else if (mutation.inner.kind === "prepend_array") {
+	} else if (mutation.inner.kind === "array_prepend") {
 		if (!(key in object)) {
 			object[key] = [];
 		}
 		let array = object[key];
 		assert(array instanceof Array);
 		array.unshift(...flatten(mutation.inner.value));
-	} else if (mutation.inner.kind === "append_array") {
+	} else if (mutation.inner.kind === "array_append") {
 		if (!(key in object)) {
 			object[key] = [];
 		}
 		let array = object[key];
 		assert(array instanceof Array);
 		array.push(...flatten(mutation.inner.value));
-	} else if (mutation.inner.kind === "prepend_template") {
+	} else if (mutation.inner.kind === "template_prepend") {
 		if (!(key in object)) {
 			object[key] = await template();
 		}
-		let t = object[key];
-		assert(t instanceof Template);
-		t = await Template.join(mutation.inner.separator, mutation.inner.value, t);
-	} else if (mutation.inner.kind === "append_template") {
+		let value = object[key];
+		assert(
+			value === undefined ||
+				typeof value === "string" ||
+				Artifact.is(value) ||
+				value instanceof Template,
+		);
+		object[key] = await Template.join(
+			mutation.inner.separator,
+			mutation.inner.value,
+			value,
+		);
+	} else if (mutation.inner.kind === "template_append") {
 		if (!(key in object)) {
 			object[key] = await template();
 		}
-		let t = object[key];
-		assert(t instanceof Template);
-		t = await Template.join(mutation.inner.separator, t, mutation.inner.value);
+		let value = object[key];
+		assert(
+			value === undefined ||
+				typeof value === "string" ||
+				Artifact.is(value) ||
+				value instanceof Template,
+		);
+		object[key] = await Template.join(
+			mutation.inner.separator,
+			value,
+			mutation.inner.value,
+		);
 	}
 };

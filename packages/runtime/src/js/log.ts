@@ -1,7 +1,9 @@
 import { unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
+import * as encoding from "./encoding.ts";
 import { File } from "./file.ts";
+import { Mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
@@ -40,7 +42,11 @@ let stringifyInner = (value: unknown, visited: WeakSet<object>): string => {
 			}
 		}
 		case "function": {
-			return `(function "${value.name ?? "(anonymous)"}")`;
+			if (Target.is(value)) {
+				return stringifyObject(value, visited);
+			} else {
+				return `(function "${value.name ?? "(anonymous)"}")`;
+			}
 		}
 		case "symbol": {
 			return "(symbol)";
@@ -60,6 +66,9 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		return `[${value
 			.map((value) => stringifyInner(value, visited))
 			.join(", ")}]`;
+	} else if (value instanceof Uint8Array) {
+		let bytes = encoding.hex.encode(value);
+		return `(tg.bytes ${bytes})`;
 	} else if (value instanceof Error) {
 		return value.message;
 	} else if (value instanceof Promise) {
@@ -86,13 +95,15 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 				}
 			})
 			.join("");
-		return `(tg.template "${string}")`;
+		return `\`${string}\``;
+	} else if (Mutation.is(value)) {
+		return `(tg.mutation ${stringifyObject(value.inner, visited)})`;
 	} else if (Package.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.package "${handle}")`;
+		return `(tg.package ${handle})`;
 	} else if (Target.is(value)) {
 		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.target "${handle}")`;
+		return `(tg.target ${handle})`;
 	} else {
 		let constructorName = "";
 		if (
@@ -104,7 +115,8 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		let entries = Object.entries(value).map(
 			([key, value]) => `${key}: ${stringifyInner(value, visited)}`,
 		);
-		return `${constructorName}{ ${entries.join(", ")} }`;
+		let space = entries.length > 0 ? " " : "";
+		return `${constructorName}{${space}${entries.join(", ")}${space}}`;
 	}
 };
 
@@ -117,7 +129,7 @@ let stringifyHandle = (
 		return id;
 	}
 	if (object !== undefined) {
-		return stringifyObject(object, visited);
+		return stringifyObject(object.value, visited);
 	}
 	return unreachable();
 };

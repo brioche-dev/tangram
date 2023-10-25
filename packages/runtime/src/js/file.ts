@@ -1,14 +1,7 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import {
-	Args,
-	MaybeMutationMap,
-	Mutation,
-	MutationMap,
-	apply,
-	mutation,
-} from "./mutation.ts";
+import { Args, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 
 export let file = async (...args: Args<File.Arg>) => {
@@ -28,8 +21,8 @@ export class File {
 
 	static async new(...args: Args<File.Arg>): Promise<File> {
 		type Apply = {
-			contents?: Blob.Arg;
-			executable?: boolean;
+			contents?: Array<Blob.Arg>;
+			executable?: Array<boolean>;
 			references?: Array<Artifact>;
 		};
 		let {
@@ -44,28 +37,45 @@ export class File {
 				arg instanceof Uint8Array ||
 				arg instanceof Blob
 			) {
-				return { contents: arg };
+				return {
+					contents: await mutation({ kind: "array_append", value: [arg] }),
+				};
 			} else if (File.is(arg)) {
 				return {
-					contents: await arg.contents(),
-					executable: await arg.executable(),
-					references: await arg.references(),
-				};
-			} else if (arg instanceof Array) {
-				let f = await File.new(...arg);
-				return {
-					contents: await f.contents(),
-					executable: await f.executable(),
-					references: await f.references(),
+					contents: await mutation({
+						kind: "array_append",
+						value: [await arg.contents()],
+					}),
+					executable: await mutation({
+						kind: "array_append",
+						value: [await arg.executable()],
+					}),
+					references: await mutation({
+						kind: "array_append",
+						value: [await arg.references()],
+					}),
 				};
 			} else if (typeof arg === "object") {
-				return arg;
+				return {
+					contents: await mutation({
+						kind: "array_append",
+						value: [arg.contents],
+					}),
+					executable: await mutation({
+						kind: "array_append",
+						value: [arg.executable],
+					}),
+					references: await mutation({
+						kind: "array_append",
+						value: [arg.references],
+					}),
+				};
 			} else {
 				return unreachable();
 			}
 		});
 		let contents = await blob(contents_);
-		let executable = executable_ ?? false;
+		let executable = (executable_ ?? []).some((executable) => executable);
 		let references = references_ ?? [];
 		return new File(
 			Object_.Handle.withObject({
@@ -151,33 +161,3 @@ export namespace File {
 		references: Array<Artifact>;
 	};
 }
-
-let func = async () => {
-	let f1 = File.new("hello", {
-		references: [File.new("ref1")],
-	});
-
-	let fileArg = {
-		references: [File.new("ref1")],
-	};
-	let f2 = File.new("hello", fileArg);
-
-	let refMutation = await mutation({
-		kind: "append_array" as const,
-		value: [File.new("ref1")],
-	});
-
-	let refMutationTyped = await mutation<Array<Artifact>>({
-		kind: "append_array" as const,
-		value: [File.new("ref1")],
-	});
-	let fileArgMutation = {
-		references: refMutation,
-	};
-
-	let fileArgMutationTyped: MaybeMutationMap<File.ArgObject> = {
-		references: refMutationTyped,
-	};
-
-	let f3 = File.new("hello", fileArgMutationTyped);
-};

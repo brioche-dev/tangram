@@ -66,6 +66,7 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		let entries = Object.entries(value).map(
 			([key, value]) => `${key}: ${stringifyInner(value, visited)}`,
 		);
-		return `${constructorName}{ ${entries.join(", ")} }`;
+		let space = entries.length > 0 ? " " : "";
+		return `${constructorName}{${space}${entries.join(", ")}${space}}`;
 	}
 };

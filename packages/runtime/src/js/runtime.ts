@@ -1,4 +1,3 @@
-import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob, download } from "./blob.ts";
@@ -9,6 +8,7 @@ import { File, file } from "./file.ts";
 import { include } from "./include.ts";
 import { log } from "./log.ts";
 import { main } from "./main.ts";
+import { Args, Mutation, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
 import { resolve } from "./resolve.ts";
@@ -43,12 +43,12 @@ async function tg(
 }
 
 Object.assign(tg, {
-	Args,
 	Artifact,
 	Blob,
 	Directory,
 	Error: Error_,
 	File,
+	Mutation,
 	Object_,
 	Package,
 	Symlink,
@@ -56,6 +56,7 @@ Object.assign(tg, {
 	Target,
 	Template,
 	Value,
+	apply,
 	assert,
 	blob,
 	build,
@@ -66,6 +67,7 @@ Object.assign(tg, {
 	include,
 	log,
 	main,
+	mutation,
 	resolve,
 	sleep,
 	symlink,

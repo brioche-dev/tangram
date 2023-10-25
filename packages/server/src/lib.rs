@@ -266,6 +266,7 @@ impl Server {
 				self.handle_put_object_request(request).map(Some).boxed()
 			},
 
+			// Package
 			(_, _) => future::ready(None).boxed(),
 		}
 		.await;
