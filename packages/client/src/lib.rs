@@ -13,6 +13,7 @@ pub use self::{
 	error::{Error, Result, Wrap, WrapErr},
 	file::File,
 	id::Id,
+	mutation::Mutation,
 	package::Package,
 	path::{Relpath, Subpath},
 	reqwest::Reqwest,
@@ -38,6 +39,7 @@ pub mod directory;
 pub mod error;
 pub mod file;
 pub mod id;
+pub mod mutation;
 pub mod object;
 pub mod package;
 pub mod path;

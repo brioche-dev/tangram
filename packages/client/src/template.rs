@@ -2,7 +2,7 @@ pub use self::component::Component;
 use crate::{object, Artifact, Result};
 use futures::{stream::FuturesOrdered, Future, TryStreamExt};
 use itertools::Itertools;
-use std::{borrow::Cow, path::PathBuf};
+use std::{borrow::Cow, fmt, path::PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct Template {
@@ -135,6 +135,23 @@ impl Template {
 				Component::Artifact(artifact) => Some(artifact.handle().clone()),
 			})
 			.collect()
+	}
+}
+
+impl fmt::Display for Template {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "`")?;
+		for component in &self.components {
+			match component {
+				Component::String(string) => {
+					write!(f, "{string}")?;
+				},
+				Component::Artifact(artifact) => {
+					write!(f, "${{{}}}", artifact.expect_id())?;
+				},
+			}
+		}
+		write!(f, "`")
 	}
 }
 

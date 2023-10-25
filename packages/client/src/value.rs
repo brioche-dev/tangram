@@ -1,7 +1,8 @@
 use crate::{
-	blob, directory, error, file, object, package, symlink, target, template, Blob, Client,
-	Directory, File, Package, Result, Symlink, Target, Template, WrapErr,
+	blob, directory, error, file, mutation, object, package, symlink, target, template, Blob,
+	Client, Directory, File, Mutation, Package, Result, Symlink, Target, Template, WrapErr,
 };
+use async_compression::futures::write;
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
 use std::collections::BTreeMap;
@@ -40,6 +41,9 @@ pub enum Value {
 
 	/// A template value.
 	Template(Template),
+
+	/// A mutation value.
+	Mutation(Mutation),
 
 	/// A package value.
 	Package(Package),
@@ -95,9 +99,9 @@ pub enum Data {
 	#[tangram_serialize(id = 9)]
 	Template(template::Data),
 
-	// #[tangram_serialize(id = 10)]
-	// Mutation(mutation::Data),
-	//
+	#[tangram_serialize(id = 10)]
+	Mutation(mutation::Data),
+
 	#[tangram_serialize(id = 11)]
 	Package(package::Id),
 
@@ -126,7 +130,12 @@ impl Value {
 
 	pub fn children(&self) -> Vec<object::Handle> {
 		match self {
-			Self::Null(_) | Self::Bool(_) | Self::Number(_) | Self::String(_) | Self::Bytes(_) => {
+			Self::Null(_)
+			| Self::Bool(_)
+			| Self::Number(_)
+			| Self::String(_)
+			| Self::Bytes(_)
+			| Self::Mutation(_) => {
 				vec![]
 			},
 			Self::Blob(blob) => vec![blob.handle().clone()],
@@ -164,7 +173,12 @@ impl Data {
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		match self {
-			Self::Null(_) | Self::Bool(_) | Self::Number(_) | Self::String(_) | Self::Bytes(_) => {
+			Self::Null(_)
+			| Self::Bool(_)
+			| Self::Number(_)
+			| Self::String(_)
+			| Self::Bytes(_)
+			| Self::Mutation(_) => {
 				vec![]
 			},
 			Self::Blob(id) => vec![id.clone().into()],
@@ -191,6 +205,7 @@ impl From<Value> for Data {
 			Value::Blob(blob) => Self::Blob(blob.expect_id().clone()),
 			Value::Directory(directory) => Self::Directory(directory.expect_id().clone()),
 			Value::File(file) => Self::File(file.expect_id().clone()),
+			Value::Mutation(mutation) => Self::Mutation(mutation.to_data().clone()),
 			Value::Symlink(symlink) => Self::Symlink(symlink.expect_id().clone()),
 			Value::Template(template) => Self::Template(template.to_data().clone()),
 			Value::Package(package) => Self::Package(package.expect_id().clone()),
@@ -216,6 +231,7 @@ impl From<Data> for Value {
 			Data::Blob(id) => Self::Blob(Blob::with_id(id)),
 			Data::Directory(id) => Self::Directory(Directory::with_id(id)),
 			Data::File(id) => Self::File(File::with_id(id)),
+			Data::Mutation(mutation) => Self::Mutation(Mutation::from_data(mutation)),
 			Data::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
 			Data::Template(template) => Self::Template(Template::from_data(template)),
 			Data::Package(id) => Self::Package(Package::with_id(id)),
@@ -263,18 +279,10 @@ impl std::fmt::Display for Value {
 				write!(f, "{}", symlink.expect_id())?;
 			},
 			Value::Template(template) => {
-				write!(f, "`")?;
-				for component in template.components() {
-					match component {
-						template::Component::String(string) => {
-							write!(f, "{string}")?;
-						},
-						template::Component::Artifact(artifact) => {
-							write!(f, "${{{}}}", artifact.expect_id())?;
-						},
-					}
-				}
-				write!(f, "`")?;
+				write!(f, "{template}")?;
+			},
+			Value::Mutation(mutation) => {
+				write!(f, "{mutation}")?;
 			},
 			Value::Package(package) => {
 				write!(f, "{}", package.expect_id())?;
