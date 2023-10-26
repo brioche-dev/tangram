@@ -11,6 +11,7 @@ use tangram_client as tg;
 use tangram_util::net::Addr;
 use tg::{error, return_error, Client, Result, WrapErr};
 use tracing_subscriber::prelude::*;
+use util::dirs::home_directory_path;
 
 mod commands;
 mod config;
@@ -193,4 +194,34 @@ fn setup_tracing() {
 			.with(format_layer);
 		subscriber.init();
 	}
+}
+
+fn daemonize() -> std::io::Result<()> {
+	extern "C" {
+		fn daemon(nochdir: i32, noclose: i32) -> i32;
+	}
+	// TODO: create a .pid file and lock it.
+	let outfile = std::fs::File::options()
+		.create(true)
+		.append(false)
+		.read(true)
+		.write(true)
+		.open("/tmp/tg.serve.out")?;
+
+	unsafe {
+		let outfile_fd = outfile.as_raw_fd();
+		let stdout_fd = std::io::stdout().as_raw_fd();
+		if libc::dup2(outfile_fd, stdout_fd) < 0 {
+			return Err(std::io::Error::last_os_error());
+		}
+		let stderr_fd = std::io::stderr().as_raw_fd();
+		if libc::dup2(outfile_fd, stderr_fd) < 0 {
+			return Err(std::io::Error::last_os_error());
+		}
+		if daemon(0, 1) != 0 {
+			return Err(std::io::Error::last_os_error());
+		}
+	}
+
+	Ok(())
 }
