@@ -70,12 +70,7 @@ impl Cli {
 
 		// Create the ui.
 		if args.interactive {
-			let client = self.client.clone_box();
-			let build = build.clone();
-			let target = args.target.clone();
-			let task =
-				tokio::task::spawn(async move { ui::ui(client.as_ref(), build, target).await });
-			let _ = task.await;
+			ui::ui(client, build.clone(), args.target.clone())?;
 		}
 
 		// Wait for the build's output.

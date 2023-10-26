@@ -1,9 +1,8 @@
+use super::info_string;
 use futures::StreamExt;
 use ratatui as tui;
 use tangram_client as tg;
 use tui::prelude::Direction;
-
-use super::event_stream::info_string;
 
 pub struct App {
 	pub highlighted: usize,
@@ -53,7 +52,7 @@ impl App {
 	}
 
 	pub fn scroll_down(&mut self) {
-		let len = self.build.len();
+		let len = self.build.len() + 1;
 		self.highlighted = self
 			.highlighted
 			.saturating_add(1)
@@ -88,7 +87,7 @@ impl App {
 
 impl Build {
 	pub fn find(&self, which: usize) -> Option<&'_ Self> {
-		fn inner<'a>(offset: usize, which: usize, build: &'a Build) -> Result<&'a Build, usize> {
+		fn inner(offset: usize, which: usize, build: &'_ Build) -> Result<&'_ Build, usize> {
 			if offset == which {
 				return Ok(build);
 			}
@@ -102,18 +101,18 @@ impl Build {
 					Err(o) => offset = o,
 				}
 			}
-			return Err(offset);
+			Err(offset)
 		}
 
 		inner(0, which, self).ok()
 	}
 
 	fn find_mut(&mut self, which: usize) -> Option<&'_ mut Self> {
-		fn inner<'a>(
+		fn inner(
 			offset: usize,
 			which: usize,
-			build: &'a mut Build,
-		) -> Result<&'a mut Build, usize> {
+			build: &'_ mut Build,
+		) -> Result<&'_ mut Build, usize> {
 			if offset == which {
 				return Ok(build);
 			}
@@ -127,7 +126,7 @@ impl Build {
 					Err(o) => offset = o,
 				}
 			}
-			return Err(offset);
+			Err(offset)
 		}
 
 		inner(0, which, self).ok()
@@ -139,16 +138,17 @@ impl Build {
 		let build_ = build.clone();
 
 		tokio::task::spawn(async move {
-			let Ok(mut children) = build_.children(client_.as_ref()).await else {
+			let Ok(mut children_stream) = build_.children(client_.as_ref()).await else {
 				return;
 			};
-			while let Some(Ok(child)) = children.next().await {
+			while let Some(Ok(child)) = children_stream.next().await {
 				let info = info_string(client_.as_ref(), &child).await;
 				let child = Self::with_build(client_.as_ref(), child, info);
-				if let Err(_) = children_sender.send(child) {
+				if children_sender.send(child).is_err() {
 					break;
 				}
 			}
+			println!("Closing child stream.");
 		});
 
 		let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
@@ -201,52 +201,31 @@ pub struct Log {
 
 impl Log {
 	pub fn new(client: &dyn tg::Client, build: &tg::Build) -> Self {
-		println!("Creating new log {}", build.id());
 		let build = build.clone();
 		let client = client.clone_box();
 		let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
 		let task = tokio::task::spawn(async move {
-			println!("Spawned log task.");
-
-			// Why does this deadlock until the EventStream is dropped?
 			let mut log = match build.log(client.as_ref()).await {
 				Ok(log) => log,
 				Err(e) => {
-					println!("Failed to get log stream.");
 					let _ = sender.send(e.to_string());
 					return;
 				},
 			};
-
-			println!("Created new log stream.");
-			while !sender.is_closed() {
-				println!("Awaiting message.");
-				let result = tokio::time::timeout(std::time::Duration::from_millis(500), async {
-					match log.next().await {
-						Some(message) => {
-							match message.map(|bytes| String::from_utf8(bytes.to_vec())) {
-								Ok(Ok(message)) => Some(message),
-								Ok(Err(e)) => Some(e.to_string()),
-								Err(e) => Some(e.to_string()),
-							}
-						},
-						None => None,
-					}
-				})
-				.await;
-				if let Ok(Some(message)) = result {
-					if let Err(_) = sender.send(message) {
-						break;
-					}
-				} else {
-					println!("Log task timeout.");
+			while let Some(message) = log.next().await {
+				let message = match message.map(|bytes| String::from_utf8(bytes.to_vec())) {
+					Ok(Ok(string)) => string,
+					Ok(Err(e)) => e.to_string(),
+					Err(e) => e.to_string(),
+				};
+				if sender.send(message).is_err() {
+					break;
 				}
 			}
-			println!("Closing log stream.");
 		});
 
-		let text = "".into();
+		let text = String::new();
 		Self {
 			text,
 			receiver,

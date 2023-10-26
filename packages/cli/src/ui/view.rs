@@ -1,8 +1,11 @@
-use std::collections::BTreeMap;
-
-use super::{controller::Controller, state::*, Frame};
+use super::{
+	controller::Controller,
+	model::{App, Build, Log, Status},
+	Frame,
+};
 use itertools::Itertools;
 use ratatui as tui;
+use std::collections::BTreeMap;
 
 use tui::{
 	prelude::*,
@@ -24,79 +27,60 @@ impl App {
 
 		let block = Block::default().borders(border);
 		frame.render_widget(block, layout[1]);
-		self.view_builds(frame, layout[0]);
+		self.build.view(self.highlighted, frame, layout[0]);
 		self.log.view(frame, layout[1]);
-	}
-
-	fn view_builds(&self, frame: &mut Frame<'_>, area: tui::prelude::Rect) {
-		let page_size = area.height as usize - 1;
-		let skip = page_size * (self.highlighted / page_size);
-
-		let vlayout = tui::layout::Layout::default()
-			.direction(tui::layout::Direction::Vertical)
-			.constraints([
-				tui::layout::Constraint::Max(1),
-				tui::layout::Constraint::Min(1),
-			])
-			.split(area);
-		let hlayout = tui::layout::Layout::default()
-			.direction(tui::layout::Direction::Horizontal)
-			.constraints([
-				tui::layout::Constraint::Min(12),
-				tui::layout::Constraint::Max(10),
-				tui::layout::Constraint::Max(10),
-			])
-			.split(vlayout[0]);
-
-		for (string, area) in ["Name", "Status", "ID"]
-			.into_iter()
-			.zip(hlayout.into_iter())
-		{
-			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(string));
-			frame.render_widget(widget, *area);
-		}
-
-		// TODO: clean this up.
-		self.build
-			.view(frame, true, "", self.highlighted, skip, 0, vlayout[0], 0);
 	}
 }
 
 impl Build {
-	fn view(
-		&self,
-		frame: &mut Frame<'_>,
-		is_last_child: bool,
-		tree_str: &str,
-		selected: usize,
-		skip: usize,
-		offset: usize,
-		area: Rect,
-		depth: u16,
-	) -> usize {
-		let count = area.height as usize;
-		if (skip..(skip + count)).contains(&offset) {
-			let y = (offset - skip) as u16 + area.y;
-			let x = area.x + area.x;
-			let w = area.width - area.x - 1;
-			let h = 1;
-			let area = tui::prelude::Rect::new(x, y, w, h);
-			let layout = tui::layout::Layout::default()
-				.direction(tui::layout::Direction::Horizontal)
-				.margin(0)
-				.constraints([
-					tui::layout::Constraint::Min(12),
-					tui::layout::Constraint::Max(2),
-					tui::layout::Constraint::Max(8),
-					tui::layout::Constraint::Max(8),
-				])
-				.split(area);
+	fn view(&self, highlighted: usize, frame: &mut Frame<'_>, area: Rect) {
+		let page_size = area.height as usize - 1;
+		let skip = page_size * (highlighted / page_size);
 
-			let id = &self.build.id();
-			let name = self.info.as_str();
-			let indicator = if self.children.is_empty() { "" } else { ">" };
-			let tree = format!("{tree_str}{name} {indicator}");
-			let style = if selected == offset {
+		let layout = Layout::default()
+			.direction(Direction::Vertical)
+			.constraints(
+				(0..area.height)
+					.map(|_| Constraint::Length(1))
+					.collect::<Vec<_>>(),
+			)
+			.split(area);
+
+		let header_layout = Layout::default()
+			.direction(Direction::Horizontal)
+			.constraints([Constraint::Min(20), Constraint::Max(6)])
+			.split(layout[0]);
+
+		for (text, area) in ["Info", "Status"].into_iter().zip(header_layout.iter()) {
+			let text = Text::from(text);
+			frame.render_widget(Paragraph::new(text), *area);
+		}
+
+		self.view_inner(true, skip, highlighted, frame, &layout[1..], 0, "", 0);
+	}
+
+	#[allow(clippy::too_many_arguments)]
+	fn view_inner(
+		&self,
+		is_last_child: bool,
+		skip: usize,
+		highlighted: usize,
+		frame: &mut Frame<'_>,
+		layout: &[Rect],
+		mut offset: usize,
+		prefix: &str,
+		depth: usize,
+	) -> usize {
+		if (skip..(skip + layout.len())).contains(&offset) {
+			let area = layout[offset - skip];
+			let layout = Layout::default()
+				.direction(Direction::Horizontal)
+				.constraints([Constraint::Min(20), Constraint::Max(6)])
+				.split(area);
+			let info = &self.info;
+			let indicator = if self.children.is_empty() { "" } else { "/" };
+			let text = Text::from(format!("{prefix}{info}{indicator}"));
+			let style = if highlighted == offset {
 				tui::style::Style::default()
 					.bg(tui::style::Color::White)
 					.fg(tui::style::Color::Black)
@@ -104,41 +88,31 @@ impl Build {
 				tui::style::Style::default()
 			};
 
-			frame.render_widget(
-				tui::widgets::Paragraph::new(tui::text::Text::from(tree)).style(style),
-				layout[0],
-			);
+			frame.render_widget(Paragraph::new(text).style(style), layout[0]);
 			frame.render_widget(self.status, layout[1]);
-			frame.render_widget(
-				tui::widgets::Paragraph::new(tui::text::Text::from(id.to_string())).style(style),
-				layout[3],
-			);
 		}
 
-		let mut offset = offset + 1;
-		if !self.is_expanded {
-			return offset;
+		offset += 1;
+		if self.is_expanded {
+			for (index, child) in self.children.iter().enumerate() {
+				let last_child = index == self.children.len() - 1;
+				let end = if last_child { "└─" } else { "├─" };
+				let prefix = (0..depth)
+					.map(|_| if is_last_child { "  " } else { "│ " })
+					.chain(Some(end).into_iter())
+					.join("");
+				offset = child.view_inner(
+					last_child,
+					skip,
+					highlighted,
+					frame,
+					layout,
+					offset,
+					&prefix,
+					depth + 1,
+				);
+			}
 		}
-
-		for (index, child) in self.children.iter().enumerate() {
-			let last_child = index == self.children.len() - 1;
-			let end = if last_child { "└─" } else { "├─" };
-			let tree_str = (0..depth)
-				.map(|_| if is_last_child { "  " } else { "│ " })
-				.chain(Some(end).into_iter())
-				.join("");
-			offset = child.view(
-				frame,
-				last_child,
-				&tree_str,
-				selected,
-				skip,
-				offset,
-				area,
-				depth + 1,
-			);
-		}
-
 		offset
 	}
 }
@@ -148,8 +122,8 @@ impl Widget for Status {
 		let char = match self {
 			Status::InProgress => {
 				const STRING: &str = "⣾⣽⣻⢿⡿⣟⣯⣷";
-				let index = unsafe { libc::rand() } as usize % 8;
-				STRING.chars().nth(index).unwrap()
+				let index = unsafe { libc::rand() } % 8;
+				STRING.chars().nth(index.try_into().unwrap()).unwrap()
 			},
 			Status::Successful => '✅',
 			Status::Error => '❌',
@@ -165,9 +139,9 @@ impl Controller {
 
 		for (binding, action) in &self.bindings {
 			actions
-				.entry(action.to_owned())
+				.entry(action)
 				.or_insert(Vec::default())
-				.push(binding.display())
+				.push(binding.display());
 		}
 
 		let texts = actions
@@ -179,12 +153,12 @@ impl Controller {
 			.direction(tui::layout::Direction::Horizontal)
 			.constraints(
 				(0..texts.len())
-					.map(|_| tui::layout::Constraint::Ratio(1, texts.len() as u32))
+					.map(|_| tui::layout::Constraint::Ratio(1, texts.len().try_into().unwrap()))
 					.collect::<Vec<_>>(),
 			)
 			.split(area);
 
-		for (text, area) in texts.into_iter().zip(layout.into_iter()) {
+		for (text, area) in texts.into_iter().zip(layout.iter()) {
 			let widget = tui::widgets::Paragraph::new(tui::text::Text::from(text));
 			frame.render_widget(widget, *area);
 		}

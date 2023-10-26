@@ -1,10 +1,10 @@
+use super::model::App;
+use crossterm as ct;
 use std::collections::{BTreeMap, HashMap};
 
-use super::state::App;
-use crossterm as ct;
-
+type Action = Box<dyn Fn(&mut App) + Send + 'static>;
 pub struct Controller {
-	pub actions: BTreeMap<String, Box<dyn Fn(&mut App) + Send + 'static>>,
+	pub actions: BTreeMap<String, Action>,
 	pub bindings: HashMap<KeyBinding, String>,
 }
 
@@ -13,11 +13,52 @@ pub struct KeyBinding(ct::event::KeyCode, ct::event::KeyModifiers);
 
 impl Controller {
 	pub fn new() -> Self {
-		let controller = Self {
+		let mut controller = Self {
 			actions: BTreeMap::default(),
 			bindings: HashMap::default(),
 		};
-
+		controller.add_command(
+			"Exit",
+			[(ct::event::KeyCode::Esc, ct::event::KeyModifiers::NONE)],
+			|_| {},
+		);
+		controller.add_command(
+			"Up",
+			[
+				(ct::event::KeyCode::Up, ct::event::KeyModifiers::NONE),
+				(ct::event::KeyCode::Char('j'), ct::event::KeyModifiers::NONE),
+			],
+			App::scroll_up,
+		);
+		controller.add_command(
+			"Down",
+			[
+				(ct::event::KeyCode::Down, ct::event::KeyModifiers::NONE),
+				(ct::event::KeyCode::Char('k'), ct::event::KeyModifiers::NONE),
+			],
+			App::scroll_down,
+		);
+		controller.add_command(
+			"Open",
+			[
+				(ct::event::KeyCode::Right, ct::event::KeyModifiers::NONE),
+				(ct::event::KeyCode::Char('l'), ct::event::KeyModifiers::NONE),
+			],
+			App::expand,
+		);
+		controller.add_command(
+			"Close",
+			[
+				(ct::event::KeyCode::Left, ct::event::KeyModifiers::NONE),
+				(ct::event::KeyCode::Char('h'), ct::event::KeyModifiers::NONE),
+			],
+			App::collapse,
+		);
+		controller.add_command(
+			"Rotate",
+			[(ct::event::KeyCode::Char('r'), ct::event::KeyModifiers::NONE)],
+			App::rotate,
+		);
 		controller
 	}
 
@@ -53,11 +94,10 @@ impl KeyBinding {
 				ct::event::KeyModifiers::CONTROL => buf.push('⌃'),
 				ct::event::KeyModifiers::ALT => buf.push_str("ALT"),
 				ct::event::KeyModifiers::SUPER => buf.push('⌘'),
-				ct::event::KeyModifiers::HYPER => buf.push('⌥'),
-				ct::event::KeyModifiers::META => buf.push('⌥'),
+				ct::event::KeyModifiers::HYPER | ct::event::KeyModifiers::META => buf.push('⌥'),
 				_ => continue,
 			}
-			buf.push('+')
+			buf.push('+');
 		}
 
 		match self.0 {
@@ -68,7 +108,7 @@ impl KeyBinding {
 			ct::event::KeyCode::Up => buf.push('↑'),
 			ct::event::KeyCode::Down => buf.push('↓'),
 			ct::event::KeyCode::Home => buf.push('⇱'),
-			ct::event::KeyCode::End => buf.push_str("⇲"),
+			ct::event::KeyCode::End => buf.push('⇲'),
 			ct::event::KeyCode::PageUp => buf.push('⇞'),
 			ct::event::KeyCode::PageDown => buf.push('⇟'),
 			ct::event::KeyCode::Tab => buf.push('⇥'),
