@@ -101,6 +101,20 @@ impl Build {
 		&self.0
 	}
 
+	pub async fn target(&self, client: &dyn Client) -> Result<Target> {
+		self.try_get_target(client)
+			.await?
+			.wrap_err("Failed to get the build.")
+	}
+
+	pub async fn try_get_target(&self, client: &dyn Client) -> Result<Option<Target>> {
+		match self.0.try_get_object(client).await? {
+			Some(object::Object::Build(object)) => Ok(Some(object.target.clone())),
+			None => Ok(None),
+			_ => unreachable!(),
+		}
+	}
+
 	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
 		match self.0.try_get_object(client).await? {
 			Some(object::Object::Build(object)) => Ok(Some(object)),
