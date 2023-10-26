@@ -26,7 +26,7 @@ impl<'a> Struct<'a> {
 			};
 
 			// Parse the list items.
-			for item in list.nested.iter() {
+			for item in &list.nested {
 				match item {
 					// Handle the "into" key.
 					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
@@ -116,10 +116,10 @@ impl<'a> Field<'a> {
 				return Err(syn::Error::new_spanned(
 					attr,
 					"The tangram_serialize attribute must contain a list.",
-				))
+				));
 			};
 
-			for item in list.nested.iter() {
+			for item in &list.nested {
 				match item {
 					// Handle the "deserialize_with" key.
 					syn::NestedMeta::Meta(syn::Meta::NameValue(item))

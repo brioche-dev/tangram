@@ -409,7 +409,7 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 				<lsp::request::Shutdown as lsp::request::Request>::METHOD => handle_request::<lsp::request::Shutdown, _, _>(
 					sender,
 					request,
-					|_| async move { Ok(()) },
+					|()| async move { Ok(()) },
 				)
 				.boxed(),
 

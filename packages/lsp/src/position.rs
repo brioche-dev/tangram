@@ -91,6 +91,7 @@ impl Position {
 	}
 }
 
+#[allow(clippy::ignored_unit_patterns)]
 #[cfg(test)]
 mod tests {
 	use super::*;

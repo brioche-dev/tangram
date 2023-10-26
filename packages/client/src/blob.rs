@@ -1,5 +1,9 @@
-use crate::{object, return_error, Artifact, Client, Error, Result, WrapErr};
+use crate::{
+	branch, id, leaf, object, return_error, Artifact, Branch, Client, Error, Leaf, Result, Value,
+	WrapErr,
+};
 use bytes::Bytes;
+use derive_more::From;
 use futures::{
 	future::BoxFuture,
 	stream::{self, StreamExt},
@@ -15,35 +19,33 @@ const MAX_BRANCH_CHILDREN: usize = 1024;
 
 const MAX_LEAF_SIZE: usize = 262_144;
 
-crate::id!(Blob);
-crate::handle!(Blob);
-
-#[derive(Clone, Debug)]
-pub struct Id(crate::Id);
-
-#[derive(Clone, Debug)]
-pub struct Blob(object::Handle);
-
-#[derive(Clone, Debug)]
-pub enum Object {
-	Branch(Vec<(Blob, u64)>),
-	Leaf(Bytes),
+/// A blob kind.
+#[derive(Clone, Copy, Debug)]
+pub enum Kind {
+	Leaf,
+	Branch,
 }
 
 #[derive(
 	Clone,
 	Debug,
+	From,
 	serde::Deserialize,
 	serde::Serialize,
 	tangram_serialize::Deserialize,
 	tangram_serialize::Serialize,
 )]
-#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
-pub enum Data {
-	#[tangram_serialize(id = 0)]
-	Branch(Vec<(Id, u64)>),
-	#[tangram_serialize(id = 1)]
-	Leaf(Bytes),
+#[serde(into = "crate::Id", try_from = "crate::Id")]
+#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
+pub enum Id {
+	Leaf(leaf::Id),
+	Branch(branch::Id),
+}
+
+#[derive(Clone, Debug, From)]
+pub enum Blob {
+	Leaf(Leaf),
+	Branch(Branch),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -61,6 +63,37 @@ pub enum CompressionFormat {
 }
 
 impl Blob {
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		match id {
+			Id::Leaf(id) => Leaf::with_id(id).into(),
+			Id::Branch(id) => Branch::with_id(id).into(),
+		}
+	}
+
+	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
+		match self {
+			Self::Leaf(leaf) => Ok(leaf.id(client).await?.clone().into()),
+			Self::Branch(branch) => Ok(branch.id(client).await?.clone().into()),
+		}
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> Id {
+		match self {
+			Self::Leaf(leaf) => leaf.expect_id().clone().into(),
+			Self::Branch(branch) => branch.expect_id().clone().into(),
+		}
+	}
+
+	#[must_use]
+	pub fn handle(&self) -> &object::Handle {
+		match self {
+			Self::Leaf(leaf) => leaf.handle(),
+			Self::Branch(branch) => branch.handle(),
+		}
+	}
+
 	pub async fn with_reader(
 		client: &dyn Client,
 		mut reader: impl AsyncRead + Unpin,
@@ -87,9 +120,9 @@ impl Blob {
 
 			// Create, store, and add the leaf.
 			let bytes = Bytes::copy_from_slice(&bytes[..position]);
-			let leaf = Self::new_leaf(bytes);
+			let leaf = Leaf::new(bytes);
 			leaf.store(client).await?;
-			leaves.push((leaf, size));
+			leaves.push((leaf.into(), size));
 		}
 
 		// Create the tree.
@@ -121,47 +154,29 @@ impl Blob {
 		match children.len() {
 			0 => Self::empty(),
 			1 => children.into_iter().next().unwrap().0,
-			_ => Self::new_branch(children),
+			_ => Branch::new(children).into(),
 		}
 	}
 
 	#[must_use]
 	pub fn empty() -> Self {
-		Self(object::Handle::with_object(object::Object::Blob(
-			Object::Leaf(Bytes::new()),
-		)))
-	}
-
-	#[must_use]
-	pub fn new_branch(children: Vec<(Blob, u64)>) -> Self {
-		Self(object::Handle::with_object(object::Object::Blob(
-			Object::Branch(children),
-		)))
-	}
-
-	#[must_use]
-	pub fn new_leaf(bytes: Bytes) -> Self {
-		Self(object::Handle::with_object(object::Object::Blob(
-			Object::Leaf(bytes),
-		)))
+		Leaf::empty().into()
 	}
 
 	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
-		match self.object(client).await? {
-			Object::Branch(children) => Ok(children.iter().map(|(_, size)| size).sum()),
-			Object::Leaf(bytes) => Ok(bytes.len().to_u64().unwrap()),
+		match self {
+			Self::Branch(branch) => Ok(branch
+				.children(client)
+				.await?
+				.iter()
+				.map(|(_, size)| size)
+				.sum()),
+			Self::Leaf(leaf) => Ok(leaf.bytes(client).await?.len().to_u64().unwrap()),
 		}
 	}
 
 	pub async fn reader(&self, client: &dyn Client) -> Result<Reader> {
-		let size = self.size(client).await?;
-		Ok(Reader {
-			blob: self.clone(),
-			size,
-			client: client.clone_box(),
-			position: 0,
-			state: State::Empty,
-		})
+		Reader::new(client, self.clone()).await
 	}
 
 	pub async fn bytes(&self, client: &dyn Client) -> Result<Vec<u8>> {
@@ -207,8 +222,7 @@ impl Blob {
 		let reader = self.reader(client).await?;
 
 		// Create a temp.
-		let tempdir =
-			tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
+		let tempdir = tempfile::TempDir::new().wrap_err("Failed to create the temporary leaf.")?;
 		let path = tempdir.path().join("archive");
 
 		// Extract in a blocking task.
@@ -248,68 +262,91 @@ impl Blob {
 	}
 }
 
-impl Object {
-	#[must_use]
-	pub fn to_data(&self) -> Data {
+impl std::fmt::Display for Id {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Branch(branch) => Data::Branch(
-				branch
-					.iter()
-					.map(|(blob, size)| (blob.expect_id().clone(), *size))
-					.collect::<Vec<_>>(),
-			),
-			Self::Leaf(leaf) => Data::Leaf(leaf.clone()),
-		}
-	}
-
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		match data {
-			Data::Branch(data) => Self::Branch(
-				data.into_iter()
-					.map(|(handle, size)| (Blob::with_id(handle), size))
-					.collect::<Vec<_>>(),
-			),
-			Data::Leaf(data) => Self::Leaf(data),
-		}
-	}
-
-	#[must_use]
-	pub fn children(&self) -> Vec<object::Handle> {
-		match self {
-			Self::Branch(children) => children
-				.iter()
-				.map(|(child, _)| child.handle().clone())
-				.collect(),
-			Self::Leaf(_) => vec![],
+			Self::Leaf(id) => write!(f, "{id}"),
+			Self::Branch(id) => write!(f, "{id}"),
 		}
 	}
 }
 
-impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
-			.wrap_err("Failed to write the version.")?;
-		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
-		Ok(bytes)
-	}
+impl std::str::FromStr for Id {
+	type Err = Error;
 
-	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version =
-			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
-		if version != 0 {
-			return_error!(r#"Cannot deserialize with version "{version}"."#);
+	fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+		crate::Id::from_str(s)?.try_into()
+	}
+}
+
+impl From<Id> for crate::Id {
+	fn from(value: Id) -> Self {
+		match value {
+			Id::Leaf(id) => id.into(),
+			Id::Branch(id) => id.into(),
 		}
-		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
-		Ok(value)
 	}
+}
 
-	#[must_use]
-	pub fn children(&self) -> Vec<object::Id> {
-		match self {
-			Data::Branch(children) => children.iter().map(|(id, _)| id.clone().into()).collect(),
-			Data::Leaf(_) => vec![],
+impl TryFrom<crate::Id> for Id {
+	type Error = Error;
+
+	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
+		match value.kind() {
+			id::Kind::Leaf => Ok(Self::Leaf(value.try_into()?)),
+			id::Kind::Branch => Ok(Self::Branch(value.try_into()?)),
+			_ => return_error!("Expected a blob ID."),
+		}
+	}
+}
+
+impl From<Id> for object::Id {
+	fn from(value: Id) -> Self {
+		match value {
+			Id::Leaf(id) => id.into(),
+			Id::Branch(id) => id.into(),
+		}
+	}
+}
+
+impl TryFrom<object::Id> for Id {
+	type Error = Error;
+
+	fn try_from(value: object::Id) -> Result<Self, Self::Error> {
+		match value {
+			object::Id::Leaf(value) => Ok(value.into()),
+			object::Id::Branch(value) => Ok(value.into()),
+			_ => return_error!("Expected a blob ID."),
+		}
+	}
+}
+
+impl From<Blob> for object::Handle {
+	fn from(value: Blob) -> Self {
+		match value {
+			Blob::Leaf(leaf) => leaf.handle().clone(),
+			Blob::Branch(branch) => branch.handle().clone(),
+		}
+	}
+}
+
+impl From<Blob> for Value {
+	fn from(value: Blob) -> Self {
+		match value {
+			Blob::Leaf(leaf) => leaf.into(),
+			Blob::Branch(branch) => branch.into(),
+		}
+	}
+}
+
+impl TryFrom<Value> for Blob {
+	type Error = Error;
+
+	fn try_from(value: Value) -> Result<Self, Self::Error> {
+		match value {
+			Value::Leaf(leaf) => Ok(Self::Leaf(leaf)),
+			Value::Branch(branch) => Ok(Self::Branch(branch)),
+			_ => return_error!("Expected a blob."),
 		}
 	}
 }
@@ -332,6 +369,19 @@ pub enum State {
 
 unsafe impl Sync for State {}
 
+impl Reader {
+	pub async fn new(client: &dyn Client, blob: Blob) -> Result<Self> {
+		let size = blob.size(client).await?;
+		Ok(Self {
+			blob,
+			client: client.clone_box(),
+			position: 0,
+			size,
+			state: State::Empty,
+		})
+	}
+}
+
 impl AsyncRead for Reader {
 	fn poll_read(
 		self: std::pin::Pin<&mut Self>,
@@ -353,24 +403,28 @@ impl AsyncRead for Reader {
 							let mut current_blob = blob.clone();
 							let mut current_blob_position = 0;
 							let bytes = 'outer: loop {
-								match current_blob.object(client.as_ref()).await? {
-									Object::Branch(children) => {
-										for (child, size) in children {
-											if position < current_blob_position + size {
-												current_blob = child.clone();
-												continue 'outer;
-											}
-											current_blob_position += size;
-										}
-										return_error!("The position is out of bounds.");
-									},
-									Object::Leaf(bytes) => {
+								match current_blob {
+									Blob::Leaf(leaf) => {
+										let bytes = leaf.bytes(client.as_ref()).await?;
+										leaf.unload();
 										if position
 											< current_blob_position + bytes.len().to_u64().unwrap()
 										{
 											let mut reader = Cursor::new(bytes.clone());
 											reader.set_position(position - current_blob_position);
 											break reader;
+										}
+										return_error!("The position is out of bounds.");
+									},
+									Blob::Branch(branch) => {
+										for (child, size) in
+											branch.children(client.as_ref()).await?
+										{
+											if position < current_blob_position + size {
+												current_blob = child.clone();
+												continue 'outer;
+											}
+											current_blob_position += size;
 										}
 										return_error!("The position is out of bounds.");
 									},

@@ -35,7 +35,7 @@ export class File {
 			} else if (
 				typeof arg === "string" ||
 				arg instanceof Uint8Array ||
-				arg instanceof Blob
+				Blob.is(arg)
 			) {
 				return {
 					contents: await mutation({ kind: "array_append", value: [arg] }),

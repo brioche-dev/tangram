@@ -172,35 +172,23 @@ export class Target<
 			} else if (Target.is(arg)) {
 				return await arg.object();
 			} else if (typeof arg === "object") {
-				let ret: Partial<MutationMap<Apply>> = {};
-				if (arg.host !== undefined) {
-					ret.host = arg.host;
+				let object: MutationMap<Apply> = {};
+				if ("env" in arg) {
+					object.env =
+						arg.args !== undefined
+							? await mutation({ kind: "array_append", value: [arg.env] })
+							: await mutation({ kind: "unset" });
 				}
-				if (arg.executable !== undefined) {
-					ret.executable = arg.executable;
+				if ("args" in arg) {
+					object.args =
+						arg.args !== undefined
+							? await mutation({ kind: "array_append", value: [...arg.args] })
+							: await mutation({ kind: "unset" });
 				}
-				if (arg.package !== undefined) {
-					ret.package = arg.package;
-				}
-				if (arg.name !== undefined) {
-					ret.name = arg.name;
-				}
-				if (arg.checksum !== undefined) {
-					ret.checksum = arg.checksum;
-				}
-				if (arg.unsafe !== undefined) {
-					ret.unsafe = arg.unsafe;
-				}
-				if (arg.env !== undefined) {
-					ret.env = await mutation({ kind: "array_append", value: [arg.env] });
-				}
-				if (arg.args !== undefined) {
-					ret.args = await mutation({
-						kind: "array_append",
-						value: [arg.args],
-					});
-				}
-				return ret;
+				return {
+					...arg,
+					...object,
+				};
 			} else {
 				return unreachable();
 			}

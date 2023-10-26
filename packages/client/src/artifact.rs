@@ -4,10 +4,7 @@ use crate::{
 };
 use derive_more::{From, TryUnwrap};
 use futures::stream::{FuturesUnordered, TryStreamExt};
-use std::{
-	collections::{HashSet, VecDeque},
-	str::FromStr,
-};
+use std::collections::{HashSet, VecDeque};
 
 /// An artifact kind.
 #[derive(Clone, Copy, Debug)]
@@ -160,7 +157,7 @@ impl std::fmt::Display for Id {
 	}
 }
 
-impl FromStr for Id {
+impl std::str::FromStr for Id {
 	type Err = Error;
 
 	fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
@@ -191,9 +188,32 @@ impl TryFrom<crate::Id> for Id {
 	}
 }
 
+impl From<Id> for object::Id {
+	fn from(value: Id) -> Self {
+		match value {
+			Id::Directory(id) => id.into(),
+			Id::File(id) => id.into(),
+			Id::Symlink(id) => id.into(),
+		}
+	}
+}
+
+impl TryFrom<object::Id> for Id {
+	type Error = Error;
+
+	fn try_from(value: object::Id) -> Result<Self, Self::Error> {
+		match value {
+			object::Id::Directory(value) => Ok(value.into()),
+			object::Id::File(value) => Ok(value.into()),
+			object::Id::Symlink(value) => Ok(value.into()),
+			_ => return_error!("Expected an artifact ID."),
+		}
+	}
+}
+
 impl From<Artifact> for object::Handle {
-	fn from(object: Artifact) -> Self {
-		match object {
+	fn from(value: Artifact) -> Self {
+		match value {
 			Artifact::Directory(directory) => directory.handle().clone(),
 			Artifact::File(file) => file.handle().clone(),
 			Artifact::Symlink(symlink) => symlink.handle().clone(),
@@ -202,8 +222,8 @@ impl From<Artifact> for object::Handle {
 }
 
 impl From<Artifact> for Value {
-	fn from(object: Artifact) -> Self {
-		match object {
+	fn from(value: Artifact) -> Self {
+		match value {
 			Artifact::Directory(directory) => directory.into(),
 			Artifact::File(file) => file.into(),
 			Artifact::Symlink(symlink) => symlink.into(),
@@ -214,8 +234,8 @@ impl From<Artifact> for Value {
 impl TryFrom<Value> for Artifact {
 	type Error = Error;
 
-	fn try_from(object: Value) -> Result<Self, Self::Error> {
-		match object {
+	fn try_from(value: Value) -> Result<Self, Self::Error> {
+		match value {
 			Value::Directory(directory) => Ok(Self::Directory(directory)),
 			Value::File(file) => Ok(Self::File(file)),
 			Value::Symlink(symlink) => Ok(Self::Symlink(symlink)),

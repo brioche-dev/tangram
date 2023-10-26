@@ -23,7 +23,7 @@ impl<'a> Enum<'a> {
 			};
 
 			// Parse the list items.
-			for item in list.nested.iter() {
+			for item in &list.nested {
 				match item {
 					syn::NestedMeta::Meta(syn::Meta::NameValue(item))
 						if item.path.is_ident("into") =>
@@ -107,11 +107,11 @@ impl<'a> Variant<'a> {
 				return Err(syn::Error::new_spanned(
 					attr,
 					"The tangram_serialize attribute must contain a list.",
-				))
+				));
 			};
 
 			// Parse the list items.
-			for item in list.nested.iter() {
+			for item in &list.nested {
 				match item {
 					// Handle the "id" key.
 					syn::NestedMeta::Meta(syn::Meta::NameValue(item))

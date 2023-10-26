@@ -1,12 +1,14 @@
-import { Blob } from "./blob.ts";
+import { Branch } from "./branch.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Leaf } from "./leaf.ts";
 import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
 
 export type Object_ =
-	| { kind: "blob"; value: Blob.Object_ }
+	| { kind: "branch"; value: Branch.Object_ }
+	| { kind: "leaf"; value: Leaf.Object_ }
 	| { kind: "directory"; value: Directory.Object_ }
 	| { kind: "file"; value: File.Object_ }
 	| { kind: "symlink"; value: Symlink.Object_ }

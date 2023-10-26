@@ -1,5 +1,5 @@
 use crate::{
-	artifact, blob, build, directory, file, id, package, return_error, symlink, target, Client,
+	branch, build, directory, file, id, leaf, package, return_error, symlink, target, Client,
 	Error, Result, WrapErr,
 };
 use bytes::Bytes;
@@ -10,7 +10,8 @@ use std::sync::Arc;
 /// An artifact kind.
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
-	Blob,
+	Leaf,
+	Branch,
 	Directory,
 	File,
 	Symlink,
@@ -34,7 +35,8 @@ pub enum Kind {
 #[serde(into = "crate::Id", try_from = "crate::Id")]
 #[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
 pub enum Id {
-	Blob(blob::Id),
+	Leaf(leaf::Id),
+	Branch(branch::Id),
 	Directory(directory::Id),
 	File(file::Id),
 	Symlink(symlink::Id),
@@ -59,7 +61,8 @@ pub struct State {
 #[derive(Clone, Debug, From, TryInto, TryUnwrap)]
 #[try_unwrap(ref)]
 pub enum Object {
-	Blob(blob::Object),
+	Leaf(leaf::Object),
+	Branch(branch::Object),
 	Directory(directory::Object),
 	File(file::Object),
 	Symlink(symlink::Object),
@@ -69,10 +72,10 @@ pub enum Object {
 }
 
 /// Object data.
-#[derive(Clone, Debug, From, TryInto, serde::Deserialize, serde::Serialize)]
-#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
+#[derive(Clone, Debug, From, TryInto)]
 pub enum Data {
-	Blob(blob::Data),
+	Leaf(leaf::Data),
+	Branch(branch::Data),
 	Directory(directory::Data),
 	File(file::Data),
 	Symlink(symlink::Data),
@@ -85,8 +88,13 @@ impl Id {
 	#[must_use]
 	pub fn new(kind: Kind, bytes: &[u8]) -> Self {
 		match kind {
-			Kind::Blob => Self::Blob(
-				crate::Id::new_hashed(id::Kind::Blob, bytes)
+			Kind::Leaf => Self::Leaf(
+				crate::Id::new_hashed(id::Kind::Leaf, bytes)
+					.try_into()
+					.unwrap(),
+			),
+			Kind::Branch => Self::Branch(
+				crate::Id::new_hashed(id::Kind::Branch, bytes)
 					.try_into()
 					.unwrap(),
 			),
@@ -122,7 +130,8 @@ impl Id {
 	#[must_use]
 	pub fn kind(&self) -> Kind {
 		match self {
-			Self::Blob(_) => Kind::Blob,
+			Self::Leaf(_) => Kind::Leaf,
+			Self::Branch(_) => Kind::Branch,
 			Self::Directory(_) => Kind::Directory,
 			Self::File(_) => Kind::File,
 			Self::Symlink(_) => Kind::Symlink,
@@ -135,7 +144,8 @@ impl Id {
 	#[must_use]
 	pub fn to_bytes(&self) -> Bytes {
 		match self {
-			Self::Blob(id) => id.to_bytes(),
+			Self::Leaf(id) => id.to_bytes(),
+			Self::Branch(id) => id.to_bytes(),
 			Self::Directory(id) => id.to_bytes(),
 			Self::File(id) => id.to_bytes(),
 			Self::Symlink(id) => id.to_bytes(),
@@ -264,6 +274,13 @@ impl Handle {
 		Ok(true)
 	}
 
+	pub fn unload(&self) {
+		let mut state = self.state.write().unwrap();
+		if state.id.is_some() {
+			state.object.take();
+		}
+	}
+
 	#[async_recursion::async_recursion]
 	pub async fn store(&self, client: &dyn Client) -> Result<()> {
 		// If the handle is stored, then return.
@@ -361,7 +378,8 @@ impl Object {
 	#[must_use]
 	pub fn to_data(&self) -> Data {
 		match self {
-			Self::Blob(blob) => Data::Blob(blob.to_data()),
+			Self::Leaf(leaf) => Data::Leaf(leaf.to_data()),
+			Self::Branch(branch) => Data::Branch(branch.to_data()),
 			Self::Directory(directory) => Data::Directory(directory.to_data()),
 			Self::File(file) => Data::File(file.to_data()),
 			Self::Symlink(symlink) => Data::Symlink(symlink.to_data()),
@@ -374,7 +392,8 @@ impl Object {
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
 		match data {
-			Data::Blob(data) => Self::Blob(blob::Object::from_data(data)),
+			Data::Leaf(data) => Self::Leaf(leaf::Object::from_data(data)),
+			Data::Branch(data) => Self::Branch(branch::Object::from_data(data)),
 			Data::Directory(data) => Self::Directory(directory::Object::from_data(data)),
 			Data::File(data) => Self::File(file::Object::from_data(data)),
 			Data::Symlink(data) => Self::Symlink(symlink::Object::from_data(data)),
@@ -387,7 +406,8 @@ impl Object {
 	#[must_use]
 	pub fn children(&self) -> Vec<Handle> {
 		match self {
-			Self::Blob(blob) => blob.children(),
+			Self::Leaf(leaf) => leaf.children(),
+			Self::Branch(branch) => branch.children(),
 			Self::Directory(directory) => directory.children(),
 			Self::File(file) => file.children(),
 			Self::Symlink(symlink) => symlink.children(),
@@ -402,7 +422,8 @@ impl Data {
 	#[allow(unused)]
 	pub fn serialize(&self) -> Result<Vec<u8>> {
 		match self {
-			Self::Blob(data) => Ok(data.serialize()?),
+			Self::Leaf(data) => Ok(data.serialize()?),
+			Self::Branch(data) => Ok(data.serialize()?),
 			Self::Directory(data) => Ok(data.serialize()?),
 			Self::File(data) => Ok(data.serialize()?),
 			Self::Symlink(data) => Ok(data.serialize()?),
@@ -414,7 +435,8 @@ impl Data {
 
 	pub fn deserialize(kind: Kind, bytes: &[u8]) -> Result<Self> {
 		match kind {
-			Kind::Blob => Ok(Self::Blob(blob::Data::deserialize(bytes)?)),
+			Kind::Leaf => Ok(Self::Leaf(leaf::Data::deserialize(bytes)?)),
+			Kind::Branch => Ok(Self::Branch(branch::Data::deserialize(bytes)?)),
 			Kind::Directory => Ok(Self::Directory(directory::Data::deserialize(bytes)?)),
 			Kind::File => Ok(Self::File(file::Data::deserialize(bytes)?)),
 			Kind::Symlink => Ok(Self::Symlink(symlink::Data::deserialize(bytes)?)),
@@ -427,7 +449,8 @@ impl Data {
 	#[must_use]
 	pub fn children(&self) -> Vec<self::Id> {
 		match self {
-			Self::Blob(data) => data.children(),
+			Self::Leaf(data) => data.children(),
+			Self::Branch(data) => data.children(),
 			Self::Directory(data) => data.children(),
 			Self::File(data) => data.children(),
 			Self::Symlink(data) => data.children(),
@@ -440,7 +463,8 @@ impl Data {
 	#[must_use]
 	pub fn kind(&self) -> Kind {
 		match self {
-			Self::Blob(_) => Kind::Blob,
+			Self::Leaf(_) => Kind::Leaf,
+			Self::Branch(_) => Kind::Branch,
 			Self::Directory(_) => Kind::Directory,
 			Self::File(_) => Kind::File,
 			Self::Symlink(_) => Kind::Symlink,
@@ -454,7 +478,8 @@ impl Data {
 impl From<self::Id> for crate::Id {
 	fn from(value: self::Id) -> Self {
 		match value {
-			self::Id::Blob(id) => id.into(),
+			self::Id::Leaf(id) => id.into(),
+			self::Id::Branch(id) => id.into(),
 			self::Id::Directory(id) => id.into(),
 			self::Id::File(id) => id.into(),
 			self::Id::Symlink(id) => id.into(),
@@ -470,7 +495,8 @@ impl TryFrom<crate::Id> for self::Id {
 
 	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
 		match value.kind() {
-			crate::id::Kind::Blob => Ok(Self::Blob(value.try_into()?)),
+			crate::id::Kind::Leaf => Ok(Self::Leaf(value.try_into()?)),
+			crate::id::Kind::Branch => Ok(Self::Branch(value.try_into()?)),
 			crate::id::Kind::Directory => Ok(Self::Directory(value.try_into()?)),
 			crate::id::Kind::File => Ok(Self::File(value.try_into()?)),
 			crate::id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
@@ -485,7 +511,8 @@ impl TryFrom<crate::Id> for self::Id {
 impl std::fmt::Display for Id {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Blob(id) => write!(f, "{id}"),
+			Self::Leaf(id) => write!(f, "{id}"),
+			Self::Branch(id) => write!(f, "{id}"),
 			Self::Directory(id) => write!(f, "{id}"),
 			Self::File(id) => write!(f, "{id}"),
 			Self::Symlink(id) => write!(f, "{id}"),
@@ -504,39 +531,31 @@ impl std::str::FromStr for Id {
 	}
 }
 
-impl From<artifact::Id> for Id {
-	fn from(value: artifact::Id) -> Self {
-		match value {
-			artifact::Id::Directory(id) => Self::Directory(id),
-			artifact::Id::File(id) => Self::File(id),
-			artifact::Id::Symlink(id) => Self::Symlink(id),
-		}
-	}
-}
-
 #[macro_export]
 macro_rules! handle {
 	($t:ident) => {
 		impl $t {
 			#[must_use]
-			pub fn with_handle(handle: object::Handle) -> Self {
+			pub fn with_handle(handle: $crate::object::Handle) -> Self {
 				Self(handle)
 			}
 
 			#[must_use]
 			pub fn with_id(id: Id) -> Self {
-				Self(object::Handle::with_id(id.into()))
+				Self($crate::object::Handle::with_id(id.into()))
 			}
 
 			#[must_use]
 			pub fn with_object(object: Object) -> Self {
-				Self(object::Handle::with_object(object::Object::$t(object)))
+				Self($crate::object::Handle::with_object($crate::Object::$t(
+					object,
+				)))
 			}
 
 			#[must_use]
 			pub fn expect_id(&self) -> &Id {
 				match self.0.expect_id() {
-					object::Id::$t(id) => id,
+					$crate::object::Id::$t(id) => id,
 					_ => unreachable!(),
 				}
 			}
@@ -544,42 +563,46 @@ macro_rules! handle {
 			#[must_use]
 			pub fn expect_object(&self) -> &Object {
 				match self.0.expect_object() {
-					object::Object::$t(object) => object,
+					$crate::object::Object::$t(object) => object,
 					_ => unreachable!(),
 				}
 			}
 
-			pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
+			pub async fn id(&self, client: &dyn $crate::Client) -> $crate::Result<&Id> {
 				match self.0.id(client).await? {
-					object::Id::$t(id) => Ok(id),
+					$crate::object::Id::$t(id) => Ok(id),
 					_ => unreachable!(),
 				}
 			}
 
-			pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
+			pub async fn object(&self, client: &dyn $crate::Client) -> $crate::Result<&Object> {
 				match self.0.object(client).await? {
-					object::Object::$t(object) => Ok(object),
+					$crate::object::Object::$t(object) => Ok(object),
 					_ => unreachable!(),
 				}
 			}
 
-			pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+			pub async fn data(&self, client: &dyn $crate::Client) -> $crate::Result<Data> {
 				match self.0.data(client).await? {
-					object::Data::$t(data) => Ok(data),
+					$crate::object::Data::$t(data) => Ok(data),
 					_ => unreachable!(),
 				}
 			}
 
-			pub async fn load(&self, client: &dyn Client) -> Result<()> {
+			pub async fn load(&self, client: &dyn $crate::Client) -> $crate::Result<()> {
 				self.0.load(client).await
 			}
 
-			pub async fn store(&self, client: &dyn Client) -> Result<()> {
+			pub fn unload(&self) {
+				self.0.unload()
+			}
+
+			pub async fn store(&self, client: &dyn $crate::Client) -> $crate::Result<()> {
 				self.0.store(client).await
 			}
 
 			#[must_use]
-			pub fn handle(&self) -> &object::Handle {
+			pub fn handle(&self) -> &$crate::object::Handle {
 				&self.0
 			}
 		}

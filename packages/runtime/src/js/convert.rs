@@ -4,10 +4,10 @@ use serde_v8::Serializable;
 use std::{collections::BTreeMap, sync::Arc};
 use tangram_client as tg;
 use tg::{
-	blob, checksum, directory, error, file, mutation,
+	blob, branch, checksum, directory, error, file, leaf,
 	object::{self, Object},
-	package, return_error, symlink, target, template, Artifact, Blob, Checksum, Directory, Error,
-	File, Mutation, Package, Relpath, Result, Subpath, Symlink, System, Target, Template, Value,
+	package, return_error, symlink, target, template, Artifact, Blob, Branch, Checksum, Directory,
+	Error, File, Leaf, Mutation, Package, Result, Symlink, System, Target, Template, Value,
 	WrapErr,
 };
 use url::Url;
@@ -534,7 +534,8 @@ impl ToV8 for Value {
 			Value::Number(value) => value.to_v8(scope),
 			Value::String(value) => value.to_v8(scope),
 			Value::Bytes(value) => value.to_v8(scope),
-			Value::Blob(value) => value.to_v8(scope),
+			Value::Leaf(value) => value.to_v8(scope),
+			Value::Branch(value) => value.to_v8(scope),
 			Value::Directory(value) => value.to_v8(scope),
 			Value::File(value) => value.to_v8(scope),
 			Value::Symlink(value) => value.to_v8(scope),
@@ -559,9 +560,13 @@ impl FromV8 for Value {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let blob = v8::String::new_external_onebyte_static(scope, "Blob".as_bytes()).unwrap();
-		let blob = tg.get(scope, blob.into()).unwrap();
-		let blob = v8::Local::<v8::Function>::try_from(blob).unwrap();
+		let leaf = v8::String::new_external_onebyte_static(scope, "Leaf".as_bytes()).unwrap();
+		let leaf = tg.get(scope, leaf.into()).unwrap();
+		let leaf = v8::Local::<v8::Function>::try_from(leaf).unwrap();
+
+		let branch = v8::String::new_external_onebyte_static(scope, "Branch".as_bytes()).unwrap();
+		let branch = tg.get(scope, branch.into()).unwrap();
+		let branch = v8::Local::<v8::Function>::try_from(branch).unwrap();
 
 		let directory =
 			v8::String::new_external_onebyte_static(scope, "Directory".as_bytes()).unwrap();
@@ -604,8 +609,10 @@ impl FromV8 for Value {
 			Ok(Value::String(from_v8(scope, value)?))
 		} else if value.is_uint8_array() {
 			Ok(Value::Bytes(from_v8(scope, value)?))
-		} else if value.instance_of(scope, blob.into()).unwrap() {
-			Ok(Value::Blob(from_v8(scope, value)?))
+		} else if value.instance_of(scope, leaf.into()).unwrap() {
+			Ok(Value::Leaf(from_v8(scope, value)?))
+		} else if value.instance_of(scope, branch.into()).unwrap() {
+			Ok(Value::Branch(from_v8(scope, value)?))
 		} else if value.instance_of(scope, directory.into()).unwrap() {
 			Ok(Value::Directory(from_v8(scope, value)?))
 		} else if value.instance_of(scope, file.into()).unwrap() {
@@ -661,53 +668,12 @@ impl FromV8 for Bytes {
 	}
 }
 
-impl ToV8 for Relpath {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		self.to_string().to_v8(scope)
-	}
-}
-
-impl FromV8 for Relpath {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		String::from_v8(scope, value)?.parse()
-	}
-}
-
-impl ToV8 for Subpath {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		self.to_string().to_v8(scope)
-	}
-}
-
-impl FromV8 for Subpath {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		String::from_v8(scope, value)?.parse()
-	}
-}
-
 impl ToV8 for Blob {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let blob = v8::String::new_external_onebyte_static(scope, "Blob".as_bytes()).unwrap();
-		let blob = tg.get(scope, blob.into()).unwrap();
-		let blob = v8::Local::<v8::Function>::try_from(blob).unwrap();
-
-		let handle = self.handle().to_v8(scope)?;
-
-		let instance = blob.new_instance(scope, &[handle]).unwrap();
-
-		Ok(instance.into())
+		match self {
+			Self::Leaf(leaf) => leaf.to_v8(scope),
+			Self::Branch(branch) => branch.to_v8(scope),
+		}
 	}
 }
 
@@ -722,12 +688,63 @@ impl FromV8 for Blob {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let blob = v8::String::new_external_onebyte_static(scope, "Blob".as_bytes()).unwrap();
-		let blob = tg.get(scope, blob.into()).unwrap();
-		let blob = v8::Local::<v8::Function>::try_from(blob).unwrap();
+		let leaf = v8::String::new_external_onebyte_static(scope, "Leaf".as_bytes()).unwrap();
+		let leaf = tg.get(scope, leaf.into()).unwrap();
+		let leaf = v8::Local::<v8::Function>::try_from(leaf).unwrap();
 
-		if !value.instance_of(scope, blob.into()).unwrap() {
-			return_error!("Expected a blob.");
+		let branch = v8::String::new_external_onebyte_static(scope, "Branch".as_bytes()).unwrap();
+		let branch = tg.get(scope, branch.into()).unwrap();
+		let branch = v8::Local::<v8::Function>::try_from(branch).unwrap();
+
+		let blob = if value.instance_of(scope, leaf.into()).unwrap() {
+			Self::Leaf(from_v8(scope, value)?)
+		} else if value.instance_of(scope, branch.into()).unwrap() {
+			Self::Branch(from_v8(scope, value)?)
+		} else {
+			return_error!("Expected a leaf or branch.")
+		};
+
+		Ok(blob)
+	}
+}
+
+impl ToV8 for Leaf {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let leaf = v8::String::new_external_onebyte_static(scope, "Leaf".as_bytes()).unwrap();
+		let leaf = tg.get(scope, leaf.into()).unwrap();
+		let leaf = v8::Local::<v8::Function>::try_from(leaf).unwrap();
+
+		let handle = self.handle().to_v8(scope)?;
+
+		let instance = leaf.new_instance(scope, &[handle]).unwrap();
+
+		Ok(instance.into())
+	}
+}
+
+impl FromV8 for Leaf {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let leaf = v8::String::new_external_onebyte_static(scope, "Leaf".as_bytes()).unwrap();
+		let leaf = tg.get(scope, leaf.into()).unwrap();
+		let leaf = v8::Local::<v8::Function>::try_from(leaf).unwrap();
+
+		if !value.instance_of(scope, leaf.into()).unwrap() {
+			return_error!("Expected a leaf.");
 		}
 		let value = value.to_object(scope).unwrap();
 
@@ -739,27 +756,106 @@ impl FromV8 for Blob {
 	}
 }
 
-impl ToV8 for blob::Object {
+impl ToV8 for leaf::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		match self {
-			blob::Object::Branch(children) => Ok(children.to_v8(scope)?),
-			blob::Object::Leaf(bytes) => Ok(bytes.to_v8(scope)?),
-		}
+		let object = v8::Object::new(scope);
+
+		let key = v8::String::new_external_onebyte_static(scope, "bytes".as_bytes()).unwrap();
+		let value = self.bytes.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		Ok(object.into())
 	}
 }
 
-impl FromV8 for blob::Object {
+impl FromV8 for leaf::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		if value.is_array() {
-			Ok(blob::Object::Branch(from_v8(scope, value)?))
-		} else if value.is_uint8_array() {
-			Ok(blob::Object::Leaf(from_v8(scope, value)?))
-		} else {
-			return_error!("Invalid blob object.");
+		let value = value.to_object(scope).unwrap();
+
+		let bytes = v8::String::new_external_onebyte_static(scope, "bytes".as_bytes()).unwrap();
+		let bytes = value.get(scope, bytes.into()).unwrap();
+		let bytes = from_v8(scope, bytes)?;
+
+		Ok(Self { bytes })
+	}
+}
+
+impl ToV8 for Branch {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let branch = v8::String::new_external_onebyte_static(scope, "Branch".as_bytes()).unwrap();
+		let branch = tg.get(scope, branch.into()).unwrap();
+		let branch = v8::Local::<v8::Function>::try_from(branch).unwrap();
+
+		let handle = self.handle().to_v8(scope)?;
+
+		let instance = branch.new_instance(scope, &[handle]).unwrap();
+
+		Ok(instance.into())
+	}
+}
+
+impl FromV8 for Branch {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let branch = v8::String::new_external_onebyte_static(scope, "Branch".as_bytes()).unwrap();
+		let branch = tg.get(scope, branch.into()).unwrap();
+		let branch = v8::Local::<v8::Function>::try_from(branch).unwrap();
+
+		if !value.instance_of(scope, branch.into()).unwrap() {
+			return_error!("Expected a branch.");
 		}
+		let value = value.to_object(scope).unwrap();
+
+		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
+		let handle = value.get(scope, handle.into()).unwrap();
+		let handle = from_v8(scope, handle)?;
+
+		Ok(Self::with_handle(handle))
+	}
+}
+
+impl ToV8 for branch::Object {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let object = v8::Object::new(scope);
+
+		let key = v8::String::new_external_onebyte_static(scope, "children".as_bytes()).unwrap();
+		let value = self.children.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		Ok(object.into())
+	}
+}
+
+impl FromV8 for branch::Object {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = value.to_object(scope).unwrap();
+
+		let children =
+			v8::String::new_external_onebyte_static(scope, "children".as_bytes()).unwrap();
+		let children = value.get(scope, children.into()).unwrap();
+		let children = from_v8(scope, children)?;
+
+		Ok(Self { children })
 	}
 }
 
@@ -1214,7 +1310,10 @@ impl ToV8 for Mutation {
 				let value = vec.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
-			Mutation::TemplateAppend(mutation) => {
+			Mutation::TemplateAppend {
+				value: value_,
+				separator,
+			} => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "template_append".to_v8(scope).unwrap();
@@ -1222,15 +1321,18 @@ impl ToV8 for Mutation {
 
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-				let value = mutation.value.to_v8(scope)?;
+				let value = value_.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 
 				let key =
 					v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
-				let value = mutation.separator.to_v8(scope)?;
+				let value = separator.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
-			Mutation::TemplatePrepend(mutation) => {
+			Mutation::TemplatePrepend {
+				value: value_,
+				separator,
+			} => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "template_prepend".to_v8(scope).unwrap();
@@ -1238,12 +1340,12 @@ impl ToV8 for Mutation {
 
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-				let value = mutation.value.to_v8(scope)?;
+				let value = value_.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 
 				let key =
 					v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
-				let value = mutation.separator.to_v8(scope)?;
+				let value = separator.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
 		}
@@ -1284,44 +1386,38 @@ impl FromV8 for Mutation {
 			return Ok(Mutation::Unset(()));
 		}
 
-		let val = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-		let val = inner.get(scope, val.into()).unwrap();
+		let value_ = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+		let value_ = inner.get(scope, value_.into()).unwrap();
 
 		if kind == "set" {
-			let val = Value::from_v8(scope, val)?;
+			let val = Value::from_v8(scope, value_)?;
 			return Ok(Mutation::Set(Box::new(val)));
 		}
 		if kind == "set_if_unset" {
-			let val = Value::from_v8(scope, val)?;
+			let val = Value::from_v8(scope, value_)?;
 			return Ok(Mutation::SetIfUnset(Box::new(val)));
 		}
 
 		if kind == "array_append" {
-			let vec: Vec<Value> = from_v8(scope, val)?;
+			let vec: Vec<Value> = from_v8(scope, value_)?;
 			return Ok(Mutation::ArrayAppend(vec));
 		}
 		if kind == "array_prepend" {
-			let vec: Vec<Value> = from_v8(scope, val)?;
+			let vec: Vec<Value> = from_v8(scope, value_)?;
 			return Ok(Mutation::ArrayPrepend(vec));
 		}
 
-		let template = Template::from_v8(scope, val)?;
+		let value = Template::from_v8(scope, value_)?;
 		let separator =
 			v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
 		let separator = inner.get(scope, separator.into()).unwrap();
 		let separator = Template::from_v8(scope, separator)?;
 
 		if kind == "template_append" {
-			return Ok(Mutation::TemplateAppend(mutation::TemplateMutation {
-				value: template,
-				separator,
-			}));
+			return Ok(Mutation::TemplateAppend { value, separator });
 		}
 		if kind == "template_prepend" {
-			return Ok(Mutation::TemplatePrepend(mutation::TemplateMutation {
-				value: template,
-				separator,
-			}));
+			return Ok(Mutation::TemplatePrepend { value, separator });
 		}
 
 		return_error!("Invalid mutation.");
@@ -1678,7 +1774,8 @@ impl FromV8 for object::State {
 impl ToV8 for Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let (kind, value) = match self {
-			Self::Blob(blob) => ("blob", blob.to_v8(scope)?),
+			Self::Leaf(blob) => ("leaf", blob.to_v8(scope)?),
+			Self::Branch(blob) => ("branch", blob.to_v8(scope)?),
 			Self::Directory(directory) => ("directory", directory.to_v8(scope)?),
 			Self::File(file) => ("file", file.to_v8(scope)?),
 			Self::Symlink(symlink) => ("symlink", symlink.to_v8(scope)?),
@@ -1708,7 +1805,8 @@ impl FromV8 for Object {
 		let key = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
 		let value = value.get(scope, key.into()).unwrap();
 		let value = match kind.as_str() {
-			"blob" => Self::Blob(from_v8(scope, value)?),
+			"leaf" => Self::Leaf(from_v8(scope, value)?),
+			"branch" => Self::Branch(from_v8(scope, value)?),
 			"directory" => Self::Directory(from_v8(scope, value)?),
 			"file" => Self::File(from_v8(scope, value)?),
 			"symlink" => Self::Symlink(from_v8(scope, value)?),

@@ -1,6 +1,8 @@
 import { Blob } from "./blob.ts";
+import { Branch } from "./branch.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { Leaf } from "./leaf.ts";
 import { Mutation } from "./mutation.ts";
 import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
@@ -66,7 +68,8 @@ export let resolve = async <T extends Unresolved<Value>>(
 		typeof value === "number" ||
 		typeof value === "string" ||
 		value instanceof Uint8Array ||
-		value instanceof Blob ||
+		value instanceof Leaf ||
+		value instanceof Branch ||
 		value instanceof Directory ||
 		value instanceof File ||
 		value instanceof Symlink ||

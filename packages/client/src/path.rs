@@ -281,7 +281,6 @@ impl Relpath {
 	}
 
 	pub fn try_diff(&self, src: &Relpath) -> Result<Relpath> {
-		let src = src;
 		let dst = self;
 
 		// Remove the common parents.

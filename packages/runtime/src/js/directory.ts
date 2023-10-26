@@ -90,7 +90,7 @@ export class Directory {
 						} else if (
 							typeof value === "string" ||
 							value instanceof Uint8Array ||
-							value instanceof Blob
+							Blob.is(value)
 						) {
 							let newEntry = await file(value);
 							entries[name] = newEntry;

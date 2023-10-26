@@ -7,13 +7,16 @@
 pub use self::{
 	artifact::Artifact,
 	blob::Blob,
+	branch::Branch,
 	build::Build,
 	checksum::Checksum,
 	directory::Directory,
 	error::{Error, Result, Wrap, WrapErr},
 	file::File,
 	id::Id,
+	leaf::Leaf,
 	mutation::Mutation,
+	object::Object,
 	package::Package,
 	path::{Relpath, Subpath},
 	reqwest::Reqwest,
@@ -30,6 +33,7 @@ use std::{fmt::Debug, path::Path};
 
 pub mod artifact;
 pub mod blob;
+pub mod branch;
 pub mod build;
 pub mod bundle;
 pub mod checkin;
@@ -39,6 +43,7 @@ pub mod directory;
 pub mod error;
 pub mod file;
 pub mod id;
+pub mod leaf;
 pub mod mutation;
 pub mod object;
 pub mod package;

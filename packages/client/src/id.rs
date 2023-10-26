@@ -31,7 +31,8 @@ pub struct V0 {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum Kind {
-	Blob,
+	Leaf,
+	Branch,
 	Directory,
 	File,
 	Symlink,
@@ -141,7 +142,8 @@ impl std::fmt::Debug for Id {
 impl std::fmt::Display for Id {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let kind = match self.kind() {
-			Kind::Blob => "blb",
+			Kind::Leaf => "lef",
+			Kind::Branch => "bch",
 			Kind::Directory => "dir",
 			Kind::File => "fil",
 			Kind::Symlink => "sym",
@@ -209,16 +211,17 @@ impl TryFrom<&[u8]> for Id {
 impl From<Kind> for u64 {
 	fn from(value: Kind) -> Self {
 		match value {
-			Kind::Blob => 0,
-			Kind::Directory => 1,
-			Kind::File => 2,
-			Kind::Symlink => 3,
-			Kind::Package => 4,
-			Kind::Target => 5,
-			Kind::Build => 6,
-			Kind::User => 7,
-			Kind::Login => 8,
-			Kind::Token => 9,
+			Kind::Leaf => 0,
+			Kind::Branch => 1,
+			Kind::Directory => 2,
+			Kind::File => 3,
+			Kind::Symlink => 4,
+			Kind::Package => 5,
+			Kind::Target => 6,
+			Kind::Build => 7,
+			Kind::User => 8,
+			Kind::Login => 9,
+			Kind::Token => 10,
 		}
 	}
 }
@@ -228,16 +231,17 @@ impl TryFrom<u64> for Kind {
 
 	fn try_from(value: u64) -> Result<Self, Self::Error> {
 		match value {
-			0 => Ok(Kind::Blob),
-			1 => Ok(Kind::Directory),
-			2 => Ok(Kind::File),
-			3 => Ok(Kind::Symlink),
-			4 => Ok(Kind::Package),
-			5 => Ok(Kind::Target),
-			6 => Ok(Kind::Build),
-			7 => Ok(Kind::User),
-			8 => Ok(Kind::Login),
-			9 => Ok(Kind::Token),
+			0 => Ok(Kind::Leaf),
+			1 => Ok(Kind::Branch),
+			2 => Ok(Kind::Directory),
+			3 => Ok(Kind::File),
+			4 => Ok(Kind::Symlink),
+			5 => Ok(Kind::Package),
+			6 => Ok(Kind::Target),
+			7 => Ok(Kind::Build),
+			8 => Ok(Kind::User),
+			9 => Ok(Kind::Login),
+			10 => Ok(Kind::Token),
 			_ => return_error!("Invalid kind."),
 		}
 	}

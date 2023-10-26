@@ -1,5 +1,4 @@
 use crate::{template, value, Template, Value};
-use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum Mutation {
@@ -8,117 +7,14 @@ pub enum Mutation {
 	SetIfUnset(Box<Value>),
 	ArrayPrepend(Vec<Value>),
 	ArrayAppend(Vec<Value>),
-	TemplatePrepend(TemplateMutation),
-	TemplateAppend(TemplateMutation),
-}
-
-impl Mutation {
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		match self {
-			Self::Unset(()) => Data::Unset(()),
-			Self::Set(value) => Data::Set(Box::new(value::Data::from(value.as_ref().clone()))),
-			Self::SetIfUnset(value) => {
-				Data::SetIfUnset(Box::new(value::Data::from(value.as_ref().clone())))
-			},
-			Self::ArrayPrepend(vec) => {
-				Data::ArrayPrepend(vec.iter().cloned().map(Into::into).collect())
-			},
-			Self::ArrayAppend(vec) => {
-				Data::ArrayAppend(vec.iter().cloned().map(Into::into).collect())
-			},
-			Self::TemplatePrepend(mutation) => Data::TemplatePrepend(mutation.to_data()),
-			Self::TemplateAppend(mutation) => Data::TemplateAppend(mutation.to_data()),
-		}
-	}
-
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		match data {
-			Data::Unset(()) => Self::Unset(()),
-			Data::Set(data) => Self::Set(Box::new(Value::from(data.as_ref().clone()))),
-			Data::SetIfUnset(data) => {
-				Self::SetIfUnset(Box::new(Value::from(data.as_ref().clone())))
-			},
-			Data::ArrayPrepend(data) => {
-				Self::ArrayPrepend(data.into_iter().map(Into::into).collect())
-			},
-			Data::ArrayAppend(data) => {
-				Self::ArrayAppend(data.into_iter().map(Into::into).collect())
-			},
-			Data::TemplatePrepend(data) => Self::TemplatePrepend(TemplateMutation::from_data(data)),
-			Data::TemplateAppend(data) => Self::TemplateAppend(TemplateMutation::from_data(data)),
-		}
-	}
-}
-
-impl fmt::Display for Mutation {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let s = match self {
-			Self::Unset(()) => "unset".to_owned(),
-			Self::Set(value) => format!("set {value}"),
-			Self::SetIfUnset(value) => format!("set-if-unset {value}"),
-			Self::ArrayPrepend(vec) => format!(
-				"array-prepend [{}]",
-				vec.iter().fold(String::new(), |acc, value| {
-					let mut ret = acc.clone();
-					if !acc.is_empty() {
-						ret.push_str(", ");
-					}
-					ret.push_str(&value.to_string());
-					return ret;
-				})
-			),
-			Self::ArrayAppend(vec) => format!(
-				"array-append [{}]",
-				vec.iter().fold(String::new(), |acc, value| {
-					let mut ret = acc.clone();
-					if !acc.is_empty() {
-						ret.push_str(", ");
-					}
-					ret.push_str(&value.to_string());
-					return ret;
-				})
-			),
-			Self::TemplatePrepend(mutation) => {
-				format!(
-					"template-prepend {} ({})",
-					mutation.value, mutation.separator
-				)
-			},
-			Self::TemplateAppend(mutation) => {
-				format!(
-					"template-append {} ({})",
-					mutation.value, mutation.separator
-				)
-			},
-		};
-		write!(f, "(tg.mutation {s})")
-	}
-}
-
-#[derive(Debug, Clone)]
-pub struct TemplateMutation {
-	pub value: Template,
-	pub separator: Template,
-}
-
-impl TemplateMutation {
-	#[must_use]
-	pub fn to_data(&self) -> TemplateMutationData {
-		TemplateMutationData {
-			value: self.value.to_data(),
-			separator: self.separator.to_data(),
-		}
-	}
-
-	#[must_use]
-	pub fn from_data(data: TemplateMutationData) -> Self {
-		Self {
-			value: Template::from_data(data.value),
-			separator: Template::from_data(data.separator),
-		}
-	}
+	TemplatePrepend {
+		value: Template,
+		separator: Template,
+	},
+	TemplateAppend {
+		value: Template,
+		separator: Template,
+	},
 }
 
 #[derive(
@@ -160,4 +56,99 @@ pub struct TemplateMutationData {
 	value: template::Data,
 	#[tangram_serialize(id = 1)]
 	separator: template::Data,
+}
+
+impl Mutation {
+	#[must_use]
+	pub fn to_data(&self) -> Data {
+		match self {
+			Self::Unset(()) => Data::Unset(()),
+			Self::Set(value) => Data::Set(Box::new(value::Data::from(value.as_ref().clone()))),
+			Self::SetIfUnset(value) => {
+				Data::SetIfUnset(Box::new(value::Data::from(value.as_ref().clone())))
+			},
+			Self::ArrayPrepend(vec) => {
+				Data::ArrayPrepend(vec.iter().cloned().map(Into::into).collect())
+			},
+			Self::ArrayAppend(vec) => {
+				Data::ArrayAppend(vec.iter().cloned().map(Into::into).collect())
+			},
+			Self::TemplatePrepend { value, separator } => {
+				Data::TemplatePrepend(TemplateMutationData {
+					value: value.to_data(),
+					separator: separator.to_data(),
+				})
+			},
+			Self::TemplateAppend { value, separator } => {
+				Data::TemplateAppend(TemplateMutationData {
+					value: value.to_data(),
+					separator: separator.to_data(),
+				})
+			},
+		}
+	}
+
+	#[must_use]
+	pub fn from_data(data: Data) -> Self {
+		match data {
+			Data::Unset(()) => Self::Unset(()),
+			Data::Set(data) => Self::Set(Box::new(Value::from(data.as_ref().clone()))),
+			Data::SetIfUnset(data) => {
+				Self::SetIfUnset(Box::new(Value::from(data.as_ref().clone())))
+			},
+			Data::ArrayPrepend(data) => {
+				Self::ArrayPrepend(data.into_iter().map(Into::into).collect())
+			},
+			Data::ArrayAppend(data) => {
+				Self::ArrayAppend(data.into_iter().map(Into::into).collect())
+			},
+			Data::TemplatePrepend(data) => Self::TemplatePrepend {
+				value: Template::from_data(data.value),
+				separator: Template::from_data(data.separator),
+			},
+			Data::TemplateAppend(data) => Self::TemplateAppend {
+				value: Template::from_data(data.value),
+				separator: Template::from_data(data.separator),
+			},
+		}
+	}
+}
+
+impl std::fmt::Display for Mutation {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let s = match self {
+			Self::Unset(()) => "unset".to_owned(),
+			Self::Set(value) => format!("set {value}"),
+			Self::SetIfUnset(value) => format!("set-if-unset {value}"),
+			Self::ArrayPrepend(vec) => format!(
+				"array-prepend [{}]",
+				vec.iter().fold(String::new(), |acc, value| {
+					let mut ret = acc.clone();
+					if !acc.is_empty() {
+						ret.push_str(", ");
+					}
+					ret.push_str(&value.to_string());
+					ret
+				})
+			),
+			Self::ArrayAppend(vec) => format!(
+				"array-append [{}]",
+				vec.iter().fold(String::new(), |acc, value| {
+					let mut ret = acc.clone();
+					if !acc.is_empty() {
+						ret.push_str(", ");
+					}
+					ret.push_str(&value.to_string());
+					ret
+				})
+			),
+			Self::TemplatePrepend { value, separator } => {
+				format!("template-prepend {value} ({separator})",)
+			},
+			Self::TemplateAppend { value, separator } => {
+				format!("template-append {value} ({separator})",)
+			},
+		};
+		write!(f, "(tg.mutation {s})")
+	}
 }

@@ -47,7 +47,7 @@ impl Serialize for Value {
 		W: Write,
 	{
 		match self {
-			Value::Unit(_) => {
+			Value::Unit(()) => {
 				serializer.serialize_unit()?;
 			},
 			Value::Bool(value) => {

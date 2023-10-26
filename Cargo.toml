@@ -10,6 +10,7 @@ members = [
   "packages/server",
   "packages/vfs",
 ]
+resolver = "2"
 
 [workspace.package]
 authors = ["Tangram <root@tangram.dev"]

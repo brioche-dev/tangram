@@ -35,7 +35,7 @@ impl Server {
 			if let Some(location) = &diagnostic.location {
 				diagnostics_for_module
 					.entry(location.module.clone())
-					.or_insert_with(Vec::new)
+					.or_default()
 					.push(diagnostic);
 			}
 		}

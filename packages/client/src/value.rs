@@ -1,6 +1,7 @@
 use crate::{
-	blob, directory, error, file, mutation, object, package, symlink, target, template, Blob,
-	Client, Directory, File, Mutation, Package, Result, Symlink, Target, Template, WrapErr,
+	branch, directory, error, file, leaf, mutation, object, package, symlink, target, template,
+	Branch, Client, Directory, File, Leaf, Mutation, Package, Result, Symlink, Target, Template,
+	WrapErr,
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
@@ -26,8 +27,11 @@ pub enum Value {
 	/// A bytes value.
 	Bytes(Bytes),
 
-	/// A blob value.
-	Blob(Blob),
+	/// A leaf value.
+	Leaf(Leaf),
+
+	/// A branch value.
+	Branch(Branch),
 
 	/// A directory value.
 	Directory(Directory),
@@ -84,33 +88,36 @@ pub enum Data {
 	Bytes(Bytes),
 
 	#[tangram_serialize(id = 5)]
-	Blob(blob::Id),
+	Leaf(leaf::Id),
 
 	#[tangram_serialize(id = 6)]
-	Directory(directory::Id),
+	Branch(branch::Id),
 
 	#[tangram_serialize(id = 7)]
-	File(file::Id),
+	Directory(directory::Id),
 
 	#[tangram_serialize(id = 8)]
-	Symlink(symlink::Id),
+	File(file::Id),
 
 	#[tangram_serialize(id = 9)]
-	Template(template::Data),
+	Symlink(symlink::Id),
 
 	#[tangram_serialize(id = 10)]
-	Mutation(mutation::Data),
+	Template(template::Data),
 
 	#[tangram_serialize(id = 11)]
-	Package(package::Id),
+	Mutation(mutation::Data),
 
 	#[tangram_serialize(id = 12)]
-	Target(target::Id),
+	Package(package::Id),
 
 	#[tangram_serialize(id = 13)]
-	Array(Vec<Data>),
+	Target(target::Id),
 
 	#[tangram_serialize(id = 14)]
+	Array(Vec<Data>),
+
+	#[tangram_serialize(id = 15)]
 	Map(BTreeMap<String, Data>),
 }
 
@@ -129,7 +136,7 @@ impl Value {
 
 	pub fn children(&self) -> Vec<object::Handle> {
 		match self {
-			Self::Null(_)
+			Self::Null(())
 			| Self::Bool(_)
 			| Self::Number(_)
 			| Self::String(_)
@@ -137,7 +144,8 @@ impl Value {
 			| Self::Mutation(_) => {
 				vec![]
 			},
-			Self::Blob(blob) => vec![blob.handle().clone()],
+			Self::Leaf(leaf) => vec![leaf.handle().clone()],
+			Self::Branch(branch) => vec![branch.handle().clone()],
 			Self::Directory(directory) => vec![directory.handle().clone()],
 			Self::File(file) => vec![file.handle().clone()],
 			Self::Symlink(symlink) => vec![symlink.handle().clone()],
@@ -172,7 +180,7 @@ impl Data {
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		match self {
-			Self::Null(_)
+			Self::Null(())
 			| Self::Bool(_)
 			| Self::Number(_)
 			| Self::String(_)
@@ -180,7 +188,8 @@ impl Data {
 			| Self::Mutation(_) => {
 				vec![]
 			},
-			Self::Blob(id) => vec![id.clone().into()],
+			Self::Leaf(id) => vec![id.clone().into()],
+			Self::Branch(id) => vec![id.clone().into()],
 			Self::Directory(id) => vec![id.clone().into()],
 			Self::File(id) => vec![id.clone().into()],
 			Self::Symlink(id) => vec![id.clone().into()],
@@ -196,12 +205,13 @@ impl Data {
 impl From<Value> for Data {
 	fn from(value: Value) -> Self {
 		match value {
-			Value::Null(_) => Self::Null(()),
+			Value::Null(()) => Self::Null(()),
 			Value::Bool(bool) => Self::Bool(bool),
 			Value::Number(number) => Self::Number(number),
 			Value::String(string) => Self::String(string.clone()),
 			Value::Bytes(bytes) => Self::Bytes(bytes.clone()),
-			Value::Blob(blob) => Self::Blob(blob.expect_id().clone()),
+			Value::Leaf(leaf) => Self::Leaf(leaf.expect_id().clone()),
+			Value::Branch(branch) => Self::Branch(branch.expect_id().clone()),
 			Value::Directory(directory) => Self::Directory(directory.expect_id().clone()),
 			Value::File(file) => Self::File(file.expect_id().clone()),
 			Value::Mutation(mutation) => Self::Mutation(mutation.to_data().clone()),
@@ -222,12 +232,13 @@ impl From<Value> for Data {
 impl From<Data> for Value {
 	fn from(value: Data) -> Self {
 		match value {
-			Data::Null(_) => Self::Null(()),
+			Data::Null(()) => Self::Null(()),
 			Data::Bool(bool) => Self::Bool(bool),
 			Data::Number(number) => Self::Number(number),
 			Data::String(string) => Self::String(string),
 			Data::Bytes(bytes) => Self::Bytes(bytes),
-			Data::Blob(id) => Self::Blob(Blob::with_id(id)),
+			Data::Leaf(id) => Self::Leaf(Leaf::with_id(id)),
+			Data::Branch(id) => Self::Branch(Branch::with_id(id)),
 			Data::Directory(id) => Self::Directory(Directory::with_id(id)),
 			Data::File(id) => Self::File(File::with_id(id)),
 			Data::Mutation(mutation) => Self::Mutation(Mutation::from_data(mutation)),
@@ -250,7 +261,7 @@ impl From<Data> for Value {
 impl std::fmt::Display for Value {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Value::Null(_) => {
+			Value::Null(()) => {
 				write!(f, "null")?;
 			},
 			Value::Bool(bool) => {
@@ -265,8 +276,11 @@ impl std::fmt::Display for Value {
 			Value::Bytes(bytes) => {
 				write!(f, "{}", hex::encode(bytes))?;
 			},
-			Value::Blob(blob) => {
-				write!(f, "{}", blob.expect_id())?;
+			Value::Leaf(leaf) => {
+				write!(f, "{}", leaf.expect_id())?;
+			},
+			Value::Branch(branch) => {
+				write!(f, "{}", branch.expect_id())?;
 			},
 			Value::Directory(directory) => {
 				write!(f, "{}", directory.expect_id())?;
