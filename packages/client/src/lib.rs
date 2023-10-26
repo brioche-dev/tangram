@@ -19,7 +19,7 @@ pub use self::{
 	object::Object,
 	package::Package,
 	path::{Relpath, Subpath},
-	reqwest::Reqwest,
+	hyper::Hyper,
 	symlink::Symlink,
 	system::System,
 	target::Target,
@@ -49,7 +49,6 @@ pub mod mutation;
 pub mod object;
 pub mod package;
 pub mod path;
-pub mod reqwest;
 pub mod symlink;
 pub mod system;
 pub mod target;
