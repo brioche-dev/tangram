@@ -148,7 +148,6 @@ impl Build {
 					break;
 				}
 			}
-			println!("Closing child stream.");
 		});
 
 		let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
