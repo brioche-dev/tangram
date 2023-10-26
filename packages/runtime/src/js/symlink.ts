@@ -80,10 +80,6 @@ export class Symlink {
 						artifact: await arg.artifact(),
 						path: (await arg.path()).toString(),
 					};
-				} else if (Template.is(arg)) {
-					return {
-						path: await mutation({ kind: "template_append", value: arg }),
-					};
 				} else if (typeof arg === "object") {
 					return arg;
 				} else {

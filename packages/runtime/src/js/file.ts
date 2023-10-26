@@ -1,7 +1,7 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import { Args, apply, mutation } from "./mutation.ts";
+import { Args, MutationMap, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 
 export let file = async (...args: Args<File.Arg>) => {
@@ -56,20 +56,26 @@ export class File {
 					}),
 				};
 			} else if (typeof arg === "object") {
-				return {
-					contents: await mutation({
+				let ret: Partial<MutationMap<Apply>> = {};
+				if (arg.contents !== undefined) {
+					ret.contents = await mutation({
 						kind: "array_append",
 						value: [arg.contents],
-					}),
-					executable: await mutation({
+					});
+				}
+				if (arg.executable !== undefined) {
+					ret.executable = await mutation({
 						kind: "array_append",
 						value: [arg.executable],
-					}),
-					references: await mutation({
+					});
+				}
+				if (arg.references !== undefined) {
+					ret.references = await mutation({
 						kind: "array_append",
 						value: [arg.references],
-					}),
-				};
+					});
+				}
+				return ret;
 			} else {
 				return unreachable();
 			}

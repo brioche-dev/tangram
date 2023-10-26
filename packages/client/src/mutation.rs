@@ -6,8 +6,8 @@ pub enum Mutation {
 	Unset(()),
 	Set(Box<Value>),
 	SetIfUnset(Box<Value>),
-	ArrayPrepend(ArrayMutation),
-	ArrayAppend(ArrayMutation),
+	ArrayPrepend(Vec<Value>),
+	ArrayAppend(Vec<Value>),
 	TemplatePrepend(TemplateMutation),
 	TemplateAppend(TemplateMutation),
 }
@@ -21,8 +21,12 @@ impl Mutation {
 			Self::SetIfUnset(value) => {
 				Data::SetIfUnset(Box::new(value::Data::from(value.as_ref().clone())))
 			},
-			Self::ArrayPrepend(mutation) => Data::ArrayPrepend(mutation.to_data()),
-			Self::ArrayAppend(mutation) => Data::ArrayAppend(mutation.to_data()),
+			Self::ArrayPrepend(vec) => {
+				Data::ArrayPrepend(vec.iter().cloned().map(Into::into).collect())
+			},
+			Self::ArrayAppend(vec) => {
+				Data::ArrayAppend(vec.iter().cloned().map(Into::into).collect())
+			},
 			Self::TemplatePrepend(mutation) => Data::TemplatePrepend(mutation.to_data()),
 			Self::TemplateAppend(mutation) => Data::TemplateAppend(mutation.to_data()),
 		}
@@ -36,8 +40,12 @@ impl Mutation {
 			Data::SetIfUnset(data) => {
 				Self::SetIfUnset(Box::new(Value::from(data.as_ref().clone())))
 			},
-			Data::ArrayPrepend(data) => Self::ArrayPrepend(ArrayMutation::from_data(data)),
-			Data::ArrayAppend(data) => Self::ArrayAppend(ArrayMutation::from_data(data)),
+			Data::ArrayPrepend(data) => {
+				Self::ArrayPrepend(data.into_iter().map(Into::into).collect())
+			},
+			Data::ArrayAppend(data) => {
+				Self::ArrayAppend(data.into_iter().map(Into::into).collect())
+			},
 			Data::TemplatePrepend(data) => Self::TemplatePrepend(TemplateMutation::from_data(data)),
 			Data::TemplateAppend(data) => Self::TemplateAppend(TemplateMutation::from_data(data)),
 		}
@@ -50,8 +58,28 @@ impl fmt::Display for Mutation {
 			Self::Unset(()) => "unset".to_owned(),
 			Self::Set(value) => format!("set {value}"),
 			Self::SetIfUnset(value) => format!("set-if-unset {value}"),
-			Self::ArrayPrepend(mutation) => format!("array-prepend {}", mutation.value),
-			Self::ArrayAppend(mutation) => format!("array-append {}", mutation.value),
+			Self::ArrayPrepend(vec) => format!(
+				"array-prepend [{}]",
+				vec.iter().fold(String::new(), |acc, value| {
+					let mut ret = acc.clone();
+					if !acc.is_empty() {
+						ret.push_str(", ");
+					}
+					ret.push_str(&value.to_string());
+					return ret;
+				})
+			),
+			Self::ArrayAppend(vec) => format!(
+				"array-append [{}]",
+				vec.iter().fold(String::new(), |acc, value| {
+					let mut ret = acc.clone();
+					if !acc.is_empty() {
+						ret.push_str(", ");
+					}
+					ret.push_str(&value.to_string());
+					return ret;
+				})
+			),
 			Self::TemplatePrepend(mutation) => {
 				format!(
 					"template-prepend {} ({})",
@@ -66,27 +94,6 @@ impl fmt::Display for Mutation {
 			},
 		};
 		write!(f, "(tg.mutation {s})")
-	}
-}
-
-#[derive(Debug, Clone)]
-pub struct ArrayMutation {
-	pub value: Template,
-}
-
-impl ArrayMutation {
-	#[must_use]
-	pub fn to_data(&self) -> ArrayMutationData {
-		ArrayMutationData {
-			value: self.value.to_data(),
-		}
-	}
-
-	#[must_use]
-	pub fn from_data(data: ArrayMutationData) -> Self {
-		Self {
-			value: Template::from_data(data.value),
-		}
 	}
 }
 
@@ -131,26 +138,13 @@ pub enum Data {
 	#[tangram_serialize(id = 2)]
 	SetIfUnset(Box<value::Data>),
 	#[tangram_serialize(id = 3)]
-	ArrayPrepend(ArrayMutationData),
+	ArrayPrepend(Vec<value::Data>),
 	#[tangram_serialize(id = 4)]
-	ArrayAppend(ArrayMutationData),
+	ArrayAppend(Vec<value::Data>),
 	#[tangram_serialize(id = 5)]
 	TemplatePrepend(TemplateMutationData),
 	#[tangram_serialize(id = 6)]
 	TemplateAppend(TemplateMutationData),
-}
-
-#[derive(
-	Debug,
-	Clone,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
-pub struct ArrayMutationData {
-	#[tangram_serialize(id = 0)]
-	value: template::Data,
 }
 
 #[derive(

@@ -67,7 +67,32 @@ export let apply = async <
 	}, Promise.resolve({}));
 };
 
-/** Create a mutation. */
+// export async function mutation<T extends Value = Value>(arg: {
+// 	kind: "unset";
+// }): Promise<Mutation<T>>;
+// export async function mutation<T extends Value = Value>(arg: {
+// 	kind: "set";
+// 	value: T;
+// }): Promise<Mutation<T>>;
+// export async function mutation<T extends Value = Value>(arg: {
+// 	kind: "set_if_unset";
+// 	value: T;
+// }): Promise<Mutation<T>>;
+// // export async function mutation<U extends Value, T extends Array<U>>(arg: {
+// // 	kind: "array_prepend";
+// // 	value: MaybeNestedArray<U>;
+// // }): Promise<Mutation<T>>;
+// export async function mutation<T extends Value = Value>(arg: {
+// 	kind: "array_prepend";
+// 	value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+// }): Promise<Mutation<T>>;
+
+// export async function set<T extends Value = Value>(
+// 	value: T,
+// ): Promise<Mutation<T>> {
+// 	return mutation({ kind: "set", value });
+// }
+
 export async function mutation<T extends Value = Value>(
 	arg: Unresolved<Mutation.Arg<T>>,
 ): Promise<Mutation<T>> {

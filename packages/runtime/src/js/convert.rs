@@ -1192,7 +1192,7 @@ impl ToV8 for Mutation {
 				let value = val.clone().to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
 			},
-			Mutation::ArrayAppend(mutation) => {
+			Mutation::ArrayAppend(vec) => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "array_append".to_v8(scope).unwrap();
@@ -1200,10 +1200,10 @@ impl ToV8 for Mutation {
 
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-				let value = mutation.value.to_v8(scope)?;
+				let value = vec.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
-			Mutation::ArrayPrepend(mutation) => {
+			Mutation::ArrayPrepend(vec) => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "array_prepend".to_v8(scope).unwrap();
@@ -1211,7 +1211,7 @@ impl ToV8 for Mutation {
 
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-				let value = mutation.value.to_v8(scope)?;
+				let value = vec.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
 			Mutation::TemplateAppend(mutation) => {
@@ -1296,18 +1296,16 @@ impl FromV8 for Mutation {
 			return Ok(Mutation::SetIfUnset(Box::new(val)));
 		}
 
-		let template = Template::from_v8(scope, val)?;
 		if kind == "array_append" {
-			return Ok(Mutation::ArrayAppend(mutation::ArrayMutation {
-				value: template,
-			}));
+			let vec: Vec<Value> = from_v8(scope, val)?;
+			return Ok(Mutation::ArrayAppend(vec));
 		}
 		if kind == "array_prepend" {
-			return Ok(Mutation::ArrayPrepend(mutation::ArrayMutation {
-				value: template,
-			}));
+			let vec: Vec<Value> = from_v8(scope, val)?;
+			return Ok(Mutation::ArrayPrepend(vec));
 		}
 
+		let template = Template::from_v8(scope, val)?;
 		let separator =
 			v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
 		let separator = inner.get(scope, separator.into()).unwrap();
