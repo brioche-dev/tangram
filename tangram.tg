@@ -1,8 +1,35 @@
 export default tg.target(async () => {
-	let target = await tg.target(
-		"echo hello > $OUTPUT",
-		{ env: { HELLO: "foo" } },
-		{ env: { HELLO: tg.mutation({ kind: "template_append", value: "bar" }) } },
-	);
-	console.log(target);
+	// let target = await tg.target(
+	// 	"echo hello > $OUTPUT",
+	// 	{ env: { HELLO: "foo" } },
+	// 	{ env: { HELLO: tg.mutation({ kind: "template_append", value: "bar" }) } },
+	// );
+	// console.log(target);
+	// let obj = await bunchOMutations();
+	// console.log("console log mutations", obj);
+	// return obj;
+});
+
+export let bunchOMutations = tg.target(async () => {
+	let obj = {
+		unset: await tg.mutation({ kind: "unset" }),
+		set: await tg.mutation({ kind: "set", value: 5 }),
+		setIfUnset: await tg.mutation({ kind: "set_if_unset", value: "hello" }),
+		// arrayAppend: await tg.mutation({ kind: "array_append", value: ["hello"] }),
+		// arrayPrepend: await tg.mutation({
+		// 	kind: "array_prepend",
+		// 	value: ["hello"],
+		// }),
+		// templateAppend: await tg.mutation({
+		// 	kind: "template_append",
+		// 	value: "hello",
+		// 	separator: ":",
+		// }),
+		// templatePrepend: await tg.mutation({
+		// 	kind: "template_prepend",
+		// 	value: "hello",
+		// }),
+	};
+
+	return obj;
 });

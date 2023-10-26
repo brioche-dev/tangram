@@ -1,5 +1,3 @@
-use async_compression::futures::write;
-
 use crate::{template, value, Template, Value};
 use std::fmt;
 

@@ -2,7 +2,6 @@ use crate::{
 	blob, directory, error, file, mutation, object, package, symlink, target, template, Blob,
 	Client, Directory, File, Mutation, Package, Result, Symlink, Target, Template, WrapErr,
 };
-use async_compression::futures::write;
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
 use std::collections::BTreeMap;

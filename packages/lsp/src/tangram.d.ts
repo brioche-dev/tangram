@@ -9,100 +9,11 @@ declare function tg(
 ): Promise<tg.Template>;
 
 declare namespace tg {
-	/** The arguments to a constructor. */
-	export type Args<T extends Exclude<Value, Array<Value>>> = Array<
-		Unresolved<MaybeNestedArray<MaybeMutation<T>>>
+	export type Args<T extends Value = Value> = Array<
+		Unresolved<MaybeNestedArray<Mutation.MaybeMutationMap<T>>>
 	>;
 
-	export type MaybeMutation<T extends Value> = T | Mutation<T>;
-
 	export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
-
-	export namespace Args {
-		/** A description of mutations applied to the keys in an object. */
-		export type MutationObject<
-			T extends { [key: string]: Value } = { [key: string]: Value },
-		> = {
-			[K in keyof T]?: MaybeNestedArray<MaybeMutation<T[K]>>;
-		};
-
-		/** Apply the mutations specified by resolving and mapping an array of arguments. */
-		export let apply: <
-			A extends Value = Value,
-			R extends { [key: string]: Value } = { [key: string]: Value },
-		>(
-			args: Args<A>,
-			map: (arg: A) => Promise<MaybeNestedArray<MutationObject<R>>>,
-		) => Promise<Partial<R>>;
-	}
-
-	/** Create a mutation. */
-	export function mutation<T extends Value = Value>(
-		arg: Mutation.Arg<T>,
-	): Mutation<T>;
-
-	export class Mutation<T extends Value = Value> {
-		static new<T extends Value = Value>(
-			args: Mutation.Arg<T>,
-		): Promise<Mutation<T>>;
-
-		/** Check if a value is a `tg.Template`. */
-		static is(value: unknown): value is Template;
-
-		/** Expect that a value is a `tg.Template`. */
-		static expect(value: unknown): Template;
-
-		/** Assert that a value is a `tg.Template`. */
-		static assert(value: unknown): asserts value is Template;
-	}
-
-	export namespace Mutation {
-		export type Arg<T extends Value = Value> =
-			| { kind: "unset" }
-			| { kind: "set"; value: T }
-			| { kind: "set_if_unset"; value: T }
-			| {
-					kind: "array_prepend";
-					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
-			  }
-			| {
-					kind: "array_append";
-					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
-			  }
-			| {
-					kind: "template_prepend";
-					value: T extends Template.Arg ? Template.Arg : never;
-					separator: Template.Arg;
-			  }
-			| {
-					kind: "template_append";
-					value: T extends Template.Arg ? Template.Arg : never;
-					separator: Template.Arg;
-			  };
-
-		export type Object_ =
-			| { kind: "unset" }
-			| { kind: "set"; value: Value }
-			| { kind: "set_if_unset"; value: Value }
-			| {
-					kind: "array_prepend";
-					value: Array<Value>;
-			  }
-			| {
-					kind: "array_append";
-					value: Array<Value>;
-			  }
-			| {
-					kind: "template_prepend";
-					value: Template;
-					separator: Template;
-			  }
-			| {
-					kind: "template_append";
-					value: Template;
-					separator: Template;
-			  };
-	}
 
 	/** An artifact. */
 	export type Artifact = Directory | File | Symlink;
@@ -368,6 +279,95 @@ declare namespace tg {
 	/** Write to the log. */
 	export let log: (...args: Array<unknown>) => void;
 
+	export function mutation<T extends Value = Value>(
+		arg: Unresolved<Mutation.Arg<T>>,
+	): Promise<Mutation<T>>;
+
+	export class Mutation<T extends Value = Value> {
+		static is(value: unknown): value is Mutation;
+
+		static expect(value: unknown): Mutation;
+
+		static assert(value: unknown): asserts value is Mutation;
+
+		get inner(): Mutation.Inner;
+	}
+
+	export namespace Mutation {
+		export type MaybeMutationMap<T extends Value = Value> = T extends
+			| undefined
+			| boolean
+			| number
+			| string
+			| Uint8Array
+			| Blob
+			| Directory
+			| File
+			| Symlink
+			| Template
+			| Mutation
+			| Package
+			| Target
+			| Array<infer _U extends Value>
+			? T
+			: T extends { [key: string]: Value }
+			? MutationMap<T>
+			: never;
+
+		export type MutationMap<
+			T extends { [key: string]: Value } = { [key: string]: Value },
+		> = {
+			[K in keyof T]?: MaybeMutation<T[K]>;
+		};
+
+		export type MaybeMutation<T extends Value = Value> = T | Mutation<T>;
+
+		export type Arg<T extends Value = Value> =
+			| { kind: "unset" }
+			| { kind: "set"; value: T }
+			| { kind: "set_if_unset"; value: T }
+			| {
+					kind: "array_prepend";
+					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+			  }
+			| {
+					kind: "array_append";
+					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+			  }
+			| {
+					kind: "template_prepend";
+					value: T extends Template.Arg ? Template.Arg : never;
+					separator?: Template.Arg;
+			  }
+			| {
+					kind: "template_append";
+					value: T extends Template.Arg ? Template.Arg : never;
+					separator?: Template.Arg;
+			  };
+
+		export type Inner =
+			| { kind: "unset" }
+			| { kind: "set"; value: Value }
+			| { kind: "set_if_unset"; value: Value }
+			| {
+					kind: "array_prepend";
+					value: Array<Value>;
+			  }
+			| {
+					kind: "array_append";
+					value: Array<Value>;
+			  }
+			| {
+					kind: "template_prepend";
+					value: Template;
+					separator: Template;
+			  }
+			| {
+					kind: "template_append";
+					value: Template;
+					separator: Template;
+			  };
+	}
 	/** A package. */
 	export class Package {
 		/** Get a package with an ID. */
@@ -657,7 +657,7 @@ declare namespace tg {
 			name?: string | undefined;
 
 			/** The target's environment variables. */
-			env?: Args.MutationObject;
+			env?: Mutation.MutationMap;
 
 			/** The target's command line arguments. */
 			args?: Array<Value>;
