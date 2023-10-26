@@ -2970,12 +2970,14 @@ dependencies = [
  "futures",
  "indoc",
  "itertools",
+ "libc",
  "serde",
  "serde_json",
  "tangram_client",
  "tangram_lsp",
  "tangram_package",
  "tangram_server",
+ "tangram_util",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3185,6 +3187,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+ "url",
 ]
 
 [[package]]

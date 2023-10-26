@@ -26,7 +26,7 @@ mod publish;
 mod remove;
 mod run;
 mod search;
-mod serve;
+pub(crate) mod serve;
 mod shell;
 mod test;
 mod tree;

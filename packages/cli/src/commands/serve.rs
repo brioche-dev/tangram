@@ -1,93 +1,47 @@
 use crate::{util::dirs::home_directory_path, Cli, API_URL};
-use std::{
-	net::{IpAddr, SocketAddr},
-	path::PathBuf,
-};
+use std::path::PathBuf;
 use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_util::addr::Addr;
+use tg::{return_error, Result, WrapErr};
 
 /// Run a server.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Args {
 	/// The host to bind the server to.
-	#[command(subcommand)]
-	pub addr: Addr,
+	#[arg(long, value_parser = parse_addr)]
+	pub addr: Option<Addr>,
 
 	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
 	#[arg(long, env = "TANGRAM_PATH")]
 	pub path: Option<PathBuf>,
 
-	#[arg(long, default_value = "start")]
-	pub command: Command,
+	#[arg(long)]
+	pub start: bool,
+
+	#[arg(long)]
+	pub stop: bool,
+
+	#[arg(long)]
+	pub ping: bool,
 
 	#[arg(long)]
 	pub daemonize: bool,
 }
 
-#[derive(Copy, Clone, Debug, clap::ValueEnum)]
-pub enum Command {
-	Start,
-	Stop,
-	Ping,
-}
-
-#[derive(Debug, clap::Subcommand)]
-pub enum Addr {
-	Inet {
-		#[arg(long, default_value = "0.0.0.0")]
-		host: IpAddr,
-
-		#[arg(long, default_value = "8476")]
-		port: u16,
-	},
-	Socket {
-		#[arg(long)]
-		path: PathBuf,
-	},
+fn parse_addr(s: &str) -> Result<Addr, String> {
+	s.parse().map_err(|_| "Failed to parse address.".to_owned())
 }
 
 impl Cli {
 	pub async fn command_serve(&self, args: Args) -> Result<()> {
-		let addr = match args.command {
-			Command::Ping => {
-				let addr = match args.addr {
-					Addr::Inet { host, port } => {
-						tg::remote::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
-					},
-					Addr::Socket { path } => tg::remote::Addr::Socket(path),
-				};
-				let client = tg::Remote::new(addr, None)
-					.await
-					.wrap_err("Failed to create client.")?;
-				client.ping().await?;
-				println!("Server online.");
-				return Ok(());
-			},
-			Command::Stop => {
-				let addr = match args.addr {
-					Addr::Inet { host, port } => {
-						tg::remote::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
-					},
-					Addr::Socket { path } => tg::remote::Addr::Socket(path),
-				};
-				let client = tg::Remote::new(addr, None)
-					.await
-					.wrap_err("Failed to create client.")?;
-				let _ = client.stop().await;
-				return Ok(());
-			},
-			Command::Start => match args.addr {
-				Addr::Inet { host, port } => {
-					tangram_server::Addr::Inet(SocketAddr::new(host, port))
-				},
-				Addr::Socket { path } => tangram_server::Addr::Socket(path),
-			},
-		};
-
-		// Daemonize.
-		if args.daemonize {
-			daemonize().wrap_err("Failed to daemonize the server.")?;
+		if [args.start, args.ping, args.stop]
+			.into_iter()
+			.fold(0, |acc, flag| if flag { acc + 1 } else { acc })
+			!= 1
+		{
+			return_error!("tg serve requires exactly one of: --start, --stop, --ping.");
 		}
 
 		// Get the path.
@@ -98,6 +52,24 @@ impl Cli {
 				.wrap_err("Failed to find the user home directory.")?
 				.join(".tangram")
 		};
+
+		// Get the addr.
+		let addr = args.addr.unwrap_or(Addr::Socket(path.join("socket")));
+
+		// Ping or stop, if necessary.
+		if args.ping || args.stop {
+			let client = tg::Remote::new(addr.clone(), None)
+				.await
+				.wrap_err("Failed to create client.")?;
+			if args.ping {
+				client.ping().await?;
+				return Ok(());
+			}
+			if args.stop {
+				let _ = client.ping().await;
+				return Ok(());
+			}
+		}
 
 		// Read the config.
 		let config = Self::read_config().await?;
@@ -115,34 +87,20 @@ impl Cli {
 		let parent_token = credentials.map(|credentials| credentials.token);
 
 		// Create the parent.
-		let _parent = tangram_client::remote::Remote::new(
-			tangram_client::remote::Addr::Inet(parent_url),
-			parent_token,
-		);
+		let _parent = tangram_client::remote::Remote::new(Addr::Inet(parent_url), parent_token);
 
 		// Create the server.
 		let server = tangram_server::Server::new(path, None).await?;
 
 		// Serve.
-		server
-			.serve(addr)
-			.await
-			.wrap_err("Failed to run the server.")?;
+		let server_task = tokio::task::spawn(async move {
+			server
+				.serve(addr)
+				.await
+				.wrap_err("Failed to run the server.")
+		});
 
+		server_task.await.wrap_err("Failed to join server task")??;
 		Ok(())
 	}
-}
-
-extern "C" {
-	fn daemon(nochdir: i32, noclose: i32) -> i32;
-}
-
-fn daemonize() -> std::io::Result<()> {
-	unsafe {
-		let err = daemon(1, 1);
-		if err != 0 {
-			return Err(std::io::Error::last_os_error());
-		}
-	}
-	Ok(())
 }

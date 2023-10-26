@@ -10,7 +10,9 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::{RwLock, Weak};
 use std::{path::PathBuf, sync::Arc};
-use tangram_util::{bytes_stream, empty, full, BodyExt, Incoming, Outgoing, ResponseExt};
+use tangram_util::{
+	addr::Addr, bytes_stream, empty, full, BodyExt, Incoming, Outgoing, ResponseExt,
+};
 use tokio::io::AsyncBufReadExt;
 use tokio::net::{TcpStream, UnixStream};
 use tokio_rustls::{TlsConnector, TlsStream};
@@ -25,7 +27,7 @@ pub struct Remote {
 
 #[derive(Debug)]
 struct State {
-	addr: Addr,
+	addr: tangram_util::addr::Addr,
 	sender: hyper::client::conn::http2::SendRequest<Outgoing>,
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	token: std::sync::RwLock<Option<String>>,
@@ -43,11 +45,11 @@ struct SetForPathBody {
 	id: Id,
 }
 
-#[derive(Debug)]
-pub enum Addr {
-	Inet(Url),
-	Socket(PathBuf),
-}
+// #[derive(Debug)]
+// pub enum Addr {
+// 	Inet(Url),
+// 	Socket(PathBuf),
+// }
 
 impl Handle for Weak<State> {
 	fn upgrade(&self) -> Option<Box<dyn Client>> {
@@ -58,15 +60,7 @@ impl Handle for Weak<State> {
 
 impl Remote {
 	pub async fn new(addr: Addr, token: Option<String>) -> Result<Self> {
-		let is_local = match &addr {
-			Addr::Inet(url) => url.host().map_or(false, |host| match host {
-				url::Host::Domain(domain) => domain == "localhost",
-				url::Host::Ipv4(ip) => ip.is_loopback(),
-				url::Host::Ipv6(ip) => ip.is_loopback(),
-			}),
-			Addr::Socket(_) => true,
-		};
-
+		let is_local = addr.is_local();
 		let exec = hyper_util::rt::TokioExecutor::new();
 		let sender = match &addr {
 			Addr::Inet(url) if url.scheme() == "https" => {

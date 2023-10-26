@@ -6,6 +6,8 @@ use http_body::Frame;
 use http_body_util::BodyStream;
 use tokio::io::AsyncReadExt;
 
+pub mod addr;
+
 pub type Incoming = hyper::body::Incoming;
 pub type Outgoing = http_body_util::combinators::UnsyncBoxBody<
 	::bytes::Bytes,

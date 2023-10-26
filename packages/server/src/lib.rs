@@ -14,7 +14,10 @@ use std::{
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
-use tangram_util::{full, ok, Incoming, Outgoing};
+use tangram_util::{
+	addr::{Addr, Listener},
+	full, ok, Incoming, Outgoing,
+};
 use tg::{return_error, Result, WrapErr};
 
 mod build;
@@ -34,12 +37,6 @@ pub struct Server {
 #[derive(Clone, Debug)]
 pub struct Handle {
 	state: Weak<State>,
-}
-
-#[derive(Clone, Debug)]
-pub enum Addr {
-	Inet(SocketAddr),
-	Socket(PathBuf),
 }
 
 /// Server state.
@@ -192,72 +189,33 @@ impl Server {
 	}
 
 	pub async fn serve(self, addr: Addr) -> Result<()> {
-		match addr {
-			Addr::Inet(addr) => {
-				let listener = tokio::net::TcpListener::bind(&addr)
+		let listener = Listener::bind(&addr)
+			.await
+			.wrap_err("Failed to create a new tcp listener.")?;
+		tracing::info!("🚀 Serving on {addr:?}.");
+		loop {
+			let stream = listener
+				.accept()
+				.await
+				.wrap_err("Failed to accept new incoming connections.")?;
+			let server = self.clone();
+			tokio::spawn(async move {
+				hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
+					.serve_connection(
+						stream,
+						hyper::service::service_fn(move |request| {
+							let server = server.clone();
+							async move {
+								tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
+								let response = server.handle_request(request).await;
+								tracing::info!(status = ?response.status(), "Sending response.");
+								Ok::<_, Infallible>(response)
+							}
+						}),
+					)
 					.await
-					.wrap_err("Failed to create a new tcp listener.")?;
-				tracing::info!("🚀 Serving on {}.", addr);
-				loop {
-					let (stream, _) = listener
-						.accept()
-						.await
-						.wrap_err("Failed to accept new incoming connections.")?;
-					let stream = hyper_util::rt::TokioIo::new(stream);
-					let server = self.clone();
-					tokio::spawn(async move {
-						hyper::server::conn::http2::Builder::new(
-							hyper_util::rt::TokioExecutor::new(),
-						)
-						.serve_connection(
-							stream,
-							hyper::service::service_fn(move |request| {
-								let server = server.clone();
-								async move {
-									tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
-									let response = server.handle_request(request).await;
-									tracing::info!(status = ?response.status(), "Sending response.");
-									Ok::<_, Infallible>(response)
-								}
-							}),
-						)
-						.await
-						.ok()
-					});
-				}
-			},
-			Addr::Socket(path) => {
-				let listener = tokio::net::UnixListener::bind(&path)
-					.wrap_err("Failed to create a new socket listener.")?;
-				tracing::info!("🚀 Serving on socket {path:#?}.");
-				loop {
-					let (stream, _) = listener
-						.accept()
-						.await
-						.wrap_err("Failed to accept new incoming connections.")?;
-					let stream = hyper_util::rt::TokioIo::new(stream);
-					let server = self.clone();
-					tokio::spawn(async move {
-						hyper::server::conn::http2::Builder::new(
-							hyper_util::rt::TokioExecutor::new(),
-						)
-						.serve_connection(
-							stream,
-							hyper::service::service_fn(move |request| {
-								let server = server.clone();
-								async move {
-									tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
-									let response = server.handle_request(request).await;
-									tracing::info!(status = ?response.status(), "Sending response.");
-									Ok::<_, Infallible>(response)
-								}
-							}),
-						)
-						.await
-						.ok()
-					});
-				}
-			},
+					.ok()
+			});
 		}
 	}
 
