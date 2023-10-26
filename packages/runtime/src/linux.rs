@@ -949,7 +949,6 @@ fn stream_log_to_progress(
 				Err(_) => break,
 				Ok(size) => {
 					let bytes = &chunk[0..size];
-					let string = String::from_utf8_lossy(bytes);
 					progress.log(bytes.to_vec().into());
 				},
 			}
