@@ -15,6 +15,16 @@ declare namespace tg {
 
 	export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
 
+	export let apply: <
+		A extends Value = Value,
+		R extends { [key: string]: Value } = { [key: string]: Value },
+	>(
+		args: Args<A>,
+		map: (
+			arg: Exclude<A, Array<Value>>,
+		) => Promise<MaybeNestedArray<Mutation.MutationMap<R>>>,
+	) => Promise<Partial<R>>;
+
 	/** An artifact. */
 	export type Artifact = Directory | File | Symlink;
 
