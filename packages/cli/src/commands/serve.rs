@@ -115,8 +115,8 @@ impl Cli {
 		let parent_token = credentials.map(|credentials| credentials.token);
 
 		// Create the parent.
-		let _parent = tangram_client::hyper::Hyper::new(
-			tangram_client::hyper::Addr::Inet(parent_url),
+		let _parent = tangram_client::remote::Remote::new(
+			tangram_client::remote::Addr::Inet(parent_url),
 			parent_token,
 		);
 

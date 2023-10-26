@@ -19,7 +19,7 @@ pub use self::{
 	object::Object,
 	package::Package,
 	path::{Relpath, Subpath},
-	hyper::Hyper,
+	remote::Remote,
 	symlink::Symlink,
 	system::System,
 	target::Target,
@@ -42,7 +42,7 @@ pub mod checksum;
 pub mod directory;
 pub mod error;
 pub mod file;
-pub mod hyper;
+pub mod remote;
 pub mod id;
 pub mod leaf;
 pub mod mutation;

@@ -19,7 +19,7 @@ use tokio_util::io::StreamReader;
 use url::Url;
 
 #[derive(Debug, Clone)]
-pub struct Hyper {
+pub struct Remote {
 	state: Arc<State>,
 }
 
@@ -52,11 +52,11 @@ pub enum Addr {
 impl Handle for Weak<State> {
 	fn upgrade(&self) -> Option<Box<dyn Client>> {
 		self.upgrade()
-			.map(|state| Box::new(Hyper { state }) as Box<dyn Client>)
+			.map(|state| Box::new(Remote { state }) as Box<dyn Client>)
 	}
 }
 
-impl Hyper {
+impl Remote {
 	pub async fn new(addr: Addr, token: Option<String>) -> Result<Self> {
 		let is_local = match &addr {
 			Addr::Inet(url) => url.host().map_or(false, |host| match host {
@@ -206,7 +206,7 @@ async fn tls_stream(
 }
 
 #[async_trait]
-impl Client for Hyper {
+impl Client for Remote {
 	fn clone_box(&self) -> Box<dyn Client> {
 		Box::new(self.clone())
 	}

@@ -58,7 +58,7 @@ async fn main_inner() -> Result<()> {
 		None
 	} else {
 		let client =
-			tangram_client::hyper::Hyper::new(tangram_client::hyper::Addr::Inet(url), None).await?;
+			tangram_client::remote::Remote::new(tangram_client::remote::Addr::Inet(url), None).await?;
 		Some(Box::new(client) as Box<dyn tg::Client>)
 	};
 
