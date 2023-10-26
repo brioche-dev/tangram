@@ -2,7 +2,7 @@ use crate::{util::dirs::home_directory_path, Cli, API_URL};
 use std::path::PathBuf;
 use tangram_client as tg;
 use tangram_util::addr::Addr;
-use tg::{return_error, Result, WrapErr};
+use tg::{Result, WrapErr};
 
 /// Run a server.
 #[derive(Debug, clap::Args)]
@@ -17,14 +17,8 @@ pub struct Args {
 	#[arg(long, env = "TANGRAM_PATH")]
 	pub path: Option<PathBuf>,
 
-	#[arg(long)]
-	pub start: bool,
-
-	#[arg(long)]
-	pub stop: bool,
-
-	#[arg(long)]
-	pub ping: bool,
+	#[arg(long, default_value = "start")]
+	pub command: Action,
 
 	#[arg(long)]
 	pub daemonize: bool,
@@ -34,16 +28,15 @@ fn parse_addr(s: &str) -> Result<Addr, String> {
 	s.parse().map_err(|_| "Failed to parse address.".to_owned())
 }
 
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+pub enum Action {
+	Start,
+	Stop,
+	Ping,
+}
+
 impl Cli {
 	pub async fn command_serve(&self, args: Args) -> Result<()> {
-		if [args.start, args.ping, args.stop]
-			.into_iter()
-			.fold(0, |acc, flag| if flag { acc + 1 } else { acc })
-			!= 1
-		{
-			return_error!("tg serve requires exactly one of: --start, --stop, --ping.");
-		}
-
 		// Get the path.
 		let path = if let Some(path) = args.path.clone() {
 			path
@@ -57,18 +50,21 @@ impl Cli {
 		let addr = args.addr.unwrap_or(Addr::Socket(path.join("socket")));
 
 		// Ping or stop, if necessary.
-		if args.ping || args.stop {
-			let client = tg::Remote::new(addr.clone(), None)
-				.await
-				.wrap_err("Failed to create client.")?;
-			if args.ping {
+		match args.command {
+			Action::Ping => {
+				let client = tg::Remote::new(addr.clone(), None)
+					.await
+					.wrap_err("Failed to create client.")?;
 				client.ping().await?;
-				return Ok(());
-			}
-			if args.stop {
+			},
+			Action::Stop => {
+				let client = tg::Remote::new(addr.clone(), None)
+					.await
+					.wrap_err("Failed to create client.")?;
 				let _ = client.ping().await;
 				return Ok(());
-			}
+			},
+			Action::Start => (),
 		}
 
 		// Read the config.

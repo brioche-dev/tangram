@@ -8,7 +8,6 @@ use std::{
 	collections::HashMap,
 	convert::Infallible,
 	ffi::OsStr,
-	net::SocketAddr,
 	os::unix::prelude::OsStrExt,
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},

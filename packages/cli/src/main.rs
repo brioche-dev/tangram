@@ -79,9 +79,7 @@ fn main_inner() -> Result<()> {
 				} else {
 					let cli = Cli { client: None };
 					let args = commands::serve::Args {
-						start: true,
-						stop: false,
-						ping: false,
+						command: commands::serve::Action::Start,
 						addr: Some(addr.clone()),
 						path: Some(path),
 						daemonize: false,
