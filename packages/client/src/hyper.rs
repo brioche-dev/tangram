@@ -131,6 +131,30 @@ impl Hyper {
 			.await
 			.wrap_err("Failed to send request.")
 	}
+
+	pub async fn stop(&self) -> Result<()> {
+		let request = self
+			.request(http::Method::PUT, "/v1/stop")
+			.body(empty())
+			.wrap_err("Failed to create request.")?;
+		self.send(request)
+			.await?
+			.error_for_status()
+			.map_err(|_| error!("Failed to shutdown server."))?;
+		Ok(())
+	}
+
+	pub async fn ping(&self) -> Result<()> {
+		let request = self
+			.request(http::Method::GET, "/v1/ping")
+			.body(empty())
+			.wrap_err("Failed to create request.")?;
+		self.send(request)
+			.await?
+			.error_for_status()
+			.map_err(|_| error!("Failed to ping server."))?;
+		Ok(())
+	}
 }
 
 async fn tcp_stream(url: &Url) -> Result<TcpStream> {

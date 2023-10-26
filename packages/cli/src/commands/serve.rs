@@ -11,20 +11,85 @@ use tg::{Result, WrapErr};
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	/// The host to bind the server to.
-	#[arg(long, default_value = "0.0.0.0")]
-	pub host: IpAddr,
-
-	/// The port to bind the server to.
-	#[arg(long, default_value = "8476")]
-	pub port: u16,
+	#[command(subcommand)]
+	pub addr: Addr,
 
 	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
 	#[arg(long, env = "TANGRAM_PATH")]
 	pub path: Option<PathBuf>,
+
+	#[arg(long, default_value = "start")]
+	pub command: Command,
+
+	#[arg(long)]
+	pub daemonize: bool,
+}
+
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+pub enum Command {
+	Start,
+	Stop,
+	Ping,
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum Addr {
+	Inet {
+		#[arg(long, default_value = "0.0.0.0")]
+		host: IpAddr,
+
+		#[arg(long, default_value = "8476")]
+		port: u16,
+	},
+	Socket {
+		#[arg(long)]
+		path: PathBuf,
+	},
 }
 
 impl Cli {
 	pub async fn command_serve(&self, args: Args) -> Result<()> {
+		let addr = match args.command {
+			Command::Ping => {
+				let addr = match args.addr {
+					Addr::Inet { host, port } => {
+						tg::hyper::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
+					},
+					Addr::Socket { path } => tg::hyper::Addr::Socket(path),
+				};
+				let client = tg::hyper::Hyper::new(addr, None)
+					.await
+					.wrap_err("Failed to create client.")?;
+				client.ping().await?;
+				println!("Server online.");
+				return Ok(());
+			},
+			Command::Stop => {
+				let addr = match args.addr {
+					Addr::Inet { host, port } => {
+						tg::hyper::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
+					},
+					Addr::Socket { path } => tg::hyper::Addr::Socket(path),
+				};
+				let client = tg::hyper::Hyper::new(addr, None)
+					.await
+					.wrap_err("Failed to create client.")?;
+				let _ = client.stop().await;
+				return Ok(());
+			},
+			Command::Start => match args.addr {
+				Addr::Inet { host, port } => {
+					tangram_server::Addr::Inet(SocketAddr::new(host, port))
+				},
+				Addr::Socket { path } => tangram_server::Addr::Socket(path),
+			},
+		};
+
+		// Daemonize.
+		if args.daemonize {
+			daemonize().wrap_err("Failed to daemonize the server.")?;
+		}
+
 		// Get the path.
 		let path = if let Some(path) = args.path.clone() {
 			path
@@ -59,7 +124,6 @@ impl Cli {
 		let server = tangram_server::Server::new(path, None).await?;
 
 		// Serve.
-		let addr = SocketAddr::new(args.host, args.port);
 		server
 			.serve(addr)
 			.await
@@ -67,4 +131,18 @@ impl Cli {
 
 		Ok(())
 	}
+}
+
+extern "C" {
+	fn daemon(nochdir: i32, noclose: i32) -> i32;
+}
+
+fn daemonize() -> std::io::Result<()> {
+	unsafe {
+		let err = daemon(1, 1);
+		if err != 0 {
+			return Err(std::io::Error::last_os_error());
+		}
+	}
+	Ok(())
 }

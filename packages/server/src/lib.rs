@@ -14,8 +14,8 @@ use std::{
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
-use tangram_util::{full, Incoming, Outgoing};
-use tg::{Result, WrapErr};
+use tangram_util::{full, ok, Incoming, Outgoing};
+use tg::{return_error, Result, WrapErr};
 
 mod build;
 mod clean;
@@ -34,6 +34,12 @@ pub struct Server {
 #[derive(Clone, Debug)]
 pub struct Handle {
 	state: Weak<State>,
+}
+
+#[derive(Clone, Debug)]
+pub enum Addr {
+	Inet(SocketAddr),
+	Socket(PathBuf),
 }
 
 /// Server state.
@@ -185,35 +191,73 @@ impl Server {
 		&self.state.file_descriptor_semaphore
 	}
 
-	pub async fn serve(self, addr: SocketAddr) -> Result<()> {
-		let listener = tokio::net::TcpListener::bind(&addr)
-			.await
-			.wrap_err("Failed to create a new tcp listener.")?;
-		tracing::info!("🚀 Serving on {}.", addr);
-		loop {
-			let (stream, _) = listener
-				.accept()
-				.await
-				.wrap_err("Failed to accept new incoming connections.")?;
-			let stream = hyper_util::rt::TokioIo::new(stream);
-			let server = self.clone();
-			tokio::spawn(async move {
-				hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
-					.serve_connection(
-						stream,
-						hyper::service::service_fn(move |request| {
-							let server = server.clone();
-							async move {
-								tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
-								let response = server.handle_request(request).await;
-								tracing::info!(status = ?response.status(), "Sending response.");
-								Ok::<_, Infallible>(response)
-							}
-						}),
-					)
+	pub async fn serve(self, addr: Addr) -> Result<()> {
+		match addr {
+			Addr::Inet(addr) => {
+				let listener = tokio::net::TcpListener::bind(&addr)
 					.await
-					.ok()
-			});
+					.wrap_err("Failed to create a new tcp listener.")?;
+				tracing::info!("🚀 Serving on {}.", addr);
+				loop {
+					let (stream, _) = listener
+						.accept()
+						.await
+						.wrap_err("Failed to accept new incoming connections.")?;
+					let stream = hyper_util::rt::TokioIo::new(stream);
+					let server = self.clone();
+					tokio::spawn(async move {
+						hyper::server::conn::http2::Builder::new(
+							hyper_util::rt::TokioExecutor::new(),
+						)
+						.serve_connection(
+							stream,
+							hyper::service::service_fn(move |request| {
+								let server = server.clone();
+								async move {
+									tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
+									let response = server.handle_request(request).await;
+									tracing::info!(status = ?response.status(), "Sending response.");
+									Ok::<_, Infallible>(response)
+								}
+							}),
+						)
+						.await
+						.ok()
+					});
+				}
+			},
+			Addr::Socket(path) => {
+				let listener = tokio::net::UnixListener::bind(&path)
+					.wrap_err("Failed to create a new socket listener.")?;
+				tracing::info!("🚀 Serving on socket {path:#?}.");
+				loop {
+					let (stream, _) = listener
+						.accept()
+						.await
+						.wrap_err("Failed to accept new incoming connections.")?;
+					let stream = hyper_util::rt::TokioIo::new(stream);
+					let server = self.clone();
+					tokio::spawn(async move {
+						hyper::server::conn::http2::Builder::new(
+							hyper_util::rt::TokioExecutor::new(),
+						)
+						.serve_connection(
+							stream,
+							hyper::service::service_fn(move |request| {
+								let server = server.clone();
+								async move {
+									tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
+									let response = server.handle_request(request).await;
+									tracing::info!(status = ?response.status(), "Sending response.");
+									Ok::<_, Infallible>(response)
+								}
+							}),
+						)
+						.await
+						.ok()
+					});
+				}
+			},
 		}
 	}
 
@@ -221,6 +265,14 @@ impl Server {
 		let method = request.method().clone();
 		let path_components = request.uri().path().split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
+			// Ping
+			(http::Method::GET, ["v1", "ping"]) => {
+				self.handle_ping_request(request).map(Some).boxed()
+			},
+			// Stop
+			(http::Method::PUT, ["v1", "stop"]) => {
+				self.handle_stop_request(request).map(Some).boxed()
+			},
 			// Clean
 			(http::Method::POST, ["v1", "clean"]) => {
 				self.handle_clean_request(request).map(Some).boxed()
@@ -284,6 +336,29 @@ impl Server {
 			},
 			Some(Ok(response)) => response,
 		}
+	}
+
+	async fn handle_ping_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let ["v1", "ping"] = path_components.as_slice() else {
+			return_error!("Unexpected path.")
+		};
+		Ok(ok())
+	}
+
+	async fn handle_stop_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let ["v1", "stop"] = path_components.as_slice() else {
+			return_error!("Unexpected path.")
+		};
+		std::process::exit(0);
+		// Ok(ok())
 	}
 }
 
