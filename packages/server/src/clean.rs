@@ -1,7 +1,7 @@
 use super::Server;
-use crate::{empty, Incoming, Outgoing};
 use lmdb::Transaction;
 use tangram_client as tg;
+use tangram_util::{empty, Incoming, Outgoing};
 use tg::{Result, WrapErr};
 
 impl Server {

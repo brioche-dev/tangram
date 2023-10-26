@@ -50,7 +50,10 @@ impl Cli {
 		let parent_token = credentials.map(|credentials| credentials.token);
 
 		// Create the parent.
-		let _parent = tangram_client::reqwest::Reqwest::new(parent_url, parent_token);
+		let _parent = tangram_client::hyper::Hyper::new(
+			tangram_client::hyper::Addr::Url(parent_url),
+			parent_token,
+		);
 
 		// Create the server.
 		let server = tangram_server::Server::new(path, None).await?;
