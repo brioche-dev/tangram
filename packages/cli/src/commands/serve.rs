@@ -53,11 +53,11 @@ impl Cli {
 			Command::Ping => {
 				let addr = match args.addr {
 					Addr::Inet { host, port } => {
-						tg::hyper::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
+						tg::remote::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
 					},
-					Addr::Socket { path } => tg::hyper::Addr::Socket(path),
+					Addr::Socket { path } => tg::remote::Addr::Socket(path),
 				};
-				let client = tg::hyper::Hyper::new(addr, None)
+				let client = tg::Remote::new(addr, None)
 					.await
 					.wrap_err("Failed to create client.")?;
 				client.ping().await?;
@@ -67,11 +67,11 @@ impl Cli {
 			Command::Stop => {
 				let addr = match args.addr {
 					Addr::Inet { host, port } => {
-						tg::hyper::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
+						tg::remote::Addr::Inet(format!("http://{host}:{port}").parse().unwrap())
 					},
-					Addr::Socket { path } => tg::hyper::Addr::Socket(path),
+					Addr::Socket { path } => tg::remote::Addr::Socket(path),
 				};
-				let client = tg::hyper::Hyper::new(addr, None)
+				let client = tg::Remote::new(addr, None)
 					.await
 					.wrap_err("Failed to create client.")?;
 				let _ = client.stop().await;
