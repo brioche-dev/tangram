@@ -23,7 +23,7 @@ export class Branch {
 
 	static async new(...args: Args<Branch.Arg>): Promise<Branch> {
 		type Apply = {
-			children: Array<[Blob, number]>;
+			children: Array<Branch.Child>;
 		};
 		let { children } = await apply<Branch.Arg, Apply>(args, async (arg) => {
 			if (arg === undefined) {
@@ -32,14 +32,14 @@ export class Branch {
 				return {
 					children: await mutation({
 						kind: "array_append",
-						value: [[await arg.id(), await arg.size()]],
+						values: [{ blob: arg, size: await arg.size() }],
 					}),
 				};
 			} else if (typeof arg === "object") {
 				return {
 					children: await mutation({
 						kind: "array_append",
-						value: arg.children ?? [],
+						values: arg.children ?? [],
 					}),
 				};
 			} else {
@@ -79,13 +79,13 @@ export class Branch {
 		return this.#handle;
 	}
 
-	async children(): Promise<Array<[Blob, number]>> {
+	async children(): Promise<Array<Branch.Child>> {
 		return (await this.object()).children;
 	}
 
 	async size(): Promise<number> {
 		return (await this.children())
-			.map(([_, size]) => size)
+			.map(({ size }) => size)
 			.reduce((a, b) => a + b, 0);
 	}
 
@@ -95,6 +95,10 @@ export class Branch {
 
 	async text(): Promise<string> {
 		return encoding.utf8.decode(await syscall.read(this));
+	}
+
+	async compress(format: Blob.CompressionFormat): Promise<Blob> {
+		return await syscall.compress(this, format);
 	}
 
 	async decompress(format: Blob.CompressionFormat): Promise<Blob> {
@@ -110,10 +114,12 @@ export namespace Branch {
 	export type Arg = undefined | Branch | ArgObject | Array<Arg>;
 
 	export type ArgObject = {
-		children?: Array<[Blob, number]>;
+		children?: Array<Child>;
 	};
+
+	export type Child = { blob: Blob; size: number };
 
 	export type Id = string;
 
-	export type Object_ = { children: Array<[Blob, number]> };
+	export type Object_ = { children: Array<Child> };
 }

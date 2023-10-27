@@ -1,7 +1,8 @@
 use crate::{
-	checksum::Checksum, object, package, return_error, system::System, template, value, Build,
-	Client, Package, Result, Template, Value, WrapErr,
+	checksum::Checksum, object, package, system::System, template, value, Build, Client, Package,
+	Result, Template, Value, WrapErr,
 };
+use bytes::Bytes;
 use std::collections::BTreeMap;
 
 crate::id!(Target);
@@ -42,45 +43,15 @@ pub struct Object {
 }
 
 /// Target data.
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
-	/// The system to build the target on.
-	#[tangram_serialize(id = 0)]
 	pub host: System,
-
-	/// The task's executable.
-	#[tangram_serialize(id = 1)]
 	pub executable: template::Data,
-
-	/// The target's package.
-	#[tangram_serialize(id = 2)]
 	pub package: Option<package::Id>,
-
-	/// The task's target.
-	#[tangram_serialize(id = 3)]
 	pub name: Option<String>,
-
-	/// The task's environment variables.
-	#[tangram_serialize(id = 4)]
 	pub env: BTreeMap<String, value::Data>,
-
-	/// The task's command line arguments.
-	#[tangram_serialize(id = 5)]
 	pub args: Vec<value::Data>,
-
-	/// If a checksum of the task's output is provided, then the target will have access to the network.
-	#[tangram_serialize(id = 6)]
 	pub checksum: Option<Checksum>,
-
-	/// If the target is marked as unsafe, then it will have access to the network even if a checksum is not provided.
-	#[tangram_serialize(id = 7)]
 	pub unsafe_: bool,
 }
 
@@ -173,22 +144,14 @@ impl Object {
 }
 
 impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
-			.wrap_err("Failed to write the version.")?;
-		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
-		Ok(bytes)
+	pub fn serialize(&self) -> Result<Bytes> {
+		serde_json::to_vec(self)
+			.map(Into::into)
+			.wrap_err("Failed to serialize the data.")
 	}
 
-	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version =
-			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
-		if version != 0 {
-			return_error!(r#"Cannot deserialize with version "{version}"."#);
-		}
-		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
-		Ok(value)
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
+		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
 	}
 
 	#[must_use]

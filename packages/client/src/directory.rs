@@ -1,5 +1,6 @@
-use crate::{artifact, error, object, return_error, Artifact, Client, Result, Subpath, WrapErr};
+use crate::{artifact, error, object, Artifact, Client, Result, Subpath, WrapErr};
 use async_recursion::async_recursion;
+use bytes::Bytes;
 use std::collections::BTreeMap;
 
 crate::id!(Directory);
@@ -17,17 +18,9 @@ pub struct Object {
 	pub entries: BTreeMap<String, Artifact>,
 }
 
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
 	/// The directory's entries.
-	#[tangram_serialize(id = 0)]
 	pub entries: BTreeMap<String, artifact::Id>,
 }
 
@@ -126,22 +119,14 @@ impl Object {
 }
 
 impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
-			.wrap_err("Failed to write the version.")?;
-		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
-		Ok(bytes)
+	pub fn serialize(&self) -> Result<Bytes> {
+		serde_json::to_vec(self)
+			.map(Into::into)
+			.wrap_err("Failed to serialize the data.")
 	}
 
-	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version =
-			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
-		if version != 0 {
-			return_error!(r#"Cannot deserialize with version "{version}"."#);
-		}
-		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
-		Ok(value)
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
+		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
 	}
 
 	#[must_use]

@@ -26,9 +26,11 @@ pub fn syscall<'s>(
 
 	// Invoke the syscall.
 	let result = match name.as_str() {
+		"archive" => syscall_async(scope, &args, syscall_archive),
 		"build" => syscall_async(scope, &args, syscall_build),
 		"bundle" => syscall_async(scope, &args, syscall_bundle),
 		"checksum" => syscall_sync(scope, &args, syscall_checksum),
+		"compress" => syscall_async(scope, &args, syscall_compress),
 		"decompress" => syscall_async(scope, &args, syscall_decompress),
 		"download" => syscall_async(scope, &args, syscall_download),
 		"encoding_base64_decode" => syscall_sync(scope, &args, syscall_encoding_base64_decode),
@@ -67,6 +69,12 @@ pub fn syscall<'s>(
 	}
 }
 
+async fn syscall_archive(state: Rc<State>, args: (Artifact, blob::ArchiveFormat)) -> Result<Blob> {
+	let (artifact, format) = args;
+	let blob = artifact.archive(state.client.as_ref(), format).await?;
+	Ok(blob)
+}
+
 async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 	let (target,) = args;
 	let build = target.build(state.client.as_ref()).await?;
@@ -95,6 +103,12 @@ fn syscall_checksum(
 	checksum_writer.update(&bytes);
 	let checksum = checksum_writer.finalize();
 	Ok(checksum)
+}
+
+async fn syscall_compress(state: Rc<State>, args: (Blob, blob::CompressionFormat)) -> Result<Blob> {
+	let (blob, format) = args;
+	let blob = blob.compress(state.client.as_ref(), format).await?;
+	Ok(blob)
 }
 
 async fn syscall_decompress(

@@ -1,7 +1,6 @@
 use crate::{
-	branch, directory, error, file, leaf, mutation, object, package, symlink, target, template,
-	Branch, Client, Directory, File, Leaf, Mutation, Package, Result, Symlink, Target, Template,
-	WrapErr,
+	branch, directory, file, leaf, mutation, object, package, symlink, target, template, Branch,
+	Client, Directory, File, Leaf, Mutation, Package, Result, Symlink, Target, Template, WrapErr,
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
@@ -62,62 +61,24 @@ pub enum Value {
 }
 
 /// Value data.
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum Data {
-	#[tangram_serialize(id = 0)]
 	Null(()),
-
-	#[tangram_serialize(id = 1)]
 	Bool(bool),
-
-	#[tangram_serialize(id = 2)]
 	Number(f64),
-
-	#[tangram_serialize(id = 3)]
 	String(String),
-
-	#[tangram_serialize(id = 4)]
 	Bytes(Bytes),
-
-	#[tangram_serialize(id = 5)]
 	Leaf(leaf::Id),
-
-	#[tangram_serialize(id = 6)]
 	Branch(branch::Id),
-
-	#[tangram_serialize(id = 7)]
 	Directory(directory::Id),
-
-	#[tangram_serialize(id = 8)]
 	File(file::Id),
-
-	#[tangram_serialize(id = 9)]
 	Symlink(symlink::Id),
-
-	#[tangram_serialize(id = 10)]
 	Template(template::Data),
-
-	#[tangram_serialize(id = 11)]
 	Mutation(mutation::Data),
-
-	#[tangram_serialize(id = 12)]
 	Package(package::Id),
-
-	#[tangram_serialize(id = 13)]
 	Target(target::Id),
-
-	#[tangram_serialize(id = 14)]
 	Array(Vec<Data>),
-
-	#[tangram_serialize(id = 15)]
 	Map(BTreeMap<String, Data>),
 }
 
@@ -159,22 +120,14 @@ impl Value {
 }
 
 impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
-			.wrap_err("Failed to write the version.")?;
-		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
-		Ok(bytes)
+	pub fn serialize(&self) -> Result<Bytes> {
+		serde_json::to_vec(self)
+			.map(Into::into)
+			.wrap_err("Failed to serialize the data.")
 	}
 
-	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version =
-			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
-		if version != 0 {
-			return Err(error!(r#"Cannot deserialize with version "{version}"."#));
-		}
-		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
-		Ok(value)
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
+		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
 	}
 
 	#[must_use]

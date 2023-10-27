@@ -1,11 +1,13 @@
 import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob, download } from "./blob.ts";
+import { Branch, branch } from "./branch.ts";
 import { Directory, directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { Error as Error_, prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
 import { include } from "./include.ts";
+import { Leaf, leaf } from "./leaf.ts";
 import { log } from "./log.ts";
 import { main } from "./main.ts";
 import { Args, Mutation, apply, mutation } from "./mutation.ts";
@@ -45,9 +47,11 @@ async function tg(
 Object.assign(tg, {
 	Artifact,
 	Blob,
+	Branch,
 	Directory,
 	Error: Error_,
 	File,
+	Leaf,
 	Mutation,
 	Object_,
 	Package,
@@ -59,12 +63,14 @@ Object.assign(tg, {
 	apply,
 	assert,
 	blob,
+	branch,
 	build,
 	directory,
 	download,
 	encoding,
 	file,
 	include,
+	leaf,
 	log,
 	main,
 	mutation,

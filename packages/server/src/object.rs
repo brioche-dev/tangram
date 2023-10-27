@@ -1,9 +1,9 @@
 use super::Server;
-use tangram_util::{bad_request, empty, full, not_found, Incoming, Outgoing};
-
+use bytes::Bytes;
 use futures::{stream, StreamExt, TryStreamExt};
 use lmdb::Transaction;
 use tangram_client as tg;
+use tangram_util::{bad_request, empty, full, not_found, Incoming, Outgoing};
 use tg::{object, return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::AsyncReadExt;
 
@@ -88,6 +88,7 @@ impl Server {
 		body.read_to_end(&mut bytes)
 			.await
 			.wrap_err("Failed to read the body.")?;
+		let bytes = bytes.into();
 
 		// Put the object.
 		let result = self.try_put_object_bytes(&id, &bytes).await?;
@@ -147,13 +148,13 @@ impl Server {
 		Ok(false)
 	}
 
-	pub async fn get_object_bytes(&self, id: &object::Id) -> Result<Vec<u8>> {
+	pub async fn get_object_bytes(&self, id: &object::Id) -> Result<Bytes> {
 		self.try_get_object_bytes(id)
 			.await?
 			.wrap_err("Failed to get the object.")
 	}
 
-	pub async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Vec<u8>>> {
+	pub async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		// Attempt to get the object from the database.
 		if let Some(bytes) = self.try_get_object_bytes_from_database(id)? {
 			return Ok(Some(bytes));
@@ -167,7 +168,7 @@ impl Server {
 		Ok(None)
 	}
 
-	pub fn try_get_object_bytes_from_database(&self, id: &object::Id) -> Result<Option<Vec<u8>>> {
+	pub fn try_get_object_bytes_from_database(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		let txn = self
 			.state
 			.database
@@ -175,13 +176,13 @@ impl Server {
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
 		match txn.get(self.state.database.objects, &id.to_bytes()) {
-			Ok(data) => Ok(Some(data.to_owned())),
+			Ok(data) => Ok(Some(Bytes::copy_from_slice(data))),
 			Err(lmdb::Error::NotFound) => Ok(None),
 			Err(error) => Err(error.wrap("Failed to get the object.")),
 		}
 	}
 
-	async fn try_get_object_bytes_from_parent(&self, id: &object::Id) -> Result<Option<Vec<u8>>> {
+	async fn try_get_object_bytes_from_parent(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		let Some(parent) = self.state.parent.as_ref() else {
 			return Ok(None);
 		};
@@ -218,9 +219,9 @@ impl Server {
 	pub async fn try_put_object_bytes(
 		&self,
 		id: &object::Id,
-		bytes: &[u8],
+		bytes: &Bytes,
 	) -> Result<Result<(), Vec<object::Id>>> {
-		// Deserialize the data.
+		// Deserialize the object.
 		let data = object::Data::deserialize(id.kind(), bytes)
 			.wrap_err("Failed to serialize the data.")?;
 

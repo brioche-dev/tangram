@@ -495,9 +495,9 @@ checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
 
 [[package]]
 name = "cpufeatures"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fbc60abd742b35f2492f808e1abbb83d45f72db402e14c55057edc9c7b1e9e4"
+checksum = "ce420fe07aecd3e67c5f910618fe65e94158f6dcc0adf44e00d69ce2bdfe0fd0"
 dependencies = [
  "libc",
 ]
@@ -1072,7 +1072,7 @@ dependencies = [
  "futures-util",
  "http",
  "hyper 0.14.27",
- "rustls 0.21.7",
+ "rustls 0.21.8",
  "tokio",
  "tokio-rustls 0.24.1",
 ]
@@ -1503,17 +1503,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ba157ca0885411de85d6ca030ba7e2a83a28636056c7c699b07c8b6f7383214"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "num-derive"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfb77679af88f8b125209d354a202862602672222e7f2313fdd6dc349bad4712"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.38",
 ]
 
 [[package]]
@@ -2003,7 +1992,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "rustls 0.21.7",
+ "rustls 0.21.8",
  "rustls-pemfile 1.0.3",
  "serde",
  "serde_json",
@@ -2024,6 +2013,21 @@ dependencies = [
 
 [[package]]
 name = "ring"
+version = "0.16.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
+dependencies = [
+ "cc",
+ "libc",
+ "once_cell",
+ "spin 0.5.2",
+ "untrusted 0.7.1",
+ "web-sys",
+ "winapi",
+]
+
+[[package]]
+name = "ring"
 version = "0.17.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb0205304757e5d899b9c2e448b867ffd03ae7f988002e47cd24954391394d0b"
@@ -2031,8 +2035,8 @@ dependencies = [
  "cc",
  "getrandom",
  "libc",
- "spin",
- "untrusted",
+ "spin 0.9.8",
+ "untrusted 0.9.0",
  "windows-sys 0.48.0",
 ]
 
@@ -2086,8 +2090,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "446e14c5cda4f3f30fe71863c34ec70f5ac79d6087097ad0bb433e1be5edf04c"
 dependencies = [
  "log",
- "ring",
- "rustls-webpki 0.101.6",
+ "ring 0.17.5",
+ "rustls-webpki 0.101.7",
  "sct",
 ]
 
@@ -2098,7 +2102,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ea017625a0cf2552983c14ee021fc750abf94a7462b90bf616ed771afe803aa"
 dependencies = [
  "log",
- "ring",
+ "ring 0.16.20",
  "rustls-pki-types",
  "rustls-webpki 0.102.0-alpha.3",
  "subtle",
@@ -2119,7 +2123,7 @@ version = "2.0.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4aaa4fe93b39faddb6a8f99568c3e5880680156da0d46818e884a071381f67fe"
 dependencies = [
- "base64 0.21.4",
+ "base64 0.21.5",
  "rustls-pki-types",
 ]
 
@@ -2135,8 +2139,8 @@ version = "0.101.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
 dependencies = [
- "ring",
- "untrusted",
+ "ring 0.17.5",
+ "untrusted 0.9.0",
 ]
 
 [[package]]
@@ -2145,9 +2149,9 @@ version = "0.102.0-alpha.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77fecb40b15f8d5d22e08f89e0a0bfa2c17ddd5fc385700f96920bba2b99b680"
 dependencies = [
- "ring",
+ "ring 0.16.20",
  "rustls-pki-types",
- "untrusted",
+ "untrusted 0.7.1",
 ]
 
 [[package]]
@@ -2207,8 +2211,8 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da046153aa2352493d6cb7da4b6e5c0c057d8a1d0a9aa8560baffdd945acd414"
 dependencies = [
- "ring",
- "untrusted",
+ "ring 0.17.5",
+ "untrusted 0.9.0",
 ]
 
 [[package]]
@@ -2467,6 +2471,12 @@ dependencies = [
  "unicode-id",
  "url",
 ]
+
+[[package]]
+name = "spin"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "spin"
@@ -3003,6 +3013,7 @@ dependencies = [
  "futures",
  "hex",
  "http",
+ "http-body 1.0.0-rc.2",
  "http-body-util",
  "hyper 1.0.0-rc.4",
  "hyper-util",
@@ -3020,11 +3031,10 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "tangram_serialize",
+ "tangram_error",
  "tangram_util",
  "tar",
  "tempfile",
- "thiserror",
  "tokio",
  "tokio-rustls 0.25.0-alpha.1",
  "tokio-stream",
@@ -3035,6 +3045,14 @@ dependencies = [
  "webpki-roots 0.26.0-alpha.1",
  "xattr",
  "zip",
+]
+
+[[package]]
+name = "tangram_error"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -3062,6 +3080,7 @@ dependencies = [
  "sourcemap 7.0.0",
  "swc_core",
  "tangram_client",
+ "tangram_error",
  "tempfile",
  "tokio",
  "toml",
@@ -3102,6 +3121,7 @@ dependencies = [
  "serde_yaml",
  "sourcemap 7.0.0",
  "tangram_client",
+ "tangram_error",
  "tangram_lsp",
  "tempfile",
  "tokio",
@@ -3109,31 +3129,6 @@ dependencies = [
  "toml",
  "url",
  "v8",
-]
-
-[[package]]
-name = "tangram_serialize"
-version = "0.0.0"
-dependencies = [
- "byteorder",
- "bytes",
- "num",
- "num-derive",
- "num-traits",
- "tangram_serialize_macro",
- "url",
-]
-
-[[package]]
-name = "tangram_serialize_macro"
-version = "0.0.0"
-dependencies = [
- "heck",
- "itertools",
- "num",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -3177,6 +3172,7 @@ version = "0.0.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "derive_more 1.0.0-beta.3",
  "futures",
  "http",
  "http-body 1.0.0-rc.2",
@@ -3185,6 +3181,7 @@ dependencies = [
  "hyper-util",
  "serde",
  "serde_json",
+ "tangram_error",
  "tokio",
  "tokio-util",
  "url",
@@ -3330,7 +3327,7 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
- "rustls 0.21.7",
+ "rustls 0.21.8",
  "tokio",
 ]
 
@@ -3593,6 +3590,12 @@ name = "unsafe-libyaml"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f28467d3e1d3c6586d8f25fa243f544f5800fec42d97032474e17222c2b75cfa"
+
+[[package]]
+name = "untrusted"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "untrusted"

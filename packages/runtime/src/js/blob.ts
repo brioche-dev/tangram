@@ -59,7 +59,7 @@ export namespace Blob {
 					return {
 						children: await mutation({
 							kind: "array_append" as const,
-							value: [blob],
+							values: [blob],
 						}),
 					};
 				} else if (arg instanceof Uint8Array) {
@@ -69,14 +69,14 @@ export namespace Blob {
 					return {
 						children: await mutation({
 							kind: "array_append" as const,
-							value: [blob],
+							values: [blob],
 						}),
 					};
 				} else if (Blob.is(arg)) {
 					return {
 						children: await mutation({
 							kind: "array_append" as const,
-							value: [arg],
+							values: [arg],
 						}),
 					};
 				} else {
@@ -95,8 +95,8 @@ export namespace Blob {
 			return children_[0]!;
 		} else {
 			let children = await Promise.all(
-				children_.map<Promise<[Blob, number]>>(async (child) => {
-					return [child, await child.size()];
+				children_.map<Promise<Branch.Child>>(async (blob) => {
+					return { blob, size: await blob.size() };
 				}),
 			);
 			return new Branch(

@@ -38,21 +38,21 @@ export class File {
 				Blob.is(arg)
 			) {
 				return {
-					contents: await mutation({ kind: "array_append", value: [arg] }),
+					contents: await mutation({ kind: "array_append", values: [arg] }),
 				};
 			} else if (File.is(arg)) {
 				return {
 					contents: await mutation({
 						kind: "array_append",
-						value: [await arg.contents()],
+						values: [await arg.contents()],
 					}),
 					executable: await mutation({
 						kind: "array_append",
-						value: [await arg.executable()],
+						values: [await arg.executable()],
 					}),
 					references: await mutation({
 						kind: "array_append",
-						value: [await arg.references()],
+						values: [await arg.references()],
 					}),
 				};
 			} else if (typeof arg === "object") {
@@ -60,19 +60,19 @@ export class File {
 				if (arg.contents !== undefined) {
 					ret.contents = await mutation({
 						kind: "array_append",
-						value: [arg.contents],
+						values: [arg.contents],
 					});
 				}
 				if (arg.executable !== undefined) {
 					ret.executable = await mutation({
 						kind: "array_append",
-						value: [arg.executable],
+						values: [arg.executable],
 					});
 				}
 				if (arg.references !== undefined) {
 					ret.references = await mutation({
 						kind: "array_append",
-						value: [arg.references],
+						values: [arg.references],
 					});
 				}
 				return ret;

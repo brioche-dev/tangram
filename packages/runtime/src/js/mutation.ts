@@ -44,6 +44,12 @@ export type MaybeMutation<T extends Value = Value> = T | Mutation<T>;
 
 export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
 
+export async function mutation<T extends Value = Value>(
+	arg: Unresolved<Mutation.Arg<T>>,
+): Promise<Mutation<T>> {
+	return await Mutation.new(arg);
+}
+
 export let apply = async <
 	A extends Value = Value,
 	R extends { [key: string]: Value } = { [key: string]: Value },
@@ -67,12 +73,6 @@ export let apply = async <
 	}, Promise.resolve({}));
 };
 
-export async function mutation<T extends Value = Value>(
-	arg: Unresolved<Mutation.Arg<T>>,
-): Promise<Mutation<T>> {
-	return await Mutation.new(arg);
-}
-
 export class Mutation<T extends Value = Value> {
 	#inner: Mutation.Inner;
 
@@ -85,14 +85,14 @@ export class Mutation<T extends Value = Value> {
 	): Promise<Mutation<T>> {
 		let arg = await resolve(unresolvedArg);
 		if (arg.kind === "array_prepend" || arg.kind === "array_append") {
-			return new Mutation({ kind: arg.kind, value: flatten(arg.value) });
+			return new Mutation({ kind: arg.kind, value: flatten(arg.values) });
 		} else if (
 			arg.kind === "template_prepend" ||
 			arg.kind === "template_append"
 		) {
 			return new Mutation({
 				kind: arg.kind,
-				value: await template(arg.value),
+				value: await template(arg.template),
 				separator: await template(arg.separator),
 			});
 		} else if (arg.kind === "unset") {
@@ -130,20 +130,20 @@ export namespace Mutation {
 		| { kind: "set_if_unset"; value: T }
 		| {
 				kind: "array_prepend";
-				value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+				values: T extends Array<infer U> ? MaybeNestedArray<U> : never;
 		  }
 		| {
 				kind: "array_append";
-				value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+				values: T extends Array<infer U> ? MaybeNestedArray<U> : never;
 		  }
 		| {
 				kind: "template_prepend";
-				value: T extends Template.Arg ? Template.Arg : never;
+				template: T extends Template.Arg ? Template.Arg : never;
 				separator?: Template.Arg;
 		  }
 		| {
 				kind: "template_append";
-				value: T extends Template.Arg ? Template.Arg : never;
+				template: T extends Template.Arg ? Template.Arg : never;
 				separator?: Template.Arg;
 		  };
 
@@ -239,57 +239,3 @@ let mutate = async (
 		);
 	}
 };
-
-// export async function mutation<T extends Value = Value>(arg: {
-// 	kind: "unset";
-// }): Promise<Mutation<T>>;
-// export async function mutation<T extends Value = Value>(arg: {
-// 	kind: "set";
-// 	value: T;
-// }): Promise<Mutation<T>>;
-// export async function mutation<T extends Value = Value>(arg: {
-// 	kind: "set_if_unset";
-// 	value: T;
-// }): Promise<Mutation<T>>;
-// export async function mutation<U extends Value, T extends Array<U>>(arg: {
-// 	kind: "array_prepend";
-// 	value: MaybeNestedArray<U>;
-// }): Promise<Mutation<T>>;
-// export async function mutation<T extends Value = Value>(arg: {
-// 	kind: "array_prepend";
-// 	value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
-// }): Promise<Mutation<T>>;
-// export async function set<T extends Value = Value>(
-// 	value: T,
-// ): Promise<Mutation<T>> {
-// 	return mutation({ kind: "set", value });
-// }
-// export async function mutation(
-// 	arg: Unresolved<{ kind: "unset" }>,
-// ): Promise<Mutation>;
-// export async function mutation<U extends Value>(
-// 	arg: Unresolved<{ kind: "set"; value: U }>,
-// ): Promise<Mutation<U>>;
-// export async function mutation<U extends Value>(
-// 	arg: Unresolved<{ kind: "set_if_unset"; value: U }>,
-// ): Promise<Mutation<U>>;
-// export async function mutation<U extends Value, T extends Array<U>>(
-// 	arg: Unresolved<{ kind: "array_prepend"; value: MaybeNestedArray<U> }>,
-// ): Promise<Mutation<T>>;
-// export async function mutation<U extends Value>(
-// 	arg: Unresolved<{ kind: "array_append"; value: MaybeNestedArray<U> }>,
-// ): Promise<Mutation<Array<U>>>;
-// export async function mutation(
-// 	arg: Unresolved<{
-// 		kind: "template_prepend";
-// 		value: Template.Arg;
-// 		separator?: Template.Arg;
-// 	}>,
-// ): Promise<Mutation>;
-// export async function mutation(
-// 	arg: Unresolved<{
-// 		kind: "template_append";
-// 		value: Template.Arg;
-// 		separator?: Template.Arg;
-// 	}>,
-// ): Promise<Mutation>;

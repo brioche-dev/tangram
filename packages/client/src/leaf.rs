@@ -57,13 +57,13 @@ impl Object {
 }
 
 impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		Ok(self.bytes.to_vec())
+	pub fn serialize(&self) -> Result<Bytes> {
+		Ok(self.bytes.clone())
 	}
 
-	pub fn deserialize(bytes: &[u8]) -> Result<Self> {
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
 		Ok(Self {
-			bytes: Bytes::copy_from_slice(bytes),
+			bytes: bytes.clone(),
 		})
 	}
 

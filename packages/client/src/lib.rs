@@ -11,7 +11,6 @@ pub use self::{
 	build::Build,
 	checksum::Checksum,
 	directory::Directory,
-	error::{Error, Result, Wrap, WrapErr},
 	file::File,
 	id::Id,
 	leaf::Leaf,
@@ -30,6 +29,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::BoxStream;
 use std::{fmt::Debug, path::Path};
+pub use tangram_error::{error, return_error, Error, Result, Wrap, WrapErr};
 
 pub mod artifact;
 pub mod blob;
@@ -40,7 +40,6 @@ pub mod checkin;
 pub mod checkout;
 pub mod checksum;
 pub mod directory;
-pub mod error;
 pub mod file;
 pub mod id;
 pub mod leaf;
@@ -81,19 +80,19 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn get_object_exists(&self, id: &object::Id) -> Result<bool>;
 
-	async fn get_object_bytes(&self, id: &object::Id) -> Result<Vec<u8>> {
+	async fn get_object_bytes(&self, id: &object::Id) -> Result<Bytes> {
 		Ok(self
 			.try_get_object_bytes(id)
 			.await?
 			.wrap_err("Failed to get the object.")?)
 	}
 
-	async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Vec<u8>>>;
+	async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Bytes>>;
 
 	async fn try_put_object_bytes(
 		&self,
 		id: &object::Id,
-		bytes: &[u8],
+		bytes: &Bytes,
 	) -> Result<Result<(), Vec<object::Id>>>;
 
 	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>>;

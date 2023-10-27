@@ -1,5 +1,6 @@
 [package]
 name = "tangram_util"
+
 authors.workspace = true
 description.workspace = true
 edition.workspace = true
@@ -10,7 +11,8 @@ version.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-bytes  = { workspace = true }
+bytes = { workspace = true }
+derive_more = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
@@ -19,6 +21,7 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tangram_error = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }

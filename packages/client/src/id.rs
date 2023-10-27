@@ -4,20 +4,8 @@ use derive_more::{From, Into};
 use varint_rs::{VarintReader, VarintWriter};
 
 /// An ID.
-#[derive(
-	Clone,
-	Eq,
-	Hash,
-	Ord,
-	PartialEq,
-	PartialOrd,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize)]
 #[serde(into = "String", try_from = "String")]
-#[tangram_serialize(into = "String", try_from = "String")]
 pub enum Id {
 	V0(V0),
 }

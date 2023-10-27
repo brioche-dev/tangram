@@ -21,19 +21,8 @@ pub enum Kind {
 }
 
 /// An object ID.
-#[derive(
-	Clone,
-	Debug,
-	From,
-	TryInto,
-	TryUnwrap,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, From, TryInto, TryUnwrap, serde::Deserialize, serde::Serialize)]
 #[serde(into = "crate::Id", try_from = "crate::Id")]
-#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
 pub enum Id {
 	Leaf(leaf::Id),
 	Branch(branch::Id),
@@ -274,13 +263,6 @@ impl Handle {
 		Ok(true)
 	}
 
-	pub fn unload(&self) {
-		let mut state = self.state.write().unwrap();
-		if state.id.is_some() {
-			state.object.take();
-		}
-	}
-
 	#[async_recursion::async_recursion]
 	pub async fn store(&self, client: &dyn Client) -> Result<()> {
 		// If the handle is stored, then return.
@@ -420,7 +402,7 @@ impl Object {
 
 impl Data {
 	#[allow(unused)]
-	pub fn serialize(&self) -> Result<Vec<u8>> {
+	pub fn serialize(&self) -> Result<Bytes> {
 		match self {
 			Self::Leaf(data) => Ok(data.serialize()?),
 			Self::Branch(data) => Ok(data.serialize()?),
@@ -433,7 +415,7 @@ impl Data {
 		}
 	}
 
-	pub fn deserialize(kind: Kind, bytes: &[u8]) -> Result<Self> {
+	pub fn deserialize(kind: Kind, bytes: &Bytes) -> Result<Self> {
 		match kind {
 			Kind::Leaf => Ok(Self::Leaf(leaf::Data::deserialize(bytes)?)),
 			Kind::Branch => Ok(Self::Branch(branch::Data::deserialize(bytes)?)),
@@ -593,10 +575,6 @@ macro_rules! handle {
 				self.0.load(client).await
 			}
 
-			pub fn unload(&self) {
-				self.0.unload()
-			}
-
 			pub async fn store(&self, client: &dyn $crate::Client) -> $crate::Result<()> {
 				self.0.store(client).await
 			}
@@ -630,31 +608,6 @@ macro_rules! id {
 				$crate::Id::deserialize(deserializer)?
 					.try_into()
 					.map_err(serde::de::Error::custom)
-			}
-		}
-
-		impl tangram_serialize::Serialize for self::Id {
-			fn serialize<W>(
-				&self,
-				serializer: &mut tangram_serialize::Serializer<W>,
-			) -> std::io::Result<()>
-			where
-				W: std::io::Write,
-			{
-				self.0.serialize(serializer)
-			}
-		}
-
-		impl tangram_serialize::Deserialize for self::Id {
-			fn deserialize<R>(
-				deserializer: &mut tangram_serialize::Deserializer<R>,
-			) -> std::io::Result<Self>
-			where
-				R: std::io::Read,
-			{
-				$crate::Id::deserialize(deserializer)?
-					.try_into()
-					.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 			}
 		}
 

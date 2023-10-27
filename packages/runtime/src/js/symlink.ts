@@ -35,7 +35,7 @@ export class Symlink {
 					return {};
 				} else if (typeof arg === "string") {
 					return {
-						path: await mutation({ kind: "template_append", value: arg }),
+						path: await mutation({ kind: "template_append", template: arg }),
 					};
 				} else if (Artifact.is(arg)) {
 					return {
@@ -52,7 +52,7 @@ export class Symlink {
 						return {
 							path: await mutation({
 								kind: "template_append" as const,
-								value: firstComponent,
+								template: firstComponent,
 							}),
 						};
 					} else if (

@@ -1,18 +1,6 @@
 use crate::{return_error, Error};
 
-#[derive(
-	Clone,
-	Debug,
-	Eq,
-	Ord,
-	PartialEq,
-	PartialOrd,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
-#[tangram_serialize(into = "String", try_from = "String")]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize)]
 #[serde(into = "String", try_from = "String")]
 pub struct System {
 	arch: Arch,
@@ -20,19 +8,8 @@ pub struct System {
 }
 
 #[derive(
-	Clone,
-	Copy,
-	Debug,
-	Eq,
-	Ord,
-	PartialEq,
-	PartialOrd,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
+	Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
-#[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub enum Arch {
 	Aarch64,
@@ -41,19 +18,8 @@ pub enum Arch {
 }
 
 #[derive(
-	Clone,
-	Copy,
-	Debug,
-	Eq,
-	Ord,
-	PartialEq,
-	PartialOrd,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
+	Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
-#[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub enum Os {
 	Darwin,

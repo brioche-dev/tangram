@@ -6,7 +6,7 @@ use num::ToPrimitive;
 use std::{str::FromStr, sync::Arc};
 use tangram_client as tg;
 use tangram_lsp::Module;
-use tg::{error, Error};
+use tg::Error;
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,14 +122,14 @@ fn get_location(
 	file: Option<&str>,
 	line: u32,
 	column: u32,
-) -> Option<error::Location> {
+) -> Option<tangram_error::Location> {
 	if file.map_or(false, |resource_name| resource_name == "[runtime]") {
 		if let Some(global_source_map) = state.global_source_map.as_ref() {
 			let token = global_source_map.lookup_token(line, column).unwrap();
 			let source = token.get_source().unwrap().to_owned();
 			let line = token.get_src_line();
 			let column = token.get_src_col();
-			Some(error::Location {
+			Some(tangram_error::Location {
 				source,
 				line,
 				column,
@@ -151,7 +151,7 @@ fn get_location(
 		} else {
 			(line, column)
 		};
-		Some(error::Location {
+		Some(tangram_error::Location {
 			source,
 			line,
 			column,

@@ -32,28 +32,28 @@ export class Leaf {
 				return {
 					bytes: await mutation({
 						kind: "array_append",
-						value: [encoding.utf8.encode(arg)],
+						values: [encoding.utf8.encode(arg)],
 					}),
 				};
 			} else if (arg instanceof Uint8Array) {
 				return {
 					bytes: await mutation({
 						kind: "array_append",
-						value: [arg],
+						values: [arg],
 					}),
 				};
 			} else if (Leaf.is(arg)) {
 				return {
 					bytes: await mutation({
 						kind: "array_append",
-						value: [await arg.bytes()],
+						values: [await arg.bytes()],
 					}),
 				};
 			} else if (typeof arg === "object") {
 				return {
 					bytes: await mutation({
 						kind: "array_append",
-						value: [arg.bytes ?? new Uint8Array()],
+						values: [arg.bytes ?? new Uint8Array()],
 					}),
 				};
 			} else {
@@ -110,6 +110,10 @@ export class Leaf {
 
 	async text(): Promise<string> {
 		return encoding.utf8.decode(await syscall.read(this));
+	}
+
+	async compress(format: Blob.CompressionFormat): Promise<Blob> {
+		return await syscall.compress(this, format);
 	}
 
 	async decompress(format: Blob.CompressionFormat): Promise<Blob> {

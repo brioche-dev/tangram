@@ -25,14 +25,14 @@ export class Template {
 				return {
 					components: await mutation({
 						kind: "array_append",
-						value: [arg],
+						values: [arg],
 					}),
 				};
 			} else if (Template.is(arg)) {
 				return {
 					components: await mutation({
 						kind: "array_append",
-						value: arg.components,
+						values: arg.components,
 					}),
 				};
 			} else {

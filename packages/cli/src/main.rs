@@ -4,15 +4,15 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::redundant_pattern)]
 
-use self::commands::Args;
+use self::{
+	commands::{Args, Command},
+	util::dirs::home_directory_path,
+};
 use clap::Parser;
-use commands::Command;
-use std::os::fd::AsRawFd;
 use tangram_client as tg;
 use tangram_util::addr::Addr;
 use tg::{error, Result, WrapErr};
 use tracing_subscriber::prelude::*;
-use util::dirs::home_directory_path;
 
 mod commands;
 mod config;
@@ -29,9 +29,19 @@ fn main() {
 	// Setup tracing.
 	setup_tracing();
 
-	// Run the program.
-	let result = main_inner();
+	// Initialize V8.
+	initialize_v8();
 
+	// Parse the arguments.
+	let args = Args::parse();
+
+	// Create the tokio runtime.
+	let rt = tokio::runtime::Runtime::new().expect("Failed to create the tokio runtime.");
+
+	// Run the CLI.
+	let result = rt.block_on(main_inner(args));
+
+	// Handle the result.
 	if let Err(error) = result {
 		// Print the error trace.
 		eprintln!("An error occurred.");
@@ -42,63 +52,28 @@ fn main() {
 	}
 }
 
-fn main_inner() -> Result<()> {
-	// Parse the arguments.
-	let args = Args::parse();
+async fn main_inner(args: Args) -> Result<()> {
+	// Get the path.
+	let path = home_directory_path()
+		.wrap_err("Failed to find the user home directory.")?
+		.join(".tangram");
+	let addr = Addr::Unix(path.join("socket"));
 
-	// Check if we need to daemonize this process. This must occur before tokio's runtime is initialized.
-	if let Command::Serve(args) = &args.command {
-		if args.daemonize {
-			daemonize().wrap_err("Failed to daemonize the process.")?;
-		}
-	}
+	// Create the client.
+	let client = if let Command::Serve(_) = &args.command {
+		None
+	} else {
+		Some(
+			Box::new(tangram_client::remote::Remote::new(addr.clone(), None).await?)
+				as Box<dyn tg::Client>,
+		)
+	};
 
-	// Create the tokio runtime.
-	let rt = tokio::runtime::Runtime::new().expect("Failed to initialie tokio runtime.");
+	// Create the CLI.
+	let cli = Cli { client };
 
-	// Run the CLI.
-	rt.block_on(async move {
-		// Initialize V8.
-		initialize_v8();
-
-		// Create the client.
-		let client = if let Command::Serve(_) = &args.command {
-			None
-		} else {
-			// Get the path.
-			let path = home_directory_path()
-				.wrap_err("Failed to find the user home directory.")?
-				.join(".tangram");
-			let addr = Addr::Socket(path.join("socket"));
-			let client = tangram_client::remote::Remote::new(addr.clone(), None).await;
-
-			// Create a server if we're in debug mode.
-			if cfg!(debug_assertions) {
-				if let Ok(client) = client {
-					Some(Box::new(client) as Box<dyn tg::Client>)
-				} else {
-					let cli = Cli { client: None };
-					let args = commands::serve::Args {
-						command: commands::serve::Action::Start,
-						addr: Some(addr.clone()),
-						path: Some(path),
-						daemonize: false,
-					};
-					tokio::task::spawn(async move { cli.command_serve(args).await });
-					let client = tangram_client::remote::Remote::new(addr.clone(), None).await?;
-					Some(Box::new(client) as Box<dyn tg::Client>)
-				}
-			} else {
-				Some(Box::new(client?) as Box<dyn tg::Client>)
-			}
-		};
-
-		// Create the CLI.
-		let cli = Cli { client };
-
-		// Run the command.
-		cli.run(args).await
-	})
+	// Run the command.
+	cli.run(args).await
 }
 
 fn initialize_v8() {
@@ -136,34 +111,4 @@ fn setup_tracing() {
 			.with(format_layer);
 		subscriber.init();
 	}
-}
-
-fn daemonize() -> std::io::Result<()> {
-	extern "C" {
-		fn daemon(nochdir: i32, noclose: i32) -> i32;
-	}
-	// TODO: create a .pid file and lock it.
-	let outfile = std::fs::File::options()
-		.create(true)
-		.append(false)
-		.read(true)
-		.write(true)
-		.open("/tmp/tg.serve.out")?;
-
-	unsafe {
-		let outfile_fd = outfile.as_raw_fd();
-		let stdout_fd = std::io::stdout().as_raw_fd();
-		if libc::dup2(outfile_fd, stdout_fd) < 0 {
-			return Err(std::io::Error::last_os_error());
-		}
-		let stderr_fd = std::io::stderr().as_raw_fd();
-		if libc::dup2(outfile_fd, stderr_fd) < 0 {
-			return Err(std::io::Error::last_os_error());
-		}
-		if daemon(0, 1) != 0 {
-			return Err(std::io::Error::last_os_error());
-		}
-	}
-
-	Ok(())
 }

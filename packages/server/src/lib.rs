@@ -353,18 +353,18 @@ impl tg::Client for Server {
 		self.get_object_exists(id).await
 	}
 
-	async fn get_object_bytes(&self, id: &tg::object::Id) -> Result<Vec<u8>> {
+	async fn get_object_bytes(&self, id: &tg::object::Id) -> Result<Bytes> {
 		self.get_object_bytes(id).await
 	}
 
-	async fn try_get_object_bytes(&self, id: &tg::object::Id) -> Result<Option<Vec<u8>>> {
+	async fn try_get_object_bytes(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
 		self.try_get_object_bytes(id).await
 	}
 
 	async fn try_put_object_bytes(
 		&self,
 		id: &tg::object::Id,
-		bytes: &[u8],
+		bytes: &Bytes,
 	) -> Result<Result<(), Vec<tg::object::Id>>> {
 		self.try_put_object_bytes(id, bytes).await
 	}

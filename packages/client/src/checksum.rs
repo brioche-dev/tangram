@@ -1,18 +1,8 @@
 use crate::{return_error, Error, Result, WrapErr};
 use base64::Engine;
 
-#[derive(
-	Clone,
-	Debug,
-	Eq,
-	PartialEq,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(into = "String", try_from = "String")]
-#[tangram_serialize(into = "String", try_from = "String")]
 pub struct Checksum {
 	algorithm: Algorithm,
 	bytes: Box<[u8]>,

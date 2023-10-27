@@ -1,7 +1,4 @@
-use crate::{
-	blob, id, object, return_error, target, value, Blob, Client, Error, Result, Target, Value,
-	WrapErr,
-};
+use crate::{blob, id, object, target, value, Blob, Client, Error, Result, Target, Value, WrapErr};
 use bytes::Bytes;
 use futures::{
 	stream::{self, BoxStream},
@@ -24,25 +21,11 @@ pub struct Object {
 	pub result: Result<Value, Error>,
 }
 
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
-	#[tangram_serialize(id = 0)]
 	pub target: target::Id,
-
-	#[tangram_serialize(id = 1)]
 	pub children: Vec<Id>,
-
-	#[tangram_serialize(id = 2)]
 	pub log: blob::Id,
-
-	#[tangram_serialize(id = 3)]
 	pub result: Result<value::Data, Error>,
 }
 
@@ -234,22 +217,14 @@ impl Object {
 }
 
 impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
-			.wrap_err("Failed to write the version.")?;
-		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
-		Ok(bytes)
+	pub fn serialize(&self) -> Result<Bytes> {
+		serde_json::to_vec(self)
+			.map(Into::into)
+			.wrap_err("Failed to serialize the data.")
 	}
 
-	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version =
-			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
-		if version != 0 {
-			return_error!(r#"Cannot deserialize with version "{version}"."#);
-		}
-		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
-		Ok(value)
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
+		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
 	}
 
 	#[must_use]

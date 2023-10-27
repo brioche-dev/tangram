@@ -9,16 +9,8 @@ pub struct Template {
 	pub components: Vec<Component>,
 }
 
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
-	#[tangram_serialize(id = 0)]
 	pub components: Vec<component::Data>,
 }
 
@@ -210,19 +202,10 @@ pub mod component {
 		Artifact(Artifact),
 	}
 
-	#[derive(
-		Clone,
-		Debug,
-		serde::Deserialize,
-		serde::Serialize,
-		tangram_serialize::Deserialize,
-		tangram_serialize::Serialize,
-	)]
+	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 	#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 	pub enum Data {
-		#[tangram_serialize(id = 0)]
 		String(String),
-		#[tangram_serialize(id = 1)]
 		Artifact(artifact::Id),
 	}
 

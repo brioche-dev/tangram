@@ -1,4 +1,6 @@
-use crate::{blob, object, return_error, Blob, Client, Result, WrapErr};
+pub use self::child::Child;
+use crate::{blob, object, Blob, Client, Result, WrapErr};
+use bytes::Bytes;
 
 crate::id!(Branch);
 crate::handle!(Branch);
@@ -11,29 +13,21 @@ pub struct Branch(object::Handle);
 
 #[derive(Clone, Debug)]
 pub struct Object {
-	pub children: Vec<(Blob, u64)>,
+	pub children: Vec<Child>,
 }
 
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
-	#[tangram_serialize(id = 0)]
-	pub children: Vec<(blob::Id, u64)>,
+	pub children: Vec<child::Data>,
 }
 
 impl Branch {
 	#[must_use]
-	pub fn new(children: Vec<(Blob, u64)>) -> Self {
+	pub fn new(children: Vec<Child>) -> Self {
 		Self(object::Handle::with_object(Object { children }.into()))
 	}
 
-	pub async fn children(&self, client: &dyn Client) -> Result<&Vec<(Blob, u64)>> {
+	pub async fn children(&self, client: &dyn Client) -> Result<&Vec<Child>> {
 		let object = self.object(client).await?;
 		Ok(&object.children)
 	}
@@ -45,7 +39,10 @@ impl Object {
 		let children = self
 			.children
 			.iter()
-			.map(|(blob, size)| (blob.expect_id().clone(), *size))
+			.map(|child| child::Data {
+				blob: child.blob.expect_id().clone(),
+				size: child.size,
+			})
 			.collect();
 		Data { children }
 	}
@@ -55,8 +52,11 @@ impl Object {
 	pub fn from_data(data: Data) -> Self {
 		let children = data
 			.children
-			.iter()
-			.map(|(id, size)| (Blob::with_id(id.clone()), *size))
+			.into_iter()
+			.map(|child| Child {
+				blob: Blob::with_id(child.blob),
+				size: child.size,
+			})
 			.collect();
 		Self { children }
 	}
@@ -65,35 +65,43 @@ impl Object {
 	pub fn children(&self) -> Vec<object::Handle> {
 		self.children
 			.iter()
-			.map(|(blob, _)| blob.handle().clone())
+			.map(|child| child.blob.handle().clone())
 			.collect()
 	}
 }
 
 impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
-			.wrap_err("Failed to write the version.")?;
-		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
-		Ok(bytes)
+	pub fn serialize(&self) -> Result<Bytes> {
+		serde_json::to_vec(self)
+			.map(Into::into)
+			.wrap_err("Failed to serialize the data.")
 	}
 
-	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version =
-			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
-		if version != 0 {
-			return_error!(r#"Cannot deserialize with version "{version}"."#);
-		}
-		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
-		Ok(value)
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
+		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
 	}
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		self.children
 			.iter()
-			.map(|(id, _)| id.clone().into())
+			.map(|child| child.blob.clone().into())
 			.collect()
+	}
+}
+
+pub mod child {
+	use super::{blob, Blob};
+
+	#[derive(Clone, Debug)]
+	pub struct Child {
+		pub blob: Blob,
+		pub size: u64,
+	}
+
+	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+	pub struct Data {
+		pub blob: blob::Id,
+		pub size: u64,
 	}
 }

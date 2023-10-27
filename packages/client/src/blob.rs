@@ -26,17 +26,8 @@ pub enum Kind {
 	Branch,
 }
 
-#[derive(
-	Clone,
-	Debug,
-	From,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, From, serde::Deserialize, serde::Serialize)]
 #[serde(into = "crate::Id", try_from = "crate::Id")]
-#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
 pub enum Id {
 	Leaf(leaf::Id),
 	Branch(branch::Id),
@@ -122,7 +113,10 @@ impl Blob {
 			let bytes = Bytes::copy_from_slice(&bytes[..position]);
 			let leaf = Leaf::new(bytes);
 			leaf.store(client).await?;
-			leaves.push((leaf.into(), size));
+			leaves.push(branch::Child {
+				blob: leaf.into(),
+				size,
+			});
 		}
 
 		// Create the tree.
@@ -134,7 +128,7 @@ impl Blob {
 						stream::once(async move {
 							let blob = Self::new(chunk);
 							let size = blob.size(client).await?;
-							Ok::<_, Error>((blob, size))
+							Ok::<_, Error>(branch::Child { blob, size })
 						})
 						.boxed()
 					} else {
@@ -150,10 +144,10 @@ impl Blob {
 	}
 
 	#[must_use]
-	pub fn new(children: Vec<(Self, u64)>) -> Self {
+	pub fn new(children: Vec<branch::Child>) -> Self {
 		match children.len() {
 			0 => Self::empty(),
-			1 => children.into_iter().next().unwrap().0,
+			1 => children.into_iter().next().unwrap().blob,
 			_ => Branch::new(children).into(),
 		}
 	}
@@ -169,7 +163,7 @@ impl Blob {
 				.children(client)
 				.await?
 				.iter()
-				.map(|(_, size)| size)
+				.map(|child| child.size)
 				.sum()),
 			Self::Leaf(leaf) => Ok(leaf.bytes(client).await?.len().to_u64().unwrap()),
 		}
@@ -194,6 +188,27 @@ impl Blob {
 		let string =
 			String::from_utf8(bytes).wrap_err("Failed to decode the blob's bytes as UTF-8.")?;
 		Ok(string)
+	}
+
+	pub async fn compress(&self, client: &dyn Client, format: CompressionFormat) -> Result<Blob> {
+		let reader = self.reader(client).await?;
+		let reader = tokio::io::BufReader::new(reader);
+		let reader: Box<dyn AsyncRead + Unpin> = match format {
+			CompressionFormat::Bz2 => {
+				Box::new(async_compression::tokio::bufread::BzEncoder::new(reader))
+			},
+			CompressionFormat::Gz => {
+				Box::new(async_compression::tokio::bufread::GzipEncoder::new(reader))
+			},
+			CompressionFormat::Xz => {
+				Box::new(async_compression::tokio::bufread::XzEncoder::new(reader))
+			},
+			CompressionFormat::Zstd => {
+				Box::new(async_compression::tokio::bufread::ZstdEncoder::new(reader))
+			},
+		};
+		let blob = Blob::with_reader(client, reader).await?;
+		Ok(blob)
 	}
 
 	pub async fn decompress(&self, client: &dyn Client, format: CompressionFormat) -> Result<Blob> {
@@ -405,8 +420,7 @@ impl AsyncRead for Reader {
 							let bytes = 'outer: loop {
 								match current_blob {
 									Blob::Leaf(leaf) => {
-										let bytes = leaf.bytes(client.as_ref()).await?;
-										leaf.unload();
+										let bytes = leaf.bytes(client.as_ref()).await?.clone();
 										if position
 											< current_blob_position + bytes.len().to_u64().unwrap()
 										{
@@ -417,14 +431,12 @@ impl AsyncRead for Reader {
 										return_error!("The position is out of bounds.");
 									},
 									Blob::Branch(branch) => {
-										for (child, size) in
-											branch.children(client.as_ref()).await?
-										{
-											if position < current_blob_position + size {
-												current_blob = child.clone();
+										for child in branch.children(client.as_ref()).await? {
+											if position < current_blob_position + child.size {
+												current_blob = child.blob.clone();
 												continue 'outer;
 											}
-											current_blob_position += size;
+											current_blob_position += child.size;
 										}
 										return_error!("The position is out of bounds.");
 									},

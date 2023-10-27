@@ -1,5 +1,6 @@
 pub use self::{dependency::Dependency, specifier::Specifier};
-use crate::{artifact, object, return_error, Artifact, Client, Result, WrapErr};
+use crate::{artifact, object, Artifact, Client, Result, WrapErr};
+use bytes::Bytes;
 use std::collections::BTreeMap;
 
 /// The file name of the root module in a package.
@@ -23,19 +24,9 @@ pub struct Object {
 	pub dependencies: BTreeMap<Dependency, Package>,
 }
 
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
-	#[tangram_serialize(id = 0)]
 	pub artifact: artifact::Id,
-
-	#[tangram_serialize(id = 1)]
 	pub dependencies: BTreeMap<Dependency, Id>,
 }
 
@@ -111,22 +102,14 @@ impl Object {
 }
 
 impl Data {
-	pub fn serialize(&self) -> Result<Vec<u8>> {
-		let mut bytes = Vec::new();
-		byteorder::WriteBytesExt::write_u8(&mut bytes, 0)
-			.wrap_err("Failed to write the version.")?;
-		tangram_serialize::to_writer(self, &mut bytes).wrap_err("Failed to write the data.")?;
-		Ok(bytes)
+	pub fn serialize(&self) -> Result<Bytes> {
+		serde_json::to_vec(self)
+			.map(Into::into)
+			.wrap_err("Failed to serialize the data.")
 	}
 
-	pub fn deserialize(mut bytes: &[u8]) -> Result<Self> {
-		let version =
-			byteorder::ReadBytesExt::read_u8(&mut bytes).wrap_err("Failed to read the version.")?;
-		if version != 0 {
-			return_error!(r#"Cannot deserialize with version "{version}"."#);
-		}
-		let value = tangram_serialize::from_reader(bytes).wrap_err("Failed to read the data.")?;
-		Ok(value)
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
+		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
 	}
 
 	#[must_use]
@@ -141,20 +124,9 @@ pub mod dependency {
 
 	/// A dependency on a package, either at a path or from the registry.
 	#[derive(
-		Clone,
-		Debug,
-		Eq,
-		Hash,
-		Ord,
-		PartialEq,
-		PartialOrd,
-		serde::Deserialize,
-		serde::Serialize,
-		tangram_serialize::Deserialize,
-		tangram_serialize::Serialize,
+		Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 	)]
 	#[serde(into = "String", try_from = "String")]
-	#[tangram_serialize(into = "String", try_from = "String")]
 	pub enum Dependency {
 		/// A dependency on a package at a path.
 		Path(Relpath),
@@ -217,19 +189,9 @@ pub mod specifier {
 
 	/// A reference to a package, either at a path or from the registry.
 	#[derive(
-		Clone,
-		Debug,
-		Eq,
-		Ord,
-		PartialEq,
-		PartialOrd,
-		serde::Deserialize,
-		serde::Serialize,
-		tangram_serialize::Deserialize,
-		tangram_serialize::Serialize,
+		Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 	)]
 	#[serde(into = "String", try_from = "String")]
-	#[tangram_serialize(into = "String", try_from = "String")]
 	pub enum Specifier {
 		/// A reference to a package at a path.
 		Path(PathBuf),

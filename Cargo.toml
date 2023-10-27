@@ -3,10 +3,10 @@ default-members = ["packages/cli"]
 members = [
   "packages/cli",
   "packages/client",
+  "packages/error",
   "packages/lsp",
   "packages/package",
   "packages/runtime",
-  "packages/serialize",
   "packages/server",
   "packages/util",
   "packages/vfs",
@@ -89,10 +89,10 @@ swc_core = { version = "=0.83.41", features = [
 syn = { version = "1", features = ["full"] }
 tangram_cli = { path = "packages/cli" }
 tangram_client = { path = "packages/client" }
+tangram_error = { path = "packages/error" }
 tangram_lsp = { path = "packages/lsp" }
 tangram_package = { path = "packages/package" }
 tangram_runtime = { path = "packages/runtime" }
-tangram_serialize = { path = "packages/serialize" }
 tangram_server = { path = "packages/server" }
 tangram_util = { path = "packages/util" }
 tar = { version = "0.4" }
@@ -109,7 +109,10 @@ url = { version = "2", features = ["serde"] }
 v8 = { version = "=0.79.1" }
 varint-rs = "2"
 webbrowser = "0.8"
-webpki = { package = "rustls-webpki", version = "=0.102.0-alpha.3", features = ["alloc", "std"] }
+webpki = { package = "rustls-webpki", version = "=0.102.0-alpha.3", features = [
+  "alloc",
+  "std",
+] }
 webpki-roots = "=0.26.0-alpha.1"
 xattr = { version = "1" }
 zerocopy = { version = "0.7", features = ["derive"] }

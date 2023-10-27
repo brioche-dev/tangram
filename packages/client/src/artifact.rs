@@ -1,6 +1,6 @@
 use crate::{
-	checksum, directory, file, id, object, return_error, symlink, Checksum, Client, Directory,
-	Error, File, Result, Symlink, Value,
+	blob, checksum, directory, file, id, object, return_error, symlink, Blob, Checksum, Client,
+	Directory, Error, File, Result, Symlink, Value,
 };
 use derive_more::{From, TryUnwrap};
 use futures::stream::{FuturesUnordered, TryStreamExt};
@@ -15,20 +15,8 @@ pub enum Kind {
 }
 
 /// An artifact ID.
-#[derive(
-	Clone,
-	Debug,
-	Eq,
-	From,
-	Hash,
-	PartialEq,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, Eq, From, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(into = "crate::Id", try_from = "crate::Id")]
-#[tangram_serialize(into = "crate::Id", try_from = "crate::Id")]
 pub enum Id {
 	/// A directory ID.
 	Directory(directory::Id),
@@ -88,6 +76,15 @@ impl Artifact {
 			Self::File(file) => file.handle(),
 			Self::Symlink(symlink) => symlink.handle(),
 		}
+	}
+
+	#[allow(clippy::unused_async)]
+	pub async fn archive(
+		&self,
+		_client: &dyn Client,
+		_format: blob::ArchiveFormat,
+	) -> Result<Blob> {
+		unimplemented!()
 	}
 
 	/// Compute an artifact's checksum.

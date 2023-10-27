@@ -7,6 +7,12 @@ import { Target } from "./target.ts";
 import { Value } from "./value.ts";
 
 declare global {
+	function syscall(
+		syscall: "archive",
+		artifact: Artifact,
+		format: Blob.ArchiveFormat,
+	): Promise<Blob>;
+
 	function syscall(syscall: "build", target: Target): Promise<Value>;
 
 	function syscall(syscall: "bundle", artifact: Artifact): Promise<Directory>;
@@ -16,6 +22,12 @@ declare global {
 		algorithm: Checksum.Algorithm,
 		bytes: string | Uint8Array,
 	): Checksum;
+
+	function syscall(
+		syscall: "compress",
+		blob: Blob,
+		format: Blob.CompressionFormat,
+	): Promise<Blob>;
 
 	function syscall(
 		syscall: "decompress",
@@ -76,6 +88,17 @@ declare global {
 	function syscall(syscall: "sleep", duration: number): Promise<void>;
 }
 
+export let archive = async (
+	artifact: Artifact,
+	format: Blob.ArchiveFormat,
+): Promise<Blob> => {
+	try {
+		return await syscall("archive", artifact, format);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
+
 export let build = async (target: Target): Promise<Value> => {
 	try {
 		return await syscall("build", target);
@@ -98,6 +121,17 @@ export let checksum = (
 ): Checksum => {
 	try {
 		return syscall("checksum", algorithm, bytes);
+	} catch (cause) {
+		throw new Error("The syscall failed.", { cause });
+	}
+};
+
+export let compress = async (
+	blob: Blob,
+	format: Blob.CompressionFormat,
+): Promise<Blob> => {
+	try {
+		return await syscall("compress", blob, format);
 	} catch (cause) {
 		throw new Error("The syscall failed.", { cause });
 	}

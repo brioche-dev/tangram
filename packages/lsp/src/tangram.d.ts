@@ -43,6 +43,12 @@ declare namespace tg {
 
 		/** Assert that a value is an `Artifact`. */
 		export let assert: (value: unknown) => asserts value is Artifact;
+
+		/** Archive an artifact. */
+		export let archive: (
+			artifact: Artifact,
+			format: Blob.ArchiveFormat,
+		) => Promise<Blob>;
 	}
 
 	/** Assert that a condition is truthy. If not, throw an error with an optional message. */
@@ -64,43 +70,7 @@ declare namespace tg {
 	export let download: (url: string, checksum: Checksum) => Promise<Blob>;
 
 	/** A blob. */
-	export class Blob {
-		/** Get a blob with an ID. */
-		static withId(id: Blob.Id): Blob;
-
-		/** Create a blob. */
-		static new(...args: Args<Blob.Arg>): Promise<Blob>;
-
-		/** Download the contents of a URL. */
-		static download(url: string, checksum: Checksum): Promise<Blob>;
-
-		/** Check if a value is a `tg.Blob`. */
-		static is(value: unknown): value is Blob;
-
-		/** Expect that a value is a `tg.Blob`. */
-		static expect(value: unknown): Blob;
-
-		/** Assert that a value is a `tg.Blob`. */
-		static assert(value: unknown): asserts value is Blob;
-
-		/* Get this blob's id. */
-		id(): Promise<Blob.Id>;
-
-		/** Get this blob's size. */
-		size(): Promise<number>;
-
-		/** Get this blob as a `Uint8Array`. */
-		bytes(): Promise<Uint8Array>;
-
-		/** Get this blob as a string. */
-		text(): Promise<string>;
-
-		/** Decompress this blob. */
-		decompress(format: Blob.CompressionFormat): Promise<Blob>;
-
-		/** Extract an artifact from this blob. */
-		extract(format: Blob.ArchiveFormat): Promise<Artifact>;
-	}
+	export type Blob = Leaf | Branch;
 
 	export namespace Blob {
 		export type Arg = undefined | string | Uint8Array | Blob | Array<Arg>;
@@ -286,8 +256,132 @@ declare namespace tg {
 	/** Include an artifact at a path relative to the module this function is called from. The path must be a string literal so that it can be statically analyzed. */
 	export let include: (path: string) => Promise<Artifact>;
 
+	/** Create a branch. */
+	export let branch: (...args: Args<Branch.Arg>) => Promise<Branch>;
+
+	export class Branch {
+		/** Get a branch with an ID. */
+		static withId(id: Branch.Id): Branch;
+
+		/** Create a branch. */
+		static new(...args: Args<Branch.Arg>): Promise<Branch>;
+
+		/** Check if a value is a `tg.Branch`. */
+		static is(value: unknown): value is Branch;
+
+		/** Expect that a value is a `tg.Branch`. */
+		static expect(value: unknown): Branch;
+
+		/** Assert that a value is a `tg.Branch`. */
+		static assert(value: unknown): asserts value is Branch;
+
+		/* Get this branch's id. */
+		id(): Promise<Branch.Id>;
+
+		children(): Promise<Array<Branch.Child>>;
+
+		/** Get this branch's size. */
+		size(): Promise<number>;
+
+		/** Get this branch as a `Uint8Array`. */
+		bytes(): Promise<Uint8Array>;
+
+		/** Get this branch as a string. */
+		text(): Promise<string>;
+
+		/** Compress this branch. */
+		compress(format: Blob.CompressionFormat): Promise<Blob>;
+
+		/** Decompress this branch. */
+		decompress(format: Blob.CompressionFormat): Promise<Blob>;
+
+		/** Extract an artifact from this branch. */
+		extract(format: Blob.ArchiveFormat): Promise<Artifact>;
+	}
+
+	export namespace Branch {
+		export type Arg = undefined | Branch | ArgObject | Array<Arg>;
+
+		export type ArgObject = {
+			children?: Array<Child>;
+		};
+
+		export type Child = { blob: Blob; size: number };
+
+		export type Id = string;
+
+		export type Object_ = { children: Array<Child> };
+	}
+
+	/** Create a leaf. */
+	export let leaf: (...args: Args<Leaf.Arg>) => Promise<Leaf>;
+
+	export class Leaf {
+		/** Get a leaf with an ID. */
+		static withId(id: Leaf.Id): Leaf;
+
+		/** Create a leaf. */
+		static new(...args: Args<Leaf.Arg>): Promise<Leaf>;
+
+		/** Check if a value is a `tg.Leaf`. */
+		static is(value: unknown): value is Leaf;
+
+		/** Expect that a value is a `tg.Leaf`. */
+		static expect(value: unknown): Leaf;
+
+		/** Assert that a value is a `tg.Leaf`. */
+		static assert(value: unknown): asserts value is Leaf;
+
+		/* Get this leaf's id. */
+		id(): Promise<Leaf.Id>;
+
+		/** Get this leaf's size. */
+		size(): Promise<number>;
+
+		/** Get this leaf as a `Uint8Array`. */
+		bytes(): Promise<Uint8Array>;
+
+		/** Get this leaf as a string. */
+		text(): Promise<string>;
+
+		/** Compress this leaf. */
+		compress(format: Blob.CompressionFormat): Promise<Blob>;
+
+		/** Decompress this leaf. */
+		decompress(format: Blob.CompressionFormat): Promise<Blob>;
+
+		/** Extract an artifact from this leaf. */
+		extract(format: Blob.ArchiveFormat): Promise<Artifact>;
+	}
+
+	export namespace Leaf {
+		export type Arg =
+			| undefined
+			| string
+			| Uint8Array
+			| Leaf
+			| ArgObject
+			| Array<Arg>;
+
+		export type ArgObject = {
+			bytes?: Uint8Array;
+		};
+
+		export type Id = string;
+
+		export type Object_ = { bytes: Uint8Array };
+	}
+
 	/** Write to the log. */
 	export let log: (...args: Array<unknown>) => void;
+
+	export type Metadata = {
+		homepage?: string;
+		license: string;
+		name: string;
+		repository?: string;
+		version: string;
+	};
 
 	export function mutation<T extends Value = Value>(
 		arg: Unresolved<Mutation.Arg<T>>,

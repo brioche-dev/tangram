@@ -1,24 +1,23 @@
 use crate::{
-	build, error, object, package, target, user, user::Login, value, Artifact, Client, Handle, Id,
+	artifact, build, object, package, target, user, user::Login, Artifact, Client, Handle, Id,
 	Package, Result, Value, Wrap, WrapErr,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::stream::BoxStream;
-use futures::{StreamExt, TryStreamExt};
-use std::io::BufReader;
-use std::path::Path;
-use std::sync::{RwLock, Weak};
-use std::{path::PathBuf, sync::Arc};
-use tangram_util::{
-	addr::Addr, bytes_stream, empty, full, BodyExt, Incoming, Outgoing, ResponseExt,
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use http_body_util::{BodyExt, BodyStream};
+use std::{
+	path::{Path, PathBuf},
+	sync::{Arc, RwLock, Weak},
 };
-use tokio::io::AsyncBufReadExt;
-use tokio::net::{TcpStream, UnixStream};
-use tokio_rustls::{TlsConnector, TlsStream};
+use tangram_error::return_error;
+use tangram_util::{addr::Addr, empty, full, Incoming, Outgoing};
+use tokio::{
+	io::AsyncBufReadExt,
+	net::{TcpStream, UnixStream},
+};
 use tokio_stream::wrappers::LinesStream;
 use tokio_util::io::StreamReader;
-use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct Remote {
@@ -28,10 +27,9 @@ pub struct Remote {
 #[derive(Debug)]
 struct State {
 	addr: tangram_util::addr::Addr,
-	sender: hyper::client::conn::http2::SendRequest<Outgoing>,
 	file_descriptor_semaphore: tokio::sync::Semaphore,
+	sender: hyper::client::conn::http2::SendRequest<Outgoing>,
 	token: std::sync::RwLock<Option<String>>,
-	is_local: bool,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -45,12 +43,6 @@ struct SetForPathBody {
 	id: Id,
 }
 
-// #[derive(Debug)]
-// pub enum Addr {
-// 	Inet(Url),
-// 	Socket(PathBuf),
-// }
-
 impl Handle for Weak<State> {
 	fn upgrade(&self) -> Option<Box<dyn Client>> {
 		self.upgrade()
@@ -60,56 +52,75 @@ impl Handle for Weak<State> {
 
 impl Remote {
 	pub async fn new(addr: Addr, token: Option<String>) -> Result<Self> {
-		let is_local = addr.is_local();
-		let exec = hyper_util::rt::TokioExecutor::new();
+		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 		let sender = match &addr {
 			Addr::Inet(url) if url.scheme() == "https" => {
-				let stream = tcp_stream(url).await?;
-				let stream = tls_stream(stream, url, None).await?;
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
+				let addr = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
+				let stream = TcpStream::connect(addr)
 					.await
-					.wrap_err("Failed to create hyper stream.")?;
+					.wrap_err("Failed to create the TCP connection.")?;
+				let mut root_cert_store = rustls::RootCertStore::empty();
+				root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+				let config = rustls::ClientConfig::builder()
+					.with_safe_defaults()
+					.with_root_certificates(root_cert_store)
+					.with_no_client_auth();
+				let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+				let domain = url.domain().wrap_err("Missing domain for URL.")?;
+				let domain = rustls::ServerName::try_from(domain)
+					.wrap_err("Failed to create the server name.")?;
+				let stream = connector
+					.connect(domain, stream)
+					.await
+					.wrap_err("Failed to connect.")?;
+				let executor = hyper_util::rt::TokioExecutor::new();
+				let io = hyper_util::rt::TokioIo::new(stream);
+				let (sender, connection) = hyper::client::conn::http2::handshake(executor, io)
+					.await
+					.wrap_err("Failed to perform the HTTP handshake.")?;
 				tokio::spawn(connection);
 				sender
 			},
 			Addr::Inet(url) => {
-				let stream = tcp_stream(url).await?;
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
+				let addr = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
+				let stream = TcpStream::connect(addr)
 					.await
-					.wrap_err("Failed to create hyper stream.")?;
+					.wrap_err("Failed to create the TCP connection.")?;
+				let executor = hyper_util::rt::TokioExecutor::new();
+				let io = hyper_util::rt::TokioIo::new(stream);
+				let (sender, connection) = hyper::client::conn::http2::handshake(executor, io)
+					.await
+					.wrap_err("Failed to perform the HTTP handshake.")?;
 				tokio::spawn(connection);
 				sender
 			},
-			Addr::Socket(path) => {
-				let stream = socket_stream(path).await?;
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(exec, io)
+			Addr::Unix(path) => {
+				let stream = UnixStream::connect(path)
 					.await
-					.wrap_err("Failed to create hyper stream.")?;
+					.wrap_err("Failed to connect to the socket.")?;
+				let executor = hyper_util::rt::TokioExecutor::new();
+				let io = hyper_util::rt::TokioIo::new(stream);
+				let (sender, connection) = hyper::client::conn::http2::handshake(executor, io)
+					.await
+					.wrap_err("Failed to perform the HTTP handshake.")?;
 				tokio::spawn(connection);
 				sender
 			},
 		};
-
-		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 		let token = RwLock::new(token);
 		let state = Arc::new(State {
 			addr,
-			sender,
 			file_descriptor_semaphore,
+			sender,
 			token,
-			is_local,
 		});
-
 		Ok(Self { state })
 	}
 
 	fn request(&self, method: http::Method, path: &str) -> http::request::Builder {
 		let uri = match &self.state.addr {
 			Addr::Inet(url) => format!("{}{}", url, path.strip_prefix('/').unwrap()),
-			Addr::Socket(_) => path.into(),
+			Addr::Unix(_) => path.into(),
 		};
 		http::request::Builder::default().uri(uri).method(method)
 	}
@@ -123,80 +134,32 @@ impl Remote {
 			.clone()
 			.send_request(request)
 			.await
-			.wrap_err("Failed to send request.")
-	}
-
-	pub async fn stop(&self) -> Result<()> {
-		let request = self
-			.request(http::Method::PUT, "/v1/stop")
-			.body(empty())
-			.wrap_err("Failed to create request.")?;
-		self.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("Failed to shutdown server."))?;
-		Ok(())
+			.wrap_err("Failed to send the request.")
 	}
 
 	pub async fn ping(&self) -> Result<()> {
 		let request = self
 			.request(http::Method::GET, "/v1/ping")
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
-		self.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("Failed to ping server."))?;
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		Ok(())
 	}
-}
 
-async fn tcp_stream(url: &Url) -> Result<TcpStream> {
-	let addr = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
-	let stream = TcpStream::connect(addr)
-		.await
-		.wrap_err("Failed to connect to url.")?;
-	Ok(stream)
-}
-
-async fn socket_stream(path: &Path) -> Result<UnixStream> {
-	let stream = UnixStream::connect(path)
-		.await
-		.wrap_err("Failed to connect to socket")?;
-	Ok(stream)
-}
-
-async fn tls_stream(
-	stream: TcpStream,
-	url: &Url,
-	cafile: Option<PathBuf>,
-) -> Result<TlsStream<TcpStream>> {
-	let mut root_cert_store = rustls::RootCertStore::empty();
-	if let Some(cafile) = cafile {
-		// Has to be io::BufRead.
-		let mut pem =
-			BufReader::new(std::fs::File::open(cafile).wrap_err("Failed to open cacert file")?);
-		for cert in rustls_pemfile::certs(&mut pem) {
-			let der = cert.wrap_err("Failed to parse cert.")?;
-			root_cert_store.add(der).wrap_err("Failed to add der.")?;
+	pub async fn stop(&self) -> Result<()> {
+		let request = self
+			.request(http::Method::PUT, "/v1/stop")
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
 		}
-	} else {
-		root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+		Ok(())
 	}
-
-	let config = rustls::ClientConfig::builder()
-		.with_safe_defaults()
-		.with_root_certificates(root_cert_store)
-		.with_no_client_auth();
-	let connector = TlsConnector::from(Arc::new(config));
-
-	let domain = url.domain().wrap_err("Missing domain for URL.")?;
-	let domain = rustls::ServerName::try_from(domain).wrap_err("Failed to create server name.")?;
-	let stream = connector
-		.connect(domain, stream)
-		.await
-		.wrap_err("Failed to connect.")?;
-	Ok(stream.into())
 }
 
 #[async_trait]
@@ -210,7 +173,7 @@ impl Client for Remote {
 	}
 
 	fn is_local(&self) -> bool {
-		self.state.is_local
+		self.state.addr.is_local()
 	}
 
 	fn path(&self) -> Option<&std::path::Path> {
@@ -229,59 +192,61 @@ impl Client for Remote {
 		let request = self
 			.request(http::Method::HEAD, &format!("/v1/objects/{id}"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {
 			return Ok(false);
 		}
-		response
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		Ok(true)
 	}
 
-	async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Vec<u8>>> {
+	async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/objects/{id}"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {
 			return Ok(None);
 		}
-		let response = response
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		let bytes = response
-			.bytes()
+			.collect()
 			.await
-			.wrap_err("Failed to get the response bytes.")?;
-		Ok(Some(bytes.into()))
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		Ok(Some(bytes))
 	}
 
 	async fn try_put_object_bytes(
 		&self,
 		id: &object::Id,
-		bytes: &[u8],
+		bytes: &Bytes,
 	) -> Result<Result<(), Vec<object::Id>>> {
-		let body = full(bytes.to_owned());
+		let body = full(bytes.clone());
 		let request = self
 			.request(http::Method::PUT, &format!("/v1/objects/{id}"))
 			.body(body)
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::BAD_REQUEST {
 			let bytes = response
-				.bytes()
+				.collect()
 				.await
-				.wrap_err("Failed to get the response body.")?;
-			let missing_children = tangram_serialize::from_slice(&bytes)
-				.wrap_err("Failed to deserialize the body.")?;
+				.wrap_err("Failed to collect the response body.")?
+				.to_bytes();
+			let missing_children =
+				serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 			return Ok(Err(missing_children));
 		}
-		response
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		Ok(Ok(()))
 	}
 
@@ -291,24 +256,23 @@ impl Client for Remote {
 		let request = self
 			.request(http::Method::GET, "/v1/artifact/path")
 			.body(full(body))
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
-
-		if response.status().is_success() {
-			let id: Id = response
-				.json()
-				.await
-				.wrap_err("Failed to deserialize the response as json.")?;
-			let artifact = Artifact::with_id(id.try_into()?);
-			Ok(Some(artifact))
-		} else if response.status().as_u16() == 404 {
-			Ok(None)
-		} else {
-			Err(response
-				.error_for_status()
-				.map_err(|_| error!("The response had a non-success status."))
-				.unwrap_err())
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
 		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let id: artifact::Id =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		let artifact = Artifact::with_id(id);
+		Ok(Some(artifact))
 	}
 
 	async fn set_artifact_for_path(&self, path: &Path, artifact: &Artifact) -> Result<()> {
@@ -319,11 +283,11 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::PUT, "/v1/artifact/path")
 			.body(full(body))
-			.wrap_err("Failed to create request.")?;
-		self.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("The response had a non-success status."))?;
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		Ok(())
 	}
 
@@ -333,23 +297,23 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::GET, "/v1/package/path")
 			.body(full(body))
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
-		if response.status().is_success() {
-			let id: Id = response
-				.json()
-				.await
-				.wrap_err("Failed to deserialize the reponse as json.")?;
-			let package = Package::with_id(id.try_into()?);
-			Ok(Some(package))
-		} else if response.status().as_u16() == 404 {
-			Ok(None)
-		} else {
-			Err(response
-				.error_for_status()
-				.map_err(|_| error!("The response had a non-success status."))
-				.unwrap_err())
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
 		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let id: package::Id =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		let package = Package::with_id(id);
+		Ok(Some(package))
 	}
 
 	async fn set_package_for_path(&self, path: &Path, package: &Package) -> Result<()> {
@@ -360,11 +324,11 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::PUT, "/v1/package/path")
 			.body(full(body))
-			.wrap_err("Failed to create request.")?;
-		self.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("The response had a non-success status."))?;
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		Ok(())
 	}
 
@@ -372,18 +336,19 @@ impl Client for Remote {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/targets/{id}/build"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {
 			return Ok(None);
 		}
-		let response = response
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		let bytes = response
-			.bytes()
+			.collect()
 			.await
-			.wrap_err("Failed to get the response body.")?;
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
 		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 		Ok(Some(id))
 	}
@@ -392,16 +357,16 @@ impl Client for Remote {
 		let request = self
 			.request(http::Method::POST, &format!("/v1/targets/{id}/build"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
-		let response = self
-			.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		let bytes = response
-			.bytes()
+			.collect()
 			.await
-			.wrap_err("Failed to get the response body.")?;
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
 		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 		Ok(id)
 	}
@@ -413,15 +378,22 @@ impl Client for Remote {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/builds/{id}/children"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {
 			return Ok(None);
 		}
-		let response = response
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
-		let stream = bytes_stream(response.into_body())
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let stream = BodyStream::new(response.into_body())
+			.filter_map(|frame| async {
+				match frame.map(http_body::Frame::into_data) {
+					Ok(Ok(bytes)) => Some(Ok(bytes)),
+					Err(e) => Some(Err(e)),
+					Ok(Err(_frame)) => None,
+				}
+			})
 			.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error));
 		let reader = tokio::io::BufReader::new(StreamReader::new(stream));
 		let children = LinesStream::new(reader.lines())
@@ -442,7 +414,7 @@ impl Client for Remote {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/builds/{id}/log"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self
 			.send(request)
 			.await
@@ -450,11 +422,18 @@ impl Client for Remote {
 		if response.status() == http::StatusCode::NOT_FOUND {
 			return Ok(None);
 		}
-		let response = response
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
-		let log = bytes_stream(response.into_body())
-			.map_err(|error| error.wrap("Failed to read from the response stream."))
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let log = BodyStream::new(response.into_body())
+			.filter_map(|frame| async {
+				match frame.map(http_body::Frame::into_data) {
+					Ok(Ok(bytes)) => Some(Ok(bytes)),
+					Err(e) => Some(Err(e)),
+					Ok(Err(_frame)) => None,
+				}
+			})
+			.map_err(|error| error.wrap("Failed to read from the body."))
 			.boxed();
 		Ok(Some(log))
 	}
@@ -463,21 +442,21 @@ impl Client for Remote {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/builds/{id}/result"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {
 			return Ok(None);
 		}
-		let response = response
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		let bytes = response
-			.bytes()
+			.collect()
 			.await
-			.wrap_err("Failed to read the response body.")?;
-		let result = serde_json::from_slice::<Result<value::Data>>(&bytes)
-			.wrap_err("Failed to deserialize the response body.")?
-			.map(Into::into);
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let result =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(Some(result))
 	}
 
@@ -489,16 +468,18 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::POST, "/v1/logins")
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
-		let response = self
-			.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
-		let response = response
-			.json()
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
 			.await
-			.wrap_err("Failed to get the response JSON.")?;
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(response)
 	}
 
@@ -506,17 +487,21 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::GET, &format!("/v1/logins/{id}"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
+			.wrap_err("Failed to create the request.")?;
 		let response = self
 			.send(request)
 			.await
-			.wrap_err("Failed to send the request.")?
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
-		let response = response
-			.json()
+			.wrap_err("Failed to send the request.")?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
 			.await
-			.wrap_err("Failed to get the response JSON.")?;
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(response)
 	}
 
@@ -524,11 +509,11 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::POST, &format!("/v1/packages/{id}"))
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
-		self.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		Ok(())
 	}
 
@@ -537,16 +522,18 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::GET, path)
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
-		let response = self
-			.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
-		let response = response
-			.json()
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
 			.await
-			.wrap_err("Failed to get the response JSON.")?;
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(response)
 	}
 
@@ -554,16 +541,18 @@ impl Client for Remote {
 		let request = self
 			.request(reqwest::Method::GET, "/v1/user")
 			.body(empty())
-			.wrap_err("Failed to create request.")?;
-		let response = self
-			.send(request)
-			.await?
-			.error_for_status()
-			.map_err(|_| error!("Expected the status to be success."))?;
-		let user = response
-			.json()
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
 			.await
-			.wrap_err("Failed to get the response JSON.")?;
-		Ok(user)
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		Ok(response)
 	}
 }

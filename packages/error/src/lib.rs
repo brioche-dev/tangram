@@ -5,50 +5,23 @@ use thiserror::Error;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// An error.
-#[derive(
-	Clone,
-	Debug,
-	Error,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, Error, serde::Deserialize, serde::Serialize)]
 #[error("{message}")]
 pub struct Error {
-	#[tangram_serialize(id = 0)]
 	pub message: String,
-
-	#[tangram_serialize(id = 1)]
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub location: Option<Location>,
-
-	#[tangram_serialize(id = 2)]
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub stack: Option<Vec<Location>>,
-
-	#[tangram_serialize(id = 3)]
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub source: Option<Arc<Error>>,
 }
 
 /// An error location.
-#[derive(
-	Clone,
-	Debug,
-	serde::Deserialize,
-	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
-)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Location {
-	#[tangram_serialize(id = 0)]
 	pub source: String,
-
-	#[tangram_serialize(id = 1)]
 	pub line: u32,
-
-	#[tangram_serialize(id = 2)]
 	pub column: u32,
 }
 
@@ -244,8 +217,6 @@ macro_rules! error {
 	}};
 }
 
-pub use error;
-
 #[allow(clippy::module_name_repetitions)]
 #[macro_export]
 macro_rules! return_error {
@@ -253,6 +224,3 @@ macro_rules! return_error {
 		return Err($crate::error!($($t)*).into())
 	}};
 }
-
-#[allow(clippy::module_name_repetitions)]
-pub use return_error;

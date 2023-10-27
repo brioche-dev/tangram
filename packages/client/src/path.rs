@@ -14,10 +14,7 @@ use std::path::PathBuf;
 	PartialOrd,
 	serde::Deserialize,
 	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 )]
-#[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub struct Relpath {
 	/// The number of leading parent components.
@@ -39,10 +36,7 @@ pub struct Relpath {
 	PartialOrd,
 	serde::Deserialize,
 	serde::Serialize,
-	tangram_serialize::Deserialize,
-	tangram_serialize::Serialize,
 )]
-#[tangram_serialize(into = "String", try_from = "String")]
 #[serde(into = "String", try_from = "String")]
 pub struct Subpath {
 	components: Vec<String>,

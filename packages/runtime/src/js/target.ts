@@ -176,13 +176,16 @@ export class Target<
 				if ("env" in arg) {
 					object.env =
 						arg.args !== undefined
-							? await mutation({ kind: "array_append", value: [arg.env] })
+							? await mutation({ kind: "array_append", values: [arg.env] })
 							: await mutation({ kind: "unset" });
 				}
 				if ("args" in arg) {
 					object.args =
 						arg.args !== undefined
-							? await mutation({ kind: "array_append", value: [...arg.args] })
+							? await mutation({
+									kind: "array_append",
+									values: [...arg.args],
+							  })
 							: await mutation({ kind: "unset" });
 				}
 				return {
