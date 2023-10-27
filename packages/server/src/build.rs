@@ -8,7 +8,7 @@ use futures::{
 use http_body_util::StreamBody;
 use lmdb::Transaction;
 use tangram_client as tg;
-use tangram_util::{full, not_found, Incoming, Outgoing};
+use tangram_util::http::{full, not_found, Incoming, Outgoing};
 use tg::{build, return_error, system, target, Build, Result, Target, Value, Wrap, WrapErr};
 
 impl Server {

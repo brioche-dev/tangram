@@ -10,7 +10,7 @@ use self::{
 };
 use clap::Parser;
 use tangram_client as tg;
-use tangram_util::addr::Addr;
+use tangram_util::net::Addr;
 use tg::{error, Result, WrapErr};
 use tracing_subscriber::prelude::*;
 

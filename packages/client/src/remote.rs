@@ -11,7 +11,10 @@ use std::{
 	sync::{Arc, RwLock, Weak},
 };
 use tangram_error::return_error;
-use tangram_util::{addr::Addr, empty, full, Incoming, Outgoing};
+use tangram_util::{
+	http::{empty, full, Incoming, Outgoing},
+	net::Addr,
+};
 use tokio::{
 	io::AsyncBufReadExt,
 	net::{TcpStream, UnixStream},
@@ -26,7 +29,7 @@ pub struct Remote {
 
 #[derive(Debug)]
 struct State {
-	addr: tangram_util::addr::Addr,
+	addr: Addr,
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	sender: hyper::client::conn::http2::SendRequest<Outgoing>,
 	token: std::sync::RwLock<Option<String>>,

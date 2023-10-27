@@ -455,23 +455,24 @@ declare namespace tg {
 			| { kind: "set_if_unset"; value: Value }
 			| {
 					kind: "array_prepend";
-					value: Array<Value>;
+					values: Array<Value>;
 			  }
 			| {
 					kind: "array_append";
-					value: Array<Value>;
+					values: Array<Value>;
 			  }
 			| {
 					kind: "template_prepend";
-					value: Template;
+					template: Template;
 					separator: Template;
 			  }
 			| {
 					kind: "template_append";
-					value: Template;
+					template: Template;
 					separator: Template;
 			  };
 	}
+
 	/** A package. */
 	export class Package {
 		/** Get a package with an ID. */

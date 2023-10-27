@@ -3,7 +3,7 @@ use bytes::Bytes;
 use futures::{stream, StreamExt, TryStreamExt};
 use lmdb::Transaction;
 use tangram_client as tg;
-use tangram_util::{bad_request, empty, full, not_found, Incoming, Outgoing};
+use tangram_util::http::{bad_request, empty, full, not_found, Incoming, Outgoing};
 use tg::{object, return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::AsyncReadExt;
 

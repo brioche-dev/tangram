@@ -1,7 +1,7 @@
 use crate::{util::dirs::home_directory_path, Cli, API_URL};
 use std::path::PathBuf;
 use tangram_client as tg;
-use tangram_util::addr::Addr;
+use tangram_util::net::Addr;
 use tg::{Result, WrapErr};
 
 /// Run a server.

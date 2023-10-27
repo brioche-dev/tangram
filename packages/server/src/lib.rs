@@ -14,8 +14,8 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_util::{
-	addr::{Addr, Listener},
-	full, ok, Incoming, Outgoing,
+	http::{full, ok, Incoming, Outgoing},
+	net::{Addr, Listener},
 };
 use tg::{return_error, Result, WrapErr};
 
