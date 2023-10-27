@@ -64,7 +64,7 @@ async fn main_inner(args: Args) -> Result<()> {
 		None
 	} else {
 		Some(
-			Box::new(tangram_client::remote::Remote::new(addr.clone(), None).await?)
+			Box::new(tangram_client::remote::Remote::new(addr, false, None).await?)
 				as Box<dyn tg::Client>,
 		)
 	};

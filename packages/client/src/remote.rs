@@ -24,7 +24,7 @@ use tokio_util::io::StreamReader;
 
 #[derive(Debug, Clone)]
 pub struct Remote {
-	state: Arc<State>,
+	inner: Arc<State>,
 }
 
 #[derive(Debug)]
@@ -33,6 +33,12 @@ struct State {
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	sender: hyper::client::conn::http2::SendRequest<Outgoing>,
 	token: std::sync::RwLock<Option<String>>,
+}
+
+pub struct Builder {
+	addr: Addr,
+	tls: Option<bool>,
+	token: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -49,17 +55,16 @@ struct SetForPathBody {
 impl Handle for Weak<State> {
 	fn upgrade(&self) -> Option<Box<dyn Client>> {
 		self.upgrade()
-			.map(|state| Box::new(Remote { state }) as Box<dyn Client>)
+			.map(|state| Box::new(Remote { inner: state }) as Box<dyn Client>)
 	}
 }
 
 impl Remote {
-	pub async fn new(addr: Addr, token: Option<String>) -> Result<Self> {
+	pub async fn new(addr: Addr, tls: bool, token: Option<String>) -> Result<Self> {
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 		let sender = match &addr {
-			Addr::Inet(url) if url.scheme() == "https" => {
-				let addr = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
-				let stream = TcpStream::connect(addr)
+			Addr::Inet(inet) if tls => {
+				let stream = TcpStream::connect(inet.to_string())
 					.await
 					.wrap_err("Failed to create the TCP connection.")?;
 				let mut root_cert_store = rustls::RootCertStore::empty();
@@ -69,11 +74,10 @@ impl Remote {
 					.with_root_certificates(root_cert_store)
 					.with_no_client_auth();
 				let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
-				let domain = url.domain().wrap_err("Missing domain for URL.")?;
-				let domain = rustls::ServerName::try_from(domain)
+				let server_name = rustls::ServerName::try_from(inet.host.to_string().as_str())
 					.wrap_err("Failed to create the server name.")?;
 				let stream = connector
-					.connect(domain, stream)
+					.connect(server_name, stream)
 					.await
 					.wrap_err("Failed to connect.")?;
 				let executor = hyper_util::rt::TokioExecutor::new();
@@ -84,9 +88,8 @@ impl Remote {
 				tokio::spawn(connection);
 				sender
 			},
-			Addr::Inet(url) => {
-				let addr = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
-				let stream = TcpStream::connect(addr)
+			Addr::Inet(inet) => {
+				let stream = TcpStream::connect(inet.to_string())
 					.await
 					.wrap_err("Failed to create the TCP connection.")?;
 				let executor = hyper_util::rt::TokioExecutor::new();
@@ -117,11 +120,11 @@ impl Remote {
 			sender,
 			token,
 		});
-		Ok(Self { state })
+		Ok(Self { inner: state })
 	}
 
 	fn request(&self, method: http::Method, path: &str) -> http::request::Builder {
-		let uri = match &self.state.addr {
+		let uri = match &self.inner.addr {
 			Addr::Inet(url) => format!("{}{}", url, path.strip_prefix('/').unwrap()),
 			Addr::Unix(_) => path.into(),
 		};
@@ -132,7 +135,7 @@ impl Remote {
 		&self,
 		request: http::request::Request<Outgoing>,
 	) -> Result<http::Response<Incoming>> {
-		self.state
+		self.inner
 			.sender
 			.clone()
 			.send_request(request)
@@ -172,11 +175,11 @@ impl Client for Remote {
 	}
 
 	fn downgrade_box(&self) -> Box<dyn Handle> {
-		Box::new(Arc::downgrade(&self.state))
+		Box::new(Arc::downgrade(&self.inner))
 	}
 
 	fn is_local(&self) -> bool {
-		self.state.addr.is_local()
+		self.inner.addr.is_local()
 	}
 
 	fn path(&self) -> Option<&std::path::Path> {
@@ -184,11 +187,11 @@ impl Client for Remote {
 	}
 
 	fn set_token(&self, token: Option<String>) {
-		*self.state.token.write().unwrap() = token;
+		*self.inner.token.write().unwrap() = token;
 	}
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
-		&self.state.file_descriptor_semaphore
+		&self.inner.file_descriptor_semaphore
 	}
 
 	async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
@@ -557,5 +560,34 @@ impl Client for Remote {
 		let response =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(response)
+	}
+}
+
+impl Builder {
+	#[must_use]
+	pub fn new(addr: Addr) -> Self {
+		Self {
+			addr,
+			tls: None,
+			token: None,
+		}
+	}
+
+	#[must_use]
+	pub fn tls(mut self, tls: bool) -> Self {
+		self.tls = Some(tls);
+		self
+	}
+
+	#[must_use]
+	pub fn token(mut self, token: Option<String>) -> Self {
+		self.token = token;
+		self
+	}
+
+	pub async fn build(self) -> Result<Remote> {
+		let tls = self.tls.unwrap_or(false);
+		let remote = Remote::new(self.addr, tls, self.token).await?;
+		Ok(remote)
 	}
 }

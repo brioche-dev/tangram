@@ -42,17 +42,23 @@ impl Cli {
 		// Read the credentials.
 		let credentials = Self::read_credentials().await?;
 
-		// Get the parent URL.
+		// Create the parent.
 		let parent_url = config
 			.as_ref()
 			.and_then(|config| config.parent_url.as_ref().cloned())
 			.unwrap_or_else(|| API_URL.parse().unwrap());
-
-		// Get the parent token.
+		let parent_addr = parent_url
+			.authority()
+			.parse()
+			.wrap_err("Invalid parent URL.")?;
+		let parent_tls = parent_url.scheme() == "https";
 		let parent_token = credentials.map(|credentials| credentials.token);
-
-		// Create the parent.
-		let _parent = tangram_client::remote::Remote::new(Addr::Inet(parent_url), parent_token);
+		let parent = tangram_client::remote::Builder::new(parent_addr)
+			.tls(parent_tls)
+			.token(parent_token)
+			.build()
+			.await?;
+		let _parent = Box::new(parent);
 
 		// Create the server.
 		let server = tangram_server::Server::new(path, None)
