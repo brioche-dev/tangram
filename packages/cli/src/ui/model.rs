@@ -43,6 +43,12 @@ pub struct Build {
 
 	/// A receiving channel to check for new children.
 	pub children_receiver: tokio::sync::mpsc::UnboundedReceiver<Self>,
+
+	/// A receiving channel to check for the result of this build.
+	pub result_receiver: tokio::sync::oneshot::Receiver<tg::Result<()>>,
+
+	/// The status of this build.
+	pub status: Result<tg::Result<()>, usize>,
 }
 
 /// Model of the state of the info pane.
@@ -226,7 +232,6 @@ impl Build {
 		let (children_sender, children_receiver) = tokio::sync::mpsc::unbounded_channel();
 		let client_ = client.clone_box();
 		let build_ = build.clone();
-
 		tokio::task::spawn(async move {
 			let Ok(mut children_stream) = build_.children(client_.as_ref()).await else {
 				return;
@@ -240,12 +245,26 @@ impl Build {
 			}
 		});
 
+		let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
+		let client_ = client.clone_box();
+		let build_ = build.clone();
+		tokio::task::spawn(async move {
+			let result = build_
+				.result(client_.as_ref())
+				.await
+				.and_then(|r| r)
+				.map(|_| ());
+			let _ = result_sender.send(result);
+		});
+
 		Self {
 			build,
 			children: vec![],
 			is_expanded: false,
 			info,
 			children_receiver,
+			result_receiver,
+			status: Err(0),
 		}
 	}
 
@@ -259,6 +278,20 @@ impl Build {
 		if let Ok(child) = self.children_receiver.try_recv() {
 			self.children.push(child);
 		}
+
+		if self.status.is_err() {
+			self.status = match self.result_receiver.try_recv() {
+				Ok(status) => Ok(status),
+				Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+					Ok(Err(tg::error!("Failed to get build status.")))
+				},
+				Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+					let value = *self.status.as_ref().unwrap_err();
+					Err((value + 1) % BuildResult::SPINNER.len())
+				},
+			}
+		}
+
 		self.children.iter_mut().for_each(Self::update);
 	}
 }

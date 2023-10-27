@@ -87,8 +87,23 @@ impl Build {
 		if (skip..(skip + layout.len())).contains(&offset) {
 			let area = layout[offset - skip];
 			let info = &self.info;
-			let indicator = if self.children.is_empty() { "" } else { "/" };
-			let text = Text::from(format!("{prefix}{info}{indicator}"));
+			let indicator = {
+				if self.children.is_empty() {
+					" "
+				} else if self.is_expanded {
+					"▼"
+				} else {
+					"▶"
+				}
+			};
+			let status = {
+				match &self.status {
+					Ok(Ok(_)) => "✓",
+					Ok(Err(_)) => "❌",
+					Err(index) => BuildResult::SPINNER[*index],
+				}
+			};
+			let text = Text::from(format!("{indicator}{status}{prefix}{info}"));
 			let style = if highlighted == offset {
 				tui::style::Style::default()
 					.bg(tui::style::Color::White)
