@@ -349,13 +349,6 @@ impl Handle {
 		Ok(true)
 	}
 
-	pub fn unload(&self) {
-		let mut state = self.state.write().unwrap();
-		if state.id.is_some() {
-			state.object.take();
-		}
-	}
-
 	#[async_recursion::async_recursion]
 	pub async fn store(&self, client: &dyn Client) -> Result<()> {
 		// If the handle is stored, then return.
