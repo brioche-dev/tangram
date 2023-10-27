@@ -28,7 +28,7 @@ impl Cli {
 			package: args.package,
 			package_args: args.package_args,
 			target: "test".to_owned(),
-			interactive: false,
+			non_interactive: true,
 		};
 
 		// Build!

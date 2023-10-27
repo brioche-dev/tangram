@@ -44,9 +44,14 @@ pub async fn info_string(client: &dyn tg::Client, build: &tg::Build) -> String {
 }
 
 /// Run the user interface.
-pub fn ui(client: &dyn tg::Client, root: tg::Build, root_info: String) -> tg::Result<()> {
+pub fn ui(
+	client: &dyn tg::Client,
+	tty: DevTty,
+	root: tg::Build,
+	root_info: String,
+) -> tg::Result<()> {
 	ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
-	let backend = tui::backend::CrosstermBackend::new(DevTty::open()?);
+	let backend = tui::backend::CrosstermBackend::new(tty);
 	let mut terminal =
 		tui::Terminal::new(backend).wrap_err("Failed to create terminal backend.")?;
 	ct::execute!(
@@ -140,7 +145,7 @@ pub struct DevTty {
 }
 
 impl DevTty {
-	fn open() -> tg::Result<Self> {
+	pub fn open() -> tg::Result<Self> {
 		unsafe {
 			let fd = libc::open(b"/dev/tty\0".as_ptr().cast(), libc::O_RDWR);
 			if fd < 0 {
