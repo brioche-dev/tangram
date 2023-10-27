@@ -5,11 +5,23 @@ use tangram_client as tg;
 use tui::prelude::Direction;
 
 pub struct App {
+	/// Index into the viewable tree that is highlighted
 	pub highlighted: usize,
+
+	/// Index into the viewable tree that is selected for viewing in the other panel.
 	pub selected: usize,
+
+	/// The distance from the top of the highlighted item.
+	pub dy: usize,
+
+	/// The rotation of the UI.
 	pub direction: tui::layout::Direction,
+
+	/// The build tree state.
 	pub build: Build,
-	pub log: Log,
+
+	/// The info pane.
+	pub info: InfoPane,
 }
 
 pub struct Build {
@@ -31,23 +43,34 @@ pub enum Status {
 
 impl App {
 	pub fn new(client: &dyn tg::Client, root: tg::Build, root_info: String) -> Self {
-		let log = Log::new(client, &root);
+		let log = Log::new(client, root.clone());
 		Self {
 			highlighted: 0,
-			direction: Direction::Horizontal,
 			selected: 0,
+			dy: 0,
+			direction: Direction::Horizontal,
 			build: Build::with_build(client, root, root_info),
-			log,
+			info: InfoPane::Log(log),
 		}
 	}
 
 	pub fn select(&mut self, client: &dyn tg::Client) {
 		self.selected = self.highlighted;
-		let build = self.selected_build();
-		self.log = Log::new(client, &build.build);
+		let build = self.selected_build().build.clone();
+		match &self.info {
+			InfoPane::Log(_) => {
+				let log = Log::new(client, build);
+				self.info = InfoPane::Log(log);
+			},
+			InfoPane::Result(_) => {
+				let result = BuildResult::new(client, build);
+				self.info = InfoPane::Result(result);
+			},
+		}
 	}
 
 	pub fn scroll_up(&mut self) {
+		self.dy = self.dy.saturating_sub(1);
 		self.highlighted = self.highlighted.saturating_sub(1);
 	}
 
@@ -57,6 +80,8 @@ impl App {
 			.highlighted
 			.saturating_add(1)
 			.min(len.saturating_sub(1));
+
+		self.dy = self.dy.saturating_add(1).min(len.saturating_sub(1));
 	}
 
 	pub fn expand(&mut self) {
@@ -73,6 +98,20 @@ impl App {
 		self.direction = match self.direction {
 			tui::layout::Direction::Horizontal => tui::layout::Direction::Vertical,
 			tui::layout::Direction::Vertical => tui::layout::Direction::Horizontal,
+		}
+	}
+
+	pub fn tab_info(&mut self, client: &dyn tg::Client) {
+		let build = self.info.build();
+		match &self.info {
+			InfoPane::Log(_) => {
+				let result = BuildResult::new(client, build);
+				self.info = InfoPane::Result(result);
+			},
+			InfoPane::Result(_) => {
+				let log = Log::new(client, build);
+				self.info = InfoPane::Log(log);
+			},
 		}
 	}
 
@@ -193,19 +232,20 @@ impl Build {
 }
 
 pub struct Log {
+	pub build: tg::Build,
 	pub text: String,
 	receiver: tokio::sync::mpsc::UnboundedReceiver<String>,
 	_task: tokio::task::JoinHandle<()>,
 }
 
 impl Log {
-	pub fn new(client: &dyn tg::Client, build: &tg::Build) -> Self {
-		let build = build.clone();
+	pub fn new(client: &dyn tg::Client, build: tg::Build) -> Self {
 		let client = client.clone_box();
 		let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
+		let build_ = build.clone();
 		let task = tokio::task::spawn(async move {
-			let mut log = match build.log(client.as_ref()).await {
+			let mut log = match build_.log(client.as_ref()).await {
 				Ok(log) => log,
 				Err(e) => {
 					let _ = sender.send(e.to_string());
@@ -226,6 +266,7 @@ impl Log {
 
 		let text = String::new();
 		Self {
+			build,
 			text,
 			receiver,
 			_task: task,
@@ -235,6 +276,64 @@ impl Log {
 	pub fn update(&mut self) {
 		if let Ok(recv) = self.receiver.try_recv() {
 			self.text.push_str(recv.as_str());
+		}
+	}
+}
+
+pub struct BuildResult {
+	pub build: tg::Build,
+	pub value: Result<tg::Result<tg::Value>, usize>,
+	pub receiver: tokio::sync::oneshot::Receiver<tg::Result<tg::Value>>,
+}
+
+impl BuildResult {
+	pub fn new(client: &dyn tg::Client, build: tg::Build) -> Self {
+		let (sender, receiver) = tokio::sync::oneshot::channel();
+		let value = Err(0);
+		let client = client.clone_box();
+		let build_ = build.clone();
+		tokio::task::spawn(async move {
+			let value = build_.result(client.as_ref()).await.and_then(|r| r);
+			let _ = sender.send(value);
+		});
+		Self {
+			build,
+			value,
+			receiver,
+		}
+	}
+
+	fn update(&mut self) {
+		self.value = match self.receiver.try_recv() {
+			Ok(value) => Ok(value),
+			Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+				Ok(Err(tg::error!("Failed to get value for build.")))
+			},
+			Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+				let value = *self.value.as_ref().unwrap_err();
+				Err((value + 1) % Self::SPINNER.len())
+			},
+		}
+	}
+}
+
+pub enum InfoPane {
+	Log(Log),
+	Result(BuildResult),
+}
+
+impl InfoPane {
+	pub fn update(&mut self) {
+		match self {
+			Self::Log(log) => log.update(),
+			Self::Result(result) => result.update(),
+		}
+	}
+
+	fn build(&self) -> tg::Build {
+		match self {
+			Self::Log(log) => log.build.clone(),
+			Self::Result(result) => result.build.clone(),
 		}
 	}
 }

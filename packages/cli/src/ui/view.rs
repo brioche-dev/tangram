@@ -1,6 +1,6 @@
 use super::{
 	controller::Controller,
-	model::{App, Build, Log, Status},
+	model::{App, Build, BuildResult, InfoPane, Log},
 	Frame,
 };
 use itertools::Itertools;
@@ -9,11 +9,13 @@ use std::collections::BTreeMap;
 
 use tui::{
 	prelude::*,
-	widgets::{Block, Borders, Paragraph, Widget, Wrap},
+	widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 impl App {
-	pub fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+	pub fn view(&mut self, frame: &mut Frame<'_>, area: Rect) {
+		self.dy = self.dy.min(area.height.try_into().unwrap());
+
 		let border = match self.direction {
 			Direction::Horizontal => Borders::LEFT,
 			Direction::Vertical => Borders::BOTTOM,
@@ -22,20 +24,25 @@ impl App {
 		let layout = Layout::default()
 			.direction(self.direction)
 			.margin(0)
-			.constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+			.constraints([
+				Constraint::Percentage(50),
+				Constraint::Length(1),
+				Constraint::Min(1),
+			])
 			.split(area);
 
 		let block = Block::default().borders(border);
 		frame.render_widget(block, layout[1]);
-		self.build.view(self.highlighted, frame, layout[0]);
-		self.log.view(frame, layout[1]);
+		self.build.view(self.highlighted, self.dy, frame, layout[0]);
+		self.info.view(frame, layout[2]);
 	}
 }
 
 impl Build {
-	fn view(&self, highlighted: usize, frame: &mut Frame<'_>, area: Rect) {
-		let page_size = area.height as usize - 1;
-		let skip = page_size * (highlighted / page_size);
+	fn view(&self, highlighted: usize, dy: usize, frame: &mut Frame<'_>, area: Rect) {
+		// first offset to render = highlighted - dy
+		// let page_size = area.height as usize - 1;
+		let skip = highlighted - dy;
 
 		let layout = Layout::default()
 			.direction(Direction::Vertical)
@@ -46,16 +53,8 @@ impl Build {
 			)
 			.split(area);
 
-		let header_layout = Layout::default()
-			.direction(Direction::Horizontal)
-			.constraints([Constraint::Min(20), Constraint::Max(6)])
-			.split(layout[0]);
-
-		for (text, area) in ["Info", "Status"].into_iter().zip(header_layout.iter()) {
-			let text = Text::from(text);
-			frame.render_widget(Paragraph::new(text), *area);
-		}
-
+		let text = Text::from("Builds");
+		frame.render_widget(Paragraph::new(text), layout[0]);
 		self.view_inner(true, skip, highlighted, frame, &layout[1..], 0, "", 0);
 	}
 
@@ -73,10 +72,6 @@ impl Build {
 	) -> usize {
 		if (skip..(skip + layout.len())).contains(&offset) {
 			let area = layout[offset - skip];
-			let layout = Layout::default()
-				.direction(Direction::Horizontal)
-				.constraints([Constraint::Min(20), Constraint::Max(6)])
-				.split(area);
 			let info = &self.info;
 			let indicator = if self.children.is_empty() { "" } else { "/" };
 			let text = Text::from(format!("{prefix}{info}{indicator}"));
@@ -87,9 +82,7 @@ impl Build {
 			} else {
 				tui::style::Style::default()
 			};
-
-			frame.render_widget(Paragraph::new(text).style(style), layout[0]);
-			frame.render_widget(self.status, layout[1]);
+			frame.render_widget(Paragraph::new(text).style(style), area);
 		}
 
 		offset += 1;
@@ -114,22 +107,6 @@ impl Build {
 			}
 		}
 		offset
-	}
-}
-
-impl Widget for Status {
-	fn render(self, area: tui::prelude::Rect, buf: &mut tui::prelude::Buffer) {
-		let char = match self {
-			Status::InProgress => {
-				const STRING: &str = "⣾⣽⣻⢿⡿⣟⣯⣷";
-				let index = unsafe { libc::rand() } % 8;
-				STRING.chars().nth(index.try_into().unwrap()).unwrap()
-			},
-			Status::Successful => '✅',
-			Status::Error => '❌',
-		};
-		let string = format!("{char}");
-		buf.set_string(area.x, area.y, string, tui::style::Style::default());
 	}
 }
 
@@ -173,5 +150,29 @@ impl Log {
 		let wrap = Wrap { trim: false };
 		let paragraph = Paragraph::new(text).wrap(wrap);
 		frame.render_widget(paragraph, area);
+	}
+}
+
+impl BuildResult {
+	pub const SPINNER: [&str; 16] = [
+		"⣾", "⣾", "⣽", "⣽", "⣻", "⣻", "⢿", "⢿", "⡿", "⡿", "⣟", "⣟", "⣯", "⣯", "⣷", "⣷",
+	];
+	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+		let text = match &self.value {
+			Ok(Ok(value)) => Text::from(format!("✅ {value}")),
+			Ok(Err(value)) => Text::from(format!("❌ {value}")),
+			Err(state) => Text::from(format!("{} In progress...", Self::SPINNER[*state])),
+		};
+		let widget = Paragraph::new(text).wrap(Wrap { trim: false });
+		frame.render_widget(widget, area);
+	}
+}
+
+impl InfoPane {
+	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+		match self {
+			Self::Log(log) => log.view(frame, area),
+			Self::Result(result) => result.view(frame, area),
+		}
 	}
 }

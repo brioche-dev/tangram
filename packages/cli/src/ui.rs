@@ -77,17 +77,24 @@ fn inner(
 ) -> std::io::Result<()> {
 	// Create the state, event stream, and controller.
 	let mut controller = Controller::new();
-	let mut state = App::new(client, root.clone(), root_info);
+	let mut state = App::new(client, root, root_info);
 
 	// Add the key bindings. Note that these closures take client and events by ref, which means that the Controller instance cannot outlive this function's scope.s
+	// The "Select" commands is special because it requires a `Client`.
 	let client_ = client.clone_box();
-
-	// The "Select" command is special because it requires a `Client`.
 	controller.add_command(
 		"Select",
 		[(ct::event::KeyCode::Enter, ct::event::KeyModifiers::NONE)],
 		move |state| {
 			state.select(client_.as_ref());
+		},
+	);
+	let client_ = client.clone_box();
+	controller.add_command(
+		"Tab Info",
+		[(ct::event::KeyCode::Tab, ct::event::KeyModifiers::NONE)],
+		move |state| {
+			state.tab_info(client_.as_ref());
 		},
 	);
 
@@ -107,7 +114,7 @@ fn inner(
 		}
 
 		// Update the log and build tree states.
-		state.log.update();
+		state.info.update();
 		state.build.update();
 
 		// Render the UI.
