@@ -100,11 +100,11 @@ impl Build {
 			let status = {
 				match &self.status {
 					Ok(Ok(_)) => "✓",
-					Ok(Err(_)) => "❌",
+					Ok(Err(_)) => "✗",
 					Err(index) => BuildResult::SPINNER[*index],
 				}
 			};
-			let text = Text::from(format!("{prefix}{indicator}{status}{info}"));
+			let text = Text::from(format!("{prefix}{indicator} {status} {info}"));
 			let style = if highlighted == offset {
 				tui::style::Style::default()
 					.bg(tui::style::Color::White)
