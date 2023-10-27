@@ -5,58 +5,99 @@ use tangram_client as tg;
 use tui::prelude::Direction;
 
 pub struct App {
-	/// Index into the viewable tree that is highlighted
-	pub highlighted: usize,
-
-	/// Index into the viewable tree that is selected for viewing in the other panel.
-	pub selected: usize,
-
-	/// The distance from the top of the highlighted item.
-	pub dy: usize,
-
 	/// The rotation of the UI.
 	pub direction: tui::layout::Direction,
 
-	/// The build tree state.
-	pub build: Build,
-
 	/// The info pane.
 	pub info: InfoPane,
+
+	/// The build tree.
+	pub tree: Tree,
 }
 
+/// Model of the state of the build tree view.
+pub struct Tree {
+	/// The root build of tree.
+	pub root: Build,
+
+	/// The number of items in the tree to skip when rendering.
+	pub skip: usize,
+
+	/// Which item in the tree is highlighted.
+	pub highlighted: usize,
+}
+
+/// Model of a single build within the tree.
 pub struct Build {
+	/// The underlying build object.
 	pub build: tg::Build,
-	pub status: Status,
+
+	/// If this build should be rendered as expanded.
 	pub is_expanded: bool,
+
+	/// A list of the children of this build.
 	pub children: Vec<Self>,
+
+	/// An informatic string to display in the tree view.
 	pub info: String,
-	pub result_receiver: tokio::sync::oneshot::Receiver<tg::Result<tg::Value>>,
+
+	/// A receiving channel to check for new children.
 	pub children_receiver: tokio::sync::mpsc::UnboundedReceiver<Self>,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum Status {
-	InProgress,
-	Successful,
-	Error,
+/// Model of the state of the info pane.
+pub enum InfoPane {
+	/// A build log.
+	Log(Log),
+
+	/// A build result.
+	Result(BuildResult),
+}
+
+/// The state of a given build log.
+pub struct Log {
+	/// The underlying build being logged.
+	pub build: tg::Build,
+
+	/// The text to display in the view panel.
+	pub text: String,
+
+	/// A receiver to poll for new log messages.
+	pub receiver: tokio::sync::mpsc::UnboundedReceiver<String>,
+}
+
+/// The state of a build's result.
+pub struct BuildResult {
+	/// The underlying build.
+	pub build: tg::Build,
+
+	/// The result of the value, Ok if done, Err if in progress.
+	pub value: Result<tg::Result<tg::Value>, usize>,
+
+	/// A receiver to poll for the result of a build.
+	pub receiver: tokio::sync::oneshot::Receiver<tg::Result<tg::Value>>,
 }
 
 impl App {
+	/// Create a new app model for a root build.
 	pub fn new(client: &dyn tg::Client, root: tg::Build, root_info: String) -> Self {
 		let log = Log::new(client, root.clone());
 		Self {
-			highlighted: 0,
-			selected: 0,
-			dy: 0,
 			direction: Direction::Horizontal,
-			build: Build::with_build(client, root, root_info),
 			info: InfoPane::Log(log),
+			tree: Tree::new(Build::with_build(client, root, root_info)),
 		}
 	}
 
+	/// Update any internal state for pending changes.
+	pub fn update(&mut self) {
+		self.tree.root.update();
+		self.info.update();
+	}
+
+	/// Select the highlighted build and display its status or log in the info panel.
 	pub fn select(&mut self, client: &dyn tg::Client) {
-		self.selected = self.highlighted;
-		let build = self.selected_build().build.clone();
+		let build = self.highlighted_build().build.clone();
 		match &self.info {
 			InfoPane::Log(_) => {
 				let log = Log::new(client, build);
@@ -69,31 +110,30 @@ impl App {
 		}
 	}
 
+	/// Move the highlighted build up one.
 	pub fn scroll_up(&mut self) {
-		self.dy = self.dy.saturating_sub(1);
-		self.highlighted = self.highlighted.saturating_sub(1);
+		self.tree.highlighted = self.tree.highlighted.saturating_sub(1);
 	}
 
+	/// Move the highlighted build down one.
 	pub fn scroll_down(&mut self) {
-		let len = self.build.len() + 1;
-		self.highlighted = self
-			.highlighted
-			.saturating_add(1)
-			.min(len.saturating_sub(1));
-
-		self.dy = self.dy.saturating_add(1).min(len.saturating_sub(1));
+		let len = self.tree.root.len();
+		self.tree.highlighted = self.tree.highlighted.saturating_add(1).min(len - 1);
 	}
 
+	/// Expand the children of the highlighted build.
 	pub fn expand(&mut self) {
 		let build = self.highlighted_build_mut();
 		build.is_expanded = true;
 	}
 
+	/// Collapse the children of the highlighted build.
 	pub fn collapse(&mut self) {
 		let build = self.highlighted_build_mut();
 		build.is_expanded = false;
 	}
 
+	/// Rotate the view.
 	pub fn rotate(&mut self) {
 		self.direction = match self.direction {
 			tui::layout::Direction::Horizontal => tui::layout::Direction::Vertical,
@@ -101,6 +141,7 @@ impl App {
 		}
 	}
 
+	/// Change what is displayed in the info panel.
 	pub fn tab_info(&mut self, client: &dyn tg::Client) {
 		let build = self.info.build();
 		match &self.info {
@@ -115,17 +156,27 @@ impl App {
 		}
 	}
 
-	pub fn selected_build(&self) -> &'_ Build {
-		self.build.find(self.selected).unwrap()
+	fn highlighted_build(&self) -> &'_ Build {
+		self.tree.root.find(self.tree.highlighted).unwrap()
 	}
 
 	fn highlighted_build_mut(&mut self) -> &'_ mut Build {
-		self.build.find_mut(self.highlighted).unwrap()
+		self.tree.root.find_mut(self.tree.highlighted).unwrap()
+	}
+}
+
+impl Tree {
+	fn new(root: Build) -> Self {
+		Self {
+			root,
+			skip: 0,
+			highlighted: 0,
+		}
 	}
 }
 
 impl Build {
-	pub fn find(&self, which: usize) -> Option<&'_ Self> {
+	fn find(&self, which: usize) -> Option<&'_ Self> {
 		fn inner(offset: usize, which: usize, build: &'_ Build) -> Result<&'_ Build, usize> {
 			if offset == which {
 				return Ok(build);
@@ -171,7 +222,7 @@ impl Build {
 		inner(0, which, self).ok()
 	}
 
-	pub fn with_build(client: &dyn tg::Client, build: tg::Build, info: String) -> Self {
+	fn with_build(client: &dyn tg::Client, build: tg::Build, info: String) -> Self {
 		let (children_sender, children_receiver) = tokio::sync::mpsc::unbounded_channel();
 		let client_ = client.clone_box();
 		let build_ = build.clone();
@@ -189,25 +240,12 @@ impl Build {
 			}
 		});
 
-		let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
-		let client_ = client.clone_box();
-		let build_ = build.clone();
-		tokio::task::spawn(async move {
-			let result = build_
-				.result(client_.as_ref())
-				.await
-				.and_then(|result| result);
-			let _ = result_sender.send(result);
-		});
-
 		Self {
 			build,
-			status: Status::InProgress,
 			children: vec![],
 			is_expanded: false,
 			info,
 			children_receiver,
-			result_receiver,
 		}
 	}
 
@@ -217,34 +255,37 @@ impl Build {
 			.fold(self.children.len(), |acc, child| acc + child.len())
 	}
 
-	pub fn update(&mut self) {
+	fn update(&mut self) {
 		if let Ok(child) = self.children_receiver.try_recv() {
 			self.children.push(child);
-		}
-		if let Ok(result) = self.result_receiver.try_recv() {
-			self.status = match result {
-				Ok(_) => Status::Successful,
-				Err(_) => Status::Error,
-			}
 		}
 		self.children.iter_mut().for_each(Self::update);
 	}
 }
 
-pub struct Log {
-	pub build: tg::Build,
-	pub text: String,
-	receiver: tokio::sync::mpsc::UnboundedReceiver<String>,
-	_task: tokio::task::JoinHandle<()>,
+impl InfoPane {
+	pub fn update(&mut self) {
+		match self {
+			Self::Log(log) => log.update(),
+			Self::Result(result) => result.update(),
+		}
+	}
+
+	fn build(&self) -> tg::Build {
+		match self {
+			Self::Log(log) => log.build.clone(),
+			Self::Result(result) => result.build.clone(),
+		}
+	}
 }
 
 impl Log {
-	pub fn new(client: &dyn tg::Client, build: tg::Build) -> Self {
+	fn new(client: &dyn tg::Client, build: tg::Build) -> Self {
 		let client = client.clone_box();
 		let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
 		let build_ = build.clone();
-		let task = tokio::task::spawn(async move {
+		tokio::task::spawn(async move {
 			let mut log = match build_.log(client.as_ref()).await {
 				Ok(log) => log,
 				Err(e) => {
@@ -269,30 +310,23 @@ impl Log {
 			build,
 			text,
 			receiver,
-			_task: task,
 		}
 	}
 
-	pub fn update(&mut self) {
+	fn update(&mut self) {
 		if let Ok(recv) = self.receiver.try_recv() {
 			self.text.push_str(recv.as_str());
 		}
 	}
 }
 
-pub struct BuildResult {
-	pub build: tg::Build,
-	pub value: Result<tg::Result<tg::Value>, usize>,
-	pub receiver: tokio::sync::oneshot::Receiver<tg::Result<tg::Value>>,
-}
-
 impl BuildResult {
-	pub fn new(client: &dyn tg::Client, build: tg::Build) -> Self {
+	fn new(client: &dyn tg::Client, build: tg::Build) -> Self {
 		let (sender, receiver) = tokio::sync::oneshot::channel();
 		let value = Err(0);
 		let client = client.clone_box();
 		let build_ = build.clone();
-		tokio::task::spawn(async move {
+		let _task = tokio::task::spawn(async move {
 			let value = build_.result(client.as_ref()).await.and_then(|r| r);
 			let _ = sender.send(value);
 		});
@@ -304,6 +338,10 @@ impl BuildResult {
 	}
 
 	fn update(&mut self) {
+		if self.value.is_ok() {
+			return;
+		}
+
 		self.value = match self.receiver.try_recv() {
 			Ok(value) => Ok(value),
 			Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
@@ -313,27 +351,6 @@ impl BuildResult {
 				let value = *self.value.as_ref().unwrap_err();
 				Err((value + 1) % Self::SPINNER.len())
 			},
-		}
-	}
-}
-
-pub enum InfoPane {
-	Log(Log),
-	Result(BuildResult),
-}
-
-impl InfoPane {
-	pub fn update(&mut self) {
-		match self {
-			Self::Log(log) => log.update(),
-			Self::Result(result) => result.update(),
-		}
-	}
-
-	fn build(&self) -> tg::Build {
-		match self {
-			Self::Log(log) => log.build.clone(),
-			Self::Result(result) => result.build.clone(),
 		}
 	}
 }

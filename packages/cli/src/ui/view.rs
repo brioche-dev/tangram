@@ -1,6 +1,6 @@
 use super::{
 	controller::Controller,
-	model::{App, Build, BuildResult, InfoPane, Log},
+	model::{App, Build, BuildResult, InfoPane, Log, Tree},
 	Frame,
 };
 use itertools::Itertools;
@@ -14,8 +14,6 @@ use tui::{
 
 impl App {
 	pub fn view(&mut self, frame: &mut Frame<'_>, area: Rect) {
-		self.dy = self.dy.min(area.height.try_into().unwrap());
-
 		let border = match self.direction {
 			Direction::Horizontal => Borders::LEFT,
 			Direction::Vertical => Borders::BOTTOM,
@@ -33,17 +31,35 @@ impl App {
 
 		let block = Block::default().borders(border);
 		frame.render_widget(block, layout[1]);
-		self.build.view(self.highlighted, self.dy, frame, layout[0]);
+		self.tree.view(frame, layout[0]);
 		self.info.view(frame, layout[2]);
 	}
 }
 
-impl Build {
-	fn view(&self, highlighted: usize, dy: usize, frame: &mut Frame<'_>, area: Rect) {
-		// first offset to render = highlighted - dy
-		// let page_size = area.height as usize - 1;
-		let skip = highlighted - dy;
+impl Tree {
+	fn view(&mut self, frame: &mut Frame<'_>, area: Rect) {
+		let layout = Layout::default()
+			.direction(Direction::Vertical)
+			.constraints([Constraint::Length(1), Constraint::Min(1)])
+			.split(area);
 
+		// Update the number of skipped children if necessary.
+		let height = layout[1].height.try_into().unwrap();
+		if self.highlighted < self.skip {
+			self.skip = self.highlighted;
+		} else if (self.highlighted - self.skip) >= height {
+			self.skip = self.highlighted - height + 1;
+		}
+
+		let text = Text::from("Builds");
+		frame.render_widget(Paragraph::new(text), layout[0]);
+		self.root
+			.view(self.skip, self.highlighted, frame, layout[1]);
+	}
+}
+
+impl Build {
+	fn view(&self, skip: usize, highlighted: usize, frame: &mut Frame<'_>, area: Rect) {
 		let layout = Layout::default()
 			.direction(Direction::Vertical)
 			.constraints(
@@ -53,9 +69,7 @@ impl Build {
 			)
 			.split(area);
 
-		let text = Text::from("Builds");
-		frame.render_widget(Paragraph::new(text), layout[0]);
-		self.view_inner(true, skip, highlighted, frame, &layout[1..], 0, "", 0);
+		self.view_inner(true, skip, highlighted, frame, layout.as_ref(), 0, "", 0);
 	}
 
 	#[allow(clippy::too_many_arguments)]
@@ -142,14 +156,29 @@ impl Controller {
 	}
 }
 
+impl InfoPane {
+	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+		match self {
+			Self::Log(log) => log.view(frame, area),
+			Self::Result(result) => result.view(frame, area),
+		}
+	}
+}
+
 impl Log {
-	fn view(&self, frame: &mut Frame<'_>, mut area: Rect) {
-		area.x += 1;
-		area.width -= 1;
+	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+		let layout = Layout::default()
+			.direction(Direction::Vertical)
+			.constraints([Constraint::Length(1), Constraint::Min(1)])
+			.split(area);
+
+		let text = Text::from("Log");
+		frame.render_widget(Paragraph::new(text), layout[0]);
+
 		let text = Text::from(self.text.as_str());
 		let wrap = Wrap { trim: false };
-		let paragraph = Paragraph::new(text).wrap(wrap);
-		frame.render_widget(paragraph, area);
+		let widget = Paragraph::new(text).wrap(wrap);
+		frame.render_widget(widget, layout[1]);
 	}
 }
 
@@ -158,21 +187,20 @@ impl BuildResult {
 		"⣾", "⣾", "⣽", "⣽", "⣻", "⣻", "⢿", "⢿", "⡿", "⡿", "⣟", "⣟", "⣯", "⣯", "⣷", "⣷",
 	];
 	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+		let layout = Layout::default()
+			.direction(Direction::Vertical)
+			.constraints([Constraint::Length(1), Constraint::Min(1)])
+			.split(area);
+
+		let text = Text::from("Status");
+		frame.render_widget(Paragraph::new(text), layout[0]);
+
 		let text = match &self.value {
 			Ok(Ok(value)) => Text::from(format!("✅ {value}")),
 			Ok(Err(value)) => Text::from(format!("❌ {value}")),
 			Err(state) => Text::from(format!("{} In progress...", Self::SPINNER[*state])),
 		};
 		let widget = Paragraph::new(text).wrap(Wrap { trim: false });
-		frame.render_widget(widget, area);
-	}
-}
-
-impl InfoPane {
-	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
-		match self {
-			Self::Log(log) => log.view(frame, area),
-			Self::Result(result) => result.view(frame, area),
-		}
+		frame.render_widget(widget, layout[1]);
 	}
 }

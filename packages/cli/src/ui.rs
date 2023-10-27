@@ -114,8 +114,7 @@ fn inner(
 		}
 
 		// Update the log and build tree states.
-		state.info.update();
-		state.build.update();
+		state.update();
 
 		// Render the UI.
 		terminal.draw(|frame| {
