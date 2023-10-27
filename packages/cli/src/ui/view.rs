@@ -51,7 +51,8 @@ impl Tree {
 			self.skip = self.highlighted - height + 1;
 		}
 
-		let text = Text::from("Builds");
+		let mut text = Text::from("Builds");
+		text.patch_style(Style::default().bg(Color::White));
 		frame.render_widget(Paragraph::new(text), layout[0]);
 		self.root
 			.view(self.skip, self.highlighted, frame, layout[1]);
@@ -88,8 +89,8 @@ impl Build {
 			let area = layout[offset - skip];
 			let info = &self.info;
 			let indicator = {
-				if self.children.is_empty() {
-					" "
+				if self.children.is_empty() && self.status.is_ok() {
+					"•"
 				} else if self.is_expanded {
 					"▼"
 				} else {
@@ -103,7 +104,7 @@ impl Build {
 					Err(index) => BuildResult::SPINNER[*index],
 				}
 			};
-			let text = Text::from(format!("{indicator}{status}{prefix}{info}"));
+			let text = Text::from(format!("{prefix}{indicator}{status}{info}"));
 			let style = if highlighted == offset {
 				tui::style::Style::default()
 					.bg(tui::style::Color::White)

@@ -124,7 +124,7 @@ impl App {
 	/// Move the highlighted build down one.
 	pub fn scroll_down(&mut self) {
 		let len = self.tree.root.len();
-		self.tree.highlighted = self.tree.highlighted.saturating_add(1).min(len - 1);
+		self.tree.highlighted = self.tree.highlighted.saturating_add(1).min(len);
 	}
 
 	/// Expand the children of the highlighted build.
