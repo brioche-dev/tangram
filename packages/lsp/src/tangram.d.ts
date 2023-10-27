@@ -432,20 +432,20 @@ declare namespace tg {
 			| { kind: "set_if_unset"; value: T }
 			| {
 					kind: "array_prepend";
-					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+					values: T extends Array<infer U> ? MaybeNestedArray<U> : never;
 			  }
 			| {
 					kind: "array_append";
-					value: T extends Array<infer U> ? MaybeNestedArray<U> : never;
+					values: T extends Array<infer U> ? MaybeNestedArray<U> : never;
 			  }
 			| {
 					kind: "template_prepend";
-					value: T extends Template.Arg ? Template.Arg : never;
+					template: T extends Template.Arg ? Template.Arg : never;
 					separator?: Template.Arg;
 			  }
 			| {
 					kind: "template_append";
-					value: T extends Template.Arg ? Template.Arg : never;
+					template: T extends Template.Arg ? Template.Arg : never;
 					separator?: Template.Arg;
 			  };
 
