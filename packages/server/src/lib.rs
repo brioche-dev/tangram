@@ -2,6 +2,7 @@ use self::progress::Progress;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{future, stream::BoxStream, FutureExt};
+use hyper_util::rt::TokioIo;
 use itertools::Itertools;
 use lmdb::{Cursor, Transaction};
 use std::{
@@ -15,9 +16,11 @@ use std::{
 use tangram_client as tg;
 use tangram_util::{
 	http::{full, ok, Incoming, Outgoing},
-	net::{Addr, Listener},
+	net::Addr,
 };
 use tg::{return_error, Result, WrapErr};
+use tokio::net::{TcpListener, UnixListener};
+use tokio_util::either::Either;
 
 mod build;
 mod clean;
@@ -188,15 +191,34 @@ impl Server {
 	}
 
 	pub async fn serve(self, addr: Addr) -> Result<()> {
-		let listener = Listener::bind(&addr)
-			.await
-			.wrap_err("Failed to create a new tcp listener.")?;
+		let listener = match &addr {
+			Addr::Inet(inet) => Either::Left(
+				TcpListener::bind(inet.to_string())
+					.await
+					.wrap_err("Failed to create the TCP listener.")?,
+			),
+			Addr::Unix(path) => Either::Right(
+				UnixListener::bind(path).wrap_err("Failed to create the UNIX listener.")?,
+			),
+		};
 		tracing::info!("🚀 Serving on {addr:?}.");
 		loop {
-			let stream = listener
-				.accept()
-				.await
-				.wrap_err("Failed to accept new incoming connections.")?;
+			let stream = TokioIo::new(match &listener {
+				Either::Left(listener) => Either::Left(
+					listener
+						.accept()
+						.await
+						.wrap_err("Failed to accept a new TCP connection.")?
+						.0,
+				),
+				Either::Right(listener) => Either::Right(
+					listener
+						.accept()
+						.await
+						.wrap_err("Failed to accept a new UNIX connection.")?
+						.0,
+				),
+			});
 			let server = self.clone();
 			tokio::spawn(async move {
 				hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
@@ -222,15 +244,12 @@ impl Server {
 		let method = request.method().clone();
 		let path_components = request.uri().path().split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
-			// Ping
 			(http::Method::GET, ["v1", "ping"]) => {
 				self.handle_ping_request(request).map(Some).boxed()
 			},
-			// Stop
 			(http::Method::PUT, ["v1", "stop"]) => {
 				self.handle_stop_request(request).map(Some).boxed()
 			},
-			// Clean
 			(http::Method::POST, ["v1", "clean"]) => {
 				self.handle_clean_request(request).map(Some).boxed()
 			},
@@ -242,6 +261,10 @@ impl Server {
 				.boxed(),
 			(http::Method::POST, ["v1", "targets", _, "build"]) => self
 				.handle_get_or_create_build_for_target_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::GET, ["v1", "builds", _, "target"]) => self
+				.handle_try_get_build_target_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::GET, ["v1", "builds", _, "children"]) => self
@@ -276,6 +299,7 @@ impl Server {
 			},
 
 			// Package
+			//
 			(_, _) => future::ready(None).boxed(),
 		}
 		.await;
@@ -315,7 +339,6 @@ impl Server {
 			return_error!("Unexpected path.")
 		};
 		std::process::exit(0);
-		// Ok(ok())
 	}
 }
 
@@ -375,6 +398,10 @@ impl tg::Client for Server {
 
 	async fn get_or_create_build_for_target(&self, id: &tg::target::Id) -> Result<tg::build::Id> {
 		self.get_or_create_build_for_target(id).await
+	}
+
+	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
+		self.try_get_build_target(id).await
 	}
 
 	async fn try_get_build_children(

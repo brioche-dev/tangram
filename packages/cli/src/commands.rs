@@ -26,7 +26,8 @@ mod publish;
 mod remove;
 mod run;
 mod search;
-pub(crate) mod serve;
+mod serve;
+mod server;
 mod shell;
 mod test;
 mod tree;
@@ -73,6 +74,7 @@ pub enum Command {
 	Run(self::run::Args),
 	Search(self::search::Args),
 	Serve(self::serve::Args),
+	Server(self::server::Args),
 	Shell(self::shell::Args),
 	Test(self::test::Args),
 	Tree(self::tree::Args),
@@ -126,6 +128,7 @@ impl Cli {
 			Command::Run(args) => self.command_run(args).boxed(),
 			Command::Search(args) => self.command_search(args).boxed(),
 			Command::Serve(args) => self.command_serve(args).boxed(),
+			Command::Server(args) => self.command_server(args).boxed(),
 			Command::Shell(args) => self.command_shell(args).boxed(),
 			Command::Test(args) => self.command_test(args).boxed(),
 			Command::Tree(args) => self.command_tree(args).boxed(),

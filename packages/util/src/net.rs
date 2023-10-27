@@ -1,10 +1,5 @@
-use hyper_util::rt::TokioIo;
 use std::{path::PathBuf, str::FromStr};
 use tangram_error::{Error, WrapErr};
-use tokio::{
-	io::{AsyncRead, AsyncWrite},
-	net::{TcpListener, TcpStream, UnixListener, UnixStream},
-};
 
 #[derive(Clone, Debug)]
 pub enum Addr {
@@ -92,39 +87,6 @@ impl std::str::FromStr for Host {
 			Ok(Host::Ip(ip))
 		} else {
 			Ok(Host::Domain(s.to_string()))
-		}
-	}
-}
-
-pub enum Listener {
-	Tcp(TcpListener),
-	Socket(UnixListener),
-}
-
-pub trait Stream: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
-
-impl Stream for TcpStream {}
-
-impl Stream for UnixStream {}
-
-impl Listener {
-	pub async fn bind(addr: &Addr) -> std::io::Result<Self> {
-		match addr {
-			Addr::Inet(inet) => Ok(Self::Tcp(TcpListener::bind(inet.to_string()).await?)),
-			Addr::Unix(path) => Ok(Self::Socket(UnixListener::bind(path)?)),
-		}
-	}
-
-	pub async fn accept(&self) -> std::io::Result<TokioIo<Box<dyn Stream>>> {
-		match self {
-			Listener::Tcp(listener) => {
-				let (stream, _) = listener.accept().await?;
-				Ok(TokioIo::new(Box::new(stream)))
-			},
-			Listener::Socket(listener) => {
-				let (stream, _) = listener.accept().await?;
-				Ok(TokioIo::new(Box::new(stream)))
-			},
 		}
 	}
 }

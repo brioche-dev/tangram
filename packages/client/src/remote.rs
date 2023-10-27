@@ -377,6 +377,24 @@ impl Client for Remote {
 		Ok(id)
 	}
 
+	async fn try_get_build_target(&self, id: &build::Id) -> Result<Option<target::Id>> {
+		let request = self
+			.request(http::Method::POST, &format!("/v1/builds/{id}/target"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		Ok(id)
+	}
+
 	async fn try_get_build_children(
 		&self,
 		id: &build::Id,

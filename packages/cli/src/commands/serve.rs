@@ -1,7 +1,7 @@
 use crate::{util::dirs::home_directory_path, Cli, API_URL};
 use std::path::PathBuf;
 use tangram_client as tg;
-use tangram_util::net::Addr;
+use tangram_util::net::{Addr, Inet};
 use tg::{Result, WrapErr};
 
 /// Run a server.
@@ -47,10 +47,18 @@ impl Cli {
 			.as_ref()
 			.and_then(|config| config.parent_url.as_ref().cloned())
 			.unwrap_or_else(|| API_URL.parse().unwrap());
-		let parent_addr = parent_url
-			.authority()
+		let parent_host = parent_url
+			.host_str()
+			.wrap_err("Invalid parent URL.")?
 			.parse()
 			.wrap_err("Invalid parent URL.")?;
+		let parent_port = parent_url
+			.port_or_known_default()
+			.wrap_err("Invalid parent URL.")?;
+		let parent_addr = Addr::Inet(Inet {
+			host: parent_host,
+			port: parent_port,
+		});
 		let parent_tls = parent_url.scheme() == "https";
 		let parent_token = credentials.map(|credentials| credentials.token);
 		let parent = tangram_client::remote::Builder::new(parent_addr)

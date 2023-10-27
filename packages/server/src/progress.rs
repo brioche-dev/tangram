@@ -98,6 +98,10 @@ impl Progress {
 		})
 	}
 
+	pub fn target(&self) -> &tg::Target {
+		&self.state.target
+	}
+
 	pub fn children_stream(&self) -> BoxStream<'static, Result<tg::Build>> {
 		let state = self.state.children.lock().unwrap();
 		let old = stream::iter(state.children.clone()).map(Ok);

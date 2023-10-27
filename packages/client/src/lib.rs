@@ -117,6 +117,15 @@ pub trait Client: Debug + Send + Sync + 'static {
 			.wrap_err("Failed to get the build.")?)
 	}
 
+	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
+		Ok(self
+			.try_get_build_target(id)
+			.await?
+			.wrap_err("Failed to get the build.")?)
+	}
+
+	async fn try_get_build_target(&self, id: &build::Id) -> Result<Option<target::Id>>;
+
 	async fn try_get_build_children(
 		&self,
 		id: &build::Id,

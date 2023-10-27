@@ -54,6 +54,28 @@ impl Server {
 		Ok(response)
 	}
 
+	pub async fn handle_try_get_build_target_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<hyper::Response<Outgoing>> {
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let [_, "builds", id, "target"] = path_components.as_slice() else {
+			return_error!("Unexpected path.");
+		};
+		let id = id.parse().wrap_err("Failed to parse the ID.")?;
+
+		// Attempt to get the build target.
+		let Some(build_id) = self.try_get_build_target(&id).await? else {
+			return Ok(not_found());
+		};
+
+		// Create the response.
+		let body = serde_json::to_vec(&build_id).wrap_err("Failed to serialize the response.")?;
+		let response = http::Response::builder().body(full(body)).unwrap();
+		Ok(response)
+	}
+
 	pub async fn handle_try_get_build_children_request(
 		&self,
 		request: http::Request<Incoming>,
@@ -65,7 +87,7 @@ impl Server {
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
-		// Get the children.
+		// Attempt to get the children.
 		let Some(children) = self.try_get_build_children(&id).await? else {
 			return Ok(not_found());
 		};
@@ -98,7 +120,7 @@ impl Server {
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
-		// Get the log.
+		// Attempt to get the log.
 		let Some(log) = self.try_get_build_log(&id).await? else {
 			return Ok(not_found());
 		};
@@ -125,7 +147,7 @@ impl Server {
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
-		// Get the result.
+		// Attempt to get the result.
 		let Some(result) = self.try_get_build_result(&id).await? else {
 			return Ok(not_found());
 		};
@@ -301,6 +323,25 @@ impl Server {
 		self.state.running.write().unwrap().1.remove(&build_id);
 
 		Ok(())
+	}
+
+	pub async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
+		// Attempt to get the target from the running state.
+		let state = self.state.running.read().unwrap().1.get(id).cloned();
+		if let Some(state) = state {
+			return Ok(Some(state.target().id(self).await?.clone()));
+		}
+
+		// Attempt to get the target from the object.
+		'a: {
+			let build = Build::with_id(id.clone());
+			let Some(object) = build.try_get_object(self).await? else {
+				break 'a;
+			};
+			return Ok(Some(object.target.expect_id().clone()));
+		}
+
+		Ok(None)
 	}
 
 	pub async fn try_get_build_children(
