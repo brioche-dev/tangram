@@ -1,11 +1,11 @@
-use num::ToPrimitive;
-use std::{fmt::Debug, path::Path};
-use crate::vfs::nfs::{
+use crate::nfs::{
 	server::{Context, Server},
 	state::NodeKind,
 	types::*,
-	xdr::{self, Encoder, ToXdr},
+	xdr,
 };
+use num::ToPrimitive;
+use std::{fmt::Debug, path::Path};
 
 #[derive(Clone, Debug)]
 pub enum ResOp {
@@ -22,8 +22,8 @@ impl ResOp {
 	}
 }
 
-impl ToXdr for ResOp {
-	fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), xdr::Error>
+impl xdr::ToXdr for ResOp {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -239,6 +239,7 @@ impl Server {
 
 use consts::*;
 
+#[allow(dead_code)]
 pub mod consts {
 	// Flags for mode
 	pub const MODE4_SUID: u32 = 0x800; /* set user id on execution */
@@ -484,8 +485,8 @@ struct Locations {
 	locations: Vec<Location>,
 }
 
-impl ToXdr for Locations {
-	fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), xdr::Error>
+impl xdr::ToXdr for Locations {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -501,8 +502,8 @@ struct Location {
 	rootpath: Vec<String>,
 }
 
-impl ToXdr for Location {
-	fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), xdr::Error>
+impl xdr::ToXdr for Location {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -531,8 +532,8 @@ where
 	}
 }
 
-impl ToXdr for Pathname {
-	fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), xdr::Error>
+impl xdr::ToXdr for Pathname {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -543,7 +544,7 @@ impl ToXdr for Pathname {
 impl FileAttrData {
 	fn to_bytes(&self, requested: &Bitmap) -> Vec<u8> {
 		let mut buf = Vec::with_capacity(256);
-		let mut encoder = Encoder::from_writer(&mut buf);
+		let mut encoder = xdr::Encoder::new(&mut buf);
 		for attr in ALL_SUPPORTED_ATTRS.iter().copied() {
 			if !requested.get(attr.to_usize().unwrap()) {
 				continue;
@@ -620,241 +621,86 @@ impl std::fmt::Debug for Bitmap {
 			if !self.get(flag.to_usize().unwrap()) {
 				continue;
 			}
-
 			match flag {
-				SUPPORTED_ATTRS => {
-					list.entry(&"SUPPORTED_ATTRS");
-				},
-				TYPE => {
-					list.entry(&"TYPE");
-				},
-				FH_EXPIRE_TYPE => {
-					list.entry(&"FH_EXPIRE_TYPE");
-				},
-				CHANGE => {
-					list.entry(&"CHANGE");
-				},
-				SIZE => {
-					list.entry(&"SIZE");
-				},
-				LINK_SUPPORT => {
-					list.entry(&"LINK_SUPPORT");
-				},
-				SYMLINK_SUPPORT => {
-					list.entry(&"SYMLINK_SUPPORT");
-				},
-				NAMED_ATTR => {
-					list.entry(&"NAMED_ATTR");
-				},
-				FSID => {
-					list.entry(&"FSID");
-				},
-				UNIQUE_HANDLES => {
-					list.entry(&"UNIQUE_HANDLES");
-				},
-				LEASE_TIME => {
-					list.entry(&"LEASE_TIME");
-				},
-				RDATTR_ERROR => {
-					list.entry(&"RDATTR_ERROR");
-				},
-				ACL => {
-					list.entry(&"ACL");
-				},
-				ACLSUPPORT => {
-					list.entry(&"ACLSUPPORT");
-				},
-				ARCHIVE => {
-					list.entry(&"ARCHIVE");
-				},
-				CANSETTIME => {
-					list.entry(&"CANSETTIME");
-				},
-				CASE_INSENSITIVE => {
-					list.entry(&"CASE_INSENSITIVE");
-				},
-				CASE_PRESERVING => {
-					list.entry(&"CASE_PRESERVING");
-				},
-				CHOWN_RESTRICTED => {
-					list.entry(&"CHOWN_RESTRICTED");
-				},
-				FILEHANDLE => {
-					list.entry(&"FILEHANDLE");
-				},
-				FILEID => {
-					list.entry(&"FILEID");
-				},
-				FILES_AVAIL => {
-					list.entry(&"FILES_AVAIL");
-				},
-				FILES_FREE => {
-					list.entry(&"FILES_FREE");
-				},
-				FILES_TOTAL => {
-					list.entry(&"FILES_TOTAL");
-				},
-				FS_LOCATIONS => {
-					list.entry(&"FS_LOCATIONS");
-				},
-				HIDDEN => {
-					list.entry(&"HIDDEN");
-				},
-				HOMOGENEOUS => {
-					list.entry(&"HOMOGENEOUS");
-				},
-				MAXFILESIZE => {
-					list.entry(&"MAXFILESIZE");
-				},
-				MAXLINK => {
-					list.entry(&"MAXLINK");
-				},
-				MAXNAME => {
-					list.entry(&"MAXNAME");
-				},
-				MAXREAD => {
-					list.entry(&"MAXREAD");
-				},
-				MAXWRITE => {
-					list.entry(&"MAXWRITE");
-				},
-				MIMETYPE => {
-					list.entry(&"MIMETYPE");
-				},
-				MODE => {
-					list.entry(&"MODE");
-				},
-				NO_TRUNC => {
-					list.entry(&"NO_TRUNC");
-				},
-				NUMLINKS => {
-					list.entry(&"NUMLINKS");
-				},
-				OWNER => {
-					list.entry(&"OWNER");
-				},
-				OWNER_GROUP => {
-					list.entry(&"OWNER_GROUP");
-				},
-				QUOTA_AVAIL_HARD => {
-					list.entry(&"QUOTA_AVAIL_HARD");
-				},
-				QUOTA_AVAIL_SOFT => {
-					list.entry(&"QUOTA_AVAIL_SOFT");
-				},
-				QUOTA_USED => {
-					list.entry(&"QUOTA_USED");
-				},
-				RAWDEV => {
-					list.entry(&"RAWDEV");
-				},
-				SPACE_AVAIL => {
-					list.entry(&"SPACE_AVAIL");
-				},
-				SPACE_FREE => {
-					list.entry(&"SPACE_FREE");
-				},
-				SPACE_TOTAL => {
-					list.entry(&"SPACE_TOTAL");
-				},
-				SPACE_USED => {
-					list.entry(&"SPACE_USED");
-				},
-				SYSTEM => {
-					list.entry(&"SYSTEM");
-				},
-				TIME_ACCESS => {
-					list.entry(&"TIME_ACCESS");
-				},
-				TIME_ACCESS_SET => {
-					list.entry(&"TIME_ACCESS_SET");
-				},
-				TIME_BACKUP => {
-					list.entry(&"TIME_BACKUP");
-				},
-				TIME_CREATE => {
-					list.entry(&"TIME_CREATE");
-				},
-				TIME_DELTA => {
-					list.entry(&"TIME_DELTA");
-				},
-				TIME_METADATA => {
-					list.entry(&"TIME_METADATA");
-				},
-				TIME_MODIFY => {
-					list.entry(&"TIME_MODIFY");
-				},
-				TIME_MODIFY_SET => {
-					list.entry(&"TIME_MODIFY_SET");
-				},
-				MOUNTED_ON_FILEID => {
-					list.entry(&"MOUNTED_ON_FILEID");
-				},
-				DIR_NOTIF_DELAY => {
-					list.entry(&"DIR_NOTIF_DELAY");
-				},
-				DIRENT_NOTIF_DELAY => {
-					list.entry(&"DIRENT_NOTIF_DELAY");
-				},
-				DACL => {
-					list.entry(&"DACL");
-				},
-				SACL => {
-					list.entry(&"SACL");
-				},
-				CHANGE_POLICY => {
-					list.entry(&"CHANGE_POLICY");
-				},
-				FS_STATUS => {
-					list.entry(&"FS_STATUS");
-				},
-				FS_LAYOUT_TYPE => {
-					list.entry(&"FS_LAYOUT_TYPE");
-				},
-				LAYOUT_HINT => {
-					list.entry(&"LAYOUT_HINT");
-				},
-				LAYOUT_TYPE => {
-					list.entry(&"LAYOUT_TYPE");
-				},
-				LAYOUT_BLKSIZE => {
-					list.entry(&"LAYOUT_BLKSIZE");
-				},
-				LAYOUT_ALIGNMENT => {
-					list.entry(&"LAYOUT_ALIGNMENT");
-				},
-				FS_LOCATIONS_INFO => {
-					list.entry(&"FS_LOCATIONS_INFO");
-				},
-				MDSTHRESHOLD => {
-					list.entry(&"MDSTHRESHOLD");
-				},
-				RETENTION_GET => {
-					list.entry(&"RETENTION_GET");
-				},
-				RETENTION_SET => {
-					list.entry(&"RETENTION_SET");
-				},
-				RETENTEVT_GET => {
-					list.entry(&"RETENTEVT_GET");
-				},
-				RETENTEVT_SET => {
-					list.entry(&"RETENTEVT_SET");
-				},
-				RETENTION_HOLD => {
-					list.entry(&"RETENTION_HOLD");
-				},
-				MODE_SET_MASKED => {
-					list.entry(&"MODE_SET_MASKED");
-				},
-				SUPPATTR_EXCLCREAT => {
-					list.entry(&"SUPPATTR_EXCLCREAT");
-				},
-				FS_CHARSET_CAP => {
-					list.entry(&"FS_CHARSET_CA&P");
-				},
+				SUPPORTED_ATTRS => list.entry(&"SUPPORTED_ATTRS"),
+				TYPE => list.entry(&"TYPE"),
+				FH_EXPIRE_TYPE => list.entry(&"FH_EXPIRE_TYPE"),
+				CHANGE => list.entry(&"CHANGE"),
+				SIZE => list.entry(&"SIZE"),
+				LINK_SUPPORT => list.entry(&"LINK_SUPPORT"),
+				SYMLINK_SUPPORT => list.entry(&"SYMLINK_SUPPORT"),
+				NAMED_ATTR => list.entry(&"NAMED_ATTR"),
+				FSID => list.entry(&"FSID"),
+				UNIQUE_HANDLES => list.entry(&"UNIQUE_HANDLES"),
+				LEASE_TIME => list.entry(&"LEASE_TIME"),
+				RDATTR_ERROR => list.entry(&"RDATTR_ERROR"),
+				ACL => list.entry(&"ACL"),
+				ACLSUPPORT => list.entry(&"ACLSUPPORT"),
+				ARCHIVE => list.entry(&"ARCHIVE"),
+				CANSETTIME => list.entry(&"CANSETTIME"),
+				CASE_INSENSITIVE => list.entry(&"CASE_INSENSITIVE"),
+				CASE_PRESERVING => list.entry(&"CASE_PRESERVING"),
+				CHOWN_RESTRICTED => list.entry(&"CHOWN_RESTRICTED"),
+				FILEHANDLE => list.entry(&"FILEHANDLE"),
+				FILEID => list.entry(&"FILEID"),
+				FILES_AVAIL => list.entry(&"FILES_AVAIL"),
+				FILES_FREE => list.entry(&"FILES_FREE"),
+				FILES_TOTAL => list.entry(&"FILES_TOTAL"),
+				FS_LOCATIONS => list.entry(&"FS_LOCATIONS"),
+				HIDDEN => list.entry(&"HIDDEN"),
+				HOMOGENEOUS => list.entry(&"HOMOGENEOUS"),
+				MAXFILESIZE => list.entry(&"MAXFILESIZE"),
+				MAXLINK => list.entry(&"MAXLINK"),
+				MAXNAME => list.entry(&"MAXNAME"),
+				MAXREAD => list.entry(&"MAXREAD"),
+				MAXWRITE => list.entry(&"MAXWRITE"),
+				MIMETYPE => list.entry(&"MIMETYPE"),
+				MODE => list.entry(&"MODE"),
+				NO_TRUNC => list.entry(&"NO_TRUNC"),
+				NUMLINKS => list.entry(&"NUMLINKS"),
+				OWNER => list.entry(&"OWNER"),
+				OWNER_GROUP => list.entry(&"OWNER_GROUP"),
+				QUOTA_AVAIL_HARD => list.entry(&"QUOTA_AVAIL_HARD"),
+				QUOTA_AVAIL_SOFT => list.entry(&"QUOTA_AVAIL_SOFT"),
+				QUOTA_USED => list.entry(&"QUOTA_USED"),
+				RAWDEV => list.entry(&"RAWDEV"),
+				SPACE_AVAIL => list.entry(&"SPACE_AVAIL"),
+				SPACE_FREE => list.entry(&"SPACE_FREE"),
+				SPACE_TOTAL => list.entry(&"SPACE_TOTAL"),
+				SPACE_USED => list.entry(&"SPACE_USED"),
+				SYSTEM => list.entry(&"SYSTEM"),
+				TIME_ACCESS => list.entry(&"TIME_ACCESS"),
+				TIME_ACCESS_SET => list.entry(&"TIME_ACCESS_SET"),
+				TIME_BACKUP => list.entry(&"TIME_BACKUP"),
+				TIME_CREATE => list.entry(&"TIME_CREATE"),
+				TIME_DELTA => list.entry(&"TIME_DELTA"),
+				TIME_METADATA => list.entry(&"TIME_METADATA"),
+				TIME_MODIFY => list.entry(&"TIME_MODIFY"),
+				TIME_MODIFY_SET => list.entry(&"TIME_MODIFY_SET"),
+				MOUNTED_ON_FILEID => list.entry(&"MOUNTED_ON_FILEID"),
+				DIR_NOTIF_DELAY => list.entry(&"DIR_NOTIF_DELAY"),
+				DIRENT_NOTIF_DELAY => list.entry(&"DIRENT_NOTIF_DELAY"),
+				DACL => list.entry(&"DACL"),
+				SACL => list.entry(&"SACL"),
+				CHANGE_POLICY => list.entry(&"CHANGE_POLICY"),
+				FS_STATUS => list.entry(&"FS_STATUS"),
+				FS_LAYOUT_TYPE => list.entry(&"FS_LAYOUT_TYPE"),
+				LAYOUT_HINT => list.entry(&"LAYOUT_HINT"),
+				LAYOUT_TYPE => list.entry(&"LAYOUT_TYPE"),
+				LAYOUT_BLKSIZE => list.entry(&"LAYOUT_BLKSIZE"),
+				LAYOUT_ALIGNMENT => list.entry(&"LAYOUT_ALIGNMENT"),
+				FS_LOCATIONS_INFO => list.entry(&"FS_LOCATIONS_INFO"),
+				MDSTHRESHOLD => list.entry(&"MDSTHRESHOLD"),
+				RETENTION_GET => list.entry(&"RETENTION_GET"),
+				RETENTION_SET => list.entry(&"RETENTION_SET"),
+				RETENTEVT_GET => list.entry(&"RETENTEVT_GET"),
+				RETENTEVT_SET => list.entry(&"RETENTEVT_SET"),
+				RETENTION_HOLD => list.entry(&"RETENTION_HOLD"),
+				MODE_SET_MASKED => list.entry(&"MODE_SET_MASKED"),
+				SUPPATTR_EXCLCREAT => list.entry(&"SUPPATTR_EXCLCREAT"),
+				FS_CHARSET_CAP => list.entry(&"FS_CHARSET_CA&P"),
 				_ => continue,
-			}
+			};
 		}
 		list.finish()
 	}

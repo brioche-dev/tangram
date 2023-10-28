@@ -10,5 +10,9 @@ repository = { workspace = true }
 version = { workspace = true }
 
 [dependencies]
+libc = { workspace = true }
+num = { workspace = true }
 tangram_client = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
+zerocopy = { workspace = true }

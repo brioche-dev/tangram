@@ -57,7 +57,7 @@ struct Inner {
 	local_pool: tokio_util::task::LocalPoolHandle,
 
 	/// The lock file.
-	#[allow(unused)]
+	#[allow(dead_code)]
 	lock_file: tokio::fs::File,
 
 	/// A client for communicating with the parent.
@@ -65,9 +65,9 @@ struct Inner {
 
 	/// The path to the directory where the server stores its data.
 	path: PathBuf,
-	//
-	// /// The VFS task.
-	// vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+
+	/// The VFS task.
+	vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
 
 type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, fnv::FnvBuildHasher>;
@@ -151,7 +151,7 @@ impl Server {
 		);
 
 		// Create the VFS task.
-		// let vfs_task = std::sync::Mutex::new(None);
+		let vfs_task = std::sync::Mutex::new(None);
 
 		// Create the inner.
 		let inner = Arc::new(Inner {
@@ -162,7 +162,7 @@ impl Server {
 			lock_file,
 			parent,
 			path,
-			// vfs_task,
+			vfs_task,
 		});
 
 		// Create the server.
@@ -172,13 +172,13 @@ impl Server {
 		// let fsm = Fsm::new(Arc::downgrade(&server.inner))?;
 		// server.inner.fsm.write().await.replace(fsm);
 
-		// // Start the VFS server.
-		// let vfs = vfs::Server::new(&server);
-		// let task = vfs
-		// 	.mount(server.artifacts_path())
-		// 	.await
-		// 	.wrap_err("Failed to mount the VFS.")?;
-		// server.inner.vfs_task.lock().unwrap().replace(task);
+		// Start the VFS server.
+		let vfs = tangram_vfs::Server::new(&server);
+		let task = vfs
+			.mount(&server.artifacts_path())
+			.await
+			.wrap_err("Failed to mount the VFS.")?;
+		server.inner.vfs_task.lock().unwrap().replace(task);
 
 		Ok(server)
 	}

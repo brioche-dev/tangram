@@ -304,7 +304,7 @@ mod tests {
 		let metadata = tg::package::Metadata {
 			name: Some("name".to_owned()),
 			version: Some("version".to_owned()),
-			description: Some("description".to_owned()),
+			..Default::default()
 		};
 		let imports = [
 			"tangram:default_import",

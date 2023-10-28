@@ -30,7 +30,7 @@ pub struct Data {
 	pub dependencies: BTreeMap<Dependency, Id>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct Metadata {
 	pub name: Option<String>,
 	pub version: Option<String>,

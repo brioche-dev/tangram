@@ -1,4 +1,6 @@
-use super::xdr::{FromXdr, ToXdr};
+#![allow(dead_code)]
+
+use super::xdr;
 use num::ToPrimitive;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -134,7 +136,7 @@ pub struct StateId {
 	pub other: [u8; 12],
 }
 
-impl FromXdr for StateId {
+impl xdr::FromXdr for StateId {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let seqid = decoder.decode()?;
 		let other = decoder.decode_n()?;
@@ -184,7 +186,7 @@ pub struct OpenOwner {
 	pub opaque: Vec<u8>,
 }
 
-impl ToXdr for FileHandle {
+impl xdr::ToXdr for FileHandle {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -194,7 +196,7 @@ impl ToXdr for FileHandle {
 	}
 }
 
-impl FromXdr for FileHandle {
+impl xdr::FromXdr for FileHandle {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let decoded = decoder.decode_opaque()?;
 		if decoded.len() != 8 {
@@ -207,7 +209,7 @@ impl FromXdr for FileHandle {
 	}
 }
 
-impl ToXdr for ChangeInfo {
+impl xdr::ToXdr for ChangeInfo {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -219,7 +221,7 @@ impl ToXdr for ChangeInfo {
 	}
 }
 
-impl ToXdr for StateId {
+impl xdr::ToXdr for StateId {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -230,7 +232,7 @@ impl ToXdr for StateId {
 	}
 }
 
-impl ToXdr for OpenDelegation {
+impl xdr::ToXdr for OpenDelegation {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -241,7 +243,7 @@ impl ToXdr for OpenDelegation {
 	}
 }
 
-impl ToXdr for FileAttr {
+impl xdr::ToXdr for FileAttr {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -252,7 +254,7 @@ impl ToXdr for FileAttr {
 	}
 }
 
-impl FromXdr for FileAttr {
+impl xdr::FromXdr for FileAttr {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let attr_mask = decoder.decode()?;
 		let attr_vals = decoder.decode_opaque()?.to_owned();
@@ -263,7 +265,7 @@ impl FromXdr for FileAttr {
 	}
 }
 
-impl ToXdr for CallbackClient {
+impl xdr::ToXdr for CallbackClient {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -274,7 +276,7 @@ impl ToXdr for CallbackClient {
 	}
 }
 
-impl FromXdr for CallbackClient {
+impl xdr::FromXdr for CallbackClient {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let program = decoder.decode_uint()?;
 		let location = decoder.decode()?;
@@ -282,7 +284,7 @@ impl FromXdr for CallbackClient {
 	}
 }
 
-impl ToXdr for ClientAddr {
+impl xdr::ToXdr for ClientAddr {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -293,7 +295,7 @@ impl ToXdr for ClientAddr {
 	}
 }
 
-impl FromXdr for ClientAddr {
+impl xdr::FromXdr for ClientAddr {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let netid = decoder.decode_str()?.to_owned();
 		let addr = decoder.decode_str()?.to_owned();
@@ -301,7 +303,7 @@ impl FromXdr for ClientAddr {
 	}
 }
 
-impl ToXdr for FsId {
+impl xdr::ToXdr for FsId {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -312,13 +314,13 @@ impl ToXdr for FsId {
 	}
 }
 
-impl FromXdr for Bitmap {
+impl xdr::FromXdr for Bitmap {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		Ok(Self(decoder.decode()?))
 	}
 }
 
-impl ToXdr for Bitmap {
+impl xdr::ToXdr for Bitmap {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -327,7 +329,7 @@ impl ToXdr for Bitmap {
 	}
 }
 
-impl ToXdr for Ace {
+impl xdr::ToXdr for Ace {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -340,7 +342,7 @@ impl ToXdr for Ace {
 	}
 }
 
-impl ToXdr for FsLocations {
+impl xdr::ToXdr for FsLocations {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -351,7 +353,7 @@ impl ToXdr for FsLocations {
 	}
 }
 
-impl ToXdr for Location {
+impl xdr::ToXdr for Location {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -362,7 +364,7 @@ impl ToXdr for Location {
 	}
 }
 
-impl ToXdr for SpecData {
+impl xdr::ToXdr for SpecData {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -373,7 +375,7 @@ impl ToXdr for SpecData {
 	}
 }
 
-impl ToXdr for Time {
+impl xdr::ToXdr for Time {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -384,7 +386,7 @@ impl ToXdr for Time {
 	}
 }
 
-impl FromXdr for Time {
+impl xdr::FromXdr for Time {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let seconds = decoder.decode()?;
 		let nanos = decoder.decode()?;
@@ -392,7 +394,7 @@ impl FromXdr for Time {
 	}
 }
 
-impl FromXdr for OpenOwner {
+impl xdr::FromXdr for OpenOwner {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let clientid = decoder.decode()?;
 		let len = decoder.decode_uint()?;
@@ -402,7 +404,7 @@ impl FromXdr for OpenOwner {
 	}
 }
 
-impl FromXdr for OpenFlags {
+impl xdr::FromXdr for OpenFlags {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		match decoder.decode_int()? {
 			0 => Ok(Self::None),
@@ -414,7 +416,7 @@ impl FromXdr for OpenFlags {
 	}
 }
 
-impl FromXdr for OpenClaim {
+impl xdr::FromXdr for OpenClaim {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
@@ -432,7 +434,7 @@ impl FromXdr for OpenClaim {
 	}
 }
 
-impl FromXdr for OpenDelegationType {
+impl xdr::FromXdr for OpenDelegationType {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
@@ -446,7 +448,7 @@ impl FromXdr for OpenDelegationType {
 	}
 }
 
-impl ToXdr for Entry {
+impl xdr::ToXdr for Entry {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,

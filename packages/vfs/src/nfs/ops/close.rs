@@ -1,8 +1,8 @@
-use crate::vfs::nfs::{
+use crate::nfs::{
 	server::{Context, Server},
 	state::NodeKind,
 	types::*,
-	xdr::{FromXdr, ToXdr},
+	xdr,
 };
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -31,7 +31,7 @@ impl Server {
 
 		if let NodeKind::File { .. } = &node.kind {
 			let mut state = self.state.write().await;
-			if let None = state.blob_readers.remove(&arg.open_stateid) {
+			if state.blob_readers.remove(&arg.open_stateid).is_none() {
 				return ResOp::Err(NFS4ERR_BAD_STATEID);
 			}
 		}
@@ -52,11 +52,11 @@ impl ResOp {
 	}
 }
 
-impl ToXdr for Arg {
+impl xdr::ToXdr for Arg {
 	fn encode<W>(
 		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+		encoder: &mut crate::nfs::xdr::Encoder<W>,
+	) -> Result<(), crate::nfs::xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -66,10 +66,8 @@ impl ToXdr for Arg {
 	}
 }
 
-impl FromXdr for Arg {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for Arg {
+	fn decode(decoder: &mut crate::nfs::xdr::Decoder<'_>) -> Result<Self, crate::nfs::xdr::Error> {
 		let seqid = decoder.decode_uint()?;
 		let open_stateid = decoder.decode()?;
 		Ok(Self {
@@ -79,11 +77,8 @@ impl FromXdr for Arg {
 	}
 }
 
-impl ToXdr for ResOp {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ResOp {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{

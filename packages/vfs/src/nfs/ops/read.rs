@@ -1,8 +1,8 @@
-use crate::vfs::nfs::{
+use crate::nfs::{
 	server::{Context, Server},
 	state::NodeKind,
 	types::*,
-	xdr::{FromXdr, ToXdr},
+	xdr,
 };
 use num::ToPrimitive;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -78,10 +78,8 @@ impl Server {
 	}
 }
 
-impl FromXdr for Arg {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for Arg {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let state_id = decoder.decode()?;
 		let offset = decoder.decode()?;
 		let count = decoder.decode()?;
@@ -102,11 +100,8 @@ impl ResOp {
 	}
 }
 
-impl ToXdr for ResOp {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ResOp {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{

@@ -1,5 +1,5 @@
 pub mod dirs {
-	#![allow(unused)]
+	#![allow(dead_code)]
 
 	use crate::{error, Result};
 	use std::path::PathBuf;

@@ -10,9 +10,10 @@ impl<W> Encoder<W>
 where
 	W: std::io::Write,
 {
-	pub fn from_writer(output: W) -> Self {
+	pub fn new(output: W) -> Self {
 		Self { output }
 	}
+
 	pub fn encode_n<const N: usize>(&mut self, bytes: [u8; N]) -> Result<(), Error> {
 		self.output.write_all(&bytes)?;
 		Ok(())
@@ -69,6 +70,7 @@ where
 		value.encode(self)
 	}
 
+	#[allow(dead_code)]
 	pub fn encode_array<T>(&mut self, value: &[T]) -> Result<(), Error>
 	where
 		T: ToXdr,
@@ -160,6 +162,7 @@ impl<'d> Decoder<'d> {
 		Ok(head)
 	}
 
+	#[allow(dead_code)]
 	pub fn peek_bytes(&mut self, count: usize) -> Result<&'d [u8], Error> {
 		if self.input.len() < count {
 			return Err(Error::UnexpectedEof);
@@ -376,11 +379,12 @@ where
 	T: ToXdr,
 {
 	let mut bytes = Vec::new();
-	let mut encoder = Encoder::from_writer(&mut bytes);
+	let mut encoder = Encoder::new(&mut bytes);
 	encoder.encode(arg).unwrap();
 	bytes
 }
 
+#[allow(dead_code)]
 pub fn from_bytes<T>(bytes: &[u8]) -> Result<T, Error>
 where
 	T: FromXdr,

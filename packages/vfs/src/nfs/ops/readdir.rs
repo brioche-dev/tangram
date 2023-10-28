@@ -1,8 +1,8 @@
-use crate::vfs::nfs::{
+use crate::nfs::{
 	server::{Context, Server},
 	state::NodeKind,
 	types::*,
-	xdr::{FromXdr, ToXdr},
+	xdr,
 };
 use num::ToPrimitive;
 
@@ -24,8 +24,6 @@ pub enum ResOp {
 	},
 	Err(i32),
 }
-
-const SKIP: usize = 2;
 
 impl Server {
 	#[tracing::instrument(skip(self))]
@@ -103,10 +101,8 @@ impl Server {
 		}
 	}
 }
-impl FromXdr for Arg {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for Arg {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let cookie = decoder.decode()?;
 		let cookie_verf = decoder.decode_n()?;
 		let dircount = decoder.decode()?;
@@ -131,11 +127,8 @@ impl ResOp {
 	}
 }
 
-impl ToXdr for ResOp {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ResOp {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{

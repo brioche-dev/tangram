@@ -1,4 +1,4 @@
-use crate::vfs::nfs::{
+use crate::nfs::{
 	server::Context,
 	types::{FileHandle, NFS4ERR_BADHANDLE},
 };

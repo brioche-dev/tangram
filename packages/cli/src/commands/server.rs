@@ -27,13 +27,19 @@ impl Cli {
 	pub async fn command_server(&self, args: Args) -> Result<()> {
 		match args.command {
 			Command::Start => {
-				tokio::process::Command::new(
-					std::env::current_exe()
-						.wrap_err("Failed to get the current executable path.")?,
-				)
-				.arg("serve")
-				.spawn()
-				.wrap_err("Failed to spawn the server.")?;
+				let executable = std::env::current_exe()
+					.wrap_err("Failed to get the current executable path.")?;
+				let stdout = std::fs::File::create("stdout")
+					.wrap_err("Failed to create the server log file.")?;
+				let stderr = std::fs::File::create("stderr")
+					.wrap_err("Failed to create the server log file.")?;
+				tokio::process::Command::new(executable)
+					.arg("serve")
+					.stdin(std::process::Stdio::null())
+					.stdout(std::process::Stdio::from(stdout))
+					.stderr(std::process::Stdio::from(stderr))
+					.spawn()
+					.wrap_err("Failed to spawn the server.")?;
 			},
 			Command::Stop => {
 				let client = self.client().await?;

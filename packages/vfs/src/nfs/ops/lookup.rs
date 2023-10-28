@@ -1,14 +1,14 @@
-use crate::{
-	vfs::nfs::{
-		server::{Context, Server},
-		state::{Node, NodeKind},
-		types::*,
-	},
-	Artifact,
+use crate::nfs::{
+	server::{Context, Server},
+	state::{Node, NodeKind},
+	types::*,
 };
 use std::{collections::BTreeMap, sync::Arc};
+use tangram_client as tg;
+use tg::Artifact;
 
 pub type Arg = String;
+
 pub type ResOp = i32;
 
 impl Server {

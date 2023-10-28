@@ -1,8 +1,8 @@
-use crate::vfs::nfs::{
+use crate::nfs::{
 	server::{Context, Server},
 	state::NodeKind,
 	types::*,
-	xdr::ToXdr,
+	xdr,
 };
 
 pub type Arg = u32;
@@ -13,6 +13,7 @@ pub enum ResOp {
 	Err(i32),
 }
 
+#[allow(dead_code)]
 pub mod flags {
 	pub const ACCESS4_READ: u32 = 0x00000001;
 	pub const ACCESS4_LOOKUP: u32 = 0x00000002;
@@ -74,11 +75,8 @@ impl ResOp {
 	}
 }
 
-impl ToXdr for ResOp {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ResOp {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{

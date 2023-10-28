@@ -1,8 +1,4 @@
-use crate::vfs::nfs::{
-	ops::*,
-	types::*,
-	xdr::{FromXdr, ToXdr},
-};
+use super::{ops::*, types::*, xdr};
 
 #[derive(Debug, Clone)]
 pub struct CompoundArgs {
@@ -20,23 +16,23 @@ pub struct CompoundReply {
 
 #[derive(Debug, Clone)]
 pub enum Arg {
-	Access(access::Arg),                            // 3
-	Close(close::Arg),                              // 4
-	GetAttr(Bitmap),                                // 9
-	GetFileHandle,                                  // 10
-	Lookup(lookup::Arg),                            // 15
-	Open(open::Arg),                                // 18
-	PutFileHandle(FileHandle),                      // 22
-	PutRootFileHandle,                              // 24
-	Read(read::Arg),                                // 25
-	ReadDir(readdir::Arg),                          // 26
-	ReadLink,                                       // 27
-	Renew(set_client_id::ClientId),                 // 30
-	RestoreFileHandle,                              // 31
-	SaveFileHandle,                                 // 32
-	SecInfo(String),                                // 33
-	SetClientId(set_client_id::Arg),                // 35
-	SetCLientIdConfirm(set_client_id_confirm::Arg), // 36
+	Access(access::Arg),
+	Close(close::Arg),
+	GetAttr(Bitmap),
+	GetFileHandle,
+	Lookup(lookup::Arg),
+	Open(open::Arg),
+	PutFileHandle(FileHandle),
+	PutRootFileHandle,
+	Read(read::Arg),
+	ReadDir(readdir::Arg),
+	ReadLink,
+	Renew(set_client_id::ClientId),
+	RestoreFileHandle,
+	SaveFileHandle,
+	SecInfo(String),
+	SetClientId(set_client_id::Arg),
+	SetClientIdConfirm(set_client_id_confirm::Arg),
 	Unsupported(i32),
 	Illegal,
 }
@@ -83,14 +79,14 @@ impl Arg {
 			Self::SaveFileHandle => 32,
 			Self::SecInfo(_) => 33,
 			Self::SetClientId(_) => 35,
-			Self::SetCLientIdConfirm(_) => 36,
+			Self::SetClientIdConfirm(_) => 36,
 			Self::Unsupported(op) => *op,
 			Self::Illegal => NFS4ERR_OP_ILLEGAL,
 		}
 	}
 }
 
-impl FromXdr for Arg {
+impl xdr::FromXdr for Arg {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let opcode = decoder.decode_int()?;
 		match opcode {
@@ -110,7 +106,7 @@ impl FromXdr for Arg {
 			32 => Ok(Arg::SaveFileHandle),
 			33 => Ok(Arg::SecInfo(decoder.decode()?)),
 			35 => Ok(Arg::SetClientId(decoder.decode()?)),
-			36 => Ok(Arg::SetCLientIdConfirm(decoder.decode()?)),
+			36 => Ok(Arg::SetClientIdConfirm(decoder.decode()?)),
 			opcode => {
 				if (3..=56).contains(&opcode) {
 					tracing::warn!(?opcode, "Unsupported opcode.");
@@ -124,7 +120,7 @@ impl FromXdr for Arg {
 	}
 }
 
-impl FromXdr for CompoundArgs {
+impl xdr::FromXdr for CompoundArgs {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let tag = std::str::from_utf8(decoder.decode_opaque()?)?;
 		let minor_version = decoder.decode_uint()?;
@@ -137,7 +133,7 @@ impl FromXdr for CompoundArgs {
 	}
 }
 
-impl ToXdr for CompoundReply {
+impl xdr::ToXdr for CompoundReply {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -199,7 +195,7 @@ impl ResultOp {
 	}
 }
 
-impl ToXdr for ResultOp {
+impl xdr::ToXdr for ResultOp {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,

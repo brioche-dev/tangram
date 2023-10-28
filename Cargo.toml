@@ -95,6 +95,7 @@ tangram_package = { path = "packages/package" }
 tangram_runtime = { path = "packages/runtime" }
 tangram_server = { path = "packages/server" }
 tangram_util = { path = "packages/util" }
+tangram_vfs = { path = "packages/vfs" }
 tar = { version = "0.4" }
 tempfile = "3"
 thiserror = "1"

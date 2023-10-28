@@ -1,4 +1,4 @@
-use crate::vfs::nfs::{server::Server, types::*, xdr::FromXdr};
+use crate::nfs::{server::Server, types::*, xdr};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Arg {
@@ -23,10 +23,8 @@ impl Server {
 	}
 }
 
-impl FromXdr for Arg {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for Arg {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let clientid = decoder.decode()?;
 		let verifier = decoder.decode_n()?;
 		Ok(Self { clientid, verifier })

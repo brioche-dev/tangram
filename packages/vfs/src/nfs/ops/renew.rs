@@ -1,4 +1,4 @@
-use crate::vfs::nfs::{ops::set_client_id::ClientId, server::Server, types::NFS4_OK};
+use crate::nfs::{ops::set_client_id::ClientId, server::Server, types::NFS4_OK};
 
 impl Server {
 	#[tracing::instrument(skip(self))]

@@ -1,7 +1,13 @@
-use super::xdr::{self, Error, FromXdr, ToXdr};
+use super::xdr;
 use num::ToPrimitive;
 use std::io::IoSlice;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+#[derive(Clone, Debug)]
+pub struct Auth {
+	pub flavor: AuthFlavor,
+	pub opaque: Vec<u8>,
+}
 
 #[derive(Copy, Clone, Debug)]
 #[repr(i32)]
@@ -10,12 +16,6 @@ pub enum AuthFlavor {
 	Sys = 1,
 	Short = 2,
 	Unknown(i32),
-}
-
-#[derive(Clone, Debug)]
-pub struct Auth {
-	pub flavor: AuthFlavor,
-	pub opaque: Vec<u8>,
 }
 
 #[derive(Clone, Debug)]
@@ -81,33 +81,7 @@ pub enum AuthStat {
 	Failed = 7,
 }
 
-impl ToXdr for AuthFlavor {
-	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
-	where
-		W: std::io::Write,
-	{
-		let int = match self {
-			Self::None => 0,
-			Self::Sys => 1,
-			Self::Short => 2,
-			Self::Unknown(i) => *i,
-		};
-		encoder.encode_int(int)
-	}
-}
-
-impl FromXdr for AuthFlavor {
-	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
-		match decoder.decode_int()? {
-			0 => Ok(Self::None),
-			1 => Ok(Self::Sys),
-			2 => Ok(Self::Short),
-			i => Ok(Self::Unknown(i)),
-		}
-	}
-}
-
-impl ToXdr for Auth {
+impl xdr::ToXdr for Auth {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -118,7 +92,7 @@ impl ToXdr for Auth {
 	}
 }
 
-impl FromXdr for Auth {
+impl xdr::FromXdr for Auth {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let flavor = decoder.decode()?;
 		let opaque = decoder.decode()?;
@@ -135,7 +109,33 @@ impl Default for Auth {
 	}
 }
 
-impl ToXdr for Message {
+impl xdr::ToXdr for AuthFlavor {
+	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		let int = match self {
+			Self::None => 0,
+			Self::Sys => 1,
+			Self::Short => 2,
+			Self::Unknown(i) => *i,
+		};
+		encoder.encode_int(int)
+	}
+}
+
+impl xdr::FromXdr for AuthFlavor {
+	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
+		match decoder.decode_int()? {
+			0 => Ok(Self::None),
+			1 => Ok(Self::Sys),
+			2 => Ok(Self::Short),
+			i => Ok(Self::Unknown(i)),
+		}
+	}
+}
+
+impl xdr::ToXdr for Message {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -146,7 +146,7 @@ impl ToXdr for Message {
 	}
 }
 
-impl FromXdr for Message {
+impl xdr::FromXdr for Message {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let xid = decoder.decode_uint()?;
 		let body = decoder.decode()?;
@@ -154,7 +154,7 @@ impl FromXdr for Message {
 	}
 }
 
-impl ToXdr for MessageBody {
+impl xdr::ToXdr for MessageBody {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -173,7 +173,7 @@ impl ToXdr for MessageBody {
 	}
 }
 
-impl FromXdr for MessageBody {
+impl xdr::FromXdr for MessageBody {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
@@ -185,14 +185,14 @@ impl FromXdr for MessageBody {
 				let body = decoder.decode()?;
 				Ok(Self::Reply(body))
 			},
-			tag => Err(Error::Custom(format!(
+			tag => Err(xdr::Error::Custom(format!(
 				"Expected a message body. Got {tag}."
 			))),
 		}
 	}
 }
 
-impl ToXdr for CallBody {
+impl xdr::ToXdr for CallBody {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -207,7 +207,7 @@ impl ToXdr for CallBody {
 	}
 }
 
-impl FromXdr for CallBody {
+impl xdr::FromXdr for CallBody {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let rpcvers = decoder.decode_uint()?;
 		let prog = decoder.decode_uint()?;
@@ -226,7 +226,7 @@ impl FromXdr for CallBody {
 	}
 }
 
-impl ToXdr for ReplyBody {
+impl xdr::ToXdr for ReplyBody {
 	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
 	where
 		W: std::io::Write,
@@ -245,19 +245,21 @@ impl ToXdr for ReplyBody {
 	}
 }
 
-impl FromXdr for ReplyBody {
+impl xdr::FromXdr for ReplyBody {
 	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
 			0 => Ok(Self::Accepted(decoder.decode()?)),
 			1 => Ok(Self::Rejected(decoder.decode()?)),
-			tag => Err(Error::Custom(format!("Expected a reply body. Got {tag}."))),
+			tag => Err(xdr::Error::Custom(format!(
+				"Expected a reply body. Got {tag}."
+			))),
 		}
 	}
 }
 
-impl ToXdr for ReplyAccepted {
-	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), Error>
+impl xdr::ToXdr for ReplyAccepted {
+	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -267,16 +269,16 @@ impl ToXdr for ReplyAccepted {
 	}
 }
 
-impl FromXdr for ReplyAccepted {
-	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, Error> {
+impl xdr::FromXdr for ReplyAccepted {
+	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let verf = decoder.decode()?;
 		let stat = decoder.decode()?;
 		Ok(Self { verf, stat })
 	}
 }
 
-impl ToXdr for ReplyAcceptedStat {
-	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), Error>
+impl xdr::ToXdr for ReplyAcceptedStat {
+	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -307,8 +309,8 @@ impl ToXdr for ReplyAcceptedStat {
 	}
 }
 
-impl FromXdr for ReplyAcceptedStat {
-	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, Error> {
+impl xdr::FromXdr for ReplyAcceptedStat {
+	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
 			0 => Ok(Self::Success {
@@ -322,13 +324,13 @@ impl FromXdr for ReplyAcceptedStat {
 			3 => Ok(Self::ProcedureUnavailable),
 			4 => Ok(Self::GarbageArgs),
 			5 => Ok(Self::SystemError),
-			tag => Err(Error::Custom(format!("Expected a reply. Got {tag}."))),
+			tag => Err(xdr::Error::Custom(format!("Expected a reply. Got {tag}."))),
 		}
 	}
 }
 
-impl ToXdr for ReplyRejected {
-	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), Error>
+impl xdr::ToXdr for ReplyRejected {
+	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -344,8 +346,8 @@ impl ToXdr for ReplyRejected {
 	}
 }
 
-impl FromXdr for ReplyRejected {
-	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, Error> {
+impl xdr::FromXdr for ReplyRejected {
+	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
 			0 => Ok(Self::RpcMismatch {
@@ -353,13 +355,13 @@ impl FromXdr for ReplyRejected {
 				high: decoder.decode_uint()?,
 			}),
 			1 => Ok(Self::AuthError(decoder.decode()?)),
-			tag => Err(Error::Custom(format!("Expected a reply. Got {tag}."))),
+			tag => Err(xdr::Error::Custom(format!("Expected a reply. Got {tag}."))),
 		}
 	}
 }
 
-impl ToXdr for AuthStat {
-	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), Error>
+impl xdr::ToXdr for AuthStat {
+	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -377,8 +379,8 @@ impl ToXdr for AuthStat {
 	}
 }
 
-impl FromXdr for AuthStat {
-	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, Error> {
+impl xdr::FromXdr for AuthStat {
+	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let int = decoder.decode_int()?;
 		match int {
 			0 => Ok(Self::Ok),
@@ -389,7 +391,9 @@ impl FromXdr for AuthStat {
 			5 => Ok(Self::TooWeak),
 			6 => Ok(Self::InvalidResp),
 			7 => Ok(Self::Failed),
-			int => Err(Error::Custom(format!("Expected auth error. Got {int}."))),
+			int => Err(xdr::Error::Custom(format!(
+				"Expected auth error. Got {int}."
+			))),
 		}
 	}
 }
@@ -426,7 +430,7 @@ where
 
 pub fn success<T>(verf: Option<Auth>, value: T) -> ReplyBody
 where
-	T: ToXdr,
+	T: xdr::ToXdr,
 {
 	let verf = verf.unwrap_or_default();
 	let results = xdr::to_bytes(&value);

@@ -4,7 +4,7 @@ use std::{
 	ffi::CString,
 	io::{Read, SeekFrom, Write},
 	os::{fd::FromRawFd, unix::prelude::OsStrExt},
-	path::{Path, PathBuf},
+	path::Path,
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
@@ -12,6 +12,7 @@ use tg::{
 	artifact::Artifact, blob, directory::Directory, file::File, symlink::Symlink, template, Client,
 	Result, Template, Wrap, WrapErr,
 };
+use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -136,14 +137,16 @@ impl Server {
 	}
 
 	/// Serve.
-	pub fn serve(&self, mut fuse_file: std::fs::File) -> Result<()> {
+	pub async fn serve(&self, fuse_file: std::fs::File) -> Result<()> {
+		let mut fuse_file = tokio::fs::File::from_std(fuse_file);
+
 		// Create a buffer to read requests into.
 		let mut request_buffer = vec![0u8; 1024 * 1024 + 4096];
 
 		// Handle each request.
 		loop {
 			// Read a request from the FUSE file.
-			let request_size = match fuse_file.read(request_buffer.as_mut()) {
+			let request_size = match fuse_file.read(request_buffer.as_mut()).await {
 				Ok(request_size) => request_size,
 
 				// Handle an error reading the request from the FUSE file.
@@ -199,6 +202,7 @@ impl Server {
 			// Spawn a task to handle the request.
 			let mut fuse_file = fuse_file
 				.try_clone()
+				.await
 				.wrap_err("Failed to clone the FUSE file.")?;
 			let server = self.clone();
 			tokio::spawn(async move {
@@ -242,7 +246,7 @@ impl Server {
 				};
 
 				// Write the response.
-				match fuse_file.write_all(&response_bytes) {
+				match fuse_file.write_all(&response_bytes).await {
 					Ok(_) => {},
 					Err(error) => {
 						tracing::error!(?error, "Failed to write the response.");
@@ -796,16 +800,16 @@ impl Node {
 	}
 }
 
-pub async fn mount(mountpoint: PathBuf) -> crate::Result<std::fs::File> {
-	unmount(&mountpoint).await?;
-	let result = unsafe { mount_inner(&mountpoint) };
+pub async fn mount(path: &Path) -> crate::Result<std::fs::File> {
+	unmount(path).await?;
+	let result = unsafe { mount_inner(path) };
 	if result.is_err() {
-		unmount(&mountpoint).await?;
+		unmount(path).await?;
 	}
 	result
 }
 
-unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
+unsafe fn mount_inner(path: &Path) -> crate::Result<std::fs::File> {
 	// Setup the arguments.
 	let uid = libc::getuid();
 	let gid = libc::getgid();
@@ -836,7 +840,7 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 			b"-o\0".as_ptr().cast(),
 			options.as_ptr().cast(),
 			b"--\0".as_ptr().cast(),
-			mountpoint.as_os_str().as_bytes().as_ptr().cast(),
+			path.as_os_str().as_bytes().as_ptr().cast(),
 			std::ptr::null(),
 		];
 		libc::close(fds[1]);
@@ -903,11 +907,11 @@ unsafe fn mount_inner(mountpoint: &Path) -> crate::Result<std::fs::File> {
 	Ok(std::fs::File::from_raw_fd(fd))
 }
 
-async fn unmount(mountpoint: &Path) -> crate::Result<()> {
+async fn unmount(path: &Path) -> crate::Result<()> {
 	tokio::process::Command::new("fusermount3")
 		.arg("-q")
 		.arg("-u")
-		.arg(mountpoint)
+		.arg(path)
 		.status()
 		.await
 		.wrap_err("Failed to execute the unmount command.")?;

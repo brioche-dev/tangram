@@ -1,13 +1,12 @@
-use super::{
+use self::{
 	compound::{Arg, CompoundArgs, CompoundReply, ResultOp},
 	ops::*,
-	rpc::{
-		self, Auth, AuthStat, Message, MessageBody, ReplyAcceptedStat, ReplyBody, ReplyRejected,
-	},
+	rpc::{Auth, AuthStat, Message, MessageBody, ReplyAcceptedStat, ReplyBody, ReplyRejected},
 	state::{Node, State},
 	types::*,
 	xdr::{Decoder, Encoder, Error},
 };
+use std::path::Path;
 use std::sync::Arc;
 use tangram_client as tg;
 use tg::{Client, WrapErr};
@@ -16,19 +15,27 @@ use tokio::{
 	sync::RwLock,
 };
 
+mod compound;
+mod ops;
+mod rpc;
+mod state;
+mod types;
+mod xdr;
+
 const ROOT: FileHandle = FileHandle { node: 0 };
 
 #[derive(Clone)]
 pub struct Server {
-	pub client: Arc<dyn Client>,
-	pub state: Arc<RwLock<State>>,
+	client: Arc<dyn Client>,
+	state: Arc<RwLock<State>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Context {
-	pub minor_version: u32,
-	pub current_file_handle: Option<FileHandle>,
-	pub saved_file_handle: Option<FileHandle>,
+	#[allow(dead_code)]
+	minor_version: u32,
+	current_file_handle: Option<FileHandle>,
+	saved_file_handle: Option<FileHandle>,
 }
 
 impl Server {
@@ -248,4 +255,25 @@ impl Server {
 	pub async fn get_node(&self, node: u64) -> Option<Arc<Node>> {
 		self.state.read().await.nodes.get(&node).cloned()
 	}
+}
+
+pub async fn mount(mountpoint: &Path, port: u16) -> crate::Result<()> {
+	let _ = tokio::process::Command::new("umount")
+		.arg("-f")
+		.arg(mountpoint)
+		.status()
+		.await
+		.wrap_err("Failed to unmount.")?;
+	tokio::process::Command::new("mount_nfs")
+		.arg("-o")
+		.arg(format!("tcp,vers=4.0,port={port}"))
+		.arg("localhost:")
+		.arg(mountpoint)
+		.status()
+		.await
+		.wrap_err("Failed to mount.")?
+		.success()
+		.then_some(())
+		.wrap_err("Failed to mount NFS share.")?;
+	Ok(())
 }

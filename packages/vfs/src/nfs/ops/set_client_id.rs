@@ -1,9 +1,4 @@
-use crate::vfs::nfs::{
-	server::Server,
-	state::ClientData,
-	types::*,
-	xdr::{FromXdr, ToXdr},
-};
+use crate::nfs::{server::Server, state::ClientData, types::*, xdr};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Arg {
@@ -82,10 +77,8 @@ impl Server {
 	}
 }
 
-impl FromXdr for Arg {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for Arg {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let client = decoder.decode()?;
 		tracing::info!(?client, "Decoded client.");
 		let callback = decoder.decode()?;
@@ -101,20 +94,16 @@ impl FromXdr for Arg {
 	}
 }
 
-impl FromXdr for ClientId {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for ClientId {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let verifier = decoder.decode_n()?;
 		let id = decoder.decode()?;
 		Ok(Self { verifier, id })
 	}
 }
 
-impl FromXdr for CallbackClient {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for CallbackClient {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let cb_program = decoder.decode()?;
 		let cb_location = decoder.decode()?;
 		Ok(Self {
@@ -124,21 +113,16 @@ impl FromXdr for CallbackClient {
 	}
 }
 
-impl FromXdr for ClientAddr {
-	fn decode(
-		decoder: &mut crate::vfs::nfs::xdr::Decoder<'_>,
-	) -> Result<Self, crate::vfs::nfs::xdr::Error> {
+impl xdr::FromXdr for ClientAddr {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let r_netid = decoder.decode()?;
 		let r_addr = decoder.decode()?;
 		Ok(Self { r_netid, r_addr })
 	}
 }
 
-impl ToXdr for ResOp {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ResOp {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -163,11 +147,8 @@ impl ToXdr for ResOp {
 	}
 }
 
-impl ToXdr for ClientId {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ClientId {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -177,11 +158,8 @@ impl ToXdr for ClientId {
 	}
 }
 
-impl ToXdr for ClientAddr {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ClientAddr {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{

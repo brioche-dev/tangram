@@ -1,12 +1,10 @@
-use crate::{
-	template,
-	vfs::nfs::{
-		server::{Context, Server},
-		state::NodeKind,
-		types::*,
-		xdr::ToXdr,
-	},
+use crate::nfs::{
+	server::{Context, Server},
+	state::NodeKind,
+	types::*,
+	xdr,
 };
+use tangram_client as tg;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResOp {
@@ -32,10 +30,10 @@ impl Server {
 		let mut response = String::new();
 		for component in target.components() {
 			match component {
-				template::Component::String(string) => {
-					response.extend(string.chars());
+				tg::template::Component::String(string) => {
+					response.push_str(string);
 				},
-				template::Component::Artifact(artifact) => {
+				tg::template::Component::Artifact(artifact) => {
 					let Ok(id) = artifact.id(self.client.as_ref()).await else {
 						return ResOp::Err(NFS4ERR_IO);
 					};
@@ -59,11 +57,8 @@ impl ResOp {
 	}
 }
 
-impl ToXdr for ResOp {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::vfs::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::vfs::nfs::xdr::Error>
+impl xdr::ToXdr for ResOp {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{

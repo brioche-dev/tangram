@@ -2,12 +2,13 @@ use super::{
 	ops::set_client_id::CallbackClient,
 	types::{StateId, NFS4_VERIFIER_SIZE},
 };
-use crate::{blob, Directory, File, Symlink};
 use num::ToPrimitive;
 use std::{
 	collections::{BTreeMap, HashMap},
 	sync::{Arc, Weak},
 };
+use tangram_client as tg;
+use tg::{blob, Directory, File, Symlink};
 
 #[derive(Clone)]
 pub struct State {

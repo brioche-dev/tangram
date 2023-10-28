@@ -401,7 +401,7 @@ impl Object {
 }
 
 impl Data {
-	#[allow(unused)]
+	#[allow(dead_code)]
 	pub fn serialize(&self) -> Result<Bytes> {
 		match self {
 			Self::Leaf(data) => Ok(data.serialize()?),
