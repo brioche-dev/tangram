@@ -536,7 +536,10 @@ impl Client for Remote {
 
 	async fn publish_package(&self, id: &package::Id) -> Result<()> {
 		let request = self
-			.request(reqwest::Method::POST, &format!("/v1/packages/{id}"))
+			.request(
+				reqwest::Method::POST,
+				&format!("/v1/registry/packages/{id}"),
+			)
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -547,7 +550,7 @@ impl Client for Remote {
 	}
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<package::SearchResult>> {
-		let path = &format!("/v1/packages/search?query={query}");
+		let path = &format!("/v1/registry/packages/search?query={query}");
 		let request = self
 			.request(reqwest::Method::GET, path)
 			.body(empty())

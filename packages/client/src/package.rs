@@ -34,6 +34,7 @@ pub struct Data {
 pub struct Metadata {
 	pub name: Option<String>,
 	pub version: Option<String>,
+	pub description: Option<String>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -45,6 +46,9 @@ pub struct Registry {
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct SearchResult {
 	pub name: String,
+	pub description: String,
+	pub latest_version: String,
+	pub last_updated: u64,
 }
 
 impl Package {
