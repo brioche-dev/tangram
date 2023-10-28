@@ -30,7 +30,8 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
-		let client = self.client.as_deref().unwrap();
+		let client = self.client().await?;
+		let client = client.as_ref();
 
 		// Create the package.
 		let package = tg::Package::with_specifier(client, args.package)

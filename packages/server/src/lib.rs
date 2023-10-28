@@ -4,12 +4,10 @@ use bytes::Bytes;
 use futures::{future, stream::BoxStream, FutureExt};
 use hyper_util::rt::TokioIo;
 use itertools::Itertools;
-use lmdb::{Cursor, Transaction};
 use std::{
 	collections::HashMap,
 	convert::Infallible,
-	ffi::OsStr,
-	os::unix::prelude::OsStrExt,
+	os::fd::AsRawFd,
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 };
@@ -18,7 +16,7 @@ use tangram_util::{
 	http::{full, ok, Incoming, Outgoing},
 	net::Addr,
 };
-use tg::{return_error, Result, WrapErr};
+use tg::{util::rmrf, Result, Wrap, WrapErr};
 use tokio::net::{TcpListener, UnixListener};
 use tokio_util::either::Either;
 
@@ -32,18 +30,20 @@ mod progress;
 /// A server.
 #[derive(Clone, Debug)]
 pub struct Server {
-	state: Arc<State>,
+	inner: Arc<Inner>,
 }
 
 /// A server handle.
 #[derive(Clone, Debug)]
 pub struct Handle {
-	state: Weak<State>,
+	inner: Weak<Inner>,
 }
 
-/// Server state.
 #[derive(Debug)]
-struct State {
+struct Inner {
+	/// The server's running builds.
+	builds: std::sync::RwLock<(BuildForTargetMap, BuildProgressMap)>,
+
 	/// The database.
 	database: Database,
 
@@ -53,17 +53,19 @@ struct State {
 	/// The file system monitor task.
 	// fsm_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 
-	/// A local pool for running JS builds.
+	/// A local pool for build JS targets.
 	local_pool: tokio_util::task::LocalPoolHandle,
+
+	/// The lock file.
+	#[allow(unused)]
+	lock_file: tokio::fs::File,
 
 	/// A client for communicating with the parent.
 	parent: Option<Box<dyn tg::Client>>,
 
 	/// The path to the directory where the server stores its data.
 	path: PathBuf,
-
-	/// The state of the server's running builds.
-	running: std::sync::RwLock<(BuildForTargetMap, BuildProgressMap)>,
+	//
 	// /// The VFS task.
 	// vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
@@ -87,10 +89,31 @@ impl Server {
 			.await
 			.wrap_err("Failed to create the directory.")?;
 
+		// Acquire an exclusive lock to the path.
+		let lock_file = tokio::fs::OpenOptions::new()
+			.read(true)
+			.write(true)
+			.create(true)
+			.open(path.join("lock"))
+			.await
+			.wrap_err("Failed to open the lock file.")?;
+		let ret = unsafe { libc::flock(lock_file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+		if ret != 0 {
+			return Err(std::io::Error::last_os_error().wrap("Failed to acquire the lock file."));
+		}
+
 		// Migrate the path.
 		Self::migrate(&path).await?;
 
-		// Create the database.
+		// Remove an existing socket file.
+		rmrf(&path.join("socket"))
+			.await
+			.wrap_err("Failed to remove an existing socket file.")?;
+
+		// Create the server's running builds.
+		let builds = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
+
+		// Open the database.
 		let database_path = path.join("database");
 		let mut env_builder = lmdb::Environment::new();
 		env_builder.set_map_size(1_099_511_627_776);
@@ -109,9 +132,6 @@ impl Server {
 		let trackers = env
 			.open_db(Some("trackers"))
 			.wrap_err("Failed to open the trackers datatabse.")?;
-
-		delete_directory_trackers(&env, trackers)?;
-
 		let database = Database {
 			env,
 			objects,
@@ -125,34 +145,32 @@ impl Server {
 		// Create the FSM task.
 		// let fsm_task = tokio::sync::Mutex::new(None);
 
-		// Create the local pool for running JS builds.
+		// Create the local pool.
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
 			std::thread::available_parallelism().unwrap().get(),
 		);
 
-		// Create the state of the server's running builds.
-		let running = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
-
 		// Create the VFS task.
 		// let vfs_task = std::sync::Mutex::new(None);
 
-		// Create the state.
-		let state = Arc::new(State {
+		// Create the inner.
+		let inner = Arc::new(Inner {
+			builds,
 			database,
 			file_descriptor_semaphore,
 			local_pool,
+			lock_file,
 			parent,
 			path,
-			running,
 			// vfs_task,
 		});
 
 		// Create the server.
-		let server = Server { state };
+		let server = Server { inner };
 
 		// // Start the FSM server.
-		// let fsm = Fsm::new(Arc::downgrade(&server.state))?;
-		// server.state.fsm.write().await.replace(fsm);
+		// let fsm = Fsm::new(Arc::downgrade(&server.inner))?;
+		// server.inner.fsm.write().await.replace(fsm);
 
 		// // Start the VFS server.
 		// let vfs = vfs::Server::new(&server);
@@ -160,14 +178,14 @@ impl Server {
 		// 	.mount(server.artifacts_path())
 		// 	.await
 		// 	.wrap_err("Failed to mount the VFS.")?;
-		// server.state.vfs_task.lock().unwrap().replace(task);
+		// server.inner.vfs_task.lock().unwrap().replace(task);
 
 		Ok(server)
 	}
 
 	#[must_use]
 	pub fn path(&self) -> &Path {
-		&self.state.path
+		&self.inner.path
 	}
 
 	#[must_use]
@@ -187,7 +205,7 @@ impl Server {
 
 	#[must_use]
 	pub fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
-		&self.state.file_descriptor_semaphore
+		&self.inner.file_descriptor_semaphore
 	}
 
 	pub async fn serve(self, addr: Addr) -> Result<()> {
@@ -244,12 +262,12 @@ impl Server {
 		let method = request.method().clone();
 		let path_components = request.uri().path().split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
-			(http::Method::GET, ["v1", "ping"]) => {
-				self.handle_ping_request(request).map(Some).boxed()
-			},
-			(http::Method::PUT, ["v1", "stop"]) => {
+			(http::Method::GET, ["v1", "ping"]) => future::ready(Some(Ok(ok()))).boxed(),
+			(http::Method::POST, ["v1", "stop"]) => {
 				self.handle_stop_request(request).map(Some).boxed()
 			},
+
+			// Clean
 			(http::Method::POST, ["v1", "clean"]) => {
 				self.handle_clean_request(request).map(Some).boxed()
 			},
@@ -278,14 +296,6 @@ impl Server {
 				.handle_try_get_build_result_request(request)
 				.map(Some)
 				.boxed(),
-			// (http::Method::GET, ["v1", _, "path"]) => self
-			// 	.handle_get_object_for_path_request(request)
-			// 	.map(Some)
-			// 	.boxed(),
-			// (http::Method::PUT, ["v1", _, "path"]) => self
-			// 	.handle_put_object_for_path_request(request)
-			// 	.map(Some)
-			// 	.boxed(),
 
 			// Objects
 			(http::Method::HEAD, ["v1", "objects", _]) => {
@@ -299,7 +309,16 @@ impl Server {
 			},
 
 			// Package
-			//
+
+			// Paths
+			// (http::Method::GET, ["v1", _, "path"]) => self
+			// 	.handle_get_object_for_path_request(request)
+			// 	.map(Some)
+			// 	.boxed(),
+			// (http::Method::PUT, ["v1", _, "path"]) => self
+			// 	.handle_put_object_for_path_request(request)
+			// 	.map(Some)
+			// 	.boxed(),
 			(_, _) => future::ready(None).boxed(),
 		}
 		.await;
@@ -319,34 +338,27 @@ impl Server {
 		}
 	}
 
-	async fn handle_ping_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "ping"] = path_components.as_slice() else {
-			return_error!("Unexpected path.")
-		};
-		Ok(ok())
-	}
-
 	async fn handle_stop_request(
 		&self,
-		request: http::Request<Incoming>,
+		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "stop"] = path_components.as_slice() else {
-			return_error!("Unexpected path.")
-		};
 		std::process::exit(0);
+	}
+
+	async fn ping(&self) -> Result<()> {
+		Ok(())
+	}
+
+	async fn stop(&self) -> Result<()> {
+		Ok(())
 	}
 }
 
 impl tg::Handle for Handle {
 	fn upgrade(&self) -> Option<Box<dyn tg::Client>> {
-		self.state
+		self.inner
 			.upgrade()
-			.map(|state| Box::new(Server { state }) as Box<dyn tg::Client>)
+			.map(|inner| Box::new(Server { inner }) as Box<dyn tg::Client>)
 	}
 }
 
@@ -358,7 +370,7 @@ impl tg::Client for Server {
 
 	fn downgrade_box(&self) -> Box<dyn tg::Handle> {
 		Box::new(Handle {
-			state: Arc::downgrade(&self.state),
+			inner: Arc::downgrade(&self.inner),
 		})
 	}
 
@@ -369,7 +381,19 @@ impl tg::Client for Server {
 	fn set_token(&self, _token: Option<String>) {}
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
-		&self.state.file_descriptor_semaphore
+		&self.inner.file_descriptor_semaphore
+	}
+
+	async fn ping(&self) -> Result<()> {
+		self.ping().await
+	}
+
+	async fn stop(&self) -> Result<()> {
+		self.stop().await
+	}
+
+	async fn clean(&self) -> Result<()> {
+		self.clean().await
 	}
 
 	async fn get_object_exists(&self, id: &tg::object::Id) -> Result<bool> {
@@ -422,12 +446,8 @@ impl tg::Client for Server {
 		self.try_get_build_result(id).await
 	}
 
-	async fn clean(&self) -> Result<()> {
-		self.clean().await
-	}
-
 	async fn create_login(&self) -> Result<tg::user::Login> {
-		self.state
+		self.inner
 			.parent
 			.as_ref()
 			.wrap_err("The server does not have a parent.")?
@@ -436,7 +456,7 @@ impl tg::Client for Server {
 	}
 
 	async fn get_login(&self, id: &tg::Id) -> Result<Option<tg::user::Login>> {
-		self.state
+		self.inner
 			.parent
 			.as_ref()
 			.wrap_err("The server does not have a parent.")?
@@ -445,7 +465,7 @@ impl tg::Client for Server {
 	}
 
 	async fn publish_package(&self, id: &tg::package::Id) -> Result<()> {
-		self.state
+		self.inner
 			.parent
 			.as_ref()
 			.wrap_err("The server does not have a parent.")?
@@ -454,7 +474,7 @@ impl tg::Client for Server {
 	}
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<tg::package::SearchResult>> {
-		self.state
+		self.inner
 			.parent
 			.as_ref()
 			.wrap_err("The server does not have a parent.")?
@@ -463,7 +483,7 @@ impl tg::Client for Server {
 	}
 
 	async fn get_current_user(&self) -> Result<tg::user::User> {
-		self.state
+		self.inner
 			.parent
 			.as_ref()
 			.wrap_err("The server does not have a parent.")?
@@ -486,33 +506,4 @@ impl tg::Client for Server {
 	async fn set_package_for_path(&self, path: &Path, package: &tg::Package) -> Result<()> {
 		self.set_package_for_path(path, package).await
 	}
-}
-
-fn delete_directory_trackers(env: &lmdb::Environment, trackers: lmdb::Database) -> Result<()> {
-	let paths = {
-		let txn = env
-			.begin_ro_txn()
-			.wrap_err("Failed to begin the transaction.")?;
-		let mut cursor = txn
-			.open_ro_cursor(trackers)
-			.wrap_err("Failed to open the cursor.")?;
-		cursor
-			.iter()
-			.filter_map(|entry| {
-				let (path, _) = entry.ok()?;
-				let path = PathBuf::from(OsStr::from_bytes(path));
-				path.is_dir().then_some(path)
-			})
-			.collect::<Vec<_>>()
-	};
-
-	let mut txn = env
-		.begin_rw_txn()
-		.wrap_err("Failed to begin the transaction.")?;
-	for path in paths {
-		let key = path.as_os_str().as_bytes();
-		let _ = txn.del(trackers, &key, None);
-	}
-	txn.commit().wrap_err("Failed to commit the transaction.")?;
-	Ok(())
 }

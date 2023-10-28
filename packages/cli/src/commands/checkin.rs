@@ -13,7 +13,8 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_checkin(&self, args: Args) -> Result<()> {
-		let client = self.client.as_deref().unwrap();
+		let client = self.client().await?;
+		let client = client.as_ref();
 
 		// Get the path.
 		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;

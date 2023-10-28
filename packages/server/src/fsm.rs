@@ -353,3 +353,32 @@ fn canonicalize(path: &Path) -> &'_ [u8] {
 		path
 	}
 }
+
+// fn delete_directory_trackers(env: &lmdb::Environment, trackers: lmdb::Database) -> Result<()> {
+// 	let paths = {
+// 		let txn = env
+// 			.begin_ro_txn()
+// 			.wrap_err("Failed to begin the transaction.")?;
+// 		let mut cursor = txn
+// 			.open_ro_cursor(trackers)
+// 			.wrap_err("Failed to open the cursor.")?;
+// 		cursor
+// 			.iter()
+// 			.filter_map(|entry| {
+// 				let (path, _) = entry.ok()?;
+// 				let path = PathBuf::from(OsStr::from_bytes(path));
+// 				path.is_dir().then_some(path)
+// 			})
+// 			.collect::<Vec<_>>()
+// 	};
+
+// 	let mut txn = env
+// 		.begin_rw_txn()
+// 		.wrap_err("Failed to begin the transaction.")?;
+// 	for path in paths {
+// 		let key = path.as_os_str().as_bytes();
+// 		let _ = txn.del(trackers, &key, None);
+// 	}
+// 	txn.commit().wrap_err("Failed to commit the transaction.")?;
+// 	Ok(())
+// }

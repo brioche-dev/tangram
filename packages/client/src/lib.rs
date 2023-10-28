@@ -78,6 +78,12 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore;
 
+	async fn stop(&self) -> Result<()>;
+
+	async fn ping(&self) -> Result<()>;
+
+	async fn clean(&self) -> Result<()>;
+
 	async fn get_object_exists(&self, id: &object::Id) -> Result<bool>;
 
 	async fn get_object_bytes(&self, id: &object::Id) -> Result<Bytes> {
@@ -151,8 +157,6 @@ pub trait Client: Debug + Send + Sync + 'static {
 	}
 
 	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
-
-	async fn clean(&self) -> Result<()>;
 
 	async fn create_login(&self) -> Result<user::Login>;
 

@@ -1,6 +1,6 @@
 use crate::Cli;
 use tangram_client as tg;
-use tg::Result;
+use tg::{Result, WrapErr};
 
 /// Manage the server.
 #[derive(Debug, clap::Args)]
@@ -18,9 +18,6 @@ pub enum Command {
 	/// Stop the server.
 	Stop,
 
-	/// Restart the server.
-	Restart,
-
 	/// Ping the server.
 	Ping,
 }
@@ -29,10 +26,26 @@ impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_server(&self, args: Args) -> Result<()> {
 		match args.command {
-			Command::Start => todo!(),
-			Command::Stop => todo!(),
-			Command::Restart => todo!(),
-			Command::Ping => todo!(),
+			Command::Start => {
+				tokio::process::Command::new(
+					std::env::current_exe()
+						.wrap_err("Failed to get the current executable path.")?,
+				)
+				.arg("serve")
+				.spawn()
+				.wrap_err("Failed to spawn the server.")?;
+			},
+			Command::Stop => {
+				let client = self.client().await?;
+				let client = client.as_ref();
+				client.stop().await?;
+			},
+			Command::Ping => {
+				let client = self.client().await?;
+				let client = client.as_ref();
+				client.ping().await?;
+			},
 		}
+		Ok(())
 	}
 }

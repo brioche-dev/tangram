@@ -4,11 +4,9 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::redundant_pattern)]
 
-use self::{
-	commands::{Args, Command},
-	util::dirs::home_directory_path,
-};
+use self::{commands::Args, util::dirs::home_directory_path};
 use clap::Parser;
+use std::sync::Arc;
 use tangram_client as tg;
 use tangram_util::net::Addr;
 use tg::{error, Result, WrapErr};
@@ -22,10 +20,11 @@ mod util;
 pub const API_URL: &str = "https://api.tangram.dev";
 
 struct Cli {
-	client: Option<Box<dyn tg::Client>>,
+	client: tokio::sync::Mutex<Option<Arc<dyn tg::Client>>>,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
 	// Setup tracing.
 	setup_tracing();
 
@@ -35,11 +34,13 @@ fn main() {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	// Create the tokio runtime.
-	let rt = tokio::runtime::Runtime::new().expect("Failed to create the tokio runtime.");
+	// Create the CLI.
+	let cli = Cli {
+		client: tokio::sync::Mutex::new(None),
+	};
 
-	// Run the CLI.
-	let result = rt.block_on(main_inner(args));
+	// Run the command.
+	let result = cli.run(args).await;
 
 	// Handle the result.
 	if let Err(error) = result {
@@ -52,28 +53,22 @@ fn main() {
 	}
 }
 
-async fn main_inner(args: Args) -> Result<()> {
-	// Get the path.
-	let path = home_directory_path()
-		.wrap_err("Failed to find the user home directory.")?
-		.join(".tangram");
-	let addr = Addr::Unix(path.join("socket"));
-
-	// Create the client.
-	let client = if let Command::Serve(_) = &args.command {
-		None
-	} else {
-		Some(
-			Box::new(tangram_client::remote::Remote::new(addr, false, None).await?)
-				as Box<dyn tg::Client>,
-		)
-	};
-
-	// Create the CLI.
-	let cli = Cli { client };
-
-	// Run the command.
-	cli.run(args).await
+impl Cli {
+	async fn client(&self) -> Result<Arc<dyn tg::Client>> {
+		let mut client = self.client.lock().await;
+		if let Some(client) = &*client {
+			Ok(client.clone())
+		} else {
+			let path = home_directory_path()
+				.wrap_err("Failed to find the user home directory.")?
+				.join(".tangram");
+			let addr = Addr::Unix(path.join("socket"));
+			*client = Some(Arc::new(
+				tangram_client::remote::Remote::new(addr, false, None).await?,
+			));
+			Ok(client.as_ref().unwrap().clone())
+		}
+	}
 }
 
 fn initialize_v8() {

@@ -47,7 +47,7 @@ impl Server {
 			// Get the version.
 			let version = location
 				.module
-				.version(Some(&self.state.document_store))
+				.version(Some(&self.inner.document_store))
 				.await?;
 
 			// Create the URI.

@@ -127,12 +127,12 @@ impl Server {
 
 	pub fn get_object_exists_from_database(&self, id: &object::Id) -> Result<bool> {
 		let txn = self
-			.state
+			.inner
 			.database
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		match txn.get(self.state.database.objects, &id.to_bytes()) {
+		match txn.get(self.inner.database.objects, &id.to_bytes()) {
 			Ok(_) => Ok(true),
 			Err(lmdb::Error::NotFound) => Ok(false),
 			Err(error) => Err(error.wrap("Failed to get the object.")),
@@ -140,7 +140,7 @@ impl Server {
 	}
 
 	async fn get_object_exists_from_parent(&self, id: &object::Id) -> Result<bool> {
-		if let Some(parent) = self.state.parent.as_ref() {
+		if let Some(parent) = self.inner.parent.as_ref() {
 			if parent.get_object_exists(id).await? {
 				return Ok(true);
 			}
@@ -170,12 +170,12 @@ impl Server {
 
 	pub fn try_get_object_bytes_from_database(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		let txn = self
-			.state
+			.inner
 			.database
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		match txn.get(self.state.database.objects, &id.to_bytes()) {
+		match txn.get(self.inner.database.objects, &id.to_bytes()) {
 			Ok(data) => Ok(Some(Bytes::copy_from_slice(data))),
 			Err(lmdb::Error::NotFound) => Ok(None),
 			Err(error) => Err(error.wrap("Failed to get the object.")),
@@ -183,7 +183,7 @@ impl Server {
 	}
 
 	async fn try_get_object_bytes_from_parent(&self, id: &object::Id) -> Result<Option<Bytes>> {
-		let Some(parent) = self.state.parent.as_ref() else {
+		let Some(parent) = self.inner.parent.as_ref() else {
 			return Ok(None);
 		};
 
@@ -194,7 +194,7 @@ impl Server {
 
 		// Create a write transaction.
 		let mut txn = self
-			.state
+			.inner
 			.database
 			.env
 			.begin_rw_txn()
@@ -202,7 +202,7 @@ impl Server {
 
 		// Add the object to the database.
 		txn.put(
-			self.state.database.objects,
+			self.inner.database.objects,
 			&id.to_bytes(),
 			&bytes,
 			lmdb::WriteFlags::empty(),
@@ -240,7 +240,7 @@ impl Server {
 
 		// Create a write transaction.
 		let mut txn = self
-			.state
+			.inner
 			.database
 			.env
 			.begin_rw_txn()
@@ -248,7 +248,7 @@ impl Server {
 
 		// Add the object to the database.
 		txn.put(
-			self.state.database.objects,
+			self.inner.database.objects,
 			&id.to_bytes(),
 			&bytes,
 			lmdb::WriteFlags::empty(),

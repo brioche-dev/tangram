@@ -11,11 +11,11 @@ use tokio_stream::wrappers::BroadcastStream;
 
 #[derive(Clone, Debug)]
 pub struct Progress {
-	state: Arc<State>,
+	inner: Arc<Inner>,
 }
 
 #[derive(Debug)]
-struct State {
+struct Inner {
 	id: tg::build::Id,
 	target: tg::Target,
 	children: std::sync::Mutex<ChildrenState>,
@@ -86,7 +86,7 @@ impl Progress {
 		let result = ResultState { sender, receiver };
 
 		Ok(Self {
-			state: Arc::new(State {
+			inner: Arc::new(Inner {
 				id,
 				target,
 				children,
@@ -99,11 +99,11 @@ impl Progress {
 	}
 
 	pub fn target(&self) -> &tg::Target {
-		&self.state.target
+		&self.inner.target
 	}
 
 	pub fn children_stream(&self) -> BoxStream<'static, Result<tg::Build>> {
-		let state = self.state.children.lock().unwrap();
+		let state = self.inner.children.lock().unwrap();
 		let old = stream::iter(state.children.clone()).map(Ok);
 		let new = if let Some(sender) = state.sender.as_ref() {
 			BroadcastStream::new(sender.subscribe())
@@ -116,7 +116,7 @@ impl Progress {
 	}
 
 	pub async fn log_stream(&self) -> Result<BoxStream<'static, Result<Bytes>>> {
-		let mut log = self.state.log.lock().await;
+		let mut log = self.inner.log.lock().await;
 		log.file
 			.rewind()
 			.await
@@ -142,7 +142,7 @@ impl Progress {
 	}
 
 	pub async fn wait_for_result(&self) -> Result<tg::Value> {
-		self.state
+		self.inner
 			.result
 			.receiver
 			.clone()
@@ -155,31 +155,31 @@ impl Progress {
 
 	pub async fn finish(self, client: &dyn tg::Client) -> Result<tg::Build> {
 		// Drop the children sender.
-		self.state.children.lock().unwrap().sender.take();
+		self.inner.children.lock().unwrap().sender.take();
 
 		// Drop the logger sender and wait for the logger task to finish.
-		self.state.logger.lock().unwrap().take();
-		let logger_task = self.state.logger_task.lock().unwrap().take().unwrap();
+		self.inner.logger.lock().unwrap().take();
+		let logger_task = self.inner.logger_task.lock().unwrap().take().unwrap();
 		logger_task.await.unwrap()?;
 
 		// Get the children.
-		let children = self.state.children.lock().unwrap().children.clone();
+		let children = self.inner.children.lock().unwrap().children.clone();
 
 		// Get the log.
 		let log = {
-			let mut state = self.state.log.lock().await;
+			let mut state = self.inner.log.lock().await;
 			state.file.rewind().await.wrap_err("Failed to seek.")?;
 			tg::Blob::with_reader(client, &mut state.file).await?
 		};
 
 		// Get the result.
-		let result = self.state.result.receiver.borrow().clone().unwrap();
+		let result = self.inner.result.receiver.borrow().clone().unwrap();
 
 		// Create the build.
 		let build = tg::Build::new(
 			client,
-			self.state.id.clone(),
-			self.state.target.clone(),
+			self.inner.id.clone(),
+			self.inner.target.clone(),
 			children,
 			log,
 			result,
@@ -196,14 +196,14 @@ impl tangram_runtime::Progress for Progress {
 	}
 
 	fn child(&self, child: &tg::Build) {
-		let mut state = self.state.children.lock().unwrap();
+		let mut state = self.inner.children.lock().unwrap();
 		state.children.push(child.clone());
 		state.sender.as_ref().unwrap().send(child.clone()).ok();
 	}
 
 	fn log(&self, bytes: Bytes) {
 		eprint!("{}", std::str::from_utf8(&bytes).unwrap());
-		self.state
+		self.inner
 			.logger
 			.lock()
 			.unwrap()
@@ -214,6 +214,6 @@ impl tangram_runtime::Progress for Progress {
 	}
 
 	fn result(&self, result: Result<tg::Value>) {
-		self.state.result.sender.send(Some(result)).unwrap();
+		self.inner.result.sender.send(Some(result)).unwrap();
 	}
 }

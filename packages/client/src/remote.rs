@@ -24,11 +24,11 @@ use tokio_util::io::StreamReader;
 
 #[derive(Debug, Clone)]
 pub struct Remote {
-	inner: Arc<State>,
+	inner: Arc<Inner>,
 }
 
 #[derive(Debug)]
-struct State {
+struct Inner {
 	addr: Addr,
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	sender: hyper::client::conn::http2::SendRequest<Outgoing>,
@@ -52,7 +52,7 @@ struct SetForPathBody {
 	id: Id,
 }
 
-impl Handle for Weak<State> {
+impl Handle for Weak<Inner> {
 	fn upgrade(&self) -> Option<Box<dyn Client>> {
 		self.upgrade()
 			.map(|state| Box::new(Remote { inner: state }) as Box<dyn Client>)
@@ -114,7 +114,7 @@ impl Remote {
 			},
 		};
 		let token = RwLock::new(token);
-		let state = Arc::new(State {
+		let state = Arc::new(Inner {
 			addr,
 			file_descriptor_semaphore,
 			sender,
@@ -142,30 +142,6 @@ impl Remote {
 			.await
 			.wrap_err("Failed to send the request.")
 	}
-
-	pub async fn ping(&self) -> Result<()> {
-		let request = self
-			.request(http::Method::GET, "/v1/ping")
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		Ok(())
-	}
-
-	pub async fn stop(&self) -> Result<()> {
-		let request = self
-			.request(http::Method::PUT, "/v1/stop")
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		Ok(())
-	}
 }
 
 #[async_trait]
@@ -192,6 +168,39 @@ impl Client for Remote {
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
 		&self.inner.file_descriptor_semaphore
+	}
+
+	async fn ping(&self) -> Result<()> {
+		let request = self
+			.request(http::Method::GET, "/v1/ping")
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
+	}
+
+	async fn stop(&self) -> Result<()> {
+		let request = self
+			.request(http::Method::POST, "/v1/stop")
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		self.send(request).await.ok();
+		Ok(())
+	}
+
+	async fn clean(&self) -> Result<()> {
+		let request = self
+			.request(http::Method::POST, "/v1/clean")
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
 	}
 
 	async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
@@ -482,10 +491,6 @@ impl Client for Remote {
 		let result =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(Some(result))
-	}
-
-	async fn clean(&self) -> Result<()> {
-		unimplemented!()
 	}
 
 	async fn create_login(&self) -> Result<Login> {

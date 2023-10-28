@@ -15,7 +15,8 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_publish(&self, args: Args) -> Result<()> {
-		let client = self.client.as_deref().unwrap();
+		let client = self.client().await?;
+		let client = client.as_ref();
 
 		// Create the package.
 		let package = tg::Package::with_path(client, &args.package).await?;

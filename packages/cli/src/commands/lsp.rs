@@ -9,7 +9,8 @@ pub struct Args {}
 
 impl Cli {
 	pub async fn command_lsp(&self, _args: Args) -> Result<()> {
-		let client = self.client.as_deref().unwrap();
+		let client = self.client().await?;
+		let client = client.as_ref();
 
 		// Create the language server.
 		let server =

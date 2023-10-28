@@ -11,7 +11,8 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_search(&self, args: Args) -> Result<()> {
-		let client = self.client.as_deref().unwrap();
+		let client = self.client().await?;
+		let client = client.as_ref();
 
 		// Perform the search.
 		let packages = client.search_packages(&args.query).await?;

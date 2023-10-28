@@ -9,12 +9,12 @@ use tg::{Result, WrapErr};
 #[command(verbatim_doc_comment)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Args {
-	/// The address to bind the server to.
+	/// The address to bind to.
 	#[arg(long, value_parser = parse_addr)]
 	pub address: Option<Addr>,
 
 	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
-	#[arg(long, env = "TANGRAM_PATH")]
+	#[arg(long)]
 	pub path: Option<PathBuf>,
 }
 

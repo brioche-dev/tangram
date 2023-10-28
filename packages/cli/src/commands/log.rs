@@ -16,7 +16,8 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_log(&self, args: Args) -> Result<()> {
-		let client = self.client.as_deref().unwrap();
+		let client = self.client().await?;
+		let client = client.as_ref();
 
 		let build = if let Ok(id) = tg::build::Id::try_from(args.id.clone()) {
 			tg::Build::with_id(id)

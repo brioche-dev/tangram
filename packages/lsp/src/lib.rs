@@ -56,11 +56,11 @@ type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
 #[derive(Clone, Debug)]
 pub struct Server {
-	state: Arc<State>,
+	inner: Arc<Inner>,
 }
 
 #[derive(Debug)]
-struct State {
+struct Inner {
 	/// The Tangram client handle.
 	client: Box<dyn tg::Handle>,
 
@@ -175,7 +175,7 @@ impl Server {
 			tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
 
 		// Create the state.
-		let state = Arc::new(State {
+		let state = Arc::new(Inner {
 			client,
 			diagnostics,
 			document_store,
@@ -189,7 +189,7 @@ impl Server {
 			move || run_request_handler(state, request_receiver)
 		});
 
-		Self { state }
+		Self { inner: state }
 	}
 
 	pub async fn request(&self, request: Request) -> Result<Response> {
@@ -197,7 +197,7 @@ impl Server {
 		let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
 
 		// Send the request.
-		self.state
+		self.inner
 			.request_sender
 			.send((request, response_sender))
 			.wrap_err("Failed to send the request.")?;
@@ -272,7 +272,7 @@ impl Server {
 		match url.scheme() {
 			"file" => {
 				let document =
-					Document::for_path(&self.state.document_store, Path::new(url.path())).await?;
+					Document::for_path(&self.inner.document_store, Path::new(url.path())).await?;
 				let module = Module::Document(document);
 				Ok(module)
 			},
@@ -563,7 +563,7 @@ where
 }
 
 /// Run the request handler.
-fn run_request_handler(state: Arc<State>, mut request_receiver: RequestReceiver) {
+fn run_request_handler(state: Arc<Inner>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
 	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);

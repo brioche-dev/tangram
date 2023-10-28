@@ -71,7 +71,7 @@ impl Server {
 			let version = params.text_document.version;
 			let text = params.text_document.text;
 			document
-				.open(&self.state.document_store, version, text)
+				.open(&self.inner.document_store, version, text)
 				.await?;
 		}
 
@@ -94,7 +94,7 @@ impl Server {
 			for change in params.content_changes {
 				document
 					.update(
-						&self.state.document_store,
+						&self.inner.document_store,
 						change.range.map(Into::into),
 						params.text_document.version,
 						change.text,
@@ -119,7 +119,7 @@ impl Server {
 
 		if let Module::Document(document) = module {
 			// Close the document.
-			document.close(&self.state.document_store).await?;
+			document.close(&self.inner.document_store).await?;
 		}
 
 		// Update all diagnostics.

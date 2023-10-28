@@ -168,7 +168,7 @@ impl Server {
 	/// Attempt to get the build for a target.
 	pub async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>> {
 		// Attempt to get the build for the target from the running state.
-		if let Some(build_id) = self.state.running.read().unwrap().0.get(id).cloned() {
+		if let Some(build_id) = self.inner.builds.read().unwrap().0.get(id).cloned() {
 			return Ok(Some(build_id));
 		}
 
@@ -189,12 +189,12 @@ impl Server {
 	fn try_get_build_for_target_from_database(&self, id: &target::Id) -> Result<Option<build::Id>> {
 		// Get the build for the target from the database.
 		let txn = self
-			.state
+			.inner
 			.database
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to begin the transaction.")?;
-		match txn.get(self.state.database.assignments, &id.to_bytes()) {
+		match txn.get(self.inner.database.assignments, &id.to_bytes()) {
 			Ok(build_id) => Ok(Some(build_id.try_into().wrap_err("Invalid ID.")?)),
 			Err(lmdb::Error::NotFound) => Ok(None),
 			Err(error) => Err(error.wrap("Failed to get the assignment.")),
@@ -207,7 +207,7 @@ impl Server {
 		id: &target::Id,
 	) -> Result<Option<build::Id>> {
 		// Get the parent.
-		let Some(parent) = self.state.parent.as_ref() else {
+		let Some(parent) = self.inner.parent.as_ref() else {
 			return Ok(None);
 		};
 
@@ -235,7 +235,7 @@ impl Server {
 		let build_id = build::Id::new();
 		let progress = Progress::new(build_id.clone(), target)?;
 		{
-			let mut running = self.state.running.write().unwrap();
+			let mut running = self.inner.builds.write().unwrap();
 			running.0.insert(target_id.clone(), build_id.clone());
 			running.1.insert(build_id.clone(), progress.clone());
 		}
@@ -262,7 +262,7 @@ impl Server {
 		match target.host(self).await?.os() {
 			system::Os::Js => {
 				// Build the target on the server's local pool because it is a `!Send` future.
-				self.state
+				self.inner
 					.local_pool
 					.spawn_pinned({
 						let server = self.clone();
@@ -301,7 +301,7 @@ impl Server {
 
 		// Create a write transaction.
 		let mut txn = self
-			.state
+			.inner
 			.database
 			.env
 			.begin_rw_txn()
@@ -309,7 +309,7 @@ impl Server {
 
 		// Set the build for the target.
 		txn.put(
-			self.state.database.assignments,
+			self.inner.database.assignments,
 			&target_id.to_bytes(),
 			&build_id.to_bytes(),
 			lmdb::WriteFlags::empty(),
@@ -320,14 +320,14 @@ impl Server {
 		txn.commit().wrap_err("Failed to commit the transaction.")?;
 
 		// Remove the state of the running build.
-		self.state.running.write().unwrap().1.remove(&build_id);
+		self.inner.builds.write().unwrap().1.remove(&build_id);
 
 		Ok(())
 	}
 
 	pub async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
 		// Attempt to get the target from the running state.
-		let state = self.state.running.read().unwrap().1.get(id).cloned();
+		let state = self.inner.builds.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			return Ok(Some(state.target().id(self).await?.clone()));
 		}
@@ -349,7 +349,7 @@ impl Server {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<build::Id>>>> {
 		// Attempt to stream the children from the running state.
-		let state = self.state.running.read().unwrap().1.get(id).cloned();
+		let state = self.inner.builds.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			let children = state.children_stream();
 			return Ok(Some(children.map_ok(|child| child.id().clone()).boxed()));
@@ -371,7 +371,7 @@ impl Server {
 
 		// Attempt to stream the children from the parent.
 		'a: {
-			let Some(parent) = self.state.parent.as_ref() else {
+			let Some(parent) = self.inner.parent.as_ref() else {
 				break 'a;
 			};
 			let Some(children) = parent.try_get_build_children(id).await? else {
@@ -388,7 +388,7 @@ impl Server {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		// Attempt to stream the log from the running state.
-		let state = self.state.running.read().unwrap().1.get(id).cloned();
+		let state = self.inner.builds.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			let log = state.log_stream().await?;
 			return Ok(Some(log));
@@ -406,7 +406,7 @@ impl Server {
 
 		// Attempt to stream the log from the parent.
 		'a: {
-			let Some(parent) = self.state.parent.as_ref() else {
+			let Some(parent) = self.inner.parent.as_ref() else {
 				break 'a;
 			};
 			let Some(log) = parent.try_get_build_log(id).await? else {
@@ -420,7 +420,7 @@ impl Server {
 
 	pub async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value>>> {
 		// Attempt to await the result from the running state.
-		let state = self.state.running.read().unwrap().1.get(id).cloned();
+		let state = self.inner.builds.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			let result = state.wait_for_result().await;
 			return Ok(Some(result));
@@ -437,7 +437,7 @@ impl Server {
 
 		// Attempt to await the result from the parent.
 		'a: {
-			let Some(parent) = self.state.parent.as_ref() else {
+			let Some(parent) = self.inner.parent.as_ref() else {
 				break 'a;
 			};
 			let Some(result) = parent.try_get_build_result(id).await? else {
