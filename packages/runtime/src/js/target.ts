@@ -35,7 +35,7 @@ type FunctionArg<
 > = {
 	url: string;
 	name: string;
-	function: (...args: A) => MaybePromise<R | void>;
+	function: (...args: A) => Unresolved<R>;
 };
 
 export function target<

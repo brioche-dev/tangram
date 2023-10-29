@@ -1,8 +1,9 @@
 import { unreachable } from "./assert.ts";
-import { Blob } from "./blob.ts";
+import { Branch } from "./branch.ts";
 import { Directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { File } from "./file.ts";
+import { Leaf } from "./leaf.ts";
 import { Mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
@@ -73,20 +74,18 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		return value.message;
 	} else if (value instanceof Promise) {
 		return "(promise)";
-	} else if (Blob.is(value)) {
-		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.blob ${handle})`;
+	} else if (Leaf.is(value)) {
+		return stringifyHandle(value.handle, visited);
+	} else if (Branch.is(value)) {
+		return stringifyHandle(value.handle, visited);
 	} else if (Directory.is(value)) {
-		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.directory ${handle})`;
+		return stringifyHandle(value.handle, visited);
 	} else if (File.is(value)) {
-		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.file ${handle})`;
+		return stringifyHandle(value.handle, visited);
 	} else if (Symlink.is(value)) {
-		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.symlink ${handle})`;
+		return stringifyHandle(value.handle, visited);
 	} else if (Template.is(value)) {
-		let string = value.components
+		return `\`${value.components
 			.map((component) => {
 				if (typeof component === "string") {
 					return component;
@@ -94,29 +93,34 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 					return `\${${stringifyInner(component, visited)}}`;
 				}
 			})
-			.join("");
-		return `\`${string}\``;
+			.join("")}\``;
 	} else if (Mutation.is(value)) {
 		return `(tg.mutation ${stringifyObject(value.inner, visited)})`;
 	} else if (Package.is(value)) {
-		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.package ${handle})`;
+		return stringifyHandle(value.handle, visited);
 	} else if (Target.is(value)) {
-		let handle = stringifyHandle(value.handle, visited);
-		return `(tg.target ${handle})`;
+		return stringifyHandle(value.handle, visited);
 	} else {
-		let constructorName = "";
+		let string = "";
 		if (
 			value.constructor !== undefined &&
 			value.constructor.name !== "Object"
 		) {
-			constructorName = `${value.constructor.name} `;
+			string += `${value.constructor.name} `;
 		}
-		let entries = Object.entries(value).map(
-			([key, value]) => `${key}: ${stringifyInner(value, visited)}`,
-		);
-		let space = entries.length > 0 ? " " : "";
-		return `${constructorName}{${space}${entries.join(", ")}${space}}`;
+		string += "{";
+		let entries = Object.entries(value);
+		if (entries.length > 0) {
+			string += " ";
+		}
+		string += entries
+			.map(([key, value]) => `${key}: ${stringifyInner(value, visited)}`)
+			.join(", ");
+		if (entries.length > 0) {
+			string += " ";
+		}
+		string += "}";
+		return string;
 	}
 };
 
@@ -127,9 +131,9 @@ let stringifyHandle = (
 	let { id, object } = handle.state;
 	if (id !== undefined) {
 		return id;
+	} else if (object !== undefined) {
+		return `(tg.${object.kind} ${stringifyObject(object.value, visited)})`;
+	} else {
+		return unreachable();
 	}
-	if (object !== undefined) {
-		return stringifyObject(object.value, visited);
-	}
-	return unreachable();
 };

@@ -64,12 +64,20 @@ impl Cli {
 		let parent = tangram_client::remote::Builder::new(parent_addr)
 			.tls(parent_tls)
 			.token(parent_token)
-			.build()
-			.await?;
+			.build();
 		let _parent = Box::new(parent);
 
+		let version = self.version.clone();
+
+		// Create the options.
+		let options = tangram_server::Options {
+			parent: None,
+			path,
+			version,
+		};
+
 		// Create the server.
-		let server = tangram_server::Server::new(path, None)
+		let server = tangram_server::Server::new(options)
 			.await
 			.wrap_err("Failed to create the server.")?;
 

@@ -85,6 +85,8 @@ pub enum Data {
 impl Value {
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		match self {
+			Value::Leaf(leaf) => leaf.handle().store(client).await?,
+			Value::Branch(branch) => branch.handle().store(client).await?,
 			Value::Directory(directory) => directory.handle().store(client).await?,
 			Value::File(file) => file.handle().store(client).await?,
 			Value::Symlink(symlink) => symlink.handle().store(client).await?,
@@ -97,12 +99,7 @@ impl Value {
 
 	pub fn children(&self) -> Vec<object::Handle> {
 		match self {
-			Self::Null(())
-			| Self::Bool(_)
-			| Self::Number(_)
-			| Self::String(_)
-			| Self::Bytes(_)
-			| Self::Mutation(_) => {
+			Self::Null(()) | Self::Bool(_) | Self::Number(_) | Self::String(_) | Self::Bytes(_) => {
 				vec![]
 			},
 			Self::Leaf(leaf) => vec![leaf.handle().clone()],
@@ -111,6 +108,7 @@ impl Value {
 			Self::File(file) => vec![file.handle().clone()],
 			Self::Symlink(symlink) => vec![symlink.handle().clone()],
 			Self::Template(template) => template.children(),
+			Self::Mutation(mutation) => mutation.children(),
 			Self::Package(package) => vec![package.handle().clone()],
 			Self::Target(target) => vec![target.handle().clone()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
@@ -133,12 +131,7 @@ impl Data {
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		match self {
-			Self::Null(())
-			| Self::Bool(_)
-			| Self::Number(_)
-			| Self::String(_)
-			| Self::Bytes(_)
-			| Self::Mutation(_) => {
+			Self::Null(()) | Self::Bool(_) | Self::Number(_) | Self::String(_) | Self::Bytes(_) => {
 				vec![]
 			},
 			Self::Leaf(id) => vec![id.clone().into()],
@@ -147,6 +140,7 @@ impl Data {
 			Self::File(id) => vec![id.clone().into()],
 			Self::Symlink(id) => vec![id.clone().into()],
 			Self::Template(template) => template.children(),
+			Self::Mutation(mutation) => mutation.children(),
 			Self::Package(id) => vec![id.clone().into()],
 			Self::Target(id) => vec![id.clone().into()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
@@ -230,19 +224,19 @@ impl std::fmt::Display for Value {
 				write!(f, "{}", hex::encode(bytes))?;
 			},
 			Value::Leaf(leaf) => {
-				write!(f, "{}", leaf.expect_id())?;
+				write!(f, "{leaf}")?;
 			},
 			Value::Branch(branch) => {
-				write!(f, "{}", branch.expect_id())?;
+				write!(f, "{branch}")?;
 			},
 			Value::Directory(directory) => {
-				write!(f, "{}", directory.expect_id())?;
+				write!(f, "{directory}")?;
 			},
 			Value::File(file) => {
-				write!(f, "{}", file.expect_id())?;
+				write!(f, "{file}")?;
 			},
 			Value::Symlink(symlink) => {
-				write!(f, "{}", symlink.expect_id())?;
+				write!(f, "{symlink}")?;
 			},
 			Value::Template(template) => {
 				write!(f, "{template}")?;
@@ -251,10 +245,10 @@ impl std::fmt::Display for Value {
 				write!(f, "{mutation}")?;
 			},
 			Value::Package(package) => {
-				write!(f, "{}", package.expect_id())?;
+				write!(f, "{package}")?;
 			},
 			Value::Target(target) => {
-				write!(f, "{}", target.expect_id())?;
+				write!(f, "{target}")?;
 			},
 			Value::Array(array) => {
 				write!(f, "[")?;
@@ -267,14 +261,20 @@ impl std::fmt::Display for Value {
 				write!(f, "]")?;
 			},
 			Value::Map(map) => {
-				write!(f, "[")?;
+				write!(f, "{{")?;
+				if !map.is_empty() {
+					write!(f, " ")?;
+				}
 				for (i, (key, value)) in map.iter().enumerate() {
-					write!(f, "{key}:{value}")?;
+					write!(f, "{key}: {value}")?;
 					if i < map.len() - 1 {
 						write!(f, ", ")?;
 					}
 				}
-				write!(f, "]")?;
+				if !map.is_empty() {
+					write!(f, " ")?;
+				}
+				write!(f, "}}")?;
 			},
 		}
 		Ok(())

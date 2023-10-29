@@ -1,6 +1,6 @@
 use crate::{
-	artifact, build, object, package, target, tracker::Tracker, user, user::Login, Artifact,
-	Client, Handle, Id, Package, Result, Value, Wrap, WrapErr,
+	artifact, build, object, package, status, target, tracker::Tracker, user, user::Login,
+	Artifact, Client, Handle, Id, Package, Result, Value, Wrap, WrapErr,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -9,12 +9,12 @@ use http_body_util::{BodyExt, BodyStream};
 use std::{
 	os::unix::prelude::OsStrExt,
 	path::Path,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, Weak},
 };
 use tangram_error::return_error;
 use tangram_util::{
 	http::{empty, full, Incoming, Outgoing},
-	net::Addr,
+	net::{Addr, Inet},
 };
 use tokio::{
 	io::AsyncBufReadExt,
@@ -32,7 +32,8 @@ pub struct Remote {
 struct Inner {
 	addr: Addr,
 	file_descriptor_semaphore: tokio::sync::Semaphore,
-	sender: hyper::client::conn::http2::SendRequest<Outgoing>,
+	sender: tokio::sync::RwLock<Option<hyper::client::conn::http2::SendRequest<Outgoing>>>,
+	tls: bool,
 	token: std::sync::RwLock<Option<String>>,
 }
 
@@ -50,67 +51,115 @@ impl Handle for Weak<Inner> {
 }
 
 impl Remote {
-	pub async fn new(addr: Addr, tls: bool, token: Option<String>) -> Result<Self> {
+	fn new(addr: Addr, tls: bool, token: Option<String>) -> Self {
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
-		let sender = match &addr {
-			Addr::Inet(inet) if tls => {
-				let stream = TcpStream::connect(inet.to_string())
-					.await
-					.wrap_err("Failed to create the TCP connection.")?;
-				let mut root_cert_store = rustls::RootCertStore::empty();
-				root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-				let config = rustls::ClientConfig::builder()
-					.with_safe_defaults()
-					.with_root_certificates(root_cert_store)
-					.with_no_client_auth();
-				let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
-				let server_name = rustls::ServerName::try_from(inet.host.to_string().as_str())
-					.wrap_err("Failed to create the server name.")?;
-				let stream = connector
-					.connect(server_name, stream)
-					.await
-					.wrap_err("Failed to connect.")?;
-				let executor = hyper_util::rt::TokioExecutor::new();
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(executor, io)
-					.await
-					.wrap_err("Failed to perform the HTTP handshake.")?;
-				tokio::spawn(connection);
-				sender
-			},
-			Addr::Inet(inet) => {
-				let stream = TcpStream::connect(inet.to_string())
-					.await
-					.wrap_err("Failed to create the TCP connection.")?;
-				let executor = hyper_util::rt::TokioExecutor::new();
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(executor, io)
-					.await
-					.wrap_err("Failed to perform the HTTP handshake.")?;
-				tokio::spawn(connection);
-				sender
-			},
-			Addr::Unix(path) => {
-				let stream = UnixStream::connect(path)
-					.await
-					.wrap_err("Failed to connect to the socket.")?;
-				let executor = hyper_util::rt::TokioExecutor::new();
-				let io = hyper_util::rt::TokioIo::new(stream);
-				let (sender, connection) = hyper::client::conn::http2::handshake(executor, io)
-					.await
-					.wrap_err("Failed to perform the HTTP handshake.")?;
-				tokio::spawn(connection);
-				sender
-			},
-		};
-		let token = RwLock::new(token);
+		let sender = tokio::sync::RwLock::new(None);
+		let token = std::sync::RwLock::new(token);
 		let inner = Arc::new(Inner {
 			addr,
 			file_descriptor_semaphore,
 			sender,
+			tls,
 			token,
 		});
-		Ok(Self { inner })
+		Self { inner }
+	}
+
+	pub async fn disconnect(&self) -> Result<()> {
+		*self.inner.sender.write().await = None;
+		Ok(())
+	}
+
+	pub async fn connect(&self) -> Result<()> {
+		self.sender().await.map(|_| ())
+	}
+
+	async fn sender(&self) -> Result<hyper::client::conn::http2::SendRequest<Outgoing>> {
+		if let Some(sender) = self.inner.sender.read().await.as_ref().cloned() {
+			return Ok(sender);
+		}
+		match &self.inner.addr {
+			Addr::Inet(inet) if self.inner.tls => {
+				self.connect_tcp_tls(inet).await?;
+			},
+			Addr::Inet(inet) => {
+				self.connect_tcp(inet).await?;
+			},
+			Addr::Unix(path) => {
+				self.connect_unix(path).await?;
+			},
+		}
+		Ok(self.inner.sender.read().await.as_ref().cloned().unwrap())
+	}
+
+	async fn connect_tcp_tls(&self, inet: &Inet) -> Result<()> {
+		let mut sender_guard = self.inner.sender.write().await;
+		let stream = TcpStream::connect(inet.to_string())
+			.await
+			.wrap_err("Failed to create the TCP connection.")?;
+		let mut root_cert_store = rustls::RootCertStore::empty();
+		root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+		let config = rustls::ClientConfig::builder()
+			.with_safe_defaults()
+			.with_root_certificates(root_cert_store)
+			.with_no_client_auth();
+		let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+		let server_name = rustls::ServerName::try_from(inet.host.to_string().as_str())
+			.wrap_err("Failed to create the server name.")?;
+		let stream = connector
+			.connect(server_name, stream)
+			.await
+			.wrap_err("Failed to connect.")?;
+		let executor = hyper_util::rt::TokioExecutor::new();
+		let io = hyper_util::rt::TokioIo::new(stream);
+		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
+			.await
+			.wrap_err("Failed to perform the HTTP handshake..")?;
+		tokio::spawn(connection);
+		sender
+			.ready()
+			.await
+			.wrap_err("Failed to ready the sender.")?;
+		sender_guard.replace(sender);
+		Ok(())
+	}
+
+	async fn connect_tcp(&self, inet: &Inet) -> Result<()> {
+		let mut sender_guard = self.inner.sender.write().await;
+		let stream = TcpStream::connect(inet.to_string())
+			.await
+			.wrap_err("Failed to create the TCP connection.")?;
+		let executor = hyper_util::rt::TokioExecutor::new();
+		let io = hyper_util::rt::TokioIo::new(stream);
+		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
+			.await
+			.wrap_err("Failed to perform the HTTP handshake.")?;
+		tokio::spawn(connection);
+		sender
+			.ready()
+			.await
+			.wrap_err("Failed to ready the sender.")?;
+		sender_guard.replace(sender);
+		Ok(())
+	}
+
+	async fn connect_unix(&self, path: &Path) -> Result<()> {
+		let mut sender_guard = self.inner.sender.write().await;
+		let stream = UnixStream::connect(path)
+			.await
+			.wrap_err("Failed to connect to the socket.")?;
+		let executor = hyper_util::rt::TokioExecutor::new();
+		let io = hyper_util::rt::TokioIo::new(stream);
+		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
+			.await
+			.wrap_err("Failed to perform the HTTP handshake.")?;
+		tokio::spawn(connection);
+		sender
+			.ready()
+			.await
+			.wrap_err("Failed to ready the sender.")?;
+		sender_guard.replace(sender);
+		Ok(())
 	}
 
 	fn request(&self, method: http::Method, path: &str) -> http::request::Builder {
@@ -125,9 +174,8 @@ impl Remote {
 		&self,
 		request: http::request::Request<Outgoing>,
 	) -> Result<http::Response<Incoming>> {
-		self.inner
-			.sender
-			.clone()
+		self.sender()
+			.await?
 			.send_request(request)
 			.await
 			.wrap_err("Failed to send the request.")
@@ -160,16 +208,22 @@ impl Client for Remote {
 		&self.inner.file_descriptor_semaphore
 	}
 
-	async fn ping(&self) -> Result<()> {
+	async fn status(&self) -> Result<status::Status> {
 		let request = self
-			.request(http::Method::GET, "/v1/ping")
+			.request(http::Method::GET, "/v1/status")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if !response.status().is_success() {
 			return_error!("Expected the response's status to be success.");
 		}
-		Ok(())
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let status = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		Ok(status)
 	}
 
 	async fn stop(&self) -> Result<()> {
@@ -544,7 +598,7 @@ impl Client for Remote {
 		Ok(Some(result))
 	}
 
-	async fn set_build_result(&self, build_id: &build::Id, result: Value) -> Result<()> {
+	async fn set_build_result(&self, build_id: &build::Id, result: Result<Value>) -> Result<()> {
 		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
 		let request = self
 			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
@@ -694,9 +748,9 @@ impl Builder {
 		self
 	}
 
-	pub async fn build(self) -> Result<Remote> {
+	#[must_use]
+	pub fn build(self) -> Remote {
 		let tls = self.tls.unwrap_or(false);
-		let remote = Remote::new(self.addr, tls, self.token).await?;
-		Ok(remote)
+		Remote::new(self.addr, tls, self.token)
 	}
 }

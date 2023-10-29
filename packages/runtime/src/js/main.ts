@@ -1,6 +1,7 @@
 import { assert } from "./assert.ts";
 import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
+import { resolve } from "./resolve.ts";
 import { Target, functions, setCurrent } from "./target.ts";
 import { Value } from "./value.ts";
 
@@ -39,7 +40,7 @@ export let main = async (target: Target): Promise<Value> => {
 	let args = await target.args();
 
 	// Call the function.
-	let output = await function_(...args);
+	let output = await resolve(function_(...args));
 
 	return output;
 };

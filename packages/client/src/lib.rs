@@ -48,6 +48,7 @@ pub mod object;
 pub mod package;
 pub mod path;
 pub mod remote;
+pub mod status;
 pub mod symlink;
 pub mod system;
 pub mod target;
@@ -81,7 +82,7 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn stop(&self) -> Result<()>;
 
-	async fn ping(&self) -> Result<()>;
+	async fn status(&self) -> Result<status::Status>;
 
 	async fn clean(&self) -> Result<()>;
 
@@ -160,12 +161,12 @@ pub trait Client: Debug + Send + Sync + 'static {
 		Ok(self
 			.try_get_build_result(id)
 			.await?
-			.wrap_err("Failed to get the build.")?)
+			.wrap_err("Failed to get the build2.")?)
 	}
 
 	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
 
-	async fn set_build_result(&self, build_id: &build::Id, result: Value) -> Result<()>;
+	async fn set_build_result(&self, build_id: &build::Id, result: Result<Value>) -> Result<()>;
 
 	async fn finish_build(&self, id: &build::Id) -> Result<()>;
 

@@ -80,3 +80,10 @@ impl Data {
 		self.target.children()
 	}
 }
+
+impl std::fmt::Display for Symlink {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.expect_id())?;
+		Ok(())
+	}
+}

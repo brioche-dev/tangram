@@ -667,7 +667,7 @@ declare namespace tg {
 	export function target<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,
-	>(function_: (...args: A) => MaybePromise<R | void>): Target<A, R>;
+	>(function_: (...args: A) => Unresolved<R>): Target<A, R>;
 	export function target<
 		A extends Array<Value> = Array<Value>,
 		R extends Value = Value,

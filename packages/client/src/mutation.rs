@@ -1,4 +1,4 @@
-use crate::{template, value, Template, Value};
+use crate::{object, template, value, Template, Value};
 
 #[derive(Debug, Clone)]
 pub enum Mutation {
@@ -99,6 +99,29 @@ impl Mutation {
 				template: Template::from_data(data.template),
 				separator: Template::from_data(data.separator),
 			},
+		}
+	}
+
+	#[must_use]
+	pub fn children(&self) -> Vec<object::Handle> {
+		match self {
+			Mutation::Unset => vec![],
+			Mutation::Set { value } | Mutation::SetIfUnset { value } => value.children(),
+			Mutation::ArrayPrepend { values } | Mutation::ArrayAppend { values } => {
+				values.iter().flat_map(Value::children).collect()
+			},
+			Mutation::TemplatePrepend {
+				template,
+				separator,
+			}
+			| Mutation::TemplateAppend {
+				template,
+				separator,
+			} => template
+				.children()
+				.into_iter()
+				.chain(separator.children())
+				.collect(),
 		}
 	}
 }

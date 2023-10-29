@@ -122,6 +122,13 @@ impl Data {
 	}
 }
 
+impl std::fmt::Display for Package {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.expect_id())?;
+		Ok(())
+	}
+}
+
 pub mod dependency {
 	pub use crate::package::specifier::Registry;
 	use crate::{Error, Relpath, Result};

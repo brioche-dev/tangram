@@ -7,8 +7,8 @@ import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
 
 export type Object_ =
-	| { kind: "branch"; value: Branch.Object_ }
 	| { kind: "leaf"; value: Leaf.Object_ }
+	| { kind: "branch"; value: Branch.Object_ }
 	| { kind: "directory"; value: Directory.Object_ }
 	| { kind: "file"; value: File.Object_ }
 	| { kind: "symlink"; value: Symlink.Object_ }
@@ -17,6 +17,15 @@ export type Object_ =
 
 export namespace Object_ {
 	export type Id = string;
+
+	export type Kind =
+		| "leaf"
+		| "branch"
+		| "directory"
+		| "file"
+		| "symlink"
+		| "package"
+		| "target";
 
 	export class Handle {
 		#state: State;
@@ -35,20 +44,6 @@ export namespace Object_ {
 
 		static withObject(object: Object_): Handle {
 			return new Handle({ id: undefined, object });
-		}
-
-		expectId(): Id {
-			if (this.#state.id === undefined) {
-				throw new Error();
-			}
-			return this.#state.id;
-		}
-
-		expectObject(): Object_ {
-			if (this.#state.object === undefined) {
-				throw new Error();
-			}
-			return this.#state.object;
 		}
 
 		async id(): Promise<Id> {

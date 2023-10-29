@@ -114,6 +114,13 @@ impl Data {
 	}
 }
 
+impl std::fmt::Display for File {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.expect_id())?;
+		Ok(())
+	}
+}
+
 pub struct Builder {
 	contents: Blob,
 	executable: bool,

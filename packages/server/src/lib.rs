@@ -66,6 +66,9 @@ struct Inner {
 	/// The path to the directory where the server stores its data.
 	path: PathBuf,
 
+	/// The server's version.
+	version: String,
+
 	/// The VFS task.
 	vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
@@ -82,8 +85,20 @@ struct Database {
 	trackers: lmdb::Database,
 }
 
+pub struct Options {
+	pub parent: Option<Box<dyn tg::Client>>,
+	pub path: PathBuf,
+	pub version: String,
+}
+
 impl Server {
-	pub async fn new(path: PathBuf, parent: Option<Box<dyn tg::Client>>) -> Result<Server> {
+	pub async fn new(options: Options) -> Result<Server> {
+		let Options {
+			parent,
+			path,
+			version,
+		} = options;
+
 		// Ensure the path exists.
 		tokio::fs::create_dir_all(&path)
 			.await
@@ -162,6 +177,7 @@ impl Server {
 			lock_file,
 			parent,
 			path,
+			version,
 			vfs_task,
 		});
 
@@ -262,7 +278,9 @@ impl Server {
 		let method = request.method().clone();
 		let path_components = request.uri().path().split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
-			(http::Method::GET, ["v1", "ping"]) => future::ready(Some(Ok(ok()))).boxed(),
+			(http::Method::GET, ["v1", "status"]) => {
+				self.handle_status_request(request).map(Some).boxed()
+			},
 			(http::Method::POST, ["v1", "stop"]) => {
 				self.handle_stop_request(request).map(Some).boxed()
 			},
@@ -336,19 +354,35 @@ impl Server {
 		}
 	}
 
+	async fn handle_status_request(
+		&self,
+		_request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		let pong = self.status().await?;
+		let body = serde_json::to_vec(&pong).unwrap();
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(full(body))
+			.unwrap();
+		Ok(response)
+	}
+
 	async fn handle_stop_request(
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		std::process::exit(0);
+		self.stop().await?;
+		Ok(ok())
 	}
 
-	async fn ping(&self) -> Result<()> {
-		Ok(())
+	async fn status(&self) -> Result<tg::status::Status> {
+		Ok(tg::status::Status {
+			version: self.inner.version.clone(),
+		})
 	}
 
 	async fn stop(&self) -> Result<()> {
-		Ok(())
+		std::process::exit(0);
 	}
 }
 
@@ -382,8 +416,8 @@ impl tg::Client for Server {
 		&self.inner.file_descriptor_semaphore
 	}
 
-	async fn ping(&self) -> Result<()> {
-		self.ping().await
+	async fn status(&self) -> Result<tg::status::Status> {
+		self.status().await
 	}
 
 	async fn stop(&self) -> Result<()> {
@@ -460,7 +494,11 @@ impl tg::Client for Server {
 		self.try_get_build_result(id).await
 	}
 
-	async fn set_build_result(&self, _build_id: &tg::build::Id, _result: tg::Value) -> Result<()> {
+	async fn set_build_result(
+		&self,
+		_build_id: &tg::build::Id,
+		_result: Result<tg::Value>,
+	) -> Result<()> {
 		return_error!("This server does not support builders.");
 	}
 

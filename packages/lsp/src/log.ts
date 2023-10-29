@@ -56,17 +56,25 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Promise) {
 		return "(promise)";
 	} else {
-		let constructorName = "";
+		let string = "";
 		if (
 			value.constructor !== undefined &&
 			value.constructor.name !== "Object"
 		) {
-			constructorName = `${value.constructor.name} `;
+			string += `${value.constructor.name} `;
 		}
-		let entries = Object.entries(value).map(
-			([key, value]) => `${key}: ${stringifyInner(value, visited)}`,
-		);
-		let space = entries.length > 0 ? " " : "";
-		return `${constructorName}{${space}${entries.join(", ")}${space}}`;
+		string += "{";
+		let entries = Object.entries(value);
+		if (entries.length > 0) {
+			string += " ";
+		}
+		string += entries
+			.map(([key, value]) => `${key}: ${stringifyInner(value, visited)}`)
+			.join(", ");
+		if (entries.length > 0) {
+			string += " ";
+		}
+		string += "}";
+		return string;
 	}
 };

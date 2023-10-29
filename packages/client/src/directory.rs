@@ -135,6 +135,13 @@ impl Data {
 	}
 }
 
+impl std::fmt::Display for Directory {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.expect_id())?;
+		Ok(())
+	}
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
 	entries: BTreeMap<String, Artifact>,
