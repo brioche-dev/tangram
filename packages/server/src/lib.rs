@@ -424,8 +424,16 @@ impl tg::Client for Server {
 		self.get_or_create_build_for_target(id).await
 	}
 
+	async fn try_get_build_queue_item(&self) -> Result<Option<tg::build::Id>> {
+		todo!()
+	}
+
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
 		self.try_get_build_target(id).await
+	}
+
+	async fn try_finish_build(&self, id: &tg::build::Id) -> Result<()> {
+		todo!()
 	}
 
 	async fn try_get_build_children(
@@ -435,6 +443,14 @@ impl tg::Client for Server {
 		self.try_get_build_children(id).await
 	}
 
+	async fn try_put_build_child(
+		&self,
+		build_id: &tg::build::Id,
+		child_id: &tg::build::Id,
+	) -> Result<()> {
+		todo!()
+	}
+
 	async fn try_get_build_log(
 		&self,
 		id: &tg::build::Id,
@@ -442,8 +458,20 @@ impl tg::Client for Server {
 		self.try_get_build_log(id).await
 	}
 
+	async fn try_put_build_log(&self, build_id: &tg::build::Id, bytes: Bytes) -> Result<()> {
+		todo!()
+	}
+
 	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
 		self.try_get_build_result(id).await
+	}
+
+	async fn try_put_build_result(
+		&self,
+		build_id: &tg::build::Id,
+		result: tg::Value,
+	) -> Result<()> {
+		todo!()
 	}
 
 	async fn create_login(&self) -> Result<tg::user::Login> {

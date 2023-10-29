@@ -404,6 +404,46 @@ impl Client for Remote {
 		Ok(id)
 	}
 
+	async fn try_get_build_queue_item(&self) -> Result<Option<build::Id>> {
+		let request = self
+			.request(http::Method::GET, "/v1/builds/queue")
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+
+		let build_id =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+
+		Ok(Some(build_id))
+	}
+
+	async fn try_finish_build(&self, id: &build::Id) -> Result<()> {
+		let request = self
+			.request(http::Method::POST, &format!("/v1/builds/${id}/finish"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(());
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+
+		Ok(())
+	}
+
 	async fn try_get_build_children(
 		&self,
 		id: &build::Id,
@@ -440,6 +480,25 @@ impl Client for Remote {
 		Ok(Some(children))
 	}
 
+	async fn try_put_build_child(&self, build_id: &build::Id, child_id: &build::Id) -> Result<()> {
+		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize to json.")?;
+		let request = self
+			.request(
+				http::Method::POST,
+				&format!("/v1/builds/${build_id}/children"),
+			)
+			.body(full(body))
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(());
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
+	}
+
 	async fn try_get_build_log(
 		&self,
 		id: &build::Id,
@@ -471,6 +530,22 @@ impl Client for Remote {
 		Ok(Some(log))
 	}
 
+	async fn try_put_build_log(&self, build_id: &build::Id, bytes: Bytes) -> Result<()> {
+		let body = bytes;
+		let request = self
+			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
+			.body(full(body))
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(());
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
+	}
+
 	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value>>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/builds/{id}/result"))
@@ -491,6 +566,22 @@ impl Client for Remote {
 		let result =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(Some(result))
+	}
+
+	async fn try_put_build_result(&self, build_id: &build::Id, result: Value) -> Result<()> {
+		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize to json.")?;
+		let request = self
+			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
+			.body(full(body))
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(());
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
 	}
 
 	async fn create_login(&self) -> Result<Login> {
