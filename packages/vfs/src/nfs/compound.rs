@@ -87,7 +87,7 @@ impl Arg {
 }
 
 impl xdr::FromXdr for Arg {
-	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let opcode = decoder.decode_int()?;
 		match opcode {
 			3 => Ok(Arg::Access(decoder.decode()?)),
@@ -121,7 +121,7 @@ impl xdr::FromXdr for Arg {
 }
 
 impl xdr::FromXdr for CompoundArgs {
-	fn decode(decoder: &mut super::xdr::Decoder<'_>) -> Result<Self, super::xdr::Error> {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let tag = std::str::from_utf8(decoder.decode_opaque()?)?;
 		let minor_version = decoder.decode_uint()?;
 		let args = decoder.decode()?;
@@ -134,7 +134,7 @@ impl xdr::FromXdr for CompoundArgs {
 }
 
 impl xdr::ToXdr for CompoundReply {
-	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -196,7 +196,7 @@ impl ResultOp {
 }
 
 impl xdr::ToXdr for ResultOp {
-	fn encode<W>(&self, encoder: &mut super::xdr::Encoder<W>) -> Result<(), super::xdr::Error>
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{

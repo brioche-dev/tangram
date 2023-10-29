@@ -16,16 +16,16 @@ use tangram_util::{
 	http::{full, ok, Incoming, Outgoing},
 	net::Addr,
 };
-use tg::{util::rmrf, Result, Wrap, WrapErr};
+use tg::{return_error, util::rmrf, Result, Wrap, WrapErr};
 use tokio::net::{TcpListener, UnixListener};
 use tokio_util::either::Either;
 
 mod build;
 mod clean;
-// mod fsm;
 mod migrations;
 mod object;
 mod progress;
+mod tracker;
 
 /// A server.
 #[derive(Clone, Debug)]
@@ -79,7 +79,7 @@ struct Database {
 	env: lmdb::Environment,
 	objects: lmdb::Database,
 	assignments: lmdb::Database,
-	_trackers: lmdb::Database,
+	trackers: lmdb::Database,
 }
 
 impl Server {
@@ -136,7 +136,7 @@ impl Server {
 			env,
 			objects,
 			assignments,
-			_trackers: trackers,
+			trackers,
 		};
 
 		// Create the file system semaphore.
@@ -310,15 +310,13 @@ impl Server {
 
 			// Package
 
-			// Paths
-			// (http::Method::GET, ["v1", _, "path"]) => self
-			// 	.handle_get_object_for_path_request(request)
-			// 	.map(Some)
-			// 	.boxed(),
-			// (http::Method::PUT, ["v1", _, "path"]) => self
-			// 	.handle_put_object_for_path_request(request)
-			// 	.map(Some)
-			// 	.boxed(),
+			// // Trackers
+			// (http::Method::GET, ["v1", "trackers", _]) => {
+			// 	self.handle_get_tracker_request(request).map(Some).boxed()
+			// },
+			// (http::Method::PATCH, ["v1", "trackers", _]) => {
+			// 	self.handle_patch_tracker_request(request).map(Some).boxed()
+			// },
 			(_, _) => future::ready(None).boxed(),
 		}
 		.await;
@@ -425,15 +423,11 @@ impl tg::Client for Server {
 	}
 
 	async fn try_get_build_queue_item(&self) -> Result<Option<tg::build::Id>> {
-		todo!()
+		Ok(None)
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
 		self.try_get_build_target(id).await
-	}
-
-	async fn try_finish_build(&self, id: &tg::build::Id) -> Result<()> {
-		todo!()
 	}
 
 	async fn try_get_build_children(
@@ -443,12 +437,12 @@ impl tg::Client for Server {
 		self.try_get_build_children(id).await
 	}
 
-	async fn try_put_build_child(
+	async fn add_build_child(
 		&self,
-		build_id: &tg::build::Id,
-		child_id: &tg::build::Id,
+		_build_id: &tg::build::Id,
+		_child_id: &tg::build::Id,
 	) -> Result<()> {
-		todo!()
+		return_error!("This server does not support builders.");
 	}
 
 	async fn try_get_build_log(
@@ -458,20 +452,20 @@ impl tg::Client for Server {
 		self.try_get_build_log(id).await
 	}
 
-	async fn try_put_build_log(&self, build_id: &tg::build::Id, bytes: Bytes) -> Result<()> {
-		todo!()
+	async fn add_build_log(&self, _build_id: &tg::build::Id, _bytes: Bytes) -> Result<()> {
+		return_error!("This server does not support builders.");
 	}
 
 	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
 		self.try_get_build_result(id).await
 	}
 
-	async fn try_put_build_result(
-		&self,
-		build_id: &tg::build::Id,
-		result: tg::Value,
-	) -> Result<()> {
-		todo!()
+	async fn set_build_result(&self, _build_id: &tg::build::Id, _result: tg::Value) -> Result<()> {
+		return_error!("This server does not support builders.");
+	}
+
+	async fn finish_build(&self, _id: &tg::build::Id) -> Result<()> {
+		return_error!("This server does not support builders.");
 	}
 
 	async fn create_login(&self) -> Result<tg::user::Login> {

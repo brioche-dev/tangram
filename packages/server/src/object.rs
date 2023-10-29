@@ -1,11 +1,11 @@
 use super::Server;
 use bytes::Bytes;
 use futures::{stream, StreamExt, TryStreamExt};
+use http_body_util::BodyExt;
 use lmdb::Transaction;
 use tangram_client as tg;
-use tangram_util::http::{bad_request, empty, full, not_found, Incoming, Outgoing};
+use tangram_util::http::{bad_request, empty, full, not_found, ok, Incoming, Outgoing};
 use tg::{object, return_error, Error, Result, Wrap, WrapErr};
-use tokio::io::AsyncReadExt;
 
 impl Server {
 	pub async fn handle_head_object_request(
@@ -21,6 +21,7 @@ impl Server {
 			return Ok(bad_request());
 		};
 
+		// Get whether the object exists.
 		let exists = self.get_object_exists(&id).await?;
 
 		// Create the response.
@@ -50,6 +51,7 @@ impl Server {
 			return Ok(bad_request());
 		};
 
+		// Get the object.
 		let Some(bytes) = self.try_get_object_bytes(&id).await? else {
 			return Ok(not_found());
 		};
@@ -76,19 +78,13 @@ impl Server {
 			return Ok(bad_request());
 		};
 
-		// Create a reader from the body.
-		let mut body = tokio_util::io::StreamReader::new(
-			http_body_util::BodyStream::new(request.into_body())
-				.try_filter_map(|frame| Box::pin(async move { Ok(frame.into_data().ok()) }))
-				.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error)),
-		);
-
 		// Read the body.
-		let mut bytes = Vec::new();
-		body.read_to_end(&mut bytes)
+		let bytes = request
+			.into_body()
+			.collect()
 			.await
-			.wrap_err("Failed to read the body.")?;
-		let bytes = bytes.into();
+			.wrap_err("Failed to read the body.")?
+			.to_bytes();
 
 		// Put the object.
 		let result = self.try_put_object_bytes(&id, &bytes).await?;
@@ -105,10 +101,7 @@ impl Server {
 		}
 
 		// Otherwise, return an ok response.
-		Ok(http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(empty())
-			.unwrap())
+		Ok(ok())
 	}
 
 	pub async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
@@ -175,11 +168,13 @@ impl Server {
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		match txn.get(self.inner.database.objects, &id.to_bytes()) {
-			Ok(data) => Ok(Some(Bytes::copy_from_slice(data))),
-			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => Err(error.wrap("Failed to get the object.")),
-		}
+		let data = match txn.get(self.inner.database.objects, &id.to_bytes()) {
+			Ok(data) => data,
+			Err(lmdb::Error::NotFound) => return Ok(None),
+			Err(error) => return Err(error.wrap("Failed to get the object.")),
+		};
+		let data = Bytes::copy_from_slice(data);
+		Ok(Some(data))
 	}
 
 	async fn try_get_object_bytes_from_parent(&self, id: &object::Id) -> Result<Option<Bytes>> {

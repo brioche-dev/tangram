@@ -194,11 +194,13 @@ impl Server {
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to begin the transaction.")?;
-		match txn.get(self.inner.database.assignments, &id.to_bytes()) {
-			Ok(build_id) => Ok(Some(build_id.try_into().wrap_err("Invalid ID.")?)),
-			Err(lmdb::Error::NotFound) => Ok(None),
-			Err(error) => Err(error.wrap("Failed to get the assignment.")),
-		}
+		let build_id = match txn.get(self.inner.database.assignments, &id.to_bytes()) {
+			Ok(build_id) => build_id,
+			Err(lmdb::Error::NotFound) => return Ok(None),
+			Err(error) => return Err(error.wrap("Failed to get the assignment.")),
+		};
+		let build_id = build_id.try_into().wrap_err("Invalid ID.")?;
+		Ok(Some(build_id))
 	}
 
 	/// Attempt to get the build for the target from the parent.

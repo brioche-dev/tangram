@@ -1,7 +1,4 @@
-use crate::nfs::{
-	server::{Context, Server},
-	types::*,
-};
+use crate::nfs::{types::*, Context, Server};
 
 impl Server {
 	#[tracing::instrument(skip(self))]

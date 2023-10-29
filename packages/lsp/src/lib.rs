@@ -174,8 +174,8 @@ impl Server {
 		let (request_sender, request_receiver) =
 			tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
 
-		// Create the state.
-		let state = Arc::new(Inner {
+		// Create the inner.
+		let inner = Arc::new(Inner {
 			client,
 			diagnostics,
 			document_store,
@@ -185,11 +185,11 @@ impl Server {
 
 		// Spawn a thread to handle requests.
 		std::thread::spawn({
-			let state = state.clone();
-			move || run_request_handler(state, request_receiver)
+			let inner = inner.clone();
+			move || run_request_handler(inner, request_receiver)
 		});
 
-		Self { inner: state }
+		Self { inner }
 	}
 
 	pub async fn request(&self, request: Request) -> Result<Response> {
@@ -563,7 +563,7 @@ where
 }
 
 /// Run the request handler.
-fn run_request_handler(state: Arc<Inner>, mut request_receiver: RequestReceiver) {
+fn run_request_handler(inner: Arc<Inner>, mut request_receiver: RequestReceiver) {
 	// Create the isolate.
 	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 	let mut isolate = v8::Isolate::new(params);
@@ -573,8 +573,8 @@ fn run_request_handler(state: Arc<Inner>, mut request_receiver: RequestReceiver)
 	let context = v8::Context::new(scope);
 	let scope = &mut v8::ContextScope::new(scope, context);
 
-	// Set the service state on the context.
-	context.set_slot(scope, state);
+	// Set the inner on the context.
+	context.set_slot(scope, inner);
 
 	// Add the syscall function to the global.
 	let syscall_string =

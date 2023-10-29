@@ -1,9 +1,4 @@
-use crate::nfs::{
-	server::{Context, Server},
-	state::NodeKind,
-	types::*,
-	xdr,
-};
+use crate::nfs::{state::NodeKind, types::*, xdr, Context, Server};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Arg {
@@ -53,10 +48,7 @@ impl ResOp {
 }
 
 impl xdr::ToXdr for Arg {
-	fn encode<W>(
-		&self,
-		encoder: &mut crate::nfs::xdr::Encoder<W>,
-	) -> Result<(), crate::nfs::xdr::Error>
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
@@ -67,7 +59,7 @@ impl xdr::ToXdr for Arg {
 }
 
 impl xdr::FromXdr for Arg {
-	fn decode(decoder: &mut crate::nfs::xdr::Decoder<'_>) -> Result<Self, crate::nfs::xdr::Error> {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let seqid = decoder.decode_uint()?;
 		let open_stateid = decoder.decode()?;
 		Ok(Self {

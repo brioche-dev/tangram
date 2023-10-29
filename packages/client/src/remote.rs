@@ -1,13 +1,14 @@
 use crate::{
-	artifact, build, object, package, target, user, user::Login, Artifact, Client, Handle, Id,
-	Package, Result, Value, Wrap, WrapErr,
+	artifact, build, object, package, target, tracker::Tracker, user, user::Login, Artifact,
+	Client, Handle, Id, Package, Result, Value, Wrap, WrapErr,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use http_body_util::{BodyExt, BodyStream};
 use std::{
-	path::{Path, PathBuf},
+	os::unix::prelude::OsStrExt,
+	path::Path,
 	sync::{Arc, RwLock, Weak},
 };
 use tangram_error::return_error;
@@ -41,21 +42,10 @@ pub struct Builder {
 	token: Option<String>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct GetForPathBody {
-	path: PathBuf,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct SetForPathBody {
-	path: PathBuf,
-	id: Id,
-}
-
 impl Handle for Weak<Inner> {
 	fn upgrade(&self) -> Option<Box<dyn Client>> {
 		self.upgrade()
-			.map(|state| Box::new(Remote { inner: state }) as Box<dyn Client>)
+			.map(|inner| Box::new(Remote { inner }) as Box<dyn Client>)
 	}
 }
 
@@ -114,13 +104,13 @@ impl Remote {
 			},
 		};
 		let token = RwLock::new(token);
-		let state = Arc::new(Inner {
+		let inner = Arc::new(Inner {
 			addr,
 			file_descriptor_semaphore,
 			sender,
 			token,
 		});
-		Ok(Self { inner: state })
+		Ok(Self { inner })
 	}
 
 	fn request(&self, method: http::Method, path: &str) -> http::request::Builder {
@@ -266,11 +256,10 @@ impl Client for Remote {
 	}
 
 	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>> {
-		let body = GetForPathBody { path: path.into() };
-		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
+		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
 		let request = self
-			.request(http::Method::GET, "/v1/artifact/path")
-			.body(full(body))
+			.request(http::Method::GET, &format!("/v1/trackers/{path}"))
+			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {
@@ -291,12 +280,15 @@ impl Client for Remote {
 	}
 
 	async fn set_artifact_for_path(&self, path: &Path, artifact: &Artifact) -> Result<()> {
-		let path = path.into();
-		let id = artifact.id(self).await?.into();
-		let body = SetForPathBody { path, id };
-		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
+		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
+		let id = artifact.id(self).await?;
+		let body = Tracker {
+			artifact: Some(id),
+			..Default::default()
+		};
+		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize the body.")?;
 		let request = self
-			.request(reqwest::Method::PUT, "/v1/artifact/path")
+			.request(reqwest::Method::PATCH, &format!("/v1/trackers/{path}"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -307,11 +299,10 @@ impl Client for Remote {
 	}
 
 	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<Package>> {
-		let body = GetForPathBody { path: path.into() };
-		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
+		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
 		let request = self
-			.request(reqwest::Method::GET, "/v1/package/path")
-			.body(full(body))
+			.request(reqwest::Method::GET, &format!("/v1/trackers/{path}"))
+			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {
@@ -332,12 +323,15 @@ impl Client for Remote {
 	}
 
 	async fn set_package_for_path(&self, path: &Path, package: &Package) -> Result<()> {
-		let path = path.into();
-		let id = package.id(self).await?.clone().into();
-		let body = SetForPathBody { path, id };
-		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize to json.")?;
+		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
+		let id = package.id(self).await?.clone();
+		let body = Tracker {
+			package: Some(id),
+			..Default::default()
+		};
+		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize the body.")?;
 		let request = self
-			.request(reqwest::Method::PUT, "/v1/package/path")
+			.request(reqwest::Method::PATCH, &format!("/v1/trackers/{path}"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -421,27 +415,9 @@ impl Client for Remote {
 			.await
 			.wrap_err("Failed to collect the response body.")?
 			.to_bytes();
-
 		let build_id =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-
 		Ok(Some(build_id))
-	}
-
-	async fn try_finish_build(&self, id: &build::Id) -> Result<()> {
-		let request = self
-			.request(http::Method::POST, &format!("/v1/builds/${id}/finish"))
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if response.status() == http::StatusCode::NOT_FOUND {
-			return Ok(());
-		}
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-
-		Ok(())
 	}
 
 	async fn try_get_build_children(
@@ -480,8 +456,8 @@ impl Client for Remote {
 		Ok(Some(children))
 	}
 
-	async fn try_put_build_child(&self, build_id: &build::Id, child_id: &build::Id) -> Result<()> {
-		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize to json.")?;
+	async fn add_build_child(&self, build_id: &build::Id, child_id: &build::Id) -> Result<()> {
+		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize the body.")?;
 		let request = self
 			.request(
 				http::Method::POST,
@@ -530,7 +506,7 @@ impl Client for Remote {
 		Ok(Some(log))
 	}
 
-	async fn try_put_build_log(&self, build_id: &build::Id, bytes: Bytes) -> Result<()> {
+	async fn add_build_log(&self, build_id: &build::Id, bytes: Bytes) -> Result<()> {
 		let body = bytes;
 		let request = self
 			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
@@ -568,8 +544,8 @@ impl Client for Remote {
 		Ok(Some(result))
 	}
 
-	async fn try_put_build_result(&self, build_id: &build::Id, result: Value) -> Result<()> {
-		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize to json.")?;
+	async fn set_build_result(&self, build_id: &build::Id, result: Value) -> Result<()> {
+		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
 		let request = self
 			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
 			.body(full(body))
@@ -581,6 +557,22 @@ impl Client for Remote {
 		if !response.status().is_success() {
 			return_error!("Expected the response's status to be success.");
 		}
+		Ok(())
+	}
+
+	async fn finish_build(&self, id: &build::Id) -> Result<()> {
+		let request = self
+			.request(http::Method::POST, &format!("/v1/builds/${id}/finish"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(());
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+
 		Ok(())
 	}
 

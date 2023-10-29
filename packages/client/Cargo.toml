@@ -50,6 +50,7 @@ tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+urlencoding = { workspace = true }
 webpki-roots = { workspace = true }
 varint-rs = { workspace = true }
 xattr = { workspace = true }

@@ -33,7 +33,8 @@ impl Cli {
 		let docs = server.docs(&package.root_module(client).await?).await?;
 
 		// Render the docs to JSON.
-		let json = serde_json::to_string_pretty(&docs).wrap_err("Failed to serialize to json.")?;
+		let json =
+			serde_json::to_string_pretty(&docs).wrap_err("Failed to serialize to the docs.")?;
 
 		// Print the docs.
 		println!("{json}");

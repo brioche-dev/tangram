@@ -1,4 +1,4 @@
-use crate::nfs::{server::Server, state::ClientData, types::*, xdr};
+use crate::nfs::{state::ClientData, types::*, xdr, Server};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Arg {

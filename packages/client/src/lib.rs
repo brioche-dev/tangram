@@ -52,6 +52,7 @@ pub mod symlink;
 pub mod system;
 pub mod target;
 pub mod template;
+pub mod tracker;
 pub mod user;
 pub mod util;
 pub mod value;
@@ -115,7 +116,14 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn try_get_build_queue_item(&self) -> Result<Option<build::Id>>;
 
-	async fn try_finish_build(&self, id: &build::Id) -> Result<()>;
+	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
+		Ok(self
+			.try_get_build_target(id)
+			.await?
+			.wrap_err("Failed to get the build.")?)
+	}
+
+	async fn try_get_build_target(&self, id: &build::Id) -> Result<Option<target::Id>>;
 
 	async fn get_build_children(
 		&self,
@@ -127,21 +135,12 @@ pub trait Client: Debug + Send + Sync + 'static {
 			.wrap_err("Failed to get the build.")?)
 	}
 
-	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
-		Ok(self
-			.try_get_build_target(id)
-			.await?
-			.wrap_err("Failed to get the build.")?)
-	}
-
-	async fn try_get_build_target(&self, id: &build::Id) -> Result<Option<target::Id>>;
-
 	async fn try_get_build_children(
 		&self,
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<build::Id>>>>;
 
-	async fn try_put_build_child(&self, build_id: &build::Id, child_id: &build::Id) -> Result<()>;
+	async fn add_build_child(&self, build_id: &build::Id, child_id: &build::Id) -> Result<()>;
 
 	async fn get_build_log(&self, id: &build::Id) -> Result<BoxStream<'static, Result<Bytes>>> {
 		Ok(self
@@ -155,7 +154,7 @@ pub trait Client: Debug + Send + Sync + 'static {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>>;
 
-	async fn try_put_build_log(&self, build_id: &build::Id, bytes: Bytes) -> Result<()>;
+	async fn add_build_log(&self, build_id: &build::Id, bytes: Bytes) -> Result<()>;
 
 	async fn get_build_result(&self, id: &build::Id) -> Result<Result<Value, Error>> {
 		Ok(self
@@ -166,7 +165,9 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
 
-	async fn try_put_build_result(&self, build_id: &build::Id, result: Value) -> Result<()>;
+	async fn set_build_result(&self, build_id: &build::Id, result: Value) -> Result<()>;
+
+	async fn finish_build(&self, id: &build::Id) -> Result<()>;
 
 	async fn create_login(&self) -> Result<user::Login>;
 

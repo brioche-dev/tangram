@@ -6,6 +6,18 @@ pub struct Encoder<W> {
 	output: W,
 }
 
+pub struct Decoder<'a> {
+	input: &'a [u8],
+}
+
+#[derive(Debug)]
+pub enum Error {
+	UnexpectedEof,
+	Utf8(Utf8Error),
+	Io(std::io::Error),
+	Custom(String),
+}
+
 impl<W> Encoder<W>
 where
 	W: std::io::Write,
@@ -81,18 +93,6 @@ where
 		}
 		Ok(())
 	}
-}
-
-pub struct Decoder<'d> {
-	input: &'d [u8],
-}
-
-#[derive(Debug)]
-pub enum Error {
-	UnexpectedEof,
-	Utf8(Utf8Error),
-	Io(std::io::Error),
-	Custom(String),
 }
 
 impl From<Utf8Error> for Error {

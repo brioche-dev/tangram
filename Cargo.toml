@@ -107,6 +107,7 @@ toml = { version = "0.8" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = { version = "2", features = ["serde"] }
+urlencoding = "2"
 v8 = { version = "=0.79.1" }
 varint-rs = "2"
 webbrowser = "0.8"

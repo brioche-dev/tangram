@@ -36,6 +36,7 @@ impl Default for State {
 		}
 	}
 }
+
 impl std::fmt::Debug for State {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		std::fmt::Debug::fmt(&self.nodes, f)

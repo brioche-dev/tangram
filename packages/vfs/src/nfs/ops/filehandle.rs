@@ -1,6 +1,6 @@
 use crate::nfs::{
-	server::Context,
 	types::{FileHandle, NFS4ERR_BADHANDLE},
+	Context,
 };
 
 pub fn put(ctx: &mut Context, arg: FileHandle) {
