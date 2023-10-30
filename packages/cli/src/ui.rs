@@ -1,7 +1,13 @@
-use self::{controller::Controller, model::App};
+use self::{
+	controller::Controller,
+	model::{App, InfoPane},
+};
 use crossterm as ct;
 use ratatui as tui;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::{
+	os::fd::{AsRawFd, FromRawFd, OwnedFd},
+	sync::{atomic::AtomicBool, Arc},
+};
 use tangram_client as tg;
 use tangram_package::PackageExt;
 use tg::WrapErr;
@@ -43,35 +49,70 @@ pub async fn info_string(client: &dyn tg::Client, build: &tg::Build) -> String {
 	format!("{package}: {name}")
 }
 
+pub struct Handle {
+	running: Arc<AtomicBool>,
+	task: Option<tokio::task::JoinHandle<tg::Result<()>>>,
+}
+
+impl Handle {
+	pub fn shutdown(&mut self) {
+		self.running
+			.store(false, std::sync::atomic::Ordering::SeqCst);
+		if let Some(task) = self.task.take() {
+			task.abort();
+		}
+	}
+}
+
+impl Drop for Handle {
+	fn drop(&mut self) {
+		self.shutdown();
+	}
+}
+
 /// Run the user interface.
-pub fn ui(
-	client: &dyn tg::Client,
-	tty: DevTty,
-	root: tg::Build,
-	root_info: String,
-) -> tg::Result<()> {
-	ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
-	let backend = tui::backend::CrosstermBackend::new(tty);
-	let mut terminal =
-		tui::Terminal::new(backend).wrap_err("Failed to create terminal backend.")?;
-	ct::execute!(
-		terminal.backend_mut(),
-		ct::event::EnableMouseCapture,
-		ct::terminal::EnterAlternateScreen,
-	)
-	.wrap_err("Failed to setup TUI")?;
+pub fn ui(client: &dyn tg::Client, tty: DevTty, root: tg::Build, root_info: String) -> Handle {
+	let running = Arc::new(AtomicBool::new(true));
+	let running_ = running.clone();
+	let client = client.clone_box();
+	let task = tokio::spawn(async move {
+		tokio::task::spawn_blocking(move || -> tg::Result<()> {
+			ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
+			let backend = tui::backend::CrosstermBackend::new(tty);
+			let mut terminal =
+				tui::Terminal::new(backend).wrap_err("Failed to create terminal backend.")?;
+			ct::execute!(
+				terminal.backend_mut(),
+				ct::event::EnableMouseCapture,
+				ct::terminal::EnterAlternateScreen,
+			)
+			.wrap_err("Failed to setup TUI")?;
+			let _ = inner(
+				&mut terminal,
+				client.as_ref(),
+				root,
+				root_info,
+				running_.as_ref(),
+			)
+			.wrap_err("Failed to run TUI.");
+			let _ = terminal.clear();
 
-	let _ = inner(&mut terminal, client, root, root_info).wrap_err("Failed to run TUI.");
-	let _ = terminal.clear();
+			ct::execute!(
+				terminal.backend_mut(),
+				ct::event::DisableMouseCapture,
+				ct::terminal::LeaveAlternateScreen
+			)
+			.wrap_err("Failed to shutdown TUI.")?;
+			ct::terminal::disable_raw_mode().wrap_err("Failed to disable terminal raw mode")?;
+			Ok(())
+		})
+		.await
+		.wrap_err("Failed to join task")??;
+		Ok(())
+	});
 
-	ct::execute!(
-		terminal.backend_mut(),
-		ct::event::DisableMouseCapture,
-		ct::terminal::LeaveAlternateScreen
-	)
-	.wrap_err("Failed to shutdown TUI.")?;
-	ct::terminal::disable_raw_mode().wrap_err("Failed to disable terminal raw mode")?;
-	Ok(())
+	let task = Some(task);
+	Handle { running, task }
 }
 
 fn inner(
@@ -79,6 +120,7 @@ fn inner(
 	client: &dyn tg::Client,
 	root: tg::Build,
 	root_info: String,
+	running: &AtomicBool,
 ) -> std::io::Result<()> {
 	// Create the state, event stream, and controller.
 	let mut controller = Controller::new();
@@ -104,7 +146,7 @@ fn inner(
 	);
 
 	// Main loop.
-	loop {
+	while running.load(std::sync::atomic::Ordering::SeqCst) {
 		// Handle events.
 		if ct::event::poll(std::time::Duration::from_millis(16))? {
 			let event = ct::event::read()?;
@@ -113,6 +155,20 @@ fn inner(
 				ct::event::Event::Key(event) if event.code == ct::event::KeyCode::Esc => break,
 				ct::event::Event::Key(event) => {
 					controller.handle_key_event(event, &mut state);
+				},
+				ct::event::Event::Mouse(event) => match event.kind {
+					ct::event::MouseEventKind::ScrollUp => {
+						if let InfoPane::Log(log) = &mut state.info {
+							log.scroll_up();
+						}
+					},
+					ct::event::MouseEventKind::ScrollDown => {
+						if let InfoPane::Log(log) = &mut state.info {
+							log.scroll_down();
+						}
+					},
+
+					_ => (),
 				},
 				_ => (),
 			}

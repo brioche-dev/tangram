@@ -5,11 +5,11 @@ use super::{
 };
 use itertools::Itertools;
 use ratatui as tui;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::atomic::AtomicUsize};
 
 use tui::{
 	prelude::*,
-	widgets::{Block, Borders, Paragraph, Wrap},
+	widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarState, Wrap},
 };
 
 impl App {
@@ -89,7 +89,7 @@ impl Build {
 			let area = layout[offset - skip];
 			let info = &self.info;
 			let indicator = {
-				if self.children.is_empty() && self.status.is_ok() {
+				if self.children.is_empty() && self.result.is_some() {
 					"•"
 				} else if self.is_expanded {
 					"▼"
@@ -98,10 +98,10 @@ impl Build {
 				}
 			};
 			let status = {
-				match &self.status {
-					Ok(Ok(_)) => "✓",
-					Ok(Err(_)) => "✗",
-					Err(index) => BuildResult::SPINNER[*index],
+				match &self.result {
+					Some(Ok(_)) => "✓",
+					Some(Err(_)) => "✗",
+					None => Spinner::get(),
 				}
 			};
 			let text = Text::from(format!("{prefix}{indicator} {status} {info}"));
@@ -173,7 +173,7 @@ impl Controller {
 }
 
 impl InfoPane {
-	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+	fn view(&mut self, frame: &mut Frame<'_>, area: Rect) {
 		match self {
 			Self::Log(log) => log.view(frame, area),
 			Self::Result(result) => result.view(frame, area),
@@ -182,26 +182,41 @@ impl InfoPane {
 }
 
 impl Log {
-	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
+	fn view(&mut self, frame: &mut Frame<'_>, area: Rect) {
+		let max_scroll: usize = self.text.len() / (area.width as usize);
+		self.scroll = self.scroll.min(max_scroll);
+		let mut scrollbar_state = ScrollbarState::default()
+			.content_length(max_scroll.try_into().unwrap())
+			.position(self.scroll.try_into().unwrap());
+
 		let layout = Layout::default()
 			.direction(Direction::Vertical)
 			.constraints([Constraint::Length(1), Constraint::Min(1)])
 			.split(area);
 
 		let text = Text::from("Log");
-		frame.render_widget(Paragraph::new(text), layout[0]);
+		frame.render_widget(
+			Paragraph::new(text).style(Style::default().bg(Color::White)),
+			layout[0],
+		);
 
 		let text = Text::from(self.text.as_str());
 		let wrap = Wrap { trim: false };
-		let widget = Paragraph::new(text).wrap(wrap);
+		let widget = Paragraph::new(text)
+			.wrap(wrap)
+			.scroll((self.scroll.try_into().unwrap(), 0));
 		frame.render_widget(widget, layout[1]);
+
+		let scrollbar = Scrollbar::new(tui::widgets::ScrollbarOrientation::VerticalRight)
+			.symbols(tui::symbols::scrollbar::VERTICAL)
+			.begin_symbol(None)
+			.end_symbol(None)
+			.track_symbol(None);
+		frame.render_stateful_widget(scrollbar, layout[1], &mut scrollbar_state);
 	}
 }
 
 impl BuildResult {
-	pub const SPINNER: [&str; 16] = [
-		"⣾", "⣾", "⣽", "⣽", "⣻", "⣻", "⢿", "⢿", "⡿", "⡿", "⣟", "⣟", "⣯", "⣯", "⣷", "⣷",
-	];
 	fn view(&self, frame: &mut Frame<'_>, area: Rect) {
 		let layout = Layout::default()
 			.direction(Direction::Vertical)
@@ -209,14 +224,33 @@ impl BuildResult {
 			.split(area);
 
 		let text = Text::from("Status");
-		frame.render_widget(Paragraph::new(text), layout[0]);
+		frame.render_widget(
+			Paragraph::new(text).style(Style::default().bg(Color::White)),
+			layout[0],
+		);
 
 		let text = match &self.value {
-			Ok(Ok(value)) => Text::from(format!("✅ {value}")),
-			Ok(Err(value)) => Text::from(format!("❌ {value}")),
-			Err(state) => Text::from(format!("{} In progress...", Self::SPINNER[*state])),
+			Some(Ok(value)) => Text::from(format!("✅ {value}")),
+			Some(Err(value)) => Text::from(format!("❌ {value}")),
+			None => Text::from(format!("{} In progress...", Spinner::get())),
 		};
 		let widget = Paragraph::new(text).wrap(Wrap { trim: false });
 		frame.render_widget(widget, layout[1]);
+	}
+}
+
+pub struct Spinner;
+static SPINNER_POSITION: AtomicUsize = AtomicUsize::new(0);
+pub const SPINNER: [&str; 16] = [
+	"⣾", "⣾", "⣽", "⣽", "⣻", "⣻", "⢿", "⢿", "⡿", "⡿", "⣟", "⣟", "⣯", "⣯", "⣷", "⣷",
+];
+impl Spinner {
+	pub fn update() {
+		SPINNER_POSITION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+	}
+
+	fn get() -> &'static str {
+		let state = SPINNER_POSITION.load(std::sync::atomic::Ordering::SeqCst) % SPINNER.len();
+		SPINNER[state]
 	}
 }

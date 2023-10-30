@@ -1,4 +1,4 @@
-use super::info_string;
+use super::{info_string, view::Spinner};
 use futures::StreamExt;
 use ratatui as tui;
 use tangram_client as tg;
@@ -48,7 +48,7 @@ pub struct Build {
 	pub result_receiver: tokio::sync::oneshot::Receiver<tg::Result<()>>,
 
 	/// The status of this build.
-	pub status: Result<tg::Result<()>, usize>,
+	pub result: Option<tg::Result<()>>,
 }
 
 /// Model of the state of the info pane.
@@ -70,6 +70,9 @@ pub struct Log {
 
 	/// A receiver to poll for new log messages.
 	pub receiver: tokio::sync::mpsc::UnboundedReceiver<String>,
+
+	/// Represents the scroll position of the log.
+	pub scroll: usize,
 }
 
 /// The state of a build's result.
@@ -78,7 +81,7 @@ pub struct BuildResult {
 	pub build: tg::Build,
 
 	/// The result of the value, Ok if done, Err if in progress.
-	pub value: Result<tg::Result<tg::Value>, usize>,
+	pub value: Option<tg::Result<tg::Value>>,
 
 	/// A receiver to poll for the result of a build.
 	pub receiver: tokio::sync::oneshot::Receiver<tg::Result<tg::Value>>,
@@ -97,6 +100,7 @@ impl App {
 
 	/// Update any internal state for pending changes.
 	pub fn update(&mut self) {
+		Spinner::update();
 		self.tree.root.update();
 		self.info.update();
 	}
@@ -264,7 +268,7 @@ impl Build {
 			info,
 			children_receiver,
 			result_receiver,
-			status: Err(0),
+			result: None,
 		}
 	}
 
@@ -279,16 +283,13 @@ impl Build {
 			self.children.push(child);
 		}
 
-		if self.status.is_err() {
-			self.status = match self.result_receiver.try_recv() {
-				Ok(status) => Ok(status),
+		if self.result.is_none() {
+			self.result = match self.result_receiver.try_recv() {
+				Ok(status) => Some(status),
 				Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-					Ok(Err(tg::error!("Failed to get build status.")))
+					Some(Err(tg::error!("Failed to get build status.")))
 				},
-				Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-					let value = *self.status.as_ref().unwrap_err();
-					Err((value + 1) % BuildResult::SPINNER.len())
-				},
+				Err(tokio::sync::oneshot::error::TryRecvError::Empty) => None,
 			}
 		}
 
@@ -343,6 +344,7 @@ impl Log {
 			build,
 			text,
 			receiver,
+			scroll: 0,
 		}
 	}
 
@@ -351,12 +353,20 @@ impl Log {
 			self.text.push_str(recv.as_str());
 		}
 	}
+
+	pub fn scroll_up(&mut self) {
+		self.scroll = self.scroll.saturating_add(1);
+	}
+
+	pub fn scroll_down(&mut self) {
+		self.scroll = self.scroll.saturating_sub(1);
+	}
 }
 
 impl BuildResult {
 	fn new(client: &dyn tg::Client, build: tg::Build) -> Self {
 		let (sender, receiver) = tokio::sync::oneshot::channel();
-		let value = Err(0);
+		let value = None;
 		let client = client.clone_box();
 		let build_ = build.clone();
 		let _task = tokio::task::spawn(async move {
@@ -371,19 +381,16 @@ impl BuildResult {
 	}
 
 	fn update(&mut self) {
-		if self.value.is_ok() {
+		if self.value.is_some() {
 			return;
 		}
 
 		self.value = match self.receiver.try_recv() {
-			Ok(value) => Ok(value),
+			Ok(value) => Some(value),
 			Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-				Ok(Err(tg::error!("Failed to get value for build.")))
+				Some(Err(tg::error!("Failed to get value for build.")))
 			},
-			Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-				let value = *self.value.as_ref().unwrap_err();
-				Err((value + 1) % Self::SPINNER.len())
-			},
+			Err(tokio::sync::oneshot::error::TryRecvError::Empty) => None,
 		}
 	}
 }

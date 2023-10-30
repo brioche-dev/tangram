@@ -72,9 +72,10 @@ impl Cli {
 		}
 
 		// Create the ui.
+		let mut _ui = None;
 		if !args.non_interactive {
 			if let Ok(tty) = DevTty::open() {
-				ui::ui(client, tty, build.clone(), args.target.clone())?;
+				_ui = Some(ui::ui(client, tty, build.clone(), args.target.clone()));
 			}
 		}
 
