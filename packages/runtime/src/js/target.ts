@@ -175,7 +175,7 @@ export class Target<
 				let object: MutationMap<Apply> = {};
 				if ("env" in arg) {
 					object.env =
-						arg.args !== undefined
+						arg.env !== undefined
 							? await mutation({ kind: "array_append", values: [arg.env] })
 							: await mutation({ kind: "unset" });
 				}
