@@ -82,14 +82,11 @@ impl Cli {
 			.wrap_err("Failed to create the server.")?;
 
 		// Serve.
-		let server_task = tokio::task::spawn(async move {
-			server
-				.serve(addr)
-				.await
-				.wrap_err("Failed to run the server.")
-		});
+		server
+			.serve(addr)
+			.await
+			.wrap_err("Failed to run the server.")?;
 
-		server_task.await.wrap_err("Failed to join server task")??;
 		Ok(())
 	}
 }
