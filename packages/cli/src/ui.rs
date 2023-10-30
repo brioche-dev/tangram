@@ -35,7 +35,7 @@ pub async fn info_string(client: &dyn tg::Client, build: &tg::Build) -> String {
 
 	let package = match target.package(client).await {
 		Ok(Some(package)) => match package.metadata(client).await {
-			Ok(tg::package::Metadata { name, version }) => {
+			Ok(tg::package::Metadata { name, version, .. }) => {
 				let name = name.as_deref().unwrap_or("<unknown>");
 				let version = version.as_deref().unwrap_or("<unknown>");
 				format!("{name}@{version}")

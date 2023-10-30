@@ -123,20 +123,6 @@ impl Build {
 		}
 	}
 
-	pub async fn target(&self, client: &dyn Client) -> Result<Target> {
-		self.try_get_target(client)
-			.await?
-			.wrap_err("Failed to get the build.")
-	}
-
-	pub async fn try_get_target(&self, client: &dyn Client) -> Result<Option<Target>> {
-		let Some(id) = client.try_get_build_target(self.id()).await? else {
-			return Ok(None);
-		};
-		let target = Target::with_id(id);
-		Ok(Some(target))
-	}
-
 	pub async fn children(&self, client: &dyn Client) -> Result<BoxStream<'static, Result<Self>>> {
 		self.try_get_children(client)
 			.await?

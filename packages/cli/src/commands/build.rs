@@ -39,10 +39,9 @@ pub struct Args {
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
 		let client = self.client().await?;
-		crate::ui::ui()?;
 
 		// Create the package.
-		let package = tg::Package::with_specifier(client, args.package)
+		let package = tg::Package::with_specifier(client.as_ref(), args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
@@ -63,7 +62,7 @@ impl Cli {
 			.build();
 
 		// Build the target.
-		let build = target.build(client).await?;
+		let build = target.build(client.as_ref()).await?;
 
 		// If the detach flag is set, then exit.
 		if args.detach {
@@ -72,16 +71,16 @@ impl Cli {
 		}
 
 		// Create the ui.
-		let mut _ui = None;
+		let mut ui = None;
 		if !args.non_interactive {
 			if let Ok(tty) = DevTty::open() {
-				_ui = Some(ui::ui(client, tty, build.clone(), args.target.clone()));
+				ui = Some(ui::ui(client.as_ref(), tty, build.clone(), args.target.clone()));
 			}
 		}
 
 		// Wait for the build's output.
 		let output = build
-			.result(client)
+			.result(client.as_ref())
 			.await
 			.wrap_err("Failed to get the build result.")?
 			.wrap_err("The build failed.")?;
@@ -91,7 +90,7 @@ impl Cli {
 			let artifact = tg::Artifact::try_from(output.clone())
 				.wrap_err("Expected the output to be an artifact.")?;
 			artifact
-				.check_out(client, &path)
+				.check_out(client.as_ref(), &path)
 				.await
 				.wrap_err("Failed to check out the artifact.")?;
 		}
@@ -99,6 +98,7 @@ impl Cli {
 		// Print the output.
 		println!("{output}");
 
+		drop(ui);
 		Ok(())
 	}
 }
