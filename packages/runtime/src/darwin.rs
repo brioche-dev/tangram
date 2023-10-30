@@ -33,7 +33,7 @@ pub async fn run_inner(
 	let server_directory_path = client.path().unwrap().to_owned();
 
 	// Get the artifacts path.
-	let artifacts_directory_path = server_directory_path.join(".artifacts");
+	let artifacts_directory_path = server_directory_path.join("artifacts");
 
 	// Create a tempdir for the root.
 	let root_directory_tempdir =

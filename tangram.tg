@@ -1,4 +1,4 @@
-export default tg.target(async () => {
+export default tg.target(() => {
 	let cat = tg.include("./cat");
 	let file = tg.file("Hello, World!");
 	return tg.build(tg`${cat} ${file} > $OUTPUT`);

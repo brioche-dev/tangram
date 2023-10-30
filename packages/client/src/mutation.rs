@@ -90,16 +90,16 @@ impl Mutation {
 		match data {
 			Data::Unset => Self::Unset,
 			Data::Set { value } => Self::Set {
-				value: Box::new(Value::from(value.as_ref().clone())),
+				value: Box::new(Value::from_data(value.as_ref().clone())),
 			},
 			Data::SetIfUnset { value } => Self::SetIfUnset {
-				value: Box::new(Value::from(value.as_ref().clone())),
+				value: Box::new(Value::from_data(value.as_ref().clone())),
 			},
 			Data::ArrayPrepend { values } => Self::ArrayPrepend {
-				values: values.into_iter().map(Into::into).collect(),
+				values: values.into_iter().map(Value::from_data).collect(),
 			},
 			Data::ArrayAppend { values } => Self::ArrayAppend {
-				values: values.into_iter().map(Into::into).collect(),
+				values: values.into_iter().map(Value::from_data).collect(),
 			},
 			Data::TemplatePrepend {
 				template,

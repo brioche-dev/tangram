@@ -286,28 +286,19 @@ impl Handle {
 	}
 
 	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
-		// Store the object.
 		self.store(client).await?;
-
-		// Return a reference to the ID.
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
 	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
-		// Load the object.
 		self.load(client).await?;
-
-		// Return a reference to the object.
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
 	}
 
 	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
-		// Attempt to load the object.
 		if !self.try_load(client).await? {
 			return Ok(None);
 		}
-
-		// Return a reference to the object.
 		Ok(Some(unsafe {
 			&*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object)
 		}))

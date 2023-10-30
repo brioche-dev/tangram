@@ -344,7 +344,7 @@ impl Server {
 			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
-			return Ok(Some(object.target.expect_id().clone()));
+			return Ok(Some(object.target.id(self).await?.clone()));
 		}
 
 		Ok(None)

@@ -84,6 +84,7 @@ impl Server {
 				})?;
 				entries.get(name).ok_or(NFS4ERR_NOENT)?.clone()
 			},
+
 			_ => unreachable!(),
 		};
 

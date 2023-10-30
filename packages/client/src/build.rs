@@ -1,4 +1,4 @@
-use crate::{blob, id, object, target, value, Blob, Client, Error, Result, Target, Value, WrapErr};
+use crate::{blob, id, object, target, value, Blob, Client, Result, Target, Value, WrapErr};
 use bytes::Bytes;
 use futures::{
 	stream::{self, BoxStream, FuturesUnordered},
@@ -18,7 +18,7 @@ pub struct Object {
 	pub target: Target,
 	pub children: Vec<Build>,
 	pub log: Blob,
-	pub result: Result<Value, Error>,
+	pub result: Result<Value>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -26,7 +26,7 @@ pub struct Data {
 	pub target: target::Id,
 	pub children: Vec<Id>,
 	pub log: blob::Id,
-	pub result: Result<value::Data, Error>,
+	pub result: Result<value::Data>,
 }
 
 impl Id {
@@ -44,7 +44,7 @@ impl Build {
 		target: Target,
 		children: Vec<Build>,
 		log: Blob,
-		result: Result<Value, Error>,
+		result: Result<Value>,
 	) -> Result<Self> {
 		// Create the object.
 		let object = Object {
@@ -162,16 +162,13 @@ impl Build {
 		}
 	}
 
-	pub async fn result(&self, client: &dyn Client) -> Result<Result<Value, Error>> {
+	pub async fn result(&self, client: &dyn Client) -> Result<Result<Value>> {
 		self.try_get_result(client)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	pub async fn try_get_result(
-		&self,
-		client: &dyn Client,
-	) -> Result<Option<Result<Value, Error>>> {
+	pub async fn try_get_result(&self, client: &dyn Client) -> Result<Option<Result<Value>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.result.clone()))
 		} else {
@@ -200,7 +197,7 @@ impl Object {
 		let target = Target::with_id(data.target);
 		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
-		let result = data.result.map(Into::into);
+		let result = data.result.map(Value::from_data);
 		Self {
 			target,
 			children,

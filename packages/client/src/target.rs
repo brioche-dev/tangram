@@ -125,9 +125,9 @@ impl Object {
 			env: data
 				.env
 				.into_iter()
-				.map(|(key, data)| (key, data.into()))
+				.map(|(key, data)| (key, Value::from_data(data)))
 				.collect(),
-			args: data.args.into_iter().map(Into::into).collect(),
+			args: data.args.into_iter().map(Value::from_data).collect(),
 			checksum: data.checksum,
 			unsafe_: data.unsafe_,
 		}

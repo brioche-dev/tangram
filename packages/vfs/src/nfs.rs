@@ -45,12 +45,10 @@ impl Server {
 		Self { client, state }
 	}
 
-	/// Serve NFS4 requests on [port].
 	pub async fn serve(&self, port: u16) -> crate::Result<()> {
 		let listener = TcpListener::bind(format!("localhost:{port}"))
 			.await
 			.wrap_err("Failed to bind the server.")?;
-		tracing::info!("🚀 Serving NFS requests on {port}.");
 		loop {
 			let (conn, addr) = listener
 				.accept()
@@ -59,42 +57,41 @@ impl Server {
 			tracing::info!(?addr, "Accepted client connection.");
 			let server = self.clone();
 			tokio::task::spawn(async move {
-				if let Err(e) = server.handle_connection(conn).await {
-					match e {
-						Error::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-							tracing::info!(?addr, "Closing connection");
+				if let Err(error) = server.handle_connection(conn).await {
+					match error {
+						Error::Io(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+							tracing::info!(?addr, "The connection was closed.");
 						},
-						e => tracing::error!(?e),
+						error => tracing::error!(?error),
 					}
 				}
 			});
 		}
 	}
 
-	/// Handle an incoming TCP stream connection.
 	async fn handle_connection(&self, mut stream: TcpStream) -> Result<(), Error> {
 		loop {
 			let fragments = rpc::read_fragments(&mut stream).await?;
 			let mut decoder = Decoder::from_bytes(&fragments);
-			let mut reply_buf = Vec::new();
-
+			let mut buffer = Vec::new();
 			while let Ok(message) = decoder.decode::<rpc::Message>() {
 				let xid = message.xid;
-				if let Some(body) = self.handle_message(message, &mut decoder).await {
-					reply_buf.clear();
-					let mut encoder = Encoder::new(&mut reply_buf);
-					let reply = rpc::Message {
-						xid,
-						body: MessageBody::Reply(body),
-					};
-					encoder.encode(&reply)?;
-					rpc::write_fragments(&mut stream, &reply_buf).await?;
-				}
+				let Some(body) = self.handle_message(message, &mut decoder).await else {
+					continue;
+				};
+				buffer.clear();
+				let mut encoder = Encoder::new(&mut buffer);
+				let reply = rpc::Message {
+					xid,
+					body: MessageBody::Reply(body),
+				};
+				encoder.encode(&reply)?;
+				rpc::write_fragments(&mut stream, &buffer).await?;
 			}
 		}
 	}
 
-	/// Handle a single message pulled off the TCP stream.
+	#[tracing::instrument(skip(self, decoder), ret)]
 	async fn handle_message(
 		&self,
 		message: Message,
@@ -258,17 +255,36 @@ impl Server {
 }
 
 pub async fn mount(mountpoint: &Path, port: u16) -> crate::Result<()> {
+	let _ = tokio::process::Command::new("dns-sd")
+		.args([
+			"-P",
+			"Tangram",
+			"_nfs._tcp",
+			"local",
+			&port.to_string(),
+			"Tangram",
+			"::1",
+			"path=/",
+		])
+		.stdout(std::process::Stdio::null())
+		.stderr(std::process::Stdio::null())
+		.spawn()
+		.wrap_err("Failed to spawn dns-sd.")?;
 	let _ = tokio::process::Command::new("umount")
 		.arg("-f")
 		.arg(mountpoint)
+		.stdout(std::process::Stdio::null())
+		.stderr(std::process::Stdio::null())
 		.status()
 		.await
 		.wrap_err("Failed to unmount.")?;
 	tokio::process::Command::new("mount_nfs")
 		.arg("-o")
 		.arg(format!("tcp,vers=4.0,port={port}"))
-		.arg("localhost:")
+		.arg("Tangram:/")
 		.arg(mountpoint)
+		.stdout(std::process::Stdio::null())
+		.stderr(std::process::Stdio::null())
 		.status()
 		.await
 		.wrap_err("Failed to mount.")?

@@ -129,7 +129,7 @@ impl Artifact {
 					// Handle each artifact.
 					for artifact in artifacts {
 						// Insert the artifact into the set of references.
-						let inserted = references.insert(artifact.expect_id());
+						let inserted = references.insert(artifact.id(client).await?);
 
 						// If the artifact was new, then add it to the queue.
 						if inserted {

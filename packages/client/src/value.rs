@@ -1,6 +1,7 @@
 use crate::{
 	branch, directory, file, leaf, mutation, object, package, symlink, target, template, Branch,
-	Client, Directory, File, Leaf, Mutation, Package, Result, Symlink, Target, Template, WrapErr,
+	Client, Directory, Error, File, Leaf, Mutation, Package, Result, Symlink, Target, Template,
+	WrapErr,
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
@@ -275,16 +276,10 @@ impl std::fmt::Display for Value {
 	}
 }
 
-impl From<Data> for Value {
-	fn from(value: Data) -> Self {
-		Self::from_data(value)
+impl TryFrom<Data> for Value {
+	type Error = Error;
+
+	fn try_from(value: Data) -> std::result::Result<Self, Self::Error> {
+		Ok(Self::from_data(value))
 	}
 }
-
-// impl TryFrom<Data> for Value {
-// 	type Error = Error;
-
-// 	fn try_from(value: Data) -> std::result::Result<Self, Self::Error> {
-// 		Ok(Self::from_data(value))
-// 	}
-// }
