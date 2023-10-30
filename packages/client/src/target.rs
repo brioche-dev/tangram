@@ -107,9 +107,9 @@ impl Object {
 			env: self
 				.env
 				.iter()
-				.map(|(key, value)| (key.clone(), value.clone().into()))
+				.map(|(key, value)| (key.clone(), value.to_data()))
 				.collect(),
-			args: self.args.iter().cloned().map(Into::into).collect(),
+			args: self.args.iter().map(Value::to_data).collect(),
 			checksum: self.checksum.clone(),
 			unsafe_: self.unsafe_,
 		}

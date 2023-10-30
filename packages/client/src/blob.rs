@@ -159,13 +159,13 @@ impl Blob {
 
 	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
 		match self {
+			Self::Leaf(leaf) => Ok(leaf.bytes(client).await?.len().to_u64().unwrap()),
 			Self::Branch(branch) => Ok(branch
 				.children(client)
 				.await?
 				.iter()
 				.map(|child| child.size)
 				.sum()),
-			Self::Leaf(leaf) => Ok(leaf.bytes(client).await?.len().to_u64().unwrap()),
 		}
 	}
 

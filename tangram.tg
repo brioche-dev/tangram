@@ -1,3 +1,5 @@
 export default tg.target(async () => {
-	return { "hello": tg.directory({ "hello": tg.file("Hello, World!") }), world: `5` };
+	let cat = tg.include("./cat");
+	let file = tg.file("Hello, World!");
+	return tg.build(tg`${cat} ${file} > $OUTPUT`);
 });

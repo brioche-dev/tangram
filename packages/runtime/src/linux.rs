@@ -201,6 +201,10 @@ pub async fn run_inner(
 		output_guest_path.to_str().unwrap().to_owned(),
 	);
 
+	dbg!(&executable);
+	dbg!(&env);
+	dbg!(&args);
+
 	// Create /etc.
 	tokio::fs::create_dir_all(root_directory_host_path.join("etc"))
 		.await

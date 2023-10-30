@@ -2,7 +2,7 @@ use num::ToPrimitive;
 use std::{
 	collections::BTreeMap,
 	ffi::CString,
-	io::{Read, SeekFrom, Write},
+	io::SeekFrom,
 	os::{fd::FromRawFd, unix::prelude::OsStrExt},
 	path::Path,
 	sync::{Arc, Weak},

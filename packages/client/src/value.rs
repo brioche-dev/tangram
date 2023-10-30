@@ -4,11 +4,12 @@ use crate::{
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
+use futures::{stream::FuturesUnordered, TryStreamExt};
 use std::collections::BTreeMap;
 
 /// A value.
-#[derive(Clone, Debug, From, TryInto, serde::Serialize, serde::Deserialize, TryUnwrap)]
-#[serde(into = "Data", try_from = "Data")]
+#[derive(Clone, Debug, From, TryInto, serde::Deserialize, TryUnwrap)]
+#[serde(try_from = "Data")]
 #[try_unwrap(ref)]
 pub enum Value {
 	/// A null value.
@@ -84,17 +85,66 @@ pub enum Data {
 
 impl Value {
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+		self.children()
+			.into_iter()
+			.map(|child| async move { child.store(client).await })
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+		let data = self.to_data();
+		Ok(data)
+	}
+
+	pub fn to_data(&self) -> Data {
 		match self {
-			Value::Leaf(leaf) => leaf.handle().store(client).await?,
-			Value::Branch(branch) => branch.handle().store(client).await?,
-			Value::Directory(directory) => directory.handle().store(client).await?,
-			Value::File(file) => file.handle().store(client).await?,
-			Value::Symlink(symlink) => symlink.handle().store(client).await?,
-			Value::Package(package) => package.handle().store(client).await?,
-			Value::Target(target) => target.handle().store(client).await?,
-			_ => {},
+			Self::Null(()) => Data::Null(()),
+			Self::Bool(bool) => Data::Bool(*bool),
+			Self::Number(number) => Data::Number(*number),
+			Self::String(string) => Data::String(string.clone()),
+			Self::Bytes(bytes) => Data::Bytes(bytes.clone()),
+			Self::Leaf(leaf) => Data::Leaf(leaf.expect_id().clone()),
+			Self::Branch(branch) => Data::Branch(branch.expect_id().clone()),
+			Self::Directory(directory) => Data::Directory(directory.expect_id().clone()),
+			Self::File(file) => Data::File(file.expect_id().clone()),
+			Self::Mutation(mutation) => Data::Mutation(mutation.to_data().clone()),
+			Self::Symlink(symlink) => Data::Symlink(symlink.expect_id().clone()),
+			Self::Template(template) => Data::Template(template.to_data().clone()),
+			Self::Package(package) => Data::Package(package.expect_id().clone()),
+			Self::Target(target) => Data::Target(target.expect_id().clone()),
+			Self::Array(array) => Data::Array(array.iter().map(Value::to_data).collect()),
+			Self::Map(map) => Data::Map(
+				map.iter()
+					.map(|(key, value)| (key.clone(), value.to_data()))
+					.collect(),
+			),
 		}
-		Ok(self.clone().into())
+	}
+
+	pub fn from_data(data: Data) -> Self {
+		match data {
+			Data::Null(()) => Self::Null(()),
+			Data::Bool(bool) => Self::Bool(bool),
+			Data::Number(number) => Self::Number(number),
+			Data::String(string) => Self::String(string),
+			Data::Bytes(bytes) => Self::Bytes(bytes),
+			Data::Leaf(id) => Self::Leaf(Leaf::with_id(id)),
+			Data::Branch(id) => Self::Branch(Branch::with_id(id)),
+			Data::Directory(id) => Self::Directory(Directory::with_id(id)),
+			Data::File(id) => Self::File(File::with_id(id)),
+			Data::Mutation(mutation) => Self::Mutation(Mutation::from_data(mutation)),
+			Data::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
+			Data::Template(template) => Self::Template(Template::from_data(template)),
+			Data::Package(id) => Self::Package(Package::with_id(id)),
+			Data::Target(id) => Self::Target(Target::with_id(id)),
+			Data::Array(array) => {
+				Self::Array(array.into_iter().map(Value::from_data).collect::<Vec<_>>())
+			},
+			Data::Map(map) => Self::Map(
+				map.into_iter()
+					.map(|(key, value)| (key, Value::from_data(value)))
+					.collect(),
+			),
+		}
 	}
 
 	pub fn children(&self) -> Vec<object::Handle> {
@@ -145,62 +195,6 @@ impl Data {
 			Self::Target(id) => vec![id.clone().into()],
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
-		}
-	}
-}
-
-impl From<Value> for Data {
-	fn from(value: Value) -> Self {
-		match value {
-			Value::Null(()) => Self::Null(()),
-			Value::Bool(bool) => Self::Bool(bool),
-			Value::Number(number) => Self::Number(number),
-			Value::String(string) => Self::String(string.clone()),
-			Value::Bytes(bytes) => Self::Bytes(bytes.clone()),
-			Value::Leaf(leaf) => Self::Leaf(leaf.expect_id().clone()),
-			Value::Branch(branch) => Self::Branch(branch.expect_id().clone()),
-			Value::Directory(directory) => Self::Directory(directory.expect_id().clone()),
-			Value::File(file) => Self::File(file.expect_id().clone()),
-			Value::Mutation(mutation) => Self::Mutation(mutation.to_data().clone()),
-			Value::Symlink(symlink) => Self::Symlink(symlink.expect_id().clone()),
-			Value::Template(template) => Self::Template(template.to_data().clone()),
-			Value::Package(package) => Self::Package(package.expect_id().clone()),
-			Value::Target(target) => Self::Target(target.expect_id().clone()),
-			Value::Array(array) => Self::Array(array.into_iter().map(Into::into).collect()),
-			Value::Map(map) => Self::Map(
-				map.into_iter()
-					.map(|(key, value)| (key.clone(), value.into()))
-					.collect(),
-			),
-		}
-	}
-}
-
-impl From<Data> for Value {
-	fn from(value: Data) -> Self {
-		match value {
-			Data::Null(()) => Self::Null(()),
-			Data::Bool(bool) => Self::Bool(bool),
-			Data::Number(number) => Self::Number(number),
-			Data::String(string) => Self::String(string),
-			Data::Bytes(bytes) => Self::Bytes(bytes),
-			Data::Leaf(id) => Self::Leaf(Leaf::with_id(id)),
-			Data::Branch(id) => Self::Branch(Branch::with_id(id)),
-			Data::Directory(id) => Self::Directory(Directory::with_id(id)),
-			Data::File(id) => Self::File(File::with_id(id)),
-			Data::Mutation(mutation) => Self::Mutation(Mutation::from_data(mutation)),
-			Data::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
-			Data::Template(template) => Self::Template(Template::from_data(template)),
-			Data::Package(id) => Self::Package(Package::with_id(id)),
-			Data::Target(id) => Self::Target(Target::with_id(id)),
-			Data::Array(array) => {
-				Self::Array(array.into_iter().map(Into::into).collect::<Vec<_>>())
-			},
-			Data::Map(map) => Self::Map(
-				map.into_iter()
-					.map(|(key, value)| (key, value.into()))
-					.collect(),
-			),
 		}
 	}
 }
@@ -280,3 +274,17 @@ impl std::fmt::Display for Value {
 		Ok(())
 	}
 }
+
+impl From<Data> for Value {
+	fn from(value: Data) -> Self {
+		Self::from_data(value)
+	}
+}
+
+// impl TryFrom<Data> for Value {
+// 	type Error = Error;
+
+// 	fn try_from(value: Data) -> std::result::Result<Self, Self::Error> {
+// 		Ok(Self::from_data(value))
+// 	}
+// }

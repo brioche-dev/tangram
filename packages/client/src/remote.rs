@@ -599,6 +599,10 @@ impl Client for Remote {
 	}
 
 	async fn set_build_result(&self, build_id: &build::Id, result: Result<Value>) -> Result<()> {
+		let result = match result {
+			Ok(value) => Ok(value.data(self).await?),
+			Err(error) => Err(error),
+		};
 		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
 		let request = self
 			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))

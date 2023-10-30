@@ -4,7 +4,7 @@ use crate::{
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
-use futures::stream::TryStreamExt;
+use futures::stream::{FuturesUnordered, TryStreamExt};
 use std::sync::Arc;
 
 /// An artifact kind.
@@ -34,18 +34,6 @@ pub enum Id {
 	Build(build::Id),
 }
 
-/// An object handle.
-#[derive(Clone, Debug)]
-pub struct Handle {
-	state: Arc<std::sync::RwLock<State>>,
-}
-
-#[derive(Debug)]
-pub struct State {
-	id: Option<Id>,
-	object: Option<Object>,
-}
-
 /// An object.
 #[derive(Clone, Debug, From, TryInto, TryUnwrap)]
 #[try_unwrap(ref)]
@@ -71,6 +59,18 @@ pub enum Data {
 	Package(package::Data),
 	Target(target::Data),
 	Build(build::Data),
+}
+
+/// An object handle.
+#[derive(Clone, Debug)]
+pub struct Handle {
+	state: Arc<std::sync::RwLock<State>>,
+}
+
+#[derive(Debug)]
+pub struct State {
+	id: Option<Id>,
+	object: Option<Object>,
 }
 
 impl Id {
@@ -142,217 +142,6 @@ impl Id {
 			Self::Target(id) => id.to_bytes(),
 			Self::Build(id) => id.to_bytes(),
 		}
-	}
-}
-
-impl Handle {
-	#[must_use]
-	pub fn with_state(state: State) -> Self {
-		Self {
-			state: Arc::new(std::sync::RwLock::new(state)),
-		}
-	}
-
-	#[must_use]
-	pub fn state(&self) -> &std::sync::RwLock<State> {
-		&self.state
-	}
-
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		let state = State::with_id(id);
-		Self {
-			state: Arc::new(std::sync::RwLock::new(state)),
-		}
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		let state = State::with_object(object);
-		Self {
-			state: Arc::new(std::sync::RwLock::new(state)),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> &Id {
-		unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) }
-	}
-
-	#[must_use]
-	pub fn expect_object(&self) -> &Object {
-		unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) }
-	}
-
-	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
-		// Store the object.
-		self.store(client).await?;
-
-		// Return a reference to the ID.
-		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
-	}
-
-	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
-		// Load the object.
-		self.load(client).await?;
-
-		// Return a reference to the object.
-		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
-	}
-
-	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
-		// Attempt to load the object.
-		if !self.try_load(client).await? {
-			return Ok(None);
-		}
-
-		// Return a reference to the object.
-		Ok(Some(unsafe {
-			&*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object)
-		}))
-	}
-
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
-		// Load the object.
-		self.load(client).await?;
-
-		// Return the data.
-		Ok(self
-			.state
-			.read()
-			.unwrap()
-			.object
-			.as_ref()
-			.unwrap()
-			.to_data())
-	}
-
-	pub async fn load(&self, client: &dyn Client) -> Result<()> {
-		self.try_load(client)
-			.await?
-			.then_some(())
-			.wrap_err("Failed to load the object.")
-	}
-
-	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
-		// If the handle is loaded, then return.
-		if self.state.read().unwrap().object.is_some() {
-			return Ok(true);
-		}
-
-		// Get the ID.
-		let id = self.expect_id();
-
-		// Get the kind.
-		let kind = id.kind();
-
-		// Get the data.
-		let Some(bytes) = client.try_get_object_bytes(id).await? else {
-			return Ok(false);
-		};
-
-		// Deserialize the data.
-		let data = Data::deserialize(kind, &bytes).wrap_err("Failed to deserialize the data.")?;
-
-		// Create the object.
-		let object = Object::from_data(data);
-
-		// Update the state.
-		self.state.write().unwrap().object.replace(object);
-
-		Ok(true)
-	}
-
-	#[async_recursion::async_recursion]
-	pub async fn store(&self, client: &dyn Client) -> Result<()> {
-		// If the handle is stored, then return.
-		if self.state.read().unwrap().id.is_some() {
-			return Ok(());
-		}
-
-		// Get the children.
-		let children = self
-			.state
-			.read()
-			.unwrap()
-			.object
-			.as_ref()
-			.unwrap()
-			.children();
-
-		// Store the children.
-		children
-			.into_iter()
-			.map(|child| async move { child.store(client).await })
-			.collect::<futures::stream::FuturesUnordered<_>>()
-			.try_collect()
-			.await?;
-
-		// Get the data.
-		let data = self
-			.state
-			.read()
-			.unwrap()
-			.object
-			.as_ref()
-			.unwrap()
-			.to_data();
-
-		// Serialize the data.
-		let bytes = data.serialize()?;
-
-		// Get the kind.
-		let kind = data.kind();
-
-		// Create the ID.
-		let id = Id::new(kind, &bytes);
-
-		// Store the object.
-		client
-			.try_put_object_bytes(&id, &bytes)
-			.await
-			.wrap_err("Failed to put the object.")?
-			.ok()
-			.wrap_err("Expected all children to be stored.")?;
-
-		// Update the state.
-		self.state.write().unwrap().id.replace(id);
-
-		Ok(())
-	}
-}
-
-impl State {
-	#[must_use]
-	pub fn new(id: Option<Id>, object: Option<Object>) -> Self {
-		assert!(id.is_some() || object.is_some());
-		Self { id, object }
-	}
-
-	#[must_use]
-	pub fn with_id(id: Id) -> Self {
-		Self {
-			id: Some(id),
-			object: None,
-		}
-	}
-
-	#[must_use]
-	pub fn with_object(object: Object) -> Self {
-		Self {
-			id: None,
-			object: Some(object),
-		}
-	}
-
-	#[must_use]
-	pub fn id(&self) -> &Option<Id> {
-		&self.id
-	}
-
-	#[must_use]
-	pub fn object(&self) -> &Option<Object> {
-		&self.object
 	}
 }
 
@@ -454,6 +243,202 @@ impl Data {
 			Self::Target(_) => Kind::Target,
 			Self::Build(_) => Kind::Build,
 		}
+	}
+}
+
+impl Handle {
+	#[must_use]
+	pub fn with_state(state: State) -> Self {
+		Self {
+			state: Arc::new(std::sync::RwLock::new(state)),
+		}
+	}
+
+	#[must_use]
+	pub fn state(&self) -> &std::sync::RwLock<State> {
+		&self.state
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		let state = State::with_id(id);
+		Self {
+			state: Arc::new(std::sync::RwLock::new(state)),
+		}
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		let state = State::with_object(object);
+		Self {
+			state: Arc::new(std::sync::RwLock::new(state)),
+		}
+	}
+
+	#[must_use]
+	pub fn expect_id(&self) -> &Id {
+		unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) }
+	}
+
+	#[must_use]
+	pub fn expect_object(&self) -> &Object {
+		unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) }
+	}
+
+	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
+		// Store the object.
+		self.store(client).await?;
+
+		// Return a reference to the ID.
+		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
+	}
+
+	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
+		// Load the object.
+		self.load(client).await?;
+
+		// Return a reference to the object.
+		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
+	}
+
+	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
+		// Attempt to load the object.
+		if !self.try_load(client).await? {
+			return Ok(None);
+		}
+
+		// Return a reference to the object.
+		Ok(Some(unsafe {
+			&*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object)
+		}))
+	}
+
+	pub async fn load(&self, client: &dyn Client) -> Result<()> {
+		self.try_load(client)
+			.await?
+			.then_some(())
+			.wrap_err("Failed to load the object.")
+	}
+
+	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
+		// If the handle is loaded, then return.
+		if self.state.read().unwrap().object.is_some() {
+			return Ok(true);
+		}
+
+		// Get the ID.
+		let id = self.expect_id();
+
+		// Get the kind.
+		let kind = id.kind();
+
+		// Get the data.
+		let Some(bytes) = client.try_get_object_bytes(id).await? else {
+			return Ok(false);
+		};
+
+		// Deserialize the data.
+		let data = Data::deserialize(kind, &bytes).wrap_err("Failed to deserialize the data.")?;
+
+		// Create the object.
+		let object = Object::from_data(data);
+
+		// Update the state.
+		self.state.write().unwrap().object.replace(object);
+
+		Ok(true)
+	}
+
+	#[async_recursion::async_recursion]
+	pub async fn store(&self, client: &dyn Client) -> Result<()> {
+		// If the handle is stored, then return.
+		if self.state.read().unwrap().id.is_some() {
+			return Ok(());
+		}
+
+		// Get the children.
+		let children = self
+			.state
+			.read()
+			.unwrap()
+			.object
+			.as_ref()
+			.unwrap()
+			.children();
+
+		// Store the children.
+		children
+			.into_iter()
+			.map(|child| async move { child.store(client).await })
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+
+		// Get the data.
+		let data = self
+			.state
+			.read()
+			.unwrap()
+			.object
+			.as_ref()
+			.unwrap()
+			.to_data();
+
+		// Serialize the data.
+		let bytes = data.serialize()?;
+
+		// Get the kind.
+		let kind = data.kind();
+
+		// Create the ID.
+		let id = Id::new(kind, &bytes);
+
+		// Store the object.
+		client
+			.try_put_object_bytes(&id, &bytes)
+			.await
+			.wrap_err("Failed to put the object.")?
+			.ok()
+			.wrap_err("Expected all children to be stored.")?;
+
+		// Update the state.
+		self.state.write().unwrap().id.replace(id);
+
+		Ok(())
+	}
+}
+
+impl State {
+	#[must_use]
+	pub fn new(id: Option<Id>, object: Option<Object>) -> Self {
+		assert!(id.is_some() || object.is_some());
+		Self { id, object }
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		Self {
+			id: Some(id),
+			object: None,
+		}
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		Self {
+			id: None,
+			object: Some(object),
+		}
+	}
+
+	#[must_use]
+	pub fn id(&self) -> &Option<Id> {
+		&self.id
+	}
+
+	#[must_use]
+	pub fn object(&self) -> &Option<Object> {
+		&self.object
 	}
 }
 
@@ -564,13 +549,6 @@ macro_rules! handle {
 				}
 			}
 
-			pub async fn data(&self, client: &dyn $crate::Client) -> $crate::Result<Data> {
-				match self.0.data(client).await? {
-					$crate::object::Data::$t(data) => Ok(data),
-					_ => unreachable!(),
-				}
-			}
-
 			pub async fn load(&self, client: &dyn $crate::Client) -> $crate::Result<()> {
 				self.0.load(client).await
 			}
@@ -594,6 +572,23 @@ macro_rules! id {
 			#[must_use]
 			pub fn to_bytes(&self) -> ::bytes::Bytes {
 				self.0.to_bytes()
+			}
+		}
+
+		impl From<self::Id> for $crate::Id {
+			fn from(value: self::Id) -> Self {
+				value.0
+			}
+		}
+
+		impl TryFrom<$crate::Id> for self::Id {
+			type Error = $crate::Error;
+
+			fn try_from(value: $crate::Id) -> Result<Self, Self::Error> {
+				match value.kind() {
+					$crate::id::Kind::$t => Ok(Self(value)),
+					_ => $crate::return_error!("Unexpected kind."),
+				}
 			}
 		}
 
@@ -639,23 +634,6 @@ macro_rules! id {
 
 			fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
 				Self::try_from($crate::Id::try_from(value)?)
-			}
-		}
-
-		impl From<self::Id> for $crate::Id {
-			fn from(value: self::Id) -> Self {
-				value.0
-			}
-		}
-
-		impl TryFrom<$crate::Id> for self::Id {
-			type Error = $crate::Error;
-
-			fn try_from(value: $crate::Id) -> Result<Self, Self::Error> {
-				match value.kind() {
-					$crate::id::Kind::$t => Ok(Self(value)),
-					_ => $crate::return_error!("Unexpected kind."),
-				}
 			}
 		}
 	};

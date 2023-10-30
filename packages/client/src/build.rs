@@ -1,7 +1,7 @@
 use crate::{blob, id, object, target, value, Blob, Client, Error, Result, Target, Value, WrapErr};
 use bytes::Bytes;
 use futures::{
-	stream::{self, BoxStream},
+	stream::{self, BoxStream, FuturesUnordered},
 	StreamExt, TryStreamExt,
 };
 
@@ -59,7 +59,7 @@ impl Build {
 			.children()
 			.into_iter()
 			.map(|child| async move { child.store(client).await })
-			.collect::<futures::stream::FuturesUnordered<_>>()
+			.collect::<FuturesUnordered<_>>()
 			.try_collect()
 			.await?;
 
@@ -186,7 +186,7 @@ impl Object {
 		let target = self.target.expect_id().clone();
 		let children = self.children.iter().map(Build::id).cloned().collect();
 		let log = self.log.expect_id().clone();
-		let result = self.result.clone().map(Into::into);
+		let result = self.result.clone().map(|value| value.to_data());
 		Data {
 			target,
 			children,
@@ -211,10 +211,8 @@ impl Object {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Handle> {
-		let children = self
-			.children
-			.iter()
-			.map(|child| object::Handle::with_id(child.id().clone().into()));
+		let target = std::iter::once(self.target.handle().clone());
+		let children = self.children.iter().map(|child| child.handle().clone());
 		let log = std::iter::once(self.log.handle().clone());
 		let result = self
 			.result
@@ -223,6 +221,7 @@ impl Object {
 			.into_iter()
 			.flatten();
 		std::iter::empty()
+			.chain(target)
 			.chain(children)
 			.chain(log)
 			.chain(result)
@@ -243,6 +242,7 @@ impl Data {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
+		let target = std::iter::once(self.target.clone().into());
 		let children = self.children.iter().cloned().map(Into::into);
 		let log = std::iter::once(self.log.clone().into());
 		let result = self
@@ -252,6 +252,7 @@ impl Data {
 			.into_iter()
 			.flatten();
 		std::iter::empty()
+			.chain(target)
 			.chain(children)
 			.chain(log)
 			.chain(result)

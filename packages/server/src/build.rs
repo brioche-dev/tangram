@@ -237,9 +237,9 @@ impl Server {
 		let build_id = build::Id::new();
 		let progress = Progress::new(build_id.clone(), target)?;
 		{
-			let mut running = self.inner.builds.write().unwrap();
-			running.0.insert(target_id.clone(), build_id.clone());
-			running.1.insert(build_id.clone(), progress.clone());
+			let mut builds = self.inner.builds.write().unwrap();
+			builds.0.insert(target_id.clone(), build_id.clone());
+			builds.1.insert(build_id.clone(), progress.clone());
 		}
 
 		// Spawn the task.
@@ -322,7 +322,11 @@ impl Server {
 		txn.commit().wrap_err("Failed to commit the transaction.")?;
 
 		// Remove the state of the running build.
-		self.inner.builds.write().unwrap().1.remove(&build_id);
+		{
+			let mut builds = self.inner.builds.write().unwrap();
+			builds.0.remove(&target_id);
+			builds.1.remove(&build_id);
+		}
 
 		Ok(())
 	}

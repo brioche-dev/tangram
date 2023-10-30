@@ -28,76 +28,92 @@ pub enum Mutation {
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "kind", content = "value")]
 pub enum Data {
-	Unset(()),
-	Set(Box<value::Data>),
-	SetIfUnset(Box<value::Data>),
-	ArrayPrepend(Vec<value::Data>),
-	ArrayAppend(Vec<value::Data>),
-	TemplatePrepend(TemplateMutationData),
-	TemplateAppend(TemplateMutationData),
-}
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-pub struct TemplateMutationData {
-	template: template::Data,
-	separator: template::Data,
+	Unset,
+	Set {
+		value: Box<value::Data>,
+	},
+	SetIfUnset {
+		value: Box<value::Data>,
+	},
+	ArrayPrepend {
+		values: Vec<value::Data>,
+	},
+	ArrayAppend {
+		values: Vec<value::Data>,
+	},
+	TemplatePrepend {
+		template: template::Data,
+		separator: template::Data,
+	},
+	TemplateAppend {
+		template: template::Data,
+		separator: template::Data,
+	},
 }
 
 impl Mutation {
 	#[must_use]
 	pub fn to_data(&self) -> Data {
 		match self {
-			Self::Unset => Data::Unset(()),
-			Self::Set { value } => Data::Set(Box::new(value::Data::from(value.as_ref().clone()))),
-			Self::SetIfUnset { value } => {
-				Data::SetIfUnset(Box::new(value::Data::from(value.as_ref().clone())))
+			Self::Unset => Data::Unset,
+			Self::Set { value } => Data::Set {
+				value: Box::new(value.to_data()),
 			},
-			Self::ArrayPrepend { values } => {
-				Data::ArrayPrepend(values.iter().cloned().map(Into::into).collect())
+			Self::SetIfUnset { value } => Data::SetIfUnset {
+				value: Box::new(value.to_data()),
 			},
-			Self::ArrayAppend { values } => {
-				Data::ArrayAppend(values.iter().cloned().map(Into::into).collect())
+			Self::ArrayPrepend { values } => Data::ArrayPrepend {
+				values: values.iter().map(Value::to_data).collect(),
+			},
+			Self::ArrayAppend { values } => Data::ArrayAppend {
+				values: values.iter().map(Value::to_data).collect(),
 			},
 			Self::TemplatePrepend {
 				template,
 				separator,
-			} => Data::TemplatePrepend(TemplateMutationData {
+			} => Data::TemplatePrepend {
 				template: template.to_data(),
 				separator: separator.to_data(),
-			}),
+			},
 			Self::TemplateAppend {
 				template,
 				separator,
-			} => Data::TemplateAppend(TemplateMutationData {
+			} => Data::TemplateAppend {
 				template: template.to_data(),
 				separator: separator.to_data(),
-			}),
+			},
 		}
 	}
 
 	#[must_use]
 	pub fn from_data(data: Data) -> Self {
 		match data {
-			Data::Unset(()) => Self::Unset,
-			Data::Set(data) => Self::Set {
-				value: Box::new(Value::from(data.as_ref().clone())),
+			Data::Unset => Self::Unset,
+			Data::Set { value } => Self::Set {
+				value: Box::new(Value::from(value.as_ref().clone())),
 			},
-			Data::SetIfUnset(data) => Self::SetIfUnset {
-				value: Box::new(Value::from(data.as_ref().clone())),
+			Data::SetIfUnset { value } => Self::SetIfUnset {
+				value: Box::new(Value::from(value.as_ref().clone())),
 			},
-			Data::ArrayPrepend(data) => Self::ArrayPrepend {
-				values: data.into_iter().map(Into::into).collect(),
+			Data::ArrayPrepend { values } => Self::ArrayPrepend {
+				values: values.into_iter().map(Into::into).collect(),
 			},
-			Data::ArrayAppend(data) => Self::ArrayAppend {
-				values: data.into_iter().map(Into::into).collect(),
+			Data::ArrayAppend { values } => Self::ArrayAppend {
+				values: values.into_iter().map(Into::into).collect(),
 			},
-			Data::TemplatePrepend(data) => Self::TemplatePrepend {
-				template: Template::from_data(data.template),
-				separator: Template::from_data(data.separator),
+			Data::TemplatePrepend {
+				template,
+				separator,
+			} => Self::TemplatePrepend {
+				template: Template::from_data(template),
+				separator: Template::from_data(separator),
 			},
-			Data::TemplateAppend(data) => Self::TemplateAppend {
-				template: Template::from_data(data.template),
-				separator: Template::from_data(data.separator),
+			Data::TemplateAppend {
+				template,
+				separator,
+			} => Self::TemplateAppend {
+				template: Template::from_data(template),
+				separator: Template::from_data(separator),
 			},
 		}
 	}
@@ -105,16 +121,41 @@ impl Mutation {
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Handle> {
 		match self {
-			Mutation::Unset => vec![],
-			Mutation::Set { value } | Mutation::SetIfUnset { value } => value.children(),
-			Mutation::ArrayPrepend { values } | Mutation::ArrayAppend { values } => {
+			Self::Unset => vec![],
+			Self::Set { value } | Self::SetIfUnset { value } => value.children(),
+			Self::ArrayPrepend { values } | Self::ArrayAppend { values } => {
 				values.iter().flat_map(Value::children).collect()
 			},
-			Mutation::TemplatePrepend {
+			Self::TemplatePrepend {
 				template,
 				separator,
 			}
-			| Mutation::TemplateAppend {
+			| Self::TemplateAppend {
+				template,
+				separator,
+			} => template
+				.children()
+				.into_iter()
+				.chain(separator.children())
+				.collect(),
+		}
+	}
+}
+
+impl Data {
+	#[must_use]
+	pub fn children(&self) -> Vec<object::Id> {
+		match self {
+			Self::Unset => vec![],
+			Self::Set { value } | Self::SetIfUnset { value } => value.children(),
+			Self::ArrayPrepend { values } | Self::ArrayAppend { values } => {
+				values.iter().flat_map(value::Data::children).collect()
+			},
+			Self::TemplatePrepend {
+				template,
+				separator,
+			}
+			| Self::TemplateAppend {
 				template,
 				separator,
 			} => template
