@@ -1,16 +1,21 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_ } from "./assert.ts";
 import { Object_ } from "./object.ts";
+import * as syscall from "./syscall.ts";
 
 export class Package {
-	#handle: Object_.Handle;
+	#state: Package.State;
 
-	constructor(handle: Object_.Handle) {
-		this.#handle = handle;
+	constructor(state: Package.State) {
+		this.#state = state;
+	}
+
+	get state(): Package.State {
+		return this.#state;
 	}
 
 	static withId(id: Package.Id): Package {
-		return new Package(Object_.Handle.withId(id));
+		return new Package({ id });
 	}
 
 	static is(value: unknown): value is Package {
@@ -27,17 +32,30 @@ export class Package {
 	}
 
 	async id(): Promise<Package.Id> {
-		return (await this.#handle.id()) as Package.Id;
+		await this.store();
+		return this.#state.id!;
 	}
 
 	async object(): Promise<Package.Object_> {
-		let object = await this.#handle.object();
-		assert_(object.kind === "package");
-		return object.value;
+		await this.load();
+		return this.#state.object!;
 	}
 
-	get handle(): Object_.Handle {
-		return this.#handle;
+	async load() {
+		if (this.#state.object === undefined) {
+			let object = await syscall.load(this.#state.id!);
+			assert_(object.kind === "package");
+			this.#state.object = object.value;
+		}
+	}
+
+	async store() {
+		if (this.#state.id === undefined) {
+			this.#state.id = await syscall.store({
+				kind: "package",
+				value: this.#state.object!,
+			});
+		}
 	}
 
 	async artifact(): Promise<Artifact> {
@@ -63,4 +81,6 @@ export namespace Package {
 		artifact: Artifact;
 		dependencies: { [dependency: string]: Package };
 	};
+
+	export type State = Object_.State<Package.Id, Package.Object_>;
 }

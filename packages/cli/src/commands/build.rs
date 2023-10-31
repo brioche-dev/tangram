@@ -67,7 +67,7 @@ impl Cli {
 
 		// If the detach flag is set, then exit.
 		if args.detach {
-			println!("{}", build.id());
+			println!("{}", build.id(client).await?);
 			return Ok(());
 		}
 

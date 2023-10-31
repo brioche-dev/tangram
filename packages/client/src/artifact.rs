@@ -15,7 +15,9 @@ pub enum Kind {
 }
 
 /// An artifact ID.
-#[derive(Clone, Debug, Eq, From, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(
+	Clone, Debug, Eq, From, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 #[serde(into = "crate::Id", try_from = "crate::Id")]
 pub enum Id {
 	/// A directory ID.
@@ -42,6 +44,19 @@ pub enum Artifact {
 	Symlink(Symlink),
 }
 
+#[derive(Clone, Debug, From, TryUnwrap)]
+#[try_unwrap(ref)]
+pub enum Data {
+	/// A directory.
+	Directory(directory::Data),
+
+	/// A file.
+	File(file::Data),
+
+	/// A symlink.
+	Symlink(symlink::Data),
+}
+
 impl Artifact {
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {
@@ -60,24 +75,16 @@ impl Artifact {
 		}
 	}
 
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
+	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		match self {
-			Self::Directory(directory) => directory.expect_id().clone().into(),
-			Self::File(file) => file.expect_id().clone().into(),
-			Self::Symlink(symlink) => symlink.expect_id().clone().into(),
+			Self::Directory(directory) => Ok(directory.data(client).await?.into()),
+			Self::File(file) => Ok(file.data(client).await?.into()),
+			Self::Symlink(symlink) => Ok(symlink.data(client).await?.into()),
 		}
 	}
+}
 
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		match self {
-			Self::Directory(directory) => directory.handle(),
-			Self::File(file) => file.handle(),
-			Self::Symlink(symlink) => symlink.handle(),
-		}
-	}
-
+impl Artifact {
 	#[allow(clippy::unused_async)]
 	pub async fn archive(
 		&self,
@@ -208,12 +215,12 @@ impl TryFrom<object::Id> for Id {
 	}
 }
 
-impl From<Artifact> for object::Handle {
-	fn from(value: Artifact) -> Self {
-		match value {
-			Artifact::Directory(directory) => directory.handle().clone(),
-			Artifact::File(file) => file.handle().clone(),
-			Artifact::Symlink(symlink) => symlink.handle().clone(),
+impl std::fmt::Display for Artifact {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Directory(directory) => write!(f, "{directory}"),
+			Self::File(file) => write!(f, "{file}"),
+			Self::Symlink(symlink) => write!(f, "{symlink}"),
 		}
 	}
 }

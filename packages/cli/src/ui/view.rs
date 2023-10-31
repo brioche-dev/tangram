@@ -99,7 +99,7 @@ impl Build {
 			};
 			let status = {
 				match &self.result {
-					Some(Ok(_)) => "✓",
+					Some(Ok(())) => "✓",
 					Some(Err(_)) => "✗",
 					None => Spinner::get(),
 				}

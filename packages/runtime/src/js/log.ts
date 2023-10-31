@@ -75,15 +75,15 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (value instanceof Promise) {
 		return "(promise)";
 	} else if (Leaf.is(value)) {
-		return stringifyHandle(value.handle, visited);
+		return stringifyState("leaf", value.state, visited);
 	} else if (Branch.is(value)) {
-		return stringifyHandle(value.handle, visited);
+		return stringifyState("branch", value.state, visited);
 	} else if (Directory.is(value)) {
-		return stringifyHandle(value.handle, visited);
+		return stringifyState("directory", value.state, visited);
 	} else if (File.is(value)) {
-		return stringifyHandle(value.handle, visited);
+		return stringifyState("file", value.state, visited);
 	} else if (Symlink.is(value)) {
-		return stringifyHandle(value.handle, visited);
+		return stringifyState("symlink", value.state, visited);
 	} else if (Template.is(value)) {
 		return `\`${value.components
 			.map((component) => {
@@ -97,9 +97,9 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	} else if (Mutation.is(value)) {
 		return `(tg.mutation ${stringifyObject(value.inner, visited)})`;
 	} else if (Package.is(value)) {
-		return stringifyHandle(value.handle, visited);
+		return stringifyState("package", value.state, visited);
 	} else if (Target.is(value)) {
-		return stringifyHandle(value.handle, visited);
+		return stringifyState("target", value.state, visited);
 	} else {
 		let string = "";
 		if (
@@ -124,15 +124,16 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 	}
 };
 
-let stringifyHandle = (
-	handle: Object_.Handle,
+let stringifyState = (
+	kind: string,
+	state: Object_.State<string, object>,
 	visited: WeakSet<object>,
 ): string => {
-	let { id, object } = handle.state;
+	let { id, object } = state;
 	if (id !== undefined) {
 		return id;
 	} else if (object !== undefined) {
-		return `(tg.${object.kind} ${stringifyObject(object.value, visited)})`;
+		return `(tg.${kind} ${stringifyObject(object, visited)})`;
 	} else {
 		return unreachable();
 	}

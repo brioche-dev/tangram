@@ -4,7 +4,6 @@ import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
 import { Leaf } from "./leaf.ts";
 import { Args, apply, mutation } from "./mutation.ts";
-import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
 
 export type Blob = Leaf | Branch;
@@ -50,12 +49,9 @@ export namespace Blob {
 				if (arg === undefined) {
 					return {};
 				} else if (typeof arg === "string") {
-					let blob = new Leaf(
-						Object_.Handle.withObject({
-							kind: "leaf",
-							value: { bytes: encoding.utf8.encode(arg) },
-						}),
-					);
+					let blob = new Leaf({
+						object: { bytes: encoding.utf8.encode(arg) },
+					});
 					return {
 						children: await mutation({
 							kind: "array_append" as const,
@@ -63,9 +59,7 @@ export namespace Blob {
 						}),
 					};
 				} else if (arg instanceof Uint8Array) {
-					let blob = new Leaf(
-						Object_.Handle.withObject({ kind: "leaf", value: { bytes: arg } }),
-					);
+					let blob = new Leaf({ object: { bytes: arg } });
 					return {
 						children: await mutation({
 							kind: "array_append" as const,
@@ -85,12 +79,9 @@ export namespace Blob {
 			},
 		);
 		if (!children_ || children_.length === 0) {
-			return new Leaf(
-				Object_.Handle.withObject({
-					kind: "leaf",
-					value: { bytes: new Uint8Array() },
-				}),
-			);
+			return new Leaf({
+				object: { bytes: new Uint8Array() },
+			});
 		} else if (children_.length === 1) {
 			return children_[0]!;
 		} else {
@@ -99,12 +90,9 @@ export namespace Blob {
 					return { blob, size: await blob.size() };
 				}),
 			);
-			return new Branch(
-				Object_.Handle.withObject({
-					kind: "branch",
-					value: { children },
-				}),
-			);
+			return new Branch({
+				object: { children },
+			});
 		}
 	};
 	Blob.new = new_;
@@ -129,28 +117,3 @@ export namespace Blob {
 		return await syscall.download(url, checksum);
 	};
 }
-
-// async size(): Promise<number> {
-// 	let object = await this.object();
-// 	if (object instanceof Array) {
-// 		return object.map(([_, size]) => size).reduce((a, b) => a + b, 0);
-// 	} else {
-// 		return object.byteLength;
-// 	}
-// }
-
-// async bytes(): Promise<Uint8Array> {
-// 	return await syscall.read(this);
-// }
-
-// async text(): Promise<string> {
-// 	return encoding.utf8.decode(await syscall.read(this));
-// }
-
-// async decompress(format: Blob.CompressionFormat): Promise<Blob> {
-// 	return await syscall.decompress(this, format);
-// }
-
-// async extract(format: Blob.ArchiveFormat): Promise<Artifact> {
-// 	return await syscall.extract(this, format);
-// }

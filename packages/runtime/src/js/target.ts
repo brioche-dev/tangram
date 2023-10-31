@@ -68,21 +68,18 @@ export function target<
 		let package_ = Package.withId(module_.value.packageId);
 
 		// Create the target.
-		return new Target(
-			Object_.Handle.withObject({
-				kind: "target",
-				value: {
-					host: "js-js",
-					executable: new Template([module_.value.path]),
-					package: package_,
-					name: arg.name,
-					args: [],
-					env: {},
-					checksum: undefined,
-					unsafe: false,
-				},
-			}),
-		);
+		return new Target({
+			object: {
+				host: "js-js",
+				executable: new Template([module_.value.path]),
+				package: package_,
+				name: arg.name,
+				args: [],
+				env: {},
+				checksum: undefined,
+				unsafe: false,
+			},
+		});
 	} else {
 		return Target.new(...args);
 	}
@@ -105,11 +102,11 @@ export class Target<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
 > extends globalThis.Function {
-	#handle: Object_.Handle;
+	#state: Target.State;
 
-	constructor(handle: Object_.Handle) {
+	constructor(state: Target.State) {
 		super();
-		this.#handle = handle;
+		this.#state = state;
 		let this_ = this as any;
 		return new Proxy(this_, {
 			get(_target, prop, _receiver) {
@@ -131,8 +128,12 @@ export class Target<
 		});
 	}
 
+	get state(): Target.State {
+		return this.#state;
+	}
+
 	static withId(id: Target.Id): Target {
-		return new Target(Object_.Handle.withId(id));
+		return new Target({ id });
 	}
 
 	static async new<
@@ -206,21 +207,18 @@ export class Target<
 		let env = await apply(flatten(env_ ?? []), async (arg) => arg);
 		args_ ??= [];
 		unsafe_ ??= false;
-		return new Target(
-			Object_.Handle.withObject({
-				kind: "target",
-				value: {
-					host,
-					executable,
-					package: package_,
-					name,
-					env,
-					args: args_,
-					checksum,
-					unsafe: unsafe_,
-				},
-			}),
-		);
+		return new Target({
+			object: {
+				host,
+				executable,
+				package: package_,
+				name,
+				env,
+				args: args_,
+				checksum,
+				unsafe: unsafe_,
+			},
+		});
 	}
 
 	static is(value: unknown): value is Target {
@@ -237,17 +235,30 @@ export class Target<
 	}
 
 	async id(): Promise<Target.Id> {
-		return (await this.#handle.id()) as Target.Id;
+		await this.store();
+		return this.#state.id!;
 	}
 
 	async object(): Promise<Target.Object_> {
-		let object = await this.#handle.object();
-		assert_(object.kind === "target");
-		return object.value;
+		await this.load();
+		return this.#state.object!;
 	}
 
-	get handle(): Object_.Handle {
-		return this.#handle;
+	async load() {
+		if (this.#state.object === undefined) {
+			let object = await syscall.load(this.#state.id!);
+			assert_(object.kind === "target");
+			this.#state.object = object.value;
+		}
+	}
+
+	async store() {
+		if (this.#state.id === undefined) {
+			this.#state.id = await syscall.store({
+				kind: "target",
+				value: this.#state.object!,
+			});
+		}
 	}
 
 	async host(): Promise<System> {
@@ -322,4 +333,6 @@ export namespace Target {
 		checksum: Checksum | undefined;
 		unsafe: boolean;
 	};
+
+	export type State = Object_.State<Target.Id, Target.Object_>;
 }

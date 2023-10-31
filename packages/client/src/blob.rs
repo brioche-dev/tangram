@@ -26,7 +26,9 @@ pub enum Kind {
 	Branch,
 }
 
-#[derive(Clone, Debug, From, serde::Deserialize, serde::Serialize)]
+#[derive(
+	Clone, Debug, Eq, From, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 #[serde(into = "crate::Id", try_from = "crate::Id")]
 pub enum Id {
 	Leaf(leaf::Id),
@@ -66,22 +68,6 @@ impl Blob {
 		match self {
 			Self::Leaf(leaf) => Ok(leaf.id(client).await?.clone().into()),
 			Self::Branch(branch) => Ok(branch.id(client).await?.clone().into()),
-		}
-	}
-
-	#[must_use]
-	pub fn expect_id(&self) -> Id {
-		match self {
-			Self::Leaf(leaf) => leaf.expect_id().clone().into(),
-			Self::Branch(branch) => branch.expect_id().clone().into(),
-		}
-	}
-
-	#[must_use]
-	pub fn handle(&self) -> &object::Handle {
-		match self {
-			Self::Leaf(leaf) => leaf.handle(),
-			Self::Branch(branch) => branch.handle(),
 		}
 	}
 
@@ -336,11 +322,11 @@ impl TryFrom<object::Id> for Id {
 	}
 }
 
-impl From<Blob> for object::Handle {
-	fn from(value: Blob) -> Self {
-		match value {
-			Blob::Leaf(leaf) => leaf.handle().clone(),
-			Blob::Branch(branch) => branch.handle().clone(),
+impl std::fmt::Display for Blob {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Leaf(leaf) => write!(f, "{leaf}"),
+			Self::Branch(branch) => write!(f, "{branch}"),
 		}
 	}
 }

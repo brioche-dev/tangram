@@ -358,7 +358,17 @@ impl Server {
 		let state = self.inner.builds.read().unwrap().1.get(id).cloned();
 		if let Some(state) = state {
 			let children = state.children_stream();
-			return Ok(Some(children.map_ok(|child| child.id().clone()).boxed()));
+			return Ok(Some(
+				children
+					.and_then({
+						let server = self.clone();
+						move |child| {
+							let server = server.clone();
+							async move { Ok(child.id(&server).await?.clone()) }
+						}
+					})
+					.boxed(),
+			));
 		}
 
 		// Attempt to get the children from the object.
@@ -369,8 +379,14 @@ impl Server {
 			};
 			return Ok(Some(
 				stream::iter(object.children.clone())
-					.map(|child| child.id().clone())
 					.map(Ok)
+					.and_then({
+						let server = self.clone();
+						move |child| {
+							let server = server.clone();
+							async move { Ok(child.id(&server).await?.clone()) }
+						}
+					})
 					.boxed(),
 			));
 		}

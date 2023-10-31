@@ -1,4 +1,6 @@
-use crate::{object, template, value, Template, Value};
+use crate::{object, template, value, Client, Error, Result, Template, Value};
+use futures::{stream::FuturesOrdered, TryStreamExt};
+use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 pub enum Mutation {
@@ -52,93 +54,46 @@ pub enum Data {
 }
 
 impl Mutation {
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		match self {
+	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+		Ok(match self {
 			Self::Unset => Data::Unset,
 			Self::Set { value } => Data::Set {
-				value: Box::new(value.to_data()),
+				value: Box::new(value.data(client).await?),
 			},
 			Self::SetIfUnset { value } => Data::SetIfUnset {
-				value: Box::new(value.to_data()),
+				value: Box::new(value.data(client).await?),
 			},
 			Self::ArrayPrepend { values } => Data::ArrayPrepend {
-				values: values.iter().map(Value::to_data).collect(),
+				values: values
+					.iter()
+					.map(|value| value.data(client))
+					.collect::<FuturesOrdered<_>>()
+					.try_collect()
+					.await?,
 			},
 			Self::ArrayAppend { values } => Data::ArrayAppend {
-				values: values.iter().map(Value::to_data).collect(),
+				values: values
+					.iter()
+					.map(|value| value.data(client))
+					.collect::<FuturesOrdered<_>>()
+					.try_collect()
+					.await?,
 			},
 			Self::TemplatePrepend {
 				template,
 				separator,
 			} => Data::TemplatePrepend {
-				template: template.to_data(),
-				separator: separator.to_data(),
+				template: template.data(client).await?,
+				separator: separator.data(client).await?,
 			},
 			Self::TemplateAppend {
 				template,
 				separator,
 			} => Data::TemplateAppend {
-				template: template.to_data(),
-				separator: separator.to_data(),
+				template: template.data(client).await?,
+				separator: separator.data(client).await?,
 			},
-		}
-	}
-
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		match data {
-			Data::Unset => Self::Unset,
-			Data::Set { value } => Self::Set {
-				value: Box::new(Value::from_data(value.as_ref().clone())),
-			},
-			Data::SetIfUnset { value } => Self::SetIfUnset {
-				value: Box::new(Value::from_data(value.as_ref().clone())),
-			},
-			Data::ArrayPrepend { values } => Self::ArrayPrepend {
-				values: values.into_iter().map(Value::from_data).collect(),
-			},
-			Data::ArrayAppend { values } => Self::ArrayAppend {
-				values: values.into_iter().map(Value::from_data).collect(),
-			},
-			Data::TemplatePrepend {
-				template,
-				separator,
-			} => Self::TemplatePrepend {
-				template: Template::from_data(template),
-				separator: Template::from_data(separator),
-			},
-			Data::TemplateAppend {
-				template,
-				separator,
-			} => Self::TemplateAppend {
-				template: Template::from_data(template),
-				separator: Template::from_data(separator),
-			},
-		}
-	}
-
-	#[must_use]
-	pub fn children(&self) -> Vec<object::Handle> {
-		match self {
-			Self::Unset => vec![],
-			Self::Set { value } | Self::SetIfUnset { value } => value.children(),
-			Self::ArrayPrepend { values } | Self::ArrayAppend { values } => {
-				values.iter().flat_map(Value::children).collect()
-			},
-			Self::TemplatePrepend {
-				template,
-				separator,
-			}
-			| Self::TemplateAppend {
-				template,
-				separator,
-			} => template
-				.children()
-				.into_iter()
-				.chain(separator.children())
-				.collect(),
-		}
+		})
 	}
 }
 
@@ -167,47 +122,45 @@ impl Data {
 	}
 }
 
+impl TryFrom<Data> for Mutation {
+	type Error = Error;
+
+	fn try_from(data: Data) -> std::result::Result<Self, Self::Error> {
+		Ok(match data {
+			Data::Unset => Self::Unset,
+			Data::Set { value } => Self::Set {
+				value: Box::new((*value).try_into()?),
+			},
+			Data::SetIfUnset { value } => Self::SetIfUnset {
+				value: Box::new((*value).try_into()?),
+			},
+			Data::ArrayPrepend { values } => Self::ArrayPrepend {
+				values: values.into_iter().map(TryInto::try_into).try_collect()?,
+			},
+			Data::ArrayAppend { values } => Self::ArrayAppend {
+				values: values.into_iter().map(TryInto::try_into).try_collect()?,
+			},
+			Data::TemplatePrepend {
+				template,
+				separator,
+			} => Self::TemplatePrepend {
+				template: template.try_into()?,
+				separator: separator.try_into()?,
+			},
+			Data::TemplateAppend {
+				template,
+				separator,
+			} => Self::TemplateAppend {
+				template: template.try_into()?,
+				separator: separator.try_into()?,
+			},
+		})
+	}
+}
+
 impl std::fmt::Display for Mutation {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let s = match self {
-			Self::Unset => "unset".to_owned(),
-			Self::Set { value } => format!("set {value}"),
-			Self::SetIfUnset { value } => format!("set-if-unset {value}"),
-			Self::ArrayPrepend { values } => format!(
-				"array-prepend [{}]",
-				values.iter().fold(String::new(), |acc, value| {
-					let mut ret = acc.clone();
-					if !acc.is_empty() {
-						ret.push_str(", ");
-					}
-					ret.push_str(&value.to_string());
-					ret
-				})
-			),
-			Self::ArrayAppend { values } => format!(
-				"array-append [{}]",
-				values.iter().fold(String::new(), |acc, value| {
-					let mut ret = acc.clone();
-					if !acc.is_empty() {
-						ret.push_str(", ");
-					}
-					ret.push_str(&value.to_string());
-					ret
-				})
-			),
-			Self::TemplatePrepend {
-				template,
-				separator,
-			} => {
-				format!("template-prepend {template} ({separator})",)
-			},
-			Self::TemplateAppend {
-				template,
-				separator,
-			} => {
-				format!("template-append {template} ({separator})",)
-			},
-		};
-		write!(f, "(tg.mutation {s})")
+		write!(f, "(tg.mutation)")?;
+		Ok(())
 	}
 }

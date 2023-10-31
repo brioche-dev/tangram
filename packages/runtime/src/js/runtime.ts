@@ -11,7 +11,6 @@ import { Leaf, leaf } from "./leaf.ts";
 import { log } from "./log.ts";
 import { main } from "./main.ts";
 import { Args, Mutation, apply, mutation } from "./mutation.ts";
-import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
 import { resolve } from "./resolve.ts";
 import { sleep } from "./sleep.ts";
@@ -53,7 +52,6 @@ Object.assign(tg, {
 	File,
 	Leaf,
 	Mutation,
-	Object_,
 	Package,
 	Symlink,
 	System,

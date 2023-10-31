@@ -309,8 +309,6 @@ declare namespace tg {
 		export type Child = { blob: Blob; size: number };
 
 		export type Id = string;
-
-		export type Object_ = { children: Array<Child> };
 	}
 
 	/** Create a leaf. */
@@ -368,8 +366,6 @@ declare namespace tg {
 		};
 
 		export type Id = string;
-
-		export type Object_ = { bytes: Uint8Array };
 	}
 
 	/** Write to the log. */

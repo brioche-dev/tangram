@@ -1,8 +1,8 @@
 pub use self::component::Component;
-use crate::{object, Artifact, Result};
+use crate::{object, Artifact, Client, Error, Result};
 use futures::{stream::FuturesOrdered, Future, TryStreamExt};
 use itertools::Itertools;
-use std::{borrow::Cow, fmt, path::PathBuf};
+use std::{borrow::Cow, path::PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct Template {
@@ -100,38 +100,33 @@ impl Template {
 		Ok(Self { components })
 	}
 
-	pub fn to_data(&self) -> Data {
+	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let components = self
 			.components
 			.iter()
-			.map(Component::to_data)
-			.collect::<Vec<_>>();
-		Data { components }
-	}
-
-	pub fn from_data(data: Data) -> Self {
-		let components = data
-			.components
-			.into_iter()
-			.map(Component::from_data)
-			.collect();
-		Self { components }
-	}
-
-	#[must_use]
-	pub fn children(&self) -> Vec<object::Handle> {
-		self.components
-			.iter()
-			.filter_map(|component| match component {
-				Component::String(_) => None,
-				Component::Artifact(artifact) => Some(artifact.handle().clone()),
-			})
-			.collect()
+			.map(|component| component.data(client))
+			.collect::<FuturesOrdered<_>>()
+			.try_collect()
+			.await?;
+		Ok(Data { components })
 	}
 }
 
-impl fmt::Display for Template {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl TryFrom<Data> for Template {
+	type Error = Error;
+
+	fn try_from(data: Data) -> std::result::Result<Self, Self::Error> {
+		let components = data
+			.components
+			.into_iter()
+			.map(TryInto::try_into)
+			.try_collect()?;
+		Ok(Self { components })
+	}
+}
+
+impl std::fmt::Display for Template {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "`")?;
 		for component in &self.components {
 			match component {
@@ -139,7 +134,7 @@ impl fmt::Display for Template {
 					write!(f, "{string}")?;
 				},
 				Component::Artifact(artifact) => {
-					write!(f, "${{{}}}", artifact.expect_id())?;
+					write!(f, "${{{artifact}}}")?;
 				},
 			}
 		}
@@ -193,7 +188,7 @@ impl From<&str> for Template {
 }
 
 pub mod component {
-	use crate::{artifact, Artifact};
+	use crate::{artifact, Artifact, Client, Error, Result};
 	use derive_more::From;
 
 	#[derive(Clone, Debug, From)]
@@ -210,20 +205,22 @@ pub mod component {
 	}
 
 	impl Component {
-		#[must_use]
-		pub fn to_data(&self) -> Data {
+		pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 			match self {
-				Self::String(string) => Data::String(string.clone()),
-				Self::Artifact(artifact) => Data::Artifact(artifact.expect_id()),
+				Self::String(string) => Ok(Data::String(string.clone())),
+				Self::Artifact(artifact) => Ok(Data::Artifact(artifact.id(client).await?)),
 			}
 		}
+	}
 
-		#[must_use]
-		pub fn from_data(data: Data) -> Self {
-			match data {
+	impl TryFrom<Data> for Component {
+		type Error = Error;
+
+		fn try_from(data: Data) -> Result<Self, Self::Error> {
+			Ok(match data {
 				Data::String(string) => Self::String(string),
 				Data::Artifact(id) => Self::Artifact(Artifact::with_id(id)),
-			}
+			})
 		}
 	}
 }

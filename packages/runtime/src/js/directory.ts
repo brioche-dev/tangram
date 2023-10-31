@@ -13,14 +13,18 @@ export let directory = async (...args: Array<Unresolved<Directory.Arg>>) => {
 };
 
 export class Directory {
-	#handle: Object_.Handle;
+	#state: Directory.State;
 
-	constructor(handle: Object_.Handle) {
-		this.#handle = handle;
+	constructor(state: Directory.State) {
+		this.#state = state;
+	}
+
+	get state(): Directory.State {
+		return this.#state;
 	}
 
 	static withId(id: Directory.Id): Directory {
-		return new Directory(Object_.Handle.withId(id));
+		return new Directory({ id });
 	}
 
 	static async new(
@@ -106,9 +110,7 @@ export class Directory {
 			}
 			return entries;
 		}, Promise.resolve({}));
-		return new Directory(
-			Object_.Handle.withObject({ kind: "directory", value: { entries } }),
-		);
+		return new Directory({ object: { entries } });
 	}
 
 	static is(value: unknown): value is Directory {
@@ -125,17 +127,30 @@ export class Directory {
 	}
 
 	async id(): Promise<Directory.Id> {
-		return (await this.#handle.id()) as Directory.Id;
+		await this.store();
+		return this.#state.id!;
 	}
 
 	async object(): Promise<Directory.Object_> {
-		let object = await this.#handle.object();
-		assert_(object.kind === "directory");
-		return object.value;
+		await this.load();
+		return this.#state.object!;
 	}
 
-	get handle(): Object_.Handle {
-		return this.#handle;
+	async load() {
+		if (this.#state.object === undefined) {
+			let object = await syscall.load(this.#state.id!);
+			assert_(object.kind === "directory");
+			this.#state.object = object.value;
+		}
+	}
+
+	async store() {
+		if (this.#state.id === undefined) {
+			this.#state.id = await syscall.store({
+				kind: "directory",
+				value: this.#state.object!,
+			});
+		}
 	}
 
 	async get(arg: string): Promise<Directory | File> {
@@ -220,4 +235,6 @@ export namespace Directory {
 	export type Object_ = {
 		entries: Record<string, Artifact>;
 	};
+
+	export type State = Object_.State<Directory.Id, Directory.Object_>;
 }

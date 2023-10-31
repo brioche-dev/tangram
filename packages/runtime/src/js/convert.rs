@@ -720,9 +720,9 @@ impl ToV8 for Leaf {
 		let leaf = tg.get(scope, leaf.into()).unwrap();
 		let leaf = v8::Local::<v8::Function>::try_from(leaf).unwrap();
 
-		let handle = self.handle().to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = leaf.new_instance(scope, &[handle]).unwrap();
+		let instance = leaf.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -748,11 +748,26 @@ impl FromV8 for Leaf {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let handle = value.get(scope, handle.into()).unwrap();
-		let handle = from_v8(scope, handle)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self::with_handle(handle))
+		Ok(Self::with_state(state))
+	}
+}
+
+impl ToV8 for leaf::Id {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for leaf::Id {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
 	}
 }
 
@@ -795,9 +810,9 @@ impl ToV8 for Branch {
 		let branch = tg.get(scope, branch.into()).unwrap();
 		let branch = v8::Local::<v8::Function>::try_from(branch).unwrap();
 
-		let handle = self.handle().to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = branch.new_instance(scope, &[handle]).unwrap();
+		let instance = branch.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -823,11 +838,26 @@ impl FromV8 for Branch {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let handle = value.get(scope, handle.into()).unwrap();
-		let handle = from_v8(scope, handle)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self::with_handle(handle))
+		Ok(Self::with_state(state))
+	}
+}
+
+impl ToV8 for branch::Id {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for branch::Id {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
 	}
 }
 
@@ -955,9 +985,9 @@ impl ToV8 for Directory {
 		let directory = tg.get(scope, directory.into()).unwrap();
 		let directory = v8::Local::<v8::Function>::try_from(directory).unwrap();
 
-		let handle = self.handle().to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = directory.new_instance(scope, &[handle]).unwrap();
+		let instance = directory.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -984,11 +1014,26 @@ impl FromV8 for Directory {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let handle = value.get(scope, handle.into()).unwrap();
-		let handle = from_v8(scope, handle)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self::with_handle(handle))
+		Ok(Self::with_state(state))
+	}
+}
+
+impl ToV8 for directory::Id {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for directory::Id {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
 	}
 }
 
@@ -1031,9 +1076,9 @@ impl ToV8 for File {
 		let file = tg.get(scope, file.into()).unwrap();
 		let file = v8::Local::<v8::Function>::try_from(file).unwrap();
 
-		let handle = self.handle().to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = file.new_instance(scope, &[handle]).unwrap();
+		let instance = file.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1059,11 +1104,26 @@ impl FromV8 for File {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let handle = value.get(scope, handle.into()).unwrap();
-		let handle = from_v8(scope, handle)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self::with_handle(handle))
+		Ok(Self::with_state(state))
+	}
+}
+
+impl ToV8 for file::Id {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for file::Id {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
 	}
 }
 
@@ -1129,9 +1189,9 @@ impl ToV8 for Symlink {
 		let symlink = tg.get(scope, symlink.into()).unwrap();
 		let symlink = v8::Local::<v8::Function>::try_from(symlink).unwrap();
 
-		let handle = self.handle().to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = symlink.new_instance(scope, &[handle]).unwrap();
+		let instance = symlink.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1157,11 +1217,26 @@ impl FromV8 for Symlink {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let handle = value.get(scope, handle.into()).unwrap();
-		let handle = from_v8(scope, handle)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self::with_handle(handle))
+		Ok(Self::with_state(state))
+	}
+}
+
+impl ToV8 for symlink::Id {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for symlink::Id {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
 	}
 }
 
@@ -1490,9 +1565,9 @@ impl ToV8 for Package {
 		let package = tg.get(scope, package.into()).unwrap();
 		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
 
-		let handle = self.handle().to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = package.new_instance(scope, &[handle]).unwrap();
+		let instance = package.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1518,11 +1593,26 @@ impl FromV8 for Package {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let handle = value.get(scope, handle.into()).unwrap();
-		let handle = from_v8(scope, handle)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self::with_handle(handle))
+		Ok(Self::with_state(state))
+	}
+}
+
+impl ToV8 for package::Id {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for package::Id {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
 	}
 }
 
@@ -1588,9 +1678,9 @@ impl ToV8 for Target {
 		let target = tg.get(scope, target.into()).unwrap();
 		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
 
-		let handle = self.handle().to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = target.new_instance(scope, &[handle]).unwrap();
+		let instance = target.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
@@ -1616,11 +1706,26 @@ impl FromV8 for Target {
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-		let handle = value.get(scope, handle.into()).unwrap();
-		let handle = from_v8(scope, handle)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self::with_handle(handle))
+		Ok(Self::with_state(state))
+	}
+}
+
+impl ToV8 for target::Id {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		self.to_string().to_v8(scope)
+	}
+}
+
+impl FromV8 for target::Id {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		String::from_v8(scope, value)?.parse()
 	}
 }
 
@@ -1733,64 +1838,11 @@ impl FromV8 for object::Id {
 	}
 }
 
-impl ToV8 for object::Handle {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let object_ = v8::String::new_external_onebyte_static(scope, "Object_".as_bytes()).unwrap();
-		let object_ = tg.get(scope, object_.into()).unwrap();
-		let object_ = object_.to_object(scope).unwrap();
-
-		let handle = v8::String::new_external_onebyte_static(scope, "Handle".as_bytes()).unwrap();
-		let handle = object_.get(scope, handle.into()).unwrap();
-		let handle = v8::Local::<v8::Function>::try_from(handle).unwrap();
-
-		let state = self.state().read().unwrap().to_v8(scope)?;
-
-		let instance = handle.new_instance(scope, &[state]).unwrap();
-
-		Ok(instance.into())
-	}
-}
-
-impl FromV8 for object::Handle {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
-
-		let object_ = v8::String::new_external_onebyte_static(scope, "Object_".as_bytes()).unwrap();
-		let object_ = tg.get(scope, object_.into()).unwrap();
-		let object_ = object_.to_object(scope).unwrap();
-
-		let handle = v8::String::new_external_onebyte_static(scope, "Handle".as_bytes()).unwrap();
-		let handle = object_.get(scope, handle.into()).unwrap();
-		let handle = v8::Local::<v8::Function>::try_from(handle).unwrap();
-
-		if !value.instance_of(scope, handle.into()).unwrap() {
-			return_error!("Expected a handle.");
-		}
-
-		let value = value.to_object(scope).unwrap();
-
-		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
-		let state = value.get(scope, state.into()).unwrap();
-		let state = from_v8(scope, state)?;
-
-		Ok(Self::with_state(state))
-	}
-}
-
-impl ToV8 for object::State {
+impl<I, O> ToV8 for object::State<I, O>
+where
+	I: ToV8,
+	O: ToV8,
+{
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -1806,7 +1858,11 @@ impl ToV8 for object::State {
 	}
 }
 
-impl FromV8 for object::State {
+impl<I, O> FromV8 for object::State<I, O>
+where
+	I: FromV8,
+	O: FromV8,
+{
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,

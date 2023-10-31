@@ -11,14 +11,18 @@ export let leaf = async (...args: Args<Leaf.Arg>): Promise<Leaf> => {
 };
 
 export class Leaf {
-	#handle: Object_.Handle;
+	#state: Leaf.State;
 
-	constructor(handle: Object_.Handle) {
-		this.#handle = handle;
+	constructor(state: Leaf.State) {
+		this.#state = state;
+	}
+
+	get state(): Leaf.State {
+		return this.#state;
 	}
 
 	static withId(id: Leaf.Id): Leaf {
-		return new Leaf(Object_.Handle.withId(id));
+		return new Leaf({ id });
 	}
 
 	static async new(...args: Args<Leaf.Arg>): Promise<Leaf> {
@@ -68,9 +72,7 @@ export class Leaf {
 			bytes.set(entry, offset);
 			offset += entry.byteLength;
 		}
-		return new Leaf(
-			Object_.Handle.withObject({ kind: "leaf", value: { bytes } }),
-		);
+		return new Leaf({ object: { bytes } });
 	}
 
 	static is(value: unknown): value is Leaf {
@@ -87,17 +89,30 @@ export class Leaf {
 	}
 
 	async id(): Promise<Leaf.Id> {
-		return (await this.#handle.id()) as Leaf.Id;
+		await this.store();
+		return this.#state.id!;
 	}
 
 	async object(): Promise<Leaf.Object_> {
-		let object = await this.#handle.object();
-		assert_(object.kind === "leaf");
-		return object.value;
+		await this.load();
+		return this.#state.object!;
 	}
 
-	get handle(): Object_.Handle {
-		return this.#handle;
+	async load() {
+		if (this.#state.object === undefined) {
+			let object = await syscall.load(this.#state.id!);
+			assert_(object.kind === "leaf");
+			this.#state.object = object.value;
+		}
+	}
+
+	async store() {
+		if (this.#state.id === undefined) {
+			this.#state.id = await syscall.store({
+				kind: "leaf",
+				value: this.#state.object!,
+			});
+		}
 	}
 
 	async size(): Promise<number> {
@@ -141,4 +156,6 @@ export namespace Leaf {
 	export type Id = string;
 
 	export type Object_ = { bytes: Uint8Array };
+
+	export type State = Object_.State<Leaf.Id, Leaf.Object_>;
 }

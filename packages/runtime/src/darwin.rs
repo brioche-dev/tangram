@@ -320,7 +320,7 @@ pub async fn run_inner(
 		let mut buf = vec![0; 512];
 		loop {
 			match stderr.read(&mut buf).await {
-				Ok(size) if size == 0 => break,
+				Ok(0) => break,
 				Ok(_) => progress.log(buf.clone().into()),
 				Err(_) => break,
 			}

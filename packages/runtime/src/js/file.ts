@@ -3,20 +3,25 @@ import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
 import { Args, MutationMap, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
+import * as syscall from "./syscall.ts";
 
 export let file = async (...args: Args<File.Arg>) => {
 	return await File.new(...args);
 };
 
 export class File {
-	#handle: Object_.Handle;
+	#state: File.State;
 
-	constructor(handle: Object_.Handle) {
-		this.#handle = handle;
+	constructor(state: File.State) {
+		this.#state = state;
+	}
+
+	get state(): File.State {
+		return this.#state;
 	}
 
 	static withId(id: File.Id): File {
-		return new File(Object_.Handle.withId(id));
+		return new File({ id });
 	}
 
 	static async new(...args: Args<File.Arg>): Promise<File> {
@@ -83,12 +88,9 @@ export class File {
 		let contents = await blob(contents_);
 		let executable = (executable_ ?? []).some((executable) => executable);
 		let references = references_ ?? [];
-		return new File(
-			Object_.Handle.withObject({
-				kind: "file",
-				value: { contents, executable, references },
-			}),
-		);
+		return new File({
+			object: { contents, executable, references },
+		});
 	}
 
 	static is(value: unknown): value is File {
@@ -105,17 +107,29 @@ export class File {
 	}
 
 	async id(): Promise<File.Id> {
-		return (await this.#handle.id()) as File.Id;
+		return (await this.id()) as File.Id;
 	}
 
 	async object(): Promise<File.Object_> {
-		let object = await this.#handle.object();
-		assert_(object.kind === "file");
-		return object.value;
+		await this.load();
+		return this.#state.object!;
 	}
 
-	get handle(): Object_.Handle {
-		return this.#handle;
+	async load() {
+		if (this.#state.object === undefined) {
+			let object = await syscall.load(this.#state.id!);
+			assert_(object.kind === "file");
+			this.#state.object = object.value;
+		}
+	}
+
+	async store() {
+		if (this.#state.id === undefined) {
+			this.#state.id = await syscall.store({
+				kind: "file",
+				value: this.#state.object!,
+			});
+		}
 	}
 
 	async contents(): Promise<Blob> {
@@ -166,4 +180,6 @@ export namespace File {
 		executable: boolean;
 		references: Array<Artifact>;
 	};
+
+	export type State = Object_.State<File.Id, File.Object_>;
 }

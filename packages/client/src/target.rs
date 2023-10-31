@@ -1,18 +1,38 @@
 use crate::{
-	checksum::Checksum, object, package, system::System, template, value, Build, Client, Package,
-	Result, Template, Value, WrapErr,
+	checksum::Checksum, id, object, package, system::System, template, value, Build, Client, Error,
+	Package, Result, Template, Value, WrapErr,
 };
 use bytes::Bytes;
-use std::collections::BTreeMap;
+use derive_more::Display;
+use futures::{
+	stream::{FuturesOrdered, FuturesUnordered},
+	TryStreamExt,
+};
+use itertools::Itertools;
+use std::{collections::BTreeMap, sync::Arc};
+use tangram_error::return_error;
 
-crate::id!(Target);
-crate::handle!(Target);
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+	Clone,
+	Debug,
+	Display,
+	Eq,
+	Hash,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	serde::Deserialize,
+	serde::Serialize,
+)]
+#[serde(into = "crate::Id", try_from = "crate::Id")]
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
-pub struct Target(object::Handle);
+pub struct Target {
+	state: Arc<std::sync::RwLock<State>>,
+}
+
+type State = object::State<Id, Object>;
 
 /// A target object.
 #[derive(Clone, Debug)]
@@ -53,6 +73,136 @@ pub struct Data {
 	pub args: Vec<value::Data>,
 	pub checksum: Option<Checksum>,
 	pub unsafe_: bool,
+}
+
+impl Id {
+	pub fn new(bytes: &Bytes) -> Self {
+		Self(crate::Id::new_hashed(id::Kind::Target, bytes))
+	}
+
+	#[must_use]
+	pub fn to_bytes(&self) -> Bytes {
+		self.0.to_bytes()
+	}
+}
+
+impl Target {
+	#[must_use]
+	pub fn with_state(state: State) -> Self {
+		Self {
+			state: Arc::new(std::sync::RwLock::new(state)),
+		}
+	}
+
+	#[must_use]
+	pub fn state(&self) -> &std::sync::RwLock<State> {
+		&self.state
+	}
+
+	#[must_use]
+	pub fn with_id(id: Id) -> Self {
+		let state = State::with_id(id);
+		Self {
+			state: Arc::new(std::sync::RwLock::new(state)),
+		}
+	}
+
+	#[must_use]
+	pub fn with_object(object: Object) -> Self {
+		let state = State::with_object(object);
+		Self {
+			state: Arc::new(std::sync::RwLock::new(state)),
+		}
+	}
+
+	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
+		self.store(client).await?;
+		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
+	}
+
+	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
+		self.load(client).await?;
+		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
+	}
+
+	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
+		if !self.try_load(client).await? {
+			return Ok(None);
+		}
+		Ok(Some(unsafe {
+			&*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object)
+		}))
+	}
+
+	pub async fn load(&self, client: &dyn Client) -> Result<()> {
+		self.try_load(client)
+			.await?
+			.then_some(())
+			.wrap_err("Failed to load the object.")
+	}
+
+	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
+		if self.state.read().unwrap().object.is_some() {
+			return Ok(true);
+		}
+		let id = self.state.read().unwrap().id.clone().unwrap();
+		let Some(bytes) = client.try_get_object_bytes(&id.clone().into()).await? else {
+			return Ok(false);
+		};
+		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
+		let object = data.try_into()?;
+		self.state.write().unwrap().object.replace(object);
+		Ok(true)
+	}
+
+	pub async fn store(&self, client: &dyn Client) -> Result<()> {
+		if self.state.read().unwrap().id.is_some() {
+			return Ok(());
+		}
+		let data = self.data(client).await?;
+		let bytes = data.serialize()?;
+		let id = Id::new(&bytes);
+		client
+			.try_put_object_bytes(&id.clone().into(), &bytes)
+			.await
+			.wrap_err("Failed to put the object.")?
+			.ok()
+			.wrap_err("Expected all children to be stored.")?;
+		self.state.write().unwrap().id.replace(id);
+		Ok(())
+	}
+
+	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+		let object = self.object(client).await?;
+		Ok(Data {
+			host: object.host.clone(),
+			executable: object.executable.data(client).await?,
+			package: if let Some(package) = &object.package {
+				Some(package.id(client).await?.clone())
+			} else {
+				None
+			},
+			name: object.name.clone(),
+			env: object
+				.env
+				.iter()
+				.map(|(key, value)| async move {
+					Ok::<_, Error>((key.clone(), value.data(client).await?))
+				})
+				.collect::<FuturesUnordered<_>>()
+				.try_collect()
+				.await?,
+			args: object
+				.args
+				.iter()
+				.map(|value| value.data(client))
+				.collect::<FuturesOrdered<_>>()
+				.try_collect()
+				.await?,
+			checksum: object.checksum.clone(),
+			unsafe_: object.unsafe_,
+		})
+	}
 }
 
 impl Target {
@@ -96,53 +246,6 @@ impl Target {
 	}
 }
 
-impl Object {
-	#[must_use]
-	pub fn to_data(&self) -> Data {
-		Data {
-			host: self.host.clone(),
-			executable: self.executable.to_data(),
-			package: self.package.as_ref().map(Package::expect_id).cloned(),
-			name: self.name.clone(),
-			env: self
-				.env
-				.iter()
-				.map(|(key, value)| (key.clone(), value.to_data()))
-				.collect(),
-			args: self.args.iter().map(Value::to_data).collect(),
-			checksum: self.checksum.clone(),
-			unsafe_: self.unsafe_,
-		}
-	}
-
-	#[must_use]
-	pub fn from_data(data: Data) -> Self {
-		Self {
-			host: data.host,
-			executable: Template::from_data(data.executable),
-			package: data.package.map(Package::with_id),
-			name: data.name,
-			env: data
-				.env
-				.into_iter()
-				.map(|(key, data)| (key, Value::from_data(data)))
-				.collect(),
-			args: data.args.into_iter().map(Value::from_data).collect(),
-			checksum: data.checksum,
-			unsafe_: data.unsafe_,
-		}
-	}
-
-	pub fn children(&self) -> Vec<object::Handle> {
-		std::iter::empty()
-			.chain(self.executable.children())
-			.chain(self.package.iter().map(|package| package.handle().clone()))
-			.chain(self.env.values().flat_map(value::Value::children))
-			.chain(self.args.iter().flat_map(value::Value::children))
-			.collect()
-	}
-}
-
 impl Data {
 	pub fn serialize(&self) -> Result<Bytes> {
 		serde_json::to_vec(self)
@@ -165,10 +268,56 @@ impl Data {
 	}
 }
 
+impl TryFrom<Data> for Object {
+	type Error = Error;
+
+	fn try_from(data: Data) -> std::result::Result<Self, Self::Error> {
+		Ok(Self {
+			host: data.host,
+			executable: data.executable.try_into()?,
+			package: data.package.map(Package::with_id),
+			name: data.name,
+			env: data
+				.env
+				.into_iter()
+				.map(|(key, data)| Ok::<_, Error>((key, data.try_into()?)))
+				.try_collect()?,
+			args: data.args.into_iter().map(TryInto::try_into).try_collect()?,
+			checksum: data.checksum,
+			unsafe_: data.unsafe_,
+		})
+	}
+}
+
 impl std::fmt::Display for Target {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.expect_id())?;
+		write!(f, "{}", self.state.read().unwrap().id().as_ref().unwrap())?;
 		Ok(())
+	}
+}
+
+impl From<Id> for crate::Id {
+	fn from(value: Id) -> Self {
+		value.0
+	}
+}
+
+impl TryFrom<crate::Id> for Id {
+	type Error = Error;
+
+	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
+		if value.kind() != id::Kind::Target {
+			return_error!("Invalid kind.");
+		}
+		Ok(Self(value))
+	}
+}
+
+impl std::str::FromStr for Id {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		crate::Id::from_str(s)?.try_into()
 	}
 }
 

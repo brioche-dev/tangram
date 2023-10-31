@@ -274,7 +274,6 @@ async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::O
 	object::Handle::with_id(id)
 		.object(state.client.as_ref())
 		.await
-		.cloned()
 }
 
 fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) -> Result<()> {

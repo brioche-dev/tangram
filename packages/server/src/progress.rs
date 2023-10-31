@@ -177,14 +177,12 @@ impl Progress {
 
 		// Create the build.
 		let build = tg::Build::new(
-			client,
 			self.inner.id.clone(),
 			self.inner.target.clone(),
 			children,
 			log,
 			result,
-		)
-		.await?;
+		)?;
 
 		Ok(build)
 	}
@@ -202,7 +200,6 @@ impl tangram_runtime::Progress for Progress {
 	}
 
 	fn log(&self, bytes: Bytes) {
-		eprint!("{}", std::str::from_utf8(&bytes).unwrap());
 		self.inner
 			.logger
 			.lock()

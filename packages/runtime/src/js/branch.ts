@@ -11,14 +11,18 @@ export let branch = async (...args: Args<Branch.Arg>): Promise<Branch> => {
 };
 
 export class Branch {
-	#handle: Object_.Handle;
+	#state: Branch.State;
 
-	constructor(handle: Object_.Handle) {
-		this.#handle = handle;
+	constructor(state: Branch.State) {
+		this.#state = state;
+	}
+
+	get state(): Branch.State {
+		return this.#state;
 	}
 
 	static withId(id: Branch.Id): Branch {
-		return new Branch(Object_.Handle.withId(id));
+		return new Branch({ id });
 	}
 
 	static async new(...args: Args<Branch.Arg>): Promise<Branch> {
@@ -47,9 +51,7 @@ export class Branch {
 			}
 		});
 		children ??= [];
-		return new Branch(
-			Object_.Handle.withObject({ kind: "branch", value: { children } }),
-		);
+		return new Branch({ object: { children } });
 	}
 
 	static is(value: unknown): value is Branch {
@@ -66,17 +68,30 @@ export class Branch {
 	}
 
 	async id(): Promise<Branch.Id> {
-		return (await this.#handle.id()) as Branch.Id;
+		await this.store();
+		return this.#state.id!;
 	}
 
 	async object(): Promise<Branch.Object_> {
-		let object = await this.#handle.object();
-		assert_(object.kind === "branch");
-		return object.value;
+		await this.load();
+		return this.#state.object!;
 	}
 
-	get handle(): Object_.Handle {
-		return this.#handle;
+	async load() {
+		if (this.#state.object === undefined) {
+			let object = await syscall.load(this.#state.id!);
+			assert_(object.kind === "branch");
+			this.#state.object = object.value;
+		}
+	}
+
+	async store() {
+		if (this.#state.id === undefined) {
+			this.#state.id = await syscall.store({
+				kind: "branch",
+				value: this.#state.object!,
+			});
+		}
 	}
 
 	async children(): Promise<Array<Branch.Child>> {
@@ -122,4 +137,6 @@ export namespace Branch {
 	export type Id = string;
 
 	export type Object_ = { children: Array<Child> };
+
+	export type State = Object_.State<Branch.Id, Branch.Object_>;
 }

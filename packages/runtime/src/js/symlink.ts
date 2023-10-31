@@ -6,6 +6,7 @@ import { Args, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Relpath, relpath } from "./path.ts";
 import { Unresolved } from "./resolve.ts";
+import * as syscall from "./syscall.ts";
 import { Template, template } from "./template.ts";
 
 export let symlink = async (...args: Args<Symlink.Arg>): Promise<Symlink> => {
@@ -13,14 +14,18 @@ export let symlink = async (...args: Args<Symlink.Arg>): Promise<Symlink> => {
 };
 
 export class Symlink {
-	#handle: Object_.Handle;
+	#state: Symlink.State;
 
-	constructor(handle: Object_.Handle) {
-		this.#handle = handle;
+	constructor(state: Symlink.State) {
+		this.#state = state;
+	}
+
+	get state(): Symlink.State {
+		return this.#state;
 	}
 
 	static withId(id: Symlink.Id): Symlink {
-		return new Symlink(Object_.Handle.withId(id));
+		return new Symlink({ id });
 	}
 
 	static async new(...args: Args<Symlink.Arg>): Promise<Symlink> {
@@ -101,9 +106,7 @@ export class Symlink {
 			throw new Error("Invalid symlink.");
 		}
 
-		return new Symlink(
-			Object_.Handle.withObject({ kind: "symlink", value: { target } }),
-		);
+		return new Symlink({ object: { target } });
 	}
 
 	static is(value: unknown): value is Symlink {
@@ -120,17 +123,30 @@ export class Symlink {
 	}
 
 	async id(): Promise<Symlink.Id> {
-		return (await this.#handle.id()) as Symlink.Id;
+		await this.store();
+		return this.#state.id!;
 	}
 
 	async object(): Promise<Symlink.Object_> {
-		let object = await this.#handle.object();
-		assert_(object.kind === "symlink");
-		return object.value;
+		await this.load();
+		return this.#state.object!;
 	}
 
-	get handle(): Object_.Handle {
-		return this.#handle;
+	async load() {
+		if (this.#state.object === undefined) {
+			let object = await syscall.load(this.#state.id!);
+			assert_(object.kind === "symlink");
+			this.#state.object = object.value;
+		}
+	}
+
+	async store() {
+		if (this.#state.id === undefined) {
+			this.#state.id = await syscall.store({
+				kind: "symlink",
+				value: this.#state.object!,
+			});
+		}
 	}
 
 	async target(): Promise<Template> {
@@ -220,4 +236,6 @@ export namespace Symlink {
 	export type Id = string;
 
 	export type Object_ = { target: Template };
+
+	export type State = Object_.State<Symlink.Id, Symlink.Object_>;
 }

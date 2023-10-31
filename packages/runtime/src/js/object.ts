@@ -27,50 +27,8 @@ export namespace Object_ {
 		| "package"
 		| "target";
 
-	export class Handle {
-		#state: State;
-
-		constructor(state: State) {
-			this.#state = state;
-		}
-
-		get state(): State {
-			return this.#state;
-		}
-
-		static withId(id: Id): Handle {
-			return new Handle({ id, object: undefined });
-		}
-
-		static withObject(object: Object_): Handle {
-			return new Handle({ id: undefined, object });
-		}
-
-		async id(): Promise<Id> {
-			await this.store();
-			return this.#state.id!;
-		}
-
-		async object(): Promise<Object_> {
-			await this.load();
-			return this.#state.object!;
-		}
-
-		async load() {
-			if (this.#state.object === undefined) {
-				this.#state.object = await syscall("load", this.#state.id!);
-			}
-		}
-
-		async store() {
-			if (this.#state.id === undefined) {
-				this.#state.id = await syscall("store", this.#state.object!);
-			}
-		}
-	}
-
-	export type State = {
-		id: Id | undefined;
-		object: Object_ | undefined;
+	export type State<I, O> = {
+		id?: I | undefined;
+		object?: O | undefined;
 	};
 }
