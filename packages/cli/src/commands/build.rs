@@ -72,10 +72,10 @@ impl Cli {
 		}
 
 		// Create the ui.
-		let mut ui = None;
+		let mut tui = None;
 		if !args.non_interactive {
 			if let Ok(tty) = DevTty::open() {
-				ui = Some(ui::ui(client, tty, build.clone(), args.target.clone()));
+				tui = Some(ui::Tui::new(client, tty, build.clone())?);
 			}
 		}
 
@@ -85,6 +85,11 @@ impl Cli {
 			.await
 			.wrap_err("Failed to get the build result.")?
 			.wrap_err("The build failed.")?;
+
+		// Shutdown the TUI
+		if let Some(mut tui) = tui {
+			tui.finish().await?;
+		}
 
 		// Check out the output if requested.
 		if let Some(path) = args.output {
@@ -99,7 +104,6 @@ impl Cli {
 		// Print the output.
 		println!("{output}");
 
-		drop(ui);
 		Ok(())
 	}
 }
