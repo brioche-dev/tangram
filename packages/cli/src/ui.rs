@@ -49,71 +49,107 @@ pub async fn info_string(client: &dyn tg::Client, build: &tg::Build) -> String {
 	format!("{package}: {name}")
 }
 
-pub struct Handle {
+pub struct Tui {
 	running: Arc<AtomicBool>,
-	task: Option<tokio::task::JoinHandle<tg::Result<()>>>,
+	terminal: Terminal,
+	task: Option<tokio::task::JoinHandle<()>>,
 }
 
-impl Handle {
-	pub fn shutdown(&mut self) {
-		self.running
-			.store(false, std::sync::atomic::Ordering::SeqCst);
-		if let Some(task) = self.task.take() {
-			task.abort();
-		}
-	}
-}
-
-impl Drop for Handle {
-	fn drop(&mut self) {
-		self.shutdown();
-	}
-}
-
-/// Run the user interface.
-pub fn ui(client: &dyn tg::Client, tty: DevTty, root: tg::Build, root_info: String) -> Handle {
-	let running = Arc::new(AtomicBool::new(true));
-	let running_ = running.clone();
-	let client = client.clone_box();
-	let task = tokio::spawn(async move {
-		tokio::task::spawn_blocking(move || -> tg::Result<()> {
-			ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
-			let backend = tui::backend::CrosstermBackend::new(tty);
-			let mut terminal =
-				tui::Terminal::new(backend).wrap_err("Failed to create terminal backend.")?;
-			ct::execute!(
-				terminal.backend_mut(),
-				ct::event::EnableMouseCapture,
-				ct::terminal::EnterAlternateScreen,
-			)
-			.wrap_err("Failed to setup TUI")?;
+impl Tui {
+	pub fn new(client: &dyn tg::Client, tty: DevTty, root: tg::Build) -> tg::Result<Self> {
+		let backend = tui::backend::CrosstermBackend::new(tty);
+		let terminal =
+			tui::Terminal::new(backend).wrap_err("Failed to create terminal backend.")?;
+		let running = Arc::new(AtomicBool::new(true));
+		let mut terminal_ = terminal.clone();
+		let running_ = running.clone();
+		let client = client.clone_box();
+		let task = tokio::task::spawn(async move {
+			let root_info = info_string(client.as_ref(), &root).await;
 			let _ = inner(
-				&mut terminal,
+				&mut terminal_,
 				client.as_ref(),
 				root,
 				root_info,
 				running_.as_ref(),
 			)
 			.wrap_err("Failed to run TUI.");
-			let _ = terminal.clear();
+			let _ = terminal_.clear();
+		});
+		let mut tui = Self {
+			running,
+			terminal,
+			task: Some(task),
+		};
+		tui.setup()?;
+		Ok(tui)
+	}
 
-			ct::execute!(
-				terminal.backend_mut(),
-				ct::event::DisableMouseCapture,
-				ct::terminal::LeaveAlternateScreen
-			)
-			.wrap_err("Failed to shutdown TUI.")?;
-			ct::terminal::disable_raw_mode().wrap_err("Failed to disable terminal raw mode")?;
-			Ok(())
-		})
-		.await
-		.wrap_err("Failed to join task")??;
+	pub fn setup(&mut self) -> tg::Result<()> {
+		ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
+		ct::execute!(
+			self.terminal.backend_mut(),
+			ct::event::EnableMouseCapture,
+			ct::terminal::EnterAlternateScreen,
+		)
+		.wrap_err("Failed to setup terminal.")?;
 		Ok(())
-	});
+	}
 
-	let task = Some(task);
-	Handle { running, task }
+	pub async fn finish(&mut self) -> tg::Result<()> {
+		self.running
+			.store(false, std::sync::atomic::Ordering::SeqCst);
+		if let Some(task) = self.task.take() {
+			let _ = task.await;
+		}
+		ct::execute!(
+			self.terminal.backend_mut(),
+			ct::event::DisableMouseCapture,
+			ct::terminal::LeaveAlternateScreen
+		)
+		.wrap_err("Failed to shutdown TUI.")?;
+		ct::terminal::disable_raw_mode().wrap_err("Failed to disable terminal raw mode")?;
+		Ok(())
+	}
 }
+
+// /// Run the user interface.
+// pub fn ui(client: &dyn tg::Client, tty: DevTty, root: tg::Build, root_info: String) -> Handle {
+// 	let running = Arc::new(AtomicBool::new(true));
+// 	let running_ = running.clone();
+// 	let client = client.clone_box();
+// 	let task = tokio::spawn(async move {
+// 		tokio::task::spawn_blocking(move || -> tg::Result<()> {
+// 			ct::terminal::enable_raw_mode().wrap_err("Failed to enable terminal raw mode")?;
+// 			let backend = tui::backend::CrosstermBackend::new(tty);
+// 			let mut terminal =
+// 				tui::Terminal::new(backend).wrap_err("Failed to create terminal backend.")?;
+// 			ct::execute!(
+// 				terminal.backend_mut(),
+// 				ct::event::EnableMouseCapture,
+// 				ct::terminal::EnterAlternateScreen,
+// 			)
+// 			.wrap_err("Failed to setup TUI")?;
+// 			let _ = inner(
+// 				&mut terminal,
+// 				client.as_ref(),
+// 				root,
+// 				root_info,
+// 				running_.as_ref(),
+// 			)
+// 			.wrap_err("Failed to run TUI.");
+// 			let _ = terminal.clear();
+
+// 			Ok(())
+// 		})
+// 		.await
+// 		.wrap_err("Failed to join task")??;
+// 		Ok(())
+// 	});
+
+// 	let task = Some(task);
+// 	Handle { running, task }
+// }
 
 fn inner(
 	terminal: &mut Terminal,
@@ -198,6 +234,13 @@ fn inner(
 
 pub struct DevTty {
 	fd: std::os::fd::OwnedFd,
+}
+
+impl Clone for DevTty {
+	fn clone(&self) -> Self {
+		let fd = self.fd.try_clone().unwrap();
+		Self { fd }
+	}
 }
 
 impl DevTty {

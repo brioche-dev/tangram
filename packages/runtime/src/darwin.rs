@@ -10,6 +10,7 @@ use std::{
 };
 use tangram_client as tg;
 use tg::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
+use tokio::io::AsyncReadExt;
 
 pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 	match run_inner(client, target, progress).await {
@@ -27,7 +28,7 @@ pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 pub async fn run_inner(
 	client: &dyn Client,
 	target: Target,
-	_progress: &dyn Progress,
+	progress: &dyn Progress,
 ) -> Result<Value> {
 	// Get the server path.
 	let server_directory_path = client.path().unwrap().to_owned();
@@ -301,12 +302,30 @@ pub async fn run_inner(
 				return Err(std::io::Error::from(std::io::ErrorKind::Other));
 			}
 
+			// Redirect stdout to stderr.
+			if libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) < 0 {
+				return Err(std::io::Error::last_os_error());
+			}
 			Ok(())
 		})
 	};
 
 	// Spawn the child.
 	let mut child = command.spawn().wrap_err("Failed to spawn the process.")?;
+
+	// Log the child's progress.
+	let progress = progress.clone_box();
+	let mut stderr = child.stderr.take().unwrap();
+	tokio::task::spawn(async move {
+		let mut buf = vec![0; 512];
+		loop {
+			match stderr.read(&mut buf).await {
+				Ok(size) if size == 0 => break,
+				Ok(_) => progress.log(buf.clone().into()),
+				Err(_) => break,
+			}
+		}
+	});
 
 	// Wait for the child to exit.
 	let status = child
