@@ -442,13 +442,24 @@ impl Server {
 		let FileHandleData::File { reader } = &mut *file_handle_data else {
 			return Err(libc::EIO);
 		};
+
 		let mut response = vec![0u8; data.size.to_usize().unwrap()];
 		reader
-			.seek(SeekFrom::Start(data.offset.to_u64().unwrap()))
+			.seek(SeekFrom::Start(data.offset))
 			.await
 			.map_err(|_| libc::EIO)?;
-		let n = reader.read(&mut response).await.map_err(|_| libc::EIO)?;
-		response.truncate(n);
+
+		// We need to read exactly data.size bytes unless we reach EOF. Note: AsyncReadExt::read_exact is inappropriate here because we need to get the total number of bytes read.
+		let mut total_size = 0;
+		loop {
+			let buf = &mut response[total_size..];
+			let n = reader.read(buf).await.map_err(|_| libc::EIO)?;
+			total_size = (total_size + n).min(data.size.to_usize().unwrap());
+			if n == 0 || total_size.to_u32().unwrap() >= data.size {
+				break;
+			}
+		}
+		response.truncate(total_size);
 		Ok(Response::Read(response))
 	}
 
