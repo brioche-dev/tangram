@@ -1,43 +1,49 @@
 use crate::nfs::{
 	state::{Node, NodeKind},
-	types::*,
+	types::{nfs_fh4, nfsstat4, LOOKUP4args, LOOKUP4res},
 	Context, Server,
 };
 use std::{collections::BTreeMap, sync::Arc};
 use tangram_client as tg;
 use tg::Artifact;
 
-pub type Arg = String;
-
-pub type ResOp = i32;
-
 impl Server {
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_lookup(&self, ctx: &mut Context, arg: Arg) -> ResOp {
+	pub async fn handle_lookup(&self, ctx: &mut Context, arg: LOOKUP4args) -> LOOKUP4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return NFS4ERR_NOFILEHANDLE;
+			return LOOKUP4res {
+				status: nfsstat4::NFS4ERR_NOFILEHANDLE,
+			};
 		};
 
-		match self.lookup(fh, &arg).await {
+		let Ok(name) = std::str::from_utf8(&arg.objname) else {
+			return LOOKUP4res {
+				status: nfsstat4::NFS4ERR_NOENT,
+			};
+		};
+
+		match self.lookup(fh, name).await {
 			Ok(fh) => {
 				ctx.current_file_handle = Some(fh);
-				NFS4_OK
+				LOOKUP4res {
+					status: nfsstat4::NFS4_OK,
+				}
 			},
-			Err(e) => e,
+			Err(status) => LOOKUP4res { status },
 		}
 	}
 
-	pub async fn lookup(&self, parent: FileHandle, name: &str) -> Result<FileHandle, i32> {
+	pub async fn lookup(&self, parent: nfs_fh4, name: &str) -> Result<nfs_fh4, nfsstat4> {
 		let parent_node = self
 			.state
 			.read()
 			.await
 			.nodes
-			.get(&parent.node)
+			.get(&parent)
 			.cloned()
-			.ok_or(NFS4ERR_NOENT)?;
+			.ok_or(nfsstat4::NFS4ERR_NOENT)?;
 		let node = self.get_or_create_child_node(parent_node, name).await?;
-		let fh = FileHandle { node: node.id };
+		let fh = node.id;
 		Ok(fh)
 	}
 
@@ -46,13 +52,13 @@ impl Server {
 		&self,
 		parent_node: Arc<Node>,
 		name: &str,
-	) -> Result<Arc<Node>, i32> {
+	) -> Result<Arc<Node>, nfsstat4> {
 		if name == "." {
 			return Ok(parent_node);
 		}
 
 		if name == ".." {
-			let parent_parent_node = parent_node.parent.upgrade().ok_or(NFS4ERR_IO)?;
+			let parent_parent_node = parent_node.parent.upgrade().ok_or(nfsstat4::NFS4ERR_IO)?;
 			return Ok(parent_parent_node);
 		}
 
@@ -64,7 +70,7 @@ impl Server {
 			},
 			_ => {
 				tracing::error!("Cannot create child on File or Symlink.");
-				return Err(NFS4ERR_NOTDIR);
+				return Err(nfsstat4::NFS4ERR_NOTDIR);
 			},
 		}
 
@@ -72,7 +78,7 @@ impl Server {
 			NodeKind::Root { .. } => {
 				let id = name.parse().map_err(|e| {
 					tracing::error!(?e, "Failed to parse artifact ID.");
-					NFS4ERR_NOENT
+					nfsstat4::NFS4ERR_NOENT
 				})?;
 				Artifact::with_id(id)
 			},
@@ -80,9 +86,9 @@ impl Server {
 			NodeKind::Directory { directory, .. } => {
 				let entries = directory.entries(self.client.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get directory entries.");
-					NFS4ERR_IO
+					nfsstat4::NFS4ERR_IO
 				})?;
-				entries.get(name).ok_or(NFS4ERR_NOENT)?.clone()
+				entries.get(name).ok_or(nfsstat4::NFS4ERR_NOENT)?.clone()
 			},
 
 			_ => unreachable!(),
@@ -100,11 +106,11 @@ impl Server {
 			Artifact::File(file) => {
 				let contents = file.contents(self.client.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get file contents.");
-					NFS4ERR_IO
+					nfsstat4::NFS4ERR_IO
 				})?;
 				let size = contents.size(self.client.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get size of file's contents.");
-					NFS4ERR_IO
+					nfsstat4::NFS4ERR_IO
 				})?;
 				NodeKind::File { file, size }
 			},

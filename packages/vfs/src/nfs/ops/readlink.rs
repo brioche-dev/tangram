@@ -1,26 +1,24 @@
-use crate::nfs::{state::NodeKind, types::*, xdr, Context, Server};
+use crate::nfs::{
+	state::NodeKind,
+	types::{nfsstat4, READLINK4res, READLINK4resok},
+	Context, Server,
+};
 use tangram_client as tg;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ResOp {
-	Ok(Vec<u8>),
-	Err(i32),
-}
 
 impl Server {
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_readlink(&self, ctx: &Context) -> ResOp {
+	pub async fn handle_readlink(&self, ctx: &Context) -> READLINK4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return ResOp::Err(NFS4ERR_NOFILEHANDLE);
+			return READLINK4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
-		let Some(node) = self.get_node(fh.node).await else {
-			return ResOp::Err(NFS4ERR_NOENT);
+		let Some(node) = self.get_node(fh).await else {
+			return READLINK4res::Default(nfsstat4::NFS4ERR_NOENT);
 		};
 		let NodeKind::Symlink { symlink } = &node.kind else {
-			return ResOp::Err(NFS4ERR_INVAL);
+			return READLINK4res::Default(nfsstat4::NFS4ERR_INVAL);
 		};
 		let Ok(target) = symlink.target(self.client.as_ref()).await else {
-			return ResOp::Err(NFS4ERR_IO);
+			return READLINK4res::Default(nfsstat4::NFS4ERR_IO);
 		};
 		let mut response = String::new();
 		for component in target.components() {
@@ -30,7 +28,7 @@ impl Server {
 				},
 				tg::template::Component::Artifact(artifact) => {
 					let Ok(id) = artifact.id(self.client.as_ref()).await else {
-						return ResOp::Err(NFS4ERR_IO);
+						return READLINK4res::Default(nfsstat4::NFS4ERR_IO);
 					};
 					for _ in 0..node.depth() {
 						response.push_str("../");
@@ -40,27 +38,8 @@ impl Server {
 			}
 		}
 
-		ResOp::Ok(response.into_bytes())
-	}
-}
-impl ResOp {
-	pub fn status(&self) -> i32 {
-		match self {
-			Self::Ok(_) => NFS4_OK,
-			Self::Err(e) => *e,
-		}
-	}
-}
-
-impl xdr::ToXdr for ResOp {
-	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-	where
-		W: std::io::Write,
-	{
-		encoder.encode_int(self.status())?;
-		if let Self::Ok(linktext) = self {
-			encoder.encode_opaque(linktext)?;
-		}
-		Ok(())
+		READLINK4res::NFS4_OK(READLINK4resok {
+			link: response.into_bytes(),
+		})
 	}
 }

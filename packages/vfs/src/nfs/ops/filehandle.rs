@@ -1,14 +1,14 @@
 use crate::nfs::{
-	types::{FileHandle, NFS4ERR_BADHANDLE},
+	types::{nfs_fh4, nfsstat4},
 	Context,
 };
 
-pub fn put(ctx: &mut Context, arg: FileHandle) {
+pub fn put(ctx: &mut Context, arg: nfs_fh4) {
 	ctx.current_file_handle = Some(arg);
 }
 
-pub fn get(ctx: &Context) -> Result<FileHandle, i32> {
-	ctx.current_file_handle.ok_or(NFS4ERR_BADHANDLE)
+pub fn get(ctx: &Context) -> Result<nfs_fh4, nfsstat4> {
+	ctx.current_file_handle.ok_or(nfsstat4::NFS4ERR_BADHANDLE)
 }
 
 pub fn save(ctx: &mut Context) {

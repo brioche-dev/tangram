@@ -1,142 +1,1239 @@
-#![allow(dead_code)]
-
-use super::xdr;
+#![allow(non_camel_case_types, dead_code)]
 use num::ToPrimitive;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct FileHandle {
-	pub node: u64,
+use super::xdr;
+
+// RPC constants.
+pub const RPC_VERS: u32 = 2;
+pub const NFS_PROG: u32 = 100003;
+pub const NFS_VERS: u32 = 4;
+
+pub type int32_t = i32;
+pub type uint32_t = u32;
+pub type int64_t = i64;
+pub type uint64_t = u64;
+
+pub const NFS4_FHSIZE: usize = 128;
+pub const NFS4_VERIFIER_SIZE: usize = 8;
+pub const NFS4_OTHER_SIZE: usize = 12;
+pub const NFS4_OPAQUE_LIMIT: usize = 1024;
+
+pub const NFS4_INT64_MAX: int64_t = 0x7fffffffffffffff;
+pub const NFS4_UINT64_MAX: uint64_t = 0xffffffffffffffff;
+pub const NFS4_INT32_MAX: int32_t = 0x7fffffff;
+pub const NFS4_UINT32_MAX: uint32_t = 0xffffffff;
+
+#[repr(i32)]
+pub enum nfs_ftype4 {
+	NF4REG = 1,       /* Regular File */
+	NF4DIR = 2,       /* Directory */
+	NF4BLK = 3,       /* Special File - block device */
+	NF4CHR = 4,       /* Special File - character device */
+	NF4LNK = 5,       /* Symbolic Link */
+	NF4SOCK = 6,      /* Special File - socket */
+	NF4FIFO = 7,      /* Special File - fifo */
+	NF4ATTRDIR = 8,   /* Attribute Directory */
+	NF4NAMEDATTR = 9, /* Named Attribute */
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(i32)]
+pub enum nfsstat4 {
+	NFS4_OK = 0,         /* everything is okay       */
+	NFS4ERR_PERM = 1,    /* caller not privileged    */
+	NFS4ERR_NOENT = 2,   /* no such file/directory   */
+	NFS4ERR_IO = 5,      /* hard I/O error           */
+	NFS4ERR_NXIO = 6,    /* no such device           */
+	NFS4ERR_ACCESS = 13, /* access denied            */
+	NFS4ERR_EXIST = 17,  /* file already exists      */
+	NFS4ERR_XDEV = 18,   /* different file systems   */
+	/* Unused/reserved        19 */
+	NFS4ERR_NOTDIR = 20,                 /* should be a directory    */
+	NFS4ERR_ISDIR = 21,                  /* should not be directory  */
+	NFS4ERR_INVAL = 22,                  /* invalid argument         */
+	NFS4ERR_FBIG = 27,                   /* file exceeds server max  */
+	NFS4ERR_NOSPC = 28,                  /* no space on file system  */
+	NFS4ERR_ROFS = 30,                   /* read-only file system    */
+	NFS4ERR_MLINK = 31,                  /* too many hard links      */
+	NFS4ERR_NAMETOOLONG = 63,            /* name exceeds server max  */
+	NFS4ERR_NOTEMPTY = 66,               /* directory not empty      */
+	NFS4ERR_DQUOT = 69,                  /* hard quota limit reached */
+	NFS4ERR_STALE = 70,                  /* file no longer exists    */
+	NFS4ERR_BADHANDLE = 10001,           /* Illegal filehandle       */
+	NFS4ERR_BAD_COOKIE = 10003,          /* READDIR cookie is stale  */
+	NFS4ERR_NOTSUPP = 10004,             /* operation not supported  */
+	NFS4ERR_TOOSMALL = 10005,            /* response limit exceeded  */
+	NFS4ERR_SERVERFAULT = 10006,         /* undefined server error   */
+	NFS4ERR_BADTYPE = 10007,             /* type invalid for CREATE  */
+	NFS4ERR_DELAY = 10008,               /* file "busy" - retry      */
+	NFS4ERR_SAME = 10009,                /* nverify says attrs same  */
+	NFS4ERR_DENIED = 10010,              /* lock unavailable         */
+	NFS4ERR_EXPIRED = 10011,             /* lock lease expired       */
+	NFS4ERR_LOCKED = 10012,              /* I/O failed due to lock   */
+	NFS4ERR_GRACE = 10013,               /* in grace period          */
+	NFS4ERR_FHEXPIRED = 10014,           /* filehandle expired       */
+	NFS4ERR_SHARE_DENIED = 10015,        /* share reserve denied     */
+	NFS4ERR_WRONGSEC = 10016,            /* wrong security flavor    */
+	NFS4ERR_CLID_INUSE = 10017,          /* clientid in use          */
+	NFS4ERR_RESOURCE = 10018,            /* resource exhaustion      */
+	NFS4ERR_MOVED = 10019,               /* file system relocated    */
+	NFS4ERR_NOFILEHANDLE = 10020,        /* current FH is not set    */
+	NFS4ERR_MINOR_VERS_MISMATCH = 10021, /* minor vers not supp */
+	NFS4ERR_STALE_CLIENTID = 10022,      /* server has rebooted      */
+	NFS4ERR_STALE_STATEID = 10023,       /* server has rebooted      */
+	NFS4ERR_OLD_STATEID = 10024,         /* state is out of sync     */
+	NFS4ERR_BAD_STATEID = 10025,         /* incorrect stateid        */
+	NFS4ERR_BAD_SEQID = 10026,           /* request is out of seq.   */
+	NFS4ERR_NOT_SAME = 10027,            /* verify - attrs not same  */
+	NFS4ERR_LOCK_RANGE = 10028,          /* lock range not supported */
+	NFS4ERR_SYMLINK = 10029,             /* should be file/directory */
+	NFS4ERR_RESTOREFH = 10030,           /* no saved filehandle      */
+	NFS4ERR_LEASE_MOVED = 10031,         /* some file system moved   */
+	NFS4ERR_ATTRNOTSUPP = 10032,         /* recommended attr not sup */
+	NFS4ERR_NO_GRACE = 10033,            /* reclaim outside of grace */
+	NFS4ERR_RECLAIM_BAD = 10034,         /* reclaim error at server  */
+	NFS4ERR_RECLAIM_CONFLICT = 10035,    /* conflict on reclaim    */
+	NFS4ERR_BADXDR = 10036,              /* XDR decode failed        */
+	NFS4ERR_LOCKS_HELD = 10037,          /* file locks held at CLOSE */
+	NFS4ERR_OPENMODE = 10038,            /* conflict in OPEN and I/O */
+	NFS4ERR_BADOWNER = 10039,            /* owner translation bad    */
+	NFS4ERR_BADCHAR = 10040,             /* UTF-8 char not supported */
+	NFS4ERR_BADNAME = 10041,             /* name not supported       */
+	NFS4ERR_BAD_RANGE = 10042,           /* lock range not supported */
+	NFS4ERR_LOCK_NOTSUPP = 10043,        /* no atomic up/downgrade   */
+	NFS4ERR_OP_ILLEGAL = 10044,          /* undefined operation      */
+	NFS4ERR_DEADLOCK = 10045,            /* file locking deadlock    */
+	NFS4ERR_FILE_OPEN = 10046,           /* open file blocks op.     */
+	NFS4ERR_ADMIN_REVOKED = 10047,       /* lock-owner state revoked */
+	NFS4ERR_CB_PATH_DOWN = 10048,        /* callback path down       */
+}
+
+pub type attrlist4 = Vec<u8>;
+pub type bitmap4 = Vec<uint32_t>;
+pub type changeid4 = uint64_t;
+pub type clientid4 = uint64_t;
+pub type count4 = uint32_t;
+pub type length4 = uint64_t;
+pub type mode4 = uint32_t;
+pub type nfs_cookie4 = uint64_t;
+/// Note: this is an opaque type that is left up to the server to define. We use 64 bit integers.
+pub type nfs_fh4 = u64;
+pub type nfs_lease4 = uint32_t;
+pub type offset4 = uint64_t;
+pub type qop4 = uint32_t;
+pub type sec_oid4 = Vec<u8>;
+
+pub type seqid4 = uint32_t;
+pub type utf8string = Vec<u8>;
+pub type utf8str_cis = utf8string;
+pub type utf8str_cs = utf8string;
+pub type utf8str_mixed = utf8string;
+pub type component4 = utf8str_cs;
+pub type linktext4 = Vec<u8>;
+pub type ascii_REQUIRED4 = utf8string;
+pub type pathname4 = Vec<component4>;
+pub type nfs_lockid4 = uint64_t;
+pub type verifier4 = [u8; NFS4_VERIFIER_SIZE];
+
+/*
+ * Timeval
+ */
+#[derive(Debug, Clone, Copy)]
+pub struct nfstime4 {
+	pub seconds: int64_t,
+	pub nseconds: uint32_t,
+}
+
+#[repr(i32)]
+pub enum time_how4 {
+	SET_TO_SERVER_TIME4 = 0,
+	SET_TO_CLIENT_TIME4 = 1,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum settime4 {
+	SET_TO_SERVER_TIME4(nfstime4),
+	SET_TO_CLIENT_TIME4,
+}
+
+/*
+ * File attribute definitions
+ */
+
+/*
+ * FSID structure for major/minor
+ */
+
+#[derive(Debug, Clone, Copy)]
+pub struct fsid4 {
+	pub major: uint64_t,
+	pub minor: uint64_t,
+}
+
+/*
+ * File system locations attribute for relocation/migration
+ */
+
+#[derive(Debug, Clone)]
+pub struct fs_location4 {
+	pub server: Vec<utf8str_cis>,
+	pub rootpath: pathname4,
 }
 
 #[derive(Debug, Clone)]
-pub struct FileAttr {
-	pub attr_mask: Bitmap,
-	pub attr_vals: Vec<u8>,
+pub struct fs_locations4 {
+	pub fs_root: pathname4,
+	pub locations: Vec<fs_location4>,
 }
 
-#[derive(Debug, Clone)]
-pub struct CallbackClient {
-	pub program: u32,
-	pub location: ClientAddr,
+/*
+ * Various Access Control Entry definitions
+ */
+
+/*
+ * Mask that indicates which Access Control Entries
+ * are supported.  Values for the fattr4_aclsupport attribute.
+ */
+pub const ACL4_SUPPORT_ALLOW_ACL: u32 = 0x00000001;
+pub const ACL4_SUPPORT_DENY_ACL: u32 = 0x00000002;
+pub const ACL4_SUPPORT_AUDIT_ACL: u32 = 0x00000004;
+pub const ACL4_SUPPORT_ALARM_ACL: u32 = 0x00000008;
+pub type acetype4 = uint32_t;
+
+/*
+ * acetype4 values; others can be added as needed.
+ */
+pub const ACE4_ACCESS_ALLOWED_ACE_TYPE: acetype4 = 0x00000000;
+pub const ACE4_ACCESS_DENIED_ACE_TYPE: acetype4 = 0x00000001;
+pub const ACE4_SYSTEM_AUDIT_ACE_TYPE: acetype4 = 0x00000002;
+pub const ACE4_SYSTEM_ALARM_ACE_TYPE: acetype4 = 0x00000003;
+
+/*
+ * ACE flag
+ */
+pub type aceflag4 = uint32_t;
+
+/*
+ * ACE flag values
+ */
+pub const ACE4_FILE_INHERIT_ACE: aceflag4 = 0x00000001;
+pub const ACE4_DIRECTORY_INHERIT_ACE: aceflag4 = 0x00000002;
+pub const ACE4_NO_PROPAGATE_INHERIT_ACE: aceflag4 = 0x00000004;
+pub const ACE4_INHERIT_ONLY_ACE: aceflag4 = 0x00000008;
+pub const ACE4_SUCCESSFUL_ACCESS_ACE_FLAG: aceflag4 = 0x00000010;
+pub const ACE4_FAILED_ACCESS_ACE_FLAG: aceflag4 = 0x00000020;
+pub const ACE4_IDENTIFIER_GROUP: aceflag4 = 0x00000040;
+
+/*
+ * ACE mask
+ */
+pub type acemask4 = uint32_t;
+
+/*
+ * ACE mask values
+ */
+pub const ACE4_READ_DATA: acemask4 = 0x00000001;
+pub const ACE4_LIST_DIRECTORY: acemask4 = 0x00000001;
+pub const ACE4_WRITE_DATA: acemask4 = 0x00000002;
+pub const ACE4_ADD_FILE: acemask4 = 0x00000002;
+pub const ACE4_APPEND_DATA: acemask4 = 0x00000004;
+pub const ACE4_ADD_SUBDIRECTORY: acemask4 = 0x00000004;
+pub const ACE4_READ_NAMED_ATTRS: acemask4 = 0x00000008;
+pub const ACE4_WRITE_NAMED_ATTRS: acemask4 = 0x00000010;
+pub const ACE4_EXECUTE: acemask4 = 0x00000020;
+pub const ACE4_DELETE_CHILD: acemask4 = 0x00000040;
+pub const ACE4_READ_ATTRIBUTES: acemask4 = 0x00000080;
+pub const ACE4_WRITE_ATTRIBUTES: acemask4 = 0x00000100;
+
+pub const ACE4_DELETE: u32 = 0x00010000;
+pub const ACE4_READ_ACL: u32 = 0x00020000;
+pub const ACE4_WRITE_ACL: u32 = 0x00040000;
+pub const ACE4_WRITE_OWNER: u32 = 0x00080000;
+pub const ACE4_SYNCHRONIZE: u32 = 0x00100000;
+
+/*
+ * ACE4_GENERIC_READ - defined as a combination of
+ *      ACE4_READ_ACL |
+ *      ACE4_READ_DATA |
+ *      ACE4_READ_ATTRIBUTES |
+ *      ACE4_SYNCHRONIZE
+ */
+
+pub const ACE4_GENERIC_READ: u32 = 0x00120081;
+
+/*
+ * ACE4_GENERIC_WRITE - defined as a combination of
+ *      ACE4_READ_ACL |
+ *      ACE4_WRITE_DATA |
+ *      ACE4_WRITE_ATTRIBUTES |
+ *      ACE4_WRITE_ACL |
+ *      ACE4_APPEND_DATA |
+ *      ACE4_SYNCHRONIZE
+ */
+pub const ACE4_GENERIC_WRITE: u32 = 0x00160106;
+
+/*
+ * ACE4_GENERIC_EXECUTE - defined as a combination of
+ *      ACE4_READ_ACL
+ *      ACE4_READ_ATTRIBUTES
+ *      ACE4_EXECUTE
+ *      ACE4_SYNCHRONIZE
+ */
+pub const ACE4_GENERIC_EXECUTE: u32 = 0x001200A0;
+
+/*
+ * Access Control Entry definition
+ */
+#[derive(Clone, Debug)]
+pub struct nfsace4 {
+	pub type_: acetype4,
+	pub flag: aceflag4,
+	pub access_mask: acemask4,
+	pub who: utf8str_mixed,
 }
 
-#[derive(Debug, Clone)]
-pub struct ClientAddr {
-	pub netid: String,
-	pub addr: String,
+/*
+ * Field definitions for the fattr4_mode attribute
+ */
+pub const MODE4_SUID: fattr4_mode = 0x800; /* set user id on execution */
+pub const MODE4_SGID: fattr4_mode = 0x400; /* set group id on execution */
+pub const MODE4_SVTX: fattr4_mode = 0x200; /* save text even after use */
+pub const MODE4_RUSR: fattr4_mode = 0x100; /* read permission: owner */
+pub const MODE4_WUSR: fattr4_mode = 0x080; /* write permission: owner */
+pub const MODE4_XUSR: fattr4_mode = 0x040; /* execute permission: owner */
+pub const MODE4_RGRP: fattr4_mode = 0x020; /* read permission: group */
+pub const MODE4_WGRP: fattr4_mode = 0x010; /* write permission: group */
+pub const MODE4_XGRP: fattr4_mode = 0x008; /* execute permission: group */
+pub const MODE4_ROTH: fattr4_mode = 0x004; /* read permission: other */
+pub const MODE4_WOTH: fattr4_mode = 0x002; /* write permission: other */
+pub const MODE4_XOTH: fattr4_mode = 0x001; /* execute permission: other */
+
+/*
+ * Special data/attribute associated with
+ * file types NF4BLK and NF4CHR.
+ */
+#[derive(Clone, Copy, Debug)]
+pub struct specdata4 {
+	pub specdata1: uint32_t, /* major device number */
+	pub specdata2: uint32_t, /* minor device number */
 }
 
-#[derive(Clone)]
-pub struct Bitmap(pub Vec<u32>);
+/*
+ * Values for fattr4_fh_expire_type
+ */
+pub const FH4_PERSISTENT: fattr4_fh_expire_type = 0x00000000;
+pub const FH4_NOEXPIRE_WITH_OPEN: fattr4_fh_expire_type = 0x00000001;
+pub const FH4_VOLATILE_ANY: fattr4_fh_expire_type = 0x00000002;
+pub const FH4_VOL_MIGRATION: fattr4_fh_expire_type = 0x00000004;
+pub const FH4_VOL_RENAME: fattr4_fh_expire_type = 0x00000008;
 
-pub struct FsId {
-	pub major: u64,
-	pub minor: u64,
+pub type fattr4_supported_attrs = bitmap4;
+pub type fattr4_type = nfs_ftype4;
+pub type fattr4_fh_expire_type = uint32_t;
+pub type fattr4_change = changeid4;
+pub type fattr4_size = uint64_t;
+pub type fattr4_link_support = bool;
+pub type fattr4_symlink_support = bool;
+pub type fattr4_named_attr = bool;
+pub type fattr4_fsid = fsid4;
+
+pub type fattr4_unique_handles = bool;
+pub type fattr4_lease_time = nfs_lease4;
+pub type fattr4_rdattr_error = nfsstat4;
+
+pub type fattr4_acl = Vec<nfsace4>;
+pub type fattr4_aclsupport = uint32_t;
+pub type fattr4_archive = bool;
+pub type fattr4_cansettime = bool;
+pub type fattr4_case_insensitive = bool;
+pub type fattr4_case_preserving = bool;
+pub type fattr4_chown_restricted = bool;
+pub type fattr4_fileid = uint64_t;
+pub type fattr4_files_avail = uint64_t;
+pub type fattr4_filehandle = nfs_fh4;
+pub type fattr4_files_free = uint64_t;
+pub type fattr4_files_total = uint64_t;
+pub type fattr4_fs_locations = fs_locations4;
+pub type fattr4_hidden = bool;
+pub type fattr4_homogeneous = bool;
+pub type fattr4_maxfilesize = uint64_t;
+pub type fattr4_maxlink = uint32_t;
+pub type fattr4_maxname = uint32_t;
+pub type fattr4_maxread = uint64_t;
+pub type fattr4_maxwrite = uint64_t;
+pub type fattr4_mimetype = ascii_REQUIRED4;
+pub type fattr4_mode = mode4;
+pub type fattr4_mounted_on_fileid = uint64_t;
+pub type fattr4_no_trunc = bool;
+pub type fattr4_numlinks = uint32_t;
+pub type fattr4_owner = utf8str_mixed;
+pub type fattr4_owner_group = utf8str_mixed;
+pub type fattr4_quota_avail_hard = uint64_t;
+pub type fattr4_quota_avail_soft = uint64_t;
+pub type fattr4_quota_used = uint64_t;
+pub type fattr4_rawdev = specdata4;
+pub type fattr4_space_avail = uint64_t;
+pub type fattr4_space_free = uint64_t;
+pub type fattr4_space_total = uint64_t;
+pub type fattr4_space_used = uint64_t;
+pub type fattr4_system = bool;
+pub type fattr4_time_access = nfstime4;
+pub type fattr4_time_access_set = settime4;
+pub type fattr4_time_backup = nfstime4;
+pub type fattr4_time_create = nfstime4;
+pub type fattr4_time_delta = nfstime4;
+pub type fattr4_time_metadata = nfstime4;
+pub type fattr4_time_modify = nfstime4;
+pub type fattr4_time_modify_set = settime4;
+
+/*
+ * Mandatory attributes
+ */
+pub const FATTR4_SUPPORTED_ATTRS: i32 = 0;
+pub const FATTR4_TYPE: i32 = 1;
+pub const FATTR4_FH_EXPIRE_TYPE: i32 = 2;
+pub const FATTR4_CHANGE: i32 = 3;
+pub const FATTR4_SIZE: i32 = 4;
+pub const FATTR4_LINK_SUPPORT: i32 = 5;
+pub const FATTR4_SYMLINK_SUPPORT: i32 = 6;
+pub const FATTR4_NAMED_ATTR: i32 = 7;
+pub const FATTR4_FSID: i32 = 8;
+pub const FATTR4_UNIQUE_HANDLES: i32 = 9;
+pub const FATTR4_LEASE_TIME: i32 = 10;
+pub const FATTR4_RDATTR_ERROR: i32 = 11;
+pub const FATTR4_FILEHANDLE: i32 = 19;
+
+/*
+ * Recommended attributes
+ */
+pub const FATTR4_ACL: i32 = 12;
+pub const FATTR4_ACLSUPPORT: i32 = 13;
+pub const FATTR4_ARCHIVE: i32 = 14;
+pub const FATTR4_CANSETTIME: i32 = 15;
+pub const FATTR4_CASE_INSENSITIVE: i32 = 16;
+pub const FATTR4_CASE_PRESERVING: i32 = 17;
+pub const FATTR4_CHOWN_RESTRICTED: i32 = 18;
+pub const FATTR4_FILEID: i32 = 20;
+pub const FATTR4_FILES_AVAIL: i32 = 21;
+pub const FATTR4_FILES_FREE: i32 = 22;
+pub const FATTR4_FILES_TOTAL: i32 = 23;
+pub const FATTR4_FS_LOCATIONS: i32 = 24;
+pub const FATTR4_HIDDEN: i32 = 25;
+pub const FATTR4_HOMOGENEOUS: i32 = 26;
+pub const FATTR4_MAXFILESIZE: i32 = 27;
+pub const FATTR4_MAXLINK: i32 = 28;
+pub const FATTR4_MAXNAME: i32 = 29;
+pub const FATTR4_MAXREAD: i32 = 30;
+pub const FATTR4_MAXWRITE: i32 = 31;
+pub const FATTR4_MIMETYPE: i32 = 32;
+pub const FATTR4_MODE: i32 = 33;
+pub const FATTR4_NO_TRUNC: i32 = 34;
+pub const FATTR4_NUMLINKS: i32 = 35;
+pub const FATTR4_OWNER: i32 = 36;
+pub const FATTR4_OWNER_GROUP: i32 = 37;
+pub const FATTR4_QUOTA_AVAIL_HARD: i32 = 38;
+
+pub const FATTR4_QUOTA_AVAIL_SOFT: i32 = 39;
+pub const FATTR4_QUOTA_USED: i32 = 40;
+pub const FATTR4_RAWDEV: i32 = 41;
+pub const FATTR4_SPACE_AVAIL: i32 = 42;
+pub const FATTR4_SPACE_FREE: i32 = 43;
+pub const FATTR4_SPACE_TOTAL: i32 = 44;
+pub const FATTR4_SPACE_USED: i32 = 45;
+pub const FATTR4_SYSTEM: i32 = 46;
+pub const FATTR4_TIME_ACCESS: i32 = 47;
+pub const FATTR4_TIME_ACCESS_SET: i32 = 48;
+pub const FATTR4_TIME_BACKUP: i32 = 49;
+pub const FATTR4_TIME_CREATE: i32 = 50;
+pub const FATTR4_TIME_DELTA: i32 = 51;
+pub const FATTR4_TIME_METADATA: i32 = 52;
+pub const FATTR4_TIME_MODIFY: i32 = 53;
+pub const FATTR4_TIME_MODIFY_SET: i32 = 54;
+pub const FATTR4_MOUNTED_ON_FILEID: i32 = 55;
+
+/*
+ * File attribute container
+ */
+#[derive(Clone, Debug)]
+pub struct fattr4 {
+	pub attrmask: bitmap4,
+	pub attr_vals: attrlist4,
 }
 
-pub type Cookie = u64;
-pub type Count = u32;
-
-#[derive(Debug, Clone)]
-pub struct Entry {
-	pub cookie: Cookie,
-	pub name: String,
-	pub attrs: FileAttr,
-}
-
-impl Bitmap {
-	pub fn set(&mut self, bit: usize) {
-		let word = bit / 32;
-		if word >= self.0.len() {
-			self.0.resize_with(word + 1, || 0);
-		}
-		self.0[word] |= 1 << (bit % 32);
-	}
-
-	pub fn get(&self, bit: usize) -> bool {
-		let word = self.0.get(bit / 32).copied().unwrap_or(0);
-		let flag = 1 & (word >> (bit % 32));
-		flag != 0
-	}
-
-	pub fn intersection(&self, rhs: &Self) -> Self {
-		let sz = self.0.len().max(rhs.0.len());
-		let mut new = vec![0; sz];
-		for (i, new) in new.iter_mut().enumerate() {
-			let lhs = self.0.get(i).copied().unwrap_or(0);
-			let rhs = rhs.0.get(i).copied().unwrap_or(0);
-			*new = lhs & rhs;
-		}
-		Self(new)
-	}
-}
-
-#[derive(Debug, Clone)]
-pub struct Ace {
-	pub type_: u32,
-	pub flag: u32,
-	pub mask: u32,
-	pub who: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct FsLocations {
-	pub fs_root: Vec<String>,
-	pub locations: Vec<Location>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Location {
-	pub server: Vec<String>,
-	pub rootpath: Vec<String>,
-}
-
-#[derive(Copy, Clone, Debug, Default)]
-pub struct SpecData {
-	pub specdata1: u32,
-	pub specdata2: u32,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct Time {
-	pub seconds: i64,
-	pub nanos: u32,
-}
-
-impl Default for Time {
-	fn default() -> Self {
-		Self {
-			seconds: 1,
-			nanos: 0,
-		}
-	}
-}
-
-impl Time {
-	pub fn now() -> Self {
-		let now = std::time::SystemTime::now();
-		let dur = now.duration_since(std::time::UNIX_EPOCH).unwrap();
-		Self {
-			seconds: dur.as_secs().to_i64().unwrap(),
-			nanos: dur.subsec_nanos(),
-		}
-	}
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct ChangeInfo {
+/*
+ * Change info for the client
+ */
+#[derive(Clone, Copy, Debug)]
+pub struct change_info4 {
 	pub atomic: bool,
-	pub before: u64,
-	pub after: u64,
+	pub before: changeid4,
+	pub after: changeid4,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct StateId {
-	pub seqid: u32,
-	pub other: [u8; 12],
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct clientaddr4 {
+	/* see struct rpcb in RFC 1833 */
+	pub r_netid: String, /* network id */
+	pub r_addr: String,  /* universal address */
 }
 
-impl xdr::FromXdr for StateId {
+/*
+ * Callback program info as provided by the client
+ */
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct cb_client4 {
+	pub cb_program: u32,
+	pub cb_location: clientaddr4,
+}
+
+/*
+ * Stateid
+ */
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct stateid4 {
+	pub seqid: uint32_t,
+	pub other: [u8; NFS4_OTHER_SIZE],
+}
+
+/*
+ * Client ID
+ */
+#[derive(Clone, Debug)]
+pub struct nfs_client_id4 {
+	pub verifier: verifier4,
+	pub id: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub struct open_owner4 {
+	pub clientid: clientid4,
+	pub owner: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub struct lock_owner4 {
+	pub clientid: clientid4,
+	pub owner: Vec<u8>,
+}
+
+#[repr(i32)]
+#[derive(Clone, Copy, Debug)]
+pub enum nfs_lock_type4 {
+	READ_LT = 1,
+	WRITE_LT = 2,
+	READW_LT = 3,  /* blocking read */
+	WRITEW_LT = 4, /* blocking write */
+}
+
+pub const ACCESS4_READ: uint32_t = 0x00000001;
+pub const ACCESS4_LOOKUP: uint32_t = 0x00000002;
+pub const ACCESS4_MODIFY: uint32_t = 0x00000004;
+pub const ACCESS4_EXTEND: uint32_t = 0x00000008;
+pub const ACCESS4_DELETE: uint32_t = 0x00000010;
+pub const ACCESS4_EXECUTE: uint32_t = 0x00000020;
+
+#[derive(Clone, Copy, Debug)]
+pub struct ACCESS4args {
+	pub access: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ACCESS4resok {
+	pub supported: u32,
+	pub access: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ACCESS4res {
+	NFS4_OK(ACCESS4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CLOSE4args {
+	pub seqid: seqid4,
+	pub open_stateid: stateid4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CLOSE4res {
+	NFS4_OK(stateid4),
+	Default(nfsstat4),
+}
+
+#[derive(Clone, Debug)]
+pub struct GETATTR4args {
+	/* CURRENT_FH: directory or file */
+	pub attr_request: bitmap4,
+}
+
+#[derive(Clone, Debug)]
+pub struct GETATTR4resok {
+	pub obj_attributes: fattr4,
+}
+
+#[derive(Clone, Debug)]
+pub enum GETATTR4res {
+	NFS4_OK(GETATTR4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum GETFH4res {
+	NFS4_OK(GETFH4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GETFH4resok {
+	pub object: nfs_fh4,
+}
+
+#[derive(Clone, Debug)]
+pub struct LOOKUP4args {
+	/* CURRENT_FH: directory */
+	pub objname: component4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LOOKUP4res {
+	/* CURRENT_FH: object */
+	pub status: nfsstat4,
+}
+
+pub const OPEN4_SHARE_ACCESS_READ: u32 = 0x00000001;
+pub const OPEN4_SHARE_ACCESS_WRITE: u32 = 0x00000002;
+pub const OPEN4_SHARE_ACCESS_BOTH: u32 = 0x00000003;
+
+pub const OPEN4_SHARE_DENY_NONE: u32 = 0x00000000;
+pub const OPEN4_SHARE_DENY_READ: u32 = 0x00000001;
+pub const OPEN4_SHARE_DENY_WRITE: u32 = 0x00000002;
+pub const OPEN4_SHARE_DENY_BOTH: u32 = 0x00000003;
+/*
+ * Various definitions for OPEN
+ */
+#[repr(i32)]
+#[derive(Clone, Copy, Debug)]
+pub enum createmode4 {
+	UNCHECKED4 = 0,
+	GUARDED4 = 1,
+	EXCLUSIVE4 = 2,
+}
+
+#[derive(Clone, Debug)]
+pub enum createhow4 {
+	UNCHECKED4(fattr4),
+	GUARDED4(fattr4),
+	EXCLUSIVE4(verifier4),
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(i32)]
+pub enum opentype4 {
+	OPEN4_NOCREATE = 0,
+	OPEN4_CREATE = 1,
+}
+
+#[derive(Clone, Debug)]
+pub enum openflag4 {
+	OPEN4_CREATE(createhow4),
+	Default,
+}
+
+/* Next definitions used for OPEN delegation */
+#[derive(Clone, Copy, Debug)]
+#[repr(i32)]
+pub enum limit_by4 {
+	NFS_LIMIT_SIZE = 1,
+	NFS_LIMIT_BLOCKS = 2, /* others as needed */
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct nfs_modified_limit4 {
+	num_blocks: uint32_t,
+	bytes_per_block: uint32_t,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum nfs_space_limit4 {
+	/* limit specified as file size */
+	NFS_LIMIT_SIZE(uint64_t),
+	/* limit specified by number of blocks */
+	NFS_LIMIT_BLOCKS(nfs_modified_limit4),
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(i32)]
+pub enum open_delegation_type4 {
+	OPEN_DELEGATE_NONE = 0,
+	OPEN_DELEGATE_READ = 1,
+	OPEN_DELEGATE_WRITE = 2,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(i32)]
+pub enum open_claim_type4 {
+	CLAIM_NULL = 0,
+	CLAIM_PREVIOUS = 1,
+	CLAIM_DELEGATE_CUR = 2,
+	CLAIM_DELEGATE_PREV = 3,
+}
+
+#[derive(Clone, Debug)]
+pub struct open_claim_delegate_cur4 {
+	pub delegate_stateid: stateid4,
+	pub file: component4,
+}
+
+#[derive(Clone, Debug)]
+pub enum open_claim4 {
+	/*
+		* No special rights to file.
+		* Ordinary OPEN of the specified file.
+		*/
+	/* CURRENT_FH: directory */
+	CLAIM_NULL(component4),
+
+	/*
+		* Right to the file established by an
+		* open previous to server reboot.  File
+		* identified by filehandle obtained at
+		* that time rather than by name.
+		*/
+	/* CURRENT_FH: file being reclaimed */
+	CLAIM_PREVIOUS(open_delegation_type4),
+
+	/*
+		* Right to file based on a delegation
+		* granted by the server.  File is
+		* specified by name.
+		*/
+	/* CURRENT_FH: directory */
+	CLAIM_DELEGATE_CUR(open_claim_delegate_cur4),
+
+	/*
+		* Right to file based on a delegation
+		* granted to a previous boot instance
+		* of the client.  File is specified by name.
+		*/
+	/* CURRENT_FH: directory */
+	CLAIM_DELEGATE_PREV(component4),
+}
+
+/*
+ * OPEN: Open a file, potentially receiving an open delegation
+ */
+#[derive(Clone, Debug)]
+pub struct OPEN4args {
+	pub seqid: seqid4,
+	pub share_access: uint32_t,
+	pub share_deny: uint32_t,
+	pub owner: open_owner4,
+	pub openhow: openflag4,
+	pub claim: open_claim4,
+}
+
+#[derive(Clone, Debug)]
+pub struct open_read_delegation4 {
+	/// Stateid for delegation
+	pub stateid: stateid4,
+
+	/// Pre-recalled flag for delegations obtainedby reclaim (CLAIM_PREVIOUS).
+	pub recall: bool,
+
+	/// Defines users who don't need an ACCESS call to open for read.
+	pub permissions: nfsace4,
+}
+
+#[derive(Clone, Debug)]
+pub struct open_write_delegation4 {
+	/// Stateid for delegation
+	pub stateid: stateid4,
+
+	/// Pre-recalled flag for delegations obtained by reclaim (CLAIM_PREVIOUS).
+	pub recall: bool,
+
+	/// Defines condition that the client must check to determine whether the file needs to be flushed to the server on close.
+	pub space_limit: nfs_space_limit4,
+
+	/// Defines users who don't need an ACCESS call as part of a delegated open.
+	pub permissions: nfsace4,
+}
+
+#[derive(Clone, Debug)]
+pub enum open_delegation4 {
+	OPEN_DELEGATE_NONE,
+	OPEN_DELEGATE_READ(open_read_delegation4),
+	OPEN_DELEGATE_WRITE(open_write_delegation4),
+}
+
+/*
+ * Result flags
+ */
+
+/* Client must confirm open */
+pub const OPEN4_RESULT_CONFIRM: u32 = 0x00000002;
+
+/* Type of file locking behavior at the server */
+pub const OPEN4_RESULT_LOCKTYPE_POSIX: u32 = 0x00000004;
+
+#[derive(Clone, Debug)]
+pub struct OPEN4resok {
+	pub stateid: stateid4,   /* Stateid for open */
+	pub cinfo: change_info4, /* Directory change info */
+	pub rflags: uint32_t,    /* Result flags */
+	pub attrset: bitmap4,    /* attribute set for create */
+	pub delegation: open_delegation4, /* Info on any open
+							 delegation */
+}
+
+#[derive(Clone, Debug)]
+pub enum OPEN4res {
+	/* CURRENT_FH: opened file */
+	NFS4_OK(OPEN4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Debug, Clone)]
+pub struct PUTFH4args {
+	pub object: nfs_fh4,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PUTFH4res {
+	/* CURRENT_FH: */
+	pub status: nfsstat4,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PUTROOTFH4res {
+	/* CURRENT_FH: root fh */
+	pub status: nfsstat4,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct READ4args {
+	/* CURRENT_FH: file */
+	pub stateid: stateid4,
+	pub offset: offset4,
+	pub count: count4,
+}
+
+#[derive(Debug, Clone)]
+pub struct READ4resok {
+	pub eof: bool,
+	pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub enum READ4res {
+	NFS4_OK(READ4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Debug, Clone)]
+pub struct READDIR4args {
+	/* CURRENT_FH: directory */
+	pub cookie: nfs_cookie4,
+	pub cookieverf: verifier4,
+	pub dircount: count4,
+	pub maxcount: count4,
+	pub attr_request: bitmap4,
+}
+
+#[derive(Debug, Clone)]
+pub struct entry4 {
+	pub cookie: nfs_cookie4,
+	pub name: component4,
+	pub attrs: fattr4,
+}
+
+#[derive(Debug, Clone)]
+pub struct dirlist4 {
+	pub entries: Vec<entry4>,
+	pub eof: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct READDIR4resok {
+	pub cookieverf: verifier4,
+	pub reply: dirlist4,
+}
+
+#[derive(Debug, Clone)]
+pub enum READDIR4res {
+	NFS4_OK(READDIR4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Debug, Clone)]
+pub struct READLINK4resok {
+	pub link: linktext4,
+}
+
+#[derive(Debug, Clone)]
+pub enum READLINK4res {
+	NFS4_OK(READLINK4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RENEW4args {
+	pub clientid: clientid4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RENEW4res {
+	pub status: nfsstat4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RESTOREFH4res {
+	/* CURRENT_FH: value of saved fh */
+	pub status: nfsstat4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SAVEFH4res {
+	/* SAVED_FH: value of current fh */
+	pub status: nfsstat4,
+}
+
+#[derive(Clone, Debug)]
+pub struct SECINFO4args {
+	/* CURRENT_FH: directory */
+	pub name: component4,
+}
+
+/*
+ * From RFC 2203
+ */
+#[derive(Clone, Copy, Debug)]
+#[repr(i32)]
+pub enum rpc_gss_svc_t {
+	RPC_GSS_SVC_NONE = 1,
+	RPC_GSS_SVC_INTEGRITY = 2,
+	RPC_GSS_SVC_PRIVACY = 3,
+}
+
+#[derive(Clone, Debug)]
+pub struct rpcsec_gss_info {
+	pub oid: sec_oid4,
+	pub qop: qop4,
+	pub service: rpc_gss_svc_t,
+}
+
+/* RPCSEC_GSS has a value of '6'.  See RFC 2203 */
+#[derive(Clone, Debug)]
+pub enum secinfo4 {
+	RPCSEC_GSS(rpcsec_gss_info),
+	Default(u32),
+}
+
+pub type SECINFO4resok = Vec<secinfo4>;
+
+#[derive(Clone, Debug)]
+pub enum SECINFO4res {
+	NFS4_OK(SECINFO4resok),
+	Default(nfsstat4),
+}
+
+#[derive(Clone, Debug)]
+pub struct SETCLIENTID4args {
+	pub client: nfs_client_id4,
+	pub callback: cb_client4,
+	pub callback_ident: uint32_t,
+}
+
+#[derive(Clone, Debug)]
+pub struct SETCLIENTID4resok {
+	pub clientid: clientid4,
+	pub setclientid_confirm: verifier4,
+}
+
+#[derive(Clone, Debug)]
+pub enum SETCLIENTID4res {
+	NFS4_OK(SETCLIENTID4resok),
+	NFS4ERR_CLID_INUSE(clientaddr4),
+	Default(nfsstat4),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SETCLIENTID_CONFIRM4args {
+	pub clientid: clientid4,
+	pub setclientid_confirm: verifier4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SETCLIENTID_CONFIRM4res {
+	pub status: nfsstat4,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ILLEGAL4res {
+	pub status: nfsstat4,
+}
+
+#[derive(Clone, Debug)]
+pub struct COMPOUND4args {
+	pub tag: utf8str_cs,
+	pub minorversion: uint32_t,
+	pub argarray: Vec<nfs_argop4>,
+}
+
+#[derive(Clone, Debug)]
+pub struct COMPOUND4res {
+	pub status: nfsstat4,
+	pub tag: utf8str_cs,
+	pub resarray: Vec<nfs_resop4>,
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(i32)]
+pub enum nfs_opnum4 {
+	OP_ACCESS = 3,
+	OP_CLOSE = 4,
+	OP_COMMIT = 5,
+	OP_CREATE = 6,
+	OP_DELEGPURGE = 7,
+	OP_DELEGRETURN = 8,
+	OP_GETATTR = 9,
+	OP_GETFH = 10,
+	OP_LINK = 11,
+	OP_LOCK = 12,
+	OP_LOCKT = 13,
+	OP_LOCKU = 14,
+	OP_LOOKUP = 15,
+	OP_LOOKUPP = 16,
+	OP_NVERIFY = 17,
+	OP_OPEN = 18,
+	OP_OPENATTR = 19,
+	OP_OPEN_CONFIRM = 20,
+	OP_OPEN_DOWNGRADE = 21,
+	OP_PUTFH = 22,
+	OP_PUTPUBFH = 23,
+	OP_PUTROOTFH = 24,
+	OP_READ = 25,
+	OP_READDIR = 26,
+	OP_READLINK = 27,
+	OP_REMOVE = 28,
+	OP_RENAME = 29,
+	OP_RENEW = 30,
+	OP_RESTOREFH = 31,
+	OP_SAVEFH = 32,
+	OP_SECINFO = 33,
+	OP_SETATTR = 34,
+	OP_SETCLIENTID = 35,
+	OP_SETCLIENTID_CONFIRM = 36,
+	OP_VERIFY = 37,
+	OP_WRITE = 38,
+	OP_RELEASE_LOCKOWNER = 39,
+	OP_ILLEGAL = 10044,
+}
+
+#[derive(Clone, Debug)]
+pub enum nfs_argop4 {
+	OP_ACCESS(ACCESS4args),
+	OP_CLOSE(CLOSE4args),
+	// OP_COMMIT(COMMIT4args),
+	// OP_CREATE(CREATE4args),
+	// OP_DELEGPURGE(DELEGPURGE4args),
+	// OP_DELEGRETURN(DELEGRETURN4args),
+	OP_GETATTR(GETATTR4args),
+	OP_GETFH,
+	// OP_LINK(LINK4args),
+	// OP_LOCK(LOCK4args),
+	// OP_LOCKT(LOCKT4args),
+	// OP_LOCKU(LOCKU4args),
+	OP_LOOKUP(LOOKUP4args),
+	// OP_LOOKUPP,
+	// OP_NVERIFY(NVERIFY4args),
+	OP_OPEN(OPEN4args),
+	// OP_OPENATTR(OPENATTR4args),
+	// OP_OPEN_CONFIRM(OPEN_CONFIRM4args),
+	// OP_OPEN_DOWNGRADE(OPEN_DOWNGRADE4args),
+	OP_PUTFH(PUTFH4args),
+	// OP_PUTPUBFH,
+	OP_PUTROOTFH,
+	OP_READ(READ4args),
+	OP_READDIR(READDIR4args),
+	OP_READLINK,
+	// OP_REMOVE(REMOVE4args),
+	// OP_RENAME(RENAME4args),
+	OP_RENEW(RENEW4args),
+	OP_RESTOREFH,
+	OP_SAVEFH,
+	OP_SECINFO(SECINFO4args),
+	// OP_SETATTR(SETATTR4args),
+	OP_SETCLIENTID(SETCLIENTID4args),
+	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4args),
+	// OP_VERIFY(VERIFY4args),
+	// OP_WRITE(WRITE4args),
+	// OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4args),
+	OP_ILLEGAL,
+	Unimplemented(nfs_opnum4),
+}
+
+#[derive(Clone, Debug)]
+pub enum nfs_resop4 {
+	OP_ACCESS(ACCESS4res),
+	OP_CLOSE(CLOSE4res),
+	// OP_COMMIT (COMMIT4res),
+	// OP_CREATE (CREATE4res),
+	// OP_DELEGPURGE (DELEGPURGE4res),
+	// OP_DELEGRETURN (DELEGRETURN4res),
+	OP_GETATTR(GETATTR4res),
+	OP_GETFH(GETFH4res),
+	// OP_LINK (LINK4res),
+	// OP_LOCK (LOCK4res),
+	// OP_LOCKT (LOCKT4res),
+	// OP_LOCKU (LOCKU4res),
+	OP_LOOKUP(LOOKUP4res),
+	// OP_LOOKUPP (LOOKUPP4res),
+	// OP_NVERIFY (NVERIFY4res),
+	OP_OPEN(OPEN4res),
+	// OP_OPENATTR (OPENATTR4res),
+	// OP_OPEN_CONFIRM (OPEN_CONFIRM4res),
+	// OP_OPEN_DOWNGRADE (OPEN_DOWNGRADE4res),
+	OP_PUTFH(PUTFH4res),
+	// OP_PUTPUBFH (PUTPUBFH4res),
+	OP_PUTROOTFH(PUTROOTFH4res),
+	OP_READ(READ4res),
+	OP_READDIR(READDIR4res),
+	OP_READLINK(READLINK4res),
+	// OP_REMOVE (REMOVE4res),
+	// OP_RENAME (RENAME4res),
+	OP_RENEW(RENEW4res),
+	OP_RESTOREFH(RESTOREFH4res),
+	OP_SAVEFH(SAVEFH4res),
+	OP_SECINFO(SECINFO4res),
+	// OP_SETATTR (SETATTR4res),
+	OP_SETCLIENTID(SETCLIENTID4res),
+	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res),
+	// OP_VERIFY (VERIFY4res),
+	// OP_WRITE (WRITE4res),
+	// OP_RELEASE_LOCKOWNER (RELEASE_LOCKOWNER4res),
+	OP_ILLEGAL(ILLEGAL4res),
+	Unknown(nfs_opnum4),
+}
+
+impl xdr::FromXdr for nfs_ftype4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let tag = decoder.decode_int()?;
+		let ftype = match tag {
+			1 => nfs_ftype4::NF4REG,
+			2 => nfs_ftype4::NF4DIR,
+			3 => nfs_ftype4::NF4BLK,
+			4 => nfs_ftype4::NF4CHR,
+			5 => nfs_ftype4::NF4LNK,
+			6 => nfs_ftype4::NF4SOCK,
+			7 => nfs_ftype4::NF4FIFO,
+			8 => nfs_ftype4::NF4ATTRDIR,
+			9 => nfs_ftype4::NF4NAMEDATTR,
+			_ => return Err(xdr::Error::Custom("Expected a valid nfs_ftype4.".into())),
+		};
+		Ok(ftype)
+	}
+}
+
+impl xdr::ToXdr for nfs_ftype4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			nfs_ftype4::NF4REG => encoder.encode_int(1)?,
+			nfs_ftype4::NF4DIR => encoder.encode_int(2)?,
+			nfs_ftype4::NF4BLK => encoder.encode_int(3)?,
+			nfs_ftype4::NF4CHR => encoder.encode_int(4)?,
+			nfs_ftype4::NF4LNK => encoder.encode_int(5)?,
+			nfs_ftype4::NF4SOCK => encoder.encode_int(6)?,
+			nfs_ftype4::NF4FIFO => encoder.encode_int(7)?,
+			nfs_ftype4::NF4ATTRDIR => encoder.encode_int(8)?,
+			nfs_ftype4::NF4NAMEDATTR => encoder.encode_int(9)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::ToXdr for nfsstat4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		let int = match self {
+			nfsstat4::NFS4_OK => 0,
+			nfsstat4::NFS4ERR_PERM => 1,
+			nfsstat4::NFS4ERR_NOENT => 2,
+			nfsstat4::NFS4ERR_IO => 5,
+			nfsstat4::NFS4ERR_NXIO => 6,
+			nfsstat4::NFS4ERR_ACCESS => 13,
+			nfsstat4::NFS4ERR_EXIST => 17,
+			nfsstat4::NFS4ERR_XDEV => 18,
+			nfsstat4::NFS4ERR_NOTDIR => 20,
+			nfsstat4::NFS4ERR_ISDIR => 21,
+			nfsstat4::NFS4ERR_INVAL => 22,
+			nfsstat4::NFS4ERR_FBIG => 27,
+			nfsstat4::NFS4ERR_NOSPC => 28,
+			nfsstat4::NFS4ERR_ROFS => 30,
+			nfsstat4::NFS4ERR_MLINK => 31,
+			nfsstat4::NFS4ERR_NAMETOOLONG => 63,
+			nfsstat4::NFS4ERR_NOTEMPTY => 66,
+			nfsstat4::NFS4ERR_DQUOT => 69,
+			nfsstat4::NFS4ERR_STALE => 70,
+			nfsstat4::NFS4ERR_BADHANDLE => 10001,
+			nfsstat4::NFS4ERR_BAD_COOKIE => 10003,
+			nfsstat4::NFS4ERR_NOTSUPP => 10004,
+			nfsstat4::NFS4ERR_TOOSMALL => 10005,
+			nfsstat4::NFS4ERR_SERVERFAULT => 10006,
+			nfsstat4::NFS4ERR_BADTYPE => 10007,
+			nfsstat4::NFS4ERR_DELAY => 10008,
+			nfsstat4::NFS4ERR_SAME => 10009,
+			nfsstat4::NFS4ERR_DENIED => 10010,
+			nfsstat4::NFS4ERR_EXPIRED => 10011,
+			nfsstat4::NFS4ERR_LOCKED => 10012,
+			nfsstat4::NFS4ERR_GRACE => 10013,
+			nfsstat4::NFS4ERR_FHEXPIRED => 10014,
+			nfsstat4::NFS4ERR_SHARE_DENIED => 10015,
+			nfsstat4::NFS4ERR_WRONGSEC => 10016,
+			nfsstat4::NFS4ERR_CLID_INUSE => 10017,
+			nfsstat4::NFS4ERR_RESOURCE => 10018,
+			nfsstat4::NFS4ERR_MOVED => 10019,
+			nfsstat4::NFS4ERR_NOFILEHANDLE => 10020,
+			nfsstat4::NFS4ERR_MINOR_VERS_MISMATCH => 10021,
+			nfsstat4::NFS4ERR_STALE_CLIENTID => 10022,
+			nfsstat4::NFS4ERR_STALE_STATEID => 10023,
+			nfsstat4::NFS4ERR_OLD_STATEID => 10024,
+			nfsstat4::NFS4ERR_BAD_STATEID => 10025,
+			nfsstat4::NFS4ERR_BAD_SEQID => 10026,
+			nfsstat4::NFS4ERR_NOT_SAME => 10027,
+			nfsstat4::NFS4ERR_LOCK_RANGE => 10028,
+			nfsstat4::NFS4ERR_SYMLINK => 10029,
+			nfsstat4::NFS4ERR_RESTOREFH => 10030,
+			nfsstat4::NFS4ERR_LEASE_MOVED => 10031,
+			nfsstat4::NFS4ERR_ATTRNOTSUPP => 10032,
+			nfsstat4::NFS4ERR_NO_GRACE => 10033,
+			nfsstat4::NFS4ERR_RECLAIM_BAD => 10034,
+			nfsstat4::NFS4ERR_RECLAIM_CONFLICT => 10035,
+			nfsstat4::NFS4ERR_BADXDR => 10036,
+			nfsstat4::NFS4ERR_LOCKS_HELD => 10037,
+			nfsstat4::NFS4ERR_OPENMODE => 10038,
+			nfsstat4::NFS4ERR_BADOWNER => 10039,
+			nfsstat4::NFS4ERR_BADCHAR => 10040,
+			nfsstat4::NFS4ERR_BADNAME => 10041,
+			nfsstat4::NFS4ERR_BAD_RANGE => 10042,
+			nfsstat4::NFS4ERR_LOCK_NOTSUPP => 10043,
+			nfsstat4::NFS4ERR_OP_ILLEGAL => 10044,
+			nfsstat4::NFS4ERR_DEADLOCK => 10045,
+			nfsstat4::NFS4ERR_FILE_OPEN => 10046,
+			nfsstat4::NFS4ERR_ADMIN_REVOKED => 10047,
+			nfsstat4::NFS4ERR_CB_PATH_DOWN => 10048,
+		};
+		encoder.encode_int(int)
+	}
+}
+
+impl xdr::FromXdr for stateid4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let seqid = decoder.decode()?;
 		let other = decoder.decode_n()?;
@@ -144,73 +1241,28 @@ impl xdr::FromXdr for StateId {
 	}
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum OpenDelegation {
-	None,
-}
+// impl xdr::ToXdr for nfs_fh4 {
+// 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+// 	where
+// 		W: std::io::Write,
+// 	{
+// 		encoder.encode_opaque(&self.node.to_be_bytes())?;
+// 		Ok(())
+// 	}
+// }
 
-// https://datatracker.ietf.org/doc/html/rfc7530#section-16.16.2
-// Note: there is an excessive amount of configuration data to support open with O_CREAT. We rely on the fact the server is allowed to reject this, however the rest of the Arg vec will be deserialized as garbage as a result.
-#[derive(Debug, Clone)]
-pub enum OpenFlags {
-	Create,
-	None,
-}
+// impl xdr::FromXdr for nfs_fh4 {
+// 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+// 		let decoded = decoder.decode_opaque()?;
+// 		if decoded.len() != 8 {
+// 			return Err(xdr::Error::Custom("File handle size mismatch.".into()));
+// 		}
+// 		let fh = u64::from_be_bytes(decoded[0..8].try_into().unwrap());
+// 		Ok(fh)
+// 	}
+// }
 
-#[derive(Debug, Clone)]
-pub enum OpenClaim {
-	/// CLAIM_NULL: No special rights. Argument is the file name.
-	Null(String),
-
-	/// CLAIM_PREVIOUS: Right to the file established by an open previous to server reboot. File identified by filehandle obtained previously rather than by name.
-	Previous(OpenDelegationType),
-
-	/// CLAIM_DELEGATE_CUR: Right to file based on a delegation granted by the server. File is specified by name.
-	DelegateCur {
-		delegate_stateid: StateId,
-		file: String,
-		// todo: open claim delegate
-	},
-
-	/// CLAIM_DELEGATE_PREV: Right to a file based on a delegation granted to a previous boot instance of the client. File is specified by name.
-	DelegatePrev(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum OpenDelegationType {
-	None,
-	Read,
-	Write,
-}
-
-#[derive(Debug, Clone)]
-pub struct OpenOwner {
-	pub clientid: u64,
-	pub opaque: Vec<u8>,
-}
-
-impl xdr::ToXdr for FileHandle {
-	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-	where
-		W: std::io::Write,
-	{
-		encoder.encode_opaque(&self.node.to_be_bytes())?;
-		Ok(())
-	}
-}
-
-impl xdr::FromXdr for FileHandle {
-	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let decoded = decoder.decode_opaque()?;
-		if decoded.len() != 8 {
-			return Err(xdr::Error::Custom("File handle size mismatch.".into()));
-		}
-		let node = u64::from_be_bytes(decoded[0..8].try_into().unwrap());
-		Ok(Self { node })
-	}
-}
-
-impl xdr::ToXdr for ChangeInfo {
+impl xdr::ToXdr for change_info4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -222,7 +1274,7 @@ impl xdr::ToXdr for ChangeInfo {
 	}
 }
 
-impl xdr::ToXdr for StateId {
+impl xdr::ToXdr for stateid4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -233,78 +1285,82 @@ impl xdr::ToXdr for StateId {
 	}
 }
 
-impl xdr::ToXdr for OpenDelegation {
+impl xdr::ToXdr for open_delegation4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
 		match self {
-			Self::None => encoder.encode_int(0),
+			Self::OPEN_DELEGATE_NONE => encoder.encode_int(0),
+			_ => unimplemented!(),
 		}
 	}
 }
 
-impl xdr::ToXdr for FileAttr {
+impl xdr::ToXdr for fattr4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
-		encoder.encode(&self.attr_mask)?;
+		encoder.encode(&self.attrmask)?;
 		encoder.encode_opaque(&self.attr_vals)?;
 		Ok(())
 	}
 }
 
-impl xdr::FromXdr for FileAttr {
+impl xdr::FromXdr for fattr4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let attr_mask = decoder.decode()?;
+		let attrmask = decoder.decode()?;
 		let attr_vals = decoder.decode_opaque()?.to_owned();
 		Ok(Self {
-			attr_mask,
+			attrmask,
 			attr_vals,
 		})
 	}
 }
 
-impl xdr::ToXdr for CallbackClient {
+impl xdr::ToXdr for cb_client4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
-		encoder.encode_uint(self.program)?;
-		encoder.encode(&self.location)?;
+		encoder.encode_uint(self.cb_program)?;
+		encoder.encode(&self.cb_location)?;
 		Ok(())
 	}
 }
 
-impl xdr::FromXdr for CallbackClient {
+impl xdr::FromXdr for cb_client4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let program = decoder.decode_uint()?;
-		let location = decoder.decode()?;
-		Ok(Self { program, location })
+		let cb_program = decoder.decode_uint()?;
+		let cb_location = decoder.decode()?;
+		Ok(Self {
+			cb_program,
+			cb_location,
+		})
 	}
 }
 
-impl xdr::ToXdr for ClientAddr {
+impl xdr::ToXdr for clientaddr4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
-		encoder.encode_str(&self.netid)?;
-		encoder.encode_str(&self.addr)?;
+		encoder.encode_str(&self.r_netid)?;
+		encoder.encode_str(&self.r_addr)?;
 		Ok(())
 	}
 }
 
-impl xdr::FromXdr for ClientAddr {
+impl xdr::FromXdr for clientaddr4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let netid = decoder.decode_str()?.to_owned();
-		let addr = decoder.decode_str()?.to_owned();
-		Ok(Self { netid, addr })
+		let r_netid = decoder.decode_str()?.to_owned();
+		let r_addr = decoder.decode_str()?.to_owned();
+		Ok(Self { r_netid, r_addr })
 	}
 }
 
-impl xdr::ToXdr for FsId {
+impl xdr::ToXdr for fsid4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -315,35 +1371,20 @@ impl xdr::ToXdr for FsId {
 	}
 }
 
-impl xdr::FromXdr for Bitmap {
-	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		Ok(Self(decoder.decode()?))
-	}
-}
-
-impl xdr::ToXdr for Bitmap {
-	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-	where
-		W: std::io::Write,
-	{
-		encoder.encode(&self.0)
-	}
-}
-
-impl xdr::ToXdr for Ace {
+impl xdr::ToXdr for nfsace4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
 		encoder.encode(&self.type_)?;
 		encoder.encode(&self.flag)?;
-		encoder.encode(&self.mask)?;
+		encoder.encode(&self.access_mask)?;
 		encoder.encode(&self.who)?;
 		Ok(())
 	}
 }
 
-impl xdr::ToXdr for FsLocations {
+impl xdr::ToXdr for fs_locations4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -354,7 +1395,7 @@ impl xdr::ToXdr for FsLocations {
 	}
 }
 
-impl xdr::ToXdr for Location {
+impl xdr::ToXdr for fs_location4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -365,7 +1406,7 @@ impl xdr::ToXdr for Location {
 	}
 }
 
-impl xdr::ToXdr for SpecData {
+impl xdr::ToXdr for specdata4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -376,58 +1417,68 @@ impl xdr::ToXdr for SpecData {
 	}
 }
 
-impl xdr::ToXdr for Time {
+impl xdr::ToXdr for nfstime4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
 	{
 		encoder.encode(&self.seconds)?;
-		encoder.encode(&self.nanos)?;
+		encoder.encode(&self.nseconds)?;
 		Ok(())
 	}
 }
 
-impl xdr::FromXdr for Time {
+impl xdr::FromXdr for nfstime4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let seconds = decoder.decode()?;
-		let nanos = decoder.decode()?;
-		Ok(Self { seconds, nanos })
+		let nseconds = decoder.decode()?;
+		Ok(Self { seconds, nseconds })
 	}
 }
 
-impl xdr::FromXdr for OpenOwner {
+impl xdr::FromXdr for open_owner4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let clientid = decoder.decode()?;
 		let len = decoder.decode_uint()?;
 		let bytes = decoder.decode_bytes(len.to_usize().unwrap())?;
-		let opaque = bytes.to_owned();
-		Ok(Self { clientid, opaque })
+		let owner = bytes.to_owned();
+		Ok(Self { clientid, owner })
 	}
 }
 
-impl xdr::FromXdr for OpenFlags {
+impl xdr::FromXdr for createhow4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		match decoder.decode_int()? {
-			0 => Ok(Self::None),
-			1 => Ok(Self::Create),
+		let type_ = decoder.decode_int()?;
+		match type_ {
+			0 => Ok(Self::UNCHECKED4(decoder.decode()?)),
+			1 => Ok(Self::GUARDED4(decoder.decode()?)),
+			2 => Ok(Self::EXCLUSIVE4(decoder.decode_n()?)),
 			_ => Err(xdr::Error::Custom(
-				"Expected a flag openflags4 variant.".into(),
+				"Expected a valid createhow4 value.".into(),
 			)),
 		}
 	}
 }
 
-impl xdr::FromXdr for OpenClaim {
+impl xdr::FromXdr for openflag4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let type_ = decoder.decode_int()?;
+		match type_ {
+			0 => Ok(Self::Default),
+			1 => Ok(Self::OPEN4_CREATE(decoder.decode()?)),
+			_ => Err(xdr::Error::Custom("Expected a valid opentype4.".into())),
+		}
+	}
+}
+
+impl xdr::FromXdr for open_claim4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
-			0 => Ok(Self::Null(decoder.decode()?)),
-			1 => Ok(Self::Previous(decoder.decode()?)),
-			2 => Ok(Self::DelegateCur {
-				delegate_stateid: decoder.decode()?,
-				file: decoder.decode()?,
-			}),
-			3 => Ok(Self::DelegatePrev(decoder.decode()?)),
+			0 => Ok(Self::CLAIM_NULL(decoder.decode()?)),
+			1 => Ok(Self::CLAIM_DELEGATE_PREV(decoder.decode()?)),
+			2 => Ok(Self::CLAIM_DELEGATE_CUR(decoder.decode()?)),
+			3 => Ok(Self::CLAIM_PREVIOUS(decoder.decode()?)),
 			_ => Err(xdr::Error::Custom(
 				"Expected a claim delegation type.".into(),
 			)),
@@ -435,13 +1486,13 @@ impl xdr::FromXdr for OpenClaim {
 	}
 }
 
-impl xdr::FromXdr for OpenDelegationType {
+impl xdr::FromXdr for open_delegation_type4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let tag = decoder.decode_int()?;
 		match tag {
-			0 => Ok(Self::None),
-			1 => Ok(Self::Read),
-			2 => Ok(Self::Write),
+			0 => Ok(Self::OPEN_DELEGATE_NONE),
+			1 => Ok(Self::OPEN_DELEGATE_READ),
+			2 => Ok(Self::OPEN_DELEGATE_WRITE),
 			_ => Err(xdr::Error::Custom(
 				"Expected an open delegation type.".into(),
 			)),
@@ -449,7 +1500,440 @@ impl xdr::FromXdr for OpenDelegationType {
 	}
 }
 
-impl xdr::ToXdr for Entry {
+impl xdr::FromXdr for open_claim_delegate_cur4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let delegate_stateid = decoder.decode()?;
+		let file = decoder.decode()?;
+		Ok(Self {
+			delegate_stateid,
+			file,
+		})
+	}
+}
+
+impl xdr::FromXdr for ACCESS4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let access = decoder.decode_uint()?;
+		Ok(Self { access })
+	}
+}
+
+impl xdr::ToXdr for ACCESS4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::NFS4_OK(resop) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(&resop.supported)?;
+				encoder.encode(&resop.access)?;
+			},
+			Self::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for CLOSE4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let seqid = decoder.decode()?;
+		let open_stateid = decoder.decode()?;
+		Ok(Self {
+			seqid,
+			open_stateid,
+		})
+	}
+}
+
+impl xdr::ToXdr for CLOSE4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			CLOSE4res::NFS4_OK(resop) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(resop)?;
+			},
+			CLOSE4res::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for GETATTR4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let attr_request = decoder.decode()?;
+		Ok(Self { attr_request })
+	}
+}
+
+impl xdr::ToXdr for GETATTR4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::NFS4_OK(resok) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(&resok.obj_attributes)?;
+			},
+			Self::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::ToXdr for GETFH4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::NFS4_OK(resok) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(&resok.object)?;
+			},
+			Self::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for PUTFH4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let object = decoder.decode()?;
+		Ok(Self { object })
+	}
+}
+
+impl xdr::ToXdr for PUTFH4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::ToXdr for PUTROOTFH4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::FromXdr for LOOKUP4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let objname = decoder.decode()?;
+		Ok(Self { objname })
+	}
+}
+
+impl xdr::ToXdr for LOOKUP4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::FromXdr for OPEN4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let seqid = decoder.decode()?;
+		let share_access = decoder.decode()?;
+		let share_deny = decoder.decode()?;
+		let owner = decoder.decode()?;
+		let openhow = decoder.decode()?;
+		let claim = decoder.decode()?;
+		Ok(Self {
+			seqid,
+			share_access,
+			share_deny,
+			owner,
+			openhow,
+			claim,
+		})
+	}
+}
+
+impl xdr::ToXdr for OPEN4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			OPEN4res::NFS4_OK(resop) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(&resop.stateid)?;
+				encoder.encode(&resop.cinfo)?;
+				encoder.encode(&resop.rflags)?;
+				encoder.encode(&resop.attrset)?;
+				encoder.encode(&resop.delegation)?;
+			},
+			OPEN4res::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for READ4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let stateid = decoder.decode()?;
+		let offset = decoder.decode()?;
+		let count = decoder.decode()?;
+		Ok(Self {
+			stateid,
+			offset,
+			count,
+		})
+	}
+}
+
+impl xdr::ToXdr for READ4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::NFS4_OK(resop) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(&resop.eof)?;
+				encoder.encode(&resop.data)?;
+			},
+			Self::Default(error) => encoder.encode(error)?,
+		};
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for READDIR4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let cookie = decoder.decode()?;
+		let cookieverf = decoder.decode_n()?;
+		let dircount = decoder.decode()?;
+		let maxcount = decoder.decode()?;
+		let attr_request = decoder.decode()?;
+		Ok(Self {
+			cookie,
+			cookieverf,
+			dircount,
+			maxcount,
+			attr_request,
+		})
+	}
+}
+
+impl xdr::ToXdr for READDIR4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			READDIR4res::NFS4_OK(resop) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode_n(resop.cookieverf)?;
+				for entry in &resop.reply.entries {
+					encoder.encode_bool(true)?;
+					encoder.encode(entry)?;
+				}
+				encoder.encode_bool(false)?;
+				encoder.encode_bool(resop.reply.eof)?;
+			},
+			Self::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::ToXdr for READLINK4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::NFS4_OK(resok) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(&resok.link)?;
+			},
+			Self::Default(error) => encoder.encode(&error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for RENEW4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let clientid = decoder.decode()?;
+		Ok(Self { clientid })
+	}
+}
+
+impl xdr::ToXdr for RENEW4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::ToXdr for RESTOREFH4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::ToXdr for SAVEFH4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::FromXdr for SECINFO4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let name = decoder.decode()?;
+		Ok(Self { name })
+	}
+}
+
+impl xdr::ToXdr for SECINFO4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::NFS4_OK(resok) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(resok)?;
+			},
+			Self::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::ToXdr for secinfo4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::RPCSEC_GSS(gss) => encoder.encode(gss)?,
+			Self::Default(u) => encoder.encode(u)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::ToXdr for rpcsec_gss_info {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.oid)?;
+		encoder.encode(&self.qop)?;
+		encoder.encode(&self.service)?;
+		Ok(())
+	}
+}
+
+impl xdr::ToXdr for rpc_gss_svc_t {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::RPC_GSS_SVC_NONE => encoder.encode_int(1)?,
+			Self::RPC_GSS_SVC_INTEGRITY => encoder.encode_int(2)?,
+			Self::RPC_GSS_SVC_PRIVACY => encoder.encode_int(3)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for nfs_client_id4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let verifier = decoder.decode_n()?;
+		let id = decoder.decode()?;
+		Ok(Self { verifier, id })
+	}
+}
+
+impl xdr::FromXdr for SETCLIENTID4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let client = decoder.decode()?;
+		let callback = decoder.decode()?;
+		let callback_ident = decoder.decode()?;
+		Ok(Self {
+			client,
+			callback,
+			callback_ident,
+		})
+	}
+}
+
+impl xdr::ToXdr for SETCLIENTID4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::NFS4_OK(resok) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(&resok.clientid)?;
+				encoder.encode_n(resok.setclientid_confirm)?;
+			},
+			Self::NFS4ERR_CLID_INUSE(clientaddr) => {
+				encoder.encode(&nfsstat4::NFS4ERR_CLID_INUSE)?;
+				encoder.encode(clientaddr)?;
+			},
+			Self::Default(error) => encoder.encode(error)?,
+		}
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for SETCLIENTID_CONFIRM4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let clientid = decoder.decode()?;
+		let setclientid_confirm = decoder.decode_n()?;
+		Ok(Self {
+			clientid,
+			setclientid_confirm,
+		})
+	}
+}
+
+impl xdr::ToXdr for SETCLIENTID_CONFIRM4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::ToXdr for ILLEGAL4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::ToXdr for entry4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -461,109 +1945,154 @@ impl xdr::ToXdr for Entry {
 	}
 }
 
-// Not explicitly defined in the RFC, but necessary.
-pub const NFS4_VERIFIER_SIZE: usize = 8;
-pub const NFS4_OTHER_SIZE: usize = 12;
-pub const NFS4_FH_SIZE: usize = 128;
+impl xdr::FromXdr for nfs_opnum4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let opnum = match decoder.decode_int()? {
+			3 => Self::OP_ACCESS,
+			4 => Self::OP_CLOSE,
+			5 => Self::OP_COMMIT,
+			6 => Self::OP_CREATE,
+			7 => Self::OP_DELEGPURGE,
+			8 => Self::OP_DELEGRETURN,
+			9 => Self::OP_GETATTR,
+			10 => Self::OP_GETFH,
+			11 => Self::OP_LINK,
+			12 => Self::OP_LOCK,
+			13 => Self::OP_LOCKT,
+			14 => Self::OP_LOCKU,
+			15 => Self::OP_LOOKUP,
+			16 => Self::OP_LOOKUPP,
+			17 => Self::OP_NVERIFY,
+			18 => Self::OP_OPEN,
+			19 => Self::OP_OPENATTR,
+			20 => Self::OP_OPEN_CONFIRM,
+			21 => Self::OP_OPEN_DOWNGRADE,
+			22 => Self::OP_PUTFH,
+			23 => Self::OP_PUTPUBFH,
+			24 => Self::OP_PUTROOTFH,
+			25 => Self::OP_READ,
+			26 => Self::OP_READDIR,
+			27 => Self::OP_READLINK,
+			28 => Self::OP_REMOVE,
+			29 => Self::OP_RENAME,
+			30 => Self::OP_RENEW,
+			31 => Self::OP_RESTOREFH,
+			32 => Self::OP_SAVEFH,
+			33 => Self::OP_SECINFO,
+			34 => Self::OP_SETATTR,
+			35 => Self::OP_SETCLIENTID,
+			36 => Self::OP_SETCLIENTID_CONFIRM,
+			37 => Self::OP_VERIFY,
+			38 => Self::OP_WRITE,
+			39 => Self::OP_RELEASE_LOCKOWNER,
+			_ => Self::OP_ILLEGAL,
+		};
+		Ok(opnum)
+	}
+}
 
-// RPC constants.
-pub const RPC_VERS: u32 = 2;
-pub const NFS_PROG: u32 = 100003;
-pub const NFS_VERS: u32 = 4;
+impl xdr::FromXdr for nfs_argop4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let opnum: nfs_opnum4 = decoder.decode()?;
+		let arg = match opnum {
+			nfs_opnum4::OP_ACCESS => nfs_argop4::OP_ACCESS(decoder.decode()?),
+			nfs_opnum4::OP_CLOSE => nfs_argop4::OP_CLOSE(decoder.decode()?),
+			nfs_opnum4::OP_GETATTR => nfs_argop4::OP_GETATTR(decoder.decode()?),
+			nfs_opnum4::OP_LOOKUP => nfs_argop4::OP_LOOKUP(decoder.decode()?),
+			nfs_opnum4::OP_OPEN => nfs_argop4::OP_OPEN(decoder.decode()?),
+			nfs_opnum4::OP_PUTFH => nfs_argop4::OP_PUTFH(decoder.decode()?),
+			nfs_opnum4::OP_READ => nfs_argop4::OP_READ(decoder.decode()?),
+			nfs_opnum4::OP_READDIR => nfs_argop4::OP_READDIR(decoder.decode()?),
+			nfs_opnum4::OP_READLINK => nfs_argop4::OP_READLINK,
+			nfs_opnum4::OP_PUTROOTFH => nfs_argop4::OP_PUTROOTFH,
+			nfs_opnum4::OP_RENEW => nfs_argop4::OP_RENEW(decoder.decode()?),
+			nfs_opnum4::OP_SECINFO => nfs_argop4::OP_SECINFO(decoder.decode()?),
+			nfs_opnum4::OP_SETCLIENTID => nfs_argop4::OP_SETCLIENTID(decoder.decode()?),
+			nfs_opnum4::OP_SETCLIENTID_CONFIRM => {
+				nfs_argop4::OP_SETCLIENTID_CONFIRM(decoder.decode()?)
+			},
+			nfs_opnum4::OP_COMMIT => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_CREATE => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_DELEGPURGE => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_DELEGRETURN => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_REMOVE => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_RENAME => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_GETFH => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_LINK => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_LOCK => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_LOCKT => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_LOCKU => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_LOOKUPP => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_NVERIFY => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_OPENATTR => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_OPEN_CONFIRM => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_OPEN_DOWNGRADE => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_PUTPUBFH => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_RESTOREFH => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_SAVEFH => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_SETATTR => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_VERIFY => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_WRITE => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_RELEASE_LOCKOWNER => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_ILLEGAL => nfs_argop4::OP_ILLEGAL,
+		};
+		Ok(arg)
+	}
+}
 
-// Procedure codes.
-pub const NFS_PROC_NULL: u32 = 0;
-pub const NFS_PROC_COMPOUND: u32 = 1;
+impl xdr::FromXdr for COMPOUND4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let tag = decoder.decode_opaque()?.to_owned();
+		let minorversion = decoder.decode_uint()?;
+		let argarray = decoder.decode()?;
+		Ok(Self {
+			tag,
+			minorversion,
+			argarray,
+		})
+	}
+}
 
-// Error codes.
-pub const NFS4_OK: i32 = 0;
-pub const NFS4ERR_PERM: i32 = 1;
-pub const NFS4ERR_NOENT: i32 = 2;
-pub const NFS4ERR_IO: i32 = 5;
-pub const NFS4ERR_NXIO: i32 = 6;
-pub const NFS4ERR_ACCESS: i32 = 13;
-pub const NFS4ERR_EXIST: i32 = 17;
-pub const NFS4ERR_XDEV: i32 = 18;
-pub const NFS4ERR_NOTDIR: i32 = 20;
-pub const NFS4ERR_ISDIR: i32 = 21;
-pub const NFS4ERR_INVAL: i32 = 22;
-pub const NFS4ERR_FBIG: i32 = 27;
-pub const NFS4ERR_NOSPC: i32 = 28;
-pub const NFS4ERR_ROFS: i32 = 30;
-pub const NFS4ERR_MLINK: i32 = 31;
-pub const NFS4ERR_NAMETOOLONG: i32 = 63;
-pub const NFS4ERR_NOTEMPTY: i32 = 66;
-pub const NFS4ERR_DQUOT: i32 = 69;
-pub const NFS4ERR_STALE: i32 = 70;
-pub const NFS4ERR_BADHANDLE: i32 = 10001;
-pub const NFS4ERR_BAD_COOKIE: i32 = 10003;
-pub const NFS4ERR_NOTSUPP: i32 = 10004;
-pub const NFS4ERR_TOOSMALL: i32 = 10005;
-pub const NFS4ERR_SERVERFAULT: i32 = 10006;
-pub const NFS4ERR_BADTYPE: i32 = 10007;
-pub const NFS4ERR_DELAY: i32 = 10008;
-pub const NFS4ERR_SAME: i32 = 10009;
-pub const NFS4ERR_DENIED: i32 = 10010;
-pub const NFS4ERR_EXPIRED: i32 = 10011;
-pub const NFS4ERR_LOCKED: i32 = 10012;
-pub const NFS4ERR_GRACE: i32 = 10013;
-pub const NFS4ERR_FHEXPIRED: i32 = 10014;
-pub const NFS4ERR_SHARE_DENIED: i32 = 10015;
-pub const NFS4ERR_WRONGSEC: i32 = 10016;
-pub const NFS4ERR_CLID_INUSE: i32 = 10017;
-pub const NFS4ERR_RESOURCE: i32 = 10018;
-pub const NFS4ERR_MOVED: i32 = 10019;
-pub const NFS4ERR_NOFILEHANDLE: i32 = 10020;
-pub const NFS4ERR_MINOR_VERS_MISMATCH: i32 = 10021;
-pub const NFS4ERR_STALE_CLIENTID: i32 = 10022;
-pub const NFS4ERR_STALE_STATEID: i32 = 10023;
-pub const NFS4ERR_OLD_STATEID: i32 = 10024;
-pub const NFS4ERR_BAD_STATEID: i32 = 10025;
-pub const NFS4ERR_BAD_SEQID: i32 = 10026;
-pub const NFS4ERR_NOT_SAME: i32 = 10027;
-pub const NFS4ERR_LOCK_RANGE: i32 = 10028;
-pub const NFS4ERR_SYMLINK: i32 = 10029;
-pub const NFS4ERR_RESTOREFH: i32 = 10030;
-pub const NFS4ERR_LEASE_MOVED: i32 = 10031;
-pub const NFS4ERR_ATTRNOTSUPP: i32 = 10032;
-pub const NFS4ERR_NO_GRACE: i32 = 10033;
-pub const NFS4ERR_RECLAIM_BAD: i32 = 10034;
-pub const NFS4ERR_RECLAIM_CONFLICT: i32 = 10035;
-pub const NFS4ERR_BADZDR: i32 = 10036;
-pub const NFS4ERR_LOCKS_HELD: i32 = 10037;
-pub const NFS4ERR_OPENMODE: i32 = 10038;
-pub const NFS4ERR_BADOWNER: i32 = 10039;
-pub const NFS4ERR_BADCHAR: i32 = 10040;
-pub const NFS4ERR_BADNAME: i32 = 10041;
-pub const NFS4ERR_BAD_RANGE: i32 = 10042;
-pub const NFS4ERR_LOCK_NOTSUPP: i32 = 10043;
-pub const NFS4ERR_OP_ILLEGAL: i32 = 10044;
-pub const NFS4ERR_DEADLOCK: i32 = 10045;
-pub const NFS4ERR_FILE_OPEN: i32 = 10046;
-pub const NFS4ERR_ADMIN_REVOKED: i32 = 10047;
-pub const NFS4ERR_CB_PATH_DOWN: i32 = 10048;
-pub const NFS4ERR_BADIOMODE: i32 = 10049;
-pub const NFS4ERR_BADLAYOUT: i32 = 10050;
-pub const NFS4ERR_BAD_SESSION_DIGEST: i32 = 10051;
-pub const NFS4ERR_BADSESSION: i32 = 10052;
-pub const NFS4ERR_BADSLOT: i32 = 10053;
-pub const NFS4ERR_COMPLETE_ALREADY: i32 = 10054;
-pub const NFS4ERR_CONN_NOT_BOUND_TO_SESSION: i32 = 10055;
-pub const NFS4ERR_DELEG_ALREADY_WANTED: i32 = 10056;
-pub const NFS4ERR_BACK_CHAN_BUSY: i32 = 10057;
-pub const NFS4ERR_LAYOUTTRYLATER: i32 = 10058;
-pub const NFS4ERR_LAYOUTUNAVAILABLE: i32 = 10059;
-pub const NFS4ERR_NOMATCHING_LAYOUT: i32 = 10060;
-pub const NFS4ERR_RECALLCONFLICT: i32 = 10061;
-pub const NFS4ERR_NOT_ONLY_OP: i32 = 10081;
+impl xdr::ToXdr for nfs_resop4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			nfs_resop4::OP_ACCESS(opaccess4res) => opaccess4res.encode(encoder)?,
+			nfs_resop4::OP_CLOSE(opclose4res) => opclose4res.encode(encoder)?,
+			nfs_resop4::OP_GETATTR(opgetattr4res) => opgetattr4res.encode(encoder)?,
+			nfs_resop4::OP_GETFH(opgetfh4res) => opgetfh4res.encode(encoder)?,
+			nfs_resop4::OP_LOOKUP(oplookup4res) => oplookup4res.encode(encoder)?,
+			nfs_resop4::OP_OPEN(opopen4res) => opopen4res.encode(encoder)?,
+			nfs_resop4::OP_PUTFH(opputfh4res) => opputfh4res.encode(encoder)?,
+			nfs_resop4::OP_PUTROOTFH(opputrootfh4res) => opputrootfh4res.encode(encoder)?,
+			nfs_resop4::OP_READ(opread4res) => opread4res.encode(encoder)?,
+			nfs_resop4::OP_READDIR(opreaddir4res) => opreaddir4res.encode(encoder)?,
+			nfs_resop4::OP_READLINK(opreadlink4res) => opreadlink4res.encode(encoder)?,
+			nfs_resop4::OP_RENEW(oprenew4res) => oprenew4res.encode(encoder)?,
+			nfs_resop4::OP_RESTOREFH(oprestoref4h) => oprestoref4h.encode(encoder)?,
+			nfs_resop4::OP_SAVEFH(opsavefh4) => opsavefh4.encode(encoder)?,
+			nfs_resop4::OP_SECINFO(opsecinfo4res) => opsecinfo4res.encode(encoder)?,
+			nfs_resop4::OP_SETCLIENTID(opsetclientid4res) => opsetclientid4res.encode(encoder)?,
+			nfs_resop4::OP_SETCLIENTID_CONFIRM(opsetclientid_confirm4res) => {
+				opsetclientid_confirm4res.encode(encoder)?
+			},
+			nfs_resop4::OP_ILLEGAL(opillegal4res) => opillegal4res.encode(encoder)?,
+			nfs_resop4::Unknown(_) => nfsstat4::NFS4ERR_NOTSUPP.encode(encoder)?,
+		}
+		Ok(())
+	}
+}
 
-// File types
-pub const NF4REG: i32 = 1;
-pub const NF4DIR: i32 = 2;
-pub const NF4BLK: i32 = 3;
-pub const NF4CHR: i32 = 4;
-pub const NF4LNK: i32 = 5;
-pub const NF4SOCK: i32 = 6;
-pub const NF4FIFO: i32 = 7;
-pub const NF4ATTRDIR: i32 = 8;
-pub const NF4NAMEDATTR: i32 = 9;
+impl xdr::ToXdr for COMPOUND4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)?;
+		encoder.encode(&self.tag)?;
+		encoder.encode(&self.resarray)?;
+		Ok(())
+	}
+}

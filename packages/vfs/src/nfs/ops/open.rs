@@ -1,59 +1,49 @@
-use crate::nfs::{state::NodeKind, types::*, xdr, Context, Server};
+use crate::nfs::{
+	state::NodeKind,
+	types::{
+		change_info4, nfsstat4, open_claim4, open_delegation4, open_delegation_type4, stateid4,
+		OPEN4args, OPEN4res, OPEN4resok,
+	},
+	Context, Server,
+};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-#[derive(Debug, Clone)]
-pub struct Arg {
-	pub seqid: u32,
-	pub share_access: u32,
-	pub share_deny: u32,
-	pub owner: OpenOwner,
-	pub openhow: OpenFlags,
-	pub claim: OpenClaim,
-}
-
-#[derive(Debug, Clone)]
-pub enum ResOp {
-	Ok {
-		stateid: StateId,
-		info: ChangeInfo,
-		rflags: u32,
-		attrset: Bitmap,
-		delegation: OpenDelegation,
-	},
-	Err(i32),
-}
-
 impl Server {
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_open(&self, ctx: &mut Context, arg: Arg) -> ResOp {
+	pub async fn handle_open(&self, ctx: &mut Context, arg: OPEN4args) -> OPEN4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return ResOp::Err(NFS4ERR_NOFILEHANDLE);
+			return OPEN4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 
 		let fh = match arg.claim {
-			OpenClaim::Null(filename) => match self.lookup(fh, &filename).await {
-				Ok(fh) => fh,
-				Err(e) => return ResOp::Err(e),
+			open_claim4::CLAIM_NULL(name) => {
+				let Ok(name) = std::str::from_utf8(&name) else {
+					return OPEN4res::Default(nfsstat4::NFS4ERR_NOENT);
+				};
+				match self.lookup(fh, name).await {
+					Ok(fh) => fh,
+					Err(e) => return OPEN4res::Default(e),
+				}
 			},
-			OpenClaim::Previous(OpenDelegationType::None) => fh,
-			_ => return ResOp::Err(NFS4ERR_IO),
+			open_claim4::CLAIM_PREVIOUS(open_delegation_type4::OPEN_DELEGATE_NONE) => fh,
+			_ => return OPEN4res::Default(nfsstat4::NFS4ERR_IO),
 		};
 
 		ctx.current_file_handle = Some(fh);
-		let stateid = StateId {
+		let stateid = stateid4 {
 			seqid: arg.seqid + 1,
 			other: [0; 12],
 		};
 
-		if let NodeKind::File { file, .. } = &self.get_node(fh.node).await.unwrap().kind {
+		if let NodeKind::File { file, .. } = &self.get_node(fh).await.unwrap().kind {
 			let Ok(blob) = file.contents(self.client.as_ref()).await else {
 				tracing::error!("Failed to get file's content.");
-				return ResOp::Err(NFS4ERR_IO);
+				return OPEN4res::Default(nfsstat4::NFS4ERR_IO);
 			};
 			let Ok(reader) = blob.reader(self.client.as_ref()).await else {
 				tracing::error!("Failed to create blob reader.");
-				return ResOp::Err(NFS4ERR_IO);
+				return OPEN4res::Default(nfsstat4::NFS4ERR_IO);
 			};
 			self.state
 				.write()
@@ -62,76 +52,22 @@ impl Server {
 				.insert(stateid, Arc::new(RwLock::new(reader)));
 		}
 
-		let info = ChangeInfo {
+		let cinfo = change_info4 {
 			atomic: false,
 			before: 0,
 			after: 0,
 		};
 
 		let rflags = 0;
-		let attrset = Bitmap(vec![]);
-		let delegation = OpenDelegation::None;
-
-		ResOp::Ok {
+		let attrset = vec![];
+		let delegation = open_delegation4::OPEN_DELEGATE_NONE;
+		let resok = OPEN4resok {
 			stateid,
-			info,
+			cinfo,
 			rflags,
 			attrset,
 			delegation,
-		}
-	}
-}
-
-impl ResOp {
-	pub fn status(&self) -> i32 {
-		match self {
-			Self::Ok { .. } => NFS4_OK,
-			Self::Err(e) => *e,
-		}
-	}
-}
-
-impl xdr::FromXdr for Arg {
-	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let seqid = decoder.decode()?;
-		let share_access = decoder.decode()?;
-		let share_deny = decoder.decode()?;
-		let owner = decoder.decode()?;
-		let openhow = decoder.decode()?;
-		let claim = decoder.decode()?;
-		Ok(Self {
-			seqid,
-			share_access,
-			share_deny,
-			owner,
-			openhow,
-			claim,
-		})
-	}
-}
-
-impl xdr::ToXdr for ResOp {
-	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-	where
-		W: std::io::Write,
-	{
-		match self {
-			Self::Ok {
-				stateid,
-				info,
-				rflags,
-				attrset,
-				delegation,
-			} => {
-				encoder.encode_int(NFS4_OK)?;
-				encoder.encode(stateid)?;
-				encoder.encode(info)?;
-				encoder.encode(rflags)?;
-				encoder.encode(attrset)?;
-				encoder.encode(delegation)?;
-			},
-			Self::Err(e) => encoder.encode_int(*e)?,
 		};
-		Ok(())
+		OPEN4res::NFS4_OK(resok)
 	}
 }

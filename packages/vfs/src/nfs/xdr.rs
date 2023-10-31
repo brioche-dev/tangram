@@ -1,4 +1,3 @@
-use super::types::NFS4ERR_IO;
 use num::ToPrimitive;
 use std::{io::IoSlice, str::Utf8Error};
 
@@ -104,13 +103,6 @@ impl From<Utf8Error> for Error {
 impl From<std::io::Error> for Error {
 	fn from(value: std::io::Error) -> Self {
 		Self::Io(value)
-	}
-}
-
-impl From<Error> for i32 {
-	fn from(value: Error) -> Self {
-		tracing::error!(?value);
-		NFS4ERR_IO
 	}
 }
 

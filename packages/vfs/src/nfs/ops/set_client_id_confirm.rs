@@ -1,32 +1,30 @@
-use crate::nfs::{types::*, xdr, Server};
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Arg {
-	pub clientid: u64,
-	pub verifier: [u8; NFS4_VERIFIER_SIZE],
-}
+use crate::nfs::{
+	types::{nfsstat4, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res},
+	Server,
+};
 
 impl Server {
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_set_client_id_confirm(&self, arg: Arg) -> i32 {
+	pub async fn handle_set_client_id_confirm(
+		&self,
+		arg: SETCLIENTID_CONFIRM4args,
+	) -> SETCLIENTID_CONFIRM4res {
 		let mut state = self.state.write().await;
 		for client in state.clients.values_mut() {
 			if client.server_id == arg.clientid {
-				if client.server_verifier == arg.verifier {
+				if client.server_verifier == arg.setclientid_confirm {
 					client.confirmed = true;
-					return NFS4_OK;
+					return SETCLIENTID_CONFIRM4res {
+						status: nfsstat4::NFS4_OK,
+					};
 				}
-				return NFS4ERR_CLID_INUSE;
+				return SETCLIENTID_CONFIRM4res {
+					status: nfsstat4::NFS4ERR_CLID_INUSE,
+				};
 			}
 		}
-		NFS4ERR_STALE_CLIENTID
-	}
-}
-
-impl xdr::FromXdr for Arg {
-	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let clientid = decoder.decode()?;
-		let verifier = decoder.decode_n()?;
-		Ok(Self { clientid, verifier })
+		SETCLIENTID_CONFIRM4res {
+			status: nfsstat4::NFS4ERR_STALE_CLIENTID,
+		}
 	}
 }

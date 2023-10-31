@@ -1,34 +1,19 @@
-use crate::nfs::{state::NodeKind, types::*, xdr, Context, Server};
+use crate::nfs::{
+	state::NodeKind,
+	types::{dirlist4, entry4, nfsstat4, READDIR4args, READDIR4res, READDIR4resok},
+	Context, Server,
+};
 use num::ToPrimitive;
-
-#[derive(Debug, Clone)]
-pub struct Arg {
-	pub cookie: Cookie,
-	pub cookie_verf: [u8; NFS4_VERIFIER_SIZE],
-	pub dircount: Count,
-	pub maxcount: Count,
-	pub attr_request: Bitmap,
-}
-
-#[derive(Debug, Clone)]
-pub enum ResOp {
-	Ok {
-		cookieverf: [u8; NFS4_VERIFIER_SIZE],
-		reply: Vec<Entry>,
-		eof: bool,
-	},
-	Err(i32),
-}
 
 impl Server {
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_readdir(&self, ctx: &Context, arg: Arg) -> ResOp {
+	pub async fn handle_readdir(&self, ctx: &Context, arg: READDIR4args) -> READDIR4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return ResOp::Err(NFS4ERR_NOFILEHANDLE);
+			return READDIR4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 
-		let Some(node) = self.get_node(fh.node).await else {
-			return ResOp::Err(NFS4ERR_BADHANDLE);
+		let Some(node) = self.get_node(fh).await else {
+			return READDIR4res::Default(nfsstat4::NFS4ERR_BADHANDLE);
 		};
 
 		let cookie = arg.cookie.to_usize().unwrap();
@@ -37,12 +22,12 @@ impl Server {
 		let entries = match &node.kind {
 			NodeKind::Directory { directory, .. } => {
 				let Ok(entries) = directory.entries(self.client.as_ref()).await else {
-					return ResOp::Err(NFS4ERR_IO);
+					return READDIR4res::Default(nfsstat4::NFS4ERR_IO);
 				};
 				entries.clone()
 			},
 			NodeKind::Root { .. } => Default::default(),
-			_ => return ResOp::Err(NFS4ERR_NOTDIR),
+			_ => return READDIR4res::Default(nfsstat4::NFS4ERR_NOTDIR),
 		};
 
 		let mut reply = Vec::with_capacity(entries.len());
@@ -60,11 +45,11 @@ impl Server {
 				".." => node.parent.upgrade().unwrap(),
 				_ => match self.get_or_create_child_node(node.clone(), name).await {
 					Ok(node) => node,
-					Err(e) => return ResOp::Err(e),
+					Err(e) => return READDIR4res::Default(e),
 				},
 			};
 			let attrs = self
-				.get_attr(FileHandle { node: node.id }, arg.attr_request.clone())
+				.get_attr(node.id, arg.attr_request.clone())
 				.await
 				.unwrap();
 			let cookie = cookie.to_u64().unwrap();
@@ -72,7 +57,7 @@ impl Server {
 
 			// Size of the cookie + size of the attr + size of the name
 			count += std::mem::size_of_val(&cookie); // u64
-			count += 4 + 4 * attrs.attr_mask.0.len(); // bitmap4
+			count += 4 + 4 * attrs.attrmask.len(); // bitmap4
 			count += 4 + attrs.attr_vals.len(); // opaque<>
 			count += 4 + name.len(); // utf8_cstr
 
@@ -81,71 +66,19 @@ impl Server {
 				break;
 			}
 
-			reply.push(Entry {
+			let name = name.as_bytes().into();
+			reply.push(entry4 {
 				cookie,
 				name,
 				attrs,
 			});
 		}
 
-		let cookieverf = fh.node.to_be_bytes();
-		ResOp::Ok {
-			cookieverf,
-			reply,
+		let cookieverf = fh.to_be_bytes();
+		let reply = dirlist4 {
+			entries: reply,
 			eof,
-		}
-	}
-}
-impl xdr::FromXdr for Arg {
-	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let cookie = decoder.decode()?;
-		let cookie_verf = decoder.decode_n()?;
-		let dircount = decoder.decode()?;
-		let maxcount = decoder.decode()?;
-		let attr_request = decoder.decode()?;
-		Ok(Self {
-			cookie,
-			cookie_verf,
-			dircount,
-			maxcount,
-			attr_request,
-		})
-	}
-}
-
-impl ResOp {
-	pub fn status(&self) -> i32 {
-		match self {
-			Self::Ok { .. } => NFS4_OK,
-			Self::Err(e) => *e,
-		}
-	}
-}
-
-impl xdr::ToXdr for ResOp {
-	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-	where
-		W: std::io::Write,
-	{
-		match self {
-			Self::Ok {
-				cookieverf,
-				reply,
-				eof,
-			} => {
-				encoder.encode_int(NFS4_OK)?;
-				encoder.encode_n(*cookieverf)?;
-				for entry in reply {
-					encoder.encode_bool(true)?;
-					encoder.encode(entry)?;
-				}
-				encoder.encode_bool(false)?;
-				encoder.encode(eof)?;
-			},
-			Self::Err(e) => {
-				encoder.encode(e)?;
-			},
-		}
-		Ok(())
+		};
+		READDIR4res::NFS4_OK(READDIR4resok { cookieverf, reply })
 	}
 }

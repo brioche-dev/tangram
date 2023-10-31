@@ -1,55 +1,29 @@
-use crate::nfs::{state::NodeKind, types::*, xdr, Context, Server};
+use crate::nfs::{
+	state::NodeKind,
+	types::{
+		bitmap4, fattr4, fs_locations4, fsid4, nfs_fh4, nfs_ftype4, nfsace4, nfsstat4, nfstime4,
+		specdata4, GETATTR4args, GETATTR4res, GETATTR4resok,
+	},
+	xdr, Context, Server,
+};
 use num::ToPrimitive;
 use std::{fmt::Debug, path::Path};
 
-#[derive(Clone, Debug)]
-pub enum ResOp {
-	Ok(FileAttr),
-	Err(i32),
-}
-
-impl ResOp {
-	pub fn status(&self) -> i32 {
-		match self {
-			Self::Ok(_) => NFS4_OK,
-			Self::Err(e) => *e,
-		}
-	}
-}
-
-impl xdr::ToXdr for ResOp {
-	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-	where
-		W: std::io::Write,
-	{
-		match self {
-			Self::Ok(res) => {
-				encoder.encode_int(NFS4_OK)?;
-				encoder.encode(res)?;
-			},
-			Self::Err(e) => {
-				encoder.encode_int(*e)?;
-			},
-		}
-		Ok(())
-	}
-}
-
 pub struct FileAttrData {
-	pub(crate) supported_attrs: Bitmap,
-	pub(crate) file_type: i32,
+	pub(crate) supported_attrs: bitmap4,
+	pub(crate) file_type: nfs_ftype4,
 	pub(crate) expire_type: u32, // Defines how file expiry is supposed to be handled. A value of "0" is called FH4_PERSISTENT, which implies the file handle is persistent for the lifetime of the server.
 	pub(crate) change: u64, // Defines how file changes happen. Since we don't have changes, we don't care.
 	pub(crate) size: u64,
 	pub(crate) link_support: bool, // TRUE if the file system this object is on supports hard links.
 	pub(crate) symlink_support: bool, // TRUE if the file system this object is on supports soft links.
 	pub(crate) named_attr: bool, // Whether this file has any nammed attributes (xattrs). TODO: care about this.
-	pub(crate) fsid: FsId, // Identifies which file system the object is on (servers may overlay multiple file systems and report such to the client).
+	pub(crate) fsid: fsid4, // Identifies which file system the object is on (servers may overlay multiple file systems and report such to the client).
 	pub(crate) unique_handles: bool, // TRUE, if two distinct filehandles are guaranteed to refer to two different file system objects.
 	pub(crate) lease_time: u32,      // The amount of time this file is valid for, in seconds.
 	pub(crate) rdattr_error: i32,    // An error, if we want to return one.
-	pub(crate) file_handle: FileHandle, // The underlying file handle
-	pub(crate) acl: Vec<Ace>,
+	pub(crate) file_handle: nfs_fh4, // The underlying file handle
+	pub(crate) acl: Vec<nfsace4>,
 	pub(crate) aclsupport: u32,
 	pub(crate) archive: bool,
 	pub(crate) cansettime: bool,
@@ -60,7 +34,7 @@ pub struct FileAttrData {
 	pub(crate) files_avail: u64,
 	pub(crate) files_free: u64,
 	pub(crate) files_total: u64,
-	pub(crate) fs_locations: FsLocations,
+	pub(crate) fs_locations: fs_locations4,
 	pub(crate) hidden: bool,
 	pub(crate) homogeneous: bool,
 	pub(crate) maxfilesize: u64,
@@ -77,29 +51,42 @@ pub struct FileAttrData {
 	pub(crate) quota_avail_hard: u64,
 	pub(crate) quota_avail_soft: u64,
 	pub(crate) quota_used: u64,
-	pub(crate) rawdev: SpecData,
+	pub(crate) rawdev: specdata4,
 	pub(crate) space_avail: u64,
 	pub(crate) space_free: u64,
 	pub(crate) space_total: u64,
 	pub(crate) space_used: u64,
 	pub(crate) system: bool,
-	pub(crate) time_access: Time,
-	pub(crate) time_backup: Time,
-	pub(crate) time_create: Time,
-	pub(crate) time_delta: Time,
-	pub(crate) time_metadata: Time,
-	pub(crate) time_modify: Time,
+	pub(crate) time_access: nfstime4,
+	pub(crate) time_backup: nfstime4,
+	pub(crate) time_create: nfstime4,
+	pub(crate) time_delta: nfstime4,
+	pub(crate) time_metadata: nfstime4,
+	pub(crate) time_modify: nfstime4,
 	pub(crate) mounted_on_fileid: u64,
 }
 
-impl FileAttrData {
-	fn new(file_handle: FileHandle, file_type: i32, size: usize, mode: u32) -> FileAttrData {
-		let size = size.to_u64().unwrap();
-		let mut supported_attrs = Bitmap(Vec::default());
-		for attr in ALL_SUPPORTED_ATTRS {
-			supported_attrs.set(attr.to_usize().unwrap());
+impl nfstime4 {
+	fn new() -> nfstime4 {
+		nfstime4 {
+			seconds: 0,
+			nseconds: 0,
 		}
-		let change = Time::now().seconds as u64;
+	}
+
+	fn now() -> nfstime4 {
+		todo!()
+	}
+}
+
+impl FileAttrData {
+	fn new(file_handle: nfs_fh4, file_type: nfs_ftype4, size: usize, mode: u32) -> FileAttrData {
+		let size = size.to_u64().unwrap();
+		let mut supported_attrs = Vec::new();
+		for attr in ALL_SUPPORTED_ATTRS {
+			// supported_attrs.set(attr.to_usize().unwrap());
+		}
+		let change = nfstime4::now().seconds as u64;
 		FileAttrData {
 			supported_attrs,
 			file_type,
@@ -109,7 +96,7 @@ impl FileAttrData {
 			link_support: true,
 			symlink_support: true,
 			named_attr: false,
-			fsid: FsId { major: 0, minor: 1 },
+			fsid: fsid4 { major: 0, minor: 1 },
 			unique_handles: true,
 			lease_time: 1000,
 			rdattr_error: 0,
@@ -121,7 +108,7 @@ impl FileAttrData {
 			case_insensitive: false,
 			case_preserving: true,
 			chown_restricted: true,
-			fileid: file_handle.node,
+			fileid: file_handle,
 			files_avail: 0,
 			files_free: 0,
 			files_total: 1,
@@ -134,8 +121,8 @@ impl FileAttrData {
 			maxwrite: 0,
 			mimetype: vec![],
 			mode,
-			fs_locations: FsLocations {
-				fs_root: vec!["/".to_owned()],
+			fs_locations: fs_locations4 {
+				fs_root: vec!["/".as_bytes().to_owned()],
 				locations: vec![],
 			},
 			no_trunc: true,
@@ -145,71 +132,76 @@ impl FileAttrData {
 			quota_avail_hard: 0,
 			quota_avail_soft: 0,
 			quota_used: 0,
-			rawdev: Default::default(),
+			rawdev: specdata4 {
+				specdata1: 0,
+				specdata2: 0,
+			},
 			space_avail: 0,
 			space_free: 0,
 			space_total: u64::MAX,
 			space_used: size.to_u64().unwrap(),
 			system: false,
-			time_access: Default::default(),
-			time_backup: Default::default(),
-			time_create: Default::default(),
-			time_delta: Default::default(),
-			time_metadata: Default::default(),
-			time_modify: Default::default(),
-			mounted_on_fileid: file_handle.node,
+			time_access: nfstime4::new(),
+			time_backup: nfstime4::new(),
+			time_create: nfstime4::new(),
+			time_delta: nfstime4::new(),
+			time_metadata: nfstime4::new(),
+			time_modify: nfstime4::new(),
+			mounted_on_fileid: file_handle,
 		}
 	}
 }
 
 impl Server {
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_getattr(&self, ctx: &Context, arg: Bitmap) -> ResOp {
+	pub async fn handle_getattr(&self, ctx: &Context, arg: GETATTR4args) -> GETATTR4res {
 		let Some(fh) = ctx.current_file_handle else {
 			tracing::error!("Missing current file handle.");
-			return ResOp::Err(NFS4ERR_NOFILEHANDLE);
+			return GETATTR4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 
-		match self.get_attr(fh, arg).await {
-			Ok(fattr) => ResOp::Ok(fattr),
-			Err(e) => ResOp::Err(e),
+		match self.get_attr(fh, arg.attr_request).await {
+			Ok(obj_attributes) => GETATTR4res::NFS4_OK(GETATTR4resok { obj_attributes }),
+			Err(e) => GETATTR4res::Default(e),
 		}
 	}
 
 	pub async fn get_attr(
 		&self,
-		file_handle: FileHandle,
-		requested: Bitmap,
-	) -> Result<FileAttr, i32> {
-		if requested.0.is_empty() {
-			return Ok(FileAttr {
-				attr_mask: Bitmap(Vec::default()),
-				attr_vals: Vec::new(),
-			});
+		file_handle: nfs_fh4,
+		requested: bitmap4,
+	) -> Result<fattr4, nfsstat4> {
+		if requested.is_empty() {
+			todo!()
+			// return Ok(FileAttr {
+			// 	attr_mask: Bitmap(Vec::default()),
+			// 	attr_vals: Vec::new(),
+			// });
 		}
 
 		let Some(data) = self.get_file_attr_data(file_handle).await else {
 			tracing::error!(?file_handle, "Missing attr data.");
-			return Err(NFS4ERR_NOENT);
+			return Err(nfsstat4::NFS4ERR_NOENT);
 		};
 
-		let attr_mask = data.supported_attrs.intersection(&requested);
-		let attr_vals = data.to_bytes(&attr_mask);
+		todo!()
+		// let attr_mask = data.supported_attrs.intersection(&requested);
+		// let attr_vals = data.to_bytes(&attr_mask);
 
-		Ok(FileAttr {
-			attr_mask,
-			attr_vals,
-		})
+		// Ok(FileAttr {
+		// 	attr_mask,
+		// 	attr_vals,
+		// })
 	}
 
-	pub async fn get_file_attr_data(&self, file_handle: FileHandle) -> Option<FileAttrData> {
+	pub async fn get_file_attr_data(&self, file_handle: nfs_fh4) -> Option<FileAttrData> {
 		let state = &self.state.read().await;
-		let node = state.nodes.get(&file_handle.node)?;
+		let node = state.nodes.get(&file_handle)?;
 		let data = match &node.kind {
-			NodeKind::Root { .. } => FileAttrData::new(file_handle, NF4DIR, 0, O_RX),
+			NodeKind::Root { .. } => FileAttrData::new(file_handle, nfs_ftype4::NF4DIR, 0, O_RX),
 			NodeKind::Directory { children, .. } => {
 				let len = children.read().await.len();
-				FileAttrData::new(file_handle, NF4DIR, len, O_RX)
+				FileAttrData::new(file_handle, nfs_ftype4::NF4DIR, len, O_RX)
 			},
 			NodeKind::File { file, size } => {
 				let is_executable = match file.executable(self.client.as_ref()).await {
@@ -221,11 +213,16 @@ impl Server {
 				};
 				let mode = if is_executable { O_RX } else { O_RDONLY };
 
-				FileAttrData::new(file_handle, NF4REG, size.to_usize().unwrap(), mode)
+				FileAttrData::new(
+					file_handle,
+					nfs_ftype4::NF4REG,
+					size.to_usize().unwrap(),
+					mode,
+				)
 			},
 			NodeKind::Symlink { .. } => {
 				// TODO: size of symlink
-				FileAttrData::new(file_handle, NF4LNK, 1, O_RDONLY)
+				FileAttrData::new(file_handle, nfs_ftype4::NF4LNK, 1, O_RDONLY)
 			},
 		};
 		Some(data)
@@ -537,13 +534,13 @@ impl xdr::ToXdr for Pathname {
 }
 
 impl FileAttrData {
-	fn to_bytes(&self, requested: &Bitmap) -> Vec<u8> {
+	fn to_bytes(&self, requested: &bitmap4) -> Vec<u8> {
 		let mut buf = Vec::with_capacity(256);
 		let mut encoder = xdr::Encoder::new(&mut buf);
 		for attr in ALL_SUPPORTED_ATTRS.iter().copied() {
-			if !requested.get(attr.to_usize().unwrap()) {
-				continue;
-			}
+			// if !requested.get(attr.to_usize().unwrap()) {
+			// 	continue;
+			// }
 			match attr {
 				SUPPORTED_ATTRS => encoder.encode(&self.supported_attrs).unwrap(),
 				TYPE => encoder.encode(&self.file_type).unwrap(),
@@ -606,97 +603,5 @@ impl FileAttrData {
 		}
 
 		buf
-	}
-}
-
-impl std::fmt::Debug for Bitmap {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let mut list = f.debug_list();
-		for flag in ALL_ATTRS {
-			if !self.get(flag.to_usize().unwrap()) {
-				continue;
-			}
-			match flag {
-				SUPPORTED_ATTRS => list.entry(&"SUPPORTED_ATTRS"),
-				TYPE => list.entry(&"TYPE"),
-				FH_EXPIRE_TYPE => list.entry(&"FH_EXPIRE_TYPE"),
-				CHANGE => list.entry(&"CHANGE"),
-				SIZE => list.entry(&"SIZE"),
-				LINK_SUPPORT => list.entry(&"LINK_SUPPORT"),
-				SYMLINK_SUPPORT => list.entry(&"SYMLINK_SUPPORT"),
-				NAMED_ATTR => list.entry(&"NAMED_ATTR"),
-				FSID => list.entry(&"FSID"),
-				UNIQUE_HANDLES => list.entry(&"UNIQUE_HANDLES"),
-				LEASE_TIME => list.entry(&"LEASE_TIME"),
-				RDATTR_ERROR => list.entry(&"RDATTR_ERROR"),
-				ACL => list.entry(&"ACL"),
-				ACLSUPPORT => list.entry(&"ACLSUPPORT"),
-				ARCHIVE => list.entry(&"ARCHIVE"),
-				CANSETTIME => list.entry(&"CANSETTIME"),
-				CASE_INSENSITIVE => list.entry(&"CASE_INSENSITIVE"),
-				CASE_PRESERVING => list.entry(&"CASE_PRESERVING"),
-				CHOWN_RESTRICTED => list.entry(&"CHOWN_RESTRICTED"),
-				FILEHANDLE => list.entry(&"FILEHANDLE"),
-				FILEID => list.entry(&"FILEID"),
-				FILES_AVAIL => list.entry(&"FILES_AVAIL"),
-				FILES_FREE => list.entry(&"FILES_FREE"),
-				FILES_TOTAL => list.entry(&"FILES_TOTAL"),
-				FS_LOCATIONS => list.entry(&"FS_LOCATIONS"),
-				HIDDEN => list.entry(&"HIDDEN"),
-				HOMOGENEOUS => list.entry(&"HOMOGENEOUS"),
-				MAXFILESIZE => list.entry(&"MAXFILESIZE"),
-				MAXLINK => list.entry(&"MAXLINK"),
-				MAXNAME => list.entry(&"MAXNAME"),
-				MAXREAD => list.entry(&"MAXREAD"),
-				MAXWRITE => list.entry(&"MAXWRITE"),
-				MIMETYPE => list.entry(&"MIMETYPE"),
-				MODE => list.entry(&"MODE"),
-				NO_TRUNC => list.entry(&"NO_TRUNC"),
-				NUMLINKS => list.entry(&"NUMLINKS"),
-				OWNER => list.entry(&"OWNER"),
-				OWNER_GROUP => list.entry(&"OWNER_GROUP"),
-				QUOTA_AVAIL_HARD => list.entry(&"QUOTA_AVAIL_HARD"),
-				QUOTA_AVAIL_SOFT => list.entry(&"QUOTA_AVAIL_SOFT"),
-				QUOTA_USED => list.entry(&"QUOTA_USED"),
-				RAWDEV => list.entry(&"RAWDEV"),
-				SPACE_AVAIL => list.entry(&"SPACE_AVAIL"),
-				SPACE_FREE => list.entry(&"SPACE_FREE"),
-				SPACE_TOTAL => list.entry(&"SPACE_TOTAL"),
-				SPACE_USED => list.entry(&"SPACE_USED"),
-				SYSTEM => list.entry(&"SYSTEM"),
-				TIME_ACCESS => list.entry(&"TIME_ACCESS"),
-				TIME_ACCESS_SET => list.entry(&"TIME_ACCESS_SET"),
-				TIME_BACKUP => list.entry(&"TIME_BACKUP"),
-				TIME_CREATE => list.entry(&"TIME_CREATE"),
-				TIME_DELTA => list.entry(&"TIME_DELTA"),
-				TIME_METADATA => list.entry(&"TIME_METADATA"),
-				TIME_MODIFY => list.entry(&"TIME_MODIFY"),
-				TIME_MODIFY_SET => list.entry(&"TIME_MODIFY_SET"),
-				MOUNTED_ON_FILEID => list.entry(&"MOUNTED_ON_FILEID"),
-				DIR_NOTIF_DELAY => list.entry(&"DIR_NOTIF_DELAY"),
-				DIRENT_NOTIF_DELAY => list.entry(&"DIRENT_NOTIF_DELAY"),
-				DACL => list.entry(&"DACL"),
-				SACL => list.entry(&"SACL"),
-				CHANGE_POLICY => list.entry(&"CHANGE_POLICY"),
-				FS_STATUS => list.entry(&"FS_STATUS"),
-				FS_LAYOUT_TYPE => list.entry(&"FS_LAYOUT_TYPE"),
-				LAYOUT_HINT => list.entry(&"LAYOUT_HINT"),
-				LAYOUT_TYPE => list.entry(&"LAYOUT_TYPE"),
-				LAYOUT_BLKSIZE => list.entry(&"LAYOUT_BLKSIZE"),
-				LAYOUT_ALIGNMENT => list.entry(&"LAYOUT_ALIGNMENT"),
-				FS_LOCATIONS_INFO => list.entry(&"FS_LOCATIONS_INFO"),
-				MDSTHRESHOLD => list.entry(&"MDSTHRESHOLD"),
-				RETENTION_GET => list.entry(&"RETENTION_GET"),
-				RETENTION_SET => list.entry(&"RETENTION_SET"),
-				RETENTEVT_GET => list.entry(&"RETENTEVT_GET"),
-				RETENTEVT_SET => list.entry(&"RETENTEVT_SET"),
-				RETENTION_HOLD => list.entry(&"RETENTION_HOLD"),
-				MODE_SET_MASKED => list.entry(&"MODE_SET_MASKED"),
-				SUPPATTR_EXCLCREAT => list.entry(&"SUPPATTR_EXCLCREAT"),
-				FS_CHARSET_CAP => list.entry(&"FS_CHARSET_CA&P"),
-				_ => continue,
-			};
-		}
-		list.finish()
 	}
 }
