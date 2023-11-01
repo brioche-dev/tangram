@@ -276,19 +276,8 @@ pub const ACE4_GENERIC_READ: u32 = 0x00120081;
  *      ACE4_SYNCHRONIZE
  */
 pub const ACE4_GENERIC_WRITE: u32 = 0x00160106;
-
-/*
- * ACE4_GENERIC_EXECUTE - defined as a combination of
- *      ACE4_READ_ACL
- *      ACE4_READ_ATTRIBUTES
- *      ACE4_EXECUTE
- *      ACE4_SYNCHRONIZE
- */
 pub const ACE4_GENERIC_EXECUTE: u32 = 0x001200A0;
 
-/*
- * Access Control Entry definition
- */
 #[derive(Clone, Debug)]
 pub struct nfsace4 {
 	pub type_: acetype4,
@@ -1061,41 +1050,21 @@ pub enum nfs_opnum4 {
 pub enum nfs_argop4 {
 	OP_ACCESS(ACCESS4args),
 	OP_CLOSE(CLOSE4args),
-	// OP_COMMIT(COMMIT4args),
-	// OP_CREATE(CREATE4args),
-	// OP_DELEGPURGE(DELEGPURGE4args),
-	// OP_DELEGRETURN(DELEGRETURN4args),
 	OP_GETATTR(GETATTR4args),
 	OP_GETFH,
-	// OP_LINK(LINK4args),
-	// OP_LOCK(LOCK4args),
-	// OP_LOCKT(LOCKT4args),
-	// OP_LOCKU(LOCKU4args),
 	OP_LOOKUP(LOOKUP4args),
-	// OP_LOOKUPP,
-	// OP_NVERIFY(NVERIFY4args),
 	OP_OPEN(OPEN4args),
-	// OP_OPENATTR(OPENATTR4args),
-	// OP_OPEN_CONFIRM(OPEN_CONFIRM4args),
-	// OP_OPEN_DOWNGRADE(OPEN_DOWNGRADE4args),
 	OP_PUTFH(PUTFH4args),
-	// OP_PUTPUBFH,
 	OP_PUTROOTFH,
 	OP_READ(READ4args),
 	OP_READDIR(READDIR4args),
 	OP_READLINK,
-	// OP_REMOVE(REMOVE4args),
-	// OP_RENAME(RENAME4args),
 	OP_RENEW(RENEW4args),
 	OP_RESTOREFH,
 	OP_SAVEFH,
 	OP_SECINFO(SECINFO4args),
-	// OP_SETATTR(SETATTR4args),
 	OP_SETCLIENTID(SETCLIENTID4args),
 	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4args),
-	// OP_VERIFY(VERIFY4args),
-	// OP_WRITE(WRITE4args),
-	// OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4args),
 	OP_ILLEGAL,
 	Unimplemented(nfs_opnum4),
 }
@@ -1104,41 +1073,21 @@ pub enum nfs_argop4 {
 pub enum nfs_resop4 {
 	OP_ACCESS(ACCESS4res),
 	OP_CLOSE(CLOSE4res),
-	// OP_COMMIT (COMMIT4res),
-	// OP_CREATE (CREATE4res),
-	// OP_DELEGPURGE (DELEGPURGE4res),
-	// OP_DELEGRETURN (DELEGRETURN4res),
 	OP_GETATTR(GETATTR4res),
 	OP_GETFH(GETFH4res),
-	// OP_LINK (LINK4res),
-	// OP_LOCK (LOCK4res),
-	// OP_LOCKT (LOCKT4res),
-	// OP_LOCKU (LOCKU4res),
 	OP_LOOKUP(LOOKUP4res),
-	// OP_LOOKUPP (LOOKUPP4res),
-	// OP_NVERIFY (NVERIFY4res),
 	OP_OPEN(OPEN4res),
-	// OP_OPENATTR (OPENATTR4res),
-	// OP_OPEN_CONFIRM (OPEN_CONFIRM4res),
-	// OP_OPEN_DOWNGRADE (OPEN_DOWNGRADE4res),
 	OP_PUTFH(PUTFH4res),
-	// OP_PUTPUBFH (PUTPUBFH4res),
 	OP_PUTROOTFH(PUTROOTFH4res),
 	OP_READ(READ4res),
 	OP_READDIR(READDIR4res),
 	OP_READLINK(READLINK4res),
-	// OP_REMOVE (REMOVE4res),
-	// OP_RENAME (RENAME4res),
 	OP_RENEW(RENEW4res),
 	OP_RESTOREFH(RESTOREFH4res),
 	OP_SAVEFH(SAVEFH4res),
 	OP_SECINFO(SECINFO4res),
-	// OP_SETATTR (SETATTR4res),
 	OP_SETCLIENTID(SETCLIENTID4res),
 	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res),
-	// OP_VERIFY (VERIFY4res),
-	// OP_WRITE (WRITE4res),
-	// OP_RELEASE_LOCKOWNER (RELEASE_LOCKOWNER4res),
 	OP_ILLEGAL(ILLEGAL4res),
 	Unknown(nfs_opnum4),
 }
@@ -1179,27 +1128,6 @@ impl xdr::ToXdr for nfs_ftype4 {
 			nfs_ftype4::NF4NAMEDATTR => encoder.encode_int(9)?,
 		}
 		Ok(())
-	}
-}
-
-impl xdr::ToXdr for nfs_fh4 {
-	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-		where
-			W: std::io::Write {
-		encoder.encode_opaque(&self.0.to_be_bytes())?;
-		Ok(())
-
-	}
-}
-
-impl xdr::FromXdr for nfs_fh4 {
-	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let decoded = decoder.decode_opaque()?;
-		if decoded.len() != 8 {
-			return Err(xdr::Error::Custom("File handle size mismatch.".into()));
-		}
-		let fh = u64::from_be_bytes(decoded[0..8].try_into().unwrap());
-		Ok(Self(fh))
 	}
 }
 
@@ -1280,6 +1208,27 @@ impl xdr::ToXdr for nfsstat4 {
 	}
 }
 
+impl xdr::ToXdr for nfs_fh4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+		where
+			W: std::io::Write {
+		encoder.encode_opaque(&self.0.to_be_bytes())?;
+		Ok(())
+
+	}
+}
+
+impl xdr::FromXdr for nfs_fh4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let decoded = decoder.decode_opaque()?;
+		if decoded.len() != 8 {
+			return Err(xdr::Error::Custom("File handle size mismatch.".into()));
+		}
+		let fh = u64::from_be_bytes(decoded[0..8].try_into().unwrap());
+		Ok(Self(fh))
+	}
+}
+
 impl xdr::FromXdr for stateid4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let seqid = decoder.decode()?;
@@ -1287,27 +1236,6 @@ impl xdr::FromXdr for stateid4 {
 		Ok(Self { seqid, other })
 	}
 }
-
-// impl xdr::ToXdr for nfs_fh4 {
-// 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-// 	where
-// 		W: std::io::Write,
-// 	{
-// 		encoder.encode_opaque(&self.node.to_be_bytes())?;
-// 		Ok(())
-// 	}
-// }
-
-// impl xdr::FromXdr for nfs_fh4 {
-// 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-// 		let decoded = decoder.decode_opaque()?;
-// 		if decoded.len() != 8 {
-// 			return Err(xdr::Error::Custom("File handle size mismatch.".into()));
-// 		}
-// 		let fh = u64::from_be_bytes(decoded[0..8].try_into().unwrap());
-// 		Ok(fh)
-// 	}
-// }
 
 impl xdr::ToXdr for change_info4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
@@ -2405,9 +2333,6 @@ mod test {
 		println!("{buffer:?}");
 	}
 }
-
-
-
 
 impl std::fmt::Debug for bitmap4 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
