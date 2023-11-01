@@ -303,9 +303,10 @@ pub async fn run_inner(
 			}
 
 			// Redirect stdout to stderr.
-			if libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) < 0 {
-				return Err(std::io::Error::last_os_error());
-			}
+			// if libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) < 0 {
+			// 	return Err(std::io::Error::last_os_error());
+			// }
+
 			Ok(())
 		})
 	};
@@ -313,19 +314,19 @@ pub async fn run_inner(
 	// Spawn the child.
 	let mut child = command.spawn().wrap_err("Failed to spawn the process.")?;
 
-	// Log the child's progress.
-	let progress = progress.clone_box();
-	let mut stderr = child.stderr.take().unwrap();
-	tokio::task::spawn(async move {
-		let mut buf = vec![0; 512];
-		loop {
-			match stderr.read(&mut buf).await {
-				Ok(0) => break,
-				Ok(_) => progress.log(buf.clone().into()),
-				Err(_) => break,
-			}
-		}
-	});
+	// // Log the child's progress.
+	// let progress = progress.clone_box();
+	// let mut stderr = child.stderr.take().unwrap();
+	// tokio::task::spawn(async move {
+	// 	let mut buf = vec![0; 512];
+	// 	loop {
+	// 		match stderr.read(&mut buf).await {
+	// 			Ok(0) => break,
+	// 			Ok(_) => progress.log(buf.clone().into()),
+	// 			Err(_) => break,
+	// 		}
+	// 	}
+	// });
 
 	// Wait for the child to exit.
 	let status = child
