@@ -1,5 +1,5 @@
 #![allow(non_camel_case_types, dead_code)]
-use std::{path::Path, os::unix::prelude::OsStrExt};
+use std::{os::unix::prelude::OsStrExt, path::Path};
 
 use num::ToPrimitive;
 
@@ -475,8 +475,6 @@ pub const FATTR4_RETENTION_HOLD: u32 = 73;
 pub const FATTR4_MODE_SET_MASKED: u32 = 74;
 pub const FATTR4_SUPPATTR_EXCLCREAT: u32 = 75; // Required
 pub const FATTR4_FS_CHARSET_CAP: u32 = 76;
-
-
 
 /*
  * File attribute container
@@ -2018,6 +2016,55 @@ impl xdr::FromXdr for nfs_opnum4 {
 	}
 }
 
+impl xdr::ToXdr for nfs_opnum4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			Self::OP_ACCESS => encoder.encode_int(3)?,
+			Self::OP_CLOSE => encoder.encode_int(4)?,
+			Self::OP_COMMIT => encoder.encode_int(5)?,
+			Self::OP_CREATE => encoder.encode_int(6)?,
+			Self::OP_DELEGPURGE => encoder.encode_int(7)?,
+			Self::OP_DELEGRETURN => encoder.encode_int(8)?,
+			Self::OP_GETATTR => encoder.encode_int(9)?,
+			Self::OP_GETFH => encoder.encode_int(10)?,
+			Self::OP_LINK => encoder.encode_int(11)?,
+			Self::OP_LOCK => encoder.encode_int(12)?,
+			Self::OP_LOCKT => encoder.encode_int(13)?,
+			Self::OP_LOCKU => encoder.encode_int(14)?,
+			Self::OP_LOOKUP => encoder.encode_int(15)?,
+			Self::OP_LOOKUPP => encoder.encode_int(16)?,
+			Self::OP_NVERIFY => encoder.encode_int(17)?,
+			Self::OP_OPEN => encoder.encode_int(18)?,
+			Self::OP_OPENATTR => encoder.encode_int(19)?,
+			Self::OP_OPEN_CONFIRM => encoder.encode_int(20)?,
+			Self::OP_OPEN_DOWNGRADE => encoder.encode_int(21)?,
+			Self::OP_PUTFH => encoder.encode_int(22)?,
+			Self::OP_PUTPUBFH => encoder.encode_int(23)?,
+			Self::OP_PUTROOTFH => encoder.encode_int(24)?,
+			Self::OP_READ => encoder.encode_int(25)?,
+			Self::OP_READDIR => encoder.encode_int(26)?,
+			Self::OP_READLINK => encoder.encode_int(27)?,
+			Self::OP_REMOVE => encoder.encode_int(28)?,
+			Self::OP_RENAME => encoder.encode_int(29)?,
+			Self::OP_RENEW => encoder.encode_int(30)?,
+			Self::OP_RESTOREFH => encoder.encode_int(31)?,
+			Self::OP_SAVEFH => encoder.encode_int(32)?,
+			Self::OP_SECINFO => encoder.encode_int(33)?,
+			Self::OP_SETATTR => encoder.encode_int(34)?,
+			Self::OP_SETCLIENTID => encoder.encode_int(35)?,
+			Self::OP_SETCLIENTID_CONFIRM => encoder.encode_int(36)?,
+			Self::OP_VERIFY => encoder.encode_int(37)?,
+			Self::OP_WRITE => encoder.encode_int(38)?,
+			Self::OP_RELEASE_LOCKOWNER => encoder.encode_int(39)?,
+			Self::OP_ILLEGAL => encoder.encode_int(10044)?,
+		}
+		Ok(())
+	}
+}
+
 impl xdr::FromXdr for nfs_argop4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let opnum: nfs_opnum4 = decoder.decode()?;
@@ -2086,27 +2133,82 @@ impl xdr::ToXdr for nfs_resop4 {
 		W: std::io::Write,
 	{
 		match self {
-			nfs_resop4::OP_ACCESS(opaccess4res) => opaccess4res.encode(encoder)?,
-			nfs_resop4::OP_CLOSE(opclose4res) => opclose4res.encode(encoder)?,
-			nfs_resop4::OP_GETATTR(opgetattr4res) => opgetattr4res.encode(encoder)?,
-			nfs_resop4::OP_GETFH(opgetfh4res) => opgetfh4res.encode(encoder)?,
-			nfs_resop4::OP_LOOKUP(oplookup4res) => oplookup4res.encode(encoder)?,
-			nfs_resop4::OP_OPEN(opopen4res) => opopen4res.encode(encoder)?,
-			nfs_resop4::OP_PUTFH(opputfh4res) => opputfh4res.encode(encoder)?,
-			nfs_resop4::OP_PUTROOTFH(opputrootfh4res) => opputrootfh4res.encode(encoder)?,
-			nfs_resop4::OP_READ(opread4res) => opread4res.encode(encoder)?,
-			nfs_resop4::OP_READDIR(opreaddir4res) => opreaddir4res.encode(encoder)?,
-			nfs_resop4::OP_READLINK(opreadlink4res) => opreadlink4res.encode(encoder)?,
-			nfs_resop4::OP_RENEW(oprenew4res) => oprenew4res.encode(encoder)?,
-			nfs_resop4::OP_RESTOREFH(oprestoref4h) => oprestoref4h.encode(encoder)?,
-			nfs_resop4::OP_SAVEFH(opsavefh4) => opsavefh4.encode(encoder)?,
-			nfs_resop4::OP_SECINFO(opsecinfo4res) => opsecinfo4res.encode(encoder)?,
-			nfs_resop4::OP_SETCLIENTID(opsetclientid4res) => opsetclientid4res.encode(encoder)?,
-			nfs_resop4::OP_SETCLIENTID_CONFIRM(opsetclientid_confirm4res) => {
-				opsetclientid_confirm4res.encode(encoder)?
+			nfs_resop4::OP_ACCESS(res) => {
+				encoder.encode(&nfs_opnum4::OP_ACCESS)?;
+				encoder.encode(&res)?;
 			},
-			nfs_resop4::OP_ILLEGAL(opillegal4res) => opillegal4res.encode(encoder)?,
-			nfs_resop4::Unknown(_) => nfsstat4::NFS4ERR_NOTSUPP.encode(encoder)?,
+			nfs_resop4::OP_CLOSE(res) => {
+				encoder.encode(&nfs_opnum4::OP_CLOSE)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_GETATTR(res) => {
+				encoder.encode(&nfs_opnum4::OP_GETATTR)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_GETFH(res) => {
+				encoder.encode(&nfs_opnum4::OP_GETFH)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_LOOKUP(res) => {
+				encoder.encode(&nfs_opnum4::OP_LOOKUP)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_OPEN(res) => {
+				encoder.encode(&nfs_opnum4::OP_OPEN)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_PUTFH(res) => {
+				encoder.encode(&nfs_opnum4::OP_PUTFH)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_PUTROOTFH(res) => {
+				encoder.encode(&nfs_opnum4::OP_PUTROOTFH)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_READ(res) => {
+				encoder.encode(&nfs_opnum4::OP_READ)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_READDIR(res) => {
+				encoder.encode(&nfs_opnum4::OP_READDIR)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_READLINK(res) => {
+				encoder.encode(&nfs_opnum4::OP_READLINK)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_RENEW(res) => {
+				encoder.encode(&nfs_opnum4::OP_RENEW)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_RESTOREFH(res) => {
+				encoder.encode(&nfs_opnum4::OP_RESTOREFH)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_SAVEFH(res) => {
+				encoder.encode(&nfs_opnum4::OP_SAVEFH)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_SECINFO(res) => {
+				encoder.encode(&nfs_opnum4::OP_SECINFO)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_SETCLIENTID(res) => {
+				encoder.encode(&nfs_opnum4::OP_SETCLIENTID)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_SETCLIENTID_CONFIRM(res) => {
+				encoder.encode(&nfs_opnum4::OP_SETCLIENTID_CONFIRM)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_ILLEGAL(res) => {
+				encoder.encode(&nfs_opnum4::OP_ILLEGAL)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::Unknown(opnum) => {
+				encoder.encode(opnum)?;
+				encoder.encode(&nfsstat4::NFS4ERR_NOTSUPP)?;
+			},
 		}
 		Ok(())
 	}
@@ -2188,26 +2290,26 @@ impl From<std::io::Error> for nfsstat4 {
 	// https://www.thegeekstuff.com/2010/10/linux-error-codes/
 	fn from(value: std::io::Error) -> Self {
 		match value.raw_os_error() {
-			 Some(0) => nfsstat4::NFS4_OK,
-			 Some(1) => nfsstat4::NFS4ERR_PERM,
-			 Some(2) => nfsstat4::NFS4ERR_NOENT,
-			 Some(5) => nfsstat4::NFS4ERR_IO,
-			 Some(6) => nfsstat4::NFS4ERR_NXIO,
-			 Some(13) => nfsstat4::NFS4ERR_ACCESS,
-			 Some(17) => nfsstat4::NFS4ERR_EXIST,
-			 Some(18) => nfsstat4::NFS4ERR_XDEV,
-			 Some(20) => nfsstat4::NFS4ERR_NOTDIR,
-			 Some(21) => nfsstat4::NFS4ERR_ISDIR,
-			 Some(22) => nfsstat4::NFS4ERR_INVAL,
-			 Some(27) => nfsstat4::NFS4ERR_FBIG,
-			 Some(28) => nfsstat4::NFS4ERR_NOSPC,
-			 Some(30) => nfsstat4::NFS4ERR_ROFS,
-			 Some(31) => nfsstat4::NFS4ERR_MLINK,
-			 Some(63) => nfsstat4::NFS4ERR_NAMETOOLONG,
-			 Some(66) => nfsstat4::NFS4ERR_NOTEMPTY,
-			 Some(69) => nfsstat4::NFS4ERR_DQUOT,
-			 Some(70) => nfsstat4::NFS4ERR_STALE,
-			 _ => nfsstat4::NFS4ERR_IO
+			Some(0) => nfsstat4::NFS4_OK,
+			Some(1) => nfsstat4::NFS4ERR_PERM,
+			Some(2) => nfsstat4::NFS4ERR_NOENT,
+			Some(5) => nfsstat4::NFS4ERR_IO,
+			Some(6) => nfsstat4::NFS4ERR_NXIO,
+			Some(13) => nfsstat4::NFS4ERR_ACCESS,
+			Some(17) => nfsstat4::NFS4ERR_EXIST,
+			Some(18) => nfsstat4::NFS4ERR_XDEV,
+			Some(20) => nfsstat4::NFS4ERR_NOTDIR,
+			Some(21) => nfsstat4::NFS4ERR_ISDIR,
+			Some(22) => nfsstat4::NFS4ERR_INVAL,
+			Some(27) => nfsstat4::NFS4ERR_FBIG,
+			Some(28) => nfsstat4::NFS4ERR_NOSPC,
+			Some(30) => nfsstat4::NFS4ERR_ROFS,
+			Some(31) => nfsstat4::NFS4ERR_MLINK,
+			Some(63) => nfsstat4::NFS4ERR_NAMETOOLONG,
+			Some(66) => nfsstat4::NFS4ERR_NOTEMPTY,
+			Some(69) => nfsstat4::NFS4ERR_DQUOT,
+			Some(70) => nfsstat4::NFS4ERR_STALE,
+			_ => nfsstat4::NFS4ERR_IO,
 		}
 	}
 }
@@ -2226,7 +2328,7 @@ impl nfs_resop4 {
 			nfs_resop4::OP_LOOKUP(LOOKUP4res { status }) => *status,
 			nfs_resop4::OP_OPEN(OPEN4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_OPEN(OPEN4res::Error(e)) => *e,
-			nfs_resop4::OP_PUTFH(PUTFH4res { status }) => *status ,
+			nfs_resop4::OP_PUTFH(PUTFH4res { status }) => *status,
 			nfs_resop4::OP_PUTROOTFH(PUTROOTFH4res { status }) => *status,
 			nfs_resop4::OP_READ(READ4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_READ(READ4res::Error(e)) => *e,
@@ -2240,7 +2342,9 @@ impl nfs_resop4 {
 			nfs_resop4::OP_SECINFO(SECINFO4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_SECINFO(SECINFO4res::Error(e)) => *e,
 			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
-			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::NFS4ERR_CLID_INUSE(_)) => nfsstat4::NFS4ERR_CLID_INUSE,
+			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::NFS4ERR_CLID_INUSE(_)) => {
+				nfsstat4::NFS4ERR_CLID_INUSE
+			},
 			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::Error(e)) => *e,
 			nfs_resop4::OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res { status }) => *status,
 			nfs_resop4::OP_ILLEGAL(_) => nfsstat4::NFS4ERR_OP_ILLEGAL,
@@ -2251,9 +2355,12 @@ impl nfs_resop4 {
 
 #[cfg(test)]
 mod test {
-    use crate::nfs::{xdr::{self, ToXdr}, types::{COMPOUND4res, nfsstat4, nfs_resop4}};
+	use crate::nfs::{
+		types::{nfs_resop4, nfsstat4, COMPOUND4res},
+		xdr::{self, ToXdr},
+	};
 
-    use super::SETCLIENTID4res;
+	use super::SETCLIENTID4res;
 
 	#[test]
 	fn setclientid() {
@@ -2261,7 +2368,6 @@ mod test {
 			clientid: 1007,
 			setclientid_confirm: [0, 0, 0, 0, 0, 0, 3, 239],
 		});
-
 
 		let compound = COMPOUND4res {
 			status: nfsstat4::NFS4_OK,
@@ -2271,7 +2377,9 @@ mod test {
 
 		let mut buffer = vec![];
 		let mut encoder = xdr::Encoder::new(&mut buffer);
-		compound.encode(&mut encoder).expect("Failed to encode result.");
+		compound
+			.encode(&mut encoder)
+			.expect("Failed to encode result.");
 		println!("{buffer:?}");
 	}
 }
