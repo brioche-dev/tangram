@@ -29,10 +29,10 @@ ratatui = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tangram_client = { workspace = true }
+tangram_http = { workspace = true }
 tangram_lsp = { workspace = true }
 tangram_package = { workspace = true }
 tangram_server = { workspace = true }
-tangram_util = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

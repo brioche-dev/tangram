@@ -1,76 +1,10 @@
-use crate::{Incoming, Outgoing, Server, WrapErr};
-use http_body_util::BodyExt;
+use crate::{Server, WrapErr};
 use lmdb::Transaction;
-use std::{
-	os::unix::prelude::OsStrExt,
-	path::{Path, PathBuf},
-};
+use std::{os::unix::prelude::OsStrExt, path::Path};
 use tangram_client as tg;
-use tangram_util::http::{full, not_found, ok};
-use tg::{return_error, tracker::Tracker, Result, Wrap};
+use tg::{tracker::Tracker, Result, Wrap};
 
 impl Server {
-	pub async fn handle_get_tracker_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "trackers", path] = path_components.as_slice() else {
-			return_error!("Unexpected path.")
-		};
-		let path = PathBuf::from(
-			urlencoding::decode(path)
-				.wrap_err("Failed to decode the path.")?
-				.as_ref(),
-		);
-
-		// Get the tracker.
-		let Some(tracker) = self.try_get_tracker(&path).await? else {
-			return Ok(not_found());
-		};
-
-		// Create the body.
-		let body = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the body.")?;
-
-		// Create the response.
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(full(body))
-			.unwrap();
-
-		Ok(response)
-	}
-
-	pub async fn handle_patch_tracker_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "trackers", path] = path_components.as_slice() else {
-			return_error!("Unexpected path.")
-		};
-		let path = PathBuf::from(
-			urlencoding::decode(path)
-				.wrap_err("Failed to decode the path.")?
-				.as_ref(),
-		);
-
-		// Read the body.
-		let bytes = request
-			.into_body()
-			.collect()
-			.await
-			.wrap_err("Failed to read the body.")?
-			.to_bytes();
-		let tracker = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
-
-		self.set_tracker(&path, &tracker).await?;
-
-		Ok(ok())
-	}
-
 	pub async fn try_get_tracker(&self, path: &Path) -> Result<Option<Tracker>> {
 		let txn = self
 			.inner

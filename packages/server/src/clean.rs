@@ -1,21 +1,9 @@
 use super::Server;
 use lmdb::Transaction;
 use tangram_client as tg;
-use tangram_util::http::{empty, Incoming, Outgoing};
 use tg::{Result, WrapErr};
 
 impl Server {
-	pub async fn handle_clean_request(
-		&self,
-		_request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		self.clean().await?;
-		Ok(http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(empty())
-			.unwrap())
-	}
-
 	pub async fn clean(&self) -> Result<()> {
 		// Clear the database.
 		{

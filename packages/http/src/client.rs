@@ -1,6 +1,6 @@
 use crate::{
-	build, object, package, status, target, tracker::Tracker, user, user::Login, Client, Handle,
-	Id, Result, Value, Wrap, WrapErr,
+	net::{Addr, Inet},
+	util::{empty, full, Incoming, Outgoing},
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -11,10 +11,11 @@ use std::{
 	path::Path,
 	sync::{Arc, Weak},
 };
+use tangram_client as tg;
 use tangram_error::return_error;
-use tangram_util::{
-	http::{empty, full, Incoming, Outgoing},
-	net::{Addr, Inet},
+use tg::{
+	build, object, package, status, target, tracker::Tracker, user, user::Login, Id, Result, Value,
+	Wrap, WrapErr,
 };
 use tokio::{
 	io::AsyncBufReadExt,
@@ -24,7 +25,7 @@ use tokio_stream::wrappers::LinesStream;
 use tokio_util::io::StreamReader;
 
 #[derive(Debug, Clone)]
-pub struct Remote {
+pub struct Client {
 	inner: Arc<Inner>,
 }
 
@@ -34,33 +35,33 @@ struct Inner {
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	sender: tokio::sync::RwLock<Option<hyper::client::conn::http2::SendRequest<Outgoing>>>,
 	tls: bool,
-	token: std::sync::RwLock<Option<String>>,
 }
+
+#[derive(Debug)]
+pub struct Handle(Weak<Inner>);
 
 pub struct Builder {
 	addr: Addr,
 	tls: Option<bool>,
-	token: Option<String>,
 }
 
-impl Handle for Weak<Inner> {
-	fn upgrade(&self) -> Option<Box<dyn Client>> {
-		self.upgrade()
-			.map(|inner| Box::new(Remote { inner }) as Box<dyn Client>)
+impl tg::Handle for Handle {
+	fn upgrade(&self) -> Option<Box<dyn tg::Client>> {
+		self.0
+			.upgrade()
+			.map(|inner| Box::new(Client { inner }) as Box<dyn tg::Client>)
 	}
 }
 
-impl Remote {
-	fn new(addr: Addr, tls: bool, token: Option<String>) -> Self {
+impl Client {
+	fn new(addr: Addr, tls: bool) -> Self {
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 		let sender = tokio::sync::RwLock::new(None);
-		let token = std::sync::RwLock::new(token);
 		let inner = Arc::new(Inner {
 			addr,
 			file_descriptor_semaphore,
 			sender,
 			tls,
-			token,
 		});
 		Self { inner }
 	}
@@ -183,13 +184,13 @@ impl Remote {
 }
 
 #[async_trait]
-impl Client for Remote {
-	fn clone_box(&self) -> Box<dyn Client> {
+impl tg::Client for Client {
+	fn clone_box(&self) -> Box<dyn tg::Client> {
 		Box::new(self.clone())
 	}
 
-	fn downgrade_box(&self) -> Box<dyn Handle> {
-		Box::new(Arc::downgrade(&self.inner))
+	fn downgrade_box(&self) -> Box<dyn tg::Handle> {
+		Box::new(Handle(Arc::downgrade(&self.inner)))
 	}
 
 	fn is_local(&self) -> bool {
@@ -198,10 +199,6 @@ impl Client for Remote {
 
 	fn path(&self) -> Option<&std::path::Path> {
 		None
-	}
-
-	fn set_token(&self, token: Option<String>) {
-		*self.inner.token.write().unwrap() = token;
 	}
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
@@ -262,7 +259,7 @@ impl Client for Remote {
 		Ok(true)
 	}
 
-	async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Bytes>> {
+	async fn try_get_object(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/objects/{id}"))
 			.body(empty())
@@ -282,7 +279,7 @@ impl Client for Remote {
 		Ok(Some(bytes))
 	}
 
-	async fn try_put_object_bytes(
+	async fn try_put_object(
 		&self,
 		id: &object::Id,
 		bytes: &Bytes,
@@ -335,7 +332,7 @@ impl Client for Remote {
 		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
 		let body = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the body.")?;
 		let request = self
-			.request(reqwest::Method::PATCH, &format!("/v1/trackers/{path}"))
+			.request(http::Method::PATCH, &format!("/v1/trackers/{path}"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -584,9 +581,81 @@ impl Client for Remote {
 		Ok(())
 	}
 
+	async fn search_packages(&self, query: &str) -> Result<Vec<package::Registry>> {
+		let path = &format!("/v1/registry/packages/search?query={query}");
+		let request = self
+			.request(http::Method::GET, path)
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		Ok(response)
+	}
+
+	async fn get_package(&self, name: &str) -> Result<Option<package::Registry>> {
+		let path = &format!("/v1/registry/packages/{name}");
+		let request = self
+			.request(http::Method::GET, path)
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		Ok(response)
+	}
+
+	async fn get_package_version(&self, name: &str, version: &str) -> Result<Option<package::Id>> {
+		let path = &format!("/v1/registry/packages/{name}/version/{version}");
+		let request = self
+			.request(http::Method::GET, path)
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		Ok(response)
+	}
+
+	async fn publish_package(&self, _token: &str, id: &package::Id) -> Result<()> {
+		let request = self
+			.request(http::Method::POST, &format!("/v1/registry/packages/{id}"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
+	}
+
 	async fn create_login(&self) -> Result<Login> {
 		let request = self
-			.request(reqwest::Method::POST, "/v1/logins")
+			.request(http::Method::POST, "/v1/logins")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -605,7 +674,7 @@ impl Client for Remote {
 
 	async fn get_login(&self, id: &Id) -> Result<Option<Login>> {
 		let request = self
-			.request(reqwest::Method::GET, &format!("/v1/logins/{id}"))
+			.request(http::Method::GET, &format!("/v1/logins/{id}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self
@@ -625,44 +694,9 @@ impl Client for Remote {
 		Ok(response)
 	}
 
-	async fn publish_package(&self, id: &package::Id) -> Result<()> {
+	async fn get_current_user(&self, _token: &str) -> Result<Option<user::User>> {
 		let request = self
-			.request(
-				reqwest::Method::POST,
-				&format!("/v1/registry/packages/{id}"),
-			)
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		Ok(())
-	}
-
-	async fn search_packages(&self, query: &str) -> Result<Vec<package::SearchResult>> {
-		let path = &format!("/v1/registry/packages/search?query={query}");
-		let request = self
-			.request(reqwest::Method::GET, path)
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		let bytes = response
-			.collect()
-			.await
-			.wrap_err("Failed to collect the response body.")?
-			.to_bytes();
-		let response =
-			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-		Ok(response)
-	}
-
-	async fn get_current_user(&self) -> Result<user::User> {
-		let request = self
-			.request(reqwest::Method::GET, "/v1/user")
+			.request(http::Method::GET, "/v1/user")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -683,11 +717,7 @@ impl Client for Remote {
 impl Builder {
 	#[must_use]
 	pub fn new(addr: Addr) -> Self {
-		Self {
-			addr,
-			tls: None,
-			token: None,
-		}
+		Self { addr, tls: None }
 	}
 
 	#[must_use]
@@ -697,14 +727,8 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn token(mut self, token: Option<String>) -> Self {
-		self.token = token;
-		self
-	}
-
-	#[must_use]
-	pub fn build(self) -> Remote {
+	pub fn build(self) -> Client {
 		let tls = self.tls.unwrap_or(false);
-		Remote::new(self.addr, tls, self.token)
+		Client::new(self.addr, tls)
 	}
 }

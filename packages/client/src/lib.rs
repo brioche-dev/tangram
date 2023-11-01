@@ -18,7 +18,6 @@ pub use self::{
 	object::Object,
 	package::Package,
 	path::{Relpath, Subpath},
-	remote::Remote,
 	symlink::Symlink,
 	system::System,
 	target::Target,
@@ -48,7 +47,6 @@ pub mod mutation;
 pub mod object;
 pub mod package;
 pub mod path;
-pub mod remote;
 pub mod status;
 pub mod symlink;
 pub mod system;
@@ -77,8 +75,6 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	fn path(&self) -> Option<&Path>;
 
-	fn set_token(&self, token: Option<String>);
-
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore;
 
 	async fn stop(&self) -> Result<()>;
@@ -89,16 +85,16 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn get_object_exists(&self, id: &object::Id) -> Result<bool>;
 
-	async fn get_object_bytes(&self, id: &object::Id) -> Result<Bytes> {
+	async fn get_object(&self, id: &object::Id) -> Result<Bytes> {
 		Ok(self
-			.try_get_object_bytes(id)
+			.try_get_object(id)
 			.await?
 			.wrap_err("Failed to get the object.")?)
 	}
 
-	async fn try_get_object_bytes(&self, id: &object::Id) -> Result<Option<Bytes>>;
+	async fn try_get_object(&self, id: &object::Id) -> Result<Option<Bytes>>;
 
-	async fn try_put_object_bytes(
+	async fn try_put_object(
 		&self,
 		id: &object::Id,
 		bytes: &Bytes,
@@ -171,9 +167,13 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn get_login(&self, id: &Id) -> Result<Option<user::Login>>;
 
-	async fn publish_package(&self, id: &package::Id) -> Result<()>;
+	async fn get_current_user(&self, token: &str) -> Result<Option<user::User>>;
 
-	async fn search_packages(&self, query: &str) -> Result<Vec<package::SearchResult>>;
+	async fn search_packages(&self, quer: &str) -> Result<Vec<package::Registry>>;
 
-	async fn get_current_user(&self) -> Result<user::User>;
+	async fn get_package(&self, name: &str) -> Result<Option<package::Registry>>;
+
+	async fn get_package_version(&self, name: &str, version: &str) -> Result<Option<package::Id>>;
+
+	async fn publish_package(&self, token: &str, id: &package::Id) -> Result<()>;
 }

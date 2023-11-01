@@ -1,5 +1,5 @@
 [package]
-name = "tangram_util"
+name = "tangram_http"
 
 authors.workspace = true
 description.workspace = true
@@ -19,9 +19,19 @@ http-body = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+itertools = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
+tangram_client = { workspace = true }
 tangram_error = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true }
+urlencoding = { workspace = true }
+webpki-roots = { workspace = true }

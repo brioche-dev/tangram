@@ -59,14 +59,6 @@ pub struct Registry {
 	pub versions: Vec<String>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
-pub struct SearchResult {
-	pub name: String,
-	pub description: String,
-	pub latest_version: String,
-	pub last_updated: u64,
-}
-
 impl Id {
 	pub fn new(bytes: &Bytes) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::Package, bytes))
@@ -139,7 +131,7 @@ impl Package {
 			return Ok(true);
 		}
 		let id = self.state.read().unwrap().id.clone().unwrap();
-		let Some(bytes) = client.try_get_object_bytes(&id.clone().into()).await? else {
+		let Some(bytes) = client.try_get_object(&id.clone().into()).await? else {
 			return Ok(false);
 		};
 		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
@@ -156,7 +148,7 @@ impl Package {
 		let bytes = data.serialize()?;
 		let id = Id::new(&bytes);
 		client
-			.try_put_object_bytes(&id.clone().into(), &bytes)
+			.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()

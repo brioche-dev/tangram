@@ -146,7 +146,7 @@ impl Target {
 			return Ok(true);
 		}
 		let id = self.state.read().unwrap().id.clone().unwrap();
-		let Some(bytes) = client.try_get_object_bytes(&id.clone().into()).await? else {
+		let Some(bytes) = client.try_get_object(&id.clone().into()).await? else {
 			return Ok(false);
 		};
 		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
@@ -163,7 +163,7 @@ impl Target {
 		let bytes = data.serialize()?;
 		let id = Id::new(&bytes);
 		client
-			.try_put_object_bytes(&id.clone().into(), &bytes)
+			.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()

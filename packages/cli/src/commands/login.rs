@@ -44,10 +44,13 @@ impl Cli {
 		};
 
 		// Set the token.
-		client.set_token(Some(token.clone()));
+		self.token.write().unwrap().replace(token.clone());
 
 		// Get the user.
-		let user = client.get_current_user().await?;
+		let user = client
+			.get_current_user(&token)
+			.await?
+			.wrap_err("Expected the user to exist.")?;
 
 		// Write the credentials.
 		let credentials = Credentials {

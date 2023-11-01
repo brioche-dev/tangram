@@ -1,24 +1,15 @@
 use self::progress::Progress;
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::{future, stream::BoxStream, FutureExt};
-use hyper_util::rt::TokioIo;
-use itertools::Itertools;
+use futures::stream::BoxStream;
 use std::{
 	collections::HashMap,
-	convert::Infallible,
 	os::fd::AsRawFd,
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
-use tangram_util::{
-	http::{full, ok, Incoming, Outgoing},
-	net::Addr,
-};
 use tg::{return_error, util::rmrf, Result, Wrap, WrapErr};
-use tokio::net::{TcpListener, UnixListener};
-use tokio_util::either::Either;
 
 mod build;
 mod clean;
@@ -224,157 +215,6 @@ impl Server {
 		&self.inner.file_descriptor_semaphore
 	}
 
-	pub async fn serve(self, addr: Addr) -> Result<()> {
-		let listener = match &addr {
-			Addr::Inet(inet) => Either::Left(
-				TcpListener::bind(inet.to_string())
-					.await
-					.wrap_err("Failed to create the TCP listener.")?,
-			),
-			Addr::Unix(path) => Either::Right(
-				UnixListener::bind(path).wrap_err("Failed to create the UNIX listener.")?,
-			),
-		};
-		tracing::info!("🚀 Serving on {addr:?}.");
-		loop {
-			let stream = TokioIo::new(match &listener {
-				Either::Left(listener) => Either::Left(
-					listener
-						.accept()
-						.await
-						.wrap_err("Failed to accept a new TCP connection.")?
-						.0,
-				),
-				Either::Right(listener) => Either::Right(
-					listener
-						.accept()
-						.await
-						.wrap_err("Failed to accept a new UNIX connection.")?
-						.0,
-				),
-			});
-			let server = self.clone();
-			tokio::spawn(async move {
-				hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
-					.serve_connection(
-						stream,
-						hyper::service::service_fn(move |request| {
-							let server = server.clone();
-							async move {
-								tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
-								let response = server.handle_request(request).await;
-								tracing::info!(status = ?response.status(), "Sending response.");
-								Ok::<_, Infallible>(response)
-							}
-						}),
-					)
-					.await
-					.ok()
-			});
-		}
-	}
-
-	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
-		let method = request.method().clone();
-		let path_components = request.uri().path().split('/').skip(1).collect_vec();
-		let response = match (method, path_components.as_slice()) {
-			(http::Method::GET, ["v1", "status"]) => {
-				self.handle_status_request(request).map(Some).boxed()
-			},
-			(http::Method::POST, ["v1", "stop"]) => {
-				self.handle_stop_request(request).map(Some).boxed()
-			},
-
-			// Clean
-			(http::Method::POST, ["v1", "clean"]) => {
-				self.handle_clean_request(request).map(Some).boxed()
-			},
-
-			// Builds
-			(http::Method::GET, ["v1", "targets", _, "build"]) => self
-				.handle_try_get_build_for_target_request(request)
-				.map(Some)
-				.boxed(),
-			(http::Method::POST, ["v1", "targets", _, "build"]) => self
-				.handle_get_or_create_build_for_target_request(request)
-				.map(Some)
-				.boxed(),
-			(http::Method::GET, ["v1", "builds", _, "target"]) => self
-				.handle_try_get_build_target_request(request)
-				.map(Some)
-				.boxed(),
-			(http::Method::GET, ["v1", "builds", _, "children"]) => self
-				.handle_try_get_build_children_request(request)
-				.map(Some)
-				.boxed(),
-			(http::Method::GET, ["v1", "builds", _, "log"]) => {
-				self.handle_get_build_log_request(request).map(Some).boxed()
-			},
-			(http::Method::GET, ["v1", "builds", _, "result"]) => self
-				.handle_try_get_build_result_request(request)
-				.map(Some)
-				.boxed(),
-
-			// Objects
-			(http::Method::HEAD, ["v1", "objects", _]) => {
-				self.handle_head_object_request(request).map(Some).boxed()
-			},
-			(http::Method::GET, ["v1", "objects", _]) => {
-				self.handle_get_object_request(request).map(Some).boxed()
-			},
-			(http::Method::PUT, ["v1", "objects", _]) => {
-				self.handle_put_object_request(request).map(Some).boxed()
-			},
-
-			// Package
-
-			// // Trackers
-			// (http::Method::GET, ["v1", "trackers", _]) => {
-			// 	self.handle_get_tracker_request(request).map(Some).boxed()
-			// },
-			// (http::Method::PATCH, ["v1", "trackers", _]) => {
-			// 	self.handle_patch_tracker_request(request).map(Some).boxed()
-			// },
-			(_, _) => future::ready(None).boxed(),
-		}
-		.await;
-		match response {
-			None => http::Response::builder()
-				.status(http::StatusCode::NOT_FOUND)
-				.body(full("Not found."))
-				.unwrap(),
-			Some(Err(error)) => {
-				tracing::error!(?error);
-				http::Response::builder()
-					.status(http::StatusCode::INTERNAL_SERVER_ERROR)
-					.body(full("Internal server error."))
-					.unwrap()
-			},
-			Some(Ok(response)) => response,
-		}
-	}
-
-	async fn handle_status_request(
-		&self,
-		_request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		let pong = self.status().await?;
-		let body = serde_json::to_vec(&pong).unwrap();
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(full(body))
-			.unwrap();
-		Ok(response)
-	}
-
-	async fn handle_stop_request(
-		&self,
-		_request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		self.stop().await?;
-		Ok(ok())
-	}
-
 	async fn status(&self) -> Result<tg::status::Status> {
 		Ok(tg::status::Status {
 			version: self.inner.version.clone(),
@@ -410,8 +250,6 @@ impl tg::Client for Server {
 		Some(self.path())
 	}
 
-	fn set_token(&self, _token: Option<String>) {}
-
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
 		&self.inner.file_descriptor_semaphore
 	}
@@ -432,20 +270,20 @@ impl tg::Client for Server {
 		self.get_object_exists(id).await
 	}
 
-	async fn get_object_bytes(&self, id: &tg::object::Id) -> Result<Bytes> {
-		self.get_object_bytes(id).await
+	async fn get_object(&self, id: &tg::object::Id) -> Result<Bytes> {
+		self.get_object(id).await
 	}
 
-	async fn try_get_object_bytes(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
-		self.try_get_object_bytes(id).await
+	async fn try_get_object(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
+		self.try_get_object(id).await
 	}
 
-	async fn try_put_object_bytes(
+	async fn try_put_object(
 		&self,
 		id: &tg::object::Id,
 		bytes: &Bytes,
 	) -> Result<Result<(), Vec<tg::object::Id>>> {
-		self.try_put_object_bytes(id, bytes).await
+		self.try_put_object(id, bytes).await
 	}
 
 	async fn try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
@@ -514,6 +352,46 @@ impl tg::Client for Server {
 		return_error!("This server does not support builders.");
 	}
 
+	async fn search_packages(&self, query: &str) -> Result<Vec<tg::package::Registry>> {
+		self.inner
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.search_packages(query)
+			.await
+	}
+
+	async fn get_package(&self, name: &str) -> Result<Option<tg::package::Registry>> {
+		self.inner
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.get_package(name)
+			.await
+	}
+
+	async fn get_package_version(
+		&self,
+		name: &str,
+		version: &str,
+	) -> Result<Option<tg::package::Id>> {
+		self.inner
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.get_package_version(name, version)
+			.await
+	}
+
+	async fn publish_package(&self, token: &str, id: &tg::package::Id) -> Result<()> {
+		self.inner
+			.parent
+			.as_ref()
+			.wrap_err("The server does not have a parent.")?
+			.publish_package(token, id)
+			.await
+	}
+
 	async fn create_login(&self) -> Result<tg::user::Login> {
 		self.inner
 			.parent
@@ -532,30 +410,12 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn publish_package(&self, id: &tg::package::Id) -> Result<()> {
+	async fn get_current_user(&self, token: &str) -> Result<Option<tg::user::User>> {
 		self.inner
 			.parent
 			.as_ref()
 			.wrap_err("The server does not have a parent.")?
-			.publish_package(id)
-			.await
-	}
-
-	async fn search_packages(&self, query: &str) -> Result<Vec<tg::package::SearchResult>> {
-		self.inner
-			.parent
-			.as_ref()
-			.wrap_err("The server does not have a parent.")?
-			.search_packages(query)
-			.await
-	}
-
-	async fn get_current_user(&self) -> Result<tg::user::User> {
-		self.inner
-			.parent
-			.as_ref()
-			.wrap_err("The server does not have a parent.")?
-			.get_current_user()
+			.get_current_user(token)
 			.await
 	}
 }

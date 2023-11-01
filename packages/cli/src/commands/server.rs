@@ -1,6 +1,6 @@
 use crate::Cli;
 use tangram_client as tg;
-use tangram_util::net::Addr;
+use tangram_http::net::Addr;
 use tg::{Client, Result};
 
 /// Manage the server.
@@ -32,14 +32,14 @@ impl Cli {
 			},
 			Command::Status => {
 				let addr = Addr::Unix(self.path.join("socket"));
-				let client = tangram_client::remote::Builder::new(addr).build();
+				let client = tangram_http::client::Builder::new(addr).build();
 				let status = client.status().await?;
 				let status = serde_json::to_string_pretty(&status).unwrap();
 				println!("{status}");
 			},
 			Command::Stop => {
 				let addr = Addr::Unix(self.path.join("socket"));
-				let client = tangram_client::remote::Builder::new(addr).build();
+				let client = tangram_http::client::Builder::new(addr).build();
 				client.stop().await?;
 			},
 		}

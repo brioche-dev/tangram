@@ -26,7 +26,7 @@ impl Cli {
 
 		// Publish the package.
 		client
-			.publish_package(id)
+			.publish_package(&self.token()?, id)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

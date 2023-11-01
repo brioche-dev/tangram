@@ -1,7 +1,7 @@
 use crate::{util::dirs::home_directory_path, Cli, API_URL};
 use std::path::PathBuf;
 use tangram_client as tg;
-use tangram_util::net::{Addr, Inet};
+use tangram_http::net::{Addr, Inet};
 use tg::{Result, WrapErr};
 
 /// Run a server.
@@ -40,7 +40,7 @@ impl Cli {
 		let config = Self::read_config().await?;
 
 		// Read the credentials.
-		let credentials = Self::read_credentials().await?;
+		let _credentials = Self::read_credentials().await?;
 
 		// Create the parent.
 		let parent_url = config
@@ -60,10 +60,8 @@ impl Cli {
 			port: parent_port,
 		});
 		let parent_tls = parent_url.scheme() == "https";
-		let parent_token = credentials.map(|credentials| credentials.token);
-		let parent = tangram_client::remote::Builder::new(parent_addr)
+		let parent = tangram_http::client::Builder::new(parent_addr)
 			.tls(parent_tls)
-			.token(parent_token)
 			.build();
 		let _parent = Box::new(parent);
 
@@ -82,7 +80,7 @@ impl Cli {
 			.wrap_err("Failed to create the server.")?;
 
 		// Serve.
-		server
+		tangram_http::Server::new(&server, None)
 			.serve(addr)
 			.await
 			.wrap_err("Failed to run the server.")?;

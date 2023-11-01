@@ -8,7 +8,7 @@ use self::{commands::Args, util::dirs::home_directory_path};
 use clap::Parser;
 use std::{path::PathBuf, sync::Arc};
 use tangram_client as tg;
-use tangram_util::net::Addr;
+use tangram_http::net::Addr;
 use tg::{error, return_error, Client, Result, WrapErr};
 use tracing_subscriber::prelude::*;
 
@@ -23,6 +23,7 @@ pub const API_URL: &str = "https://api.tangram.dev";
 struct Cli {
 	client: tokio::sync::Mutex<Option<Arc<dyn tg::Client>>>,
 	path: PathBuf,
+	token: std::sync::RwLock<Option<String>>,
 	version: String,
 }
 
@@ -57,6 +58,14 @@ async fn main_inner() -> Result<()> {
 		.wrap_err("Failed to find the user home directory.")?
 		.join(".tangram");
 
+	// Create the container for the client.
+	let client = tokio::sync::Mutex::new(None);
+
+	// Get the token.
+	let credentials = Cli::read_credentials().await?;
+	let token = credentials.map(|credentials| credentials.token);
+	let token = std::sync::RwLock::new(token);
+
 	// Get the version.
 	let version = if cfg!(debug_assertions) {
 		let executable_path =
@@ -76,10 +85,10 @@ async fn main_inner() -> Result<()> {
 	};
 
 	// Create the CLI.
-	let client = tokio::sync::Mutex::new(None);
 	let cli = Cli {
 		client,
 		path,
+		token,
 		version,
 	};
 
@@ -98,7 +107,7 @@ impl Cli {
 
 		// Attempt to connect to the server.
 		let addr = Addr::Unix(self.path.join("socket"));
-		let client = tangram_client::remote::Builder::new(addr).build();
+		let client = tangram_http::client::Builder::new(addr).build();
 		let mut connected = client.connect().await.is_ok();
 
 		// If the client is connected, check the version.
@@ -155,6 +164,14 @@ impl Cli {
 			.spawn()
 			.wrap_err("Failed to spawn the server.")?;
 		Ok(())
+	}
+
+	fn token(&self) -> Result<String> {
+		self.token
+			.read()
+			.unwrap()
+			.clone()
+			.wrap_err("You are not logged in. Please run `tangram login` to log in.")
 	}
 }
 
