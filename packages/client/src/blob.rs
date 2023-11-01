@@ -406,7 +406,15 @@ impl AsyncRead for Reader {
 							let bytes = 'outer: loop {
 								match current_blob {
 									Blob::Leaf(leaf) => {
-										let bytes = leaf.bytes(client.as_ref()).await?.clone();
+										let (id, object) = {
+											let state = leaf.state().read().unwrap();
+											(state.id.clone(), state.object.clone())
+										};
+										let bytes = if let Some(object) = object {
+											object.bytes.clone()
+										} else {
+											client.get_object(&id.unwrap().into()).await?.clone()
+										};
 										if position
 											< current_blob_position + bytes.len().to_u64().unwrap()
 										{
