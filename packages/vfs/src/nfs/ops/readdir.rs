@@ -1,6 +1,6 @@
 use crate::nfs::{
 	state::NodeKind,
-	types::{dirlist4, entry4, nfsstat4, READDIR4args, READDIR4res, READDIR4resok, nfs_fh4},
+	types::{dirlist4, entry4, nfs_fh4, nfsstat4, READDIR4args, READDIR4res, READDIR4resok},
 	Context, Server,
 };
 use num::ToPrimitive;
@@ -67,11 +67,12 @@ impl Server {
 			}
 
 			let name = name.as_bytes().into();
-			reply.push(entry4 {
+			let entry = entry4 {
 				cookie,
 				name,
 				attrs,
-			});
+			};
+			reply.push(entry);
 		}
 
 		let cookieverf = fh.0.to_be_bytes();

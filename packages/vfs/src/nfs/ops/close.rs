@@ -5,7 +5,6 @@ use crate::nfs::{
 };
 
 impl Server {
-	#[tracing::instrument(skip(self))]
 	pub async fn handle_close(&self, ctx: &Context, arg: CLOSE4args) -> CLOSE4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return CLOSE4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);

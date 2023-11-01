@@ -1210,11 +1210,11 @@ impl xdr::ToXdr for nfsstat4 {
 
 impl xdr::ToXdr for nfs_fh4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
-		where
-			W: std::io::Write {
+	where
+		W: std::io::Write,
+	{
 		encoder.encode_opaque(&self.0.to_be_bytes())?;
 		Ok(())
-
 	}
 }
 

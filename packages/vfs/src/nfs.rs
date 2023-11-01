@@ -265,8 +265,9 @@ impl Server {
 			};
 
 			status = result.status();
-			resarray.push(result);
+			resarray.push(result.clone());
 			if status != nfsstat4::NFS4_OK {
+				tracing::error!(?status, ?result, "Method failed.");
 				break;
 			}
 		}
@@ -276,7 +277,6 @@ impl Server {
 			tag,
 			resarray,
 		};
-		tracing::debug!(?results);
 		rpc::success(verf, results)
 	}
 

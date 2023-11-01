@@ -15,9 +15,10 @@ use crate::nfs::{
 		FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED, FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT,
 		FATTR4_SYSTEM, FATTR4_TIME_ACCESS, FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE,
 		FATTR4_TIME_DELTA, FATTR4_TIME_METADATA, FATTR4_TIME_MODIFY, FATTR4_TYPE,
-		FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_RUSR, MODE4_XGRP, MODE4_XUSR,
+		FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR, MODE4_XGRP, MODE4_XOTH,
+		MODE4_XUSR,
 	},
-	xdr, Context, Server, ROOT,
+	xdr, Context, Server,
 };
 use num::ToPrimitive;
 
@@ -146,7 +147,7 @@ impl FileAttrData {
 			time_delta: nfstime4::new(),
 			time_metadata: nfstime4::new(),
 			time_modify: nfstime4::new(),
-			mounted_on_fileid: ROOT.0,
+			mounted_on_fileid: file_handle.0,
 		}
 	}
 }
@@ -228,8 +229,8 @@ impl Server {
 
 // use consts::*;
 
-pub const O_RDONLY: u32 = MODE4_RUSR | MODE4_RGRP;
-pub const O_RX: u32 = MODE4_XUSR | MODE4_XGRP | MODE4_RUSR | MODE4_RGRP;
+pub const O_RDONLY: u32 = MODE4_RUSR | MODE4_RGRP | MODE4_ROTH;
+pub const O_RX: u32 = MODE4_XUSR | MODE4_XGRP | MODE4_XOTH | O_RDONLY;
 
 pub const ALL_SUPPORTED_ATTRS: &[u32] = &[
 	FATTR4_SUPPORTED_ATTRS,

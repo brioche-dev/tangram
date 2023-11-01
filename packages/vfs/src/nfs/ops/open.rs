@@ -1,8 +1,8 @@
 use crate::nfs::{
 	state::NodeKind,
 	types::{
-		change_info4, nfsstat4, open_claim4, open_delegation4, open_delegation_type4, stateid4,
-		OPEN4args, OPEN4res, OPEN4resok, bitmap4,
+		bitmap4, change_info4, nfsstat4, open_claim4, open_delegation4, open_delegation_type4,
+		stateid4, OPEN4args, OPEN4res, OPEN4resok,
 	},
 	Context, Server,
 };
