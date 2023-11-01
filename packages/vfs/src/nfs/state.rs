@@ -1,7 +1,4 @@
-use super::{
-	ops::set_client_id::CallbackClient,
-	types::{StateId, NFS4_VERIFIER_SIZE},
-};
+use super::types::{cb_client4, stateid4, verifier4};
 use num::ToPrimitive;
 use std::{
 	collections::{BTreeMap, HashMap},
@@ -13,7 +10,7 @@ use tg::{blob, Directory, File, Symlink};
 #[derive(Clone)]
 pub struct State {
 	pub nodes: BTreeMap<u64, Arc<Node>>,
-	pub blob_readers: BTreeMap<StateId, Arc<tokio::sync::RwLock<blob::Reader>>>,
+	pub blob_readers: BTreeMap<stateid4, Arc<tokio::sync::RwLock<blob::Reader>>>,
 	pub clients: HashMap<Vec<u8>, ClientData>,
 }
 
@@ -82,21 +79,21 @@ impl Node {
 #[derive(Clone)]
 pub struct CallbackData {
 	pub ident: u32,
-	pub client: CallbackClient,
+	pub client: cb_client4,
 }
 
 #[derive(Clone, Debug)]
 pub struct ClientData {
 	pub server_id: u64,
-	pub client_verifier: [u8; NFS4_VERIFIER_SIZE],
-	pub server_verifier: [u8; NFS4_VERIFIER_SIZE],
-	pub callback: CallbackClient,
+	pub client_verifier: verifier4,
+	pub server_verifier: verifier4,
+	pub callback: cb_client4,
 	pub callback_ident: u32,
 	pub confirmed: bool,
 }
 
 impl State {
-	pub fn new_client_data(&self) -> (u64, [u8; NFS4_VERIFIER_SIZE]) {
+	pub fn new_client_data(&self) -> (u64, verifier4) {
 		let new_id = (self.clients.len() + 1000).to_u64().unwrap();
 		(new_id, new_id.to_be_bytes())
 	}
