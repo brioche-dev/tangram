@@ -200,6 +200,7 @@ impl tangram_runtime::Progress for Progress {
 	}
 
 	fn log(&self, bytes: Bytes) {
+		eprint!("{}", std::str::from_utf8(bytes.as_ref()).unwrap());
 		self.inner
 			.logger
 			.lock()
