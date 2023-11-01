@@ -1,6 +1,6 @@
 use crate::{
-	artifact, build, object, package, status, target, tracker::Tracker, user, user::Login,
-	Artifact, Client, Handle, Id, Package, Result, Value, Wrap, WrapErr,
+	build, object, package, status, target, tracker::Tracker, user, user::Login, Client, Handle,
+	Id, Result, Value, Wrap, WrapErr,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -309,7 +309,7 @@ impl Client for Remote {
 		Ok(Ok(()))
 	}
 
-	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>> {
+	async fn try_get_tracker(&self, path: &Path) -> Result<Option<Tracker>> {
 		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
 		let request = self
 			.request(http::Method::GET, &format!("/v1/trackers/{path}"))
@@ -327,63 +327,13 @@ impl Client for Remote {
 			.await
 			.wrap_err("Failed to collect the response body.")?
 			.to_bytes();
-		let id: artifact::Id =
-			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
-		let artifact = Artifact::with_id(id);
-		Ok(Some(artifact))
+		let tracker = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		Ok(Some(tracker))
 	}
 
-	async fn set_artifact_for_path(&self, path: &Path, artifact: &Artifact) -> Result<()> {
+	async fn set_tracker(&self, path: &Path, tracker: &Tracker) -> Result<()> {
 		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
-		let id = artifact.id(self).await?;
-		let body = Tracker {
-			artifact: Some(id),
-			..Default::default()
-		};
-		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize the body.")?;
-		let request = self
-			.request(reqwest::Method::PATCH, &format!("/v1/trackers/{path}"))
-			.body(full(body))
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		Ok(())
-	}
-
-	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<Package>> {
-		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
-		let request = self
-			.request(reqwest::Method::GET, &format!("/v1/trackers/{path}"))
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if response.status() == http::StatusCode::NOT_FOUND {
-			return Ok(None);
-		}
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		let bytes = response
-			.collect()
-			.await
-			.wrap_err("Failed to collect the response body.")?
-			.to_bytes();
-		let id: package::Id =
-			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
-		let package = Package::with_id(id);
-		Ok(Some(package))
-	}
-
-	async fn set_package_for_path(&self, path: &Path, package: &Package) -> Result<()> {
-		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
-		let id = package.id(self).await?.clone();
-		let body = Tracker {
-			package: Some(id),
-			..Default::default()
-		};
-		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize the body.")?;
+		let body = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the body.")?;
 		let request = self
 			.request(reqwest::Method::PATCH, &format!("/v1/trackers/{path}"))
 			.body(full(body))

@@ -195,7 +195,7 @@ impl PackageExt for tg::Package {
 
 	async fn root_module(&self, client: &dyn tg::Client) -> Result<Module> {
 		{
-			Ok(Module::Normal(tangram_lsp::Normal {
+			Ok(Module::Normal(tangram_lsp::module::Normal {
 				package_id: self.id(client).await?.clone(),
 				path: tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
 			}))

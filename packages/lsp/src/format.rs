@@ -21,7 +21,7 @@ impl Server {
 		let client = self.inner.client.upgrade().unwrap();
 
 		// Get the module.
-		let module = self.convert_lsp_url(&params.text_document.uri).await?;
+		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		// Load the module.
 		let text = module

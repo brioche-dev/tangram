@@ -23,7 +23,7 @@ impl Server {
 	) -> Result<Option<Vec<lsp::Location>>> {
 		// Get the module.
 		let module = self
-			.convert_lsp_url(&params.text_document_position.text_document.uri)
+			.module_for_url(&params.text_document_position.text_document.uri)
 			.await?;
 
 		// Get the position for the request.
@@ -39,7 +39,7 @@ impl Server {
 		let locations = locations
 			.into_iter()
 			.map(|location| lsp::Location {
-				uri: self.convert_module(&location.module),
+				uri: self.url_for_module(&location.module),
 				range: location.range.into(),
 			})
 			.collect();

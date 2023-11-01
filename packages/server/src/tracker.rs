@@ -66,7 +66,7 @@ impl Server {
 			.to_bytes();
 		let tracker = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 
-		self.update_tracker(&path, tracker).await?;
+		self.set_tracker(&path, &tracker).await?;
 
 		Ok(ok())
 	}
@@ -88,7 +88,7 @@ impl Server {
 		Ok(Some(tracker))
 	}
 
-	pub async fn update_tracker(&self, _path: &Path, _tracker: Tracker) -> Result<()> {
+	pub async fn set_tracker(&self, _path: &Path, _tracker: &Tracker) -> Result<()> {
 		todo!()
 	}
 }

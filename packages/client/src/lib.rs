@@ -23,6 +23,7 @@ pub use self::{
 	system::System,
 	target::Target,
 	template::Template,
+	tracker::Tracker,
 	value::Value,
 };
 use async_trait::async_trait;
@@ -103,13 +104,9 @@ pub trait Client: Debug + Send + Sync + 'static {
 		bytes: &Bytes,
 	) -> Result<Result<(), Vec<object::Id>>>;
 
-	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<Artifact>>;
+	async fn try_get_tracker(&self, path: &Path) -> Result<Option<Tracker>>;
 
-	async fn set_artifact_for_path(&self, path: &Path, artifact: &Artifact) -> Result<()>;
-
-	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<Package>>;
-
-	async fn set_package_for_path(&self, path: &Path, package: &Package) -> Result<()>;
+	async fn set_tracker(&self, path: &Path, tracker: &Tracker) -> Result<()>;
 
 	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>>;
 

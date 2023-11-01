@@ -6,10 +6,10 @@
 
 use self::syscall::syscall;
 pub use self::{
-	diagnostic::Diagnostic, document::Document, import::Import, location::Location,
+	diagnostic::Diagnostic, document::Document, import::Import, location::Location, module::Module,
 	position::Position, range::Range,
 };
-use derive_more::{TryUnwrap, Unwrap};
+use derive_more::Unwrap;
 use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
 use std::{collections::HashMap, path::Path, sync::Arc};
@@ -34,6 +34,7 @@ pub mod initialize;
 pub mod jsonrpc;
 pub mod load;
 pub mod location;
+pub mod module;
 pub mod parse;
 pub mod position;
 pub mod range;
@@ -75,55 +76,6 @@ struct Inner {
 
 	/// A handle to the main tokio runtime.
 	main_runtime_handle: tokio::runtime::Handle,
-}
-
-/// A module.
-#[derive(
-	Clone,
-	Debug,
-	Eq,
-	Hash,
-	Ord,
-	PartialEq,
-	PartialOrd,
-	Unwrap,
-	TryUnwrap,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
-#[unwrap(ref)]
-#[try_unwrap(ref)]
-pub enum Module {
-	/// A library module.
-	Library(Library),
-
-	/// A document module.
-	Document(Document),
-
-	/// A normal module.
-	Normal(Normal),
-}
-
-#[derive(
-	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
-)]
-#[serde(rename_all = "camelCase")]
-pub struct Library {
-	/// The module's path.
-	pub path: tg::Subpath,
-}
-
-#[derive(
-	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
-)]
-#[serde(rename_all = "camelCase")]
-pub struct Normal {
-	/// The module's package ID.
-	pub package_id: tg::package::Id,
-
-	/// The module's path.
-	pub path: tg::Subpath,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -268,7 +220,7 @@ impl Server {
 		Ok(())
 	}
 
-	pub async fn convert_lsp_url(&self, url: &Url) -> Result<Module> {
+	pub async fn module_for_url(&self, url: &Url) -> Result<Module> {
 		match url.scheme() {
 			"file" => {
 				let document =
@@ -281,7 +233,7 @@ impl Server {
 	}
 
 	#[must_use]
-	pub fn convert_module(&self, module: &Module) -> Url {
+	pub fn url_for_module(&self, module: &Module) -> Url {
 		match module {
 			Module::Document(document) => {
 				let path = document.package_path.join(document.path.to_string());
@@ -531,7 +483,7 @@ where
 	}
 }
 
-pub fn send_response<T>(
+fn send_response<T>(
 	sender: &Sender,
 	id: jsonrpc::Id,
 	result: Option<T>,
@@ -549,7 +501,7 @@ pub fn send_response<T>(
 	sender.send(message).ok();
 }
 
-pub fn send_notification<T>(sender: &Sender, params: T::Params)
+fn send_notification<T>(sender: &Sender, params: T::Params)
 where
 	T: lsp::notification::Notification,
 {
@@ -637,77 +589,5 @@ fn run_request_handler(inner: Arc<Inner>, mut request_receiver: RequestReceiver)
 
 		// Send the response.
 		response_sender.send(Ok(response)).unwrap();
-	}
-}
-
-impl From<Module> for Url {
-	fn from(value: Module) -> Self {
-		// Serialize and encode the module.
-		let data = hex::encode(serde_json::to_string(&value).unwrap());
-
-		let path = match value {
-			Module::Library(library) => format!("/{}", library.path),
-			Module::Document(document) => {
-				format!("/{}/{}", document.package_path.display(), document.path)
-			},
-			Module::Normal(normal) => format!("/{}", normal.path),
-		};
-
-		// Create the URL.
-		format!("tangram://{data}{path}").parse().unwrap()
-	}
-}
-
-impl TryFrom<Url> for Module {
-	type Error = Error;
-
-	fn try_from(value: Url) -> Result<Self, Self::Error> {
-		// Ensure the scheme is "tangram".
-		if value.scheme() != "tangram" {
-			return_error!("The URL has an invalid scheme.");
-		}
-
-		// Get the domain.
-		let data = value.domain().wrap_err("The URL must have a domain.")?;
-
-		// Decode the domain.
-		let data = hex::decode(data).wrap_err("Failed to deserialize the path as hex.")?;
-
-		// Deserialize the domain.
-		let module = serde_json::from_slice(&data).wrap_err("Failed to deserialize the module.")?;
-
-		Ok(module)
-	}
-}
-
-impl std::fmt::Display for Module {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let url: Url = self.clone().into();
-		write!(f, "{url}")?;
-		Ok(())
-	}
-}
-
-impl std::str::FromStr for Module {
-	type Err = Error;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let url: Url = s.parse().wrap_err("Failed to parse the URL.")?;
-		let module = url.try_into()?;
-		Ok(module)
-	}
-}
-
-impl From<Module> for String {
-	fn from(value: Module) -> Self {
-		value.to_string()
-	}
-}
-
-impl TryFrom<String> for Module {
-	type Error = Error;
-
-	fn try_from(value: String) -> Result<Self, Self::Error> {
-		value.parse()
 	}
 }

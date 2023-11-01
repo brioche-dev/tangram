@@ -64,7 +64,7 @@ impl Server {
 		params: lsp::DidOpenTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = self.convert_lsp_url(&params.text_document.uri).await?;
+		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		// Open the document.
 		if let Module::Document(document) = module {
@@ -87,7 +87,7 @@ impl Server {
 		params: lsp::DidChangeTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = self.convert_lsp_url(&params.text_document.uri).await?;
+		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		if let Module::Document(document) = module {
 			// Apply the changes.
@@ -115,7 +115,7 @@ impl Server {
 		params: lsp::DidCloseTextDocumentParams,
 	) -> Result<()> {
 		// Get the module.
-		let module = self.convert_lsp_url(&params.text_document.uri).await?;
+		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		if let Module::Document(document) = module {
 			// Close the document.

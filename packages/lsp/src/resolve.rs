@@ -1,4 +1,8 @@
-use crate::{document, Document, Import, Library, Module, Normal};
+use crate::{
+	document,
+	module::{Library, Normal},
+	Document, Import, Module,
+};
 use tangram_client as tg;
 use tg::{error, return_error, Client, Package, Result, WrapErr};
 

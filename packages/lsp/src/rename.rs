@@ -26,7 +26,7 @@ impl Server {
 	) -> Result<Option<lsp::WorkspaceEdit>> {
 		// Get the module.
 		let module = self
-			.convert_lsp_url(&params.text_document_position.text_document.uri)
+			.module_for_url(&params.text_document_position.text_document.uri)
 			.await?;
 
 		// Get the position for the request.
@@ -51,7 +51,7 @@ impl Server {
 				.await?;
 
 			// Create the URI.
-			let uri = self.convert_module(&location.module);
+			let uri = self.url_for_module(&location.module);
 
 			if document_changes.get_mut(&uri).is_none() {
 				document_changes.insert(

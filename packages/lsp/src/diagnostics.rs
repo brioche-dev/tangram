@@ -47,7 +47,7 @@ impl Server {
 			send_notification::<lsp::notification::PublishDiagnostics>(
 				sender,
 				lsp::PublishDiagnosticsParams {
-					uri: self.convert_module(&module),
+					uri: self.url_for_module(&module),
 					diagnostics,
 					version,
 				},

@@ -448,6 +448,14 @@ impl tg::Client for Server {
 		self.try_put_object_bytes(id, bytes).await
 	}
 
+	async fn try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
+		self.try_get_tracker(path).await
+	}
+
+	async fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
+		self.set_tracker(path, tracker).await
+	}
+
 	async fn try_get_build_for_target(&self, id: &tg::target::Id) -> Result<Option<tg::build::Id>> {
 		self.try_get_build_for_target(id).await
 	}
@@ -549,21 +557,5 @@ impl tg::Client for Server {
 			.wrap_err("The server does not have a parent.")?
 			.get_current_user()
 			.await
-	}
-
-	async fn try_get_artifact_for_path(&self, path: &Path) -> Result<Option<tg::Artifact>> {
-		self.try_get_artifact_for_path(path).await
-	}
-
-	async fn try_get_package_for_path(&self, path: &Path) -> Result<Option<tg::Package>> {
-		self.try_get_package_for_path(path).await
-	}
-
-	async fn set_artifact_for_path(&self, path: &Path, artifact: &tg::Artifact) -> Result<()> {
-		self.set_artifact_for_path(path, artifact).await
-	}
-
-	async fn set_package_for_path(&self, path: &Path, package: &tg::Package) -> Result<()> {
-		self.set_package_for_path(path, package).await
 	}
 }

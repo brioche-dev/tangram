@@ -69,7 +69,7 @@ impl Server {
 		params: lsp::DocumentSymbolParams,
 	) -> Result<Option<lsp::DocumentSymbolResponse>> {
 		// Get the module.
-		let module = self.convert_lsp_url(&params.text_document.uri).await?;
+		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		// Get the document symbols.
 		let symbols = self.symbols(&module).await?;

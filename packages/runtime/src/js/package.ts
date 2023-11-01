@@ -68,7 +68,7 @@ export class Package {
 }
 
 export namespace Package {
-	export type Arg = Package | Array<Arg> | ArgObject;
+	export type Arg = Package | ArgObject | Array<Arg>;
 
 	export type ArgObject = {
 		artifact: Artifact;
