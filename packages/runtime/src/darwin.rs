@@ -10,6 +10,7 @@ use std::{
 };
 use tangram_client as tg;
 use tg::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
+use tokio::io::AsyncReadExt;
 
 pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 	match run_inner(client, target, progress).await {
@@ -27,7 +28,7 @@ pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 pub async fn run_inner(
 	client: &dyn Client,
 	target: Target,
-	_progress: &dyn Progress,
+	progress: &dyn Progress,
 ) -> Result<Value> {
 	// Get the server path.
 	let server_directory_path = client.path().unwrap().to_owned();
@@ -286,6 +287,9 @@ pub async fn run_inner(
 	// Set the args.
 	command.args(args);
 
+	// Redirect stderr to a pipe.
+	command.stderr(std::process::Stdio::piped());
+
 	// Set up the sandbox.
 	unsafe {
 		command.pre_exec(move || {
@@ -302,9 +306,9 @@ pub async fn run_inner(
 			}
 
 			// Redirect stdout to stderr.
-			// if libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) < 0 {
-			// 	return Err(std::io::Error::last_os_error());
-			// }
+			if libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) < 0 {
+				return Err(std::io::Error::last_os_error());
+			}
 
 			Ok(())
 		})
@@ -313,25 +317,30 @@ pub async fn run_inner(
 	// Spawn the child.
 	let mut child = command.spawn().wrap_err("Failed to spawn the process.")?;
 
-	// // Log the child's progress.
-	// let progress = progress.clone_box();
-	// let mut stderr = child.stderr.take().unwrap();
-	// tokio::task::spawn(async move {
-	// 	let mut buf = vec![0; 512];
-	// 	loop {
-	// 		match stderr.read(&mut buf).await {
-	// 			Ok(0) => break,
-	// 			Ok(_) => progress.log(buf.clone().into()),
-	// 			Err(_) => break,
-	// 		}
-	// 	}
-	// });
+	// Log the child's progress.
+	let progress = progress.clone_box();
+	let mut stderr = child.stderr.take().unwrap();
+	let log_task = tokio::task::spawn(async move {
+		let mut buf = [0; 512];
+		loop {
+			match stderr.read(&mut buf).await {
+				Ok(0) | Err(_) => break,
+				Ok(size) => {
+					let msg = &buf[0..size];
+					progress.log(msg.to_owned().into());
+				},
+			}
+		}
+	});
 
 	// Wait for the child to exit.
 	let status = child
 		.wait()
 		.await
 		.wrap_err("Failed to wait for the process to exit.")?;
+
+	// Wait for the log task to complete, draining any remaining output.
+	let _ = log_task.await;
 
 	// Return an error if the process did not exit successfully.
 	if !status.success() {
