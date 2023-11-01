@@ -2118,7 +2118,7 @@ impl xdr::ToXdr for COMPOUND4res {
 		W: std::io::Write,
 	{
 		encoder.encode(&self.status)?;
-		encoder.encode(&self.tag)?;
+		encoder.encode_opaque(&self.tag)?;
 		encoder.encode(&self.resarray)?;
 		Ok(())
 	}
@@ -2246,5 +2246,32 @@ impl nfs_resop4 {
 			nfs_resop4::OP_ILLEGAL(_) => nfsstat4::NFS4ERR_OP_ILLEGAL,
 			nfs_resop4::Unknown(_) => nfsstat4::NFS4ERR_NOTSUPP,
 		}
+	}
+}
+
+#[cfg(test)]
+mod test {
+    use crate::nfs::{xdr::{self, ToXdr}, types::{COMPOUND4res, nfsstat4, nfs_resop4}};
+
+    use super::SETCLIENTID4res;
+
+	#[test]
+	fn setclientid() {
+		let res = SETCLIENTID4res::NFS4_OK(super::SETCLIENTID4resok {
+			clientid: 1007,
+			setclientid_confirm: [0, 0, 0, 0, 0, 0, 3, 239],
+		});
+
+
+		let compound = COMPOUND4res {
+			status: nfsstat4::NFS4_OK,
+			tag: vec![115, 101, 116, 99, 108, 105, 100, 32, 32, 32, 32, 32],
+			resarray: vec![nfs_resop4::OP_SETCLIENTID(res)],
+		};
+
+		let mut buffer = vec![];
+		let mut encoder = xdr::Encoder::new(&mut buffer);
+		compound.encode(&mut encoder).expect("Failed to encode result.");
+		println!("{buffer:?}");
 	}
 }
