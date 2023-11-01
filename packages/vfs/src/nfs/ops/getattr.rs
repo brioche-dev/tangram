@@ -17,7 +17,7 @@ use crate::nfs::{
 		FATTR4_TIME_DELTA, FATTR4_TIME_METADATA, FATTR4_TIME_MODIFY, FATTR4_TYPE,
 		FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_RUSR, MODE4_XGRP, MODE4_XUSR,
 	},
-	xdr, Context, Server,
+	xdr, Context, Server, ROOT,
 };
 use num::ToPrimitive;
 
@@ -107,7 +107,7 @@ impl FileAttrData {
 			case_insensitive: false,
 			case_preserving: true,
 			chown_restricted: true,
-			fileid: file_handle,
+			fileid: file_handle.0,
 			files_avail: 0,
 			files_free: 0,
 			files_total: 1,
@@ -146,7 +146,7 @@ impl FileAttrData {
 			time_delta: nfstime4::new(),
 			time_metadata: nfstime4::new(),
 			time_modify: nfstime4::new(),
-			mounted_on_fileid: file_handle,
+			mounted_on_fileid: ROOT.0,
 		}
 	}
 }
@@ -193,7 +193,7 @@ impl Server {
 
 	pub async fn get_file_attr_data(&self, file_handle: nfs_fh4) -> Option<FileAttrData> {
 		let state = &self.state.read().await;
-		let node = state.nodes.get(&file_handle)?;
+		let node = state.nodes.get(&file_handle.0)?;
 		let data = match &node.kind {
 			NodeKind::Root { .. } => FileAttrData::new(file_handle, nfs_ftype4::NF4DIR, 0, O_RX),
 			NodeKind::Directory { children, .. } => {

@@ -25,7 +25,7 @@ mod state;
 mod types;
 mod xdr;
 
-const ROOT: nfs_fh4 = 0;
+const ROOT: nfs_fh4 = nfs_fh4(0);
 
 #[derive(Clone)]
 pub struct Server {
@@ -281,7 +281,7 @@ impl Server {
 	}
 
 	pub async fn get_node(&self, node: nfs_fh4) -> Option<Arc<Node>> {
-		self.state.read().await.nodes.get(&node).cloned()
+		self.state.read().await.nodes.get(&node.0).cloned()
 	}
 }
 

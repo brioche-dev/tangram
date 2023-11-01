@@ -39,11 +39,11 @@ impl Server {
 			.read()
 			.await
 			.nodes
-			.get(&parent)
+			.get(&parent.0)
 			.cloned()
 			.ok_or(nfsstat4::NFS4ERR_NOENT)?;
 		let node = self.get_or_create_child_node(parent_node, name).await?;
-		let fh = node.id;
+		let fh = nfs_fh4(node.id);
 		Ok(fh)
 	}
 

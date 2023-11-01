@@ -1,6 +1,6 @@
 use crate::nfs::{
 	state::NodeKind,
-	types::{dirlist4, entry4, nfsstat4, READDIR4args, READDIR4res, READDIR4resok},
+	types::{dirlist4, entry4, nfsstat4, READDIR4args, READDIR4res, READDIR4resok, nfs_fh4},
 	Context, Server,
 };
 use num::ToPrimitive;
@@ -49,7 +49,7 @@ impl Server {
 				},
 			};
 			let attrs = self
-				.get_attr(node.id, arg.attr_request.clone())
+				.get_attr(nfs_fh4(node.id), arg.attr_request.clone())
 				.await
 				.unwrap();
 			let cookie = cookie.to_u64().unwrap();
@@ -74,7 +74,7 @@ impl Server {
 			});
 		}
 
-		let cookieverf = fh.to_be_bytes();
+		let cookieverf = fh.0.to_be_bytes();
 		let reply = dirlist4 {
 			entries: reply,
 			eof,

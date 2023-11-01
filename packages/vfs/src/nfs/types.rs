@@ -120,7 +120,8 @@ pub type length4 = uint64_t;
 pub type mode4 = uint32_t;
 pub type nfs_cookie4 = uint64_t;
 /// Note: this is an opaque type that is left up to the server to define. We use 64 bit integers.
-pub type nfs_fh4 = u64;
+#[derive(Clone, Copy, Debug)]
+pub struct nfs_fh4(pub u64);
 pub type nfs_lease4 = uint32_t;
 pub type offset4 = uint64_t;
 pub type qop4 = uint32_t;
@@ -180,8 +181,8 @@ pub struct fsid4 {
 
 #[derive(Debug, Clone)]
 pub struct fs_location4 {
-	pub server: Vec<utf8str_cis>,
-	pub rootpath: pathname4,
+	pub server: pathname4,
+	pub rootpath: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1181,6 +1182,27 @@ impl xdr::ToXdr for nfs_ftype4 {
 	}
 }
 
+impl xdr::ToXdr for nfs_fh4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+		where
+			W: std::io::Write {
+		encoder.encode_opaque(&self.0.to_be_bytes())?;
+		Ok(())
+
+	}
+}
+
+impl xdr::FromXdr for nfs_fh4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let decoded = decoder.decode_opaque()?;
+		if decoded.len() != 8 {
+			return Err(xdr::Error::Custom("File handle size mismatch.".into()));
+		}
+		let fh = u64::from_be_bytes(decoded[0..8].try_into().unwrap());
+		Ok(Self(fh))
+	}
+}
+
 impl xdr::ToXdr for nfsstat4 {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
@@ -1425,8 +1447,8 @@ impl xdr::ToXdr for fs_location4 {
 	where
 		W: std::io::Write,
 	{
-		encoder.encode(&self.server)?;
-		encoder.encode(&self.rootpath.0)?;
+		encoder.encode(&self.server.0)?;
+		encoder.encode(&self.rootpath)?;
 		Ok(())
 	}
 }
