@@ -310,13 +310,12 @@ pub async fn mount(mountpoint: &Path, port: u16) -> crate::Result<()> {
 		.await
 		.wrap_err("Failed to unmount.")?;
 	tokio::process::Command::new("mount_nfs")
-		.arg("-vvv")
 		.arg("-o")
 		.arg(format!("tcp,vers=4.0,port={port}"))
 		.arg("Tangram:/")
 		.arg(mountpoint)
-		// .stdout(std::process::Stdio::null())
-		// .stderr(std::process::Stdio::null())
+		.stdout(std::process::Stdio::null())
+		.stderr(std::process::Stdio::null())
 		.status()
 		.await
 		.wrap_err("Failed to mount.")?
