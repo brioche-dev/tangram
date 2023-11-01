@@ -119,7 +119,7 @@ impl Cli {
 		}
 
 		// If the client is not connected, start the server and attempt to connect.
-		if !connected {
+		if !cfg!(debug_assertions) && !connected {
 			self.start_server().await?;
 			for _ in 0..10 {
 				tokio::time::sleep(std::time::Duration::from_millis(100)).await;
