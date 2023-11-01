@@ -10,7 +10,6 @@ use std::{
 };
 use tangram_client as tg;
 use tg::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
-use tokio::io::AsyncReadExt;
 
 pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 	match run_inner(client, target, progress).await {
@@ -28,7 +27,7 @@ pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 pub async fn run_inner(
 	client: &dyn Client,
 	target: Target,
-	progress: &dyn Progress,
+	_progress: &dyn Progress,
 ) -> Result<Value> {
 	// Get the server path.
 	let server_directory_path = client.path().unwrap().to_owned();
