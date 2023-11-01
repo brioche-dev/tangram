@@ -28,7 +28,7 @@ pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
 pub async fn run_inner(
 	client: &dyn Client,
 	target: Target,
-	_progress: &dyn Progress,
+	progress: &dyn Progress,
 ) -> Result<Value> {
 	// Get the server path.
 	let server_directory_path = client.path().unwrap().to_owned();
@@ -318,7 +318,7 @@ pub async fn run_inner(
 	let mut child = command.spawn().wrap_err("Failed to spawn the process.")?;
 
 	// Log the child's progress.
-	let progress = _progress.clone_box();
+	let progress = progress.clone_box();
 	let mut stderr = child.stderr.take().unwrap();
 	let log_task = tokio::task::spawn(async move {
 		let mut buf = [0; 512];
