@@ -9,11 +9,11 @@ impl Server {
 	#[tracing::instrument(skip(self))]
 	pub async fn handle_readdir(&self, ctx: &Context, arg: READDIR4args) -> READDIR4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return READDIR4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
+			return READDIR4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 
 		let Some(node) = self.get_node(fh).await else {
-			return READDIR4res::Default(nfsstat4::NFS4ERR_BADHANDLE);
+			return READDIR4res::Error(nfsstat4::NFS4ERR_BADHANDLE);
 		};
 
 		let cookie = arg.cookie.to_usize().unwrap();
@@ -22,12 +22,12 @@ impl Server {
 		let entries = match &node.kind {
 			NodeKind::Directory { directory, .. } => {
 				let Ok(entries) = directory.entries(self.client.as_ref()).await else {
-					return READDIR4res::Default(nfsstat4::NFS4ERR_IO);
+					return READDIR4res::Error(nfsstat4::NFS4ERR_IO);
 				};
 				entries.clone()
 			},
 			NodeKind::Root { .. } => Default::default(),
-			_ => return READDIR4res::Default(nfsstat4::NFS4ERR_NOTDIR),
+			_ => return READDIR4res::Error(nfsstat4::NFS4ERR_NOTDIR),
 		};
 
 		let mut reply = Vec::with_capacity(entries.len());
@@ -45,7 +45,7 @@ impl Server {
 				".." => node.parent.upgrade().unwrap(),
 				_ => match self.get_or_create_child_node(node.clone(), name).await {
 					Ok(node) => node,
-					Err(e) => return READDIR4res::Default(e),
+					Err(e) => return READDIR4res::Error(e),
 				},
 			};
 			let attrs = self
@@ -57,7 +57,7 @@ impl Server {
 
 			// Size of the cookie + size of the attr + size of the name
 			count += std::mem::size_of_val(&cookie); // u64
-			count += 4 + 4 * attrs.attrmask.len(); // bitmap4
+			count += 4 + 4 * attrs.attrmask.0.len(); // bitmap4
 			count += 4 + attrs.attr_vals.len(); // opaque<>
 			count += 4 + name.len(); // utf8_cstr
 

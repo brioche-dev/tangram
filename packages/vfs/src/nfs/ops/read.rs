@@ -10,20 +10,20 @@ impl Server {
 	#[tracing::instrument(skip(self))]
 	pub async fn handle_read(&self, ctx: &Context, arg: READ4args) -> READ4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return READ4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
+			return READ4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 		let Some(node) = self.get_node(fh).await else {
 			tracing::error!(?fh, "Unknown filehandle.");
-			return READ4res::Default(nfsstat4::NFS4ERR_BADHANDLE);
+			return READ4res::Error(nfsstat4::NFS4ERR_BADHANDLE);
 		};
 
 		// RFC 7530 16.23.4:
 		// "If the current file handle is not a regular file, an error will be returned to the client. In the case where the current filehandle represents a directory, NFS4ERR_ISDIR is returned; otherwise, NFS4ERR_INVAL is returned."
 		let file_size = match &node.kind {
 			NodeKind::Directory { .. } | NodeKind::Root { .. } => {
-				return READ4res::Default(nfsstat4::NFS4ERR_ISDIR)
+				return READ4res::Error(nfsstat4::NFS4ERR_ISDIR)
 			},
-			NodeKind::Symlink { .. } => return READ4res::Default(nfsstat4::NFS4ERR_INVAL),
+			NodeKind::Symlink { .. } => return READ4res::Error(nfsstat4::NFS4ERR_INVAL),
 			NodeKind::File { size, .. } => *size,
 		};
 
@@ -38,15 +38,14 @@ impl Server {
 		let state = self.state.read().await;
 		let Some(reader) = state.blob_readers.get(&arg.stateid).cloned() else {
 			tracing::error!(?arg.stateid, "No reader is registered for the given id.");
-			return READ4res::Default(nfsstat4::NFS4ERR_BAD_STATEID);
+			return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 		};
 
 		let mut reader = reader.write().await;
 
 		if let Err(e) = reader.seek(std::io::SeekFrom::Start(arg.offset)).await {
 			tracing::error!(?e, "Failed to seek.");
-			// todo!("Convert std::io::Error to nfs error.");
-			return READ4res::Default(nfsstat4::NFS4ERR_IO);
+			return READ4res::Error(e.into());
 		}
 
 		let read_size = arg
@@ -59,8 +58,7 @@ impl Server {
 		let mut data = vec![0u8; read_size];
 		if let Err(e) = reader.read_exact(&mut data).await {
 			tracing::error!(?e, "Failed to read from file.");
-			// todo!("Convert std::io::Error to nfs error.");
-			return READ4res::Default(nfsstat4::NFS4ERR_IO);
+			return READ4res::Error(e.into());
 		}
 
 		let eof = (arg.offset + arg.count.to_u64().unwrap()) >= file_size;

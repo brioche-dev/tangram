@@ -8,18 +8,18 @@ impl Server {
 	#[tracing::instrument(skip(self))]
 	pub async fn handle_close(&self, ctx: &Context, arg: CLOSE4args) -> CLOSE4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return CLOSE4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
+			return CLOSE4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 
 		let Some(node) = self.get_node(fh).await else {
 			tracing::error!(?fh, "Unknown filehandle.");
-			return CLOSE4res::Default(nfsstat4::NFS4ERR_BADHANDLE);
+			return CLOSE4res::Error(nfsstat4::NFS4ERR_BADHANDLE);
 		};
 
 		if let NodeKind::File { .. } = &node.kind {
 			let mut state = self.state.write().await;
 			if state.blob_readers.remove(&arg.open_stateid).is_none() {
-				return CLOSE4res::Default(nfsstat4::NFS4ERR_BAD_STATEID);
+				return CLOSE4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 			}
 		}
 

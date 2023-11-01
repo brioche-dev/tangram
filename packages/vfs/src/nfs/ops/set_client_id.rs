@@ -34,7 +34,7 @@ impl Server {
 
 		if !conditions.into_iter().all(|c| c) {
 			// TODO: extend to handle any other cases.
-			SETCLIENTID4res::Default(nfsstat4::NFS4ERR_IO)
+			SETCLIENTID4res::Error(nfsstat4::NFS4ERR_IO)
 		} else {
 			let clientid = client.server_id;
 			let setclientid_confirm = client.server_verifier;

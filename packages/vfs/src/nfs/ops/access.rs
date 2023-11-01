@@ -11,12 +11,12 @@ impl Server {
 	#[tracing::instrument(skip(self))]
 	pub async fn handle_access(&self, ctx: &Context, arg: ACCESS4args) -> ACCESS4res {
 		let Some(fh) = ctx.current_file_handle else {
-			return ACCESS4res::Default(nfsstat4::NFS4ERR_NOFILEHANDLE);
+			return ACCESS4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 
 		let Some(node) = self.get_node(fh).await else {
 			tracing::error!(?fh, "Unknown filehandle.");
-			return ACCESS4res::Default(nfsstat4::NFS4ERR_BADHANDLE);
+			return ACCESS4res::Error(nfsstat4::NFS4ERR_BADHANDLE);
 		};
 
 		let access = match &node.kind {
@@ -28,7 +28,7 @@ impl Server {
 					Ok(b) => b,
 					Err(e) => {
 						tracing::error!(?e, "Failed to lookup executable bit for file.");
-						return ACCESS4res::Default(nfsstat4::NFS4ERR_IO);
+						return ACCESS4res::Error(nfsstat4::NFS4ERR_IO);
 					},
 				};
 				if is_executable {

@@ -1,4 +1,6 @@
 #![allow(non_camel_case_types, dead_code)]
+use std::{path::Path, os::unix::prelude::OsStrExt};
+
 use num::ToPrimitive;
 
 use super::xdr;
@@ -109,7 +111,8 @@ pub enum nfsstat4 {
 }
 
 pub type attrlist4 = Vec<u8>;
-pub type bitmap4 = Vec<uint32_t>;
+#[derive(Clone, Debug)]
+pub struct bitmap4(pub Vec<uint32_t>);
 pub type changeid4 = uint64_t;
 pub type clientid4 = uint64_t;
 pub type count4 = uint32_t;
@@ -131,7 +134,8 @@ pub type utf8str_mixed = utf8string;
 pub type component4 = utf8str_cs;
 pub type linktext4 = Vec<u8>;
 pub type ascii_REQUIRED4 = utf8string;
-pub type pathname4 = Vec<component4>;
+#[derive(Clone, Debug)]
+pub struct pathname4(pub Vec<component4>);
 pub type nfs_lockid4 = uint64_t;
 pub type verifier4 = [u8; NFS4_VERIFIER_SIZE];
 
@@ -389,67 +393,90 @@ pub type fattr4_time_modify_set = settime4;
 /*
  * Mandatory attributes
  */
-pub const FATTR4_SUPPORTED_ATTRS: i32 = 0;
-pub const FATTR4_TYPE: i32 = 1;
-pub const FATTR4_FH_EXPIRE_TYPE: i32 = 2;
-pub const FATTR4_CHANGE: i32 = 3;
-pub const FATTR4_SIZE: i32 = 4;
-pub const FATTR4_LINK_SUPPORT: i32 = 5;
-pub const FATTR4_SYMLINK_SUPPORT: i32 = 6;
-pub const FATTR4_NAMED_ATTR: i32 = 7;
-pub const FATTR4_FSID: i32 = 8;
-pub const FATTR4_UNIQUE_HANDLES: i32 = 9;
-pub const FATTR4_LEASE_TIME: i32 = 10;
-pub const FATTR4_RDATTR_ERROR: i32 = 11;
-pub const FATTR4_FILEHANDLE: i32 = 19;
+pub const FATTR4_SUPPORTED_ATTRS: u32 = 0;
+pub const FATTR4_TYPE: u32 = 1;
+pub const FATTR4_FH_EXPIRE_TYPE: u32 = 2;
+pub const FATTR4_CHANGE: u32 = 3;
+pub const FATTR4_SIZE: u32 = 4;
+pub const FATTR4_LINK_SUPPORT: u32 = 5;
+pub const FATTR4_SYMLINK_SUPPORT: u32 = 6;
+pub const FATTR4_NAMED_ATTR: u32 = 7;
+pub const FATTR4_FSID: u32 = 8;
+pub const FATTR4_UNIQUE_HANDLES: u32 = 9;
+pub const FATTR4_LEASE_TIME: u32 = 10;
+pub const FATTR4_RDATTR_ERROR: u32 = 11;
+pub const FATTR4_FILEHANDLE: u32 = 19;
 
 /*
  * Recommended attributes
  */
-pub const FATTR4_ACL: i32 = 12;
-pub const FATTR4_ACLSUPPORT: i32 = 13;
-pub const FATTR4_ARCHIVE: i32 = 14;
-pub const FATTR4_CANSETTIME: i32 = 15;
-pub const FATTR4_CASE_INSENSITIVE: i32 = 16;
-pub const FATTR4_CASE_PRESERVING: i32 = 17;
-pub const FATTR4_CHOWN_RESTRICTED: i32 = 18;
-pub const FATTR4_FILEID: i32 = 20;
-pub const FATTR4_FILES_AVAIL: i32 = 21;
-pub const FATTR4_FILES_FREE: i32 = 22;
-pub const FATTR4_FILES_TOTAL: i32 = 23;
-pub const FATTR4_FS_LOCATIONS: i32 = 24;
-pub const FATTR4_HIDDEN: i32 = 25;
-pub const FATTR4_HOMOGENEOUS: i32 = 26;
-pub const FATTR4_MAXFILESIZE: i32 = 27;
-pub const FATTR4_MAXLINK: i32 = 28;
-pub const FATTR4_MAXNAME: i32 = 29;
-pub const FATTR4_MAXREAD: i32 = 30;
-pub const FATTR4_MAXWRITE: i32 = 31;
-pub const FATTR4_MIMETYPE: i32 = 32;
-pub const FATTR4_MODE: i32 = 33;
-pub const FATTR4_NO_TRUNC: i32 = 34;
-pub const FATTR4_NUMLINKS: i32 = 35;
-pub const FATTR4_OWNER: i32 = 36;
-pub const FATTR4_OWNER_GROUP: i32 = 37;
-pub const FATTR4_QUOTA_AVAIL_HARD: i32 = 38;
+pub const FATTR4_ACL: u32 = 12;
+pub const FATTR4_ACLSUPPORT: u32 = 13;
+pub const FATTR4_ARCHIVE: u32 = 14;
+pub const FATTR4_CANSETTIME: u32 = 15;
+pub const FATTR4_CASE_INSENSITIVE: u32 = 16;
+pub const FATTR4_CASE_PRESERVING: u32 = 17;
+pub const FATTR4_CHOWN_RESTRICTED: u32 = 18;
+pub const FATTR4_FILEID: u32 = 20;
+pub const FATTR4_FILES_AVAIL: u32 = 21;
+pub const FATTR4_FILES_FREE: u32 = 22;
+pub const FATTR4_FILES_TOTAL: u32 = 23;
+pub const FATTR4_FS_LOCATIONS: u32 = 24;
+pub const FATTR4_HIDDEN: u32 = 25;
+pub const FATTR4_HOMOGENEOUS: u32 = 26;
+pub const FATTR4_MAXFILESIZE: u32 = 27;
+pub const FATTR4_MAXLINK: u32 = 28;
+pub const FATTR4_MAXNAME: u32 = 29;
+pub const FATTR4_MAXREAD: u32 = 30;
+pub const FATTR4_MAXWRITE: u32 = 31;
+pub const FATTR4_MIMETYPE: u32 = 32;
+pub const FATTR4_MODE: u32 = 33;
+pub const FATTR4_NO_TRUNC: u32 = 34;
+pub const FATTR4_NUMLINKS: u32 = 35;
+pub const FATTR4_OWNER: u32 = 36;
+pub const FATTR4_OWNER_GROUP: u32 = 37;
+pub const FATTR4_QUOTA_AVAIL_HARD: u32 = 38;
 
-pub const FATTR4_QUOTA_AVAIL_SOFT: i32 = 39;
-pub const FATTR4_QUOTA_USED: i32 = 40;
-pub const FATTR4_RAWDEV: i32 = 41;
-pub const FATTR4_SPACE_AVAIL: i32 = 42;
-pub const FATTR4_SPACE_FREE: i32 = 43;
-pub const FATTR4_SPACE_TOTAL: i32 = 44;
-pub const FATTR4_SPACE_USED: i32 = 45;
-pub const FATTR4_SYSTEM: i32 = 46;
-pub const FATTR4_TIME_ACCESS: i32 = 47;
-pub const FATTR4_TIME_ACCESS_SET: i32 = 48;
-pub const FATTR4_TIME_BACKUP: i32 = 49;
-pub const FATTR4_TIME_CREATE: i32 = 50;
-pub const FATTR4_TIME_DELTA: i32 = 51;
-pub const FATTR4_TIME_METADATA: i32 = 52;
-pub const FATTR4_TIME_MODIFY: i32 = 53;
-pub const FATTR4_TIME_MODIFY_SET: i32 = 54;
-pub const FATTR4_MOUNTED_ON_FILEID: i32 = 55;
+pub const FATTR4_QUOTA_AVAIL_SOFT: u32 = 39;
+pub const FATTR4_QUOTA_USED: u32 = 40;
+pub const FATTR4_RAWDEV: u32 = 41;
+pub const FATTR4_SPACE_AVAIL: u32 = 42;
+pub const FATTR4_SPACE_FREE: u32 = 43;
+pub const FATTR4_SPACE_TOTAL: u32 = 44;
+pub const FATTR4_SPACE_USED: u32 = 45;
+pub const FATTR4_SYSTEM: u32 = 46;
+pub const FATTR4_TIME_ACCESS: u32 = 47;
+pub const FATTR4_TIME_ACCESS_SET: u32 = 48;
+pub const FATTR4_TIME_BACKUP: u32 = 49;
+pub const FATTR4_TIME_CREATE: u32 = 50;
+pub const FATTR4_TIME_DELTA: u32 = 51;
+pub const FATTR4_TIME_METADATA: u32 = 52;
+pub const FATTR4_TIME_MODIFY: u32 = 53;
+pub const FATTR4_TIME_MODIFY_SET: u32 = 54;
+pub const FATTR4_MOUNTED_ON_FILEID: u32 = 55;
+pub const FATTR4_DIR_NOTIF_DELAY: u32 = 56;
+pub const FATTR4_DIRENT_NOTIF_DELAY: u32 = 57;
+pub const FATTR4_DACL: u32 = 58;
+pub const FATTR4_SACL: u32 = 59;
+pub const FATTR4_CHANGE_POLICY: u32 = 60;
+pub const FATTR4_FS_STATUS: u32 = 61;
+pub const FATTR4_FS_LAYOUT_TYPE: u32 = 62;
+pub const FATTR4_LAYOUT_HINT: u32 = 63;
+pub const FATTR4_LAYOUT_TYPE: u32 = 64;
+pub const FATTR4_LAYOUT_BLKSIZE: u32 = 65;
+pub const FATTR4_LAYOUT_ALIGNMENT: u32 = 66;
+pub const FATTR4_FS_LOCATIONS_INFO: u32 = 67;
+pub const FATTR4_MDSTHRESHOLD: u32 = 68;
+pub const FATTR4_RETENTION_GET: u32 = 69;
+pub const FATTR4_RETENTION_SET: u32 = 70;
+pub const FATTR4_RETENTEVT_GET: u32 = 71;
+pub const FATTR4_RETENTEVT_SET: u32 = 72;
+pub const FATTR4_RETENTION_HOLD: u32 = 73;
+pub const FATTR4_MODE_SET_MASKED: u32 = 74;
+pub const FATTR4_SUPPATTR_EXCLCREAT: u32 = 75; // Required
+pub const FATTR4_FS_CHARSET_CAP: u32 = 76;
+
+
 
 /*
  * File attribute container
@@ -546,7 +573,7 @@ pub struct ACCESS4resok {
 #[derive(Clone, Copy, Debug)]
 pub enum ACCESS4res {
 	NFS4_OK(ACCESS4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -558,7 +585,7 @@ pub struct CLOSE4args {
 #[derive(Clone, Copy, Debug)]
 pub enum CLOSE4res {
 	NFS4_OK(stateid4),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Debug)]
@@ -575,13 +602,13 @@ pub struct GETATTR4resok {
 #[derive(Clone, Debug)]
 pub enum GETATTR4res {
 	NFS4_OK(GETATTR4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum GETFH4res {
 	NFS4_OK(GETFH4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -791,7 +818,7 @@ pub struct OPEN4resok {
 pub enum OPEN4res {
 	/* CURRENT_FH: opened file */
 	NFS4_OK(OPEN4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Debug, Clone)]
@@ -828,7 +855,7 @@ pub struct READ4resok {
 #[derive(Debug, Clone)]
 pub enum READ4res {
 	NFS4_OK(READ4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Debug, Clone)]
@@ -863,7 +890,7 @@ pub struct READDIR4resok {
 #[derive(Debug, Clone)]
 pub enum READDIR4res {
 	NFS4_OK(READDIR4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Debug, Clone)]
@@ -874,7 +901,7 @@ pub struct READLINK4resok {
 #[derive(Debug, Clone)]
 pub enum READLINK4res {
 	NFS4_OK(READLINK4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -935,7 +962,7 @@ pub type SECINFO4resok = Vec<secinfo4>;
 #[derive(Clone, Debug)]
 pub enum SECINFO4res {
 	NFS4_OK(SECINFO4resok),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Debug)]
@@ -955,7 +982,7 @@ pub struct SETCLIENTID4resok {
 pub enum SETCLIENTID4res {
 	NFS4_OK(SETCLIENTID4resok),
 	NFS4ERR_CLID_INUSE(clientaddr4),
-	Default(nfsstat4),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1302,7 +1329,7 @@ impl xdr::ToXdr for fattr4 {
 	where
 		W: std::io::Write,
 	{
-		encoder.encode(&self.attrmask)?;
+		encoder.encode(&self.attrmask.0)?;
 		encoder.encode_opaque(&self.attr_vals)?;
 		Ok(())
 	}
@@ -1310,7 +1337,7 @@ impl xdr::ToXdr for fattr4 {
 
 impl xdr::FromXdr for fattr4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let attrmask = decoder.decode()?;
+		let attrmask = bitmap4(decoder.decode()?);
 		let attr_vals = decoder.decode_opaque()?.to_owned();
 		Ok(Self {
 			attrmask,
@@ -1389,7 +1416,7 @@ impl xdr::ToXdr for fs_locations4 {
 	where
 		W: std::io::Write,
 	{
-		encoder.encode(&self.fs_root)?;
+		encoder.encode(&self.fs_root.0)?;
 		encoder.encode(&self.locations)?;
 		Ok(())
 	}
@@ -1401,7 +1428,7 @@ impl xdr::ToXdr for fs_location4 {
 		W: std::io::Write,
 	{
 		encoder.encode(&self.server)?;
-		encoder.encode(&self.rootpath)?;
+		encoder.encode(&self.rootpath.0)?;
 		Ok(())
 	}
 }
@@ -1529,7 +1556,7 @@ impl xdr::ToXdr for ACCESS4res {
 				encoder.encode(&resop.supported)?;
 				encoder.encode(&resop.access)?;
 			},
-			Self::Default(error) => encoder.encode(error)?,
+			Self::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -1556,7 +1583,7 @@ impl xdr::ToXdr for CLOSE4res {
 				encoder.encode(&nfsstat4::NFS4_OK)?;
 				encoder.encode(resop)?;
 			},
-			CLOSE4res::Default(error) => encoder.encode(error)?,
+			CLOSE4res::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -1564,7 +1591,7 @@ impl xdr::ToXdr for CLOSE4res {
 
 impl xdr::FromXdr for GETATTR4args {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let attr_request = decoder.decode()?;
+		let attr_request = bitmap4(decoder.decode()?);
 		Ok(Self { attr_request })
 	}
 }
@@ -1579,7 +1606,7 @@ impl xdr::ToXdr for GETATTR4res {
 				encoder.encode(&nfsstat4::NFS4_OK)?;
 				encoder.encode(&resok.obj_attributes)?;
 			},
-			Self::Default(error) => encoder.encode(error)?,
+			Self::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -1595,7 +1622,7 @@ impl xdr::ToXdr for GETFH4res {
 				encoder.encode(&nfsstat4::NFS4_OK)?;
 				encoder.encode(&resok.object)?;
 			},
-			Self::Default(error) => encoder.encode(error)?,
+			Self::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -1672,10 +1699,10 @@ impl xdr::ToXdr for OPEN4res {
 				encoder.encode(&resop.stateid)?;
 				encoder.encode(&resop.cinfo)?;
 				encoder.encode(&resop.rflags)?;
-				encoder.encode(&resop.attrset)?;
+				encoder.encode(&resop.attrset.0)?;
 				encoder.encode(&resop.delegation)?;
 			},
-			OPEN4res::Default(error) => encoder.encode(error)?,
+			OPEN4res::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -1705,7 +1732,7 @@ impl xdr::ToXdr for READ4res {
 				encoder.encode(&resop.eof)?;
 				encoder.encode(&resop.data)?;
 			},
-			Self::Default(error) => encoder.encode(error)?,
+			Self::Error(error) => encoder.encode(error)?,
 		};
 		Ok(())
 	}
@@ -1717,7 +1744,7 @@ impl xdr::FromXdr for READDIR4args {
 		let cookieverf = decoder.decode_n()?;
 		let dircount = decoder.decode()?;
 		let maxcount = decoder.decode()?;
-		let attr_request = decoder.decode()?;
+		let attr_request = bitmap4(decoder.decode()?);
 		Ok(Self {
 			cookie,
 			cookieverf,
@@ -1744,7 +1771,7 @@ impl xdr::ToXdr for READDIR4res {
 				encoder.encode_bool(false)?;
 				encoder.encode_bool(resop.reply.eof)?;
 			},
-			Self::Default(error) => encoder.encode(error)?,
+			Self::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -1760,7 +1787,7 @@ impl xdr::ToXdr for READLINK4res {
 				encoder.encode(&nfsstat4::NFS4_OK)?;
 				encoder.encode(&resok.link)?;
 			},
-			Self::Default(error) => encoder.encode(&error)?,
+			Self::Error(error) => encoder.encode(&error)?,
 		}
 		Ok(())
 	}
@@ -1817,7 +1844,7 @@ impl xdr::ToXdr for SECINFO4res {
 				encoder.encode(&nfsstat4::NFS4_OK)?;
 				encoder.encode(resok)?;
 			},
-			Self::Default(error) => encoder.encode(error)?,
+			Self::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -1898,7 +1925,7 @@ impl xdr::ToXdr for SETCLIENTID4res {
 				encoder.encode(&nfsstat4::NFS4ERR_CLID_INUSE)?;
 				encoder.encode(clientaddr)?;
 			},
-			Self::Default(error) => encoder.encode(error)?,
+			Self::Error(error) => encoder.encode(error)?,
 		}
 		Ok(())
 	}
@@ -2094,5 +2121,130 @@ impl xdr::ToXdr for COMPOUND4res {
 		encoder.encode(&self.tag)?;
 		encoder.encode(&self.resarray)?;
 		Ok(())
+	}
+}
+
+impl bitmap4 {
+	pub fn set(&mut self, bit: usize) {
+		let word = bit / 32;
+		if word >= self.0.len() {
+			self.0.resize_with(word + 1, || 0);
+		}
+		self.0[word] |= 1 << (bit % 32);
+	}
+
+	pub fn get(&self, bit: usize) -> bool {
+		let word = self.0.get(bit / 32).copied().unwrap_or(0);
+		let flag = 1 & (word >> (bit % 32));
+		flag != 0
+	}
+
+	pub fn intersection(&self, rhs: &Self) -> Self {
+		let sz = self.0.len().max(rhs.0.len());
+		let mut new = vec![0; sz];
+		for (i, new) in new.iter_mut().enumerate() {
+			let lhs = self.0.get(i).copied().unwrap_or(0);
+			let rhs = rhs.0.get(i).copied().unwrap_or(0);
+			*new = lhs & rhs;
+		}
+		Self(new)
+	}
+}
+
+impl nfstime4 {
+	pub fn new() -> nfstime4 {
+		nfstime4 {
+			seconds: 0,
+			nseconds: 0,
+		}
+	}
+
+	pub fn now() -> nfstime4 {
+		let now = std::time::SystemTime::now();
+		let dur = now.duration_since(std::time::UNIX_EPOCH).unwrap();
+		Self {
+			seconds: dur.as_secs().to_i64().unwrap(),
+			nseconds: dur.subsec_nanos(),
+		}
+	}
+}
+
+impl<P> From<P> for pathname4
+where
+	P: AsRef<Path>,
+{
+	fn from(value: P) -> Self {
+		let components = value
+			.as_ref()
+			.components()
+			.map(|component| component.as_os_str().as_bytes().into())
+			.collect();
+		Self(components)
+	}
+}
+
+impl From<std::io::Error> for nfsstat4 {
+	// https://github.com/apple/darwin-xnu/blob/main/bsd/sys/errno.h
+	// https://www.thegeekstuff.com/2010/10/linux-error-codes/
+	fn from(value: std::io::Error) -> Self {
+		match value.raw_os_error() {
+			 Some(0) => nfsstat4::NFS4_OK,
+			 Some(1) => nfsstat4::NFS4ERR_PERM,
+			 Some(2) => nfsstat4::NFS4ERR_NOENT,
+			 Some(5) => nfsstat4::NFS4ERR_IO,
+			 Some(6) => nfsstat4::NFS4ERR_NXIO,
+			 Some(13) => nfsstat4::NFS4ERR_ACCESS,
+			 Some(17) => nfsstat4::NFS4ERR_EXIST,
+			 Some(18) => nfsstat4::NFS4ERR_XDEV,
+			 Some(20) => nfsstat4::NFS4ERR_NOTDIR,
+			 Some(21) => nfsstat4::NFS4ERR_ISDIR,
+			 Some(22) => nfsstat4::NFS4ERR_INVAL,
+			 Some(27) => nfsstat4::NFS4ERR_FBIG,
+			 Some(28) => nfsstat4::NFS4ERR_NOSPC,
+			 Some(30) => nfsstat4::NFS4ERR_ROFS,
+			 Some(31) => nfsstat4::NFS4ERR_MLINK,
+			 Some(63) => nfsstat4::NFS4ERR_NAMETOOLONG,
+			 Some(66) => nfsstat4::NFS4ERR_NOTEMPTY,
+			 Some(69) => nfsstat4::NFS4ERR_DQUOT,
+			 Some(70) => nfsstat4::NFS4ERR_STALE,
+			 _ => nfsstat4::NFS4ERR_IO
+		}
+	}
+}
+
+impl nfs_resop4 {
+	pub fn status(&self) -> nfsstat4 {
+		match self {
+			nfs_resop4::OP_ACCESS(ACCESS4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_ACCESS(ACCESS4res::Error(e)) => *e,
+			nfs_resop4::OP_CLOSE(CLOSE4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_CLOSE(CLOSE4res::Error(e)) => *e,
+			nfs_resop4::OP_GETATTR(GETATTR4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_GETATTR(GETATTR4res::Error(e)) => *e,
+			nfs_resop4::OP_GETFH(GETFH4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_GETFH(GETFH4res::Error(e)) => *e,
+			nfs_resop4::OP_LOOKUP(LOOKUP4res { status }) => *status,
+			nfs_resop4::OP_OPEN(OPEN4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_OPEN(OPEN4res::Error(e)) => *e,
+			nfs_resop4::OP_PUTFH(PUTFH4res { status }) => *status ,
+			nfs_resop4::OP_PUTROOTFH(PUTROOTFH4res { status }) => *status,
+			nfs_resop4::OP_READ(READ4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_READ(READ4res::Error(e)) => *e,
+			nfs_resop4::OP_READDIR(READDIR4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_READDIR(READDIR4res::Error(e)) => *e,
+			nfs_resop4::OP_READLINK(READLINK4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_READLINK(READLINK4res::Error(e)) => *e,
+			nfs_resop4::OP_RENEW(RENEW4res { status }) => *status,
+			nfs_resop4::OP_RESTOREFH(RESTOREFH4res { status }) => *status,
+			nfs_resop4::OP_SAVEFH(SAVEFH4res { status }) => *status,
+			nfs_resop4::OP_SECINFO(SECINFO4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_SECINFO(SECINFO4res::Error(e)) => *e,
+			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::NFS4ERR_CLID_INUSE(_)) => nfsstat4::NFS4ERR_CLID_INUSE,
+			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::Error(e)) => *e,
+			nfs_resop4::OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res { status }) => *status,
+			nfs_resop4::OP_ILLEGAL(_) => nfsstat4::NFS4ERR_OP_ILLEGAL,
+			nfs_resop4::Unknown(_) => nfsstat4::NFS4ERR_NOTSUPP,
+		}
 	}
 }

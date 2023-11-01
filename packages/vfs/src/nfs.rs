@@ -1,9 +1,13 @@
+use crate::nfs::{
+	ops::filehandle,
+	types::{GETFH4res, GETFH4resok},
+};
+
 use self::{
-	compound::{Arg, CompoundArgs, CompoundReply, ResultOp},
-	ops::*,
 	rpc::{Auth, AuthStat, Message, MessageBody, ReplyAcceptedStat, ReplyBody, ReplyRejected},
 	state::{Node, State},
-	types::*,
+	types::{nfs_argop4, nfs_resop4, nfsstat4, NFS_PROG, NFS_VERS, RPC_VERS},
+	types::{nfs_fh4, COMPOUND4res},
 	xdr::{Decoder, Encoder, Error},
 };
 use std::path::Path;
@@ -15,14 +19,13 @@ use tokio::{
 	sync::RwLock,
 };
 
-mod compound;
 mod ops;
 mod rpc;
 mod state;
 mod types;
 mod xdr;
 
-const ROOT: FileHandle = FileHandle { node: 0 };
+const ROOT: nfs_fh4 = 0;
 
 #[derive(Clone)]
 pub struct Server {
@@ -34,8 +37,8 @@ pub struct Server {
 pub struct Context {
 	#[allow(dead_code)]
 	minor_version: u32,
-	current_file_handle: Option<FileHandle>,
-	saved_file_handle: Option<FileHandle>,
+	current_file_handle: Option<nfs_fh4>,
+	saved_file_handle: Option<nfs_fh4>,
 }
 
 impl Server {
@@ -158,7 +161,7 @@ impl Server {
 		decoder: &mut Decoder<'_>,
 	) -> ReplyBody {
 		// Deserialize the arguments up front.
-		let args = match decoder.decode::<CompoundArgs>() {
+		let args = match decoder.decode::<types::COMPOUND4args>() {
 			Ok(args) => args,
 			Err(e) => {
 				tracing::error!(?e, "Failed to decode COMPOUND args.");
@@ -173,83 +176,111 @@ impl Server {
 		};
 
 		// Handle the operations.
-		let CompoundArgs {
+		let types::COMPOUND4args {
 			tag,
-			minor_version,
-			args,
+			minorversion,
+			argarray,
 			..
 		} = args;
 
 		// Create the context
 		let mut ctx = Context {
-			minor_version,
+			minor_version: minorversion,
 			current_file_handle: None,
 			saved_file_handle: None,
 		};
 
-		// Debugging
-		let opcodes = args.iter().map(|arg| arg.opcode()).collect::<Vec<_>>();
-		tracing::info!(?tag, ?minor_version, ?opcodes, "COMPOUND");
-
-		let mut results = Vec::new(); // Result buffer.
-		let mut status = NFS4_OK; // Most recent status code.
-		for arg in args.into_iter() {
+		let mut resarray = Vec::new(); // Result buffer.
+		let mut status = nfsstat4::NFS4_OK; // Most recent status code.
+		for arg in argarray {
 			tracing::info!(?arg);
 			let result = match arg {
-				Arg::Illegal => ResultOp::Illegal,
-				Arg::Access(arg) => ResultOp::Access(self.handle_access(&ctx, arg).await),
-				Arg::Close(arg) => ResultOp::Close(self.handle_close(&ctx, arg).await),
-				Arg::GetAttr(arg) => ResultOp::GetAttr(self.handle_getattr(&ctx, arg).await),
-				Arg::GetFileHandle => ResultOp::GetFileHandle(filehandle::get(&ctx)),
-				Arg::Lookup(arg) => ResultOp::LookupResult(self.handle_lookup(&mut ctx, arg).await),
-				Arg::Open(arg) => ResultOp::OpenResult(self.handle_open(&mut ctx, arg).await),
-				Arg::PutFileHandle(fh) => {
-					filehandle::put(&mut ctx, fh);
-					ResultOp::PutFileHandle(NFS4_OK)
+				nfs_argop4::OP_ILLEGAL => nfs_resop4::OP_ILLEGAL(types::ILLEGAL4res {
+					status: nfsstat4::NFS4ERR_OP_ILLEGAL,
+				}),
+				nfs_argop4::OP_ACCESS(arg) => {
+					nfs_resop4::OP_ACCESS(self.handle_access(&ctx, arg).await)
 				},
-				Arg::PutRootFileHandle => {
+				nfs_argop4::OP_CLOSE(arg) => {
+					nfs_resop4::OP_CLOSE(self.handle_close(&ctx, arg).await)
+				},
+				nfs_argop4::OP_GETATTR(arg) => {
+					nfs_resop4::OP_GETATTR(self.handle_getattr(&ctx, arg).await)
+				},
+				nfs_argop4::OP_GETFH => {
+					let res = match filehandle::get(&ctx) {
+						Ok(object) => GETFH4res::NFS4_OK(GETFH4resok { object }),
+						Err(error) => GETFH4res::Error(error),
+					};
+					nfs_resop4::OP_GETFH(res)
+				},
+				nfs_argop4::OP_LOOKUP(arg) => {
+					nfs_resop4::OP_LOOKUP(self.handle_lookup(&mut ctx, arg).await)
+				},
+				nfs_argop4::OP_OPEN(arg) => {
+					nfs_resop4::OP_OPEN(self.handle_open(&mut ctx, arg).await)
+				},
+				nfs_argop4::OP_PUTFH(arg) => {
+					filehandle::put(&mut ctx, arg.object);
+					nfs_resop4::OP_PUTFH(types::PUTFH4res {
+						status: nfsstat4::NFS4_OK,
+					})
+				},
+				nfs_argop4::OP_PUTROOTFH => {
 					filehandle::put(&mut ctx, ROOT);
-					ResultOp::PutRootFileHandle(NFS4_OK)
+					nfs_resop4::OP_PUTROOTFH(types::PUTROOTFH4res {
+						status: nfsstat4::NFS4_OK,
+					})
 				},
-				Arg::Read(arg) => ResultOp::Read(self.handle_read(&ctx, arg).await),
-				Arg::ReadDir(arg) => ResultOp::ReadDir(self.handle_readdir(&ctx, arg).await),
-				Arg::ReadLink => ResultOp::ReadLink(self.handle_readlink(&ctx).await),
-				Arg::Renew(client) => ResultOp::Renew(self.handle_renew(client)),
-				Arg::RestoreFileHandle => {
+				nfs_argop4::OP_READ(arg) => nfs_resop4::OP_READ(self.handle_read(&ctx, arg).await),
+				nfs_argop4::OP_READDIR(arg) => {
+					nfs_resop4::OP_READDIR(self.handle_readdir(&ctx, arg).await)
+				},
+				nfs_argop4::OP_READLINK => {
+					nfs_resop4::OP_READLINK(self.handle_readlink(&ctx).await)
+				},
+				nfs_argop4::OP_RENEW(arg) => nfs_resop4::OP_RENEW(self.handle_renew(arg)),
+				nfs_argop4::OP_RESTOREFH => {
 					filehandle::restore(&mut ctx);
-					ResultOp::RestoreFileHandle(0)
+					nfs_resop4::OP_RESTOREFH(types::RESTOREFH4res {
+						status: nfsstat4::NFS4_OK,
+					})
 				},
-				Arg::SaveFileHandle => {
+				nfs_argop4::OP_SAVEFH => {
 					filehandle::save(&mut ctx);
-					ResultOp::SaveFileHandle(NFS4_OK)
+					nfs_resop4::OP_SAVEFH(types::SAVEFH4res {
+						status: nfsstat4::NFS4_OK,
+					})
 				},
-				Arg::SecInfo(arg) => ResultOp::SecInfo(self.handle_sec_info(&ctx, &arg).await),
-				Arg::SetClientId(arg) => {
-					ResultOp::SetClientId(self.handle_set_client_id(arg).await)
+				nfs_argop4::OP_SECINFO(arg) => {
+					nfs_resop4::OP_SECINFO(self.handle_sec_info(&ctx, arg).await)
 				},
-				Arg::SetClientIdConfirm(arg) => {
-					ResultOp::SetClientIdConfirm(self.handle_set_client_id_confirm(arg).await)
+				nfs_argop4::OP_SETCLIENTID(arg) => {
+					nfs_resop4::OP_SETCLIENTID(self.handle_set_client_id(arg).await)
 				},
-				arg => ResultOp::Unsupported(arg.opcode()),
+				nfs_argop4::OP_SETCLIENTID_CONFIRM(arg) => {
+					nfs_resop4::OP_SETCLIENTID_CONFIRM(self.handle_set_client_id_confirm(arg).await)
+				},
+				nfs_argop4::Unimplemented(arg) => types::nfs_resop4::Unknown(arg),
 			};
 
 			status = result.status();
-			results.push(result);
-			if status != NFS4_OK {
+			resarray.push(result);
+			if status != nfsstat4::NFS4_OK {
 				break;
 			}
 		}
 
-		let results = CompoundReply {
+		let results = COMPOUND4res {
 			status,
 			tag,
-			results,
+			resarray,
 		};
 
 		rpc::success(verf, results)
 	}
 
-	pub async fn get_node(&self, node: u64) -> Option<Arc<Node>> {
+	pub async fn get_node(&self, node: nfs_fh4) -> Option<Arc<Node>> {
 		self.state.read().await.nodes.get(&node).cloned()
 	}
 }
