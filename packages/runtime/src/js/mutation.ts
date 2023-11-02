@@ -197,14 +197,14 @@ let mutate = async (
 		}
 		let array = object[key];
 		assert(array instanceof Array);
-		array.unshift(...flatten(mutation.inner.value));
+		object[key] = [...array, ...flatten(mutation.inner.value)];
 	} else if (mutation.inner.kind === "array_append") {
 		if (!(key in object)) {
 			object[key] = [];
 		}
 		let array = object[key];
 		assert(array instanceof Array);
-		array.push(...flatten(mutation.inner.value));
+		object[key] = [...array, ...flatten(mutation.inner.value)];
 	} else if (mutation.inner.kind === "template_prepend") {
 		if (!(key in object)) {
 			object[key] = await template();

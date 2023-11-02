@@ -13,7 +13,7 @@ import {
 } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Package } from "./package.ts";
-import { MaybePromise, Unresolved, resolve } from "./resolve.ts";
+import { MaybePromise, Unresolved } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template, template } from "./template.ts";
@@ -116,11 +116,8 @@ export class Target<
 					return this_[prop];
 				}
 			},
-			apply: async (_target, _, args) => {
-				let target = await Target.new(this_ as any, {
-					args: (await resolve(args)) as Array<Value>,
-				});
-				return await target.build();
+			apply: async (target, _, args) => {
+				return await target.build(args);
 			},
 			getPrototypeOf: (_target) => {
 				return Object.getPrototypeOf(this_);
