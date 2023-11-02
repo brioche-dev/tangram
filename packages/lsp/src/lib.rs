@@ -18,6 +18,9 @@ use tg::{return_error, Error, Result, WrapErr};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use url::Url;
 
+/// The file name of the root module in a package.
+pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
+
 pub mod analyze;
 pub mod check;
 pub mod completion;

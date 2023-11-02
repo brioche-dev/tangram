@@ -7,7 +7,7 @@ export type Module =
 	| { kind: "normal"; value: Normal };
 
 export type Document = {
-	packagePath: string;
+	package: string;
 	path: string;
 };
 
@@ -16,7 +16,8 @@ export type Library = {
 };
 
 export type Normal = {
-	packageId: string;
+	lock: string;
+	package: string;
 	path: string;
 };
 

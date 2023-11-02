@@ -352,7 +352,7 @@ impl tg::Client for Server {
 		return_error!("This server does not support builders.");
 	}
 
-	async fn search_packages(&self, query: &str) -> Result<Vec<tg::package::Registry>> {
+	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
 		self.inner
 			.parent
 			.as_ref()
@@ -361,7 +361,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn get_package(&self, name: &str) -> Result<Option<tg::package::Registry>> {
+	async fn get_package(&self, name: &str) -> Result<Option<tg::Package>> {
 		self.inner
 			.parent
 			.as_ref()
@@ -374,7 +374,7 @@ impl tg::Client for Server {
 		&self,
 		name: &str,
 		version: &str,
-	) -> Result<Option<tg::package::Id>> {
+	) -> Result<Option<tg::artifact::Id>> {
 		self.inner
 			.parent
 			.as_ref()
@@ -383,7 +383,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn publish_package(&self, token: &str, id: &tg::package::Id) -> Result<()> {
+	async fn publish_package(&self, token: &str, id: &tg::artifact::Id) -> Result<()> {
 		self.inner
 			.parent
 			.as_ref()

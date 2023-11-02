@@ -7,7 +7,7 @@ use tg::{return_error, Result};
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(default_value = ".")]
-	pub package: tg::package::Specifier,
+	pub package: tangram_package::Specifier,
 }
 
 impl Cli {

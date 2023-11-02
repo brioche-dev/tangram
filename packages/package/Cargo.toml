@@ -10,8 +10,10 @@ repository = { workspace = true }
 version = { workspace = true }
 
 [dependencies]
+async-recursion = { workspace = true }
 async-trait = { workspace = true }
 fnv = { workspace = true }
+serde = { workspace = true }
 tangram_client = { workspace = true }
 tangram_lsp = { workspace = true }
 tokio = { workspace = true }

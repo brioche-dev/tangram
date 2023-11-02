@@ -9,7 +9,6 @@ use std::{
 	sync::{atomic::AtomicBool, Arc},
 };
 use tangram_client as tg;
-use tangram_package::PackageExt;
 use tg::WrapErr;
 
 mod controller;
@@ -33,7 +32,7 @@ pub async fn info_string(client: &dyn tg::Client, build: &tg::Build) -> String {
 		Err(e) => format!("Error: {e}"),
 	};
 
-	let package = match target.package(client).await {
+	let package = match target.lock(client).await {
 		Ok(Some(package)) => match package.metadata(client).await {
 			Ok(tg::package::Metadata { name, version, .. }) => {
 				let name = name.as_deref().unwrap_or("<unknown>");

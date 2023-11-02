@@ -1,4 +1,6 @@
+import { Artifact } from "./artifact.ts";
 import { assert } from "./assert.ts";
+import { Lock } from "./lock.ts";
 import { encoding } from "./syscall.ts";
 
 export type Module =
@@ -7,7 +9,7 @@ export type Module =
 	| { kind: "normal"; value: Normal };
 
 export type Document = {
-	packagePath: string;
+	package: string;
 	path: string;
 };
 
@@ -16,7 +18,8 @@ export type Library = {
 };
 
 export type Normal = {
-	packageId: string;
+	lock: Lock.Id;
+	package: Artifact.Id;
 	path: string;
 };
 

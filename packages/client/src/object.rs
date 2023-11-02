@@ -1,6 +1,6 @@
 use crate::{
-	branch, build, directory, file, id, leaf, package, return_error, symlink, target, Branch,
-	Build, Client, Directory, Error, File, Leaf, Package, Result, Symlink, Target,
+	branch, build, directory, file, id, leaf, lock, return_error, symlink, target, Branch, Build,
+	Client, Directory, Error, File, Leaf, Lock, Result, Symlink, Target,
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
@@ -13,7 +13,7 @@ pub enum Kind {
 	Directory,
 	File,
 	Symlink,
-	Package,
+	Lock,
 	Target,
 	Build,
 }
@@ -27,7 +27,7 @@ pub enum Id {
 	Directory(directory::Id),
 	File(file::Id),
 	Symlink(symlink::Id),
-	Package(package::Id),
+	Lock(lock::Id),
 	Target(target::Id),
 	Build(build::Id),
 }
@@ -41,7 +41,7 @@ pub enum Handle {
 	Directory(Directory),
 	File(File),
 	Symlink(Symlink),
-	Package(Package),
+	Lock(Lock),
 	Target(Target),
 	Build(Build),
 }
@@ -55,7 +55,7 @@ pub enum Object {
 	Directory(directory::Object),
 	File(file::Object),
 	Symlink(symlink::Object),
-	Package(package::Object),
+	Lock(lock::Object),
 	Target(target::Object),
 	Build(build::Object),
 }
@@ -68,7 +68,7 @@ pub enum Data {
 	Directory(directory::Data),
 	File(file::Data),
 	Symlink(symlink::Data),
-	Package(package::Data),
+	Lock(lock::Data),
 	Target(target::Data),
 	Build(build::Data),
 }
@@ -108,8 +108,8 @@ impl Id {
 					.try_into()
 					.unwrap(),
 			),
-			Kind::Package => Self::Package(
-				crate::Id::new_hashed(id::Kind::Package, bytes)
+			Kind::Lock => Self::Lock(
+				crate::Id::new_hashed(id::Kind::Lock, bytes)
 					.try_into()
 					.unwrap(),
 			),
@@ -130,7 +130,7 @@ impl Id {
 			Self::Directory(_) => Kind::Directory,
 			Self::File(_) => Kind::File,
 			Self::Symlink(_) => Kind::Symlink,
-			Self::Package(_) => Kind::Package,
+			Self::Lock(_) => Kind::Lock,
 			Self::Target(_) => Kind::Target,
 			Self::Build(_) => Kind::Build,
 		}
@@ -144,7 +144,7 @@ impl Id {
 			Self::Directory(id) => id.to_bytes(),
 			Self::File(id) => id.to_bytes(),
 			Self::Symlink(id) => id.to_bytes(),
-			Self::Package(id) => id.to_bytes(),
+			Self::Lock(id) => id.to_bytes(),
 			Self::Target(id) => id.to_bytes(),
 			Self::Build(id) => id.to_bytes(),
 		}
@@ -160,7 +160,7 @@ impl Handle {
 			Id::Directory(id) => Self::Directory(Directory::with_id(id)),
 			Id::File(id) => Self::File(File::with_id(id)),
 			Id::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
-			Id::Package(id) => Self::Package(Package::with_id(id)),
+			Id::Lock(id) => Self::Lock(Lock::with_id(id)),
 			Id::Target(id) => Self::Target(Target::with_id(id)),
 			Id::Build(id) => Self::Build(Build::with_id(id)),
 		}
@@ -174,7 +174,7 @@ impl Handle {
 			Object::Directory(object) => Self::Directory(Directory::with_object(object)),
 			Object::File(object) => Self::File(File::with_object(object)),
 			Object::Symlink(object) => Self::Symlink(Symlink::with_object(object)),
-			Object::Package(object) => Self::Package(Package::with_object(object)),
+			Object::Lock(object) => Self::Lock(Lock::with_object(object)),
 			Object::Target(object) => Self::Target(Target::with_object(object)),
 			Object::Build(object) => Self::Build(Build::with_object(object)),
 		}
@@ -187,7 +187,7 @@ impl Handle {
 			Self::Directory(object) => object.id(client).await.cloned().map(Id::Directory),
 			Self::File(object) => object.id(client).await.cloned().map(Id::File),
 			Self::Symlink(object) => object.id(client).await.cloned().map(Id::Symlink),
-			Self::Package(object) => object.id(client).await.cloned().map(Id::Package),
+			Self::Lock(object) => object.id(client).await.cloned().map(Id::Lock),
 			Self::Target(object) => object.id(client).await.cloned().map(Id::Target),
 			Self::Build(object) => object.id(client).await.cloned().map(Id::Build),
 		}
@@ -200,7 +200,7 @@ impl Handle {
 			Self::Directory(object) => object.object(client).await.cloned().map(Object::Directory),
 			Self::File(object) => object.object(client).await.cloned().map(Object::File),
 			Self::Symlink(object) => object.object(client).await.cloned().map(Object::Symlink),
-			Self::Package(object) => object.object(client).await.cloned().map(Object::Package),
+			Self::Lock(object) => object.object(client).await.cloned().map(Object::Lock),
 			Self::Target(object) => object.object(client).await.cloned().map(Object::Target),
 			Self::Build(object) => object.object(client).await.cloned().map(Object::Build),
 		}
@@ -216,7 +216,7 @@ impl Data {
 			Self::Directory(_) => Kind::Directory,
 			Self::File(_) => Kind::File,
 			Self::Symlink(_) => Kind::Symlink,
-			Self::Package(_) => Kind::Package,
+			Self::Lock(_) => Kind::Lock,
 			Self::Target(_) => Kind::Target,
 			Self::Build(_) => Kind::Build,
 		}
@@ -230,7 +230,7 @@ impl Data {
 			Self::Directory(data) => data.children(),
 			Self::File(data) => data.children(),
 			Self::Symlink(data) => data.children(),
-			Self::Package(data) => data.children(),
+			Self::Lock(data) => data.children(),
 			Self::Target(data) => data.children(),
 			Self::Build(data) => data.children(),
 		}
@@ -244,7 +244,7 @@ impl Data {
 			Self::Directory(data) => Ok(data.serialize()?),
 			Self::File(data) => Ok(data.serialize()?),
 			Self::Symlink(data) => Ok(data.serialize()?),
-			Self::Package(data) => Ok(data.serialize()?),
+			Self::Lock(data) => Ok(data.serialize()?),
 			Self::Target(data) => Ok(data.serialize()?),
 			Self::Build(data) => Ok(data.serialize()?),
 		}
@@ -257,7 +257,7 @@ impl Data {
 			Kind::Directory => Ok(Self::Directory(directory::Data::deserialize(bytes)?)),
 			Kind::File => Ok(Self::File(file::Data::deserialize(bytes)?)),
 			Kind::Symlink => Ok(Self::Symlink(symlink::Data::deserialize(bytes)?)),
-			Kind::Package => Ok(Self::Package(package::Data::deserialize(bytes)?)),
+			Kind::Lock => Ok(Self::Lock(lock::Data::deserialize(bytes)?)),
 			Kind::Target => Ok(Self::Target(target::Data::deserialize(bytes)?)),
 			Kind::Build => Ok(Self::Build(build::Data::deserialize(bytes)?)),
 		}
@@ -274,7 +274,7 @@ impl TryFrom<Data> for Object {
 			Data::Directory(data) => Self::Directory(data.try_into()?),
 			Data::File(data) => Self::File(data.try_into()?),
 			Data::Symlink(data) => Self::Symlink(data.try_into()?),
-			Data::Package(data) => Self::Package(data.try_into()?),
+			Data::Lock(data) => Self::Lock(data.try_into()?),
 			Data::Target(data) => Self::Target(data.try_into()?),
 			Data::Build(data) => Self::Build(data.try_into()?),
 		})
@@ -323,7 +323,7 @@ impl From<self::Id> for crate::Id {
 			self::Id::Directory(id) => id.into(),
 			self::Id::File(id) => id.into(),
 			self::Id::Symlink(id) => id.into(),
-			self::Id::Package(id) => id.into(),
+			self::Id::Lock(id) => id.into(),
 			self::Id::Target(id) => id.into(),
 			self::Id::Build(id) => id.into(),
 		}
@@ -340,7 +340,7 @@ impl TryFrom<crate::Id> for self::Id {
 			crate::id::Kind::Directory => Ok(Self::Directory(value.try_into()?)),
 			crate::id::Kind::File => Ok(Self::File(value.try_into()?)),
 			crate::id::Kind::Symlink => Ok(Self::Symlink(value.try_into()?)),
-			crate::id::Kind::Package => Ok(Self::Package(value.try_into()?)),
+			crate::id::Kind::Lock => Ok(Self::Lock(value.try_into()?)),
 			crate::id::Kind::Target => Ok(Self::Target(value.try_into()?)),
 			crate::id::Kind::Build => Ok(Self::Build(value.try_into()?)),
 			_ => return_error!("Expected an object ID."),
@@ -356,7 +356,7 @@ impl std::fmt::Display for Id {
 			Self::Directory(id) => write!(f, "{id}"),
 			Self::File(id) => write!(f, "{id}"),
 			Self::Symlink(id) => write!(f, "{id}"),
-			Self::Package(id) => write!(f, "{id}"),
+			Self::Lock(id) => write!(f, "{id}"),
 			Self::Target(id) => write!(f, "{id}"),
 			Self::Build(id) => write!(f, "{id}"),
 		}

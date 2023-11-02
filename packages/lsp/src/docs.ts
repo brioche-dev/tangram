@@ -1515,7 +1515,7 @@ let convertLocation = (node: ts.Node): Location => {
 			kind: "normal",
 			value: {
 				path: module_.value.path,
-				packageId: todo(),
+				package: todo(),
 			},
 		};
 	} else {

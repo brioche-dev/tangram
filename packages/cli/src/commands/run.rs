@@ -2,7 +2,6 @@ use super::{PackageArgs, RunArgs};
 use crate::{util::dirs::home_directory_path, Cli};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_client as tg;
-use tangram_package::PackageExt;
 use tg::{Result, Wrap, WrapErr};
 
 /// Build the specified target from a package and execute a command from its output.
@@ -12,7 +11,7 @@ use tg::{Result, Wrap, WrapErr};
 pub struct Args {
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: tg::package::Specifier,
+	pub package: tangram_package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -34,9 +33,9 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the package.
-		let package = tg::Package::with_specifier(client, args.package)
+		let (package, lock) = tangram_package::new(client, &args.package)
 			.await
-			.wrap_err("Failed to get the package.")?;
+			.wrap_err("Failed to create the package.")?;
 
 		// Create the target.
 		let env = [(
@@ -46,10 +45,14 @@ impl Cli {
 		.into();
 		let args_ = Vec::new();
 		let host = tg::System::js();
-		let executable = tg::package::ROOT_MODULE_FILE_NAME.to_owned().into();
+		let path = tangram_package::ROOT_MODULE_FILE_NAME
+			.to_owned()
+			.try_into()
+			.unwrap();
+		let executable = tg::Symlink::with_package_and_path(&package, &path).into();
 		let target = tg::target::Builder::new(host, executable)
-			.package(package)
-			.name(args.target)
+			.lock(lock)
+			.name(args.target.clone())
 			.env(env)
 			.args(args_)
 			.build();

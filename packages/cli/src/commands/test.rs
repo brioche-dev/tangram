@@ -13,7 +13,7 @@ pub struct Args {
 
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: tg::package::Specifier,
+	pub package: tangram_package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,

@@ -1,11 +1,7 @@
 use super::PackageArgs;
-use crate::{
-	ui::{self, DevTty},
-	Cli,
-};
+use crate::Cli;
 use std::path::PathBuf;
 use tangram_client as tg;
-use tangram_package::PackageExt;
 use tg::{Result, WrapErr};
 
 /// Build a target.
@@ -22,7 +18,7 @@ pub struct Args {
 
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: tg::package::Specifier,
+	pub package: tangram_package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -42,9 +38,9 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the package.
-		let package = tg::Package::with_specifier(client, args.package)
+		let (package, lock) = tangram_package::new(client, &args.package)
 			.await
-			.wrap_err("Failed to get the package.")?;
+			.wrap_err("Failed to create the package.")?;
 
 		// Create the target.
 		let env = [(
@@ -54,9 +50,13 @@ impl Cli {
 		.into();
 		let args_ = Vec::new();
 		let host = tg::System::js();
-		let executable = tg::package::ROOT_MODULE_FILE_NAME.to_owned().into();
+		let path = tangram_package::ROOT_MODULE_FILE_NAME
+			.to_owned()
+			.try_into()
+			.unwrap();
+		let executable = tg::Symlink::with_package_and_path(&package, &path).into();
 		let target = tg::target::Builder::new(host, executable)
-			.package(package)
+			.lock(lock)
 			.name(args.target.clone())
 			.env(env)
 			.args(args_)
@@ -71,13 +71,13 @@ impl Cli {
 			return Ok(());
 		}
 
-		// Create the ui.
-		let mut tui = None;
-		if !args.non_interactive {
-			if let Ok(tty) = DevTty::open() {
-				tui = Some(ui::Tui::new(client, tty, build.clone())?);
-			}
-		}
+		// // Create the ui.
+		// let mut tui = None;
+		// if !args.non_interactive {
+		// 	if let Ok(tty) = DevTty::open() {
+		// 		tui = Some(ui::Tui::new(client, tty, build.clone())?);
+		// 	}
+		// }
 
 		// Wait for the build's output.
 		let output = build
@@ -86,10 +86,10 @@ impl Cli {
 			.wrap_err("Failed to get the build result.")?
 			.wrap_err("The build failed.")?;
 
-		// Shutdown the TUI
-		if let Some(mut tui) = tui {
-			tui.finish().await?;
-		}
+		// // Shutdown the TUI
+		// if let Some(mut tui) = tui {
+		// 	tui.finish().await?;
+		// }
 
 		// Check out the output if requested.
 		if let Some(path) = args.output {

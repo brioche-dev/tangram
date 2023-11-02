@@ -3,8 +3,8 @@ import { Branch } from "./branch.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { Leaf } from "./leaf.ts";
+import { Lock } from "./lock.ts";
 import { Mutation } from "./mutation.ts";
-import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
 import { Template } from "./template.ts";
@@ -21,10 +21,10 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| Directory
 		| File
 		| Symlink
-		| Template
-		| Mutation
-		| Package
+		| Lock
 		| Target
+		| Mutation
+		| Template
 		? T
 		: T extends Array<infer U extends Value>
 		? Array<Unresolved<U>>
@@ -43,10 +43,10 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| Directory
 	| File
 	| Symlink
-	| Template
-	| Mutation
-	| Package
+	| Lock
 	| Target
+	| Mutation
+	| Template
 	? T
 	: T extends Promise<infer U extends Unresolved<Value>>
 	? Resolved<U>
@@ -75,7 +75,7 @@ export let resolve = async <T extends Unresolved<Value>>(
 		value instanceof Symlink ||
 		value instanceof Template ||
 		value instanceof Mutation ||
-		value instanceof Package ||
+		value instanceof Lock ||
 		value instanceof Target
 	) {
 		return value as unknown as Resolved<T>;

@@ -3,7 +3,7 @@ import { assert, assert as assert_ } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Package } from "./package.ts";
+import { Lock } from "./lock.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
@@ -24,10 +24,10 @@ export type MaybeMutationMap<T extends Value = Value> = T extends
 	| Directory
 	| File
 	| Symlink
-	| Template
-	| Mutation
-	| Package
+	| Lock
 	| Target
+	| Mutation
+	| Template
 	| Array<infer _U extends Value>
 	? T
 	: T extends { [key: string]: Value }

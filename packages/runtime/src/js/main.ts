@@ -2,20 +2,25 @@ import { assert } from "./assert.ts";
 import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
 import { resolve } from "./resolve.ts";
+import { Symlink } from "./symlink.ts";
 import { Target, functions, setCurrent } from "./target.ts";
 import { Value } from "./value.ts";
 
 export let main = async (target: Target): Promise<Value> => {
 	// Load the executable.
-	let package_ = await target.package();
+	let lock = await target.lock();
+	assert(lock);
+	let lockId = await lock.id();
+	let executable = await target.executable();
+	Symlink.assert(executable);
+	let package_ = await executable.artifact();
 	assert(package_);
 	let packageId = await package_.id();
-	let executable = await target.executable();
-	let path = executable.components[0];
-	assert(typeof path === "string");
+	let path = await executable.path();
+	assert(path);
 	let module_ = {
 		kind: "normal" as const,
-		value: { packageId, path },
+		value: { lock: lockId, package: packageId, path: path.toString() },
 	};
 	let url = Module.toUrl(module_);
 	await import(url);

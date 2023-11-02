@@ -1,7 +1,7 @@
 use super::{document, Module};
 use include_dir::include_dir;
 use tangram_client as tg;
-use tg::{Client, Package, Result, WrapErr};
+use tg::{Artifact, Client, Result, WrapErr};
 
 const TANGRAM_D_TS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/tangram.d.ts"));
 const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/src/lib");
@@ -36,14 +36,10 @@ impl Module {
 			// Load a module from a package.
 			Self::Normal(module) => {
 				// Get the package.
-				let package = Package::with_id(module.package_id.clone());
+				let artifact = Artifact::with_id(module.package.clone());
 
 				// Load the module.
-				let directory = package
-					.artifact(client)
-					.await?
-					.try_unwrap_directory_ref()
-					.unwrap();
+				let directory = artifact.try_unwrap_directory_ref().unwrap();
 				let entry = directory.get(client, &module.path).await?;
 				let file = entry
 					.try_unwrap_file_ref()

@@ -404,10 +404,10 @@ declare namespace tg {
 			| Directory
 			| File
 			| Symlink
-			| Template
-			| Mutation
-			| Package
+			| Lock
 			| Target
+			| Mutation
+			| Template
 			| Array<infer _U extends Value>
 			? T
 			: T extends { [key: string]: Value }
@@ -469,28 +469,25 @@ declare namespace tg {
 			  };
 	}
 
-	/** A package. */
-	export class Package {
-		/** Get a package with an ID. */
-		static withId(id: Package.Id): Package;
+	/** A lock. */
+	export class Lock {
+		/** Get a lock with an ID. */
+		static withId(id: Lock.Id): Lock;
 
-		/** Check if a value is a `tg.Package`. */
-		static is(value: unknown): value is Package;
+		/** Check if a value is a `tg.Lock`. */
+		static is(value: unknown): value is Lock;
 
-		/** Expect that a value is a `tg.Package`. */
-		static expect(value: unknown): Package;
+		/** Expect that a value is a `tg.Lock`. */
+		static expect(value: unknown): Lock;
 
-		/** Assert that a value is a `tg.Package`. */
-		static assert(value: unknown): asserts value is Package;
+		/** Assert that a value is a `tg.Lock`. */
+		static assert(value: unknown): asserts value is Lock;
 
-		/** Get this package's artifact. */
-		artifact(): Promise<Artifact>;
-
-		/** Get this package's dependencies. */
-		dependencies(): Promise<Record<string, Package>>;
+		/** Get this lock's dependencies. */
+		dependencies(): Promise<Record<string, Lock>>;
 	}
 
-	export namespace Package {
+	export namespace Lock {
 		export type Id = string;
 	}
 
@@ -521,10 +518,10 @@ declare namespace tg {
 			| Directory
 			| File
 			| Symlink
-			| Template
-			| Mutation
-			| Package
+			| Lock
 			| Target
+			| Mutation
+			| Template
 			? T
 			: T extends Array<infer U extends Value>
 			? Array<Unresolved<U>>
@@ -556,7 +553,7 @@ declare namespace tg {
 		| File
 		| Symlink
 		| Template
-		| Package
+		| Lock
 		| Target
 		? T
 		: T extends Array<infer U extends Unresolved<Value>>
@@ -706,14 +703,14 @@ declare namespace tg {
 		/* Get this target's id. */
 		id(): Promise<Target.Id>;
 
-		/** Get this target's package. */
-		package(): Promise<string | undefined>;
+		/** Get this target's lock. */
+		lock(): Promise<string | undefined>;
 
 		/** Get this target's host. */
 		host(): Promise<System>;
 
 		/** Get this target's executable. */
-		executable(): Promise<Template>;
+		executable(): Promise<Artifact>;
 
 		/** Get this target's name. */
 		name_(): Promise<string | undefined>;
@@ -749,10 +746,10 @@ declare namespace tg {
 			host?: System;
 
 			/** The target's executable. */
-			executable?: Template.Arg;
+			executable?: Artifact;
 
-			/** The target's package. */
-			package?: Package | undefined;
+			/** The target's lock. */
+			lock?: Lock | undefined;
 
 			/** The target's name. */
 			name?: string | undefined;
@@ -819,10 +816,10 @@ declare namespace tg {
 		| Directory
 		| File
 		| Symlink
-		| Template
-		| Mutation
-		| Package
+		| Lock
 		| Target
+		| Mutation
+		| Template
 		| Array<Value>
 		| { [key: string]: Value };
 

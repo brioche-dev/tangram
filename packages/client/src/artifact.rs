@@ -2,6 +2,7 @@ use crate::{
 	blob, checksum, directory, file, id, object, return_error, symlink, Blob, Checksum, Client,
 	Directory, Error, File, Result, Symlink, Value,
 };
+use bytes::Bytes;
 use derive_more::{From, TryUnwrap};
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use std::collections::{HashSet, VecDeque};
@@ -55,6 +56,17 @@ pub enum Data {
 
 	/// A symlink.
 	Symlink(symlink::Data),
+}
+
+impl Id {
+	#[must_use]
+	pub fn to_bytes(&self) -> Bytes {
+		match self {
+			Self::Directory(id) => id.to_bytes(),
+			Self::File(id) => id.to_bytes(),
+			Self::Symlink(id) => id.to_bytes(),
+		}
+	}
 }
 
 impl Artifact {

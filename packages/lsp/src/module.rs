@@ -46,8 +46,11 @@ pub struct Library {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Normal {
-	/// The module's package ID.
-	pub package_id: tg::package::Id,
+	/// The module's lock.
+	pub lock: tg::lock::Id,
+
+	/// The module's package.
+	pub package: tg::artifact::Id,
 
 	/// The module's path.
 	pub path: tg::Subpath,

@@ -8,10 +8,10 @@ import { Error as Error_, prepareStackTrace } from "./error.ts";
 import { File, file } from "./file.ts";
 import { include } from "./include.ts";
 import { Leaf, leaf } from "./leaf.ts";
+import { Lock } from "./lock.ts";
 import { log } from "./log.ts";
 import { main } from "./main.ts";
 import { Args, Mutation, apply, mutation } from "./mutation.ts";
-import { Package } from "./package.ts";
 import { resolve } from "./resolve.ts";
 import { sleep } from "./sleep.ts";
 import { Symlink, symlink } from "./symlink.ts";
@@ -51,8 +51,8 @@ Object.assign(tg, {
 	Error: Error_,
 	File,
 	Leaf,
+	Lock,
 	Mutation,
-	Package,
 	Symlink,
 	System,
 	Target,

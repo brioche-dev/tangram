@@ -1,6 +1,6 @@
 use crate::{
-	branch, directory, file, leaf, mutation, object, package, symlink, target, template, Branch,
-	Client, Directory, Error, File, Leaf, Mutation, Package, Result, Symlink, Target, Template,
+	branch, directory, file, leaf, lock, mutation, object, symlink, target, template, Branch,
+	Client, Directory, Error, File, Leaf, Lock, Mutation, Result, Symlink, Target, Template,
 	WrapErr,
 };
 use async_recursion::async_recursion;
@@ -48,17 +48,17 @@ pub enum Value {
 	/// A symlink value.
 	Symlink(Symlink),
 
-	/// A template value.
-	Template(Template),
+	/// A lock value.
+	Lock(Lock),
+
+	/// A target value.
+	Target(Target),
 
 	/// A mutation value.
 	Mutation(Mutation),
 
-	/// A package value.
-	Package(Package),
-
-	/// A target value.
-	Target(Target),
+	/// A template value.
+	Template(Template),
 
 	/// An array value.
 	Array(Vec<Value>),
@@ -83,7 +83,7 @@ pub enum Data {
 	Symlink(symlink::Id),
 	Template(template::Data),
 	Mutation(mutation::Data),
-	Package(package::Id),
+	Lock(lock::Id),
 	Target(target::Id),
 	Array(Vec<Data>),
 	Map(BTreeMap<String, Data>),
@@ -102,11 +102,11 @@ impl Value {
 			Self::Branch(branch) => Data::Branch(branch.id(client).await?.clone()),
 			Self::Directory(directory) => Data::Directory(directory.id(client).await?.clone()),
 			Self::File(file) => Data::File(file.id(client).await?.clone()),
-			Self::Mutation(mutation) => Data::Mutation(mutation.data(client).await?.clone()),
 			Self::Symlink(symlink) => Data::Symlink(symlink.id(client).await?.clone()),
-			Self::Template(template) => Data::Template(template.data(client).await?.clone()),
-			Self::Package(package) => Data::Package(package.id(client).await?.clone()),
+			Self::Lock(lock) => Data::Lock(lock.id(client).await?.clone()),
 			Self::Target(target) => Data::Target(target.id(client).await?.clone()),
+			Self::Mutation(mutation) => Data::Mutation(mutation.data(client).await?.clone()),
+			Self::Template(template) => Data::Template(template.data(client).await?.clone()),
 			Self::Array(array) => Data::Array(
 				array
 					.iter()
@@ -151,10 +151,10 @@ impl Data {
 			Self::Directory(id) => vec![id.clone().into()],
 			Self::File(id) => vec![id.clone().into()],
 			Self::Symlink(id) => vec![id.clone().into()],
-			Self::Template(template) => template.children(),
-			Self::Mutation(mutation) => mutation.children(),
-			Self::Package(id) => vec![id.clone().into()],
+			Self::Lock(id) => vec![id.clone().into()],
 			Self::Target(id) => vec![id.clone().into()],
+			Self::Mutation(mutation) => mutation.children(),
+			Self::Template(template) => template.children(),
 			Self::Array(array) => array.iter().flat_map(Self::children).collect(),
 			Self::Map(map) => map.values().flat_map(Self::children).collect(),
 		}
@@ -194,17 +194,17 @@ impl std::fmt::Display for Value {
 			Value::Symlink(symlink) => {
 				write!(f, "{symlink}")?;
 			},
-			Value::Template(template) => {
-				write!(f, "{template}")?;
+			Value::Lock(lock) => {
+				write!(f, "{lock}")?;
+			},
+			Value::Target(target) => {
+				write!(f, "{target}")?;
 			},
 			Value::Mutation(mutation) => {
 				write!(f, "{mutation}")?;
 			},
-			Value::Package(package) => {
-				write!(f, "{package}")?;
-			},
-			Value::Target(target) => {
-				write!(f, "{target}")?;
+			Value::Template(template) => {
+				write!(f, "{template}")?;
 			},
 			Value::Array(array) => {
 				write!(f, "[")?;
@@ -251,12 +251,11 @@ impl TryFrom<Data> for Value {
 			Data::Branch(id) => Self::Branch(Branch::with_id(id)),
 			Data::Directory(id) => Self::Directory(Directory::with_id(id)),
 			Data::File(id) => Self::File(File::with_id(id)),
-			Data::Mutation(mutation) => Self::Mutation(mutation.try_into()?),
-
 			Data::Symlink(id) => Self::Symlink(Symlink::with_id(id)),
-			Data::Template(template) => Self::Template(template.try_into()?),
-			Data::Package(id) => Self::Package(Package::with_id(id)),
+			Data::Lock(id) => Self::Lock(Lock::with_id(id)),
 			Data::Target(id) => Self::Target(Target::with_id(id)),
+			Data::Mutation(mutation) => Self::Mutation(mutation.try_into()?),
+			Data::Template(template) => Self::Template(template.try_into()?),
 			Data::Array(array) => {
 				Self::Array(array.into_iter().map(TryInto::try_into).try_collect()?)
 			},

@@ -1,8 +1,9 @@
-use crate::{id, object, template, Artifact, Client, Error, Relpath, Result, Template, WrapErr};
+use crate::{id, object, return_error, Artifact, Client, Dependency, Error, Result, WrapErr};
 use bytes::Bytes;
 use derive_more::Display;
-use std::sync::Arc;
-use tangram_error::return_error;
+use futures::{stream::FuturesUnordered, TryStreamExt};
+use itertools::Itertools;
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(
 	Clone,
@@ -20,7 +21,7 @@ use tangram_error::return_error;
 pub struct Id(crate::Id);
 
 #[derive(Clone, Debug)]
-pub struct Symlink {
+pub struct Lock {
 	state: Arc<std::sync::RwLock<State>>,
 }
 
@@ -28,17 +29,33 @@ type State = object::State<Id, Object>;
 
 #[derive(Clone, Debug)]
 pub struct Object {
-	pub target: Template,
+	pub dependencies: BTreeMap<Dependency, Entry>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Entry {
+	pub package: Artifact,
+	pub lock: Lock,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
-	pub target: template::Data,
+	pub dependencies: BTreeMap<Dependency, data::Entry>,
+}
+
+mod data {
+	use crate::artifact;
+
+	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+	pub struct Entry {
+		pub package: artifact::Id,
+		pub lock: super::Id,
+	}
 }
 
 impl Id {
 	pub fn new(bytes: &Bytes) -> Self {
-		Self(crate::Id::new_hashed(id::Kind::Symlink, bytes))
+		Self(crate::Id::new_hashed(id::Kind::Lock, bytes))
 	}
 
 	#[must_use]
@@ -47,7 +64,7 @@ impl Id {
 	}
 }
 
-impl Symlink {
+impl Lock {
 	#[must_use]
 	pub fn with_state(state: State) -> Self {
 		Self {
@@ -81,6 +98,7 @@ impl Symlink {
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
+	#[async_recursion::async_recursion]
 	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
 		self.load(client).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
@@ -136,44 +154,22 @@ impl Symlink {
 	#[async_recursion::async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
-		let target = object.target.data(client).await?;
-		Ok(Data { target })
+		let dependencies = object
+			.dependencies
+			.iter()
+			.map(|(dependency, entry)| async move {
+				Ok::<_, Error>((dependency.clone(), entry.data(client).await?))
+			})
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+		Ok(Data { dependencies })
 	}
 }
 
-impl Symlink {
-	#[must_use]
-	pub fn new(target: Template) -> Self {
-		Self::with_object(Object { target })
-	}
-
-	#[must_use]
-	pub fn with_package_and_path(package: &Artifact, path: &Relpath) -> Self {
-		Self::with_object(Object {
-			target: [
-				package.clone().into(),
-				("/".to_owned() + &path.to_string()).into(),
-			]
-			.into_iter()
-			.collect(),
-		})
-	}
-
-	pub async fn target(&self, client: &dyn Client) -> Result<Template> {
-		Ok(self.object(client).await?.target.clone())
-	}
-
-	pub async fn resolve(&self, client: &dyn Client) -> Result<Option<Artifact>> {
-		self.resolve_from(client, None).await
-	}
-
-	#[allow(clippy::unused_async)]
-	pub async fn resolve_from(
-		&self,
-		_client: &dyn Client,
-		_from: Option<Self>,
-	) -> Result<Option<Artifact>> {
-		unimplemented!()
+impl Lock {
+	pub async fn dependencies(&self, client: &dyn Client) -> Result<&BTreeMap<Dependency, Entry>> {
+		Ok(&self.object(client).await?.dependencies)
 	}
 }
 
@@ -190,7 +186,19 @@ impl Data {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
-		self.target.children()
+		self.dependencies
+			.values()
+			.flat_map(|entry| [entry.package.clone().into(), entry.lock.clone().into()])
+			.collect()
+	}
+}
+
+impl Entry {
+	pub async fn data(&self, client: &dyn Client) -> Result<data::Entry> {
+		Ok(data::Entry {
+			package: self.package.id(client).await?.clone(),
+			lock: self.lock.id(client).await?.clone(),
+		})
 	}
 }
 
@@ -198,12 +206,27 @@ impl TryFrom<Data> for Object {
 	type Error = Error;
 
 	fn try_from(data: Data) -> std::result::Result<Self, Self::Error> {
-		let target = data.target.try_into()?;
-		Ok(Self { target })
+		let dependencies = data
+			.dependencies
+			.into_iter()
+			.map(|(dependency, entry)| Ok::<_, Error>((dependency, entry.try_into()?)))
+			.try_collect()?;
+		Ok(Self { dependencies })
 	}
 }
 
-impl std::fmt::Display for Symlink {
+impl TryFrom<data::Entry> for Entry {
+	type Error = Error;
+
+	fn try_from(value: data::Entry) -> std::result::Result<Self, Self::Error> {
+		Ok(Self {
+			package: Artifact::with_id(value.package),
+			lock: Lock::with_id(value.lock),
+		})
+	}
+}
+
+impl std::fmt::Display for Lock {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{}", self.state.read().unwrap().id().as_ref().unwrap())?;
 		Ok(())
@@ -220,7 +243,7 @@ impl TryFrom<crate::Id> for Id {
 	type Error = Error;
 
 	fn try_from(value: crate::Id) -> Result<Self, Self::Error> {
-		if value.kind() != id::Kind::Symlink {
+		if value.kind() != id::Kind::Lock {
 			return_error!("Invalid kind.");
 		}
 		Ok(Self(value))

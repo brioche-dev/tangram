@@ -1,7 +1,6 @@
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_client as tg;
-use tangram_package::PackageExt;
 use tg::{Result, WrapErr};
 
 /// Publish a package.
@@ -19,14 +18,17 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the package.
-		let package = tg::Package::with_path(client, &args.package).await?;
+		let specifier = tangram_package::Specifier::Path(args.package);
+		let (package, _) = tangram_package::new(client, &specifier)
+			.await
+			.wrap_err("Failed to create the package.")?;
 
 		// Get the package ID.
 		let id = package.id(client).await?;
 
 		// Publish the package.
 		client
-			.publish_package(&self.token()?, id)
+			.publish_package(&self.token()?, &id)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

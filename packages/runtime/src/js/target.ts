@@ -1,7 +1,9 @@
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
+import { Directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
+import { Lock } from "./lock.ts";
 import { Module } from "./module.ts";
 import {
 	Args,
@@ -12,11 +14,11 @@ import {
 	mutation,
 } from "./mutation.ts";
 import { Object_ } from "./object.ts";
-import { Package } from "./package.ts";
 import { MaybePromise, Unresolved } from "./resolve.ts";
+import { Symlink, symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
-import { Template, template } from "./template.ts";
+import { Template } from "./template.ts";
 import { Value } from "./value.ts";
 
 let current: Target;
@@ -65,14 +67,24 @@ export function target<
 		// Get the package.
 		let module_ = Module.fromUrl(arg.url);
 		assert_(module_.kind === "normal");
-		let package_ = Package.withId(module_.value.packageId);
+		let lock = Lock.withId(module_.value.lock);
+
+		// Create the executable.
+		let executable = new Symlink({
+			object: {
+				target: new Template([
+					Directory.withId(module_.value.package),
+					"/" + module_.value.path,
+				]),
+			},
+		});
 
 		// Create the target.
 		return new Target({
 			object: {
 				host: "js-js",
-				executable: new Template([module_.value.path]),
-				package: package_,
+				executable,
+				lock,
 				name: arg.name,
 				args: [],
 				env: {},
@@ -139,8 +151,8 @@ export class Target<
 	>(...args: Args<Target.Arg>): Promise<Target<A, R>> {
 		type Apply = {
 			host?: System;
-			executable?: Template.Arg;
-			package?: Package | undefined;
+			executable?: Artifact;
+			lock?: Lock | undefined;
 			name?: string | undefined;
 			env?: MaybeNestedArray<MutationMap>;
 			args?: Array<Value>;
@@ -149,8 +161,8 @@ export class Target<
 		};
 		let {
 			host,
-			executable: executable_,
-			package: package_,
+			executable,
+			lock,
 			name,
 			env: env_,
 			args: args_,
@@ -164,7 +176,7 @@ export class Target<
 			) {
 				return {
 					host: (await getCurrent().env())["TANGRAM_HOST"] as System,
-					executable: "/bin/sh",
+					executable: await symlink("/bin/sh"),
 					args: ["-c", arg],
 				};
 			} else if (Target.is(arg)) {
@@ -197,10 +209,9 @@ export class Target<
 		if (!host) {
 			throw new Error("Cannot create a target without a host.");
 		}
-		if (!executable_) {
+		if (!executable) {
 			throw new Error("Cannot create a target without an executable.");
 		}
-		let executable = await template(executable_);
 		let env = await apply(flatten(env_ ?? []), async (arg) => arg);
 		args_ ??= [];
 		unsafe_ ??= false;
@@ -208,7 +219,7 @@ export class Target<
 			object: {
 				host,
 				executable,
-				package: package_,
+				lock,
 				name,
 				env,
 				args: args_,
@@ -262,12 +273,12 @@ export class Target<
 		return (await this.object()).host;
 	}
 
-	async executable(): Promise<Template> {
+	async executable(): Promise<Artifact> {
 		return (await this.object()).executable;
 	}
 
-	async package(): Promise<Package | undefined> {
-		return (await this.object()).package;
+	async lock(): Promise<Lock | undefined> {
+		return (await this.object()).lock;
 	}
 
 	async name_(): Promise<string | undefined> {
@@ -309,8 +320,8 @@ export namespace Target {
 
 	export type ArgObject = {
 		host?: System;
-		executable?: Template.Arg;
-		package?: Package | undefined;
+		executable?: Artifact;
+		lock?: Lock | undefined;
 		name?: string | undefined;
 		env?: MutationMap;
 		args?: Array<Value>;
@@ -322,8 +333,8 @@ export namespace Target {
 
 	export type Object_ = {
 		host: System;
-		executable: Template;
-		package: Package | undefined;
+		executable: Artifact;
+		lock: Lock | undefined;
 		name: string | undefined;
 		env: Record<string, Value>;
 		args: Array<Value>;

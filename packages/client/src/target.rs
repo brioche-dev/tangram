@@ -1,6 +1,6 @@
 use crate::{
-	checksum::Checksum, id, object, package, system::System, template, value, Build, Client, Error,
-	Package, Result, Template, Value, WrapErr,
+	artifact, checksum::Checksum, id, lock, object, system::System, value, Artifact, Build, Client,
+	Error, Lock, Result, Value, WrapErr,
 };
 use bytes::Bytes;
 use derive_more::Display;
@@ -41,10 +41,10 @@ pub struct Object {
 	pub host: System,
 
 	/// The target's executable.
-	pub executable: Template,
+	pub executable: Artifact,
 
-	/// The target's package.
-	pub package: Option<Package>,
+	/// The target's lock.
+	pub lock: Option<Lock>,
 
 	/// The target's name.
 	pub name: Option<String>,
@@ -66,8 +66,8 @@ pub struct Object {
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
 	pub host: System,
-	pub executable: template::Data,
-	pub package: Option<package::Id>,
+	pub executable: artifact::Id,
+	pub lock: Option<lock::Id>,
 	pub name: Option<String>,
 	pub env: BTreeMap<String, value::Data>,
 	pub args: Vec<value::Data>,
@@ -176,9 +176,9 @@ impl Target {
 		let object = self.object(client).await?;
 		Ok(Data {
 			host: object.host.clone(),
-			executable: object.executable.data(client).await?,
-			package: if let Some(package) = &object.package {
-				Some(package.id(client).await?.clone())
+			executable: object.executable.id(client).await?,
+			lock: if let Some(lock) = &object.lock {
+				Some(lock.id(client).await?.clone())
 			} else {
 				None
 			},
@@ -210,12 +210,12 @@ impl Target {
 		Ok(&self.object(client).await?.host)
 	}
 
-	pub async fn executable(&self, client: &dyn Client) -> Result<&Template> {
+	pub async fn executable(&self, client: &dyn Client) -> Result<&Artifact> {
 		Ok(&self.object(client).await?.executable)
 	}
 
-	pub async fn package(&self, client: &dyn Client) -> Result<&Option<Package>> {
-		Ok(&self.object(client).await?.package)
+	pub async fn lock(&self, client: &dyn Client) -> Result<&Option<Lock>> {
+		Ok(&self.object(client).await?.lock)
 	}
 
 	pub async fn name(&self, client: &dyn Client) -> Result<&Option<String>> {
@@ -260,8 +260,8 @@ impl Data {
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
 		std::iter::empty()
-			.chain(self.executable.children())
-			.chain(self.package.clone().map(Into::into))
+			.chain(std::iter::once(self.executable.clone().into()))
+			.chain(self.lock.clone().map(Into::into))
 			.chain(self.env.values().flat_map(value::Data::children))
 			.chain(self.args.iter().flat_map(value::Data::children))
 			.collect()
@@ -274,8 +274,8 @@ impl TryFrom<Data> for Object {
 	fn try_from(data: Data) -> std::result::Result<Self, Self::Error> {
 		Ok(Self {
 			host: data.host,
-			executable: data.executable.try_into()?,
-			package: data.package.map(Package::with_id),
+			executable: Artifact::with_id(data.executable),
+			lock: data.lock.map(Lock::with_id),
 			name: data.name,
 			env: data
 				.env
@@ -324,8 +324,8 @@ impl std::str::FromStr for Id {
 #[derive(Clone, Debug)]
 pub struct Builder {
 	host: System,
-	executable: Template,
-	package: Option<Package>,
+	executable: Artifact,
+	lock: Option<Lock>,
 	name: Option<String>,
 	env: BTreeMap<String, Value>,
 	args: Vec<Value>,
@@ -335,11 +335,11 @@ pub struct Builder {
 
 impl Builder {
 	#[must_use]
-	pub fn new(host: System, executable: Template) -> Self {
+	pub fn new(host: System, executable: Artifact) -> Self {
 		Self {
 			host,
 			executable,
-			package: None,
+			lock: None,
 			name: None,
 			env: BTreeMap::new(),
 			args: Vec::new(),
@@ -355,14 +355,14 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn executable(mut self, executable: Template) -> Self {
+	pub fn executable(mut self, executable: Artifact) -> Self {
 		self.executable = executable;
 		self
 	}
 
 	#[must_use]
-	pub fn package(mut self, package: Package) -> Self {
-		self.package = Some(package);
+	pub fn lock(mut self, lock: Lock) -> Self {
+		self.lock = Some(lock);
 		self
 	}
 
@@ -399,7 +399,7 @@ impl Builder {
 	#[must_use]
 	pub fn build(self) -> Target {
 		Target::with_object(Object {
-			package: self.package,
+			lock: self.lock,
 			host: self.host,
 			executable: self.executable,
 			name: self.name,

@@ -1,7 +1,7 @@
 use super::PackageArgs;
 use crate::Cli;
 use tangram_client as tg;
-use tangram_package::PackageExt;
+use tangram_lsp::ROOT_MODULE_FILE_NAME;
 use tg::{Result, WrapErr};
 
 /// Print the docs for a package.
@@ -9,7 +9,7 @@ use tg::{Result, WrapErr};
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: tg::package::Specifier,
+	pub package: tangram_package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -20,17 +20,24 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
-		// Get the package.
-		let package = tg::Package::with_specifier(client, args.package)
+		// Create the package.
+		let (package, lock) = tangram_package::new(client, &args.package)
 			.await
-			.wrap_err("Failed to get the package.")?;
+			.wrap_err("Failed to create the package.")?;
 
 		// Create the language server.
 		let server =
 			tangram_lsp::Server::new(client.downgrade_box(), tokio::runtime::Handle::current());
 
+		// Create the module.
+		let module = tangram_lsp::Module::Normal(tangram_lsp::module::Normal {
+			package: package.id(client).await?.clone(),
+			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+			lock: lock.id(client).await?.clone(),
+		});
+
 		// Get the docs.
-		let docs = server.docs(&package.root_module(client).await?).await?;
+		let docs = server.docs(&module).await?;
 
 		// Render the docs to JSON.
 		let json =

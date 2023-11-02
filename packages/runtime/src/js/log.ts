@@ -4,9 +4,9 @@ import { Directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { File } from "./file.ts";
 import { Leaf } from "./leaf.ts";
+import { Lock } from "./lock.ts";
 import { Mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
-import { Package } from "./package.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 import { Target } from "./target.ts";
@@ -84,6 +84,12 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 		return stringifyState("file", value.state, visited);
 	} else if (Symlink.is(value)) {
 		return stringifyState("symlink", value.state, visited);
+	} else if (Lock.is(value)) {
+		return stringifyState("lock", value.state, visited);
+	} else if (Target.is(value)) {
+		return stringifyState("target", value.state, visited);
+	} else if (Mutation.is(value)) {
+		return `(tg.mutation ${stringifyObject(value.inner, visited)})`;
 	} else if (Template.is(value)) {
 		return `\`${value.components
 			.map((component) => {
@@ -94,12 +100,6 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 				}
 			})
 			.join("")}\``;
-	} else if (Mutation.is(value)) {
-		return `(tg.mutation ${stringifyObject(value.inner, visited)})`;
-	} else if (Package.is(value)) {
-		return stringifyState("package", value.state, visited);
-	} else if (Target.is(value)) {
-		return stringifyState("target", value.state, visited);
 	} else {
 		let string = "";
 		if (

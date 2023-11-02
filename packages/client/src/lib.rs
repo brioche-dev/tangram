@@ -10,10 +10,12 @@ pub use self::{
 	branch::Branch,
 	build::Build,
 	checksum::Checksum,
+	dependency::Dependency,
 	directory::Directory,
 	file::File,
 	id::Id,
 	leaf::Leaf,
+	lock::Lock,
 	mutation::Mutation,
 	object::Object,
 	package::Package,
@@ -39,10 +41,12 @@ pub mod bundle;
 pub mod checkin;
 pub mod checkout;
 pub mod checksum;
+pub mod dependency;
 pub mod directory;
 pub mod file;
 pub mod id;
 pub mod leaf;
+pub mod lock;
 pub mod mutation;
 pub mod object;
 pub mod package;
@@ -169,11 +173,11 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn get_current_user(&self, token: &str) -> Result<Option<user::User>>;
 
-	async fn search_packages(&self, quer: &str) -> Result<Vec<package::Registry>>;
+	async fn search_packages(&self, quer: &str) -> Result<Vec<package::Package>>;
 
-	async fn get_package(&self, name: &str) -> Result<Option<package::Registry>>;
+	async fn get_package(&self, name: &str) -> Result<Option<package::Package>>;
 
-	async fn get_package_version(&self, name: &str, version: &str) -> Result<Option<package::Id>>;
+	async fn get_package_version(&self, name: &str, version: &str) -> Result<Option<artifact::Id>>;
 
-	async fn publish_package(&self, token: &str, id: &package::Id) -> Result<()>;
+	async fn publish_package(&self, token: &str, id: &artifact::Id) -> Result<()>;
 }

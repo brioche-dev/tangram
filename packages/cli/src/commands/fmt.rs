@@ -1,7 +1,8 @@
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_client as tg;
-use tg::{package::ROOT_MODULE_FILE_NAME, Result, WrapErr};
+use tangram_package::ROOT_MODULE_FILE_NAME;
+use tg::{Result, WrapErr};
 
 /// Format the files in a package.
 #[derive(Debug, clap::Args)]

@@ -4,11 +4,10 @@ use serde_v8::Serializable;
 use std::{collections::BTreeMap, sync::Arc};
 use tangram_client as tg;
 use tg::{
-	blob, branch, checksum, directory, file, leaf,
+	blob, branch, checksum, directory, file, leaf, lock,
 	object::{self, Object},
-	package, return_error, symlink, target, template, Artifact, Blob, Branch, Checksum, Directory,
-	Error, File, Leaf, Mutation, Package, Result, Symlink, System, Target, Template, Value,
-	WrapErr,
+	return_error, symlink, target, template, Artifact, Blob, Branch, Checksum, Directory, Error,
+	File, Leaf, Lock, Mutation, Result, Symlink, System, Target, Template, Value, WrapErr,
 };
 use url::Url;
 
@@ -539,10 +538,10 @@ impl ToV8 for Value {
 			Value::Directory(value) => value.to_v8(scope),
 			Value::File(value) => value.to_v8(scope),
 			Value::Symlink(value) => value.to_v8(scope),
-			Value::Template(value) => value.to_v8(scope),
-			Value::Mutation(value) => value.to_v8(scope),
-			Value::Package(value) => value.to_v8(scope),
+			Value::Lock(value) => value.to_v8(scope),
 			Value::Target(value) => value.to_v8(scope),
+			Value::Mutation(value) => value.to_v8(scope),
+			Value::Template(value) => value.to_v8(scope),
 			Value::Array(value) => value.to_v8(scope),
 			Value::Map(value) => value.to_v8(scope),
 		}
@@ -581,23 +580,23 @@ impl FromV8 for Value {
 		let symlink = tg.get(scope, symlink.into()).unwrap();
 		let symlink = v8::Local::<v8::Function>::try_from(symlink).unwrap();
 
-		let template =
-			v8::String::new_external_onebyte_static(scope, "Template".as_bytes()).unwrap();
-		let template = tg.get(scope, template.into()).unwrap();
-		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
+		let lock = v8::String::new_external_onebyte_static(scope, "Lock".as_bytes()).unwrap();
+		let lock = tg.get(scope, lock.into()).unwrap();
+		let lock = v8::Local::<v8::Function>::try_from(lock).unwrap();
+
+		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
+		let target = tg.get(scope, target.into()).unwrap();
+		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
 
 		let mutation =
 			v8::String::new_external_onebyte_static(scope, "Mutation".as_bytes()).unwrap();
 		let mutation = tg.get(scope, mutation.into()).unwrap();
 		let mutation = v8::Local::<v8::Function>::try_from(mutation).unwrap();
 
-		let package = v8::String::new_external_onebyte_static(scope, "Package".as_bytes()).unwrap();
-		let package = tg.get(scope, package.into()).unwrap();
-		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
-
-		let target = v8::String::new_external_onebyte_static(scope, "Target".as_bytes()).unwrap();
-		let target = tg.get(scope, target.into()).unwrap();
-		let target = v8::Local::<v8::Function>::try_from(target).unwrap();
+		let template =
+			v8::String::new_external_onebyte_static(scope, "Template".as_bytes()).unwrap();
+		let template = tg.get(scope, template.into()).unwrap();
+		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
 
 		if value.is_null_or_undefined() {
 			Ok(Value::Null(()))
@@ -619,14 +618,14 @@ impl FromV8 for Value {
 			Ok(Value::File(from_v8(scope, value)?))
 		} else if value.instance_of(scope, symlink.into()).unwrap() {
 			Ok(Value::Symlink(from_v8(scope, value)?))
-		} else if value.instance_of(scope, template.into()).unwrap() {
-			Ok(Value::Template(from_v8(scope, value)?))
-		} else if value.instance_of(scope, mutation.into()).unwrap() {
-			Ok(Value::Mutation(from_v8(scope, value)?))
-		} else if value.instance_of(scope, package.into()).unwrap() {
-			Ok(Value::Package(from_v8(scope, value)?))
+		} else if value.instance_of(scope, lock.into()).unwrap() {
+			Ok(Value::Lock(from_v8(scope, value)?))
 		} else if value.instance_of(scope, target.into()).unwrap() {
 			Ok(Value::Target(from_v8(scope, value)?))
+		} else if value.instance_of(scope, mutation.into()).unwrap() {
+			Ok(Value::Mutation(from_v8(scope, value)?))
+		} else if value.instance_of(scope, template.into()).unwrap() {
+			Ok(Value::Template(from_v8(scope, value)?))
 		} else if value.is_array() {
 			Ok(Value::Array(from_v8(scope, value)?))
 		} else if value.is_object() {
@@ -1267,7 +1266,7 @@ impl FromV8 for symlink::Object {
 	}
 }
 
-impl ToV8 for Template {
+impl ToV8 for Lock {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1275,20 +1274,19 @@ impl ToV8 for Template {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let template =
-			v8::String::new_external_onebyte_static(scope, "Template".as_bytes()).unwrap();
-		let template = tg.get(scope, template.into()).unwrap();
-		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
+		let lock = v8::String::new_external_onebyte_static(scope, "Lock".as_bytes()).unwrap();
+		let lock = tg.get(scope, lock.into()).unwrap();
+		let lock = v8::Local::<v8::Function>::try_from(lock).unwrap();
 
-		let components = self.components.to_v8(scope)?;
+		let state = self.state().read().unwrap().to_v8(scope)?;
 
-		let instance = template.new_instance(scope, &[components]).unwrap();
+		let instance = lock.new_instance(scope, &[state]).unwrap();
 
 		Ok(instance.into())
 	}
 }
 
-impl FromV8 for Template {
+impl FromV8 for Lock {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1299,70 +1297,108 @@ impl FromV8 for Template {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let template =
-			v8::String::new_external_onebyte_static(scope, "Template".as_bytes()).unwrap();
-		let template = tg.get(scope, template.into()).unwrap();
-		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
+		let lock = v8::String::new_external_onebyte_static(scope, "Lock".as_bytes()).unwrap();
+		let lock = tg.get(scope, lock.into()).unwrap();
+		let lock = v8::Local::<v8::Function>::try_from(lock).unwrap();
 
-		if !value.instance_of(scope, template.into()).unwrap() {
-			return_error!("Expected a template.");
+		if !value.instance_of(scope, lock.into()).unwrap() {
+			return_error!("Expected a lock.");
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let components =
-			v8::String::new_external_onebyte_static(scope, "components".as_bytes()).unwrap();
-		let components = value.get(scope, components.into()).unwrap();
-		let components = from_v8(scope, components)?;
+		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
+		let state = value.get(scope, state.into()).unwrap();
+		let state = from_v8(scope, state)?;
 
-		Ok(Self { components })
+		Ok(Self::with_state(state))
 	}
 }
 
-impl ToV8 for template::Component {
+impl ToV8 for lock::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		match self {
-			Self::String(string) => string.to_v8(scope),
-			Self::Artifact(artifact) => artifact.to_v8(scope),
-		}
+		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for template::Component {
+impl FromV8 for lock::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
-		let context = scope.get_current_context();
-		let global = context.global(scope);
-		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
-		let tg = global.get(scope, tg.into()).unwrap();
-		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+		String::from_v8(scope, value)?.parse()
+	}
+}
 
-		let directory =
-			v8::String::new_external_onebyte_static(scope, "Directory".as_bytes()).unwrap();
-		let directory = tg.get(scope, directory.into()).unwrap();
-		let directory = v8::Local::<v8::Function>::try_from(directory).unwrap();
+impl ToV8 for lock::Object {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let object = v8::Object::new(scope);
 
-		let file = v8::String::new_external_onebyte_static(scope, "File".as_bytes()).unwrap();
-		let file = tg.get(scope, file.into()).unwrap();
-		let file = v8::Local::<v8::Function>::try_from(file).unwrap();
+		let key =
+			v8::String::new_external_onebyte_static(scope, "dependencies".as_bytes()).unwrap();
+		let value = self
+			.dependencies
+			.iter()
+			.map(|(key, value)| (key.to_string(), value.clone()))
+			.collect::<BTreeMap<_, _>>()
+			.to_v8(scope)?;
+		object.set(scope, key.into(), value);
 
-		let symlink = v8::String::new_external_onebyte_static(scope, "Symlink".as_bytes()).unwrap();
-		let symlink = tg.get(scope, symlink.into()).unwrap();
-		let symlink = v8::Local::<v8::Function>::try_from(symlink).unwrap();
+		Ok(object.into())
+	}
+}
 
-		let component = if value.is_string() {
-			Self::String(from_v8(scope, value)?)
-		} else if value.instance_of(scope, directory.into()).unwrap()
-			|| value.instance_of(scope, file.into()).unwrap()
-			|| value.instance_of(scope, symlink.into()).unwrap()
-		{
-			Self::Artifact(from_v8(scope, value)?)
-		} else {
-			return_error!("Expected a string or artifact.")
-		};
+impl FromV8 for lock::Object {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = value.to_object(scope).unwrap();
 
-		Ok(component)
+		let dependencies =
+			v8::String::new_external_onebyte_static(scope, "dependencies".as_bytes()).unwrap();
+		let dependencies = value.get(scope, dependencies.into()).unwrap();
+		let dependencies: BTreeMap<String, _> = from_v8(scope, dependencies)?;
+		let dependencies = dependencies
+			.into_iter()
+			.map(|(key, value)| (key.parse().unwrap(), value))
+			.collect();
+
+		Ok(Self { dependencies })
+	}
+}
+
+impl ToV8 for tg::lock::Entry {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let object = v8::Object::new(scope);
+
+		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
+		let value = self.package.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "lock".as_bytes()).unwrap();
+		let value = self.lock.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		Ok(object.into())
+	}
+}
+
+impl FromV8 for tg::lock::Entry {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = value.to_object(scope).unwrap();
+
+		let package = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
+		let package = value.get(scope, package.into()).unwrap();
+		let package = from_v8(scope, package)?;
+
+		let lock = v8::String::new_external_onebyte_static(scope, "lock".as_bytes()).unwrap();
+		let lock = value.get(scope, lock.into()).unwrap();
+		let lock = from_v8(scope, lock)?;
+
+		Ok(Self { package, lock })
 	}
 }
 
@@ -1381,7 +1417,6 @@ impl ToV8 for Mutation {
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "set".to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
-
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
 				let value = value_.clone().to_v8(scope).unwrap();
@@ -1392,7 +1427,6 @@ impl ToV8 for Mutation {
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "set_if_unset".to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
-
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
 				let value = value_.clone().to_v8(scope).unwrap();
@@ -1403,7 +1437,6 @@ impl ToV8 for Mutation {
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "array_append".to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
-
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
 				let value = values.to_v8(scope)?;
@@ -1414,7 +1447,6 @@ impl ToV8 for Mutation {
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "array_prepend".to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
-
 				let key =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
 				let value = values.to_v8(scope)?;
@@ -1553,7 +1585,7 @@ impl FromV8 for Mutation {
 	}
 }
 
-impl ToV8 for Package {
+impl ToV8 for Template {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1561,19 +1593,20 @@ impl ToV8 for Package {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let package = v8::String::new_external_onebyte_static(scope, "Package".as_bytes()).unwrap();
-		let package = tg.get(scope, package.into()).unwrap();
-		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
+		let template =
+			v8::String::new_external_onebyte_static(scope, "Template".as_bytes()).unwrap();
+		let template = tg.get(scope, template.into()).unwrap();
+		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
 
-		let state = self.state().read().unwrap().to_v8(scope)?;
+		let components = self.components.to_v8(scope)?;
 
-		let instance = package.new_instance(scope, &[state]).unwrap();
+		let instance = template.new_instance(scope, &[components]).unwrap();
 
 		Ok(instance.into())
 	}
 }
 
-impl FromV8 for Package {
+impl FromV8 for Template {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1584,85 +1617,22 @@ impl FromV8 for Package {
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		let package = v8::String::new_external_onebyte_static(scope, "Package".as_bytes()).unwrap();
-		let package = tg.get(scope, package.into()).unwrap();
-		let package = v8::Local::<v8::Function>::try_from(package).unwrap();
+		let template =
+			v8::String::new_external_onebyte_static(scope, "Template".as_bytes()).unwrap();
+		let template = tg.get(scope, template.into()).unwrap();
+		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
 
-		if !value.instance_of(scope, package.into()).unwrap() {
-			return_error!("Expected a package.");
+		if !value.instance_of(scope, template.into()).unwrap() {
+			return_error!("Expected a template.");
 		}
 		let value = value.to_object(scope).unwrap();
 
-		let state = v8::String::new_external_onebyte_static(scope, "state".as_bytes()).unwrap();
-		let state = value.get(scope, state.into()).unwrap();
-		let state = from_v8(scope, state)?;
+		let components =
+			v8::String::new_external_onebyte_static(scope, "components".as_bytes()).unwrap();
+		let components = value.get(scope, components.into()).unwrap();
+		let components = from_v8(scope, components)?;
 
-		Ok(Self::with_state(state))
-	}
-}
-
-impl ToV8 for package::Id {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		self.to_string().to_v8(scope)
-	}
-}
-
-impl FromV8 for package::Id {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		String::from_v8(scope, value)?.parse()
-	}
-}
-
-impl ToV8 for package::Object {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let object = v8::Object::new(scope);
-
-		let key = v8::String::new_external_onebyte_static(scope, "artifact".as_bytes()).unwrap();
-		let value = self.artifact.to_v8(scope)?;
-		object.set(scope, key.into(), value);
-
-		let key =
-			v8::String::new_external_onebyte_static(scope, "dependencies".as_bytes()).unwrap();
-		let value = self
-			.dependencies
-			.iter()
-			.map(|(key, value)| (key.to_string(), value.clone()))
-			.collect::<BTreeMap<_, _>>()
-			.to_v8(scope)?;
-		object.set(scope, key.into(), value);
-
-		Ok(object.into())
-	}
-}
-
-impl FromV8 for package::Object {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let value = value.to_object(scope).unwrap();
-
-		let artifact =
-			v8::String::new_external_onebyte_static(scope, "artifact".as_bytes()).unwrap();
-		let artifact = value.get(scope, artifact.into()).unwrap();
-		let artifact = from_v8(scope, artifact)?;
-
-		let dependencies =
-			v8::String::new_external_onebyte_static(scope, "dependencies".as_bytes()).unwrap();
-		let dependencies = value.get(scope, dependencies.into()).unwrap();
-		let dependencies: BTreeMap<String, _> = from_v8(scope, dependencies)?;
-		let dependencies = dependencies
-			.into_iter()
-			.map(|(key, value)| (key.parse().unwrap(), value))
-			.collect();
-
-		Ok(Self {
-			artifact,
-			dependencies,
-		})
+		Ok(Self { components })
 	}
 }
 
@@ -1741,8 +1711,8 @@ impl ToV8 for target::Object {
 		let value = self.executable.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
-		let key = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
-		let value = self.package.to_v8(scope)?;
+		let key = v8::String::new_external_onebyte_static(scope, "lock".as_bytes()).unwrap();
+		let value = self.lock.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
 		let key = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
@@ -1785,9 +1755,9 @@ impl FromV8 for target::Object {
 		let executable = value.get(scope, executable.into()).unwrap();
 		let executable = from_v8(scope, executable)?;
 
-		let package = v8::String::new_external_onebyte_static(scope, "package".as_bytes()).unwrap();
-		let package = value.get(scope, package.into()).unwrap();
-		let package = from_v8(scope, package)?;
+		let lock = v8::String::new_external_onebyte_static(scope, "lock".as_bytes()).unwrap();
+		let lock = value.get(scope, lock.into()).unwrap();
+		let lock = from_v8(scope, lock)?;
 
 		let name = v8::String::new_external_onebyte_static(scope, "name".as_bytes()).unwrap();
 		let name = value.get(scope, name.into()).unwrap();
@@ -1813,13 +1783,61 @@ impl FromV8 for target::Object {
 		Ok(Self {
 			host,
 			executable,
-			package,
+			lock,
 			name,
 			env,
 			args,
 			checksum,
 			unsafe_,
 		})
+	}
+}
+
+impl ToV8 for template::Component {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		match self {
+			Self::String(string) => string.to_v8(scope),
+			Self::Artifact(artifact) => artifact.to_v8(scope),
+		}
+	}
+}
+
+impl FromV8 for template::Component {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let directory =
+			v8::String::new_external_onebyte_static(scope, "Directory".as_bytes()).unwrap();
+		let directory = tg.get(scope, directory.into()).unwrap();
+		let directory = v8::Local::<v8::Function>::try_from(directory).unwrap();
+
+		let file = v8::String::new_external_onebyte_static(scope, "File".as_bytes()).unwrap();
+		let file = tg.get(scope, file.into()).unwrap();
+		let file = v8::Local::<v8::Function>::try_from(file).unwrap();
+
+		let symlink = v8::String::new_external_onebyte_static(scope, "Symlink".as_bytes()).unwrap();
+		let symlink = tg.get(scope, symlink.into()).unwrap();
+		let symlink = v8::Local::<v8::Function>::try_from(symlink).unwrap();
+
+		let component = if value.is_string() {
+			Self::String(from_v8(scope, value)?)
+		} else if value.instance_of(scope, directory.into()).unwrap()
+			|| value.instance_of(scope, file.into()).unwrap()
+			|| value.instance_of(scope, symlink.into()).unwrap()
+		{
+			Self::Artifact(from_v8(scope, value)?)
+		} else {
+			return_error!("Expected a string or artifact.")
+		};
+
+		Ok(component)
 	}
 }
 
@@ -1835,6 +1853,53 @@ impl FromV8 for object::Id {
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		String::from_v8(scope, value)?.parse()
+	}
+}
+
+impl ToV8 for Object {
+	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
+		let (kind, value) = match self {
+			Self::Leaf(blob) => ("leaf", blob.to_v8(scope)?),
+			Self::Branch(blob) => ("branch", blob.to_v8(scope)?),
+			Self::Directory(directory) => ("directory", directory.to_v8(scope)?),
+			Self::File(file) => ("file", file.to_v8(scope)?),
+			Self::Symlink(symlink) => ("symlink", symlink.to_v8(scope)?),
+			Self::Lock(lock) => ("lock", lock.to_v8(scope)?),
+			Self::Target(target) => ("target", target.to_v8(scope)?),
+			Self::Build(_) => unreachable!(),
+		};
+		let object = v8::Object::new(scope);
+		let key = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+		let kind = v8::String::new_external_onebyte_static(scope, kind.as_bytes()).unwrap();
+		object.set(scope, key.into(), kind.into());
+		let key = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+		object.set(scope, key.into(), value);
+		Ok(object.into())
+	}
+}
+
+impl FromV8 for Object {
+	fn from_v8<'a>(
+		scope: &mut v8::HandleScope<'a>,
+		value: v8::Local<'a, v8::Value>,
+	) -> Result<Self> {
+		let value = value.to_object(scope).unwrap();
+		let key = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
+		let kind = value.get(scope, key.into()).unwrap();
+		let kind = String::from_v8(scope, kind).unwrap();
+		let key = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+		let value = value.get(scope, key.into()).unwrap();
+		let value = match kind.as_str() {
+			"leaf" => Self::Leaf(from_v8(scope, value)?),
+			"branch" => Self::Branch(from_v8(scope, value)?),
+			"directory" => Self::Directory(from_v8(scope, value)?),
+			"file" => Self::File(from_v8(scope, value)?),
+			"symlink" => Self::Symlink(from_v8(scope, value)?),
+			"lock" => Self::Lock(from_v8(scope, value)?),
+			"target" => Self::Target(from_v8(scope, value)?),
+			_ => unreachable!(),
+		};
+		Ok(value)
 	}
 }
 
@@ -1878,53 +1943,6 @@ where
 		let object = from_v8(scope, object)?;
 
 		Ok(Self::new(id, object))
-	}
-}
-
-impl ToV8 for Object {
-	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
-		let (kind, value) = match self {
-			Self::Leaf(blob) => ("leaf", blob.to_v8(scope)?),
-			Self::Branch(blob) => ("branch", blob.to_v8(scope)?),
-			Self::Directory(directory) => ("directory", directory.to_v8(scope)?),
-			Self::File(file) => ("file", file.to_v8(scope)?),
-			Self::Symlink(symlink) => ("symlink", symlink.to_v8(scope)?),
-			Self::Package(package) => ("package", package.to_v8(scope)?),
-			Self::Target(target) => ("target", target.to_v8(scope)?),
-			Self::Build(_) => unreachable!(),
-		};
-		let object = v8::Object::new(scope);
-		let key = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
-		let kind = v8::String::new_external_onebyte_static(scope, kind.as_bytes()).unwrap();
-		object.set(scope, key.into(), kind.into());
-		let key = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-		object.set(scope, key.into(), value);
-		Ok(object.into())
-	}
-}
-
-impl FromV8 for Object {
-	fn from_v8<'a>(
-		scope: &mut v8::HandleScope<'a>,
-		value: v8::Local<'a, v8::Value>,
-	) -> Result<Self> {
-		let value = value.to_object(scope).unwrap();
-		let key = v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
-		let kind = value.get(scope, key.into()).unwrap();
-		let kind = String::from_v8(scope, kind).unwrap();
-		let key = v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
-		let value = value.get(scope, key.into()).unwrap();
-		let value = match kind.as_str() {
-			"leaf" => Self::Leaf(from_v8(scope, value)?),
-			"branch" => Self::Branch(from_v8(scope, value)?),
-			"directory" => Self::Directory(from_v8(scope, value)?),
-			"file" => Self::File(from_v8(scope, value)?),
-			"symlink" => Self::Symlink(from_v8(scope, value)?),
-			"package" => Self::Package(from_v8(scope, value)?),
-			"target" => Self::Target(from_v8(scope, value)?),
-			_ => unreachable!(),
-		};
-		Ok(value)
 	}
 }
 

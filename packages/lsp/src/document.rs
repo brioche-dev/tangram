@@ -1,4 +1,4 @@
-use super::{Sender, Server};
+use super::{Sender, Server, ROOT_MODULE_FILE_NAME};
 use crate::{Module, Range};
 use lsp_types as lsp;
 use std::{
@@ -8,7 +8,7 @@ use std::{
 	time::SystemTime,
 };
 use tangram_client as tg;
-use tg::{package::ROOT_MODULE_FILE_NAME, return_error, Result, Subpath, WrapErr};
+use tg::{return_error, Result, Subpath, WrapErr};
 
 /// A document.
 #[derive(

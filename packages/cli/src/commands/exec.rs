@@ -18,7 +18,7 @@ pub struct Args {
 	pub run_args: super::RunArgs,
 
 	#[arg(default_value = ".")]
-	pub package: tg::package::Specifier,
+	pub package: tangram_package::Specifier,
 
 	pub trailing_args: Vec<String>,
 }

@@ -13,10 +13,7 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::return_error;
-use tg::{
-	build, object, package, status, target, tracker::Tracker, user, user::Login, Id, Result, Value,
-	Wrap, WrapErr,
-};
+use tg::{Result, Wrap, WrapErr};
 use tokio::{
 	io::AsyncBufReadExt,
 	net::{TcpStream, UnixStream},
@@ -205,7 +202,7 @@ impl tg::Client for Client {
 		&self.inner.file_descriptor_semaphore
 	}
 
-	async fn status(&self) -> Result<status::Status> {
+	async fn status(&self) -> Result<tg::status::Status> {
 		let request = self
 			.request(http::Method::GET, "/v1/status")
 			.body(empty())
@@ -244,7 +241,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
+	async fn get_object_exists(&self, id: &tg::object::Id) -> Result<bool> {
 		let request = self
 			.request(http::Method::HEAD, &format!("/v1/objects/{id}"))
 			.body(empty())
@@ -259,7 +256,7 @@ impl tg::Client for Client {
 		Ok(true)
 	}
 
-	async fn try_get_object(&self, id: &object::Id) -> Result<Option<Bytes>> {
+	async fn try_get_object(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/objects/{id}"))
 			.body(empty())
@@ -281,9 +278,9 @@ impl tg::Client for Client {
 
 	async fn try_put_object(
 		&self,
-		id: &object::Id,
+		id: &tg::object::Id,
 		bytes: &Bytes,
-	) -> Result<Result<(), Vec<object::Id>>> {
+	) -> Result<Result<(), Vec<tg::object::Id>>> {
 		let body = full(bytes.clone());
 		let request = self
 			.request(http::Method::PUT, &format!("/v1/objects/{id}"))
@@ -306,7 +303,7 @@ impl tg::Client for Client {
 		Ok(Ok(()))
 	}
 
-	async fn try_get_tracker(&self, path: &Path) -> Result<Option<Tracker>> {
+	async fn try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
 		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
 		let request = self
 			.request(http::Method::GET, &format!("/v1/trackers/{path}"))
@@ -328,7 +325,7 @@ impl tg::Client for Client {
 		Ok(Some(tracker))
 	}
 
-	async fn set_tracker(&self, path: &Path, tracker: &Tracker) -> Result<()> {
+	async fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
 		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
 		let body = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the body.")?;
 		let request = self
@@ -342,7 +339,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>> {
+	async fn try_get_build_for_target(&self, id: &tg::target::Id) -> Result<Option<tg::build::Id>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/targets/{id}/build"))
 			.body(empty())
@@ -363,7 +360,7 @@ impl tg::Client for Client {
 		Ok(Some(id))
 	}
 
-	async fn get_or_create_build_for_target(&self, id: &target::Id) -> Result<build::Id> {
+	async fn get_or_create_build_for_target(&self, id: &tg::target::Id) -> Result<tg::build::Id> {
 		let request = self
 			.request(http::Method::POST, &format!("/v1/targets/{id}/build"))
 			.body(empty())
@@ -381,7 +378,7 @@ impl tg::Client for Client {
 		Ok(id)
 	}
 
-	async fn try_get_build_target(&self, id: &build::Id) -> Result<Option<target::Id>> {
+	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
 		let request = self
 			.request(http::Method::POST, &format!("/v1/builds/{id}/target"))
 			.body(empty())
@@ -399,7 +396,7 @@ impl tg::Client for Client {
 		Ok(id)
 	}
 
-	async fn try_get_build_queue_item(&self) -> Result<Option<build::Id>> {
+	async fn try_get_build_queue_item(&self) -> Result<Option<tg::build::Id>> {
 		let request = self
 			.request(http::Method::GET, "/v1/builds/queue")
 			.body(empty())
@@ -423,8 +420,8 @@ impl tg::Client for Client {
 
 	async fn try_get_build_children(
 		&self,
-		id: &build::Id,
-	) -> Result<Option<BoxStream<'static, Result<build::Id>>>> {
+		id: &tg::build::Id,
+	) -> Result<Option<BoxStream<'static, Result<tg::build::Id>>>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/builds/{id}/children"))
 			.body(empty())
@@ -457,7 +454,11 @@ impl tg::Client for Client {
 		Ok(Some(children))
 	}
 
-	async fn add_build_child(&self, build_id: &build::Id, child_id: &build::Id) -> Result<()> {
+	async fn add_build_child(
+		&self,
+		build_id: &tg::build::Id,
+		child_id: &tg::build::Id,
+	) -> Result<()> {
 		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize the body.")?;
 		let request = self
 			.request(
@@ -478,7 +479,7 @@ impl tg::Client for Client {
 
 	async fn try_get_build_log(
 		&self,
-		id: &build::Id,
+		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/builds/{id}/log"))
@@ -507,7 +508,7 @@ impl tg::Client for Client {
 		Ok(Some(log))
 	}
 
-	async fn add_build_log(&self, build_id: &build::Id, bytes: Bytes) -> Result<()> {
+	async fn add_build_log(&self, build_id: &tg::build::Id, bytes: Bytes) -> Result<()> {
 		let body = bytes;
 		let request = self
 			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
@@ -523,7 +524,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value>>> {
+	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/builds/{id}/result"))
 			.body(empty())
@@ -545,7 +546,11 @@ impl tg::Client for Client {
 		Ok(Some(result))
 	}
 
-	async fn set_build_result(&self, build_id: &build::Id, result: Result<Value>) -> Result<()> {
+	async fn set_build_result(
+		&self,
+		build_id: &tg::build::Id,
+		result: Result<tg::Value>,
+	) -> Result<()> {
 		let result = match result {
 			Ok(value) => Ok(value.data(self).await?),
 			Err(error) => Err(error),
@@ -565,7 +570,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn finish_build(&self, id: &build::Id) -> Result<()> {
+	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
 		let request = self
 			.request(http::Method::POST, &format!("/v1/builds/${id}/finish"))
 			.body(empty())
@@ -581,7 +586,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn search_packages(&self, query: &str) -> Result<Vec<package::Registry>> {
+	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
 		let path = &format!("/v1/registry/packages/search?query={query}");
 		let request = self
 			.request(http::Method::GET, path)
@@ -601,7 +606,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_package(&self, name: &str) -> Result<Option<package::Registry>> {
+	async fn get_package(&self, name: &str) -> Result<Option<tg::Package>> {
 		let path = &format!("/v1/registry/packages/{name}");
 		let request = self
 			.request(http::Method::GET, path)
@@ -621,7 +626,11 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_package_version(&self, name: &str, version: &str) -> Result<Option<package::Id>> {
+	async fn get_package_version(
+		&self,
+		name: &str,
+		version: &str,
+	) -> Result<Option<tg::artifact::Id>> {
 		let path = &format!("/v1/registry/packages/{name}/version/{version}");
 		let request = self
 			.request(http::Method::GET, path)
@@ -641,7 +650,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn publish_package(&self, _token: &str, id: &package::Id) -> Result<()> {
+	async fn publish_package(&self, _token: &str, id: &tg::artifact::Id) -> Result<()> {
 		let request = self
 			.request(http::Method::POST, &format!("/v1/registry/packages/{id}"))
 			.body(empty())
@@ -653,7 +662,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn create_login(&self) -> Result<Login> {
+	async fn create_login(&self) -> Result<tg::user::Login> {
 		let request = self
 			.request(http::Method::POST, "/v1/logins")
 			.body(empty())
@@ -672,7 +681,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_login(&self, id: &Id) -> Result<Option<Login>> {
+	async fn get_login(&self, id: &tg::Id) -> Result<Option<tg::user::Login>> {
 		let request = self
 			.request(http::Method::GET, &format!("/v1/logins/{id}"))
 			.body(empty())
@@ -694,7 +703,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_current_user(&self, _token: &str) -> Result<Option<user::User>> {
+	async fn get_current_user(&self, _token: &str) -> Result<Option<tg::user::User>> {
 		let request = self
 			.request(http::Method::GET, "/v1/user")
 			.body(empty())

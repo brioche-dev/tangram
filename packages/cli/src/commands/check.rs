@@ -1,7 +1,6 @@
 use super::PackageArgs;
 use crate::Cli;
 use tangram_client as tg;
-use tangram_package::PackageExt;
 use tg::{return_error, Result, WrapErr};
 
 /// Check a package for errors.
@@ -9,7 +8,7 @@ use tg::{return_error, Result, WrapErr};
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: tg::package::Specifier,
+	pub package: tangram_package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -21,7 +20,7 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Get the package.
-		let package = tg::Package::with_specifier(client, args.package.clone())
+		let (package, lock) = tangram_package::new(client, &args.package)
 			.await
 			.wrap_err("Failed to get the package.")?;
 
@@ -31,7 +30,13 @@ impl Cli {
 
 		// Check the package for diagnostics.
 		let diagnostics = server
-			.check(vec![package.root_module(client).await?])
+			.check(vec![tangram_lsp::Module::Normal(
+				tangram_lsp::module::Normal {
+					package: package.id(client).await?,
+					lock: lock.id(client).await?.clone(),
+					path: tangram_package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
+				},
+			)])
 			.await?;
 
 		// Print the diagnostics.

@@ -69,7 +69,7 @@ pub async fn run_inner(
 	// Render the executable.
 	let executable = target.executable(client).await?;
 	let executable = render(
-		&Value::Template(executable.clone()),
+		&executable.clone().into(),
 		client,
 		&artifacts_directory_path,
 	)
