@@ -1,6 +1,6 @@
 use crate::{
-	artifact, checksum::Checksum, id, lock, object, system::System, value, Artifact, Build, Client,
-	Error, Lock, Result, Value, WrapErr,
+	artifact, id, lock, object, value, Artifact, Build, Checksum, Client, Error, Lock, Result,
+	System, Value, WrapErr,
 };
 use bytes::Bytes;
 use derive_more::Display;
@@ -57,9 +57,6 @@ pub struct Object {
 
 	/// If a checksum of the target's output is provided, then the target will have access to the network.
 	pub checksum: Option<Checksum>,
-
-	/// If the target is marked as unsafe, then it will have access to the network even if a checksum is not provided.
-	pub unsafe_: bool,
 }
 
 /// Target data.
@@ -72,7 +69,6 @@ pub struct Data {
 	pub env: BTreeMap<String, value::Data>,
 	pub args: Vec<value::Data>,
 	pub checksum: Option<Checksum>,
-	pub unsafe_: bool,
 }
 
 impl Id {
@@ -200,7 +196,6 @@ impl Target {
 				.try_collect()
 				.await?,
 			checksum: object.checksum.clone(),
-			unsafe_: object.unsafe_,
 		})
 	}
 }
@@ -232,10 +227,6 @@ impl Target {
 
 	pub async fn checksum(&self, client: &dyn Client) -> Result<&Option<Checksum>> {
 		Ok(&self.object(client).await?.checksum)
-	}
-
-	pub async fn unsafe_(&self, client: &dyn Client) -> Result<bool> {
-		Ok(self.object(client).await?.unsafe_)
 	}
 
 	pub async fn build(&self, client: &dyn Client) -> Result<Build> {
@@ -284,7 +275,6 @@ impl TryFrom<Data> for Object {
 				.try_collect()?,
 			args: data.args.into_iter().map(TryInto::try_into).try_collect()?,
 			checksum: data.checksum,
-			unsafe_: data.unsafe_,
 		})
 	}
 }
@@ -330,7 +320,6 @@ pub struct Builder {
 	env: BTreeMap<String, Value>,
 	args: Vec<Value>,
 	checksum: Option<Checksum>,
-	unsafe_: bool,
 }
 
 impl Builder {
@@ -344,7 +333,6 @@ impl Builder {
 			env: BTreeMap::new(),
 			args: Vec::new(),
 			checksum: None,
-			unsafe_: false,
 		}
 	}
 
@@ -391,12 +379,6 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn unsafe_(mut self, unsafe_: bool) -> Self {
-		self.unsafe_ = unsafe_;
-		self
-	}
-
-	#[must_use]
 	pub fn build(self) -> Target {
 		Target::with_object(Object {
 			lock: self.lock,
@@ -406,7 +388,6 @@ impl Builder {
 			env: self.env,
 			args: self.args,
 			checksum: self.checksum,
-			unsafe_: self.unsafe_,
 		})
 	}
 }

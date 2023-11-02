@@ -89,7 +89,6 @@ export function target<
 				args: [],
 				env: {},
 				checksum: undefined,
-				unsafe: false,
 			},
 		});
 	} else {
@@ -157,7 +156,6 @@ export class Target<
 			env?: MaybeNestedArray<MutationMap>;
 			args?: Array<Value>;
 			checksum?: Checksum | undefined;
-			unsafe?: boolean;
 		};
 		let {
 			host,
@@ -167,7 +165,6 @@ export class Target<
 			env: env_,
 			args: args_,
 			checksum,
-			unsafe: unsafe_,
 		} = await apply<Target.Arg, Apply>(args, async (arg) => {
 			if (
 				typeof arg === "string" ||
@@ -216,7 +213,6 @@ export class Target<
 		}
 		let env = await apply(flatten(env_ ?? []), async (arg) => arg);
 		args_ ??= [];
-		unsafe_ ??= false;
 		return new Target({
 			object: {
 				host,
@@ -226,7 +222,6 @@ export class Target<
 				env,
 				args: args_,
 				checksum,
-				unsafe: unsafe_,
 			},
 		});
 	}
@@ -299,10 +294,6 @@ export class Target<
 		return (await this.object()).checksum;
 	}
 
-	async unsafe(): Promise<boolean> {
-		return (await this.object()).unsafe;
-	}
-
 	async build(...args: A): Promise<Value> {
 		return await syscall.build(
 			await Target.new<[], R>(this as Target, { args }),
@@ -328,7 +319,6 @@ export namespace Target {
 		env?: MutationMap;
 		args?: Array<Value>;
 		checksum?: Checksum | undefined;
-		unsafe?: boolean;
 	};
 
 	export type Id = string;
@@ -341,7 +331,6 @@ export namespace Target {
 		env: Record<string, Value>;
 		args: Array<Value>;
 		checksum: Checksum | undefined;
-		unsafe: boolean;
 	};
 
 	export type State = Object_.State<Target.Id, Target.Object_>;

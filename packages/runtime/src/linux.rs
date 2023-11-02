@@ -186,9 +186,8 @@ pub async fn run_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg:
 		.try_collect()
 		.await?;
 
-	// Enable the network if a checksum was provided or if the unsafe flag was set.
-	let network_enabled =
-		target.checksum(client).await?.is_some() || target.unsafe_(client).await?;
+	// Enable the network if a checksum was provided.
+	let network_enabled = target.checksum(client).await?.is_some();
 
 	// Set `$HOME`.
 	env.insert(
@@ -607,7 +606,7 @@ pub async fn run_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg:
 				.checksum(client, expected.algorithm())
 				.await
 				.wrap_err("Failed to compute the checksum.")?;
-			if expected != actual {
+			if expected != tg::Checksum::Unsafe && expected != actual {
 				return_error!(
 					r#"The checksum did not match. Expected "{expected}" but got "{actual}"."#
 				);

@@ -724,9 +724,6 @@ declare namespace tg {
 		/** Get this target's checksum. */
 		checksum(): Promise<Checksum | undefined>;
 
-		/** Get whether this target is unsafe. */
-		unsafe(): Promise<boolean>;
-
 		/** Build this target. */
 		build(...args: { [K in keyof A]: Unresolved<A[K]> }): Promise<R>;
 	}
@@ -762,9 +759,6 @@ declare namespace tg {
 
 			/** If a checksum of the target's output is provided, then the target will have access to the network. */
 			checksum?: Checksum | undefined;
-
-			/** If the target is marked as unsafe, then it will have access to the network even if a checksum is not provided. */
-			unsafe?: boolean;
 		};
 
 		export type Id = string;

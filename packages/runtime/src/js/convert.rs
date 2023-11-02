@@ -1732,10 +1732,6 @@ impl ToV8 for target::Object {
 		let value = self.checksum.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
-		let key = v8::String::new_external_onebyte_static(scope, "unsafe".as_bytes()).unwrap();
-		let value = self.unsafe_.to_v8(scope)?;
-		object.set(scope, key.into(), value);
-
 		Ok(object.into())
 	}
 }
@@ -1777,10 +1773,6 @@ impl FromV8 for target::Object {
 		let checksum = value.get(scope, checksum.into()).unwrap();
 		let checksum = from_v8(scope, checksum)?;
 
-		let unsafe_ = v8::String::new_external_onebyte_static(scope, "unsafe".as_bytes()).unwrap();
-		let unsafe_ = value.get(scope, unsafe_.into()).unwrap();
-		let unsafe_ = from_v8(scope, unsafe_)?;
-
 		Ok(Self {
 			host,
 			executable,
@@ -1789,7 +1781,6 @@ impl FromV8 for target::Object {
 			env,
 			args,
 			checksum,
-			unsafe_,
 		})
 	}
 }
