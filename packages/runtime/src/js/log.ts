@@ -114,7 +114,7 @@ let stringifyObject = (value: object, visited: WeakSet<object>): string => {
 			string += " ";
 		}
 		string += entries
-			.map(([key, value]) => `${key}: ${stringifyInner(value, visited)}`)
+			.map(([key, value]) => `"${key}": ${stringifyInner(value, visited)}`)
 			.join(", ");
 		if (entries.length > 0) {
 			string += " ";

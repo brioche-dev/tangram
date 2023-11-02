@@ -465,9 +465,10 @@ where
 		value: v8::Local<'a, v8::Value>,
 	) -> Result<Self> {
 		let value = v8::Local::<v8::Object>::try_from(value).wrap_err("Expected an object.")?;
-		let property_names = value
-			.get_own_property_names(scope, v8::GetPropertyNamesArgs::default())
-			.unwrap();
+		let args = v8::GetPropertyNamesArgsBuilder::new()
+			.key_conversion(v8::KeyConversionMode::ConvertToString)
+			.build();
+		let property_names = value.get_own_property_names(scope, args).unwrap();
 		let mut output = BTreeMap::default();
 		for i in 0..property_names.length() {
 			let key = property_names.get_index(scope, i).unwrap();
@@ -1915,9 +1916,11 @@ where
 		let value = self.id().to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
-		let key = v8::String::new_external_onebyte_static(scope, "object".as_bytes()).unwrap();
-		let value = self.object().to_v8(scope)?;
-		object.set(scope, key.into(), value);
+		if self.id().is_none() {
+			let key = v8::String::new_external_onebyte_static(scope, "object".as_bytes()).unwrap();
+			let value = self.object().to_v8(scope)?;
+			object.set(scope, key.into(), value);
+		}
 
 		Ok(object.into())
 	}
@@ -1936,11 +1939,16 @@ where
 
 		let id = v8::String::new_external_onebyte_static(scope, "id".as_bytes()).unwrap();
 		let id = value.get(scope, id.into()).unwrap();
-		let id = from_v8(scope, id)?;
+		let id = from_v8::<Option<I>>(scope, id)?;
 
-		let object = v8::String::new_external_onebyte_static(scope, "object".as_bytes()).unwrap();
-		let object = value.get(scope, object.into()).unwrap();
-		let object = from_v8(scope, object)?;
+		let object = if id.is_none() {
+			let object =
+				v8::String::new_external_onebyte_static(scope, "object".as_bytes()).unwrap();
+			let object = value.get(scope, object.into()).unwrap();
+			from_v8(scope, object)?
+		} else {
+			None
+		};
 
 		Ok(Self::new(id, object))
 	}

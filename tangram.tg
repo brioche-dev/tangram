@@ -1,3 +1,5 @@
-export default tg.target(() => {
-	return tg.build("echo hello");
+export default tg.target(async () => {
+	let directory = tg.Directory.expect(await tg.include("./test"));
+	let entries = await directory.entries();
+	return directory;
 });
