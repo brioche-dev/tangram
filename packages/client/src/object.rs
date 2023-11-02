@@ -1,9 +1,11 @@
 use crate::{
-	branch, build, directory, file, id, leaf, lock, return_error, symlink, target, Branch, Build,
-	Client, Directory, Error, File, Leaf, Lock, Result, Symlink, Target,
+	branch, build, directory, file, leaf, lock, return_error, symlink, target, Branch, Build,
+	Client, Directory, Error, File, Leaf, Lock, Result, Symlink, Target, WrapErr,
 };
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
+use futures::{stream::FuturesOrdered, TryStreamExt};
 
 /// An artifact kind.
 #[derive(Clone, Copy, Debug)]
@@ -80,48 +82,6 @@ pub struct State<I, O> {
 }
 
 impl Id {
-	#[must_use]
-	pub fn new(kind: Kind, bytes: &[u8]) -> Self {
-		match kind {
-			Kind::Leaf => Self::Leaf(
-				crate::Id::new_hashed(id::Kind::Leaf, bytes)
-					.try_into()
-					.unwrap(),
-			),
-			Kind::Branch => Self::Branch(
-				crate::Id::new_hashed(id::Kind::Branch, bytes)
-					.try_into()
-					.unwrap(),
-			),
-			Kind::Directory => Self::Directory(
-				crate::Id::new_hashed(id::Kind::Directory, bytes)
-					.try_into()
-					.unwrap(),
-			),
-			Kind::File => Self::File(
-				crate::Id::new_hashed(id::Kind::File, bytes)
-					.try_into()
-					.unwrap(),
-			),
-			Kind::Symlink => Self::Symlink(
-				crate::Id::new_hashed(id::Kind::Symlink, bytes)
-					.try_into()
-					.unwrap(),
-			),
-			Kind::Lock => Self::Lock(
-				crate::Id::new_hashed(id::Kind::Lock, bytes)
-					.try_into()
-					.unwrap(),
-			),
-			Kind::Target => Self::Target(
-				crate::Id::new_hashed(id::Kind::Target, bytes)
-					.try_into()
-					.unwrap(),
-			),
-			Kind::Build => Self::Build(crate::Id::new_random(id::Kind::Build).try_into().unwrap()),
-		}
-	}
-
 	#[must_use]
 	pub fn kind(&self) -> Kind {
 		match self {
@@ -217,6 +177,46 @@ impl Handle {
 			Self::Target(object) => object.data(client).await.map(Data::Target),
 			Self::Build(object) => object.data(client).await.map(Data::Build),
 		}
+	}
+
+	pub async fn store(&self, client: &dyn Client) -> Result<()> {
+		match self {
+			Self::Leaf(object) => object.store(client).await,
+			Self::Branch(object) => object.store(client).await,
+			Self::Directory(object) => object.store(client).await,
+			Self::File(object) => object.store(client).await,
+			Self::Symlink(object) => object.store(client).await,
+			Self::Lock(object) => object.store(client).await,
+			Self::Target(object) => object.store(client).await,
+			Self::Build(object) => object.store(client).await,
+		}
+	}
+
+	#[async_recursion]
+	pub async fn push(&self, client: &dyn Client, remote: &dyn Client) -> Result<()> {
+		let id = self.id(client).await?;
+		let data = self.data(client).await?;
+		let bytes = data.serialize()?;
+		if let Err(missing_children) = remote
+			.try_put_object(&id.clone(), &bytes)
+			.await
+			.wrap_err("Failed to put the object.")?
+		{
+			missing_children
+				.into_iter()
+				.map(Self::with_id)
+				.map(|object| async move { object.push(client, remote).await })
+				.collect::<FuturesOrdered<_>>()
+				.try_collect()
+				.await?;
+			remote
+				.try_put_object(&id.clone(), &bytes)
+				.await
+				.wrap_err("Failed to put the object.")?
+				.ok()
+				.wrap_err("Expected all children to be stored.")?;
+		}
+		Ok(())
 	}
 }
 

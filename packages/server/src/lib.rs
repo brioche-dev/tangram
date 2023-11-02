@@ -384,12 +384,16 @@ impl tg::Client for Server {
 	}
 
 	async fn publish_package(&self, token: &str, id: &tg::artifact::Id) -> Result<()> {
-		self.inner
+		let parent = self
+			.inner
 			.parent
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?
-			.publish_package(token, id)
+			.wrap_err("The server does not have a parent.")?;
+		tg::object::Handle::with_id(id.clone().into())
+			.push(self, parent.as_ref())
 			.await
+			.wrap_err("Failed to push the package.")?;
+		parent.publish_package(token, id).await
 	}
 
 	async fn create_login(&self) -> Result<tg::user::Login> {

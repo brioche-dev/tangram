@@ -471,9 +471,9 @@ pub async fn run_inner(
 	if ret == 0 {
 		root(&context);
 	}
+	drop(log_send);
 
 	// Spawn the log task.
-	drop(log_send);
 	let log_task = tokio::task::spawn({
 		let progress = progress.clone_box();
 		async move {
