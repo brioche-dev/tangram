@@ -292,6 +292,8 @@ impl Server {
 	}
 
 	pub async fn add_build_log(&self, build_id: &tg::build::Id, log: Bytes) -> Result<()> {
+		eprint!("{}", String::from_utf8_lossy(&log));
+
 		// Get the progress for the build.
 		let progress = self
 			.inner

@@ -15,7 +15,7 @@ import {
 } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { MaybePromise, Unresolved } from "./resolve.ts";
-import { Symlink, symlink } from "./symlink.ts";
+import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template } from "./template.ts";
@@ -129,7 +129,7 @@ export class Target<
 				}
 			},
 			apply: async (target, _, args) => {
-				return await target.build(args);
+				return await target.build(...args);
 			},
 			getPrototypeOf: (_target) => {
 				return Object.getPrototypeOf(this_);

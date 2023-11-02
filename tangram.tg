@@ -1,3 +1,7 @@
+export let a = tg.target(s => s);
+
 export default tg.target(async () => {
-	return tg.file("Hello, World!");
+	let s1 = await a("a");
+	let s2 = await a("b");
+	tg.log(s1, s2);
 });
