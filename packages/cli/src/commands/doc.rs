@@ -40,11 +40,13 @@ impl Cli {
 		let docs = server.docs(&module).await?;
 
 		// Render the docs to JSON.
-		let json =
-			serde_json::to_string_pretty(&docs).wrap_err("Failed to serialize to the docs.")?;
+		let docs = serde_json::to_string_pretty(&serde_json::json!({
+			ROOT_MODULE_FILE_NAME: docs,
+		}))
+		.wrap_err("Failed to serialize the docs.")?;
 
 		// Print the docs.
-		println!("{json}");
+		println!("{docs}");
 
 		Ok(())
 	}

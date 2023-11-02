@@ -1,4 +1,4 @@
-import { assert, todo } from "./assert.ts";
+import { assert } from "./assert.ts";
 import { Module } from "./module.ts";
 import { Range } from "./range.ts";
 import { compilerOptions, host } from "./typescript.ts";
@@ -101,6 +101,11 @@ type TypeDeclaration = {
 };
 
 type VariableDeclaration = {
+	location: Location;
+	type: Type;
+};
+
+type DefaultExportDeclaration = {
 	location: Location;
 	type: Type;
 };
@@ -214,7 +219,7 @@ type PredicateType = {
 };
 
 type ReferenceType = {
-	module: Module;
+	location: Location;
 	name: string;
 	typeArguments: Array<Type>;
 	isTypeParameter: boolean;
@@ -375,6 +380,17 @@ let convertSymbol = (
 		declarations.push(...interfaceDeclarations);
 	}
 
+	// Handle default export Property.
+	if (
+		ts.SymbolFlags.Property & moduleExport.flags &&
+		moduleExport.getName() == "default"
+	) {
+		declarations.push({
+			kind: "variable",
+			value: convertDefaultExportSymbol(typeChecker, moduleExport),
+		});
+	}
+
 	return { declarations };
 };
 
@@ -397,9 +413,7 @@ let convertModuleSymbol = (
 	}
 
 	// Convert the declaration locations.
-	let declaration = symbol
-		.getDeclarations()
-		?.find((d): d is ts.ModuleDeclaration => ts.isModuleDeclaration(d));
+	let declaration = symbol.declarations?.[0]!;
 	if (!declaration) {
 		throw new Error();
 	}
@@ -480,6 +494,24 @@ let convertVariableSymbol = (
 	} else {
 		type = convertType(typeChecker, typeChecker.getTypeOfSymbol(symbol));
 	}
+
+	return {
+		location: convertLocation(declaration),
+		type,
+	};
+};
+
+// DefaultExport.
+let convertDefaultExportSymbol = (
+	typeChecker: ts.TypeChecker,
+	symbol: ts.Symbol,
+): DefaultExportDeclaration => {
+	let declaration = symbol.valueDeclaration;
+	if (!declaration) {
+		throw new Error();
+	}
+	// Convert the declaration.
+	let type = convertType(typeChecker, typeChecker.getTypeOfSymbol(symbol));
 
 	return {
 		location: convertLocation(declaration),
@@ -1053,8 +1085,20 @@ let convertObjectType = (
 
 	// Get the properties.
 	let properties = typeChecker.getPropertiesOfType(type).map((property) => {
-		let type = convertType(typeChecker, typeChecker.getTypeOfSymbol(property));
-		return [property.getName(), type];
+		// Convert the property.
+		let declaration = property.getDeclarations()?.[0]!;
+		let type: Type;
+		if (ts.isPropertySignature(declaration) && declaration.type) {
+			type = convertTypeNode(typeChecker, declaration.type);
+		} else {
+			type = convertType(typeChecker, typeChecker.getTypeOfSymbol(property));
+		}
+		let optional = false;
+		if (property.flags & ts.SymbolFlags.Optional) {
+			optional = true;
+		}
+		let objectProperty: ObjectProperty = { type, optional };
+		return [property.getName(), objectProperty];
 	});
 
 	return {
@@ -1118,19 +1162,21 @@ let convertTypeReferenceType = (
 		let declaration = aliasSymbol.declarations![0]!;
 		return {
 			name: aliasSymbol.getName(),
-			module: convertLocation(declaration).module,
+			location: convertLocation(declaration),
 			typeArguments: typeArguments ?? [],
 			isTypeParameter,
 		};
 	} else {
 		let typeArguments = typeChecker
 			.getTypeArguments(type as ts.TypeReference)
-			.map((typeArgument) => convertType(typeChecker, typeArgument));
+			.map((typeArgument) => {
+				return convertType(typeChecker, typeArgument);
+			});
 		let symbol = type.symbol;
 		let declaration = symbol.declarations![0]!;
 		return {
 			name: symbol.getName(),
-			module: convertLocation(declaration).module,
+			location: convertLocation(declaration),
 			typeArguments: typeArguments ?? [],
 			isTypeParameter,
 		};
@@ -1143,7 +1189,6 @@ let convertUnionType = (
 	type: ts.UnionType,
 ): UnionType => {
 	return {
-		// types: type.types.map((type) => convertType(typeChecker, type)),
 		types: type.types.map((type) => {
 			return {
 				kind: "other",
@@ -1366,6 +1411,7 @@ let convertObjectTypeNode = (
 	node: ts.TypeLiteralNode,
 ): ObjectType => {
 	let type = typeChecker.getTypeAtLocation(node);
+	// TODO.
 	return convertObjectType(typeChecker, type);
 };
 
@@ -1485,7 +1531,7 @@ let convertTypeReferenceTypeNode = (
 	let declaration = resolved.declarations![0]!;
 	let isTypeParameter = ts.isTypeParameterDeclaration(declaration);
 	return {
-		module: convertLocation(declaration).module,
+		location: convertLocation(declaration),
 		name: node.typeName.getText(),
 		typeArguments: typeArguments ?? [],
 		isTypeParameter,
@@ -1515,7 +1561,8 @@ let convertLocation = (node: ts.Node): Location => {
 			kind: "normal",
 			value: {
 				path: module_.value.path,
-				package: todo(),
+				package: module_.value.package,
+				lock: module_.value.lock,
 			},
 		};
 	} else {
