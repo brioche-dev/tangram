@@ -78,7 +78,7 @@ async fn syscall_archive(state: Rc<State>, args: (Artifact, blob::ArchiveFormat)
 async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 	let (target,) = args;
 	let build = target.build(state.client.as_ref()).await?;
-	state.progress.child(&build);
+	state.build.add_child(state.client.as_ref(), &build).await?;
 	let output = build
 		.result(state.client.as_ref())
 		.await
@@ -278,7 +278,19 @@ async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::O
 
 fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) -> Result<()> {
 	let (string,) = args;
-	state.progress.log(string.into());
+	let (sender, receiver) = std::sync::mpsc::channel();
+	state.main_runtime_handle.spawn({
+		let build = state.build.clone();
+		let client = state.client.clone_box();
+		async move {
+			let result = build.add_log(client.as_ref(), string.into()).await;
+			sender.send(result).unwrap();
+		}
+	});
+	receiver
+		.recv()
+		.unwrap()
+		.wrap_err("Failed to add the log.")?;
 	Ok(())
 }
 

@@ -130,9 +130,6 @@ impl Build {
 	}
 
 	pub async fn store(&self, client: &dyn Client) -> Result<()> {
-		if self.state.read().unwrap().id.is_some() {
-			return Ok(());
-		}
 		let data = self.data(client).await?;
 		let bytes = data.serialize()?;
 		let id = self.state.read().unwrap().id.clone().unwrap();
@@ -142,7 +139,6 @@ impl Build {
 			.wrap_err("Failed to put the object.")?
 			.ok()
 			.wrap_err("Expected all children to be stored.")?;
-		self.state.write().unwrap().id.replace(id);
 		Ok(())
 	}
 
@@ -228,6 +224,13 @@ impl Build {
 		}
 	}
 
+	pub async fn add_child(&self, client: &dyn Client, child: &Self) -> Result<()> {
+		let id = self.id(client).await?;
+		let child_id = child.id(client).await?;
+		client.add_build_child(id, child_id).await?;
+		Ok(())
+	}
+
 	pub async fn log(&self, client: &dyn Client) -> Result<BoxStream<'static, Result<Bytes>>> {
 		self.try_get_log(client)
 			.await?
@@ -247,18 +250,37 @@ impl Build {
 		}
 	}
 
+	pub async fn add_log(&self, client: &dyn Client, log: Bytes) -> Result<()> {
+		let id = self.id(client).await?;
+		client.add_build_log(id, log).await?;
+		Ok(())
+	}
+
 	pub async fn result(&self, client: &dyn Client) -> Result<Result<Value>> {
 		self.try_get_result(client)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
+	pub async fn set_result(&self, client: &dyn Client, result: Result<Value>) -> Result<()> {
+		let id = self.id(client).await?;
+		client.set_build_result(id, result).await?;
+		Ok(())
+	}
+
 	pub async fn try_get_result(&self, client: &dyn Client) -> Result<Option<Result<Value>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.result.clone()))
 		} else {
+			dbg!("Getting the build result.");
 			Ok(client.try_get_build_result(self.id(client).await?).await?)
 		}
+	}
+
+	pub async fn finish(&self, client: &dyn Client) -> Result<()> {
+		let id = self.id(client).await?;
+		client.finish_build(id).await?;
+		Ok(())
 	}
 }
 

@@ -107,7 +107,8 @@ export class File {
 	}
 
 	async id(): Promise<File.Id> {
-		return (await this.id()) as File.Id;
+		await this.store();
+		return this.#state.id!;
 	}
 
 	async object(): Promise<File.Object_> {

@@ -1,4 +1,3 @@
-use super::Progress;
 use crate::util::render;
 use bytes::Bytes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
@@ -11,27 +10,29 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::Wrap;
-use tg::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
+use tg::{return_error, Artifact, Build, Client, Error, Result, Value, WrapErr};
 use tokio::io::AsyncReadExt;
 
-pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
-	match run_inner(client, target, progress).await {
+pub async fn run(client: &dyn Client, build: &Build) -> Result<()> {
+	match run_inner(client, build).await {
 		Ok(output) => {
-			progress.result(Ok(output));
+			build.set_result(client, Ok(output)).await?;
 		},
 		Err(error) => {
-			progress.log(error.trace().to_string().into());
-			progress.result(Err(error));
+			build
+				.add_log(client, error.trace().to_string().into())
+				.await?;
+			build.set_result(client, Err(error)).await?;
 		},
 	}
+	Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
-pub async fn run_inner(
-	client: &dyn Client,
-	target: Target,
-	progress: &dyn Progress,
-) -> Result<Value> {
+pub async fn run_inner(client: &dyn Client, build: &Build) -> Result<Value> {
+	// Get the target.
+	let target = build.target(client).await?;
+
 	// Get the server path.
 	let server_directory_path = client.path().unwrap().to_owned();
 
@@ -322,7 +323,8 @@ pub async fn run_inner(
 	// Create the log task.
 	let mut stdout = child.stdout.take().unwrap();
 	let log_task = tokio::task::spawn({
-		let progress = progress.clone_box();
+		let build = build.clone();
+		let client = client.clone_box();
 		async move {
 			let mut buf = [0; 512];
 			loop {
@@ -330,7 +332,8 @@ pub async fn run_inner(
 					Err(error) => return Err(error.wrap("Failed to read from the log.")),
 					Ok(0) => return Ok(()),
 					Ok(size) => {
-						progress.log(Bytes::copy_from_slice(&buf[0..size]));
+						let log = Bytes::copy_from_slice(&buf[0..size]);
+						build.add_log(client.as_ref(), log).await?;
 					},
 				}
 			}

@@ -1,4 +1,4 @@
-use crate::{util::render, Progress};
+use crate::util::render;
 use bytes::Bytes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use indoc::formatdoc;
@@ -10,9 +10,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 use tangram_client as tg;
-use tg::{
-	return_error, system::Arch, Artifact, Client, Error, Result, Target, Value, Wrap, WrapErr,
-};
+use tg::{return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// The home directory guest path.
@@ -53,24 +51,26 @@ const SH_X8664_LINUX: &[u8] = include_bytes!(concat!(
 	"/src/linux/bin/sh_x86_64_linux"
 ));
 
-pub async fn run(client: &dyn Client, target: Target, progress: &dyn Progress) {
-	match run_inner(client, target, progress).await {
+pub async fn run(client: &dyn tg::Client, build: &tg::Build) -> Result<()> {
+	match run_inner(client, build).await {
 		Ok(output) => {
-			progress.result(Ok(output));
+			build.set_result(client, Ok(output)).await?;
 		},
 		Err(error) => {
-			progress.log(error.trace().to_string().into());
-			progress.result(Err(error));
+			build
+				.add_log(client, error.trace().to_string().into())
+				.await?;
+			build.set_result(client, Err(error)).await?;
 		},
 	}
+	Ok(())
 }
 
 #[allow(clippy::too_many_lines, clippy::similar_names)]
-pub async fn run_inner(
-	client: &dyn Client,
-	target: Target,
-	progress: &dyn Progress,
-) -> Result<Value> {
+pub async fn run_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
+	// Get the target.
+	let target = build.target(client).await?;
+
 	// Get the server directory path.
 	let server_directory_host_path = client.path().unwrap().to_owned();
 	let server_directory_guest_path = PathBuf::from(SERVER_DIRECTORY_GUEST_PATH);
@@ -87,8 +87,8 @@ pub async fn run_inner(
 	let env_path = root_directory_host_path.join("usr/bin/env");
 	let sh_path = root_directory_host_path.join("bin/sh");
 	let (env_bytes, sh_bytes) = match target.host(client).await?.arch() {
-		Arch::Aarch64 => (ENV_AARCH64_LINUX, SH_AARCH64_LINUX),
-		Arch::X8664 => (ENV_X8664_LINUX, SH_X8664_LINUX),
+		tg::system::Arch::Aarch64 => (ENV_AARCH64_LINUX, SH_AARCH64_LINUX),
+		tg::system::Arch::X8664 => (ENV_X8664_LINUX, SH_X8664_LINUX),
 		_ => unreachable!(),
 	};
 	tokio::fs::create_dir_all(&env_path.parent().unwrap())
@@ -427,7 +427,9 @@ pub async fn run_inner(
 	// Create the log socket pair.
 	let (log_send, mut log_recv) =
 		tokio::net::UnixStream::pair().wrap_err("Failed to create stdout socket.")?;
-	let log = log_send.as_raw_fd();
+	let log = log_send
+		.into_std()
+		.wrap_err("Failed to convert the log sender.")?;
 
 	// Create the context.
 	let context = Context {
@@ -471,11 +473,11 @@ pub async fn run_inner(
 	if ret == 0 {
 		root(&context);
 	}
-	drop(log_send);
 
 	// Spawn the log task.
 	let log_task = tokio::task::spawn({
-		let progress = progress.clone_box();
+		let build = build.clone();
+		let client = client.clone_box();
 		async move {
 			let mut buf = vec![0; 512];
 			loop {
@@ -483,7 +485,8 @@ pub async fn run_inner(
 					Err(error) => return Err(error.wrap("Failed to read from the log.")),
 					Ok(0) => return Ok(()),
 					Ok(size) => {
-						progress.log(Bytes::copy_from_slice(&buf[0..size]));
+						let log = Bytes::copy_from_slice(&buf[0..size]);
+						build.add_log(client.as_ref(), log).await?;
 					},
 				}
 			}
@@ -594,7 +597,7 @@ pub async fn run_inner(
 		let options = tg::checkin::Options {
 			artifacts_paths: vec![artifacts_directory_guest_path],
 		};
-		let artifact = Artifact::check_in_with_options(client, &output_host_path, &options)
+		let artifact = tg::Artifact::check_in_with_options(client, &output_host_path, &options)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 
@@ -613,7 +616,7 @@ pub async fn run_inner(
 
 		artifact.into()
 	} else {
-		Value::Null(())
+		tg::Value::Null(())
 	};
 
 	Ok(value)
@@ -629,11 +632,11 @@ fn root(context: &Context) {
 		}
 
 		// Duplicate stdout and stderr to the log.
-		let ret = libc::dup2(context.log, libc::STDOUT_FILENO);
+		let ret = libc::dup2(context.log.as_raw_fd(), libc::STDOUT_FILENO);
 		if ret == -1 {
 			abort_errno!("Failed to duplicate stdout to the log.");
 		}
-		let ret = libc::dup2(context.log, libc::STDERR_FILENO);
+		let ret = libc::dup2(context.log.as_raw_fd(), libc::STDERR_FILENO);
 		if ret == -1 {
 			abort_errno!("Failed to duplicate stderr to the log.");
 		}
@@ -888,7 +891,7 @@ struct Context {
 	working_directory_guest_path: CString,
 
 	/// The file descriptor for streaming to the log.
-	log: i32,
+	log: std::os::unix::net::UnixStream,
 }
 
 unsafe impl Send for Context {}

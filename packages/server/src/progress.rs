@@ -20,8 +20,6 @@ struct Inner {
 	target: tg::Target,
 	children: std::sync::Mutex<ChildrenState>,
 	log: Arc<tokio::sync::Mutex<LogState>>,
-	logger: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<Bytes>>>,
-	logger_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 	result: ResultState,
 }
 
@@ -33,14 +31,14 @@ struct ChildrenState {
 
 #[derive(Debug)]
 struct LogState {
-	file: tokio::fs::File,
+	log: tokio::fs::File,
 	sender: Option<tokio::sync::broadcast::Sender<Bytes>>,
 }
 
 #[derive(Debug)]
 struct ResultState {
+	result: tokio::sync::watch::Receiver<Option<Result<tg::Value>>>,
 	sender: tokio::sync::watch::Sender<Option<Result<tg::Value>>>,
-	receiver: tokio::sync::watch::Receiver<Option<Result<tg::Value>>>,
 }
 
 impl Progress {
@@ -53,37 +51,18 @@ impl Progress {
 
 		// Create the log state.
 		let log = Arc::new(tokio::sync::Mutex::new(LogState {
-			file: tokio::fs::File::from_std(
+			log: tokio::fs::File::from_std(
 				tempfile::tempfile().wrap_err("Failed to create the temporary file.")?,
 			),
 			sender: Some(tokio::sync::broadcast::channel(1024).0),
 		}));
 
-		// Spawn the logger task.
-		let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<Bytes>();
-		let logger = std::sync::Mutex::new(Some(sender));
-		let logger_task = std::sync::Mutex::new(Some(tokio::spawn({
-			let log = log.clone();
-			async move {
-				while let Some(bytes) = receiver.recv().await {
-					let mut log = log.lock().await;
-					log.file
-						.seek(std::io::SeekFrom::End(0))
-						.await
-						.wrap_err("Failed to seek.")?;
-					log.file
-						.write_all(&bytes)
-						.await
-						.wrap_err("Failed to write the log.")?;
-					log.sender.as_ref().unwrap().send(bytes).ok();
-				}
-				Ok(())
-			}
-		})));
-
 		// Create the result state.
 		let (sender, receiver) = tokio::sync::watch::channel(None);
-		let result = ResultState { sender, receiver };
+		let result = ResultState {
+			sender,
+			result: receiver,
+		};
 
 		Ok(Self {
 			inner: Arc::new(Inner {
@@ -91,8 +70,6 @@ impl Progress {
 				target,
 				children,
 				log,
-				logger,
-				logger_task,
 				result,
 			}),
 		})
@@ -102,7 +79,7 @@ impl Progress {
 		&self.inner.target
 	}
 
-	pub fn children_stream(&self) -> BoxStream<'static, Result<tg::Build>> {
+	pub fn children(&self) -> BoxStream<'static, Result<tg::Build>> {
 		let state = self.inner.children.lock().unwrap();
 		let old = stream::iter(state.children.clone()).map(Ok);
 		let new = if let Some(sender) = state.sender.as_ref() {
@@ -115,19 +92,25 @@ impl Progress {
 		old.chain(new).boxed()
 	}
 
-	pub async fn log_stream(&self) -> Result<BoxStream<'static, Result<Bytes>>> {
+	pub fn add_child(&self, child: &tg::Build) {
+		let mut state = self.inner.children.lock().unwrap();
+		state.children.push(child.clone());
+		state.sender.as_ref().unwrap().send(child.clone()).ok();
+	}
+
+	pub async fn log(&self) -> Result<BoxStream<'static, Result<Bytes>>> {
 		let mut log = self.inner.log.lock().await;
-		log.file
+		log.log
 			.rewind()
 			.await
 			.wrap_err("Failed to rewind the log file.")?;
 		let mut old = Vec::new();
-		log.file
+		log.log
 			.read_to_end(&mut old)
 			.await
 			.wrap_err("Failed to read the log.")?;
 		let old = stream::once(async move { Ok(old.into()) });
-		log.file
+		log.log
 			.seek(std::io::SeekFrom::End(0))
 			.await
 			.wrap_err("Failed to seek in the log file.")?;
@@ -141,10 +124,24 @@ impl Progress {
 		Ok(old.chain(new).boxed())
 	}
 
-	pub async fn wait_for_result(&self) -> Result<tg::Value> {
+	pub async fn add_log(&self, bytes: Bytes) -> Result<()> {
+		let mut log = self.inner.log.lock().await;
+		log.log
+			.seek(std::io::SeekFrom::End(0))
+			.await
+			.wrap_err("Failed to seek.")?;
+		log.log
+			.write_all(&bytes)
+			.await
+			.wrap_err("Failed to write the log.")?;
+		log.sender.as_ref().unwrap().send(bytes).ok();
+		Ok(())
+	}
+
+	pub async fn result(&self) -> Result<tg::Value> {
 		self.inner
 			.result
-			.receiver
+			.result
 			.clone()
 			.wait_for(Option::is_some)
 			.await
@@ -153,14 +150,16 @@ impl Progress {
 			.unwrap()
 	}
 
-	pub async fn finish(self, client: &dyn tg::Client) -> Result<tg::Build> {
+	pub fn set_result(&self, result: Result<tg::Value>) {
+		self.inner.result.sender.send(Some(result)).unwrap();
+	}
+
+	pub async fn finish(&self, client: &dyn tg::Client) -> Result<tg::Build> {
 		// Drop the children sender.
 		self.inner.children.lock().unwrap().sender.take();
 
-		// Drop the logger sender and wait for the logger task to finish.
-		self.inner.logger.lock().unwrap().take();
-		let logger_task = self.inner.logger_task.lock().unwrap().take().unwrap();
-		logger_task.await.unwrap()?;
+		// Drop the log sender.
+		self.inner.log.lock().await.sender.take();
 
 		// Get the children.
 		let children = self.inner.children.lock().unwrap().children.clone();
@@ -168,12 +167,12 @@ impl Progress {
 		// Get the log.
 		let log = {
 			let mut state = self.inner.log.lock().await;
-			state.file.rewind().await.wrap_err("Failed to seek.")?;
-			tg::Blob::with_reader(client, &mut state.file).await?
+			state.log.rewind().await.wrap_err("Failed to seek.")?;
+			tg::Blob::with_reader(client, &mut state.log).await?
 		};
 
 		// Get the result.
-		let result = self.inner.result.receiver.borrow().clone().unwrap();
+		let result = self.inner.result.result.borrow().clone().unwrap();
 
 		// Create the build.
 		let build = tg::Build::new(
@@ -184,34 +183,9 @@ impl Progress {
 			result,
 		)?;
 
+		// Store the build.
+		build.store(client).await?;
+
 		Ok(build)
-	}
-}
-
-impl tangram_runtime::Progress for Progress {
-	fn clone_box(&self) -> Box<dyn tangram_runtime::Progress> {
-		Box::new(self.clone())
-	}
-
-	fn child(&self, child: &tg::Build) {
-		let mut state = self.inner.children.lock().unwrap();
-		state.children.push(child.clone());
-		state.sender.as_ref().unwrap().send(child.clone()).ok();
-	}
-
-	fn log(&self, bytes: Bytes) {
-		eprint!("{}", std::str::from_utf8(bytes.as_ref()).unwrap());
-		self.inner
-			.logger
-			.lock()
-			.unwrap()
-			.as_ref()
-			.unwrap()
-			.send(bytes)
-			.unwrap();
-	}
-
-	fn result(&self, result: Result<tg::Value>) {
-		self.inner.result.sender.send(Some(result)).unwrap();
 	}
 }

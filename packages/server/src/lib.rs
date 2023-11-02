@@ -9,7 +9,7 @@ use std::{
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
-use tg::{return_error, util::rmrf, Result, Wrap, WrapErr};
+use tg::{util::rmrf, Result, Wrap, WrapErr};
 
 mod build;
 mod clean;
@@ -32,9 +32,6 @@ pub struct Handle {
 
 #[derive(Debug)]
 struct Inner {
-	/// The server's running builds.
-	builds: std::sync::RwLock<(BuildForTargetMap, BuildProgressMap)>,
-
 	/// The database.
 	database: Database,
 
@@ -57,6 +54,9 @@ struct Inner {
 	/// The path to the directory where the server stores its data.
 	path: PathBuf,
 
+	/// The server's state.
+	state: State,
+
 	/// The server's version.
 	version: String,
 
@@ -64,9 +64,11 @@ struct Inner {
 	vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
 }
 
-type BuildForTargetMap = HashMap<tg::target::Id, tg::build::Id, fnv::FnvBuildHasher>;
-
-type BuildProgressMap = HashMap<tg::build::Id, Progress, fnv::FnvBuildHasher>;
+#[derive(Debug, Default)]
+struct State {
+	assignments: std::sync::RwLock<HashMap<tg::target::Id, tg::build::Id, fnv::FnvBuildHasher>>,
+	progress: std::sync::RwLock<HashMap<tg::build::Id, Progress, fnv::FnvBuildHasher>>,
+}
 
 #[derive(Debug)]
 struct Database {
@@ -116,9 +118,6 @@ impl Server {
 			.await
 			.wrap_err("Failed to remove an existing socket file.")?;
 
-		// Create the server's running builds.
-		let builds = std::sync::RwLock::new((HashMap::default(), HashMap::default()));
-
 		// Open the database.
 		let database_path = path.join("database");
 		let mut env_builder = lmdb::Environment::new();
@@ -156,18 +155,21 @@ impl Server {
 			std::thread::available_parallelism().unwrap().get(),
 		);
 
+		// Create the server's state.
+		let state = State::default();
+
 		// Create the VFS task.
 		let vfs_task = std::sync::Mutex::new(None);
 
 		// Create the inner.
 		let inner = Arc::new(Inner {
-			builds,
 			database,
 			file_descriptor_semaphore,
 			local_pool,
 			lock_file,
 			parent,
 			path,
+			state,
 			version,
 			vfs_task,
 		});
@@ -319,10 +321,10 @@ impl tg::Client for Server {
 
 	async fn add_build_child(
 		&self,
-		_build_id: &tg::build::Id,
-		_child_id: &tg::build::Id,
+		build_id: &tg::build::Id,
+		child_id: &tg::build::Id,
 	) -> Result<()> {
-		return_error!("This server does not support builders.");
+		self.add_build_child(build_id, child_id).await
 	}
 
 	async fn try_get_build_log(
@@ -332,8 +334,8 @@ impl tg::Client for Server {
 		self.try_get_build_log(id).await
 	}
 
-	async fn add_build_log(&self, _build_id: &tg::build::Id, _bytes: Bytes) -> Result<()> {
-		return_error!("This server does not support builders.");
+	async fn add_build_log(&self, build_id: &tg::build::Id, bytes: Bytes) -> Result<()> {
+		self.add_build_log(build_id, bytes).await
 	}
 
 	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
@@ -342,14 +344,14 @@ impl tg::Client for Server {
 
 	async fn set_build_result(
 		&self,
-		_build_id: &tg::build::Id,
-		_result: Result<tg::Value>,
+		build_id: &tg::build::Id,
+		result: Result<tg::Value>,
 	) -> Result<()> {
-		return_error!("This server does not support builders.");
+		self.set_build_result(build_id, result).await
 	}
 
-	async fn finish_build(&self, _id: &tg::build::Id) -> Result<()> {
-		return_error!("This server does not support builders.");
+	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
+		self.finish_build(id).await
 	}
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {

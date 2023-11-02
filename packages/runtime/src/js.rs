@@ -2,14 +2,13 @@ use self::{
 	convert::{from_v8, ToV8},
 	syscall::syscall,
 };
-use super::Progress;
 use futures::{future::LocalBoxFuture, stream::FuturesUnordered, StreamExt};
 use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client as tg;
 use tangram_lsp::{Import, Module};
-use tg::{Client, Result, Target, WrapErr};
+use tg::{Result, WrapErr};
 
 mod convert;
 mod error;
@@ -23,12 +22,12 @@ const SOURCE_MAP: &[u8] = include_bytes!(concat!(
 ));
 
 struct State {
-	client: Box<dyn Client>,
+	build: tg::Build,
+	client: Box<dyn tg::Client>,
 	futures: Rc<RefCell<Futures>>,
 	global_source_map: Option<SourceMap>,
 	loaded_modules: Rc<RefCell<Vec<LoadedModule>>>,
 	main_runtime_handle: tokio::runtime::Handle,
-	progress: Box<dyn Progress>,
 }
 
 type Futures = FuturesUnordered<
@@ -42,13 +41,34 @@ struct LoadedModule {
 	v8_module: v8::Global<v8::Module>,
 }
 
-#[allow(clippy::too_many_lines)]
 pub async fn run(
-	client: &dyn Client,
-	target: Target,
-	progress: &dyn Progress,
+	client: &dyn tg::Client,
+	build: &tg::Build,
 	main_runtime_handle: tokio::runtime::Handle,
-) {
+) -> Result<()> {
+	match run_inner(client, build, main_runtime_handle).await {
+		Ok(output) => {
+			build.set_result(client, Ok(output)).await?;
+		},
+		Err(error) => {
+			build
+				.add_log(client, error.trace().to_string().into())
+				.await?;
+			build.set_result(client, Err(error)).await?;
+		},
+	}
+	Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+pub async fn run_inner(
+	client: &dyn tg::Client,
+	build: &tg::Build,
+	main_runtime_handle: tokio::runtime::Handle,
+) -> Result<tg::Value> {
+	// Get the target.
+	let target = build.target(client).await?;
+
 	// Create the isolate params.
 	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
 
@@ -65,12 +85,12 @@ pub async fn run(
 
 	// Create the state.
 	let state = Rc::new(State {
+		build: build.clone(),
 		client: client.clone_box(),
 		futures: Rc::new(RefCell::new(FuturesUnordered::new())),
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 		loaded_modules: Rc::new(RefCell::new(Vec::new())),
 		main_runtime_handle,
-		progress: progress.clone_box(),
 	});
 
 	// Create the context.
@@ -121,7 +141,7 @@ pub async fn run(
 	};
 
 	// Await the output.
-	let output = poll_fn(|cx| {
+	poll_fn(|cx| {
 		// Poll the context's futures and resolve or reject all that are ready.
 		loop {
 			// Poll the context's futures.
@@ -182,17 +202,7 @@ pub async fn run(
 
 		Poll::Ready(Ok(output))
 	})
-	.await;
-
-	match output {
-		Ok(output) => {
-			state.progress.result(Ok(output));
-		},
-		Err(error) => {
-			state.progress.log(error.trace().to_string().into());
-			state.progress.result(Err(error));
-		},
-	};
+	.await
 }
 
 /// Implement V8's dynamic import callback.
