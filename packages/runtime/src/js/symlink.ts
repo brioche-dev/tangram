@@ -40,12 +40,12 @@ export class Symlink {
 					return {};
 				} else if (typeof arg === "string") {
 					return {
-						path: await mutation({ kind: "template_append", template: arg }),
+						path: arg,
 					};
 				} else if (Artifact.is(arg)) {
 					return {
 						artifact: arg,
-						path: await mutation({ kind: "unset" as const }),
+						path: await mutation({ kind: "unset" }),
 					};
 				} else if (Template.is(arg)) {
 					assert_(arg.components.length <= 2);
@@ -55,10 +55,7 @@ export class Symlink {
 						secondComponent === undefined
 					) {
 						return {
-							path: await mutation({
-								kind: "template_append" as const,
-								template: firstComponent,
-							}),
+							path: firstComponent,
 						};
 					} else if (
 						Artifact.is(firstComponent) &&
@@ -66,7 +63,7 @@ export class Symlink {
 					) {
 						return {
 							artifact: firstComponent,
-							path: await mutation({ kind: "unset" as const }),
+							path: await mutation({ kind: "unset" }),
 						};
 					} else if (
 						Artifact.is(firstComponent) &&
@@ -94,7 +91,7 @@ export class Symlink {
 		);
 
 		// Create the target.
-		let path = relpath(path_ ?? "");
+		let path = relpath(path_);
 		let target;
 		if (artifact !== undefined && !path.isEmpty()) {
 			target = await template(artifact, "/", path.toString());

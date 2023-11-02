@@ -176,7 +176,9 @@ export class Target<
 			) {
 				return {
 					host: (await getCurrent().env())["TANGRAM_HOST"] as System,
-					executable: await symlink("/bin/sh"),
+					executable: new Symlink({
+						object: { target: new Template(["/bin/sh"]) },
+					}),
 					args: ["-c", arg],
 				};
 			} else if (Target.is(arg)) {

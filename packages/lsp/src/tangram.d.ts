@@ -436,13 +436,13 @@ declare namespace tg {
 			  }
 			| {
 					kind: "template_prepend";
-					template: T extends Template.Arg ? Template.Arg : never;
-					separator?: Template.Arg;
+					template: T extends Template ? Template.Arg : never;
+					separator?: string | undefined;
 			  }
 			| {
 					kind: "template_append";
-					template: T extends Template.Arg ? Template.Arg : never;
-					separator?: Template.Arg;
+					template: T extends Template ? Template.Arg : never;
+					separator?: string | undefined;
 			  };
 
 		export type Inner =
@@ -460,12 +460,12 @@ declare namespace tg {
 			| {
 					kind: "template_prepend";
 					template: Template;
-					separator: Template;
+					separator: string | undefined;
 			  }
 			| {
 					kind: "template_append";
 					template: Template;
-					separator: Template;
+					separator: string | undefined;
 			  };
 	}
 

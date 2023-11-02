@@ -9,8 +9,7 @@ use std::{
 };
 use tangram_client as tg;
 use tg::{
-	artifact::Artifact, blob, directory::Directory, file::File, symlink::Symlink, template, Client,
-	Result, Template, Wrap, WrapErr,
+	blob, template, Artifact, Client, Directory, File, Result, Symlink, Template, Wrap, WrapErr,
 };
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};

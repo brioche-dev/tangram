@@ -19,11 +19,11 @@ pub enum Mutation {
 	},
 	TemplatePrepend {
 		template: Template,
-		separator: Template,
+		separator: Option<String>,
 	},
 	TemplateAppend {
 		template: Template,
-		separator: Template,
+		separator: Option<String>,
 	},
 }
 
@@ -45,11 +45,11 @@ pub enum Data {
 	},
 	TemplatePrepend {
 		template: template::Data,
-		separator: template::Data,
+		separator: Option<String>,
 	},
 	TemplateAppend {
 		template: template::Data,
-		separator: template::Data,
+		separator: Option<String>,
 	},
 }
 
@@ -84,14 +84,14 @@ impl Mutation {
 				separator,
 			} => Data::TemplatePrepend {
 				template: template.data(client).await?,
-				separator: separator.data(client).await?,
+				separator: separator.clone(),
 			},
 			Self::TemplateAppend {
 				template,
 				separator,
 			} => Data::TemplateAppend {
 				template: template.data(client).await?,
-				separator: separator.data(client).await?,
+				separator: separator.clone(),
 			},
 		})
 	}
@@ -106,18 +106,9 @@ impl Data {
 			Self::ArrayPrepend { values } | Self::ArrayAppend { values } => {
 				values.iter().flat_map(value::Data::children).collect()
 			},
-			Self::TemplatePrepend {
-				template,
-				separator,
-			}
-			| Self::TemplateAppend {
-				template,
-				separator,
-			} => template
-				.children()
-				.into_iter()
-				.chain(separator.children())
-				.collect(),
+			Self::TemplatePrepend { template, .. } | Self::TemplateAppend { template, .. } => {
+				template.children()
+			},
 		}
 	}
 }
@@ -145,14 +136,14 @@ impl TryFrom<Data> for Mutation {
 				separator,
 			} => Self::TemplatePrepend {
 				template: template.try_into()?,
-				separator: separator.try_into()?,
+				separator,
 			},
 			Data::TemplateAppend {
 				template,
 				separator,
 			} => Self::TemplateAppend {
 				template: template.try_into()?,
-				separator: separator.try_into()?,
+				separator,
 			},
 		})
 	}

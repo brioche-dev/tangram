@@ -1,5 +1,6 @@
 use super::Progress;
 use crate::util::render;
+use bytes::Bytes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use indoc::writedoc;
 use std::{
@@ -9,6 +10,7 @@ use std::{
 	os::unix::prelude::OsStrExt,
 };
 use tangram_client as tg;
+use tangram_error::Wrap;
 use tg::{return_error, Artifact, Client, Error, Result, Target, Value, WrapErr};
 use tokio::io::AsyncReadExt;
 
@@ -287,8 +289,8 @@ pub async fn run_inner(
 	// Set the args.
 	command.args(args);
 
-	// Redirect stderr to a pipe.
-	command.stderr(std::process::Stdio::piped());
+	// Redirect stdout to a pipe.
+	command.stdout(std::process::Stdio::piped());
 
 	// Set up the sandbox.
 	unsafe {
@@ -305,8 +307,8 @@ pub async fn run_inner(
 				return Err(std::io::Error::from(std::io::ErrorKind::Other));
 			}
 
-			// Redirect stdout to stderr.
-			if libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) < 0 {
+			// Redirect stderr to stdout.
+			if libc::dup2(libc::STDOUT_FILENO, libc::STDERR_FILENO) < 0 {
 				return Err(std::io::Error::last_os_error());
 			}
 
@@ -317,18 +319,20 @@ pub async fn run_inner(
 	// Spawn the child.
 	let mut child = command.spawn().wrap_err("Failed to spawn the process.")?;
 
-	// Log the child's progress.
-	let progress = progress.clone_box();
-	let mut stderr = child.stderr.take().unwrap();
-	let log_task = tokio::task::spawn(async move {
-		let mut buf = [0; 512];
-		loop {
-			match stderr.read(&mut buf).await {
-				Ok(0) | Err(_) => break,
-				Ok(size) => {
-					let msg = &buf[0..size];
-					progress.log(msg.to_owned().into());
-				},
+	// Create the log task.
+	let mut stdout = child.stdout.take().unwrap();
+	let log_task = tokio::task::spawn({
+		let progress = progress.clone_box();
+		async move {
+			let mut buf = [0; 512];
+			loop {
+				match stdout.read(&mut buf).await {
+					Err(error) => return Err(error.wrap("Failed to read from the log.")),
+					Ok(0) => return Ok(()),
+					Ok(size) => {
+						progress.log(Bytes::copy_from_slice(&buf[0..size]));
+					},
+				}
 			}
 		}
 	});
@@ -339,8 +343,11 @@ pub async fn run_inner(
 		.await
 		.wrap_err("Failed to wait for the process to exit.")?;
 
-	// Wait for the log task to complete, draining any remaining output.
-	let _ = log_task.await;
+	// Wait for the log task to complete.
+	log_task
+		.await
+		.wrap_err("Failed to join the log task.")?
+		.wrap_err("The log task failed.")?;
 
 	// Return an error if the process did not exit successfully.
 	if !status.success() {

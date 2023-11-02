@@ -1,4 +1,5 @@
 use crate::{util::render, Progress};
+use bytes::Bytes;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -154,7 +155,7 @@ pub async fn run_inner(
 	// Render the executable.
 	let executable = target.executable(client).await?;
 	let executable = render(
-		&Value::Template(executable.clone()),
+		&executable.clone().into(),
 		client,
 		&artifacts_directory_guest_path,
 	)
@@ -423,8 +424,8 @@ pub async fn run_inner(
 	let working_directory_guest_path = CString::new(WORKING_DIRECTORY_GUEST_PATH)
 		.wrap_err("The working directory is not a valid C string.")?;
 
-	// Get ready to redirect stdout/stderr
-	let (log_send, log_recv) =
+	// Create the log socket pair.
+	let (log_send, mut log_recv) =
 		tokio::net::UnixStream::pair().wrap_err("Failed to create stdout socket.")?;
 	let log = log_send.as_raw_fd();
 
@@ -471,9 +472,23 @@ pub async fn run_inner(
 		root(&context);
 	}
 
-	// Spawn the handler.
+	// Spawn the log task.
 	drop(log_send);
-	let io_task = stream_log_to_progress(log_recv, progress);
+	let log_task = tokio::task::spawn({
+		let progress = progress.clone_box();
+		async move {
+			let mut buf = vec![0; 512];
+			loop {
+				match log_recv.read(&mut buf).await {
+					Err(error) => return Err(error.wrap("Failed to read from the log.")),
+					Ok(0) => return Ok(()),
+					Ok(size) => {
+						progress.log(Bytes::copy_from_slice(&buf[0..size]));
+					},
+				}
+			}
+		}
+	});
 
 	let root_process_pid: libc::pid_t = ret.try_into().wrap_err("Invalid root process PID.")?;
 
@@ -553,6 +568,12 @@ pub async fn run_inner(
 	.wrap_err("Failed to join the process task.")?
 	.wrap_err("Failed to run the process.")?;
 
+	// Wait for the log task to complete.
+	log_task
+		.await
+		.wrap_err("Failed to join the log task.")?
+		.wrap_err("The log task failed.")?;
+
 	// Handle the guest process's exit status.
 	match exit_status {
 		ExitStatus::Code(0) => {},
@@ -595,8 +616,6 @@ pub async fn run_inner(
 		Value::Null(())
 	};
 
-	// Join the task.
-	let _ = io_task.await;
 	Ok(value)
 }
 
@@ -609,7 +628,7 @@ fn root(context: &Context) {
 			abort_errno!("Failed to set PDEATHSIG.");
 		}
 
-		// Duplicate stdout and stderr to stderr.
+		// Duplicate stdout and stderr to the log.
 		let ret = libc::dup2(context.log, libc::STDOUT_FILENO);
 		if ret == -1 {
 			abort_errno!("Failed to duplicate stdout to the log.");
@@ -931,23 +950,3 @@ macro_rules! abort_errno {
 }
 
 use abort_errno;
-
-fn stream_log_to_progress(
-	mut log: tokio::net::UnixStream,
-	progress: &dyn Progress,
-) -> tokio::task::JoinHandle<()> {
-	let progress = progress.clone_box();
-	tokio::task::spawn(async move {
-		let mut chunk = vec![0; 512];
-		loop {
-			match log.read(&mut chunk).await {
-				Ok(size) if size == 0 => break,
-				Err(_) => break,
-				Ok(size) => {
-					let bytes = &chunk[0..size];
-					progress.log(bytes.to_vec().into());
-				},
-			}
-		}
-	})
-}

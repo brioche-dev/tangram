@@ -18,11 +18,10 @@ export let main = async (target: Target): Promise<Value> => {
 	let packageId = await package_.id();
 	let path = await executable.path();
 	assert(path);
-	let module_ = {
-		kind: "normal" as const,
+	let url = Module.toUrl({
+		kind: "normal",
 		value: { lock: lockId, package: packageId, path: path.toString() },
-	};
-	let url = Module.toUrl(module_);
+	});
 	await import(url);
 
 	// Get the target.

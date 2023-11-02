@@ -205,6 +205,19 @@ impl Handle {
 			Self::Build(object) => object.object(client).await.cloned().map(Object::Build),
 		}
 	}
+
+	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+		match self {
+			Self::Leaf(object) => object.data(client).await.map(Data::Leaf),
+			Self::Branch(object) => object.data(client).await.map(Data::Branch),
+			Self::Directory(object) => object.data(client).await.map(Data::Directory),
+			Self::File(object) => object.data(client).await.map(Data::File),
+			Self::Symlink(object) => object.data(client).await.map(Data::Symlink),
+			Self::Lock(object) => object.data(client).await.map(Data::Lock),
+			Self::Target(object) => object.data(client).await.map(Data::Target),
+			Self::Build(object) => object.data(client).await.map(Data::Build),
+		}
+	}
 }
 
 impl Data {

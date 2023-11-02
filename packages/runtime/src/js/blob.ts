@@ -54,7 +54,7 @@ export namespace Blob {
 					});
 					return {
 						children: await mutation({
-							kind: "array_append" as const,
+							kind: "array_append",
 							values: [blob],
 						}),
 					};
@@ -62,14 +62,14 @@ export namespace Blob {
 					let blob = new Leaf({ object: { bytes: arg } });
 					return {
 						children: await mutation({
-							kind: "array_append" as const,
+							kind: "array_append",
 							values: [blob],
 						}),
 					};
 				} else if (Blob.is(arg)) {
 					return {
 						children: await mutation({
-							kind: "array_append" as const,
+							kind: "array_append",
 							values: [arg],
 						}),
 					};

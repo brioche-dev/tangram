@@ -93,7 +93,7 @@ export class Mutation<T extends Value = Value> {
 			return new Mutation({
 				kind: arg.kind,
 				value: await template(arg.template),
-				separator: await template(arg.separator),
+				separator: arg.separator,
 			});
 		} else if (arg.kind === "unset") {
 			return new Mutation({ kind: "unset" });
@@ -138,13 +138,13 @@ export namespace Mutation {
 		  }
 		| {
 				kind: "template_prepend";
-				template: T extends Template.Arg ? Template.Arg : never;
-				separator?: Template.Arg;
+				template: T extends Template ? Template.Arg : never;
+				separator?: string;
 		  }
 		| {
 				kind: "template_append";
-				template: T extends Template.Arg ? Template.Arg : never;
-				separator?: Template.Arg;
+				template: T extends Template ? Template.Arg : never;
+				separator?: string;
 		  };
 
 	export type Inner =
@@ -162,12 +162,12 @@ export namespace Mutation {
 		| {
 				kind: "template_prepend";
 				value: Template;
-				separator: Template;
+				separator: string | undefined;
 		  }
 		| {
 				kind: "template_append";
 				value: Template;
-				separator: Template;
+				separator: string | undefined;
 		  };
 }
 
