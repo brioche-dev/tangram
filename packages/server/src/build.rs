@@ -315,7 +315,7 @@ impl Server {
 	) -> Result<Option<Result<tg::Value>>> {
 		// Attempt to await the result from the state.
 		let progress = self.inner.state.progress.read().unwrap().get(id).cloned();
-		if let Some(progress) = dbg!(progress) {
+		if let Some(progress) = progress {
 			return Ok(Some(progress.result().await));
 		}
 

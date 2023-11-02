@@ -89,8 +89,8 @@ impl Build {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
-		self.store(client).await?;
+	#[allow(clippy::unused_async)]
+	pub async fn id(&self, _client: &dyn Client) -> Result<&Id> {
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
@@ -272,7 +272,6 @@ impl Build {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.result.clone()))
 		} else {
-			dbg!("Getting the build result.");
 			Ok(client.try_get_build_result(self.id(client).await?).await?)
 		}
 	}
