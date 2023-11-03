@@ -147,6 +147,7 @@ type FunctionType = {
 
 type Parameter = {
 	optional: boolean;
+	dotDotDotToken: boolean;
 	type: Type;
 };
 
@@ -547,8 +548,12 @@ let convertFunctionDeclaration = (
 	let parameters = Object.fromEntries(
 		declaration.parameters.map((parameter) => {
 			let optional = false;
+			let dotDotDotToken = false;
 			if (ts.isParameter(parameter) && parameter.questionToken) {
 				optional = true;
+			}
+			if (ts.isParameter(parameter) && parameter.dotDotDotToken) {
+				dotDotDotToken = true;
 			}
 			let type = typeChecker.getTypeAtLocation(parameter);
 			return [
@@ -558,6 +563,7 @@ let convertFunctionDeclaration = (
 						? convertTypeNode(typeChecker, parameter.type)
 						: convertType(typeChecker, type),
 					optional,
+					dotDotDotToken,
 				},
 			];
 		}),
@@ -723,9 +729,10 @@ let convertIndexSignature = (
 	typeChecker: ts.TypeChecker,
 	declaration: ts.IndexSignatureDeclaration,
 ): IndexSignature => {
-	let key = convertParameterNode(typeChecker, declaration.parameters[0]!);
+	let parameter = declaration.parameters[0]!;
+	let key = convertParameterNode(typeChecker, parameter);
 	return {
-		name: declaration.name?.getText() ?? "",
+		name: parameter.name.getText(),
 		type: convertTypeNode(typeChecker, declaration.type),
 		key,
 	};
@@ -740,11 +747,15 @@ let convertConstructSignature = (
 	let parameters = Object.fromEntries(
 		signature.parameters.map((parameter) => {
 			let optional = false;
+			let dotDotDotToken = false;
 			if (parameter.flags & ts.SymbolFlags.Optional) {
 				optional = true;
 			}
 			let declaration =
 				parameter.getDeclarations()?.[0] as ts.ParameterDeclaration;
+			if (declaration.dotDotDotToken) {
+				dotDotDotToken = true;
+			}
 			return [
 				parameter.getName(),
 				{
@@ -752,6 +763,7 @@ let convertConstructSignature = (
 						? convertTypeNode(typeChecker, declaration.type)
 						: convertType(typeChecker, typeChecker.getTypeOfSymbol(parameter)),
 					optional,
+					dotDotDotToken,
 				},
 			];
 		}),
@@ -780,8 +792,12 @@ let convertConstructSignatureDeclaration = (
 	let parameters = Object.fromEntries(
 		declaration.parameters.map((parameter) => {
 			let optional = false;
+			let dotDotDotToken = false;
 			if (parameter.questionToken) {
 				optional = true;
+			}
+			if (parameter.dotDotDotToken) {
+				dotDotDotToken = true;
 			}
 			return [
 				parameter.name.getText(),
@@ -793,6 +809,7 @@ let convertConstructSignatureDeclaration = (
 								typeChecker.getTypeAtLocation(parameter),
 						  ),
 					optional,
+					dotDotDotToken,
 				},
 			];
 		}),
@@ -950,12 +967,19 @@ let convertFunctionType = (
 				let parameterDeclaration: ts.ParameterDeclaration | undefined =
 					parameter.valueDeclaration as ts.ParameterDeclaration;
 				let optional = false;
+				let dotDotDotToken = false;
 				if (parameterDeclaration) {
 					if (
 						ts.isParameter(parameterDeclaration) &&
 						parameterDeclaration.questionToken
 					) {
 						optional = true;
+					}
+					if (
+						ts.isParameter(parameterDeclaration) &&
+						parameterDeclaration.questionToken
+					) {
+						dotDotDotToken = true;
 					}
 				}
 				return [
@@ -965,6 +989,7 @@ let convertFunctionType = (
 							? convertTypeNode(typeChecker, parameterDeclaration.type)
 							: convertType(typeChecker, parameterType),
 						optional,
+						dotDotDotToken,
 					},
 				];
 			}),
@@ -1422,6 +1447,7 @@ let convertParameterNode = (
 ): Parameter => {
 	return {
 		optional: node.questionToken ? true : false,
+		dotDotDotToken: node.dotDotDotToken ? true : false,
 		type: node.type
 			? convertTypeNode(typeChecker, node.type)
 			: convertType(typeChecker, typeChecker.getTypeAtLocation(node)),
