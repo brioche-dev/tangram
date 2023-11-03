@@ -43,7 +43,7 @@ pub struct Data {
 	pub dependencies: BTreeMap<Dependency, data::Entry>,
 }
 
-mod data {
+pub mod data {
 	use crate::artifact;
 
 	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]

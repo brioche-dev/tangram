@@ -13,8 +13,10 @@ version = { workspace = true }
 async-recursion = { workspace = true }
 async-trait = { workspace = true }
 fnv = { workspace = true }
+im = { workspace = true }
 serde = { workspace = true }
 tangram_client = { workspace = true }
 tangram_error = { workspace = true }
 tangram_lsp = { workspace = true }
 tokio = { workspace = true }
+semver = { workspace = true }
