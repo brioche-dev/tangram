@@ -154,11 +154,15 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 		match (permanent, partial) {
 			// Case 0: There is no solution for this package yet.
 			(None, None) => 'a: {
+				tracing::debug!(?dependant, "Creating initial version selection.");
+
 				// Note: this bit is tricky. The next frame will always have an empty set of remaining versions, because by construction it will never have been tried before. However we need to get a list of versions to attempt, which we will push onto the stack.
 				if current_frame.remaining_versions.is_none() {
 					let all_versions = match context.lookup(&dependant.dependency.name).await {
 						Ok(all_versions) => all_versions,
 						Err(e) => {
+							tracing::debug!(?dependant, ?e, "Failed to get versions of package.");
+
 							// We cannot solve this dependency.
 							current_frame
 								.solution
@@ -173,10 +177,11 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 						.into_iter()
 						.filter_map(|version| {
 							// TODO: handle the error here. If the published version cannot be parsed then we can continue the loop. If the dependency version cannot be parsed we need to issue a hard error and break out of the match statement.
+							let version = version.version.as_deref()?;
 							context
-								.matches(&version, &dependant.dependency)
+								.matches(version, &dependant.dependency)
 								.ok()?
-								.then_some(version)
+								.then_some(version.to_owned())
 						})
 						.collect();
 					current_frame.remaining_versions = Some(remaining_versions);
@@ -220,6 +225,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 					},
 
 					None => {
+						tracing::error!(?dependant, "No solution exists.");
 						let error = current_frame
 							.last_error
 							.clone()
@@ -232,11 +238,12 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 
 			// Case 1: There exists a global version for the package but we haven't solved this dependency constraint.
 			(Some(permanent), None) => {
+				tracing::debug!(?dependant, ?permanent, "Existing solution found.");
 				match permanent {
 					// Case 1.1: The happy path. Our version is solved and it matches this constraint.
 					Ok(version) => {
 						// Case 1.1: The happy path. Our version is solved and it matches this constraint.
-						match context.matches(&dependant.metadata, &dependant.dependency) {
+						match context.matches(version, &dependant.dependency) {
 							Ok(true) => {
 								next_frame.solution = next_frame
 									.solution
@@ -244,6 +251,11 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 							},
 							// Case 1.3: The unhappy path. We need to fail.
 							Ok(false) => {
+								tracing::warn!(
+									?dependant,
+									?version,
+									"Package version conflict detected."
+								);
 								let error = Error::PackageVersionConflict;
 								if let Some(frame_) = try_backtrack(
 									&history,
@@ -252,12 +264,14 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 								) {
 									next_frame = frame_;
 								} else {
+									tracing::error!(?dependant, "No solution exists.");
 									// There is no solution for this package. Add an error.
 									next_frame.solution =
 										next_frame.solution.mark_permanently(dependant, Err(error));
 								}
 							},
 							Err(e) => {
+								tracing::error!(?dependant, ?e, "Existing solution is an error.");
 								next_frame
 									.solution
 									.mark_permanently(dependant, Err(Error::Other(e)));
@@ -383,7 +397,7 @@ enum Mark {
 struct Frame {
 	solution: Solution,
 	working_set: im::Vector<Dependant>,
-	remaining_versions: Option<im::Vector<tg::package::Metadata>>,
+	remaining_versions: Option<im::Vector<String>>,
 	last_error: Option<Error>,
 }
 
@@ -397,36 +411,31 @@ impl Context {
 	// Check if a package satisfies a dependency.
 	fn matches(
 		&self,
-		metadata: &tg::package::Metadata,
+		version: &str,
 		dependency: &tg::dependency::Registry,
 	) -> tg::Result<bool> {
-		let name = metadata.name.as_ref().unwrap();
-		if name != &dependency.name {
-			// Perhaps a bit redundant?
-			return Ok(false);
-		}
 		let Some(constraint) = dependency.version.as_ref() else {
 			return Ok(true);
 		};
-		let version: semver::Version = metadata
-			.version
-			.as_ref()
-			.unwrap()
-			.parse()
-			.map_err(|_| tg::error!("Failed to parse version."))?;
-		let constraint: semver::VersionReq = constraint
-			.parse()
-			.map_err(|_| tg::error!("Failed to parse version."))?;
+		let version: semver::Version = version.parse().map_err(|e| {
+			tracing::error!(?e, ?version, "Failed to parse metadata version.");
+			tg::error!("Failed to parse version.")
+		})?;
+		let constraint: semver::VersionReq = constraint.parse().map_err(|e| {
+			tracing::error!(?e, ?dependency, "Failed to parse dependency version.");
+			tg::error!("Failed to parse version.")
+		})?;
+		let matches = constraint.matches(&version);
+		tracing::debug!(?version, ?constraint, ?matches, "Checked version against constraint.");
 		Ok(constraint.matches(&version))
 	}
 
 	// Try and get the next version from a list of remaining ones. Returns an error if the list is empty.
 	fn try_get_version(
 		&self,
-		remaining_versions: &mut im::Vector<tg::package::Metadata>,
+		remaining_versions: &mut im::Vector<String>,
 	) -> Option<String> {
-		remaining_versions.pop_back()?.version.clone()
-		// .ok_or(tg::error!("No version satisfies constraints."))
+		remaining_versions.pop_back().clone()
 	}
 
 	// Get a list of registry dependencies for a package given its metadata.

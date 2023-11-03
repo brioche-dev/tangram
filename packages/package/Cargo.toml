@@ -20,3 +20,11 @@ tangram_error = { workspace = true }
 tangram_lsp = { workspace = true }
 tokio = { workspace = true }
 semver = { workspace = true }
+tracing = { workspace = true}
+
+[dev-dependencies]
+bytes = { workspace = true }
+futures = { workspace = true }
+once_cell = { workspace = true }
+tangram_http = { workspace = true }
+tracing-subscriber = { workspace = true }

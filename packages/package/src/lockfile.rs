@@ -2,6 +2,7 @@ use async_recursion::async_recursion;
 use std::collections::BTreeMap;
 use tangram_client as tg;
 
+#[derive(Debug, Clone)]
 pub struct Lockfile {
 	pub root: tg::lock::data::Entry,
 	pub entries: BTreeMap<tg::lock::Id, BTreeMap<tg::Dependency, tg::lock::data::Entry>>,
@@ -27,6 +28,7 @@ impl Lockfile {
 		lock: tg::Lock,
 		entries: &mut BTreeMap<tg::lock::Id, BTreeMap<tg::Dependency, tg::lock::data::Entry>>,
 	) {
+		// let entry =
 		todo!()
 	}
 

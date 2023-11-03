@@ -3,7 +3,7 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::{
-	collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
+	collections::{BTreeMap, HashSet, VecDeque},
 	path::PathBuf,
 };
 use tangram_client as tg;
@@ -13,6 +13,7 @@ use tangram_lsp::Module;
 pub mod lockfile;
 pub mod specifier;
 pub mod version;
+mod tests;
 
 /// The file name of the root module in a package.
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
