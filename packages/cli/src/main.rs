@@ -110,6 +110,19 @@ impl Cli {
 		let client = tangram_http::client::Builder::new(addr).build();
 		let mut connected = client.connect().await.is_ok();
 
+		if cfg!(debug_assertions) {
+			if !connected {
+				return_error!("Failed to connect to the server.");
+			}
+			if connected && client.status().await?.version != self.version {
+				return_error!("The server has different version from the client.");
+			}
+			// Store the client.
+			let client = Arc::new(client);
+			*self.client.lock().await = Some(client.clone());
+			return Ok(client);
+		}
+
 		// If the client is connected, check the version.
 		if connected && client.status().await?.version != self.version {
 			client.stop().await?;
@@ -119,7 +132,7 @@ impl Cli {
 		}
 
 		// If the client is not connected, start the server and attempt to connect.
-		if !cfg!(debug_assertions) && !connected {
+		if !connected {
 			self.start_server().await?;
 			for _ in 0..10 {
 				tokio::time::sleep(std::time::Duration::from_millis(100)).await;

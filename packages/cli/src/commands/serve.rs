@@ -1,4 +1,4 @@
-use crate::{util::dirs::home_directory_path, Cli, API_URL};
+use crate::{util::dirs::home_directory_path, Cli};
 use std::path::PathBuf;
 use tangram_client as tg;
 use tangram_http::net::{Addr, Inet};
@@ -43,33 +43,30 @@ impl Cli {
 		let _credentials = Self::read_credentials().await?;
 
 		// Create the parent.
-		let parent_url = config
-			.as_ref()
-			.and_then(|config| config.parent_url.as_ref().cloned())
-			.unwrap_or_else(|| API_URL.parse().unwrap());
-		let parent_host = parent_url
-			.host_str()
-			.wrap_err("Invalid parent URL.")?
-			.parse()
-			.wrap_err("Invalid parent URL.")?;
-		let parent_port = parent_url
-			.port_or_known_default()
-			.wrap_err("Invalid parent URL.")?;
-		let parent_addr = Addr::Inet(Inet {
-			host: parent_host,
-			port: parent_port,
-		});
-		let parent_tls = parent_url.scheme() == "https";
-		let parent = tangram_http::client::Builder::new(parent_addr)
-			.tls(parent_tls)
-			.build();
-		let _parent = Box::new(parent);
+		let parent = if let Some(parent) = config.as_ref().and_then(|config| config.parent.as_ref())
+		{
+			let url = parent.url.as_ref().unwrap();
+			let host = url
+				.host_str()
+				.wrap_err("Invalid parent URL.")?
+				.parse()
+				.wrap_err("Invalid parent URL.")?;
+			let port = url
+				.port_or_known_default()
+				.wrap_err("Invalid parent URL.")?;
+			let addr = Addr::Inet(Inet { host, port });
+			let tls = url.scheme() == "https";
+			let client = tangram_http::client::Builder::new(addr).tls(tls).build();
+			Some(Box::new(client) as _)
+		} else {
+			None
+		};
 
 		let version = self.version.clone();
 
 		// Create the options.
 		let options = tangram_server::Options {
-			parent: None,
+			parent,
 			path,
 			version,
 		};

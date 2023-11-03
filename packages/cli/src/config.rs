@@ -10,7 +10,13 @@ pub struct Config {
 	pub autoenvs: Option<Vec<PathBuf>>,
 
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub parent_url: Option<Url>,
+	pub parent: Option<Parent>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct Parent {
+	pub url: Option<Url>,
+	pub token: Option<String>,
 }
 
 impl Cli {

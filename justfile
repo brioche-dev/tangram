@@ -12,4 +12,4 @@ runtime:
 	npm run -w @tangramdotdev/runtime build
 
 serve_dev:
-	cargo run -- serve
+	TANGRAM_TRACING=tangram_http=info cargo run -- serve

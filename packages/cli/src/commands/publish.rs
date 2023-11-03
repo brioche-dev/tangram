@@ -17,6 +17,9 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
+		// Get the token.
+		let token = self.token()?;
+
 		// Create the package.
 		let specifier = tangram_package::Specifier::Path(args.package);
 		let (package, _) = tangram_package::new(client, &specifier)
@@ -28,7 +31,7 @@ impl Cli {
 
 		// Publish the package.
 		client
-			.publish_package(&self.token()?, &id)
+			.publish_package(&token, &id)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

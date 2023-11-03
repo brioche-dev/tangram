@@ -160,14 +160,6 @@ impl Client {
 		Ok(())
 	}
 
-	fn request(&self, method: http::Method, path: &str) -> http::request::Builder {
-		let uri = match &self.inner.addr {
-			Addr::Inet(url) => format!("{}{}", url, path.strip_prefix('/').unwrap()),
-			Addr::Unix(_) => path.into(),
-		};
-		http::request::Builder::default().uri(uri).method(method)
-	}
-
 	async fn send(
 		&self,
 		request: http::request::Request<Outgoing>,
@@ -203,8 +195,9 @@ impl tg::Client for Client {
 	}
 
 	async fn status(&self) -> Result<tg::status::Status> {
-		let request = self
-			.request(http::Method::GET, "/v1/status")
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri("/v1/status")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -221,8 +214,9 @@ impl tg::Client for Client {
 	}
 
 	async fn stop(&self) -> Result<()> {
-		let request = self
-			.request(http::Method::POST, "/v1/stop")
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri("/v1/stop")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		self.send(request).await.ok();
@@ -230,8 +224,9 @@ impl tg::Client for Client {
 	}
 
 	async fn clean(&self) -> Result<()> {
-		let request = self
-			.request(http::Method::POST, "/v1/clean")
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri("/v1/clean")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -242,8 +237,9 @@ impl tg::Client for Client {
 	}
 
 	async fn get_object_exists(&self, id: &tg::object::Id) -> Result<bool> {
-		let request = self
-			.request(http::Method::HEAD, &format!("/v1/objects/{id}"))
+		let request = http::request::Builder::default()
+			.method(http::Method::HEAD)
+			.uri(format!("/v1/objects/{id}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -257,8 +253,9 @@ impl tg::Client for Client {
 	}
 
 	async fn try_get_object(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
-		let request = self
-			.request(http::Method::GET, &format!("/v1/objects/{id}"))
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/objects/{id}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -282,8 +279,9 @@ impl tg::Client for Client {
 		bytes: &Bytes,
 	) -> Result<Result<(), Vec<tg::object::Id>>> {
 		let body = full(bytes.clone());
-		let request = self
-			.request(http::Method::PUT, &format!("/v1/objects/{id}"))
+		let request = http::request::Builder::default()
+			.method(http::Method::PUT)
+			.uri(format!("/v1/objects/{id}"))
 			.body(body)
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -305,8 +303,9 @@ impl tg::Client for Client {
 
 	async fn try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
 		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
-		let request = self
-			.request(http::Method::GET, &format!("/v1/trackers/{path}"))
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/trackers/{path}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -328,8 +327,9 @@ impl tg::Client for Client {
 	async fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
 		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
 		let body = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the body.")?;
-		let request = self
-			.request(http::Method::PATCH, &format!("/v1/trackers/{path}"))
+		let request = http::request::Builder::default()
+			.method(http::Method::PATCH)
+			.uri(format!("/v1/trackers/{path}"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -340,8 +340,9 @@ impl tg::Client for Client {
 	}
 
 	async fn try_get_build_for_target(&self, id: &tg::target::Id) -> Result<Option<tg::build::Id>> {
-		let request = self
-			.request(http::Method::GET, &format!("/v1/targets/{id}/build"))
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/targets/{id}/build"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -361,8 +362,9 @@ impl tg::Client for Client {
 	}
 
 	async fn get_or_create_build_for_target(&self, id: &tg::target::Id) -> Result<tg::build::Id> {
-		let request = self
-			.request(http::Method::POST, &format!("/v1/targets/{id}/build"))
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/targets/{id}/build"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -379,8 +381,9 @@ impl tg::Client for Client {
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
-		let request = self
-			.request(http::Method::POST, &format!("/v1/builds/{id}/target"))
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/builds/{id}/target"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -397,8 +400,9 @@ impl tg::Client for Client {
 	}
 
 	async fn try_get_build_queue_item(&self) -> Result<Option<tg::build::Id>> {
-		let request = self
-			.request(http::Method::GET, "/v1/builds/queue")
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri("/v1/builds/queue")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -422,8 +426,9 @@ impl tg::Client for Client {
 		&self,
 		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<tg::build::Id>>>> {
-		let request = self
-			.request(http::Method::GET, &format!("/v1/builds/{id}/children"))
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/builds/{id}/children"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -460,11 +465,9 @@ impl tg::Client for Client {
 		child_id: &tg::build::Id,
 	) -> Result<()> {
 		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize the body.")?;
-		let request = self
-			.request(
-				http::Method::POST,
-				&format!("/v1/builds/${build_id}/children"),
-			)
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/builds/${build_id}/children"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -481,8 +484,9 @@ impl tg::Client for Client {
 		&self,
 		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
-		let request = self
-			.request(http::Method::GET, &format!("/v1/builds/{id}/log"))
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/builds/{id}/log"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self
@@ -510,8 +514,9 @@ impl tg::Client for Client {
 
 	async fn add_build_log(&self, build_id: &tg::build::Id, bytes: Bytes) -> Result<()> {
 		let body = bytes;
-		let request = self
-			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/builds/${build_id}/log"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -525,8 +530,9 @@ impl tg::Client for Client {
 	}
 
 	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
-		let request = self
-			.request(http::Method::GET, &format!("/v1/builds/{id}/result"))
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/builds/{id}/result"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -556,8 +562,9 @@ impl tg::Client for Client {
 			Err(error) => Err(error),
 		};
 		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
-		let request = self
-			.request(http::Method::POST, &format!("/v1/builds/${build_id}/log"))
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/builds/${build_id}/log"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -571,8 +578,9 @@ impl tg::Client for Client {
 	}
 
 	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
-		let request = self
-			.request(http::Method::POST, &format!("/v1/builds/${id}/finish"))
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/builds/${id}/finish"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -587,9 +595,9 @@ impl tg::Client for Client {
 	}
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
-		let path = &format!("/v1/registry/packages/search?query={query}");
-		let request = self
-			.request(http::Method::GET, path)
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/registry/packages/search?query={query}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -607,9 +615,9 @@ impl tg::Client for Client {
 	}
 
 	async fn get_package(&self, name: &str) -> Result<Option<tg::Package>> {
-		let path = &format!("/v1/registry/packages/{name}");
-		let request = self
-			.request(http::Method::GET, path)
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/registry/packages/{name}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -631,9 +639,9 @@ impl tg::Client for Client {
 		name: &str,
 		version: &str,
 	) -> Result<Option<tg::artifact::Id>> {
-		let path = &format!("/v1/registry/packages/{name}/version/{version}");
-		let request = self
-			.request(http::Method::GET, path)
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/registry/packages/{name}/version/{version}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -650,10 +658,13 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn publish_package(&self, _token: &str, id: &tg::artifact::Id) -> Result<()> {
-		let request = self
-			.request(http::Method::POST, &format!("/v1/registry/packages/{id}"))
-			.body(empty())
+	async fn publish_package(&self, token: &str, id: &tg::artifact::Id) -> Result<()> {
+		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the body.")?;
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri("/v1/registry/packages")
+			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if !response.status().is_success() {
@@ -663,8 +674,9 @@ impl tg::Client for Client {
 	}
 
 	async fn create_login(&self) -> Result<tg::user::Login> {
-		let request = self
-			.request(http::Method::POST, "/v1/logins")
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri("/v1/logins")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -682,8 +694,9 @@ impl tg::Client for Client {
 	}
 
 	async fn get_login(&self, id: &tg::Id) -> Result<Option<tg::user::Login>> {
-		let request = self
-			.request(http::Method::GET, &format!("/v1/logins/{id}"))
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/logins/{id}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self
@@ -704,8 +717,9 @@ impl tg::Client for Client {
 	}
 
 	async fn get_current_user(&self, _token: &str) -> Result<Option<tg::user::User>> {
-		let request = self
-			.request(http::Method::GET, "/v1/user")
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri("/v1/user")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
