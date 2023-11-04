@@ -1,9 +1,10 @@
 pub use self::specifier::Specifier;
 use async_recursion::async_recursion;
+use async_trait::async_trait;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use tangram_client as tg;
 use tangram_lsp::Module;
-use tg::{Result, Subpath, WrapErr};
+use tg::{return_error, Result, Subpath, WrapErr};
 
 pub mod specifier;
 
@@ -144,24 +145,25 @@ pub async fn new(
 	Ok((directory.into(), lock))
 }
 
-// 	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata> {
-// 		let module = self.root_module(client).await?.unwrap_normal();
-// 		let directory = self
-// 			.artifact(client)
-// 			.await?
-// 			.clone()
-// 			.try_unwrap_directory()
-// 			.unwrap();
-// 		let file = directory
-// 			.get(client, &module.path)
-// 			.await?
-// 			.try_unwrap_file()
-// 			.unwrap();
-// 		let text = file.contents(client).await?.text(client).await?;
-// 		let output = Module::analyze(text)?;
-// 		if let Some(metadata) = output.metadata {
-// 			Ok(metadata)
-// 		} else {
-// 			return_error!("Missing package metadata.")
-// 		}
-// 	}
+#[async_trait]
+impl PackageExt for tg::Directory {
+	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata> {
+		let file = self
+			.get(client, &ROOT_MODULE_FILE_NAME.try_into().unwrap())
+			.await?
+			.try_unwrap_file()
+			.unwrap();
+		let text = file.contents(client).await?.text(client).await?;
+		let output = Module::analyze(text)?;
+		if let Some(metadata) = output.metadata {
+			Ok(metadata)
+		} else {
+			return_error!("Missing package metadata.")
+		}
+	}
+}
+
+#[async_trait]
+pub trait PackageExt {
+	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata>;
+}

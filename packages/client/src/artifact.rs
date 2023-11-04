@@ -3,7 +3,7 @@ use crate::{
 	Directory, Error, File, Result, Symlink, Value,
 };
 use bytes::Bytes;
-use derive_more::{From, TryUnwrap};
+use derive_more::{From, TryInto, TryUnwrap};
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use std::collections::{HashSet, VecDeque};
 
@@ -17,7 +17,17 @@ pub enum Kind {
 
 /// An artifact ID.
 #[derive(
-	Clone, Debug, Eq, From, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	Eq,
+	From,
+	Hash,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	TryInto,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 #[serde(into = "crate::Id", try_from = "crate::Id")]
 pub enum Id {
