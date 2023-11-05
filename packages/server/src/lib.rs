@@ -9,6 +9,7 @@ use std::{
 	sync::{Arc, Weak},
 };
 use tangram_client as tg;
+use tangram_package::PackageExt;
 use tg::{util::rmrf, Result, Wrap, WrapErr};
 
 mod build;
@@ -396,6 +397,25 @@ impl tg::Client for Server {
 			.await
 			.wrap_err("Failed to push the package.")?;
 		parent.publish_package(token, id).await
+	}
+
+	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {
+		// Get the package.
+		let package =
+			tg::Directory::with_id(id.clone().try_into().wrap_err("Invalid Directory ID.")?);
+		let metadata = package.metadata(self).await?;
+		Ok(Some(metadata))
+	}
+
+	async fn get_package_dependencies(
+		&self,
+		id: &tg::Id,
+	) -> Result<Option<Vec<tg::dependency::Registry>>> {
+		// Get the package.
+		let package =
+			tg::Directory::with_id(id.clone().try_into().wrap_err("Invalid Directory ID.")?);
+		let dependencies = package.dependencies(self).await?;
+		Ok(Some(dependencies))
 	}
 
 	async fn create_login(&self) -> Result<tg::user::Login> {

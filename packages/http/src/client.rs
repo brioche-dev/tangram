@@ -658,6 +658,49 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
+	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/packages/{id}/metadata"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		Ok(response)
+	}
+
+	async fn get_package_dependencies(
+		&self,
+		id: &tg::Id,
+	) -> Result<Option<Vec<tg::dependency::Registry>>> {
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/packages/{id}/dependencies"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		Ok(response)
+	}
+
 	async fn publish_package(&self, token: &str, id: &tg::artifact::Id) -> Result<()> {
 		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the body.")?;
 		let request = http::request::Builder::default()

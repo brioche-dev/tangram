@@ -179,5 +179,9 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn get_package_version(&self, name: &str, version: &str) -> Result<Option<artifact::Id>>;
 
+	async fn get_package_metadata(&self, id: &Id) -> Result<Option<package::Metadata>>;
+
+	async fn get_package_dependencies(&self, id: &Id) -> Result<Option<Vec<dependency::Registry>>>;
+
 	async fn publish_package(&self, token: &str, id: &artifact::Id) -> Result<()>;
 }

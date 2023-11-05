@@ -3271,6 +3271,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tangram_client",
+ "tangram_package",
  "tangram_runtime",
  "tangram_vfs",
  "tempfile",

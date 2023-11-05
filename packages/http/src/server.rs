@@ -174,6 +174,14 @@ impl Server {
 				.handle_publish_package_request(request)
 				.map(Some)
 				.boxed(),
+			(http::Method::GET, ["v1", "packages", _, "metadata"]) => self
+				.handle_get_package_metadata_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::GET, ["v1", "packages", _, "dependencies"]) => self
+				.handle_get_package_dependencies_request(request)
+				.map(Some)
+				.boxed(),
 
 			// Trackers
 			(http::Method::GET, ["v1", "trackers", _]) => {
@@ -730,6 +738,76 @@ impl Server {
 		self.client.publish_package(&token, &package_id).await?;
 
 		Ok(ok())
+	}
+
+	pub async fn handle_get_package_metadata_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let [_, "packages", id, "metadata"] = path_components.as_slice() else {
+			return_error!("Unexpected path.");
+		};
+
+		let Ok(package_id) = id.parse::<tg::Id>() else {
+			return Ok(bad_request());
+		};
+
+		// Get the package metadata.
+		let metadata = self.client.get_package_metadata(&package_id).await?;
+
+		match metadata {
+			Some(metadata) => {
+				// Create the body.
+				let body =
+					serde_json::to_vec(&metadata).wrap_err("Failed to serialize the metadata.")?;
+
+				// Create the response.
+				let response = http::Response::builder().body(full(body)).unwrap();
+
+				Ok(response)
+			},
+			None => Ok(http::Response::builder()
+				.status(http::StatusCode::NOT_FOUND)
+				.body(empty())
+				.unwrap()),
+		}
+	}
+
+	pub async fn handle_get_package_dependencies_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let [_, "packages", id, "dependencies"] = path_components.as_slice() else {
+			return_error!("Unexpected path.");
+		};
+
+		let Ok(package_id) = id.parse::<tg::Id>() else {
+			return Ok(bad_request());
+		};
+
+		// Get the package dependencies.
+		let dependencies = self.client.get_package_dependencies(&package_id).await?;
+
+		match dependencies {
+			Some(dependencies) => {
+				// Create the body.
+				let body = serde_json::to_vec(&dependencies)
+					.wrap_err("Failed to serialize the package.")?;
+
+				// Create the response.
+				let response = http::Response::builder().body(full(body)).unwrap();
+
+				Ok(response)
+			},
+			None => Ok(http::Response::builder()
+				.status(http::StatusCode::NOT_FOUND)
+				.body(empty())
+				.unwrap()),
+		}
 	}
 
 	pub async fn handle_get_tracker_request(

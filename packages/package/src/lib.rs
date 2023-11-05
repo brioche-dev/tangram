@@ -1,7 +1,7 @@
 pub use self::specifier::Specifier;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use tangram_client as tg;
 use tangram_lsp::Module;
 use tg::{return_error, Result, Subpath, WrapErr};
@@ -147,6 +147,80 @@ pub async fn new(
 
 #[async_trait]
 impl PackageExt for tg::Directory {
+	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::dependency::Registry>> {
+		// Create the dependencies map.
+		let mut dependencies: BTreeSet<tg::Dependency> = BTreeSet::default();
+
+		// Create a queue of module paths to visit and a visited set.
+		let mut queue: VecDeque<Subpath> =
+			VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
+		let mut visited: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
+
+		// Add each dependency.
+		while let Some(module_subpath) = queue.pop_front() {
+			// Get the file.
+			let file = self
+				.get(client, &module_subpath.clone())
+				.await?
+				.try_unwrap_file()
+				.unwrap();
+			let text = file.contents(client).await?.text(client).await?;
+
+			// Analyze the module.
+			let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
+
+			// Recurse into the dependencies.
+			for import in &analyze_output.imports {
+				if let tangram_lsp::Import::Dependency(dependency) = import {
+					// Ignore duplicate dependencies.
+					if dependencies.contains(dependency) {
+						continue;
+					}
+
+					// Convert the module dependency to a package dependency.
+					let dependency = match dependency {
+						tg::Dependency::Path(_) => {
+							unimplemented!()
+						},
+						tg::Dependency::Registry(_) => dependency.clone(),
+					};
+
+					// Add the dependency.
+					dependencies.insert(dependency.clone());
+				}
+			}
+
+			// Add the module subpath to the visited set.
+			visited.insert(module_subpath.clone());
+
+			// Add the unvisited path imports to the queue.
+			for import in &analyze_output.imports {
+				if let tangram_lsp::Import::Path(import) = import {
+					let imported_module_subpath = module_subpath
+						.clone()
+						.into_relpath()
+						.parent()
+						.join(import.clone())
+						.try_into_subpath()
+						.wrap_err("Failed to resolve the module path.")?;
+					if !visited.contains(&imported_module_subpath) {
+						queue.push_back(imported_module_subpath);
+					}
+				}
+			}
+		}
+
+		let dependencies = dependencies
+			.into_iter()
+			.map(|dependency| match dependency {
+				tg::Dependency::Registry(registry) => registry,
+				_ => unimplemented!(),
+			})
+			.collect::<Vec<_>>();
+
+		Ok(dependencies.into_iter().collect::<Vec<_>>())
+	}
+
 	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata> {
 		let file = self
 			.get(client, &ROOT_MODULE_FILE_NAME.try_into().unwrap())
@@ -166,4 +240,5 @@ impl PackageExt for tg::Directory {
 #[async_trait]
 pub trait PackageExt {
 	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata>;
+	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::dependency::Registry>>;
 }
