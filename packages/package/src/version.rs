@@ -161,7 +161,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 					let all_versions = match context.lookup(&dependant.dependency.name).await {
 						Ok(all_versions) => all_versions,
 						Err(e) => {
-							tracing::debug!(?dependant, ?e, "Failed to get versions of package.");
+							tracing::error!(?dependant, ?e, "Failed to get versions of package.");
 
 							// We cannot solve this dependency.
 							current_frame
@@ -409,11 +409,7 @@ impl Context {
 	}
 
 	// Check if a package satisfies a dependency.
-	fn matches(
-		&self,
-		version: &str,
-		dependency: &tg::dependency::Registry,
-	) -> tg::Result<bool> {
+	fn matches(&self, version: &str, dependency: &tg::dependency::Registry) -> tg::Result<bool> {
 		let Some(constraint) = dependency.version.as_ref() else {
 			return Ok(true);
 		};
@@ -425,16 +421,12 @@ impl Context {
 			tracing::error!(?e, ?dependency, "Failed to parse dependency version.");
 			tg::error!("Failed to parse version.")
 		})?;
-		let matches = constraint.matches(&version);
-		tracing::debug!(?version, ?constraint, ?matches, "Checked version against constraint.");
+
 		Ok(constraint.matches(&version))
 	}
 
 	// Try and get the next version from a list of remaining ones. Returns an error if the list is empty.
-	fn try_get_version(
-		&self,
-		remaining_versions: &mut im::Vector<String>,
-	) -> Option<String> {
+	fn try_get_version(&self, remaining_versions: &mut im::Vector<String>) -> Option<String> {
 		remaining_versions.pop_back().clone()
 	}
 

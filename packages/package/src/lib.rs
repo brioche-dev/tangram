@@ -13,6 +13,8 @@ use tangram_lsp::Module;
 pub mod lockfile;
 pub mod specifier;
 pub mod version;
+
+#[cfg(test)]
 mod tests;
 
 /// The file name of the root module in a package.

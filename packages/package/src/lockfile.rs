@@ -1,8 +1,9 @@
 use async_recursion::async_recursion;
 use std::collections::BTreeMap;
 use tangram_client as tg;
+use tg::WrapErr;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Lockfile {
 	pub root: tg::lock::data::Entry,
 	pub entries: BTreeMap<tg::lock::Id, BTreeMap<tg::Dependency, tg::lock::data::Entry>>,
@@ -15,7 +16,7 @@ impl Lockfile {
 		lock: tg::Lock,
 	) -> tg::Result<Self> {
 		let mut entries = BTreeMap::new();
-		Self::from_lock_inner(package.clone(), lock.clone(), &mut entries).await;
+		Self::from_lock_inner(client, lock.clone(), &mut entries).await?;
 		let package = package.id(client).await?;
 		let lock = lock.id(client).await?.clone();
 		let root = tg::lock::data::Entry { package, lock };
@@ -24,12 +25,25 @@ impl Lockfile {
 
 	#[async_recursion]
 	async fn from_lock_inner(
-		package: tg::Artifact,
+		client: &dyn tg::Client,
 		lock: tg::Lock,
 		entries: &mut BTreeMap<tg::lock::Id, BTreeMap<tg::Dependency, tg::lock::data::Entry>>,
-	) {
-		// let entry =
-		todo!()
+	) -> tg::Result<()> {
+		// Get the ID and check if we've already visited this lock.
+		let id = lock.id(client).await.wrap_err("Failed to get ID")?.clone();
+		if entries.contains_key(&id) {
+			return Ok(());
+		}
+
+		// Add the data to the lockfile.
+		let data = lock.data(client).await.wrap_err("Failed to get data.")?;
+		entries.insert(id, data.dependencies.clone());
+
+		// Visit any dependencies.
+		for entry in lock.object(client).await?.dependencies.values() {
+			Self::from_lock_inner(client, entry.lock.clone(), entries).await?;
+		}
+		Ok(())
 	}
 
 	pub fn to_package(&self) -> tg::Result<(tg::Artifact, tg::Lock)> {
