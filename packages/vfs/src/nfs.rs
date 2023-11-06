@@ -627,7 +627,7 @@ impl Server {
 				}
 			},
 			open_claim4::CLAIM_PREVIOUS(open_delegation_type4::OPEN_DELEGATE_NONE) => fh,
-			_ => return OPEN4res::Error(nfsstat4::NFS4ERR_IO),
+			_ => return OPEN4res::Error(nfsstat4::NFS4ERR_NOTSUPP),
 		};
 
 		ctx.current_file_handle = Some(fh);
