@@ -134,7 +134,7 @@ impl Server {
 						let build = build.clone();
 						let main_runtime_handle = tokio::runtime::Handle::current();
 						move || async move {
-							tangram_runtime::js::run(&server, &build, main_runtime_handle).await
+							tangram_runtime::js::build(&server, &build, main_runtime_handle).await
 						}
 					})
 					.await
@@ -143,13 +143,13 @@ impl Server {
 			},
 			tg::system::Os::Darwin => {
 				#[cfg(target_os = "macos")]
-				tangram_runtime::darwin::run(self, &build).await?;
+				tangram_runtime::darwin::build(self, &build).await?;
 				#[cfg(not(target_os = "macos"))]
 				return_error!("Cannot build a darwin target on this host.");
 			},
 			tg::system::Os::Linux => {
 				#[cfg(target_os = "linux")]
-				tangram_runtime::linux::run(self, &build).await?;
+				tangram_runtime::linux::build(self, &build).await?;
 				#[cfg(not(target_os = "linux"))]
 				return_error!("Cannot build a linux target on this host.");
 			},
@@ -292,8 +292,6 @@ impl Server {
 	}
 
 	pub async fn add_build_log(&self, build_id: &tg::build::Id, log: Bytes) -> Result<()> {
-		eprint!("{}", String::from_utf8_lossy(&log));
-
 		// Get the progress for the build.
 		let progress = self
 			.inner

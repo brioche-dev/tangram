@@ -167,12 +167,6 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn finish_build(&self, id: &build::Id) -> Result<()>;
 
-	async fn create_login(&self) -> Result<user::Login>;
-
-	async fn get_login(&self, id: &Id) -> Result<Option<user::Login>>;
-
-	async fn get_current_user(&self, token: &str) -> Result<Option<user::User>>;
-
 	async fn search_packages(&self, quer: &str) -> Result<Vec<package::Package>>;
 
 	async fn get_package(&self, name: &str) -> Result<Option<package::Package>>;
@@ -184,4 +178,10 @@ pub trait Client: Debug + Send + Sync + 'static {
 	async fn get_package_dependencies(&self, id: &Id) -> Result<Option<Vec<dependency::Registry>>>;
 
 	async fn publish_package(&self, token: &str, id: &artifact::Id) -> Result<()>;
+
+	async fn create_login(&self) -> Result<user::Login>;
+
+	async fn get_login(&self, id: &Id) -> Result<Option<user::Login>>;
+
+	async fn get_current_user(&self, token: &str) -> Result<Option<user::User>>;
 }

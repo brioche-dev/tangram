@@ -177,7 +177,7 @@ impl Writer {
 
 	pub fn update(&mut self, data: impl AsRef<[u8]>) {
 		match self {
-			Writer::Unsafe => {},
+			Writer::Unsafe => (),
 			Writer::Blake3(hasher) => {
 				hasher.update(data.as_ref());
 			},

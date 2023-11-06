@@ -51,8 +51,8 @@ const SH_X8664_LINUX: &[u8] = include_bytes!(concat!(
 	"/src/linux/bin/sh_x86_64_linux"
 ));
 
-pub async fn run(client: &dyn tg::Client, build: &tg::Build) -> Result<()> {
-	match run_inner(client, build).await {
+pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<()> {
+	match build_inner(client, build).await {
 		Ok(output) => {
 			build.set_result(client, Ok(output)).await?;
 		},
@@ -67,7 +67,7 @@ pub async fn run(client: &dyn tg::Client, build: &tg::Build) -> Result<()> {
 }
 
 #[allow(clippy::too_many_lines, clippy::similar_names)]
-pub async fn run_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
+pub async fn build_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 
@@ -472,6 +472,7 @@ pub async fn run_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg:
 	if ret == 0 {
 		root(&context);
 	}
+	drop(context);
 
 	// Spawn the log task.
 	let log_task = tokio::task::spawn({
@@ -578,7 +579,7 @@ pub async fn run_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg:
 
 	// Handle the guest process's exit status.
 	match exit_status {
-		ExitStatus::Code(0) => {},
+		ExitStatus::Code(0) => (),
 		ExitStatus::Code(code) => {
 			return_error!(r#"The process exited with code "{code}"."#);
 		},

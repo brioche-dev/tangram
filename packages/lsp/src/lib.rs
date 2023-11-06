@@ -391,7 +391,7 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 		},
 
 		// Handle a response.
-		jsonrpc::Message::Response(_) => {},
+		jsonrpc::Message::Response(_) => (),
 
 		// Handle a notification.
 		jsonrpc::Message::Notification(notification) => {

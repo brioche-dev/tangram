@@ -3080,6 +3080,7 @@ dependencies = [
  "indoc",
  "itertools",
  "libc",
+ "num",
  "rand",
  "ratatui",
  "serde",

@@ -22,11 +22,23 @@ import { Template } from "./template.ts";
 import { Value } from "./value.ts";
 
 let current: Target;
+
+let currentEnv: { [key: string]: Value } = {};
+
 export let getCurrent = (): Target => {
 	return current;
 };
+
 export let setCurrent = (target: Target) => {
 	current = target;
+};
+
+export let getCurrentEnv = (): { [key: string]: Value } => {
+	return currentEnv;
+};
+
+export let setCurrentEnv = (env: { [key: string]: Value }) => {
+	currentEnv = env;
 };
 
 export let functions: Record<string, Function> = {};
@@ -87,7 +99,7 @@ export function target<
 				lock,
 				name: arg.name,
 				args: [],
-				env: {},
+				env: getCurrentEnv(),
 				checksum: undefined,
 			},
 		});
@@ -165,46 +177,49 @@ export class Target<
 			env: env_,
 			args: args_,
 			checksum,
-		} = await apply<Target.Arg, Apply>(args, async (arg) => {
-			if (
-				typeof arg === "string" ||
-				Artifact.is(arg) ||
-				arg instanceof Template
-			) {
-				return {
-					host: (await getCurrent().env())["TANGRAM_HOST"] as System,
-					executable: new Symlink({
-						object: { target: new Template(["/bin/sh"]) },
-					}),
-					args: ["-c", arg],
-				};
-			} else if (Target.is(arg)) {
-				return await arg.object();
-			} else if (typeof arg === "object") {
-				let object: MutationMap<Apply> = {};
-				if ("env" in arg) {
-					object.env =
-						arg.env !== undefined
-							? await mutation({ kind: "array_append", values: [arg.env] })
-							: await mutation({ kind: "unset" });
+		} = await apply<Target.Arg, Apply>(
+			[{ env: await getCurrent().env() }, ...args],
+			async (arg) => {
+				if (
+					typeof arg === "string" ||
+					Artifact.is(arg) ||
+					arg instanceof Template
+				) {
+					return {
+						host: (await getCurrent().env())["TANGRAM_HOST"] as System,
+						executable: new Symlink({
+							object: { target: new Template(["/bin/sh"]) },
+						}),
+						args: ["-c", arg],
+					};
+				} else if (Target.is(arg)) {
+					return await arg.object();
+				} else if (typeof arg === "object") {
+					let object: MutationMap<Apply> = {};
+					if ("env" in arg) {
+						object.env =
+							arg.env !== undefined
+								? await mutation({ kind: "array_append", values: [arg.env] })
+								: await mutation({ kind: "unset" });
+					}
+					if ("args" in arg) {
+						object.args =
+							arg.args !== undefined
+								? await mutation({
+										kind: "array_append",
+										values: [...arg.args],
+								  })
+								: await mutation({ kind: "unset" });
+					}
+					return {
+						...arg,
+						...object,
+					};
+				} else {
+					return unreachable();
 				}
-				if ("args" in arg) {
-					object.args =
-						arg.args !== undefined
-							? await mutation({
-									kind: "array_append",
-									values: [...arg.args],
-							  })
-							: await mutation({ kind: "unset" });
-				}
-				return {
-					...arg,
-					...object,
-				};
-			} else {
-				return unreachable();
-			}
-		});
+			},
+		);
 		if (!host) {
 			throw new Error("Cannot create a target without a host.");
 		}

@@ -1,5 +1,5 @@
 use super::PackageArgs;
-use crate::Cli;
+use crate::{tui::Tui, Cli};
 use std::path::PathBuf;
 use tangram_client as tg;
 use tg::{Result, WrapErr};
@@ -11,6 +11,10 @@ pub struct Args {
 	/// If this flag is set, then the command will exit immediately instead of waiting for the build's output.
 	#[arg(short, long)]
 	pub detach: bool,
+
+	/// Disable the TUI.
+	#[arg(long, default_value = "false")]
+	pub no_tui: bool,
 
 	/// The path to check out the output to.
 	#[arg(short, long)]
@@ -26,10 +30,6 @@ pub struct Args {
 	/// The name of the target to build.
 	#[arg(default_value = "default")]
 	pub target: String,
-
-	/// Enable an interactive TUI.
-	#[arg(long, default_value = "false")]
-	pub non_interactive: bool,
 }
 
 impl Cli {
@@ -71,25 +71,27 @@ impl Cli {
 			return Ok(());
 		}
 
-		// // Create the ui.
-		// let mut tui = None;
-		// if !args.non_interactive {
-		// 	if let Ok(tty) = DevTty::open() {
-		// 		tui = Some(ui::Tui::new(client, tty, build.clone())?);
-		// 	}
-		// }
+		// Create the TUI.
+		let tui = !args.no_tui;
+		let tui = if tui {
+			Tui::start(client, &build).await.ok()
+		} else {
+			None
+		};
 
 		// Wait for the build's output.
-		let output = build
-			.result(client)
-			.await
-			.wrap_err("Failed to get the build result.")?
-			.wrap_err("The build failed.")?;
+		let result = build.result(client).await;
 
-		// // Shutdown the TUI
-		// if let Some(mut tui) = tui {
-		// 	tui.finish().await?;
-		// }
+		// Finish the TUI.
+		if let Some(tui) = tui {
+			tui.finish().await?;
+		}
+
+		// Handle for an error that occurred while waiting for the build's result.
+		let result = result.wrap_err("Failed to get the build result.")?;
+
+		// Handle a failed build.
+		let output = result.wrap_err("The build failed.")?;
 
 		// Check out the output if requested.
 		if let Some(path) = args.output {

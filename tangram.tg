@@ -1,9 +1,26 @@
-export let a = tg.target(s => s);
+export default tg.target(() => {
+	return {
+		foo: f("foo", 5),
+		bar: f("bar", 10),
+		baz: f("baz", 120),
+	};
+});
 
-export default tg.target(async () => {
-	let s1 = await a("a");
-	let s2 = await a("b");
-	tg.log(s1, s2);
+export let f = tg.target(async (name: string, n: number) => {
+	for (let i = 0; i < n; i++) {
+		await g(name);
+		await tg.sleep(1);
+	}
+	return name;
+});
+
+export let g = tg.target(async (name: string) => {
+	tg.log(name);
+	return undefined;
+});
+
+export let testOutput = tg.target(async () => {
+	return tg.build(tg`echo "Hello, World!" > $OUTPUT`);
 });
 
 export let source = tg.target(() =>

@@ -13,8 +13,8 @@ use tangram_error::Wrap;
 use tg::{return_error, Artifact, Build, Client, Error, Result, Value, WrapErr};
 use tokio::io::AsyncReadExt;
 
-pub async fn run(client: &dyn Client, build: &Build) -> Result<()> {
-	match run_inner(client, build).await {
+pub async fn build(client: &dyn Client, build: &Build) -> Result<()> {
+	match build_inner(client, build).await {
 		Ok(output) => {
 			build.set_result(client, Ok(output)).await?;
 		},
@@ -29,7 +29,7 @@ pub async fn run(client: &dyn Client, build: &Build) -> Result<()> {
 }
 
 #[allow(clippy::too_many_lines)]
-pub async fn run_inner(client: &dyn Client, build: &Build) -> Result<Value> {
+pub async fn build_inner(client: &dyn Client, build: &Build) -> Result<Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 

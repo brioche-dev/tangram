@@ -27,6 +27,7 @@ impl Cli {
 	pub async fn command_exec(&self, args: Args) -> Result<()> {
 		// Create the run args.
 		let args = super::run::Args {
+			no_tui: false,
 			package: args.package,
 			package_args: args.package_args,
 			run_args: args.run_args,

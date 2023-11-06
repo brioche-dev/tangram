@@ -41,7 +41,7 @@ impl Artifact {
 		// If the artifact is the same as the existing artifact, then return.
 		let id = self.id(client).await?;
 		match existing_artifact {
-			None => {},
+			None => (),
 			Some(existing_artifact) => {
 				if id == existing_artifact.id(client).await? {
 					return Ok(());
@@ -171,7 +171,7 @@ impl Artifact {
 			},
 
 			// If there is no file system object at this path, then continue.
-			None => {},
+			None => (),
 		};
 
 		// Copy the blob to the path.
@@ -216,7 +216,7 @@ impl Artifact {
 			},
 
 			// If there is no file system object at this path, then continue.
-			None => {},
+			None => (),
 		};
 
 		// Render the target.

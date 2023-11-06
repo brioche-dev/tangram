@@ -23,12 +23,12 @@ impl Cli {
 	pub async fn command_test(&self, args: Args) -> Result<()> {
 		// Create the build args.
 		let args = super::build::Args {
+			no_tui: false,
 			detach: args.detach,
 			output: None,
 			package: args.package,
 			package_args: args.package_args,
 			target: "test".to_owned(),
-			non_interactive: true,
 		};
 
 		// Build!

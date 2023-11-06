@@ -15,7 +15,7 @@ use tracing_subscriber::prelude::*;
 mod commands;
 mod config;
 mod credentials;
-// mod ui;
+mod tui;
 mod util;
 
 pub const API_URL: &str = "https://api.tangram.dev";

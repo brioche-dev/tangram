@@ -246,7 +246,7 @@ impl Server {
 
 				// Write the response.
 				match fuse_file.write_all(&response_bytes).await {
-					Ok(_) => {},
+					Ok(_) => (),
 					Err(error) => {
 						tracing::error!(?error, "Failed to write the response.");
 					},

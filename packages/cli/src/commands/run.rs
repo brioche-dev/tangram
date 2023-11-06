@@ -1,5 +1,5 @@
 use super::{PackageArgs, RunArgs};
-use crate::{util::dirs::home_directory_path, Cli};
+use crate::{tui::Tui, util::dirs::home_directory_path, Cli};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_client as tg;
 use tg::{Result, Wrap, WrapErr};
@@ -9,6 +9,10 @@ use tg::{Result, Wrap, WrapErr};
 #[command(verbatim_doc_comment)]
 #[command(trailing_var_arg = true)]
 pub struct Args {
+	/// Disable the TUI.
+	#[arg(long, default_value = "false")]
+	pub no_tui: bool,
+
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
 	pub package: tangram_package::Specifier,
@@ -60,8 +64,27 @@ impl Cli {
 		// Build the target.
 		let build = target.build(client).await?;
 
+		// Create the TUI.
+		let tui = !args.no_tui;
+		let tui = if tui {
+			Tui::start(client, &build).await.ok()
+		} else {
+			None
+		};
+
 		// Wait for the build's output.
-		let output = build.result(client).await?.wrap_err("The build failed.")?;
+		let result = build.result(client).await;
+
+		// Finish the TUI.
+		if let Some(tui) = tui {
+			tui.finish().await?;
+		}
+
+		// Handle for an error that occurred while waiting for the build's result.
+		let result = result.wrap_err("Failed to get the build result.")?;
+
+		// Handle a failed build.
+		let output = result.wrap_err("The build failed.")?;
 
 		// Get the output artifact.
 		let artifact: tg::Artifact = output

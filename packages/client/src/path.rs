@@ -151,7 +151,7 @@ impl std::str::FromStr for Relpath {
 		let mut path = Self::empty();
 		for component in s.split('/') {
 			match component {
-				"" | "." => {},
+				"" | "." => (),
 				".." => {
 					path = path.parent();
 				},

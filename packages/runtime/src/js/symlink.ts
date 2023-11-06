@@ -2,7 +2,7 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { Args, apply, mutation } from "./mutation.ts";
+import { Args, MutationMap, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Relpath, relpath } from "./path.ts";
 import { Unresolved } from "./resolve.ts";
@@ -31,7 +31,7 @@ export class Symlink {
 	static async new(...args: Args<Symlink.Arg>): Promise<Symlink> {
 		type Apply = {
 			artifact?: Artifact | undefined;
-			path?: string | undefined;
+			path?: Array<string>;
 		};
 		let { artifact, path: path_ } = await apply<Symlink.Arg, Apply>(
 			args,
@@ -40,7 +40,7 @@ export class Symlink {
 					return {};
 				} else if (typeof arg === "string") {
 					return {
-						path: arg,
+						path: await mutation({ kind: "array_append", values: [arg] }),
 					};
 				} else if (Artifact.is(arg)) {
 					return {
@@ -55,7 +55,10 @@ export class Symlink {
 						secondComponent === undefined
 					) {
 						return {
-							path: firstComponent,
+							path: await mutation({
+								kind: "array_append",
+								values: [firstComponent],
+							}),
 						};
 					} else if (
 						Artifact.is(firstComponent) &&
@@ -72,7 +75,7 @@ export class Symlink {
 						assert_(secondComponent.startsWith("/"));
 						return {
 							artifact: firstComponent,
-							path: secondComponent.slice(1),
+							path: [secondComponent.slice(1)],
 						};
 					} else {
 						throw new Error("Invalid template.");
@@ -80,10 +83,17 @@ export class Symlink {
 				} else if (Symlink.is(arg)) {
 					return {
 						artifact: await arg.artifact(),
-						path: (await arg.path()).toString(),
+						path: [(await arg.path()).toString()],
 					};
 				} else if (typeof arg === "object") {
-					return arg;
+					let object: MutationMap<Apply> = {};
+					if ("artifact" in arg) {
+						object.artifact = arg.artifact;
+					}
+					if ("path" in arg) {
+						object.path = await mutation({ kind: "set", value: [arg.path] });
+					}
+					return object;
 				} else {
 					return unreachable();
 				}

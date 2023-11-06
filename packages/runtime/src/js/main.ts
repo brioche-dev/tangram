@@ -3,10 +3,16 @@ import * as encoding from "./encoding.ts";
 import { Module } from "./module.ts";
 import { resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
-import { Target, functions, setCurrent } from "./target.ts";
+import { Target, functions, setCurrent, setCurrentEnv } from "./target.ts";
 import { Value } from "./value.ts";
 
 export let main = async (target: Target): Promise<Value> => {
+	// Set the current target.
+	setCurrent(target);
+
+	// Set the current env.
+	setCurrentEnv(await target.env());
+
 	// Load the executable.
 	let lock = await target.lock();
 	assert(lock);
@@ -36,9 +42,6 @@ export let main = async (target: Target): Promise<Value> => {
 	if (!function_) {
 		throw new Error("Failed to find the function.");
 	}
-
-	// Set the current target.
-	setCurrent(target);
 
 	// Get the args.
 	let args = await target.args();
