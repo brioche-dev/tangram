@@ -5,3 +5,11 @@ export default tg.target(async () => {
 	let s2 = await a("b");
 	tg.log(s1, s2);
 });
+
+export let source = tg.target(() =>
+	tg.directory({
+		["Cargo.toml"]: tg.include("./Cargo.toml"),
+		["Cargo.lock"]: tg.include("./Cargo.lock"),
+		["packages"]: tg.include("./packages"),
+	}),
+);
