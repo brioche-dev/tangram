@@ -114,10 +114,8 @@ impl State {
 		}
 	}
 
-	pub fn release_lock(&mut self, lock_owner: lock_owner4) {
-		if let Some(stateid) = self.lock_owners.remove(&lock_owner) {
-			let (_, stack) = &mut self.lock_data;
-			stack.push(stateid.seqid);
-		}
+	pub fn release_lock(&mut self, lock_stateid: &stateid4) {
+		let (_, stack) = &mut self.lock_data;
+		stack.push(lock_stateid.seqid);
 	}
 }

@@ -658,6 +658,21 @@ pub enum LOCK4res {
 }
 
 #[derive(Clone, Debug)]
+pub struct LOCKU4args {
+	pub locktype: nfs_lock_type4,
+	pub seqid: seqid4,
+	pub lock_stateid: stateid4,
+	pub offset: offset4,
+	pub length: length4,
+}
+
+#[derive(Clone, Debug)]
+pub enum LOCKU4res {
+	NFS4_OK(stateid4),
+	Error(nfsstat4),
+}
+
+#[derive(Clone, Debug)]
 pub struct LOOKUP4args {
 	/* CURRENT_FH: directory */
 	pub objname: component4,
@@ -1116,6 +1131,7 @@ pub enum nfs_argop4 {
 	OP_GETATTR(GETATTR4args),
 	OP_GETFH,
 	OP_LOCK(LOCK4args),
+	OP_LOCKU(LOCKU4args),
 	OP_LOOKUP(LOOKUP4args),
 	OP_OPEN(OPEN4args),
 	OP_PUTFH(PUTFH4args),
@@ -1141,6 +1157,7 @@ pub enum nfs_resop4 {
 	OP_GETATTR(GETATTR4res),
 	OP_GETFH(GETFH4res),
 	OP_LOCK(LOCK4res),
+	OP_LOCKU(LOCKU4res),
 	OP_LOOKUP(LOOKUP4res),
 	OP_OPEN(OPEN4res),
 	OP_PUTFH(PUTFH4res),
@@ -1802,6 +1819,55 @@ impl xdr::ToXdr for LOCK4res {
 	}
 }
 
+// #[derive(Clone, Debug)]
+// pub struct LOCKU4args {
+// 	locktype: nfs_lock_type4,
+// 	seqid: seqid4,
+// 	lock_stateid: stateid4,
+// 	offset: offset4,
+// 	length: length4,
+// }
+
+// #[derive(Clone, Debug)]
+// pub enum LOCKU4res {
+// 	NFS4_OK(stateid4),
+// 	Error(nfsstat4),
+// }
+impl xdr::FromXdr for LOCKU4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let locktype = decoder.decode()?;
+		let seqid = decoder.decode()?;
+		let lock_stateid = decoder.decode()?;
+		let offset = decoder.decode()?;
+		let length = decoder.decode()?;
+		Ok(Self {
+			locktype,
+			seqid,
+			lock_stateid,
+			offset,
+			length,
+		})
+	}
+}
+
+impl xdr::ToXdr for LOCKU4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			LOCKU4res::NFS4_OK(lock_stateid) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(lock_stateid)?;
+			},
+			LOCKU4res::Error(e) => {
+				encoder.encode(e)?;
+			},
+		}
+		Ok(())
+	}
+}
+
 impl xdr::FromXdr for LOOKUP4args {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let objname = decoder.decode()?;
@@ -2241,6 +2307,7 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_GETATTR => nfs_argop4::OP_GETATTR(decoder.decode()?),
 			nfs_opnum4::OP_GETFH => nfs_argop4::OP_GETFH,
 			nfs_opnum4::OP_LOCK => nfs_argop4::OP_LOCK(decoder.decode()?),
+			nfs_opnum4::OP_LOCKU => nfs_argop4::OP_LOCKU(decoder.decode()?),
 			nfs_opnum4::OP_LOOKUP => nfs_argop4::OP_LOOKUP(decoder.decode()?),
 			nfs_opnum4::OP_OPEN => nfs_argop4::OP_OPEN(decoder.decode()?),
 			nfs_opnum4::OP_PUTFH => nfs_argop4::OP_PUTFH(decoder.decode()?),
@@ -2265,7 +2332,6 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_RENAME => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LINK => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LOCKT => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_LOCKU => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LOOKUPP => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_NVERIFY => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_OPENATTR => nfs_argop4::Unimplemented(opnum),
@@ -2318,6 +2384,10 @@ impl xdr::ToXdr for nfs_resop4 {
 			},
 			nfs_resop4::OP_LOCK(res) => {
 				encoder.encode(&nfs_opnum4::OP_LOCK)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_LOCKU(res) => {
+				encoder.encode(&nfs_opnum4::OP_LOCKU)?;
 				encoder.encode(&res)?;
 			},
 			nfs_resop4::OP_LOOKUP(res) => {
@@ -2503,6 +2573,8 @@ impl nfs_resop4 {
 			nfs_resop4::OP_LOCK(LOCK4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_LOCK(LOCK4res::NFS4ERR_DENIED(_)) => nfsstat4::NFS4ERR_DENIED,
 			nfs_resop4::OP_LOCK(LOCK4res::Error(e)) => *e,
+			nfs_resop4::OP_LOCKU(LOCKU4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_LOCKU(LOCKU4res::Error(e)) => *e,
 			nfs_resop4::OP_LOOKUP(LOOKUP4res { status }) => *status,
 			nfs_resop4::OP_OPEN(OPEN4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_OPEN(OPEN4res::Error(e)) => *e,
