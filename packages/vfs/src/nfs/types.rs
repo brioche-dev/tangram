@@ -525,7 +525,7 @@ pub struct open_owner4 {
 	pub owner: Vec<u8>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct lock_owner4 {
 	pub clientid: clientid4,
 	pub owner: Vec<u8>,
@@ -538,6 +538,29 @@ pub enum nfs_lock_type4 {
 	WRITE_LT = 2,
 	READW_LT = 3,  /* blocking read */
 	WRITEW_LT = 4, /* blocking write */
+}
+
+#[derive(Clone, Debug)]
+pub struct open_to_lock_owner4 {
+	pub open_seqid: seqid4,
+	pub open_stateid: stateid4,
+	pub lock_seqid: seqid4,
+	pub lock_owner: lock_owner4,
+}
+
+/*
+ * For LOCK, existing lock_owner continues to request file locks
+ */
+#[derive(Copy, Clone, Debug)]
+pub struct exist_lock_owner4 {
+	pub lock_stateid: stateid4,
+	pub lock_seqid: seqid4,
+}
+
+#[derive(Clone, Debug)]
+pub enum locker4 {
+	TRUE(open_to_lock_owner4),
+	FALSE(exist_lock_owner4),
 }
 
 pub const ACCESS4_READ: uint32_t = 0x00000001;
@@ -602,6 +625,36 @@ pub enum GETFH4res {
 #[derive(Clone, Copy, Debug)]
 pub struct GETFH4resok {
 	pub object: nfs_fh4,
+}
+
+#[derive(Clone, Debug)]
+pub struct LOCK4args {
+	/* CURRENT_FH: file */
+	pub locktype: nfs_lock_type4,
+	pub reclaim: bool,
+	pub offset: offset4,
+	pub length: length4,
+	pub locker: locker4,
+}
+
+#[derive(Clone, Debug)]
+pub struct LOCK4denied {
+	pub offset: offset4,
+	pub length: length4,
+	pub locktype: nfs_lock_type4,
+	pub owner: lock_owner4,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct LOCK4resok {
+	pub lock_stateid: stateid4,
+}
+
+#[derive(Clone, Debug)]
+pub enum LOCK4res {
+	NFS4_OK(LOCK4resok),
+	NFS4ERR_DENIED(LOCK4denied),
+	Error(nfsstat4),
 }
 
 #[derive(Clone, Debug)]
@@ -979,6 +1032,16 @@ pub struct SETCLIENTID_CONFIRM4args {
 	pub setclientid_confirm: verifier4,
 }
 
+#[derive(Clone, Debug)]
+pub struct RELEASE_LOCKOWNER4args {
+	pub lock_owner: lock_owner4,
+}
+
+#[derive(Clone, Debug)]
+pub struct RELEASE_LOCKOWNER4res {
+	pub status: nfsstat4,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct SETCLIENTID_CONFIRM4res {
 	pub status: nfsstat4,
@@ -1052,6 +1115,7 @@ pub enum nfs_argop4 {
 	OP_CLOSE(CLOSE4args),
 	OP_GETATTR(GETATTR4args),
 	OP_GETFH,
+	OP_LOCK(LOCK4args),
 	OP_LOOKUP(LOOKUP4args),
 	OP_OPEN(OPEN4args),
 	OP_PUTFH(PUTFH4args),
@@ -1065,6 +1129,7 @@ pub enum nfs_argop4 {
 	OP_SECINFO(SECINFO4args),
 	OP_SETCLIENTID(SETCLIENTID4args),
 	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4args),
+	OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4args),
 	OP_ILLEGAL,
 	Unimplemented(nfs_opnum4),
 }
@@ -1075,6 +1140,7 @@ pub enum nfs_resop4 {
 	OP_CLOSE(CLOSE4res),
 	OP_GETATTR(GETATTR4res),
 	OP_GETFH(GETFH4res),
+	OP_LOCK(LOCK4res),
 	OP_LOOKUP(LOOKUP4res),
 	OP_OPEN(OPEN4res),
 	OP_PUTFH(PUTFH4res),
@@ -1088,6 +1154,7 @@ pub enum nfs_resop4 {
 	OP_SECINFO(SECINFO4res),
 	OP_SETCLIENTID(SETCLIENTID4res),
 	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res),
+	OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4res),
 	OP_ILLEGAL(ILLEGAL4res),
 	Unknown(nfs_opnum4),
 }
@@ -1601,6 +1668,140 @@ impl xdr::ToXdr for PUTROOTFH4res {
 	}
 }
 
+impl xdr::FromXdr for nfs_lock_type4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		match decoder.decode_int()? {
+			1 => Ok(nfs_lock_type4::READ_LT),
+			2 => Ok(nfs_lock_type4::WRITE_LT),
+			3 => Ok(nfs_lock_type4::READW_LT),
+			4 => Ok(nfs_lock_type4::WRITEW_LT),
+			_ => Err(xdr::Error::Custom(
+				"Expected a valid nfs_lock_type4.".into(),
+			)),
+		}
+	}
+}
+
+impl xdr::ToXdr for nfs_lock_type4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		let int = match self {
+			nfs_lock_type4::READ_LT => 1,
+			nfs_lock_type4::WRITE_LT => 2,
+			nfs_lock_type4::READW_LT => 3,
+			nfs_lock_type4::WRITEW_LT => 4,
+		};
+		encoder.encode_int(int)?;
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for locker4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		if decoder.decode_bool()? {
+			let open_seqid = decoder.decode()?;
+			let open_stateid = decoder.decode()?;
+			let lock_seqid = decoder.decode()?;
+			let lock_owner = decoder.decode()?;
+			let locker = open_to_lock_owner4 {
+				open_seqid,
+				open_stateid,
+				lock_seqid,
+				lock_owner,
+			};
+			Ok(locker4::TRUE(locker))
+		} else {
+			let lock_stateid = decoder.decode()?;
+			let lock_seqid = decoder.decode()?;
+			let locker = exist_lock_owner4 {
+				lock_stateid,
+				lock_seqid,
+			};
+			Ok(locker4::FALSE(locker))
+		}
+	}
+}
+
+impl xdr::FromXdr for lock_owner4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let clientid = decoder.decode()?;
+		let owner = decoder.decode_opaque()?.into();
+		Ok(Self { clientid, owner })
+	}
+}
+
+impl xdr::ToXdr for lock_owner4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.clientid)?;
+		encoder.encode_opaque(&self.owner)?;
+		Ok(())
+	}
+}
+
+impl xdr::FromXdr for LOCK4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let locktype = decoder.decode()?;
+		let reclaim = decoder.decode()?;
+		let offset = decoder.decode()?;
+		let length = decoder.decode()?;
+		let locker = decoder.decode()?;
+		Ok(Self {
+			locktype,
+			reclaim,
+			offset,
+			length,
+			locker,
+		})
+	}
+}
+
+impl xdr::ToXdr for LOCK4denied {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.offset)?;
+		encoder.encode(&self.length)?;
+		encoder.encode(&self.locktype)?;
+		encoder.encode(&self.owner)?;
+		Ok(())
+	}
+}
+
+impl xdr::ToXdr for LOCK4resok {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.lock_stateid)
+	}
+}
+
+impl xdr::ToXdr for LOCK4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		match self {
+			LOCK4res::NFS4_OK(resok) => {
+				encoder.encode(&nfsstat4::NFS4_OK)?;
+				encoder.encode(resok)?;
+			},
+			LOCK4res::NFS4ERR_DENIED(denied) => {
+				encoder.encode(&nfsstat4::NFS4ERR_DENIED)?;
+				encoder.encode(denied)?;
+			},
+			LOCK4res::Error(e) => encoder.encode(e)?,
+		}
+		Ok(())
+	}
+}
+
 impl xdr::FromXdr for LOOKUP4args {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let objname = decoder.decode()?;
@@ -1899,6 +2100,22 @@ impl xdr::ToXdr for SETCLIENTID_CONFIRM4res {
 	}
 }
 
+impl xdr::FromXdr for RELEASE_LOCKOWNER4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let lock_owner = decoder.decode()?;
+		Ok(Self { lock_owner })
+	}
+}
+
+impl xdr::ToXdr for RELEASE_LOCKOWNER4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
 impl xdr::ToXdr for ILLEGAL4res {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
@@ -2023,6 +2240,7 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_CLOSE => nfs_argop4::OP_CLOSE(decoder.decode()?),
 			nfs_opnum4::OP_GETATTR => nfs_argop4::OP_GETATTR(decoder.decode()?),
 			nfs_opnum4::OP_GETFH => nfs_argop4::OP_GETFH,
+			nfs_opnum4::OP_LOCK => nfs_argop4::OP_LOCK(decoder.decode()?),
 			nfs_opnum4::OP_LOOKUP => nfs_argop4::OP_LOOKUP(decoder.decode()?),
 			nfs_opnum4::OP_OPEN => nfs_argop4::OP_OPEN(decoder.decode()?),
 			nfs_opnum4::OP_PUTFH => nfs_argop4::OP_PUTFH(decoder.decode()?),
@@ -2038,6 +2256,7 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_SETCLIENTID_CONFIRM => {
 				nfs_argop4::OP_SETCLIENTID_CONFIRM(decoder.decode()?)
 			},
+			nfs_opnum4::OP_RELEASE_LOCKOWNER => nfs_argop4::OP_RELEASE_LOCKOWNER(decoder.decode()?),
 			nfs_opnum4::OP_COMMIT => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_CREATE => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_DELEGPURGE => nfs_argop4::Unimplemented(opnum),
@@ -2045,7 +2264,6 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_REMOVE => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_RENAME => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LINK => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_LOCK => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LOCKT => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LOCKU => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LOOKUPP => nfs_argop4::Unimplemented(opnum),
@@ -2057,7 +2275,6 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_SETATTR => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_VERIFY => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_WRITE => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_RELEASE_LOCKOWNER => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_ILLEGAL => nfs_argop4::OP_ILLEGAL,
 		};
 		Ok(arg)
@@ -2097,6 +2314,10 @@ impl xdr::ToXdr for nfs_resop4 {
 			},
 			nfs_resop4::OP_GETFH(res) => {
 				encoder.encode(&nfs_opnum4::OP_GETFH)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_LOCK(res) => {
+				encoder.encode(&nfs_opnum4::OP_LOCK)?;
 				encoder.encode(&res)?;
 			},
 			nfs_resop4::OP_LOOKUP(res) => {
@@ -2149,6 +2370,10 @@ impl xdr::ToXdr for nfs_resop4 {
 			},
 			nfs_resop4::OP_SETCLIENTID_CONFIRM(res) => {
 				encoder.encode(&nfs_opnum4::OP_SETCLIENTID_CONFIRM)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_RELEASE_LOCKOWNER(res) => {
+				encoder.encode(&nfs_opnum4::OP_RELEASE_LOCKOWNER)?;
 				encoder.encode(&res)?;
 			},
 			nfs_resop4::OP_ILLEGAL(res) => {
@@ -2275,6 +2500,9 @@ impl nfs_resop4 {
 			nfs_resop4::OP_GETATTR(GETATTR4res::Error(e)) => *e,
 			nfs_resop4::OP_GETFH(GETFH4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_GETFH(GETFH4res::Error(e)) => *e,
+			nfs_resop4::OP_LOCK(LOCK4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_LOCK(LOCK4res::NFS4ERR_DENIED(_)) => nfsstat4::NFS4ERR_DENIED,
+			nfs_resop4::OP_LOCK(LOCK4res::Error(e)) => *e,
 			nfs_resop4::OP_LOOKUP(LOOKUP4res { status }) => *status,
 			nfs_resop4::OP_OPEN(OPEN4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_OPEN(OPEN4res::Error(e)) => *e,
@@ -2297,6 +2525,7 @@ impl nfs_resop4 {
 			},
 			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::Error(e)) => *e,
 			nfs_resop4::OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res { status }) => *status,
+			nfs_resop4::OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4res { status }) => *status,
 			nfs_resop4::OP_ILLEGAL(_) => nfsstat4::NFS4ERR_OP_ILLEGAL,
 			nfs_resop4::Unknown(_) => nfsstat4::NFS4ERR_NOTSUPP,
 		}
