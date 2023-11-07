@@ -31,7 +31,7 @@ async fn simple_diamond() {
 			&[tg::Dependency::with_name_and_version(
 				"simple_diamond_D".into(),
 				Some("^1.0".into()),
-		)],
+			)],
 		)
 		.await;
 
@@ -157,7 +157,7 @@ async fn diamond_backtrack() {
 			&[tg::Dependency::with_name_and_version(
 				"diamond_backtrack_D".into(),
 				Some("<1.3.0".into()),
-		)],
+			)],
 		)
 		.await;
 	client
@@ -268,7 +268,7 @@ async fn diamond_incompatible_versions() {
 			&[tg::Dependency::with_name_and_version(
 				"diamond_incompatible_versions_D".into(),
 				Some("<1.2.0".into()),
-		)],
+			)],
 		)
 		.await;
 	client
@@ -278,7 +278,7 @@ async fn diamond_incompatible_versions() {
 			&[tg::Dependency::with_name_and_version(
 				"diamond_incompatible_versions_D".into(),
 				Some(">1.3.0".into()),
-		)],
+			)],
 		)
 		.await;
 

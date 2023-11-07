@@ -256,8 +256,12 @@ pub async fn new2(
 		},
 	};
 
+	// Create the context.
+	let context = version::Context::new(client);
+
 	// Collect the list of package roots.
 	let mut roots = Vec::new();
+
 	let mut visited = BTreeMap::new();
 	scan(client, package_path.clone(), &mut visited, &mut roots).await?;
 
@@ -381,53 +385,6 @@ async fn scan(
 	Ok(())
 }
 
-// Get the dependencies from a package artifact.
-async fn scan_direct_dependencies(
-	client: &dyn tg::Client,
-	package: tg::Directory,
-) -> tg::Result<Vec<tg::Dependency>> {
-	// Create the dependencies vec.
-	let mut dependencies = Vec::new();
-
-	// Create a queue of module paths to visit and a visited set.
-	let mut queue: VecDeque<Subpath> = VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
-	let mut visited_modules: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
-
-	// Add each module and its includes to the directory.
-	while let Some(module_subpath) = queue.pop_front() {
-		// Get the module's path.
-		// Add the module to the package directory.
-		let artifact = package
-			.get(client, &module_subpath)
-			.await?
-			.try_unwrap_file()
-			.wrap_err("Expected a file.")?;
-
-		// Get the module's text.
-		let text = artifact.contents(client).await?.text(client).await?;
-
-		// Analyze the module.
-		let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
-
-		// Add dependencies, recursing if necessary.
-		for import in &analyze_output.imports {
-			match import {
-				tangram_lsp::Import::Dependency(dependency) => {
-					dependencies.push(dependency.clone());
-				},
-				tangram_lsp::Import::Path(path) => {
-					queue.push_back(path.subpath().clone());
-				},
-			}
-		}
-
-		// Add the module subpath to the visited set.
-		visited_modules.insert(module_subpath.clone());
-	}
-
-	Ok(dependencies)
-}
-
 #[derive(Debug, Clone)]
 pub struct Analysis {
 	pub metadata: Metadata,
@@ -475,25 +432,3 @@ impl Analysis {
 			.filter(|dependency| dependency.path.is_none())
 	}
 }
-
-// 	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata> {
-// 		let module = self.root_module(client).await?.unwrap_normal();
-// 		let directory = self
-// 			.artifact(client)
-// 			.await?
-// 			.clone()
-// 			.try_unwrap_directory()
-// 			.unwrap();
-// 		let file = directory
-// 			.get(client, &module.path)
-// 			.await?
-// 			.try_unwrap_file()
-// 			.unwrap();
-// 		let text = file.contents(client).await?.text(client).await?;
-// 		let output = Module::analyze(text)?;
-// 		if let Some(metadata) = output.metadata {
-// 			Ok(metadata)
-// 		} else {
-// 			return_error!("Missing package metadata.")
-// 		}
-// 	}
