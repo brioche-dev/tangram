@@ -557,6 +557,7 @@ pub struct exist_lock_owner4 {
 	pub lock_seqid: seqid4,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug)]
 pub enum locker4 {
 	TRUE(open_to_lock_owner4),
