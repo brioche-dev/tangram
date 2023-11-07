@@ -6,9 +6,10 @@ use self::{
 		nfs_ftype4, nfs_resop4, nfsace4, nfsstat4, nfstime4, open_claim4, open_delegation4,
 		open_delegation_type4, pathname4, specdata4, stateid4, ACCESS4args, ACCESS4res,
 		ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args, GETATTR4res,
-		GETATTR4resok, GETFH4res, GETFH4resok, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res,
-		OPEN4resok, PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args,
-		READDIR4res, READDIR4resok, READLINK4res, READLINK4resok, RENEW4args, RENEW4res,
+		GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok, LOCKU4args,
+		LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok, PUTFH4args, PUTFH4res,
+		READ4args, READ4res, READ4resok, READDIR4args, READDIR4res, READDIR4resok, READLINK4res,
+		READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res,
 		RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args, SETCLIENTID4res,
 		SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE,
 		ACCESS4_LOOKUP, ACCESS4_READ, FATTR4_ACL, FATTR4_ACLSUPPORT, FATTR4_ARCHIVE,
@@ -228,6 +229,12 @@ impl Server {
 					nfs_resop4::OP_GETATTR(self.handle_getattr(&ctx, arg).await)
 				},
 				nfs_argop4::OP_GETFH => nfs_resop4::OP_GETFH(self.handle_get_file_handle(&ctx)),
+				nfs_argop4::OP_LOCK(arg) => {
+					nfs_resop4::OP_LOCK(self.handle_lock(&mut ctx, arg).await)
+				},
+				nfs_argop4::OP_LOCKU(arg) => {
+					nfs_resop4::OP_LOCKU(self.handle_locku(&mut ctx, arg).await)
+				},
 				nfs_argop4::OP_LOOKUP(arg) => {
 					nfs_resop4::OP_LOOKUP(self.handle_lookup(&mut ctx, arg).await)
 				},
@@ -266,6 +273,9 @@ impl Server {
 				nfs_argop4::OP_SETCLIENTID_CONFIRM(arg) => {
 					nfs_resop4::OP_SETCLIENTID_CONFIRM(self.handle_set_client_id_confirm(arg).await)
 				},
+				nfs_argop4::OP_RELEASE_LOCKOWNER(arg) => nfs_resop4::OP_RELEASE_LOCKOWNER(
+					self.handle_release_lockowner(&mut ctx, arg).await,
+				),
 				nfs_argop4::Unimplemented(arg) => types::nfs_resop4::Unknown(arg),
 			};
 
@@ -470,6 +480,19 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
+	pub async fn handle_lock(&self, ctx: &mut Context, _arg: LOCK4args) -> LOCK4res {
+		let lock_stateid = self.state.write().await.acquire_lock();
+		let resok = LOCK4resok { lock_stateid };
+		LOCK4res::NFS4_OK(resok)
+	}
+
+	#[tracing::instrument(skip(self))]
+	pub async fn handle_locku(&self, ctx: &mut Context, arg: LOCKU4args) -> LOCKU4res {
+		self.state.write().await.release_lock(&arg.lock_stateid);
+		LOCKU4res::NFS4_OK(arg.lock_stateid)
+	}
+
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_lookup(&self, ctx: &mut Context, arg: LOOKUP4args) -> LOOKUP4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return LOOKUP4res {
@@ -538,7 +561,7 @@ impl Server {
 		let child_artifact = match &parent_node.kind {
 			NodeKind::Root { .. } => {
 				let id = name.parse().map_err(|e| {
-					tracing::error!(?e, "Failed to parse artifact ID.");
+					tracing::error!(?e, ?name, "Failed to parse artifact ID.");
 					nfsstat4::NFS4ERR_NOENT
 				})?;
 				tg::Artifact::with_id(id)
@@ -546,10 +569,14 @@ impl Server {
 
 			NodeKind::Directory { directory, .. } => {
 				let entries = directory.entries(self.client.as_ref()).await.map_err(|e| {
-					tracing::error!(?e, "Failed to get directory entries.");
+					tracing::error!(?e, ?name, "Failed to get directory entries.");
 					nfsstat4::NFS4ERR_IO
 				})?;
-				entries.get(name).ok_or(nfsstat4::NFS4ERR_NOENT)?.clone()
+				let child = entries.get(name);
+				if child.is_none() {
+					tracing::error!(?name, "Failed to get the child.");
+				}
+				child.ok_or(nfsstat4::NFS4ERR_NOENT)?.clone()
 			},
 
 			_ => unreachable!(),
@@ -920,6 +947,20 @@ impl Server {
 		}
 		SETCLIENTID_CONFIRM4res {
 			status: nfsstat4::NFS4ERR_STALE_CLIENTID,
+		}
+	}
+
+	pub async fn handle_release_lockowner(
+		&self,
+		_context: &mut Context,
+		arg: RELEASE_LOCKOWNER4args,
+	) -> RELEASE_LOCKOWNER4res {
+		let mut state = self.state.write().await;
+		if let Some(lock_stateid) = state.lock_owners.remove(&arg.lock_owner) {
+			state.release_lock(&lock_stateid);
+		}
+		RELEASE_LOCKOWNER4res {
+			status: nfsstat4::NFS4_OK,
 		}
 	}
 
