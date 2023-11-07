@@ -7,7 +7,7 @@ use im::HashMap;
 use tangram_client as tg;
 use tg::{Client, WrapErr};
 
-use crate::scan_direct_dependencies;
+use crate::{scan_direct_dependencies, Analysis};
 
 /// Errors that may arise during version solving.
 #[derive(Debug, Clone)]
@@ -359,6 +359,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 pub struct Context {
 	client: Box<dyn tg::Client>,
 	cache: HashMap<tg::package::Metadata, Vec<tg::dependency::Registry>>,
+	cache2: HashMap<String, HashMap<String, Vec<Analysis>>>,
 }
 
 /// The Report is an error type that can be pretty printed to describe why version solving failed.
@@ -405,7 +406,8 @@ impl Context {
 	fn new(client: &dyn tg::Client) -> Self {
 		let client = client.clone_box();
 		let cache = HashMap::new();
-		Self { client, cache }
+		let cache2 = HashMap::new();
+		Self { client, cache, cache2 }
 	}
 
 	// Check if a package satisfies a dependency.
@@ -440,6 +442,34 @@ impl Context {
 			self.cache.insert(metadata.clone(), dependencies);
 		}
 		Ok(self.cache.get(metadata).unwrap())
+	}
+
+	async fn get_or_insert_package (&self, metadata: &tg::package::Metadata) -> tg::Result<()> {
+		todo!()
+		// let name = metadata.name.as_ref().unwrap();
+		// let version = metadata.version.as_ref().unwrap();
+
+		// Avoid using the entry api here in order to avoid the allocation.
+		// let entry = match self.cache2.get_mut(name) {
+		// 	Some(entry) => entry,
+		// 	None => {
+		// 		self.cache2.insert(name.into(), HashMap::new());
+		// 		self.cache2.get_mut(name).unwrap()
+		// 	}
+		// };
+		// todo!()
+		// let dependencies = match entry.get(version) {
+		// 	Some(dependency) => dependencies,
+		// 	None => {
+		// 		let package = self.client.get_package_version(name, version)
+		// 			.await?
+		// 			.ok_or(tg::error!("Package version does not exist."))?;
+		// 		let artifact = tg::Artifact::with_id(package);
+		// 		let
+		// 	}
+		// }
+
+		// Ok(())
 	}
 
 	// Lookup all the published versions of a package by name.
