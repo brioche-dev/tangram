@@ -109,12 +109,15 @@ impl TryFrom<String> for Registry {
 
 impl From<Dependency> for Specifier {
 	fn from(value: Dependency) -> Self {
-		match value {
-			Dependency::Path(path) => Specifier::Path(path.into()),
-			Dependency::Registry(specifier) => Specifier::Registry(Registry {
-				name: specifier.name,
-				version: specifier.version,
-			}),
+		let Dependency {
+			name,
+			version,
+			path,
+		} = value;
+		match (name, version, path) {
+			(_, _, Some(path)) => Specifier::Path(path.into()),
+			(Some(name), version, None) => Specifier::Registry(Registry { name, version }),
+			_ => unreachable!(),
 		}
 	}
 }

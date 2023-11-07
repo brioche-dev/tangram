@@ -86,21 +86,22 @@ pub async fn new(
 				}
 
 				// Convert the module dependency to a package dependency.
-				let dependency = match dependency {
-					tg::Dependency::Path(dependency_path) => tg::Dependency::Path(
+				let dependency = match &dependency.path {
+					Some(dependency_path) => tg::Dependency::with_path(
 						module_subpath
 							.clone()
 							.into_relpath()
 							.parent()
 							.join(dependency_path.clone()),
 					),
-					tg::Dependency::Registry(_) => dependency.clone(),
+					None => dependency.clone(),
 				};
 
 				// Get the dependency package.
-				let tg::Dependency::Path(dependency_relpath) = &dependency else {
+				let Some(dependency_relpath) = &dependency.path else {
 					unimplemented!();
 				};
+
 				let dependency_package_path = package_path.join(dependency_relpath.to_string());
 				let (dependency_package, dependency_lock) =
 					new(client, &Specifier::Path(dependency_package_path.clone())).await?;
@@ -147,7 +148,7 @@ pub async fn new(
 
 #[async_trait]
 impl PackageExt for tg::Directory {
-	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::dependency::Registry>> {
+	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>> {
 		// Create the dependencies map.
 		let mut dependencies: BTreeSet<tg::Dependency> = BTreeSet::default();
 
@@ -176,16 +177,6 @@ impl PackageExt for tg::Directory {
 					if dependencies.contains(dependency) {
 						continue;
 					}
-
-					// Convert the module dependency to a package dependency.
-					let dependency = match dependency {
-						tg::Dependency::Path(_) => {
-							unimplemented!()
-						},
-						tg::Dependency::Registry(_) => dependency.clone(),
-					};
-
-					// Add the dependency.
 					dependencies.insert(dependency.clone());
 				}
 			}
@@ -212,9 +203,9 @@ impl PackageExt for tg::Directory {
 
 		let dependencies = dependencies
 			.into_iter()
-			.map(|dependency| match dependency {
-				tg::Dependency::Registry(registry) => registry,
-				_ => unimplemented!(),
+			.map(|dependency| match &dependency.path {
+				Some(_) => unimplemented!(),
+				None => dependency,
 			})
 			.collect::<Vec<_>>();
 
@@ -240,5 +231,5 @@ impl PackageExt for tg::Directory {
 #[async_trait]
 pub trait PackageExt {
 	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata>;
-	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::dependency::Registry>>;
+	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>>;
 }

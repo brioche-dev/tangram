@@ -65,17 +65,17 @@ impl Module {
 				Ok(module)
 			},
 
-			(
-				Self::Document(document),
-				Import::Dependency(tg::Dependency::Path(dependency_path)),
-			) => {
+			(Self::Document(document), Import::Dependency(dependency))
+				if dependency.path.is_some() =>
+			{
 				// Resolve the package path.
 				let dependency_path = document
 					.path
 					.clone()
 					.into_relpath()
 					.parent()
-					.join(dependency_path.clone());
+					.join(dependency.path.as_ref().unwrap().clone());
+
 				let package_path = document.package_path.join(dependency_path.to_string());
 				let package_path = tokio::fs::canonicalize(package_path)
 					.await
@@ -94,7 +94,7 @@ impl Module {
 				Ok(module)
 			},
 
-			(Self::Document(_), Import::Dependency(tg::Dependency::Registry(_))) => {
+			(Self::Document(_), Import::Dependency(_)) => {
 				unimplemented!()
 			},
 
@@ -117,14 +117,14 @@ impl Module {
 			(Self::Normal(module), Import::Dependency(dependency)) => {
 				// Convert the module dependency to a package dependency.
 				let module_subpath = module.path.clone();
-				let dependency = match dependency {
-					tg::Dependency::Path(dependency_path) => tg::Dependency::Path(
+				let dependency = match &dependency.path {
+					Some(dependency_path) => tg::Dependency::with_path(
 						module_subpath
 							.into_relpath()
 							.parent()
 							.join(dependency_path.clone()),
 					),
-					tg::Dependency::Registry(_) => dependency.clone(),
+					None => dependency.clone(),
 				};
 
 				// Get the lock.

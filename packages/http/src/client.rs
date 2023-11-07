@@ -678,10 +678,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_package_dependencies(
-		&self,
-		id: &tg::Id,
-	) -> Result<Option<Vec<tg::dependency::Registry>>> {
+	async fn get_package_dependencies(&self, id: &tg::Id) -> Result<Option<Vec<tg::Dependency>>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{id}/dependencies"))

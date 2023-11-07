@@ -407,10 +407,7 @@ impl tg::Client for Server {
 		Ok(Some(metadata))
 	}
 
-	async fn get_package_dependencies(
-		&self,
-		id: &tg::Id,
-	) -> Result<Option<Vec<tg::dependency::Registry>>> {
+	async fn get_package_dependencies(&self, id: &tg::Id) -> Result<Option<Vec<tg::Dependency>>> {
 		// Get the package.
 		let package =
 			tg::Directory::with_id(id.clone().try_into().wrap_err("Invalid Directory ID.")?);
