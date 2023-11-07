@@ -1819,20 +1819,6 @@ impl xdr::ToXdr for LOCK4res {
 	}
 }
 
-// #[derive(Clone, Debug)]
-// pub struct LOCKU4args {
-// 	locktype: nfs_lock_type4,
-// 	seqid: seqid4,
-// 	lock_stateid: stateid4,
-// 	offset: offset4,
-// 	length: length4,
-// }
-
-// #[derive(Clone, Debug)]
-// pub enum LOCKU4res {
-// 	NFS4_OK(stateid4),
-// 	Error(nfsstat4),
-// }
 impl xdr::FromXdr for LOCKU4args {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let locktype = decoder.decode()?;
