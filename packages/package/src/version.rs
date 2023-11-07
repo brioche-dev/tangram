@@ -5,6 +5,7 @@ use async_recursion::async_recursion;
 use im::HashMap;
 // use std::path::PathBuf;
 use tangram_client as tg;
+use tangram_lsp::analyze;
 use tg::{Client, WrapErr};
 
 use crate::{scan_direct_dependencies, Analysis};
@@ -159,7 +160,10 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 
 				// Note: this bit is tricky. The next frame will always have an empty set of remaining versions, because by construction it will never have been tried before. However we need to get a list of versions to attempt, which we will push onto the stack.
 				if current_frame.remaining_versions.is_none() {
-					let all_versions = match context.lookup(dependant.dependency.name.as_ref().unwrap()).await {
+					let all_versions = match context
+						.lookup(dependant.dependency.name.as_ref().unwrap())
+						.await
+					{
 						Ok(all_versions) => all_versions,
 						Err(e) => {
 							tracing::error!(?dependant, ?e, "Failed to get versions of package.");
@@ -334,9 +338,11 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 						erroneous_dependencies: erroneous_children,
 					};
 
-					if let Some(frame_) =
-						try_backtrack(&history, dependant.dependency.name.as_ref().unwrap(), error.clone())
-					{
+					if let Some(frame_) = try_backtrack(
+						&history,
+						dependant.dependency.name.as_ref().unwrap(),
+						error.clone(),
+					) {
 						next_frame = frame_;
 					} else {
 						// This means that backtracking totally failed and we need to fail with an error
@@ -359,8 +365,8 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 
 pub struct Context {
 	client: Box<dyn tg::Client>,
-	cache: HashMap<tg::package::Metadata, Vec<tg::Dependency>>,
-	cache2: HashMap<String, HashMap<String, Vec<Analysis>>>,
+	analysis: HashMap<tg::Id, Analysis>,
+	packages: HashMap<tg::package::Metadata, tg::Id>,
 }
 
 /// The Report is an error type that can be pretty printed to describe why version solving failed.
@@ -406,9 +412,9 @@ struct Frame {
 impl Context {
 	fn new(client: &dyn tg::Client) -> Self {
 		let client = client.clone_box();
-		let cache = HashMap::new();
-		let cache2 = HashMap::new();
-		Self { client, cache, cache2 }
+		let packages = HashMap::new();
+		let analysis = HashMap::new();
+		Self { client, packages, analysis }
 	}
 
 	// Check if a package satisfies a dependency.
@@ -438,39 +444,36 @@ impl Context {
 		&mut self,
 		metadata: &tg::package::Metadata,
 	) -> tg::Result<&'_ [tg::Dependency]> {
-		if !self.cache.contains_key(metadata) {
-			let dependencies = self.scan_registry_dependencies(metadata).await?;
-			self.cache.insert(metadata.clone(), dependencies);
+		if !self.packages.contains_key(metadata) {
+			let name = metadata
+				.name
+				.as_ref()
+				.ok_or(tg::error!("Missing name in package metadata."))?;
+			let version = metadata
+				.version
+				.as_ref()
+				.ok_or(tg::error!("Missing version in package metadata."))?;
+			let package = self
+				.client
+				.get_package_version(name, version)
+				.await?
+				.ok_or(tg::error!("Could not find package {name}@{version}."))?
+				.into();
+			let dependencies = self
+				.client
+				.get_package_dependencies(&package)
+				.await?
+				.unwrap_or_default();
+			let analysis = Analysis {
+				metadata: metadata.clone(),
+				dependencies,
+			};
+			let _ = self.packages.insert(metadata.clone(), package.clone());
+			let _ = self.analysis.insert(package, analysis);
 		}
-		Ok(self.cache.get(metadata).unwrap())
-	}
-
-	async fn get_or_insert_package (&self, metadata: &tg::package::Metadata) -> tg::Result<()> {
-		todo!()
-		// let name = metadata.name.as_ref().unwrap();
-		// let version = metadata.version.as_ref().unwrap();
-
-		// Avoid using the entry api here in order to avoid the allocation.
-		// let entry = match self.cache2.get_mut(name) {
-		// 	Some(entry) => entry,
-		// 	None => {
-		// 		self.cache2.insert(name.into(), HashMap::new());
-		// 		self.cache2.get_mut(name).unwrap()
-		// 	}
-		// };
-		// todo!()
-		// let dependencies = match entry.get(version) {
-		// 	Some(dependency) => dependencies,
-		// 	None => {
-		// 		let package = self.client.get_package_version(name, version)
-		// 			.await?
-		// 			.ok_or(tg::error!("Package version does not exist."))?;
-		// 		let artifact = tg::Artifact::with_id(package);
-		// 		let
-		// 	}
-		// }
-
-		// Ok(())
+		let package = self.packages.get(metadata).unwrap();
+		let analysis = self.analysis.get(package).unwrap();
+		Ok(&analysis.dependencies)
 	}
 
 	// Lookup all the published versions of a package by name.
@@ -507,7 +510,6 @@ impl Context {
 		let Some(package) = self.client.get_package_version(name, version).await? else {
 			tg::return_error!("Could not find package {name}@{version}");
 		};
-
 		let artifact = tg::Artifact::with_id(package)
 			.try_unwrap_directory()
 			.wrap_err("Expected the package artifact to be a directory.")?;
@@ -515,9 +517,7 @@ impl Context {
 		let dependencies = scan_direct_dependencies(self.client.as_ref(), artifact)
 			.await?
 			.into_iter()
-			.filter(|dependency| {
-				dependency.path.is_none()
-			})
+			.filter(|dependency| dependency.path.is_none())
 			.collect();
 
 		Ok(dependencies)
@@ -655,7 +655,11 @@ impl Report {
 				previous_version,
 				erroneous_dependencies,
 			} => {
-				writeln!(f, "{} {previous_version} has errors:", dependency.name.as_ref().unwrap())?;
+				writeln!(
+					f,
+					"{} {previous_version} has errors:",
+					dependency.name.as_ref().unwrap()
+				)?;
 				for (child, error) in erroneous_dependencies {
 					let dependent = Dependant {
 						metadata: tg::package::Metadata {

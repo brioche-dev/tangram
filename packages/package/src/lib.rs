@@ -9,7 +9,7 @@ use std::{
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
 use tangram_lsp::Module;
-use tg::{return_error, Result, Subpath, WrapErr,  Dependency, package::Metadata};
+use tg::{package::Metadata, return_error, Dependency, Result, Subpath, WrapErr};
 
 pub mod lockfile;
 pub mod specifier;
@@ -436,63 +436,19 @@ pub struct Analysis {
 
 impl Analysis {
 	pub async fn new(client: &dyn tg::Client, artifact: tg::Artifact) -> tg::Result<Self> {
-		// Get the package.
-		let package = artifact.try_unwrap_directory().wrap_err("Failed to get package directory.")?;
-
-		// Get the metadata.
-		let root_path: tg::Subpath = ROOT_MODULE_FILE_NAME.parse().unwrap();
-		let root_text = package
-			.get(client, &root_path)
+		let id = artifact
+			.id(client)
 			.await
-			.wrap_err("Failed to get the root module.")?
-			.try_unwrap_file()
-			.wrap_err("Expected a file.")?
-			.contents(client).await?
-			.text(client).await?;
-
-		let metadata = Module::analyze(root_text)?
-			.metadata
-			.ok_or(tg::error!("Failed to get the package's metadata."))?;
-
-		// Create the dependencies vec.
-		let mut dependencies = Vec::new();
-
-		// Create a queue of module paths to visit and a visited set.
-		let mut queue: VecDeque<Subpath> = VecDeque::from(vec![root_path.clone()]);
-		let mut visited_modules: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
-
-		// Add each module and its includes to the directory.
-		while let Some(module_subpath) = queue.pop_front() {
-			// Get the module's path.
-			// Add the module to the package directory.
-			let artifact = package
-				.get(client, &module_subpath)
-				.await?
-				.try_unwrap_file()
-				.wrap_err("Expected a file.")?;
-
-			// Get the module's text.
-			let text = artifact.contents(client).await?.text(client).await?;
-
-			// Analyze the module.
-			let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
-
-			// Add dependencies, recursing if necessary.
-			for import in &analyze_output.imports {
-				match import {
-					tangram_lsp::Import::Dependency(dependency) => {
-						dependencies.push(dependency.clone());
-					},
-					tangram_lsp::Import::Path(path) => {
-						queue.push_back(path.subpath().clone());
-					},
-				}
-			}
-
-			// Add the module subpath to the visited set.
-			visited_modules.insert(module_subpath.clone());
-		}
-
+			.wrap_err("Failed to get package ID.")?
+			.into();
+		let metadata = client
+			.get_package_metadata(&id)
+			.await?
+			.ok_or(tg::error!("Missing package metadata."))?;
+		let dependencies = client
+			.get_package_dependencies(&id)
+			.await?
+			.unwrap_or_default();
 		Ok(Self {
 			metadata,
 			dependencies,
@@ -500,11 +456,17 @@ impl Analysis {
 	}
 
 	pub fn name(&self) -> tg::Result<&str> {
-		self.metadata.name.as_deref().ok_or(tg::error!("Missing package name."))
+		self.metadata
+			.name
+			.as_deref()
+			.ok_or(tg::error!("Missing package name."))
 	}
 
 	pub fn version(&self) -> tg::Result<&str> {
-		self.metadata.version.as_deref().ok_or(tg::error!("Missing package version."))
+		self.metadata
+			.version
+			.as_deref()
+			.ok_or(tg::error!("Missing package version."))
 	}
 
 	pub fn registry_dependencies(&self) -> impl Iterator<Item = &'_ tg::Dependency> {
