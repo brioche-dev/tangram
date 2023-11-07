@@ -1,16 +1,15 @@
 pub use self::specifier::Specifier;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
-use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::{
-	collections::{BTreeMap, HashSet, VecDeque, HashMap},
+	collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 	path::PathBuf,
 };
+
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
 use tangram_lsp::Module;
-use tg::{return_error, Result, Subpath, WrapErr};
-use tg::{Result, Subpath, WrapErr, Dependency, package::Metadata};
+use tg::{return_error, Result, Subpath, WrapErr,  Dependency, package::Metadata};
 
 pub mod lockfile;
 pub mod specifier;
@@ -273,7 +272,7 @@ async fn scan(
 	client: &dyn tg::Client,
 	package_path: PathBuf,
 	visited: &mut BTreeMap<PathBuf, bool>,
-	roots: &mut Vec<(tg::Directory, Vec<tg::dependency::Registry>)>,
+	roots: &mut Vec<(tg::Directory, Vec<tg::Dependency>)>,
 ) -> tg::Result<()> {
 	debug_assert!(package_path.is_absolute());
 	match visited.get(&package_path) {
@@ -338,15 +337,15 @@ async fn scan(
 		// Recurse into the dependencies.
 		for import in &analyze_output.imports {
 			match import {
-				tangram_lsp::Import::Dependency(tg::Dependency::Path(dependency)) => {
+				tangram_lsp::Import::Dependency(dependency) if dependency.path.is_some() => {
 					// recurse
 					let package_path = package_path
-						.join(dependency.to_string())
+						.join(dependency.path.as_ref().unwrap().to_string())
 						.canonicalize()
 						.wrap_err("Failed to canonicalize path.")?;
 					scan(client, package_path, visited, roots).await?;
 				},
-				tangram_lsp::Import::Dependency(tg::Dependency::Registry(dependency)) => {
+				tangram_lsp::Import::Dependency(dependency) => {
 					dependencies.push(dependency.clone());
 				},
 				_ => (),
@@ -508,13 +507,10 @@ impl Analysis {
 		self.metadata.version.as_deref().ok_or(tg::error!("Missing package version."))
 	}
 
-	pub fn registry_dependencies(&self) -> impl Iterator<Item = &'_ tg::dependency::Registry> {
+	pub fn registry_dependencies(&self) -> impl Iterator<Item = &'_ tg::Dependency> {
 		self.dependencies
 			.iter()
-			.filter_map(|dependency| match dependency {
-				tg::Dependency::Registry(dependency) => Some(dependency),
-				tg::Dependency::Path(_) => None
-			})
+			.filter(|dependency| dependency.path.is_none())
 	}
 }
 
@@ -538,9 +534,4 @@ impl Analysis {
 // 		} else {
 // 			return_error!("Missing package metadata.")
 // 		}
-<<<<<<< HEAD
 // 	}
->>>>>>> 9663340 (WIP: port version solving code to tangram_package.)
-=======
-// 	}
->>>>>>> 4794969 (WIP on package cache.)

@@ -30,7 +30,7 @@ pub enum Error {
 		previous_version: String,
 
 		/// A list of dependencies of `previous_version` that caused an error.
-		erroneous_dependencies: Vec<(tg::dependency::Registry, Error)>,
+		erroneous_dependencies: Vec<(tg::Dependency, Error)>,
 	},
 
 	/// Semantive version parsing error.
@@ -44,7 +44,7 @@ pub enum Error {
 pub async fn solve(
 	client: &dyn Client,
 	root: tg::package::Metadata,
-	dependencies: Vec<tg::dependency::Registry>,
+	dependencies: Vec<tg::Dependency>,
 ) -> Result<tg::Lock, Report> {
 	// Create the input to the solver.
 	let mut context = Context::new(client);
@@ -95,7 +95,7 @@ async fn lock(
 		};
 
 		let metadata = tg::package::Metadata {
-			name: Some(dependency.name.clone()),
+			name: dependency.name.clone(),
 			version: Some(version),
 			description: None,
 		};
@@ -110,7 +110,7 @@ async fn lock(
 
 		let lock = lock(context, solution, unlocked).await?;
 		let entry = tg::lock::Entry { lock, package };
-		locked_dependencies.insert(tg::Dependency::Registry(dependency), entry);
+		locked_dependencies.insert(dependency, entry);
 	}
 
 	let lock = tg::Lock::with_object(tg::lock::Object {
@@ -149,7 +149,8 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 		let permanent = current_frame
 			.solution
 			.permanent
-			.get(&dependant.dependency.name);
+			.get(dependant.dependency.name.as_ref().unwrap());
+
 		let partial = current_frame.solution.partial.get(&dependant);
 		match (permanent, partial) {
 			// Case 0: There is no solution for this package yet.
@@ -158,7 +159,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 
 				// Note: this bit is tricky. The next frame will always have an empty set of remaining versions, because by construction it will never have been tried before. However we need to get a list of versions to attempt, which we will push onto the stack.
 				if current_frame.remaining_versions.is_none() {
-					let all_versions = match context.lookup(&dependant.dependency.name).await {
+					let all_versions = match context.lookup(dependant.dependency.name.as_ref().unwrap()).await {
 						Ok(all_versions) => all_versions,
 						Err(e) => {
 							tracing::error!(?dependant, ?e, "Failed to get versions of package.");
@@ -203,7 +204,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 
 						// Add all the dependencies to the stack.
 						let metadata = tg::package::Metadata {
-							name: Some(dependant.dependency.name.clone()),
+							name: dependant.dependency.name.clone(),
 							version: Some(version.clone()),
 							description: None,
 						};
@@ -259,7 +260,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 								let error = Error::PackageVersionConflict;
 								if let Some(frame_) = try_backtrack(
 									&history,
-									&dependant.dependency.name,
+									dependant.dependency.name.as_ref().unwrap(),
 									error.clone(),
 								) {
 									next_frame = frame_;
@@ -290,7 +291,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 			// Case 2: We only have a partial solution for this dependency and need to make sure we didn't create a cycle.
 			(_, Some(Mark::Temporary(version))) => {
 				let metadata = tg::package::Metadata {
-					name: Some(dependant.dependency.name.clone()),
+					name: dependant.dependency.name.clone(),
 					version: Some(version.clone()),
 					description: None,
 				};
@@ -334,7 +335,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 					};
 
 					if let Some(frame_) =
-						try_backtrack(&history, &dependant.dependency.name, error.clone())
+						try_backtrack(&history, dependant.dependency.name.as_ref().unwrap(), error.clone())
 					{
 						next_frame = frame_;
 					} else {
@@ -358,7 +359,7 @@ async fn solve_inner(context: &mut Context, root: Unsolved) -> Solution {
 
 pub struct Context {
 	client: Box<dyn tg::Client>,
-	cache: HashMap<tg::package::Metadata, Vec<tg::dependency::Registry>>,
+	cache: HashMap<tg::package::Metadata, Vec<tg::Dependency>>,
 	cache2: HashMap<String, HashMap<String, Vec<Analysis>>>,
 }
 
@@ -372,7 +373,7 @@ pub struct Report {
 #[derive(Clone, Debug)]
 struct Unsolved {
 	metadata: tg::package::Metadata,
-	dependencies: Vec<tg::dependency::Registry>,
+	dependencies: Vec<tg::Dependency>,
 }
 
 #[derive(Clone, Debug)]
@@ -385,7 +386,7 @@ struct Solution {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Dependant {
 	metadata: tg::package::Metadata,
-	dependency: tg::dependency::Registry,
+	dependency: tg::Dependency,
 }
 
 #[derive(Clone, Debug)]
@@ -411,7 +412,7 @@ impl Context {
 	}
 
 	// Check if a package satisfies a dependency.
-	fn matches(&self, version: &str, dependency: &tg::dependency::Registry) -> tg::Result<bool> {
+	fn matches(&self, version: &str, dependency: &tg::Dependency) -> tg::Result<bool> {
 		let Some(constraint) = dependency.version.as_ref() else {
 			return Ok(true);
 		};
@@ -436,7 +437,7 @@ impl Context {
 	async fn dependencies(
 		&mut self,
 		metadata: &tg::package::Metadata,
-	) -> tg::Result<&'_ [tg::dependency::Registry]> {
+	) -> tg::Result<&'_ [tg::Dependency]> {
 		if !self.cache.contains_key(metadata) {
 			let dependencies = self.scan_registry_dependencies(metadata).await?;
 			self.cache.insert(metadata.clone(), dependencies);
@@ -494,7 +495,7 @@ impl Context {
 	async fn scan_registry_dependencies(
 		&self,
 		metadata: &tg::package::Metadata,
-	) -> tg::Result<Vec<tg::dependency::Registry>> {
+	) -> tg::Result<Vec<tg::Dependency>> {
 		let name = metadata
 			.name
 			.as_ref()
@@ -514,12 +515,8 @@ impl Context {
 		let dependencies = scan_direct_dependencies(self.client.as_ref(), artifact)
 			.await?
 			.into_iter()
-			.filter_map(|dependency| {
-				if let tg::Dependency::Registry(d) = dependency {
-					Some(d)
-				} else {
-					None
-				}
+			.filter(|dependency| {
+				dependency.path.is_none()
 			})
 			.collect();
 
@@ -575,7 +572,7 @@ impl Solution {
 		// Update the global solution.
 		let _old = solution
 			.permanent
-			.insert(dependent.dependency.name.clone(), complete.clone());
+			.insert(dependent.dependency.name.clone().unwrap(), complete.clone());
 
 		// Update the local solution.
 		let _old = solution
@@ -658,11 +655,11 @@ impl Report {
 				previous_version,
 				erroneous_dependencies,
 			} => {
-				writeln!(f, "{} {previous_version} has errors:", dependency.name)?;
+				writeln!(f, "{} {previous_version} has errors:", dependency.name.as_ref().unwrap())?;
 				for (child, error) in erroneous_dependencies {
 					let dependent = Dependant {
 						metadata: tg::package::Metadata {
-							name: Some(dependency.name.clone()),
+							name: Some(dependency.name.clone().unwrap()),
 							version: Some(previous_version.clone()),
 							description: None,
 						},

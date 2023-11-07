@@ -13,14 +13,14 @@ async fn simple_diamond() {
 			"simple_diamond_A",
 			"1.0.0",
 			&[
-				tg::dependency::Registry {
-					name: "simple_diamond_B".into(),
-					version: Some("^1.0".into()),
-				},
-				tg::dependency::Registry {
-					name: "simple_diamond_C".into(),
-					version: Some("^1.0".into()),
-				},
+				tg::Dependency::with_name_and_version(
+					"simple_diamond_B".into(),
+					Some("^1.0".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"simple_diamond_C".into(),
+					Some("^1.0".into()),
+				),
 			],
 		)
 		.await;
@@ -28,10 +28,10 @@ async fn simple_diamond() {
 		.create_mock_package(
 			"simple_diamond_B",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "simple_diamond_D".into(),
-				version: Some("^1.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"simple_diamond_D".into(),
+				Some("^1.0".into()),
+		)],
 		)
 		.await;
 
@@ -39,10 +39,10 @@ async fn simple_diamond() {
 		.create_mock_package(
 			"simple_diamond_C",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "simple_diamond_D".into(),
-				version: Some("^1.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"simple_diamond_D".into(),
+				Some("^1.0".into()),
+			)],
 		)
 		.await;
 	client
@@ -75,14 +75,14 @@ async fn simple_backtrack() {
 			"simple_backtrack_A",
 			"1.0.0",
 			&[
-				tg::dependency::Registry {
-					name: "simple_backtrack_B".into(),
-					version: Some("^1.2.3".into()),
-				},
-				tg::dependency::Registry {
-					name: "simple_backtrack_C".into(),
-					version: Some("<1.2.3".into()),
-				},
+				tg::Dependency::with_name_and_version(
+					"simple_backtrack_B".into(),
+					Some("^1.2.3".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"simple_backtrack_C".into(),
+					Some("<1.2.3".into()),
+				),
 			],
 		)
 		.await;
@@ -90,10 +90,10 @@ async fn simple_backtrack() {
 		.create_mock_package(
 			"simple_backtrack_B",
 			"1.2.3",
-			&[tg::dependency::Registry {
-				name: "simple_backtrack_C".into(),
-				version: Some("<1.2.3".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"simple_backtrack_C".into(),
+				Some("<1.2.3".into()),
+			)],
 		)
 		.await;
 	client
@@ -129,14 +129,14 @@ async fn diamond_backtrack() {
 			"diamond_backtrack_A",
 			"1.0.0",
 			&[
-				tg::dependency::Registry {
-					name: "diamond_backtrack_B".into(),
-					version: Some("1.0.0".into()),
-				},
-				tg::dependency::Registry {
-					name: "diamond_backtrack_C".into(),
-					version: Some("1.0.0".into()),
-				},
+				tg::Dependency::with_name_and_version(
+					"diamond_backtrack_B".into(),
+					Some("1.0.0".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"diamond_backtrack_C".into(),
+					Some("1.0.0".into()),
+				),
 			],
 		)
 		.await;
@@ -144,20 +144,20 @@ async fn diamond_backtrack() {
 		.create_mock_package(
 			"diamond_backtrack_B",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "diamond_backtrack_D".into(),
-				version: Some("<1.5.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"diamond_backtrack_D".into(),
+				Some("<1.5.0".into()),
+			)],
 		)
 		.await;
 	client
 		.create_mock_package(
 			"diamond_backtrack_C",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "diamond_backtrack_D".into(),
-				version: Some("<1.3.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"diamond_backtrack_D".into(),
+				Some("<1.3.0".into()),
+		)],
 		)
 		.await;
 	client
@@ -201,30 +201,30 @@ async fn cycle_exists() {
 		.create_mock_package(
 			"cycle_exists_A",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "cycle_exists_B".into(),
-				version: Some("1.0.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"cycle_exists_B".into(),
+				Some("1.0.0".into()),
+			)],
 		)
 		.await;
 	client
 		.create_mock_package(
 			"cycle_exists_B",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "cycle_exists_C".into(),
-				version: Some("1.0.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"cycle_exists_C".into(),
+				Some("1.0.0".into()),
+			)],
 		)
 		.await;
 	client
 		.create_mock_package(
 			"cycle_exists_C",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "cycle_exists_B".into(),
-				version: Some("1.0.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"cycle_exists_B".into(),
+				Some("1.0.0".into()),
+			)],
 		)
 		.await;
 
@@ -250,14 +250,14 @@ async fn diamond_incompatible_versions() {
 			"diamond_incompatible_versions_A",
 			"1.0.0",
 			&[
-				tg::dependency::Registry {
-					name: "diamond_incompatible_versions_B".into(),
-					version: Some("1.0.0".into()),
-				},
-				tg::dependency::Registry {
-					name: "diamond_incompatible_versions_C".into(),
-					version: Some("1.0.0".into()),
-				},
+				tg::Dependency::with_name_and_version(
+					"diamond_incompatible_versions_B".into(),
+					Some("1.0.0".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"diamond_incompatible_versions_C".into(),
+					Some("1.0.0".into()),
+				),
 			],
 		)
 		.await;
@@ -265,20 +265,20 @@ async fn diamond_incompatible_versions() {
 		.create_mock_package(
 			"diamond_incompatible_versions_B",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "diamond_incompatible_versions_D".into(),
-				version: Some("<1.2.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"diamond_incompatible_versions_D".into(),
+				Some("<1.2.0".into()),
+		)],
 		)
 		.await;
 	client
 		.create_mock_package(
 			"diamond_incompatible_versions_C",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "diamond_incompatible_versions_D".into(),
-				version: Some(">1.3.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"diamond_incompatible_versions_D".into(),
+				Some(">1.3.0".into()),
+		)],
 		)
 		.await;
 
@@ -319,22 +319,22 @@ async fn complex_diamond() {
 			"complex_diamond_A",
 			"1.0.0",
 			&[
-				tg::dependency::Registry {
-					name: "complex_diamond_B".into(),
-					version: Some("^1.0.0".into()),
-				},
-				tg::dependency::Registry {
-					name: "complex_diamond_E".into(),
-					version: Some("^1.1.0".into()),
-				},
-				tg::dependency::Registry {
-					name: "complex_diamond_C".into(),
-					version: Some("^1.0.0".into()),
-				},
-				tg::dependency::Registry {
-					name: "complex_diamond_D".into(),
-					version: Some("^1.0.0".into()),
-				},
+				tg::Dependency::with_name_and_version(
+					"complex_diamond_B".into(),
+					Some("^1.0.0".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"complex_diamond_E".into(),
+					Some("^1.1.0".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"complex_diamond_C".into(),
+					Some("^1.0.0".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"complex_diamond_D".into(),
+					Some("^1.0.0".into()),
+				),
 			],
 		)
 		.await;
@@ -342,10 +342,10 @@ async fn complex_diamond() {
 		.create_mock_package(
 			"complex_diamond_B",
 			"1.0.0",
-			&[tg::dependency::Registry {
-				name: "complex_diamond_D".into(),
-				version: Some("^1.0.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"complex_diamond_D".into(),
+				Some("^1.0.0".into()),
+			)],
 		)
 		.await;
 	client
@@ -353,14 +353,14 @@ async fn complex_diamond() {
 			"complex_diamond_C",
 			"1.0.0",
 			&[
-				tg::dependency::Registry {
-					name: "complex_diamond_D".into(),
-					version: Some("^1.0.0".into()),
-				},
-				tg::dependency::Registry {
-					name: "complex_diamond_E".into(),
-					version: Some(">1.0.0".into()),
-				},
+				tg::Dependency::with_name_and_version(
+					"complex_diamond_D".into(),
+					Some("^1.0.0".into()),
+				),
+				tg::Dependency::with_name_and_version(
+					"complex_diamond_E".into(),
+					Some(">1.0.0".into()),
+				),
 			],
 		)
 		.await;
@@ -369,20 +369,20 @@ async fn complex_diamond() {
 		.create_mock_package(
 			"complex_diamond_D",
 			"1.3.0",
-			&[tg::dependency::Registry {
-				name: "complex_diamond_E".into(),
-				version: Some("=1.0.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"complex_diamond_E".into(),
+				Some("=1.0.0".into()),
+			)],
 		)
 		.await;
 	client
 		.create_mock_package(
 			"complex_diamond_D",
 			"1.2.0",
-			&[tg::dependency::Registry {
-				name: "complex_diamond_E".into(),
-				version: Some("^1.0.0".into()),
-			}],
+			&[tg::Dependency::with_name_and_version(
+				"complex_diamond_E".into(),
+				Some("^1.0.0".into()),
+			)],
 		)
 		.await;
 	client
@@ -424,7 +424,7 @@ pub struct MockClient {
 #[derive(Debug)]
 struct State {
 	packages: BTreeMap<String, Vec<MockPackage>>,
-	dependencies: HashMap<tg::package::Metadata, Vec<tg::dependency::Registry>>,
+	dependencies: HashMap<tg::package::Metadata, Vec<tg::Dependency>>,
 }
 
 #[derive(Debug)]
@@ -475,15 +475,15 @@ impl MockClient {
 		&self,
 		name: &str,
 		version: &str,
-		dependencies: &[tg::dependency::Registry],
+		dependencies: &[tg::Dependency],
 	) {
 		let imports = dependencies
 			.iter()
 			.map(|dep| {
 				format!(
 					r#"import * as {} from "tangram:{}@{}"#,
-					dep.name,
-					dep.name,
+					dep.name.as_ref().unwrap(),
+					dep.name.as_ref().unwrap(),
 					dep.version.as_ref().unwrap()
 				)
 			})
@@ -756,5 +756,16 @@ impl tg::Client for MockClient {
 
 		self.publish(metadata, tg::Artifact::with_id(id.clone()));
 		Ok(())
+	}
+
+	async fn get_package_metadata(&self, id: &tg::Id) -> tg::Result<Option<tg::package::Metadata>> {
+		self.client.get_package_metadata(id).await
+	}
+
+	async fn get_package_dependencies(
+		&self,
+		id: &tg::Id,
+	) -> tg::Result<Option<Vec<tg::Dependency>>> {
+		self.client.get_package_dependencies(id).await
 	}
 }
