@@ -115,7 +115,7 @@ impl Server {
 		}
 	}
 
-	// #[tracing::instrument(skip(self, decoder), ret)]
+	#[tracing::instrument(skip(self, decoder), ret)]
 	async fn handle_message(
 		&self,
 		message: Message,
@@ -169,7 +169,7 @@ impl Server {
 		Ok(None)
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	fn handle_null(&self) -> ReplyBody {
 		rpc::success(None, ())
 	}
@@ -343,7 +343,7 @@ pub async fn mount(mountpoint: &Path, port: u16) -> crate::Result<()> {
 use num::ToPrimitive;
 
 impl Server {
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_access(&self, ctx: &Context, arg: ACCESS4args) -> ACCESS4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return ACCESS4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -380,7 +380,7 @@ impl Server {
 		ACCESS4res::NFS4_OK(resok)
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_close(&self, ctx: &Context, arg: CLOSE4args) -> CLOSE4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return CLOSE4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -406,7 +406,7 @@ impl Server {
 		CLOSE4res::NFS4_OK(stateid)
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_getattr(&self, ctx: &Context, arg: GETATTR4args) -> GETATTR4res {
 		let Some(fh) = ctx.current_file_handle else {
 			tracing::error!("Missing current file handle.");
@@ -494,7 +494,7 @@ impl Server {
 		LOCKU4res::NFS4_OK(arg.lock_stateid)
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_lookup(&self, ctx: &mut Context, arg: LOOKUP4args) -> LOOKUP4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return LOOKUP4res {
@@ -574,11 +574,7 @@ impl Server {
 					tracing::error!(?e, ?name, "Failed to get directory entries.");
 					nfsstat4::NFS4ERR_IO
 				})?;
-				let child = entries.get(name);
-				// if child.is_none() {
-				// 	tracing::error!(?name, "Failed to get the child.");
-				// }
-				child.ok_or(nfsstat4::NFS4ERR_NOENT)?.clone()
+				entries.get(name).ok_or(nfsstat4::NFS4ERR_NOENT)?.clone()
 			},
 
 			_ => unreachable!(),
@@ -634,7 +630,7 @@ impl Server {
 		Ok(child_node)
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_open(&self, ctx: &mut Context, arg: OPEN4args) -> OPEN4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return OPEN4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -695,7 +691,7 @@ impl Server {
 		OPEN4res::NFS4_OK(resok)
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_read(&self, ctx: &Context, arg: READ4args) -> READ4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return READ4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -753,7 +749,7 @@ impl Server {
 		READ4res::NFS4_OK(READ4resok { eof, data })
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_readdir(&self, ctx: &Context, arg: READDIR4args) -> READDIR4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return READDIR4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -830,7 +826,7 @@ impl Server {
 		READDIR4res::NFS4_OK(READDIR4resok { cookieverf, reply })
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_readlink(&self, ctx: &Context) -> READLINK4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -867,14 +863,14 @@ impl Server {
 		})
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub fn handle_renew(&self, _arg: RENEW4args) -> RENEW4res {
 		RENEW4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_sec_info(&self, ctx: &Context, arg: SECINFO4args) -> SECINFO4res {
 		let Some(parent) = ctx.current_file_handle else {
 			return SECINFO4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -888,7 +884,7 @@ impl Server {
 		}
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_set_client_id(&self, arg: SETCLIENTID4args) -> SETCLIENTID4res {
 		let mut state = self.state.write().await;
 		let Some(client) = state.clients.get(&arg.client.id) else {
@@ -928,7 +924,7 @@ impl Server {
 		}
 	}
 
-	// #[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self))]
 	pub async fn handle_set_client_id_confirm(
 		&self,
 		arg: SETCLIENTID_CONFIRM4args,
