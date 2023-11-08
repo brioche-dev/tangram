@@ -27,6 +27,7 @@ pub struct Server {
 /// The server's state.
 struct State {
 	nodes: BTreeMap<NodeId, Arc<Node>>,
+	index: u64,
 	handles: BTreeMap<FileHandle, Arc<tokio::sync::RwLock<FileHandleData>>>,
 }
 
@@ -129,8 +130,13 @@ impl Server {
 			},
 		});
 		let nodes = [(ROOT_NODE_ID, root)].into();
+		let index = 0;
 		let handles = BTreeMap::default();
-		let state = State { nodes, handles };
+		let state = State {
+			nodes,
+			index,
+			handles,
+		};
 		let state = Arc::new(tokio::sync::RwLock::new(state));
 		Self { client, state }
 	}
@@ -395,10 +401,13 @@ impl Server {
 		let file_handle_data = Arc::new(tokio::sync::RwLock::new(file_handle_data));
 
 		// Add the file handle to the state.
-		let mut state = self.state.write().await;
-		let file_handle = FileHandle(state.handles.len().to_u64().unwrap() + 1);
-		state.handles.insert(file_handle, file_handle_data);
-		drop(state);
+		let file_handle = {
+			let mut state = self.state.write().await;
+			state.index += 1;
+			let file_handle = FileHandle(state.index);
+			state.handles.insert(file_handle, file_handle_data);
+			file_handle
+		};
 
 		// Create the response.
 		let response = sys::fuse_open_out {
