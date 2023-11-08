@@ -1,4 +1,4 @@
-use super::types::{cb_client4, lock_owner4, stateid4, verifier4, NFS4_OTHER_SIZE};
+use super::types::{cb_client4, stateid4, verifier4};
 use num::ToPrimitive;
 use std::{
 	collections::{BTreeMap, HashMap},
@@ -12,8 +12,6 @@ pub struct State {
 	pub nodes: BTreeMap<u64, Arc<Node>>,
 	pub blob_readers: BTreeMap<stateid4, Arc<tokio::sync::RwLock<blob::Reader>>>,
 	pub clients: HashMap<Vec<u8>, ClientData>,
-	pub lock_data: (u32, Vec<u32>),
-	pub lock_owners: HashMap<lock_owner4, stateid4>,
 }
 
 impl Default for State {
@@ -32,8 +30,6 @@ impl Default for State {
 			nodes,
 			blob_readers: BTreeMap::default(),
 			clients: HashMap::new(),
-			lock_data: (0, Vec::new()),
-			lock_owners: HashMap::new(),
 		}
 	}
 }
@@ -100,22 +96,5 @@ impl State {
 	pub fn new_client_data(&self) -> (u64, verifier4) {
 		let new_id = (self.clients.len() + 1000).to_u64().unwrap();
 		(new_id, new_id.to_be_bytes())
-	}
-
-	pub fn acquire_lock(&mut self) -> stateid4 {
-		let (count, stack) = &mut self.lock_data;
-		let other = [0; NFS4_OTHER_SIZE];
-		if let Some(seqid) = stack.pop() {
-			stateid4 { seqid, other }
-		} else {
-			let seqid = *count;
-			*count += 1;
-			stateid4 { seqid, other }
-		}
-	}
-
-	pub fn release_lock(&mut self, lock_stateid: &stateid4) {
-		let (_, stack) = &mut self.lock_data;
-		stack.push(lock_stateid.seqid);
 	}
 }
