@@ -13,6 +13,9 @@ pub struct Args {
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
+
+	#[arg(short, long, default_value = "false")]
+	pub runtime: bool,
 }
 
 impl Cli {
@@ -20,28 +23,35 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
-		// Create the package.
-		let (package, lock) = tangram_package::new(client, &args.package)
-			.await
-			.wrap_err("Failed to create the package.")?;
-
 		// Create the language server.
 		let server =
 			tangram_lsp::Server::new(client.downgrade_box(), tokio::runtime::Handle::current());
 
-		// Create the module.
-		let module = tangram_lsp::Module::Normal(tangram_lsp::module::Normal {
-			package: package.id(client).await?.clone(),
-			path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
-			lock: lock.id(client).await?.clone(),
-		});
+		let (module, path) = if args.runtime {
+			// Create the module.
+			let module = tangram_lsp::Module::Library(tangram_lsp::module::Library {
+				path: "tangram.d.ts".parse().unwrap(),
+			});
+			(module, "tangarm.d.ts")
+		} else {
+			// Create the package.
+			let (package, lock) = tangram_package::new(client, &args.package)
+				.await
+				.wrap_err("Failed to create the package.")?;
+			// Create the module.
+			let module = tangram_lsp::Module::Normal(tangram_lsp::module::Normal {
+				package: package.id(client).await?.clone(),
+				path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
+				lock: lock.id(client).await?.clone(),
+			});
+			(module, ROOT_MODULE_FILE_NAME)
+		};
 
 		// Get the docs.
 		let docs = server.docs(&module).await?;
-
 		// Render the docs to JSON.
 		let docs = serde_json::to_string_pretty(&serde_json::json!({
-			ROOT_MODULE_FILE_NAME: docs,
+			path.to_owned(): docs,
 		}))
 		.wrap_err("Failed to serialize the docs.")?;
 

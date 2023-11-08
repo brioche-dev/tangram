@@ -272,7 +272,17 @@ export let handle = (request: Request): Response => {
 		typescript.fileNameFromModule(request.module),
 	)!;
 	let symbol = typeChecker.getSymbolAtLocation(sourceFile)!;
-	let exports_ = typeChecker.getExportsOfModule(symbol);
+	let exports_;
+	if (!symbol) {
+		exports_ = typeChecker
+			.getSymbolsInScope(sourceFile, ts.SymbolFlags.ModuleMember)
+			.filter(
+				(s) =>
+					s.getDeclarations()?.some((d) => d.getSourceFile() === sourceFile),
+			);
+	} else {
+		exports_ = typeChecker.getExportsOfModule(symbol);
+	}
 
 	// Convert the exports.
 	let exports: { [key: string]: Symbol } = {};
