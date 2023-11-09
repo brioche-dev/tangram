@@ -119,13 +119,7 @@ impl PackageExt for tg::Directory {
 			}
 		}
 
-		let dependencies = dependencies
-			.into_iter()
-			.map(|dependency| match &dependency.path {
-				Some(_) => unimplemented!(),
-				None => dependency,
-			})
-			.collect::<Vec<_>>();
+		let dependencies = dependencies.into_iter().collect::<Vec<_>>();
 
 		Ok(dependencies.into_iter().collect::<Vec<_>>())
 	}

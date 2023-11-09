@@ -144,10 +144,7 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 			last_error: None,
 		};
 
-		let permanent = current_frame
-			.solution
-			.permanent
-			.get(dependant.dependency.name.as_ref().unwrap());
+		let permanent = current_frame.solution.get_permanent(context, &dependant);
 
 		let partial = current_frame.solution.partial.get(&dependant);
 		match (permanent, partial) {
@@ -166,9 +163,11 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 							tracing::error!(?dependant, ?e, "Failed to get versions of package.");
 
 							// We cannot solve this dependency.
-							current_frame
-								.solution
-								.mark_permanently(dependant, Err(Error::Other(e)));
+							current_frame.solution.mark_permanently(
+								context,
+								dependant,
+								Err(Error::Other(e)),
+							);
 
 							// This is ugly, but writing out the full match statemenet is uglier and we already have a deeply nested tree of branches.
 							break 'a;
@@ -192,8 +191,7 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 				// Try and pick a version.
 				let package = context
 					.try_resolve(
-						&dependant.package,
-						&dependant.dependency,
+						&dependant,
 						current_frame.remaining_versions.as_mut().unwrap(),
 					)
 					.await;
@@ -228,7 +226,9 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 					Err(e) => {
 						tracing::error!(?dependant, ?e, "No solution exists.");
 						next_frame.solution =
-							next_frame.solution.mark_permanently(dependant, Err(e));
+							next_frame
+								.solution
+								.mark_permanently(context, dependant, Err(e));
 					},
 				}
 			},
@@ -245,9 +245,11 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 						// Case 1.1: The happy path. Our version is solved and it matches this constraint.
 						match context.matches(&version, &dependant.dependency) {
 							Ok(true) => {
-								next_frame.solution = next_frame
-									.solution
-									.mark_permanently(dependant, Ok(package.clone()));
+								next_frame.solution = next_frame.solution.mark_permanently(
+									context,
+									dependant,
+									Ok(package.clone()),
+								);
 							},
 							// Case 1.3: The unhappy path. We need to fail.
 							Ok(false) => {
@@ -261,23 +263,30 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 								} else {
 									tracing::error!(?dependant, "No solution exists.");
 									// There is no solution for this package. Add an error.
-									next_frame.solution =
-										next_frame.solution.mark_permanently(dependant, Err(error));
+									next_frame.solution = next_frame.solution.mark_permanently(
+										context,
+										dependant,
+										Err(error),
+									);
 								}
 							},
 							Err(e) => {
 								tracing::error!(?dependant, ?e, "Existing solution is an error.");
-								next_frame
-									.solution
-									.mark_permanently(dependant, Err(Error::Other(e)));
+								next_frame.solution.mark_permanently(
+									context,
+									dependant,
+									Err(Error::Other(e)),
+								);
 							},
 						}
 					},
 					// Case 1.2: The less happy path. We know there's no solution to this package because we've already failed to satisfy some other set of constraints.
 					Err(e) => {
-						next_frame.solution = next_frame
-							.solution
-							.mark_permanently(dependant, Err(e.clone()));
+						next_frame.solution = next_frame.solution.mark_permanently(
+							context,
+							dependant,
+							Err(e.clone()),
+						);
 					},
 				}
 			},
@@ -318,9 +327,11 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 
 				// If none of the children contain errors, we mark this edge permanently
 				if erroneous_children.is_empty() {
-					next_frame.solution = next_frame
-						.solution
-						.mark_permanently(dependant, Ok(package.clone()));
+					next_frame.solution = next_frame.solution.mark_permanently(
+						context,
+						dependant,
+						Ok(package.clone()),
+					);
 				} else {
 					// Successful lookups of the version are memoized, so it's safe to unwrap here.
 					let previous_version = context.version(package).await.unwrap().into();
@@ -339,7 +350,9 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 					} else {
 						// This means that backtracking totally failed and we need to fail with an error
 						next_frame.solution =
-							next_frame.solution.mark_permanently(dependant, Err(error));
+							next_frame
+								.solution
+								.mark_permanently(context, dependant, Err(error));
 					}
 				}
 			},
@@ -426,6 +439,32 @@ impl Context {
 		}
 	}
 
+	pub fn is_path_dependency(&self, dependant: &Dependant) -> bool {
+		self.path_dependencies.get(&dependant.package).is_some()
+			&& dependant.dependency.path.is_some()
+	}
+
+	pub fn resolve_path_dependency(&self, dependant: &Dependant) -> Option<Result<tg::Id, Error>> {
+		let Dependant {
+			package,
+			dependency,
+		} = dependant;
+		if let (Some(path_dependencies), Some(path)) = (
+			self.path_dependencies.get(package),
+			dependency.path.as_ref(),
+		) {
+			let result = path_dependencies
+				.get(path)
+				.cloned()
+				.ok_or(Error::Other(tg::error!(
+					"Could not resolve path dependency for {dependency}."
+				)));
+			Some(result)
+		} else {
+			None
+		}
+	}
+
 	pub fn add_root(&mut self, package: tg::Id) {
 		self.roots.push(package);
 	}
@@ -450,27 +489,14 @@ impl Context {
 	// Try and get the next version from a list of remaining ones. Returns an error if the list is empty.
 	async fn try_resolve(
 		&mut self,
-		package: &tg::Id,
-		dependency: &tg::Dependency,
+		dependant: &Dependant,
 		remaining_versions: &mut im::Vector<String>,
 	) -> Result<tg::Id, Error> {
-		debug_assert!(
-			dependency.name.is_some() && dependency.version.is_some() && dependency.path.is_none(),
-			"try_get_version is only meaningful for registry dependencies."
-		);
-		let name = dependency.name.as_ref().unwrap();
+		let name = dependant.dependency.name.as_ref().unwrap();
 
 		// First check if we have a path dependency table for this package and this is a path dependency. If we cannot look up the path dependency we return an error.
-		if let (Some(path_dependencies), Some(path)) = (
-			self.path_dependencies.get(package),
-			dependency.path.as_ref(),
-		) {
-			return path_dependencies
-				.get(path)
-				.cloned()
-				.ok_or(Error::Other(tg::error!(
-					"Could not find path dependency for {dependency}."
-				)));
+		if let Some(result) = self.resolve_path_dependency(dependant) {
+			return result;
 		}
 
 		// If the cache doesn't contain the package, we need to go out to the client to retrieve the ID. If this errors, we return immediately. If there is no package available for this version (which is extremely unlikely) we loop until we get the next version that's either in the cache, or available from the client.
@@ -572,6 +598,18 @@ impl Solution {
 		}
 	}
 
+	// If there's an existing solution for this dependant, return it. Path dependencies are ignored.
+	fn get_permanent(
+		&self,
+		context: &Context,
+		dependant: &Dependant,
+	) -> Option<&Result<tg::Id, Error>> {
+		if context.is_path_dependency(dependant) {
+			return None;
+		}
+		self.permanent.get(dependant.dependency.name.as_ref()?)
+	}
+
 	/// Mark this dependant with a temporary solution.
 	fn mark_temporarily(&self, dependant: Dependant, package: tg::Id) -> Self {
 		let mut solution = self.clone();
@@ -580,13 +618,20 @@ impl Solution {
 	}
 
 	/// Mark the dependant permanently, adding it to the list of known solutions and the partial solutions.
-	fn mark_permanently(&self, dependant: Dependant, complete: Result<tg::Id, Error>) -> Self {
+	fn mark_permanently(
+		&self,
+		context: &Context,
+		dependant: Dependant,
+		complete: Result<tg::Id, Error>,
+	) -> Self {
 		let mut solution = self.clone();
 
 		// Update the global solution.
-		let _old = solution
-			.permanent
-			.insert(dependant.dependency.name.clone().unwrap(), complete.clone());
+		if !context.is_path_dependency(&dependant) {
+			let _old = solution
+				.permanent
+				.insert(dependant.dependency.name.clone().unwrap(), complete.clone());
+		}
 
 		// Update the local solution.
 		let _old = solution
@@ -705,37 +750,4 @@ impl fmt::Display for Mark {
 			Self::Temporary(version) => write!(f, "Incomplete({version})"),
 		}
 	}
-}
-
-pub async fn path_overrides(
-	client: &dyn Client,
-	root: tg::Directory,
-	resolver: impl Fn(tg::Directory, &tg::Relpath) -> Option<tg::Directory>,
-) -> tg::Result<HashMap<String, tg::Id>> {
-	let mut table = HashMap::new();
-	let mut stack = vec![root];
-	while let Some(next) = stack.pop() {
-		let package = next.id(client).await?.clone().into();
-		let Ok(Some(dependencies)) = client.get_package_dependencies(&package).await else {
-			continue;
-		};
-		let Ok(Some(metadata)) = client.get_package_metadata(&package).await else {
-			continue;
-		};
-		for dependency in dependencies {
-			match (&dependency.name, &metadata.name) {
-				(Some(dependency_name), Some(package_name)) if package_name == dependency_name => {
-					table.insert(dependency_name.clone(), package.clone());
-				},
-				_ => (),
-			}
-			if let Some(path) = dependency.path.as_ref() {
-				if let Some(package) = resolver(next.clone(), path) {
-					stack.push(package);
-				}
-			}
-		}
-	}
-
-	Ok(table)
 }

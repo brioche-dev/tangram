@@ -1,5 +1,5 @@
-use crate::lockfile::Lockfile;
 use crate::ROOT_MODULE_FILE_NAME;
+use crate::{lockfile::Lockfile, version::solve};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tangram_client as tg;
@@ -309,6 +309,117 @@ async fn diamond_incompatible_versions() {
 		.expect_err("Expected to fail with cycle detection.");
 
 	println!("{report}");
+}
+
+#[tokio::test]
+async fn diamond_with_path_dependencies() {
+	let foo = r#"
+		export let metadata = {
+			name: "foo",
+			version: "1.0.0",
+		};
+
+		import bar from "tangram:?path=./path/to/bar"
+		import baz from "tangram:baz@^1"
+		export default tg.target(() => tg`foo ${bar} {baz}`);
+	"#;
+
+	let bar = r#"
+		export let metadata = {
+			name: "bar",
+			version: "1.0.0",
+		};
+
+		import baz as baz from "tangram:baz@=1.2.3"
+		export default tg.target(() => tg`bar ${baz}`);
+	"#;
+	let baz = r#"
+		export let metadata = {
+			name: "baz",
+			version: "1.2.3",
+		};
+
+		export default tg.target(() => "baz");
+	"#;
+	let client = MockClient::new().await;
+
+	let foo = tg::Directory::new(
+		[(
+			ROOT_MODULE_FILE_NAME.into(),
+			tg::Artifact::from(
+				tg::File::builder(
+					tg::blob::Blob::with_reader(&client, foo.as_bytes())
+						.await
+						.unwrap(),
+				)
+				.build(),
+			),
+		)]
+		.into_iter()
+		.collect(),
+	);
+
+	let bar = tg::Directory::new(
+		[(
+			ROOT_MODULE_FILE_NAME.into(),
+			tg::Artifact::from(
+				tg::File::builder(
+					tg::blob::Blob::with_reader(&client, bar.as_bytes())
+						.await
+						.unwrap(),
+				)
+				.build(),
+			),
+		)]
+		.into_iter()
+		.collect(),
+	);
+
+	let baz = tg::Directory::new(
+		[(
+			ROOT_MODULE_FILE_NAME.into(),
+			tg::Artifact::from(
+				tg::File::builder(
+					tg::blob::Blob::with_reader(&client, baz.as_bytes())
+						.await
+						.unwrap(),
+				)
+				.build(),
+			),
+		)]
+		.into_iter()
+		.collect(),
+	);
+	client
+		.publish_package("", &baz.id(&client).await.unwrap().clone().into())
+		.await
+		.unwrap();
+
+	// Create the path dependency table.
+	let foo_id: tg::Id = foo.id(&client).await.unwrap().clone().into();
+	let foo_path_dependencies: BTreeMap<tg::Relpath, tg::Id> = [(
+		"./path/to/bar".parse().unwrap(),
+		bar.id(&client).await.unwrap().clone().into(),
+	)]
+	.into_iter()
+	.collect();
+	let path_dependencies = [(foo_id.clone(), foo_path_dependencies)]
+		.into_iter()
+		.collect();
+
+	// Lock using foo as the root.
+	let lock = solve(&client, foo_id, path_dependencies)
+		.await
+		.unwrap()
+		.expect("Failed to lock diamond with a path dependency.");
+
+	// Create the lockfile and print.
+	let lockfile = Lockfile::from_package(&client, foo.into(), lock)
+		.await
+		.unwrap();
+
+	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
+	println!("{lockfile}");
 }
 
 #[tokio::test]
