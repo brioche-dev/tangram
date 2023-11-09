@@ -5,11 +5,10 @@ use std::{
 	collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 	path::PathBuf,
 };
-
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
 use tangram_lsp::Module;
-use tg::{package::Metadata, return_error, Dependency, Result, Subpath, WrapErr};
+use tg::{package::Metadata, return_error, Dependency, Relpath, Result, Subpath, WrapErr};
 
 pub mod lockfile;
 pub mod specifier;
@@ -24,137 +23,45 @@ pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 /// The file name of the lockfile.
 pub const LOCKFILE_FILE_NAME: &str = "tangram.lock";
 
-// Create a package.
-#[async_recursion]
 pub async fn new(
 	client: &dyn tg::Client,
 	specifier: &Specifier,
 ) -> Result<(tg::Artifact, tg::Lock)> {
-	let package_path = match specifier {
-		Specifier::Path(path) => path,
-		Specifier::Registry(_) => unimplemented!(),
+	let (root_artifact, path_dependencies) = match specifier {
+		Specifier::Path(path) => {
+			// Scan, checking in any the path dependencies and includes.
+			let mut visited = BTreeMap::new();
+			let mut path_dependencies = BTreeMap::new();
+			let root_artifact =
+				analyze_package_at_path(client, path.clone(), &mut visited, &mut path_dependencies)
+					.await?;
+			(root_artifact, path_dependencies)
+		},
+		Specifier::Registry(specifier::Registry { name, version }) if version.is_some() => {
+			let version = version.as_deref().unwrap();
+			let id = client
+				.get_package_version(name, version)
+				.await?
+				.ok_or(tg::error!("Could not find package {name}@{version}."))?;
+			let root_artifact = tg::Artifact::with_id(id)
+				.try_unwrap_directory()
+				.wrap_err("Expected package artifact to be a directory.")?;
+			let path_dependencies = BTreeMap::new();
+			(root_artifact, path_dependencies)
+		},
+		_ => {
+			tg::return_error!("Creating locks for regsitry dependencies without a version specifiier is unsupported.");
+		},
 	};
 
-	// Create a builder for the directory.
-	let mut directory = tg::directory::Builder::default();
+	let root_id = root_artifact.id(client).await?.clone().into();
 
-	// Create the dependencies map.
-	let mut dependencies: BTreeMap<tg::Dependency, tg::lock::Entry> = BTreeMap::default();
+	// Now we have the root, we need to get its path overrides.
+	let lock = version::solve(client, root_id, path_dependencies)
+		.await?
+		.map_err(|e| tg::error!("Failed to solve dependency versions. {e}"))?;
 
-	// Create a queue of module paths to visit and a visited set.
-	let mut queue: VecDeque<tg::Subpath> =
-		VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
-	let mut visited: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
-
-	// Add each module and its includes to the directory.
-	while let Some(module_subpath) = queue.pop_front() {
-		// Get the module's path.
-		let module_path = package_path.join(module_subpath.to_string());
-
-		// Add the module to the package directory.
-		let artifact = tg::Artifact::check_in(client, &module_path).await?;
-		directory = directory.add(client, &module_subpath, artifact).await?;
-
-		// Get the module's text.
-		let permit = client.file_descriptor_semaphore().acquire().await;
-		let text = tokio::fs::read_to_string(&module_path)
-			.await
-			.wrap_err("Failed to read the module.")?;
-		drop(permit);
-
-		// Analyze the module.
-		let analyze_output = Module::analyze(text).wrap_err("Failed to analyze the module.")?;
-
-		// Add the includes to the package directory.
-		for include_path in analyze_output.includes {
-			// Get the included artifact's path in the package.
-			let included_artifact_subpath = module_subpath
-				.clone()
-				.into_relpath()
-				.parent()
-				.join(include_path.clone())
-				.try_into_subpath()
-				.wrap_err("Invalid include path.")?;
-
-			// Get the included artifact's path.
-			let included_artifact_path = package_path.join(included_artifact_subpath.to_string());
-
-			// Check in the artifact at the included path.
-			let included_artifact = tg::Artifact::check_in(client, &included_artifact_path).await?;
-
-			// Add the included artifact to the directory.
-			directory = directory
-				.add(client, &included_artifact_subpath, included_artifact)
-				.await?;
-		}
-
-		// Recurse into the dependencies.
-		for import in &analyze_output.imports {
-			if let tangram_lsp::Import::Dependency(dependency) = import {
-				// Ignore duplicate dependencies.
-				if dependencies.contains_key(dependency) {
-					continue;
-				}
-
-				// Convert the module dependency to a package dependency.
-				let dependency = match &dependency.path {
-					Some(dependency_path) => tg::Dependency::with_path(
-						module_subpath
-							.clone()
-							.into_relpath()
-							.parent()
-							.join(dependency_path.clone()),
-					),
-					None => dependency.clone(),
-				};
-
-				// Get the dependency package.
-				let Some(dependency_relpath) = &dependency.path else {
-					unimplemented!();
-				};
-
-				let dependency_package_path = package_path.join(dependency_relpath.to_string());
-				let (dependency_package, dependency_lock) =
-					new(client, &Specifier::Path(dependency_package_path.clone())).await?;
-
-				// Add the dependency.
-				dependencies.insert(
-					dependency.clone(),
-					tg::lock::Entry {
-						package: dependency_package,
-						lock: dependency_lock,
-					},
-				);
-			}
-		}
-
-		// Add the module subpath to the visited set.
-		visited.insert(module_subpath.clone());
-
-		// Add the unvisited path imports to the queue.
-		for import in &analyze_output.imports {
-			if let tangram_lsp::Import::Path(import) = import {
-				let imported_module_subpath = module_subpath
-					.clone()
-					.into_relpath()
-					.parent()
-					.join(import.clone())
-					.try_into_subpath()
-					.wrap_err("Failed to resolve the module path.")?;
-				if !visited.contains(&imported_module_subpath) {
-					queue.push_back(imported_module_subpath);
-				}
-			}
-		}
-	}
-
-	// Create the package directory.
-	let directory = directory.build();
-
-	// Create the lock.
-	let lock = tg::Lock::with_object(tg::lock::Object { dependencies });
-
-	Ok((directory.into(), lock))
+	Ok((root_artifact.into(), lock))
 }
 
 #[async_trait]
@@ -245,56 +152,30 @@ pub trait PackageExt {
 	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>>;
 }
 
-pub async fn new2(
-	client: &dyn tg::Client,
-	specifier: &Specifier,
-) -> Result<(tg::Artifact, tg::Lock)> {
-	let package_path = match specifier {
-		Specifier::Path(path) => path,
-		Specifier::Registry(_) => {
-			unimplemented!("Creating locks for registry dependencies is unsupported.")
-		},
-	};
-
-	// Create the context.
-	let context = version::Context::new(client);
-
-	// Collect the list of package roots.
-	let mut roots = Vec::new();
-
-	let mut visited = BTreeMap::new();
-	scan(client, package_path.clone(), &mut visited, &mut roots).await?;
-
-	// Now we have all of our roots we can solve.
-
-	todo!()
-}
-
-// Recursively scan packages and their path dependencies.
+// Recursively checkin a package, its includes, and path dependencies. Returns the directory artifact of the root package, and fills the path_dependencies table.
 #[async_recursion]
-async fn scan(
+async fn analyze_package_at_path(
 	client: &dyn tg::Client,
 	package_path: PathBuf,
-	visited: &mut BTreeMap<PathBuf, bool>,
-	roots: &mut Vec<(tg::Directory, Vec<tg::Dependency>)>,
-) -> tg::Result<()> {
+	visited: &mut BTreeMap<PathBuf, Option<tg::Directory>>,
+	path_dependencies: &mut BTreeMap<tg::Id, BTreeMap<Relpath, tg::Id>>,
+) -> tg::Result<tg::Directory> {
 	debug_assert!(package_path.is_absolute());
 	match visited.get(&package_path) {
-		Some(true) => return Ok(()),
-		Some(false) => return Err(tg::error!("Cyclical path dependencies found.")),
+		Some(Some(directory)) => return Ok(directory.clone()),
+		Some(None) => return Err(tg::error!("Cyclical path dependencies found.")),
 		None => (),
 	}
-	visited.insert(package_path.clone(), false);
+	visited.insert(package_path.clone(), None);
 
 	// Create a builder for the directory.
 	let mut directory = tg::directory::Builder::default();
 
-	// Create the dependencies vec.
-	let mut dependencies = Vec::new();
-
 	// Create a queue of module paths to visit and a visited set.
 	let mut queue: VecDeque<Subpath> = VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
 	let mut visited_modules: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
+
+	let mut package_path_dependencies = BTreeMap::new();
 
 	// Add each module and its includes to the directory.
 	while let Some(module_subpath) = queue.pop_front() {
@@ -347,10 +228,15 @@ async fn scan(
 						.join(dependency.path.as_ref().unwrap().to_string())
 						.canonicalize()
 						.wrap_err("Failed to canonicalize path.")?;
-					scan(client, package_path, visited, roots).await?;
-				},
-				tangram_lsp::Import::Dependency(dependency) => {
-					dependencies.push(dependency.clone());
+
+					// This gives us a full directory ID.
+					let child =
+						analyze_package_at_path(client, package_path, visited, path_dependencies)
+							.await?;
+					let id = child.id(client).await?.clone();
+
+					// Store the artifact and dependenc
+					package_path_dependencies.insert(dependency.path.clone().unwrap(), id.into());
 				},
 				_ => (),
 			}
@@ -377,12 +263,11 @@ async fn scan(
 	}
 
 	// Create permanent mark.
-	let _ = visited.insert(package_path, true);
-
 	let artifact = directory.build();
-	roots.push((artifact, dependencies));
-
-	Ok(())
+	let id = artifact.id(client).await?.clone().into();
+	let _ = visited.insert(package_path, Some(artifact.clone()));
+	path_dependencies.insert(id, package_path_dependencies);
+	Ok(artifact)
 }
 
 #[derive(Debug, Clone)]

@@ -3,7 +3,7 @@ use crate::ROOT_MODULE_FILE_NAME;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tangram_client as tg;
-use tg::WrapErr;
+use tg::{Client, WrapErr};
 
 #[tokio::test]
 async fn simple_diamond() {
@@ -532,15 +532,18 @@ impl MockClient {
 		&self,
 		metadata: tg::package::Metadata,
 	) -> Result<tg::Lock, crate::version::Report> {
-		let dependencies = self
-			.state
-			.lock()
+		let package = self
+			.get_package_version(
+				metadata.name.as_ref().unwrap(),
+				metadata.version.as_ref().unwrap(),
+			)
+			.await
 			.unwrap()
-			.dependencies
-			.get(&metadata)
 			.unwrap()
-			.clone();
-		crate::version::solve(self, metadata, dependencies).await
+			.into();
+		crate::version::solve(self, package, BTreeMap::new())
+			.await
+			.unwrap()
 	}
 
 	pub fn artifact(&self, metadata: tg::package::Metadata) -> tg::Artifact {
