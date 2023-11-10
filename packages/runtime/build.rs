@@ -10,9 +10,9 @@ fn main() {
 		v8::V8::initialize();
 	});
 
-	println!("cargo:rerun-if-changed=src/js/runtime.js");
+	println!("cargo:rerun-if-changed=src/js/main.js");
 	let path = out_dir_path.join("runtime.heapsnapshot");
-	let snapshot = create_snapshot("src/js/runtime.js");
+	let snapshot = create_snapshot("src/js/main.js");
 	std::fs::write(path, snapshot).unwrap();
 }
 

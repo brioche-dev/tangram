@@ -1,8 +1,7 @@
 use super::Server;
 use futures::FutureExt;
 use std::path::Path;
-use tangram_client as tg;
-use tg::{return_error, Result, Wrap, WrapErr};
+use tangram_error::{return_error, Result, Wrap, WrapErr};
 
 impl Server {
 	pub async fn migrate(path: &Path) -> Result<()> {

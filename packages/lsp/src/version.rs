@@ -1,6 +1,5 @@
 use crate::{document, Module};
-use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 impl Module {
 	pub async fn version(&self, document_store: Option<&document::Store>) -> Result<i32> {

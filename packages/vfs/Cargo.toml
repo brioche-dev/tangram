@@ -13,6 +13,7 @@ version = { workspace = true }
 libc = { workspace = true }
 num = { workspace = true }
 tangram_client = { workspace = true }
+tangram_error = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 zerocopy = { workspace = true }

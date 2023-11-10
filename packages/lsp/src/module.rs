@@ -1,7 +1,7 @@
 use super::document::Document;
 use derive_more::{TryUnwrap, Unwrap};
 use tangram_client as tg;
-use tg::{return_error, Error, Result, WrapErr};
+use tangram_error::{return_error, Error, Result, WrapErr};
 use url::Url;
 
 /// A module.

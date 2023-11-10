@@ -5,9 +5,8 @@ use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
 };
-use lmdb::Transaction;
 use tangram_client as tg;
-use tg::{return_error, Result, Wrap, WrapErr};
+use tangram_error::{error, return_error, Result, WrapErr};
 
 impl Server {
 	/// Attempt to get the build for a target.
@@ -15,26 +14,13 @@ impl Server {
 		&self,
 		id: &tg::target::Id,
 	) -> Result<Option<tg::build::Id>> {
-		// Attempt to get the build for the target from the state.
-		if let Some(build_id) = self
-			.inner
-			.state
-			.assignments
-			.read()
-			.unwrap()
-			.get(id)
-			.cloned()
-		{
-			return Ok(Some(build_id));
-		}
-
 		// Attempt to get the build for the target from the database.
 		if let Some(build_id) = self.try_get_build_for_target_from_database(id)? {
 			return Ok(Some(build_id));
 		}
 
-		// Attempt to get the build for the target from the parent.
-		if let Ok(Some(build_id)) = self.try_get_build_for_target_from_parent(id).await {
+		// Attempt to get the build for the target from the remote.
+		if let Ok(Some(build_id)) = self.try_get_build_for_target_from_remote(id).await {
 			return Ok(Some(build_id));
 		}
 
@@ -46,36 +32,26 @@ impl Server {
 		&self,
 		id: &tg::target::Id,
 	) -> Result<Option<tg::build::Id>> {
-		// Get the build for the target from the database.
-		let txn = self
-			.inner
-			.database
-			.env
-			.begin_ro_txn()
-			.wrap_err("Failed to begin the transaction.")?;
-		let build_id = match txn.get(self.inner.database.assignments, &id.to_bytes()) {
-			Ok(build_id) => build_id,
-			Err(lmdb::Error::NotFound) => return Ok(None),
-			Err(error) => return Err(error.wrap("Failed to get the assignment.")),
-		};
-		let build_id = build_id.try_into().wrap_err("Invalid ID.")?;
-		Ok(Some(build_id))
+		self.inner.database.try_get_build_for_target(id)
 	}
 
-	/// Attempt to get the build for the target from the parent.
-	async fn try_get_build_for_target_from_parent(
+	/// Attempt to get the build for the target from the remote.
+	async fn try_get_build_for_target_from_remote(
 		&self,
 		id: &tg::target::Id,
 	) -> Result<Option<tg::build::Id>> {
-		// Get the parent.
-		let Some(parent) = self.inner.parent.as_ref() else {
+		// Get the remote.
+		let Some(remote) = self.inner.remote.as_ref() else {
 			return Ok(None);
 		};
 
-		// Get the build for the target from the parent.
-		let Some(build_id) = parent.try_get_build_for_target(id).await? else {
+		// Get the build for the target from the remote.
+		let Some(build_id) = remote.try_get_build_for_target(id).await? else {
 			return Ok(None);
 		};
+
+		// Add the assignment to the database.
+		self.inner.database.set_build_for_target(id, &build_id)?;
 
 		Ok(Some(build_id))
 	}
@@ -83,47 +59,63 @@ impl Server {
 	/// Get or create a build for a target.
 	pub async fn get_or_create_build_for_target(
 		&self,
-		target_id: &tg::target::Id,
+		id: &tg::target::Id,
 	) -> Result<tg::build::Id> {
-		let target = tg::Target::with_id(target_id.clone());
+		let target = tg::Target::with_id(id.clone());
 
 		// Attempt to get the build for the target.
-		if let Some(build_id) = self.try_get_build_for_target(target_id).await? {
+		if let Some(build_id) = self.try_get_build_for_target(id).await? {
 			return Ok(build_id);
 		}
 
-		// Otherwise, create a new build and add its progress to the server's state.
+		// Decide whether to attempt to escalate the build.
+		let escalate = true;
+
+		// Attempt to escalate the build.
+		if escalate {
+			if let Some(remote) = self.inner.remote.as_ref() {
+				let object = tg::object::Handle::with_id(id.clone().into());
+				let result = object.push(self, remote.as_ref()).await;
+				if result.is_ok() {
+					if let Ok(build_id) = remote.get_or_create_build_for_target(id).await {
+						return Ok(build_id);
+					}
+				}
+			}
+		}
+
+		// Otherwise, create the progress for the new build.
 		let build_id = tg::build::Id::new();
-		let progress = Progress::new(build_id.clone(), target)?;
+		let progress = Progress::new(target)?;
 		self.inner
-			.state
 			.progress
 			.write()
 			.unwrap()
 			.insert(build_id.clone(), progress.clone());
-		self.inner
-			.state
-			.assignments
-			.write()
-			.unwrap()
-			.insert(target_id.clone(), build_id.clone());
 
-		// Spawn the task.
-		tokio::spawn({
-			let server = self.clone();
-			let target_id = target_id.clone();
-			let build_id = build_id.clone();
-			async move { server.build_inner(target_id, build_id).await }
-		});
+		// Add the assignment to the database.
+		self.inner.database.set_build_for_target(id, &build_id)?;
+
+		// Start the build.
+		self.start_build(&build_id).await?;
 
 		Ok(build_id)
 	}
 
-	async fn build_inner(&self, target_id: tg::target::Id, build_id: tg::build::Id) -> Result<()> {
-		let build = tg::Build::with_id(build_id.clone());
-		let target = tg::Target::with_id(target_id.clone());
+	pub(super) async fn start_build(&self, id: &tg::build::Id) -> Result<()> {
+		tokio::spawn({
+			let server = self.clone();
+			let id = id.clone();
+			async move { server.start_build_inner(&id).await }
+		});
+		Ok(())
+	}
 
-		// Build.
+	async fn start_build_inner(&self, id: &tg::build::Id) -> Result<()> {
+		let build = tg::Build::with_id(id.clone());
+		let target = build.target(self).await?;
+
+		// Build the target with the appropriate runtime.
 		match target.host(self).await?.os() {
 			tg::system::Os::Js => {
 				// Build the target on the server's local pool because it is a `!Send` future.
@@ -161,9 +153,17 @@ impl Server {
 		Ok(())
 	}
 
+	pub async fn get_build_from_queue(&self) -> Result<tg::build::Id> {
+		let Some(remote) = self.inner.remote.as_ref() else {
+			return_error!("The server does not have a remote.");
+		};
+		let build_id = remote.get_build_from_queue().await?;
+		Ok(build_id)
+	}
+
 	pub async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
-		// Attempt to get the target from the state.
-		let progress = self.inner.state.progress.read().unwrap().get(id).cloned();
+		// Attempt to get the target from the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
 			return Ok(Some(progress.target().id(self).await?.clone()));
 		}
@@ -184,8 +184,8 @@ impl Server {
 		&self,
 		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<tg::build::Id>>>> {
-		// Attempt to stream the children from the state.
-		let progress = self.inner.state.progress.read().unwrap().get(id).cloned();
+		// Attempt to get the children from the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
 			return Ok(Some(
 				progress
@@ -221,12 +221,12 @@ impl Server {
 			));
 		}
 
-		// Attempt to stream the children from the parent.
+		// Attempt to get the children from the remote.
 		'a: {
-			let Some(parent) = self.inner.parent.as_ref() else {
+			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let Some(children) = parent.try_get_build_children(id).await? else {
+			let Some(children) = remote.try_get_build_children(id).await? else {
 				break 'a;
 			};
 			return Ok(Some(children));
@@ -240,29 +240,28 @@ impl Server {
 		build_id: &tg::build::Id,
 		child_id: &tg::build::Id,
 	) -> Result<()> {
-		// Get the progress for the build.
-		let progress = self
-			.inner
-			.state
-			.progress
-			.read()
-			.unwrap()
-			.get(build_id)
-			.cloned()
-			.wrap_err("Failed to find the build.")?;
+		// Attempt to add the child to the progress.
+		let progress = self.inner.progress.read().unwrap().get(build_id).cloned();
+		if let Some(progress) = progress {
+			progress.add_child(&tg::Build::with_id(child_id.clone()));
+			return Ok(());
+		};
 
-		// Add the child.
-		progress.add_child(&tg::Build::with_id(child_id.clone()));
+		// Attempt to add the child to the remote.
+		if let Some(remote) = self.inner.remote.as_ref() {
+			remote.add_build_child(build_id, child_id).await?;
+			return Ok(());
+		}
 
-		Ok(())
+		return_error!("Failed to find the build.");
 	}
 
 	pub async fn try_get_build_log(
 		&self,
 		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
-		// Attempt to stream the log from the state.
-		let progress = self.inner.state.progress.read().unwrap().get(id).cloned();
+		// Attempt to get the log from the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
 			return Ok(Some(progress.log().await?));
 		}
@@ -277,12 +276,12 @@ impl Server {
 			return Ok(Some(stream::once(async move { Ok(bytes.into()) }).boxed()));
 		}
 
-		// Attempt to stream the log from the parent.
+		// Attempt to get the log from the remote.
 		'a: {
-			let Some(parent) = self.inner.parent.as_ref() else {
+			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let Some(log) = parent.try_get_build_log(id).await? else {
+			let Some(log) = remote.try_get_build_log(id).await? else {
 				break 'a;
 			};
 			return Ok(Some(log));
@@ -291,20 +290,19 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn add_build_log(&self, build_id: &tg::build::Id, log: Bytes) -> Result<()> {
-		// Get the progress for the build.
-		let progress = self
-			.inner
-			.state
-			.progress
-			.read()
-			.unwrap()
-			.get(build_id)
-			.cloned()
-			.wrap_err("Failed to find the build.")?;
+	pub async fn add_build_log(&self, id: &tg::build::Id, log: Bytes) -> Result<()> {
+		// Attempt to add the log to the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
+		if let Some(progress) = progress {
+			progress.add_log(log).await?;
+			return Ok(());
+		}
 
-		// Add the log.
-		progress.add_log(log).await?;
+		// Attempt to add the log to the remote.
+		if let Some(remote) = self.inner.remote.as_ref() {
+			remote.add_build_log(id, log).await?;
+			return Ok(());
+		}
 
 		Ok(())
 	}
@@ -313,8 +311,8 @@ impl Server {
 		&self,
 		id: &tg::build::Id,
 	) -> Result<Option<Result<tg::Value>>> {
-		// Attempt to await the result from the state.
-		let progress = self.inner.state.progress.read().unwrap().get(id).cloned();
+		// Attempt to await the result from the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
 			return Ok(Some(progress.result().await));
 		}
@@ -328,12 +326,12 @@ impl Server {
 			return Ok(Some(object.result.clone()));
 		}
 
-		// Attempt to await the result from the parent.
+		// Attempt to await the result from the remote.
 		'a: {
-			let Some(parent) = self.inner.parent.as_ref() else {
+			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let Some(result) = parent.try_get_build_result(id).await? else {
+			let Some(result) = remote.try_get_build_result(id).await? else {
 				break 'a;
 			};
 			return Ok(Some(result));
@@ -344,73 +342,58 @@ impl Server {
 
 	pub async fn set_build_result(
 		&self,
-		build_id: &tg::build::Id,
+		id: &tg::build::Id,
 		result: Result<tg::Value>,
 	) -> Result<()> {
-		// Get the progress for the build.
-		let progress = self
-			.inner
-			.state
-			.progress
-			.read()
-			.unwrap()
-			.get(build_id)
-			.cloned()
-			.wrap_err("Failed to find the build.")?;
+		// Attempt to set the result on the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
+		if let Some(progress) = progress {
+			progress.set_result(result);
+			return Ok(());
+		}
 
-		// Set the result.
-		progress.set_result(result);
+		// Attempt to set the result on the remote.
+		if let Some(remote) = self.inner.remote.as_ref() {
+			remote.set_build_result(id, result).await?;
+			return Ok(());
+		}
+
+		return_error!("Failed to find the build.");
+	}
+
+	pub async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
+		// Set the result to an error.
+		self.set_build_result(id, Err(error!("The build was cancelled.")))
+			.await?;
+
+		// Finish the build.
+		self.finish_build(id).await?;
 
 		Ok(())
 	}
 
-	pub async fn finish_build(&self, build_id: &tg::build::Id) -> Result<()> {
-		let build = tg::Build::with_id(build_id.clone());
-		let target = build.target(self).await?;
-		let target_id = target.id(self).await?;
+	pub async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
+		// Get the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
+		let progress = progress.wrap_err("Failed to find the build.")?;
 
 		// Finish the build.
-		let progress = self
-			.inner
-			.state
-			.progress
-			.read()
-			.unwrap()
-			.get(build_id)
-			.cloned();
-		progress
-			.wrap_err("Failed to find the build.")?
-			.finish(self)
-			.await?;
+		let output = progress.finish(self).await?;
 
-		// Create a write transaction.
-		let mut txn = self
-			.inner
-			.database
-			.env
-			.begin_rw_txn()
-			.wrap_err("Failed to begin the transaction.")?;
+		// Create the build.
+		let build = tg::Build::new(
+			id.clone(),
+			output.target,
+			output.children,
+			output.log,
+			output.result,
+		);
 
-		// Set the build for the target.
-		txn.put(
-			self.inner.database.assignments,
-			&target_id.to_bytes(),
-			&build_id.to_bytes(),
-			lmdb::WriteFlags::empty(),
-		)
-		.wrap_err("Failed to store the item.")?;
+		// Store the build.
+		build.store(self).await?;
 
-		// Commit the transaction.
-		txn.commit().wrap_err("Failed to commit the transaction.")?;
-
-		// Remove the build from the server's state.
-		self.inner
-			.state
-			.assignments
-			.write()
-			.unwrap()
-			.remove(target_id);
-		self.inner.state.progress.write().unwrap().remove(build_id);
+		// Remove the build's progress.
+		self.inner.progress.write().unwrap().remove(id);
 
 		Ok(())
 	}

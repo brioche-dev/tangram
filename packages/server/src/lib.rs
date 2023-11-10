@@ -1,46 +1,50 @@
-use self::progress::Progress;
+use self::{builder::Builder, progress::Progress};
 use async_trait::async_trait;
 use bytes::Bytes;
+use database::Database;
 use futures::stream::BoxStream;
 use std::{
 	collections::HashMap,
 	os::fd::AsRawFd,
 	path::{Path, PathBuf},
-	sync::{Arc, Weak},
+	sync::Arc,
 };
 use tangram_client as tg;
+use tangram_error::{Result, Wrap, WrapErr};
+use tangram_http::net::Addr;
 use tangram_package::PackageExt;
-use tg::{util::rmrf, Result, Wrap, WrapErr};
+use tg::util::rmrf;
 
 mod build;
+mod builder;
 mod clean;
+mod database;
 mod migrations;
 mod object;
 mod progress;
 mod tracker;
 
 /// A server.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Server {
 	inner: Arc<Inner>,
 }
 
-/// A server handle.
-#[derive(Clone, Debug)]
-pub struct Handle {
-	inner: Weak<Inner>,
-}
-
-#[derive(Debug)]
 struct Inner {
+	/// The builder.
+	builder: std::sync::Mutex<Option<Builder>>,
+
 	/// The database.
 	database: Database,
 
 	/// A semaphore that prevents opening too many file descriptors.
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 
-	/// The file system monitor task.
-	// fsm_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+	/// The fsm.
+	// fsm: tokio::sync::Mutex<Option<Fsm>>,
+
+	/// The HTTP server.
+	http: std::sync::Mutex<Option<tangram_http::Server>>,
 
 	/// A local pool for build JS targets.
 	local_pool: tokio_util::task::LocalPoolHandle,
@@ -49,46 +53,34 @@ struct Inner {
 	#[allow(dead_code)]
 	lock_file: tokio::fs::File,
 
-	/// A client for communicating with the parent.
-	parent: Option<Box<dyn tg::Client>>,
-
 	/// The path to the directory where the server stores its data.
 	path: PathBuf,
 
-	/// The server's state.
-	state: State,
+	/// The progress of the server's builds.
+	progress: std::sync::RwLock<HashMap<tg::build::Id, Progress, fnv::FnvBuildHasher>>,
+
+	/// A client for communicating with the parent server.
+	remote: Option<Box<dyn tg::Client>>,
 
 	/// The server's version.
 	version: String,
 
-	/// The VFS task.
-	vfs_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
-}
-
-#[derive(Debug, Default)]
-struct State {
-	assignments: std::sync::RwLock<HashMap<tg::target::Id, tg::build::Id, fnv::FnvBuildHasher>>,
-	progress: std::sync::RwLock<HashMap<tg::build::Id, Progress, fnv::FnvBuildHasher>>,
-}
-
-#[derive(Debug)]
-struct Database {
-	env: lmdb::Environment,
-	objects: lmdb::Database,
-	assignments: lmdb::Database,
-	trackers: lmdb::Database,
+	/// The VFS server.
+	vfs: std::sync::Mutex<Option<tangram_vfs::Server>>,
 }
 
 pub struct Options {
-	pub parent: Option<Box<dyn tg::Client>>,
+	pub addr: Addr,
+	pub remote: Option<Box<dyn tg::Client>>,
 	pub path: PathBuf,
 	pub version: String,
 }
 
 impl Server {
-	pub async fn new(options: Options) -> Result<Server> {
+	pub async fn start(options: Options) -> Result<Server> {
 		let Options {
-			parent,
+			addr,
+			remote,
 			path,
 			version,
 		} = options;
@@ -114,65 +106,55 @@ impl Server {
 		// Migrate the path.
 		Self::migrate(&path).await?;
 
+		// Write the PID file.
+		tokio::fs::write(&path.join("server.pid"), std::process::id().to_string())
+			.await
+			.wrap_err("Failed to write the PID file.")?;
+
 		// Remove an existing socket file.
 		rmrf(&path.join("socket"))
 			.await
 			.wrap_err("Failed to remove an existing socket file.")?;
 
+		// Create the builder.
+		let builder = std::sync::Mutex::new(None);
+
 		// Open the database.
-		let database_path = path.join("database");
-		let mut env_builder = lmdb::Environment::new();
-		env_builder.set_map_size(1_099_511_627_776);
-		env_builder.set_max_dbs(3);
-		env_builder.set_max_readers(1024);
-		env_builder.set_flags(lmdb::EnvironmentFlags::NO_SUB_DIR);
-		let env = env_builder
-			.open(&database_path)
-			.wrap_err("Failed to open an environment.")?;
-		let objects = env
-			.open_db(Some("objects"))
-			.wrap_err("Failed to open the objects database.")?;
-		let assignments = env
-			.open_db(Some("assignments"))
-			.wrap_err("Failed to open the assignments database.")?;
-		let trackers = env
-			.open_db(Some("trackers"))
-			.wrap_err("Failed to open the trackers datatabse.")?;
-		let database = Database {
-			env,
-			objects,
-			assignments,
-			trackers,
-		};
+		let database = Database::open(&path.join("database"))?;
 
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 
-		// Create the FSM task.
+		// Create the FSM.
 		// let fsm_task = tokio::sync::Mutex::new(None);
+
+		// Create the HTTP server.
+		let http = std::sync::Mutex::new(None);
 
 		// Create the local pool.
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
 			std::thread::available_parallelism().unwrap().get(),
 		);
 
-		// Create the server's state.
-		let state = State::default();
+		// Create the build progress.
+		let progress = std::sync::RwLock::new(HashMap::default());
 
-		// Create the VFS task.
-		let vfs_task = std::sync::Mutex::new(None);
+		// Create the VFS.
+		let vfs = std::sync::Mutex::new(None);
 
 		// Create the inner.
 		let inner = Arc::new(Inner {
+			builder,
 			database,
 			file_descriptor_semaphore,
+			http,
 			local_pool,
 			lock_file,
-			parent,
 			path,
-			state,
+			progress,
+			remote,
 			version,
-			vfs_task,
+			vfs,
 		});
 
 		// Create the server.
@@ -183,14 +165,67 @@ impl Server {
 		// server.inner.fsm.write().await.replace(fsm);
 
 		// Start the VFS server.
-		let vfs = tangram_vfs::Server::new(&server);
-		let task = vfs
-			.mount(&server.artifacts_path())
+		let vfs = tangram_vfs::Server::start(&server, &server.artifacts_path())
 			.await
-			.wrap_err("Failed to mount the VFS.")?;
-		server.inner.vfs_task.lock().unwrap().replace(task);
+			.wrap_err("Failed to start the VFS server.")?;
+		server.inner.vfs.lock().unwrap().replace(vfs);
+
+		// Start the HTTP server.
+		let http = tangram_http::Server::start(&server, addr, None)
+			.await
+			.wrap_err("Failed to start the HTTP server.")?;
+		server.inner.http.lock().unwrap().replace(http);
+
+		// Start the builder.
+		if server.inner.remote.is_some() {
+			let builder = Builder::start(&server)
+				.await
+				.wrap_err("Failed to start the HTTP server.")?;
+			server.inner.builder.lock().unwrap().replace(builder);
+		}
 
 		Ok(server)
+	}
+
+	pub fn stop(&self) {
+		// Stop the HTTP server.
+		if let Some(http) = self.inner.http.lock().unwrap().as_ref() {
+			http.stop();
+		}
+
+		// Stop the builder.
+		if let Some(builder) = self.inner.builder.lock().unwrap().as_ref() {
+			builder.stop();
+		}
+	}
+
+	pub async fn join(&self) -> Result<()> {
+		// Join the builder.
+		let builder = self.inner.builder.lock().unwrap().clone();
+		if let Some(builder) = builder {
+			builder.join().await?;
+		}
+
+		// Join the HTTP server.
+		let http = self.inner.http.lock().unwrap().clone();
+		if let Some(http) = http {
+			http.join().await?;
+		}
+
+		// Join the VFS server.
+		let vfs = self.inner.vfs.lock().unwrap().clone();
+		if let Some(vfs) = vfs {
+			vfs.stop();
+			vfs.join().await?;
+		}
+
+		Ok(())
+	}
+
+	async fn status(&self) -> Result<tg::status::Status> {
+		Ok(tg::status::Status {
+			version: self.inner.version.clone(),
+		})
 	}
 
 	#[must_use]
@@ -212,41 +247,12 @@ impl Server {
 	pub fn temps_path(&self) -> PathBuf {
 		self.path().join("temps")
 	}
-
-	#[must_use]
-	pub fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
-		&self.inner.file_descriptor_semaphore
-	}
-
-	async fn status(&self) -> Result<tg::status::Status> {
-		Ok(tg::status::Status {
-			version: self.inner.version.clone(),
-		})
-	}
-
-	async fn stop(&self) -> Result<()> {
-		std::process::exit(0);
-	}
-}
-
-impl tg::Handle for Handle {
-	fn upgrade(&self) -> Option<Box<dyn tg::Client>> {
-		self.inner
-			.upgrade()
-			.map(|inner| Box::new(Server { inner }) as Box<dyn tg::Client>)
-	}
 }
 
 #[async_trait]
 impl tg::Client for Server {
 	fn clone_box(&self) -> Box<dyn tg::Client> {
 		Box::new(self.clone())
-	}
-
-	fn downgrade_box(&self) -> Box<dyn tg::Handle> {
-		Box::new(Handle {
-			inner: Arc::downgrade(&self.inner),
-		})
 	}
 
 	fn path(&self) -> Option<&Path> {
@@ -262,7 +268,9 @@ impl tg::Client for Server {
 	}
 
 	async fn stop(&self) -> Result<()> {
-		self.stop().await
+		self.stop();
+		self.join().await?;
+		Ok(())
 	}
 
 	async fn clean(&self) -> Result<()> {
@@ -305,8 +313,8 @@ impl tg::Client for Server {
 		self.get_or_create_build_for_target(id).await
 	}
 
-	async fn try_get_build_queue_item(&self) -> Result<Option<tg::build::Id>> {
-		Ok(None)
+	async fn get_build_from_queue(&self) -> Result<tg::build::Id> {
+		self.get_build_from_queue().await
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
@@ -343,12 +351,12 @@ impl tg::Client for Server {
 		self.try_get_build_result(id).await
 	}
 
-	async fn set_build_result(
-		&self,
-		build_id: &tg::build::Id,
-		result: Result<tg::Value>,
-	) -> Result<()> {
-		self.set_build_result(build_id, result).await
+	async fn set_build_result(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
+		self.set_build_result(id, result).await
+	}
+
+	async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
+		self.cancel_build(id).await
 	}
 
 	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
@@ -357,18 +365,18 @@ impl tg::Client for Server {
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
 		self.inner
-			.parent
+			.remote
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?
+			.wrap_err("The server does not have a remote.")?
 			.search_packages(query)
 			.await
 	}
 
 	async fn get_package(&self, name: &str) -> Result<Option<tg::Package>> {
 		self.inner
-			.parent
+			.remote
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?
+			.wrap_err("The server does not have a remote.")?
 			.get_package(name)
 			.await
 	}
@@ -379,24 +387,24 @@ impl tg::Client for Server {
 		version: &str,
 	) -> Result<Option<tg::artifact::Id>> {
 		self.inner
-			.parent
+			.remote
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?
+			.wrap_err("The server does not have a remote.")?
 			.get_package_version(name, version)
 			.await
 	}
 
 	async fn publish_package(&self, token: &str, id: &tg::artifact::Id) -> Result<()> {
-		let parent = self
+		let remote = self
 			.inner
-			.parent
+			.remote
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?;
+			.wrap_err("The server does not have a remote.")?;
 		tg::object::Handle::with_id(id.clone().into())
-			.push(self, parent.as_ref())
+			.push(self, remote.as_ref())
 			.await
 			.wrap_err("Failed to push the package.")?;
-		parent.publish_package(token, id).await
+		remote.publish_package(token, id).await
 	}
 
 	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {
@@ -417,27 +425,27 @@ impl tg::Client for Server {
 
 	async fn create_login(&self) -> Result<tg::user::Login> {
 		self.inner
-			.parent
+			.remote
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?
+			.wrap_err("The server does not have a remote.")?
 			.create_login()
 			.await
 	}
 
 	async fn get_login(&self, id: &tg::Id) -> Result<Option<tg::user::Login>> {
 		self.inner
-			.parent
+			.remote
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?
+			.wrap_err("The server does not have a remote.")?
 			.get_login(id)
 			.await
 	}
 
 	async fn get_current_user(&self, token: &str) -> Result<Option<tg::user::User>> {
 		self.inner
-			.parent
+			.remote
 			.as_ref()
-			.wrap_err("The server does not have a parent.")?
+			.wrap_err("The server does not have a remote.")?
 			.get_current_user(token)
 			.await
 	}

@@ -1,8 +1,7 @@
 use crate::Cli;
 use std::path::PathBuf;
-use tangram_client as tg;
+use tangram_error::{Result, WrapErr};
 use tangram_package::ROOT_MODULE_FILE_NAME;
-use tg::{Result, WrapErr};
 
 /// Format the files in a package.
 #[derive(Debug, clap::Args)]
@@ -19,8 +18,7 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the language server.
-		let server =
-			tangram_lsp::Server::new(client.downgrade_box(), tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
 
 		let path = args.path.join(ROOT_MODULE_FILE_NAME);
 		let text = tokio::fs::read_to_string(&path)

@@ -1,7 +1,6 @@
 use crate::{credentials::Credentials, Cli};
 use std::time::{Duration, Instant};
-use tangram_client as tg;
-use tg::{return_error, Result, WrapErr};
+use tangram_error::{return_error, Result, WrapErr};
 
 /// Log in to Tangram.
 #[derive(Debug, clap::Args)]

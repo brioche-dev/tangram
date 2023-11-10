@@ -30,8 +30,8 @@ pub use self::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::BoxStream;
-use std::{fmt::Debug, path::Path};
-pub use tangram_error::{error, return_error, Error, Result, Wrap, WrapErr};
+use std::path::Path;
+use tangram_error::{error, return_error, Error, Result, Wrap, WrapErr};
 
 pub mod artifact;
 pub mod blob;
@@ -61,17 +61,10 @@ pub mod user;
 pub mod util;
 pub mod value;
 
-/// A client handle.
-pub trait Handle: Debug + Send + Sync + 'static {
-	fn upgrade(&self) -> Option<Box<dyn Client>>;
-}
-
 /// A client.
 #[async_trait]
-pub trait Client: Debug + Send + Sync + 'static {
+pub trait Client: Send + Sync + 'static {
 	fn clone_box(&self) -> Box<dyn Client>;
-
-	fn downgrade_box(&self) -> Box<dyn Handle>;
 
 	fn is_local(&self) -> bool {
 		false
@@ -112,7 +105,7 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn get_or_create_build_for_target(&self, id: &target::Id) -> Result<build::Id>;
 
-	async fn try_get_build_queue_item(&self) -> Result<Option<build::Id>>;
+	async fn get_build_from_queue(&self) -> Result<build::Id>;
 
 	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
 		Ok(self
@@ -138,7 +131,7 @@ pub trait Client: Debug + Send + Sync + 'static {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<build::Id>>>>;
 
-	async fn add_build_child(&self, build_id: &build::Id, child_id: &build::Id) -> Result<()>;
+	async fn add_build_child(&self, id: &build::Id, child_id: &build::Id) -> Result<()>;
 
 	async fn get_build_log(&self, id: &build::Id) -> Result<BoxStream<'static, Result<Bytes>>> {
 		Ok(self
@@ -152,7 +145,7 @@ pub trait Client: Debug + Send + Sync + 'static {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>>;
 
-	async fn add_build_log(&self, build_id: &build::Id, bytes: Bytes) -> Result<()>;
+	async fn add_build_log(&self, id: &build::Id, bytes: Bytes) -> Result<()>;
 
 	async fn get_build_result(&self, id: &build::Id) -> Result<Result<Value, Error>> {
 		Ok(self
@@ -163,7 +156,9 @@ pub trait Client: Debug + Send + Sync + 'static {
 
 	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
 
-	async fn set_build_result(&self, build_id: &build::Id, result: Result<Value>) -> Result<()>;
+	async fn set_build_result(&self, id: &build::Id, result: Result<Value>) -> Result<()>;
+
+	async fn cancel_build(&self, id: &build::Id) -> Result<()>;
 
 	async fn finish_build(&self, id: &build::Id) -> Result<()>;
 

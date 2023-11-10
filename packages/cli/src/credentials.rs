@@ -1,7 +1,6 @@
 use crate::{util::dirs::user_config_directory_path, Cli, Result};
 use std::path::{Path, PathBuf};
-use tangram_client as tg;
-use tg::{Wrap, WrapErr};
+use tangram_error::{Wrap, WrapErr};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Credentials {

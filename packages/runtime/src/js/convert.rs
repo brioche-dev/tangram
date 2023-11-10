@@ -3,12 +3,7 @@ use num::ToPrimitive;
 use serde_v8::Serializable;
 use std::{collections::BTreeMap, sync::Arc};
 use tangram_client as tg;
-use tg::{
-	blob, branch, checksum, directory, file, leaf, lock,
-	object::{self, Object},
-	return_error, symlink, target, template, Artifact, Blob, Branch, Checksum, Directory, Error,
-	File, Leaf, Lock, Mutation, Result, Symlink, System, Target, Template, Value, WrapErr,
-};
+use tangram_error::{return_error, Error, Result, WrapErr};
 use url::Url;
 
 pub fn _to_v8<'a, T>(scope: &mut v8::HandleScope<'a>, value: &T) -> Result<v8::Local<'a, v8::Value>>
@@ -526,30 +521,30 @@ impl FromV8 for serde_yaml::Value {
 	}
 }
 
-impl ToV8 for Value {
+impl ToV8 for tg::Value {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		match self {
-			Value::Null(value) => value.to_v8(scope),
-			Value::Bool(value) => value.to_v8(scope),
-			Value::Number(value) => value.to_v8(scope),
-			Value::String(value) => value.to_v8(scope),
-			Value::Bytes(value) => value.to_v8(scope),
-			Value::Leaf(value) => value.to_v8(scope),
-			Value::Branch(value) => value.to_v8(scope),
-			Value::Directory(value) => value.to_v8(scope),
-			Value::File(value) => value.to_v8(scope),
-			Value::Symlink(value) => value.to_v8(scope),
-			Value::Lock(value) => value.to_v8(scope),
-			Value::Target(value) => value.to_v8(scope),
-			Value::Mutation(value) => value.to_v8(scope),
-			Value::Template(value) => value.to_v8(scope),
-			Value::Array(value) => value.to_v8(scope),
-			Value::Map(value) => value.to_v8(scope),
+			tg::Value::Null(value) => value.to_v8(scope),
+			tg::Value::Bool(value) => value.to_v8(scope),
+			tg::Value::Number(value) => value.to_v8(scope),
+			tg::Value::String(value) => value.to_v8(scope),
+			tg::Value::Bytes(value) => value.to_v8(scope),
+			tg::Value::Leaf(value) => value.to_v8(scope),
+			tg::Value::Branch(value) => value.to_v8(scope),
+			tg::Value::Directory(value) => value.to_v8(scope),
+			tg::Value::File(value) => value.to_v8(scope),
+			tg::Value::Symlink(value) => value.to_v8(scope),
+			tg::Value::Lock(value) => value.to_v8(scope),
+			tg::Value::Target(value) => value.to_v8(scope),
+			tg::Value::Mutation(value) => value.to_v8(scope),
+			tg::Value::Template(value) => value.to_v8(scope),
+			tg::Value::Array(value) => value.to_v8(scope),
+			tg::Value::Map(value) => value.to_v8(scope),
 		}
 	}
 }
 
-impl FromV8 for Value {
+impl FromV8 for tg::Value {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -600,37 +595,37 @@ impl FromV8 for Value {
 		let template = v8::Local::<v8::Function>::try_from(template).unwrap();
 
 		if value.is_null_or_undefined() {
-			Ok(Value::Null(()))
+			Ok(tg::Value::Null(()))
 		} else if value.is_boolean() {
-			Ok(Value::Bool(from_v8(scope, value)?))
+			Ok(tg::Value::Bool(from_v8(scope, value)?))
 		} else if value.is_number() {
-			Ok(Value::Number(from_v8(scope, value)?))
+			Ok(tg::Value::Number(from_v8(scope, value)?))
 		} else if value.is_string() {
-			Ok(Value::String(from_v8(scope, value)?))
+			Ok(tg::Value::String(from_v8(scope, value)?))
 		} else if value.is_uint8_array() {
-			Ok(Value::Bytes(from_v8(scope, value)?))
+			Ok(tg::Value::Bytes(from_v8(scope, value)?))
 		} else if value.instance_of(scope, leaf.into()).unwrap() {
-			Ok(Value::Leaf(from_v8(scope, value)?))
+			Ok(tg::Value::Leaf(from_v8(scope, value)?))
 		} else if value.instance_of(scope, branch.into()).unwrap() {
-			Ok(Value::Branch(from_v8(scope, value)?))
+			Ok(tg::Value::Branch(from_v8(scope, value)?))
 		} else if value.instance_of(scope, directory.into()).unwrap() {
-			Ok(Value::Directory(from_v8(scope, value)?))
+			Ok(tg::Value::Directory(from_v8(scope, value)?))
 		} else if value.instance_of(scope, file.into()).unwrap() {
-			Ok(Value::File(from_v8(scope, value)?))
+			Ok(tg::Value::File(from_v8(scope, value)?))
 		} else if value.instance_of(scope, symlink.into()).unwrap() {
-			Ok(Value::Symlink(from_v8(scope, value)?))
+			Ok(tg::Value::Symlink(from_v8(scope, value)?))
 		} else if value.instance_of(scope, lock.into()).unwrap() {
-			Ok(Value::Lock(from_v8(scope, value)?))
+			Ok(tg::Value::Lock(from_v8(scope, value)?))
 		} else if value.instance_of(scope, target.into()).unwrap() {
-			Ok(Value::Target(from_v8(scope, value)?))
+			Ok(tg::Value::Target(from_v8(scope, value)?))
 		} else if value.instance_of(scope, mutation.into()).unwrap() {
-			Ok(Value::Mutation(from_v8(scope, value)?))
+			Ok(tg::Value::Mutation(from_v8(scope, value)?))
 		} else if value.instance_of(scope, template.into()).unwrap() {
-			Ok(Value::Template(from_v8(scope, value)?))
+			Ok(tg::Value::Template(from_v8(scope, value)?))
 		} else if value.is_array() {
-			Ok(Value::Array(from_v8(scope, value)?))
+			Ok(tg::Value::Array(from_v8(scope, value)?))
 		} else if value.is_object() {
-			Ok(Value::Map(from_v8(scope, value)?))
+			Ok(tg::Value::Map(from_v8(scope, value)?))
 		} else {
 			return_error!("Invalid value.");
 		}
@@ -668,7 +663,7 @@ impl FromV8 for Bytes {
 	}
 }
 
-impl ToV8 for Blob {
+impl ToV8 for tg::Blob {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		match self {
 			Self::Leaf(leaf) => leaf.to_v8(scope),
@@ -677,7 +672,7 @@ impl ToV8 for Blob {
 	}
 }
 
-impl FromV8 for Blob {
+impl FromV8 for tg::Blob {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -708,7 +703,7 @@ impl FromV8 for Blob {
 	}
 }
 
-impl ToV8 for Leaf {
+impl ToV8 for tg::Leaf {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -728,7 +723,7 @@ impl ToV8 for Leaf {
 	}
 }
 
-impl FromV8 for Leaf {
+impl FromV8 for tg::Leaf {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -756,13 +751,13 @@ impl FromV8 for Leaf {
 	}
 }
 
-impl ToV8 for leaf::Id {
+impl ToV8 for tg::leaf::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for leaf::Id {
+impl FromV8 for tg::leaf::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -771,7 +766,7 @@ impl FromV8 for leaf::Id {
 	}
 }
 
-impl ToV8 for leaf::Object {
+impl ToV8 for tg::leaf::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -783,7 +778,7 @@ impl ToV8 for leaf::Object {
 	}
 }
 
-impl FromV8 for leaf::Object {
+impl FromV8 for tg::leaf::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -798,7 +793,7 @@ impl FromV8 for leaf::Object {
 	}
 }
 
-impl ToV8 for Branch {
+impl ToV8 for tg::Branch {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -818,7 +813,7 @@ impl ToV8 for Branch {
 	}
 }
 
-impl FromV8 for Branch {
+impl FromV8 for tg::Branch {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -846,13 +841,13 @@ impl FromV8 for Branch {
 	}
 }
 
-impl ToV8 for branch::Id {
+impl ToV8 for tg::branch::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for branch::Id {
+impl FromV8 for tg::branch::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -861,7 +856,7 @@ impl FromV8 for branch::Id {
 	}
 }
 
-impl ToV8 for branch::Object {
+impl ToV8 for tg::branch::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -873,7 +868,7 @@ impl ToV8 for branch::Object {
 	}
 }
 
-impl FromV8 for branch::Object {
+impl FromV8 for tg::branch::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -889,7 +884,7 @@ impl FromV8 for branch::Object {
 	}
 }
 
-impl ToV8 for branch::Child {
+impl ToV8 for tg::branch::Child {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -905,7 +900,7 @@ impl ToV8 for branch::Child {
 	}
 }
 
-impl FromV8 for branch::Child {
+impl FromV8 for tg::branch::Child {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -924,7 +919,7 @@ impl FromV8 for branch::Child {
 	}
 }
 
-impl ToV8 for Artifact {
+impl ToV8 for tg::Artifact {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		match self {
 			Self::Directory(directory) => directory.to_v8(scope),
@@ -934,7 +929,7 @@ impl ToV8 for Artifact {
 	}
 }
 
-impl FromV8 for Artifact {
+impl FromV8 for tg::Artifact {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -972,7 +967,7 @@ impl FromV8 for Artifact {
 	}
 }
 
-impl ToV8 for Directory {
+impl ToV8 for tg::Directory {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -993,7 +988,7 @@ impl ToV8 for Directory {
 	}
 }
 
-impl FromV8 for Directory {
+impl FromV8 for tg::Directory {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1022,13 +1017,13 @@ impl FromV8 for Directory {
 	}
 }
 
-impl ToV8 for directory::Id {
+impl ToV8 for tg::directory::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for directory::Id {
+impl FromV8 for tg::directory::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1037,7 +1032,7 @@ impl FromV8 for directory::Id {
 	}
 }
 
-impl ToV8 for directory::Object {
+impl ToV8 for tg::directory::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -1049,7 +1044,7 @@ impl ToV8 for directory::Object {
 	}
 }
 
-impl FromV8 for directory::Object {
+impl FromV8 for tg::directory::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1064,7 +1059,7 @@ impl FromV8 for directory::Object {
 	}
 }
 
-impl ToV8 for File {
+impl ToV8 for tg::File {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1084,7 +1079,7 @@ impl ToV8 for File {
 	}
 }
 
-impl FromV8 for File {
+impl FromV8 for tg::File {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1112,13 +1107,13 @@ impl FromV8 for File {
 	}
 }
 
-impl ToV8 for file::Id {
+impl ToV8 for tg::file::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for file::Id {
+impl FromV8 for tg::file::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1127,7 +1122,7 @@ impl FromV8 for file::Id {
 	}
 }
 
-impl ToV8 for file::Object {
+impl ToV8 for tg::file::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -1147,7 +1142,7 @@ impl ToV8 for file::Object {
 	}
 }
 
-impl FromV8 for file::Object {
+impl FromV8 for tg::file::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1177,7 +1172,7 @@ impl FromV8 for file::Object {
 	}
 }
 
-impl ToV8 for Symlink {
+impl ToV8 for tg::Symlink {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1197,7 +1192,7 @@ impl ToV8 for Symlink {
 	}
 }
 
-impl FromV8 for Symlink {
+impl FromV8 for tg::Symlink {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1225,13 +1220,13 @@ impl FromV8 for Symlink {
 	}
 }
 
-impl ToV8 for symlink::Id {
+impl ToV8 for tg::symlink::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for symlink::Id {
+impl FromV8 for tg::symlink::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1240,7 +1235,7 @@ impl FromV8 for symlink::Id {
 	}
 }
 
-impl ToV8 for symlink::Object {
+impl ToV8 for tg::symlink::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -1252,7 +1247,7 @@ impl ToV8 for symlink::Object {
 	}
 }
 
-impl FromV8 for symlink::Object {
+impl FromV8 for tg::symlink::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1267,7 +1262,7 @@ impl FromV8 for symlink::Object {
 	}
 }
 
-impl ToV8 for Lock {
+impl ToV8 for tg::Lock {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1287,7 +1282,7 @@ impl ToV8 for Lock {
 	}
 }
 
-impl FromV8 for Lock {
+impl FromV8 for tg::Lock {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1315,13 +1310,13 @@ impl FromV8 for Lock {
 	}
 }
 
-impl ToV8 for lock::Id {
+impl ToV8 for tg::lock::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for lock::Id {
+impl FromV8 for tg::lock::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1330,7 +1325,7 @@ impl FromV8 for lock::Id {
 	}
 }
 
-impl ToV8 for lock::Object {
+impl ToV8 for tg::lock::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -1348,7 +1343,7 @@ impl ToV8 for lock::Object {
 	}
 }
 
-impl FromV8 for lock::Object {
+impl FromV8 for tg::lock::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1403,17 +1398,17 @@ impl FromV8 for tg::lock::Entry {
 	}
 }
 
-impl ToV8 for Mutation {
+impl ToV8 for tg::Mutation {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 		match self {
-			Mutation::Unset => {
+			tg::Mutation::Unset => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "unset".to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
 			},
-			Mutation::Set { value: value_ } => {
+			tg::Mutation::Set { value: value_ } => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "set".to_v8(scope).unwrap();
@@ -1423,7 +1418,7 @@ impl ToV8 for Mutation {
 				let value = value_.clone().to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
 			},
-			Mutation::SetIfUnset { value: value_ } => {
+			tg::Mutation::SetIfUnset { value: value_ } => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "set_if_unset".to_v8(scope).unwrap();
@@ -1433,7 +1428,7 @@ impl ToV8 for Mutation {
 				let value = value_.clone().to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
 			},
-			Mutation::ArrayAppend { values } => {
+			tg::Mutation::ArrayAppend { values } => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "array_append".to_v8(scope).unwrap();
@@ -1443,7 +1438,7 @@ impl ToV8 for Mutation {
 				let value = values.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
-			Mutation::ArrayPrepend { values } => {
+			tg::Mutation::ArrayPrepend { values } => {
 				let key =
 					v8::String::new_external_onebyte_static(scope, "kind".as_bytes()).unwrap();
 				let value = "array_prepend".to_v8(scope).unwrap();
@@ -1453,7 +1448,7 @@ impl ToV8 for Mutation {
 				let value = values.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
-			Mutation::TemplateAppend {
+			tg::Mutation::TemplateAppend {
 				template,
 				separator,
 			} => {
@@ -1470,7 +1465,7 @@ impl ToV8 for Mutation {
 				let value = separator.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
-			Mutation::TemplatePrepend {
+			tg::Mutation::TemplatePrepend {
 				template,
 				separator,
 			} => {
@@ -1492,7 +1487,7 @@ impl ToV8 for Mutation {
 	}
 }
 
-impl FromV8 for Mutation {
+impl FromV8 for tg::Mutation {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1522,14 +1517,14 @@ impl FromV8 for Mutation {
 		let kind = String::from_v8(scope, kind)?;
 
 		match kind.as_str() {
-			"unset" => Ok(Mutation::Unset),
+			"unset" => Ok(tg::Mutation::Unset),
 			"set" => {
 				let value_ =
 					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
 				let value_ = inner.get(scope, value_.into()).unwrap();
 				let value_ = from_v8(scope, value_)?;
 				let value_ = Box::new(value_);
-				Ok(Mutation::Set { value: value_ })
+				Ok(tg::Mutation::Set { value: value_ })
 			},
 			"set_if_unset" => {
 				let value_ =
@@ -1537,21 +1532,21 @@ impl FromV8 for Mutation {
 				let value_ = inner.get(scope, value_.into()).unwrap();
 				let value_ = from_v8(scope, value_)?;
 				let value_ = Box::new(value_);
-				Ok(Mutation::SetIfUnset { value: value_ })
+				Ok(tg::Mutation::SetIfUnset { value: value_ })
 			},
 			"array_prepend" => {
 				let values =
 					v8::String::new_external_onebyte_static(scope, "values".as_bytes()).unwrap();
 				let values = inner.get(scope, values.into()).unwrap();
 				let values = from_v8(scope, values)?;
-				Ok(Mutation::ArrayPrepend { values })
+				Ok(tg::Mutation::ArrayPrepend { values })
 			},
 			"array_append" => {
 				let values =
 					v8::String::new_external_onebyte_static(scope, "values".as_bytes()).unwrap();
 				let values = inner.get(scope, values.into()).unwrap();
 				let values = from_v8(scope, values)?;
-				Ok(Mutation::ArrayAppend { values })
+				Ok(tg::Mutation::ArrayAppend { values })
 			},
 			"template_prepend" => {
 				let template =
@@ -1562,7 +1557,7 @@ impl FromV8 for Mutation {
 					v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
 				let separator = inner.get(scope, separator.into()).unwrap();
 				let separator = from_v8(scope, separator)?;
-				Ok(Mutation::TemplatePrepend {
+				Ok(tg::Mutation::TemplatePrepend {
 					template,
 					separator,
 				})
@@ -1576,7 +1571,7 @@ impl FromV8 for Mutation {
 					v8::String::new_external_onebyte_static(scope, "separator".as_bytes()).unwrap();
 				let separator = inner.get(scope, separator.into()).unwrap();
 				let separator = from_v8(scope, separator)?;
-				Ok(Mutation::TemplateAppend {
+				Ok(tg::Mutation::TemplateAppend {
 					template,
 					separator,
 				})
@@ -1586,7 +1581,7 @@ impl FromV8 for Mutation {
 	}
 }
 
-impl ToV8 for Template {
+impl ToV8 for tg::Template {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1607,7 +1602,7 @@ impl ToV8 for Template {
 	}
 }
 
-impl FromV8 for Template {
+impl FromV8 for tg::Template {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1637,7 +1632,7 @@ impl FromV8 for Template {
 	}
 }
 
-impl ToV8 for Target {
+impl ToV8 for tg::Target {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let context = scope.get_current_context();
 		let global = context.global(scope);
@@ -1657,7 +1652,7 @@ impl ToV8 for Target {
 	}
 }
 
-impl FromV8 for Target {
+impl FromV8 for tg::Target {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1685,13 +1680,13 @@ impl FromV8 for Target {
 	}
 }
 
-impl ToV8 for target::Id {
+impl ToV8 for tg::target::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for target::Id {
+impl FromV8 for tg::target::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1700,7 +1695,7 @@ impl FromV8 for target::Id {
 	}
 }
 
-impl ToV8 for target::Object {
+impl ToV8 for tg::target::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
@@ -1736,7 +1731,7 @@ impl ToV8 for target::Object {
 	}
 }
 
-impl FromV8 for target::Object {
+impl FromV8 for tg::target::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1785,7 +1780,7 @@ impl FromV8 for target::Object {
 	}
 }
 
-impl ToV8 for template::Component {
+impl ToV8 for tg::template::Component {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		match self {
 			Self::String(string) => string.to_v8(scope),
@@ -1794,7 +1789,7 @@ impl ToV8 for template::Component {
 	}
 }
 
-impl FromV8 for template::Component {
+impl FromV8 for tg::template::Component {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1833,13 +1828,13 @@ impl FromV8 for template::Component {
 	}
 }
 
-impl ToV8 for object::Id {
+impl ToV8 for tg::object::Id {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for object::Id {
+impl FromV8 for tg::object::Id {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1848,7 +1843,7 @@ impl FromV8 for object::Id {
 	}
 }
 
-impl ToV8 for Object {
+impl ToV8 for tg::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let (kind, value) = match self {
 			Self::Leaf(blob) => ("leaf", blob.to_v8(scope)?),
@@ -1870,7 +1865,7 @@ impl ToV8 for Object {
 	}
 }
 
-impl FromV8 for Object {
+impl FromV8 for tg::Object {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1895,7 +1890,7 @@ impl FromV8 for Object {
 	}
 }
 
-impl<I, O> ToV8 for object::State<I, O>
+impl<I, O> ToV8 for tg::object::State<I, O>
 where
 	I: ToV8,
 	O: ToV8,
@@ -1917,7 +1912,7 @@ where
 	}
 }
 
-impl<I, O> FromV8 for object::State<I, O>
+impl<I, O> FromV8 for tg::object::State<I, O>
 where
 	I: FromV8,
 	O: FromV8,
@@ -1945,13 +1940,13 @@ where
 	}
 }
 
-impl ToV8 for blob::ArchiveFormat {
+impl ToV8 for tg::blob::ArchiveFormat {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for blob::ArchiveFormat {
+impl FromV8 for tg::blob::ArchiveFormat {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1960,13 +1955,13 @@ impl FromV8 for blob::ArchiveFormat {
 	}
 }
 
-impl ToV8 for blob::CompressionFormat {
+impl ToV8 for tg::blob::CompressionFormat {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for blob::CompressionFormat {
+impl FromV8 for tg::blob::CompressionFormat {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1975,13 +1970,13 @@ impl FromV8 for blob::CompressionFormat {
 	}
 }
 
-impl ToV8 for Checksum {
+impl ToV8 for tg::Checksum {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for Checksum {
+impl FromV8 for tg::Checksum {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -1990,13 +1985,13 @@ impl FromV8 for Checksum {
 	}
 }
 
-impl ToV8 for checksum::Algorithm {
+impl ToV8 for tg::checksum::Algorithm {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for checksum::Algorithm {
+impl FromV8 for tg::checksum::Algorithm {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,
@@ -2005,13 +2000,13 @@ impl FromV8 for checksum::Algorithm {
 	}
 }
 
-impl ToV8 for System {
+impl ToV8 for tg::System {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		self.to_string().to_v8(scope)
 	}
 }
 
-impl FromV8 for System {
+impl FromV8 for tg::System {
 	fn from_v8<'a>(
 		scope: &mut v8::HandleScope<'a>,
 		value: v8::Local<'a, v8::Value>,

@@ -192,6 +192,10 @@ impl File {
 	pub async fn references(&self, client: &dyn Client) -> Result<&[Artifact]> {
 		Ok(self.object(client).await?.references.as_slice())
 	}
+
+	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
+		self.contents(client).await?.size(client).await
+	}
 }
 
 impl Data {

@@ -2,8 +2,7 @@ use crate::Cli;
 use futures::FutureExt;
 use itertools::Itertools;
 use std::path::PathBuf;
-use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 
 /// Manage autoenv paths.
 #[derive(Debug, clap::Args)]

@@ -10,9 +10,7 @@ use futures::{Future, TryStreamExt};
 use itertools::Itertools;
 use std::rc::Rc;
 use tangram_client as tg;
-use tg::{
-	blob, checksum, object, return_error, Artifact, Blob, Checksum, Result, Target, Value, WrapErr,
-};
+use tangram_error::{return_error, Result, WrapErr};
 use tokio_util::io::StreamReader;
 use url::Url;
 
@@ -69,13 +67,16 @@ pub fn syscall<'s>(
 	}
 }
 
-async fn syscall_archive(state: Rc<State>, args: (Artifact, blob::ArchiveFormat)) -> Result<Blob> {
+async fn syscall_archive(
+	state: Rc<State>,
+	args: (tg::Artifact, tg::blob::ArchiveFormat),
+) -> Result<tg::Blob> {
 	let (artifact, format) = args;
 	let blob = artifact.archive(state.client.as_ref(), format).await?;
 	Ok(blob)
 }
 
-async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
+async fn syscall_build(state: Rc<State>, args: (tg::Target,)) -> Result<tg::Value> {
 	let (target,) = args;
 	let build = target.build(state.client.as_ref()).await?;
 	state.build.add_child(state.client.as_ref(), &build).await?;
@@ -87,7 +88,7 @@ async fn syscall_build(state: Rc<State>, args: (Target,)) -> Result<Value> {
 	Ok(output)
 }
 
-async fn syscall_bundle(state: Rc<State>, args: (Artifact,)) -> Result<Artifact> {
+async fn syscall_bundle(state: Rc<State>, args: (tg::Artifact,)) -> Result<tg::Artifact> {
 	let (artifact,) = args;
 	let artifact = artifact.bundle(state.client.as_ref()).await?;
 	Ok(artifact)
@@ -96,16 +97,19 @@ async fn syscall_bundle(state: Rc<State>, args: (Artifact,)) -> Result<Artifact>
 fn syscall_checksum(
 	_scope: &mut v8::HandleScope,
 	_state: Rc<State>,
-	args: (checksum::Algorithm, Bytes),
-) -> Result<Checksum> {
+	args: (tg::checksum::Algorithm, Bytes),
+) -> Result<tg::Checksum> {
 	let (algorithm, bytes) = args;
-	let mut checksum_writer = checksum::Writer::new(algorithm);
+	let mut checksum_writer = tg::checksum::Writer::new(algorithm);
 	checksum_writer.update(&bytes);
 	let checksum = checksum_writer.finalize();
 	Ok(checksum)
 }
 
-async fn syscall_compress(state: Rc<State>, args: (Blob, blob::CompressionFormat)) -> Result<Blob> {
+async fn syscall_compress(
+	state: Rc<State>,
+	args: (tg::Blob, tg::blob::CompressionFormat),
+) -> Result<tg::Blob> {
 	let (blob, format) = args;
 	let blob = blob.compress(state.client.as_ref(), format).await?;
 	Ok(blob)
@@ -113,26 +117,26 @@ async fn syscall_compress(state: Rc<State>, args: (Blob, blob::CompressionFormat
 
 async fn syscall_decompress(
 	state: Rc<State>,
-	args: (Blob, blob::CompressionFormat),
-) -> Result<Blob> {
+	args: (tg::Blob, tg::blob::CompressionFormat),
+) -> Result<tg::Blob> {
 	let (blob, format) = args;
 	let blob = blob.decompress(state.client.as_ref(), format).await?;
 	Ok(blob)
 }
 
-async fn syscall_download(state: Rc<State>, args: (Url, Checksum)) -> Result<Blob> {
+async fn syscall_download(state: Rc<State>, args: (Url, tg::Checksum)) -> Result<tg::Blob> {
 	let (url, checksum) = args;
 	let response = reqwest::get(url)
 		.await
 		.wrap_err("Failed to perform the request.")?
 		.error_for_status()
 		.wrap_err("Expected a sucess status.")?;
-	let mut checksum_writer = checksum::Writer::new(checksum.algorithm());
+	let mut checksum_writer = tg::checksum::Writer::new(checksum.algorithm());
 	let stream = response
 		.bytes_stream()
 		.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 		.inspect_ok(|chunk| checksum_writer.update(chunk));
-	let blob = Blob::with_reader(state.client.as_ref(), StreamReader::new(stream)).await?;
+	let blob = tg::Blob::with_reader(state.client.as_ref(), StreamReader::new(stream)).await?;
 	let actual = checksum_writer.finalize();
 	if actual != checksum {
 		return_error!(r#"The checksum did not match. Expected "{checksum}" but got "{actual}"."#);
@@ -263,15 +267,18 @@ fn syscall_encoding_yaml_encode(
 	Ok(yaml)
 }
 
-async fn syscall_extract(state: Rc<State>, args: (Blob, blob::ArchiveFormat)) -> Result<Artifact> {
+async fn syscall_extract(
+	state: Rc<State>,
+	args: (tg::Blob, tg::blob::ArchiveFormat),
+) -> Result<tg::Artifact> {
 	let (blob, format) = args;
 	let artifact = blob.extract(state.client.as_ref(), format).await?;
 	Ok(artifact)
 }
 
-async fn syscall_load(state: Rc<State>, args: (object::Id,)) -> Result<object::Object> {
+async fn syscall_load(state: Rc<State>, args: (tg::object::Id,)) -> Result<tg::object::Object> {
 	let (id,) = args;
-	object::Handle::with_id(id)
+	tg::object::Handle::with_id(id)
 		.object(state.client.as_ref())
 		.await
 }
@@ -294,7 +301,7 @@ fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) 
 	Ok(())
 }
 
-async fn syscall_read(state: Rc<State>, args: (Blob,)) -> Result<Bytes> {
+async fn syscall_read(state: Rc<State>, args: (tg::Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
 	let bytes = blob.bytes(state.client.as_ref()).await?;
 	Ok(bytes.into())
@@ -307,9 +314,9 @@ async fn syscall_sleep(_state: Rc<State>, args: (f64,)) -> Result<()> {
 	Ok(())
 }
 
-async fn syscall_store(state: Rc<State>, args: (object::Object,)) -> Result<object::Id> {
+async fn syscall_store(state: Rc<State>, args: (tg::object::Object,)) -> Result<tg::object::Id> {
 	let (object,) = args;
-	let handle = object::Handle::with_object(object);
+	let handle = tg::object::Handle::with_object(object);
 	let id = handle.id(state.client.as_ref()).await?;
 	Ok(id.clone())
 }

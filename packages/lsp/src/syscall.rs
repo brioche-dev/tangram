@@ -5,8 +5,7 @@ use base64::Engine as _;
 use bytes::Bytes;
 use itertools::Itertools;
 use std::sync::Arc;
-use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 
 pub fn syscall<'s>(
 	scope: &mut v8::HandleScope<'s>,
@@ -205,9 +204,9 @@ fn syscall_module_load(
 ) -> Result<String> {
 	let (module,) = args;
 	state.main_runtime_handle.clone().block_on(async move {
-		let client = state.client.upgrade().unwrap();
+		let client = state.client.as_ref();
 		let text = module
-			.load(client.as_ref(), Some(&state.document_store))
+			.load(client, Some(&state.document_store))
 			.await
 			.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
 		Ok(text)
@@ -221,9 +220,9 @@ fn syscall_module_resolve(
 ) -> Result<Module> {
 	let (module, specifier) = args;
 	state.main_runtime_handle.clone().block_on(async move {
-		let client = state.client.upgrade().unwrap();
+		let client = state.client.as_ref();
 		let module = module
-			.resolve(client.as_ref(), Some(&state.document_store), &specifier)
+			.resolve(client, Some(&state.document_store), &specifier)
 			.await
 			.wrap_err_with(|| {
 				format!(

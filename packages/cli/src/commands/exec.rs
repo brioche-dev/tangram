@@ -1,6 +1,5 @@
 use crate::Cli;
-use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 /// Build a target from the specified package and execute a command from its output.
 #[derive(Debug, clap::Args)]

@@ -3,8 +3,7 @@ pub mod dirs {
 
 	use crate::{error, Result};
 	use std::path::PathBuf;
-	use tangram_client as tg;
-	use tg::Wrap;
+	use tangram_error::Wrap;
 
 	#[must_use]
 	pub fn global_config_directory_path() -> PathBuf {

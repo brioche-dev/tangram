@@ -1,6 +1,6 @@
 use crate::Cli;
 use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 use tokio::io::AsyncWriteExt;
 
 /// Get an object.

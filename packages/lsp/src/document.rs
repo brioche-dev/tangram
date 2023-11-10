@@ -8,7 +8,7 @@ use std::{
 	time::SystemTime,
 };
 use tangram_client as tg;
-use tg::{return_error, Result, Subpath, WrapErr};
+use tangram_error::{return_error, Result, WrapErr};
 
 /// A document.
 #[derive(
@@ -20,7 +20,7 @@ pub struct Document {
 	pub package_path: PathBuf,
 
 	/// The module's path.
-	pub path: Subpath,
+	pub path: tg::Subpath,
 }
 
 /// A document's state.
@@ -130,7 +130,11 @@ impl Server {
 }
 
 impl Document {
-	pub async fn new(store: &Store, package_path: PathBuf, module_path: Subpath) -> Result<Self> {
+	pub async fn new(
+		store: &Store,
+		package_path: PathBuf,
+		module_path: tg::Subpath,
+	) -> Result<Self> {
 		let path = package_path.join(module_path.to_string());
 
 		// Create the document.
@@ -179,7 +183,7 @@ impl Document {
 		}
 
 		// Get the module path by stripping the package path.
-		let module_path: Subpath = path
+		let module_path: tg::Subpath = path
 			.strip_prefix(&package_path)
 			.unwrap()
 			.to_owned()

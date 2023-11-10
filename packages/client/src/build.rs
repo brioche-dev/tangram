@@ -174,17 +174,17 @@ impl Build {
 		children: Vec<Build>,
 		log: Blob,
 		result: Result<Value>,
-	) -> Result<Self> {
+	) -> Self {
 		let object = Object {
 			target,
 			children,
 			log,
 			result,
 		};
-		Ok(Self::with_state(State {
+		Self::with_state(State {
 			id: Some(id),
 			object: Some(object),
-		}))
+		})
 	}
 
 	pub async fn target(&self, client: &dyn Client) -> Result<Target> {
@@ -262,18 +262,18 @@ impl Build {
 			.wrap_err("Failed to get the build.")
 	}
 
-	pub async fn set_result(&self, client: &dyn Client, result: Result<Value>) -> Result<()> {
-		let id = self.id(client).await?;
-		client.set_build_result(id, result).await?;
-		Ok(())
-	}
-
 	pub async fn try_get_result(&self, client: &dyn Client) -> Result<Option<Result<Value>>> {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.result.clone()))
 		} else {
 			Ok(client.try_get_build_result(self.id(client).await?).await?)
 		}
+	}
+
+	pub async fn set_result(&self, client: &dyn Client, result: Result<Value>) -> Result<()> {
+		let id = self.id(client).await?;
+		client.set_build_result(id, result).await?;
+		Ok(())
 	}
 
 	pub async fn finish(&self, client: &dyn Client) -> Result<()> {

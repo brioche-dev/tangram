@@ -1,8 +1,7 @@
 use crate::{return_error, send_notification, Diagnostic, Module, Sender, Server};
 use lsp_types as lsp;
 use std::collections::BTreeMap;
-use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

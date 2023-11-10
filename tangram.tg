@@ -1,32 +1,6 @@
-export default tg.target(() => {
-	return {
-		foo: f("foo", 5),
-		bar: f("bar", 10),
-		baz: f("baz", 120),
-	};
-});
+export let metadata: tg.Metadata = {
+	name: "test",
+	version: "0.0.0",
+}
 
-export let f = tg.target(async (name: string, n: number) => {
-	for (let i = 0; i < n; i++) {
-		await g(name);
-		await tg.sleep(1);
-	}
-	return name;
-});
-
-export let g = tg.target(async (name: string) => {
-	tg.log(name);
-	return undefined;
-});
-
-export let testOutput = tg.target(async () => {
-	return tg.build(tg`echo "Hello, World!" > $OUTPUT`);
-});
-
-export let source = tg.target(() =>
-	tg.directory({
-		["Cargo.toml"]: tg.include("./Cargo.toml"),
-		["Cargo.lock"]: tg.include("./Cargo.lock"),
-		["packages"]: tg.include("./packages"),
-	}),
-);
+export default tg.target(() => tg.file("Hello, World!"));

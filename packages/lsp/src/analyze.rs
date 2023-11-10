@@ -4,13 +4,13 @@ use std::{collections::HashSet, rc::Rc};
 use swc::ecma::{ast, visit::VisitWith};
 use swc_core as swc;
 use tangram_client as tg;
-use tg::{error, Relpath, Result, WrapErr};
+use tangram_error::{error, Result, WrapErr};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Output {
 	pub metadata: Option<tg::package::Metadata>,
 	pub imports: HashSet<Import, fnv::FnvBuildHasher>,
-	pub includes: HashSet<Relpath, fnv::FnvBuildHasher>,
+	pub includes: HashSet<tg::Relpath, fnv::FnvBuildHasher>,
 }
 
 pub struct Error {
@@ -82,7 +82,7 @@ struct Visitor {
 	errors: Vec<Error>,
 	metadata: Option<tg::package::Metadata>,
 	imports: HashSet<Import, fnv::FnvBuildHasher>,
-	includes: HashSet<Relpath, fnv::FnvBuildHasher>,
+	includes: HashSet<tg::Relpath, fnv::FnvBuildHasher>,
 }
 
 impl Visitor {

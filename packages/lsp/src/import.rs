@@ -1,5 +1,5 @@
 use tangram_client as tg;
-use tg::{return_error, Dependency, Error, Relpath, WrapErr};
+use tangram_error::{return_error, Error, WrapErr};
 use url::Url;
 
 /// An import in a module.
@@ -7,10 +7,10 @@ use url::Url;
 #[serde(into = "String", try_from = "String")]
 pub enum Import {
 	/// An import of a module in the current package, such as `import "./module.tg"`.
-	Path(Relpath),
+	Path(tg::Relpath),
 
 	/// An import of a dependency, such as `import "tangram:std"`.
-	Dependency(Dependency),
+	Dependency(tg::Dependency),
 }
 
 impl std::fmt::Display for Import {
@@ -34,7 +34,7 @@ impl std::str::FromStr for Import {
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		if value.starts_with('.') {
 			// If the string starts with `.`, then parse the string as a relative path.
-			let relpath: Relpath = value.parse()?;
+			let relpath: tg::Relpath = value.parse()?;
 
 			// Ensure the path has a ".tg" extension.
 			if relpath.extension() != Some("tg") {

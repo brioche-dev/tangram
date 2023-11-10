@@ -5,14 +5,11 @@ use std::{
 	io::SeekFrom,
 	os::{fd::FromRawFd, unix::prelude::OsStrExt},
 	path::Path,
-	sync::{Arc, Weak},
+	sync::{atomic::AtomicBool, Arc, Weak},
 };
 use tangram_client as tg;
-use tg::{
-	blob, template, Artifact, Client, Directory, File, Result, Symlink, Template, Wrap, WrapErr,
-};
-use tokio::io::AsyncWriteExt;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tangram_error::{Result, Wrap, WrapErr};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use zerocopy::{AsBytes, FromBytes};
 
 mod sys;
@@ -20,9 +17,19 @@ mod sys;
 /// A FUSE server.
 #[derive(Clone)]
 pub struct Server {
-	client: Arc<dyn Client>,
-	state: Arc<tokio::sync::RwLock<State>>,
+	inner: Arc<Inner>,
 }
+
+struct Inner {
+	client: Box<dyn tg::Client>,
+	state: tokio::sync::RwLock<State>,
+	task: Task,
+}
+
+type Task = (
+	std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+	std::sync::Mutex<Option<tokio::task::AbortHandle>>,
+);
 
 /// The server's state.
 struct State {
@@ -33,7 +40,7 @@ struct State {
 
 /// A node in the file system.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct NodeId(pub u64);
+struct NodeId(u64);
 
 /// The root node has ID 1.
 const ROOT_NODE_ID: NodeId = NodeId(1);
@@ -53,26 +60,26 @@ enum NodeKind {
 		children: tokio::sync::RwLock<BTreeMap<String, Arc<Node>>>,
 	},
 	Directory {
-		directory: Directory,
+		directory: tg::Directory,
 		children: tokio::sync::RwLock<BTreeMap<String, Arc<Node>>>,
 	},
 	File {
-		file: File,
+		file: tg::File,
 		size: u64,
 	},
 	Symlink {
-		symlink: Symlink,
+		symlink: tg::Symlink,
 	},
 }
 
 /// A file handle.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct FileHandle(u64);
 
 /// The data associated with a file handle.
 enum FileHandleData {
 	Directory,
-	File { reader: blob::Reader },
+	File { reader: tg::blob::Reader },
 	Symlink,
 }
 
@@ -119,9 +126,10 @@ enum Response {
 }
 
 impl Server {
-	/// Create a server.
-	pub fn new(client: &dyn tg::Client) -> Self {
-		let client = Arc::from(client.clone_box());
+	pub async fn start(client: &dyn tg::Client, path: &Path) -> Result<Self> {
+		// Create the server.
+		let client = client.clone_box();
+		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let root = Arc::new_cyclic(|root| Node {
 			id: ROOT_NODE_ID,
 			parent: root.clone(),
@@ -137,12 +145,54 @@ impl Server {
 			index,
 			handles,
 		};
-		let state = Arc::new(tokio::sync::RwLock::new(state));
-		Self { client, state }
+		let state = tokio::sync::RwLock::new(state);
+		let server = Self {
+			inner: Arc::new(Inner {
+				client,
+				state,
+				task,
+			}),
+		};
+
+		// Mount.
+		let file = Self::mount(path).await?;
+
+		// Spawn the task.
+		let task = tokio::spawn({
+			let server = server.clone();
+			async move { server.serve(file).await }
+		});
+		let abort = task.abort_handle();
+		server.inner.task.0.lock().unwrap().replace(task);
+		server.inner.task.1.lock().unwrap().replace(abort);
+
+		Ok(server)
 	}
 
-	/// Serve.
-	pub async fn serve(&self, fuse_file: std::fs::File) -> Result<()> {
+	pub fn stop(&self) {
+		if let Some(handle) = self.inner.task.1.lock().unwrap().as_ref() {
+			handle.abort();
+		};
+	}
+
+	pub async fn join(&self) -> Result<()> {
+		// Join the task.
+		let task = self.inner.task.0.lock().unwrap().take();
+		if let Some(task) = task {
+			match task.await {
+				Ok(result) => Ok(result),
+				Err(error) if error.is_cancelled() => Ok(Ok(())),
+				Err(error) => Err(error),
+			}
+			.unwrap()?;
+		}
+
+		Self::unmount(&self.path).await?;
+
+		Ok(())
+	}
+
+	async fn serve(&self, fuse_file: std::fs::File) -> Result<()> {
 		let mut fuse_file = tokio::fs::File::from_std(fuse_file);
 
 		// Create a buffer to read requests into.
@@ -262,16 +312,7 @@ impl Server {
 
 		Ok(())
 	}
-}
 
-fn read_data<T>(request_data: &[u8]) -> Result<T>
-where
-	T: FromBytes,
-{
-	T::read_from_prefix(request_data).wrap_err("Failed to deserialize the request data.")
-}
-
-impl Server {
 	/// Handle a request.
 	#[tracing::instrument(skip(self), ret)]
 	async fn handle_request(&self, request: Request) -> Result<Response, i32> {
@@ -319,7 +360,7 @@ impl Server {
 	) -> Result<Response, i32> {
 		let node_id = NodeId(header.nodeid);
 		let node = self.get_node(node_id).await?;
-		let response = node.fuse_attr_out(self.client.as_ref()).await?;
+		let response = node.fuse_attr_out(self.inner.client.as_ref()).await?;
 		Ok(Response::GetAttr(response))
 	}
 
@@ -357,15 +398,15 @@ impl Server {
 		let parent_node = self.get_node(parent_node_id).await?;
 
 		// Get the name as a string.
-		let Ok(name) = String::from_utf8(data.into_bytes()) else {
-			return Err(libc::ENOENT);
-		};
+		let name = String::from_utf8(data.into_bytes()).map_err(|_| libc::ENOENT)?;
 
 		// Get or create the child node.
 		let child_node = self.get_or_create_child_node(parent_node, &name).await?;
 
 		// Create the response.
-		let response = child_node.fuse_entry_out(self.client.as_ref()).await?;
+		let response = child_node
+			.fuse_entry_out(self.inner.client.as_ref())
+			.await?;
 
 		Ok(Response::Lookup(response))
 	}
@@ -388,12 +429,13 @@ impl Server {
 			NodeKind::Directory { .. } => FileHandleData::Directory,
 			NodeKind::File { file, .. } => {
 				let contents = file
-					.contents(self.client.as_ref())
+					.contents(self.inner.client.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
-				let Ok(reader) = contents.reader(self.client.as_ref()).await else {
-					return Err(libc::EIO);
-				};
+				let reader = contents
+					.reader(self.inner.client.as_ref())
+					.await
+					.map_err(|_| libc::EIO)?;
 				FileHandleData::File { reader }
 			},
 			NodeKind::Symlink { .. } => FileHandleData::Symlink,
@@ -402,7 +444,7 @@ impl Server {
 
 		// Add the file handle to the state.
 		let file_handle = {
-			let mut state = self.state.write().await;
+			let mut state = self.inner.state.write().await;
 			state.index += 1;
 			let file_handle = FileHandle(state.index);
 			state.handles.insert(file_handle, file_handle_data);
@@ -437,8 +479,10 @@ impl Server {
 		_header: sys::fuse_in_header,
 		data: sys::fuse_read_in,
 	) -> Result<Response, i32> {
+		// Get the reader.
 		let file_handle = FileHandle(data.fh);
 		let file_handle_data = self
+			.inner
 			.state
 			.read()
 			.await
@@ -451,24 +495,28 @@ impl Server {
 			return Err(libc::EIO);
 		};
 
-		let mut response = vec![0u8; data.size.to_usize().unwrap()];
+		// Seek to the offset.
 		reader
 			.seek(SeekFrom::Start(data.offset))
 			.await
 			.map_err(|_| libc::EIO)?;
 
-		// We need to read exactly data.size bytes unless we reach EOF. Note: AsyncReadExt::read_exact is inappropriate here because we need to get the total number of bytes read.
-		let mut total_size = 0;
-		loop {
-			let buf = &mut response[total_size..];
-			let n = reader.read(buf).await.map_err(|_| libc::EIO)?;
-			total_size = (total_size + n).min(data.size.to_usize().unwrap());
-			if n == 0 || total_size.to_u32().unwrap() >= data.size {
+		// Read.
+		let mut bytes = vec![0u8; data.size.to_usize().unwrap()];
+		let mut size = 0;
+		while size < data.size.to_usize().unwrap() {
+			let n = reader
+				.read(&mut bytes[size..])
+				.await
+				.map_err(|_| libc::EIO)?;
+			size += n;
+			if n == 0 {
 				break;
 			}
 		}
-		response.truncate(total_size);
-		Ok(Response::Read(response))
+		bytes.truncate(size);
+
+		Ok(Response::Read(bytes))
 	}
 
 	#[allow(clippy::unused_async)]
@@ -495,7 +543,7 @@ impl Server {
 		// Create the response.
 		let mut response = Vec::new();
 		let names = directory
-			.entries(self.client.as_ref())
+			.entries(self.inner.client.as_ref())
 			.await
 			.map_err(|_| libc::EIO)?
 			.keys()
@@ -537,7 +585,7 @@ impl Server {
 			};
 			if plus {
 				let entry = sys::fuse_direntplus {
-					entry_out: node.fuse_entry_out(self.client.as_ref()).await?,
+					entry_out: node.fuse_entry_out(self.inner.client.as_ref()).await?,
 					dirent: entry,
 				};
 				response.extend_from_slice(entry.as_bytes());
@@ -561,23 +609,26 @@ impl Server {
 		let node_id = NodeId(header.nodeid);
 		let node = self.get_node(node_id).await?;
 
-		// Get the target.
-		let target: Template = match &node.kind {
-			NodeKind::Symlink { symlink, .. } => symlink
-				.target(self.client.as_ref())
-				.await
-				.map_err(|_| libc::EIO)?,
+		// Get the symlink.
+		let symlink = match &node.kind {
+			NodeKind::Symlink { symlink, .. } => symlink,
 			_ => return Err(libc::EIO),
 		};
+
+		// Get the target.
+		let target = symlink
+			.target(self.inner.client.as_ref())
+			.await
+			.map_err(|_| libc::EIO)?;
 
 		// Render the target.
 		let mut response = String::new();
 		for component in target.components() {
 			match component {
-				template::Component::String(string) => response.push_str(string),
-				template::Component::Artifact(artifact) => {
+				tg::template::Component::String(string) => response.push_str(string),
+				tg::template::Component::Artifact(artifact) => {
 					let id = artifact
-						.id(self.client.as_ref())
+						.id(self.inner.client.as_ref())
 						.await
 						.map_err(|_| libc::EIO)?;
 					for _ in 0..node.depth() {
@@ -598,7 +649,7 @@ impl Server {
 		data: sys::fuse_release_in,
 	) -> Result<Response, i32> {
 		let file_handle = FileHandle(data.fh);
-		self.state.write().await.handles.remove(&file_handle);
+		self.inner.state.write().await.handles.remove(&file_handle);
 		Ok(Response::Release)
 	}
 
@@ -608,7 +659,7 @@ impl Server {
 		data: sys::fuse_release_in,
 	) -> Result<Response, i32> {
 		let file_handle = FileHandle(data.fh);
-		self.state.write().await.handles.remove(&file_handle);
+		self.inner.state.write().await.handles.remove(&file_handle);
 		Ok(Response::ReleaseDir)
 	}
 
@@ -624,11 +675,9 @@ impl Server {
 		tracing::error!(?opcode, "Unsupported FUSE request.");
 		Err(libc::ENOSYS)
 	}
-}
 
-impl Server {
 	async fn get_node(&self, node_id: NodeId) -> Result<Arc<Node>, i32> {
-		let state = self.state.read().await;
+		let state = self.inner.state.read().await;
 		let Some(node) = state.nodes.get(&node_id).cloned() else {
 			return Err(libc::ENOENT);
 		};
@@ -666,12 +715,12 @@ impl Server {
 		let child_artifact = match &parent_node.kind {
 			NodeKind::Root { .. } => {
 				let id = name.parse().map_err(|_| libc::ENOENT)?;
-				Artifact::with_id(id)
+				tg::Artifact::with_id(id)
 			},
 
 			NodeKind::Directory { directory, .. } => {
 				let entries = directory
-					.entries(self.client.as_ref())
+					.entries(self.inner.client.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
 				entries.get(name).ok_or(libc::ENOENT)?.clone()
@@ -681,27 +730,27 @@ impl Server {
 		};
 
 		// Create the child node.
-		let node_id = NodeId(self.state.read().await.nodes.len() as u64 + 1000);
+		let node_id = NodeId(self.inner.state.read().await.nodes.len() as u64 + 1000);
 		let kind = match child_artifact {
-			Artifact::Directory(directory) => {
+			tg::Artifact::Directory(directory) => {
 				let children = tokio::sync::RwLock::new(BTreeMap::default());
 				NodeKind::Directory {
 					directory,
 					children,
 				}
 			},
-			Artifact::File(file) => {
+			tg::Artifact::File(file) => {
 				let contents = file
-					.contents(self.client.as_ref())
+					.contents(self.inner.client.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
 				let size = contents
-					.size(self.client.as_ref())
+					.size(self.inner.client.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
 				NodeKind::File { file, size }
 			},
-			Artifact::Symlink(symlink) => NodeKind::Symlink { symlink },
+			tg::Artifact::Symlink(symlink) => NodeKind::Symlink { symlink },
 		};
 		let child_node = Node {
 			id: node_id,
@@ -723,13 +772,131 @@ impl Server {
 		}
 
 		// Add the child node to the nodes.
-		self.state
+		self.inner
+			.state
 			.write()
 			.await
 			.nodes
 			.insert(child_node.id, child_node.clone());
 
 		Ok(child_node)
+	}
+
+	async fn mount(path: &Path) -> Result<std::fs::File> {
+		unsafe {
+			Self::unmount(path).await?;
+
+			// Setup the arguments.
+			let uid = libc::getuid();
+			let gid = libc::getgid();
+			let options = format!(
+				"rootmode=40755,user_id={uid},group_id={gid},default_permissions,auto_unmount\0"
+			);
+
+			let mut fds = [0, 0];
+			let ret = libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr());
+			if ret != 0 {
+				Err(std::io::Error::last_os_error())
+					.wrap_err("Failed to create the socket pair.")?;
+			}
+
+			let fusermount3 = std::ffi::CString::new("/usr/bin/fusermount3").unwrap();
+			let fuse_commfd = std::ffi::CString::new(fds[0].to_string()).unwrap();
+
+			// Fork.
+			let pid = libc::fork();
+			if pid == -1 {
+				libc::close(fds[0]);
+				libc::close(fds[1]);
+				Err(std::io::Error::last_os_error()).wrap_err("Failed to fork.")?;
+			}
+
+			// Exec the program.
+			if pid == 0 {
+				let argv = [
+					fusermount3.as_ptr(),
+					b"-o\0".as_ptr().cast(),
+					options.as_ptr().cast(),
+					b"--\0".as_ptr().cast(),
+					path.as_os_str().as_bytes().as_ptr().cast(),
+					std::ptr::null(),
+				];
+				libc::close(fds[1]);
+				libc::fcntl(fds[0], libc::F_SETFD, 0);
+				libc::setenv(
+					b"_FUSE_COMMFD\0".as_ptr().cast(),
+					fuse_commfd.as_ptr().cast(),
+					1,
+				);
+				libc::execv(argv[0], argv.as_ptr());
+				libc::perror(b"tangram: failed to mount fuse\0".as_ptr().cast());
+				libc::close(fds[0]);
+				libc::exit(1);
+			}
+			libc::close(fds[0]);
+
+			// Create the control message.
+			let mut control = [0u8; unsafe { libc::CMSG_SPACE(4) as usize }];
+			let mut msg = libc::msghdr {
+				msg_name: std::ptr::null_mut(),
+				msg_namelen: 0,
+				msg_iov: [libc::iovec {
+					iov_base: [0u8; 8].as_mut_ptr().cast(),
+					iov_len: 8,
+				}]
+				.as_mut_ptr(),
+				msg_iovlen: 1,
+				msg_control: control.as_mut_ptr().cast(),
+				msg_controllen: std::mem::size_of_val(&control) as _,
+				msg_flags: 0,
+			};
+
+			// Receive the control message.
+			let ret = libc::recvmsg(fds[1], std::ptr::addr_of_mut!(msg), 0);
+			if ret == -1 {
+				return Err(std::io::Error::last_os_error().wrap("Failed to receive the message."));
+			}
+			if ret == 0 {
+				return Err(std::io::Error::new(
+					std::io::ErrorKind::UnexpectedEof,
+					"Unexpected EOF.",
+				)
+				.wrap("Unexpected EOF."));
+			}
+
+			// Read the file descriptor.
+			let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
+			if cmsg.is_null() {
+				return Err(std::io::Error::new(
+					std::io::ErrorKind::UnexpectedEof,
+					"Unexpected EOF.",
+				)
+				.wrap("Unexpected EOF."));
+			}
+			let mut fd: std::os::unix::io::RawFd = 0;
+			libc::memcpy(
+				std::ptr::addr_of_mut!(fd).cast(),
+				libc::CMSG_DATA(cmsg).cast(),
+				std::mem::size_of_val(&fd),
+			);
+
+			if fd > 0 {
+				libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
+			}
+
+			Ok(std::fs::File::from_raw_fd(fd))
+		}
+	}
+
+	async fn unmount(path: &Path) -> Result<()> {
+		tokio::process::Command::new("fusermount3")
+			.arg("-q")
+			.arg("-u")
+			.arg(path)
+			.status()
+			.await
+			.wrap_err("Failed to execute the unmount command.")?;
+		Ok(())
 	}
 }
 
@@ -742,7 +909,7 @@ impl Node {
 		}
 	}
 
-	async fn mode(&self, client: &dyn Client) -> Result<u32, i32> {
+	async fn mode(&self, client: &dyn tg::Client) -> Result<u32, i32> {
 		let mode = match &self.kind {
 			NodeKind::Root { .. } | NodeKind::Directory { .. } => libc::S_IFDIR | 0o555,
 			NodeKind::File { file, .. } => {
@@ -769,7 +936,7 @@ impl Node {
 		}
 	}
 
-	async fn fuse_entry_out(&self, client: &dyn Client) -> Result<sys::fuse_entry_out, i32> {
+	async fn fuse_entry_out(&self, client: &dyn tg::Client) -> Result<sys::fuse_entry_out, i32> {
 		let nodeid = self.id.0;
 		let attr_out = self.fuse_attr_out(client).await?;
 		let entry_out = sys::fuse_entry_out {
@@ -784,7 +951,7 @@ impl Node {
 		Ok(entry_out)
 	}
 
-	async fn fuse_attr_out(&self, client: &dyn Client) -> Result<sys::fuse_attr_out, i32> {
+	async fn fuse_attr_out(&self, client: &dyn tg::Client) -> Result<sys::fuse_attr_out, i32> {
 		let nodeid = self.id.0;
 		let nlink: u32 = match &self.kind {
 			NodeKind::Root { .. } => 2,
@@ -819,120 +986,9 @@ impl Node {
 	}
 }
 
-pub async fn mount(path: &Path) -> crate::Result<std::fs::File> {
-	unmount(path).await?;
-	let result = unsafe { mount_inner(path) };
-	if result.is_err() {
-		unmount(path).await?;
-	}
-	result
-}
-
-unsafe fn mount_inner(path: &Path) -> crate::Result<std::fs::File> {
-	// Setup the arguments.
-	let uid = libc::getuid();
-	let gid = libc::getgid();
-	let options =
-		format!("rootmode=40755,user_id={uid},group_id={gid},default_permissions,auto_unmount\0");
-
-	let mut fds = [0, 0];
-	let ret = libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr());
-	if ret != 0 {
-		Err(std::io::Error::last_os_error()).wrap_err("Failed to create the socket pair.")?;
-	}
-
-	let fusermount3 = std::ffi::CString::new("/usr/bin/fusermount3").unwrap();
-	let fuse_commfd = std::ffi::CString::new(fds[0].to_string()).unwrap();
-
-	// Fork.
-	let pid = libc::fork();
-	if pid == -1 {
-		libc::close(fds[0]);
-		libc::close(fds[1]);
-		Err(std::io::Error::last_os_error()).wrap_err("Failed to fork.")?;
-	}
-
-	// Exec the program.
-	if pid == 0 {
-		let argv = [
-			fusermount3.as_ptr(),
-			b"-o\0".as_ptr().cast(),
-			options.as_ptr().cast(),
-			b"--\0".as_ptr().cast(),
-			path.as_os_str().as_bytes().as_ptr().cast(),
-			std::ptr::null(),
-		];
-		libc::close(fds[1]);
-		libc::fcntl(fds[0], libc::F_SETFD, 0);
-		libc::setenv(
-			b"_FUSE_COMMFD\0".as_ptr().cast(),
-			fuse_commfd.as_ptr().cast(),
-			1,
-		);
-		libc::execv(argv[0], argv.as_ptr());
-		libc::perror(b"tangram: failed to mount fuse\0".as_ptr().cast());
-		libc::close(fds[0]);
-		libc::exit(1);
-	}
-	libc::close(fds[0]);
-
-	// Create the control message.
-	let mut control = [0u8; unsafe { libc::CMSG_SPACE(4) as usize }];
-	let mut msg = libc::msghdr {
-		msg_name: std::ptr::null_mut(),
-		msg_namelen: 0,
-		msg_iov: [libc::iovec {
-			iov_base: [0u8; 8].as_mut_ptr().cast(),
-			iov_len: 8,
-		}]
-		.as_mut_ptr(),
-		msg_iovlen: 1,
-		msg_control: control.as_mut_ptr().cast(),
-		msg_controllen: std::mem::size_of_val(&control) as _,
-		msg_flags: 0,
-	};
-
-	// Receive the control message.
-	let ret = libc::recvmsg(fds[1], std::ptr::addr_of_mut!(msg), 0);
-	if ret == -1 {
-		return Err(std::io::Error::last_os_error().wrap("Failed to receive the message."));
-	}
-	if ret == 0 {
-		return Err(
-			std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF.")
-				.wrap("Unexpected EOF."),
-		);
-	}
-
-	// Read the file descriptor.
-	let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
-	if cmsg.is_null() {
-		return Err(
-			std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF.")
-				.wrap("Unexpected EOF."),
-		);
-	}
-	let mut fd: std::os::unix::io::RawFd = 0;
-	libc::memcpy(
-		std::ptr::addr_of_mut!(fd).cast(),
-		libc::CMSG_DATA(cmsg).cast(),
-		std::mem::size_of_val(&fd),
-	);
-
-	if fd > 0 {
-		libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
-	}
-
-	Ok(std::fs::File::from_raw_fd(fd))
-}
-
-async fn unmount(path: &Path) -> crate::Result<()> {
-	tokio::process::Command::new("fusermount3")
-		.arg("-q")
-		.arg("-u")
-		.arg(path)
-		.status()
-		.await
-		.wrap_err("Failed to execute the unmount command.")?;
-	Ok(())
+fn read_data<T>(request_data: &[u8]) -> Result<T>
+where
+	T: FromBytes,
+{
+	T::read_from_prefix(request_data).wrap_err("Failed to deserialize the request data.")
 }

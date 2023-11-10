@@ -1,15 +1,13 @@
 use std::path::Path;
 use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 #[cfg(target_os = "linux")]
 mod fuse;
 #[cfg(target_os = "macos")]
 mod nfs;
 
-#[cfg(target_os = "macos")]
-const PORT: u16 = 8437;
-
+#[derive(Clone)]
 pub enum Server {
 	#[cfg(target_os = "linux")]
 	Fuse(fuse::Server),
@@ -18,33 +16,32 @@ pub enum Server {
 }
 
 impl Server {
-	#[must_use]
-	pub fn new(client: &dyn tg::Client) -> Self {
+	pub async fn start(client: &dyn tg::Client, path: &Path) -> Result<Self> {
 		#[cfg(target_os = "linux")]
 		{
-			Self::Fuse(fuse::Server::new(client))
+			Ok(Self::Fuse(fuse::Server::start(client, path).await?))
 		}
 		#[cfg(target_os = "macos")]
 		{
-			Self::Nfs(nfs::Server::new(client))
+			Ok(Self::Nfs(nfs::Server::start(client, path, 8437).await?))
 		}
 	}
 
-	pub async fn mount(self, path: &Path) -> Result<tokio::task::JoinHandle<Result<()>>> {
+	pub fn stop(&self) {
 		match self {
 			#[cfg(target_os = "linux")]
-			Server::Fuse(server) => {
-				let file = fuse::mount(path).await?;
-				let task = tokio::task::spawn(async move { server.serve(file).await });
-				Ok(task)
-			},
-
+			Server::Fuse(server) => server.stop(),
 			#[cfg(target_os = "macos")]
-			Server::Nfs(server) => {
-				let task = tokio::spawn(async move { server.serve(PORT).await });
-				nfs::mount(path, PORT).await?;
-				Ok(task)
-			},
+			Server::Nfs(server) => server.stop(),
+		}
+	}
+
+	pub async fn join(&self) -> Result<()> {
+		match self {
+			#[cfg(target_os = "linux")]
+			Server::Fuse(server) => server.join().await,
+			#[cfg(target_os = "macos")]
+			Server::Nfs(server) => server.join().await,
 		}
 	}
 }

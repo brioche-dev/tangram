@@ -1,8 +1,7 @@
 use crate::{Location, Module, Position, Server};
 use lsp_types as lsp;
 use std::collections::HashMap;
-use tangram_client as tg;
-use tg::{return_error, Result};
+use tangram_error::{return_error, Result};
 use url::Url;
 
 #[derive(Debug, serde::Serialize)]

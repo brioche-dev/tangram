@@ -1,6 +1,6 @@
 use crate::{
-	artifact, id, lock, object, value, Artifact, Build, Checksum, Client, Error, Lock, Result,
-	System, Value, WrapErr,
+	artifact, id, lock, object, value, Artifact, Build, Checksum, Client, Directory, Error, Lock,
+	Result, System, Value, WrapErr,
 };
 use bytes::Bytes;
 use derive_more::Display;
@@ -227,6 +227,20 @@ impl Target {
 
 	pub async fn checksum(&self, client: &dyn Client) -> Result<&Option<Checksum>> {
 		Ok(&self.object(client).await?.checksum)
+	}
+
+	pub async fn package(&self, client: &dyn Client) -> Result<Option<&Directory>> {
+		let object = &self.object(client).await?;
+		let Artifact::Symlink(symlink) = &object.executable else {
+			return Ok(None);
+		};
+		let Some(artifact) = symlink.artifact(client).await? else {
+			return Ok(None);
+		};
+		let Some(directory) = artifact.try_unwrap_directory_ref().ok() else {
+			return Ok(None);
+		};
+		Ok(Some(directory))
 	}
 
 	pub async fn build(&self, client: &dyn Client) -> Result<Build> {

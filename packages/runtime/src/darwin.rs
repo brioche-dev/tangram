@@ -9,11 +9,10 @@ use std::{
 	os::unix::prelude::OsStrExt,
 };
 use tangram_client as tg;
-use tangram_error::Wrap;
-use tg::{return_error, Artifact, Build, Client, Error, Result, Value, WrapErr};
+use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::AsyncReadExt;
 
-pub async fn build(client: &dyn Client, build: &Build) -> Result<()> {
+pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<()> {
 	match build_inner(client, build).await {
 		Ok(output) => {
 			build.set_result(client, Ok(output)).await?;
@@ -29,7 +28,7 @@ pub async fn build(client: &dyn Client, build: &Build) -> Result<()> {
 }
 
 #[allow(clippy::too_many_lines)]
-pub async fn build_inner(client: &dyn Client, build: &Build) -> Result<Value> {
+pub async fn build_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 
@@ -365,7 +364,7 @@ pub async fn build_inner(client: &dyn Client, build: &Build) -> Result<Value> {
 		let options = tg::checkin::Options {
 			artifacts_paths: vec![artifacts_directory_path],
 		};
-		let artifact = Artifact::check_in_with_options(client, &output_path, &options)
+		let artifact = tg::Artifact::check_in_with_options(client, &output_path, &options)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 
@@ -384,7 +383,7 @@ pub async fn build_inner(client: &dyn Client, build: &Build) -> Result<Value> {
 
 		artifact.into()
 	} else {
-		Value::Null(())
+		tg::Value::Null(())
 	};
 
 	Ok(value)

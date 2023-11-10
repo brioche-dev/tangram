@@ -1,5 +1,6 @@
 use std::{path::PathBuf, str::FromStr};
 use tangram_error::{Error, WrapErr};
+use url::Url;
 
 #[derive(Clone, Debug)]
 pub enum Addr {
@@ -88,5 +89,19 @@ impl std::str::FromStr for Host {
 		} else {
 			Ok(Host::Domain(s.to_string()))
 		}
+	}
+}
+
+impl TryFrom<Url> for Addr {
+	type Error = Error;
+
+	fn try_from(value: Url) -> Result<Self, Self::Error> {
+		let host = value
+			.host_str()
+			.wrap_err("Invalid URL.")?
+			.parse()
+			.wrap_err("Invalid URL.")?;
+		let port = value.port_or_known_default().wrap_err("Invalid URL.")?;
+		Ok(Addr::Inet(Inet { host, port }))
 	}
 }

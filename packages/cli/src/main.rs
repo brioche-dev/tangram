@@ -8,8 +8,9 @@ use self::{commands::Args, util::dirs::home_directory_path};
 use clap::Parser;
 use std::{path::PathBuf, sync::Arc};
 use tangram_client as tg;
+use tangram_error::{error, return_error, Result, WrapErr};
 use tangram_http::net::Addr;
-use tg::{error, return_error, Client, Result, WrapErr};
+use tg::Client;
 use tracing_subscriber::prelude::*;
 
 mod commands;
@@ -110,6 +111,7 @@ impl Cli {
 		let client = tangram_http::client::Builder::new(addr).build();
 		let mut connected = client.connect().await.is_ok();
 
+		// If this is a debug build, then require that the client is connected and has the same version as the server.
 		if cfg!(debug_assertions) {
 			if !connected {
 				return_error!("Failed to connect to the server.");
@@ -169,7 +171,7 @@ impl Cli {
 			.await
 			.wrap_err("Failed to create the server stderr file.")?;
 		tokio::process::Command::new(executable)
-			.arg("serve")
+			.args(["server", "run"])
 			.current_dir(&self.path)
 			.stdin(std::process::Stdio::null())
 			.stdout(std::process::Stdio::from(stdout.into_std().await))

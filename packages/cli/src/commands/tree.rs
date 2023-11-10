@@ -1,6 +1,5 @@
 use crate::Cli;
-use tangram_client as tg;
-use tg::{return_error, Result};
+use tangram_error::{return_error, Result};
 
 /// Print the dependency tree of a package.
 #[derive(Debug, clap::Args)]

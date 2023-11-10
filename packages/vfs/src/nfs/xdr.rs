@@ -366,6 +366,7 @@ where
 		Ok(())
 	}
 }
+
 pub fn to_bytes<T>(arg: &T) -> Vec<u8>
 where
 	T: ToXdr,

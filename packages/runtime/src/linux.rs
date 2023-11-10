@@ -10,7 +10,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 use tangram_client as tg;
-use tg::{return_error, Error, Result, Wrap, WrapErr};
+use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// The home directory guest path.

@@ -55,7 +55,7 @@ type FunctionArg<
 export function target<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,
->(args: FunctionArg): Target<A, R>;
+>(arg: FunctionArg): Target<A, R>;
 export function target<
 	A extends Array<Value> = Array<Value>,
 	R extends Value = Value,

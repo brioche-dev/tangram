@@ -163,6 +163,21 @@ impl Symlink {
 		Ok(self.object(client).await?.target.clone())
 	}
 
+	pub async fn artifact(&self, client: &dyn Client) -> Result<Option<&Artifact>> {
+		let object = self.object(client).await?;
+		let Some(artifact) = object
+			.target
+			.components()
+			.first()
+			.wrap_err("Expected at least one component.")?
+			.try_unwrap_artifact_ref()
+			.ok()
+		else {
+			return Ok(None);
+		};
+		Ok(Some(artifact))
+	}
+
 	pub async fn resolve(&self, client: &dyn Client) -> Result<Option<Artifact>> {
 		self.resolve_from(client, None).await
 	}

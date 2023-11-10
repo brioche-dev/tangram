@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use tangram_client as tg;
-use tg::{Dependency, Error, Result, WrapErr};
+use tangram_error::{Error, Result, WrapErr};
 
 /// A reference to a package, either at a path or from the registry.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize)]
@@ -107,9 +107,9 @@ impl TryFrom<String> for Registry {
 	}
 }
 
-impl From<Dependency> for Specifier {
-	fn from(value: Dependency) -> Self {
-		let Dependency {
+impl From<tg::Dependency> for Specifier {
+	fn from(value: tg::Dependency) -> Self {
+		let tg::Dependency {
 			name,
 			version,
 			path,

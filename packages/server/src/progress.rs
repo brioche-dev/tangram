@@ -5,7 +5,7 @@ use futures::{
 };
 use std::sync::Arc;
 use tangram_client as tg;
-use tg::{Result, Wrap, WrapErr};
+use tangram_error::{Result, Wrap, WrapErr};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -16,7 +16,6 @@ pub struct Progress {
 
 #[derive(Debug)]
 struct Inner {
-	id: tg::build::Id,
 	target: tg::Target,
 	children: std::sync::Mutex<ChildrenState>,
 	log: Arc<tokio::sync::Mutex<LogState>>,
@@ -41,8 +40,15 @@ struct ResultState {
 	sender: tokio::sync::watch::Sender<Option<Result<tg::Value>>>,
 }
 
+pub struct Output {
+	pub target: tg::Target,
+	pub children: Vec<tg::Build>,
+	pub log: tg::Blob,
+	pub result: Result<tg::Value>,
+}
+
 impl Progress {
-	pub fn new(id: tg::build::Id, target: tg::Target) -> Result<Self> {
+	pub fn new(target: tg::Target) -> Result<Self> {
 		// Create the children state.
 		let children = std::sync::Mutex::new(ChildrenState {
 			children: Vec::new(),
@@ -66,7 +72,6 @@ impl Progress {
 
 		Ok(Self {
 			inner: Arc::new(Inner {
-				id,
 				target,
 				children,
 				log,
@@ -154,17 +159,16 @@ impl Progress {
 		self.inner.result.sender.send(Some(result)).unwrap();
 	}
 
-	pub async fn finish(&self, client: &dyn tg::Client) -> Result<tg::Build> {
-		// Drop the children sender.
-		self.inner.children.lock().unwrap().sender.take();
-
-		// Drop the log sender.
-		self.inner.log.lock().await.sender.take();
+	pub async fn finish(&self, client: &dyn tg::Client) -> Result<Output> {
+		// Get the target.
+		let target = self.inner.target.clone();
 
 		// Get the children.
+		self.inner.children.lock().unwrap().sender.take();
 		let children = self.inner.children.lock().unwrap().children.clone();
 
 		// Get the log.
+		self.inner.log.lock().await.sender.take();
 		let log = {
 			let mut state = self.inner.log.lock().await;
 			state.log.rewind().await.wrap_err("Failed to seek.")?;
@@ -174,18 +178,11 @@ impl Progress {
 		// Get the result.
 		let result = self.inner.result.result.borrow().clone().unwrap();
 
-		// Create the build.
-		let build = tg::Build::new(
-			self.inner.id.clone(),
-			self.inner.target.clone(),
+		Ok(Output {
+			target,
 			children,
 			log,
 			result,
-		)?;
-
-		// Store the build.
-		build.store(client).await?;
-
-		Ok(build)
+		})
 	}
 }

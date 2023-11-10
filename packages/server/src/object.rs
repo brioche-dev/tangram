@@ -1,9 +1,9 @@
 use super::Server;
 use bytes::Bytes;
 use futures::{stream, StreamExt, TryStreamExt};
-use lmdb::Transaction;
 use tangram_client as tg;
-use tg::{object, Error, Result, Wrap, WrapErr};
+use tangram_error::{Error, Result, WrapErr};
+use tg::object;
 
 impl Server {
 	pub async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
@@ -12,8 +12,8 @@ impl Server {
 			return Ok(true);
 		}
 
-		// Check if the object exists in the parent.
-		if let Ok(true) = self.get_object_exists_from_parent(id).await {
+		// Check if the object exists in the remote.
+		if let Ok(true) = self.get_object_exists_from_remote(id).await {
 			return Ok(true);
 		}
 
@@ -21,22 +21,12 @@ impl Server {
 	}
 
 	pub fn get_object_exists_from_database(&self, id: &object::Id) -> Result<bool> {
-		let txn = self
-			.inner
-			.database
-			.env
-			.begin_ro_txn()
-			.wrap_err("Failed to create the transaction.")?;
-		match txn.get(self.inner.database.objects, &id.to_bytes()) {
-			Ok(_) => Ok(true),
-			Err(lmdb::Error::NotFound) => Ok(false),
-			Err(error) => Err(error.wrap("Failed to get the object.")),
-		}
+		self.inner.database.get_object_exists(id)
 	}
 
-	async fn get_object_exists_from_parent(&self, id: &object::Id) -> Result<bool> {
-		if let Some(parent) = self.inner.parent.as_ref() {
-			if parent.get_object_exists(id).await? {
+	async fn get_object_exists_from_remote(&self, id: &object::Id) -> Result<bool> {
+		if let Some(remote) = self.inner.remote.as_ref() {
+			if remote.get_object_exists(id).await? {
 				return Ok(true);
 			}
 		}
@@ -55,8 +45,8 @@ impl Server {
 			return Ok(Some(bytes));
 		};
 
-		// Attempt to get the object from the parent.
-		if let Ok(Some(bytes)) = self.try_get_object_from_parent(id).await {
+		// Attempt to get the object from the remote.
+		if let Ok(Some(bytes)) = self.try_get_object_from_remote(id).await {
 			return Ok(Some(bytes));
 		};
 
@@ -64,50 +54,21 @@ impl Server {
 	}
 
 	pub fn try_get_object_from_database(&self, id: &object::Id) -> Result<Option<Bytes>> {
-		let txn = self
-			.inner
-			.database
-			.env
-			.begin_ro_txn()
-			.wrap_err("Failed to create the transaction.")?;
-		let data = match txn.get(self.inner.database.objects, &id.to_bytes()) {
-			Ok(data) => data,
-			Err(lmdb::Error::NotFound) => return Ok(None),
-			Err(error) => return Err(error.wrap("Failed to get the object.")),
-		};
-		let data = Bytes::copy_from_slice(data);
-		Ok(Some(data))
+		self.inner.database.get_object(id)
 	}
 
-	async fn try_get_object_from_parent(&self, id: &object::Id) -> Result<Option<Bytes>> {
-		let Some(parent) = self.inner.parent.as_ref() else {
+	async fn try_get_object_from_remote(&self, id: &object::Id) -> Result<Option<Bytes>> {
+		let Some(remote) = self.inner.remote.as_ref() else {
 			return Ok(None);
 		};
 
-		// Get the object from the parent.
-		let Some(bytes) = parent.try_get_object(id).await? else {
+		// Get the object from the remote.
+		let Some(bytes) = remote.try_get_object(id).await? else {
 			return Ok(None);
 		};
-
-		// Create a write transaction.
-		let mut txn = self
-			.inner
-			.database
-			.env
-			.begin_rw_txn()
-			.wrap_err("Failed to create the transaction.")?;
 
 		// Add the object to the database.
-		txn.put(
-			self.inner.database.objects,
-			&id.to_bytes(),
-			&bytes,
-			lmdb::WriteFlags::empty(),
-		)
-		.wrap_err("Failed to put the object.")?;
-
-		// Commit the transaction.
-		txn.commit().wrap_err("Failed to commit the transaction.")?;
+		self.inner.database.put_object(id, &bytes)?;
 
 		Ok(Some(bytes))
 	}
@@ -134,25 +95,8 @@ impl Server {
 			return Ok(Err(missing_children));
 		}
 
-		// Create a write transaction.
-		let mut txn = self
-			.inner
-			.database
-			.env
-			.begin_rw_txn()
-			.wrap_err("Failed to create the transaction.")?;
-
 		// Add the object to the database.
-		txn.put(
-			self.inner.database.objects,
-			&id.to_bytes(),
-			&bytes,
-			lmdb::WriteFlags::empty(),
-		)
-		.wrap_err("Failed to put the object.")?;
-
-		// Commit the transaction.
-		txn.commit().wrap_err("Failed to commit the transaction.")?;
+		self.inner.database.put_object(id, bytes)?;
 
 		Ok(Ok(()))
 	}

@@ -1,9 +1,8 @@
 #![allow(non_camel_case_types, dead_code)]
-use std::{os::unix::prelude::OsStrExt, path::Path};
-
-use num::ToPrimitive;
 
 use super::xdr;
+use num::ToPrimitive;
+use std::{os::unix::prelude::OsStrExt, path::Path};
 
 // RPC constants.
 pub const RPC_VERS: u32 = 2;

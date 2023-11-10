@@ -1,8 +1,7 @@
 use crate::Cli;
 use indoc::formatdoc;
 use std::path::PathBuf;
-use tangram_client as tg;
-use tg::{return_error, Result, Wrap, WrapErr};
+use tangram_error::{return_error, Result, Wrap, WrapErr};
 
 /// Initialize a new package.
 #[derive(Debug, clap::Args)]

@@ -1,8 +1,11 @@
 use super::PackageArgs;
-use crate::{tui::Tui, Cli};
+use crate::{
+	tui::{self, Tui},
+	Cli,
+};
 use std::path::PathBuf;
 use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 
 /// Build a target.
 #[derive(Debug, clap::Args)]
@@ -64,6 +67,7 @@ impl Cli {
 
 		// Build the target.
 		let build = target.build(client).await?;
+		eprintln!("{}", build.id(client).await?);
 
 		// If the detach flag is set, then exit.
 		if args.detach {
@@ -74,17 +78,20 @@ impl Cli {
 		// Create the TUI.
 		let tui = !args.no_tui;
 		let tui = if tui {
-			Tui::start(client, &build).await.ok()
+			Tui::start(client, &build, tui::Options::default())
+				.await
+				.ok()
 		} else {
 			None
 		};
 
-		// Wait for the build's output.
+		// Wait for the build's result.
 		let result = build.result(client).await;
 
-		// Finish the TUI.
+		// Stop the TUI.
 		if let Some(tui) = tui {
-			tui.finish().await?;
+			tui.stop();
+			tui.join().await?;
 		}
 
 		// Handle for an error that occurred while waiting for the build's result.

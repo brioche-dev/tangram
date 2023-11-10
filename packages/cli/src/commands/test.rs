@@ -1,7 +1,6 @@
 use super::PackageArgs;
 use crate::Cli;
-use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 /// Build the target named "test" from the specified package.
 #[derive(Debug, clap::Args)]

@@ -2,7 +2,7 @@ use super::SOURCE_MAP;
 use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::sync::Arc;
-use tangram_client as tg;
+use tangram_error::Error;
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +31,7 @@ struct V8CallSite {
 
 pub(super) fn to_exception<'s>(
 	scope: &mut v8::HandleScope<'s>,
-	error: &tg::Error,
+	error: &tangram_error::Error,
 ) -> v8::Local<'s, v8::Value> {
 	let context = scope.get_current_context();
 	let global = context.global(scope);
@@ -53,7 +53,7 @@ pub(super) fn to_exception<'s>(
 pub(super) fn from_exception<'s>(
 	scope: &mut v8::HandleScope<'s>,
 	exception: v8::Local<'s, v8::Value>,
-) -> tg::Error {
+) -> Error {
 	let context = scope.get_current_context();
 	let global = context.global(scope);
 	let lsp = v8::String::new_external_onebyte_static(scope, "lsp".as_bytes()).unwrap();
@@ -112,7 +112,7 @@ pub(super) fn from_exception<'s>(
 		.map(|error| Arc::new(error) as _);
 
 	// Create the error.
-	tg::Error {
+	Error {
 		message,
 		location,
 		stack,

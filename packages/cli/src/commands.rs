@@ -1,7 +1,8 @@
 use crate::Cli;
 use futures::FutureExt;
 use tangram_client as tg;
-use tg::{Result, Subpath};
+use tangram_error::Result;
+use tg::Subpath;
 
 mod add;
 mod autoenv;
@@ -26,7 +27,6 @@ mod publish;
 mod remove;
 mod run;
 mod search;
-mod serve;
 mod server;
 mod shell;
 mod test;
@@ -73,7 +73,6 @@ pub enum Command {
 	Remove(self::remove::Args),
 	Run(self::run::Args),
 	Search(self::search::Args),
-	Serve(self::serve::Args),
 	Server(self::server::Args),
 	Shell(self::shell::Args),
 	Test(self::test::Args),
@@ -127,7 +126,6 @@ impl Cli {
 			Command::Remove(args) => self.command_remove(args).boxed(),
 			Command::Run(args) => self.command_run(args).boxed(),
 			Command::Search(args) => self.command_search(args).boxed(),
-			Command::Serve(args) => self.command_serve(args).boxed(),
 			Command::Server(args) => self.command_server(args).boxed(),
 			Command::Shell(args) => self.command_shell(args).boxed(),
 			Command::Test(args) => self.command_test(args).boxed(),

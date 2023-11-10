@@ -1,6 +1,6 @@
 use crate::Cli;
 use tangram_client as tg;
-use tg::{return_error, Result};
+use tangram_error::{return_error, Result};
 
 /// Compute a checksum.
 #[derive(Debug, clap::Args)]

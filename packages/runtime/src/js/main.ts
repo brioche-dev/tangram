@@ -1,53 +1,91 @@
-import { assert } from "./assert.ts";
+import { Artifact } from "./artifact.ts";
+import { assert, unimplemented, unreachable } from "./assert.ts";
+import { Blob, blob, download } from "./blob.ts";
+import { Branch, branch } from "./branch.ts";
+import { Directory, directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
-import { Module } from "./module.ts";
+import { Error as Error_, prepareStackTrace } from "./error.ts";
+import { File, file } from "./file.ts";
+import { include } from "./include.ts";
+import { Leaf, leaf } from "./leaf.ts";
+import { Lock } from "./lock.ts";
+import { log } from "./log.ts";
+import { Args, Mutation, apply, mutation } from "./mutation.ts";
 import { resolve } from "./resolve.ts";
-import { Symlink } from "./symlink.ts";
-import { Target, functions, setCurrent, setCurrentEnv } from "./target.ts";
+import { sleep } from "./sleep.ts";
+import { start } from "./start.ts";
+import { Symlink, symlink } from "./symlink.ts";
+import { System, system } from "./system.ts";
+import { Target, build, getCurrent, target } from "./target.ts";
+import { Template, template } from "./template.ts";
 import { Value } from "./value.ts";
 
-export let main = async (target: Target): Promise<Value> => {
-	// Set the current target.
-	setCurrent(target);
+Object.defineProperties(Error, {
+	prepareStackTrace: { value: prepareStackTrace },
+});
 
-	// Set the current env.
-	setCurrentEnv(await target.env());
+Object.defineProperties(globalThis, {
+	console: { value: { log } },
+});
 
-	// Load the executable.
-	let lock = await target.lock();
-	assert(lock);
-	let lockId = await lock.id();
-	let executable = await target.executable();
-	Symlink.assert(executable);
-	let package_ = await executable.artifact();
-	assert(package_);
-	let packageId = await package_.id();
-	let path = await executable.path();
-	assert(path);
-	let url = Module.toUrl({
-		kind: "normal",
-		value: { lock: lockId, package: packageId, path: path.toString() },
-	});
-	await import(url);
-
-	// Get the target.
-	let name = await target.name_();
-	if (!name) {
-		throw new Error("The target must have a name.");
+async function tg(
+	strings: TemplateStringsArray,
+	...placeholders: Args<Template.Arg>
+): Promise<Template> {
+	let components: Args<Template.Arg> = [];
+	for (let i = 0; i < strings.length - 1; i++) {
+		let string = strings[i]!;
+		components.push(string);
+		let placeholder = placeholders[i]!;
+		components.push(placeholder);
 	}
+	components.push(strings[strings.length - 1]!);
+	return await template(...components);
+}
 
-	// Get the function.
-	let key = encoding.json.encode({ url, name });
-	let function_ = functions[key];
-	if (!function_) {
-		throw new Error("Failed to find the function.");
-	}
+Object.assign(tg, {
+	Artifact,
+	Blob,
+	Branch,
+	Directory,
+	Error: Error_,
+	File,
+	Leaf,
+	Lock,
+	Mutation,
+	Symlink,
+	System,
+	Target,
+	Template,
+	Value,
+	apply,
+	assert,
+	blob,
+	branch,
+	build,
+	directory,
+	download,
+	encoding,
+	file,
+	include,
+	leaf,
+	log,
+	mutation,
+	resolve,
+	sleep,
+	start,
+	symlink,
+	system,
+	target,
+	template,
+	unimplemented,
+	unreachable,
+});
 
-	// Get the args.
-	let args = await target.args();
+Object.defineProperties(tg, {
+	current: { get: getCurrent },
+});
 
-	// Call the function.
-	let output = await resolve(function_(...args));
-
-	return output;
-};
+Object.defineProperties(globalThis, {
+	tg: { value: tg },
+});

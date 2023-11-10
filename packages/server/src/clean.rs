@@ -1,7 +1,6 @@
 use super::Server;
 use lmdb::Transaction;
-use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 
 impl Server {
 	pub async fn clean(&self) -> Result<()> {

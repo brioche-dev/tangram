@@ -1,6 +1,5 @@
 use crate::Cli;
-use tangram_client as tg;
-use tg::{return_error, Result};
+use tangram_error::{return_error, Result};
 
 /// Add a dependency to a package.
 #[derive(Debug, clap::Args)]

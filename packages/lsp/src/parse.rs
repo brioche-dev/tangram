@@ -1,8 +1,7 @@
 use super::Module;
 use std::rc::Rc;
 use swc_core as swc;
-use tangram_client as tg;
-use tg::{error, Result};
+use tangram_error::{error, Result};
 
 pub struct Output {
 	pub program: swc::ecma::ast::Program,

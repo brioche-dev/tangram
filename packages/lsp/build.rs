@@ -10,9 +10,9 @@ fn main() {
 		v8::V8::initialize();
 	});
 
-	println!("cargo:rerun-if-changed=src/lsp.js");
+	println!("cargo:rerun-if-changed=src/main.js");
 	let path = out_dir_path.join("lsp.heapsnapshot");
-	let snapshot = create_snapshot("src/lsp.js");
+	let snapshot = create_snapshot("src/main.js");
 	std::fs::write(path, snapshot).unwrap();
 }
 

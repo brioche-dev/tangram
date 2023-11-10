@@ -1,6 +1,5 @@
 use crate::Cli;
-use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 
 /// Upgrade to the latest version of tangram.
 #[derive(Debug, clap::Args)]

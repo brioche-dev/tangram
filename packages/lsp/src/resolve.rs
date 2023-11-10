@@ -5,14 +5,14 @@ use crate::{
 	Document, Import, Module,
 };
 use tangram_client as tg;
-use tg::{error, return_error, Client, Lock, Result, WrapErr};
+use tangram_error::{error, return_error, Result, WrapErr};
 
 impl Module {
 	/// Resolve a module.
 	#[allow(clippy::too_many_lines)]
 	pub async fn resolve(
 		&self,
-		client: &dyn Client,
+		client: &dyn tg::Client,
 		document_store: Option<&document::Store>,
 		import: &Import,
 	) -> Result<Self> {
@@ -128,7 +128,7 @@ impl Module {
 				};
 
 				// Get the lock.
-				let lock = Lock::with_id(module.lock.clone());
+				let lock = tg::Lock::with_id(module.lock.clone());
 
 				// Get the specified package from the dependencies.
 				let dependencies = lock.dependencies(client).await?;

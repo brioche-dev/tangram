@@ -1,7 +1,10 @@
-use crate::Cli;
+use crate::{util::dirs::home_directory_path, Cli, API_URL};
+use std::path::PathBuf;
 use tangram_client as tg;
+use tangram_error::{Result, WrapErr};
 use tangram_http::net::Addr;
-use tg::{Client, Result};
+use tg::Client;
+use url::Url;
 
 /// Manage the server.
 #[derive(Debug, clap::Args)]
@@ -21,6 +24,31 @@ pub enum Command {
 
 	/// Stop the server.
 	Stop,
+
+	/// Run the server.
+	Run(RunArgs),
+}
+
+/// Run a server.
+#[derive(Debug, clap::Args)]
+#[command(verbatim_doc_comment)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct RunArgs {
+	/// The address to bind to.
+	#[arg(long)]
+	pub address: Option<Addr>,
+
+	/// The path where Tangram should store its data. The default is `$HOME/.tangram`.
+	#[arg(long)]
+	pub path: Option<PathBuf>,
+
+	/// The URL of the remote server.
+	#[arg(long, default_value = "false")]
+	pub no_remote: bool,
+
+	/// The URL of the remote server.
+	#[arg(long)]
+	pub remote: Option<Url>,
 }
 
 impl Cli {
@@ -42,7 +70,78 @@ impl Cli {
 				let client = tangram_http::client::Builder::new(addr).build();
 				client.stop().await?;
 			},
+			Command::Run(args) => {
+				self.command_server_run(args).await?;
+			},
 		}
+		Ok(())
+	}
+
+	async fn command_server_run(&self, args: RunArgs) -> Result<()> {
+		// Get the path.
+		let path = if let Some(path) = args.path.clone() {
+			path
+		} else {
+			home_directory_path()
+				.wrap_err("Failed to find the user home directory.")?
+				.join(".tangram")
+		};
+
+		// Get the addr.
+		let addr = args.address.unwrap_or(Addr::Unix(path.join("socket")));
+
+		// Read the config.
+		let config = Self::read_config().await?;
+
+		// Read the credentials.
+		let _credentials = Self::read_credentials().await?;
+
+		// Create the remote.
+		let url = if let Some(url) = args.remote {
+			url
+		} else if let Some(url) = config.as_ref().and_then(|config| config.remote.as_ref()) {
+			url.clone()
+		} else {
+			API_URL.parse().unwrap()
+		};
+		let tls = url.scheme() == "https";
+		let client = tangram_http::client::Builder::new(url.try_into()?)
+			.tls(tls)
+			.build();
+		let remote = if args.no_remote {
+			None
+		} else {
+			Some(Box::new(client) as _)
+		};
+
+		let version = self.version.clone();
+
+		// Create the options.
+		let options = tangram_server::Options {
+			addr,
+			remote,
+			path,
+			version,
+		};
+
+		// Start the server.
+		let server = tangram_server::Server::start(options)
+			.await
+			.wrap_err("Failed to create the server.")?;
+
+		// Wait for the server to stop or stop it with an interrupt signal.
+		tokio::spawn({
+			let server = server.clone();
+			async move {
+				tokio::signal::ctrl_c().await.ok();
+				server.stop();
+				tokio::signal::ctrl_c().await.ok();
+				std::process::exit(130);
+			}
+		});
+
+		server.join().await.wrap_err("Failed to join the server.")?;
+
 		Ok(())
 	}
 }

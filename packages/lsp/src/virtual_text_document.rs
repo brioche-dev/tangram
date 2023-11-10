@@ -1,7 +1,6 @@
 use crate::Server;
 use lsp_types as lsp;
-use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 pub struct VirtualTextDocument;
 
@@ -22,14 +21,14 @@ impl Server {
 		&self,
 		params: Params,
 	) -> Result<Option<String>> {
-		let client = self.inner.client.upgrade().unwrap();
+		let client = self.inner.client.as_ref();
 
 		// Get the module.
 		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		// Load the file.
 		let text = module
-			.load(client.as_ref(), Some(&self.inner.document_store))
+			.load(client, Some(&self.inner.document_store))
 			.await?;
 
 		Ok(Some(text))

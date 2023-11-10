@@ -3,8 +3,8 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use tangram_client as tg;
+use tangram_error::{return_error, Result, WrapErr};
 use tangram_lsp::Module;
-use tg::{return_error, Result, Subpath, WrapErr};
 
 pub mod specifier;
 
@@ -32,7 +32,8 @@ pub async fn new(
 	let mut dependencies: BTreeMap<tg::Dependency, tg::lock::Entry> = BTreeMap::default();
 
 	// Create a queue of module paths to visit and a visited set.
-	let mut queue: VecDeque<Subpath> = VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
+	let mut queue: VecDeque<tg::Subpath> =
+		VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
 	let mut visited: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
 
 	// Add each module and its includes to the directory.
@@ -153,7 +154,7 @@ impl PackageExt for tg::Directory {
 		let mut dependencies: BTreeSet<tg::Dependency> = BTreeSet::default();
 
 		// Create a queue of module paths to visit and a visited set.
-		let mut queue: VecDeque<Subpath> =
+		let mut queue: VecDeque<tg::Subpath> =
 			VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
 		let mut visited: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
 

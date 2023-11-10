@@ -1,8 +1,12 @@
 use super::{PackageArgs, RunArgs};
-use crate::{tui::Tui, util::dirs::home_directory_path, Cli};
+use crate::{
+	tui::{self, Tui},
+	util::dirs::home_directory_path,
+	Cli,
+};
 use std::{os::unix::process::CommandExt, path::PathBuf};
 use tangram_client as tg;
-use tg::{Result, Wrap, WrapErr};
+use tangram_error::{Result, Wrap, WrapErr};
 
 /// Build the specified target from a package and execute a command from its output.
 #[derive(Debug, clap::Args)]
@@ -63,11 +67,14 @@ impl Cli {
 
 		// Build the target.
 		let build = target.build(client).await?;
+		eprintln!("{}", build.id(client).await?);
 
 		// Create the TUI.
 		let tui = !args.no_tui;
 		let tui = if tui {
-			Tui::start(client, &build).await.ok()
+			Tui::start(client, &build, tui::Options::default())
+				.await
+				.ok()
 		} else {
 			None
 		};
@@ -75,9 +82,10 @@ impl Cli {
 		// Wait for the build's output.
 		let result = build.result(client).await;
 
-		// Finish the TUI.
+		// Stop the TUI.
 		if let Some(tui) = tui {
-			tui.finish().await?;
+			tui.stop();
+			tui.join().await?;
 		}
 
 		// Handle for an error that occurred while waiting for the build's result.

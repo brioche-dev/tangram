@@ -1,7 +1,7 @@
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_client as tg;
-use tg::{Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 
 /// Check in an artifact.
 #[derive(Debug, clap::Args)]

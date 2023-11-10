@@ -6,14 +6,9 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use http_body_util::{BodyExt, BodyStream};
-use std::{
-	os::unix::prelude::OsStrExt,
-	path::Path,
-	sync::{Arc, Weak},
-};
+use std::{os::unix::prelude::OsStrExt, path::Path, sync::Arc};
 use tangram_client as tg;
-use tangram_error::return_error;
-use tg::{Result, Wrap, WrapErr};
+use tangram_error::{return_error, Result, Wrap, WrapErr};
 use tokio::{
 	io::AsyncBufReadExt,
 	net::{TcpStream, UnixStream},
@@ -34,20 +29,9 @@ struct Inner {
 	tls: bool,
 }
 
-#[derive(Debug)]
-pub struct Handle(Weak<Inner>);
-
 pub struct Builder {
 	addr: Addr,
 	tls: Option<bool>,
-}
-
-impl tg::Handle for Handle {
-	fn upgrade(&self) -> Option<Box<dyn tg::Client>> {
-		self.0
-			.upgrade()
-			.map(|inner| Box::new(Client { inner }) as Box<dyn tg::Client>)
-	}
 }
 
 impl Client {
@@ -90,6 +74,25 @@ impl Client {
 		Ok(self.inner.sender.read().await.as_ref().cloned().unwrap())
 	}
 
+	async fn connect_tcp(&self, inet: &Inet) -> Result<()> {
+		let mut sender_guard = self.inner.sender.write().await;
+		let stream = TcpStream::connect(inet.to_string())
+			.await
+			.wrap_err("Failed to create the TCP connection.")?;
+		let executor = hyper_util::rt::TokioExecutor::new();
+		let io = hyper_util::rt::TokioIo::new(stream);
+		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
+			.await
+			.wrap_err("Failed to perform the HTTP handshake.")?;
+		tokio::spawn(connection);
+		sender
+			.ready()
+			.await
+			.wrap_err("Failed to ready the sender.")?;
+		sender_guard.replace(sender);
+		Ok(())
+	}
+
 	async fn connect_tcp_tls(&self, inet: &Inet) -> Result<()> {
 		let mut sender_guard = self.inner.sender.write().await;
 		let stream = TcpStream::connect(inet.to_string())
@@ -113,25 +116,6 @@ impl Client {
 		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
 			.await
 			.wrap_err("Failed to perform the HTTP handshake..")?;
-		tokio::spawn(connection);
-		sender
-			.ready()
-			.await
-			.wrap_err("Failed to ready the sender.")?;
-		sender_guard.replace(sender);
-		Ok(())
-	}
-
-	async fn connect_tcp(&self, inet: &Inet) -> Result<()> {
-		let mut sender_guard = self.inner.sender.write().await;
-		let stream = TcpStream::connect(inet.to_string())
-			.await
-			.wrap_err("Failed to create the TCP connection.")?;
-		let executor = hyper_util::rt::TokioExecutor::new();
-		let io = hyper_util::rt::TokioIo::new(stream);
-		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
-			.await
-			.wrap_err("Failed to perform the HTTP handshake.")?;
 		tokio::spawn(connection);
 		sender
 			.ready()
@@ -176,10 +160,6 @@ impl Client {
 impl tg::Client for Client {
 	fn clone_box(&self) -> Box<dyn tg::Client> {
 		Box::new(self.clone())
-	}
-
-	fn downgrade_box(&self) -> Box<dyn tg::Handle> {
-		Box::new(Handle(Arc::downgrade(&self.inner)))
 	}
 
 	fn is_local(&self) -> bool {
@@ -382,7 +362,7 @@ impl tg::Client for Client {
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
 		let request = http::request::Builder::default()
-			.method(http::Method::POST)
+			.method(http::Method::GET)
 			.uri(format!("/v1/builds/{id}/target"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
@@ -399,16 +379,13 @@ impl tg::Client for Client {
 		Ok(id)
 	}
 
-	async fn try_get_build_queue_item(&self) -> Result<Option<tg::build::Id>> {
+	async fn get_build_from_queue(&self) -> Result<tg::build::Id> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri("/v1/builds/queue")
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
-		if response.status() == http::StatusCode::NOT_FOUND {
-			return Ok(None);
-		}
 		if !response.status().is_success() {
 			return_error!("Expected the response's status to be success.");
 		}
@@ -419,7 +396,7 @@ impl tg::Client for Client {
 			.to_bytes();
 		let build_id =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-		Ok(Some(build_id))
+		Ok(build_id)
 	}
 
 	async fn try_get_build_children(
@@ -512,11 +489,11 @@ impl tg::Client for Client {
 		Ok(Some(log))
 	}
 
-	async fn add_build_log(&self, build_id: &tg::build::Id, bytes: Bytes) -> Result<()> {
+	async fn add_build_log(&self, id: &tg::build::Id, bytes: Bytes) -> Result<()> {
 		let body = bytes;
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/${build_id}/log"))
+			.uri(format!("/v1/builds/${id}/log"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -552,11 +529,7 @@ impl tg::Client for Client {
 		Ok(Some(result))
 	}
 
-	async fn set_build_result(
-		&self,
-		build_id: &tg::build::Id,
-		result: Result<tg::Value>,
-	) -> Result<()> {
+	async fn set_build_result(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
 		let result = match result {
 			Ok(value) => Ok(value.data(self).await?),
 			Err(error) => Err(error),
@@ -564,7 +537,7 @@ impl tg::Client for Client {
 		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/${build_id}/log"))
+			.uri(format!("/v1/builds/${id}/log"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -574,6 +547,10 @@ impl tg::Client for Client {
 		if !response.status().is_success() {
 			return_error!("Expected the response's status to be success.");
 		}
+		Ok(())
+	}
+
+	async fn cancel_build(&self, _id: &tg::build::Id) -> Result<()> {
 		Ok(())
 	}
 

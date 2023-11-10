@@ -1,29 +1,17 @@
-use crate::{Server, WrapErr};
-use lmdb::Transaction;
-use std::{os::unix::prelude::OsStrExt, path::Path};
+use crate::Server;
+use std::path::Path;
 use tangram_client as tg;
-use tg::{tracker::Tracker, Result, Wrap};
+use tangram_error::Result;
+use tg::tracker::Tracker;
 
 impl Server {
 	pub async fn try_get_tracker(&self, path: &Path) -> Result<Option<Tracker>> {
-		let txn = self
-			.inner
-			.database
-			.env
-			.begin_ro_txn()
-			.wrap_err("Failed to begin the transaction.")?;
-		let data = match txn.get(self.inner.database.trackers, &path.as_os_str().as_bytes()) {
-			Ok(data) => data,
-			Err(lmdb::Error::NotFound) => return Ok(None),
-			Err(error) => return Err(error.wrap("Failed to get the tracker.")),
-		};
-		let tracker =
-			serde_json::from_slice(data).wrap_err("Failed to deserialize the tracker.")?;
-		Ok(Some(tracker))
+		self.inner.database.try_get_tracker(path)
 	}
 
-	pub async fn set_tracker(&self, _path: &Path, _tracker: &Tracker) -> Result<()> {
-		todo!()
+	pub async fn set_tracker(&self, path: &Path, tracker: &Tracker) -> Result<()> {
+		self.inner.database.set_tracker(path, tracker)?;
+		Ok(())
 	}
 }
 
@@ -167,7 +155,7 @@ impl Server {
 // }
 
 // impl Fsm {
-// 	pub(crate) fn new(server_state: Weak<State>) -> Result<Self> {
+// 	pub fn new(server_state: Weak<State>) -> Result<Self> {
 // 		use notify::Watcher;
 
 // 		let (sender, mut receiver) = tokio::sync::mpsc::channel::<PathBuf>(128);

@@ -1,7 +1,7 @@
 use super::{document, Module};
 use include_dir::include_dir;
 use tangram_client as tg;
-use tg::{Artifact, Client, Result, WrapErr};
+use tangram_error::{Result, WrapErr};
 
 const TANGRAM_D_TS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/tangram.d.ts"));
 const LIB: include_dir::Dir = include_dir!("$CARGO_MANIFEST_DIR/src/lib");
@@ -10,7 +10,7 @@ impl Module {
 	/// Load the module.
 	pub async fn load(
 		&self,
-		client: &dyn Client,
+		client: &dyn tg::Client,
 		document_store: Option<&document::Store>,
 	) -> Result<String> {
 		match self {
@@ -36,7 +36,7 @@ impl Module {
 			// Load a module from a package.
 			Self::Normal(module) => {
 				// Get the package.
-				let artifact = Artifact::with_id(module.package.clone());
+				let artifact = tg::Artifact::with_id(module.package.clone());
 
 				// Load the module.
 				let directory = artifact.try_unwrap_directory_ref().unwrap();

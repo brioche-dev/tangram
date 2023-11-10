@@ -189,9 +189,10 @@ impl From<&str> for Template {
 
 pub mod component {
 	use crate::{artifact, Artifact, Client, Error, Result};
-	use derive_more::From;
+	use derive_more::{From, TryUnwrap};
 
-	#[derive(Clone, Debug, From)]
+	#[derive(Clone, Debug, From, TryUnwrap)]
+	#[try_unwrap(ref)]
 	pub enum Component {
 		String(String),
 		Artifact(Artifact),

@@ -14,12 +14,9 @@ use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
 use std::{collections::HashMap, path::Path, sync::Arc};
 use tangram_client as tg;
-use tg::{return_error, Error, Result, WrapErr};
+use tangram_error::{return_error, Error, Result, WrapErr};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use url::Url;
-
-/// The file name of the root module in a package.
-pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 
 pub mod analyze;
 pub mod check;
@@ -50,23 +47,24 @@ pub mod transpile;
 pub mod version;
 pub mod virtual_text_document;
 
+pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
+
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/lsp.heapsnapshot"));
 
 pub const SOURCE_MAP: &[u8] =
-	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lsp.js.map"));
+	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.js.map"));
 
 type _Receiver = tokio::sync::mpsc::UnboundedReceiver<jsonrpc::Message>;
 type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Server {
 	inner: Arc<Inner>,
 }
 
-#[derive(Debug)]
 struct Inner {
-	/// The Tangram client handle.
-	client: Box<dyn tg::Handle>,
+	/// The Tangram client.
+	client: Box<dyn tg::Client>,
 
 	/// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
@@ -118,7 +116,7 @@ pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Server {
 	#[must_use]
-	pub fn new(client: Box<dyn tg::Handle>, main_runtime_handle: tokio::runtime::Handle) -> Self {
+	pub fn new(client: &dyn tg::Client, main_runtime_handle: tokio::runtime::Handle) -> Self {
 		// Create the published diagnostics.
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
@@ -131,7 +129,7 @@ impl Server {
 
 		// Create the inner.
 		let inner = Arc::new(Inner {
-			client,
+			client: client.clone_box(),
 			diagnostics,
 			document_store,
 			request_sender,

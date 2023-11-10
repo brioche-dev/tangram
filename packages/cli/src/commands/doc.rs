@@ -1,10 +1,9 @@
 use super::PackageArgs;
 use crate::Cli;
-use tangram_client as tg;
+use tangram_error::{Result, WrapErr};
 use tangram_lsp::ROOT_MODULE_FILE_NAME;
-use tg::{Result, WrapErr};
 
-/// Print the docs for a package.
+/// Generate documentation.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -14,6 +13,7 @@ pub struct Args {
 	#[command(flatten)]
 	pub package_args: PackageArgs,
 
+	/// Generate the documentation for the runtime.
 	#[arg(short, long, default_value = "false")]
 	pub runtime: bool,
 }
@@ -24,15 +24,14 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the language server.
-		let server =
-			tangram_lsp::Server::new(client.downgrade_box(), tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
 
 		let (module, path) = if args.runtime {
 			// Create the module.
 			let module = tangram_lsp::Module::Library(tangram_lsp::module::Library {
 				path: "tangram.d.ts".parse().unwrap(),
 			});
-			(module, "tangarm.d.ts")
+			(module, "tangram.d.ts")
 		} else {
 			// Create the package.
 			let (package, lock) = tangram_package::new(client, &args.package)

@@ -18,9 +18,19 @@ use tokio_util::either::Either;
 
 #[derive(Clone)]
 pub struct Server {
-	client: Arc<dyn tg::Client>,
-	handler: Arc<Option<Handler>>,
+	inner: Arc<Inner>,
 }
+
+struct Inner {
+	client: Box<dyn tg::Client>,
+	handler: Option<Handler>,
+	task: Task,
+}
+
+type Task = (
+	std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+	std::sync::Mutex<Option<tokio::task::AbortHandle>>,
+);
 
 type Handler = Box<
 	dyn Fn(http::Request<Incoming>) -> BoxFuture<'static, Option<Result<http::Response<Outgoing>>>>
@@ -30,11 +40,49 @@ type Handler = Box<
 >;
 
 impl Server {
-	pub fn new(client: &dyn tg::Client, handler: Option<Handler>) -> Self {
-		Self {
-			client: Arc::from(client.clone_box()),
-			handler: Arc::new(handler),
+	pub async fn start(
+		client: &dyn tg::Client,
+		addr: Addr,
+		handler: Option<Handler>,
+	) -> Result<Self> {
+		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
+		let inner = Inner {
+			client: client.clone_box(),
+			handler,
+			task,
+		};
+		let server = Self {
+			inner: Arc::new(inner),
+		};
+		let task = tokio::spawn({
+			let server = server.clone();
+			async move { server.serve(addr).await }
+		});
+		let abort = task.abort_handle();
+		server.inner.task.0.lock().unwrap().replace(task);
+		server.inner.task.1.lock().unwrap().replace(abort);
+		Ok(server)
+	}
+
+	pub fn stop(&self) {
+		if let Some(handle) = self.inner.task.1.lock().unwrap().as_ref() {
+			handle.abort();
+		};
+	}
+
+	pub async fn join(&self) -> Result<()> {
+		// Join the task.
+		let task = self.inner.task.0.lock().unwrap().take();
+		if let Some(task) = task {
+			match task.await {
+				Ok(result) => Ok(result),
+				Err(error) if error.is_cancelled() => Ok(Ok(())),
+				Err(error) => Err(error),
+			}
+			.unwrap()?;
 		}
+
+		Ok(())
 	}
 
 	pub async fn serve(self, addr: Addr) -> Result<()> {
@@ -67,7 +115,7 @@ impl Server {
 				),
 			});
 			let server = self.clone();
-			tokio::spawn(async move {
+			let connection =
 				hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
 					.serve_connection(
 						stream,
@@ -80,10 +128,8 @@ impl Server {
 								Ok::<_, Infallible>(response)
 							}
 						}),
-					)
-					.await
-					.ok()
-			});
+					);
+			tokio::spawn(async move { connection.await.ok() });
 		}
 	}
 
@@ -93,13 +139,13 @@ impl Server {
 		let response = match (method, path_components.as_slice()) {
 			// Server
 			(http::Method::GET, ["v1", "status"]) => {
-				self.handle_status_request(request).map(Some).boxed()
+				self.handle_get_status_request(request).map(Some).boxed()
 			},
 			(http::Method::POST, ["v1", "stop"]) => {
-				self.handle_stop_request(request).map(Some).boxed()
+				self.handle_post_stop_request(request).map(Some).boxed()
 			},
 			(http::Method::POST, ["v1", "clean"]) => {
-				self.handle_clean_request(request).map(Some).boxed()
+				self.handle_post_clean_request(request).map(Some).boxed()
 			},
 
 			// Builds
@@ -140,6 +186,10 @@ impl Server {
 				.boxed(),
 			(http::Method::POST, ["v1", "builds", _, "result"]) => self
 				.handle_post_build_result_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::POST, ["v1", "builds", _, "cancel"]) => self
+				.handle_post_build_cancel_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::POST, ["v1", "builds", _, "finish"]) => self
@@ -204,7 +254,7 @@ impl Server {
 				.boxed(),
 
 			(_, _) => {
-				if let Some(handler) = self.handler.as_ref() {
+				if let Some(handler) = self.inner.handler.as_ref() {
 					handler(request).boxed()
 				} else {
 					future::ready(None).boxed()
@@ -229,11 +279,11 @@ impl Server {
 		}
 	}
 
-	async fn handle_status_request(
+	async fn handle_get_status_request(
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		let status = self.client.status().await?;
+		let status = self.inner.client.status().await?;
 		let body = serde_json::to_vec(&status).unwrap();
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
@@ -242,19 +292,19 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_stop_request(
+	async fn handle_post_stop_request(
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		self.client.stop().await?;
+		self.inner.client.stop().await?;
 		Ok(ok())
 	}
 
-	pub async fn handle_clean_request(
+	pub async fn handle_post_clean_request(
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		self.client.clean().await?;
+		self.inner.client.clean().await?;
 		Ok(http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(empty())
@@ -265,7 +315,7 @@ impl Server {
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		let build_id = self.client.try_get_build_queue_item().await?;
+		let build_id = self.inner.client.get_build_from_queue().await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&build_id).wrap_err("Failed to serialize the ID.")?;
@@ -285,7 +335,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the build for the target.
-		let Some(build_id) = self.client.try_get_build_for_target(&id).await? else {
+		let Some(build_id) = self.inner.client.try_get_build_for_target(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -307,7 +357,11 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get or create the build for the target.
-		let build_id = self.client.get_or_create_build_for_target(&id).await?;
+		let build_id = self
+			.inner
+			.client
+			.get_or_create_build_for_target(&id)
+			.await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&build_id).wrap_err("Failed to serialize the response.")?;
@@ -327,7 +381,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the build target.
-		let Some(build_id) = self.client.try_get_build_target(&id).await? else {
+		let Some(build_id) = self.inner.client.try_get_build_target(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -349,7 +403,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the children.
-		let Some(children) = self.client.try_get_build_children(&id).await? else {
+		let Some(children) = self.inner.client.try_get_build_children(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -391,7 +445,10 @@ impl Server {
 		let child_id =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 
-		self.client.add_build_child(&build_id, &child_id).await?;
+		self.inner
+			.client
+			.add_build_child(&build_id, &child_id)
+			.await?;
 
 		// Create the response.
 		let response = http::Response::builder()
@@ -413,7 +470,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get the log.
-		let Some(log) = self.client.try_get_build_log(&id).await? else {
+		let Some(log) = self.inner.client.try_get_build_log(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -447,7 +504,7 @@ impl Server {
 			.wrap_err("Failed to read the body.")?
 			.to_bytes();
 
-		self.client.add_build_log(&build_id, bytes).await?;
+		self.inner.client.add_build_log(&build_id, bytes).await?;
 
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
@@ -468,13 +525,13 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the result.
-		let Some(result) = self.client.try_get_build_result(&id).await? else {
+		let Some(result) = self.inner.client.try_get_build_result(&id).await? else {
 			return Ok(not_found());
 		};
 
 		// Create the response.
 		let result = match result {
-			Ok(value) => Ok(value.data(self.client.as_ref()).await?),
+			Ok(value) => Ok(value.data(self.inner.client.as_ref()).await?),
 			Err(error) => Err(error),
 		};
 		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the response.")?;
@@ -506,13 +563,38 @@ impl Server {
 		let result = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize.")?;
 
 		// Set the build result.
-		self.client.set_build_result(&build_id, result).await?;
+		self.inner
+			.client
+			.set_build_result(&build_id, result)
+			.await?;
 
 		// Create the response.
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(empty())
 			.unwrap();
+		Ok(response)
+	}
+
+	pub async fn handle_post_build_cancel_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<hyper::Response<Outgoing>> {
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let [_, "builds", build_id, "cancel"] = path_components.as_slice() else {
+			return_error!("Unexpected path.");
+		};
+		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
+
+		self.inner.client.cancel_build(&build_id).await?;
+
+		// Create the response.
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(empty())
+			.unwrap();
+
 		Ok(response)
 	}
 
@@ -527,7 +609,7 @@ impl Server {
 		};
 		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
 
-		self.client.finish_build(&build_id).await?;
+		self.inner.client.finish_build(&build_id).await?;
 
 		// Create the response.
 		let response = http::Response::builder()
@@ -552,7 +634,7 @@ impl Server {
 		};
 
 		// Get whether the object exists.
-		let exists = self.client.get_object_exists(&id).await?;
+		let exists = self.inner.client.get_object_exists(&id).await?;
 
 		// Create the response.
 		let status = if exists {
@@ -582,7 +664,7 @@ impl Server {
 		};
 
 		// Get the object.
-		let Some(bytes) = self.client.try_get_object(&id).await? else {
+		let Some(bytes) = self.inner.client.try_get_object(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -617,7 +699,7 @@ impl Server {
 			.to_bytes();
 
 		// Put the object.
-		let result = self.client.try_put_object(&id, &bytes).await?;
+		let result = self.inner.client.try_put_object(&id, &bytes).await?;
 
 		// If there are missing children, then return a bad request response.
 		if let Err(missing_children) = result {
@@ -650,7 +732,11 @@ impl Server {
 			serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
 
 		// Perform the search.
-		let search_results = self.client.search_packages(&search_params.query).await?;
+		let search_results = self
+			.inner
+			.client
+			.search_packages(&search_params.query)
+			.await?;
 
 		// Create the response.
 		let body =
@@ -671,7 +757,7 @@ impl Server {
 		};
 
 		// Get the package.
-		let package = self.client.get_package(name).await?;
+		let package = self.inner.client.get_package(name).await?;
 
 		match package {
 			Some(package) => {
@@ -702,7 +788,7 @@ impl Server {
 		};
 
 		// Get the package.
-		let source_artifact_hash = self.client.get_package_version(name, version).await?;
+		let source_artifact_hash = self.inner.client.get_package_version(name, version).await?;
 
 		// Create the response.
 		let response = if let Some(source_artifact_hash) = source_artifact_hash {
@@ -735,7 +821,10 @@ impl Server {
 		let package_id = serde_json::from_slice(&bytes).wrap_err("Invalid request.")?;
 
 		// Create the package.
-		self.client.publish_package(&token, &package_id).await?;
+		self.inner
+			.client
+			.publish_package(&token, &package_id)
+			.await?;
 
 		Ok(ok())
 	}
@@ -755,7 +844,7 @@ impl Server {
 		};
 
 		// Get the package metadata.
-		let metadata = self.client.get_package_metadata(&package_id).await?;
+		let metadata = self.inner.client.get_package_metadata(&package_id).await?;
 
 		match metadata {
 			Some(metadata) => {
@@ -790,7 +879,11 @@ impl Server {
 		};
 
 		// Get the package dependencies.
-		let dependencies = self.client.get_package_dependencies(&package_id).await?;
+		let dependencies = self
+			.inner
+			.client
+			.get_package_dependencies(&package_id)
+			.await?;
 
 		match dependencies {
 			Some(dependencies) => {
@@ -826,7 +919,7 @@ impl Server {
 		);
 
 		// Get the tracker.
-		let Some(tracker) = self.client.try_get_tracker(&path).await? else {
+		let Some(tracker) = self.inner.client.try_get_tracker(&path).await? else {
 			return Ok(not_found());
 		};
 
@@ -866,7 +959,7 @@ impl Server {
 			.to_bytes();
 		let tracker = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 
-		self.client.set_tracker(&path, &tracker).await?;
+		self.inner.client.set_tracker(&path, &tracker).await?;
 
 		Ok(ok())
 	}
@@ -876,7 +969,7 @@ impl Server {
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
 		// Create the login.
-		let login = self.client.create_login().await?;
+		let login = self.inner.client.create_login().await?;
 
 		// Create the response.
 		let body = serde_json::to_string(&login).wrap_err("Failed to serialize the response.")?;
@@ -901,7 +994,7 @@ impl Server {
 		};
 
 		// Get the login.
-		let login = self.client.get_login(&id).await?;
+		let login = self.inner.client.get_login(&id).await?;
 
 		// Create the response.
 		let response =
@@ -923,7 +1016,7 @@ impl Server {
 		};
 
 		// Authenticate the user.
-		let Some(user) = self.client.get_current_user(&token).await? else {
+		let Some(user) = self.inner.client.get_current_user(&token).await? else {
 			return Ok(unauthorized());
 		};
 

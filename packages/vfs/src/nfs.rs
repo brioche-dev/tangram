@@ -1,25 +1,24 @@
 use self::{
 	rpc::{Auth, AuthStat, Message, MessageBody, ReplyAcceptedStat, ReplyBody, ReplyRejected},
-	state::{ClientData, Node, NodeKind, State},
 	types::{
-		bitmap4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, locker4, nfs_argop4,
-		nfs_fh4, nfs_ftype4, nfs_resop4, nfsace4, nfsstat4, nfstime4, open_claim4,
-		open_delegation4, open_delegation_type4, pathname4, specdata4, stateid4, ACCESS4args,
-		ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args, GETATTR4res,
-		GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok, LOCKU4args,
-		LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok, PUTFH4args, PUTFH4res,
-		READ4args, READ4res, READ4resok, READDIR4args, READDIR4res, READDIR4resok, READLINK4res,
-		READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res,
-		RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args, SETCLIENTID4res,
-		SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE,
-		ACCESS4_LOOKUP, ACCESS4_READ, FATTR4_ACL, FATTR4_ACLSUPPORT, FATTR4_ARCHIVE,
-		FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE, FATTR4_CASE_PRESERVING, FATTR4_CHANGE,
-		FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE, FATTR4_FILEHANDLE, FATTR4_FILEID,
-		FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL, FATTR4_FSID,
-		FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
-		FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME, FATTR4_MAXREAD,
-		FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID, FATTR4_NAMED_ATTR,
-		FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP,
+		bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, locker4,
+		nfs_argop4, nfs_fh4, nfs_ftype4, nfs_resop4, nfsace4, nfsstat4, nfstime4, open_claim4,
+		open_delegation4, open_delegation_type4, pathname4, specdata4, stateid4, verifier4,
+		ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args,
+		GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok,
+		LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok,
+		PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args, READDIR4res,
+		READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res,
+		RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res,
+		SETCLIENTID4args, SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args,
+		SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, FATTR4_ACL,
+		FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
+		FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
+		FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE,
+		FATTR4_FILES_TOTAL, FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS,
+		FATTR4_LEASE_TIME, FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME,
+		FATTR4_MAXREAD, FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID,
+		FATTR4_NAMED_ATTR, FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP,
 		FATTR4_QUOTA_AVAIL_HARD, FATTR4_QUOTA_AVAIL_SOFT, FATTR4_QUOTA_USED, FATTR4_RAWDEV,
 		FATTR4_RDATTR_ERROR, FATTR4_SIZE, FATTR4_SPACE_AVAIL, FATTR4_SPACE_FREE,
 		FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED, FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT,
@@ -30,19 +29,20 @@ use self::{
 	},
 	xdr::{Decoder, Encoder, Error},
 };
-use std::sync::Arc;
-use std::{collections::BTreeMap, path::Path};
+use num::ToPrimitive;
+use std::{
+	collections::{BTreeMap, HashMap},
+	path::{Path, PathBuf},
+	sync::{Arc, Weak},
+};
 use tangram_client as tg;
-use tg::{Client, WrapErr};
+use tangram_error::{Result, WrapErr};
 use tokio::{
 	io::{AsyncReadExt, AsyncSeekExt},
 	net::{TcpListener, TcpStream},
-	sync::RwLock,
 };
 
-// mod ops;
 mod rpc;
-mod state;
 mod types;
 mod xdr;
 
@@ -50,8 +50,62 @@ const ROOT: nfs_fh4 = nfs_fh4(0);
 
 #[derive(Clone)]
 pub struct Server {
-	client: Arc<dyn Client>,
-	state: Arc<RwLock<State>>,
+	inner: Arc<Inner>,
+}
+
+struct Inner {
+	client: Box<dyn tg::Client>,
+	path: PathBuf,
+	state: tokio::sync::RwLock<State>,
+	task: Task,
+}
+
+type Task = (
+	std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+	std::sync::Mutex<Option<tokio::task::AbortHandle>>,
+);
+
+#[derive(Clone)]
+struct State {
+	nodes: BTreeMap<u64, Arc<Node>>,
+	readers: BTreeMap<stateid4, Arc<tokio::sync::RwLock<tg::blob::Reader>>>,
+	clients: HashMap<Vec<u8>, ClientData>,
+}
+
+#[derive(Debug)]
+struct Node {
+	id: u64,
+	parent: Weak<Self>,
+	kind: NodeKind,
+}
+
+/// An node's kind.
+#[derive(Debug)]
+enum NodeKind {
+	Root {
+		children: tokio::sync::RwLock<BTreeMap<String, Arc<Node>>>,
+	},
+	Directory {
+		directory: tg::Directory,
+		children: tokio::sync::RwLock<BTreeMap<String, Arc<Node>>>,
+	},
+	File {
+		file: tg::File,
+		size: u64,
+	},
+	Symlink {
+		symlink: tg::Symlink,
+	},
+}
+
+#[derive(Clone, Debug)]
+pub struct ClientData {
+	pub server_id: u64,
+	pub client_verifier: verifier4,
+	pub server_verifier: verifier4,
+	pub callback: cb_client4,
+	pub callback_ident: u32,
+	pub confirmed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -63,13 +117,121 @@ pub struct Context {
 }
 
 impl Server {
-	pub fn new(client: &dyn Client) -> Self {
-		let client = Arc::from(client.clone_box());
-		let state = Arc::new(RwLock::new(State::default()));
-		Self { client, state }
+	pub async fn start(client: &dyn tg::Client, path: &Path, port: u16) -> Result<Self> {
+		// Create the server.
+		let client = client.clone_box();
+		let root = Arc::new_cyclic(|root| Node {
+			id: 0,
+			parent: root.clone(),
+			kind: NodeKind::Root {
+				children: tokio::sync::RwLock::new(BTreeMap::default()),
+			},
+		});
+		let nodes = [(0, root)].into_iter().collect();
+		let state = tokio::sync::RwLock::new(State {
+			nodes,
+			readers: BTreeMap::default(),
+			clients: HashMap::new(),
+		});
+		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
+		let server = Self {
+			inner: Arc::new(Inner {
+				client,
+				path: path.to_owned(),
+				state,
+				task,
+			}),
+		};
+
+		// Spawn the task.
+		let task = tokio::spawn({
+			let server = server.clone();
+			async move { server.serve(port).await }
+		});
+		let abort = task.abort_handle();
+		server.inner.task.1.lock().unwrap().replace(abort);
+		server.inner.task.0.lock().unwrap().replace(task);
+
+		// Mount.
+		Self::mount(path, port).await?;
+
+		Ok(server)
 	}
 
-	pub async fn serve(&self, port: u16) -> crate::Result<()> {
+	async fn mount(path: &Path, port: u16) -> crate::Result<()> {
+		Self::unmount(path).await?;
+
+		let _ = tokio::process::Command::new("dns-sd")
+			.args([
+				"-P",
+				"Tangram",
+				"_nfs._tcp",
+				"local",
+				&port.to_string(),
+				"Tangram",
+				"::1",
+				"path=/",
+			])
+			.stdout(std::process::Stdio::null())
+			.stderr(std::process::Stdio::null())
+			.spawn()
+			.wrap_err("Failed to spawn dns-sd.")?;
+
+		tokio::process::Command::new("mount_nfs")
+			.arg("-o")
+			.arg(format!("tcp,vers=4.0,port={port}"))
+			.arg("Tangram:/")
+			.arg(path)
+			.stdout(std::process::Stdio::null())
+			.stderr(std::process::Stdio::null())
+			.status()
+			.await
+			.wrap_err("Failed to mount.")?
+			.success()
+			.then_some(())
+			.wrap_err("Failed to mount the VFS.")?;
+
+		Ok(())
+	}
+
+	async fn unmount(path: &Path) -> Result<()> {
+		let _ = tokio::process::Command::new("umount")
+			.arg("-f")
+			.arg(path)
+			.stdout(std::process::Stdio::null())
+			.stderr(std::process::Stdio::null())
+			.status()
+			.await
+			.wrap_err("Failed to unmount the VFS.")?;
+		Ok(())
+	}
+
+	pub fn stop(&self) {
+		// Abort the task.
+		if let Some(handle) = self.inner.task.1.lock().unwrap().as_ref() {
+			handle.abort();
+		};
+	}
+
+	pub async fn join(&self) -> Result<()> {
+		// Join the task.
+		let task = self.inner.task.0.lock().unwrap().take();
+		if let Some(task) = task {
+			match task.await {
+				Ok(result) => Ok(result),
+				Err(error) if error.is_cancelled() => Ok(Ok(())),
+				Err(error) => Err(error),
+			}
+			.unwrap()?;
+		}
+
+		// Unmount.
+		Self::unmount(&self.inner.path).await?;
+
+		Ok(())
+	}
+
+	async fn serve(&self, port: u16) -> crate::Result<()> {
 		let listener = TcpListener::bind(format!("localhost:{port}"))
 			.await
 			.wrap_err("Failed to bind the server.")?;
@@ -295,56 +457,14 @@ impl Server {
 		rpc::success(verf, results)
 	}
 
-	pub async fn get_node(&self, node: nfs_fh4) -> Option<Arc<Node>> {
-		self.state.read().await.nodes.get(&node.0).cloned()
+	async fn get_node(&self, node: nfs_fh4) -> Option<Arc<Node>> {
+		self.inner.state.read().await.nodes.get(&node.0).cloned()
 	}
 }
 
-pub async fn mount(mountpoint: &Path, port: u16) -> crate::Result<()> {
-	let _ = tokio::process::Command::new("dns-sd")
-		.args([
-			"-P",
-			"Tangram",
-			"_nfs._tcp",
-			"local",
-			&port.to_string(),
-			"Tangram",
-			"::1",
-			"path=/",
-		])
-		.stdout(std::process::Stdio::null())
-		.stderr(std::process::Stdio::null())
-		.spawn()
-		.wrap_err("Failed to spawn dns-sd.")?;
-	let _ = tokio::process::Command::new("umount")
-		.arg("-f")
-		.arg(mountpoint)
-		.stdout(std::process::Stdio::null())
-		.stderr(std::process::Stdio::null())
-		.status()
-		.await
-		.wrap_err("Failed to unmount.")?;
-	tokio::process::Command::new("mount_nfs")
-		.arg("-o")
-		.arg(format!("tcp,vers=4.0,port={port}"))
-		.arg("Tangram:/")
-		.arg(mountpoint)
-		.stdout(std::process::Stdio::null())
-		.stderr(std::process::Stdio::null())
-		.status()
-		.await
-		.wrap_err("Failed to mount.")?
-		.success()
-		.then_some(())
-		.wrap_err("Failed to mount NFS share.")?;
-	Ok(())
-}
-
-use num::ToPrimitive;
-
 impl Server {
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_access(&self, ctx: &Context, arg: ACCESS4args) -> ACCESS4res {
+	async fn handle_access(&self, ctx: &Context, arg: ACCESS4args) -> ACCESS4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return ACCESS4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
@@ -359,7 +479,7 @@ impl Server {
 			NodeKind::Directory { .. } => ACCESS4_EXECUTE | ACCESS4_READ | ACCESS4_LOOKUP,
 			NodeKind::Symlink { .. } => ACCESS4_READ,
 			NodeKind::File { file, .. } => {
-				let is_executable = match file.executable(self.client.as_ref()).await {
+				let is_executable = match file.executable(self.inner.client.as_ref()).await {
 					Ok(b) => b,
 					Err(e) => {
 						tracing::error!(?e, "Failed to lookup executable bit for file.");
@@ -381,7 +501,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_close(&self, ctx: &Context, arg: CLOSE4args) -> CLOSE4res {
+	async fn handle_close(&self, ctx: &Context, arg: CLOSE4args) -> CLOSE4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return CLOSE4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
@@ -392,8 +512,8 @@ impl Server {
 		};
 
 		if let NodeKind::File { .. } = &node.kind {
-			let mut state = self.state.write().await;
-			if state.blob_readers.remove(&arg.open_stateid).is_none() {
+			let mut state = self.inner.state.write().await;
+			if state.readers.remove(&arg.open_stateid).is_none() {
 				return CLOSE4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 			}
 		}
@@ -407,7 +527,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_getattr(&self, ctx: &Context, arg: GETATTR4args) -> GETATTR4res {
+	async fn handle_getattr(&self, ctx: &Context, arg: GETATTR4args) -> GETATTR4res {
 		let Some(fh) = ctx.current_file_handle else {
 			tracing::error!("Missing current file handle.");
 			return GETATTR4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -419,11 +539,7 @@ impl Server {
 		}
 	}
 
-	pub async fn get_attr(
-		&self,
-		file_handle: nfs_fh4,
-		requested: bitmap4,
-	) -> Result<fattr4, nfsstat4> {
+	async fn get_attr(&self, file_handle: nfs_fh4, requested: bitmap4) -> Result<fattr4, nfsstat4> {
 		if requested.0.is_empty() {
 			return Ok(fattr4 {
 				attrmask: bitmap4(Vec::default()),
@@ -445,8 +561,8 @@ impl Server {
 		})
 	}
 
-	pub async fn get_file_attr_data(&self, file_handle: nfs_fh4) -> Option<FileAttrData> {
-		let state = &self.state.read().await;
+	async fn get_file_attr_data(&self, file_handle: nfs_fh4) -> Option<FileAttrData> {
+		let state = &self.inner.state.read().await;
 		let node = state.nodes.get(&file_handle.0)?;
 		let data = match &node.kind {
 			NodeKind::Root { .. } => FileAttrData::new(file_handle, nfs_ftype4::NF4DIR, 0, O_RX),
@@ -455,7 +571,7 @@ impl Server {
 				FileAttrData::new(file_handle, nfs_ftype4::NF4DIR, len, O_RX)
 			},
 			NodeKind::File { file, size } => {
-				let is_executable = match file.executable(self.client.as_ref()).await {
+				let is_executable = match file.executable(self.inner.client.as_ref()).await {
 					Ok(b) => b,
 					Err(e) => {
 						tracing::error!(?e, "Failed to lookup executable bit for file.");
@@ -472,7 +588,6 @@ impl Server {
 				)
 			},
 			NodeKind::Symlink { .. } => {
-				// TODO: size of symlink
 				FileAttrData::new(file_handle, nfs_ftype4::NF4LNK, 1, O_RDONLY)
 			},
 		};
@@ -480,7 +595,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn handle_lock(&self, ctx: &mut Context, arg: LOCK4args) -> LOCK4res {
+	async fn handle_lock(&self, ctx: &mut Context, arg: LOCK4args) -> LOCK4res {
 		let lock_stateid = match arg.locker {
 			locker4::TRUE(open_to_lock_owner) => open_to_lock_owner.open_stateid,
 			locker4::FALSE(exist_lock_owner) => exist_lock_owner.lock_stateid,
@@ -490,12 +605,12 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn handle_locku(&self, ctx: &mut Context, arg: LOCKU4args) -> LOCKU4res {
+	async fn handle_locku(&self, ctx: &mut Context, arg: LOCKU4args) -> LOCKU4res {
 		LOCKU4res::NFS4_OK(arg.lock_stateid)
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_lookup(&self, ctx: &mut Context, arg: LOOKUP4args) -> LOOKUP4res {
+	async fn handle_lookup(&self, ctx: &mut Context, arg: LOOKUP4args) -> LOOKUP4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return LOOKUP4res {
 				status: nfsstat4::NFS4ERR_NOFILEHANDLE,
@@ -519,8 +634,9 @@ impl Server {
 		}
 	}
 
-	pub async fn lookup(&self, parent: nfs_fh4, name: &str) -> Result<nfs_fh4, nfsstat4> {
+	async fn lookup(&self, parent: nfs_fh4, name: &str) -> Result<nfs_fh4, nfsstat4> {
 		let parent_node = self
+			.inner
 			.state
 			.read()
 			.await
@@ -533,8 +649,7 @@ impl Server {
 		Ok(fh)
 	}
 
-	// TODO: unify with FUSE implementation.
-	pub async fn get_or_create_child_node(
+	async fn get_or_create_child_node(
 		&self,
 		parent_node: Arc<Node>,
 		name: &str,
@@ -570,17 +685,20 @@ impl Server {
 			},
 
 			NodeKind::Directory { directory, .. } => {
-				let entries = directory.entries(self.client.as_ref()).await.map_err(|e| {
-					tracing::error!(?e, ?name, "Failed to get directory entries.");
-					nfsstat4::NFS4ERR_IO
-				})?;
+				let entries = directory
+					.entries(self.inner.client.as_ref())
+					.await
+					.map_err(|e| {
+						tracing::error!(?e, ?name, "Failed to get directory entries.");
+						nfsstat4::NFS4ERR_IO
+					})?;
 				entries.get(name).ok_or(nfsstat4::NFS4ERR_NOENT)?.clone()
 			},
 
 			_ => unreachable!(),
 		};
 
-		let node_id = self.state.read().await.nodes.len() as u64 + 1000;
+		let node_id = self.inner.state.read().await.nodes.len() as u64 + 1000;
 		let kind = match child_artifact {
 			tg::Artifact::Directory(directory) => {
 				let children = tokio::sync::RwLock::new(BTreeMap::default());
@@ -590,14 +708,20 @@ impl Server {
 				}
 			},
 			tg::Artifact::File(file) => {
-				let contents = file.contents(self.client.as_ref()).await.map_err(|e| {
-					tracing::error!(?e, "Failed to get file contents.");
-					nfsstat4::NFS4ERR_IO
-				})?;
-				let size = contents.size(self.client.as_ref()).await.map_err(|e| {
-					tracing::error!(?e, "Failed to get size of file's contents.");
-					nfsstat4::NFS4ERR_IO
-				})?;
+				let contents = file
+					.contents(self.inner.client.as_ref())
+					.await
+					.map_err(|e| {
+						tracing::error!(?e, "Failed to get file contents.");
+						nfsstat4::NFS4ERR_IO
+					})?;
+				let size = contents
+					.size(self.inner.client.as_ref())
+					.await
+					.map_err(|e| {
+						tracing::error!(?e, "Failed to get size of file's contents.");
+						nfsstat4::NFS4ERR_IO
+					})?;
 				NodeKind::File { file, size }
 			},
 			tg::Artifact::Symlink(symlink) => NodeKind::Symlink { symlink },
@@ -621,7 +745,8 @@ impl Server {
 		}
 
 		// Add the child node to the nodes.
-		self.state
+		self.inner
+			.state
 			.write()
 			.await
 			.nodes
@@ -631,7 +756,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_open(&self, ctx: &mut Context, arg: OPEN4args) -> OPEN4res {
+	async fn handle_open(&self, ctx: &mut Context, arg: OPEN4args) -> OPEN4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return OPEN4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
@@ -657,19 +782,20 @@ impl Server {
 		};
 
 		if let NodeKind::File { file, .. } = &self.get_node(fh).await.unwrap().kind {
-			let Ok(blob) = file.contents(self.client.as_ref()).await else {
+			let Ok(blob) = file.contents(self.inner.client.as_ref()).await else {
 				tracing::error!("Failed to get file's content.");
 				return OPEN4res::Error(nfsstat4::NFS4ERR_IO);
 			};
-			let Ok(reader) = blob.reader(self.client.as_ref()).await else {
+			let Ok(reader) = blob.reader(self.inner.client.as_ref()).await else {
 				tracing::error!("Failed to create blob reader.");
 				return OPEN4res::Error(nfsstat4::NFS4ERR_IO);
 			};
-			self.state
+			self.inner
+				.state
 				.write()
 				.await
-				.blob_readers
-				.insert(stateid, Arc::new(RwLock::new(reader)));
+				.readers
+				.insert(stateid, Arc::new(tokio::sync::RwLock::new(reader)));
 		}
 
 		let cinfo = change_info4 {
@@ -692,7 +818,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_read(&self, ctx: &Context, arg: READ4args) -> READ4res {
+	async fn handle_read(&self, ctx: &Context, arg: READ4args) -> READ4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return READ4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
@@ -719,8 +845,8 @@ impl Server {
 			});
 		}
 
-		let state = self.state.read().await;
-		let Some(reader) = state.blob_readers.get(&arg.stateid).cloned() else {
+		let state = self.inner.state.read().await;
+		let Some(reader) = state.readers.get(&arg.stateid).cloned() else {
 			tracing::error!(?arg.stateid, "No reader is registered for the given id.");
 			return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 		};
@@ -750,7 +876,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_readdir(&self, ctx: &Context, arg: READDIR4args) -> READDIR4res {
+	async fn handle_readdir(&self, ctx: &Context, arg: READDIR4args) -> READDIR4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return READDIR4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
@@ -764,7 +890,7 @@ impl Server {
 
 		let entries = match &node.kind {
 			NodeKind::Directory { directory, .. } => {
-				let Ok(entries) = directory.entries(self.client.as_ref()).await else {
+				let Ok(entries) = directory.entries(self.inner.client.as_ref()).await else {
 					return READDIR4res::Error(nfsstat4::NFS4ERR_IO);
 				};
 				entries.clone()
@@ -827,7 +953,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_readlink(&self, ctx: &Context) -> READLINK4res {
+	async fn handle_readlink(&self, ctx: &Context) -> READLINK4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
@@ -837,7 +963,7 @@ impl Server {
 		let NodeKind::Symlink { symlink } = &node.kind else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_INVAL);
 		};
-		let Ok(target) = symlink.target(self.client.as_ref()).await else {
+		let Ok(target) = symlink.target(self.inner.client.as_ref()).await else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
 		};
 		let mut response = String::new();
@@ -847,7 +973,7 @@ impl Server {
 					response.push_str(string);
 				},
 				tg::template::Component::Artifact(artifact) => {
-					let Ok(id) = artifact.id(self.client.as_ref()).await else {
+					let Ok(id) = artifact.id(self.inner.client.as_ref()).await else {
 						return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
 					};
 					for _ in 0..node.depth() {
@@ -864,14 +990,14 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub fn handle_renew(&self, _arg: RENEW4args) -> RENEW4res {
+	fn handle_renew(&self, _arg: RENEW4args) -> RENEW4res {
 		RENEW4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_sec_info(&self, ctx: &Context, arg: SECINFO4args) -> SECINFO4res {
+	async fn handle_sec_info(&self, ctx: &Context, arg: SECINFO4args) -> SECINFO4res {
 		let Some(parent) = ctx.current_file_handle else {
 			return SECINFO4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
@@ -885,10 +1011,10 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_set_client_id(&self, arg: SETCLIENTID4args) -> SETCLIENTID4res {
-		let mut state = self.state.write().await;
+	async fn handle_set_client_id(&self, arg: SETCLIENTID4args) -> SETCLIENTID4res {
+		let mut state = self.inner.state.write().await;
 		let Some(client) = state.clients.get(&arg.client.id) else {
-			let (server_id, server_verifier) = state.new_client_data();
+			let (server_id, server_verifier) = state.create_client_data();
 			let record = ClientData {
 				server_id,
 				client_verifier: arg.client.verifier,
@@ -912,7 +1038,6 @@ impl Server {
 		];
 
 		if !conditions.into_iter().all(|c| c) {
-			// TODO: extend to handle any other cases.
 			SETCLIENTID4res::Error(nfsstat4::NFS4ERR_IO)
 		} else {
 			let clientid = client.server_id;
@@ -925,11 +1050,11 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	pub async fn handle_set_client_id_confirm(
+	async fn handle_set_client_id_confirm(
 		&self,
 		arg: SETCLIENTID_CONFIRM4args,
 	) -> SETCLIENTID_CONFIRM4res {
-		let mut state = self.state.write().await;
+		let mut state = self.inner.state.write().await;
 		for client in state.clients.values_mut() {
 			if client.server_id == arg.clientid {
 				if client.server_verifier == arg.setclientid_confirm {
@@ -949,7 +1074,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self), ret)]
-	pub async fn handle_release_lockowner(
+	async fn handle_release_lockowner(
 		&self,
 		_context: &mut Context,
 		_arg: RELEASE_LOCKOWNER4args,
@@ -959,14 +1084,14 @@ impl Server {
 		}
 	}
 
-	pub fn handle_put_file_handle(&self, ctx: &mut Context, arg: PUTFH4args) -> PUTFH4res {
+	fn handle_put_file_handle(&self, ctx: &mut Context, arg: PUTFH4args) -> PUTFH4res {
 		ctx.current_file_handle = Some(arg.object);
 		PUTFH4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 
-	pub fn handle_get_file_handle(&self, ctx: &Context) -> GETFH4res {
+	fn handle_get_file_handle(&self, ctx: &Context) -> GETFH4res {
 		if let Some(object) = ctx.current_file_handle {
 			GETFH4res::NFS4_OK(GETFH4resok { object })
 		} else {
@@ -974,20 +1099,38 @@ impl Server {
 		}
 	}
 
-	pub fn handle_save_file_handle(&self, ctx: &mut Context) -> SAVEFH4res {
+	fn handle_save_file_handle(&self, ctx: &mut Context) -> SAVEFH4res {
 		ctx.saved_file_handle = ctx.current_file_handle;
 		SAVEFH4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 
-	pub fn handle_restore_file_handle(&self, ctx: &mut Context) -> RESTOREFH4res {
+	fn handle_restore_file_handle(&self, ctx: &mut Context) -> RESTOREFH4res {
 		ctx.current_file_handle = ctx.saved_file_handle.take();
 		RESTOREFH4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 }
+
+impl State {
+	fn create_client_data(&self) -> (u64, verifier4) {
+		let new_id = (self.clients.len() + 1000).to_u64().unwrap();
+		(new_id, new_id.to_be_bytes())
+	}
+}
+
+impl Node {
+	fn depth(self: &Arc<Self>) -> usize {
+		if self.id == 0 {
+			0
+		} else {
+			1 + self.parent.upgrade().unwrap().depth()
+		}
+	}
+}
+
 pub const O_RDONLY: u32 = MODE4_RUSR | MODE4_RGRP | MODE4_ROTH;
 pub const O_RX: u32 = MODE4_XUSR | MODE4_XGRP | MODE4_XOTH | O_RDONLY;
 
@@ -1047,60 +1190,70 @@ pub const ALL_SUPPORTED_ATTRS: &[u32] = &[
 ];
 
 pub struct FileAttrData {
-	pub(crate) supported_attrs: bitmap4,
-	pub(crate) file_type: nfs_ftype4,
-	pub(crate) expire_type: u32, // Defines how file expiry is supposed to be handled. A value of "0" is called FH4_PERSISTENT, which implies the file handle is persistent for the lifetime of the server.
-	pub(crate) change: u64, // Defines how file changes happen. Since we don't have changes, we don't care.
-	pub(crate) size: u64,
-	pub(crate) link_support: bool, // TRUE if the file system this object is on supports hard links.
-	pub(crate) symlink_support: bool, // TRUE if the file system this object is on supports soft links.
-	pub(crate) named_attr: bool, // Whether this file has any nammed attributes (xattrs). TODO: care about this.
-	pub(crate) fsid: fsid4, // Identifies which file system the object is on (servers may overlay multiple file systems and report such to the client).
-	pub(crate) unique_handles: bool, // TRUE, if two distinct filehandles are guaranteed to refer to two different file system objects.
-	pub(crate) lease_time: u32,      // The amount of time this file is valid for, in seconds.
-	pub(crate) rdattr_error: i32,    // An error, if we want to return one.
-	pub(crate) file_handle: nfs_fh4, // The underlying file handle
-	pub(crate) acl: Vec<nfsace4>,
-	pub(crate) aclsupport: u32,
-	pub(crate) archive: bool,
-	pub(crate) cansettime: bool,
-	pub(crate) case_insensitive: bool,
-	pub(crate) case_preserving: bool,
-	pub(crate) chown_restricted: bool,
-	pub(crate) fileid: u64,
-	pub(crate) files_avail: u64,
-	pub(crate) files_free: u64,
-	pub(crate) files_total: u64,
-	pub(crate) fs_locations: fs_locations4,
-	pub(crate) hidden: bool,
-	pub(crate) homogeneous: bool,
-	pub(crate) maxfilesize: u64,
-	pub(crate) maxlink: u32,
-	pub(crate) maxname: u32,
-	pub(crate) maxread: u64,
-	pub(crate) maxwrite: u64,
-	pub(crate) mimetype: Vec<String>,
-	pub(crate) mode: u32,
-	pub(crate) no_trunc: bool,
-	pub(crate) numlinks: u32,
-	pub(crate) owner: String,
-	pub(crate) owner_group: String,
-	pub(crate) quota_avail_hard: u64,
-	pub(crate) quota_avail_soft: u64,
-	pub(crate) quota_used: u64,
-	pub(crate) rawdev: specdata4,
-	pub(crate) space_avail: u64,
-	pub(crate) space_free: u64,
-	pub(crate) space_total: u64,
-	pub(crate) space_used: u64,
-	pub(crate) system: bool,
-	pub(crate) time_access: nfstime4,
-	pub(crate) time_backup: nfstime4,
-	pub(crate) time_create: nfstime4,
-	pub(crate) time_delta: nfstime4,
-	pub(crate) time_metadata: nfstime4,
-	pub(crate) time_modify: nfstime4,
-	pub(crate) mounted_on_fileid: u64,
+	supported_attrs: bitmap4,
+	file_type: nfs_ftype4,
+	/// Defines how file expiry is supposed to be handled. A value of "0" is called FH4_PERSISTENT, which implies the file handle is persistent for the lifetime of the server.
+	expire_type: u32,
+	/// Defines how file changes happen. Since we don't have changes, we don't care.
+	change: u64,
+	size: u64,
+	/// TRUE if the file system this object is on supports hard links.
+	link_support: bool,
+	/// TRUE if the file system this object is on supports soft links.
+	symlink_support: bool,
+	/// Whether this file has any nammed attributes (xattrs). TODO: care about this.
+	named_attr: bool,
+	/// Identifies which file system the object is on (servers may overlay multiple file systems and report such to the client).
+	fsid: fsid4,
+	/// TRUE, if two distinct filehandles are guaranteed to refer to two different file system objects.
+	unique_handles: bool,
+	/// The amount of time this file is valid for, in seconds.
+	lease_time: u32,
+	/// An error, if we want to return one.
+	rdattr_error: i32,
+	/// The underlying file handle
+	file_handle: nfs_fh4,
+	acl: Vec<nfsace4>,
+	aclsupport: u32,
+	archive: bool,
+	cansettime: bool,
+	case_insensitive: bool,
+	case_preserving: bool,
+	chown_restricted: bool,
+	fileid: u64,
+	files_avail: u64,
+	files_free: u64,
+	files_total: u64,
+	fs_locations: fs_locations4,
+	hidden: bool,
+	homogeneous: bool,
+	maxfilesize: u64,
+	maxlink: u32,
+	maxname: u32,
+	maxread: u64,
+	maxwrite: u64,
+	mimetype: Vec<String>,
+	mode: u32,
+	no_trunc: bool,
+	numlinks: u32,
+	owner: String,
+	owner_group: String,
+	quota_avail_hard: u64,
+	quota_avail_soft: u64,
+	quota_used: u64,
+	rawdev: specdata4,
+	space_avail: u64,
+	space_free: u64,
+	space_total: u64,
+	space_used: u64,
+	system: bool,
+	time_access: nfstime4,
+	time_backup: nfstime4,
+	time_create: nfstime4,
+	time_delta: nfstime4,
+	time_metadata: nfstime4,
+	time_modify: nfstime4,
+	mounted_on_fileid: u64,
 }
 
 impl FileAttrData {
@@ -1174,6 +1327,7 @@ impl FileAttrData {
 			mounted_on_fileid: file_handle.0,
 		}
 	}
+
 	fn to_bytes(&self, requested: &bitmap4) -> Vec<u8> {
 		let mut buf = Vec::with_capacity(256);
 		let mut encoder = xdr::Encoder::new(&mut buf);
@@ -1239,7 +1393,6 @@ impl FileAttrData {
 				_ => (),
 			};
 		}
-
 		buf
 	}
 }

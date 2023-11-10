@@ -1,6 +1,5 @@
 use crate::Cli;
-use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 /// Run the language server.
 #[derive(Debug, clap::Args)]
@@ -13,8 +12,7 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the language server.
-		let server =
-			tangram_lsp::Server::new(client.downgrade_box(), tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
 
 		// Run the language server.
 		server.serve().await?;

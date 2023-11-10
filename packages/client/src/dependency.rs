@@ -1,18 +1,18 @@
 use crate::{Error, Relpath, Result};
 
-/// A dependency on a package, either at a path or from the registry.
+/// A dependency.
 #[derive(
 	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
 #[serde(into = "String", try_from = "String")]
 pub struct Dependency {
-	/// A dependency on a package at a path.
+	/// The name of the package.
 	pub name: Option<String>,
 
-	/// The version requirement.
+	/// The package's version.
 	pub version: Option<String>,
 
-	/// An optional path override.
+	/// The package's path.
 	pub path: Option<Relpath>,
 }
 

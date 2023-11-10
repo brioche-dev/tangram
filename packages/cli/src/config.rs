@@ -1,7 +1,6 @@
 use crate::{util::dirs::user_config_directory_path, Cli};
 use std::path::{Path, PathBuf};
-use tangram_client as tg;
-use tg::{Result, Wrap, WrapErr};
+use tangram_error::{Result, Wrap, WrapErr};
 use url::Url;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -10,13 +9,7 @@ pub struct Config {
 	pub autoenvs: Option<Vec<PathBuf>>,
 
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub parent: Option<Parent>,
-}
-
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct Parent {
-	pub url: Option<Url>,
-	pub token: Option<String>,
+	pub remote: Option<Url>,
 }
 
 impl Cli {

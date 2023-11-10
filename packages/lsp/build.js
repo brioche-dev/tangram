@@ -4,10 +4,10 @@ import * as path from "path";
 
 await esbuild.build({
 	bundle: true,
-	entryPoints: ["./src/lsp.ts"],
+	entryPoints: ["./src/main.ts"],
 	inject: ["./src/node.js"],
 	minify: true,
-	outfile: "./src/lsp.js",
+	outfile: "./src/main.js",
 	plugins: [
 		alias({
 			assert: path.resolve("./src/node/assert.cjs"),

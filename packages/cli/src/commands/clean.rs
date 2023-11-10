@@ -1,6 +1,5 @@
 use crate::Cli;
-use tangram_client as tg;
-use tg::Result;
+use tangram_error::Result;
 
 /// Remove unused objects.
 #[derive(Debug, clap::Args)]

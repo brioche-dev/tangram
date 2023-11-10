@@ -7,8 +7,8 @@ use num::ToPrimitive;
 use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client as tg;
+use tangram_error::{Result, WrapErr};
 use tangram_lsp::{Import, Module};
-use tg::{Result, WrapErr};
 
 mod convert;
 mod error;
@@ -16,10 +16,8 @@ mod syscall;
 
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runtime.heapsnapshot"));
 
-const SOURCE_MAP: &[u8] = include_bytes!(concat!(
-	env!("CARGO_MANIFEST_DIR"),
-	"/src/js/runtime.js.map"
-));
+const SOURCE_MAP: &[u8] =
+	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/js/main.js.map"));
 
 struct State {
 	build: tg::Build,
@@ -127,15 +125,15 @@ pub async fn build_inner(
 		let tg = global.get(scope, tg.into()).unwrap();
 		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
 
-		// Get the main function.
-		let main = v8::String::new_external_onebyte_static(scope, "main".as_bytes()).unwrap();
-		let main = tg.get(scope, main.into()).unwrap();
-		let main = v8::Local::<v8::Function>::try_from(main).unwrap();
+		// Get the start function.
+		let start = v8::String::new_external_onebyte_static(scope, "start".as_bytes()).unwrap();
+		let start = tg.get(scope, start.into()).unwrap();
+		let start = v8::Local::<v8::Function>::try_from(start).unwrap();
 
-		// Call the main function.
+		// Call the start function.
 		let undefined = v8::undefined(scope);
 		let target = target.to_v8(scope).unwrap();
-		let output = main.call(scope, undefined.into(), &[target]).unwrap();
+		let output = start.call(scope, undefined.into(), &[target]).unwrap();
 
 		v8::Global::new(scope, output)
 	};

@@ -4,9 +4,8 @@ use super::{
 };
 use num::ToPrimitive;
 use std::{str::FromStr, sync::Arc};
-use tangram_client as tg;
+use tangram_error::Error;
 use tangram_lsp::Module;
-use tg::Error;
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -1446,7 +1446,6 @@ let convertObjectTypeNode = (
 	node: ts.TypeLiteralNode,
 ): ObjectType => {
 	let type = typeChecker.getTypeAtLocation(node);
-	// TODO.
 	return convertObjectType(typeChecker, type);
 };
 
