@@ -1,9 +1,11 @@
 use crate::{id, object, return_error, Artifact, Client, Dependency, Error, Result, WrapErr};
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use itertools::Itertools;
 use std::{collections::BTreeMap, sync::Arc};
+use tangram_error::error;
 
 #[derive(
 	Clone,
@@ -41,6 +43,12 @@ pub struct Entry {
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
 	pub dependencies: BTreeMap<Dependency, data::Entry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LockFile {
+	pub root: data::Entry,
+	pub entries: BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
 }
 
 pub mod data {
@@ -199,6 +207,71 @@ impl Entry {
 			package: self.package.id(client).await?.clone(),
 			lock: self.lock.id(client).await?.clone(),
 		})
+	}
+}
+
+impl LockFile {
+	pub async fn with_package_and_lock(
+		client: &dyn Client,
+		package: Artifact,
+		lock: Lock,
+	) -> tangram_error::Result<Self> {
+		let mut entries = BTreeMap::new();
+		Self::with_lock_inner(client, lock.clone(), &mut entries).await?;
+		let package = package.id(client).await?;
+		let lock = lock.id(client).await?.clone();
+		let root = data::Entry { package, lock };
+		Ok(Self { root, entries })
+	}
+
+	#[async_recursion]
+	async fn with_lock_inner(
+		client: &dyn Client,
+		lock: Lock,
+		entries: &mut BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
+	) -> tangram_error::Result<()> {
+		// Get the ID and check if we've already visited this lock.
+		let id = lock.id(client).await.wrap_err("Failed to get ID")?.clone();
+		if entries.contains_key(&id) {
+			return Ok(());
+		}
+
+		// Add the data to the lockfile.
+		let data = lock.data(client).await.wrap_err("Failed to get data.")?;
+		entries.insert(id, data.dependencies.clone());
+
+		// Visit any dependencies.
+		for entry in lock.object(client).await?.dependencies.values() {
+			Self::with_lock_inner(client, entry.lock.clone(), entries).await?;
+		}
+		Ok(())
+	}
+
+	pub fn to_package_and_lock(&self) -> tangram_error::Result<(Artifact, Lock)> {
+		let id = &self.root.lock;
+		let package = Artifact::with_id(self.root.package.clone());
+		let Entry { package, lock } = self.to_lock_inner(id, package)?;
+		Ok((package, lock))
+	}
+
+	fn to_lock_inner(&self, id: &Id, package: Artifact) -> tangram_error::Result<Entry> {
+		let raw_dependencies = self
+			.entries
+			.get(id)
+			.ok_or(error!("Lockfile is corrupted."))?;
+
+		let mut dependencies = BTreeMap::new();
+		for (dependency, entry) in raw_dependencies {
+			let package = Artifact::with_id(entry.package.clone());
+			let entry = self.to_lock_inner(&entry.lock, package)?;
+			let _ = dependencies.insert(dependency.clone(), entry);
+		}
+
+		let object = Object { dependencies };
+
+		let lock = Lock::with_object(object);
+		let entry = Entry { package, lock };
+		Ok(entry)
 	}
 }
 
