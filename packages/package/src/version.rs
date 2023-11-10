@@ -150,8 +150,6 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 		match (permanent, partial) {
 			// Case 0: There is no solution for this package yet.
 			(None, None) => 'a: {
-				tracing::debug!(?dependant, "Creating initial version selection.");
-
 				// Note: this bit is tricky. The next frame will always have an empty set of remaining versions, because by construction it will never have been tried before. However we need to get a list of versions to attempt, which we will push onto the stack.
 				if current_frame.remaining_versions.is_none() {
 					let all_versions = match context
@@ -513,7 +511,10 @@ impl Context {
 				return Ok(package.clone());
 			}
 			match self.client.get_package_version(name, &version).await {
-				Err(e) => return Err(Error::Other(e)),
+				Err(e) => {
+					tracing::error!(?e, ?name, ?version, "Failed to get an artifact for the package.");
+					return Err(Error::Other(e));
+				}
 				Ok(Some(package)) => {
 					let package: tg::Id = package.into();
 					self.published_packages.insert(metadata, package.clone());

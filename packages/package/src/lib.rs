@@ -29,11 +29,14 @@ pub async fn new(
 ) -> Result<(tg::Artifact, tg::Lock)> {
 	let (root_artifact, path_dependencies) = match specifier {
 		Specifier::Path(path) => {
+			// Canonicalize.
+			let path = path.canonicalize().wrap_err("Failed to canonicalize path.")?;
+
 			// Scan, checking in any the path dependencies and includes.
 			let mut visited = BTreeMap::new();
 			let mut path_dependencies = BTreeMap::new();
 			let root_artifact =
-				analyze_package_at_path(client, path.clone(), &mut visited, &mut path_dependencies)
+				analyze_package_at_path(client, path, &mut visited, &mut path_dependencies)
 					.await?;
 			(root_artifact, path_dependencies)
 		},
@@ -154,7 +157,7 @@ async fn analyze_package_at_path(
 	visited: &mut BTreeMap<PathBuf, Option<tg::Directory>>,
 	path_dependencies: &mut BTreeMap<tg::Id, BTreeMap<Relpath, tg::Id>>,
 ) -> tg::Result<tg::Directory> {
-	debug_assert!(package_path.is_absolute());
+	debug_assert!(package_path.is_absolute(), "Expected an absolute path, got {package_path:#?}.");
 	match visited.get(&package_path) {
 		Some(Some(directory)) => return Ok(directory.clone()),
 		Some(None) => return Err(tg::error!("Cyclical path dependencies found.")),

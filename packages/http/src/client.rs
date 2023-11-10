@@ -611,9 +611,10 @@ impl tg::Client for Client {
 		name: &str,
 		version: &str,
 	) -> Result<Option<tg::artifact::Id>> {
+		tracing::debug!(?name, ?version, "Requesting package version from API.");
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri(format!("/v1/registry/packages/{name}/version/{version}"))
+			.uri(format!("/v1/registry/packages/{name}/versions/{version}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -625,6 +626,7 @@ impl tg::Client for Client {
 			.await
 			.wrap_err("Failed to collect the response body.")?
 			.to_bytes();
+		tracing::debug!("received: {}", String::from_utf8_lossy(&bytes));
 		let response =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(response)

@@ -17,7 +17,7 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Get the token.
-		let token = self.token()?;
+		let token: String = "magic".into();
 
 		// Create the package.
 		let specifier = tangram_package::Specifier::Path(args.package);

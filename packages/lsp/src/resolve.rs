@@ -94,7 +94,8 @@ impl Module {
 				Ok(module)
 			},
 
-			(Self::Document(_), Import::Dependency(_)) => {
+			(Self::Document(_), Import::Dependency(dependency)) => {
+				// let lockfile = tangram_package::
 				unimplemented!()
 			},
 
