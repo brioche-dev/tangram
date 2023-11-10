@@ -51,9 +51,9 @@ impl std::str::FromStr for Import {
 			if url.scheme() == "tangram" {
 				// Parse the URL's path as a dependency.
 				let value = &value["tangram:".len()..];
-				let dependency = value.parse().wrap_err_with(|| {
-					format!(r#"Failed to parse "{value}" as a dependency."#)
-				})?;
+				let dependency = value
+					.parse()
+					.wrap_err_with(|| format!(r#"Failed to parse "{value}" as a dependency."#))?;
 				Ok(Import::Dependency(dependency))
 			} else {
 				return_error!(r#"The URL "{url}" has an invalid scheme."#)

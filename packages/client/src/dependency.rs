@@ -46,14 +46,17 @@ impl Dependency {
 
 impl std::fmt::Display for Dependency {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let name_and_version = [
-			self.name.as_deref(),
-			self.version.as_deref(),
-		].into_iter().flatten().join("@");
+		let name_and_version = [self.name.as_deref(), self.version.as_deref()]
+			.into_iter()
+			.flatten()
+			.join("@");
 		let parameters = [
 			self.path.as_ref().map(|s| format!("path=./{s}")),
-			self.island.as_ref().map(|s| format!("island={s}"))
-		].into_iter().flatten().join(",");
+			self.island.as_ref().map(|s| format!("island={s}")),
+		]
+		.into_iter()
+		.flatten()
+		.join(",");
 		write!(f, "{name_and_version}")?;
 		if !parameters.is_empty() {
 			write!(f, "?{parameters}")?;
@@ -69,18 +72,15 @@ impl std::str::FromStr for Dependency {
 		// Syntax: <name>@<version>?path=<path>,island=<boolean>
 		let mut components = value.split('?');
 		let mut name_and_version = components.next().unwrap().split('@');
-		let parameters = components
-			.next()
-			.into_iter()
-			.flat_map(|s| {
-				let parameters = s.split(',').map(|s| -> Result<(&str, &str)> {
-					let mut components = s.split('=');
-					let name = components.next().unwrap();
-					let value = components.next().ok_or(error!("Expected a value."))?;
-					Ok((name, value))
-				});
-				parameters
+		let parameters = components.next().into_iter().flat_map(|s| {
+			let parameters = s.split(',').map(|s| -> Result<(&str, &str)> {
+				let mut components = s.split('=');
+				let name = components.next().unwrap();
+				let value = components.next().ok_or(error!("Expected a value."))?;
+				Ok((name, value))
 			});
+			parameters
+		});
 
 		let name = match name_and_version.next() {
 			Some(name) if name.is_empty() => None,
@@ -97,17 +97,22 @@ impl std::str::FromStr for Dependency {
 			match name {
 				"path" => {
 					path = Some(value.parse()?);
-				}
+				},
 				"island" => {
 					island = Some(value.parse().map_err(|_| error!("Expected a boolean."))?);
-				}
+				},
 				name => {
 					return_error!("Unknown parameter: {name}.");
-				}
+				},
 			}
 		}
 
-		Ok(Dependency { name, version, path, island })
+		Ok(Dependency {
+			name,
+			version,
+			path,
+			island,
+		})
 	}
 }
 
@@ -127,7 +132,7 @@ impl From<Dependency> for String {
 
 #[cfg(test)]
 mod tests {
-    use crate::Dependency;
+	use crate::Dependency;
 
 	#[test]
 	fn display() {
@@ -135,37 +140,40 @@ mod tests {
 			name: Some("foo".into()),
 			version: None,
 			path: None,
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency.to_string(), "foo");
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
 			path: None,
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency.to_string(), "foo@1.2.3");
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: None,
 			path: None,
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency.to_string(), "foo");
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
 			path: Some("./path/to/foo".parse().unwrap()),
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency.to_string(), "foo@1.2.3?path=./path/to/foo");
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
 			path: Some("./path/to/foo".parse().unwrap()),
-			island: Some(true)
+			island: Some(true),
 		};
-		assert_eq!(dependency.to_string(), "foo@1.2.3?path=./path/to/foo,island=true");
+		assert_eq!(
+			dependency.to_string(),
+			"foo@1.2.3?path=./path/to/foo,island=true"
+		);
 		let dependency = Dependency {
 			name: None,
 			version: None,
@@ -181,37 +189,40 @@ mod tests {
 			name: Some("foo".into()),
 			version: None,
 			path: None,
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency, "foo".parse().unwrap());
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
 			path: None,
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency, "foo@1.2.3".parse().unwrap());
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: None,
 			path: None,
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency, "foo".parse().unwrap());
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
 			path: Some("./path/to/foo".parse().unwrap()),
-			island: None
+			island: None,
 		};
 		assert_eq!(dependency, "foo@1.2.3?path=./path/to/foo".parse().unwrap());
 		let dependency = Dependency {
 			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
 			path: Some("./path/to/foo".parse().unwrap()),
-			island: Some(true)
+			island: Some(true),
 		};
-		assert_eq!(dependency, "foo@1.2.3?path=./path/to/foo,island=true".parse().unwrap());
+		assert_eq!(
+			dependency,
+			"foo@1.2.3?path=./path/to/foo,island=true".parse().unwrap()
+		);
 		let dependency = Dependency {
 			name: None,
 			version: None,
