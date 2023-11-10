@@ -1,7 +1,8 @@
 use async_recursion::async_recursion;
+use tangram_error::WrapErr;
 use std::collections::BTreeMap;
 use tangram_client as tg;
-use tg::WrapErr;
+use tangram_error::error;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Lockfile {
@@ -14,7 +15,7 @@ impl Lockfile {
 		client: &dyn tg::Client,
 		package: tg::Artifact,
 		lock: tg::Lock,
-	) -> tg::Result<Self> {
+	) -> tangram_error::Result<Self> {
 		let mut entries = BTreeMap::new();
 		Self::from_lock_inner(client, lock.clone(), &mut entries).await?;
 		let package = package.id(client).await?;
@@ -28,7 +29,7 @@ impl Lockfile {
 		client: &dyn tg::Client,
 		lock: tg::Lock,
 		entries: &mut BTreeMap<tg::lock::Id, BTreeMap<tg::Dependency, tg::lock::data::Entry>>,
-	) -> tg::Result<()> {
+	) -> tangram_error::Result<()> {
 		// Get the ID and check if we've already visited this lock.
 		let id = lock.id(client).await.wrap_err("Failed to get ID")?.clone();
 		if entries.contains_key(&id) {
@@ -46,7 +47,7 @@ impl Lockfile {
 		Ok(())
 	}
 
-	pub fn to_package(&self) -> tg::Result<(tg::Artifact, tg::Lock)> {
+	pub fn to_package(&self) -> tangram_error::Result<(tg::Artifact, tg::Lock)> {
 		let id = &self.root.lock;
 		let package = tg::Artifact::with_id(self.root.package.clone());
 		let tg::lock::Entry { package, lock } = self.to_lock_inner(id, package)?;
@@ -57,11 +58,11 @@ impl Lockfile {
 		&self,
 		id: &tg::lock::Id,
 		package: tg::Artifact,
-	) -> tg::Result<tg::lock::Entry> {
+	) -> tangram_error::Result<tg::lock::Entry> {
 		let raw_dependencies = self
 			.entries
 			.get(id)
-			.ok_or(tg::error!("Lockfile is corrupted."))?;
+			.ok_or(error!("Lockfile is corrupted."))?;
 
 		let mut dependencies = BTreeMap::new();
 		for (dependency, entry) in raw_dependencies {

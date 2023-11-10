@@ -25,6 +25,7 @@ struct Inner {
 	path: std::path::PathBuf,
 	state: tokio::sync::RwLock<State>,
 	task: Task,
+	path: PathBuf,
 }
 
 type Task = (
@@ -156,6 +157,7 @@ impl Server {
 				path: path.to_owned(),
 				state,
 				task,
+				path: path.into(),
 			}),
 		};
 
@@ -193,7 +195,10 @@ impl Server {
 		}
 
 		Self::unmount(&self.inner.path).await?;
+<<<<<<< HEAD
 
+=======
+>>>>>>> dcf5415 (Update after rebase.)
 		Ok(())
 	}
 
@@ -815,9 +820,9 @@ impl Server {
 	}
 
 	async fn mount(path: &Path) -> Result<std::fs::File> {
+		Self::unmount(path).await?;
+		let path = format!("{}\0", path.display());
 		unsafe {
-			Self::unmount(path).await?;
-
 			// Setup the arguments.
 			let uid = libc::getuid();
 			let gid = libc::getgid();

@@ -8,9 +8,8 @@ use std::{
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
 use tangram_lsp::Module;
-use tg::{package::Metadata, return_error, Dependency, Relpath, Result, Subpath, WrapErr};
+use tg::{package::Metadata, Dependency, Relpath, Subpath};
 
-pub mod lockfile;
 pub mod specifier;
 pub mod version;
 
@@ -30,22 +29,26 @@ pub async fn new(
 	let (root_artifact, path_dependencies) = match specifier {
 		Specifier::Path(path) => {
 			// Canonicalize.
-			let path = path.canonicalize().wrap_err("Failed to canonicalize path.")?;
+			let path = path
+				.canonicalize()
+				.wrap_err("Failed to canonicalize path.")?;
 
 			// Scan, checking in any the path dependencies and includes.
 			let mut visited = BTreeMap::new();
 			let mut path_dependencies = BTreeMap::new();
 			let root_artifact =
-				analyze_package_at_path(client, path, &mut visited, &mut path_dependencies)
-					.await?;
+				analyze_package_at_path(client, path, &mut visited, &mut path_dependencies).await?;
 			(root_artifact, path_dependencies)
 		},
 		Specifier::Registry(specifier::Registry { name, version }) if version.is_some() => {
 			let version = version.as_deref().unwrap();
-			let id = client
-				.get_package_version(name, version)
-				.await?
-				.ok_or(tg::error!("Could not find package {name}@{version}."))?;
+			let id =
+				client
+					.get_package_version(name, version)
+					.await?
+					.ok_or(tangram_error::error!(
+						"Could not find package {name}@{version}."
+					))?;
 			let root_artifact = tg::Artifact::with_id(id)
 				.try_unwrap_directory()
 				.wrap_err("Expected package artifact to be a directory.")?;
@@ -53,7 +56,7 @@ pub async fn new(
 			(root_artifact, path_dependencies)
 		},
 		_ => {
-			tg::return_error!("Creating locks for regsitry dependencies without a version specifiier is unsupported.");
+			return_error!("Creating locks for registry dependencies without a version specifiier is unsupported.");
 		},
 	};
 
@@ -62,7 +65,7 @@ pub async fn new(
 	// Now we have the root, we need to get its path overrides.
 	let lock = version::solve(client, root_id, path_dependencies)
 		.await?
-		.map_err(|e| tg::error!("Failed to solve dependency versions. {e}"))?;
+		.map_err(|e| tangram_error::error!("Failed to solve dependency versions. {e}"))?;
 
 	Ok((root_artifact.into(), lock))
 }
@@ -156,11 +159,14 @@ async fn analyze_package_at_path(
 	package_path: PathBuf,
 	visited: &mut BTreeMap<PathBuf, Option<tg::Directory>>,
 	path_dependencies: &mut BTreeMap<tg::Id, BTreeMap<Relpath, tg::Id>>,
-) -> tg::Result<tg::Directory> {
-	debug_assert!(package_path.is_absolute(), "Expected an absolute path, got {package_path:#?}.");
+) -> tangram_error::Result<tg::Directory> {
+	debug_assert!(
+		package_path.is_absolute(),
+		"Expected an absolute path, got {package_path:#?}."
+	);
 	match visited.get(&package_path) {
 		Some(Some(directory)) => return Ok(directory.clone()),
-		Some(None) => return Err(tg::error!("Cyclical path dependencies found.")),
+		Some(None) => return Err(tangram_error::error!("Cyclical path dependencies found.")),
 		None => (),
 	}
 	visited.insert(package_path.clone(), None);
@@ -274,7 +280,10 @@ pub struct Analysis {
 }
 
 impl Analysis {
-	pub async fn new(client: &dyn tg::Client, artifact: tg::Artifact) -> tg::Result<Self> {
+	pub async fn new(
+		client: &dyn tg::Client,
+		artifact: tg::Artifact,
+	) -> tangram_error::Result<Self> {
 		let id = artifact
 			.id(client)
 			.await
@@ -283,7 +292,7 @@ impl Analysis {
 		let metadata = client
 			.get_package_metadata(&id)
 			.await?
-			.ok_or(tg::error!("Missing package metadata."))?;
+			.ok_or(tangram_error::error!("Missing package metadata."))?;
 		let dependencies = client
 			.get_package_dependencies(&id)
 			.await?
@@ -294,18 +303,18 @@ impl Analysis {
 		})
 	}
 
-	pub fn name(&self) -> tg::Result<&str> {
+	pub fn name(&self) -> tangram_error::Result<&str> {
 		self.metadata
 			.name
 			.as_deref()
-			.ok_or(tg::error!("Missing package name."))
+			.ok_or(tangram_error::error!("Missing package name."))
 	}
 
-	pub fn version(&self) -> tg::Result<&str> {
+	pub fn version(&self) -> tangram_error::Result<&str> {
 		self.metadata
 			.version
 			.as_deref()
-			.ok_or(tg::error!("Missing package version."))
+			.ok_or(tangram_error::error!("Missing package version."))
 	}
 
 	pub fn registry_dependencies(&self) -> impl Iterator<Item = &'_ tg::Dependency> {

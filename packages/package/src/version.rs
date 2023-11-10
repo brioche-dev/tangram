@@ -3,7 +3,8 @@ use core::fmt;
 use im::HashMap;
 use std::collections::BTreeMap;
 use tangram_client as tg;
-use tg::{Client, WrapErr};
+use tangram_error::{error, return_error, WrapErr};
+use tg::Client;
 
 use crate::Analysis;
 
@@ -38,7 +39,7 @@ pub enum Error {
 	Semver(String),
 
 	/// A tangram error.
-	Other(tg::Error),
+	Other(tangram_error::Error),
 }
 
 /// Given a registry and unlocked package, create a lockfile for it. If no solution can be found, a [Report] containing a description of the most recent set of errors is returned.
@@ -46,7 +47,7 @@ pub async fn solve(
 	client: &dyn Client,
 	root: tg::Id,
 	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Relpath, tg::Id>>,
-) -> tg::Result<Result<tg::Lock, Report>> {
+) -> tangram_error::Result<Result<tg::Lock, Report>> {
 	// Create the context.
 	let mut context = Context::new(client, path_dependencies);
 
@@ -78,7 +79,11 @@ pub async fn solve(
 }
 
 #[async_recursion]
-async fn lock(context: &Context, solution: &Solution, package: tg::Id) -> tg::Result<tg::Lock> {
+async fn lock(
+	context: &Context,
+	solution: &Solution,
+	package: tg::Id,
+) -> tangram_error::Result<tg::Lock> {
 	// Retrieve the dependencies for the package. The unwrap() is safe since we cannot reach this point if a package has not been added to the context.
 	let dependencies = &context.analysis.get(&package).unwrap().dependencies;
 
@@ -91,9 +96,8 @@ async fn lock(context: &Context, solution: &Solution, package: tg::Id) -> tg::Re
 		};
 
 		// The only way for a temporary mark to remain is if the solving algorithm is implemented incorrectly.
-		let Mark::Permanent(Ok(package)) = solution.partial.get(&dependant).cloned().unwrap()
-		else {
-			tg::return_error!("Internal error, solution is incomplete.");
+		let Some(Mark::Permanent(Ok(package))) = solution.partial.get(&dependant).cloned() else {
+			return_error!("Internal error, solution is incomplete. package: {dependant:?}");
 		};
 
 		let lock = lock(context, solution, package.clone()).await?;
@@ -111,7 +115,7 @@ async fn lock(context: &Context, solution: &Solution, package: tg::Id) -> tg::Re
 	Ok(lock)
 }
 
-async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution> {
+async fn solve_inner(context: &mut Context, root: tg::Id) -> tangram_error::Result<Solution> {
 	// Create the working set of unsolved dependencies.
 	let working_set = context
 		.dependencies(&root)
@@ -366,7 +370,6 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tg::Result<Solution
 	Ok(current_frame.solution)
 }
 
-#[derive(Debug)]
 pub struct Context {
 	// The backing client.
 	client: Box<dyn tg::Client>,
@@ -382,6 +385,12 @@ pub struct Context {
 
 	// A table of path dependencies.
 	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Relpath, tg::Id>>,
+}
+
+impl fmt::Debug for Context {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "Context()")
+	}
 }
 
 /// The Report is an error type that can be pretty printed to describe why version solving failed.
@@ -454,7 +463,7 @@ impl Context {
 			let result = path_dependencies
 				.get(path)
 				.cloned()
-				.ok_or(Error::Other(tg::error!(
+				.ok_or(Error::Other(error!(
 					"Could not resolve path dependency for {dependency}."
 				)));
 			Some(result)
@@ -468,17 +477,17 @@ impl Context {
 	}
 
 	// Check if a package satisfies a dependency.
-	fn matches(&self, version: &str, dependency: &tg::Dependency) -> tg::Result<bool> {
+	fn matches(&self, version: &str, dependency: &tg::Dependency) -> tangram_error::Result<bool> {
 		let Some(constraint) = dependency.version.as_ref() else {
 			return Ok(true);
 		};
 		let version: semver::Version = version.parse().map_err(|e| {
 			tracing::error!(?e, ?version, "Failed to parse metadata version.");
-			tg::error!("Failed to parse version: {version}.")
+			error!("Failed to parse version: {version}.")
 		})?;
 		let constraint: semver::VersionReq = constraint.parse().map_err(|e| {
 			tracing::error!(?e, ?dependency, "Failed to parse dependency version.");
-			tg::error!("Failed to parse version.")
+			error!("Failed to parse version.")
 		})?;
 
 		Ok(constraint.matches(&version))
@@ -512,9 +521,14 @@ impl Context {
 			}
 			match self.client.get_package_version(name, &version).await {
 				Err(e) => {
-					tracing::error!(?e, ?name, ?version, "Failed to get an artifact for the package.");
+					tracing::error!(
+						?e,
+						?name,
+						?version,
+						"Failed to get an artifact for the package."
+					);
 					return Err(Error::Other(e));
-				}
+				},
 				Ok(Some(package)) => {
 					let package: tg::Id = package.into();
 					self.published_packages.insert(metadata, package.clone());
@@ -525,13 +539,13 @@ impl Context {
 		}
 	}
 
-	pub async fn analysis(&mut self, package: &tg::Id) -> tg::Result<&'_ Analysis> {
+	pub async fn analysis(&mut self, package: &tg::Id) -> tangram_error::Result<&'_ Analysis> {
 		if !self.analysis.contains_key(package) {
 			let metadata = self
 				.client
 				.get_package_metadata(package)
 				.await?
-				.ok_or(tg::error!("Missing package metadata."))?;
+				.ok_or(error!("Missing package metadata."))?;
 			let dependencies = self
 				.client
 				.get_package_dependencies(package)
@@ -553,21 +567,27 @@ impl Context {
 	}
 
 	// Get a list of registry dependencies for a package given its metadata.
-	pub async fn dependencies(&mut self, package: &tg::Id) -> tg::Result<&'_ [tg::Dependency]> {
+	pub async fn dependencies(
+		&mut self,
+		package: &tg::Id,
+	) -> tangram_error::Result<&'_ [tg::Dependency]> {
 		Ok(&self.analysis(package).await?.dependencies)
 	}
 
-	pub async fn version(&mut self, package: &tg::Id) -> tg::Result<&str> {
+	pub async fn version(&mut self, package: &tg::Id) -> tangram_error::Result<&str> {
 		self.analysis(package).await?.version()
 	}
 
 	// Lookup all the published versions of a package by name.
-	async fn lookup(&mut self, package_name: &str) -> tg::Result<Vec<tg::package::Metadata>> {
+	async fn lookup(
+		&mut self,
+		package_name: &str,
+	) -> tangram_error::Result<Vec<tg::package::Metadata>> {
 		let metadata = self
 			.client
 			.get_package(package_name)
 			.await?
-			.ok_or(tg::error!("Could not find package named {package_name}."))?
+			.ok_or(error!("Could not find package named {package_name}."))?
 			.versions
 			.into_iter()
 			.map(|version| tg::package::Metadata {

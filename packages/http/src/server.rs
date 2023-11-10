@@ -763,9 +763,9 @@ impl Server {
 
 		// Create the response.
 		let response = if let Some(source_artifact_hash) = source_artifact_hash {
-			http::Response::builder()
-				.body(full(source_artifact_hash.to_string()))
-				.unwrap()
+			let body = serde_json::to_vec(&source_artifact_hash)
+				.wrap_err("Failed to serialize the source artifact hash.")?;
+			http::Response::builder().body(full(body)).unwrap()
 		} else {
 			not_found()
 		};

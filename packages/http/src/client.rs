@@ -626,10 +626,9 @@ impl tg::Client for Client {
 			.await
 			.wrap_err("Failed to collect the response body.")?
 			.to_bytes();
-		tracing::debug!("received: {}", String::from_utf8_lossy(&bytes));
-		let response =
+		let id =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-		Ok(response)
+		Ok(Some(id))
 	}
 
 	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {

@@ -1,9 +1,9 @@
-use crate::ROOT_MODULE_FILE_NAME;
-use crate::{lockfile::Lockfile, version::solve};
+use crate::{version::solve, ROOT_MODULE_FILE_NAME};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tangram_client as tg;
-use tg::{Client, WrapErr};
+use tangram_error::WrapErr;
+use tg::{lock::LockFile, Client};
 
 #[tokio::test]
 async fn simple_diamond() {
@@ -60,7 +60,7 @@ async fn simple_diamond() {
 		.await
 		.expect("Failed to solve simple_diamond case.");
 
-	let lockfile = Lockfile::from_package(&client, client.artifact(metadata), lock)
+	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
 		.await
 		.unwrap();
 	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -114,7 +114,7 @@ async fn simple_backtrack() {
 		.await
 		.expect("Failed to solve simple_backtrack case.");
 
-	let lockfile = Lockfile::from_package(&client, client.artifact(metadata), lock)
+	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
 		.await
 		.unwrap();
 	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -187,7 +187,7 @@ async fn diamond_backtrack() {
 		.await
 		.expect("Failed to solve diamond_backtrack case.");
 
-	let lockfile = Lockfile::from_package(&client, client.artifact(metadata), lock)
+	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
 		.await
 		.unwrap();
 	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -414,7 +414,7 @@ async fn diamond_with_path_dependencies() {
 		.expect("Failed to lock diamond with a path dependency.");
 
 	// Create the lockfile and print.
-	let lockfile = Lockfile::from_package(&client, foo.into(), lock)
+	let lockfile = LockFile::with_package_and_lock(&client, foo.into(), lock)
 		.await
 		.unwrap();
 
@@ -512,7 +512,7 @@ async fn complex_diamond() {
 		.await
 		.expect("Failed to solve diamond_backtrack case.");
 
-	let lockfile = Lockfile::from_package(&client, client.artifact(metadata), lock)
+	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
 		.await
 		.unwrap();
 	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
@@ -526,7 +526,7 @@ use std::{
 };
 
 /// A test client for debugging the version solving algorithm without requiring a full backend.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MockClient {
 	state: Arc<Mutex<State>>,
 	client: Arc<dyn tg::Client>,
@@ -675,10 +675,6 @@ impl tg::Client for MockClient {
 		Box::new(self.clone())
 	}
 
-	fn downgrade_box(&self) -> Box<dyn tg::Handle> {
-		unimplemented!()
-	}
-
 	fn path(&self) -> Option<&Path> {
 		self.client.path()
 	}
@@ -687,23 +683,26 @@ impl tg::Client for MockClient {
 		self.client.file_descriptor_semaphore()
 	}
 
-	async fn stop(&self) -> tg::Result<()> {
+	async fn stop(&self) -> tangram_error::Result<()> {
 		self.client.stop().await
 	}
 
-	async fn status(&self) -> tg::Result<tg::status::Status> {
+	async fn status(&self) -> tangram_error::Result<tg::status::Status> {
 		self.client.status().await
 	}
 
-	async fn clean(&self) -> tg::Result<()> {
+	async fn clean(&self) -> tangram_error::Result<()> {
 		self.client.clean().await
 	}
 
-	async fn get_object_exists(&self, id: &tg::object::Id) -> tg::Result<bool> {
+	async fn get_object_exists(&self, id: &tg::object::Id) -> tangram_error::Result<bool> {
 		self.client.get_object_exists(id).await
 	}
 
-	async fn try_get_object(&self, id: &tg::object::Id) -> tg::Result<Option<bytes::Bytes>> {
+	async fn try_get_object(
+		&self,
+		id: &tg::object::Id,
+	) -> tangram_error::Result<Option<bytes::Bytes>> {
 		self.client.try_get_object(id).await
 	}
 
@@ -711,44 +710,43 @@ impl tg::Client for MockClient {
 		&self,
 		id: &tg::object::Id,
 		bytes: &bytes::Bytes,
-	) -> tg::Result<tg::Result<(), Vec<tg::object::Id>>> {
+	) -> tangram_error::Result<tangram_error::Result<(), Vec<tg::object::Id>>> {
 		self.client.try_put_object(id, bytes).await
 	}
 
-	async fn try_get_tracker(&self, path: &Path) -> tg::Result<Option<tg::Tracker>> {
+	async fn try_get_tracker(&self, path: &Path) -> tangram_error::Result<Option<tg::Tracker>> {
 		self.client.try_get_tracker(path).await
 	}
 
-	async fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> tg::Result<()> {
+	async fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> tangram_error::Result<()> {
 		self.client.set_tracker(path, tracker).await
 	}
 
 	async fn try_get_build_for_target(
 		&self,
 		id: &tg::target::Id,
-	) -> tg::Result<Option<tg::build::Id>> {
+	) -> tangram_error::Result<Option<tg::build::Id>> {
 		self.client.try_get_build_for_target(id).await
 	}
 
 	async fn get_or_create_build_for_target(
 		&self,
 		id: &tg::target::Id,
-	) -> tg::Result<tg::build::Id> {
+	) -> tangram_error::Result<tg::build::Id> {
 		self.client.get_or_create_build_for_target(id).await
 	}
 
-	async fn try_get_build_queue_item(&self) -> tg::Result<Option<tg::build::Id>> {
-		self.client.try_get_build_queue_item().await
-	}
-
-	async fn try_get_build_target(&self, id: &tg::build::Id) -> tg::Result<Option<tg::target::Id>> {
+	async fn try_get_build_target(
+		&self,
+		id: &tg::build::Id,
+	) -> tangram_error::Result<Option<tg::target::Id>> {
 		self.client.try_get_build_target(id).await
 	}
 
 	async fn try_get_build_children(
 		&self,
 		id: &tg::build::Id,
-	) -> tg::Result<Option<BoxStream<'static, tg::Result<tg::build::Id>>>> {
+	) -> tangram_error::Result<Option<BoxStream<'static, tangram_error::Result<tg::build::Id>>>> {
 		self.client.try_get_build_children(id).await
 	}
 
@@ -756,59 +754,66 @@ impl tg::Client for MockClient {
 		&self,
 		build_id: &tg::build::Id,
 		child_id: &tg::build::Id,
-	) -> tg::Result<()> {
+	) -> tangram_error::Result<()> {
 		self.client.add_build_child(build_id, child_id).await
 	}
 
 	async fn try_get_build_log(
 		&self,
 		id: &tg::build::Id,
-	) -> tg::Result<Option<BoxStream<'static, tg::Result<bytes::Bytes>>>> {
+	) -> tangram_error::Result<Option<BoxStream<'static, tangram_error::Result<bytes::Bytes>>>> {
 		self.client.try_get_build_log(id).await
 	}
 
-	async fn add_build_log(&self, build_id: &tg::build::Id, bytes: bytes::Bytes) -> tg::Result<()> {
+	async fn add_build_log(
+		&self,
+		build_id: &tg::build::Id,
+		bytes: bytes::Bytes,
+	) -> tangram_error::Result<()> {
 		self.client.add_build_log(build_id, bytes).await
 	}
 
 	async fn try_get_build_result(
 		&self,
 		id: &tg::build::Id,
-	) -> tg::Result<Option<tg::Result<tg::Value>>> {
+	) -> tangram_error::Result<Option<tangram_error::Result<tg::Value>>> {
 		self.client.try_get_build_result(id).await
 	}
 
 	async fn set_build_result(
 		&self,
 		build_id: &tg::build::Id,
-		result: tg::Result<tg::Value>,
-	) -> tg::Result<()> {
+		result: tangram_error::Result<tg::Value>,
+	) -> tangram_error::Result<()> {
 		self.client.set_build_result(build_id, result).await
 	}
 
-	async fn finish_build(&self, id: &tg::build::Id) -> tg::Result<()> {
+	async fn finish_build(&self, id: &tg::build::Id) -> tangram_error::Result<()> {
 		self.client.finish_build(id).await
 	}
-	async fn create_login(&self) -> tg::Result<tg::user::Login> {
+	async fn create_login(&self) -> tangram_error::Result<tg::user::Login> {
 		self.client.create_login().await
 	}
 
-	async fn get_login(&self, id: &tg::Id) -> tg::Result<Option<tg::user::Login>> {
+	async fn get_login(&self, id: &tg::Id) -> tangram_error::Result<Option<tg::user::Login>> {
 		self.client.get_login(id).await
 	}
 
-	async fn get_current_user(&self, token: &str) -> tg::Result<Option<tg::user::User>> {
+	async fn get_current_user(&self, token: &str) -> tangram_error::Result<Option<tg::user::User>> {
 		self.client.get_current_user(token).await
 	}
 
-	async fn search_packages(&self, quer: &str) -> tg::Result<Vec<tg::package::Package>> {
+	async fn search_packages(
+		&self,
+		quer: &str,
+	) -> tangram_error::Result<Vec<tg::package::Package>> {
 		let Some(mock) = self.get_package(quer).await? else {
 			return Ok(vec![]);
 		};
 		Ok(vec![mock])
 	}
 
-	async fn get_package(&self, name: &str) -> tg::Result<Option<tg::package::Package>> {
+	async fn get_package(&self, name: &str) -> tangram_error::Result<Option<tg::package::Package>> {
 		let state = self.state.lock().unwrap();
 		let Some(mock) = state.packages.get(name) else {
 			return Ok(None);
@@ -828,7 +833,7 @@ impl tg::Client for MockClient {
 		&self,
 		name: &str,
 		version: &str,
-	) -> tg::Result<Option<tg::artifact::Id>> {
+	) -> tangram_error::Result<Option<tg::artifact::Id>> {
 		let artifact = {
 			let state = self.state.lock().unwrap();
 			let Some(mock) = state.packages.get(name) else {
@@ -848,7 +853,11 @@ impl tg::Client for MockClient {
 		Ok(Some(id))
 	}
 
-	async fn publish_package(&self, _token: &str, id: &tg::artifact::Id) -> tg::Result<()> {
+	async fn publish_package(
+		&self,
+		_token: &str,
+		id: &tg::artifact::Id,
+	) -> tangram_error::Result<()> {
 		let directory = tg::Artifact::with_id(id.clone())
 			.try_unwrap_directory()
 			.wrap_err("Failed to get directory")?;
@@ -872,14 +881,25 @@ impl tg::Client for MockClient {
 		Ok(())
 	}
 
-	async fn get_package_metadata(&self, id: &tg::Id) -> tg::Result<Option<tg::package::Metadata>> {
+	async fn get_package_metadata(
+		&self,
+		id: &tg::Id,
+	) -> tangram_error::Result<Option<tg::package::Metadata>> {
 		self.client.get_package_metadata(id).await
 	}
 
 	async fn get_package_dependencies(
 		&self,
 		id: &tg::Id,
-	) -> tg::Result<Option<Vec<tg::Dependency>>> {
+	) -> tangram_error::Result<Option<Vec<tg::Dependency>>> {
 		self.client.get_package_dependencies(id).await
+	}
+
+	async fn get_build_from_queue(&self) -> tangram_error::Result<tg::build::Id> {
+		self.client.get_build_from_queue().await
+	}
+
+	async fn cancel_build(&self, id: &tg::build::Id) -> tangram_error::Result<()> {
+		self.client.cancel_build(id).await
 	}
 }
