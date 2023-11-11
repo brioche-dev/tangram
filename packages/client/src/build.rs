@@ -276,6 +276,12 @@ impl Build {
 		Ok(())
 	}
 
+	pub async fn cancel(&self, client: &dyn Client) -> Result<()> {
+		let id = self.id(client).await?;
+		client.cancel_build(id).await?;
+		Ok(())
+	}
+
 	pub async fn finish(&self, client: &dyn Client) -> Result<()> {
 		let id = self.id(client).await?;
 		client.finish_build(id).await?;

@@ -444,7 +444,7 @@ impl tg::Client for Client {
 		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize the body.")?;
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/${build_id}/children"))
+			.uri(format!("/v1/builds/{build_id}/children"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -493,7 +493,7 @@ impl tg::Client for Client {
 		let body = bytes;
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/${id}/log"))
+			.uri(format!("/v1/builds/{id}/log"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -537,7 +537,7 @@ impl tg::Client for Client {
 		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/${id}/log"))
+			.uri(format!("/v1/builds/{id}/log"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -550,14 +550,10 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn cancel_build(&self, _id: &tg::build::Id) -> Result<()> {
-		Ok(())
-	}
-
-	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
+	async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/${id}/finish"))
+			.uri(format!("/v1/builds/{id}/cancel"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -567,7 +563,22 @@ impl tg::Client for Client {
 		if !response.status().is_success() {
 			return_error!("Expected the response's status to be success.");
 		}
+		Ok(())
+	}
 
+	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/builds/{id}/finish"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(());
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
 		Ok(())
 	}
 

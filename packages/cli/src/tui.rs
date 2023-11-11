@@ -67,8 +67,10 @@ struct Log {
 }
 
 static SPINNER_POSITION: AtomicUsize = AtomicUsize::new(0);
-const SPINNER: [&str; 8] = ["|", "/", "-", "\\", "|", "/", "-", "\\"];
-const SPINNER_FRAMES_PER_UPDATE: usize = 8;
+
+const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+const SPINNER_FRAMES_PER_UPDATE: usize = 4;
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
@@ -114,7 +116,11 @@ impl Tui {
 					if ct::event::poll(std::time::Duration::from_millis(16))? {
 						let event = ct::event::read()?;
 						if let ct::event::Event::Key(event) = event {
-							if event.code == ct::event::KeyCode::Char('q') && options.exit {
+							if options.exit
+								&& (event.code == ct::event::KeyCode::Char('q')
+									|| (event.code == ct::event::KeyCode::Char('c')
+										&& event.modifiers == ct::event::KeyModifiers::CONTROL))
+							{
 								break;
 							}
 						}
@@ -187,6 +193,14 @@ impl App {
 
 	fn handle_key_event(&mut self, event: ct::event::KeyEvent) {
 		match event.code {
+			ct::event::KeyCode::Char('c')
+				if event.modifiers == ct::event::KeyModifiers::CONTROL =>
+			{
+				self.quit();
+			},
+			ct::event::KeyCode::Char('c') => {
+				self.cancel();
+			},
 			ct::event::KeyCode::Left | ct::event::KeyCode::Char('h') => {
 				self.collapse();
 			},
@@ -198,6 +212,9 @@ impl App {
 			},
 			ct::event::KeyCode::Right | ct::event::KeyCode::Char('l') => {
 				self.expand();
+			},
+			ct::event::KeyCode::Char('q') => {
+				self.quit();
 			},
 			ct::event::KeyCode::Char('r') => {
 				self.rotate();
@@ -229,7 +246,7 @@ impl App {
 			self.tree
 				.selected
 				.saturating_add(1)
-				.min(self.tree.visible_items_count()),
+				.min(self.tree.visible_items_count() - 1),
 		);
 	}
 
@@ -263,6 +280,18 @@ impl App {
 		}
 	}
 
+	fn cancel(&mut self) {
+		let build = self.tree.selected_item_mut().build.clone();
+		let client = self.client.clone_box();
+		tokio::spawn(async move { build.cancel(client.as_ref()).await.ok() });
+	}
+
+	fn quit(&mut self) {
+		let build = self.tree.root.build.clone();
+		let client = self.client.clone_box();
+		tokio::spawn(async move { build.cancel(client.as_ref()).await.ok() });
+	}
+
 	fn render(&self, frame: &mut Frame, area: tui::layout::Rect) {
 		let layout = tui::layout::Layout::default()
 			.direction(self.direction)
@@ -294,26 +323,6 @@ impl Tree {
 			scroll: 0,
 			selected: 0,
 		}
-	}
-
-	fn _selected_item(&self) -> &'_ TreeItem {
-		fn inner(item: &'_ TreeItem, index: usize, selected: usize) -> Result<&'_ TreeItem, usize> {
-			if index == selected {
-				return Ok(item);
-			}
-			let mut index = index + 1;
-			if !item.expanded {
-				return Err(index);
-			}
-			for child in &item.children {
-				match inner(child, index, selected) {
-					Ok(item) => return Ok(item),
-					Err(i) => index = i,
-				}
-			}
-			Err(index)
-		}
-		inner(&self.root, 0, self.selected).unwrap()
 	}
 
 	fn selected_item_mut(&mut self) -> &'_ mut TreeItem {
@@ -476,7 +485,7 @@ impl TreeItem {
 	fn render(&self, frame: &mut Frame, area: tui::layout::Rect) {
 		let mut prefix = String::new();
 		for _ in 0..self.depth.saturating_sub(1) {
-			prefix.push_str("│ ");
+			prefix.push_str(if parent_is_last { "  " } else { "│ " });
 		}
 		if self.depth > 0 {
 			prefix.push_str(if self.last { "└─" } else { "├─" });
@@ -488,8 +497,8 @@ impl TreeItem {
 				let state = (state / SPINNER_FRAMES_PER_UPDATE) % SPINNER.len();
 				SPINNER[state]
 			},
-			TreeItemStatus::Failure => "✗",
-			TreeItemStatus::Success => "✓",
+			TreeItemStatus::Failure => '✗',
+			TreeItemStatus::Success => '✓',
 		};
 		let title = self.title.as_deref().unwrap_or("<unknown>");
 		let title = tui::text::Text::from(format!("{prefix}{disclosure} {status} {title}"));
