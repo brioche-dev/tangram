@@ -27,10 +27,10 @@ export type Unresolved<T extends Value> = MaybePromise<
 		| Template
 		? T
 		: T extends Array<infer U extends Value>
-		? Array<Unresolved<U>>
-		: T extends { [key: string]: Value }
-		? { [K in keyof T]: Unresolved<T[K]> }
-		: never
+		  ? Array<Unresolved<U>>
+		  : T extends { [key: string]: Value }
+		    ? { [K in keyof T]: Unresolved<T[K]> }
+		    : never
 >;
 
 export type Resolved<T extends Unresolved<Value>> = T extends
@@ -49,12 +49,12 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	| Template
 	? T
 	: T extends Promise<infer U extends Unresolved<Value>>
-	? Resolved<U>
-	: T extends Array<infer U extends Unresolved<Value>>
-	? Array<Resolved<U>>
-	: T extends { [key: string]: Unresolved<Value> }
-	? { [K in keyof T]: Resolved<T[K]> }
-	: never;
+	  ? Resolved<U>
+	  : T extends Array<infer U extends Unresolved<Value>>
+	    ? Array<Resolved<U>>
+	    : T extends { [key: string]: Unresolved<Value> }
+	      ? { [K in keyof T]: Resolved<T[K]> }
+	      : never;
 
 export type MaybePromise<T> = T | Promise<T>;
 

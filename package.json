@@ -14,7 +14,7 @@
 		"typescript": "^5.0.4"
 	},
 	"workspaces": [
-		"packages/eslint-plugin",
+		"packages/eslint",
 		"packages/lsp",
 		"packages/runtime",
 		"packages/vscode"
