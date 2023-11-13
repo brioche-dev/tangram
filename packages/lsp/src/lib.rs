@@ -77,6 +77,9 @@ struct Inner {
 
 	/// A handle to the main tokio runtime.
 	main_runtime_handle: tokio::runtime::Handle,
+
+	/// A package builder.
+	package_builder: Option<Box<dyn tg::package::Builder>>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -116,7 +119,7 @@ pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Server {
 	#[must_use]
-	pub fn new(client: &dyn tg::Client, main_runtime_handle: tokio::runtime::Handle) -> Self {
+	pub fn new(client: &dyn tg::Client, main_runtime_handle: tokio::runtime::Handle, package_builder: Option<Box<dyn tg::package::Builder>>) -> Self {
 		// Create the published diagnostics.
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
@@ -134,6 +137,7 @@ impl Server {
 			document_store,
 			request_sender,
 			main_runtime_handle,
+			package_builder,
 		});
 
 		// Spawn a thread to handle requests.
