@@ -17,8 +17,10 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
+		let package_builder: Option<Box<dyn tangram_client::package::Builder>> = Some(Box::new(tangram_package::Builder::new(&args.path)));
+
 		// Create the language server.
-		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current(), package_builder);
 
 		let path = args.path.join(ROOT_MODULE_FILE_NAME);
 		let text = tokio::fs::read_to_string(&path)

@@ -2,6 +2,7 @@ use super::PackageArgs;
 use crate::Cli;
 use tangram_error::{Result, WrapErr};
 use tangram_lsp::ROOT_MODULE_FILE_NAME;
+use tangram_package::Specifier;
 
 /// Generate documentation.
 #[derive(Debug, clap::Args)]
@@ -23,8 +24,15 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
+		let package_builder: Option<Box<dyn tangram_client::package::Builder>> = if let Specifier::Path(package) = &args.package {
+			let builder = tangram_package::Builder::new(package);
+			Some(Box::new(builder))
+		} else {
+			None
+		};
+
 		// Create the language server.
-		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current(), package_builder);
 
 		let (module, path) = if args.runtime {
 			// Create the module.

@@ -1,6 +1,7 @@
 use super::PackageArgs;
 use crate::Cli;
 use tangram_error::{return_error, Result, WrapErr};
+use tangram_package::Specifier;
 
 /// Check a package for errors.
 #[derive(Debug, clap::Args)]
@@ -23,8 +24,15 @@ impl Cli {
 			.await
 			.wrap_err("Failed to get the package.")?;
 
+		let package_builder: Option<Box<dyn tangram_client::package::Builder>> = if let Specifier::Path(package) = &args.package {
+			let builder = tangram_package::Builder::new(package);
+			Some(Box::new(builder))
+		} else {
+			None
+		};
+
 		// Create the language server.
-		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current(), package_builder);
 
 		// Check the package for diagnostics.
 		let diagnostics = server
