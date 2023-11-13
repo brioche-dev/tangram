@@ -190,13 +190,7 @@ impl Server {
 			return Ok(Some(
 				progress
 					.children()
-					.and_then({
-						let server = self.clone();
-						move |child| {
-							let server = server.clone();
-							async move { Ok(child.id(&server).await?.clone()) }
-						}
-					})
+					.map_ok(|build| build.id().clone())
 					.boxed(),
 			));
 		}
@@ -209,14 +203,7 @@ impl Server {
 			};
 			return Ok(Some(
 				stream::iter(object.children.clone())
-					.map(Ok)
-					.and_then({
-						let server = self.clone();
-						move |child| {
-							let server = server.clone();
-							async move { Ok(child.id(&server).await?.clone()) }
-						}
-					})
+					.map(|build| Ok(build.id().clone()))
 					.boxed(),
 			));
 		}

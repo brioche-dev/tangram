@@ -67,11 +67,11 @@ impl Cli {
 
 		// Build the target.
 		let build = target.build(client).await?;
-		eprintln!("{}", build.id(client).await?);
+		eprintln!("{}", build.id());
 
 		// If the detach flag is set, then exit.
 		if args.detach {
-			println!("{}", build.id(client).await?);
+			println!("{}", build.id());
 			return Ok(());
 		}
 

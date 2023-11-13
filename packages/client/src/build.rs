@@ -89,9 +89,9 @@ impl Build {
 		}
 	}
 
-	#[allow(clippy::unused_async)]
-	pub async fn id(&self, _client: &dyn Client) -> Result<&Id> {
-		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
+	#[must_use]
+	pub fn id(&self) -> &Id {
+		unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) }
 	}
 
 	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
@@ -149,7 +149,10 @@ impl Build {
 		let children = object
 			.children
 			.iter()
-			.map(|build| async { Ok::<_, Error>(build.id(client).await?.clone()) })
+			.map(|build| async {
+				build.store(client).await?;
+				Ok::<_, Error>(build.id().clone())
+			})
 			.collect::<FuturesUnordered<_>>()
 			.try_collect()
 			.await?;
@@ -198,7 +201,7 @@ impl Build {
 			Ok(Some(object.target.clone()))
 		} else {
 			Ok(client
-				.try_get_build_target(self.id(client).await?)
+				.try_get_build_target(self.id())
 				.await?
 				.map(Target::with_id))
 		}
@@ -218,15 +221,15 @@ impl Build {
 			Ok(Some(stream::iter(object.children.clone()).map(Ok).boxed()))
 		} else {
 			Ok(client
-				.try_get_build_children(self.id(client).await?)
+				.try_get_build_children(self.id())
 				.await?
 				.map(|children| children.map_ok(Build::with_id).boxed()))
 		}
 	}
 
 	pub async fn add_child(&self, client: &dyn Client, child: &Self) -> Result<()> {
-		let id = self.id(client).await?;
-		let child_id = child.id(client).await?;
+		let id = self.id();
+		let child_id = child.id();
 		client.add_build_child(id, child_id).await?;
 		Ok(())
 	}
@@ -246,12 +249,12 @@ impl Build {
 			let bytes = log.bytes(client).await?;
 			Ok(Some(stream::once(async move { Ok(bytes.into()) }).boxed()))
 		} else {
-			Ok(client.try_get_build_log(self.id(client).await?).await?)
+			Ok(client.try_get_build_log(self.id()).await?)
 		}
 	}
 
 	pub async fn add_log(&self, client: &dyn Client, log: Bytes) -> Result<()> {
-		let id = self.id(client).await?;
+		let id = self.id();
 		client.add_build_log(id, log).await?;
 		Ok(())
 	}
@@ -266,24 +269,24 @@ impl Build {
 		if let Some(object) = self.try_get_object(client).await? {
 			Ok(Some(object.result.clone()))
 		} else {
-			Ok(client.try_get_build_result(self.id(client).await?).await?)
+			Ok(client.try_get_build_result(self.id()).await?)
 		}
 	}
 
 	pub async fn set_result(&self, client: &dyn Client, result: Result<Value>) -> Result<()> {
-		let id = self.id(client).await?;
+		let id = self.id();
 		client.set_build_result(id, result).await?;
 		Ok(())
 	}
 
 	pub async fn cancel(&self, client: &dyn Client) -> Result<()> {
-		let id = self.id(client).await?;
+		let id = self.id();
 		client.cancel_build(id).await?;
 		Ok(())
 	}
 
 	pub async fn finish(&self, client: &dyn Client) -> Result<()> {
-		let id = self.id(client).await?;
+		let id = self.id();
 		client.finish_build(id).await?;
 		Ok(())
 	}

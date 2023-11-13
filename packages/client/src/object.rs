@@ -149,7 +149,7 @@ impl Handle {
 			Self::Symlink(object) => object.id(client).await.cloned().map(Id::Symlink),
 			Self::Lock(object) => object.id(client).await.cloned().map(Id::Lock),
 			Self::Target(object) => object.id(client).await.cloned().map(Id::Target),
-			Self::Build(object) => object.id(client).await.cloned().map(Id::Build),
+			Self::Build(object) => Ok(Id::Build(object.id().clone())),
 		}
 	}
 

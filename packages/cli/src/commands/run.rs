@@ -67,7 +67,7 @@ impl Cli {
 
 		// Build the target.
 		let build = target.build(client).await?;
-		eprintln!("{}", build.id(client).await?);
+		eprintln!("{}", build.id());
 
 		// Create the TUI.
 		let tui = !args.no_tui;
