@@ -806,15 +806,7 @@ impl Server {
 			let fuse_commfd = std::ffi::CString::new(fds[0].to_string()).unwrap();
 
 			// Produce a null-terminated path.
-			let path = path.as_os_str().as_bytes();
-			if path.contains(&0) {
-				Err(std::io::Error::new(
-					std::io::ErrorKind::InvalidInput,
-					"Path contains a null byte.",
-				)
-				.wrap("Path contains a null byte."))?;
-			}
-			let path = std::ffi::CString::new(path).unwrap();
+			let path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
 
 			// Fork.
 			let pid = libc::fork();
