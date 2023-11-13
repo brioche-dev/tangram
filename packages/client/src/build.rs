@@ -273,21 +273,15 @@ impl Build {
 		}
 	}
 
-	pub async fn set_result(&self, client: &dyn Client, result: Result<Value>) -> Result<()> {
-		let id = self.id();
-		client.set_build_result(id, result).await?;
-		Ok(())
-	}
-
 	pub async fn cancel(&self, client: &dyn Client) -> Result<()> {
 		let id = self.id();
 		client.cancel_build(id).await?;
 		Ok(())
 	}
 
-	pub async fn finish(&self, client: &dyn Client) -> Result<()> {
+	pub async fn finish(&self, client: &dyn Client, result: Result<Value>) -> Result<()> {
 		let id = self.id();
-		client.finish_build(id).await?;
+		client.finish_build(id, result).await?;
 		Ok(())
 	}
 }

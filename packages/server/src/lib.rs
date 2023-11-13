@@ -351,16 +351,12 @@ impl tg::Client for Server {
 		self.try_get_build_result(id).await
 	}
 
-	async fn set_build_result(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
-		self.set_build_result(id, result).await
-	}
-
 	async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
 		self.cancel_build(id).await
 	}
 
-	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
-		self.finish_build(id).await
+	async fn finish_build(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
+		self.finish_build(id, result).await
 	}
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {

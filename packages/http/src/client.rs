@@ -360,25 +360,6 @@ impl tg::Client for Client {
 		Ok(id)
 	}
 
-	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
-		let request = http::request::Builder::default()
-			.method(http::Method::GET)
-			.uri(format!("/v1/builds/{id}/target"))
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		let bytes = response
-			.collect()
-			.await
-			.wrap_err("Failed to collect the response body.")?
-			.to_bytes();
-		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
-		Ok(id)
-	}
-
 	async fn get_build_from_queue(&self) -> Result<tg::build::Id> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
@@ -397,6 +378,25 @@ impl tg::Client for Client {
 		let build_id =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
 		Ok(build_id)
+	}
+
+	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/builds/{id}/target"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		Ok(id)
 	}
 
 	async fn try_get_build_children(
@@ -529,27 +529,6 @@ impl tg::Client for Client {
 		Ok(Some(result))
 	}
 
-	async fn set_build_result(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
-		let result = match result {
-			Ok(value) => Ok(value.data(self).await?),
-			Err(error) => Err(error),
-		};
-		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
-		let request = http::request::Builder::default()
-			.method(http::Method::POST)
-			.uri(format!("/v1/builds/{id}/result"))
-			.body(full(body))
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if response.status() == http::StatusCode::NOT_FOUND {
-			return Ok(());
-		}
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		Ok(())
-	}
-
 	async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
@@ -566,11 +545,16 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
+	async fn finish_build(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
+		let result = match result {
+			Ok(value) => Ok(value.data(self).await?),
+			Err(error) => Err(error),
+		};
+		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
 			.uri(format!("/v1/builds/{id}/finish"))
-			.body(empty())
+			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
 		if response.status() == http::StatusCode::NOT_FOUND {

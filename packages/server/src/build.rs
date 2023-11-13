@@ -116,7 +116,7 @@ impl Server {
 		let target = build.target(self).await?;
 
 		// Build the target with the appropriate runtime.
-		match target.host(self).await?.os() {
+		let result = match target.host(self).await?.os() {
 			tg::system::Os::Js => {
 				// Build the target on the server's local pool because it is a `!Send` future.
 				self.inner
@@ -131,24 +131,38 @@ impl Server {
 					})
 					.await
 					.wrap_err("Failed to join the build task.")?
-					.wrap_err("Failed to run the build.")?;
 			},
 			tg::system::Os::Darwin => {
 				#[cfg(target_os = "macos")]
-				tangram_runtime::darwin::build(self, &build).await?;
+				{
+					tangram_runtime::darwin::build(self, &build).await
+				}
 				#[cfg(not(target_os = "macos"))]
-				return_error!("Cannot build a darwin target on this host.");
+				{
+					return_error!("Cannot build a darwin target on this host.");
+				}
 			},
 			tg::system::Os::Linux => {
 				#[cfg(target_os = "linux")]
-				tangram_runtime::linux::build(self, &build).await?;
+				{
+					tangram_runtime::linux::build(self, &build).await
+				}
 				#[cfg(not(target_os = "linux"))]
-				return_error!("Cannot build a linux target on this host.");
+				{
+					return_error!("Cannot build a linux target on this host.");
+				}
 			},
 		};
 
+		// If an error occurred, add the error to the build's log.
+		if let Err(error) = result.as_ref() {
+			build
+				.add_log(self, error.trace().to_string().into())
+				.await?;
+		}
+
 		// Finish the build.
-		build.finish(self).await?;
+		build.finish(self, result).await?;
 
 		Ok(())
 	}
@@ -338,44 +352,18 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn set_build_result(
-		&self,
-		id: &tg::build::Id,
-		result: Result<tg::Value>,
-	) -> Result<()> {
-		// Attempt to set the result on the progress.
-		let progress = self.inner.progress.read().unwrap().get(id).cloned();
-		if let Some(progress) = progress {
-			progress.set_result(result);
-			return Ok(());
-		}
-
-		// Attempt to set the result on the remote.
-		if let Some(remote) = self.inner.remote.as_ref() {
-			remote.set_build_result(id, result).await?;
-			return Ok(());
-		}
-
-		return_error!("Failed to find the build.");
-	}
-
 	pub async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
-		// Set the result to an error.
-		self.set_build_result(id, Err(error!("The build was cancelled.")))
+		self.finish_build(id, Err(error!("The build was cancelled.")))
 			.await?;
-
-		// Finish the build.
-		self.finish_build(id).await?;
-
 		Ok(())
 	}
 
-	pub async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
+	pub async fn finish_build(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
 		// Attempt to finish the build on the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
 			// Finish the build.
-			let output = progress.finish(self).await?;
+			let output = progress.finish(self, result.clone()).await?;
 
 			// Create the build.
 			let build = tg::Build::new(
@@ -398,7 +386,7 @@ impl Server {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			remote.finish_build(id).await?;
+			remote.finish_build(id, result).await?;
 		}
 
 		Ok(())

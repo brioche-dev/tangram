@@ -151,16 +151,14 @@ pub trait Client: Send + Sync + 'static {
 		Ok(self
 			.try_get_build_result(id)
 			.await?
-			.wrap_err("Failed to get the build2.")?)
+			.wrap_err("Failed to get the build.")?)
 	}
 
 	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
 
-	async fn set_build_result(&self, id: &build::Id, result: Result<Value>) -> Result<()>;
-
 	async fn cancel_build(&self, id: &build::Id) -> Result<()>;
 
-	async fn finish_build(&self, id: &build::Id) -> Result<()>;
+	async fn finish_build(&self, id: &build::Id, result: Result<Value>) -> Result<()>;
 
 	async fn search_packages(&self, quer: &str) -> Result<Vec<package::Package>>;
 

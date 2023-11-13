@@ -155,11 +155,14 @@ impl Progress {
 			.unwrap()
 	}
 
-	pub fn set_result(&self, result: Result<tg::Value>) {
-		self.inner.result.sender.send(Some(result)).unwrap();
-	}
+	pub async fn finish(
+		&self,
+		client: &dyn tg::Client,
+		result: Result<tg::Value>,
+	) -> Result<Output> {
+		// Set the result.
+		self.inner.result.sender.send(Some(result.clone())).unwrap();
 
-	pub async fn finish(&self, client: &dyn tg::Client) -> Result<Output> {
 		// Get the target.
 		let target = self.inner.target.clone();
 
@@ -174,9 +177,6 @@ impl Progress {
 			state.log.rewind().await.wrap_err("Failed to seek.")?;
 			tg::Blob::with_reader(client, &mut state.log).await?
 		};
-
-		// Get the result.
-		let result = self.inner.result.result.borrow().clone().unwrap();
 
 		Ok(Output {
 			target,

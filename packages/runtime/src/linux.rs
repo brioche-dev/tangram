@@ -51,23 +51,8 @@ const SH_X8664_LINUX: &[u8] = include_bytes!(concat!(
 	"/src/linux/bin/sh_x86_64_linux"
 ));
 
-pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<()> {
-	match build_inner(client, build).await {
-		Ok(output) => {
-			build.set_result(client, Ok(output)).await?;
-		},
-		Err(error) => {
-			build
-				.add_log(client, error.trace().to_string().into())
-				.await?;
-			build.set_result(client, Err(error)).await?;
-		},
-	}
-	Ok(())
-}
-
 #[allow(clippy::too_many_lines, clippy::similar_names)]
-pub async fn build_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
+pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 

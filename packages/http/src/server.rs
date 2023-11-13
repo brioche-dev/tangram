@@ -85,7 +85,7 @@ impl Server {
 		Ok(())
 	}
 
-	pub async fn serve(self, addr: Addr) -> Result<()> {
+	async fn serve(self, addr: Addr) -> Result<()> {
 		let listener = match &addr {
 			Addr::Inet(inet) => Either::Left(
 				TcpListener::bind(inet.to_string())
@@ -149,16 +149,16 @@ impl Server {
 			},
 
 			// Builds
-			(http::Method::GET, ["v1", "builds", "queue"]) => self
-				.handle_get_build_queue_item_request(request)
-				.map(Some)
-				.boxed(),
 			(http::Method::GET, ["v1", "targets", _, "build"]) => self
 				.handle_get_build_for_target_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::POST, ["v1", "targets", _, "build"]) => self
 				.handle_get_or_create_build_for_target_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::GET, ["v1", "builds", "queue"]) => self
+				.handle_get_build_queue_item_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::GET, ["v1", "builds", _, "target"]) => self
@@ -182,10 +182,6 @@ impl Server {
 				.boxed(),
 			(http::Method::GET, ["v1", "builds", _, "result"]) => self
 				.handle_get_build_result_request(request)
-				.map(Some)
-				.boxed(),
-			(http::Method::POST, ["v1", "builds", _, "result"]) => self
-				.handle_post_build_result_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::POST, ["v1", "builds", _, "cancel"]) => self
@@ -300,7 +296,7 @@ impl Server {
 		Ok(ok())
 	}
 
-	pub async fn handle_post_clean_request(
+	async fn handle_post_clean_request(
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -311,7 +307,7 @@ impl Server {
 			.unwrap())
 	}
 
-	pub async fn handle_get_build_queue_item_request(
+	async fn handle_get_build_queue_item_request(
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
@@ -323,7 +319,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_build_for_target_request(
+	async fn handle_get_build_for_target_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -345,7 +341,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_or_create_build_for_target_request(
+	async fn handle_get_or_create_build_for_target_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -369,7 +365,29 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_build_target_request(
+	async fn handle_post_build_cancel_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<hyper::Response<Outgoing>> {
+		// Read the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let [_, "builds", build_id, "cancel"] = path_components.as_slice() else {
+			return_error!("Unexpected path.");
+		};
+		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
+
+		self.inner.client.cancel_build(&build_id).await?;
+
+		// Create the response.
+		let response = http::Response::builder()
+			.status(http::StatusCode::OK)
+			.body(empty())
+			.unwrap();
+
+		Ok(response)
+	}
+
+	async fn handle_get_build_target_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
@@ -391,7 +409,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_build_children_request(
+	async fn handle_get_build_children_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
@@ -424,7 +442,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_post_build_child_request(
+	async fn handle_post_build_child_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
@@ -458,7 +476,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_build_log_request(
+	async fn handle_get_build_log_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
@@ -485,7 +503,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_post_build_log_request(
+	async fn handle_post_build_log_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
@@ -513,7 +531,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_build_result_request(
+	async fn handle_get_build_result_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
@@ -542,13 +560,13 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_post_build_result_request(
+	async fn handle_post_build_finish_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "builds", build_id, "result"] = path_components.as_slice() else {
+		let [_, "builds", build_id, "finish"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
@@ -562,11 +580,8 @@ impl Server {
 			.to_bytes();
 		let result = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize.")?;
 
-		// Set the build result.
-		self.inner
-			.client
-			.set_build_result(&build_id, result)
-			.await?;
+		// Finish the build.
+		self.inner.client.finish_build(&build_id, result).await?;
 
 		// Create the response.
 		let response = http::Response::builder()
@@ -576,51 +591,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_post_build_cancel_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "builds", build_id, "cancel"] = path_components.as_slice() else {
-			return_error!("Unexpected path.");
-		};
-		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
-
-		self.inner.client.cancel_build(&build_id).await?;
-
-		// Create the response.
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(empty())
-			.unwrap();
-
-		Ok(response)
-	}
-
-	pub async fn handle_post_build_finish_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "builds", build_id, "finish"] = path_components.as_slice() else {
-			return_error!("Unexpected path.");
-		};
-		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
-
-		self.inner.client.finish_build(&build_id).await?;
-
-		// Create the response.
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(empty())
-			.unwrap();
-
-		Ok(response)
-	}
-
-	pub async fn handle_head_object_request(
+	async fn handle_head_object_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -650,7 +621,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_object_request(
+	async fn handle_get_object_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -677,7 +648,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_put_object_request(
+	async fn handle_put_object_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -716,7 +687,7 @@ impl Server {
 		Ok(ok())
 	}
 
-	pub async fn handle_search_packages_request(
+	async fn handle_search_packages_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -746,7 +717,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_package_request(
+	async fn handle_get_package_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -777,7 +748,7 @@ impl Server {
 		}
 	}
 
-	pub async fn handle_get_package_version_request(
+	async fn handle_get_package_version_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -802,7 +773,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_publish_package_request(
+	async fn handle_publish_package_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -829,7 +800,7 @@ impl Server {
 		Ok(ok())
 	}
 
-	pub async fn handle_get_package_metadata_request(
+	async fn handle_get_package_metadata_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -864,7 +835,7 @@ impl Server {
 		}
 	}
 
-	pub async fn handle_get_package_dependencies_request(
+	async fn handle_get_package_dependencies_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -903,7 +874,7 @@ impl Server {
 		}
 	}
 
-	pub async fn handle_get_tracker_request(
+	async fn handle_get_tracker_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -935,7 +906,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_patch_tracker_request(
+	async fn handle_patch_tracker_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -964,7 +935,7 @@ impl Server {
 		Ok(ok())
 	}
 
-	pub async fn handle_create_login_request(
+	async fn handle_create_login_request(
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -980,7 +951,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_login_request(
+	async fn handle_get_login_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -1006,7 +977,7 @@ impl Server {
 		Ok(response)
 	}
 
-	pub async fn handle_get_current_user_request(
+	async fn handle_get_current_user_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {

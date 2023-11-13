@@ -12,23 +12,8 @@ use tangram_client as tg;
 use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::AsyncReadExt;
 
-pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<()> {
-	match build_inner(client, build).await {
-		Ok(output) => {
-			build.set_result(client, Ok(output)).await?;
-		},
-		Err(error) => {
-			build
-				.add_log(client, error.trace().to_string().into())
-				.await?;
-			build.set_result(client, Err(error)).await?;
-		},
-	}
-	Ok(())
-}
-
 #[allow(clippy::too_many_lines)]
-pub async fn build_inner(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
+pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 

@@ -39,27 +39,8 @@ struct LoadedModule {
 	v8_module: v8::Global<v8::Module>,
 }
 
-pub async fn build(
-	client: &dyn tg::Client,
-	build: &tg::Build,
-	main_runtime_handle: tokio::runtime::Handle,
-) -> Result<()> {
-	match build_inner(client, build, main_runtime_handle).await {
-		Ok(output) => {
-			build.set_result(client, Ok(output)).await?;
-		},
-		Err(error) => {
-			build
-				.add_log(client, error.trace().to_string().into())
-				.await?;
-			build.set_result(client, Err(error)).await?;
-		},
-	}
-	Ok(())
-}
-
 #[allow(clippy::too_many_lines)]
-pub async fn build_inner(
+pub async fn build(
 	client: &dyn tg::Client,
 	build: &tg::Build,
 	main_runtime_handle: tokio::runtime::Handle,
