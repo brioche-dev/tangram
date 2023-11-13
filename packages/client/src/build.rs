@@ -112,7 +112,7 @@ impl Build {
 		self.try_load(client)
 			.await?
 			.then_some(())
-			.wrap_err("Failed to load the object.")
+			.wrap_err(format!("Failed to load the object with id {}.", self.id()))
 	}
 
 	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
@@ -193,7 +193,7 @@ impl Build {
 	pub async fn target(&self, client: &dyn Client) -> Result<Target> {
 		self.try_get_target(client)
 			.await?
-			.wrap_err("Failed to get the build.")
+			.wrap_err("Failed to get the target.")
 	}
 
 	pub async fn try_get_target(&self, client: &dyn Client) -> Result<Option<Target>> {

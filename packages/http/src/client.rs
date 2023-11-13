@@ -537,7 +537,7 @@ impl tg::Client for Client {
 		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/{id}/log"))
+			.uri(format!("/v1/builds/{id}/result"))
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;

@@ -177,6 +177,17 @@ impl Server {
 			return Ok(Some(object.target.id(self).await?.clone()));
 		}
 
+		// Attempt to get the target from the remote.
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+			let Some(target) = remote.try_get_build_target(id).await? else {
+				break 'a;
+			};
+			return Ok(Some(target));
+		}
+
 		Ok(None)
 	}
 
@@ -360,27 +371,35 @@ impl Server {
 	}
 
 	pub async fn finish_build(&self, id: &tg::build::Id) -> Result<()> {
-		// Get the progress.
+		// Attempt to finish the build on the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
-		let progress = progress.wrap_err("Failed to find the build.")?;
+		if let Some(progress) = progress {
+			// Finish the build.
+			let output = progress.finish(self).await?;
 
-		// Finish the build.
-		let output = progress.finish(self).await?;
+			// Create the build.
+			let build = tg::Build::new(
+				id.clone(),
+				output.target,
+				output.children,
+				output.log,
+				output.result,
+			);
 
-		// Create the build.
-		let build = tg::Build::new(
-			id.clone(),
-			output.target,
-			output.children,
-			output.log,
-			output.result,
-		);
+			// Store the build.
+			build.store(self).await?;
 
-		// Store the build.
-		build.store(self).await?;
+			// Remove the build's progress.
+			self.inner.progress.write().unwrap().remove(id);
+		}
 
-		// Remove the build's progress.
-		self.inner.progress.write().unwrap().remove(id);
+		// Attempt to finish the build on the remote.
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+			remote.finish_build(id).await?;
+		}
 
 		Ok(())
 	}
