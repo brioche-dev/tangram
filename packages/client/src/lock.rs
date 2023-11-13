@@ -1,11 +1,14 @@
-use crate::{id, object, return_error, Artifact, Client, Dependency, Error, Result, WrapErr};
-use async_recursion::async_recursion;
+use crate::{
+	id, object, return_error, Artifact, Client, Dependency, Error, Relpath, Result, WrapErr,
+};
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use itertools::Itertools;
-use std::{collections::BTreeMap, sync::Arc};
-use tangram_error::error;
+use std::{
+	collections::{BTreeMap, BTreeSet, VecDeque},
+	sync::Arc,
+};
 
 #[derive(
 	Clone,
@@ -45,10 +48,11 @@ pub struct Data {
 	pub dependencies: BTreeMap<Dependency, data::Entry>,
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LockFile {
-	pub root: data::Entry,
-	pub entries: BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
+	pub paths: BTreeMap<Relpath, Id>,
+	pub locks: BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
 }
 
 pub mod data {
@@ -181,6 +185,48 @@ impl Lock {
 	}
 }
 
+impl LockFile {
+	/// Recursively create a [LockFile] from an iterator of (RelPath, Lock).
+	pub async fn with_paths(
+		client: &dyn Client,
+		paths_: impl IntoIterator<Item = (Relpath, Lock)>,
+	) -> Result<Self> {
+		let mut paths = BTreeMap::new();
+		let mut locks = BTreeMap::new();
+		let mut queue = VecDeque::new();
+		let mut visited = BTreeSet::new();
+
+		// Create the paths.
+		for (relpath, lock) in paths_ {
+			let id = lock.id(client).await?.clone();
+			let _ = paths.insert(relpath, id);
+			queue.push_back(lock);
+		}
+
+		// Create the locks.
+		while let Some(next) = queue.pop_front() {
+			let id = next.id(client).await?;
+			if visited.contains(id) {
+				continue;
+			}
+			visited.insert(id.clone());
+			let mut entry_ = BTreeMap::new();
+			for (dependency, entry) in next.dependencies(client).await? {
+				queue.push_back(entry.lock.clone());
+				let entry = data::Entry {
+					package: entry.package.id(client).await?.clone(),
+					lock: entry.lock.id(client).await?.clone(),
+				};
+				entry_.insert(dependency.clone(), entry.clone());
+			}
+			let _ = locks.insert(id.clone(), entry_);
+		}
+
+		// Return the lockfile.
+		Ok(Self { paths, locks })
+	}
+}
+
 impl Data {
 	pub fn serialize(&self) -> Result<Bytes> {
 		serde_json::to_vec(self)
@@ -207,71 +253,6 @@ impl Entry {
 			package: self.package.id(client).await?.clone(),
 			lock: self.lock.id(client).await?.clone(),
 		})
-	}
-}
-
-impl LockFile {
-	pub async fn with_package_and_lock(
-		client: &dyn Client,
-		package: Artifact,
-		lock: Lock,
-	) -> tangram_error::Result<Self> {
-		let mut entries = BTreeMap::new();
-		Self::with_lock_inner(client, lock.clone(), &mut entries).await?;
-		let package = package.id(client).await?;
-		let lock = lock.id(client).await?.clone();
-		let root = data::Entry { package, lock };
-		Ok(Self { root, entries })
-	}
-
-	#[async_recursion]
-	async fn with_lock_inner(
-		client: &dyn Client,
-		lock: Lock,
-		entries: &mut BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
-	) -> tangram_error::Result<()> {
-		// Get the ID and check if we've already visited this lock.
-		let id = lock.id(client).await.wrap_err("Failed to get ID")?.clone();
-		if entries.contains_key(&id) {
-			return Ok(());
-		}
-
-		// Add the data to the lockfile.
-		let data = lock.data(client).await.wrap_err("Failed to get data.")?;
-		entries.insert(id, data.dependencies.clone());
-
-		// Visit any dependencies.
-		for entry in lock.object(client).await?.dependencies.values() {
-			Self::with_lock_inner(client, entry.lock.clone(), entries).await?;
-		}
-		Ok(())
-	}
-
-	pub fn to_package_and_lock(&self) -> tangram_error::Result<(Artifact, Lock)> {
-		let id = &self.root.lock;
-		let package = Artifact::with_id(self.root.package.clone());
-		let Entry { package, lock } = self.to_lock_inner(id, package)?;
-		Ok((package, lock))
-	}
-
-	fn to_lock_inner(&self, id: &Id, package: Artifact) -> tangram_error::Result<Entry> {
-		let raw_dependencies = self
-			.entries
-			.get(id)
-			.ok_or(error!("Lockfile is corrupted."))?;
-
-		let mut dependencies = BTreeMap::new();
-		for (dependency, entry) in raw_dependencies {
-			let package = Artifact::with_id(entry.package.clone());
-			let entry = self.to_lock_inner(&entry.lock, package)?;
-			let _ = dependencies.insert(dependency.clone(), entry);
-		}
-
-		let object = Object { dependencies };
-
-		let lock = Lock::with_object(object);
-		let entry = Entry { package, lock };
-		Ok(entry)
 	}
 }
 

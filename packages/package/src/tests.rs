@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tangram_client as tg;
 use tangram_error::WrapErr;
-use tg::{lock::LockFile, Client};
+use tg::Client;
 
 #[tokio::test]
 async fn simple_diamond() {
@@ -55,16 +55,11 @@ async fn simple_diamond() {
 		description: None,
 	};
 
-	let lock = client
+	let _lock = client
 		.try_solve(metadata.clone())
 		.await
 		.expect("Failed to solve simple_diamond case.");
 
-	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
-		.await
-		.unwrap();
-	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
-	println!("{lockfile}");
 }
 
 #[tokio::test]
@@ -109,16 +104,11 @@ async fn simple_backtrack() {
 		description: None,
 	};
 
-	let lock = client
+	let _lock = client
 		.try_solve(metadata.clone())
 		.await
 		.expect("Failed to solve simple_backtrack case.");
 
-	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
-		.await
-		.unwrap();
-	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
-	println!("{lockfile}");
 }
 
 #[tokio::test]
@@ -182,16 +172,10 @@ async fn diamond_backtrack() {
 		description: None,
 	};
 
-	let lock = client
+	let _lock = client
 		.try_solve(metadata.clone())
 		.await
 		.expect("Failed to solve diamond_backtrack case.");
-
-	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
-		.await
-		.unwrap();
-	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
-	println!("{lockfile}");
 }
 
 #[tokio::test]
@@ -408,18 +392,9 @@ async fn diamond_with_path_dependencies() {
 		.collect();
 
 	// Lock using foo as the root.
-	let lock = solve(&client, foo_id, path_dependencies)
+	let _lock = solve(&client, foo_id, path_dependencies)
 		.await
-		.unwrap()
 		.expect("Failed to lock diamond with a path dependency.");
-
-	// Create the lockfile and print.
-	let lockfile = LockFile::with_package_and_lock(&client, foo.into(), lock)
-		.await
-		.unwrap();
-
-	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
-	println!("{lockfile}");
 }
 
 #[tokio::test]
@@ -507,16 +482,10 @@ async fn complex_diamond() {
 		version: Some("1.0.0".into()),
 		description: None,
 	};
-	let lock = client
+	let _lock = client
 		.try_solve(metadata.clone())
 		.await
 		.expect("Failed to solve diamond_backtrack case.");
-
-	let lockfile = LockFile::with_package_and_lock(&client, client.artifact(metadata), lock)
-		.await
-		.unwrap();
-	let lockfile = serde_json::to_string_pretty(&lockfile).unwrap();
-	println!("{lockfile}");
 }
 
 use std::{
@@ -642,7 +611,7 @@ impl MockClient {
 	pub async fn try_solve(
 		&self,
 		metadata: tg::package::Metadata,
-	) -> Result<tg::Lock, crate::version::Report> {
+	) -> tangram_error::Result<Vec<(tg::Relpath, tg::Lock)>> {
 		let package = self
 			.get_package_version(
 				metadata.name.as_ref().unwrap(),
@@ -654,19 +623,18 @@ impl MockClient {
 			.into();
 		crate::version::solve(self, package, BTreeMap::new())
 			.await
-			.unwrap()
 	}
 
-	pub fn artifact(&self, metadata: tg::package::Metadata) -> tg::Artifact {
-		let state = self.state.lock().unwrap();
-		state
-			.packages
-			.get(metadata.name.as_ref().unwrap())
-			.unwrap()
-			.iter()
-			.find_map(|mock| (mock.metadata == metadata).then_some(mock.artifact.clone()))
-			.unwrap()
-	}
+	// pub fn artifact(&self, metadata: tg::package::Metadata) -> tg::Artifact {
+	// 	let state = self.state.lock().unwrap();
+	// 	state
+	// 		.packages
+	// 		.get(metadata.name.as_ref().unwrap())
+	// 		.unwrap()
+	// 		.iter()
+	// 		.find_map(|mock| (mock.metadata == metadata).then_some(mock.artifact.clone()))
+	// 		.unwrap()
+	// }
 }
 
 #[async_trait]

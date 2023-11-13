@@ -42,14 +42,14 @@ pub enum Error {
 	Other(tangram_error::Error),
 }
 
-/// Given a registry and unlocked package, create a lockfile for it. If no solution can be found, a [Report] containing a description of the most recent set of errors is returned.
+/// Given a registry and unlocked package, create a lockfile for it. If no solution can be found, a [Report] containing a description of the most recent set of errors is formatted as an error. On success, a vec of [tg::Relpath]s (relative to the root package), package [tg::Id]s, and their [tg::Lock]s are returned. There is one vec entry for the root, and one entry for each path dependency.
 pub async fn solve(
 	client: &dyn Client,
 	root: tg::Id,
 	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Relpath, tg::Id>>,
-) -> tangram_error::Result<Result<tg::Lock, Report>> {
+) -> tangram_error::Result<Vec<(tg::Relpath, tg::Lock)>> {
 	// Create the context.
-	let mut context = Context::new(client, path_dependencies);
+	let mut context = Context::new(client, path_dependencies.clone());
 
 	// Solve.
 	let solution = solve_inner(&mut context, root.clone()).await?;
@@ -66,16 +66,27 @@ pub async fn solve(
 
 	// If the report is not empty, return an error.
 	if !errors.is_empty() {
-		return Ok(Err(Report {
+		let report = Report {
 			errors,
 			context,
 			solution,
-		}));
+		};
+		tangram_error::return_error!("{report}");
 	}
 
 	// Now we have the solution, create a lock.
-	let lock = lock(&context, &solution, root).await?;
-	Ok(Ok(lock))
+	let mut locks = vec![
+		(".".parse().unwrap(),  lock(&context, &solution, root).await?)
+	];
+
+	for (_, dependencies) in path_dependencies {
+		for (relpath, package) in dependencies {
+			let lock = lock(&context, &solution, package).await?;
+			locks.push((relpath, lock));
+		}
+	}
+
+	Ok(locks)
 }
 
 #[async_recursion]

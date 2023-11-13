@@ -3,12 +3,13 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use std::{
 	collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
-	path::PathBuf,
+	path::{Path, PathBuf},
 };
 use tangram_client as tg;
-use tangram_error::{return_error, Result, WrapErr};
+use tangram_error::{error, return_error, Result, WrapErr};
 use tangram_lsp::Module;
 use tg::{package::Metadata, Dependency, Relpath, Subpath};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub mod specifier;
 pub mod version;
@@ -22,26 +23,44 @@ pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 /// The file name of the lockfile.
 pub const LOCKFILE_FILE_NAME: &str = "tangram.lock";
 
+pub struct Options {
+	pub update: bool,
+}
+
 pub async fn new(
 	client: &dyn tg::Client,
 	specifier: &Specifier,
 ) -> Result<(tg::Artifact, tg::Lock)> {
-	let (root_artifact, path_dependencies) = match specifier {
+	match specifier {
 		Specifier::Path(path) => {
 			// Canonicalize.
-			let path = path
+			let package_path = path
 				.canonicalize()
 				.wrap_err("Failed to canonicalize path.")?;
-
-			// Scan, checking in any the path dependencies and includes.
-			let mut visited = BTreeMap::new();
-			let mut path_dependencies = BTreeMap::new();
-			let root_artifact =
-				analyze_package_at_path(client, path, &mut visited, &mut path_dependencies).await?;
-			(root_artifact, path_dependencies)
+			let lockfile_path = package_path.join(LOCKFILE_FILE_NAME);
+			let lockfile = if lockfile_path.exists() {
+				let mut file = tokio::fs::File::open(&lockfile_path)
+					.await
+					.wrap_err("Failed to open lockfile.")?;
+				let mut contents = Vec::new();
+				file.read_to_end(&mut contents)
+					.await
+					.wrap_err("Failed to read lockfile contents.")?;
+				let lockfile = serde_json::from_slice(&contents)
+					.wrap_err("Failed to deserialize lockfile.")?;
+				Some(lockfile)
+			} else {
+				None
+			};
+			let mut builder = Builder::new(&package_path);
+			<Builder as tg::package::Builder>::update(&mut builder, client, lockfile).await?;
+			<Builder as tg::package::Builder>::get_package(&builder, client, &package_path).await
 		},
-		Specifier::Registry(specifier::Registry { name, version }) if version.is_some() => {
-			let version = version.as_deref().unwrap();
+		Specifier::Registry(specifier::Registry { name, version }) => {
+			let Some(version) = version else {
+				return_error!("Cannot create package from registry dependency without a version.");
+			};
+
 			let id =
 				client
 					.get_package_version(name, version)
@@ -53,21 +72,123 @@ pub async fn new(
 				.try_unwrap_directory()
 				.wrap_err("Expected package artifact to be a directory.")?;
 			let path_dependencies = BTreeMap::new();
-			(root_artifact, path_dependencies)
+			let root = root_artifact.id(client).await?.clone().into();
+			let locks = version::solve(client, root, path_dependencies).await?;
+			let root_lock = locks[0].1.clone();
+			Ok((root_artifact.into(), root_lock))
 		},
-		_ => {
-			return_error!("Creating locks for registry dependencies without a version specifiier is unsupported.");
-		},
-	};
+	}
+}
 
-	let root_id = root_artifact.id(client).await?.clone().into();
+#[derive(Clone)]
+pub struct Builder {
+	root_path: PathBuf,
+	locks: BTreeMap<PathBuf, tg::Lock>,
+	artifacts: BTreeMap<PathBuf, tg::Artifact>,
+}
 
-	// Now we have the root, we need to get its path overrides.
-	let lock = version::solve(client, root_id, path_dependencies)
-		.await?
-		.map_err(|e| tangram_error::error!("Failed to solve dependency versions. {e}"))?;
+impl Builder {
+	pub fn new(root_path: &Path) -> Self {
+		Self {
+			root_path: root_path.into(),
+			locks: BTreeMap::new(),
+			artifacts: BTreeMap::new(),
+		}
+	}
+}
 
-	Ok((root_artifact.into(), lock))
+#[async_trait]
+impl tg::package::Builder for Builder {
+	fn clone_box(&self) -> Box<dyn tg::package::Builder> {
+		Box::new(self.clone())
+	}
+
+	async fn get_package(
+		&self,
+		_client: &dyn tg::Client,
+		path: &Path,
+	) -> tangram_error::Result<(tg::Artifact, tg::Lock)> {
+		let artifact = self
+			.artifacts
+			.get(path)
+			.ok_or(error!("Failed to lookup artifact for {path:#?}."))?
+			.clone();
+		let lock = self
+			.locks
+			.get(path)
+			.ok_or(error!("Failed to lookup lock for path {path:#?}"))?
+			.clone();
+		Ok((artifact, lock))
+	}
+
+	async fn update(
+		&mut self,
+		client: &dyn tg::Client,
+		lockfile: Option<tg::lock::LockFile>,
+	) -> tangram_error::Result<()> {
+		let root_path = &self.root_path;
+
+		// Scan, checking in any the path dependencies and includes.
+		let mut visited = BTreeMap::new();
+		let mut path_dependencies = BTreeMap::new();
+		let root_artifact = analyze_package_at_path(
+			client,
+			root_path.into(),
+			&mut visited,
+			&mut path_dependencies,
+		)
+		.await?;
+
+		// Update the artifacts.
+		self.artifacts = path_dependencies
+			.values()
+			.flatten()
+			.map(|(relpath, artifact)| {
+				(
+					root_path.join(relpath.to_string()),
+					tg::Artifact::with_id(artifact.clone().try_into().unwrap()),
+				)
+			})
+			.collect();
+
+		// Solve the versions.
+		let lockfile = match lockfile {
+			Some(lockfile) => lockfile,
+			None => {
+				let root = root_artifact.id(client).await?.clone().into();
+				let locks = version::solve(client, root, path_dependencies).await?;
+				let lockfile = tg::lock::LockFile::with_paths(client, locks).await?;
+				let lockfile_path = root_path.join(LOCKFILE_FILE_NAME);
+				let mut file = tokio::fs::File::options()
+					.read(true)
+					.write(true)
+					.append(false)
+					.create(true)
+					.open(lockfile_path)
+					.await
+					.wrap_err("Failed to open lock file for writing.")?;
+				let contents = serde_json::to_vec_pretty(&lockfile)
+					.wrap_err("Failed to serialize lock file.")?;
+				file.write_all(&contents)
+					.await
+					.wrap_err("Failed to write file contents.")?;
+				lockfile
+			},
+		};
+
+		// Update the locks.
+		self.locks = lockfile
+			.paths
+			.iter()
+			.map(|(relpath, lock)| {
+				(
+					root_path.join(relpath.to_string()),
+					tg::Lock::with_id(lock.clone()),
+				)
+			})
+			.collect();
+		Ok(())
+	}
 }
 
 #[async_trait]
