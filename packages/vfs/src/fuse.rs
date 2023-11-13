@@ -5,7 +5,7 @@ use std::{
 	io::SeekFrom,
 	os::{fd::FromRawFd, unix::prelude::OsStrExt},
 	path::Path,
-	sync::{atomic::AtomicBool, Arc, Weak},
+	sync::{Arc, Weak},
 };
 use tangram_client as tg;
 use tangram_error::{Result, Wrap, WrapErr};
@@ -22,6 +22,7 @@ pub struct Server {
 
 struct Inner {
 	client: Box<dyn tg::Client>,
+	path: std::path::PathBuf,
 	state: tokio::sync::RwLock<State>,
 	task: Task,
 }
@@ -149,6 +150,7 @@ impl Server {
 		let server = Self {
 			inner: Arc::new(Inner {
 				client,
+				path: path.to_owned(),
 				state,
 				task,
 			}),
@@ -187,7 +189,7 @@ impl Server {
 			.unwrap()?;
 		}
 
-		Self::unmount(&self.path).await?;
+		Self::unmount(&self.inner.path).await?;
 
 		Ok(())
 	}
@@ -803,6 +805,17 @@ impl Server {
 			let fusermount3 = std::ffi::CString::new("/usr/bin/fusermount3").unwrap();
 			let fuse_commfd = std::ffi::CString::new(fds[0].to_string()).unwrap();
 
+			// Produce a null-terminated path.
+			let path = path.as_os_str().as_bytes();
+			if path.contains(&0) {
+				Err(std::io::Error::new(
+					std::io::ErrorKind::InvalidInput,
+					"Path contains a null byte.",
+				)
+				.wrap("Path contains a null byte."))?;
+			}
+			let path = std::ffi::CString::new(path).unwrap();
+
 			// Fork.
 			let pid = libc::fork();
 			if pid == -1 {
@@ -818,7 +831,7 @@ impl Server {
 					b"-o\0".as_ptr().cast(),
 					options.as_ptr().cast(),
 					b"--\0".as_ptr().cast(),
-					path.as_os_str().as_bytes().as_ptr().cast(),
+					path.as_ptr().cast(),
 					std::ptr::null(),
 				];
 				libc::close(fds[1]);
