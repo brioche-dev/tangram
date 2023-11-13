@@ -821,7 +821,6 @@ impl Server {
 
 	async fn mount(path: &Path) -> Result<std::fs::File> {
 		Self::unmount(path).await?;
-		let path = format!("{}\0", path.display());
 		unsafe {
 			// Setup the arguments.
 			let uid = libc::getuid();
@@ -839,6 +838,7 @@ impl Server {
 
 			let fusermount3 = std::ffi::CString::new("/usr/bin/fusermount3").unwrap();
 			let fuse_commfd = std::ffi::CString::new(fds[0].to_string()).unwrap();
+			let path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
 
 			// Produce a null-terminated path.
 			let path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
