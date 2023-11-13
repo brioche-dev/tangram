@@ -24,3 +24,11 @@ export let g = tg.target(async (name: string, i: number) => {
 	await tg.sleep(1);
 	tg.log(name, i);
 });
+
+export let source = tg.target(() =>
+	tg.directory({
+		["Cargo.toml"]: tg.include("./Cargo.toml"),
+		["Cargo.lock"]: tg.include("./Cargo.lock"),
+		["packages"]: tg.include("./packages"),
+	}),
+);
