@@ -1,7 +1,7 @@
-// export let metadata: tg.Metadata = {
-// 	name: "test",
-// 	version: "0.0.0",
-// }
+export let metadata: tg.Metadata = {
+	name: "tangram",
+	version: "0.0.0",
+}
 
 // export default tg.target(() => tg.file("Hello, World!"));
 
@@ -16,7 +16,11 @@ export default tg.target(() => {
 
 export let f = tg.target(async (name: string, n: number) => {
 	for (let i = 0; i < n; i++) {
-		tg.log(name, i);
-		await tg.sleep(1);
+		await g(name, i);
 	}
+});
+
+export let g = tg.target(async (name: string, i: number) => {
+	await tg.sleep(1);
+	tg.log(name, i);
 });

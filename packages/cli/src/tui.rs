@@ -3,7 +3,9 @@ use futures::StreamExt;
 use num::ToPrimitive;
 use ratatui as tui;
 use std::{
+	cell::RefCell,
 	collections::VecDeque,
+	rc::{Rc, Weak},
 	sync::{
 		atomic::{AtomicBool, AtomicUsize},
 		Arc,
@@ -12,12 +14,7 @@ use std::{
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
 use tangram_package::PackageExt;
-
-type Backend = tui::backend::CrosstermBackend<std::fs::File>;
-
-type Terminal = tui::Terminal<Backend>;
-
-type Frame<'a> = tui::Frame<'a, Backend>;
+use tui::widgets::Widget;
 
 pub struct Tui {
 	#[allow(dead_code)]
@@ -25,6 +22,10 @@ pub struct Tui {
 	stop: Arc<AtomicBool>,
 	task: Option<tokio::task::JoinHandle<std::io::Result<Terminal>>>,
 }
+
+type Backend = tui::backend::CrosstermBackend<std::fs::File>;
+
+type Terminal = tui::Terminal<Backend>;
 
 struct App {
 	client: Box<dyn tg::Client>,
@@ -34,21 +35,27 @@ struct App {
 }
 
 struct Tree {
+	rect: tui::layout::Rect,
 	root: TreeItem,
 	scroll: usize,
-	selected: usize,
+	selected: TreeItem,
 }
 
+#[derive(Clone)]
 struct TreeItem {
+	inner: Rc<RefCell<TreeItemInner>>,
+}
+
+struct TreeItemInner {
 	client: Box<dyn tg::Client>,
 	build: tg::Build,
-	depth: usize,
-	last: bool,
+	parent: Option<Weak<RefCell<TreeItemInner>>>,
+	index: usize,
 	selected: bool,
 	expanded: bool,
 	status: TreeItemStatus,
 	title: Option<String>,
-	children: Vec<Self>,
+	children: Vec<TreeItem>,
 	status_receiver: tokio::sync::oneshot::Receiver<TreeItemStatus>,
 	title_receiver: tokio::sync::oneshot::Receiver<Option<String>>,
 	children_receiver: tokio::sync::mpsc::UnboundedReceiver<tg::Build>,
@@ -101,6 +108,9 @@ impl Tui {
 			ct::terminal::EnterAlternateScreen,
 		)
 		.wrap_err("Failed to setup the terminal.")?;
+		let rect = terminal
+			.size()
+			.wrap_err("Failed to get the terminal size.")?;
 
 		// Create the stop flag.
 		let stop = Arc::new(AtomicBool::new(false));
@@ -111,7 +121,7 @@ impl Tui {
 			let build = build.clone();
 			let stop = stop.clone();
 			move || {
-				let mut app = App::new(client.as_ref(), &build);
+				let mut app = App::new(rect, client.as_ref(), &build);
 				while !stop.load(std::sync::atomic::Ordering::SeqCst) {
 					if ct::event::poll(std::time::Duration::from_millis(16))? {
 						let event = ct::event::read()?;
@@ -127,7 +137,7 @@ impl Tui {
 						app.handle_event(&event);
 					}
 					app.update();
-					terminal.draw(|frame| app.render(frame, frame.size()))?;
+					terminal.draw(|frame| app.render(frame.size(), frame.buffer_mut()))?;
 				}
 				Ok(terminal)
 			}
@@ -170,11 +180,12 @@ impl Tui {
 }
 
 impl App {
-	fn new(client: &dyn tg::Client, root: &tg::Build) -> Self {
+	fn new(rect: tui::layout::Rect, client: &dyn tg::Client, build: &tg::Build) -> Self {
 		let client = client.clone_box();
 		let direction = tui::layout::Direction::Horizontal;
-		let tree = Tree::new(TreeItem::new(client.as_ref(), root, 0, true, true, true));
-		let log = Log::new(client.as_ref(), root);
+		let root = TreeItem::new(client.as_ref(), build, None, 0, true, true);
+		let tree = Tree::new(rect, root);
+		let log = Log::new(client.as_ref(), build);
 		Self {
 			client,
 			direction,
@@ -242,35 +253,46 @@ impl App {
 	}
 
 	fn down(&mut self) {
-		self.select(
-			self.tree
-				.selected
-				.saturating_add(1)
-				.min(self.tree.visible_items_count() - 1),
-		);
+		self.select(true);
 	}
 
 	fn up(&mut self) {
-		self.select(self.tree.selected.saturating_sub(1));
+		self.select(false);
 	}
 
-	fn select(&mut self, index: usize) {
-		let selected_item = self.tree.selected_item_mut();
-		selected_item.selected = false;
-		self.tree.selected = index;
-		let selected_item = self.tree.selected_item_mut();
-		selected_item.selected = true;
-		self.log = Log::new(self.client.as_ref(), &selected_item.build);
+	fn select(&mut self, down: bool) {
+		let expanded_items = self.tree.expanded_items();
+		let previous_selected_index = expanded_items
+			.iter()
+			.position(|item| Rc::ptr_eq(&item.inner, &self.tree.selected.inner))
+			.unwrap();
+		let new_selected_index = if down {
+			(previous_selected_index + 1).min(expanded_items.len() - 1)
+		} else {
+			previous_selected_index.saturating_sub(1)
+		};
+		let height = self.tree.rect.height.to_usize().unwrap();
+		if new_selected_index < self.tree.scroll {
+			self.tree.scroll -= 1;
+		} else if new_selected_index >= self.tree.scroll + height {
+			self.tree.scroll += 1;
+		}
+		let new_selected_item = expanded_items[new_selected_index].clone();
+		self.tree.selected.inner.borrow_mut().selected = false;
+		new_selected_item.inner.borrow_mut().selected = true;
+		self.log = Log::new(
+			self.client.as_ref(),
+			&new_selected_item.inner.borrow().build,
+		);
+		self.tree.selected = new_selected_item;
 	}
 
 	fn expand(&mut self) {
-		let item = self.tree.selected_item_mut();
-		item.expanded = true;
+		self.tree.selected.inner.borrow_mut().expanded = true;
 	}
 
 	fn collapse(&mut self) {
-		let item = self.tree.selected_item_mut();
-		item.expanded = false;
+		self.tree.selected.inner.borrow_mut().expanded = false;
 	}
 
 	fn rotate(&mut self) {
@@ -281,18 +303,18 @@ impl App {
 	}
 
 	fn cancel(&mut self) {
-		let build = self.tree.selected_item_mut().build.clone();
+		let build = self.tree.selected.inner.borrow().build.clone();
 		let client = self.client.clone_box();
 		tokio::spawn(async move { build.cancel(client.as_ref()).await.ok() });
 	}
 
 	fn quit(&mut self) {
-		let build = self.tree.root.build.clone();
+		let build = self.tree.root.inner.borrow().build.clone();
 		let client = self.client.clone_box();
 		tokio::spawn(async move { build.cancel(client.as_ref()).await.ok() });
 	}
 
-	fn render(&self, frame: &mut Frame, area: tui::layout::Rect) {
+	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
 		let layout = tui::layout::Layout::default()
 			.direction(self.direction)
 			.margin(0)
@@ -301,90 +323,69 @@ impl App {
 				tui::layout::Constraint::Length(1),
 				tui::layout::Constraint::Min(1),
 			])
-			.split(area);
+			.split(rect);
 
-		self.tree.render(frame, layout[0]);
+		self.tree.render(layout[0], buf);
 
 		let border = match self.direction {
 			tui::layout::Direction::Horizontal => tui::widgets::Borders::LEFT,
 			tui::layout::Direction::Vertical => tui::widgets::Borders::BOTTOM,
 		};
 		let block = tui::widgets::Block::default().borders(border);
-		frame.render_widget(block, layout[1]);
+		block.render(layout[1], buf);
 
-		self.log.render(frame, layout[2]);
+		self.log.render(layout[2], buf);
 	}
 }
 
 impl Tree {
-	fn new(root: TreeItem) -> Self {
+	fn new(rect: tui::layout::Rect, root: TreeItem) -> Self {
 		Self {
-			root,
+			rect,
+			root: root.clone(),
 			scroll: 0,
-			selected: 0,
+			selected: root,
 		}
 	}
 
-	fn selected_item_mut(&mut self) -> &'_ mut TreeItem {
-		fn inner(
-			item: &'_ mut TreeItem,
-			index: usize,
-			selected: usize,
-		) -> Result<&'_ mut TreeItem, usize> {
-			if index == selected {
-				return Ok(item);
-			}
-			let mut index = index + 1;
-			if !item.expanded {
-				return Err(index);
-			}
-			for child in &mut item.children {
-				match inner(child, index, selected) {
-					Ok(item) => return Ok(item),
-					Err(i) => index = i,
+	fn expanded_items(&self) -> Vec<TreeItem> {
+		let mut items = Vec::new();
+		let mut stack = VecDeque::from(vec![self.root.clone()]);
+		while let Some(item) = stack.pop_front() {
+			items.push(item.clone());
+			if item.inner.borrow().expanded {
+				for child in item.inner.borrow().children.iter().rev() {
+					stack.push_front(child.clone());
 				}
 			}
-			Err(index)
 		}
-		inner(&mut self.root, 0, self.selected).unwrap()
-	}
-
-	fn visible_items_count(&self) -> usize {
-		fn inner(item: &'_ TreeItem) -> usize {
-			let mut count = 1;
-			if item.expanded {
-				for child in &item.children {
-					count += inner(child);
-				}
-			}
-			count
-		}
-		inner(&self.root)
+		items
 	}
 
 	fn update(&mut self) {
 		self.root.update();
 	}
 
-	fn render(&self, frame: &mut Frame, area: tui::layout::Rect) {
+	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
+		self.rect = rect;
 		let layout = tui::layout::Layout::default()
 			.direction(tui::layout::Direction::Vertical)
 			.constraints(
-				(0..area.height)
+				(0..rect.height)
 					.map(|_| tui::layout::Constraint::Length(1))
 					.collect::<Vec<_>>(),
 			)
-			.split(area);
-		let mut stack = VecDeque::from(vec![&self.root]);
+			.split(rect);
+		let mut stack = VecDeque::from(vec![self.root.clone()]);
 		let mut index = 0;
-		while let Some(item) = stack.pop_front() {
-			if item.expanded {
-				for child in item.children.iter().rev() {
-					stack.push_front(child);
+		while let Some(mut item) = stack.pop_front() {
+			if item.inner.borrow().expanded {
+				for child in item.inner.borrow().children.iter().rev() {
+					stack.push_front(child.clone());
 				}
 			}
-			if index >= self.scroll && index < self.scroll + area.height.to_usize().unwrap() {
-				item.render(frame, layout[index - self.scroll]);
+			if index >= self.scroll && index < self.scroll + rect.height.to_usize().unwrap() {
+				item.render(layout[index - self.scroll], buf);
 			}
 			index += 1;
 		}
@@ -395,8 +396,8 @@ impl TreeItem {
 	fn new(
 		client: &dyn tg::Client,
 		build: &tg::Build,
-		depth: usize,
-		last: bool,
+		parent: Option<Weak<RefCell<TreeItemInner>>>,
+		index: usize,
 		selected: bool,
 		expanded: bool,
 	) -> Self {
@@ -440,11 +441,11 @@ impl TreeItem {
 			}
 		});
 
-		Self {
+		let inner = Rc::new(RefCell::new(TreeItemInner {
 			client: client.clone_box(),
 			build: build.clone(),
-			depth,
-			last,
+			parent,
+			index,
 			selected,
 			expanded,
 			status: TreeItemStatus::Building,
@@ -453,45 +454,75 @@ impl TreeItem {
 			status_receiver,
 			title_receiver,
 			children_receiver,
-		}
+		}));
+
+		Self { inner }
 	}
 
-	fn update(&mut self) {
-		if let Ok(status) = self.status_receiver.try_recv() {
-			self.status = status;
+	fn ancestors(&self) -> Vec<TreeItem> {
+		let mut ancestors = Vec::new();
+		let mut parent = self.inner.borrow().parent.as_ref().map(|parent| TreeItem {
+			inner: parent.upgrade().unwrap(),
+		});
+		while let Some(parent_) = parent {
+			ancestors.push(parent_.clone());
+			parent = parent_
+				.inner
+				.borrow()
+				.parent
+				.as_ref()
+				.map(|parent| TreeItem {
+					inner: parent.upgrade().unwrap(),
+				});
 		}
-		if let Ok(title) = self.title_receiver.try_recv() {
-			self.title = title;
+		ancestors
+	}
+
+	fn update(&self) {
+		let status = self.inner.borrow_mut().status_receiver.try_recv();
+		if let Ok(status) = status {
+			self.inner.borrow_mut().status = status;
 		}
-		while let Ok(child) = self.children_receiver.try_recv() {
-			if let Some(child) = self.children.last_mut() {
-				child.last = false;
-			}
-			let child = TreeItem::new(
-				self.client.as_ref(),
-				&child,
-				self.depth + 1,
-				true,
-				false,
-				false,
-			);
-			self.children.push(child);
+		let title = self.inner.borrow_mut().title_receiver.try_recv();
+		if let Ok(title) = title {
+			self.inner.borrow_mut().title = title;
 		}
-		for child in &mut self.children {
+		while let Ok(child) = {
+			let child = self.inner.borrow_mut().children_receiver.try_recv();
+			child
+		} {
+			let client = self.inner.borrow().client.clone_box();
+			let parent = Some(Rc::downgrade(&self.inner));
+			let index = self.inner.borrow().children.len();
+			let selected = false;
+			let expanded = false;
+			let child = TreeItem::new(client.as_ref(), &child, parent, index, selected, expanded);
+			self.inner.borrow_mut().children.push(child);
+		}
+		for child in &self.inner.borrow().children {
 			child.update();
 		}
 	}
 
-	fn render(&self, frame: &mut Frame, area: tui::layout::Rect) {
+	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
 		let mut prefix = String::new();
-		for _ in 0..self.depth.saturating_sub(1) {
-			prefix.push_str(if parent_is_last { "  " } else { "│ " });
+		for item in self.ancestors().iter().rev().skip(1) {
+			let parent = item.inner.borrow().parent.clone().unwrap();
+			let last =
+				item.inner.borrow().index == parent.upgrade().unwrap().borrow().children.len() - 1;
+			prefix.push_str(if last { "  " } else { "│ " });
 		}
-		if self.depth > 0 {
-			prefix.push_str(if self.last { "└─" } else { "├─" });
+		if let Some(parent) = self.inner.borrow().parent.as_ref() {
+			let last =
+				self.inner.borrow().index == parent.upgrade().unwrap().borrow().children.len() - 1;
+			prefix.push_str(if last { "└─" } else { "├─" });
 		}
-		let disclosure = if self.expanded { "▼" } else { "▶" };
-		let status = match self.status {
+		let disclosure = if self.inner.borrow().expanded {
+			"▼"
+		} else {
+			"▶"
+		};
+		let status = match self.inner.borrow().status {
 			TreeItemStatus::Building => {
 				let state = SPINNER_POSITION.load(std::sync::atomic::Ordering::SeqCst);
 				let state = (state / SPINNER_FRAMES_PER_UPDATE) % SPINNER.len();
@@ -500,16 +531,22 @@ impl TreeItem {
 			TreeItemStatus::Failure => '✗',
 			TreeItemStatus::Success => '✓',
 		};
-		let title = self.title.as_deref().unwrap_or("<unknown>");
+		let title = self
+			.inner
+			.borrow()
+			.title
+			.clone()
+			.unwrap_or_else(|| "<unknown>".to_owned());
 		let title = tui::text::Text::from(format!("{prefix}{disclosure} {status} {title}"));
-		let style = if self.selected {
+		let style = if self.inner.borrow().selected {
 			tui::style::Style::default()
 				.bg(tui::style::Color::White)
 				.fg(tui::style::Color::Black)
 		} else {
 			tui::style::Style::default()
 		};
-		frame.render_widget(tui::widgets::Paragraph::new(title).style(style), area);
+		let paragraph = tui::widgets::Paragraph::new(title).style(style);
+		paragraph.render(rect, buf);
 	}
 }
 
@@ -563,17 +600,16 @@ impl Log {
 		self.scroll = self.scroll.saturating_sub(1);
 	}
 
-	fn render(&self, frame: &mut Frame, area: tui::layout::Rect) {
+	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
 		let text = tui::text::Text::from(self.text.as_str());
 		let wrap = tui::widgets::Wrap { trim: false };
-		let widget = tui::widgets::Paragraph::new(text)
+		let paragraph = tui::widgets::Paragraph::new(text)
 			.wrap(wrap)
 			.scroll((self.scroll.to_u16().unwrap(), 0));
-		frame.render_widget(widget, area);
+		paragraph.render(rect, buf);
 	}
 }
 
-#[allow(clippy::unused_async)]
 async fn title(client: &dyn tg::Client, build: &tg::Build) -> Result<Option<String>> {
 	// Get the target.
 	let target = build.target(client).await?;
