@@ -6,7 +6,7 @@ use tangram_client as tg;
 use tangram_error::{error, return_error, WrapErr};
 use tg::Client;
 
-use crate::Analysis;
+use super::Analysis;
 
 /// Errors that may arise during version solving.
 #[derive(Debug, Clone)]
@@ -42,7 +42,7 @@ pub enum Error {
 	Other(tangram_error::Error),
 }
 
-/// Given a registry and unlocked package, create a lockfile for it. If no solution can be found, a [Report] containing a description of the most recent set of errors is formatted as an error. On success, a vec of [tg::Relpath]s (relative to the root package), package [tg::Id]s, and their [tg::Lock]s are returned. There is one vec entry for the root, and one entry for each path dependency.
+/// Given a registry and unlocked package, create a lockfile for it. If no solution can be found, a [`Report`] containing a description of the most recent set of errors is formatted as an error. On success, a vec of [`tg::Relpath`]s (relative to the root package), package [`tg::Id`]s, and their [`tg::Lock`]s are returned. There is one vec entry for the root, and one entry for each path dependency.
 pub async fn solve(
 	client: &dyn Client,
 	root: tg::Id,
@@ -58,8 +58,8 @@ pub async fn solve(
 	let errors = solution
 		.partial
 		.iter()
-		.filter_map(|(dependent, partial)| match partial {
-			Mark::Permanent(Err(e)) => Some((dependent.clone(), e.clone())),
+		.filter_map(|(dependant, partial)| match partial {
+			Mark::Permanent(Err(e)) => Some((dependant.clone(), e.clone())),
 			_ => None,
 		})
 		.collect::<Vec<_>>();
@@ -75,9 +75,7 @@ pub async fn solve(
 	}
 
 	// Now we have the solution, create a lock.
-	let mut locks = vec![
-		(".".parse().unwrap(),  lock(&context, &solution, root).await?)
-	];
+	let mut locks = vec![(".".parse().unwrap(), lock(&context, &solution, root).await?)];
 
 	for (_, dependencies) in path_dependencies {
 		for (relpath, package) in dependencies {
@@ -115,7 +113,7 @@ async fn lock(
 		let id = tg::artifact::Id::try_from(package)
 			.wrap_err("Failed to get package artifact from its id.")?;
 		let package = tg::Artifact::with_id(id.clone());
-		let entry = tg::lock::Entry { lock, package };
+		let entry = tg::lock::Entry { package, lock };
 		locked_dependencies.insert(dependency.clone(), entry);
 	}
 
@@ -126,6 +124,7 @@ async fn lock(
 	Ok(lock)
 }
 
+#[allow(clippy::too_many_lines)]
 async fn solve_inner(context: &mut Context, root: tg::Id) -> tangram_error::Result<Solution> {
 	// Create the working set of unsolved dependencies.
 	let working_set = context
@@ -143,10 +142,10 @@ async fn solve_inner(context: &mut Context, root: tg::Id) -> tangram_error::Resu
 	let last_error = None;
 	let remaining_versions = None;
 	let mut current_frame = Frame {
-		working_set,
 		solution,
-		last_error,
+		working_set,
 		remaining_versions,
+		last_error,
 	};
 	let mut history = im::Vector::new();
 
@@ -457,11 +456,13 @@ impl Context {
 		}
 	}
 
+	#[must_use]
 	pub fn is_path_dependency(&self, dependant: &Dependant) -> bool {
 		self.path_dependencies.get(&dependant.package).is_some()
 			&& dependant.dependency.path.is_some()
 	}
 
+	#[must_use]
 	pub fn resolve_path_dependency(&self, dependant: &Dependant) -> Option<Result<tg::Id, Error>> {
 		let Dependant {
 			package,
@@ -488,6 +489,7 @@ impl Context {
 	}
 
 	// Check if a package satisfies a dependency.
+	#[allow(clippy::unused_self)]
 	fn matches(&self, version: &str, dependency: &tg::Dependency) -> tangram_error::Result<bool> {
 		let Some(constraint) = dependency.version.as_ref() else {
 			return Ok(true);
@@ -688,8 +690,8 @@ impl Frame {
 
 impl fmt::Display for Report {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		for (dependent, error) in &self.errors {
-			self.format(f, dependent, error)?;
+		for (dependant, error) in &self.errors {
+			self.format(f, dependant, error)?;
 		}
 		Ok(())
 	}
@@ -733,12 +735,12 @@ impl Report {
 					f,
 					"no version could be found that satisfies the constraints."
 				)?;
-				let shared_dependents = self
+				let shared_dependants = self
 					.solution
 					.partial
 					.keys()
-					.filter(|dependent| dependent.dependency.name == dependency.name);
-				for shared in shared_dependents {
+					.filter(|dependant| dependant.dependency.name == dependency.name);
+				for shared in shared_dependants {
 					let Dependant {
 						package,
 						dependency,
@@ -762,11 +764,11 @@ impl Report {
 					dependency.name.as_ref().unwrap()
 				)?;
 				for (child, error) in erroneous_dependencies {
-					let dependent = Dependant {
+					let dependant = Dependant {
 						package: package.clone(),
 						dependency: child.clone(),
 					};
-					self.format(f, &dependent, error)?;
+					self.format(f, &dependant, error)?;
 				}
 				Ok(())
 			},

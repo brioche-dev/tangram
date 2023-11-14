@@ -1,7 +1,7 @@
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_client::package::Builder;
-use tangram_error::Result;
+use tangram_error::{return_error, Result};
 
 /// Update a package's dependencies.
 #[derive(Debug, clap::Args)]
@@ -13,11 +13,7 @@ pub struct Args {
 
 impl Cli {
 	#[allow(clippy::unused_async)]
-	pub async fn command_update(&self, args: Args) -> Result<()> {
-		let client = self.client().await?;
-		let client = client.as_ref();
-		let mut builder = tangram_package::Builder::new(&args.path);
-		builder.update(client, None).await?;
-		Ok(())
+	pub async fn command_update(&self, _args: Args) -> Result<()> {
+		unimplemented!()
 	}
 }

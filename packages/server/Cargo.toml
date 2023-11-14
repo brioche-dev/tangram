@@ -26,7 +26,6 @@ serde_json = { workspace = true }
 tangram_client = { workspace = true }
 tangram_error = { workspace = true }
 tangram_http = { workspace = true }
-tangram_package = { workspace = true }
 tangram_runtime = { workspace = true }
 tangram_vfs = { workspace = true }
 tempfile = { workspace = true }

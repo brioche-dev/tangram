@@ -13,23 +13,30 @@ version = { workspace = true }
 v8 = { workspace = true }
 
 [dev-dependencies]
+bytes = { workspace = true }
+futures = { workspace = true }
 indoc = { workspace = true }
 once_cell = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
+tangram_http = { workspace = true }
 tempfile = { workspace = true }
 
 [dependencies]
+async-recursion = { workspace = true }
+async-trait = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true }
 fnv = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
+im = { workspace = true }
 include_dir = { workspace = true }
 itertools = { workspace = true }
 lsp-types = { workspace = true }
 num = { workspace = true }
+semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_v8 = { workspace = true }

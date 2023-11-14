@@ -19,7 +19,7 @@ pub struct Args {
 
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: tangram_package::Specifier,
+	pub package: tangram_lsp::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -41,7 +41,7 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the package.
-		let (package, lock) = tangram_package::new(client, &args.package)
+		let (package, lock) = tangram_lsp::package::new(client, &args.package)
 			.await
 			.wrap_err("Failed to create the package.")?;
 
@@ -53,7 +53,7 @@ impl Cli {
 		.into();
 		let args_ = Vec::new();
 		let host = tg::System::js();
-		let path = tangram_package::ROOT_MODULE_FILE_NAME
+		let path = tangram_lsp::package::ROOT_MODULE_FILE_NAME
 			.to_owned()
 			.try_into()
 			.unwrap();

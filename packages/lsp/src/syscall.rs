@@ -222,7 +222,7 @@ fn syscall_module_resolve(
 	state.main_runtime_handle.clone().block_on(async move {
 		let client = state.client.as_ref();
 		let module = module
-			.resolve(client, Some(&state.document_store), state.package_builder.as_deref(), &specifier)
+			.resolve(client, Some(&state.document_store), &specifier)
 			.await
 			.wrap_err_with(|| {
 				format!(

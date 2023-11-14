@@ -186,7 +186,7 @@ impl Lock {
 }
 
 impl LockFile {
-	/// Recursively create a [LockFile] from an iterator of (RelPath, Lock).
+	/// Recursively create a [`LockFile`] from an iterator of `(Relpath, Lock)`.
 	pub async fn with_paths(
 		client: &dyn Client,
 		paths_: impl IntoIterator<Item = (Relpath, Lock)>,

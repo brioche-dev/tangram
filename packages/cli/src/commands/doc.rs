@@ -1,15 +1,15 @@
 use super::PackageArgs;
 use crate::Cli;
 use tangram_error::{Result, WrapErr};
+use tangram_lsp::package::Specifier;
 use tangram_lsp::ROOT_MODULE_FILE_NAME;
-use tangram_package::Specifier;
 
 /// Generate documentation.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: tangram_package::Specifier,
+	pub package: tangram_lsp::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -24,15 +24,8 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
-		let package_builder: Option<Box<dyn tangram_client::package::Builder>> = if let Specifier::Path(package) = &args.package {
-			let builder = tangram_package::Builder::new(package);
-			Some(Box::new(builder))
-		} else {
-			None
-		};
-
 		// Create the language server.
-		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current(), package_builder);
+		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
 
 		let (module, path) = if args.runtime {
 			// Create the module.
@@ -42,7 +35,7 @@ impl Cli {
 			(module, "tangram.d.ts")
 		} else {
 			// Create the package.
-			let (package, lock) = tangram_package::new(client, &args.package)
+			let (package, lock) = tangram_lsp::package::new(client, &args.package)
 				.await
 				.wrap_err("Failed to create the package.")?;
 			// Create the module.

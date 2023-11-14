@@ -35,6 +35,7 @@ pub mod jsonrpc;
 pub mod load;
 pub mod location;
 pub mod module;
+pub mod package;
 pub mod parse;
 pub mod position;
 pub mod range;
@@ -77,9 +78,6 @@ struct Inner {
 
 	/// A handle to the main tokio runtime.
 	main_runtime_handle: tokio::runtime::Handle,
-
-	/// A package builder.
-	package_builder: Option<Box<dyn tg::package::Builder>>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -119,7 +117,7 @@ pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Server {
 	#[must_use]
-	pub fn new(client: &dyn tg::Client, main_runtime_handle: tokio::runtime::Handle, package_builder: Option<Box<dyn tg::package::Builder>>) -> Self {
+	pub fn new(client: &dyn tg::Client, main_runtime_handle: tokio::runtime::Handle) -> Self {
 		// Create the published diagnostics.
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
@@ -137,7 +135,6 @@ impl Server {
 			document_store,
 			request_sender,
 			main_runtime_handle,
-			package_builder,
 		});
 
 		// Spawn a thread to handle requests.
@@ -246,6 +243,27 @@ impl Server {
 				format!("file://{path}").parse().unwrap()
 			},
 			_ => module.clone().into(),
+		}
+	}
+
+	pub async fn create_package(
+		&self,
+		specifier: &package::Specifier,
+	) -> Result<(tg::Artifact, tg::Lock)> {
+		let client = self.inner.client.as_ref();
+		match specifier {
+			package::Specifier::Path(package_path) => {
+				// Internally, get_or_create_package may work correctly if you pass it the package path. However, the contract is to provide a module_path, so we handle checking for the root module in this function body to uphold that contract.
+				let module_path = package_path.join(package::ROOT_MODULE_FILE_NAME);
+				if !module_path.exists() {
+					return_error!("Missing root module.");
+				}
+				package::get_or_create(client, &module_path, false).await
+			},
+			package::Specifier::Registry(_) => {
+				let (artifact, lock, _) = package::create(client, specifier).await?;
+				Ok((artifact, lock))
+			},
 		}
 	}
 }

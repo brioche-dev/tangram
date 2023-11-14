@@ -1,4 +1,4 @@
-use crate::{version::solve, ROOT_MODULE_FILE_NAME};
+use super::{version::solve, ROOT_MODULE_FILE_NAME};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tangram_client as tg;
@@ -59,7 +59,6 @@ async fn simple_diamond() {
 		.try_solve(metadata.clone())
 		.await
 		.expect("Failed to solve simple_diamond case.");
-
 }
 
 #[tokio::test]
@@ -108,7 +107,6 @@ async fn simple_backtrack() {
 		.try_solve(metadata.clone())
 		.await
 		.expect("Failed to solve simple_backtrack case.");
-
 }
 
 #[tokio::test]
@@ -296,6 +294,7 @@ async fn diamond_incompatible_versions() {
 }
 
 #[tokio::test]
+#[allow(clippy::similar_names)]
 async fn diamond_with_path_dependencies() {
 	let foo = r#"
 		export let metadata = {
@@ -317,6 +316,7 @@ async fn diamond_with_path_dependencies() {
 		import baz as baz from "tangram:baz@=1.2.3"
 		export default tg.target(() => tg`bar ${baz}`);
 	"#;
+
 	let baz = r#"
 		export let metadata = {
 			name: "baz",
@@ -515,6 +515,7 @@ struct MockPackage {
 
 impl MockClient {
 	pub async fn new() -> Self {
+		#[allow(clippy::map_unwrap_or)]
 		let path = std::env::var("TANGRAM_PATH")
 			.map(PathBuf::from)
 			.unwrap_or_else(|_| {
@@ -548,7 +549,7 @@ impl MockClient {
 			.or_default();
 		let existing = entry.iter().any(|package| package.metadata == metadata);
 		assert!(!existing);
-		entry.push(MockPackage { metadata, artifact })
+		entry.push(MockPackage { metadata, artifact });
 	}
 
 	pub async fn create_mock_package(
@@ -621,8 +622,7 @@ impl MockClient {
 			.unwrap()
 			.unwrap()
 			.into();
-		crate::version::solve(self, package, BTreeMap::new())
-			.await
+		solve(self, package, BTreeMap::new()).await
 	}
 
 	// pub fn artifact(&self, metadata: tg::package::Metadata) -> tg::Artifact {
@@ -842,7 +842,7 @@ impl tg::Client for MockClient {
 			.text(self.client.as_ref())
 			.await?;
 
-		let module = tangram_lsp::Module::analyze(text)?;
+		let module = crate::Module::analyze(text)?;
 		let metadata = module.metadata.unwrap();
 
 		self.publish(metadata, tg::Artifact::with_id(id.clone()));

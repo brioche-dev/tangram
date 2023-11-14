@@ -14,7 +14,6 @@ impl Module {
 		&self,
 		client: &dyn tg::Client,
 		document_store: Option<&document::Store>,
-		builder: Option<&dyn tg::package::Builder>,
 		import: &Import,
 	) -> Result<Self> {
 		match (self, import) {
@@ -96,31 +95,12 @@ impl Module {
 			},
 
 			(Self::Document(document), Import::Dependency(dependency)) => {
-				// Retrieve the builder.
-				let Some(builder) = builder else {
-					return_error!(
-						"Cannot resolve registry dependencies without a package builder."
-					);
-				};
-
-				// Find the root module path.
-				let mut path = document
-					.path()
-					.canonicalize()
-					.wrap_err("Failed to canonicalize path.")?;
-				while !path.join("tangram.tg").exists() {
-					let Some(_parent) = path.parent() else {
-						return_error!("Expected a root module.");
-					};
-					path.pop();
-				}
-
 				// Get the lock for this package.
-				let (_, lock) = builder.get_package(client, &path).await?;
+				let (_, lock) =
+					crate::package::get_or_create(client, &document.path(), false).await?;
 				let Some(entry) = lock.dependencies(client).await?.get(dependency) else {
 					return_error!("Could not find dependency in lock file.");
 				};
-
 				// Create the module.
 				let lock = lock.id(client).await?.clone();
 				let package = entry.package.id(client).await?.clone();

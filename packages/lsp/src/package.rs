@@ -1,4 +1,5 @@
 pub use self::specifier::Specifier;
+use crate::Module;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use std::{
@@ -7,7 +8,6 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{error, return_error, Result, WrapErr};
-use tangram_lsp::Module;
 use tg::{package::Metadata, Dependency, Relpath, Subpath};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -27,40 +27,95 @@ pub struct Options {
 	pub update: bool,
 }
 
-pub async fn new(
+/// Lookup the corresponding artifact and lock of a package for a given module path. If the lockfile cannot be found or the `imports_changed` flag is set "true", then a new lockfile is created.
+pub async fn get_or_create(
+	client: &dyn tg::Client,
+	module_path: &Path,
+	imports_changed: bool,
+) -> crate::Result<(tg::Artifact, tg::Lock)> {
+	// Find the package path for this module path.
+	let mut package_path = module_path.to_owned();
+	while !package_path.join(ROOT_MODULE_FILE_NAME).exists() {
+		if !package_path.pop() {
+			return_error!("Could not find root module.");
+		}
+	}
+
+	let lockfile_path = package_path.join(LOCKFILE_FILE_NAME);
+	if lockfile_path.exists() && !imports_changed {
+		// Deserialize the lockfile.
+		let mut file = tokio::fs::File::open(&lockfile_path)
+			.await
+			.wrap_err("Failed to open lockfile.")?;
+		let mut contents = Vec::new();
+		file.read_to_end(&mut contents)
+			.await
+			.wrap_err("Failed to read lockfile contents.")?;
+		let lockfile: tg::lock::LockFile =
+			serde_json::from_slice(&contents).wrap_err("Failed to deserialize lockfile.")?;
+
+		// Get the root lock.
+		let lock = lockfile
+			.paths
+			.get(&".".parse().unwrap())
+			.ok_or(error!("Missing root lock."))?;
+		let lock = tg::Lock::with_id(lock.clone());
+
+		// Scan the root artifact.
+		let mut visited = BTreeMap::new();
+		let mut path_dependencies = BTreeMap::new();
+		let artifact =
+			analyze_package_at_path(client, package_path, &mut visited, &mut path_dependencies)
+				.await?
+				.into();
+
+		// Return.
+		Ok((artifact, lock))
+	} else {
+		// Create the package, lock, and lockfile.
+		let (artifact, lock, lockfile) = create(client, &Specifier::Path(package_path)).await?;
+
+		// Write the lockfile to disk.
+		let mut file = tokio::fs::File::options()
+			.read(true)
+			.write(true)
+			.create(true)
+			.append(false)
+			.open(lockfile_path)
+			.await
+			.wrap_err("Failed to open lockfile for writing.")?;
+		let contents =
+			serde_json::to_vec_pretty(&lockfile).wrap_err("Failed to serialize lockfile.")?;
+		file.write_all(&contents)
+			.await
+			.wrap_err("Failed to write lockfile.")?;
+
+		// Return.
+		Ok((artifact, lock))
+	}
+}
+
+pub async fn create(
 	client: &dyn tg::Client,
 	specifier: &Specifier,
-) -> Result<(tg::Artifact, tg::Lock)> {
-	match specifier {
+) -> Result<(tg::Artifact, tg::Lock, tg::lock::LockFile)> {
+	let (root_artifact, path_dependencies) = match specifier {
 		Specifier::Path(path) => {
 			// Canonicalize.
 			let package_path = path
 				.canonicalize()
 				.wrap_err("Failed to canonicalize path.")?;
-			let lockfile_path = package_path.join(LOCKFILE_FILE_NAME);
-			let lockfile = if lockfile_path.exists() {
-				let mut file = tokio::fs::File::open(&lockfile_path)
-					.await
-					.wrap_err("Failed to open lockfile.")?;
-				let mut contents = Vec::new();
-				file.read_to_end(&mut contents)
-					.await
-					.wrap_err("Failed to read lockfile contents.")?;
-				let lockfile = serde_json::from_slice(&contents)
-					.wrap_err("Failed to deserialize lockfile.")?;
-				Some(lockfile)
-			} else {
-				None
-			};
-			let mut builder = Builder::new(&package_path);
-			<Builder as tg::package::Builder>::update(&mut builder, client, lockfile).await?;
-			<Builder as tg::package::Builder>::get_package(&builder, client, &package_path).await
+			let mut visited = BTreeMap::new();
+			let mut path_dependencies = BTreeMap::new();
+			let root_artifact =
+				analyze_package_at_path(client, package_path, &mut visited, &mut path_dependencies)
+					.await?;
+			(root_artifact, path_dependencies)
 		},
 		Specifier::Registry(specifier::Registry { name, version }) => {
 			let Some(version) = version else {
 				return_error!("Cannot create package from registry dependency without a version.");
 			};
-
 			let id =
 				client
 					.get_package_version(name, version)
@@ -72,127 +127,22 @@ pub async fn new(
 				.try_unwrap_directory()
 				.wrap_err("Expected package artifact to be a directory.")?;
 			let path_dependencies = BTreeMap::new();
-			let root = root_artifact.id(client).await?.clone().into();
-			let locks = version::solve(client, root, path_dependencies).await?;
-			let root_lock = locks[0].1.clone();
-			Ok((root_artifact.into(), root_lock))
+			(root_artifact, path_dependencies)
 		},
-	}
-}
+	};
 
-#[derive(Clone)]
-pub struct Builder {
-	root_path: PathBuf,
-	locks: BTreeMap<PathBuf, tg::Lock>,
-	artifacts: BTreeMap<PathBuf, tg::Artifact>,
-}
+	// Solve the version constraints.
+	let root = root_artifact.id(client).await?.clone().into();
+	let paths = version::solve(client, root, path_dependencies).await?;
 
-impl Builder {
-	pub fn new(root_path: &Path) -> Self {
-		Self {
-			root_path: root_path.into(),
-			locks: BTreeMap::new(),
-			artifacts: BTreeMap::new(),
-		}
-	}
+	// Get the root lock and create a lockfile.
+	let root_lock = paths[0].1.clone();
+	let lockfile = tg::lock::LockFile::with_paths(client, paths).await?;
+	Ok((root_artifact.into(), root_lock, lockfile))
 }
 
 #[async_trait]
-impl tg::package::Builder for Builder {
-	fn clone_box(&self) -> Box<dyn tg::package::Builder> {
-		Box::new(self.clone())
-	}
-
-	async fn get_package(
-		&self,
-		_client: &dyn tg::Client,
-		path: &Path,
-	) -> tangram_error::Result<(tg::Artifact, tg::Lock)> {
-		let artifact = self
-			.artifacts
-			.get(path)
-			.ok_or(error!("Failed to lookup artifact for {path:#?}."))?
-			.clone();
-		let lock = self
-			.locks
-			.get(path)
-			.ok_or(error!("Failed to lookup lock for path {path:#?}"))?
-			.clone();
-		Ok((artifact, lock))
-	}
-
-	async fn update(
-		&mut self,
-		client: &dyn tg::Client,
-		lockfile: Option<tg::lock::LockFile>,
-	) -> tangram_error::Result<()> {
-		let root_path = &self.root_path;
-
-		// Scan, checking in any the path dependencies and includes.
-		let mut visited = BTreeMap::new();
-		let mut path_dependencies = BTreeMap::new();
-		let root_artifact = analyze_package_at_path(
-			client,
-			root_path.into(),
-			&mut visited,
-			&mut path_dependencies,
-		)
-		.await?;
-
-		// Update the artifacts.
-		self.artifacts = path_dependencies
-			.values()
-			.flatten()
-			.map(|(relpath, artifact)| {
-				(
-					root_path.join(relpath.to_string()),
-					tg::Artifact::with_id(artifact.clone().try_into().unwrap()),
-				)
-			})
-			.collect();
-
-		// Solve the versions.
-		let lockfile = match lockfile {
-			Some(lockfile) => lockfile,
-			None => {
-				let root = root_artifact.id(client).await?.clone().into();
-				let locks = version::solve(client, root, path_dependencies).await?;
-				let lockfile = tg::lock::LockFile::with_paths(client, locks).await?;
-				let lockfile_path = root_path.join(LOCKFILE_FILE_NAME);
-				let mut file = tokio::fs::File::options()
-					.read(true)
-					.write(true)
-					.append(false)
-					.create(true)
-					.open(lockfile_path)
-					.await
-					.wrap_err("Failed to open lock file for writing.")?;
-				let contents = serde_json::to_vec_pretty(&lockfile)
-					.wrap_err("Failed to serialize lock file.")?;
-				file.write_all(&contents)
-					.await
-					.wrap_err("Failed to write file contents.")?;
-				lockfile
-			},
-		};
-
-		// Update the locks.
-		self.locks = lockfile
-			.paths
-			.iter()
-			.map(|(relpath, lock)| {
-				(
-					root_path.join(relpath.to_string()),
-					tg::Lock::with_id(lock.clone()),
-				)
-			})
-			.collect();
-		Ok(())
-	}
-}
-
-#[async_trait]
-impl PackageExt for tg::Directory {
+impl Ext for tg::Directory {
 	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>> {
 		// Create the dependencies map.
 		let mut dependencies: BTreeSet<tg::Dependency> = BTreeSet::default();
@@ -217,7 +167,7 @@ impl PackageExt for tg::Directory {
 
 			// Recurse into the dependencies.
 			for import in &analyze_output.imports {
-				if let tangram_lsp::Import::Dependency(dependency) = import {
+				if let crate::Import::Dependency(dependency) = import {
 					// Ignore duplicate dependencies.
 					if dependencies.contains(dependency) {
 						continue;
@@ -231,7 +181,7 @@ impl PackageExt for tg::Directory {
 
 			// Add the unvisited path imports to the queue.
 			for import in &analyze_output.imports {
-				if let tangram_lsp::Import::Path(import) = import {
+				if let crate::Import::Path(import) = import {
 					let imported_module_subpath = module_subpath
 						.clone()
 						.into_relpath()
@@ -268,7 +218,7 @@ impl PackageExt for tg::Directory {
 }
 
 #[async_trait]
-pub trait PackageExt {
+pub trait Ext {
 	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata>;
 	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>>;
 }
@@ -346,7 +296,7 @@ async fn analyze_package_at_path(
 		// Recurse into the dependencies.
 		for import in &analyze_output.imports {
 			match import {
-				tangram_lsp::Import::Dependency(dependency) if dependency.path.is_some() => {
+				crate::Import::Dependency(dependency) if dependency.path.is_some() => {
 					// recurse
 					let package_path = package_path
 						.join(dependency.path.as_ref().unwrap().to_string())
@@ -371,7 +321,7 @@ async fn analyze_package_at_path(
 
 		// Add the unvisited path imports to the queue.
 		for import in &analyze_output.imports {
-			if let tangram_lsp::Import::Path(import) = import {
+			if let crate::Import::Path(import) = import {
 				let imported_module_subpath = module_subpath
 					.clone()
 					.into_relpath()
