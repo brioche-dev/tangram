@@ -85,14 +85,14 @@ export class Mutation<T extends Value = Value> {
 	): Promise<Mutation<T>> {
 		let arg = await resolve(unresolvedArg);
 		if (arg.kind === "array_prepend" || arg.kind === "array_append") {
-			return new Mutation({ kind: arg.kind, value: flatten(arg.values) });
+			return new Mutation({ kind: arg.kind, values: flatten(arg.values) });
 		} else if (
 			arg.kind === "template_prepend" ||
 			arg.kind === "template_append"
 		) {
 			return new Mutation({
 				kind: arg.kind,
-				value: await template(arg.template),
+				template: await template(arg.template),
 				separator: arg.separator,
 			});
 		} else if (arg.kind === "unset") {
@@ -139,12 +139,12 @@ export namespace Mutation {
 		| {
 				kind: "template_prepend";
 				template: T extends Template ? Template.Arg : never;
-				separator?: string;
+				separator?: string | undefined;
 		  }
 		| {
 				kind: "template_append";
 				template: T extends Template ? Template.Arg : never;
-				separator?: string;
+				separator?: string | undefined;
 		  };
 
 	export type Inner =
@@ -153,20 +153,20 @@ export namespace Mutation {
 		| { kind: "set_if_unset"; value: Value }
 		| {
 				kind: "array_prepend";
-				value: Array<Value>;
+				values: Array<Value>;
 		  }
 		| {
 				kind: "array_append";
-				value: Array<Value>;
+				values: Array<Value>;
 		  }
 		| {
 				kind: "template_prepend";
-				value: Template;
+				template: Template;
 				separator: string | undefined;
 		  }
 		| {
 				kind: "template_append";
-				value: Template;
+				template: Template;
 				separator: string | undefined;
 		  };
 }
@@ -197,14 +197,14 @@ let mutate = async (
 		}
 		let array = object[key];
 		assert(array instanceof Array);
-		object[key] = [...array, ...flatten(mutation.inner.value)];
+		object[key] = [...array, ...flatten(mutation.inner.values)];
 	} else if (mutation.inner.kind === "array_append") {
 		if (!(key in object)) {
 			object[key] = [];
 		}
 		let array = object[key];
 		assert(array instanceof Array);
-		object[key] = [...array, ...flatten(mutation.inner.value)];
+		object[key] = [...array, ...flatten(mutation.inner.values)];
 	} else if (mutation.inner.kind === "template_prepend") {
 		if (!(key in object)) {
 			object[key] = await template();
@@ -218,7 +218,7 @@ let mutate = async (
 		);
 		object[key] = await Template.join(
 			mutation.inner.separator,
-			mutation.inner.value,
+			mutation.inner.template,
 			value,
 		);
 	} else if (mutation.inner.kind === "template_append") {
@@ -235,7 +235,7 @@ let mutate = async (
 		object[key] = await Template.join(
 			mutation.inner.separator,
 			value,
-			mutation.inner.value,
+			mutation.inner.template,
 		);
 	}
 };

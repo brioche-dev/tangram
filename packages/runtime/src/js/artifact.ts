@@ -10,6 +10,19 @@ export type Artifact = Directory | File | Symlink;
 export namespace Artifact {
 	export type Id = string;
 
+	export let withId = (id: Artifact.Id): Artifact => {
+		let prefix = id.substring(0, 3);
+		if (prefix === "dir") {
+			return Directory.withId(id);
+		} else if (prefix === "fil") {
+			return File.withId(id);
+		} else if (prefix === "sym") {
+			return Symlink.withId(id);
+		} else {
+			throw new Error(`invalid artifact id: ${id}`);
+		}
+	};
+
 	export let is = (value: unknown): value is Artifact => {
 		return Directory.is(value) || File.is(value) || Symlink.is(value);
 	};
