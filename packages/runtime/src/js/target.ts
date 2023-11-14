@@ -199,7 +199,10 @@ export class Target<
 					if ("env" in arg) {
 						object.env =
 							arg.env !== undefined
-								? await mutation({ kind: "array_append", values: [arg.env] })
+								? await mutation({
+										kind: "array_append",
+										values: flatten([arg.env]),
+								  })
 								: await mutation({ kind: "unset" });
 					}
 					if ("args" in arg) {
@@ -331,7 +334,7 @@ export namespace Target {
 		executable?: Artifact;
 		lock?: Lock | undefined;
 		name?: string | undefined;
-		env?: MutationMap;
+		env?: MaybeNestedArray<MutationMap>;
 		args?: Array<Value>;
 		checksum?: Checksum | undefined;
 	};

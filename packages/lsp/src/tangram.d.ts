@@ -752,7 +752,7 @@ declare namespace tg {
 			name?: string | undefined;
 
 			/** The target's environment variables. */
-			env?: Mutation.MutationMap;
+			env?: MaybeNestedArray<Mutation.MutationMap>;
 
 			/** The target's command line arguments. */
 			args?: Array<Value>;
