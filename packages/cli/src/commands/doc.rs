@@ -8,7 +8,7 @@ use tangram_lsp::ROOT_MODULE_FILE_NAME;
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: tangram_package::Specifier,
+	pub package: tangram_lsp::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -34,7 +34,7 @@ impl Cli {
 			(module, "tangram.d.ts")
 		} else {
 			// Create the package.
-			let (package, lock) = tangram_package::new(client, &args.package)
+			let (package, lock) = server.create_package(&args.package)
 				.await
 				.wrap_err("Failed to create the package.")?;
 			// Create the module.

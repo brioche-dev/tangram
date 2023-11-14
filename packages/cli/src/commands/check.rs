@@ -1,13 +1,12 @@
 use super::PackageArgs;
 use crate::Cli;
-use tangram_error::{return_error, Result, WrapErr};
-
+use tangram_error::{return_error, Result};
 /// Check a package for errors.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: tangram_package::Specifier,
+	pub package: tangram_lsp::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -18,13 +17,11 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
-		// Get the package.
-		let (package, lock) = tangram_package::new(client, &args.package)
-			.await
-			.wrap_err("Failed to get the package.")?;
-
 		// Create the language server.
 		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+
+		// Get the package.
+		let (package, lock) = server.create_package(&args.package).await?;
 
 		// Check the package for diagnostics.
 		let diagnostics = server
@@ -32,7 +29,7 @@ impl Cli {
 				tangram_lsp::module::Normal {
 					package: package.id(client).await?,
 					lock: lock.id(client).await?.clone(),
-					path: tangram_package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
+					path: tangram_lsp::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
 				},
 			)])
 			.await?;

@@ -6,12 +6,13 @@ use tangram_error::{return_error, Result};
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
-	pub path: Option<PathBuf>,
+	#[arg(short, long, default_value = ".")]
+	pub path: PathBuf,
 }
 
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_update(&self, _args: Args) -> Result<()> {
-		return_error!("This command is not yet implemented.");
+		return_error!("Not yet implemented.");
 	}
 }

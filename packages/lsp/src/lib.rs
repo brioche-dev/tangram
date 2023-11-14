@@ -12,7 +12,11 @@ pub use self::{
 use derive_more::Unwrap;
 use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{
+	collections::{BTreeSet, HashMap},
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 use tangram_client as tg;
 use tangram_error::{return_error, Error, Result, WrapErr};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
@@ -35,6 +39,7 @@ pub mod jsonrpc;
 pub mod load;
 pub mod location;
 pub mod module;
+pub mod package;
 pub mod parse;
 pub mod position;
 pub mod range;
@@ -46,6 +51,7 @@ pub mod syscall;
 pub mod transpile;
 pub mod version;
 pub mod virtual_text_document;
+pub mod workspace;
 
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 
@@ -77,6 +83,9 @@ struct Inner {
 
 	/// A handle to the main tokio runtime.
 	main_runtime_handle: tokio::runtime::Handle,
+
+	/// The workspace roots.
+	workspace_roots: Arc<tokio::sync::RwLock<BTreeSet<PathBuf>>>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -127,6 +136,9 @@ impl Server {
 		let (request_sender, request_receiver) =
 			tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
 
+		// Create the workspace roots.
+		let workspace_roots = Arc::new(tokio::sync::RwLock::new(BTreeSet::new()));
+
 		// Create the inner.
 		let inner = Arc::new(Inner {
 			client: client.clone_box(),
@@ -134,6 +146,7 @@ impl Server {
 			document_store,
 			request_sender,
 			main_runtime_handle,
+			workspace_roots,
 		});
 
 		// Spawn a thread to handle requests.
@@ -244,6 +257,27 @@ impl Server {
 			_ => module.clone().into(),
 		}
 	}
+
+	pub async fn create_package(
+		&self,
+		specifier: &package::Specifier,
+	) -> Result<(tg::Artifact, tg::Lock)> {
+		let client = self.inner.client.as_ref();
+		match specifier {
+			package::Specifier::Path(package_path) => {
+				// Internally, get_or_create_package may work correctly if you pass it the package path. However, the contract is to provide a module_path, so we handle checking for the root module in this function body to uphold that contract.
+				let module_path = package_path.join(package::ROOT_MODULE_FILE_NAME);
+				if !module_path.exists() {
+					return_error!("Missing root module.");
+				}
+				package::get_or_create(client, &module_path).await
+			},
+			package::Specifier::Registry(_) => {
+				let (artifact, lock, _) = package::create(client, specifier).await?;
+				Ok((artifact, lock))
+			},
+		}
+	}
 }
 
 async fn read_incoming_message<R>(reader: &mut R) -> Result<jsonrpc::Message>
@@ -340,7 +374,7 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 					handle_request::<lsp::request::Initialize, _, _>(
 						sender,
 						request,
-						|params| async move { Ok(Server::handle_initialize_request(&params)) },
+						|params| server.handle_initialize_request(params),
 					)
 					.boxed()
 				},
@@ -420,6 +454,14 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 					)
 					.boxed()
 				},
+
+				<lsp::notification::DidSaveTextDocument as lsp::notification::Notification>::METHOD => {
+					handle_notification::<lsp::notification::DidSaveTextDocument, _, _>(sender, notification, |sender, params| server.handle_did_save_notification(sender, params)).boxed()
+				}
+
+				<lsp::notification::DidChangeWorkspaceFolders as lsp::notification::Notification>::METHOD => {
+					handle_notification::<lsp::notification::DidChangeWorkspaceFolders, _, _>(sender, notification, |sender, params| server.handle_did_change_workspace_folders(sender, params)).boxed()
+				}
 
 				// If the notification method does not have a handler, then do nothing.
 				_ => future::ready(()).boxed(),

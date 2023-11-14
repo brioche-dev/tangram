@@ -6,7 +6,7 @@ use tangram_error::{return_error, Result};
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(default_value = ".")]
-	pub package: tangram_package::Specifier,
+	pub package: tangram_lsp::package::Specifier,
 }
 
 impl Cli {

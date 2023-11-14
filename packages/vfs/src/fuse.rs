@@ -192,6 +192,7 @@ impl Server {
 			.unwrap()?;
 		}
 
+		// Unmount.
 		Self::unmount(&self.inner.path).await?;
 
 		Ok(())
@@ -815,9 +816,8 @@ impl Server {
 	}
 
 	async fn mount(path: &Path) -> Result<std::fs::File> {
+		Self::unmount(path).await?;
 		unsafe {
-			Self::unmount(path).await?;
-
 			// Setup the arguments.
 			let uid = libc::getuid();
 			let gid = libc::getgid();

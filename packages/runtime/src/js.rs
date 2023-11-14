@@ -8,8 +8,7 @@ use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_lsp::{Import, Module};
-use tangram_package::PackageExt;
+use tangram_lsp::{Import, Module, package::Ext};
 
 mod convert;
 mod error;
@@ -322,16 +321,20 @@ fn resolve_module_callback<'s>(
 fn resolve_module(scope: &mut v8::HandleScope, module: &Module, import: &Import) -> Option<Module> {
 	let context = scope.get_current_context();
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
+
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
 		let client = state.client.clone_box();
 		let module = module.clone();
 		let import = import.clone();
 		async move {
-			let module = module.resolve(client.as_ref(), None, &import).await;
+			let module = module
+				.resolve(client.as_ref(), None, &import)
+				.await;
 			sender.send(module).unwrap();
 		}
 	});
+
 	let module = match receiver
 		.recv()
 		.unwrap()

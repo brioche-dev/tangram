@@ -92,6 +92,7 @@ impl Cli {
 
 		// Read the config.
 		let config = Self::read_config().await?;
+		println!("{config:?}");
 
 		// Read the credentials.
 		let _credentials = Self::read_credentials().await?;

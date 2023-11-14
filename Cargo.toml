@@ -6,7 +6,6 @@ members = [
   "packages/error",
   "packages/http",
   "packages/lsp",
-  "packages/package",
   "packages/runtime",
   "packages/server",
   "packages/vfs",
@@ -44,6 +43,7 @@ http-body = { version = "=1.0.0-rc.2" }
 http-body-util = { version = "=0.1.0-rc.3" }
 hyper = { version = "=1.0.0-rc.4", features = ["full"] }
 hyper-util = { version = "=0.0.0" }
+im = "15"
 include_dir = "0.7"
 indoc = "2"
 itertools = "0.11"
@@ -72,6 +72,7 @@ reqwest = { version = "0.11", default-features = false, features = [
 ] }
 rustls = "=0.22.0-alpha.3"
 rustls-pemfile = "=2.0.0-alpha.1"
+semver = "1"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"
@@ -97,7 +98,6 @@ tangram_client = { path = "packages/client" }
 tangram_error = { path = "packages/error" }
 tangram_http = { path = "packages/http" }
 tangram_lsp = { path = "packages/lsp" }
-tangram_package = { path = "packages/package" }
 tangram_runtime = { path = "packages/runtime" }
 tangram_server = { path = "packages/server" }
 tangram_vfs = { path = "packages/vfs" }

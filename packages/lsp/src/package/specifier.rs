@@ -18,10 +18,10 @@ pub enum Specifier {
 )]
 pub struct Registry {
 	/// The name.
-	name: String,
+	pub name: String,
 
 	/// The version.
-	version: Option<String>,
+	pub version: Option<String>,
 }
 
 impl std::fmt::Display for Specifier {
@@ -113,6 +113,7 @@ impl From<tg::Dependency> for Specifier {
 			name,
 			version,
 			path,
+			..
 		} = value;
 		match (name, version, path) {
 			(_, _, Some(path)) => Specifier::Path(path.into()),

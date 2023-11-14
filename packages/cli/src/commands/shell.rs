@@ -9,7 +9,7 @@ use tangram_error::Result;
 pub struct Args {
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: tangram_package::Specifier,
+	pub package: tangram_lsp::package::Specifier,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,

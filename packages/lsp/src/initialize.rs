@@ -1,11 +1,33 @@
-use super::Server;
+use super::{Result, Server};
 use lsp_types as lsp;
 
 impl Server {
-	pub(super) fn handle_initialize_request(
-		_params: &lsp::InitializeParams,
-	) -> lsp::InitializeResult {
-		lsp::InitializeResult {
+	pub(super) async fn handle_initialize_request(
+		&self,
+		params: lsp::InitializeParams,
+	) -> Result<lsp::InitializeResult> {
+		let supports_workspace_folders = params
+			.capabilities
+			.workspace
+			.as_ref()
+			.and_then(|ws| ws.workspace_folders)
+			.unwrap_or(false);
+
+		// Collect the workspace folders. We swallow any errors here to avoid crashing the server at initialization.
+		let added = if supports_workspace_folders {
+			params
+				.workspace_folders
+				.into_iter()
+				.flatten()
+				.map(|folder| folder.uri)
+				.collect()
+		} else {
+			params.root_uri.into_iter().collect()
+		};
+
+		let _ = self.update_workspace_folders(added, Vec::new()).await;
+
+		let capabilities = lsp::InitializeResult {
 			capabilities: lsp::ServerCapabilities {
 				text_document_sync: Some(lsp::TextDocumentSyncCapability::Options(
 					lsp::TextDocumentSyncOptions {
@@ -21,10 +43,17 @@ impl Server {
 				document_formatting_provider: Some(lsp::OneOf::Left(true)),
 				document_symbol_provider: Some(lsp::OneOf::Left(true)),
 				rename_provider: Some(lsp::OneOf::Left(true)),
-
+				workspace: Some(lsp::WorkspaceServerCapabilities {
+					workspace_folders: Some(lsp::WorkspaceFoldersServerCapabilities {
+						supported: Some(true),
+						change_notifications: Some(lsp::OneOf::Left(true)),
+					}),
+					..Default::default()
+				}),
 				..Default::default()
 			},
 			..Default::default()
-		}
+		};
+		Ok(capabilities)
 	}
 }

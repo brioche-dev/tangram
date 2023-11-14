@@ -1,7 +1,7 @@
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_error::{Result, WrapErr};
-use tangram_package::ROOT_MODULE_FILE_NAME;
+use tangram_lsp::package::ROOT_MODULE_FILE_NAME;
 
 /// Format the files in a package.
 #[derive(Debug, clap::Args)]
