@@ -12,7 +12,7 @@ pub use self::{
 use derive_more::Unwrap;
 use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::{HashMap, BTreeSet}, path::{Path, PathBuf}, sync::Arc};
 use tangram_client as tg;
 use tangram_error::{return_error, Error, Result, WrapErr};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
@@ -47,6 +47,7 @@ pub mod syscall;
 pub mod transpile;
 pub mod version;
 pub mod virtual_text_document;
+pub mod workspace;
 
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 
@@ -78,6 +79,9 @@ struct Inner {
 
 	/// A handle to the main tokio runtime.
 	main_runtime_handle: tokio::runtime::Handle,
+
+	/// The workspace roots.
+	workspace_roots: Arc<tokio::sync::RwLock<BTreeSet<PathBuf>>>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -128,6 +132,9 @@ impl Server {
 		let (request_sender, request_receiver) =
 			tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
 
+		// Create the workspace roots.
+		let workspace_roots = Arc::new(tokio::sync::RwLock::new(BTreeSet::new()));
+
 		// Create the inner.
 		let inner = Arc::new(Inner {
 			client: client.clone_box(),
@@ -135,6 +142,7 @@ impl Server {
 			document_store,
 			request_sender,
 			main_runtime_handle,
+			workspace_roots,
 		});
 
 		// Spawn a thread to handle requests.
@@ -258,7 +266,7 @@ impl Server {
 				if !module_path.exists() {
 					return_error!("Missing root module.");
 				}
-				package::get_or_create(client, &module_path, false).await
+				package::get_or_create(client, &module_path).await
 			},
 			package::Specifier::Registry(_) => {
 				let (artifact, lock, _) = package::create(client, specifier).await?;
@@ -362,7 +370,7 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 					handle_request::<lsp::request::Initialize, _, _>(
 						sender,
 						request,
-						|params| async move { Ok(Server::handle_initialize_request(&params)) },
+						|params| server.handle_initialize_request(params),
 					)
 					.boxed()
 				},
@@ -442,6 +450,14 @@ async fn handle_message(server: &Server, sender: &Sender, message: jsonrpc::Mess
 					)
 					.boxed()
 				},
+
+				<lsp::notification::DidSaveTextDocument as lsp::notification::Notification>::METHOD => {
+					handle_notification::<lsp::notification::DidSaveTextDocument, _, _>(sender, notification, |sender, params| server.handle_did_save_notification(sender, params)).boxed()
+				}
+
+				<lsp::notification::DidChangeWorkspaceFolders as lsp::notification::Notification>::METHOD => {
+					handle_notification::<lsp::notification::DidChangeWorkspaceFolders, _, _>(sender, notification, |sender, params| server.handle_did_change_workspace_folders(sender, params)).boxed()
+				}
 
 				// If the notification method does not have a handler, then do nothing.
 				_ => future::ready(()).boxed(),

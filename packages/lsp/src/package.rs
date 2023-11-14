@@ -2,6 +2,7 @@ pub use self::specifier::Specifier;
 use crate::Module;
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use itertools::Itertools;
 use std::{
 	collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 	path::{Path, PathBuf},
@@ -27,11 +28,10 @@ pub struct Options {
 	pub update: bool,
 }
 
-/// Lookup the corresponding artifact and lock of a package for a given module path. If the lockfile cannot be found or the `imports_changed` flag is set "true", then a new lockfile is created.
+/// Lookup the corresponding artifact and lock of a package for a given module path. If the lockfile cannot be found or the `imports_changed` flag is set "true", then a new lockfile is created. If the lockfile's dependencies for the root artifact are different than the dependencies in an existing lockfile, the lockfile is removed and we attempt to lock again.
 pub async fn get_or_create(
 	client: &dyn tg::Client,
 	module_path: &Path,
-	imports_changed: bool,
 ) -> crate::Result<(tg::Artifact, tg::Lock)> {
 	// Find the package path for this module path.
 	let mut package_path = module_path.to_owned();
@@ -41,8 +41,9 @@ pub async fn get_or_create(
 		}
 	}
 
+	// First, try and read from an existing lockfile.
 	let lockfile_path = package_path.join(LOCKFILE_FILE_NAME);
-	if lockfile_path.exists() && !imports_changed {
+	if lockfile_path.exists() {
 		// Deserialize the lockfile.
 		let mut file = tokio::fs::File::open(&lockfile_path)
 			.await
@@ -65,34 +66,40 @@ pub async fn get_or_create(
 		let mut visited = BTreeMap::new();
 		let mut path_dependencies = BTreeMap::new();
 		let artifact =
-			analyze_package_at_path(client, package_path, &mut visited, &mut path_dependencies)
-				.await?
-				.into();
+			analyze_package_at_path(client, package_path.clone(), &mut visited, &mut path_dependencies)
+				.await?;
 
-		// Return.
-		Ok((artifact, lock))
-	} else {
-		// Create the package, lock, and lockfile.
-		let (artifact, lock, lockfile) = create(client, &Specifier::Path(package_path)).await?;
+		// Verify that our dependencies all match.
+		let current_dependencies = artifact.dependencies(client).await?;
+		let locked_dependencies = lockfile.locks.get(lock.id(client).await?).into_iter().flatten().map(|(k, _)| k);
 
-		// Write the lockfile to disk.
-		let mut file = tokio::fs::File::options()
-			.read(true)
-			.write(true)
-			.create(true)
-			.append(false)
-			.open(lockfile_path)
-			.await
-			.wrap_err("Failed to open lockfile for writing.")?;
-		let contents =
-			serde_json::to_vec_pretty(&lockfile).wrap_err("Failed to serialize lockfile.")?;
-		file.write_all(&contents)
-			.await
-			.wrap_err("Failed to write lockfile.")?;
-
-		// Return.
-		Ok((artifact, lock))
+		// If the dependencies are all the same, we can use the existing lockfile. Otherwise, fall through.
+		if current_dependencies.iter().zip(locked_dependencies).all_equal() {
+			return Ok((artifact.into(), lock))
+		}
 	}
+
+	// Create the package, lock, and lockfile.
+	let (artifact, lock, lockfile) = create(client, &Specifier::Path(package_path)).await?;
+
+	// Write the lockfile to disk.
+	let mut file = tokio::fs::File::options()
+		.read(true)
+		.write(true)
+		.create(true)
+		.append(false)
+		.open(lockfile_path)
+		.await
+		.wrap_err("Failed to open lockfile for writing.")?;
+	let contents =
+		serde_json::to_vec_pretty(&lockfile).wrap_err("Failed to serialize lockfile.")?;
+	file.write_all(&contents)
+		.await
+		.wrap_err("Failed to write lockfile.")?;
+
+	// Return.
+	Ok((artifact, lock))
+
 }
 
 pub async fn create(

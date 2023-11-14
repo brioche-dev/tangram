@@ -97,7 +97,7 @@ impl Module {
 			(Self::Document(document), Import::Dependency(dependency)) => {
 				// Get the lock for this package.
 				let (_, lock) =
-					crate::package::get_or_create(client, &document.path(), false).await?;
+					crate::package::get_or_create(client, &document.path()).await?;
 				let Some(entry) = lock.dependencies(client).await?.get(dependency) else {
 					return_error!("Could not find dependency in lock file.");
 				};
