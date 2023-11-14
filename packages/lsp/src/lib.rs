@@ -12,7 +12,11 @@ pub use self::{
 use derive_more::Unwrap;
 use futures::{future, Future, FutureExt};
 use lsp_types as lsp;
-use std::{collections::{HashMap, BTreeSet}, path::{Path, PathBuf}, sync::Arc};
+use std::{
+	collections::{BTreeSet, HashMap},
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 use tangram_client as tg;
 use tangram_error::{return_error, Error, Result, WrapErr};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};

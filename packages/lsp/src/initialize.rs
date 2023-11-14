@@ -1,4 +1,4 @@
-use super::{Server, Result};
+use super::{Result, Server};
 use lsp_types as lsp;
 
 impl Server {
@@ -6,11 +6,17 @@ impl Server {
 		&self,
 		params: lsp::InitializeParams,
 	) -> Result<lsp::InitializeResult> {
-		let supports_workspace_folders = params.capabilities.workspace.as_ref().and_then(|ws| ws.workspace_folders).unwrap_or(false);
+		let supports_workspace_folders = params
+			.capabilities
+			.workspace
+			.as_ref()
+			.and_then(|ws| ws.workspace_folders)
+			.unwrap_or(false);
 
 		// Collect the workspace folders. We swallow any errors here to avoid crashing the server at initialization.
 		let added = if supports_workspace_folders {
-			params.workspace_folders
+			params
+				.workspace_folders
 				.into_iter()
 				.flatten()
 				.map(|folder| folder.uri)

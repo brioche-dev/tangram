@@ -136,19 +136,29 @@ impl Server {
 		let client = self.inner.client.as_ref();
 
 		// Get the document, if we're tracking it.
-		let Ok(Module::Document(document)) = self.module_for_url(&params.text_document.uri).await else {
-			return Ok(())
+		let Ok(Module::Document(document)) = self.module_for_url(&params.text_document.uri).await
+		else {
+			return Ok(());
 		};
 
 		let mut package_path = document.path();
-		while !package_path.join(crate::package::ROOT_MODULE_FILE_NAME).exists() {
+		while !package_path
+			.join(crate::package::ROOT_MODULE_FILE_NAME)
+			.exists()
+		{
 			if !package_path.pop() {
 				return_error!("Could not find root module.");
 			}
 		}
 
 		// Check if we're tracking this package.
-		if !self.inner.workspace_roots.read().await.contains(&package_path) {
+		if !self
+			.inner
+			.workspace_roots
+			.read()
+			.await
+			.contains(&package_path)
+		{
 			return Ok(());
 		}
 

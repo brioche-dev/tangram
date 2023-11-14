@@ -41,6 +41,8 @@ pub async fn get_or_create(
 		}
 	}
 
+	let package_path = package_path.canonicalize().wrap_err("Failed to canonicalize path.")?;
+
 	// First, try and read from an existing lockfile.
 	let lockfile_path = package_path.join(LOCKFILE_FILE_NAME);
 	if lockfile_path.exists() {
@@ -65,17 +67,30 @@ pub async fn get_or_create(
 		// Scan the root artifact.
 		let mut visited = BTreeMap::new();
 		let mut path_dependencies = BTreeMap::new();
-		let artifact =
-			analyze_package_at_path(client, package_path.clone(), &mut visited, &mut path_dependencies)
-				.await?;
+		let artifact = analyze_package_at_path(
+			client,
+			package_path.clone(),
+			&mut visited,
+			&mut path_dependencies,
+		)
+		.await?;
 
 		// Verify that our dependencies all match.
 		let current_dependencies = artifact.dependencies(client).await?;
-		let locked_dependencies = lockfile.locks.get(lock.id(client).await?).into_iter().flatten().map(|(k, _)| k);
+		let locked_dependencies = lockfile
+			.locks
+			.get(lock.id(client).await?)
+			.into_iter()
+			.flatten()
+			.map(|(k, _)| k);
 
 		// If the dependencies are all the same, we can use the existing lockfile. Otherwise, fall through.
-		if current_dependencies.iter().zip(locked_dependencies).all_equal() {
-			return Ok((artifact.into(), lock))
+		if current_dependencies
+			.iter()
+			.zip(locked_dependencies)
+			.all_equal()
+		{
+			return Ok((artifact.into(), lock));
 		}
 	}
 
@@ -99,7 +114,6 @@ pub async fn get_or_create(
 
 	// Return.
 	Ok((artifact, lock))
-
 }
 
 pub async fn create(
