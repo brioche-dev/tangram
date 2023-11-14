@@ -97,18 +97,21 @@ impl Module {
 			(Self::Document(document), Import::Dependency(dependency)) => {
 				// Get the lock for this package.
 				let (_, lock) = crate::package::get_or_create(client, &document.path()).await?;
+
 				let Some(entry) = lock.dependencies(client).await?.get(dependency) else {
 					return_error!("Could not find dependency in lock file.");
 				};
+
 				// Create the module.
 				let lock = lock.id(client).await?.clone();
 				let package = entry.package.id(client).await?.clone();
-				let path = tg::Subpath::empty();
+				let path = crate::package::ROOT_MODULE_FILE_NAME.parse().unwrap();
 				let module = Self::Normal(Normal {
 					lock,
 					package,
 					path,
 				});
+
 				Ok(module)
 			},
 
