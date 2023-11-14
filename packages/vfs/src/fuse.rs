@@ -94,7 +94,9 @@ struct Request {
 /// A request's data.
 #[derive(Clone, Debug)]
 enum RequestData {
+	BatchForget(sys::fuse_batch_forget_in),
 	Flush(sys::fuse_flush_in),
+	Forget(sys::fuse_forget_in),
 	GetAttr(sys::fuse_getattr_in),
 	Init(sys::fuse_init_in),
 	Lookup(CString),
@@ -116,6 +118,7 @@ enum Response {
 	GetAttr(sys::fuse_attr_out),
 	Init(sys::fuse_init_out),
 	Lookup(sys::fuse_entry_out),
+	None,
 	Open(sys::fuse_open_out),
 	OpenDir(sys::fuse_open_out),
 	Read(Vec<u8>),
@@ -230,6 +233,10 @@ impl Server {
 					break;
 				},
 				sys::fuse_opcode::FUSE_FLUSH => RequestData::Flush(read_data(request_data)?),
+				sys::fuse_opcode::FUSE_FORGET => RequestData::Forget(read_data(request_data)?),
+				sys::fuse_opcode::FUSE_BATCH_FORGET => {
+					RequestData::BatchForget(read_data(request_data)?)
+				},
 				sys::fuse_opcode::FUSE_GETATTR => RequestData::GetAttr(read_data(request_data)?),
 				sys::fuse_opcode::FUSE_INIT => RequestData::Init(read_data(request_data)?),
 				sys::fuse_opcode::FUSE_LOOKUP => {
@@ -280,7 +287,10 @@ impl Server {
 					},
 					Ok(data) => {
 						let data_bytes = match &data {
-							Response::Flush | Response::Release | Response::ReleaseDir => &[],
+							Response::Flush
+							| Response::None
+							| Response::Release
+							| Response::ReleaseDir => &[],
 							Response::GetAttr(data) => data.as_bytes(),
 							Response::Init(data) => data.as_bytes(),
 							Response::Lookup(data) => data.as_bytes(),
@@ -320,6 +330,10 @@ impl Server {
 	async fn handle_request(&self, request: Request) -> Result<Response, i32> {
 		match request.data {
 			RequestData::Flush(data) => self.handle_flush_request(request.header, data).await,
+			RequestData::BatchForget(data) => {
+				self.handle_batch_forget_request(request.header, data).await
+			},
+			RequestData::Forget(data) => self.handle_forget_request(request.header, data).await,
 			RequestData::GetAttr(data) => self.handle_get_attr_request(request.header, data).await,
 			RequestData::Init(data) => self.handle_init_request(request.header, data).await,
 			RequestData::Lookup(data) => self.handle_lookup_request(request.header, data).await,
@@ -353,6 +367,22 @@ impl Server {
 		_data: sys::fuse_flush_in,
 	) -> Result<Response, i32> {
 		Ok(Response::Flush)
+	}
+
+	async fn handle_batch_forget_request(
+		&self,
+		_header: sys::fuse_in_header,
+		_data: sys::fuse_batch_forget_in,
+	) -> Result<Response, i32> {
+		return Ok(Response::None);
+	}
+
+	async fn handle_forget_request(
+		&self,
+		_header: sys::fuse_in_header,
+		_data: sys::fuse_forget_in,
+	) -> Result<Response, i32> {
+		return Ok(Response::None);
 	}
 
 	async fn handle_get_attr_request(
