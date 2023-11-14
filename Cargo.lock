@@ -3318,6 +3318,7 @@ dependencies = [
  "tangram_client",
  "tangram_error",
  "tangram_http",
+ "tangram_lsp",
  "tangram_runtime",
  "tangram_vfs",
  "tempfile",
