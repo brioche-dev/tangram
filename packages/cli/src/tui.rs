@@ -15,7 +15,7 @@ use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
 use tangram_package::PackageExt;
 use tui::widgets::Widget;
-use tangrm_lsp::package::PackageExt;
+use tangram_lsp::package::Ext;
 
 type Backend = tui::backend::CrosstermBackend<std::fs::File>;
 

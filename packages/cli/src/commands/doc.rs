@@ -1,7 +1,6 @@
 use super::PackageArgs;
 use crate::Cli;
 use tangram_error::{Result, WrapErr};
-use tangram_lsp::package::Specifier;
 use tangram_lsp::ROOT_MODULE_FILE_NAME;
 
 /// Generate documentation.
@@ -35,7 +34,7 @@ impl Cli {
 			(module, "tangram.d.ts")
 		} else {
 			// Create the package.
-			let (package, lock) = tangram_lsp::package::new(client, &args.package)
+			let (package, lock) = server.create_package(&args.package)
 				.await
 				.wrap_err("Failed to create the package.")?;
 			// Create the module.

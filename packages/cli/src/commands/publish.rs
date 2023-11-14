@@ -22,7 +22,7 @@ impl Cli {
 		// Create the package.
 		let specifier = tangram_lsp::package::Specifier::Path(args.package);
 		let lsp = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
-		let (package, lock) = lsp.create_package(&specifier).await?;
+		let (package, _) = lsp.create_package(&specifier).await?;
 
 		// Get the package ID.
 		let id = package.id(client).await?;

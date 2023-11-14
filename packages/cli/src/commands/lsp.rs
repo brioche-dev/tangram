@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 use crate::Cli;
-use tangram_client::package::Builder;
-use tangram_error::{Result, WrapErr};
-use tokio::io::AsyncReadExt;
+use tangram_error::Result;
 
 /// Run the language server.
 #[derive(Debug, clap::Args)]
@@ -14,7 +12,7 @@ pub struct Args {
 }
 
 impl Cli {
-	pub async fn command_lsp(&self, args: Args) -> Result<()> {
+	pub async fn command_lsp(&self, _args: Args) -> Result<()> {
 		let client = self.client().await?;
 		let client = client.as_ref();
 

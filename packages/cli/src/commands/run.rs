@@ -41,9 +41,8 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the package.
-		let (package, lock) = tangram_lsp::package::new(client, &args.package)
-			.await
-			.wrap_err("Failed to create the package.")?;
+		let lsp = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+		let (package, lock) = lsp.create_package(&args.package).await?;
 
 		// Create the target.
 		let env = [(

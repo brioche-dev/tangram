@@ -1,6 +1,6 @@
 use super::PackageArgs;
 use crate::Cli;
-use tangram_error::{return_error, Result, WrapErr};
+use tangram_error::{return_error, Result};
 /// Check a package for errors.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
@@ -14,7 +14,7 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
-		let client: std::sync::Arc<dyn Client> = self.client().await?;
+		let client = self.client().await?;
 		let client = client.as_ref();
 
 		// Create the language server.

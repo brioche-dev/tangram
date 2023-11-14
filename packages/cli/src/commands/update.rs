@@ -1,6 +1,5 @@
 use crate::Cli;
 use std::path::PathBuf;
-use tangram_client::package::Builder;
 use tangram_error::{return_error, Result};
 
 /// Update a package's dependencies.
@@ -14,6 +13,6 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_update(&self, _args: Args) -> Result<()> {
-		unimplemented!()
+		return_error!("Not yet implemented.");
 	}
 }
