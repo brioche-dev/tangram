@@ -8,8 +8,7 @@ use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_lsp::{Import, Module};
-use tangram_package::PackageExt;
+use tangram_lsp::{Import, Module, package::Ext};
 
 mod convert;
 mod error;

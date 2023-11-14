@@ -25,7 +25,6 @@ struct Inner {
 	path: std::path::PathBuf,
 	state: tokio::sync::RwLock<State>,
 	task: Task,
-	path: PathBuf,
 }
 
 type Task = (
@@ -157,7 +156,6 @@ impl Server {
 				path: path.to_owned(),
 				state,
 				task,
-				path: path.into(),
 			}),
 		};
 
@@ -194,11 +192,9 @@ impl Server {
 			.unwrap()?;
 		}
 
+		// Unmount.
 		Self::unmount(&self.inner.path).await?;
-<<<<<<< HEAD
 
-=======
->>>>>>> dcf5415 (Update after rebase.)
 		Ok(())
 	}
 
@@ -838,7 +834,6 @@ impl Server {
 
 			let fusermount3 = std::ffi::CString::new("/usr/bin/fusermount3").unwrap();
 			let fuse_commfd = std::ffi::CString::new(fds[0].to_string()).unwrap();
-			let path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
 
 			// Produce a null-terminated path.
 			let path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
