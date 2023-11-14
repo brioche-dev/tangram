@@ -138,12 +138,32 @@ fn get_location(
 		}
 	} else if let Some(module) = file.and_then(|resource_name| Module::from_str(resource_name).ok())
 	{
-		let source = module.to_string();
-		let modules = state.loaded_modules.borrow();
-		let (line, column) = if let Some(source_map) = modules
+		let loaded_modules = state.loaded_modules.borrow();
+		let loaded_module = loaded_modules
 			.iter()
-			.find(|source_map_module| source_map_module.module == module)
-			.and_then(|source_map_module| source_map_module.source_map.as_ref())
+			.find(|source_map_module| source_map_module.module == module);
+		let mut source = "tangram://".to_owned();
+		if let Some(metadata) = loaded_module.and_then(|module| module.metadata.as_ref()) {
+			if let Some(name) = &metadata.name {
+				source.push_str(name);
+				if let Some(version) = &metadata.version {
+					source.push('@');
+					source.push_str(version);
+				}
+				match module {
+					Module::Library(_) => {},
+					Module::Document(_) => {},
+					Module::Normal(normal) => {
+						source.push(':');
+						source.push_str(&normal.path.to_string())
+					},
+				}
+			} else {
+				source.push_str(&module.to_string());
+			}
+		}
+		let (line, column) = if let Some(source_map) =
+			loaded_module.and_then(|source_map_module| source_map_module.source_map.as_ref())
 		{
 			let token = source_map.lookup_token(line, column).unwrap();
 			(token.get_src_line(), token.get_src_col())

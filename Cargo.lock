@@ -3257,6 +3257,7 @@ dependencies = [
  "tangram_client",
  "tangram_error",
  "tangram_lsp",
+ "tangram_package",
  "tempfile",
  "tokio",
  "tokio-util",
