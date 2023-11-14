@@ -11,8 +11,8 @@ use self::{
 		READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res,
 		RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res,
 		SETCLIENTID4args, SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args,
-		SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, FATTR4_ACL,
-		FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
+		SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID,
+		FATTR4_ACL, FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
 		FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
 		FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE,
 		FATTR4_FILES_TOTAL, FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS,
@@ -25,7 +25,7 @@ use self::{
 		FATTR4_SYSTEM, FATTR4_TIME_ACCESS, FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE,
 		FATTR4_TIME_DELTA, FATTR4_TIME_METADATA, FATTR4_TIME_MODIFY, FATTR4_TYPE,
 		FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR, MODE4_XGRP, MODE4_XOTH,
-		MODE4_XUSR, NFS_PROG, NFS_VERS, RPC_VERS,
+		MODE4_XUSR, NFS4_OTHER_SIZE, NFS_PROG, NFS_VERS, READ_BYPASS_STATE_ID, RPC_VERS,
 	},
 	xdr::{Decoder, Encoder, Error},
 };
@@ -68,8 +68,9 @@ type Task = (
 #[derive(Clone)]
 struct State {
 	nodes: BTreeMap<u64, Arc<Node>>,
-	readers: BTreeMap<stateid4, Arc<tokio::sync::RwLock<tg::blob::Reader>>>,
+	readers: BTreeMap<u64, Arc<tokio::sync::RwLock<tg::blob::Reader>>>,
 	clients: HashMap<Vec<u8>, ClientData>,
+	index: u64,
 }
 
 #[derive(Debug)]
@@ -132,6 +133,7 @@ impl Server {
 			nodes,
 			readers: BTreeMap::default(),
 			clients: HashMap::new(),
+			index: 0,
 		});
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let server = Self {
@@ -511,17 +513,17 @@ impl Server {
 			return CLOSE4res::Error(nfsstat4::NFS4ERR_BADHANDLE);
 		};
 
+		let mut stateid = arg.open_stateid;
+
 		if let NodeKind::File { .. } = &node.kind {
 			let mut state = self.inner.state.write().await;
-			if state.readers.remove(&arg.open_stateid).is_none() {
+			let index = u64::from_be_bytes(stateid.other[0..8].try_into().unwrap());
+			if state.readers.remove(&index).is_none() {
 				return CLOSE4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 			}
 		}
 
-		let stateid = stateid4 {
-			seqid: arg.seqid,
-			other: [0; 12],
-		};
+		stateid.seqid = stateid.seqid.increment();
 
 		CLOSE4res::NFS4_OK(stateid)
 	}
@@ -776,10 +778,18 @@ impl Server {
 		};
 
 		ctx.current_file_handle = Some(fh);
-		let stateid = stateid4 {
-			seqid: arg.seqid + 1,
-			other: [0; 12],
+		let seqid = arg.seqid.increment();
+
+		// Create the stateid.
+		let index = {
+			let mut state = self.inner.state.write().await;
+			let index = state.index;
+			state.index += 1;
+			index
 		};
+		let mut other = [0u8; NFS4_OTHER_SIZE];
+		other[0..8].copy_from_slice(&index.to_be_bytes());
+		let stateid = stateid4 { seqid, other };
 
 		if let NodeKind::File { file, .. } = &self.get_node(fh).await.unwrap().kind {
 			let Ok(blob) = file.contents(self.inner.client.as_ref()).await else {
@@ -795,7 +805,7 @@ impl Server {
 				.write()
 				.await
 				.readers
-				.insert(stateid, Arc::new(tokio::sync::RwLock::new(reader)));
+				.insert(index, Arc::new(tokio::sync::RwLock::new(reader)));
 		}
 
 		let cinfo = change_info4 {
@@ -829,33 +839,20 @@ impl Server {
 
 		// RFC 7530 16.23.4:
 		// "If the current file handle is not a regular file, an error will be returned to the client. In the case where the current filehandle represents a directory, NFS4ERR_ISDIR is returned; otherwise, NFS4ERR_INVAL is returned."
-		let file_size = match &node.kind {
+		let (file, file_size) = match &node.kind {
 			NodeKind::Directory { .. } | NodeKind::Root { .. } => {
 				return READ4res::Error(nfsstat4::NFS4ERR_ISDIR)
 			},
 			NodeKind::Symlink { .. } => return READ4res::Error(nfsstat4::NFS4ERR_INVAL),
-			NodeKind::File { size, .. } => *size,
+			NodeKind::File { file, size, .. } => (file, size),
 		};
 
 		// It is allowed for clients to attempt to read past the end of a file, in which case the server returns an empty file.
-		if arg.offset >= file_size {
+		if &arg.offset >= file_size {
 			return READ4res::NFS4_OK(READ4resok {
 				eof: true,
 				data: vec![],
 			});
-		}
-
-		let state = self.inner.state.read().await;
-		let Some(reader) = state.readers.get(&arg.stateid).cloned() else {
-			tracing::error!(?arg.stateid, "No reader is registered for the given id.");
-			return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
-		};
-
-		let mut reader = reader.write().await;
-
-		if let Err(e) = reader.seek(std::io::SeekFrom::Start(arg.offset)).await {
-			tracing::error!(?e, "Failed to seek.");
-			return READ4res::Error(e.into());
 		}
 
 		let read_size = arg
@@ -865,13 +862,48 @@ impl Server {
 			.min(file_size - arg.offset)
 			.to_usize()
 			.unwrap();
-		let mut data = vec![0u8; read_size];
-		if let Err(e) = reader.read_exact(&mut data).await {
-			tracing::error!(?e, "Failed to read from file.");
-			return READ4res::Error(e.into());
-		}
 
-		let eof = (arg.offset + arg.count.to_u64().unwrap()) >= file_size;
+		let (data, eof) = if [ANONYMOUS_STATE_ID, READ_BYPASS_STATE_ID].contains(&arg.stateid) {
+			// We need to create a reader just for this request.
+			let Ok(blob) = file.contents(self.inner.client.as_ref()).await else {
+				tracing::error!("Failed to get file's content.");
+				return READ4res::Error(nfsstat4::NFS4ERR_IO);
+			};
+			let Ok(mut reader) = blob.reader(self.inner.client.as_ref()).await else {
+				tracing::error!("Failed to create blob reader.");
+				return READ4res::Error(nfsstat4::NFS4ERR_IO);
+			};
+			if let Err(e) = reader.seek(std::io::SeekFrom::Start(arg.offset)).await {
+				tracing::error!(?e, "Failed to seek.");
+				return READ4res::Error(e.into());
+			}
+			let mut data = vec![0u8; read_size];
+			if let Err(e) = reader.read_exact(&mut data).await {
+				tracing::error!(?e, "Failed to read from file.");
+				return READ4res::Error(e.into());
+			}
+			let eof = (arg.offset + arg.count.to_u64().unwrap()) >= *file_size;
+			(data, eof)
+		} else {
+			let index = u64::from_be_bytes(arg.stateid.other[0..8].try_into().unwrap());
+			let state = self.inner.state.read().await;
+			let Some(reader) = state.readers.get(&index).cloned() else {
+				tracing::error!(?arg.stateid, "No reader is registered for the given id.");
+				return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
+			};
+			let mut reader = reader.write().await;
+			if let Err(e) = reader.seek(std::io::SeekFrom::Start(arg.offset)).await {
+				tracing::error!(?e, "Failed to seek.");
+				return READ4res::Error(e.into());
+			}
+			let mut data = vec![0u8; read_size];
+			if let Err(e) = reader.read_exact(&mut data).await {
+				tracing::error!(?e, "Failed to read from file.");
+				return READ4res::Error(e.into());
+			}
+			let eof = (arg.offset + arg.count.to_u64().unwrap()) >= *file_size;
+			(data, eof)
+		};
 		READ4res::NFS4_OK(READ4resok { eof, data })
 	}
 

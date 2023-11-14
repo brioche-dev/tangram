@@ -119,14 +119,15 @@ pub type length4 = uint64_t;
 pub type mode4 = uint32_t;
 pub type nfs_cookie4 = uint64_t;
 /// Note: this is an opaque type that is left up to the server to define. We use 64 bit integers.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash)]
 pub struct nfs_fh4(pub u64);
 pub type nfs_lease4 = uint32_t;
 pub type offset4 = uint64_t;
 pub type qop4 = uint32_t;
 pub type sec_oid4 = Vec<u8>;
 
-pub type seqid4 = uint32_t;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct seqid4(uint32_t);
 pub type utf8string = Vec<u8>;
 pub type utf8str_cis = utf8string;
 pub type utf8str_cs = utf8string;
@@ -505,9 +506,19 @@ pub struct cb_client4 {
  */
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct stateid4 {
-	pub seqid: uint32_t,
+	pub seqid: seqid4,
 	pub other: [u8; NFS4_OTHER_SIZE],
 }
+
+pub const ANONYMOUS_STATE_ID: stateid4 = stateid4 {
+	seqid: seqid4(0),
+	other: [0; NFS4_OTHER_SIZE],
+};
+
+pub const READ_BYPASS_STATE_ID: stateid4 = stateid4 {
+	seqid: seqid4(u32::MAX),
+	other: [0xff; NFS4_OTHER_SIZE],
+};
 
 /*
  * Client ID
@@ -1318,6 +1329,31 @@ impl xdr::FromXdr for stateid4 {
 		let seqid = decoder.decode()?;
 		let other = decoder.decode_n()?;
 		Ok(Self { seqid, other })
+	}
+}
+
+impl seqid4 {
+	pub fn increment(&self) -> Self {
+		if self.0 == u32::MAX {
+			Self(1)
+		} else {
+			Self(self.0 + 1)
+		}
+	}
+}
+
+impl xdr::ToXdr for seqid4 {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.0)
+	}
+}
+
+impl xdr::FromXdr for seqid4 {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		Ok(Self(decoder.decode()?))
 	}
 }
 
