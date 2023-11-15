@@ -115,7 +115,11 @@ async fn lock(
 	package: tg::Id,
 ) -> tangram_error::Result<tg::Lock> {
 	// Retrieve the dependencies for the package. The unwrap() is safe since we cannot reach this point if a package has not been added to the context.
-	let dependencies = &context.analysis.get(&package).unwrap().dependencies;
+	let dependencies = context
+		.client
+		.get_package_dependencies(&package)
+		.await?
+		.unwrap_or_default();
 
 	// Lock each dependency.
 	let mut locked_dependencies = BTreeMap::default();
@@ -125,9 +129,20 @@ async fn lock(
 			dependency: dependency.clone(),
 		};
 
-		// The only way for a temporary mark to remain is if the solving algorithm is implemented incorrectly.
-		let Some(Mark::Permanent(Ok(package))) = solution.partial.get(&dependant).cloned() else {
-			return_error!("Internal error, solution is incomplete. package: {dependant:?}");
+		// The solution only contains registry dependencies, so we have to make sure to look up the path dependencies in the set of known packages.
+		let package = if context.is_path_dependency(&dependant) {
+			let dependencies = context.path_dependencies.get(&dependant.package).unwrap();
+			dependencies
+				.get(dependant.dependency.path.as_ref().unwrap())
+				.unwrap()
+				.clone()
+		} else {
+			// The only way for a temporary mark to remain is if the solving algorithm is implemented incorrectly.
+			let Some(Mark::Permanent(Ok(package))) = solution.partial.get(&dependant).cloned()
+			else {
+				return_error!("Internal error, solution is incomplete. package: {dependant:?}");
+			};
+			package
 		};
 
 		let lock = lock(context, solution, package.clone()).await?;

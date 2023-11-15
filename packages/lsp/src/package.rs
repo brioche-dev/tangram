@@ -204,10 +204,15 @@ impl Ext for tg::Directory {
 			// Recurse into the dependencies.
 			for import in &analyze_output.imports {
 				if let Import::Dependency(dependency) = import {
-					// Ignore duplicate dependencies.
-					if dependencies.contains(dependency) {
-						continue;
-					}
+					let mut dependency = dependency.clone();
+
+					// Canonicalize the path dependency to be relative to the root.
+					dependency.path = dependency.path.take().map(|path| {
+						tg::Relpath::from(module_subpath.clone())
+							.parent()
+							.join(path)
+					});
+
 					dependencies.insert(dependency.clone());
 				}
 			}
