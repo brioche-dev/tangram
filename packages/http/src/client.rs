@@ -58,7 +58,9 @@ impl Client {
 
 	async fn sender(&self) -> Result<hyper::client::conn::http2::SendRequest<Outgoing>> {
 		if let Some(sender) = self.inner.sender.read().await.as_ref().cloned() {
-			return Ok(sender);
+			if sender.is_ready() {
+				return Ok(sender);
+			}
 		}
 		match &self.inner.addr {
 			Addr::Inet(inet) if self.inner.tls => {

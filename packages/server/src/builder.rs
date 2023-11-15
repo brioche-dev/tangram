@@ -64,13 +64,17 @@ impl Builder {
 		let mut stop_receiver = self.inner.stop_receiver.clone();
 		let server = self.inner.server.clone();
 		loop {
-			let build_id = tokio::select! {
-				_ = stop_receiver.wait_for(|s| *s) => {
-					return Ok(());
-				}
-				build_id = server.get_build_from_queue() => {
-					build_id?
-				}
+			let result = tokio::select! {
+				_ = stop_receiver.wait_for(|s| *s) => return Ok(()),
+				result = server.get_build_from_queue() => result,
+			};
+			let build_id = match result {
+				Ok(build_id) => build_id,
+				Err(error) => {
+					tracing::error!(?error, "Failed to get a build from queue.");
+					tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+					continue;
+				},
 			};
 			server.start_build(&build_id).await?;
 		}
