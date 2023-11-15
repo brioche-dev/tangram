@@ -38,11 +38,13 @@ fnv = "1"
 futures = "0.3"
 heck = "0.4"
 hex = { version = "0.4", features = ["serde"] }
-http = "0.2"
-http-body = { version = "=1.0.0-rc.2" }
-http-body-util = { version = "=0.1.0-rc.3" }
-hyper = { version = "=1.0.0-rc.4", features = ["full"] }
-hyper-util = { version = "=0.0.0", features = ["auto"] }
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["full"] }
+hyper-util = { git = "https://github.com/hyperium/hyper-util", features = [
+  "auto",
+] }
 im = "15"
 include_dir = "0.7"
 indoc = "2"
@@ -129,14 +131,6 @@ zip = { version = "0.6", default-features = false, features = [
   "bzip2",
   "time",
 ] }
-
-[patch.crates-io]
-http-body = { git = "https://github.com/hyperium/http-body" }
-http-body-util = { git = "https://github.com/hyperium/http-body" }
-hyper-util = { git = "https://github.com/hyperium/hyper-util" }
-tokio = { git = "https://github.com/tokio-rs/tokio" }
-tokio-stream = { git = "https://github.com/tokio-rs/tokio" }
-tokio-util = { git = "https://github.com/tokio-rs/tokio" }
 
 [profile.dev.package.blake3]
 opt-level = 3
