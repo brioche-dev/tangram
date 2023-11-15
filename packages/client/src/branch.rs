@@ -1,5 +1,6 @@
 pub use self::child::Child;
 use crate::{blob, id, object, Blob, Client, Error, Result, WrapErr};
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{stream::FuturesOrdered, TryStreamExt};
@@ -135,8 +136,7 @@ impl Branch {
 		Ok(())
 	}
 
-	#[must_use]
-	#[async_recursion::async_recursion]
+	#[async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
 		let children = object

@@ -1,5 +1,5 @@
 pub use self::specifier::Specifier;
-use crate::Module;
+use crate::{Import, Module};
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use itertools::Itertools;
@@ -27,11 +27,11 @@ pub struct Options {
 	pub update: bool,
 }
 
-/// Lookup the corresponding artifact and lock of a package for a given module path. If the lockfile cannot be found or the `imports_changed` flag is set "true", then a new lockfile is created. If the lockfile's dependencies for the root artifact are different than the dependencies in an existing lockfile, the lockfile is removed and we attempt to lock again.
+/// Look up the corresponding artifact and lock of a package for a given module path. If the lockfile cannot be found or the `imports_changed` flag is set "true", then a new lockfile is created. If the lockfile's dependencies for the root artifact are different than the dependencies in an existing lockfile, the lockfile is removed and we attempt to lock again.
 pub async fn get_or_create(
 	client: &dyn tg::Client,
 	module_path: &Path,
-) -> crate::Result<(tg::Artifact, tg::Lock)> {
+) -> Result<(tg::Artifact, tg::Lock)> {
 	// Find the package path for this module path.
 	let mut package_path = module_path.to_owned();
 	while !package_path.join(ROOT_MODULE_FILE_NAME).exists() {
@@ -189,7 +189,7 @@ impl Ext for tg::Directory {
 
 			// Recurse into the dependencies.
 			for import in &analyze_output.imports {
-				if let crate::Import::Dependency(dependency) = import {
+				if let Import::Dependency(dependency) = import {
 					// Ignore duplicate dependencies.
 					if dependencies.contains(dependency) {
 						continue;
@@ -203,7 +203,7 @@ impl Ext for tg::Directory {
 
 			// Add the unvisited path imports to the queue.
 			for import in &analyze_output.imports {
-				if let crate::Import::Path(import) = import {
+				if let Import::Path(import) = import {
 					let imported_module_subpath = module_subpath
 						.clone()
 						.into_relpath()
@@ -245,7 +245,7 @@ pub trait Ext {
 	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>>;
 }
 
-// Recursively checkin a package, its includes, and path dependencies. Returns the directory artifact of the root package, and fills the path_dependencies table.
+// Recursively check in a package, its includes, and path dependencies. Return the directory artifact of the root package, and fill the path_dependencies table.
 #[async_recursion]
 async fn analyze_package_at_path(
 	client: &dyn tg::Client,
@@ -318,7 +318,7 @@ async fn analyze_package_at_path(
 		// Recurse into the dependencies.
 		for import in &analyze_output.imports {
 			match import {
-				crate::Import::Dependency(dependency) if dependency.path.is_some() => {
+				Import::Dependency(dependency) if dependency.path.is_some() => {
 					// recurse
 					let package_path = package_path
 						.join(dependency.path.as_ref().unwrap().to_string())
@@ -343,7 +343,7 @@ async fn analyze_package_at_path(
 
 		// Add the unvisited path imports to the queue.
 		for import in &analyze_output.imports {
-			if let crate::Import::Path(import) = import {
+			if let Import::Path(import) = import {
 				let imported_module_subpath = module_subpath
 					.clone()
 					.into_relpath()

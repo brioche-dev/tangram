@@ -12,7 +12,7 @@ use super::Analysis;
 #[derive(Debug, Clone)]
 pub enum Error {
 	/// The package does not exist in the registry.
-	PackageOoesNotExist,
+	PackageDoesNotExist,
 
 	/// No version could be found that satisfies all constraints.
 	PackageVersionConflict,
@@ -35,7 +35,7 @@ pub enum Error {
 		erroneous_dependencies: Vec<(tg::Dependency, Error)>,
 	},
 
-	/// Semantive version parsing error.
+	/// Semantic version parsing error.
 	Semver(String),
 
 	/// A tangram error.
@@ -716,7 +716,7 @@ impl Report {
 
 		match error {
 			Error::Semver(semver) => writeln!(f, "there is a semver error: {semver}."),
-			Error::PackageOoesNotExist => {
+			Error::PackageDoesNotExist => {
 				writeln!(f, "no package by that name exists in the registry.\n")
 			},
 			Error::PackageCycleExists { dependant } => {

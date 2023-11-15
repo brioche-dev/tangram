@@ -1,4 +1,5 @@
 use crate::{id, object, template, Artifact, Client, Error, Relpath, Result, Template, WrapErr};
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use std::sync::Arc;
@@ -133,7 +134,7 @@ impl Symlink {
 		Ok(())
 	}
 
-	#[async_recursion::async_recursion]
+	#[async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
 		let target = object.target.data(client).await?;

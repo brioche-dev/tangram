@@ -526,7 +526,7 @@ impl TreeItem {
 			TreeItemStatus::Building => {
 				let state = SPINNER_POSITION.load(std::sync::atomic::Ordering::SeqCst);
 				let state = (state / SPINNER_FRAMES_PER_UPDATE) % SPINNER.len();
-				SPINNER[state].to_string().gray()
+				SPINNER[state].to_string().blue()
 			},
 			TreeItemStatus::Failure => "✗".red(),
 			TreeItemStatus::Success => "✓".green(),

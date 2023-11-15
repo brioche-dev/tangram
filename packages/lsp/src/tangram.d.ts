@@ -244,7 +244,7 @@ declare namespace tg {
 			| ArgObject
 			| Array<Arg>;
 
-		export type ArgObject = {
+		type ArgObject = {
 			contents: Blob.Arg;
 			executable?: boolean;
 			references?: Array<Artifact>;
@@ -259,6 +259,7 @@ declare namespace tg {
 	/** Create a branch. */
 	export let branch: (...args: Args<Branch.Arg>) => Promise<Branch>;
 
+	/** A branch. */
 	export class Branch {
 		/** Get a branch with an ID. */
 		static withId(id: Branch.Id): Branch;
@@ -302,7 +303,7 @@ declare namespace tg {
 	export namespace Branch {
 		export type Arg = undefined | Branch | ArgObject | Array<Arg>;
 
-		export type ArgObject = {
+		type ArgObject = {
 			children?: Array<Child>;
 		};
 
@@ -361,7 +362,7 @@ declare namespace tg {
 			| ArgObject
 			| Array<Arg>;
 
-		export type ArgObject = {
+		type ArgObject = {
 			bytes?: Uint8Array;
 		};
 
@@ -496,8 +497,6 @@ declare namespace tg {
 		value: T,
 	) => Promise<Resolved<T>>;
 
-	export type MaybePromise<T> = T | Promise<T>;
-
 	/**
 	 * This computed type takes a type `T` and returns the union of all possible types that will return `T` by calling `resolve`. Here are some examples:
 	 *
@@ -564,6 +563,8 @@ declare namespace tg {
 		      ? Resolved<U>
 		      : never;
 
+	export type MaybePromise<T> = T | Promise<T>;
+
 	/** Sleep for the specified duration in seconds. */
 	export let sleep: (duration: number) => Promise<void>;
 
@@ -627,7 +628,7 @@ declare namespace tg {
 	export namespace System {
 		export type Arg = System | ArgObject;
 
-		export type ArgObject = {
+		type ArgObject = {
 			arch: System.Arch;
 			os: System.Os;
 		};
@@ -738,7 +739,7 @@ declare namespace tg {
 			| ArgObject
 			| Array<Arg>;
 
-		export type ArgObject = {
+		type ArgObject = {
 			/** The system to build the target on. */
 			host?: System;
 

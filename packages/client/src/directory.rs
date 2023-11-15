@@ -138,7 +138,7 @@ impl Directory {
 		Ok(())
 	}
 
-	#[async_recursion::async_recursion]
+	#[async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
 		let entries = object

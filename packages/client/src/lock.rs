@@ -1,6 +1,7 @@
 use crate::{
 	id, object, return_error, Artifact, Client, Dependency, Error, Relpath, Result, WrapErr,
 };
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{stream::FuturesUnordered, TryStreamExt};
@@ -48,13 +49,6 @@ pub struct Data {
 	pub dependencies: BTreeMap<Dependency, data::Entry>,
 }
 
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Lockfile {
-	pub paths: BTreeMap<Relpath, Id>,
-	pub locks: BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
-}
-
 pub mod data {
 	use crate::artifact;
 
@@ -63,6 +57,12 @@ pub mod data {
 		pub package: artifact::Id,
 		pub lock: super::Id,
 	}
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Lockfile {
+	pub paths: BTreeMap<Relpath, Id>,
+	pub locks: BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
 }
 
 impl Id {
@@ -110,7 +110,6 @@ impl Lock {
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
-	#[async_recursion::async_recursion]
 	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
 		self.load(client).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
@@ -163,7 +162,7 @@ impl Lock {
 		Ok(())
 	}
 
-	#[async_recursion::async_recursion]
+	#[async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
 		let dependencies = object
@@ -182,6 +181,35 @@ impl Lock {
 impl Lock {
 	pub async fn dependencies(&self, client: &dyn Client) -> Result<&BTreeMap<Dependency, Entry>> {
 		Ok(&self.object(client).await?.dependencies)
+	}
+}
+
+impl Entry {
+	pub async fn data(&self, client: &dyn Client) -> Result<data::Entry> {
+		Ok(data::Entry {
+			package: self.package.id(client).await?.clone(),
+			lock: self.lock.id(client).await?.clone(),
+		})
+	}
+}
+
+impl Data {
+	pub fn serialize(&self) -> Result<Bytes> {
+		serde_json::to_vec(self)
+			.map(Into::into)
+			.wrap_err("Failed to serialize the data.")
+	}
+
+	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
+		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
+	}
+
+	#[must_use]
+	pub fn children(&self) -> Vec<object::Id> {
+		self.dependencies
+			.values()
+			.flat_map(|entry| [entry.package.clone().into(), entry.lock.clone().into()])
+			.collect()
 	}
 }
 
@@ -224,35 +252,6 @@ impl Lockfile {
 
 		// Return the lockfile.
 		Ok(Self { paths, locks })
-	}
-}
-
-impl Data {
-	pub fn serialize(&self) -> Result<Bytes> {
-		serde_json::to_vec(self)
-			.map(Into::into)
-			.wrap_err("Failed to serialize the data.")
-	}
-
-	pub fn deserialize(bytes: &Bytes) -> Result<Self> {
-		serde_json::from_reader(bytes.as_ref()).wrap_err("Failed to deserialize the data.")
-	}
-
-	#[must_use]
-	pub fn children(&self) -> Vec<object::Id> {
-		self.dependencies
-			.values()
-			.flat_map(|entry| [entry.package.clone().into(), entry.lock.clone().into()])
-			.collect()
-	}
-}
-
-impl Entry {
-	pub async fn data(&self, client: &dyn Client) -> Result<data::Entry> {
-		Ok(data::Entry {
-			package: self.package.id(client).await?.clone(),
-			lock: self.lock.id(client).await?.clone(),
-		})
 	}
 }
 

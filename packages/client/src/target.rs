@@ -170,32 +170,41 @@ impl Target {
 
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
+		let host = object.host.clone();
+		let executable = object.executable.id(client).await?;
+		let lock = if let Some(lock) = &object.lock {
+			Some(lock.id(client).await?.clone())
+		} else {
+			None
+		};
+		let name = object.name.clone();
+		let env = object
+			.env
+			.iter()
+			.map(|(key, value)| async move {
+				let key = key.clone();
+				let value = value.data(client).await?;
+				Ok::<_, Error>((key, value))
+			})
+			.collect::<FuturesUnordered<_>>()
+			.try_collect()
+			.await?;
+		let args = object
+			.args
+			.iter()
+			.map(|value| value.data(client))
+			.collect::<FuturesOrdered<_>>()
+			.try_collect()
+			.await?;
+		let checksum = object.checksum.clone();
 		Ok(Data {
-			host: object.host.clone(),
-			executable: object.executable.id(client).await?,
-			lock: if let Some(lock) = &object.lock {
-				Some(lock.id(client).await?.clone())
-			} else {
-				None
-			},
-			name: object.name.clone(),
-			env: object
-				.env
-				.iter()
-				.map(|(key, value)| async move {
-					Ok::<_, Error>((key.clone(), value.data(client).await?))
-				})
-				.collect::<FuturesUnordered<_>>()
-				.try_collect()
-				.await?,
-			args: object
-				.args
-				.iter()
-				.map(|value| value.data(client))
-				.collect::<FuturesOrdered<_>>()
-				.try_collect()
-				.await?,
-			checksum: object.checksum.clone(),
+			host,
+			executable,
+			lock,
+			name,
+			env,
+			args,
+			checksum,
 		})
 	}
 }

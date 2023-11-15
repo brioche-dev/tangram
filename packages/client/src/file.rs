@@ -1,4 +1,5 @@
 use crate::{artifact, blob, id, object, Artifact, Blob, Client, Error, Result, WrapErr};
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{stream::FuturesOrdered, TryStreamExt};
@@ -145,8 +146,7 @@ impl File {
 		Ok(())
 	}
 
-	#[must_use]
-	#[async_recursion::async_recursion]
+	#[async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
 		let contents = object.contents.id(client).await?.clone();
