@@ -126,6 +126,7 @@ fn get_location(
 		if let Some(global_source_map) = state.global_source_map.as_ref() {
 			let token = global_source_map.lookup_token(line, column).unwrap();
 			let source = token.get_source().unwrap().to_owned();
+			let source = format!("[runtime]:{source}");
 			let line = token.get_src_line();
 			let column = token.get_src_col();
 			Some(tangram_error::Location {
@@ -141,30 +142,21 @@ fn get_location(
 		let loaded_modules = state.loaded_modules.borrow();
 		let loaded_module = loaded_modules
 			.iter()
-			.find(|source_map_module| source_map_module.module == module);
-		let mut source = "tangram://".to_owned();
-		if let Some(metadata) = loaded_module.and_then(|module| module.metadata.as_ref()) {
-			if let Some(name) = &metadata.name {
-				source.push_str(name);
-				if let Some(version) = &metadata.version {
-					source.push('@');
-					source.push_str(version);
-				}
-				match module {
-					Module::Library(_) => {},
-					Module::Document(_) => {},
-					Module::Normal(normal) => {
-						source.push(':');
-						source.push_str(&normal.path.to_string())
-					},
-				}
-			} else {
-				source.push_str(&module.to_string());
-			}
-		}
-		let (line, column) = if let Some(source_map) =
-			loaded_module.and_then(|source_map_module| source_map_module.source_map.as_ref())
-		{
+			.find(|loaded_module| loaded_module.module == module)
+			.unwrap();
+		let name = loaded_module
+			.metadata
+			.as_ref()
+			.and_then(|metadata| metadata.name.as_deref())
+			.unwrap_or("<unknown>");
+		let version = loaded_module
+			.metadata
+			.as_ref()
+			.and_then(|metadata| metadata.version.as_deref())
+			.unwrap_or("<unknown>");
+		let path = &loaded_module.module.unwrap_normal_ref().path;
+		let source = format!("{name}@{version}:{path}");
+		let (line, column) = if let Some(source_map) = loaded_module.source_map.as_ref() {
 			let token = source_map.lookup_token(line, column).unwrap();
 			(token.get_src_line(), token.get_src_col())
 		} else {

@@ -1,4 +1,4 @@
-use self::{builder::Builder, progress::Progress};
+use self::builder::Builder;
 use async_trait::async_trait;
 use bytes::Bytes;
 use database::Database;
@@ -21,7 +21,6 @@ mod clean;
 mod database;
 mod migrations;
 mod object;
-mod progress;
 mod tracker;
 
 /// A server.
@@ -67,6 +66,37 @@ struct Inner {
 
 	/// The VFS server.
 	vfs: std::sync::Mutex<Option<tangram_vfs::Server>>,
+}
+
+#[derive(Clone, Debug)]
+struct Progress {
+	inner: Arc<ProgressInner>,
+}
+
+#[derive(Debug)]
+struct ProgressInner {
+	target: tg::Target,
+	children: std::sync::Mutex<ChildrenState>,
+	log: Arc<tokio::sync::Mutex<LogState>>,
+	result: ResultState,
+}
+
+#[derive(Debug)]
+struct ChildrenState {
+	children: Vec<tg::Build>,
+	sender: Option<tokio::sync::broadcast::Sender<tg::Build>>,
+}
+
+#[derive(Debug)]
+struct LogState {
+	file: tokio::fs::File,
+	sender: Option<tokio::sync::broadcast::Sender<Bytes>>,
+}
+
+#[derive(Debug)]
+struct ResultState {
+	result: tokio::sync::watch::Receiver<Option<Result<tg::Value>>>,
+	sender: tokio::sync::watch::Sender<Option<Result<tg::Value>>>,
 }
 
 pub struct Options {

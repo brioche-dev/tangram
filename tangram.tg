@@ -1,3 +1,8 @@
+export let metadata = {
+	name: "tangram2",
+	version: "0.0.0",
+}
+
 export default tg.target(() => {
 	tg.log("Hello, World!");
 	return {

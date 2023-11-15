@@ -180,14 +180,6 @@ impl Cli {
 			.wrap_err("Failed to spawn the server.")?;
 		Ok(())
 	}
-
-	fn token(&self) -> Result<String> {
-		self.token
-			.read()
-			.unwrap()
-			.clone()
-			.wrap_err("You are not logged in. Please run `tangram login` to log in.")
-	}
 }
 
 fn initialize_v8() {

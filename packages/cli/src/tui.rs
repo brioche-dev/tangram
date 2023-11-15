@@ -13,8 +13,8 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tui::widgets::Widget;
 use tangram_lsp::package::Ext;
+use tui::{style::Stylize, widgets::Widget};
 
 pub struct Tui {
 	#[allow(dead_code)]
@@ -526,10 +526,10 @@ impl TreeItem {
 			TreeItemStatus::Building => {
 				let state = SPINNER_POSITION.load(std::sync::atomic::Ordering::SeqCst);
 				let state = (state / SPINNER_FRAMES_PER_UPDATE) % SPINNER.len();
-				SPINNER[state]
+				SPINNER[state].to_string().gray()
 			},
-			TreeItemStatus::Failure => '✗',
-			TreeItemStatus::Success => '✓',
+			TreeItemStatus::Failure => "✗".red(),
+			TreeItemStatus::Success => "✓".green(),
 		};
 		let title = self
 			.inner
@@ -537,7 +537,14 @@ impl TreeItem {
 			.title
 			.clone()
 			.unwrap_or_else(|| "<unknown>".to_owned());
-		let title = tui::text::Text::from(format!("{prefix}{disclosure} {status} {title}"));
+		let title = tui::text::Line::from(vec![
+			prefix.into(),
+			disclosure.into(),
+			" ".into(),
+			status,
+			" ".into(),
+			title.into(),
+		]);
 		let style = if self.inner.borrow().selected {
 			tui::style::Style::default()
 				.bg(tui::style::Color::White)

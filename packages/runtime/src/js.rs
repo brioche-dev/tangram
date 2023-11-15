@@ -32,15 +32,10 @@ type Futures = FuturesUnordered<
 	LocalBoxFuture<'static, (Result<Box<dyn ToV8>>, v8::Global<v8::PromiseResolver>)>,
 >;
 
-struct Metadata {
-	name: Option<String>,
-	version: Option<String>,
-}
-
 struct LoadedModule {
 	module: Module,
 	source_map: Option<SourceMap>,
-	metadata: Option<Metadata>,
+	metadata: Option<tg::Metadata>,
 	v8_identity_hash: NonZeroI32,
 	v8_module: v8::Global<v8::Module>,
 }
@@ -454,37 +449,13 @@ fn load_module<'s>(
 		let client = state.client.clone_box();
 		let module = module.clone();
 		async move {
-			let metadata = match module {
-				Module::Library(_) => Ok(None),
-				Module::Document(_) => Ok(None),
-				Module::Normal(module) => {
-					let package =
-						tg::Directory::with_id(module.package.clone().try_into().unwrap());
-					let metadata = package
-						.metadata(client.as_ref())
-						.await
-						.wrap_err("Failed to get the package metadata.");
-					metadata.map(Option::Some)
-				},
-			};
+			let module = module.unwrap_normal_ref();
+			let package = tg::Directory::with_id(module.package.clone().try_into().unwrap());
+			let metadata = package.metadata(client.as_ref()).await.ok();
 			sender.send(metadata).unwrap();
 		}
 	});
-	let metadata = match receiver
-		.recv()
-		.unwrap()
-		.wrap_err_with(|| format!(r#"Failed to get the metadata for module "{module}"."#))
-	{
-		Ok(metadata) => metadata.map(|metadata| Metadata {
-			name: metadata.name,
-			version: metadata.version,
-		}),
-		Err(error) => {
-			let exception = error::to_exception(scope, &error);
-			scope.throw_exception(exception);
-			return None;
-		},
-	};
+	let metadata = receiver.recv().unwrap();
 
 	// Cache the module.
 	state.loaded_modules.borrow_mut().push(LoadedModule {

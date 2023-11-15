@@ -50,7 +50,7 @@ pub struct Data {
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct LockFile {
+pub struct Lockfile {
 	pub paths: BTreeMap<Relpath, Id>,
 	pub locks: BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
 }
@@ -185,8 +185,8 @@ impl Lock {
 	}
 }
 
-impl LockFile {
-	/// Recursively create a [`LockFile`] from an iterator of `(Relpath, Lock)`.
+impl Lockfile {
+	/// Recursively create a [`Lockfile`] from an iterator of `(Relpath, Lock)`.
 	pub async fn with_paths(
 		client: &dyn Client,
 		paths_: impl IntoIterator<Item = (Relpath, Lock)>,

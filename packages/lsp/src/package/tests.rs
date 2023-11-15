@@ -748,17 +748,14 @@ impl tg::Client for MockClient {
 		self.client.try_get_build_result(id).await
 	}
 
-	async fn set_build_result(
+	async fn finish_build(
 		&self,
-		build_id: &tg::build::Id,
+		id: &tg::build::Id,
 		result: tangram_error::Result<tg::Value>,
 	) -> tangram_error::Result<()> {
-		self.client.set_build_result(build_id, result).await
+		self.client.finish_build(id, result).await
 	}
 
-	async fn finish_build(&self, id: &tg::build::Id) -> tangram_error::Result<()> {
-		self.client.finish_build(id).await
-	}
 	async fn create_login(&self) -> tangram_error::Result<tg::user::Login> {
 		self.client.create_login().await
 	}

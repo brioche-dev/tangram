@@ -179,19 +179,6 @@ impl Handle {
 		}
 	}
 
-	pub async fn store(&self, client: &dyn Client) -> Result<()> {
-		match self {
-			Self::Leaf(object) => object.store(client).await,
-			Self::Branch(object) => object.store(client).await,
-			Self::Directory(object) => object.store(client).await,
-			Self::File(object) => object.store(client).await,
-			Self::Symlink(object) => object.store(client).await,
-			Self::Lock(object) => object.store(client).await,
-			Self::Target(object) => object.store(client).await,
-			Self::Build(object) => object.store(client).await,
-		}
-	}
-
 	#[async_recursion]
 	pub async fn push(&self, client: &dyn Client, remote: &dyn Client) -> Result<()> {
 		let id = self.id(client).await?;

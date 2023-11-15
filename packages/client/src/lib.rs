@@ -18,7 +18,7 @@ pub use self::{
 	lock::Lock,
 	mutation::Mutation,
 	object::Object,
-	package::Package,
+	package::{Metadata, Package},
 	path::{Relpath, Subpath},
 	symlink::Symlink,
 	system::System,

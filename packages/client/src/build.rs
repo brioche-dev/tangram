@@ -3,7 +3,7 @@ use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{
-	stream::{self, BoxStream, FuturesUnordered},
+	stream::{self, BoxStream, FuturesOrdered},
 	StreamExt, TryStreamExt,
 };
 use std::sync::Arc;
@@ -129,19 +129,6 @@ impl Build {
 		Ok(true)
 	}
 
-	pub async fn store(&self, client: &dyn Client) -> Result<()> {
-		let data = self.data(client).await?;
-		let bytes = data.serialize()?;
-		let id = self.state.read().unwrap().id.clone().unwrap();
-		client
-			.try_put_object(&id.clone().into(), &bytes)
-			.await
-			.wrap_err("Failed to put the object.")?
-			.ok()
-			.wrap_err("Expected all children to be stored.")?;
-		Ok(())
-	}
-
 	#[async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
@@ -149,11 +136,8 @@ impl Build {
 		let children = object
 			.children
 			.iter()
-			.map(|build| async {
-				build.store(client).await?;
-				Ok::<_, Error>(build.id().clone())
-			})
-			.collect::<FuturesUnordered<_>>()
+			.map(|build| async { Ok::<_, Error>(build.id().clone()) })
+			.collect::<FuturesOrdered<_>>()
 			.try_collect()
 			.await?;
 		let log = object.log.id(client).await?;
@@ -171,23 +155,33 @@ impl Build {
 }
 
 impl Build {
-	pub fn new(
+	pub async fn new(
+		client: &dyn Client,
 		id: Id,
 		target: Target,
 		children: Vec<Build>,
 		log: Blob,
 		result: Result<Value>,
-	) -> Self {
+	) -> Result<Self> {
 		let object = Object {
 			target,
 			children,
 			log,
 			result,
 		};
-		Self::with_state(State {
-			id: Some(id),
+		let build = Self::with_state(State {
+			id: Some(id.clone()),
 			object: Some(object),
-		})
+		});
+		let data = build.data(client).await?;
+		let bytes = data.serialize()?;
+		client
+			.try_put_object(&id.clone().into(), &bytes)
+			.await
+			.wrap_err("Failed to put the object.")?
+			.ok()
+			.wrap_err("Expected all children to be stored.")?;
+		Ok(build)
 	}
 
 	pub async fn target(&self, client: &dyn Client) -> Result<Target> {

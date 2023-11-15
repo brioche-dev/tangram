@@ -13,10 +13,9 @@ use tg::{package::Metadata, Dependency, Relpath, Subpath};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub mod specifier;
-pub mod version;
-
 #[cfg(test)]
 mod tests;
+pub mod version;
 
 /// The file name of the root module in a package.
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
@@ -41,7 +40,9 @@ pub async fn get_or_create(
 		}
 	}
 
-	let package_path = package_path.canonicalize().wrap_err("Failed to canonicalize path.")?;
+	let package_path = package_path
+		.canonicalize()
+		.wrap_err("Failed to canonicalize path.")?;
 
 	// First, try and read from an existing lockfile.
 	let lockfile_path = package_path.join(LOCKFILE_FILE_NAME);
@@ -54,8 +55,8 @@ pub async fn get_or_create(
 		file.read_to_end(&mut contents)
 			.await
 			.wrap_err("Failed to read lockfile contents.")?;
-		let lockfile: tg::lock::LockFile =
-			serde_json::from_slice(&contents).wrap_err("Failed to deserialize lockfile.")?;
+		let lockfile: tg::lock::Lockfile =
+			serde_json::from_slice(&contents).wrap_err("Failed to deserialize the lockfile.")?;
 
 		// Get the root lock.
 		let lock = lockfile
@@ -119,7 +120,7 @@ pub async fn get_or_create(
 pub async fn create(
 	client: &dyn tg::Client,
 	specifier: &Specifier,
-) -> Result<(tg::Artifact, tg::Lock, tg::lock::LockFile)> {
+) -> Result<(tg::Artifact, tg::Lock, tg::lock::Lockfile)> {
 	let (root_artifact, path_dependencies) = match specifier {
 		Specifier::Path(path) => {
 			// Canonicalize.
@@ -158,7 +159,7 @@ pub async fn create(
 
 	// Get the root lock and create a lockfile.
 	let root_lock = paths[0].1.clone();
-	let lockfile = tg::lock::LockFile::with_paths(client, paths).await?;
+	let lockfile = tg::lock::Lockfile::with_paths(client, paths).await?;
 	Ok((root_artifact.into(), root_lock, lockfile))
 }
 

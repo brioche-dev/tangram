@@ -1,12 +1,15 @@
 use super::Server;
-use crate::Progress;
+use crate::{ChildrenState, LogState, Progress, ProgressInner, ResultState};
 use bytes::Bytes;
 use futures::{
 	stream::{self, BoxStream},
 	StreamExt, TryStreamExt,
 };
+use std::sync::Arc;
 use tangram_client as tg;
-use tangram_error::{error, return_error, Result, WrapErr};
+use tangram_error::{error, return_error, Result, Wrap, WrapErr};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio_stream::wrappers::BroadcastStream;
 
 impl Server {
 	/// Attempt to get the build for a target.
@@ -84,9 +87,41 @@ impl Server {
 			}
 		}
 
-		// Otherwise, create the progress for the new build.
+		// Otherwise, create a new build.
 		let build_id = tg::build::Id::new();
-		let progress = Progress::new(target)?;
+
+		// Create the children state.
+		let children = std::sync::Mutex::new(ChildrenState {
+			children: Vec::new(),
+			sender: Some(tokio::sync::broadcast::channel(1024).0),
+		});
+
+		// Create the log state.
+		let log = Arc::new(tokio::sync::Mutex::new(LogState {
+			file: tokio::fs::File::from_std(
+				tempfile::tempfile().wrap_err("Failed to create the temporary file.")?,
+			),
+			sender: Some(tokio::sync::broadcast::channel(1024).0),
+		}));
+
+		// Create the result state.
+		let (sender, receiver) = tokio::sync::watch::channel(None);
+		let result = ResultState {
+			sender,
+			result: receiver,
+		};
+
+		// Create the progress.
+		let progress = Progress {
+			inner: Arc::new(ProgressInner {
+				target,
+				children,
+				log,
+				result,
+			}),
+		};
+
+		// Add the progress to the server.
 		self.inner
 			.progress
 			.write()
@@ -179,7 +214,7 @@ impl Server {
 		// Attempt to get the target from the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
-			return Ok(Some(progress.target().id(self).await?.clone()));
+			return Ok(Some(progress.inner.target.id(self).await?.clone()));
 		}
 
 		// Attempt to get the target from the object.
@@ -212,11 +247,17 @@ impl Server {
 		// Attempt to get the children from the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
+			let state = progress.inner.children.lock().unwrap();
+			let old = stream::iter(state.children.clone()).map(Ok);
+			let new = if let Some(sender) = state.sender.as_ref() {
+				BroadcastStream::new(sender.subscribe())
+					.map_err(|err| err.wrap("Failed to create the stream."))
+					.boxed()
+			} else {
+				stream::empty().boxed()
+			};
 			return Ok(Some(
-				progress
-					.children()
-					.map_ok(|build| build.id().clone())
-					.boxed(),
+				old.chain(new).map_ok(|build| build.id().clone()).boxed(),
 			));
 		}
 
@@ -255,7 +296,12 @@ impl Server {
 		// Attempt to add the child to the progress.
 		let progress = self.inner.progress.read().unwrap().get(build_id).cloned();
 		if let Some(progress) = progress {
-			progress.add_child(&tg::Build::with_id(child_id.clone()));
+			let child = tg::Build::with_id(child_id.clone());
+			let mut state = progress.inner.children.lock().unwrap();
+			if let Some(sender) = state.sender.as_ref().cloned() {
+				state.children.push(child.clone());
+				sender.send(child.clone()).ok();
+			}
 			return Ok(());
 		};
 
@@ -275,7 +321,32 @@ impl Server {
 		// Attempt to get the log from the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
-			return Ok(Some(progress.log().await?));
+			let mut state = progress.inner.log.lock().await;
+			state
+				.file
+				.rewind()
+				.await
+				.wrap_err("Failed to rewind the log file.")?;
+			let mut old = Vec::new();
+			state
+				.file
+				.read_to_end(&mut old)
+				.await
+				.wrap_err("Failed to read the log.")?;
+			let old = stream::once(async move { Ok(old.into()) });
+			state
+				.file
+				.seek(std::io::SeekFrom::End(0))
+				.await
+				.wrap_err("Failed to seek in the log file.")?;
+			let new = if let Some(sender) = state.sender.as_ref() {
+				BroadcastStream::new(sender.subscribe())
+					.map_err(|err| err.wrap("Failed to create the stream."))
+					.boxed()
+			} else {
+				stream::empty().boxed()
+			};
+			return Ok(Some(old.chain(new).boxed()));
 		}
 
 		// Attempt to get the log from the object.
@@ -302,17 +373,30 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn add_build_log(&self, id: &tg::build::Id, log: Bytes) -> Result<()> {
+	pub async fn add_build_log(&self, id: &tg::build::Id, bytes: Bytes) -> Result<()> {
 		// Attempt to add the log to the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
-			progress.add_log(log).await?;
+			let mut state = progress.inner.log.lock().await;
+			if let Some(sender) = state.sender.as_ref().cloned() {
+				state
+					.file
+					.seek(std::io::SeekFrom::End(0))
+					.await
+					.wrap_err("Failed to seek.")?;
+				state
+					.file
+					.write_all(&bytes)
+					.await
+					.wrap_err("Failed to write the log.")?;
+				sender.send(bytes).ok();
+			}
 			return Ok(());
 		}
 
 		// Attempt to add the log to the remote.
 		if let Some(remote) = self.inner.remote.as_ref() {
-			remote.add_build_log(id, log).await?;
+			remote.add_build_log(id, bytes).await?;
 			return Ok(());
 		}
 
@@ -326,7 +410,18 @@ impl Server {
 		// Attempt to await the result from the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
-			return Ok(Some(progress.result().await));
+			return Ok(Some(
+				progress
+					.inner
+					.result
+					.result
+					.clone()
+					.wait_for(Option::is_some)
+					.await
+					.unwrap()
+					.clone()
+					.unwrap(),
+			));
 		}
 
 		// Attempt to get the result from the object.
@@ -353,8 +448,24 @@ impl Server {
 	}
 
 	pub async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
-		self.finish_build(id, Err(error!("The build was cancelled.")))
-			.await?;
+		// Attempt to finish the build on the progress.
+		let progress = self.inner.progress.read().unwrap().get(id).cloned();
+		if let Some(progress) = progress {
+			let result = Err(error!("The build was cancelled."));
+			self.finish_build_with_progress(&progress, id, result)
+				.await?;
+			return Ok(());
+		}
+
+		// Attempt to cancel the build on the remote.
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+			remote.cancel_build(id).await?;
+			return Ok(());
+		}
+
 		Ok(())
 	}
 
@@ -362,23 +473,9 @@ impl Server {
 		// Attempt to finish the build on the progress.
 		let progress = self.inner.progress.read().unwrap().get(id).cloned();
 		if let Some(progress) = progress {
-			// Finish the build.
-			let output = progress.finish(self, result.clone()).await?;
-
-			// Create the build.
-			let build = tg::Build::new(
-				id.clone(),
-				output.target,
-				output.children,
-				output.log,
-				output.result,
-			);
-
-			// Store the build.
-			build.store(self).await?;
-
-			// Remove the build's progress.
-			self.inner.progress.write().unwrap().remove(id);
+			self.finish_build_with_progress(&progress, id, result)
+				.await?;
+			return Ok(());
 		}
 
 		// Attempt to finish the build on the remote.
@@ -387,7 +484,50 @@ impl Server {
 				break 'a;
 			};
 			remote.finish_build(id, result).await?;
+			return Ok(());
 		}
+
+		Ok(())
+	}
+
+	async fn finish_build_with_progress(
+		&self,
+		progress: &Progress,
+		id: &tg::build::Id,
+		result: Result<tg::Value>,
+	) -> Result<()> {
+		// Get the target.
+		let target = progress.inner.target.clone();
+
+		// Get the children.
+		let children = {
+			let mut state = progress.inner.children.lock().unwrap();
+			state.sender.take();
+			state.children.clone()
+		};
+
+		// Get the log.
+		let log = {
+			let mut state = progress.inner.log.lock().await;
+			state.sender.take();
+			state.file.rewind().await.wrap_err("Failed to seek.")?;
+			tg::Blob::with_reader(self, &mut state.file).await?
+		};
+
+		// Create the build.
+		let _build =
+			tg::Build::new(self, id.clone(), target, children, log, result.clone()).await?;
+
+		// Set the result.
+		progress
+			.inner
+			.result
+			.sender
+			.send(Some(result.clone()))
+			.unwrap();
+
+		// Remove the build's progress.
+		self.inner.progress.write().unwrap().remove(id);
 
 		Ok(())
 	}
