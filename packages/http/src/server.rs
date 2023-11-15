@@ -8,7 +8,7 @@ use futures::{
 	FutureExt, TryStreamExt,
 };
 use http_body_util::{BodyExt, StreamBody};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use itertools::Itertools;
 use std::{convert::Infallible, path::PathBuf, sync::Arc};
 use tangram_client as tg;
@@ -86,6 +86,7 @@ impl Server {
 	}
 
 	async fn serve(self, addr: Addr) -> Result<()> {
+		// Create the listener.
 		let listener = match &addr {
 			Addr::Inet(inet) => Either::Left(
 				TcpListener::bind(inet.to_string())
@@ -96,8 +97,12 @@ impl Server {
 				UnixListener::bind(path).wrap_err("Failed to create the UNIX listener.")?,
 			),
 		};
+
 		tracing::info!("🚀 Serving on {addr:?}.");
+
+		// Loop forever, accepting connections.
 		loop {
+			// Accept a new connection.
 			let stream = TokioIo::new(match &listener {
 				Either::Left(listener) => Either::Left(
 					listener
@@ -114,26 +119,32 @@ impl Server {
 						.0,
 				),
 			});
-			let server = self.clone();
-			let connection =
-				hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new())
-					.serve_connection(
-						stream,
-						hyper::service::service_fn(move |request| {
-							let server = server.clone();
-							async move {
-								tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
-								let response = server.handle_request(request).await;
-								tracing::info!(status = ?response.status(), "Sending response.");
-								Ok::<_, Infallible>(response)
-							}
-						}),
-					);
-			tokio::spawn(async move { connection.await.ok() });
+
+			// Create the service.
+			let service = hyper::service::service_fn({
+				let server = self.clone();
+				move |request| {
+					let server = server.clone();
+					async move { Ok::<_, Infallible>(server.handle_request(request).await) }
+				}
+			});
+
+			// Create the connection.
+			let connection = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+				.serve_connection(stream, service);
+
+			// Spawn the connection.
+			tokio::spawn(async move {
+				if let Err(error) = connection.await {
+					tracing::error!(?error, "Failed to serve the connection.");
+				}
+			});
 		}
 	}
 
 	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
+		tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
+
 		let method = request.method().clone();
 		let path_components = request.uri().path().split('/').skip(1).collect_vec();
 		let response = match (method, path_components.as_slice()) {
@@ -258,7 +269,8 @@ impl Server {
 			},
 		}
 		.await;
-		match response {
+
+		let response = match response {
 			None => http::Response::builder()
 				.status(http::StatusCode::NOT_FOUND)
 				.body(full("Not found."))
@@ -272,7 +284,11 @@ impl Server {
 					.unwrap()
 			},
 			Some(Ok(response)) => response,
-		}
+		};
+
+		tracing::info!(status = ?response.status(), "Sending response.");
+
+		response
 	}
 
 	async fn handle_get_status_request(

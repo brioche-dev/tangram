@@ -10,6 +10,7 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
+async-recursion = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true }

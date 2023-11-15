@@ -78,71 +78,134 @@ impl Client {
 
 	async fn connect_tcp(&self, inet: &Inet) -> Result<()> {
 		let mut sender_guard = self.inner.sender.write().await;
+
+		// Connect via TCP.
 		let stream = TcpStream::connect(inet.to_string())
 			.await
 			.wrap_err("Failed to create the TCP connection.")?;
+
+		// Perform the HTTP handshake.
 		let executor = hyper_util::rt::TokioExecutor::new();
 		let io = hyper_util::rt::TokioIo::new(stream);
 		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
 			.await
 			.wrap_err("Failed to perform the HTTP handshake.")?;
-		tokio::spawn(connection);
+
+		// Spawn the connection.
+		tokio::spawn(async move {
+			if let Err(error) = connection.await {
+				tracing::error!(error = ?error, "The connection failed.");
+			}
+		});
+
+		// Wait for the sender to be ready.
 		sender
 			.ready()
 			.await
 			.wrap_err("Failed to ready the sender.")?;
+
+		// Replace the sender.
 		sender_guard.replace(sender);
+
 		Ok(())
 	}
 
 	async fn connect_tcp_tls(&self, inet: &Inet) -> Result<()> {
 		let mut sender_guard = self.inner.sender.write().await;
+
+		// Connect via TCP.
 		let stream = TcpStream::connect(inet.to_string())
 			.await
 			.wrap_err("Failed to create the TCP connection.")?;
+
+		// Create the connector.
 		let mut root_cert_store = rustls::RootCertStore::empty();
 		root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-		let config = rustls::ClientConfig::builder()
+		let mut config = rustls::ClientConfig::builder()
 			.with_safe_defaults()
 			.with_root_certificates(root_cert_store)
 			.with_no_client_auth();
+		config.alpn_protocols = vec!["h2".into()];
 		let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+
+		// Create the server name.
 		let server_name = rustls::ServerName::try_from(inet.host.to_string().as_str())
 			.wrap_err("Failed to create the server name.")?;
+
+		// Connect via TLS.
 		let stream = connector
 			.connect(server_name, stream)
 			.await
 			.wrap_err("Failed to connect.")?;
+
+		// Verify the negotiated protocol.
+		if !stream
+			.get_ref()
+			.1
+			.alpn_protocol()
+			.map(|protocol| protocol == b"h2")
+			.unwrap_or_default()
+		{
+			return_error!("Failed to negotiate the HTTP/2 protocol.");
+		}
+
+		// Perform the HTTP handshake.
 		let executor = hyper_util::rt::TokioExecutor::new();
 		let io = hyper_util::rt::TokioIo::new(stream);
 		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
 			.await
 			.wrap_err("Failed to perform the HTTP handshake..")?;
-		tokio::spawn(connection);
+
+		// Spawn the connection.
+		tokio::spawn(async move {
+			if let Err(error) = connection.await {
+				tracing::error!(error = ?error, "The connection failed.");
+			}
+		});
+
+		// Wait for the sender to be ready.
 		sender
 			.ready()
 			.await
 			.wrap_err("Failed to ready the sender.")?;
+
+		// Replace the sender.
 		sender_guard.replace(sender);
+
 		Ok(())
 	}
 
 	async fn connect_unix(&self, path: &Path) -> Result<()> {
 		let mut sender_guard = self.inner.sender.write().await;
+
+		// Connect via UNIX.
 		let stream = UnixStream::connect(path)
 			.await
 			.wrap_err("Failed to connect to the socket.")?;
+
+		// Perform the HTTP handshake.
 		let executor = hyper_util::rt::TokioExecutor::new();
 		let io = hyper_util::rt::TokioIo::new(stream);
 		let (mut sender, connection) = hyper::client::conn::http2::handshake(executor, io)
 			.await
 			.wrap_err("Failed to perform the HTTP handshake.")?;
-		tokio::spawn(connection);
+
+		// Spawn the connection.
+		tokio::spawn(async move {
+			if let Err(error) = connection.await {
+				tracing::error!(error = ?error, "The connection failed.");
+			}
+		});
+
+		// Wait for the sender to be ready.
 		sender
 			.ready()
 			.await
 			.wrap_err("Failed to ready the sender.")?;
+
+		// Replace the sender.
 		sender_guard.replace(sender);
+
 		Ok(())
 	}
 
