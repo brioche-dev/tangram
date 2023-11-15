@@ -1,7 +1,7 @@
 use async_recursion::async_recursion;
 use core::fmt;
 use im::HashMap;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use tangram_client as tg;
 use tangram_error::{error, return_error, WrapErr};
 use tg::Client;
@@ -47,12 +47,33 @@ pub async fn solve(
 	client: &dyn Client,
 	root: tg::Id,
 	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Relpath, tg::Id>>,
+	registry_dependencies: BTreeSet<(tg::Id, tg::Dependency)>,
 ) -> tangram_error::Result<Vec<(tg::Relpath, tg::Lock)>> {
 	// Create the context.
 	let mut context = Context::new(client, path_dependencies.clone());
 
+	// Seed the context.
+	let roots = std::iter::once(&root)
+		.chain(path_dependencies.keys())
+		.chain(path_dependencies.values().flat_map(|v| v.values()));
+	for root in roots {
+		let _ = context
+			.analysis(root)
+			.await
+			.wrap_err("Failed to analyze root package.")?;
+	}
+
+	// Create the initial set of dependants to solve, one for each direct registry dependency of each path dependency.
+	let working_set = registry_dependencies
+		.into_iter()
+		.map(|(package, dependency)| Dependant {
+			package,
+			dependency,
+		})
+		.collect();
+
 	// Solve.
-	let solution = solve_inner(&mut context, root.clone()).await?;
+	let solution = solve_inner(&mut context, working_set).await?;
 
 	// Create the error report.
 	let errors = solution
@@ -125,18 +146,10 @@ async fn lock(
 }
 
 #[allow(clippy::too_many_lines)]
-async fn solve_inner(context: &mut Context, root: tg::Id) -> tangram_error::Result<Solution> {
-	// Create the working set of unsolved dependencies.
-	let working_set = context
-		.dependencies(&root)
-		.await?
-		.iter()
-		.map(|dependency| Dependant {
-			package: root.clone(),
-			dependency: dependency.clone(),
-		})
-		.collect();
-
+async fn solve_inner(
+	context: &mut Context,
+	working_set: im::Vector<Dependant>,
+) -> tangram_error::Result<Solution> {
 	// Create the first stack frame.
 	let solution = Solution::empty();
 	let last_error = None;
@@ -565,7 +578,9 @@ impl Context {
 				.await?
 				.into_iter()
 				.flatten()
-				.filter(|dependency| dependency.path.is_none())
+				.filter(|dependency| {
+					!(self.path_dependencies.contains_key(package) && dependency.path.is_some())
+				})
 				.collect();
 			let analysis = Analysis {
 				metadata: metadata.clone(),

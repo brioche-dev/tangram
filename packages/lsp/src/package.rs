@@ -37,6 +37,7 @@ pub async fn get_or_create(
 ) -> Result<(tg::Artifact, tg::Lock)> {
 	// Find the package path for this module path.
 	let mut package_path = module_path.to_owned();
+
 	while !package_path.join(ROOT_MODULE_FILE_NAME).exists() {
 		if !package_path.pop() {
 			return_error!("Could not find root module.");
@@ -67,11 +68,13 @@ pub async fn get_or_create(
 		// Scan the root artifact.
 		let mut visited = BTreeMap::new();
 		let mut path_dependencies = BTreeMap::new();
+		let mut registry_dependencies = BTreeSet::new();
 		let artifact = analyze_package_at_path(
 			client,
 			package_path.clone(),
 			&mut visited,
 			&mut path_dependencies,
+			&mut registry_dependencies,
 		)
 		.await?;
 
@@ -120,41 +123,53 @@ pub async fn create(
 	client: &dyn tg::Client,
 	specifier: &Specifier,
 ) -> Result<(tg::Artifact, tg::Lock, Lockfile)> {
-	let (root_artifact, path_dependencies) = match specifier {
-		Specifier::Path(path) => {
-			// Canonicalize.
-			let package_path = path
-				.canonicalize()
-				.wrap_err("Failed to canonicalize path.")?;
-			let mut visited = BTreeMap::new();
-			let mut path_dependencies = BTreeMap::new();
-			let root_artifact =
-				analyze_package_at_path(client, package_path, &mut visited, &mut path_dependencies)
-					.await?;
-			(root_artifact, path_dependencies)
-		},
-		Specifier::Registry(specifier::Registry { name, version }) => {
-			let Some(version) = version else {
-				return_error!("Cannot create package from registry dependency without a version.");
-			};
-			let id =
-				client
-					.get_package_version(name, version)
+	let (root_artifact, path_dependencies, registry_dependencies) =
+		match specifier {
+			Specifier::Path(path) => {
+				// Canonicalize.
+				let package_path = path
+					.canonicalize()
+					.wrap_err("Failed to canonicalize path.")?;
+				let mut visited = BTreeMap::new();
+				let mut path_dependencies = BTreeMap::new();
+				let mut registry_dependencies = BTreeSet::new();
+				let root_artifact = analyze_package_at_path(
+					client,
+					package_path,
+					&mut visited,
+					&mut path_dependencies,
+					&mut registry_dependencies,
+				)
+				.await?;
+				(root_artifact, path_dependencies, registry_dependencies)
+			},
+			Specifier::Registry(specifier::Registry { name, version }) => {
+				let Some(version) = version else {
+					return_error!(
+						"Cannot create package from registry dependency without a version."
+					);
+				};
+				let id = client.get_package_version(name, version).await?.ok_or(
+					tangram_error::error!("Could not find package {name}@{version}."),
+				)?;
+				let root_artifact = tg::Artifact::with_id(id.clone())
+					.try_unwrap_directory()
+					.wrap_err("Expected package artifact to be a directory.")?;
+				let path_dependencies = BTreeMap::new();
+				let registry_dependencies = client
+					.get_package_dependencies(&id.clone().into())
 					.await?
-					.ok_or(tangram_error::error!(
-						"Could not find package {name}@{version}."
-					))?;
-			let root_artifact = tg::Artifact::with_id(id)
-				.try_unwrap_directory()
-				.wrap_err("Expected package artifact to be a directory.")?;
-			let path_dependencies = BTreeMap::new();
-			(root_artifact, path_dependencies)
-		},
-	};
+					.into_iter()
+					.flatten()
+					.map(|dependency| (id.clone().into(), dependency))
+					.collect();
+				(root_artifact, path_dependencies, registry_dependencies)
+			},
+		};
 
 	// Solve the version constraints.
 	let root = root_artifact.id(client).await?.clone().into();
-	let paths = version::solve(client, root, path_dependencies).await?;
+	let paths = version::solve(client, root, path_dependencies, registry_dependencies).await?;
 
 	// Get the root lock and create a lockfile.
 	let root_lock = paths[0].1.clone();
@@ -251,6 +266,7 @@ async fn analyze_package_at_path(
 	package_path: PathBuf,
 	visited: &mut BTreeMap<PathBuf, Option<tg::Directory>>,
 	path_dependencies: &mut BTreeMap<tg::Id, BTreeMap<Relpath, tg::Id>>,
+	registry_dependencies: &mut BTreeSet<(tg::Id, tg::Dependency)>,
 ) -> tangram_error::Result<tg::Directory> {
 	debug_assert!(
 		package_path.is_absolute(),
@@ -271,6 +287,7 @@ async fn analyze_package_at_path(
 	let mut visited_modules: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
 
 	let mut package_path_dependencies = BTreeMap::new();
+	let mut package_registry_dependencies = Vec::new();
 
 	// Add each module and its includes to the directory.
 	while let Some(module_subpath) = queue.pop_front() {
@@ -327,15 +344,27 @@ async fn analyze_package_at_path(
 						.wrap_err("Failed to canonicalize dependency path.")?;
 
 					// This gives us a full directory ID.
-					let child =
-						analyze_package_at_path(client, package_path, visited, path_dependencies)
-							.await?;
+					let child = analyze_package_at_path(
+						client,
+						package_path,
+						visited,
+						path_dependencies,
+						registry_dependencies,
+					)
+					.await?;
 					let id = child.id(client).await?.clone();
 
-					// Store the artifact and dependenc
-					package_path_dependencies.insert(dependency.path.clone().unwrap(), id.into());
+					// Store the artifact and dependency
+					// The relpath must be relative to the
+					let dependency_relpath = tg::Relpath::from(module_subpath.clone())
+						.parent()
+						.join(dependency.path.clone().unwrap());
+					package_path_dependencies.insert(dependency_relpath, id.into());
 				},
-				_ => (),
+				Import::Dependency(dependency) => {
+					package_registry_dependencies.push(dependency.clone());
+				},
+				Import::Path(_) => (),
 			}
 		}
 
@@ -361,9 +390,13 @@ async fn analyze_package_at_path(
 
 	// Create permanent mark.
 	let artifact = directory.build();
-	let id = artifact.id(client).await?.clone().into();
+	let id: tg::Id = artifact.id(client).await?.clone().into();
+
 	let _ = visited.insert(package_path, Some(artifact.clone()));
-	path_dependencies.insert(id, package_path_dependencies);
+	path_dependencies.insert(id.clone(), package_path_dependencies);
+	for dependency in package_registry_dependencies {
+		registry_dependencies.insert((id.clone(), dependency));
+	}
 	Ok(artifact)
 }
 
@@ -378,6 +411,7 @@ impl Analysis {
 		client: &dyn tg::Client,
 		artifact: tg::Artifact,
 	) -> tangram_error::Result<Self> {
+		eprintln!("Creating analysis for {artifact}");
 		let id = artifact
 			.id(client)
 			.await

@@ -302,8 +302,8 @@ async fn diamond_with_path_dependencies() {
 			version: "1.0.0",
 		};
 
-		import bar from "tangram:?path=./path/to/bar"
-		import baz from "tangram:baz@^1"
+		import bar from "tangram:?path=./path/to/bar";
+		import baz from "tangram:baz@^1";
 		export default tg.target(() => tg`foo ${bar} {baz}`);
 	"#;
 
@@ -313,7 +313,7 @@ async fn diamond_with_path_dependencies() {
 			version: "1.0.0",
 		};
 
-		import baz as baz from "tangram:baz@=1.2.3"
+		import * as baz from "tangram:baz@=1.2.3";
 		export default tg.target(() => tg`bar ${baz}`);
 	"#;
 
@@ -391,8 +391,15 @@ async fn diamond_with_path_dependencies() {
 		.into_iter()
 		.collect();
 
+	// Create the registry dependencies
+	let bar_id = bar.id(&client).await.unwrap().clone().into();
+	let baz_id = baz.id(&client).await.unwrap().clone().into();
+	let registry_dependencies = client
+		.registry_dependencies(&[foo_id.clone(), bar_id, baz_id])
+		.await;
+
 	// Lock using foo as the root.
-	let _lock = solve(&client, foo_id, path_dependencies)
+	let _lock = solve(&client, foo_id, path_dependencies, registry_dependencies)
 		.await
 		.expect("Failed to lock diamond with a path dependency.");
 }
@@ -489,7 +496,7 @@ async fn complex_diamond() {
 }
 
 use std::{
-	collections::{BTreeMap, HashMap},
+	collections::{BTreeMap, BTreeSet, HashMap},
 	path::{Path, PathBuf},
 	sync::{Arc, Mutex},
 };
@@ -613,7 +620,7 @@ impl MockClient {
 		&self,
 		metadata: tg::package::Metadata,
 	) -> tangram_error::Result<Vec<(tg::Relpath, tg::Lock)>> {
-		let package = self
+		let package: tg::Id = self
 			.get_package_version(
 				metadata.name.as_ref().unwrap(),
 				metadata.version.as_ref().unwrap(),
@@ -622,19 +629,27 @@ impl MockClient {
 			.unwrap()
 			.unwrap()
 			.into();
-		solve(self, package, BTreeMap::new()).await
+		let registry_dependencies = self.registry_dependencies(&[package.clone()]).await;
+		solve(self, package, BTreeMap::new(), registry_dependencies).await
 	}
 
-	// pub fn artifact(&self, metadata: tg::package::Metadata) -> tg::Artifact {
-	// 	let state = self.state.lock().unwrap();
-	// 	state
-	// 		.packages
-	// 		.get(metadata.name.as_ref().unwrap())
-	// 		.unwrap()
-	// 		.iter()
-	// 		.find_map(|mock| (mock.metadata == metadata).then_some(mock.artifact.clone()))
-	// 		.unwrap()
-	// }
+	pub async fn registry_dependencies(
+		&self,
+		packages: &[tg::Id],
+	) -> BTreeSet<(tg::Id, tg::Dependency)> {
+		let mut set = BTreeSet::new();
+		for package in packages {
+			let dependencies = self
+				.get_package_dependencies(package)
+				.await
+				.expect("Failed to get the package dependencies.")
+				.into_iter()
+				.flatten()
+				.filter_map(|d| d.path.is_none().then_some((package.clone(), d)));
+			set.extend(dependencies);
+		}
+		set
+	}
 }
 
 #[async_trait]
