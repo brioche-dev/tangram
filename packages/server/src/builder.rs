@@ -1,5 +1,5 @@
 use crate::Server;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::Arc;
 use tangram_error::Result;
 
 #[derive(Clone)]
@@ -9,7 +9,8 @@ pub struct Builder {
 
 struct Inner {
 	server: Server,
-	stop: AtomicBool,
+	stop_sender: tokio::sync::watch::Sender<bool>,
+	stop_receiver: tokio::sync::watch::Receiver<bool>,
 	task: Task,
 }
 
@@ -20,12 +21,13 @@ type Task = (
 
 impl Builder {
 	pub async fn start(server: &Server) -> Result<Self> {
-		let stop = AtomicBool::new(false);
+		let (stop_sender, stop_receiver) = tokio::sync::watch::channel(false);
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let builder = Self {
 			inner: Arc::new(Inner {
 				server: server.clone(),
-				stop,
+				stop_receiver,
+				stop_sender,
 				task,
 			}),
 		};
@@ -40,8 +42,7 @@ impl Builder {
 	}
 
 	pub fn stop(&self) {
-		let ordering = std::sync::atomic::Ordering::SeqCst;
-		self.inner.stop.store(true, ordering);
+		self.inner.stop_sender.send(true).unwrap();
 	}
 
 	pub async fn join(&self) -> Result<()> {
@@ -60,13 +61,18 @@ impl Builder {
 	}
 
 	pub async fn run(&self) -> Result<()> {
-		let server = &self.inner.server;
-		while !self.inner.stop.load(std::sync::atomic::Ordering::SeqCst) {
-			let Some(build_id) = server.get_build_from_queue().await.ok() else {
-				continue;
+		let mut stop_receiver = self.inner.stop_receiver.clone();
+		let server = self.inner.server.clone();
+		loop {
+			let build_id = tokio::select! {
+				_ = stop_receiver.wait_for(|s| *s) => {
+					return Ok(());
+				}
+				build_id = server.get_build_from_queue() => {
+					build_id?
+				}
 			};
 			server.start_build(&build_id).await?;
 		}
-		Ok(())
 	}
 }
