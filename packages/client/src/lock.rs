@@ -1,5 +1,5 @@
 use crate::{
-	id, object, return_error, Artifact, Client, Dependency, Error, Relpath, Result, WrapErr,
+	id, object, return_error, Artifact, Client, Dependency, Error, Result, WrapErr,
 };
 use async_recursion::async_recursion;
 use bytes::Bytes;
@@ -7,7 +7,7 @@ use derive_more::Display;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use itertools::Itertools;
 use std::{
-	collections::{BTreeMap, BTreeSet, VecDeque},
+	collections::BTreeMap,
 	sync::Arc,
 };
 
@@ -57,12 +57,6 @@ pub mod data {
 		pub package: artifact::Id,
 		pub lock: super::Id,
 	}
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Lockfile {
-	pub paths: BTreeMap<Relpath, Id>,
-	pub locks: BTreeMap<Id, BTreeMap<Dependency, data::Entry>>,
 }
 
 impl Id {
@@ -210,48 +204,6 @@ impl Data {
 			.values()
 			.flat_map(|entry| [entry.package.clone().into(), entry.lock.clone().into()])
 			.collect()
-	}
-}
-
-impl Lockfile {
-	/// Recursively create a [`Lockfile`] from an iterator of `(Relpath, Lock)`.
-	pub async fn with_paths(
-		client: &dyn Client,
-		paths_: impl IntoIterator<Item = (Relpath, Lock)>,
-	) -> Result<Self> {
-		let mut paths = BTreeMap::new();
-		let mut locks = BTreeMap::new();
-		let mut queue = VecDeque::new();
-		let mut visited = BTreeSet::new();
-
-		// Create the paths.
-		for (relpath, lock) in paths_ {
-			let id = lock.id(client).await?.clone();
-			let _ = paths.insert(relpath, id);
-			queue.push_back(lock);
-		}
-
-		// Create the locks.
-		while let Some(next) = queue.pop_front() {
-			let id = next.id(client).await?;
-			if visited.contains(id) {
-				continue;
-			}
-			visited.insert(id.clone());
-			let mut entry_ = BTreeMap::new();
-			for (dependency, entry) in next.dependencies(client).await? {
-				queue.push_back(entry.lock.clone());
-				let entry = data::Entry {
-					package: entry.package.id(client).await?.clone(),
-					lock: entry.lock.id(client).await?.clone(),
-				};
-				entry_.insert(dependency.clone(), entry.clone());
-			}
-			let _ = locks.insert(id.clone(), entry_);
-		}
-
-		// Return the lockfile.
-		Ok(Self { paths, locks })
 	}
 }
 

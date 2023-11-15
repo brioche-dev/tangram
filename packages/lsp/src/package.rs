@@ -1,3 +1,4 @@
+use self::lockfile::Lockfile;
 pub use self::specifier::Specifier;
 use crate::{Import, Module};
 use async_recursion::async_recursion;
@@ -8,11 +9,13 @@ use std::{
 	path::{Path, PathBuf},
 };
 use tangram_client as tg;
-use tangram_error::{error, return_error, Result, WrapErr};
+use tangram_error::{return_error, Result, WrapErr};
 use tg::{package::Metadata, Dependency, Relpath, Subpath};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+pub mod lockfile;
 pub mod specifier;
+
 #[cfg(test)]
 mod tests;
 pub mod version;
@@ -55,15 +58,11 @@ pub async fn get_or_create(
 		file.read_to_end(&mut contents)
 			.await
 			.wrap_err("Failed to read lockfile contents.")?;
-		let lockfile: tg::lock::Lockfile =
+		let lockfile: Lockfile =
 			serde_json::from_slice(&contents).wrap_err("Failed to deserialize the lockfile.")?;
 
 		// Get the root lock.
-		let lock = lockfile
-			.paths
-			.get(&".".parse().unwrap())
-			.ok_or(error!("Missing root lock."))?;
-		let lock = tg::Lock::with_id(lock.clone());
+		let lock = lockfile.lock(&tg::Relpath::empty())?;
 
 		// Scan the root artifact.
 		let mut visited = BTreeMap::new();
@@ -120,7 +119,7 @@ pub async fn get_or_create(
 pub async fn create(
 	client: &dyn tg::Client,
 	specifier: &Specifier,
-) -> Result<(tg::Artifact, tg::Lock, tg::lock::Lockfile)> {
+) -> Result<(tg::Artifact, tg::Lock, Lockfile)> {
 	let (root_artifact, path_dependencies) = match specifier {
 		Specifier::Path(path) => {
 			// Canonicalize.
@@ -159,7 +158,7 @@ pub async fn create(
 
 	// Get the root lock and create a lockfile.
 	let root_lock = paths[0].1.clone();
-	let lockfile = tg::lock::Lockfile::with_paths(client, paths).await?;
+	let lockfile = Lockfile::with_paths(client, paths).await?;
 	Ok((root_artifact.into(), root_lock, lockfile))
 }
 
