@@ -318,7 +318,10 @@ impl TryFrom<Data> for Object {
 		let target = Target::with_id(data.target);
 		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
-		let result = data.result.map(TryInto::try_into)?;
+		let result = match data.result {
+			Ok(value) => Ok(value.try_into()?),
+			Err(error) => Err(error),
+		};
 		Ok(Self {
 			target,
 			children,
