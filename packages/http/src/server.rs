@@ -129,12 +129,10 @@ impl Server {
 				}
 			});
 
-			// Create the connection.
-			let connection = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
-				.serve_connection(stream, service);
-
 			// Spawn the connection.
 			tokio::spawn(async move {
+				let connection = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+					.serve_connection(stream, service);
 				if let Err(error) = connection.await {
 					tracing::error!(?error, "Failed to serve the connection.");
 				}
