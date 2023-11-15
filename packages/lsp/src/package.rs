@@ -318,11 +318,13 @@ async fn analyze_package_at_path(
 		for import in &analyze_output.imports {
 			match import {
 				Import::Dependency(dependency) if dependency.path.is_some() => {
-					// recurse
-					let package_path = package_path
-						.join(dependency.path.as_ref().unwrap().to_string())
+					let dependency_path = dependency.path.as_ref().unwrap();
+					let package_path = module_path
+						.parent()
+						.unwrap()
+						.join(dependency_path.to_string())
 						.canonicalize()
-						.wrap_err("Failed to canonicalize path.")?;
+						.wrap_err("Failed to canonicalize dependency path.")?;
 
 					// This gives us a full directory ID.
 					let child =
