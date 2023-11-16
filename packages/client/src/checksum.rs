@@ -89,14 +89,14 @@ fn base64(bytes: impl AsRef<[u8]>) -> Result<Box<[u8]>> {
 	Ok(base64::engine::general_purpose::STANDARD
 		.decode(bytes)
 		.ok()
-		.wrap_err(r#"Invalid base64 string."#)?
+		.wrap_err("Invalid base64 string.")?
 		.into_boxed_slice())
 }
 
 fn hex(bytes: impl AsRef<[u8]>) -> Result<Box<[u8]>> {
 	Ok(hex::decode(bytes.as_ref())
 		.ok()
-		.wrap_err(r#"Invalid hex string."#)?
+		.wrap_err("Invalid hex string.")?
 		.into_boxed_slice())
 }
 

@@ -401,9 +401,9 @@ mod tests {
 	#[test]
 	fn test_export_default_target() {
 		let text = indoc!(
-			r#"
+			"
 				export default tg.target(() => {});
-			"#
+			"
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(
@@ -421,9 +421,9 @@ mod tests {
 	#[test]
 	fn test_export_named_target() {
 		let text = indoc!(
-			r#"
+			"
 				export let named = tg.target(() => {});
-			"#
+			"
 		);
 		let left = Module::transpile(text.to_owned()).unwrap().transpiled_text;
 		let right = indoc!(

@@ -20,7 +20,7 @@ type Task = (
 );
 
 impl Builder {
-	pub async fn start(server: &Server) -> Result<Self> {
+	pub fn start(server: &Server) -> Self {
 		let (stop_sender, stop_receiver) = tokio::sync::watch::channel(false);
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let builder = Self {
@@ -38,7 +38,7 @@ impl Builder {
 		let abort = task.abort_handle();
 		builder.inner.task.0.lock().unwrap().replace(task);
 		builder.inner.task.1.lock().unwrap().replace(abort);
-		Ok(builder)
+		builder
 	}
 
 	pub fn stop(&self) {
@@ -76,7 +76,7 @@ impl Builder {
 					continue;
 				},
 			};
-			server.start_build(&build_id).await?;
+			server.start_build(&build_id);
 		}
 	}
 }

@@ -3,12 +3,9 @@ fn main() {
 	let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
 
 	// Initialize V8.
-	static V8_INIT: std::sync::Once = std::sync::Once::new();
-	V8_INIT.call_once(|| {
-		let platform = v8::new_default_platform(0, false).make_shared();
-		v8::V8::initialize_platform(platform);
-		v8::V8::initialize();
-	});
+	let platform = v8::new_default_platform(0, false).make_shared();
+	v8::V8::initialize_platform(platform);
+	v8::V8::initialize();
 
 	println!("cargo:rerun-if-changed=src/js/main.js");
 	let path = out_dir_path.join("runtime.heapsnapshot");

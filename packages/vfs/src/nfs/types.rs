@@ -1,4 +1,4 @@
-#![allow(non_camel_case_types, dead_code)]
+#![allow(non_camel_case_types, dead_code, clippy::match_same_arms)]
 
 use super::xdr;
 use num::ToPrimitive;
@@ -6,7 +6,7 @@ use std::{os::unix::prelude::OsStrExt, path::Path};
 
 // RPC constants.
 pub const RPC_VERS: u32 = 2;
-pub const NFS_PROG: u32 = 100003;
+pub const NFS_PROG: u32 = 100_003;
 pub const NFS_VERS: u32 = 4;
 
 pub type int32_t = i32;
@@ -19,10 +19,10 @@ pub const NFS4_VERIFIER_SIZE: usize = 8;
 pub const NFS4_OTHER_SIZE: usize = 12;
 pub const NFS4_OPAQUE_LIMIT: usize = 1024;
 
-pub const NFS4_INT64_MAX: int64_t = 0x7fffffffffffffff;
-pub const NFS4_UINT64_MAX: uint64_t = 0xffffffffffffffff;
-pub const NFS4_INT32_MAX: int32_t = 0x7fffffff;
-pub const NFS4_UINT32_MAX: uint32_t = 0xffffffff;
+pub const NFS4_INT64_MAX: int64_t = 0x7fff_ffff_ffff_ffff;
+pub const NFS4_UINT64_MAX: uint64_t = 0xffff_ffff_ffff_ffff;
+pub const NFS4_INT32_MAX: int32_t = 0x7fff_ffff;
+pub const NFS4_UINT32_MAX: uint32_t = 0xffff_ffff;
 
 #[repr(i32)]
 pub enum nfs_ftype4 {
@@ -199,19 +199,19 @@ pub struct fs_locations4 {
  * Mask that indicates which Access Control Entries
  * are supported.  Values for the fattr4_aclsupport attribute.
  */
-pub const ACL4_SUPPORT_ALLOW_ACL: u32 = 0x00000001;
-pub const ACL4_SUPPORT_DENY_ACL: u32 = 0x00000002;
-pub const ACL4_SUPPORT_AUDIT_ACL: u32 = 0x00000004;
-pub const ACL4_SUPPORT_ALARM_ACL: u32 = 0x00000008;
+pub const ACL4_SUPPORT_ALLOW_ACL: u32 = 0x0000_0001;
+pub const ACL4_SUPPORT_DENY_ACL: u32 = 0x0000_0002;
+pub const ACL4_SUPPORT_AUDIT_ACL: u32 = 0x0000_0004;
+pub const ACL4_SUPPORT_ALARM_ACL: u32 = 0x0000_0008;
 pub type acetype4 = uint32_t;
 
 /*
  * acetype4 values; others can be added as needed.
  */
-pub const ACE4_ACCESS_ALLOWED_ACE_TYPE: acetype4 = 0x00000000;
-pub const ACE4_ACCESS_DENIED_ACE_TYPE: acetype4 = 0x00000001;
-pub const ACE4_SYSTEM_AUDIT_ACE_TYPE: acetype4 = 0x00000002;
-pub const ACE4_SYSTEM_ALARM_ACE_TYPE: acetype4 = 0x00000003;
+pub const ACE4_ACCESS_ALLOWED_ACE_TYPE: acetype4 = 0x0000_0000;
+pub const ACE4_ACCESS_DENIED_ACE_TYPE: acetype4 = 0x0000_0001;
+pub const ACE4_SYSTEM_AUDIT_ACE_TYPE: acetype4 = 0x0000_0002;
+pub const ACE4_SYSTEM_ALARM_ACE_TYPE: acetype4 = 0x0000_0003;
 
 /*
  * ACE flag
@@ -221,13 +221,13 @@ pub type aceflag4 = uint32_t;
 /*
  * ACE flag values
  */
-pub const ACE4_FILE_INHERIT_ACE: aceflag4 = 0x00000001;
-pub const ACE4_DIRECTORY_INHERIT_ACE: aceflag4 = 0x00000002;
-pub const ACE4_NO_PROPAGATE_INHERIT_ACE: aceflag4 = 0x00000004;
-pub const ACE4_INHERIT_ONLY_ACE: aceflag4 = 0x00000008;
-pub const ACE4_SUCCESSFUL_ACCESS_ACE_FLAG: aceflag4 = 0x00000010;
-pub const ACE4_FAILED_ACCESS_ACE_FLAG: aceflag4 = 0x00000020;
-pub const ACE4_IDENTIFIER_GROUP: aceflag4 = 0x00000040;
+pub const ACE4_FILE_INHERIT_ACE: aceflag4 = 0x0000_0001;
+pub const ACE4_DIRECTORY_INHERIT_ACE: aceflag4 = 0x0000_0002;
+pub const ACE4_NO_PROPAGATE_INHERIT_ACE: aceflag4 = 0x0000_0004;
+pub const ACE4_INHERIT_ONLY_ACE: aceflag4 = 0x0000_0008;
+pub const ACE4_SUCCESSFUL_ACCESS_ACE_FLAG: aceflag4 = 0x0000_0010;
+pub const ACE4_FAILED_ACCESS_ACE_FLAG: aceflag4 = 0x0000_0020;
+pub const ACE4_IDENTIFIER_GROUP: aceflag4 = 0x0000_0040;
 
 /*
  * ACE mask
@@ -237,24 +237,24 @@ pub type acemask4 = uint32_t;
 /*
  * ACE mask values
  */
-pub const ACE4_READ_DATA: acemask4 = 0x00000001;
-pub const ACE4_LIST_DIRECTORY: acemask4 = 0x00000001;
-pub const ACE4_WRITE_DATA: acemask4 = 0x00000002;
-pub const ACE4_ADD_FILE: acemask4 = 0x00000002;
-pub const ACE4_APPEND_DATA: acemask4 = 0x00000004;
-pub const ACE4_ADD_SUBDIRECTORY: acemask4 = 0x00000004;
-pub const ACE4_READ_NAMED_ATTRS: acemask4 = 0x00000008;
-pub const ACE4_WRITE_NAMED_ATTRS: acemask4 = 0x00000010;
-pub const ACE4_EXECUTE: acemask4 = 0x00000020;
-pub const ACE4_DELETE_CHILD: acemask4 = 0x00000040;
-pub const ACE4_READ_ATTRIBUTES: acemask4 = 0x00000080;
-pub const ACE4_WRITE_ATTRIBUTES: acemask4 = 0x00000100;
+pub const ACE4_READ_DATA: acemask4 = 0x0000_0001;
+pub const ACE4_LIST_DIRECTORY: acemask4 = 0x0000_0001;
+pub const ACE4_WRITE_DATA: acemask4 = 0x0000_0002;
+pub const ACE4_ADD_FILE: acemask4 = 0x0000_0002;
+pub const ACE4_APPEND_DATA: acemask4 = 0x0000_0004;
+pub const ACE4_ADD_SUBDIRECTORY: acemask4 = 0x0000_0004;
+pub const ACE4_READ_NAMED_ATTRS: acemask4 = 0x0000_0008;
+pub const ACE4_WRITE_NAMED_ATTRS: acemask4 = 0x0000_0010;
+pub const ACE4_EXECUTE: acemask4 = 0x0000_0020;
+pub const ACE4_DELETE_CHILD: acemask4 = 0x0000_0040;
+pub const ACE4_READ_ATTRIBUTES: acemask4 = 0x0000_0080;
+pub const ACE4_WRITE_ATTRIBUTES: acemask4 = 0x0000_0100;
 
-pub const ACE4_DELETE: u32 = 0x00010000;
-pub const ACE4_READ_ACL: u32 = 0x00020000;
-pub const ACE4_WRITE_ACL: u32 = 0x00040000;
-pub const ACE4_WRITE_OWNER: u32 = 0x00080000;
-pub const ACE4_SYNCHRONIZE: u32 = 0x00100000;
+pub const ACE4_DELETE: u32 = 0x0001_0000;
+pub const ACE4_READ_ACL: u32 = 0x0002_0000;
+pub const ACE4_WRITE_ACL: u32 = 0x0004_0000;
+pub const ACE4_WRITE_OWNER: u32 = 0x0008_0000;
+pub const ACE4_SYNCHRONIZE: u32 = 0x0010_0000;
 
 /*
  * ACE4_GENERIC_READ - defined as a combination of
@@ -264,7 +264,7 @@ pub const ACE4_SYNCHRONIZE: u32 = 0x00100000;
  *      ACE4_SYNCHRONIZE
  */
 
-pub const ACE4_GENERIC_READ: u32 = 0x00120081;
+pub const ACE4_GENERIC_READ: u32 = 0x0012_0081;
 
 /*
  * ACE4_GENERIC_WRITE - defined as a combination of
@@ -275,8 +275,8 @@ pub const ACE4_GENERIC_READ: u32 = 0x00120081;
  *      ACE4_APPEND_DATA |
  *      ACE4_SYNCHRONIZE
  */
-pub const ACE4_GENERIC_WRITE: u32 = 0x00160106;
-pub const ACE4_GENERIC_EXECUTE: u32 = 0x001200A0;
+pub const ACE4_GENERIC_WRITE: u32 = 0x0016_0106;
+pub const ACE4_GENERIC_EXECUTE: u32 = 0x0012_00A0;
 
 #[derive(Clone, Debug)]
 pub struct nfsace4 {
@@ -315,11 +315,11 @@ pub struct specdata4 {
 /*
  * Values for fattr4_fh_expire_type
  */
-pub const FH4_PERSISTENT: fattr4_fh_expire_type = 0x00000000;
-pub const FH4_NOEXPIRE_WITH_OPEN: fattr4_fh_expire_type = 0x00000001;
-pub const FH4_VOLATILE_ANY: fattr4_fh_expire_type = 0x00000002;
-pub const FH4_VOL_MIGRATION: fattr4_fh_expire_type = 0x00000004;
-pub const FH4_VOL_RENAME: fattr4_fh_expire_type = 0x00000008;
+pub const FH4_PERSISTENT: fattr4_fh_expire_type = 0x0000_0000;
+pub const FH4_NOEXPIRE_WITH_OPEN: fattr4_fh_expire_type = 0x0000_0001;
+pub const FH4_VOLATILE_ANY: fattr4_fh_expire_type = 0x0000_0002;
+pub const FH4_VOL_MIGRATION: fattr4_fh_expire_type = 0x0000_0004;
+pub const FH4_VOL_RENAME: fattr4_fh_expire_type = 0x0000_0008;
 
 pub type fattr4_supported_attrs = bitmap4;
 pub type fattr4_type = nfs_ftype4;
@@ -574,12 +574,12 @@ pub enum locker4 {
 	FALSE(exist_lock_owner4),
 }
 
-pub const ACCESS4_READ: uint32_t = 0x00000001;
-pub const ACCESS4_LOOKUP: uint32_t = 0x00000002;
-pub const ACCESS4_MODIFY: uint32_t = 0x00000004;
-pub const ACCESS4_EXTEND: uint32_t = 0x00000008;
-pub const ACCESS4_DELETE: uint32_t = 0x00000010;
-pub const ACCESS4_EXECUTE: uint32_t = 0x00000020;
+pub const ACCESS4_READ: uint32_t = 0x0000_0001;
+pub const ACCESS4_LOOKUP: uint32_t = 0x0000_0002;
+pub const ACCESS4_MODIFY: uint32_t = 0x0000_0004;
+pub const ACCESS4_EXTEND: uint32_t = 0x0000_0008;
+pub const ACCESS4_DELETE: uint32_t = 0x0000_0010;
+pub const ACCESS4_EXECUTE: uint32_t = 0x0000_0020;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ACCESS4args {
@@ -695,14 +695,14 @@ pub struct LOOKUP4res {
 	pub status: nfsstat4,
 }
 
-pub const OPEN4_SHARE_ACCESS_READ: u32 = 0x00000001;
-pub const OPEN4_SHARE_ACCESS_WRITE: u32 = 0x00000002;
-pub const OPEN4_SHARE_ACCESS_BOTH: u32 = 0x00000003;
+pub const OPEN4_SHARE_ACCESS_READ: u32 = 0x0000_0001;
+pub const OPEN4_SHARE_ACCESS_WRITE: u32 = 0x0000_0002;
+pub const OPEN4_SHARE_ACCESS_BOTH: u32 = 0x0000_0003;
 
-pub const OPEN4_SHARE_DENY_NONE: u32 = 0x00000000;
-pub const OPEN4_SHARE_DENY_READ: u32 = 0x00000001;
-pub const OPEN4_SHARE_DENY_WRITE: u32 = 0x00000002;
-pub const OPEN4_SHARE_DENY_BOTH: u32 = 0x00000003;
+pub const OPEN4_SHARE_DENY_NONE: u32 = 0x0000_0000;
+pub const OPEN4_SHARE_DENY_READ: u32 = 0x0000_0001;
+pub const OPEN4_SHARE_DENY_WRITE: u32 = 0x0000_0002;
+pub const OPEN4_SHARE_DENY_BOTH: u32 = 0x0000_0003;
 /*
  * Various definitions for OPEN
  */
@@ -866,10 +866,10 @@ pub enum open_delegation4 {
  */
 
 /* Client must confirm open */
-pub const OPEN4_RESULT_CONFIRM: u32 = 0x00000002;
+pub const OPEN4_RESULT_CONFIRM: u32 = 0x0000_0002;
 
 /* Type of file locking behavior at the server */
-pub const OPEN4_RESULT_LOCKTYPE_POSIX: u32 = 0x00000004;
+pub const OPEN4_RESULT_LOCKTYPE_POSIX: u32 = 0x0000_0004;
 
 #[derive(Clone, Debug)]
 pub struct OPEN4resok {
@@ -1315,11 +1315,11 @@ impl xdr::ToXdr for nfs_fh4 {
 
 impl xdr::FromXdr for nfs_fh4 {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let decoded = decoder.decode_opaque()?;
-		if decoded.len() != 8 {
+		let bytes = decoder.decode_opaque()?;
+		if bytes.len() != 8 {
 			return Err(xdr::Error::Custom("File handle size mismatch.".into()));
 		}
-		let fh = u64::from_be_bytes(decoded[0..8].try_into().unwrap());
+		let fh = u64::from_be_bytes(bytes[0..8].try_into().unwrap());
 		Ok(Self(fh))
 	}
 }
@@ -1333,7 +1333,7 @@ impl xdr::FromXdr for stateid4 {
 }
 
 impl seqid4 {
-	pub fn increment(&self) -> Self {
+	pub fn increment(self) -> Self {
 		if self.0 == u32::MAX {
 			Self(1)
 		} else {
@@ -1524,6 +1524,7 @@ impl xdr::ToXdr for nfstime4 {
 }
 
 impl xdr::FromXdr for nfstime4 {
+	#[allow(clippy::similar_names)]
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let seconds = decoder.decode()?;
 		let nseconds = decoder.decode()?;

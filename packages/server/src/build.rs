@@ -132,18 +132,17 @@ impl Server {
 		self.inner.database.set_build_for_target(id, &build_id)?;
 
 		// Start the build.
-		self.start_build(&build_id).await?;
+		self.start_build(&build_id);
 
 		Ok(build_id)
 	}
 
-	pub(super) async fn start_build(&self, id: &tg::build::Id) -> Result<()> {
+	pub(crate) fn start_build(&self, id: &tg::build::Id) {
 		tokio::spawn({
 			let server = self.clone();
 			let id = id.clone();
 			async move { server.start_build_inner(&id).await }
 		});
-		Ok(())
 	}
 
 	async fn start_build_inner(&self, id: &tg::build::Id) -> Result<()> {

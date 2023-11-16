@@ -442,7 +442,7 @@ where
 {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let output = v8::Object::new(scope);
-		for (key, value) in self.iter() {
+		for (key, value) in self {
 			let key = key.to_v8(scope)?;
 			let value = value.to_v8(scope)?;
 			output.set(scope, key, value).unwrap();

@@ -104,7 +104,7 @@ impl Default for Auth {
 	fn default() -> Self {
 		Self {
 			flavor: AuthFlavor::None,
-			opaque: Default::default(),
+			opaque: Vec::default(),
 		}
 	}
 }
@@ -162,7 +162,7 @@ impl xdr::ToXdr for MessageBody {
 		match self {
 			Self::Call(body) => {
 				encoder.encode_int(0)?;
-				encoder.encode(body)?
+				encoder.encode(body)?;
 			},
 			Self::Reply(body) => {
 				encoder.encode_int(1)?;
@@ -208,6 +208,7 @@ impl xdr::ToXdr for CallBody {
 }
 
 impl xdr::FromXdr for CallBody {
+	#[allow(clippy::similar_names)]
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let rpcvers = decoder.decode_uint()?;
 		let prog = decoder.decode_uint()?;

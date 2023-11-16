@@ -329,6 +329,7 @@ impl Server {
 	}
 
 	// Check if credential and verification are valid.
+	#[allow(clippy::unused_async, clippy::unnecessary_wraps)]
 	async fn handle_auth(&self, _cred: Auth, _verf: Auth) -> Result<Option<Auth>, AuthStat> {
 		Ok(None)
 	}
@@ -339,6 +340,7 @@ impl Server {
 	}
 
 	// See <https://datatracker.ietf.org/doc/html/rfc7530#section-17.2>.
+	#[allow(clippy::too_many_lines)]
 	async fn handle_compound(
 		&self,
 		cred: Auth,
@@ -392,7 +394,7 @@ impl Server {
 				nfs_argop4::OP_GETATTR(arg) => {
 					nfs_resop4::OP_GETATTR(self.handle_getattr(&ctx, arg).await)
 				},
-				nfs_argop4::OP_GETFH => nfs_resop4::OP_GETFH(self.handle_get_file_handle(&ctx)),
+				nfs_argop4::OP_GETFH => nfs_resop4::OP_GETFH(Self::handle_get_file_handle(&ctx)),
 				nfs_argop4::OP_LOCK(arg) => {
 					nfs_resop4::OP_LOCK(self.handle_lock(&mut ctx, arg).await)
 				},
@@ -406,10 +408,10 @@ impl Server {
 					nfs_resop4::OP_OPEN(self.handle_open(&mut ctx, arg).await)
 				},
 				nfs_argop4::OP_PUTFH(arg) => {
-					nfs_resop4::OP_PUTFH(self.handle_put_file_handle(&mut ctx, arg))
+					nfs_resop4::OP_PUTFH(Self::handle_put_file_handle(&mut ctx, &arg))
 				},
 				nfs_argop4::OP_PUTROOTFH => {
-					let _ = self.handle_put_file_handle(&mut ctx, PUTFH4args { object: ROOT });
+					let _ = Self::handle_put_file_handle(&mut ctx, &PUTFH4args { object: ROOT });
 					nfs_resop4::OP_PUTROOTFH(types::PUTROOTFH4res {
 						status: nfsstat4::NFS4_OK,
 					})
@@ -423,10 +425,10 @@ impl Server {
 				},
 				nfs_argop4::OP_RENEW(arg) => nfs_resop4::OP_RENEW(self.handle_renew(arg)),
 				nfs_argop4::OP_RESTOREFH => {
-					nfs_resop4::OP_RESTOREFH(self.handle_restore_file_handle(&mut ctx))
+					nfs_resop4::OP_RESTOREFH(Self::handle_restore_file_handle(&mut ctx))
 				},
 				nfs_argop4::OP_SAVEFH => {
-					nfs_resop4::OP_SAVEFH(self.handle_save_file_handle(&mut ctx))
+					nfs_resop4::OP_SAVEFH(Self::handle_save_file_handle(&mut ctx))
 				},
 				nfs_argop4::OP_SECINFO(arg) => {
 					nfs_resop4::OP_SECINFO(self.handle_sec_info(&ctx, arg).await)
@@ -477,8 +479,9 @@ impl Server {
 		};
 
 		let access = match &node.kind {
-			NodeKind::Root { .. } => ACCESS4_EXECUTE | ACCESS4_READ | ACCESS4_LOOKUP,
-			NodeKind::Directory { .. } => ACCESS4_EXECUTE | ACCESS4_READ | ACCESS4_LOOKUP,
+			NodeKind::Root { .. } | NodeKind::Directory { .. } => {
+				ACCESS4_EXECUTE | ACCESS4_READ | ACCESS4_LOOKUP
+			},
 			NodeKind::Symlink { .. } => ACCESS4_READ,
 			NodeKind::File { file, .. } => {
 				let is_executable = match file.executable(self.inner.client.as_ref()).await {
@@ -563,6 +566,7 @@ impl Server {
 		})
 	}
 
+	#[allow(clippy::similar_names)]
 	async fn get_file_attr_data(&self, file_handle: nfs_fh4) -> Option<FileAttrData> {
 		let state = &self.inner.state.read().await;
 		let node = state.nodes.get(&file_handle.0)?;
@@ -927,7 +931,7 @@ impl Server {
 				};
 				entries.clone()
 			},
-			NodeKind::Root { .. } => Default::default(),
+			NodeKind::Root { .. } => BTreeMap::default(),
 			_ => return READDIR4res::Error(nfsstat4::NFS4ERR_NOTDIR),
 		};
 
@@ -1022,7 +1026,7 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
-	fn handle_renew(&self, _arg: RENEW4args) -> RENEW4res {
+	fn handle_renew(&self, arg: RENEW4args) -> RENEW4res {
 		RENEW4res {
 			status: nfsstat4::NFS4_OK,
 		}
@@ -1069,15 +1073,15 @@ impl Server {
 			client.callback_ident == arg.callback_ident,
 		];
 
-		if !conditions.into_iter().all(|c| c) {
-			SETCLIENTID4res::Error(nfsstat4::NFS4ERR_IO)
-		} else {
+		if conditions.into_iter().all(|c| c) {
 			let clientid = client.server_id;
 			let setclientid_confirm = client.server_verifier;
 			SETCLIENTID4res::NFS4_OK(SETCLIENTID4resok {
 				clientid,
 				setclientid_confirm,
 			})
+		} else {
+			SETCLIENTID4res::Error(nfsstat4::NFS4ERR_IO)
 		}
 	}
 
@@ -1108,22 +1112,22 @@ impl Server {
 	#[tracing::instrument(skip(self), ret)]
 	async fn handle_release_lockowner(
 		&self,
-		_context: &mut Context,
-		_arg: RELEASE_LOCKOWNER4args,
+		context: &mut Context,
+		arg: RELEASE_LOCKOWNER4args,
 	) -> RELEASE_LOCKOWNER4res {
 		RELEASE_LOCKOWNER4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 
-	fn handle_put_file_handle(&self, ctx: &mut Context, arg: PUTFH4args) -> PUTFH4res {
+	fn handle_put_file_handle(ctx: &mut Context, arg: &PUTFH4args) -> PUTFH4res {
 		ctx.current_file_handle = Some(arg.object);
 		PUTFH4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 
-	fn handle_get_file_handle(&self, ctx: &Context) -> GETFH4res {
+	fn handle_get_file_handle(ctx: &Context) -> GETFH4res {
 		if let Some(object) = ctx.current_file_handle {
 			GETFH4res::NFS4_OK(GETFH4resok { object })
 		} else {
@@ -1131,14 +1135,14 @@ impl Server {
 		}
 	}
 
-	fn handle_save_file_handle(&self, ctx: &mut Context) -> SAVEFH4res {
+	fn handle_save_file_handle(ctx: &mut Context) -> SAVEFH4res {
 		ctx.saved_file_handle = ctx.current_file_handle;
 		SAVEFH4res {
 			status: nfsstat4::NFS4_OK,
 		}
 	}
 
-	fn handle_restore_file_handle(&self, ctx: &mut Context) -> RESTOREFH4res {
+	fn handle_restore_file_handle(ctx: &mut Context) -> RESTOREFH4res {
 		ctx.current_file_handle = ctx.saved_file_handle.take();
 		RESTOREFH4res {
 			status: nfsstat4::NFS4_OK,
@@ -1221,6 +1225,7 @@ pub const ALL_SUPPORTED_ATTRS: &[u32] = &[
 	FATTR4_MOUNTED_ON_FILEID,
 ];
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct FileAttrData {
 	supported_attrs: bitmap4,
 	file_type: nfs_ftype4,
@@ -1295,7 +1300,7 @@ impl FileAttrData {
 		for attr in ALL_SUPPORTED_ATTRS {
 			supported_attrs.set(attr.to_usize().unwrap());
 		}
-		let change = nfstime4::now().seconds as u64;
+		let change = nfstime4::now().seconds.to_u64().unwrap();
 		FileAttrData {
 			supported_attrs,
 			file_type,

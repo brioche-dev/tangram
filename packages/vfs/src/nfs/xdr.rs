@@ -184,6 +184,7 @@ impl<'d> Decoder<'d> {
 	}
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub trait FromXdr
 where
 	Self: Sized,
@@ -191,6 +192,7 @@ where
 	fn decode(decoder: &mut Decoder<'_>) -> Result<Self, Error>;
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub trait ToXdr {
 	fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
 	where

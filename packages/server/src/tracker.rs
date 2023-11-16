@@ -5,10 +5,12 @@ use tangram_error::Result;
 use tg::tracker::Tracker;
 
 impl Server {
+	#[allow(clippy::unused_async)]
 	pub async fn try_get_tracker(&self, path: &Path) -> Result<Option<Tracker>> {
 		self.inner.database.try_get_tracker(path)
 	}
 
+	#[allow(clippy::unused_async)]
 	pub async fn set_tracker(&self, path: &Path, tracker: &Tracker) -> Result<()> {
 		self.inner.database.set_tracker(path, tracker)?;
 		Ok(())

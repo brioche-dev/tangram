@@ -208,9 +208,7 @@ impl Server {
 
 		// Start the builder.
 		if server.inner.remote.is_some() {
-			let builder = Builder::start(&server)
-				.await
-				.wrap_err("Failed to start the HTTP server.")?;
+			let builder = Builder::start(&server);
 			server.inner.builder.lock().unwrap().replace(builder);
 		}
 
@@ -252,6 +250,7 @@ impl Server {
 		Ok(())
 	}
 
+	#[allow(clippy::unused_async)]
 	async fn status(&self) -> Result<tg::status::Status> {
 		Ok(tg::status::Status {
 			version: self.inner.version.clone(),

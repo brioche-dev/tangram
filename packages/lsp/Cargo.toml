@@ -9,6 +9,9 @@ publish = false
 repository = { workspace = true }
 version = { workspace = true }
 
+[lints]
+workspace = true
+
 [build-dependencies]
 v8 = { workspace = true }
 

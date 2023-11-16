@@ -1,9 +1,3 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::missing_panics_doc)]
-#![allow(clippy::missing_safety_doc)]
-#![allow(clippy::redundant_pattern)]
-
 pub use self::{
 	artifact::Artifact,
 	blob::Blob,

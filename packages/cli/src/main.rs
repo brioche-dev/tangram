@@ -1,9 +1,3 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::missing_panics_doc)]
-#![allow(clippy::missing_safety_doc)]
-#![allow(clippy::redundant_pattern)]
-
 use self::{commands::Args, util::dirs::home_directory_path};
 use clap::Parser;
 use std::{path::PathBuf, sync::Arc};
