@@ -1,34 +1,31 @@
-use self::{
-	types::{
-		bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, length4,
-		lock_owner4, locker4, nfs_argop4, nfs_fh4, nfs_ftype4, nfs_lock_type4, nfs_resop4, nfsace4,
-		nfsstat4, nfstime4, offset4, open_claim4, open_delegation4, open_delegation_type4,
-		open_owner4, pathname4, specdata4, stateid4, verifier4, ACCESS4args, ACCESS4res,
-		ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args, GETATTR4res,
-		GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok, LOCKT4args,
-		LOCKT4res, LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok,
-		OPEN_CONFIRM4args, OPEN_CONFIRM4res, OPEN_CONFIRM4resok, PUTFH4args, PUTFH4res, READ4args,
-		READ4res, READ4resok, READDIR4args, READDIR4res, READDIR4resok, READLINK4res,
-		READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res,
-		RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args, SETCLIENTID4res,
-		SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE,
-		ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID, FATTR4_ACL, FATTR4_ACLSUPPORT,
-		FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE, FATTR4_CASE_PRESERVING,
-		FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE, FATTR4_FILEHANDLE,
-		FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL, FATTR4_FSID,
-		FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
-		FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME, FATTR4_MAXREAD,
-		FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID, FATTR4_NAMED_ATTR,
-		FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP,
-		FATTR4_QUOTA_AVAIL_HARD, FATTR4_QUOTA_AVAIL_SOFT, FATTR4_QUOTA_USED, FATTR4_RAWDEV,
-		FATTR4_RDATTR_ERROR, FATTR4_SIZE, FATTR4_SPACE_AVAIL, FATTR4_SPACE_FREE,
-		FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED, FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT,
-		FATTR4_SYSTEM, FATTR4_TIME_ACCESS, FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE,
-		FATTR4_TIME_DELTA, FATTR4_TIME_METADATA, FATTR4_TIME_MODIFY, FATTR4_TYPE,
-		FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR, MODE4_XGRP, MODE4_XOTH,
-		MODE4_XUSR, NFS_PROG, NFS_VERS, OPEN4_RESULT_CONFIRM, OPEN4_RESULT_LOCKTYPE_POSIX,
-		OPEN4_SHARE_ACCESS_BOTH, OPEN4_SHARE_ACCESS_WRITE, READ_BYPASS_STATE_ID, RPC_VERS,
-	},
+use self::types::{
+	bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, length4,
+	locker4, nfs_argop4, nfs_fh4, nfs_ftype4, nfs_lock_type4, nfs_resop4, nfsace4,
+	nfsstat4, nfstime4, offset4, open_claim4, open_delegation4, open_delegation_type4,
+	pathname4, specdata4, stateid4, verifier4, ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args,
+	CLOSE4res, COMPOUND4res, GETATTR4args, GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok,
+	LOCK4args, LOCK4res, LOCK4resok, LOCKT4args, LOCKT4res, LOCKU4args, LOCKU4res, LOOKUP4args,
+	LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok, OPEN_CONFIRM4args, OPEN_CONFIRM4res,
+	OPEN_CONFIRM4resok, PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args,
+	READDIR4res, READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args,
+	RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args,
+	SECINFO4res, SETCLIENTID4args, SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args,
+	SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID,
+	FATTR4_ACL, FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
+	FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
+	FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL,
+	FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
+	FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME, FATTR4_MAXREAD,
+	FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID, FATTR4_NAMED_ATTR,
+	FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP, FATTR4_QUOTA_AVAIL_HARD,
+	FATTR4_QUOTA_AVAIL_SOFT, FATTR4_QUOTA_USED, FATTR4_RAWDEV, FATTR4_RDATTR_ERROR, FATTR4_SIZE,
+	FATTR4_SPACE_AVAIL, FATTR4_SPACE_FREE, FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED,
+	FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT, FATTR4_SYSTEM, FATTR4_TIME_ACCESS,
+	FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE, FATTR4_TIME_DELTA, FATTR4_TIME_METADATA,
+	FATTR4_TIME_MODIFY, FATTR4_TYPE, FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR,
+	MODE4_XGRP, MODE4_XOTH, MODE4_XUSR, NFS_PROG, NFS_VERS, OPEN4_RESULT_CONFIRM,
+	OPEN4_RESULT_LOCKTYPE_POSIX, OPEN4_SHARE_ACCESS_BOTH, OPEN4_SHARE_ACCESS_WRITE,
+	READ_BYPASS_STATE_ID, RPC_VERS,
 };
 use num::ToPrimitive;
 use std::{
@@ -74,8 +71,6 @@ struct State {
 }
 
 struct LockState {
-	open_owner: Option<open_owner4>,
-	lock_owner: Option<lock_owner4>,
 	reader: tg::blob::Reader,
 	fh: nfs_fh4,
 	byterange_locks: Vec<(offset4, length4)>,
@@ -552,20 +547,12 @@ impl Server {
 			let Some(lock_state) = state.lock_state.get(&index).cloned() else {
 				return CLOSE4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 			};
-			let mut lock_state = lock_state.write().await;
+			let lock_state = lock_state.write().await;
 
 			// Check if there are any outstanding byterange locks.
 			if !lock_state.byterange_locks.is_empty() {
 				return CLOSE4res::Error(nfsstat4::NFS4ERR_LOCKS_HELD);
-			} else if stateid.is_lock_set() {
-				lock_state.lock_owner = None;
 			} else {
-				lock_state.open_owner = None;
-			}
-
-			// If there is no outstanding lock or open owner we remove the entry.
-			if lock_state.lock_owner.is_none() && lock_state.open_owner.is_none() {
-				drop(lock_state);
 				state.lock_state.remove(&index);
 			}
 		}
@@ -661,33 +648,21 @@ impl Server {
 
 		// Get the arguments we care about.
 		let range = (arg.offset, arg.length);
-		let (stateid, lock_owner) = match arg.locker {
-			locker4::TRUE(open_to_lock_owner) => {
-				let owner = open_to_lock_owner.lock_owner;
-				(open_to_lock_owner.open_stateid, Some(owner))
-			},
-			locker4::FALSE(exist_lock_owner) => (exist_lock_owner.lock_stateid, None),
+		let stateid = match arg.locker {
+			locker4::TRUE(open_to_lock_owner) => open_to_lock_owner.open_stateid,
+			locker4::FALSE(exist_lock_owner) => exist_lock_owner.lock_stateid,
 		};
 
 		// Lookup the lock state.
 		let index = stateid.index();
 		let state = self.inner.state.read().await;
-		let Some(lock_state) = state.lock_state.get(&index) else {
-			tracing::error!(?stateid, "Could not find state for stateid.");
-			return LOCK4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
+
+		// We ignore returning an error here if the lock state does not exist to support erroneous CLOSE requests that clear out state.
+		if let Some(lock_state) = state.lock_state.get(&index) {
+			// Add the new lock.
+			let mut lock_state = lock_state.write().await;
+			lock_state.byterange_locks.push(range);
 		};
-		let mut lock_state = lock_state.write().await;
-
-		// Check if we're overwriting an existing owner.
-		if lock_state.lock_owner.is_some() && lock_owner.is_some() {
-			// https://datatracker.ietf.org/doc/html/rfc7530#section-16.10.5
-			//In the case in which the state has been created and the boolean is true, the server rejects the request with the error NFS4ERR_BAD_SEQID.
-			return LOCK4res::Error(nfsstat4::NFS4ERR_BAD_SEQID);
-		}
-
-		// Add the new lock.
-		lock_state.byterange_locks.push(range);
-		lock_state.lock_owner = lock_owner;
 
 		// Return with the new stateid.
 		let lock_stateid = stateid4::new(stateid.seqid.increment(), index, true);
@@ -717,17 +692,14 @@ impl Server {
 		// Lookup the reader state.
 		let index = lock_stateid.index();
 		let state = self.inner.state.read().await;
-		let Some(lock_state) = state.lock_state.get(&index) else {
-			tracing::error!(?lock_stateid, "Could not find state for stateid.");
-			return LOCKU4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
+		if let Some(lock_state) = state.lock_state.get(&index) {
+			// Remove the lock.
+			let mut lock_state = lock_state.write().await;
+			let Some(index) = lock_state.byterange_locks.iter().position(|r| r == &range) else {
+				return LOCKU4res::Error(nfsstat4::NFS4ERR_BAD_RANGE);
+			};
+			lock_state.byterange_locks.remove(index);
 		};
-
-		// Remove the lock.
-		let mut lock_state = lock_state.write().await;
-		let Some(index) = lock_state.byterange_locks.iter().position(|r| r == &range) else {
-			return LOCKU4res::Error(nfsstat4::NFS4ERR_BAD_RANGE);
-		};
-		lock_state.byterange_locks.remove(index);
 
 		// Increment the seqid and return.
 		lock_stateid.seqid = lock_stateid.seqid.increment();
@@ -934,11 +906,8 @@ impl Server {
 			};
 
 			// Create a new lock state.
-			let open_owner = Some(arg.owner);
 			let byterange_locks = Vec::new();
 			let lock_state = LockState {
-				open_owner,
-				lock_owner: None,
 				fh,
 				reader,
 				byterange_locks,
@@ -1024,7 +993,15 @@ impl Server {
 			.to_usize()
 			.unwrap();
 
-		let (data, eof) = if [ANONYMOUS_STATE_ID, READ_BYPASS_STATE_ID].contains(&arg.stateid) {
+		// Check if the lock state exists.
+		let state = self.inner.state.read().await;
+		let index = arg.stateid.index();
+		let lock_state_exists = state.lock_state.contains_key(&index);
+
+		// This fallback exists for special state ids and any erroneous read.
+		let (data, eof) = if [ANONYMOUS_STATE_ID, READ_BYPASS_STATE_ID].contains(&arg.stateid)
+			|| !lock_state_exists
+		{
 			// We need to create a reader just for this request.
 			let Ok(blob) = file.contents(self.inner.client.as_ref()).await else {
 				tracing::error!("Failed to get file's content.");
@@ -1046,8 +1023,6 @@ impl Server {
 			let eof = (arg.offset + arg.count.to_u64().unwrap()) >= *file_size;
 			(data, eof)
 		} else {
-			let index = arg.stateid.index();
-			let state = self.inner.state.read().await;
 			let Some(lock_state) = state.lock_state.get(&index).cloned() else {
 				tracing::error!(?arg.stateid, "No reader is registered for the given id. file: {file}.");
 				return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
