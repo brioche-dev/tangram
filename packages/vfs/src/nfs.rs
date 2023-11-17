@@ -1,33 +1,38 @@
-use self::types::{
-	bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, locker4,
-	nfs_argop4, nfs_fh4, nfs_ftype4, nfs_resop4, nfsace4, nfsstat4, nfstime4, open_claim4,
-	open_delegation4, open_delegation_type4, pathname4, specdata4, stateid4, verifier4,
-	ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args,
-	GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok,
-	LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok, PUTFH4args,
-	PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args, READDIR4res, READDIR4resok,
-	READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res, RENEW4args,
-	RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args,
-	SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res,
-	ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID, FATTR4_ACL,
-	FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
-	FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
-	FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL,
-	FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
-	FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME, FATTR4_MAXREAD,
-	FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID, FATTR4_NAMED_ATTR,
-	FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP, FATTR4_QUOTA_AVAIL_HARD,
-	FATTR4_QUOTA_AVAIL_SOFT, FATTR4_QUOTA_USED, FATTR4_RAWDEV, FATTR4_RDATTR_ERROR, FATTR4_SIZE,
-	FATTR4_SPACE_AVAIL, FATTR4_SPACE_FREE, FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED,
-	FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT, FATTR4_SYSTEM, FATTR4_TIME_ACCESS,
-	FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE, FATTR4_TIME_DELTA, FATTR4_TIME_METADATA,
-	FATTR4_TIME_MODIFY, FATTR4_TYPE, FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR,
-	MODE4_XGRP, MODE4_XOTH, MODE4_XUSR, NFS4_OTHER_SIZE, NFS_PROG, NFS_VERS, READ_BYPASS_STATE_ID,
-	RPC_VERS,
+use self::{
+	types::{
+		bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, length4,
+		lock_owner4, locker4, nfs_argop4, nfs_fh4, nfs_ftype4, nfs_lock_type4, nfs_resop4, nfsace4,
+		nfsstat4, nfstime4, offset4, open_claim4, open_delegation4, open_delegation_type4,
+		open_owner4, pathname4, specdata4, stateid4, verifier4, ACCESS4args, ACCESS4res,
+		ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args, GETATTR4res,
+		GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok, LOCKT4args,
+		LOCKT4res, LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok,
+		OPEN_CONFIRM4args, OPEN_CONFIRM4res, OPEN_CONFIRM4resok, PUTFH4args, PUTFH4res, READ4args,
+		READ4res, READ4resok, READDIR4args, READDIR4res, READDIR4resok, READLINK4res,
+		READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res,
+		RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args, SETCLIENTID4res,
+		SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE,
+		ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID, FATTR4_ACL, FATTR4_ACLSUPPORT,
+		FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE, FATTR4_CASE_PRESERVING,
+		FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE, FATTR4_FILEHANDLE,
+		FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL, FATTR4_FSID,
+		FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
+		FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME, FATTR4_MAXREAD,
+		FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID, FATTR4_NAMED_ATTR,
+		FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP,
+		FATTR4_QUOTA_AVAIL_HARD, FATTR4_QUOTA_AVAIL_SOFT, FATTR4_QUOTA_USED, FATTR4_RAWDEV,
+		FATTR4_RDATTR_ERROR, FATTR4_SIZE, FATTR4_SPACE_AVAIL, FATTR4_SPACE_FREE,
+		FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED, FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT,
+		FATTR4_SYSTEM, FATTR4_TIME_ACCESS, FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE,
+		FATTR4_TIME_DELTA, FATTR4_TIME_METADATA, FATTR4_TIME_MODIFY, FATTR4_TYPE,
+		FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR, MODE4_XGRP, MODE4_XOTH,
+		MODE4_XUSR, NFS_PROG, NFS_VERS, OPEN4_RESULT_CONFIRM, OPEN4_RESULT_LOCKTYPE_POSIX,
+		OPEN4_SHARE_ACCESS_BOTH, OPEN4_SHARE_ACCESS_WRITE, READ_BYPASS_STATE_ID, RPC_VERS,
+	},
 };
 use num::ToPrimitive;
 use std::{
-	collections::{BTreeMap, HashMap},
+	collections::BTreeMap,
 	path::{Path, PathBuf},
 	sync::{Arc, Weak},
 };
@@ -61,12 +66,19 @@ type Task = (
 	std::sync::Mutex<Option<tokio::task::AbortHandle>>,
 );
 
-#[derive(Clone)]
 struct State {
 	nodes: BTreeMap<u64, Arc<Node>>,
-	readers: BTreeMap<u64, Arc<tokio::sync::RwLock<tg::blob::Reader>>>,
-	clients: HashMap<Vec<u8>, ClientData>,
+	clients: BTreeMap<Vec<u8>, ClientData>,
 	index: u64,
+	lock_state: BTreeMap<u64, Arc<tokio::sync::RwLock<LockState>>>,
+}
+
+struct LockState {
+	open_owner: Option<open_owner4>,
+	lock_owner: Option<lock_owner4>,
+	reader: tg::blob::Reader,
+	fh: nfs_fh4,
+	byterange_locks: Vec<(offset4, length4)>,
 }
 
 #[derive(Debug)]
@@ -95,7 +107,6 @@ enum NodeKind {
 	},
 }
 
-#[derive(Clone, Debug)]
 pub struct ClientData {
 	pub server_id: u64,
 	pub client_verifier: verifier4,
@@ -127,8 +138,8 @@ impl Server {
 		let nodes = [(0, root)].into_iter().collect();
 		let state = tokio::sync::RwLock::new(State {
 			nodes,
-			readers: BTreeMap::default(),
-			clients: HashMap::new(),
+			clients: BTreeMap::new(),
+			lock_state: BTreeMap::new(),
 			index: 0,
 		});
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
@@ -144,7 +155,14 @@ impl Server {
 		// Spawn the task.
 		let task = tokio::spawn({
 			let server = server.clone();
-			async move { server.serve(port).await }
+			async move {
+				if let Err(e) = server.serve(port).await {
+					tracing::error!(?e, "NFS server shutdown.");
+					Err(e)
+				} else {
+					Ok(())
+				}
+			}
 		});
 		let abort = task.abort_handle();
 		server.inner.task.1.lock().unwrap().replace(abort);
@@ -400,6 +418,9 @@ impl Server {
 				nfs_argop4::OP_LOCK(arg) => {
 					nfs_resop4::OP_LOCK(self.handle_lock(&mut ctx, arg).await)
 				},
+				nfs_argop4::OP_LOCKT(arg) => {
+					nfs_resop4::OP_LOCKT(self.handle_lockt(&mut ctx, arg).await)
+				},
 				nfs_argop4::OP_LOCKU(arg) => {
 					nfs_resop4::OP_LOCKU(self.handle_locku(&mut ctx, arg).await)
 				},
@@ -408,6 +429,9 @@ impl Server {
 				},
 				nfs_argop4::OP_OPEN(arg) => {
 					nfs_resop4::OP_OPEN(self.handle_open(&mut ctx, arg).await)
+				},
+				nfs_argop4::OP_OPEN_CONFIRM(arg) => {
+					nfs_resop4::OP_OPEN_CONFIRM(self.handle_open_confirm(&mut ctx, arg).await)
 				},
 				nfs_argop4::OP_PUTFH(arg) => {
 					nfs_resop4::OP_PUTFH(Self::handle_put_file_handle(&mut ctx, &arg))
@@ -522,14 +546,31 @@ impl Server {
 
 		if let NodeKind::File { .. } = &node.kind {
 			let mut state = self.inner.state.write().await;
-			let index = u64::from_be_bytes(stateid.other[0..8].try_into().unwrap());
-			if state.readers.remove(&index).is_none() {
+
+			// Look up the existing lock state.
+			let index = stateid.index();
+			let Some(lock_state) = state.lock_state.get(&index).cloned() else {
 				return CLOSE4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
+			};
+			let mut lock_state = lock_state.write().await;
+
+			// Check if there are any outstanding byterange locks.
+			if !lock_state.byterange_locks.is_empty() {
+				return CLOSE4res::Error(nfsstat4::NFS4ERR_LOCKS_HELD);
+			} else if stateid.is_lock_set() {
+				lock_state.lock_owner = None;
+			} else {
+				lock_state.open_owner = None;
+			}
+
+			// If there is no outstanding lock or open owner we remove the entry.
+			if lock_state.lock_owner.is_none() && lock_state.open_owner.is_none() {
+				drop(lock_state);
+				state.lock_state.remove(&index);
 			}
 		}
 
 		stateid.seqid = stateid.seqid.increment();
-
 		CLOSE4res::NFS4_OK(stateid)
 	}
 
@@ -604,17 +645,93 @@ impl Server {
 
 	#[tracing::instrument(skip(self), ret)]
 	async fn handle_lock(&self, ctx: &mut Context, arg: LOCK4args) -> LOCK4res {
-		let lock_stateid = match arg.locker {
-			locker4::TRUE(open_to_lock_owner) => open_to_lock_owner.open_stateid,
-			locker4::FALSE(exist_lock_owner) => exist_lock_owner.lock_stateid,
+		// Required overflow check.
+		if ![0, u64::MAX].contains(&arg.length) && (u64::MAX - arg.offset > arg.length) {
+			return LOCK4res::Error(nfsstat4::NFS4ERR_INVAL);
 		};
+
+		// Since we're a read only file system we need to check if the client is attempting to acquire an exlusive (write) lock and return the appropriate error code.
+		// NFS section 13.1.8.9 https://datatracker.ietf.org/doc/html/rfc7530#autoid-325
+		match arg.locktype {
+			nfs_lock_type4::WRITE_LT | nfs_lock_type4::WRITEW_LT => {
+				return LOCK4res::Error(nfsstat4::NFS4ERR_OPENMODE);
+			},
+			_ => (),
+		};
+
+		// Get the arguments we care about.
+		let range = (arg.offset, arg.length);
+		let (stateid, lock_owner) = match arg.locker {
+			locker4::TRUE(open_to_lock_owner) => {
+				let owner = open_to_lock_owner.lock_owner;
+				(open_to_lock_owner.open_stateid, Some(owner))
+			},
+			locker4::FALSE(exist_lock_owner) => (exist_lock_owner.lock_stateid, None),
+		};
+
+		// Lookup the lock state.
+		let index = stateid.index();
+		let state = self.inner.state.read().await;
+		let Some(lock_state) = state.lock_state.get(&index) else {
+			tracing::error!(?stateid, "Could not find state for stateid.");
+			return LOCK4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
+		};
+		let mut lock_state = lock_state.write().await;
+
+		// Check if we're overwriting an existing owner.
+		if lock_state.lock_owner.is_some() && lock_owner.is_some() {
+			// https://datatracker.ietf.org/doc/html/rfc7530#section-16.10.5
+			//In the case in which the state has been created and the boolean is true, the server rejects the request with the error NFS4ERR_BAD_SEQID.
+			return LOCK4res::Error(nfsstat4::NFS4ERR_BAD_SEQID);
+		}
+
+		// Add the new lock.
+		lock_state.byterange_locks.push(range);
+		lock_state.lock_owner = lock_owner;
+
+		// Return with the new stateid.
+		let lock_stateid = stateid4::new(stateid.seqid.increment(), index, true);
 		let resok = LOCK4resok { lock_stateid };
 		LOCK4res::NFS4_OK(resok)
 	}
 
 	#[tracing::instrument(skip(self), ret)]
+	async fn handle_lockt(&self, ctx: &mut Context, arg: LOCKT4args) -> LOCKT4res {
+		if ![0, u64::MAX].contains(&arg.length) && (u64::MAX - arg.offset > arg.length) {
+			return LOCKT4res::Error(nfsstat4::NFS4ERR_INVAL);
+		};
+		match arg.locktype {
+			nfs_lock_type4::WRITE_LT | nfs_lock_type4::WRITEW_LT => {
+				return LOCKT4res::Error(nfsstat4::NFS4ERR_OPENMODE);
+			},
+			_ => (),
+		};
+		LOCKT4res::NFS4_OK
+	}
+
+	#[tracing::instrument(skip(self), ret)]
 	async fn handle_locku(&self, ctx: &mut Context, arg: LOCKU4args) -> LOCKU4res {
-		LOCKU4res::NFS4_OK(arg.lock_stateid)
+		let range = (arg.offset, arg.length);
+		let mut lock_stateid = arg.lock_stateid;
+
+		// Lookup the reader state.
+		let index = lock_stateid.index();
+		let state = self.inner.state.read().await;
+		let Some(lock_state) = state.lock_state.get(&index) else {
+			tracing::error!(?lock_stateid, "Could not find state for stateid.");
+			return LOCKU4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
+		};
+
+		// Remove the lock.
+		let mut lock_state = lock_state.write().await;
+		let Some(index) = lock_state.byterange_locks.iter().position(|r| r == &range) else {
+			return LOCKU4res::Error(nfsstat4::NFS4ERR_BAD_RANGE);
+		};
+		lock_state.byterange_locks.remove(index);
+
+		// Increment the seqid and return.
+		lock_stateid.seqid = lock_stateid.seqid.increment();
+		LOCKU4res::NFS4_OK(lock_stateid)
 	}
 
 	#[tracing::instrument(skip(self))]
@@ -769,22 +886,32 @@ impl Server {
 			return OPEN4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
 		};
 
-		let fh = match arg.claim {
+		// RFC 7530 16.15.5: If the underlying file system at the server is only accessible in a read-only mode and the OPEN request has specified OPEN4_SHARE_ACCESS_WRITE or OPEN4_SHARE_ACCESS_BOTH the server with return NFS4ERR_ROFS to indicate a read-only file system
+		if (arg.share_access == OPEN4_SHARE_ACCESS_WRITE)
+			|| (arg.share_access == OPEN4_SHARE_ACCESS_BOTH)
+		{
+			tracing::error!(?arg, "Share access violation.");
+			return OPEN4res::Error(nfsstat4::NFS4ERR_ROFS);
+		}
+
+		let (fh, confirm_flags) = match arg.claim {
 			open_claim4::CLAIM_NULL(name) => {
 				let Ok(name) = std::str::from_utf8(&name) else {
 					return OPEN4res::Error(nfsstat4::NFS4ERR_NOENT);
 				};
 				match self.lookup(fh, name).await {
-					Ok(fh) => fh,
+					Ok(fh) => (fh, OPEN4_RESULT_CONFIRM),
 					Err(e) => return OPEN4res::Error(e),
 				}
 			},
-			open_claim4::CLAIM_PREVIOUS(open_delegation_type4::OPEN_DELEGATE_NONE) => fh,
-			_ => return OPEN4res::Error(nfsstat4::NFS4ERR_NOTSUPP),
+			open_claim4::CLAIM_PREVIOUS(open_delegation_type4::OPEN_DELEGATE_NONE) => (fh, 0),
+			_ => {
+				tracing::error!(?arg, "Unsupported open request.");
+				return OPEN4res::Error(nfsstat4::NFS4ERR_NOTSUPP);
+			},
 		};
 
 		ctx.current_file_handle = Some(fh);
-		let seqid = arg.seqid.increment();
 
 		// Create the stateid.
 		let index = {
@@ -793,9 +920,8 @@ impl Server {
 			state.index += 1;
 			index
 		};
-		let mut other = [0u8; NFS4_OTHER_SIZE];
-		other[0..8].copy_from_slice(&index.to_be_bytes());
-		let stateid = stateid4 { seqid, other };
+
+		let stateid = stateid4::new(arg.seqid, index, false);
 
 		if let NodeKind::File { file, .. } = &self.get_node(fh).await.unwrap().kind {
 			let Ok(blob) = file.contents(self.inner.client.as_ref()).await else {
@@ -806,12 +932,24 @@ impl Server {
 				tracing::error!("Failed to create blob reader.");
 				return OPEN4res::Error(nfsstat4::NFS4ERR_IO);
 			};
+
+			// Create a new lock state.
+			let open_owner = Some(arg.owner);
+			let byterange_locks = Vec::new();
+			let lock_state = LockState {
+				open_owner,
+				lock_owner: None,
+				fh,
+				reader,
+				byterange_locks,
+			};
+
 			self.inner
 				.state
 				.write()
 				.await
-				.readers
-				.insert(index, Arc::new(tokio::sync::RwLock::new(reader)));
+				.lock_state
+				.insert(index, Arc::new(tokio::sync::RwLock::new(lock_state)));
 		}
 
 		let cinfo = change_info4 {
@@ -820,7 +958,7 @@ impl Server {
 			after: 0,
 		};
 
-		let rflags = 0;
+		let rflags = confirm_flags | OPEN4_RESULT_LOCKTYPE_POSIX;
 		let attrset = bitmap4(vec![]);
 		let delegation = open_delegation4::OPEN_DELEGATE_NONE;
 		let resok = OPEN4resok {
@@ -831,6 +969,23 @@ impl Server {
 			delegation,
 		};
 		OPEN4res::NFS4_OK(resok)
+	}
+
+	#[tracing::instrument(skip(self))]
+	async fn handle_open_confirm(
+		&self,
+		ctx: &mut Context,
+		arg: OPEN_CONFIRM4args,
+	) -> OPEN_CONFIRM4res {
+		if arg.seqid != arg.open_stateid.seqid.increment() {
+			tracing::error!(?arg, "Invalid seqid in open.");
+			let mut state = self.inner.state.write().await;
+			state.lock_state.remove(&arg.open_stateid.index());
+			return OPEN_CONFIRM4res::Error(nfsstat4::NFS4ERR_BAD_SEQID);
+		}
+		let mut open_stateid = arg.open_stateid;
+		open_stateid.seqid = arg.seqid;
+		OPEN_CONFIRM4res::NFS4_OK(OPEN_CONFIRM4resok { open_stateid })
 	}
 
 	#[tracing::instrument(skip(self))]
@@ -891,19 +1046,27 @@ impl Server {
 			let eof = (arg.offset + arg.count.to_u64().unwrap()) >= *file_size;
 			(data, eof)
 		} else {
-			let index = u64::from_be_bytes(arg.stateid.other[0..8].try_into().unwrap());
+			let index = arg.stateid.index();
 			let state = self.inner.state.read().await;
-			let Some(reader) = state.readers.get(&index).cloned() else {
-				tracing::error!(?arg.stateid, "No reader is registered for the given id.");
+			let Some(lock_state) = state.lock_state.get(&index).cloned() else {
+				tracing::error!(?arg.stateid, "No reader is registered for the given id. file: {file}.");
 				return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 			};
-			let mut reader = reader.write().await;
-			if let Err(e) = reader.seek(std::io::SeekFrom::Start(arg.offset)).await {
+			let mut lock_state = lock_state.write().await;
+			if lock_state.fh != fh {
+				tracing::error!(?fh, ?arg.stateid, "Reader registered for wrong file id. file: {file}.");
+				return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
+			}
+			if let Err(e) = lock_state
+				.reader
+				.seek(std::io::SeekFrom::Start(arg.offset))
+				.await
+			{
 				tracing::error!(?e, "Failed to seek.");
 				return READ4res::Error(e.into());
 			}
 			let mut data = vec![0u8; read_size];
-			if let Err(e) = reader.read_exact(&mut data).await {
+			if let Err(e) = lock_state.reader.read_exact(&mut data).await {
 				tracing::error!(?e, "Failed to read from file.");
 				return READ4res::Error(e.into());
 			}
