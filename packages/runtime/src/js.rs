@@ -26,7 +26,6 @@ struct State {
 	global_source_map: Option<SourceMap>,
 	modules: RefCell<Vec<Module>>,
 	main_runtime_handle: tokio::runtime::Handle,
-	rejection: RefCell<Option<v8::Global<v8::Value>>>,
 }
 
 type Futures = FuturesUnordered<
@@ -64,9 +63,6 @@ pub async fn build(
 		host_initialize_import_meta_object_callback,
 	);
 
-	// Set the promise reject callback.
-	isolate.set_promise_reject_callback(promise_reject_callback);
-
 	// Create the state.
 	let state = Rc::new(State {
 		build: build.clone(),
@@ -75,7 +71,6 @@ pub async fn build(
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 		modules: RefCell::new(Vec::new()),
 		main_runtime_handle,
-		rejection: RefCell::new(None),
 	});
 
 	// Create the context.
@@ -128,11 +123,6 @@ pub async fn build(
 	// Await the output.
 	let value = poll_fn(|cx| {
 		loop {
-			// If there was an unhandled promise rejection, then break.
-			if state.rejection.borrow_mut().is_some() {
-				break;
-			}
-
 			// Poll the futures.
 			let (result, promise_resolver) = match state.futures.borrow_mut().poll_next_unpin(cx) {
 				// If there is a result, then resolve or reject the promise.
@@ -527,23 +517,4 @@ extern "C" fn host_initialize_import_meta_object_callback(
 	let key = v8::String::new_external_onebyte_static(scope, "url".as_bytes()).unwrap();
 	let value = v8::String::new(scope, &module.to_string()).unwrap();
 	meta.set(scope, key.into(), value.into()).unwrap();
-}
-
-extern "C" fn promise_reject_callback(message: v8::PromiseRejectMessage) {
-	// Create the scope.
-	let scope = unsafe { &mut v8::CallbackScope::new(&message) };
-
-	// Get the context.
-	let context = scope.get_current_context();
-
-	// Get the state.
-	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
-
-	// Get the value.
-	let value = message.get_value();
-	let value = value.unwrap_or_else(|| v8::undefined(scope).into());
-	let value = v8::Global::new(scope, value);
-
-	// Set the promise rejection.
-	state.rejection.borrow_mut().replace(value);
 }
