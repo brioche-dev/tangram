@@ -8,7 +8,7 @@ use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_lsp::{package::Ext, Import, Module};
+use tangram_lsp::{package::Ext, Import};
 
 mod convert;
 mod error;
@@ -22,18 +22,19 @@ const SOURCE_MAP: &[u8] =
 struct State {
 	build: tg::Build,
 	client: Box<dyn tg::Client>,
-	futures: Rc<RefCell<Futures>>,
+	futures: RefCell<Futures>,
 	global_source_map: Option<SourceMap>,
-	loaded_modules: Rc<RefCell<Vec<LoadedModule>>>,
+	modules: RefCell<Vec<Module>>,
 	main_runtime_handle: tokio::runtime::Handle,
+	rejection: RefCell<Option<v8::Global<v8::Value>>>,
 }
 
 type Futures = FuturesUnordered<
 	LocalBoxFuture<'static, (Result<Box<dyn ToV8>>, v8::Global<v8::PromiseResolver>)>,
 >;
 
-struct LoadedModule {
-	module: Module,
+struct Module {
+	module: tangram_lsp::Module,
 	source_map: Option<SourceMap>,
 	metadata: Option<tg::Metadata>,
 	v8_identity_hash: NonZeroI32,
@@ -63,14 +64,18 @@ pub async fn build(
 		host_initialize_import_meta_object_callback,
 	);
 
+	// Set the promise reject callback.
+	isolate.set_promise_reject_callback(promise_reject_callback);
+
 	// Create the state.
 	let state = Rc::new(State {
 		build: build.clone(),
 		client: client.clone_box(),
-		futures: Rc::new(RefCell::new(FuturesUnordered::new())),
+		futures: RefCell::new(FuturesUnordered::new()),
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
-		loaded_modules: Rc::new(RefCell::new(Vec::new())),
+		modules: RefCell::new(Vec::new()),
 		main_runtime_handle,
+		rejection: RefCell::new(None),
 	});
 
 	// Create the context.
@@ -95,7 +100,7 @@ pub async fn build(
 		v8::Global::new(scope, context)
 	};
 
-	let output = {
+	let value = {
 		// Enter the context.
 		let scope = &mut v8::HandleScope::new(&mut isolate);
 		let context = v8::Local::new(scope, context.clone());
@@ -115,19 +120,28 @@ pub async fn build(
 		// Call the start function.
 		let undefined = v8::undefined(scope);
 		let target = target.to_v8(scope).unwrap();
-		let output = start.call(scope, undefined.into(), &[target]).unwrap();
+		let value = start.call(scope, undefined.into(), &[target]).unwrap();
 
-		v8::Global::new(scope, output)
+		v8::Global::new(scope, value)
 	};
 
 	// Await the output.
-	poll_fn(|cx| {
-		// Poll the context's futures and resolve or reject all that are ready.
+	let value = poll_fn(|cx| {
 		loop {
-			// Poll the context's futures.
+			// If there was an unhandled promise rejection, then break.
+			if state.rejection.borrow_mut().is_some() {
+				break;
+			}
+
+			// Poll the futures.
 			let (result, promise_resolver) = match state.futures.borrow_mut().poll_next_unpin(cx) {
-				Poll::Ready(Some(output)) => output,
+				// If there is a result, then resolve or reject the promise.
+				Poll::Ready(Some((result, promise_resolver))) => (result, promise_resolver),
+
+				// If there are no more results, then break.
 				Poll::Ready(None) => break,
+
+				// If the futures are not ready, then return pending.
 				Poll::Pending => return Poll::Pending,
 			};
 
@@ -151,38 +165,53 @@ pub async fn build(
 			};
 		}
 
-		// Enter the context.
+		// Get the result from the value.
 		let scope = &mut v8::HandleScope::new(&mut isolate);
 		let context = v8::Local::new(scope, context.clone());
 		let scope = &mut v8::ContextScope::new(scope, context);
+		let value = v8::Local::new(scope, value.clone());
+		let result = if let Ok(promise) = v8::Local::<v8::Promise>::try_from(value) {
+			// If the output is a promise, check its state.
+			match promise.state() {
+				// If the promise is fulfilled, then return the result.
+				v8::PromiseState::Fulfilled => {
+					let output = promise.result(scope);
+					let output = match from_v8(scope, output) {
+						Ok(output) => output,
+						Err(error) => {
+							return Poll::Ready(Err(error));
+						},
+					};
+					Ok(output)
+				},
 
-		// Handle the value.
-		let output = v8::Local::new(scope, output.clone());
-		let output = match v8::Local::<v8::Promise>::try_from(output) {
-			Err(_) => output,
-			Ok(promise) => match promise.state() {
-				v8::PromiseState::Pending => return Poll::Pending,
-				v8::PromiseState::Fulfilled => promise.result(scope),
+				// If the promise is rejected, then return the error.
 				v8::PromiseState::Rejected => {
 					let exception = promise.result(scope);
 					let state = state.clone();
 					let error = self::error::from_exception(&state, scope, exception);
+					Err(error)
+				},
+
+				// At this point, the promise must not be pending.
+				v8::PromiseState::Pending => unreachable!(),
+			}
+		} else {
+			// If the output is not a promise, then return it.
+			let output = match from_v8(scope, value) {
+				Ok(output) => output,
+				Err(error) => {
 					return Poll::Ready(Err(error));
 				},
-			},
+			};
+			Ok(output)
 		};
 
-		// Move the output from V8.
-		let output = match from_v8(scope, output) {
-			Ok(output) => output,
-			Err(error) => {
-				return Poll::Ready(Err(error));
-			},
-		};
-
-		Poll::Ready(Ok(output))
+		Poll::Ready(result)
 	})
-	.await
+	.await?;
+
+	Ok(value)
 }
 
 /// Implement V8's dynamic import callback.
@@ -200,7 +229,7 @@ fn host_import_module_dynamically_callback<'s>(
 	// Get the module.
 	let module = if resource_name == "[runtime]" {
 		let module = specifier.to_rust_string_lossy(scope);
-		match Module::from_str(&module) {
+		match tangram_lsp::Module::from_str(&module) {
 			Ok(module) => module,
 			Err(error) => {
 				let exception = error::to_exception(scope, &error);
@@ -210,7 +239,7 @@ fn host_import_module_dynamically_callback<'s>(
 		}
 	} else {
 		// Get the module.
-		let module = match Module::from_str(&resource_name) {
+		let module = match tangram_lsp::Module::from_str(&resource_name) {
 			Ok(module) => module,
 			Err(error) => {
 				let exception = error::to_exception(scope, &error);
@@ -272,15 +301,15 @@ fn resolve_module_callback<'s>(
 	// Get the module.
 	let identity_hash = referrer.get_identity_hash();
 	let module = match state
-		.loaded_modules
+		.modules
 		.borrow()
 		.iter()
-		.find(|loaded_module| loaded_module.v8_identity_hash == identity_hash)
-		.map(|loaded_module| loaded_module.module.clone())
+		.find(|module| module.v8_identity_hash == identity_hash)
+		.map(|module| module.module.clone())
 		.wrap_err_with(|| {
 			format!(r#"Unable to find the module with identity hash "{identity_hash}"."#)
 		}) {
-		Ok(loaded_module) => loaded_module,
+		Ok(module) => module,
 		Err(error) => {
 			let exception = error::to_exception(scope, &error);
 			scope.throw_exception(exception);
@@ -313,7 +342,11 @@ fn resolve_module_callback<'s>(
 }
 
 /// Resolve a module.
-fn resolve_module(scope: &mut v8::HandleScope, module: &Module, import: &Import) -> Option<Module> {
+fn resolve_module(
+	scope: &mut v8::HandleScope,
+	module: &tangram_lsp::Module,
+	import: &Import,
+) -> Option<tangram_lsp::Module> {
 	let context = scope.get_current_context();
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 
@@ -346,7 +379,7 @@ fn resolve_module(scope: &mut v8::HandleScope, module: &Module, import: &Import)
 /// Load a module.
 fn load_module<'s>(
 	scope: &mut v8::HandleScope<'s>,
-	module: &Module,
+	module: &tangram_lsp::Module,
 ) -> Option<v8::Local<'s, v8::Module>> {
 	// Get the context and state.
 	let context = scope.get_current_context();
@@ -354,7 +387,7 @@ fn load_module<'s>(
 
 	// Return a cached module if this module has already been loaded.
 	if let Some(module) = state
-		.loaded_modules
+		.modules
 		.borrow()
 		.iter()
 		.find(|cached_module| &cached_module.module == module)
@@ -368,7 +401,7 @@ fn load_module<'s>(
 	let resource_line_offset = 0;
 	let resource_column_offset = 0;
 	let resource_is_shared_cross_origin = false;
-	let script_id = state.loaded_modules.borrow().len().to_i32().unwrap() + 1;
+	let script_id = state.modules.borrow().len().to_i32().unwrap() + 1;
 	let source_map_url = v8::undefined(scope).into();
 	let resource_is_opaque = true;
 	let is_wasm = false;
@@ -413,7 +446,7 @@ fn load_module<'s>(
 	let tangram_lsp::transpile::Output {
 		transpiled_text,
 		source_map,
-	} = match Module::transpile(text).wrap_err("Failed to transpile the module.") {
+	} = match tangram_lsp::Module::transpile(text).wrap_err("Failed to transpile the module.") {
 		Ok(output) => output,
 		Err(error) => {
 			let exception = error::to_exception(scope, &error);
@@ -456,7 +489,7 @@ fn load_module<'s>(
 	let metadata = receiver.recv().unwrap();
 
 	// Cache the module.
-	state.loaded_modules.borrow_mut().push(LoadedModule {
+	state.modules.borrow_mut().push(Module {
 		module: module.clone(),
 		metadata,
 		source_map: Some(source_map),
@@ -482,7 +515,7 @@ extern "C" fn host_initialize_import_meta_object_callback(
 	// Get the module.
 	let identity_hash = module.get_identity_hash();
 	let module = state
-		.loaded_modules
+		.modules
 		.borrow()
 		.iter()
 		.find(|module| module.v8_identity_hash == identity_hash)
@@ -494,4 +527,23 @@ extern "C" fn host_initialize_import_meta_object_callback(
 	let key = v8::String::new_external_onebyte_static(scope, "url".as_bytes()).unwrap();
 	let value = v8::String::new(scope, &module.to_string()).unwrap();
 	meta.set(scope, key.into(), value.into()).unwrap();
+}
+
+extern "C" fn promise_reject_callback(message: v8::PromiseRejectMessage) {
+	// Create the scope.
+	let scope = unsafe { &mut v8::CallbackScope::new(&message) };
+
+	// Get the context.
+	let context = scope.get_current_context();
+
+	// Get the state.
+	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
+
+	// Get the value.
+	let value = message.get_value();
+	let value = value.unwrap_or_else(|| v8::undefined(scope).into());
+	let value = v8::Global::new(scope, value);
+
+	// Set the promise rejection.
+	state.rejection.borrow_mut().replace(value);
 }

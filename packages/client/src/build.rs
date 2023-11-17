@@ -179,8 +179,7 @@ impl Build {
 			.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
-			.ok()
-			.wrap_err("Expected all children to be stored.")?;
+			.ok();
 		Ok(build)
 	}
 

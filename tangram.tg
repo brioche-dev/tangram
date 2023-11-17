@@ -1,24 +1,8 @@
 export let metadata = {
 	name: "tangram",
 	version: "0.0.0",
-}
+};
 
 export default tg.target(() => {
-	tg.log("Hello, World!");
-	return {
-		a: f("a", 5),
-		b: f("b", 10),
-		c: f("c", 60),
-	};
-});
-
-export let f = tg.target(async (name: string, n: number) => {
-	for (let i = 0; i < n; i++) {
-		await g(name, i);
-	}
-});
-
-export let g = tg.target(async (name: string, i: number) => {
-	await tg.sleep(1);
-	tg.log(name, i);
+	return "Hello, World!";
 });

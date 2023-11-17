@@ -30,6 +30,9 @@ pub struct Server {
 }
 
 struct Inner {
+	/// The state of the server's builds.
+	builds: std::sync::RwLock<HashMap<tg::build::Id, BuildState, fnv::FnvBuildHasher>>,
+
 	/// The builder.
 	builder: std::sync::Mutex<Option<Builder>>,
 
@@ -55,9 +58,6 @@ struct Inner {
 	/// The path to the directory where the server stores its data.
 	path: PathBuf,
 
-	/// The progress of the server's builds.
-	progress: std::sync::RwLock<HashMap<tg::build::Id, Progress, fnv::FnvBuildHasher>>,
-
 	/// A client for communicating with the parent server.
 	remote: Option<Box<dyn tg::Client>>,
 
@@ -69,12 +69,12 @@ struct Inner {
 }
 
 #[derive(Clone, Debug)]
-struct Progress {
-	inner: Arc<ProgressInner>,
+struct BuildState {
+	inner: Arc<BuildStateInner>,
 }
 
 #[derive(Debug)]
-struct ProgressInner {
+struct BuildStateInner {
 	target: tg::Target,
 	children: std::sync::Mutex<ChildrenState>,
 	log: Arc<tokio::sync::Mutex<LogState>>,
@@ -146,6 +146,9 @@ impl Server {
 			.await
 			.wrap_err("Failed to remove an existing socket file.")?;
 
+		// Create the state of the server's builds.
+		let builds = std::sync::RwLock::new(HashMap::default());
+
 		// Create the builder.
 		let builder = std::sync::Mutex::new(None);
 
@@ -166,14 +169,12 @@ impl Server {
 			std::thread::available_parallelism().unwrap().get(),
 		);
 
-		// Create the build progress.
-		let progress = std::sync::RwLock::new(HashMap::default());
-
 		// Create the VFS.
 		let vfs = std::sync::Mutex::new(None);
 
 		// Create the inner.
 		let inner = Arc::new(Inner {
+			builds,
 			builder,
 			database,
 			file_descriptor_semaphore,
@@ -181,7 +182,6 @@ impl Server {
 			local_pool,
 			lock_file,
 			path,
-			progress,
 			remote,
 			version,
 			vfs,
