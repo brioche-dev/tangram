@@ -1116,9 +1116,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24590385be94998c5def4cf53d34edc5381144c805126f00efb954d986f9a7b2"
+checksum = "403f9214f3e703236b221f1a9cd88ec8b4adfa5296de01ab96216361f4692f56"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -1150,15 +1150,16 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.0.0"
-source = "git+https://github.com/hyperium/hyper-util#e91fba80ac00464caea786be743274c4b7e958a0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ca339002caeb0d159cc6e023dff48e199f081e42fa039895c7c6f38b37f2e9d"
 dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
  "http 1.0.0",
  "http-body 1.0.0",
- "hyper 1.0.0",
+ "hyper 1.0.1",
  "pin-project-lite",
  "socket2 0.5.5",
  "tokio",
@@ -3233,7 +3234,7 @@ dependencies = [
  "http 1.0.0",
  "http-body 1.0.0",
  "http-body-util",
- "hyper 1.0.0",
+ "hyper 1.0.1",
  "hyper-util",
  "itertools",
  "rustls 0.22.0-alpha.3",

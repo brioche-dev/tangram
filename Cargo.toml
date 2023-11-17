@@ -48,9 +48,7 @@ http = "1"
 http-body = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["full"] }
-hyper-util = { git = "https://github.com/hyperium/hyper-util", features = [
-  "auto",
-] }
+hyper-util = { version = "0.1", features = ["server-auto", "tokio"] }
 im = "15"
 include_dir = "0.7"
 indoc = "2"

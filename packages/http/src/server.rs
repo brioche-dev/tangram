@@ -132,7 +132,7 @@ impl Server {
 			// Spawn the connection.
 			tokio::spawn(async move {
 				let builder = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new());
-				let connection = builder.serve_connection(TokioIo::new(stream), service);
+				let connection = builder.serve_connection(stream, service);
 				if let Err(error) = connection.await {
 					tracing::error!(?error, "Failed to serve the connection.");
 				}
