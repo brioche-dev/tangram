@@ -1,7 +1,6 @@
+use crate::{Error, Result};
 use itertools::Itertools;
 use tangram_error::{error, return_error};
-
-use crate::{Error, Relpath, Result};
 
 /// A dependency.
 #[derive(
@@ -16,7 +15,7 @@ pub struct Dependency {
 	pub version: Option<String>,
 
 	/// The package's path.
-	pub path: Option<Relpath>,
+	pub path: Option<crate::Path>,
 
 	/// Whether or not this dependency is an island.
 	pub island: Option<bool>,
@@ -24,7 +23,7 @@ pub struct Dependency {
 
 impl Dependency {
 	#[must_use]
-	pub fn with_path(path: Relpath) -> Self {
+	pub fn with_path(path: crate::Path) -> Self {
 		Self {
 			name: None,
 			version: None,

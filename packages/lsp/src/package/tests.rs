@@ -381,7 +381,7 @@ async fn diamond_with_path_dependencies() {
 
 	// Create the path dependency table.
 	let foo_id: tg::Id = foo.id(&client).await.unwrap().clone().into();
-	let foo_path_dependencies: BTreeMap<tg::Relpath, tg::Id> = [(
+	let foo_path_dependencies: BTreeMap<tg::Path, tg::Id> = [(
 		"./path/to/bar".parse().unwrap(),
 		bar.id(&client).await.unwrap().clone().into(),
 	)]
@@ -569,7 +569,7 @@ impl MockClient {
 			.iter()
 			.map(|dep| {
 				format!(
-					r#"import * as {} from "tangram:{}@{}"#,
+					r#"import * as {} from "tangram:{}@{}";"#,
 					dep.name.as_ref().unwrap(),
 					dep.name.as_ref().unwrap(),
 					dep.version.as_ref().unwrap()
@@ -580,14 +580,15 @@ impl MockClient {
 
 		let contents = format!(
 			r#"
-        {imports}
-        export let metadata = {{
-            name: "{name}",
-            version: "{version}",
-        }};
+				{imports}
 
-        export default tg.target(() => "Hello, from {name}!");
-        "#
+				export let metadata = {{
+						name: "{name}",
+						version: "{version}",
+				}};
+
+				export default tg.target(() => "Hello, from {name}!");
+			"#
 		);
 
 		let contents = tg::blob::Blob::with_reader(self.client.as_ref(), contents.as_bytes())
@@ -609,7 +610,7 @@ impl MockClient {
 
 		{
 			let mut state = self.state.lock().unwrap();
-			let _ = state
+			state
 				.dependencies
 				.insert(metadata.clone(), dependencies.to_vec());
 		}
@@ -619,7 +620,7 @@ impl MockClient {
 	pub async fn try_solve(
 		&self,
 		metadata: tg::package::Metadata,
-	) -> tangram_error::Result<Vec<(tg::Relpath, tg::Lock)>> {
+	) -> tangram_error::Result<Vec<(tg::Path, tg::Lock)>> {
 		let package: tg::Id = self
 			.get_package_version(
 				metadata.name.as_ref().unwrap(),
@@ -841,10 +842,11 @@ impl tg::Client for MockClient {
 		let directory = tg::Artifact::with_id(id.clone())
 			.try_unwrap_directory()
 			.wrap_err("Failed to get directory")?;
-
-		let subpath: tg::Subpath = ROOT_MODULE_FILE_NAME.parse().unwrap();
 		let text = directory
-			.try_get(self.client.as_ref(), &subpath)
+			.try_get(
+				self.client.as_ref(),
+				&ROOT_MODULE_FILE_NAME.parse().unwrap(),
+			)
 			.await?
 			.unwrap()
 			.try_unwrap_file()
@@ -853,10 +855,8 @@ impl tg::Client for MockClient {
 			.await?
 			.text(self.client.as_ref())
 			.await?;
-
 		let module = crate::Module::analyze(text)?;
 		let metadata = module.metadata.unwrap();
-
 		self.publish(metadata, tg::Artifact::with_id(id.clone()));
 		Ok(())
 	}

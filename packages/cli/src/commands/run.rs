@@ -56,7 +56,7 @@ impl Cli {
 			.to_owned()
 			.try_into()
 			.unwrap();
-		let executable = tg::Symlink::with_package_and_path(&package, &path).into();
+		let executable = tg::Symlink::new(Some(package), path).into();
 		let target = tg::target::Builder::new(host, executable)
 			.lock(lock)
 			.name(args.target.clone())
@@ -108,7 +108,7 @@ impl Cli {
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {
 			// Resolve the argument as a path relative to the artifact.
-			artifact_path.join(PathBuf::from(executable_path))
+			artifact_path.join(PathBuf::from(executable_path.to_string()))
 		} else {
 			match artifact {
 				// If the artifact is a file or symlink, then the executable path should be the artifact itself.

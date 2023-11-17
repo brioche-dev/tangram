@@ -648,32 +648,32 @@ impl Server {
 			_ => return Err(libc::EIO),
 		};
 
-		// Get the target.
-		let target = symlink
-			.target(self.inner.client.as_ref())
-			.await
-			.map_err(|_| libc::EIO)?;
-
 		// Render the target.
-		let mut response = String::new();
-		for component in target.components() {
-			match component {
-				tg::template::Component::String(string) => response.push_str(string),
-				tg::template::Component::Artifact(artifact) => {
-					let id = artifact
-						.id(self.inner.client.as_ref())
-						.await
-						.map_err(|_| libc::EIO)?;
-					for _ in 0..node.depth() {
-						response.push_str("../");
-					}
-					response.push_str(&id.to_string());
-				},
+		let mut target = String::new();
+		let Ok(artifact) = symlink.artifact(self.inner.client.as_ref()).await else {
+			return Err(libc::EIO);
+		};
+		let Ok(path) = symlink.path(self.inner.client.as_ref()).await else {
+			return Err(libc::EIO);
+		};
+		if let Some(artifact) = artifact {
+			let Ok(id) = artifact.id(self.inner.client.as_ref()).await else {
+				return Err(libc::EIO);
+			};
+			for _ in 0..node.depth() - 1 {
+				target.push_str("../");
 			}
+			target.push_str(&id.to_string());
 		}
-		let response = CString::new(response).unwrap();
+		if artifact.is_some() && path.is_some() {
+			target.push('/');
+		}
+		if let Some(path) = path {
+			target.push_str(path);
+		}
+		let target = CString::new(target).unwrap();
 
-		Ok(Response::ReadLink(response))
+		Ok(Response::ReadLink(target))
 	}
 
 	async fn handle_release_request(
@@ -967,7 +967,7 @@ impl Node {
 		if self.id == ROOT_NODE_ID {
 			0
 		} else {
-			1 + self.parent.upgrade().unwrap().depth()
+			self.parent.upgrade().unwrap().depth() + 1
 		}
 	}
 

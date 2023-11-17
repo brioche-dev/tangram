@@ -7,7 +7,7 @@ use url::Url;
 #[serde(into = "String", try_from = "String")]
 pub enum Import {
 	/// An import of a module in the current package, such as `import "./module.tg"`.
-	Path(tg::Relpath),
+	Path(tg::Path),
 
 	/// An import of a dependency, such as `import "tangram:std"`.
 	Dependency(tg::Dependency),
@@ -34,14 +34,14 @@ impl std::str::FromStr for Import {
 	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		if value.starts_with('.') {
 			// If the string starts with `.`, then parse the string as a relative path.
-			let relpath: tg::Relpath = value.parse()?;
+			let path: tg::Path = value.parse()?;
 
 			// Ensure the path has a ".tg" extension.
-			if relpath.extension() != Some("tg") {
-				return_error!(r#"The path "{relpath}" does not have a ".tg" extension."#);
+			if path.extension() != Some("tg") {
+				return_error!(r#"The path "{path}" does not have a ".tg" extension."#);
 			}
 
-			Ok(Import::Path(relpath))
+			Ok(Import::Path(path))
 		} else {
 			// Otherwise, parse the string as a URL.
 			let url: Url = value

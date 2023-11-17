@@ -127,7 +127,7 @@ impl Server {
 // 	// Update the notifier.
 // 	{
 // 		let watcher = self.state.fsm.read().await;
-// 		let _ = watcher.as_ref().unwrap().sender.send(path.into()).await;
+// 		watcher.as_ref().unwrap().sender.send(path.into()).await;
 // 		Ok(())
 // 	}
 // }
@@ -180,7 +180,7 @@ impl Server {
 // 					return;
 // 				};
 // 				let server = Server { state };
-// 				let _ = server.delete_tracker(&path);
+// 				server.delete_tracker(&path);
 // 			}
 // 		};
 
@@ -245,7 +245,7 @@ impl Server {
 // 		.wrap_err("Failed to begin the transaction.")?;
 // 	for path in paths {
 // 		let key = path.as_os_str().as_bytes();
-// 		let _ = txn.del(trackers, &key, None);
+// 		txn.del(trackers, &key, None);
 // 	}
 // 	txn.commit().wrap_err("Failed to commit the transaction.")?;
 // 	Ok(())

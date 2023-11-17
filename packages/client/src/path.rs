@@ -1,8 +1,7 @@
-use crate::{error, return_error, Error, Result};
-use itertools::Itertools;
-use std::path::PathBuf;
+use crate::{Error, Result};
+use derive_more::{TryUnwrap, Unwrap};
 
-/// A relative path.
+/// Any path.
 #[derive(
 	Clone,
 	Debug,
@@ -16,90 +15,24 @@ use std::path::PathBuf;
 	serde::Serialize,
 )]
 #[serde(into = "String", try_from = "String")]
-pub struct Relpath {
-	/// The number of leading parent components.
-	parents: usize,
-
-	/// The subpath.
-	subpath: Subpath,
+pub struct Path {
+	components: Vec<Component>,
 }
 
-/// A subpath.
-#[derive(
-	Clone,
-	Debug,
-	Default,
-	Eq,
-	Hash,
-	Ord,
-	PartialEq,
-	PartialOrd,
-	serde::Deserialize,
-	serde::Serialize,
-)]
-#[serde(into = "String", try_from = "String")]
-pub struct Subpath {
-	components: Vec<String>,
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, TryUnwrap, Unwrap)]
+#[try_unwrap(ref)]
+#[unwrap(ref)]
+pub enum Component {
+	Root,
+	Current,
+	Parent,
+	Normal(String),
 }
 
-impl Relpath {
+impl Path {
 	#[must_use]
-	pub fn empty() -> Relpath {
-		Relpath {
-			parents: 0,
-			subpath: Subpath::empty(),
-		}
-	}
-
-	#[must_use]
-	pub fn is_empty(&self) -> bool {
-		self.parents == 0 && self.subpath.is_empty()
-	}
-
-	#[must_use]
-	pub fn parents(&self) -> usize {
-		self.parents
-	}
-
-	#[must_use]
-	pub fn subpath(&self) -> &Subpath {
-		&self.subpath
-	}
-
-	#[must_use]
-	pub fn parent(mut self) -> Self {
-		if self.subpath.is_empty() {
-			self.parents += 1;
-		} else {
-			self.subpath.components.pop();
-		}
-		self
-	}
-
-	#[must_use]
-	pub fn join(mut self, other: Relpath) -> Self {
-		for _ in 0..other.parents {
-			self = self.parent();
-		}
-		self.subpath.components.extend(other.subpath.components);
-		self
-	}
-
-	#[must_use]
-	pub fn extension(&self) -> Option<&str> {
-		self.subpath.extension()
-	}
-
-	#[must_use]
-	pub fn try_into_subpath(self) -> Option<Subpath> {
-		self.try_into().ok()
-	}
-}
-
-impl Subpath {
-	#[must_use]
-	pub fn empty() -> Subpath {
-		Subpath { components: vec![] }
+	pub fn empty() -> Self {
+		Self { components: vec![] }
 	}
 
 	#[must_use]
@@ -108,55 +41,116 @@ impl Subpath {
 	}
 
 	#[must_use]
-	pub fn components(&self) -> &[String] {
+	pub fn components(&self) -> &[Component] {
 		&self.components
+	}
+
+	pub fn push(&mut self, component: Component) {
+		// Ignore the component if it is a current directory component.
+		if component == Component::Current {
+			return;
+		}
+
+		// If the component is a root component, then clear the path.
+		if component == Component::Root {
+			self.components.clear();
+		}
+
+		// Add the component to the path.
+		self.components.push(component);
+	}
+
+	#[must_use]
+	pub fn parent(self) -> Self {
+		self.join(Component::Parent.into())
 	}
 
 	#[must_use]
 	pub fn join(mut self, other: Self) -> Self {
-		self.components.extend(other.components);
+		for component in other.components {
+			self.push(component);
+		}
 		self
+	}
+
+	#[must_use]
+	pub fn normalize(self) -> Self {
+		let mut path = Self::empty();
+		for component in self.components {
+			if component == Component::Parent
+				&& matches!(path.components.last(), Some(Component::Normal(_)))
+			{
+				path.components.pop();
+			} else {
+				path.components.push(component);
+			}
+		}
+		path
+	}
+
+	#[must_use]
+	pub fn is_absolute(&self) -> bool {
+		matches!(self.components.first(), Some(Component::Root))
 	}
 
 	#[must_use]
 	pub fn extension(&self) -> Option<&str> {
 		self.components
 			.last()
+			.and_then(|component| component.try_unwrap_normal_ref().ok())
 			.and_then(|name| name.split('.').last())
-	}
-
-	#[must_use]
-	pub fn into_relpath(self) -> Relpath {
-		self.into()
 	}
 }
 
-impl std::fmt::Display for Relpath {
+impl std::fmt::Display for Path {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		for _ in 0..self.parents {
-			write!(f, "../")?;
+		for (i, component) in self.components.iter().enumerate() {
+			match component {
+				Component::Root => {
+					write!(f, "/")?;
+				},
+				Component::Current => {
+					if i != 0 {
+						write!(f, "/")?;
+					}
+					write!(f, ".")?;
+				},
+				Component::Parent => {
+					if i != 0 {
+						write!(f, "/")?;
+					}
+					write!(f, "..")?;
+				},
+				Component::Normal(name) => {
+					if i != 0 {
+						write!(f, "/")?;
+					}
+					write!(f, "{name}")?;
+				},
+			}
 		}
-		write!(f, "{}", self.subpath)?;
 		Ok(())
 	}
 }
 
-impl std::str::FromStr for Relpath {
+impl std::str::FromStr for Path {
 	type Err = Error;
 
-	fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-		if s.starts_with('/') {
-			return_error!(r#"A relpath cannot start with a path separator."#);
-		}
+	fn from_str(mut s: &str) -> std::result::Result<Self, Self::Err> {
 		let mut path = Self::empty();
+		if s.starts_with('/') {
+			path.components.push(Component::Root);
+			s = &s[1..];
+		}
 		for component in s.split('/') {
 			match component {
 				"" | "." => (),
 				".." => {
-					path = path.parent();
+					path.components.push(Component::Parent);
 				},
 				_ => {
-					path.subpath.components.push(component.to_owned());
+					let component = Component::Normal(component.to_owned());
+					path.components.push(component);
 				},
 			}
 		}
@@ -164,13 +158,13 @@ impl std::str::FromStr for Relpath {
 	}
 }
 
-impl From<Relpath> for String {
-	fn from(value: Relpath) -> Self {
+impl From<Path> for String {
+	fn from(value: Path) -> Self {
 		value.to_string()
 	}
 }
 
-impl TryFrom<String> for Relpath {
+impl TryFrom<String> for Path {
 	type Error = Error;
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -178,252 +172,18 @@ impl TryFrom<String> for Relpath {
 	}
 }
 
-impl TryFrom<&str> for Relpath {
-	type Error = Error;
-
-	fn try_from(value: &str) -> Result<Self, Self::Error> {
-		value.parse()
-	}
-}
-
-impl From<Subpath> for Relpath {
-	fn from(value: Subpath) -> Relpath {
-		Relpath {
-			parents: 0,
-			subpath: value,
+impl From<Component> for Path {
+	fn from(value: Component) -> Self {
+		Self {
+			components: vec![value],
 		}
 	}
 }
 
-impl From<Relpath> for PathBuf {
-	fn from(value: Relpath) -> Self {
-		value.to_string().into()
-	}
-}
-
-impl std::fmt::Display for Subpath {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		#[allow(unstable_name_collisions)]
-		for string in self.components.iter().map(AsRef::as_ref).intersperse("/") {
-			write!(f, "{string}")?;
-		}
-		Ok(())
-	}
-}
-
-impl std::str::FromStr for Subpath {
-	type Err = Error;
-
-	fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-		let path: Relpath = s.parse()?;
-		let path = path.try_into()?;
-		Ok(path)
-	}
-}
-
-impl From<Subpath> for String {
-	fn from(value: Subpath) -> Self {
-		value.to_string()
-	}
-}
-
-impl TryFrom<String> for Subpath {
-	type Error = Error;
-
-	fn try_from(value: String) -> Result<Self, Self::Error> {
-		value.parse()
-	}
-}
-
-impl TryFrom<&str> for Subpath {
-	type Error = Error;
-
-	fn try_from(value: &str) -> Result<Self, Self::Error> {
-		value.parse()
-	}
-}
-
-impl TryFrom<Relpath> for Subpath {
-	type Error = Error;
-
-	fn try_from(value: Relpath) -> Result<Subpath, Self::Error> {
-		if value.parents() == 0 {
-			Ok(value.subpath)
-		} else {
-			Err(error!(r#"The number of parents is not zero."#))
-		}
-	}
-}
-
-impl From<Subpath> for PathBuf {
-	fn from(value: Subpath) -> Self {
-		value.to_string().into()
-	}
-}
-
-impl FromIterator<String> for Subpath {
-	fn from_iter<T: IntoIterator<Item = String>>(iter: T) -> Self {
-		Subpath {
+impl FromIterator<Component> for Path {
+	fn from_iter<T: IntoIterator<Item = Component>>(iter: T) -> Self {
+		Self {
 			components: iter.into_iter().collect(),
 		}
-	}
-}
-impl Relpath {
-	#[must_use]
-	pub fn diff(&self, src: &Relpath) -> Relpath {
-		self.try_diff(src).unwrap()
-	}
-
-	pub fn try_diff(&self, src: &Relpath) -> Result<Relpath> {
-		let dst = self;
-
-		// Remove the common parents.
-		let common_parents = std::cmp::min(src.parents, dst.parents);
-
-		// If the src parents is greater than the common parents, then return an error.
-		if src.parents > common_parents {
-			return_error!(r#"Invalid comparison."#);
-		}
-
-		// If the src and dst have the same number of parents, then remove the common subpath components.
-		let common_components = if src.parents == dst.parents {
-			std::iter::zip(&src.subpath.components, &dst.subpath.components)
-				.take_while(|(a, b)| a == b)
-				.count()
-		} else {
-			0
-		};
-
-		// Create the path.
-		let parents =
-			src.subpath.components.len() - common_components + dst.parents - common_parents;
-		let subpath = Subpath {
-			components: dst
-				.subpath
-				.components
-				.iter()
-				.skip(common_components)
-				.cloned()
-				.collect(),
-		};
-		let path = Relpath { parents, subpath };
-
-		Ok(path)
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::Relpath;
-
-	#[test]
-	fn test_diff() {
-		let src = Relpath::empty();
-		let dst = Relpath::empty();
-		let left = dst.diff(&src);
-		let right = Relpath::empty();
-		assert_eq!(left, right);
-
-		let src = Relpath::empty();
-		let dst = Relpath::try_from("foo").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("foo").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::empty();
-		let dst = Relpath::try_from("foo/bar").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("foo/bar").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::empty();
-		let dst = Relpath::try_from("../../foo/bar").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("../../foo/bar").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("foo").unwrap();
-		let dst = Relpath::empty();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("..").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("foo/bar").unwrap();
-		let dst = Relpath::empty();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("../..").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("foo/bar/baz").unwrap();
-		let dst = Relpath::empty();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("../../..").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("foo").unwrap();
-		let dst = Relpath::try_from("foo").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::empty();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("foo/bar").unwrap();
-		let dst = Relpath::try_from("foo/bar").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::empty();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("../../foo/bar").unwrap();
-		let dst = Relpath::try_from("../../foo/bar").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::empty();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("foo").unwrap();
-		let dst = Relpath::try_from("foo/bar").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("bar").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("foo/baz/buzz").unwrap();
-		let dst = Relpath::try_from("foo/bar/baz").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("../../bar/baz").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("../foo/bar").unwrap();
-		let dst = Relpath::try_from("../foo").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("..").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("../foo/fizz/buzz").unwrap();
-		let dst = Relpath::try_from("../foo/bar/baz").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("../../bar/baz").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("../foo/bar").unwrap();
-		let dst = Relpath::try_from("..").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("../..").unwrap();
-		assert_eq!(left, right);
-
-		let src = Relpath::try_from("../foo").unwrap();
-		let dst = Relpath::empty();
-		assert!(dst.try_diff(&src).is_err());
-
-		let src = Relpath::try_from("../../bar").unwrap();
-		let dst = Relpath::try_from("../foo").unwrap();
-		assert!(dst.try_diff(&src).is_err());
-
-		let src = Relpath::try_from("../../../bar").unwrap();
-		let dst = Relpath::try_from("../../foo").unwrap();
-		assert!(dst.try_diff(&src).is_err());
-
-		let src = Relpath::try_from("foo/bar/baz").unwrap();
-		let dst = Relpath::try_from("../../").unwrap();
-		let left = dst.diff(&src);
-		let right = Relpath::try_from("../../../../../").unwrap();
-		assert_eq!(left, right);
 	}
 }

@@ -24,17 +24,9 @@ export class TangramLanguageClient {
 		// Get the tangram configuration.
 		let tangramConfig = vscode.workspace.getConfiguration("tangram");
 
-		let args: Array<string> = [];
-		if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-			args = [
-				"--workspace-root",
-				vscode.workspace.workspaceFolders[0].uri.fsPath
-			]
-		}
-
 		let serverOptions: ServerOptions = {
 			command: tangramConfig.get<string>("path", "tg"),
-			args: ["lsp", ...args],
+			args: ["lsp"],
 			options: {
 				env: {
 					...process.env,

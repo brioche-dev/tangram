@@ -10,7 +10,7 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
-use tg::{package::Metadata, Dependency, Relpath, Subpath};
+use tg::{package::Metadata, Dependency};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub mod lockfile;
@@ -63,7 +63,7 @@ pub async fn get_or_create(
 			serde_json::from_slice(&contents).wrap_err("Failed to deserialize the lockfile.")?;
 
 		// Get the root lock.
-		let lock = lockfile.lock(&tg::Relpath::empty())?;
+		let lock = lockfile.lock(&tg::Path::empty())?;
 
 		// Scan the root artifact.
 		let mut visited = BTreeMap::new();
@@ -184,9 +184,9 @@ impl Ext for tg::Directory {
 		let mut dependencies: BTreeSet<tg::Dependency> = BTreeSet::default();
 
 		// Create a queue of module paths to visit and a visited set.
-		let mut queue: VecDeque<tg::Subpath> =
+		let mut queue: VecDeque<tg::Path> =
 			VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
-		let mut visited: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
+		let mut visited: HashSet<tg::Path, fnv::FnvBuildHasher> = HashSet::default();
 
 		// Add each dependency.
 		while let Some(module_subpath) = queue.pop_front() {
@@ -206,12 +206,11 @@ impl Ext for tg::Directory {
 				if let Import::Dependency(dependency) = import {
 					let mut dependency = dependency.clone();
 
-					// Canonicalize the path dependency to be relative to the root.
-					dependency.path = dependency.path.take().map(|path| {
-						tg::Relpath::from(module_subpath.clone())
-							.parent()
-							.join(path)
-					});
+					// Normalize the path dependency to be relative to the root.
+					dependency.path = dependency
+						.path
+						.take()
+						.map(|path| module_subpath.clone().parent().join(path).normalize());
 
 					dependencies.insert(dependency.clone());
 				}
@@ -225,11 +224,9 @@ impl Ext for tg::Directory {
 				if let Import::Path(import) = import {
 					let imported_module_subpath = module_subpath
 						.clone()
-						.into_relpath()
 						.parent()
 						.join(import.clone())
-						.try_into_subpath()
-						.wrap_err("Failed to resolve the module path.")?;
+						.normalize();
 					if !visited.contains(&imported_module_subpath) {
 						queue.push_back(imported_module_subpath);
 					}
@@ -244,7 +241,7 @@ impl Ext for tg::Directory {
 
 	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata> {
 		let file = self
-			.get(client, &ROOT_MODULE_FILE_NAME.try_into().unwrap())
+			.get(client, &ROOT_MODULE_FILE_NAME.parse().unwrap())
 			.await?
 			.try_unwrap_file()
 			.unwrap();
@@ -270,7 +267,7 @@ async fn analyze_package_at_path(
 	client: &dyn tg::Client,
 	package_path: PathBuf,
 	visited: &mut BTreeMap<PathBuf, Option<tg::Directory>>,
-	path_dependencies: &mut BTreeMap<tg::Id, BTreeMap<Relpath, tg::Id>>,
+	path_dependencies: &mut BTreeMap<tg::Id, BTreeMap<tg::Path, tg::Id>>,
 	registry_dependencies: &mut BTreeSet<(tg::Id, tg::Dependency)>,
 ) -> tangram_error::Result<tg::Directory> {
 	debug_assert!(
@@ -288,8 +285,9 @@ async fn analyze_package_at_path(
 	let mut directory = tg::directory::Builder::default();
 
 	// Create a queue of module paths to visit and a visited set.
-	let mut queue: VecDeque<Subpath> = VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
-	let mut visited_modules: HashSet<tg::Subpath, fnv::FnvBuildHasher> = HashSet::default();
+	let mut queue: VecDeque<tg::Path> =
+		VecDeque::from(vec![ROOT_MODULE_FILE_NAME.parse().unwrap()]);
+	let mut visited_modules: HashSet<tg::Path, fnv::FnvBuildHasher> = HashSet::default();
 
 	let mut package_path_dependencies = BTreeMap::new();
 	let mut package_registry_dependencies = Vec::new();
@@ -318,11 +316,9 @@ async fn analyze_package_at_path(
 			// Get the included artifact's path in the package.
 			let included_artifact_subpath = module_subpath
 				.clone()
-				.into_relpath()
 				.parent()
 				.join(include_path.clone())
-				.try_into_subpath()
-				.wrap_err("Invalid include path.")?;
+				.normalize();
 
 			// Get the included artifact's path.
 			let included_artifact_path = package_path.join(included_artifact_subpath.to_string());
@@ -348,7 +344,6 @@ async fn analyze_package_at_path(
 						.canonicalize()
 						.wrap_err("Failed to canonicalize dependency path.")?;
 
-					// This gives us a full directory ID.
 					let child = analyze_package_at_path(
 						client,
 						package_path,
@@ -359,12 +354,12 @@ async fn analyze_package_at_path(
 					.await?;
 					let id = child.id(client).await?.clone();
 
-					// Store the artifact and dependency
-					// The relpath must be relative to the
-					let dependency_relpath = tg::Relpath::from(module_subpath.clone())
+					let dependency_relative_path = module_subpath
+						.clone()
 						.parent()
-						.join(dependency.path.clone().unwrap());
-					package_path_dependencies.insert(dependency_relpath, id.into());
+						.join(dependency.path.clone().unwrap())
+						.normalize();
+					package_path_dependencies.insert(dependency_relative_path, id.into());
 				},
 				Import::Dependency(dependency) => {
 					package_registry_dependencies.push(dependency.clone());
@@ -381,11 +376,9 @@ async fn analyze_package_at_path(
 			if let Import::Path(import) = import {
 				let imported_module_subpath = module_subpath
 					.clone()
-					.into_relpath()
 					.parent()
 					.join(import.clone())
-					.try_into_subpath()
-					.wrap_err("Failed to resolve the module path.")?;
+					.normalize();
 				if !visited_modules.contains(&imported_module_subpath) {
 					queue.push_back(imported_module_subpath);
 				}
@@ -397,7 +390,7 @@ async fn analyze_package_at_path(
 	let artifact = directory.build();
 	let id: tg::Id = artifact.id(client).await?.clone().into();
 
-	let _ = visited.insert(package_path, Some(artifact.clone()));
+	visited.insert(package_path, Some(artifact.clone()));
 	path_dependencies.insert(id.clone(), package_path_dependencies);
 	for dependency in package_registry_dependencies {
 		registry_dependencies.insert((id.clone(), dependency));

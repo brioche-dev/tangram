@@ -116,7 +116,7 @@ impl From<tg::Dependency> for Specifier {
 			..
 		} = value;
 		match (name, version, path) {
-			(_, _, Some(path)) => Specifier::Path(path.into()),
+			(_, _, Some(path)) => Specifier::Path(PathBuf::from(path.to_string())),
 			(Some(name), version, None) => Specifier::Registry(Registry { name, version }),
 			_ => unreachable!(),
 		}

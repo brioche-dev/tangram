@@ -1,14 +1,13 @@
-use crate::{
-	directory, return_error, template, Artifact, Client, Directory, Error, File, Result, Subpath,
-	Symlink, WrapErr,
-};
+use crate::{directory, return_error, Artifact, Client, Directory, Error, File, Result, Symlink};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use once_cell::sync::Lazy;
+use tangram_error::WrapErr;
 
-static TANGRAM_ARTIFACTS_PATH: Lazy<Subpath> = Lazy::new(|| ".tangram/artifacts".parse().unwrap());
+static TANGRAM_ARTIFACTS_PATH: Lazy<crate::Path> =
+	Lazy::new(|| ".tangram/artifacts".parse().unwrap());
 
-static TANGRAM_RUN_SUBPATH: Lazy<Subpath> = Lazy::new(|| ".tangram/run".parse().unwrap());
+static TANGRAM_RUN_SUBPATH: Lazy<crate::Path> = Lazy::new(|| ".tangram/run".parse().unwrap());
 
 impl Artifact {
 	/// Bundle an artifact with all of its recursive references at `.tangram/artifacts`.
@@ -24,20 +23,10 @@ impl Artifact {
 		// Create the artifacts directory by removing all references from the referenced artifacts.
 		let entries = references
 			.into_iter()
-			.map(|id| {
-				async move {
-					let artifact = Artifact::with_id(id.clone());
-
-					// Create the path for the reference at `.tangram/artifacts/<id>`.
-					let path = TANGRAM_ARTIFACTS_PATH
-						.clone()
-						.join(id.to_string().parse().unwrap());
-
-					// Remove references from the referenced artifact.
-					let artifact = artifact.remove_references(client, &path).await?;
-
-					Ok::<_, Error>((id.to_string(), artifact))
-				}
+			.map(|id| async move {
+				let artifact = Artifact::with_id(id.clone());
+				let artifact = artifact.remove_references(client, 3).await?;
+				Ok::<_, Error>((id.to_string(), artifact))
 			})
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
@@ -62,7 +51,7 @@ impl Artifact {
 
 		// Remove references from the bundle directory.
 		let bundle_directory = bundle_directory
-			.remove_references(client, &Subpath::empty())
+			.remove_references(client, 0)
 			.await?
 			.try_unwrap_directory()
 			.ok()
@@ -80,12 +69,12 @@ impl Artifact {
 		Ok(bundle_directory)
 	}
 
-	/// Remove all references from an artifact and its children, rendering symlink targets to a relative path from `path` to `.tangram/artifacts/<id>`.
+	/// Remove all references from an artifact and its children recursively.
 	#[async_recursion]
 	async fn remove_references(
 		&self,
 		client: &'async_recursion dyn Client,
-		path: &Subpath,
+		depth: usize,
 	) -> Result<Artifact> {
 		match self {
 			// If the artifact is a directory, then recurse to remove references from its entries.
@@ -94,16 +83,9 @@ impl Artifact {
 					.entries(client)
 					.await?
 					.iter()
-					.map(|(name, artifact)| {
-						async move {
-							// Create the path for the entry.
-							let path = path.clone().join(name.parse().unwrap());
-
-							// Remove references from the entry.
-							let artifact = artifact.remove_references(client, &path).await?;
-
-							Ok::<_, Error>((name.clone(), artifact))
-						}
+					.map(|(name, artifact)| async move {
+						let artifact = artifact.remove_references(client, depth + 1).await?;
+						Ok::<_, Error>((name.clone(), artifact))
 					})
 					.collect::<FuturesOrdered<_>>()
 					.try_collect()
@@ -120,34 +102,30 @@ impl Artifact {
 			)
 			.into()),
 
-			// If the artifact is a symlink, then return the symlink with its target rendered with artifacts pointing to `.tangram/artifacts/<id>`.
+			// If the artifact is a symlink, then replace it with a symlink pointing to `.tangram/artifacts/<id>`.
 			Artifact::Symlink(symlink) => {
 				// Render the target.
-				let target = symlink
-					.target(client)
-					.await?
-					.try_render(|component| async move {
-						match component {
-							// Render a string component as is.
-							template::Component::String(string) => Ok(string.into()),
-
-							// Render an artifact component with the diff from the path's parent to the referenced artifact's path.
-							template::Component::Artifact(artifact) => {
-								let artifact_path = TANGRAM_ARTIFACTS_PATH
-									.clone()
-									.join(artifact.id(client).await?.to_string().parse().unwrap());
-								let path = artifact_path
-									.into_relpath()
-									.diff(&path.clone().into_relpath().parent())
-									.to_string();
-								Ok(path)
-							},
-						}
-					})
-					.await?
-					.into();
-
-				Ok(Symlink::new(target).into())
+				let mut target = String::new();
+				let artifact = symlink.artifact(client).await?;
+				let path = symlink.path(client).await?;
+				if let Some(artifact) = artifact {
+					for _ in 0..depth {
+						target.push_str("../");
+					}
+					target.push_str(
+						&TANGRAM_ARTIFACTS_PATH
+							.clone()
+							.join(artifact.id(client).await?.to_string().parse().unwrap())
+							.to_string(),
+					);
+				}
+				if artifact.is_some() && path.is_some() {
+					target.push('/');
+				}
+				if let Some(path) = path {
+					target.push_str(path);
+				}
+				Ok(Symlink::new(None, Some(target)).into())
 			},
 		}
 	}

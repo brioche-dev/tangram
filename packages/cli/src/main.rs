@@ -168,8 +168,8 @@ impl Cli {
 			.args(["server", "run"])
 			.current_dir(&self.path)
 			.stdin(std::process::Stdio::null())
-			.stdout(std::process::Stdio::from(stdout.into_std().await))
-			.stderr(std::process::Stdio::from(stderr.into_std().await))
+			.stdout(stdout.into_std().await)
+			.stderr(stderr.into_std().await)
 			.spawn()
 			.wrap_err("Failed to spawn the server.")?;
 		Ok(())

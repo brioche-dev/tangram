@@ -1239,8 +1239,12 @@ impl ToV8 for tg::symlink::Object {
 	fn to_v8<'a>(&self, scope: &mut v8::HandleScope<'a>) -> Result<v8::Local<'a, v8::Value>> {
 		let object = v8::Object::new(scope);
 
-		let key = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
-		let value = self.target.to_v8(scope)?;
+		let key = v8::String::new_external_onebyte_static(scope, "artifact".as_bytes()).unwrap();
+		let value = self.artifact.to_v8(scope)?;
+		object.set(scope, key.into(), value);
+
+		let key = v8::String::new_external_onebyte_static(scope, "path".as_bytes()).unwrap();
+		let value = self.path.to_v8(scope)?;
 		object.set(scope, key.into(), value);
 
 		Ok(object.into())
@@ -1254,11 +1258,16 @@ impl FromV8 for tg::symlink::Object {
 	) -> Result<Self> {
 		let value = value.to_object(scope).unwrap();
 
-		let target = v8::String::new_external_onebyte_static(scope, "target".as_bytes()).unwrap();
-		let target = value.get(scope, target.into()).unwrap();
-		let target = from_v8(scope, target)?;
+		let artifact =
+			v8::String::new_external_onebyte_static(scope, "artifact".as_bytes()).unwrap();
+		let artifact = value.get(scope, artifact.into()).unwrap();
+		let artifact = from_v8(scope, artifact)?;
 
-		Ok(Self { target })
+		let path = v8::String::new_external_onebyte_static(scope, "path".as_bytes()).unwrap();
+		let path = value.get(scope, path.into()).unwrap();
+		let path = from_v8(scope, path)?;
+
+		Ok(Self { artifact, path })
 	}
 }
 

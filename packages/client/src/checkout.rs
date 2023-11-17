@@ -1,7 +1,4 @@
-use crate::{
-	error, return_error, Artifact, Client, Directory, Error, File, Result, Subpath, Symlink,
-	WrapErr,
-};
+use crate::{return_error, Artifact, Client, Directory, Error, File, Result, Symlink, WrapErr};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use std::{os::unix::prelude::PermissionsExt, path::Path};
@@ -135,7 +132,7 @@ impl Artifact {
 					// Retrieve an existing artifact.
 					let existing_artifact = match existing_artifact {
 						Some(Artifact::Directory(existing_directory)) => {
-							let name: Subpath = name.parse().wrap_err("Invalid entry name.")?;
+							let name = name.parse().wrap_err("Invalid entry name.")?;
 							existing_directory.try_get(client, &name).await?
 						},
 						_ => None,
@@ -220,18 +217,15 @@ impl Artifact {
 		};
 
 		// Render the target.
+		if symlink.artifact(client).await?.is_some() {
+			return_error!(r#"Cannot check out a symlink which contains an artifact."#);
+		}
 		let target = symlink
-			.target(client)
+			.path(client)
 			.await?
-			.try_render(|component| async move {
-				match component {
-					crate::template::Component::String(string) => Ok(string.into()),
-					crate::template::Component::Artifact(_) => Err(error!(
-						"Cannot check out a symlink whose target contains artifacts.",
-					)),
-				}
-			})
-			.await?;
+			.as_ref()
+			.cloned()
+			.unwrap_or_default();
 
 		// Create the symlink.
 		tokio::fs::symlink(target, path)

@@ -64,10 +64,15 @@ pub struct Object {
 pub struct Data {
 	pub host: System,
 	pub executable: artifact::Id,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub lock: Option<lock::Id>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub name: Option<String>,
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
 	pub env: BTreeMap<String, value::Data>,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub args: Vec<value::Data>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub checksum: Option<Checksum>,
 }
 

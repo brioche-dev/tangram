@@ -1,15 +1,10 @@
-use std::path::PathBuf;
-
 use crate::Cli;
 use tangram_error::Result;
 
 /// Run the language server.
 #[derive(Debug, clap::Args)]
 #[command(verbatim_doc_comment)]
-pub struct Args {
-	#[arg(long)]
-	pub workspace_root: Option<PathBuf>,
-}
+pub struct Args {}
 
 impl Cli {
 	pub async fn command_lsp(&self, _args: Args) -> Result<()> {

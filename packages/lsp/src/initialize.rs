@@ -25,7 +25,7 @@ impl Server {
 			params.root_uri.into_iter().collect()
 		};
 
-		let _ = self.update_workspace_folders(added, Vec::new()).await;
+		self.update_workspace_folders(added, Vec::new()).await.ok();
 
 		let capabilities = lsp::InitializeResult {
 			capabilities: lsp::ServerCapabilities {

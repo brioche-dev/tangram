@@ -20,7 +20,7 @@ pub struct Document {
 	pub package_path: PathBuf,
 
 	/// The module's path.
-	pub path: tg::Subpath,
+	pub path: tg::Path,
 }
 
 /// A document's state.
@@ -163,7 +163,7 @@ impl Server {
 		}
 
 		// Update the lockfile.
-		let _ = crate::package::get_or_create(client, &document.path()).await?;
+		crate::package::get_or_create(client, &document.path()).await?;
 
 		// Update all diagnostics.
 		self.update_diagnostics(&sender).await?;
@@ -173,11 +173,7 @@ impl Server {
 }
 
 impl Document {
-	pub async fn new(
-		store: &Store,
-		package_path: PathBuf,
-		module_path: tg::Subpath,
-	) -> Result<Self> {
+	pub async fn new(store: &Store, package_path: PathBuf, module_path: tg::Path) -> Result<Self> {
 		let path = package_path.join(module_path.to_string());
 
 		// Create the document.
@@ -226,7 +222,7 @@ impl Document {
 		}
 
 		// Get the module path by stripping the package path.
-		let module_path: tg::Subpath = path
+		let module_path: tg::Path = path
 			.strip_prefix(&package_path)
 			.unwrap()
 			.to_owned()

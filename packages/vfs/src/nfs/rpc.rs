@@ -1,6 +1,5 @@
 use super::xdr;
 use num::ToPrimitive;
-use std::io::IoSlice;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Debug)]
@@ -423,9 +422,8 @@ where
 	S: AsyncWrite + Unpin,
 {
 	let header = 0x8000_0000 | fragments.len().to_u32().unwrap();
-	let _ = stream
-		.write_vectored(&[IoSlice::new(&header.to_be_bytes()), IoSlice::new(fragments)])
-		.await?;
+	stream.write_all(&header.to_be_bytes()).await?;
+	stream.write_all(fragments).await?;
 	Ok(())
 }
 

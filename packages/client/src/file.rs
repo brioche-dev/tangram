@@ -45,7 +45,9 @@ pub struct Object {
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
 	pub contents: blob::Id,
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
 	pub executable: bool,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub references: Vec<artifact::Id>,
 }
 

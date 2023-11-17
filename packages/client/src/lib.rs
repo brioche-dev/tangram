@@ -13,7 +13,7 @@ pub use self::{
 	mutation::Mutation,
 	object::Object,
 	package::{Metadata, Package},
-	path::{Relpath, Subpath},
+	path::Path,
 	symlink::Symlink,
 	system::System,
 	target::Target,
@@ -24,7 +24,6 @@ pub use self::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::stream::BoxStream;
-use std::path::Path;
 use tangram_error::{error, return_error, Error, Result, Wrap, WrapErr};
 
 pub mod artifact;
@@ -64,7 +63,7 @@ pub trait Client: Send + Sync + 'static {
 		false
 	}
 
-	fn path(&self) -> Option<&Path>;
+	fn path(&self) -> Option<&std::path::Path>;
 
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore;
 
@@ -91,9 +90,9 @@ pub trait Client: Send + Sync + 'static {
 		bytes: &Bytes,
 	) -> Result<Result<(), Vec<object::Id>>>;
 
-	async fn try_get_tracker(&self, path: &Path) -> Result<Option<Tracker>>;
+	async fn try_get_tracker(&self, path: &std::path::Path) -> Result<Option<Tracker>>;
 
-	async fn set_tracker(&self, path: &Path, tracker: &Tracker) -> Result<()>;
+	async fn set_tracker(&self, path: &std::path::Path, tracker: &Tracker) -> Result<()>;
 
 	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>>;
 

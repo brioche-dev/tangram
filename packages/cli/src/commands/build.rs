@@ -56,7 +56,7 @@ impl Cli {
 			.to_owned()
 			.try_into()
 			.unwrap();
-		let executable = tg::Symlink::with_package_and_path(&package, &path).into();
+		let executable = tg::Symlink::new(Some(package), path).into();
 		let target = tg::target::Builder::new(host, executable)
 			.lock(lock)
 			.name(args.target.clone())

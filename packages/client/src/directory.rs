@@ -1,6 +1,4 @@
-use crate::{
-	artifact, error, id, object, return_error, Artifact, Client, Error, Result, Subpath, WrapErr,
-};
+use crate::{artifact, error, id, object, return_error, Artifact, Client, Error, Result, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
@@ -168,7 +166,7 @@ impl Directory {
 		Ok(&self.object(client).await?.entries)
 	}
 
-	pub async fn get(&self, client: &dyn Client, path: &Subpath) -> Result<Artifact> {
+	pub async fn get(&self, client: &dyn Client, path: &crate::Path) -> Result<Artifact> {
 		let artifact = self
 			.try_get(client, path)
 			.await?
@@ -176,24 +174,32 @@ impl Directory {
 		Ok(artifact)
 	}
 
-	pub async fn try_get(&self, client: &dyn Client, path: &Subpath) -> Result<Option<Artifact>> {
+	pub async fn try_get(
+		&self,
+		client: &dyn Client,
+		path: &crate::Path,
+	) -> Result<Option<Artifact>> {
 		// Track the current artifact.
 		let mut artifact: Artifact = self.clone().into();
 
-		// Track the current subpath.
-		let mut current_subpath = Subpath::empty();
+		// Track the current path.
+		let mut current_path = crate::Path::empty();
 
 		// Handle each path component.
-		for name in path.components() {
+		for component in path.components() {
 			// The artifact must be a directory.
 			let Some(directory) = artifact.try_unwrap_directory_ref().ok() else {
 				return Ok(None);
 			};
 
 			// Update the current subpath.
-			current_subpath = current_subpath.join(name.parse().unwrap());
+			current_path = current_path.join(component.clone().into());
 
 			// Get the entry. If it doesn't exist, return `None`.
+			let name = component
+				.try_unwrap_normal_ref()
+				.ok()
+				.wrap_err("The path must contain only normal components.")?;
 			let Some(entry) = directory.entries(client).await?.get(name).cloned() else {
 				return Ok(None);
 			};
@@ -295,17 +301,21 @@ impl Builder {
 	pub async fn add(
 		mut self,
 		client: &dyn Client,
-		path: &Subpath,
+		path: &crate::Path,
 		artifact: Artifact,
 	) -> Result<Self> {
 		// Get the first component.
 		let name = path
 			.components()
-			.first()
-			.wrap_err("Expected the path to have at least one component.")?;
+			.iter()
+			.nth(0)
+			.wrap_err("Expected the path to have at least one component.")?
+			.try_unwrap_normal_ref()
+			.ok()
+			.wrap_err("The path must contain only normal components.")?;
 
 		// Collect the trailing path.
-		let trailing_path: Subpath = path.components().iter().skip(1).cloned().collect();
+		let trailing_path: crate::Path = path.components().iter().skip(1).cloned().collect();
 
 		let artifact = if trailing_path.components().is_empty() {
 			artifact
@@ -337,15 +347,19 @@ impl Builder {
 	}
 
 	#[async_recursion]
-	pub async fn remove(mut self, client: &dyn Client, path: &Subpath) -> Result<Self> {
+	pub async fn remove(mut self, client: &dyn Client, path: &crate::Path) -> Result<Self> {
 		// Get the first component.
 		let name = path
 			.components()
-			.first()
-			.wrap_err("Expected the path to have at least one component.")?;
+			.iter()
+			.nth(0)
+			.wrap_err("Expected the path to have at least one component.")?
+			.try_unwrap_normal_ref()
+			.ok()
+			.wrap_err("The path must contain only normal components.")?;
 
 		// Collect the trailing path.
-		let trailing_path: Subpath = path.components().iter().skip(1).cloned().collect();
+		let trailing_path: crate::Path = path.components().iter().skip(1).cloned().collect();
 
 		if trailing_path.components().is_empty() {
 			// Remove the entry.

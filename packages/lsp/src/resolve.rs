@@ -18,14 +18,7 @@ impl Module {
 	) -> Result<Self> {
 		match (self, import) {
 			(Self::Library(module), Import::Path(path)) => {
-				let path = module
-					.path
-					.clone()
-					.into_relpath()
-					.parent()
-					.join(path.clone())
-					.try_into_subpath()
-					.wrap_err("Failed to resolve the module path.")?;
+				let path = module.path.clone().parent().join(path.clone()).normalize();
 				Ok(Self::Library(Library { path }))
 			},
 
@@ -39,11 +32,9 @@ impl Module {
 				let module_subpath = document
 					.path
 					.clone()
-					.into_relpath()
 					.parent()
 					.join(path.clone())
-					.try_into_subpath()
-					.wrap_err("Failed to resolve the module path.")?;
+					.normalize();
 
 				// Ensure that the module exists.
 				let module_path = package_path.join(module_subpath.to_string());
@@ -72,9 +63,9 @@ impl Module {
 				let dependency_path = document
 					.path
 					.clone()
-					.into_relpath()
 					.parent()
-					.join(dependency.path.as_ref().unwrap().clone());
+					.join(dependency.path.as_ref().unwrap().clone())
+					.normalize();
 
 				let package_path = document.package_path.join(dependency_path.to_string());
 				let package_path = tokio::fs::canonicalize(package_path)
@@ -116,14 +107,7 @@ impl Module {
 			},
 
 			(Self::Normal(module), Import::Path(path)) => {
-				let path = module
-					.path
-					.clone()
-					.into_relpath()
-					.parent()
-					.join(path.clone())
-					.try_into_subpath()
-					.wrap_err("Failed to resolve the module path.")?;
+				let path = module.path.clone().parent().join(path.clone()).normalize();
 				Ok(Self::Normal(Normal {
 					package: module.package.clone(),
 					path,
@@ -137,9 +121,9 @@ impl Module {
 				let dependency = match &dependency.path {
 					Some(dependency_path) => tg::Dependency::with_path(
 						module_subpath
-							.into_relpath()
 							.parent()
-							.join(dependency_path.clone()),
+							.join(dependency_path.clone())
+							.normalize(),
 					),
 					None => dependency.clone(),
 				};

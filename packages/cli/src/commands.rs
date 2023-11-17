@@ -2,7 +2,6 @@ use crate::Cli;
 use futures::FutureExt;
 use tangram_client as tg;
 use tangram_error::Result;
-use tg::Subpath;
 
 mod add;
 mod autoenv;
@@ -94,7 +93,7 @@ pub struct PackageArgs {
 pub struct RunArgs {
 	/// The path to the executable in the artifact to run.
 	#[arg(long)]
-	pub executable_path: Option<Subpath>,
+	pub executable_path: Option<tg::Path>,
 }
 
 impl Cli {

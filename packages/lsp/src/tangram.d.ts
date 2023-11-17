@@ -122,7 +122,7 @@ declare namespace tg {
 		/** Assert that a value is a `tg.Directory`. */
 		static assert(value: unknown): asserts value is Directory;
 
-		/* Get this directory's id. */
+		/** Get this directory's ID. */
 		id(): Promise<Directory.Id>;
 
 		/** Get this directory's entries. */
@@ -212,7 +212,7 @@ declare namespace tg {
 		/** Assert that a value is a `tg.File`. */
 		static assert(value: unknown): asserts value is File;
 
-		/* Get this file's id. */
+		/** Get this file's ID. */
 		id(): Promise<File.Id>;
 
 		/** Get this file's contents. */
@@ -276,7 +276,7 @@ declare namespace tg {
 		/** Assert that a value is a `tg.Branch`. */
 		static assert(value: unknown): asserts value is Branch;
 
-		/* Get this branch's id. */
+		/** Get this branch's ID. */
 		id(): Promise<Branch.Id>;
 
 		children(): Promise<Array<Branch.Child>>;
@@ -331,7 +331,7 @@ declare namespace tg {
 		/** Assert that a value is a `tg.Leaf`. */
 		static assert(value: unknown): asserts value is Leaf;
 
-		/* Get this leaf's id. */
+		/** Get this leaf's ID. */
 		id(): Promise<Leaf.Id>;
 
 		/** Get this leaf's size. */
@@ -588,11 +588,14 @@ declare namespace tg {
 		/** Assert that a value is a `tg.Symlink`. */
 		static assert(value: unknown): asserts value is Symlink;
 
-		/* Get this symlink's id. */
+		/** Get this symlink's ID. */
 		id(): Promise<Symlink.Id>;
 
-		/** Get this symlink's target. */
-		target(): Promise<Template>;
+		/** Get this symlink's artifact. */
+		artifact(): Promise<Artifact | undefined>;
+
+		/** Get this symlink's path. */
+		path(): Promise<string | undefined>;
 
 		/** Resolve this symlink to the directory or file it refers to, or return undefined if none is found. */
 		resolve(): Promise<Directory | File | undefined>;
@@ -608,7 +611,7 @@ declare namespace tg {
 			| ArgObject;
 
 		type ArgObject = {
-			artifact?: Artifact;
+			artifact?: Artifact | undefined;
 			path?: string | undefined;
 		};
 
@@ -701,7 +704,7 @@ declare namespace tg {
 		/** Assert that a value is a `tg.Target`. */
 		static assert(value: unknown): asserts value is Target;
 
-		/* Get this target's id. */
+		/** Get this target's ID. */
 		id(): Promise<Target.Id>;
 
 		/** Get this target's lock. */

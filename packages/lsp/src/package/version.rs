@@ -42,13 +42,13 @@ pub enum Error {
 	Other(tangram_error::Error),
 }
 
-/// Given a registry and unlocked package, create a lockfile for it. If no solution can be found, a [`Report`] containing a description of the most recent set of errors is formatted as an error. On success, a vec of [`tg::Relpath`]s (relative to the root package), package [`tg::Id`]s, and their [`tg::Lock`]s are returned. There is one vec entry for the root, and one entry for each path dependency.
+/// Given a registry and unlocked package, create a lockfile for it. If no solution can be found, a [`Report`] containing a description of the most recent set of errors is formatted as an error. On success, a vec of [`tg::Path`]s (relative to the root package), package [`tg::Id`]s, and their [`tg::Lock`]s are returned. There is one vec entry for the root, and one entry for each path dependency.
 pub async fn solve(
 	client: &dyn Client,
 	root: tg::Id,
-	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Relpath, tg::Id>>,
+	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Path, tg::Id>>,
 	registry_dependencies: BTreeSet<(tg::Id, tg::Dependency)>,
-) -> tangram_error::Result<Vec<(tg::Relpath, tg::Lock)>> {
+) -> tangram_error::Result<Vec<(tg::Path, tg::Lock)>> {
 	// Create the context.
 	let mut context = Context::new(client, path_dependencies.clone());
 
@@ -57,7 +57,7 @@ pub async fn solve(
 		.chain(path_dependencies.keys())
 		.chain(path_dependencies.values().flat_map(|v| v.values()));
 	for root in roots {
-		let _ = context
+		context
 			.analysis(root)
 			.await
 			.wrap_err("Failed to analyze root package.")?;
@@ -422,7 +422,7 @@ pub struct Context {
 	roots: Vec<tg::Id>,
 
 	// A table of path dependencies.
-	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Relpath, tg::Id>>,
+	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Path, tg::Id>>,
 }
 
 impl fmt::Debug for Context {
@@ -469,7 +469,7 @@ struct Frame {
 impl Context {
 	pub fn new(
 		client: &dyn tg::Client,
-		path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Relpath, tg::Id>>,
+		path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Path, tg::Id>>,
 	) -> Self {
 		let client = client.clone_box();
 		let packages = HashMap::new();
@@ -601,10 +601,9 @@ impl Context {
 				metadata: metadata.clone(),
 				dependencies,
 			};
-			let _ = self
-				.published_packages
+			self.published_packages
 				.insert(metadata.clone(), package.clone());
-			let _ = self.analysis.insert(package.clone(), analysis);
+			self.analysis.insert(package.clone(), analysis);
 		}
 		Ok(self.analysis.get(package).unwrap())
 	}

@@ -10,7 +10,7 @@ use tangram_error::{error, Result, WrapErr};
 pub struct Output {
 	pub metadata: Option<tg::package::Metadata>,
 	pub imports: HashSet<Import, fnv::FnvBuildHasher>,
-	pub includes: HashSet<tg::Relpath, fnv::FnvBuildHasher>,
+	pub includes: HashSet<tg::Path, fnv::FnvBuildHasher>,
 }
 
 pub struct Error {
@@ -82,7 +82,7 @@ struct Visitor {
 	errors: Vec<Error>,
 	metadata: Option<tg::package::Metadata>,
 	imports: HashSet<Import, fnv::FnvBuildHasher>,
-	includes: HashSet<tg::Relpath, fnv::FnvBuildHasher>,
+	includes: HashSet<tg::Path, fnv::FnvBuildHasher>,
 }
 
 impl Visitor {

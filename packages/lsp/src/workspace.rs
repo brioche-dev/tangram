@@ -44,9 +44,9 @@ impl Server {
 			};
 			let module_path = package_path.join(crate::package::ROOT_MODULE_FILE_NAME);
 			if module_path.exists() {
-				let _ = crate::package::get_or_create(client, &module_path).await?;
+				crate::package::get_or_create(client, &module_path).await?;
 			}
-			let _ = workspace_roots.insert(package_path);
+			workspace_roots.insert(package_path);
 		}
 
 		// Remove any stale workspace roots.
@@ -55,7 +55,7 @@ impl Server {
 				"file" => PathBuf::from(uri.path()),
 				_ => return_error!("Invalid URI for workspace folder."),
 			};
-			let _ = workspace_roots.remove(&package_path);
+			workspace_roots.remove(&package_path);
 		}
 
 		Ok(())

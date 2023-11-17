@@ -179,8 +179,32 @@ impl Artifact {
 			.wrap_err("The symlink target must be valid UTF-8.")?;
 		let target = Template::unrender(&options.artifacts_paths, target)?;
 
+		// Get the artifact and path.
+		let (artifact, path) = if target.components.len() == 1 {
+			let path = target.components[0]
+				.try_unwrap_string_ref()
+				.ok()
+				.wrap_err("Invalid sylink.")?
+				.clone();
+			(None, Some(path))
+		} else if target.components.len() == 2 {
+			let artifact = target.components[0]
+				.try_unwrap_artifact_ref()
+				.ok()
+				.wrap_err("Invalid sylink.")?
+				.clone();
+			let path = target.components[1]
+				.try_unwrap_string_ref()
+				.ok()
+				.wrap_err("Invalid sylink.")?
+				.clone();
+			(Some(artifact), Some(path))
+		} else {
+			return_error!("Invalid symlink.");
+		};
+
 		// Create the symlink.
-		let symlink = Symlink::new(target);
+		let symlink = Symlink::new(artifact, path);
 
 		Ok(symlink.into())
 	}

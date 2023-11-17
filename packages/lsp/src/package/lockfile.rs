@@ -4,15 +4,15 @@ use tangram_error::{error, Result};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Lockfile {
-	pub paths: BTreeMap<tg::Relpath, tg::lock::Id>,
+	pub paths: BTreeMap<tg::Path, tg::lock::Id>,
 	pub locks: BTreeMap<tg::lock::Id, BTreeMap<tg::Dependency, tg::lock::data::Entry>>,
 }
 
 impl Lockfile {
-	/// Recursively create a [`Lockfile`] from an iterator of `(Relpath, Lock)`.
+	/// Recursively create a [`Lockfile`] from an iterator of `(Path, Lock)`.
 	pub async fn with_paths(
 		client: &dyn tg::Client,
-		paths_: impl IntoIterator<Item = (tg::Relpath, tg::Lock)>,
+		paths_: impl IntoIterator<Item = (tg::Path, tg::Lock)>,
 	) -> Result<Self> {
 		let mut paths = BTreeMap::new();
 		let mut locks = BTreeMap::new();
@@ -22,7 +22,7 @@ impl Lockfile {
 		// Create the paths.
 		for (relpath, lock) in paths_ {
 			let id = lock.id(client).await?.clone();
-			let _ = paths.insert(relpath, id);
+			paths.insert(relpath, id);
 			queue.push_back(lock);
 		}
 
@@ -42,14 +42,14 @@ impl Lockfile {
 				};
 				entry_.insert(dependency.clone(), entry.clone());
 			}
-			let _ = locks.insert(id.clone(), entry_);
+			locks.insert(id.clone(), entry_);
 		}
 
 		// Return the lockfile.
 		Ok(Self { paths, locks })
 	}
 
-	pub fn lock(&self, relpath: &tg::Relpath) -> Result<tg::Lock> {
+	pub fn lock(&self, relpath: &tg::Path) -> Result<tg::Lock> {
 		let root = self
 			.paths
 			.get(relpath)

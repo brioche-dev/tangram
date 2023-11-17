@@ -3,7 +3,7 @@ import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import { File, file } from "./file.ts";
 import { Object_ } from "./object.ts";
-import { Subpath, subpath } from "./path.ts";
+import { Path } from "./path.ts";
 import { Unresolved, resolve } from "./resolve.ts";
 import { Symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
@@ -62,9 +62,12 @@ export class Directory {
 				for (let [key, value] of Object.entries(arg)) {
 					// Separate the first path component from the trailing path components.
 					let [firstComponent, ...trailingComponents] =
-						subpath(key).components();
+						Path.new(key).components();
 					if (firstComponent === undefined) {
 						throw new Error("The path must have at least one component.");
+					}
+					if (!Path.Component.isNormal(firstComponent)) {
+						throw new Error("All path components must be normal.");
 					}
 					let name = firstComponent;
 
@@ -78,7 +81,7 @@ export class Directory {
 
 					if (trailingComponents.length > 0) {
 						// If there are trailing path components, then recurse.
-						let trailingPath = subpath(trailingComponents).toString();
+						let trailingPath = Path.new(trailingComponents).toString();
 
 						// Merge the entry with the trailing path.
 						let newEntry = await Directory.new(existingEntry, {
@@ -161,19 +164,22 @@ export class Directory {
 
 	async tryGet(arg: string): Promise<Directory | File | undefined> {
 		let artifact: Directory | File = this;
-		let currentSubpath = subpath();
-		for (let component of subpath(arg).components()) {
+		let currentPath = Path.new();
+		for (let component of Path.new(arg).components()) {
+			if (!Path.Component.isNormal(component)) {
+				throw new Error("All path components must be normal.");
+			}
 			if (!Directory.is(artifact)) {
 				return undefined;
 			}
-			currentSubpath.push(component);
+			currentPath.push(component);
 			let entry: Artifact | undefined = (await artifact.entries())[component];
 			if (entry === undefined) {
 				return undefined;
 			} else if (Symlink.is(entry)) {
 				let resolved = await entry.resolve({
 					artifact: this,
-					path: currentSubpath.toString(),
+					path: currentPath.toString(),
 				});
 				if (resolved === undefined) {
 					return undefined;
@@ -198,12 +204,12 @@ export class Directory {
 		return await syscall.bundle(this);
 	}
 
-	async *walk(): AsyncIterableIterator<[Subpath, Artifact]> {
+	async *walk(): AsyncIterableIterator<[Path, Artifact]> {
 		for await (let [name, artifact] of this) {
-			yield [subpath(name), artifact];
+			yield [Path.new(name), artifact];
 			if (Directory.is(artifact)) {
 				for await (let [entryName, entryArtifact] of artifact.walk()) {
-					yield [subpath(name).join(entryName), entryArtifact];
+					yield [Path.new(name).join(entryName), entryArtifact];
 				}
 			}
 		}

@@ -1,5 +1,4 @@
 use num::ToPrimitive;
-use std::{io::IoSlice, str::Utf8Error};
 
 pub struct Encoder<W> {
 	output: W,
@@ -12,7 +11,7 @@ pub struct Decoder<'a> {
 #[derive(Debug)]
 pub enum Error {
 	UnexpectedEof,
-	Utf8(Utf8Error),
+	Utf8(std::str::Utf8Error),
 	Io(std::io::Error),
 	Custom(String),
 }
@@ -54,13 +53,9 @@ where
 		let len = bytes.len().to_u32().unwrap().to_be_bytes();
 		let pad = (4 - bytes.len() % 4) % 4;
 		let pad = &([0u8; 4][0..pad]);
-
-		let _ = self.output.write_vectored(&[
-			IoSlice::new(&len),
-			IoSlice::new(bytes),
-			IoSlice::new(pad),
-		])?;
-
+		self.output.write_all(&len)?;
+		self.output.write_all(bytes)?;
+		self.output.write_all(pad)?;
 		Ok(())
 	}
 
@@ -94,8 +89,8 @@ where
 	}
 }
 
-impl From<Utf8Error> for Error {
-	fn from(value: Utf8Error) -> Self {
+impl From<std::str::Utf8Error> for Error {
+	fn from(value: std::str::Utf8Error) -> Self {
 		Self::Utf8(value)
 	}
 }

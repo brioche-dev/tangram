@@ -1,33 +1,29 @@
-use self::{
-	rpc::{Auth, AuthStat, Message, MessageBody, ReplyAcceptedStat, ReplyBody, ReplyRejected},
-	types::{
-		bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, locker4,
-		nfs_argop4, nfs_fh4, nfs_ftype4, nfs_resop4, nfsace4, nfsstat4, nfstime4, open_claim4,
-		open_delegation4, open_delegation_type4, pathname4, specdata4, stateid4, verifier4,
-		ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args,
-		GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok,
-		LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok,
-		PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args, READDIR4res,
-		READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res,
-		RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res,
-		SETCLIENTID4args, SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args,
-		SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID,
-		FATTR4_ACL, FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
-		FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
-		FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE,
-		FATTR4_FILES_TOTAL, FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS,
-		FATTR4_LEASE_TIME, FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME,
-		FATTR4_MAXREAD, FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID,
-		FATTR4_NAMED_ATTR, FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP,
-		FATTR4_QUOTA_AVAIL_HARD, FATTR4_QUOTA_AVAIL_SOFT, FATTR4_QUOTA_USED, FATTR4_RAWDEV,
-		FATTR4_RDATTR_ERROR, FATTR4_SIZE, FATTR4_SPACE_AVAIL, FATTR4_SPACE_FREE,
-		FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED, FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT,
-		FATTR4_SYSTEM, FATTR4_TIME_ACCESS, FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE,
-		FATTR4_TIME_DELTA, FATTR4_TIME_METADATA, FATTR4_TIME_MODIFY, FATTR4_TYPE,
-		FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR, MODE4_XGRP, MODE4_XOTH,
-		MODE4_XUSR, NFS4_OTHER_SIZE, NFS_PROG, NFS_VERS, READ_BYPASS_STATE_ID, RPC_VERS,
-	},
-	xdr::{Decoder, Encoder, Error},
+use self::types::{
+	bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, locker4,
+	nfs_argop4, nfs_fh4, nfs_ftype4, nfs_resop4, nfsace4, nfsstat4, nfstime4, open_claim4,
+	open_delegation4, open_delegation_type4, pathname4, specdata4, stateid4, verifier4,
+	ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res, COMPOUND4res, GETATTR4args,
+	GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args, LOCK4res, LOCK4resok,
+	LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok, PUTFH4args,
+	PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args, READDIR4res, READDIR4resok,
+	READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res, RENEW4args,
+	RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args,
+	SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res,
+	ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID, FATTR4_ACL,
+	FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
+	FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
+	FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL,
+	FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
+	FATTR4_LINK_SUPPORT, FATTR4_MAXFILESIZE, FATTR4_MAXLINK, FATTR4_MAXNAME, FATTR4_MAXREAD,
+	FATTR4_MAXWRITE, FATTR4_MIMETYPE, FATTR4_MODE, FATTR4_MOUNTED_ON_FILEID, FATTR4_NAMED_ATTR,
+	FATTR4_NO_TRUNC, FATTR4_NUMLINKS, FATTR4_OWNER, FATTR4_OWNER_GROUP, FATTR4_QUOTA_AVAIL_HARD,
+	FATTR4_QUOTA_AVAIL_SOFT, FATTR4_QUOTA_USED, FATTR4_RAWDEV, FATTR4_RDATTR_ERROR, FATTR4_SIZE,
+	FATTR4_SPACE_AVAIL, FATTR4_SPACE_FREE, FATTR4_SPACE_TOTAL, FATTR4_SPACE_USED,
+	FATTR4_SUPPORTED_ATTRS, FATTR4_SYMLINK_SUPPORT, FATTR4_SYSTEM, FATTR4_TIME_ACCESS,
+	FATTR4_TIME_BACKUP, FATTR4_TIME_CREATE, FATTR4_TIME_DELTA, FATTR4_TIME_METADATA,
+	FATTR4_TIME_MODIFY, FATTR4_TYPE, FATTR4_UNIQUE_HANDLES, MODE4_RGRP, MODE4_ROTH, MODE4_RUSR,
+	MODE4_XGRP, MODE4_XOTH, MODE4_XUSR, NFS4_OTHER_SIZE, NFS_PROG, NFS_VERS, READ_BYPASS_STATE_ID,
+	RPC_VERS,
 };
 use num::ToPrimitive;
 use std::{
@@ -163,7 +159,7 @@ impl Server {
 	async fn mount(path: &Path, port: u16) -> crate::Result<()> {
 		Self::unmount(path).await?;
 
-		let _ = tokio::process::Command::new("dns-sd")
+		tokio::process::Command::new("dns-sd")
 			.args([
 				"-P",
 				"Tangram",
@@ -197,7 +193,7 @@ impl Server {
 	}
 
 	async fn unmount(path: &Path) -> Result<()> {
-		let _ = tokio::process::Command::new("umount")
+		tokio::process::Command::new("umount")
 			.arg("-f")
 			.arg(path)
 			.stdout(std::process::Stdio::null())
@@ -247,7 +243,9 @@ impl Server {
 			tokio::task::spawn(async move {
 				if let Err(error) = server.handle_connection(conn).await {
 					match error {
-						Error::Io(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+						xdr::Error::Io(error)
+							if error.kind() == std::io::ErrorKind::UnexpectedEof =>
+						{
 							tracing::info!(?addr, "The connection was closed.");
 						},
 						error => tracing::error!(?error),
@@ -257,10 +255,10 @@ impl Server {
 		}
 	}
 
-	async fn handle_connection(&self, mut stream: TcpStream) -> Result<(), Error> {
+	async fn handle_connection(&self, mut stream: TcpStream) -> Result<(), xdr::Error> {
 		loop {
 			let fragments = rpc::read_fragments(&mut stream).await?;
-			let mut decoder = Decoder::from_bytes(&fragments);
+			let mut decoder = xdr::Decoder::from_bytes(&fragments);
 			let mut buffer = Vec::new();
 			while let Ok(message) = decoder.decode::<rpc::Message>() {
 				let xid = message.xid;
@@ -268,10 +266,10 @@ impl Server {
 					continue;
 				};
 				buffer.clear();
-				let mut encoder = Encoder::new(&mut buffer);
+				let mut encoder = xdr::Encoder::new(&mut buffer);
 				let reply = rpc::Message {
 					xid,
-					body: MessageBody::Reply(body),
+					body: rpc::MessageBody::Reply(body),
 				};
 				encoder.encode(&reply)?;
 				rpc::write_fragments(&mut stream, &buffer).await?;
@@ -282,18 +280,18 @@ impl Server {
 	#[tracing::instrument(skip(self, decoder), ret)]
 	async fn handle_message(
 		&self,
-		message: Message,
-		decoder: &mut Decoder<'_>,
-	) -> Option<ReplyBody> {
+		message: rpc::Message,
+		decoder: &mut xdr::Decoder<'_>,
+	) -> Option<rpc::ReplyBody> {
 		match message.clone().body {
-			MessageBody::Call(call) => {
+			rpc::MessageBody::Call(call) => {
 				if call.rpcvers != RPC_VERS {
 					tracing::error!(?call, "Version mismatch.");
-					let rejected = ReplyRejected::RpcMismatch {
+					let rejected = rpc::ReplyRejected::RpcMismatch {
 						low: RPC_VERS,
 						high: RPC_VERS,
 					};
-					let body = ReplyBody::Rejected(rejected);
+					let body = rpc::ReplyBody::Rejected(rejected);
 					return Some(body);
 				}
 
@@ -301,7 +299,7 @@ impl Server {
 					tracing::error!(?call, "Program mismatch.");
 					return Some(rpc::error(
 						None,
-						ReplyAcceptedStat::ProgramMismatch {
+						rpc::ReplyAcceptedStat::ProgramMismatch {
 							low: NFS_VERS,
 							high: NFS_VERS,
 						},
@@ -310,18 +308,18 @@ impl Server {
 
 				if call.prog != NFS_PROG {
 					tracing::error!(?call, "Expected NFS4_PROGRAM but got {}.", call.prog);
-					return Some(rpc::error(None, ReplyAcceptedStat::ProgramUnavailable));
+					return Some(rpc::error(None, rpc::ReplyAcceptedStat::ProgramUnavailable));
 				}
 
 				let reply = match call.proc {
 					0 => self.handle_null(),
 					1 => self.handle_compound(call.cred, call.verf, decoder).await,
-					_ => rpc::error(None, ReplyAcceptedStat::ProcedureUnavailable),
+					_ => rpc::error(None, rpc::ReplyAcceptedStat::ProcedureUnavailable),
 				};
 
 				Some(reply)
 			},
-			MessageBody::Reply(reply) => {
+			rpc::MessageBody::Reply(reply) => {
 				tracing::warn!(?reply, "Ignoring reply");
 				None
 			},
@@ -330,12 +328,16 @@ impl Server {
 
 	// Check if credential and verification are valid.
 	#[allow(clippy::unused_async, clippy::unnecessary_wraps)]
-	async fn handle_auth(&self, _cred: Auth, _verf: Auth) -> Result<Option<Auth>, AuthStat> {
+	async fn handle_auth(
+		&self,
+		_cred: rpc::Auth,
+		_verf: rpc::Auth,
+	) -> Result<Option<rpc::Auth>, rpc::AuthStat> {
 		Ok(None)
 	}
 
 	#[tracing::instrument(skip(self))]
-	fn handle_null(&self) -> ReplyBody {
+	fn handle_null(&self) -> rpc::ReplyBody {
 		rpc::success(None, ())
 	}
 
@@ -343,23 +345,23 @@ impl Server {
 	#[allow(clippy::too_many_lines)]
 	async fn handle_compound(
 		&self,
-		cred: Auth,
-		verf: Auth,
-		decoder: &mut Decoder<'_>,
-	) -> ReplyBody {
+		cred: rpc::Auth,
+		verf: rpc::Auth,
+		decoder: &mut xdr::Decoder<'_>,
+	) -> rpc::ReplyBody {
 		// Deserialize the arguments up front.
 		let args = match decoder.decode::<types::COMPOUND4args>() {
 			Ok(args) => args,
 			Err(e) => {
 				tracing::error!(?e, "Failed to decode COMPOUND args.");
-				return rpc::error(None, ReplyAcceptedStat::GarbageArgs);
+				return rpc::error(None, rpc::ReplyAcceptedStat::GarbageArgs);
 			},
 		};
 
 		// Handle verification.
 		let verf = match self.handle_auth(cred, verf).await {
 			Ok(verf) => verf,
-			Err(stat) => return rpc::reject(ReplyRejected::AuthError(stat)),
+			Err(stat) => return rpc::reject(rpc::ReplyRejected::AuthError(stat)),
 		};
 
 		// Handle the operations.
@@ -411,7 +413,7 @@ impl Server {
 					nfs_resop4::OP_PUTFH(Self::handle_put_file_handle(&mut ctx, &arg))
 				},
 				nfs_argop4::OP_PUTROOTFH => {
-					let _ = Self::handle_put_file_handle(&mut ctx, &PUTFH4args { object: ROOT });
+					Self::handle_put_file_handle(&mut ctx, &PUTFH4args { object: ROOT });
 					nfs_resop4::OP_PUTROOTFH(types::PUTROOTFH4res {
 						status: nfsstat4::NFS4_OK,
 					})
@@ -999,29 +1001,30 @@ impl Server {
 		let NodeKind::Symlink { symlink } = &node.kind else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_INVAL);
 		};
-		let Ok(target) = symlink.target(self.inner.client.as_ref()).await else {
+		let mut target = String::new();
+		let Ok(artifact) = symlink.artifact(self.inner.client.as_ref()).await else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
 		};
-		let mut response = String::new();
-		for component in target.components() {
-			match component {
-				tg::template::Component::String(string) => {
-					response.push_str(string);
-				},
-				tg::template::Component::Artifact(artifact) => {
-					let Ok(id) = artifact.id(self.inner.client.as_ref()).await else {
-						return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
-					};
-					for _ in 0..node.depth() {
-						response.push_str("../");
-					}
-					response.push_str(&id.to_string());
-				},
+		let Ok(path) = symlink.path(self.inner.client.as_ref()).await else {
+			return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
+		};
+		if let Some(artifact) = artifact {
+			let Ok(id) = artifact.id(self.inner.client.as_ref()).await else {
+				return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
+			};
+			for _ in 0..node.depth() - 1 {
+				target.push_str("../");
 			}
+			target.push_str(&id.to_string());
 		}
-
+		if artifact.is_some() && path.is_some() {
+			target.push('/');
+		}
+		if let Some(path) = path {
+			target.push_str(path);
+		}
 		READLINK4res::NFS4_OK(READLINK4resok {
-			link: response.into_bytes(),
+			link: target.into_bytes(),
 		})
 	}
 
@@ -1059,7 +1062,7 @@ impl Server {
 				callback_ident: arg.callback_ident,
 				confirmed: false,
 			};
-			let _ = state.clients.insert(arg.client.id, record);
+			state.clients.insert(arg.client.id, record);
 			return SETCLIENTID4res::NFS4_OK(SETCLIENTID4resok {
 				clientid: server_id,
 				setclientid_confirm: server_verifier,
@@ -1162,7 +1165,7 @@ impl Node {
 		if self.id == 0 {
 			0
 		} else {
-			1 + self.parent.upgrade().unwrap().depth()
+			self.parent.upgrade().unwrap().depth() + 1
 		}
 	}
 }

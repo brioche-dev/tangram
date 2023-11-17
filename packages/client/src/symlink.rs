@@ -1,4 +1,4 @@
-use crate::{id, object, template, Artifact, Client, Error, Relpath, Result, Template, WrapErr};
+use crate::{artifact, id, object, Artifact, Client, Error, Result, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
@@ -29,12 +29,16 @@ type State = object::State<Id, Object>;
 
 #[derive(Clone, Debug)]
 pub struct Object {
-	pub target: Template,
+	pub artifact: Option<Artifact>,
+	pub path: Option<String>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Data {
-	pub target: template::Data,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub artifact: Option<artifact::Id>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub path: Option<String>,
 }
 
 impl Id {
@@ -137,46 +141,30 @@ impl Symlink {
 	#[async_recursion]
 	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
 		let object = self.object(client).await?;
-		let target = object.target.data(client).await?;
-		Ok(Data { target })
+		let artifact = if let Some(artifact) = &object.artifact {
+			Some(artifact.id(client).await?)
+		} else {
+			None
+		};
+		let path = object.path.clone();
+		Ok(Data { artifact, path })
 	}
 }
 
 impl Symlink {
 	#[must_use]
-	pub fn new(target: Template) -> Self {
-		Self::with_object(Object { target })
+	pub fn new(artifact: Option<Artifact>, path: Option<String>) -> Self {
+		Self::with_object(Object { artifact, path })
 	}
 
-	#[must_use]
-	pub fn with_package_and_path(package: &Artifact, path: &Relpath) -> Self {
-		Self::with_object(Object {
-			target: [
-				package.clone().into(),
-				("/".to_owned() + &path.to_string()).into(),
-			]
-			.into_iter()
-			.collect(),
-		})
-	}
-
-	pub async fn target(&self, client: &dyn Client) -> Result<Template> {
-		Ok(self.object(client).await?.target.clone())
-	}
-
-	pub async fn artifact(&self, client: &dyn Client) -> Result<Option<&Artifact>> {
+	pub async fn artifact(&self, client: &dyn Client) -> Result<&Option<Artifact>> {
 		let object = self.object(client).await?;
-		let Some(artifact) = object
-			.target
-			.components()
-			.first()
-			.wrap_err("Expected at least one component.")?
-			.try_unwrap_artifact_ref()
-			.ok()
-		else {
-			return Ok(None);
-		};
-		Ok(Some(artifact))
+		Ok(&object.artifact)
+	}
+
+	pub async fn path(&self, client: &dyn Client) -> Result<&Option<String>> {
+		let object = self.object(client).await?;
+		Ok(&object.path)
 	}
 
 	pub async fn resolve(&self, client: &dyn Client) -> Result<Option<Artifact>> {
@@ -206,7 +194,7 @@ impl Data {
 
 	#[must_use]
 	pub fn children(&self) -> Vec<object::Id> {
-		self.target.children()
+		self.artifact.iter().map(|id| id.clone().into()).collect()
 	}
 }
 
@@ -214,8 +202,9 @@ impl TryFrom<Data> for Object {
 	type Error = Error;
 
 	fn try_from(data: Data) -> std::result::Result<Self, Self::Error> {
-		let target = data.target.try_into()?;
-		Ok(Self { target })
+		let artifact = data.artifact.map(Artifact::with_id);
+		let path = data.path;
+		Ok(Self { artifact, path })
 	}
 }
 

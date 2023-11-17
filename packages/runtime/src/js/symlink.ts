@@ -2,12 +2,13 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
+import { log } from "./log.ts";
 import { Args, MutationMap, apply, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
-import { Relpath, relpath } from "./path.ts";
+import { Path } from "./path.ts";
 import { Unresolved } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
-import { Template, template } from "./template.ts";
+import { Template } from "./template.ts";
 
 export let symlink = async (...args: Args<Symlink.Arg>): Promise<Symlink> => {
 	return await Symlink.new(...args);
@@ -81,9 +82,10 @@ export class Symlink {
 						throw new Error("Invalid template.");
 					}
 				} else if (Symlink.is(arg)) {
+					let path = await arg.path();
 					return {
 						artifact: await arg.artifact(),
-						path: [(await arg.path()).toString()],
+						path: path !== undefined ? [path.toString()] : [],
 					};
 				} else if (typeof arg === "object") {
 					let object: MutationMap<Apply> = {};
@@ -99,21 +101,9 @@ export class Symlink {
 				}
 			},
 		);
-
-		// Create the target.
-		let path = relpath(path_);
-		let target;
-		if (artifact !== undefined && !path.isEmpty()) {
-			target = await template(artifact, "/", path.toString());
-		} else if (artifact !== undefined) {
-			target = await template(artifact);
-		} else if (!path.isEmpty()) {
-			target = await template(path.toString());
-		} else {
-			throw new Error("Invalid symlink.");
-		}
-
-		return new Symlink({ object: { target } });
+		let path = path_ !== undefined ? Path.new(path_).toString() : undefined;
+		log(path);
+		return new Symlink({ object: { artifact, path } });
 	}
 
 	static is(value: unknown): value is Symlink {
@@ -156,35 +146,14 @@ export class Symlink {
 		}
 	}
 
-	async target(): Promise<Template> {
-		return (await this.object()).target;
-	}
-
 	async artifact(): Promise<Artifact | undefined> {
-		let target = await this.target();
-		let firstComponent = target.components.at(0);
-		if (Artifact.is(firstComponent)) {
-			return firstComponent;
-		} else {
-			return undefined;
-		}
+		let object = await this.object();
+		return object.artifact;
 	}
 
-	async path(): Promise<Relpath> {
-		let target = await this.target();
-		let [firstComponent, secondComponent] = target.components;
-		if (typeof firstComponent === "string" && secondComponent === undefined) {
-			return relpath(firstComponent);
-		} else if (Artifact.is(firstComponent) && secondComponent === undefined) {
-			return relpath();
-		} else if (
-			Artifact.is(firstComponent) &&
-			typeof secondComponent === "string"
-		) {
-			return relpath(secondComponent.slice(1));
-		} else {
-			throw new Error("Invalid template.");
-		}
+	async path(): Promise<string | undefined> {
+		let object = await this.object();
+		return object.path;
 	}
 
 	async resolve(
@@ -195,30 +164,26 @@ export class Symlink {
 		if (Symlink.is(fromArtifact)) {
 			fromArtifact = await fromArtifact.resolve();
 		}
-		let fromPath = from?.path();
+		let fromPath = await from?.path();
 		let artifact = await this.artifact();
 		if (Symlink.is(artifact)) {
 			artifact = await artifact.resolve();
 		}
 		let path = await this.path();
-		if (artifact !== undefined && path.isEmpty()) {
+		if (artifact !== undefined && !path) {
 			return artifact;
-		} else if (artifact === undefined && !path.isEmpty()) {
+		} else if (artifact === undefined && path) {
 			if (!Directory.is(fromArtifact)) {
 				throw new Error("Expected a directory.");
 			}
 			return await fromArtifact.tryGet(
-				(await (fromPath ?? relpath()))
-					.parent()
-					.join(path)
-					.toSubpath()
-					.toString(),
+				Path.new(fromPath).join("..").join(path).normalize().toString(),
 			);
-		} else if (artifact !== undefined && !path.isEmpty()) {
+		} else if (artifact !== undefined && path) {
 			if (!Directory.is(artifact)) {
 				throw new Error("Expected a directory.");
 			}
-			return await artifact.tryGet(path.toSubpath().toString());
+			return await artifact.tryGet(path);
 		} else {
 			throw new Error("Invalid symlink.");
 		}
@@ -236,13 +201,16 @@ export namespace Symlink {
 		| Array<Arg>;
 
 	export type ArgObject = {
-		artifact?: Artifact;
-		path?: string;
+		artifact?: Artifact | undefined;
+		path?: string | undefined;
 	};
 
 	export type Id = string;
 
-	export type Object_ = { target: Template };
+	export type Object_ = {
+		artifact: Artifact | undefined;
+		path: string | undefined;
+	};
 
 	export type State = Object_.State<Symlink.Id, Symlink.Object_>;
 }

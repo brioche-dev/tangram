@@ -8,6 +8,7 @@
 		"noEmit": true,
 		"noUncheckedIndexedAccess": true,
 		"noUnusedLocals": true,
+		"skipLibCheck": true,
 		"strict": true,
 		"target": "esnext",
 		"types": []

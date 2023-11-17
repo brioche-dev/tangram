@@ -145,9 +145,12 @@ impl Artifact {
 						directory.entries(client).await?.values().cloned().collect()
 					},
 					Self::File(file) => file.references(client).await?.to_owned(),
-					Self::Symlink(symlink) => {
-						symlink.target(client).await?.artifacts().cloned().collect()
-					},
+					Self::Symlink(symlink) => symlink
+						.artifact(client)
+						.await?
+						.clone()
+						.into_iter()
+						.collect(),
 				})
 			});
 

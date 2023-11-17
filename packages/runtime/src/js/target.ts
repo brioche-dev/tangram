@@ -15,7 +15,7 @@ import {
 } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { MaybePromise, Unresolved } from "./resolve.ts";
-import { Symlink } from "./symlink.ts";
+import { Symlink, symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template } from "./template.ts";
@@ -84,10 +84,8 @@ export function target<
 		// Create the executable.
 		let executable = new Symlink({
 			object: {
-				target: new Template([
-					Directory.withId(module_.value.package),
-					"/" + module_.value.path,
-				]),
+				artifact: Directory.withId(module_.value.package),
+				path: module_.value.path,
 			},
 		});
 
@@ -187,9 +185,7 @@ export class Target<
 				) {
 					return {
 						host: (await getCurrent().env())["TANGRAM_HOST"] as System,
-						executable: new Symlink({
-							object: { target: new Template(["/bin/sh"]) },
-						}),
+						executable: await symlink("/bin/sh"),
 						args: ["-c", arg],
 					};
 				} else if (Target.is(arg)) {
