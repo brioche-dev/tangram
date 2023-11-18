@@ -292,7 +292,25 @@ impl App {
 	}
 
 	fn collapse(&mut self) {
-		self.tree.selected.inner.borrow_mut().expanded = false;
+		if self.tree.selected.inner.borrow().expanded {
+			self.tree.selected.inner.borrow_mut().expanded = false;
+		} else {
+			let parent = self
+				.tree
+				.selected
+				.inner
+				.borrow_mut()
+				.parent
+				.as_ref()
+				.map(|parent| TreeItem {
+					inner: parent.upgrade().unwrap(),
+				});
+			if let Some(parent) = parent {
+				self.tree.selected.inner.borrow_mut().selected = false;
+				self.log = Log::new(self.client.as_ref(), &parent.inner.borrow().build);
+				self.tree.selected = parent;
+			}
+		}
 	}
 
 	fn rotate(&mut self) {
