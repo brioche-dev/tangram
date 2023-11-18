@@ -16,9 +16,6 @@ impl Cli {
 		let client = self.client().await?;
 		let client = client.as_ref();
 
-		// Get the token.
-		let token: String = "magic".into();
-
 		// Create the package.
 		let specifier = tangram_lsp::package::Specifier::Path(args.package);
 		let lsp = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
@@ -29,7 +26,7 @@ impl Cli {
 
 		// Publish the package.
 		client
-			.publish_package(&token, &id)
+			.publish_package(&id, None)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

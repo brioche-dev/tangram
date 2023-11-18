@@ -98,9 +98,13 @@ pub trait Client: Send + Sync + 'static {
 
 	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>>;
 
-	async fn get_or_create_build_for_target(&self, id: &target::Id) -> Result<build::Id>;
+	async fn get_or_create_build_for_target(
+		&self,
+		id: &target::Id,
+		token: Option<String>,
+	) -> Result<build::Id>;
 
-	async fn get_build_from_queue(&self) -> Result<build::Id>;
+	async fn get_build_from_queue(&self, token: Option<String>) -> Result<build::Id>;
 
 	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
 		Ok(self
@@ -126,7 +130,12 @@ pub trait Client: Send + Sync + 'static {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<build::Id>>>>;
 
-	async fn add_build_child(&self, id: &build::Id, child_id: &build::Id) -> Result<()>;
+	async fn add_build_child(
+		&self,
+		id: &build::Id,
+		child_id: &build::Id,
+		token: Option<String>,
+	) -> Result<()>;
 
 	async fn get_build_log(&self, id: &build::Id) -> Result<BoxStream<'static, Result<Bytes>>> {
 		Ok(self
@@ -140,7 +149,12 @@ pub trait Client: Send + Sync + 'static {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>>;
 
-	async fn add_build_log(&self, id: &build::Id, bytes: Bytes) -> Result<()>;
+	async fn add_build_log(
+		&self,
+		id: &build::Id,
+		bytes: Bytes,
+		token: Option<String>,
+	) -> Result<()>;
 
 	async fn get_build_result(&self, id: &build::Id) -> Result<Result<Value, Error>> {
 		Ok(self
@@ -151,9 +165,14 @@ pub trait Client: Send + Sync + 'static {
 
 	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
 
-	async fn cancel_build(&self, id: &build::Id) -> Result<()>;
+	async fn cancel_build(&self, id: &build::Id, token: Option<String>) -> Result<()>;
 
-	async fn finish_build(&self, id: &build::Id, result: Result<Value>) -> Result<()>;
+	async fn finish_build(
+		&self,
+		id: &build::Id,
+		result: Result<Value>,
+		token: Option<String>,
+	) -> Result<()>;
 
 	async fn search_packages(&self, quer: &str) -> Result<Vec<package::Package>>;
 
@@ -168,11 +187,11 @@ pub trait Client: Send + Sync + 'static {
 		id: &Id,
 	) -> Result<Option<Vec<dependency::Dependency>>>;
 
-	async fn publish_package(&self, token: &str, id: &artifact::Id) -> Result<()>;
+	async fn publish_package(&self, id: &artifact::Id, token: Option<String>) -> Result<()>;
 
 	async fn create_login(&self) -> Result<user::Login>;
 
 	async fn get_login(&self, id: &Id) -> Result<Option<user::Login>>;
 
-	async fn get_current_user(&self, token: &str) -> Result<Option<user::User>>;
+	async fn get_current_user(&self, token: Option<String>) -> Result<Option<user::User>>;
 }

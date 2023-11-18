@@ -47,7 +47,7 @@ impl Cli {
 
 		// Get the user.
 		let user = client
-			.get_current_user(&token)
+			.get_current_user(Some(token.clone()))
 			.await?
 			.wrap_err("Expected the user to exist.")?;
 

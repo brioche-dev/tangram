@@ -338,12 +338,16 @@ impl tg::Client for Server {
 		self.try_get_build_for_target(id).await
 	}
 
-	async fn get_or_create_build_for_target(&self, id: &tg::target::Id) -> Result<tg::build::Id> {
-		self.get_or_create_build_for_target(id).await
+	async fn get_or_create_build_for_target(
+		&self,
+		id: &tg::target::Id,
+		token: Option<String>,
+	) -> Result<tg::build::Id> {
+		self.get_or_create_build_for_target(id, token).await
 	}
 
-	async fn get_build_from_queue(&self) -> Result<tg::build::Id> {
-		self.get_build_from_queue().await
+	async fn get_build_from_queue(&self, token: Option<String>) -> Result<tg::build::Id> {
+		self.get_build_from_queue(token).await
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
@@ -361,8 +365,9 @@ impl tg::Client for Server {
 		&self,
 		build_id: &tg::build::Id,
 		child_id: &tg::build::Id,
+		token: Option<String>,
 	) -> Result<()> {
-		self.add_build_child(build_id, child_id).await
+		self.add_build_child(build_id, child_id, token).await
 	}
 
 	async fn try_get_build_log(
@@ -372,20 +377,30 @@ impl tg::Client for Server {
 		self.try_get_build_log(id).await
 	}
 
-	async fn add_build_log(&self, build_id: &tg::build::Id, bytes: Bytes) -> Result<()> {
-		self.add_build_log(build_id, bytes).await
+	async fn add_build_log(
+		&self,
+		build_id: &tg::build::Id,
+		bytes: Bytes,
+		token: Option<String>,
+	) -> Result<()> {
+		self.add_build_log(build_id, bytes, token).await
 	}
 
 	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
 		self.try_get_build_result(id).await
 	}
 
-	async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
-		self.cancel_build(id).await
+	async fn cancel_build(&self, id: &tg::build::Id, token: Option<String>) -> Result<()> {
+		self.cancel_build(id, token).await
 	}
 
-	async fn finish_build(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
-		self.finish_build(id, result).await
+	async fn finish_build(
+		&self,
+		id: &tg::build::Id,
+		result: Result<tg::Value>,
+		token: Option<String>,
+	) -> Result<()> {
+		self.finish_build(id, result, token).await
 	}
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
@@ -419,7 +434,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn publish_package(&self, token: &str, id: &tg::artifact::Id) -> Result<()> {
+	async fn publish_package(&self, id: &tg::artifact::Id, token: Option<String>) -> Result<()> {
 		let remote = self
 			.inner
 			.remote
@@ -429,7 +444,7 @@ impl tg::Client for Server {
 			.push(self, remote.as_ref())
 			.await
 			.wrap_err("Failed to push the package.")?;
-		remote.publish_package(token, id).await
+		remote.publish_package(id, token).await
 	}
 
 	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {
@@ -466,7 +481,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn get_current_user(&self, token: &str) -> Result<Option<tg::user::User>> {
+	async fn get_current_user(&self, token: Option<String>) -> Result<Option<tg::user::User>> {
 		self.inner
 			.remote
 			.as_ref()

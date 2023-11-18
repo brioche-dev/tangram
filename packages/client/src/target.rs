@@ -257,9 +257,11 @@ impl Target {
 		Ok(Some(directory))
 	}
 
-	pub async fn build(&self, client: &dyn Client) -> Result<Build> {
+	pub async fn build(&self, client: &dyn Client, token: Option<String>) -> Result<Build> {
 		let target_id = self.id(client).await?;
-		let build_id = client.get_or_create_build_for_target(target_id).await?;
+		let build_id = client
+			.get_or_create_build_for_target(target_id, token)
+			.await?;
 		let build = Build::with_id(build_id);
 		Ok(build)
 	}

@@ -63,6 +63,7 @@ impl Server {
 	pub async fn get_or_create_build_for_target(
 		&self,
 		id: &tg::target::Id,
+		token: Option<String>,
 	) -> Result<tg::build::Id> {
 		let target = tg::Target::with_id(id.clone());
 
@@ -80,7 +81,10 @@ impl Server {
 				let object = tg::object::Handle::with_id(id.clone().into());
 				let result = object.push(self, remote.as_ref()).await;
 				if result.is_ok() {
-					if let Ok(build_id) = remote.get_or_create_build_for_target(id).await {
+					if let Ok(build_id) = remote
+						.get_or_create_build_for_target(id, token.clone())
+						.await
+					{
 						return Ok(build_id);
 					}
 				}
@@ -200,16 +204,16 @@ impl Server {
 		}
 
 		// Finish the build.
-		build.finish(self, result).await?;
+		build.finish(self, result, None).await?;
 
 		Ok(())
 	}
 
-	pub async fn get_build_from_queue(&self) -> Result<tg::build::Id> {
+	pub async fn get_build_from_queue(&self, token: Option<String>) -> Result<tg::build::Id> {
 		let Some(remote) = self.inner.remote.as_ref() else {
 			return_error!("The server does not have a remote.");
 		};
-		let build_id = remote.get_build_from_queue().await?;
+		let build_id = remote.get_build_from_queue(token).await?;
 		Ok(build_id)
 	}
 
@@ -295,6 +299,7 @@ impl Server {
 		&self,
 		build_id: &tg::build::Id,
 		child_id: &tg::build::Id,
+		token: Option<String>,
 	) -> Result<()> {
 		// Attempt to add the child to the state.
 		let state = self.inner.builds.read().unwrap().get(build_id).cloned();
@@ -310,7 +315,7 @@ impl Server {
 
 		// Attempt to add the child to the remote.
 		if let Some(remote) = self.inner.remote.as_ref() {
-			remote.add_build_child(build_id, child_id).await?;
+			remote.add_build_child(build_id, child_id, token).await?;
 			return Ok(());
 		}
 
@@ -376,7 +381,12 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn add_build_log(&self, id: &tg::build::Id, bytes: Bytes) -> Result<()> {
+	pub async fn add_build_log(
+		&self,
+		id: &tg::build::Id,
+		bytes: Bytes,
+		token: Option<String>,
+	) -> Result<()> {
 		// Attempt to add the log to the state.
 		let state = self.inner.builds.read().unwrap().get(id).cloned();
 		if let Some(state) = state {
@@ -399,7 +409,7 @@ impl Server {
 
 		// Attempt to add the log to the remote.
 		if let Some(remote) = self.inner.remote.as_ref() {
-			remote.add_build_log(id, bytes).await?;
+			remote.add_build_log(id, bytes, token).await?;
 			return Ok(());
 		}
 
@@ -450,7 +460,7 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn cancel_build(&self, id: &tg::build::Id) -> Result<()> {
+	pub async fn cancel_build(&self, id: &tg::build::Id, token: Option<String>) -> Result<()> {
 		// Attempt to finish the build on the state.
 		let state = self.inner.builds.read().unwrap().get(id).cloned();
 		if let Some(state) = state {
@@ -464,14 +474,19 @@ impl Server {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			remote.cancel_build(id).await?;
+			remote.cancel_build(id, token).await?;
 			return Ok(());
 		}
 
 		Ok(())
 	}
 
-	pub async fn finish_build(&self, id: &tg::build::Id, result: Result<tg::Value>) -> Result<()> {
+	pub async fn finish_build(
+		&self,
+		id: &tg::build::Id,
+		result: Result<tg::Value>,
+		token: Option<String>,
+	) -> Result<()> {
 		// Attempt to finish the build on the state.
 		let state = self.inner.builds.read().unwrap().get(id).cloned();
 		if let Some(state) = state {
@@ -484,7 +499,7 @@ impl Server {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			remote.finish_build(id, result).await?;
+			remote.finish_build(id, result, token).await?;
 			return Ok(());
 		}
 

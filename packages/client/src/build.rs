@@ -223,7 +223,7 @@ impl Build {
 	pub async fn add_child(&self, client: &dyn Client, child: &Self) -> Result<()> {
 		let id = self.id();
 		let child_id = child.id();
-		client.add_build_child(id, child_id).await?;
+		client.add_build_child(id, child_id, None).await?;
 		Ok(())
 	}
 
@@ -248,7 +248,7 @@ impl Build {
 
 	pub async fn add_log(&self, client: &dyn Client, log: Bytes) -> Result<()> {
 		let id = self.id();
-		client.add_build_log(id, log).await?;
+		client.add_build_log(id, log, None).await?;
 		Ok(())
 	}
 
@@ -268,13 +268,18 @@ impl Build {
 
 	pub async fn cancel(&self, client: &dyn Client) -> Result<()> {
 		let id = self.id();
-		client.cancel_build(id).await?;
+		client.cancel_build(id, None).await?;
 		Ok(())
 	}
 
-	pub async fn finish(&self, client: &dyn Client, result: Result<Value>) -> Result<()> {
+	pub async fn finish(
+		&self,
+		client: &dyn Client,
+		result: Result<Value>,
+		token: Option<String>,
+	) -> Result<()> {
 		let id = self.id();
-		client.finish_build(id, result).await?;
+		client.finish_build(id, result, token).await?;
 		Ok(())
 	}
 }

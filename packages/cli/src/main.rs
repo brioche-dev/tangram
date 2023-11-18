@@ -100,9 +100,13 @@ impl Cli {
 			return Ok(client);
 		}
 
+		// Get the token.
+		let credentials = Self::read_credentials().await?;
+		let token = credentials.map(|credentials| credentials.token);
+
 		// Attempt to connect to the server.
 		let addr = Addr::Unix(self.path.join("socket"));
-		let client = tangram_http::client::Builder::new(addr).build();
+		let client = tangram_http::client::Builder::new(addr, token).build();
 		let mut connected = client.connect().await.is_ok();
 
 		// If this is a debug build, then require that the client is connected and has the same version as the server.

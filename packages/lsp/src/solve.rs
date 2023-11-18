@@ -54,7 +54,11 @@ pub async fn solve(
 	// Seed the context.
 	let roots = std::iter::once(&root)
 		.chain(path_dependencies.keys())
-		.chain(path_dependencies.values().flat_map(|v| v.values()));
+		.chain(
+			path_dependencies
+				.values()
+				.flat_map(std::collections::BTreeMap::values),
+		);
 	for root in roots {
 		context
 			.analysis(root)
