@@ -72,7 +72,7 @@ async fn syscall_archive(
 	args: (tg::Artifact, tg::blob::ArchiveFormat),
 ) -> Result<tg::Blob> {
 	let (artifact, format) = args;
-	let blob = artifact.archive(state.client.as_ref(), format).await?;
+	let blob = tg::Blob::archive(state.client.as_ref(), &artifact, format).await?;
 	Ok(blob)
 }
 

@@ -1,6 +1,6 @@
 use crate::{
-	blob, checksum, directory, file, id, object, return_error, symlink, Blob, Checksum, Client,
-	Directory, Error, File, Result, Symlink, Value,
+	checksum, directory, file, id, object, return_error, symlink, Checksum, Client, Directory,
+	Error, File, Result, Symlink, Value,
 };
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
@@ -107,23 +107,17 @@ impl Artifact {
 }
 
 impl Artifact {
-	#[allow(clippy::unused_async)]
-	pub async fn archive(
-		&self,
-		_client: &dyn Client,
-		_format: blob::ArchiveFormat,
-	) -> Result<Blob> {
-		unimplemented!()
-	}
-
 	/// Compute an artifact's checksum.
 	#[allow(clippy::unused_async)]
 	pub async fn checksum(
 		&self,
 		_client: &dyn Client,
-		_algorithm: checksum::Algorithm,
+		algorithm: checksum::Algorithm,
 	) -> Result<Checksum> {
-		unimplemented!()
+		match algorithm {
+			checksum::Algorithm::Unsafe => Ok(Checksum::Unsafe),
+			_ => unimplemented!(),
+		}
 	}
 
 	/// Collect an artifact's recursive references.

@@ -228,6 +228,15 @@ impl Blob {
 		Ok(blob)
 	}
 
+	#[allow(clippy::unused_async)]
+	pub async fn archive(
+		_client: &dyn Client,
+		_artifact: &Artifact,
+		_format: ArchiveFormat,
+	) -> Result<Self> {
+		unimplemented!()
+	}
+
 	pub async fn extract(&self, client: &dyn Client, format: ArchiveFormat) -> Result<Artifact> {
 		// Create the reader.
 		let reader = self.reader(client).await?;
