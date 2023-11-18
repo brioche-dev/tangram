@@ -40,6 +40,7 @@ pub mod range;
 pub mod references;
 pub mod rename;
 pub mod resolve;
+pub mod solve;
 pub mod symbols;
 pub mod syscall;
 pub mod transpile;

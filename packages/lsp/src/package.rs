@@ -1,6 +1,5 @@
-use self::lockfile::Lockfile;
 pub use self::specifier::Specifier;
-use crate::{Import, Module};
+use crate::{solve::solve, Import, Module};
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use itertools::Itertools;
@@ -13,12 +12,7 @@ use tangram_error::{return_error, Result, WrapErr};
 use tg::{package::Metadata, Dependency};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub mod lockfile;
 pub mod specifier;
-
-#[cfg(test)]
-mod tests;
-pub mod version;
 
 /// The file name of the root module in a package.
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
@@ -59,7 +53,7 @@ pub async fn get_or_create(
 		file.read_to_end(&mut contents)
 			.await
 			.wrap_err("Failed to read lockfile contents.")?;
-		let lockfile: Lockfile =
+		let lockfile: tg::Lockfile =
 			serde_json::from_slice(&contents).wrap_err("Failed to deserialize the lockfile.")?;
 
 		// Get the root lock.
@@ -122,7 +116,7 @@ pub async fn get_or_create(
 pub async fn create(
 	client: &dyn tg::Client,
 	specifier: &Specifier,
-) -> Result<(tg::Artifact, tg::Lock, Lockfile)> {
+) -> Result<(tg::Artifact, tg::Lock, tg::Lockfile)> {
 	let (root_artifact, path_dependencies, registry_dependencies) =
 		match specifier {
 			Specifier::Path(path) => {
@@ -169,11 +163,11 @@ pub async fn create(
 
 	// Solve the version constraints.
 	let root = root_artifact.id(client).await?.clone().into();
-	let paths = version::solve(client, root, path_dependencies, registry_dependencies).await?;
+	let paths = solve(client, root, path_dependencies, registry_dependencies).await?;
 
 	// Get the root lock and create a lockfile.
 	let root_lock = paths[0].1.clone();
-	let lockfile = Lockfile::with_paths(client, paths).await?;
+	let lockfile = tg::Lockfile::with_paths(client, paths).await?;
 	Ok((root_artifact.into(), root_lock, lockfile))
 }
 

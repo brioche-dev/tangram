@@ -10,6 +10,7 @@ pub use self::{
 	id::Id,
 	leaf::Leaf,
 	lock::Lock,
+	lockfile::Lockfile,
 	mutation::Mutation,
 	object::Object,
 	package::{Metadata, Package},
@@ -40,6 +41,7 @@ pub mod file;
 pub mod id;
 pub mod leaf;
 pub mod lock;
+pub mod lockfile;
 pub mod mutation;
 pub mod object;
 pub mod package;
