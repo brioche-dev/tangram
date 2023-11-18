@@ -1371,7 +1371,7 @@ impl xdr::FromXdr for stateid4 {
 
 impl stateid4 {
 	pub fn new(seqid: seqid4, index: u64, is_lock_set: bool) -> Self {
-		let is_lock_set = if is_lock_set { 1u32 } else { 0u32 };
+		let is_lock_set = u32::from(is_lock_set);
 		let mut other = [0; NFS4_OTHER_SIZE];
 
 		other[0..8].copy_from_slice(&index.to_be_bytes());

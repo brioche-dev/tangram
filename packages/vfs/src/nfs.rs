@@ -1,17 +1,17 @@
 use self::types::{
 	bitmap4, cb_client4, change_info4, dirlist4, entry4, fattr4, fs_locations4, fsid4, length4,
-	locker4, nfs_argop4, nfs_fh4, nfs_ftype4, nfs_lock_type4, nfs_resop4, nfsace4,
-	nfsstat4, nfstime4, offset4, open_claim4, open_delegation4, open_delegation_type4,
-	pathname4, specdata4, stateid4, verifier4, ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args,
-	CLOSE4res, COMPOUND4res, GETATTR4args, GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok,
-	LOCK4args, LOCK4res, LOCK4resok, LOCKT4args, LOCKT4res, LOCKU4args, LOCKU4res, LOOKUP4args,
-	LOOKUP4res, OPEN4args, OPEN4res, OPEN4resok, OPEN_CONFIRM4args, OPEN_CONFIRM4res,
-	OPEN_CONFIRM4resok, PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args,
-	READDIR4res, READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args,
-	RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args,
-	SECINFO4res, SETCLIENTID4args, SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args,
-	SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID,
-	FATTR4_ACL, FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
+	locker4, nfs_argop4, nfs_fh4, nfs_ftype4, nfs_lock_type4, nfs_resop4, nfsace4, nfsstat4,
+	nfstime4, offset4, open_claim4, open_delegation4, open_delegation_type4, pathname4, specdata4,
+	stateid4, verifier4, ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res,
+	COMPOUND4res, GETATTR4args, GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args,
+	LOCK4res, LOCK4resok, LOCKT4args, LOCKT4res, LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res,
+	OPEN4args, OPEN4res, OPEN4resok, OPEN_CONFIRM4args, OPEN_CONFIRM4res, OPEN_CONFIRM4resok,
+	PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args, READDIR4res,
+	READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res,
+	RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args,
+	SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res,
+	ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID, FATTR4_ACL,
+	FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
 	FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
 	FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL,
 	FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
@@ -550,10 +550,10 @@ impl Server {
 			let lock_state = lock_state.write().await;
 
 			// Check if there are any outstanding byterange locks.
-			if !lock_state.byterange_locks.is_empty() {
-				return CLOSE4res::Error(nfsstat4::NFS4ERR_LOCKS_HELD);
-			} else {
+			if lock_state.byterange_locks.is_empty() {
 				state.lock_state.remove(&index);
+			} else {
+				return CLOSE4res::Error(nfsstat4::NFS4ERR_LOCKS_HELD);
 			}
 		}
 
@@ -908,8 +908,8 @@ impl Server {
 			// Create a new lock state.
 			let byterange_locks = Vec::new();
 			let lock_state = LockState {
-				fh,
 				reader,
+				fh,
 				byterange_locks,
 			};
 
