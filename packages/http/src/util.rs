@@ -11,9 +11,8 @@ pub type Outgoing = http_body_util::combinators::UnsyncBoxBody<
 /// Get a bearer token or cookie from an HTTP request.
 pub fn get_token(request: &http::Request<Incoming>, name: Option<&str>) -> Option<String> {
 	if let Some(authorization) = request.headers().get(http::header::AUTHORIZATION) {
-		let authorization = match authorization.to_str() {
-			Ok(authorization) => authorization,
-			Err(_) => return None,
+		let Ok(authorization) = authorization.to_str() else {
+			return None;
 		};
 		let mut components = authorization.split(' ');
 		let token = match (components.next(), components.next()) {
@@ -23,9 +22,8 @@ pub fn get_token(request: &http::Request<Incoming>, name: Option<&str>) -> Optio
 		Some(token)
 	} else if let Some(cookies) = request.headers().get(http::header::COOKIE) {
 		if let Some(name) = name {
-			let cookies = match cookies.to_str() {
-				Ok(cookies) => cookies,
-				Err(_) => return None,
+			let Ok(cookies) = cookies.to_str() else {
+				return None;
 			};
 			let cookies: BTreeMap<&str, &str> = match parse_cookies(cookies).collect() {
 				Ok(cookies) => cookies,

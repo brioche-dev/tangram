@@ -103,9 +103,10 @@ pub trait Client: Send + Sync + 'static {
 		&self,
 		user: Option<&User>,
 		id: &target::Id,
+		retry: build::Retry,
 	) -> Result<build::Id>;
 
-	async fn get_build_from_queue(&self, user: Option<&User>) -> Result<build::Id>;
+	async fn get_build_from_queue(&self, user: Option<&User>) -> Result<build::queue::Item>;
 
 	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
 		Ok(self

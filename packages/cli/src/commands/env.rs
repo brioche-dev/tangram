@@ -1,5 +1,6 @@
 use super::{PackageArgs, RunArgs};
 use crate::Cli;
+use tangram_client as tg;
 use tangram_error::Result;
 
 /// Build a package's "env" export and run it.
@@ -13,6 +14,10 @@ pub struct Args {
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
+
+	/// The retry strategy to use.
+	#[arg(long, default_value_t)]
+	pub retry: tg::build::Retry,
 
 	#[command(flatten)]
 	pub run_args: RunArgs,
@@ -35,6 +40,7 @@ impl Cli {
 			no_tui: false,
 			package: args.package,
 			package_args: args.package_args,
+			retry: args.retry,
 			run_args: args.run_args,
 			target: "env".to_owned(),
 			trailing_args: args.trailing_args,

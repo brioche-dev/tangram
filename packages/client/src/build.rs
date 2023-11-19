@@ -49,9 +49,21 @@ pub enum Outcome {
 	Success(Value),
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(
+	Clone,
+	Copy,
+	Debug,
+	Default,
+	Eq,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	serde::Deserialize,
+	serde::Serialize,
+)]
 #[serde(into = "String", try_from = "String")]
 pub enum Retry {
+	#[default]
 	Cancellation,
 	Failure,
 	Success,
@@ -176,9 +188,9 @@ impl Build {
 			.await?;
 		let log = object.log.id(client).await?;
 		let outcome = match &object.outcome {
-			Outcome::Success(value) => data::Outcome::Success(value.data(client).await?),
-			Outcome::Failure(error) => data::Outcome::Failure(error.clone()),
 			Outcome::Cancellation => data::Outcome::Cancellation,
+			Outcome::Failure(error) => data::Outcome::Failure(error.clone()),
+			Outcome::Success(value) => data::Outcome::Success(value.data(client).await?),
 		};
 		Ok(Data {
 			target,
@@ -190,19 +202,28 @@ impl Build {
 }
 
 impl Outcome {
+	#[must_use]
+	pub fn retry(&self) -> Retry {
+		match self {
+			Self::Cancellation => Retry::Cancellation,
+			Self::Failure(_) => Retry::Failure,
+			Self::Success(_) => Retry::Success,
+		}
+	}
+
 	pub fn into_result(self) -> Result<Value> {
 		match self {
-			Self::Success(value) => Ok(value),
-			Self::Failure(error) => Err(error),
 			Self::Cancellation => return_error!("The build was cancelled."),
+			Self::Failure(error) => Err(error),
+			Self::Success(value) => Ok(value),
 		}
 	}
 
 	pub async fn data(&self, client: &dyn Client) -> Result<data::Outcome> {
 		Ok(match self {
-			Self::Success(value) => data::Outcome::Success(value.data(client).await?),
-			Self::Failure(error) => data::Outcome::Failure(error.clone()),
 			Self::Cancellation => data::Outcome::Cancellation,
+			Self::Failure(error) => data::Outcome::Failure(error.clone()),
+			Self::Success(value) => data::Outcome::Success(value.data(client).await?),
 		})
 	}
 }
@@ -392,9 +413,9 @@ impl TryFrom<data::Outcome> for Outcome {
 
 	fn try_from(data: data::Outcome) -> std::prelude::v1::Result<Self, Self::Error> {
 		match data {
-			data::Outcome::Success(value) => Ok(Outcome::Success(value.try_into()?)),
-			data::Outcome::Failure(error) => Ok(Outcome::Failure(error)),
 			data::Outcome::Cancellation => Ok(Outcome::Cancellation),
+			data::Outcome::Failure(error) => Ok(Outcome::Failure(error)),
+			data::Outcome::Success(value) => Ok(Outcome::Success(value.try_into()?)),
 		}
 	}
 }
@@ -474,5 +495,15 @@ impl TryFrom<String> for Retry {
 
 	fn try_from(value: String) -> std::prelude::v1::Result<Self, Self::Error> {
 		value.parse()
+	}
+}
+
+pub mod queue {
+	use super::{Id, Retry};
+
+	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+	pub struct Item {
+		pub build: Id,
+		pub retry: Retry,
 	}
 }

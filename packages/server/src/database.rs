@@ -53,7 +53,7 @@ impl Database {
 		Ok(exists)
 	}
 
-	pub fn get_object(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
+	pub fn try_get_object(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
 		let txn = self
 			.env
 			.begin_ro_txn()

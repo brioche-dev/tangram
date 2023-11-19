@@ -1,4 +1,5 @@
 use crate::Cli;
+use tangram_client as tg;
 use tangram_error::Result;
 
 /// Build a target from the specified package and execute a command from its output.
@@ -12,6 +13,10 @@ pub struct Args {
 
 	#[command(flatten)]
 	pub package_args: super::PackageArgs,
+
+	/// The retry strategy to use.
+	#[arg(long, default_value_t)]
+	pub retry: tg::build::Retry,
 
 	#[command(flatten)]
 	pub run_args: super::RunArgs,
@@ -29,6 +34,7 @@ impl Cli {
 			no_tui: false,
 			package: args.package,
 			package_args: args.package_args,
+			retry: args.retry,
 			run_args: args.run_args,
 			target: args.target,
 			trailing_args: args.trailing_args,

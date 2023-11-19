@@ -30,6 +30,10 @@ pub struct Args {
 	#[command(flatten)]
 	pub package_args: PackageArgs,
 
+	/// The retry strategy to use.
+	#[arg(long, default_value_t)]
+	pub retry: tg::build::Retry,
+
 	/// The name of the target to build.
 	#[arg(default_value = "default")]
 	pub target: String,
@@ -64,15 +68,20 @@ impl Cli {
 			.args(args_)
 			.build();
 
+		// Print the target ID.
+		eprintln!("{}", target.id(client).await?);
+
 		// Build the target.
-		let build = target.build(client, None).await?;
-		eprintln!("{}", build.id());
+		let build = target.build(client, None, args.retry).await?;
 
 		// If the detach flag is set, then exit.
 		if args.detach {
 			println!("{}", build.id());
 			return Ok(());
 		}
+
+		// Print the build ID.
+		eprintln!("{}", build.id());
 
 		// Create the TUI.
 		let tui = !args.no_tui;

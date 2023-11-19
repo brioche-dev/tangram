@@ -19,45 +19,32 @@ impl Server {
 		id: &tg::target::Id,
 	) -> Result<Option<tg::build::Id>> {
 		// Attempt to get the build for the target from the database.
-		if let Some(build_id) = self.try_get_build_for_target_from_database(id)? {
+		'a: {
+			let Some(build_id) = self.inner.database.try_get_build_for_target(id)? else {
+				break 'a;
+			};
 			return Ok(Some(build_id));
 		}
 
 		// Attempt to get the build for the target from the remote.
-		if let Ok(Some(build_id)) = self.try_get_build_for_target_from_remote(id).await {
+		'a: {
+			// Get the remote.
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+
+			// Get the build for the target from the remote.
+			let Some(build_id) = remote.try_get_build_for_target(id).await? else {
+				break 'a;
+			};
+
+			// Add the assignment to the database.
+			self.inner.database.set_build_for_target(id, &build_id)?;
+
 			return Ok(Some(build_id));
 		}
 
 		Ok(None)
-	}
-
-	/// Attempt to get the build for the target from the database.
-	fn try_get_build_for_target_from_database(
-		&self,
-		id: &tg::target::Id,
-	) -> Result<Option<tg::build::Id>> {
-		self.inner.database.try_get_build_for_target(id)
-	}
-
-	/// Attempt to get the build for the target from the remote.
-	async fn try_get_build_for_target_from_remote(
-		&self,
-		id: &tg::target::Id,
-	) -> Result<Option<tg::build::Id>> {
-		// Get the remote.
-		let Some(remote) = self.inner.remote.as_ref() else {
-			return Ok(None);
-		};
-
-		// Get the build for the target from the remote.
-		let Some(build_id) = remote.try_get_build_for_target(id).await? else {
-			return Ok(None);
-		};
-
-		// Add the assignment to the database.
-		self.inner.database.set_build_for_target(id, &build_id)?;
-
-		Ok(Some(build_id))
 	}
 
 	/// Get or create a build for a target.
@@ -65,12 +52,21 @@ impl Server {
 		&self,
 		user: Option<&tg::User>,
 		id: &tg::target::Id,
+		retry: tg::build::Retry,
 	) -> Result<tg::build::Id> {
 		let target = tg::Target::with_id(id.clone());
 
 		// Attempt to get the build for the target.
 		if let Some(build_id) = self.try_get_build_for_target(id).await? {
-			return Ok(build_id);
+			let build = tg::build::Build::with_id(build_id.clone());
+			let outcome = build
+				.outcome(self)
+				.await
+				.wrap_err("Failed to get the outcome of the build.")?;
+			let retry = retry >= outcome.retry();
+			if !retry {
+				return Ok(build_id);
+			}
 		}
 
 		// Decide whether to attempt to escalate the build.
@@ -82,7 +78,9 @@ impl Server {
 				let object = tg::object::Handle::with_id(id.clone().into());
 				let result = object.push(self, remote.as_ref()).await;
 				if result.is_ok() {
-					if let Ok(build_id) = remote.get_or_create_build_for_target(user, id).await {
+					if let Ok(build_id) =
+						remote.get_or_create_build_for_target(user, id, retry).await
+					{
 						return Ok(build_id);
 					}
 				}
@@ -139,25 +137,35 @@ impl Server {
 		self.inner.database.set_build_for_target(id, &build_id)?;
 
 		// Start the build.
-		self.start_build(user, &build_id);
+		self.start_build(user, &build_id, retry);
 
 		Ok(build_id)
 	}
 
-	pub(crate) fn start_build(&self, user: Option<&tg::User>, id: &tg::build::Id) {
+	pub(crate) fn start_build(
+		&self,
+		user: Option<&tg::User>,
+		id: &tg::build::Id,
+		retry: tg::build::Retry,
+	) {
 		tokio::spawn({
 			let server = self.clone();
 			let user = user.cloned();
 			let id = id.clone();
 			async move {
-				if let Err(error) = server.start_build_inner(user.as_ref(), &id).await {
+				if let Err(error) = server.start_build_inner(user.as_ref(), &id, retry).await {
 					tracing::error!(?error, "The build failed.");
 				}
 			}
 		});
 	}
 
-	async fn start_build_inner(&self, user: Option<&tg::User>, id: &tg::build::Id) -> Result<()> {
+	async fn start_build_inner(
+		&self,
+		user: Option<&tg::User>,
+		id: &tg::build::Id,
+		retry: tg::build::Retry,
+	) -> Result<()> {
 		let build = tg::Build::with_id(id.clone());
 		let target = build.target(self).await?;
 
@@ -172,7 +180,8 @@ impl Server {
 						let build = build.clone();
 						let main_runtime_handle = tokio::runtime::Handle::current();
 						move || async move {
-							tangram_runtime::js::build(&server, &build, main_runtime_handle).await
+							tangram_runtime::js::build(&server, &build, retry, main_runtime_handle)
+								.await
 						}
 					})
 					.await
@@ -181,7 +190,7 @@ impl Server {
 			tg::system::Os::Darwin => {
 				#[cfg(target_os = "macos")]
 				{
-					tangram_runtime::darwin::build(self, &build).await
+					tangram_runtime::darwin::build(self, &build, retry).await
 				}
 				#[cfg(not(target_os = "macos"))]
 				{
@@ -191,7 +200,7 @@ impl Server {
 			tg::system::Os::Linux => {
 				#[cfg(target_os = "linux")]
 				{
-					tangram_runtime::linux::build(self, &build).await
+					tangram_runtime::linux::build(self, &build, retry).await
 				}
 				#[cfg(not(target_os = "linux"))]
 				{
@@ -219,14 +228,17 @@ impl Server {
 		Ok(())
 	}
 
-	pub async fn get_build_from_queue(&self, user: Option<&tg::User>) -> Result<tg::build::Id> {
+	pub async fn get_build_from_queue(
+		&self,
+		user: Option<&tg::User>,
+	) -> Result<tg::build::queue::Item> {
 		// Attempt to get a build from the queue from the remote.
 		'a: {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let build_id = remote.get_build_from_queue(user).await?;
-			return Ok(build_id);
+			let queue_item = remote.get_build_from_queue(user).await?;
+			return Ok(queue_item);
 		}
 
 		return_error!("Failed to get a build from the queue.");

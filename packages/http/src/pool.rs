@@ -6,7 +6,7 @@ pub struct Pool<T> {
 	sender: tokio::sync::mpsc::UnboundedSender<T>,
 }
 
-pub struct PoolGuard<'a, T> {
+pub struct Guard<'a, T> {
 	permit: Option<tokio::sync::SemaphorePermit<'a>>,
 	object: Option<T>,
 	sender: tokio::sync::mpsc::UnboundedSender<T>,
@@ -17,6 +17,7 @@ where
 	T: Send + 'static,
 {
 	#[allow(clippy::new_without_default)]
+	#[must_use]
 	pub fn new() -> Self {
 		let semaphore = Arc::new(tokio::sync::Semaphore::new(0));
 		let objects = Arc::new(tokio::sync::Mutex::new(VecDeque::new()));
@@ -38,10 +39,10 @@ where
 		}
 	}
 
-	pub async fn get(&self) -> PoolGuard<'_, T> {
+	pub async fn get(&self) -> Guard<'_, T> {
 		let permit = self.semaphore.acquire().await.unwrap();
 		let object = self.objects.lock().await.pop_front().unwrap();
-		PoolGuard {
+		Guard {
 			permit: Some(permit),
 			object: Some(object),
 			sender: self.sender.clone(),
@@ -54,7 +55,7 @@ where
 	}
 }
 
-impl<'a, T> std::ops::Deref for PoolGuard<'a, T> {
+impl<'a, T> std::ops::Deref for Guard<'a, T> {
 	type Target = T;
 
 	fn deref(&self) -> &Self::Target {
@@ -62,13 +63,13 @@ impl<'a, T> std::ops::Deref for PoolGuard<'a, T> {
 	}
 }
 
-impl<'a, T> std::ops::DerefMut for PoolGuard<'a, T> {
+impl<'a, T> std::ops::DerefMut for Guard<'a, T> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		self.object.as_mut().unwrap()
 	}
 }
 
-impl<'a, T> Drop for PoolGuard<'a, T> {
+impl<'a, T> Drop for Guard<'a, T> {
 	fn drop(&mut self) {
 		self.permit.take().unwrap().forget();
 		let object = self.object.take().unwrap();

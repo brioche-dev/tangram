@@ -1544,8 +1544,11 @@ mod tests {
 			&self,
 			user: Option<&tg::User>,
 			id: &tg::target::Id,
+			retry: tg::build::Retry,
 		) -> tangram_error::Result<tg::build::Id> {
-			self.client.get_or_create_build_for_target(user, id).await
+			self.client
+				.get_or_create_build_for_target(user, id, retry)
+				.await
 		}
 
 		async fn try_get_build_target(
@@ -1717,7 +1720,7 @@ mod tests {
 		async fn get_build_from_queue(
 			&self,
 			user: Option<&tg::User>,
-		) -> tangram_error::Result<tg::build::Id> {
+		) -> tangram_error::Result<tg::build::queue::Item> {
 			self.client.get_build_from_queue(user).await
 		}
 

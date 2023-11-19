@@ -40,11 +40,7 @@ type Handler = Box<
 >;
 
 impl Server {
-	pub async fn start(
-		client: &dyn tg::Client,
-		addr: Addr,
-		handler: Option<Handler>,
-	) -> Result<Self> {
+	pub fn start(client: &dyn tg::Client, addr: Addr, handler: Option<Handler>) -> Self {
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let inner = Inner {
 			client: client.clone_box(),
@@ -61,7 +57,7 @@ impl Server {
 		let abort = task.abort_handle();
 		server.inner.task.0.lock().unwrap().replace(task);
 		server.inner.task.1.lock().unwrap().replace(abort);
-		Ok(server)
+		server
 	}
 
 	pub fn stop(&self) {
@@ -155,6 +151,7 @@ impl Server {
 		Ok(user)
 	}
 
+	#[allow(clippy::too_many_lines)]
 	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
 		tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
 
@@ -381,12 +378,26 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
+		#[derive(serde::Deserialize)]
+		struct SearchParams {
+			#[serde(default)]
+			retry: tg::build::Retry,
+		}
+
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "targets", id, "build"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
+
+		// Get the search params.
+		let Some(query) = request.uri().query() else {
+			return Ok(bad_request());
+		};
+		let search_params: SearchParams =
+			serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
+		let retry = search_params.retry;
 
 		// Get the user.
 		let user = self.try_get_user_from_request(&request).await?;
@@ -395,7 +406,7 @@ impl Server {
 		let build_id = self
 			.inner
 			.client
-			.get_or_create_build_for_target(user.as_ref(), &id)
+			.get_or_create_build_for_target(user.as_ref(), &id, retry)
 			.await?;
 
 		// Create the response.

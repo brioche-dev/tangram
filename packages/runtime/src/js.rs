@@ -26,6 +26,7 @@ struct State {
 	global_source_map: Option<SourceMap>,
 	modules: RefCell<Vec<Module>>,
 	main_runtime_handle: tokio::runtime::Handle,
+	retry: tg::build::Retry,
 }
 
 type Futures = FuturesUnordered<
@@ -44,6 +45,7 @@ struct Module {
 pub async fn build(
 	client: &dyn tg::Client,
 	build: &tg::Build,
+	retry: tg::build::Retry,
 	main_runtime_handle: tokio::runtime::Handle,
 ) -> Result<tg::Value> {
 	// Get the target.
@@ -71,6 +73,7 @@ pub async fn build(
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 		modules: RefCell::new(Vec::new()),
 		main_runtime_handle,
+		retry,
 	});
 
 	// Create the context.

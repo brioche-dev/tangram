@@ -13,7 +13,11 @@ use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
 use tokio::io::AsyncReadExt;
 
 #[allow(clippy::too_many_lines)]
-pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
+pub async fn build(
+	client: &dyn tg::Client,
+	build: &tg::Build,
+	_retry: tg::build::Retry,
+) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 

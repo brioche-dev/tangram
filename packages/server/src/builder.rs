@@ -68,15 +68,15 @@ impl Builder {
 				_ = stop_receiver.wait_for(|s| *s) => return Ok(()),
 				result = server.get_build_from_queue(None) => result,
 			};
-			let build_id = match result {
-				Ok(build_id) => build_id,
+			let queue_item = match result {
+				Ok(queue_item) => queue_item,
 				Err(error) => {
 					tracing::error!(?error, "Failed to get a build from queue.");
 					tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 					continue;
 				},
 			};
-			server.start_build(None, &build_id);
+			server.start_build(None, &queue_item.build, queue_item.retry);
 		}
 	}
 }

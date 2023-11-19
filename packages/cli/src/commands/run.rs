@@ -23,6 +23,10 @@ pub struct Args {
 	#[command(flatten)]
 	pub package_args: PackageArgs,
 
+	/// The retry strategy to use.
+	#[arg(long, default_value_t)]
+	pub retry: tg::build::Retry,
+
 	#[command(flatten)]
 	pub run_args: RunArgs,
 
@@ -63,8 +67,13 @@ impl Cli {
 			.args(args_)
 			.build();
 
+		// Print the target ID.
+		eprintln!("{}", target.id(client).await?);
+
 		// Build the target.
-		let build = target.build(client, None).await?;
+		let build = target.build(client, None, args.retry).await?;
+
+		// Print the build ID.
 		eprintln!("{}", build.id());
 
 		// Create the TUI.

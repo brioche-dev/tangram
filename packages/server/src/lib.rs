@@ -208,9 +208,7 @@ impl Server {
 		server.inner.vfs.lock().unwrap().replace(vfs);
 
 		// Start the HTTP server.
-		let http = tangram_http::Server::start(&server, addr, None)
-			.await
-			.wrap_err("Failed to start the HTTP server.")?;
+		let http = tangram_http::Server::start(&server, addr, None);
 		server.inner.http.lock().unwrap().replace(http);
 
 		// Start the builder.
@@ -349,11 +347,15 @@ impl tg::Client for Server {
 		&self,
 		user: Option<&tg::User>,
 		id: &tg::target::Id,
+		retry: tg::build::Retry,
 	) -> Result<tg::build::Id> {
-		self.get_or_create_build_for_target(user, id).await
+		self.get_or_create_build_for_target(user, id, retry).await
 	}
 
-	async fn get_build_from_queue(&self, user: Option<&tg::User>) -> Result<tg::build::Id> {
+	async fn get_build_from_queue(
+		&self,
+		user: Option<&tg::User>,
+	) -> Result<tg::build::queue::Item> {
 		self.get_build_from_queue(user).await
 	}
 

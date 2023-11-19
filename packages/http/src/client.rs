@@ -413,13 +413,14 @@ impl tg::Client for Client {
 		&self,
 		user: Option<&tg::User>,
 		id: &tg::target::Id,
+		retry: tg::build::Retry,
 	) -> Result<tg::build::Id> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/targets/{id}/build"));
+			.uri(format!("/v1/targets/{id}/build?retry={retry}"));
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
-			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 		let request = request
 			.body(empty())
@@ -437,13 +438,16 @@ impl tg::Client for Client {
 		Ok(id)
 	}
 
-	async fn get_build_from_queue(&self, user: Option<&tg::User>) -> Result<tg::build::Id> {
+	async fn get_build_from_queue(
+		&self,
+		user: Option<&tg::User>,
+	) -> Result<tg::build::queue::Item> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri("/v1/builds/queue");
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
-			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 		let request = request
 			.body(empty())
@@ -457,9 +461,9 @@ impl tg::Client for Client {
 			.await
 			.wrap_err("Failed to collect the response body.")?
 			.to_bytes();
-		let build_id =
+		let item =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-		Ok(build_id)
+		Ok(item)
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
@@ -529,7 +533,7 @@ impl tg::Client for Client {
 			.uri(format!("/v1/builds/{build_id}/children"));
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
-			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize the body.")?;
 		let request = request
@@ -588,7 +592,7 @@ impl tg::Client for Client {
 			.uri(format!("/v1/builds/{id}/log"));
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
-			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 		let body = bytes;
 		let request = request
@@ -636,7 +640,7 @@ impl tg::Client for Client {
 			.uri(format!("/v1/builds/{id}/cancel"));
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
-			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 		let request = request
 			.body(empty())
@@ -662,7 +666,7 @@ impl tg::Client for Client {
 			.uri(format!("/v1/builds/{id}/finish"));
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
-			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 		let outcome = outcome.data(self).await?;
 		let body = serde_json::to_vec(&outcome).wrap_err("Failed to serialize the body.")?;
@@ -790,7 +794,7 @@ impl tg::Client for Client {
 			.uri("/v1/registry/packages");
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
-			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the body.")?;
 		let request = request
@@ -850,7 +854,7 @@ impl tg::Client for Client {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri("/v1/user")
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.header(http::header::AUTHORIZATION, format!("Bearer {token}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;

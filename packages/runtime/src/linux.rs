@@ -52,7 +52,11 @@ const SH_X8664_LINUX: &[u8] = include_bytes!(concat!(
 ));
 
 #[allow(clippy::too_many_lines, clippy::similar_names)]
-pub async fn build(client: &dyn tg::Client, build: &tg::Build) -> Result<tg::Value> {
+pub async fn build(
+	client: &dyn tg::Client,
+	build: &tg::Build,
+	_retry: tg::build::Retry,
+) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 

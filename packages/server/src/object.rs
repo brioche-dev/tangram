@@ -8,28 +8,22 @@ use tg::object;
 impl Server {
 	pub async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
 		// Check if the object exists in the database.
-		if self.get_object_exists_from_database(id)? {
-			return Ok(true);
+		{
+			if self.inner.database.get_object_exists(id)? {
+				return Ok(true);
+			}
 		}
 
 		// Check if the object exists in the remote.
-		if let Ok(true) = self.get_object_exists_from_remote(id).await {
-			return Ok(true);
-		}
-
-		Ok(false)
-	}
-
-	pub fn get_object_exists_from_database(&self, id: &object::Id) -> Result<bool> {
-		self.inner.database.get_object_exists(id)
-	}
-
-	async fn get_object_exists_from_remote(&self, id: &object::Id) -> Result<bool> {
-		if let Some(remote) = self.inner.remote.as_ref() {
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
 			if remote.get_object_exists(id).await? {
 				return Ok(true);
 			}
 		}
+
 		Ok(false)
 	}
 
@@ -41,36 +35,30 @@ impl Server {
 
 	pub async fn try_get_object(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		// Attempt to get the object from the database.
-		if let Some(bytes) = self.try_get_object_from_database(id)? {
-			return Ok(Some(bytes));
-		};
+		'a: {
+			let Some(object) = self.inner.database.try_get_object(id)? else {
+				break 'a;
+			};
+			return Ok(Some(object));
+		}
 
-		// Attempt to get the object from the remote.
-		if let Ok(Some(bytes)) = self.try_get_object_from_remote(id).await {
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+
+			// Get the object from the remote.
+			let Some(bytes) = remote.try_get_object(id).await? else {
+				break 'a;
+			};
+
+			// Add the object to the database.
+			self.inner.database.put_object(id, &bytes)?;
+
 			return Ok(Some(bytes));
-		};
+		}
 
 		Ok(None)
-	}
-
-	pub fn try_get_object_from_database(&self, id: &object::Id) -> Result<Option<Bytes>> {
-		self.inner.database.get_object(id)
-	}
-
-	async fn try_get_object_from_remote(&self, id: &object::Id) -> Result<Option<Bytes>> {
-		let Some(remote) = self.inner.remote.as_ref() else {
-			return Ok(None);
-		};
-
-		// Get the object from the remote.
-		let Some(bytes) = remote.try_get_object(id).await? else {
-			return Ok(None);
-		};
-
-		// Add the object to the database.
-		self.inner.database.put_object(id, &bytes)?;
-
-		Ok(Some(bytes))
 	}
 
 	pub async fn try_put_object(

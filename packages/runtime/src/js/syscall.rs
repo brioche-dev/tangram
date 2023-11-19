@@ -78,7 +78,9 @@ async fn syscall_archive(
 
 async fn syscall_build(state: Rc<State>, args: (tg::Target,)) -> Result<tg::Value> {
 	let (target,) = args;
-	let build = target.build(state.client.as_ref(), None).await?;
+	let build = target
+		.build(state.client.as_ref(), None, state.retry)
+		.await?;
 	state.build.add_child(state.client.as_ref(), &build).await?;
 	let output = build
 		.outcome(state.client.as_ref())

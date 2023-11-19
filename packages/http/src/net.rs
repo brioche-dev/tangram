@@ -21,6 +21,7 @@ pub enum Host {
 }
 
 impl Addr {
+	#[must_use]
 	pub fn is_local(&self) -> bool {
 		match &self {
 			Addr::Inet(inet) => match &inet.host {
