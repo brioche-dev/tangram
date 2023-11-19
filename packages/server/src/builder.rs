@@ -76,7 +76,7 @@ impl Builder {
 					continue;
 				},
 			};
-			server.start_build(&build_id);
+			server.start_build(None, &build_id);
 		}
 	}
 }

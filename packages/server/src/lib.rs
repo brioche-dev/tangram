@@ -75,10 +75,17 @@ struct BuildState {
 
 #[derive(Debug)]
 struct BuildStateInner {
+	stop: StopState,
 	target: tg::Target,
 	children: std::sync::Mutex<ChildrenState>,
 	log: Arc<tokio::sync::Mutex<LogState>>,
-	result: ResultState,
+	outcome: OutcomeState,
+}
+
+#[derive(Debug)]
+struct StopState {
+	sender: tokio::sync::watch::Sender<bool>,
+	receiver: tokio::sync::watch::Receiver<bool>,
 }
 
 #[derive(Debug)]
@@ -94,9 +101,9 @@ struct LogState {
 }
 
 #[derive(Debug)]
-struct ResultState {
-	result: tokio::sync::watch::Receiver<Option<Result<tg::Value>>>,
-	sender: tokio::sync::watch::Sender<Option<Result<tg::Value>>>,
+struct OutcomeState {
+	result: tokio::sync::watch::Receiver<Option<tg::build::Outcome>>,
+	sender: tokio::sync::watch::Sender<Option<tg::build::Outcome>>,
 }
 
 pub struct Options {
@@ -340,14 +347,14 @@ impl tg::Client for Server {
 
 	async fn get_or_create_build_for_target(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::target::Id,
-		token: Option<String>,
 	) -> Result<tg::build::Id> {
-		self.get_or_create_build_for_target(id, token).await
+		self.get_or_create_build_for_target(user, id).await
 	}
 
-	async fn get_build_from_queue(&self, token: Option<String>) -> Result<tg::build::Id> {
-		self.get_build_from_queue(token).await
+	async fn get_build_from_queue(&self, user: Option<&tg::User>) -> Result<tg::build::Id> {
+		self.get_build_from_queue(user).await
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
@@ -363,11 +370,11 @@ impl tg::Client for Server {
 
 	async fn add_build_child(
 		&self,
+		user: Option<&tg::User>,
 		build_id: &tg::build::Id,
 		child_id: &tg::build::Id,
-		token: Option<String>,
 	) -> Result<()> {
-		self.add_build_child(build_id, child_id, token).await
+		self.add_build_child(user, build_id, child_id).await
 	}
 
 	async fn try_get_build_log(
@@ -379,28 +386,31 @@ impl tg::Client for Server {
 
 	async fn add_build_log(
 		&self,
+		user: Option<&tg::User>,
 		build_id: &tg::build::Id,
 		bytes: Bytes,
-		token: Option<String>,
 	) -> Result<()> {
-		self.add_build_log(build_id, bytes, token).await
+		self.add_build_log(user, build_id, bytes).await
 	}
 
-	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
-		self.try_get_build_result(id).await
+	async fn try_get_build_outcome(
+		&self,
+		id: &tg::build::Id,
+	) -> Result<Option<tg::build::Outcome>> {
+		self.try_get_build_outcome(id).await
 	}
 
-	async fn cancel_build(&self, id: &tg::build::Id, token: Option<String>) -> Result<()> {
-		self.cancel_build(id, token).await
+	async fn cancel_build(&self, user: Option<&tg::User>, id: &tg::build::Id) -> Result<()> {
+		self.cancel_build(user, id).await
 	}
 
 	async fn finish_build(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::build::Id,
-		result: Result<tg::Value>,
-		token: Option<String>,
+		outcome: tg::build::Outcome,
 	) -> Result<()> {
-		self.finish_build(id, result, token).await
+		self.finish_build(user, id, outcome).await
 	}
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
@@ -434,7 +444,7 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn publish_package(&self, id: &tg::artifact::Id, token: Option<String>) -> Result<()> {
+	async fn publish_package(&self, user: Option<&tg::User>, id: &tg::artifact::Id) -> Result<()> {
 		let remote = self
 			.inner
 			.remote
@@ -444,7 +454,7 @@ impl tg::Client for Server {
 			.push(self, remote.as_ref())
 			.await
 			.wrap_err("Failed to push the package.")?;
-		remote.publish_package(id, token).await
+		remote.publish_package(user, id).await
 	}
 
 	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {
@@ -481,12 +491,12 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn get_current_user(&self, token: Option<String>) -> Result<Option<tg::user::User>> {
+	async fn get_user_for_token(&self, token: &str) -> Result<Option<tg::user::User>> {
 		self.inner
 			.remote
 			.as_ref()
 			.wrap_err("The server does not have a remote.")?
-			.get_current_user(token)
+			.get_user_for_token(token)
 			.await
 	}
 }

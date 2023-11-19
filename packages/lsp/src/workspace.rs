@@ -1,7 +1,6 @@
-use std::path::PathBuf;
-
 use crate::{Result, Sender, Server};
 use lsp_types as lsp;
+use std::path::PathBuf;
 use tangram_error::return_error;
 
 impl Server {

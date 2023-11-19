@@ -15,6 +15,7 @@ impl Cli {
 	pub async fn command_publish(&self, args: Args) -> Result<()> {
 		let client = self.client().await?;
 		let client = client.as_ref();
+		let user = self.user().await?;
 
 		// Create the package.
 		let specifier = tangram_lsp::package::Specifier::Path(args.package);
@@ -26,7 +27,7 @@ impl Cli {
 
 		// Publish the package.
 		client
-			.publish_package(&id, None)
+			.publish_package(user.as_ref(), &id)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

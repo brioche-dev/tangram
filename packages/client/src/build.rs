@@ -1,7 +1,8 @@
-use crate::{blob, id, object, target, value, Blob, Client, Error, Result, Target, Value, WrapErr};
+pub use self::data::Data;
+use crate::{id, object, value, Blob, Client, Error, Result, Target, User, Value, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
-use derive_more::Display;
+use derive_more::{Display, TryUnwrap};
 use futures::{
 	stream::{self, BoxStream, FuturesOrdered},
 	StreamExt, TryStreamExt,
@@ -36,15 +37,48 @@ pub struct Object {
 	pub target: Target,
 	pub children: Vec<Build>,
 	pub log: Blob,
-	pub result: Result<Value>,
+	pub outcome: Outcome,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, TryUnwrap)]
+#[serde(try_from = "data::Outcome")]
+#[try_unwrap(ref)]
+pub enum Outcome {
+	Cancellation,
+	Failure(Error),
+	Success(Value),
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct Data {
-	pub target: target::Id,
-	pub children: Vec<Id>,
-	pub log: blob::Id,
-	pub result: Result<value::Data>,
+#[serde(into = "String", try_from = "String")]
+pub enum Retry {
+	Cancellation,
+	Failure,
+	Success,
+}
+
+pub mod data {
+	use super::Id;
+	use crate::{blob, target, value};
+	use derive_more::TryUnwrap;
+	use tangram_error::Error;
+
+	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+	pub struct Data {
+		pub target: target::Id,
+		pub children: Vec<Id>,
+		pub log: blob::Id,
+		pub outcome: Outcome,
+	}
+
+	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, TryUnwrap)]
+	#[serde(rename_all = "camelCase", tag = "kind", content = "value")]
+	#[try_unwrap(ref)]
+	pub enum Outcome {
+		Cancellation,
+		Failure(Error),
+		Success(value::Data),
+	}
 }
 
 impl Id {
@@ -141,15 +175,34 @@ impl Build {
 			.try_collect()
 			.await?;
 		let log = object.log.id(client).await?;
-		let result = match &object.result {
-			Ok(result) => Ok(result.data(client).await?),
-			Err(error) => Err(error.clone()),
+		let outcome = match &object.outcome {
+			Outcome::Success(value) => data::Outcome::Success(value.data(client).await?),
+			Outcome::Failure(error) => data::Outcome::Failure(error.clone()),
+			Outcome::Cancellation => data::Outcome::Cancellation,
 		};
 		Ok(Data {
 			target,
 			children,
 			log,
-			result,
+			outcome,
+		})
+	}
+}
+
+impl Outcome {
+	pub fn into_result(self) -> Result<Value> {
+		match self {
+			Self::Success(value) => Ok(value),
+			Self::Failure(error) => Err(error),
+			Self::Cancellation => return_error!("The build was cancelled."),
+		}
+	}
+
+	pub async fn data(&self, client: &dyn Client) -> Result<data::Outcome> {
+		Ok(match self {
+			Self::Success(value) => data::Outcome::Success(value.data(client).await?),
+			Self::Failure(error) => data::Outcome::Failure(error.clone()),
+			Self::Cancellation => data::Outcome::Cancellation,
 		})
 	}
 }
@@ -161,13 +214,13 @@ impl Build {
 		target: Target,
 		children: Vec<Build>,
 		log: Blob,
-		result: Result<Value>,
+		outcome: Outcome,
 	) -> Result<Self> {
 		let object = Object {
 			target,
 			children,
 			log,
-			result,
+			outcome,
 		};
 		let build = Self::with_state(State {
 			id: Some(id.clone()),
@@ -179,7 +232,8 @@ impl Build {
 			.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
-			.ok();
+			.ok()
+			.wrap_err("Expected the children to be stored.")?;
 		Ok(build)
 	}
 
@@ -223,7 +277,7 @@ impl Build {
 	pub async fn add_child(&self, client: &dyn Client, child: &Self) -> Result<()> {
 		let id = self.id();
 		let child_id = child.id();
-		client.add_build_child(id, child_id, None).await?;
+		client.add_build_child(None, id, child_id).await?;
 		Ok(())
 	}
 
@@ -248,38 +302,38 @@ impl Build {
 
 	pub async fn add_log(&self, client: &dyn Client, log: Bytes) -> Result<()> {
 		let id = self.id();
-		client.add_build_log(id, log, None).await?;
+		client.add_build_log(None, id, log).await?;
 		Ok(())
 	}
 
-	pub async fn result(&self, client: &dyn Client) -> Result<Result<Value>> {
-		self.try_get_result(client)
+	pub async fn outcome(&self, client: &dyn Client) -> Result<Outcome> {
+		self.try_get_outcome(client)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	pub async fn try_get_result(&self, client: &dyn Client) -> Result<Option<Result<Value>>> {
+	pub async fn try_get_outcome(&self, client: &dyn Client) -> Result<Option<Outcome>> {
 		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(object.result.clone()))
+			Ok(Some(object.outcome.clone()))
 		} else {
-			Ok(client.try_get_build_result(self.id()).await?)
+			Ok(client.try_get_build_outcome(self.id()).await?)
 		}
 	}
 
 	pub async fn cancel(&self, client: &dyn Client) -> Result<()> {
 		let id = self.id();
-		client.cancel_build(id, None).await?;
+		client.cancel_build(None, id).await?;
 		Ok(())
 	}
 
 	pub async fn finish(
 		&self,
 		client: &dyn Client,
-		result: Result<Value>,
-		token: Option<String>,
+		user: Option<&User>,
+		outcome: Outcome,
 	) -> Result<()> {
 		let id = self.id();
-		client.finish_build(id, result, token).await?;
+		client.finish_build(user, id, outcome).await?;
 		Ok(())
 	}
 }
@@ -300,9 +354,10 @@ impl Data {
 		let target = std::iter::once(self.target.clone().into());
 		let children = self.children.iter().cloned().map(Into::into);
 		let log = std::iter::once(self.log.clone().into());
-		let result = self
-			.result
-			.as_ref()
+		let outcome = self
+			.outcome
+			.try_unwrap_success_ref()
+			.ok()
 			.map(value::Data::children)
 			.into_iter()
 			.flatten();
@@ -310,7 +365,7 @@ impl Data {
 			.chain(target)
 			.chain(children)
 			.chain(log)
-			.chain(result)
+			.chain(outcome)
 			.collect()
 	}
 }
@@ -322,16 +377,25 @@ impl TryFrom<Data> for Object {
 		let target = Target::with_id(data.target);
 		let children = data.children.into_iter().map(Build::with_id).collect();
 		let log = Blob::with_id(data.log);
-		let result = match data.result {
-			Ok(value) => Ok(value.try_into()?),
-			Err(error) => Err(error),
-		};
+		let outcome = data.outcome.try_into()?;
 		Ok(Self {
 			target,
 			children,
 			log,
-			result,
+			outcome,
 		})
+	}
+}
+
+impl TryFrom<data::Outcome> for Outcome {
+	type Error = Error;
+
+	fn try_from(data: data::Outcome) -> std::prelude::v1::Result<Self, Self::Error> {
+		match data {
+			data::Outcome::Success(value) => Ok(Outcome::Success(value.try_into()?)),
+			data::Outcome::Failure(error) => Ok(Outcome::Failure(error)),
+			data::Outcome::Cancellation => Ok(Outcome::Cancellation),
+		}
 	}
 }
 
@@ -373,5 +437,42 @@ impl TryFrom<&[u8]> for Id {
 
 	fn try_from(value: &[u8]) -> std::result::Result<Self, Self::Error> {
 		crate::Id::with_bytes(value)?.try_into()
+	}
+}
+
+impl std::fmt::Display for Retry {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Cancellation => write!(f, "cancellation"),
+			Self::Failure => write!(f, "failure"),
+			Self::Success => write!(f, "success"),
+		}
+	}
+}
+
+impl std::str::FromStr for Retry {
+	type Err = Error;
+
+	fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+		match s {
+			"cancellation" => Ok(Retry::Cancellation),
+			"failure" => Ok(Retry::Failure),
+			"success" => Ok(Retry::Success),
+			_ => return_error!("Invalid retry."),
+		}
+	}
+}
+
+impl From<Retry> for String {
+	fn from(value: Retry) -> Self {
+		value.to_string()
+	}
+}
+
+impl TryFrom<String> for Retry {
+	type Error = Error;
+
+	fn try_from(value: String) -> std::prelude::v1::Result<Self, Self::Error> {
+		value.parse()
 	}
 }

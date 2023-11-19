@@ -1,25 +1,33 @@
-use self::{commands::Args, util::dirs::home_directory_path};
+use self::commands::Args;
 use clap::Parser;
 use std::{path::PathBuf, sync::Arc};
 use tangram_client as tg;
-use tangram_error::{error, return_error, Result, WrapErr};
+use tangram_error::{return_error, Result, WrapErr};
 use tangram_http::net::Addr;
 use tg::Client;
 use tracing_subscriber::prelude::*;
+use url::Url;
 
 mod commands;
-mod config;
-mod credentials;
 mod tui;
-mod util;
 
 pub const API_URL: &str = "https://api.tangram.dev";
 
 struct Cli {
 	client: tokio::sync::Mutex<Option<Arc<dyn tg::Client>>>,
+	config: std::sync::RwLock<Option<Config>>,
 	path: PathBuf,
-	token: std::sync::RwLock<Option<String>>,
+	user: std::sync::RwLock<Option<tg::User>>,
 	version: String,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct Config {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub autoenvs: Option<Vec<PathBuf>>,
+
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub remote: Option<Url>,
 }
 
 #[tokio::main]
@@ -48,18 +56,19 @@ async fn main_inner() -> Result<()> {
 	// Parse the arguments.
 	let args = Args::parse();
 
-	// Get the path.
-	let path = home_directory_path()
-		.wrap_err("Failed to find the user home directory.")?
-		.join(".tangram");
-
 	// Create the container for the client.
 	let client = tokio::sync::Mutex::new(None);
 
-	// Get the token.
-	let credentials = Cli::read_credentials().await?;
-	let token = credentials.map(|credentials| credentials.token);
-	let token = std::sync::RwLock::new(token);
+	// Get the path.
+	let home = std::env::var("HOME").wrap_err("Failed to get the home directory path.")?;
+	let home = PathBuf::from(home);
+	let path = home.join(".tangram");
+
+	// Create the config.
+	let config = std::sync::RwLock::new(None);
+
+	// Create the user.
+	let user = std::sync::RwLock::new(None);
 
 	// Get the version.
 	let version = if cfg!(debug_assertions) {
@@ -82,8 +91,9 @@ async fn main_inner() -> Result<()> {
 	// Create the CLI.
 	let cli = Cli {
 		client,
+		config,
 		path,
-		token,
+		user,
 		version,
 	};
 
@@ -100,13 +110,10 @@ impl Cli {
 			return Ok(client);
 		}
 
-		// Get the token.
-		let credentials = Self::read_credentials().await?;
-		let token = credentials.map(|credentials| credentials.token);
-
 		// Attempt to connect to the server.
 		let addr = Addr::Unix(self.path.join("socket"));
-		let client = tangram_http::client::Builder::new(addr, token).build();
+		let user = self.user().await?.clone();
+		let client = tangram_http::client::Builder::new(addr, user).build();
 		let mut connected = client.connect().await.is_ok();
 
 		// If this is a debug build, then require that the client is connected and has the same version as the server.
@@ -176,6 +183,62 @@ impl Cli {
 			.stderr(stderr.into_std().await)
 			.spawn()
 			.wrap_err("Failed to spawn the server.")?;
+		Ok(())
+	}
+
+	pub async fn config(&self) -> Result<Option<Config>> {
+		if let Some(config) = self.config.read().unwrap().as_ref() {
+			return Ok(Some(config.clone()));
+		}
+		let path = self.path.join("config.json");
+		let config = if path.exists() {
+			let config = tokio::fs::read_to_string(path)
+				.await
+				.wrap_err("Failed to read the config file.")?;
+			Some(serde_json::from_str(&config).wrap_err("Failed to deserialize the config.")?)
+		} else {
+			None
+		};
+		*self.config.write().unwrap() = config.clone();
+		Ok(config)
+	}
+
+	pub async fn save_config(&self, config: Config) -> Result<()> {
+		self.config.write().unwrap().replace(config.clone());
+		let path = self.path.join("config.json");
+		let config =
+			serde_json::to_string_pretty(&config).wrap_err("Failed to serialize the config.")?;
+		tokio::fs::write(path, &config)
+			.await
+			.wrap_err("Failed to save the config.")?;
+		Ok(())
+	}
+
+	pub async fn user(&self) -> Result<Option<tg::User>> {
+		if let Some(user) = self.user.read().unwrap().as_ref() {
+			return Ok(Some(user.clone()));
+		}
+		let path = self.path.join("user.json");
+		let user = if path.exists() {
+			let config = tokio::fs::read_to_string(path)
+				.await
+				.wrap_err("Failed to read the user file.")?;
+			Some(serde_json::from_str(&config).wrap_err("Failed to deserialize the user.")?)
+		} else {
+			None
+		};
+		*self.user.write().unwrap() = user.clone();
+		Ok(user)
+	}
+
+	pub async fn save_user(&self, user: tg::User) -> Result<()> {
+		self.user.write().unwrap().replace(user.clone());
+		let path = self.path.join("user.json");
+		let user = serde_json::to_string_pretty(&user.clone())
+			.wrap_err("Failed to serialize the user.")?;
+		tokio::fs::write(path, &user)
+			.await
+			.wrap_err("Failed to save the user.")?;
 		Ok(())
 	}
 }

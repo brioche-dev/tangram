@@ -1,4 +1,4 @@
-use crate::{util::dirs::home_directory_path, Cli, API_URL};
+use crate::{Cli, API_URL};
 use std::path::PathBuf;
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
@@ -82,19 +82,17 @@ impl Cli {
 		let path = if let Some(path) = args.path.clone() {
 			path
 		} else {
-			home_directory_path()
-				.wrap_err("Failed to find the user home directory.")?
-				.join(".tangram")
+			self.path.clone()
 		};
 
 		// Get the addr.
 		let addr = args.address.unwrap_or(Addr::Unix(path.join("socket")));
 
-		// Read the config.
-		let config = Self::read_config().await?;
+		// Get the config.
+		let config = self.config().await?;
 
-		// Read the credentials.
-		let _credentials = Self::read_credentials().await?;
+		// Get the user.
+		let user = self.user().await?;
 
 		// Create the remote.
 		let url = if let Some(url) = args.remote {
@@ -105,7 +103,7 @@ impl Cli {
 			API_URL.parse().unwrap()
 		};
 		let tls = url.scheme() == "https";
-		let client = tangram_http::client::Builder::new(url.try_into()?, None)
+		let client = tangram_http::client::Builder::new(url.try_into()?, user)
 			.tls(tls)
 			.build();
 		let remote = if args.no_remote {

@@ -1,13 +1,14 @@
 use super::Server;
-use crate::{BuildState, BuildStateInner, ChildrenState, LogState, ResultState};
+use crate::{BuildState, BuildStateInner, ChildrenState, LogState, OutcomeState, StopState};
+use async_recursion::async_recursion;
 use bytes::Bytes;
 use futures::{
-	stream::{self, BoxStream},
+	stream::{self, BoxStream, FuturesUnordered},
 	StreamExt, TryStreamExt,
 };
 use std::sync::Arc;
 use tangram_client as tg;
-use tangram_error::{error, return_error, Result, Wrap, WrapErr};
+use tangram_error::{return_error, Result, Wrap, WrapErr};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -62,8 +63,8 @@ impl Server {
 	/// Get or create a build for a target.
 	pub async fn get_or_create_build_for_target(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::target::Id,
-		token: Option<String>,
 	) -> Result<tg::build::Id> {
 		let target = tg::Target::with_id(id.clone());
 
@@ -81,10 +82,7 @@ impl Server {
 				let object = tg::object::Handle::with_id(id.clone().into());
 				let result = object.push(self, remote.as_ref()).await;
 				if result.is_ok() {
-					if let Ok(build_id) = remote
-						.get_or_create_build_for_target(id, token.clone())
-						.await
-					{
+					if let Ok(build_id) = remote.get_or_create_build_for_target(user, id).await {
 						return Ok(build_id);
 					}
 				}
@@ -93,6 +91,10 @@ impl Server {
 
 		// Otherwise, create a new build.
 		let build_id = tg::build::Id::new();
+
+		// Create the stop state.
+		let (sender, receiver) = tokio::sync::watch::channel(false);
+		let stop = StopState { sender, receiver };
 
 		// Create the children state.
 		let children = std::sync::Mutex::new(ChildrenState {
@@ -110,7 +112,7 @@ impl Server {
 
 		// Create the result state.
 		let (sender, receiver) = tokio::sync::watch::channel(None);
-		let result = ResultState {
+		let result = OutcomeState {
 			sender,
 			result: receiver,
 		};
@@ -118,10 +120,11 @@ impl Server {
 		// Create the build state.
 		let state = BuildState {
 			inner: Arc::new(BuildStateInner {
+				stop,
 				target,
 				children,
 				log,
-				result,
+				outcome: result,
 			}),
 		};
 
@@ -136,24 +139,25 @@ impl Server {
 		self.inner.database.set_build_for_target(id, &build_id)?;
 
 		// Start the build.
-		self.start_build(&build_id);
+		self.start_build(user, &build_id);
 
 		Ok(build_id)
 	}
 
-	pub(crate) fn start_build(&self, id: &tg::build::Id) {
+	pub(crate) fn start_build(&self, user: Option<&tg::User>, id: &tg::build::Id) {
 		tokio::spawn({
 			let server = self.clone();
+			let user = user.cloned();
 			let id = id.clone();
 			async move {
-				if let Err(error) = server.start_build_inner(&id).await {
+				if let Err(error) = server.start_build_inner(user.as_ref(), &id).await {
 					tracing::error!(?error, "The build failed.");
 				}
 			}
 		});
 	}
 
-	async fn start_build_inner(&self, id: &tg::build::Id) -> Result<()> {
+	async fn start_build_inner(&self, user: Option<&tg::User>, id: &tg::build::Id) -> Result<()> {
 		let build = tg::Build::with_id(id.clone());
 		let target = build.target(self).await?;
 
@@ -203,18 +207,29 @@ impl Server {
 				.await?;
 		}
 
+		// Create the outcome.
+		let outcome = match result {
+			Ok(value) => tg::build::Outcome::Success(value),
+			Err(error) => tg::build::Outcome::Failure(error),
+		};
+
 		// Finish the build.
-		build.finish(self, result, None).await?;
+		build.finish(self, user, outcome).await?;
 
 		Ok(())
 	}
 
-	pub async fn get_build_from_queue(&self, token: Option<String>) -> Result<tg::build::Id> {
-		let Some(remote) = self.inner.remote.as_ref() else {
-			return_error!("The server does not have a remote.");
-		};
-		let build_id = remote.get_build_from_queue(token).await?;
-		Ok(build_id)
+	pub async fn get_build_from_queue(&self, user: Option<&tg::User>) -> Result<tg::build::Id> {
+		// Attempt to get a build from the queue from the remote.
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+			let build_id = remote.get_build_from_queue(user).await?;
+			return Ok(build_id);
+		}
+
+		return_error!("Failed to get a build from the queue.");
 	}
 
 	pub async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
@@ -252,10 +267,19 @@ impl Server {
 		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<tg::build::Id>>>> {
 		// Attempt to get the children from the state.
-		let state = self.inner.builds.read().unwrap().get(id).cloned();
-		if let Some(state) = state {
+		'a: {
+			// Get the state.
+			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+				break 'a;
+			};
+
+			// Lock the children state.
 			let state = state.inner.children.lock().unwrap();
+
+			// Get the old children.
 			let old = stream::iter(state.children.clone()).map(Ok);
+
+			// Get a stream of the new children.
 			let new = if let Some(sender) = state.sender.as_ref() {
 				BroadcastStream::new(sender.subscribe())
 					.map_err(|err| err.wrap("Failed to create the stream."))
@@ -263,9 +287,11 @@ impl Server {
 			} else {
 				stream::empty().boxed()
 			};
-			return Ok(Some(
-				old.chain(new).map_ok(|build| build.id().clone()).boxed(),
-			));
+
+			// Create the complete children stream.
+			let children = old.chain(new).map_ok(|build| build.id().clone()).boxed();
+
+			return Ok(Some(children));
 		}
 
 		// Attempt to get the children from the object.
@@ -297,25 +323,39 @@ impl Server {
 
 	pub async fn add_build_child(
 		&self,
+		user: Option<&tg::User>,
 		build_id: &tg::build::Id,
 		child_id: &tg::build::Id,
-		token: Option<String>,
 	) -> Result<()> {
 		// Attempt to add the child to the state.
-		let state = self.inner.builds.read().unwrap().get(build_id).cloned();
-		if let Some(state) = state {
+		'a: {
+			// Get the state.
+			let Some(state) = self.inner.builds.read().unwrap().get(build_id).cloned() else {
+				break 'a;
+			};
+
+			// Check if the build is stopped.
+			if *state.inner.stop.receiver.borrow() {
+				return_error!("The build is stopped.");
+			}
+
+			// Add the child.
 			let child = tg::Build::with_id(child_id.clone());
 			let mut state = state.inner.children.lock().unwrap();
 			if let Some(sender) = state.sender.as_ref().cloned() {
 				state.children.push(child.clone());
 				sender.send(child.clone()).ok();
 			}
+
 			return Ok(());
-		};
+		}
 
 		// Attempt to add the child to the remote.
-		if let Some(remote) = self.inner.remote.as_ref() {
-			remote.add_build_child(build_id, child_id, token).await?;
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+			remote.add_build_child(user, build_id, child_id).await?;
 			return Ok(());
 		}
 
@@ -327,14 +367,23 @@ impl Server {
 		id: &tg::build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		// Attempt to get the log from the state.
-		let state = self.inner.builds.read().unwrap().get(id).cloned();
-		if let Some(state) = state {
+		'a: {
+			// Get the state.
+			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+				break 'a;
+			};
+
+			// Lock the log state.
 			let mut state = state.inner.log.lock().await;
+
+			// Rewind the log.
 			state
 				.file
 				.rewind()
 				.await
 				.wrap_err("Failed to rewind the log file.")?;
+
+			// Read the existing log.
 			let mut old = Vec::new();
 			state
 				.file
@@ -342,11 +391,8 @@ impl Server {
 				.await
 				.wrap_err("Failed to read the log.")?;
 			let old = stream::once(async move { Ok(old.into()) });
-			state
-				.file
-				.seek(std::io::SeekFrom::End(0))
-				.await
-				.wrap_err("Failed to seek in the log file.")?;
+
+			// Get the new log stream.
 			let new = if let Some(sender) = state.sender.as_ref() {
 				BroadcastStream::new(sender.subscribe())
 					.map_err(|err| err.wrap("Failed to create the stream."))
@@ -354,7 +400,11 @@ impl Server {
 			} else {
 				stream::empty().boxed()
 			};
-			return Ok(Some(old.chain(new).boxed()));
+
+			// Create the complete log stream.
+			let log = old.chain(new).boxed();
+
+			return Ok(Some(log));
 		}
 
 		// Attempt to get the log from the object.
@@ -383,50 +433,73 @@ impl Server {
 
 	pub async fn add_build_log(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::build::Id,
 		bytes: Bytes,
-		token: Option<String>,
 	) -> Result<()> {
 		// Attempt to add the log to the state.
-		let state = self.inner.builds.read().unwrap().get(id).cloned();
-		if let Some(state) = state {
-			let mut state = state.inner.log.lock().await;
-			if let Some(sender) = state.sender.as_ref().cloned() {
-				state
-					.file
-					.seek(std::io::SeekFrom::End(0))
-					.await
-					.wrap_err("Failed to seek.")?;
-				state
-					.file
-					.write_all(&bytes)
-					.await
-					.wrap_err("Failed to write the log.")?;
-				sender.send(bytes).ok();
+		'a: {
+			// Get the state.
+			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+				break 'a;
+			};
+
+			// Check if the build is stopped.
+			if *state.inner.stop.receiver.borrow() {
+				return_error!("The build is stopped.");
 			}
+
+			// Lock the log state.
+			let mut state = state.inner.log.lock().await;
+
+			// Get the log sender.
+			let sender = state.sender.as_ref().cloned().unwrap();
+
+			// Rewind the log.
+			state
+				.file
+				.seek(std::io::SeekFrom::End(0))
+				.await
+				.wrap_err("Failed to seek.")?;
+
+			// Write the log.
+			state
+				.file
+				.write_all(&bytes)
+				.await
+				.wrap_err("Failed to write the log.")?;
+
+			// Send the log.
+			sender.send(bytes).ok();
+
 			return Ok(());
 		}
 
 		// Attempt to add the log to the remote.
-		if let Some(remote) = self.inner.remote.as_ref() {
-			remote.add_build_log(id, bytes, token).await?;
+		'a: {
+			let Some(remote) = self.inner.remote.as_ref() else {
+				break 'a;
+			};
+			remote.add_build_log(user, id, bytes).await?;
 			return Ok(());
 		}
 
-		Ok(())
+		return_error!("Failed to find the build.");
 	}
 
-	pub async fn try_get_build_result(
+	pub async fn try_get_build_outcome(
 		&self,
 		id: &tg::build::Id,
-	) -> Result<Option<Result<tg::Value>>> {
+	) -> Result<Option<tg::build::Outcome>> {
 		// Attempt to await the result from the state.
-		let state = self.inner.builds.read().unwrap().get(id).cloned();
-		if let Some(state) = state {
+		'a: {
+			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+				break 'a;
+			};
 			return Ok(Some(
 				state
 					.inner
-					.result
+					.outcome
 					.result
 					.clone()
 					.wait_for(Option::is_some)
@@ -443,7 +516,7 @@ impl Server {
 			let Some(object) = build.try_get_object(self).await? else {
 				break 'a;
 			};
-			return Ok(Some(object.result.clone()));
+			return Ok(Some(object.outcome.clone()));
 		}
 
 		// Attempt to await the result from the remote.
@@ -451,7 +524,7 @@ impl Server {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let Some(result) = remote.try_get_build_result(id).await? else {
+			let Some(result) = remote.try_get_build_outcome(id).await? else {
 				break 'a;
 			};
 			return Ok(Some(result));
@@ -460,12 +533,35 @@ impl Server {
 		Ok(None)
 	}
 
-	pub async fn cancel_build(&self, id: &tg::build::Id, token: Option<String>) -> Result<()> {
+	#[async_recursion]
+	pub async fn cancel_build(
+		&self,
+		user: Option<&'async_recursion tg::User>,
+		id: &tg::build::Id,
+	) -> Result<()> {
 		// Attempt to finish the build on the state.
-		let state = self.inner.builds.read().unwrap().get(id).cloned();
-		if let Some(state) = state {
-			let result = Err(error!("The build was cancelled."));
-			self.finish_build_with_state(&state, id, result).await?;
+		'a: {
+			// Get the state.
+			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+				break 'a;
+			};
+
+			// Mark the build as stopped.
+			state.inner.stop.sender.send(true).unwrap();
+
+			// Cancel the children.
+			let children = state.inner.children.lock().unwrap().children.clone();
+			children
+				.iter()
+				.map(|child| async move { self.cancel_build(user, child.id()).await })
+				.collect::<FuturesUnordered<_>>()
+				.try_collect()
+				.await?;
+
+			// Finish the build with the cancellation outcome.
+			self.finish_build(user, id, tg::build::Outcome::Cancellation)
+				.await?;
+
 			return Ok(());
 		}
 
@@ -474,7 +570,7 @@ impl Server {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			remote.cancel_build(id, token).await?;
+			remote.cancel_build(user, id).await?;
 			return Ok(());
 		}
 
@@ -483,14 +579,64 @@ impl Server {
 
 	pub async fn finish_build(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::build::Id,
-		result: Result<tg::Value>,
-		token: Option<String>,
+		outcome: tg::build::Outcome,
 	) -> Result<()> {
 		// Attempt to finish the build on the state.
-		let state = self.inner.builds.read().unwrap().get(id).cloned();
-		if let Some(state) = state {
-			self.finish_build_with_state(&state, id, result).await?;
+		'a: {
+			// Get the state.
+			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+				break 'a;
+			};
+
+			// Get the target.
+			let target = state.inner.target.clone();
+
+			// Get the children.
+			let children = {
+				let mut state = state.inner.children.lock().unwrap();
+				state.sender.take();
+				state.children.clone()
+			};
+
+			// Get the log.
+			let log = {
+				let mut state = state.inner.log.lock().await;
+				state.sender.take();
+				state.file.rewind().await.wrap_err("Failed to seek.")?;
+				tg::Blob::with_reader(self, &mut state.file).await?
+			};
+
+			// Check if any of the children have been cancelled.
+			let outcome = if children
+				.iter()
+				.map(|child| child.outcome(self))
+				.collect::<FuturesUnordered<_>>()
+				.try_collect::<Vec<_>>()
+				.await?
+				.into_iter()
+				.any(|outcome| outcome.try_unwrap_cancellation_ref().is_ok())
+			{
+				tg::build::Outcome::Cancellation
+			} else {
+				outcome
+			};
+
+			// Create the build.
+			tg::Build::new(self, id.clone(), target, children, log, outcome.clone()).await?;
+
+			// Set the outcome.
+			state
+				.inner
+				.outcome
+				.sender
+				.send(Some(outcome.clone()))
+				.unwrap();
+
+			// Remove the build's state.
+			self.inner.builds.write().unwrap().remove(id);
+
 			return Ok(());
 		}
 
@@ -499,51 +645,9 @@ impl Server {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			remote.finish_build(id, result, token).await?;
+			remote.finish_build(user, id, outcome).await?;
 			return Ok(());
 		}
-
-		Ok(())
-	}
-
-	async fn finish_build_with_state(
-		&self,
-		state: &BuildState,
-		id: &tg::build::Id,
-		result: Result<tg::Value>,
-	) -> Result<()> {
-		// Get the target.
-		let target = state.inner.target.clone();
-
-		// Get the children.
-		let children = {
-			let mut state = state.inner.children.lock().unwrap();
-			state.sender.take();
-			state.children.clone()
-		};
-
-		// Get the log.
-		let log = {
-			let mut state = state.inner.log.lock().await;
-			state.sender.take();
-			state.file.rewind().await.wrap_err("Failed to seek.")?;
-			tg::Blob::with_reader(self, &mut state.file).await?
-		};
-
-		// Create the build.
-		let _build =
-			tg::Build::new(self, id.clone(), target, children, log, result.clone()).await?;
-
-		// Set the result.
-		state
-			.inner
-			.result
-			.sender
-			.send(Some(result.clone()))
-			.unwrap();
-
-		// Remove the build's state.
-		self.inner.builds.write().unwrap().remove(id);
 
 		Ok(())
 	}

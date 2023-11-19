@@ -3,6 +3,16 @@ export let metadata = {
 	version: "0.0.0",
 };
 
-export default tg.target(() => {
-	return "Hello, World!";
+export default tg.target(async () => {
+	return [f(), g()];
+});
+
+export let f = tg.target(async () => {
+	await tg.sleep(5);
+	return "f";
+});
+
+export let g = tg.target(async () => {
+	await tg.sleep(10);
+	return "g";
 });

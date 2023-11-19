@@ -20,6 +20,7 @@ pub use self::{
 	target::Target,
 	template::Template,
 	tracker::Tracker,
+	user::User,
 	value::Value,
 };
 use async_trait::async_trait;
@@ -100,11 +101,11 @@ pub trait Client: Send + Sync + 'static {
 
 	async fn get_or_create_build_for_target(
 		&self,
+		user: Option<&User>,
 		id: &target::Id,
-		token: Option<String>,
 	) -> Result<build::Id>;
 
-	async fn get_build_from_queue(&self, token: Option<String>) -> Result<build::Id>;
+	async fn get_build_from_queue(&self, user: Option<&User>) -> Result<build::Id>;
 
 	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
 		Ok(self
@@ -132,9 +133,9 @@ pub trait Client: Send + Sync + 'static {
 
 	async fn add_build_child(
 		&self,
+		user: Option<&User>,
 		id: &build::Id,
 		child_id: &build::Id,
-		token: Option<String>,
 	) -> Result<()>;
 
 	async fn get_build_log(&self, id: &build::Id) -> Result<BoxStream<'static, Result<Bytes>>> {
@@ -149,32 +150,27 @@ pub trait Client: Send + Sync + 'static {
 		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>>;
 
-	async fn add_build_log(
-		&self,
-		id: &build::Id,
-		bytes: Bytes,
-		token: Option<String>,
-	) -> Result<()>;
+	async fn add_build_log(&self, user: Option<&User>, id: &build::Id, bytes: Bytes) -> Result<()>;
 
-	async fn get_build_result(&self, id: &build::Id) -> Result<Result<Value, Error>> {
+	async fn get_build_outcome(&self, id: &build::Id) -> Result<build::Outcome> {
 		Ok(self
-			.try_get_build_result(id)
+			.try_get_build_outcome(id)
 			.await?
 			.wrap_err("Failed to get the build.")?)
 	}
 
-	async fn try_get_build_result(&self, id: &build::Id) -> Result<Option<Result<Value, Error>>>;
+	async fn try_get_build_outcome(&self, id: &build::Id) -> Result<Option<build::Outcome>>;
 
-	async fn cancel_build(&self, id: &build::Id, token: Option<String>) -> Result<()>;
+	async fn cancel_build(&self, user: Option<&User>, id: &build::Id) -> Result<()>;
 
 	async fn finish_build(
 		&self,
+		user: Option<&User>,
 		id: &build::Id,
-		result: Result<Value>,
-		token: Option<String>,
+		outcome: build::Outcome,
 	) -> Result<()>;
 
-	async fn search_packages(&self, quer: &str) -> Result<Vec<package::Package>>;
+	async fn search_packages(&self, query: &str) -> Result<Vec<package::Package>>;
 
 	async fn get_package(&self, name: &str) -> Result<Option<package::Package>>;
 
@@ -187,11 +183,11 @@ pub trait Client: Send + Sync + 'static {
 		id: &Id,
 	) -> Result<Option<Vec<dependency::Dependency>>>;
 
-	async fn publish_package(&self, id: &artifact::Id, token: Option<String>) -> Result<()>;
+	async fn publish_package(&self, user: Option<&User>, id: &artifact::Id) -> Result<()>;
 
 	async fn create_login(&self) -> Result<user::Login>;
 
 	async fn get_login(&self, id: &Id) -> Result<Option<user::Login>>;
 
-	async fn get_current_user(&self, token: Option<String>) -> Result<Option<user::User>>;
+	async fn get_user_for_token(&self, token: &str) -> Result<Option<User>>;
 }

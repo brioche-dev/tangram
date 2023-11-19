@@ -1,7 +1,6 @@
 use super::{PackageArgs, RunArgs};
 use crate::{
 	tui::{self, Tui},
-	util::dirs::home_directory_path,
 	Cli,
 };
 use std::{os::unix::process::CommandExt, path::PathBuf};
@@ -78,8 +77,8 @@ impl Cli {
 			None
 		};
 
-		// Wait for the build's output.
-		let result = build.result(client).await;
+		// Wait for the build's outcome.
+		let outcome = build.outcome(client).await;
 
 		// Stop the TUI.
 		if let Some(tui) = tui {
@@ -87,11 +86,11 @@ impl Cli {
 			tui.join().await?;
 		}
 
-		// Handle for an error that occurred while waiting for the build's result.
-		let result = result.wrap_err("Failed to get the build result.")?;
+		// Handle for an error that occurred while waiting for the build's outcome.
+		let outcome = outcome.wrap_err("Failed to get the build outcome.")?;
 
 		// Handle a failed build.
-		let output = result.wrap_err("The build failed.")?;
+		let output = outcome.into_result().wrap_err("The build failed.")?;
 
 		// Get the output artifact.
 		let artifact: tg::Artifact = output
@@ -99,9 +98,8 @@ impl Cli {
 			.wrap_err("Expected the output to be an artifact.")?;
 
 		// Get the path to the artifact.
-		let artifact_path: PathBuf = home_directory_path()
-			.wrap_err("Failed to find the user home directory.")?
-			.join(".tangram")
+		let artifact_path: PathBuf = self
+			.path
 			.join("artifacts")
 			.join(artifact.id(client).await?.to_string());
 

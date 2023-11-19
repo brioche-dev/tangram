@@ -12,4 +12,5 @@ pub struct Login {
 pub struct User {
 	pub id: Id,
 	pub email: String,
+	pub token: Option<String>,
 }

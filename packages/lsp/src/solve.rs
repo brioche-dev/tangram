@@ -428,8 +428,8 @@ pub struct Context {
 	path_dependencies: BTreeMap<tg::Id, BTreeMap<tg::Path, tg::Id>>,
 }
 
-impl fmt::Debug for Context {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Debug for Context {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "Context()")
 	}
 }
@@ -1198,7 +1198,7 @@ mod tests {
 			.collect(),
 		);
 		client
-			.publish_package("", &baz.id(&client).await.unwrap().clone().into())
+			.publish_package(None, &baz.id(&client).await.unwrap().clone().into())
 			.await
 			.unwrap();
 
@@ -1355,7 +1355,7 @@ mod tests {
 
 			// Attempt to connect to the server.
 			let addr = tangram_http::net::Addr::Unix(path.join("socket"));
-			let client = tangram_http::client::Builder::new(addr).build();
+			let client = tangram_http::client::Builder::new(addr, None).build();
 			client.connect().await.unwrap();
 
 			let state = State {
@@ -1542,9 +1542,10 @@ mod tests {
 
 		async fn get_or_create_build_for_target(
 			&self,
+			user: Option<&tg::User>,
 			id: &tg::target::Id,
 		) -> tangram_error::Result<tg::build::Id> {
-			self.client.get_or_create_build_for_target(id).await
+			self.client.get_or_create_build_for_target(user, id).await
 		}
 
 		async fn try_get_build_target(
@@ -1564,10 +1565,11 @@ mod tests {
 
 		async fn add_build_child(
 			&self,
+			user: Option<&tg::User>,
 			build_id: &tg::build::Id,
 			child_id: &tg::build::Id,
 		) -> tangram_error::Result<()> {
-			self.client.add_build_child(build_id, child_id).await
+			self.client.add_build_child(user, build_id, child_id).await
 		}
 
 		async fn try_get_build_log(
@@ -1580,25 +1582,27 @@ mod tests {
 
 		async fn add_build_log(
 			&self,
+			user: Option<&tg::User>,
 			build_id: &tg::build::Id,
 			bytes: bytes::Bytes,
 		) -> tangram_error::Result<()> {
-			self.client.add_build_log(build_id, bytes).await
+			self.client.add_build_log(user, build_id, bytes).await
 		}
 
-		async fn try_get_build_result(
+		async fn try_get_build_outcome(
 			&self,
 			id: &tg::build::Id,
-		) -> tangram_error::Result<Option<tangram_error::Result<tg::Value>>> {
-			self.client.try_get_build_result(id).await
+		) -> tangram_error::Result<Option<tg::build::Outcome>> {
+			self.client.try_get_build_outcome(id).await
 		}
 
 		async fn finish_build(
 			&self,
+			user: Option<&tg::User>,
 			id: &tg::build::Id,
-			result: tangram_error::Result<tg::Value>,
+			outcome: tg::build::Outcome,
 		) -> tangram_error::Result<()> {
-			self.client.finish_build(id, result).await
+			self.client.finish_build(user, id, outcome).await
 		}
 
 		async fn create_login(&self) -> tangram_error::Result<tg::user::Login> {
@@ -1609,11 +1613,11 @@ mod tests {
 			self.client.get_login(id).await
 		}
 
-		async fn get_current_user(
+		async fn get_user_for_token(
 			&self,
 			token: &str,
 		) -> tangram_error::Result<Option<tg::user::User>> {
-			self.client.get_current_user(token).await
+			self.client.get_user_for_token(token).await
 		}
 
 		async fn search_packages(
@@ -1671,7 +1675,7 @@ mod tests {
 
 		async fn publish_package(
 			&self,
-			_token: &str,
+			_user: Option<&tg::User>,
 			id: &tg::artifact::Id,
 		) -> tangram_error::Result<()> {
 			let directory = tg::Artifact::with_id(id.clone())
@@ -1710,12 +1714,19 @@ mod tests {
 			self.client.get_package_dependencies(id).await
 		}
 
-		async fn get_build_from_queue(&self) -> tangram_error::Result<tg::build::Id> {
-			self.client.get_build_from_queue().await
+		async fn get_build_from_queue(
+			&self,
+			user: Option<&tg::User>,
+		) -> tangram_error::Result<tg::build::Id> {
+			self.client.get_build_from_queue(user).await
 		}
 
-		async fn cancel_build(&self, id: &tg::build::Id) -> tangram_error::Result<()> {
-			self.client.cancel_build(id).await
+		async fn cancel_build(
+			&self,
+			user: Option<&tg::User>,
+			id: &tg::build::Id,
+		) -> tangram_error::Result<()> {
+			self.client.cancel_build(user, id).await
 		}
 	}
 }

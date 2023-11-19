@@ -73,27 +73,27 @@ impl Cli {
 			.await
 			.wrap_err("Failed to canonicalize the path.")?;
 
-		// Read the config.
-		let mut config = Self::read_config().await?.unwrap_or_default();
+		// Get the config.
+		let mut config = self.config().await?.unwrap_or_default();
 
 		// Add the autoenv.
 		let mut autoenvs = config.autoenvs.unwrap_or_default();
 		autoenvs.push(path);
 		config.autoenvs = Some(autoenvs);
 
-		// Write the config.
-		Self::write_config(&config).await?;
+		// Save the config.
+		self.save_config(config).await?;
 
 		Ok(())
 	}
 
 	async fn command_autoenv_get(&self, _args: GetArgs) -> Result<()> {
+		// Get the config.
+		let config = self.config().await?.unwrap_or_default();
+
 		// Get the working directory path.
 		let working_directory_path =
 			std::env::current_dir().wrap_err("Failed to get the working directory.")?;
-
-		// Read the config.
-		let config = Self::read_config().await?.unwrap_or_default();
 
 		// Get the autoenv path for the working directory path.
 		let Some(autoenv_paths) = config.autoenvs.as_ref() else {
@@ -117,11 +117,13 @@ impl Cli {
 	}
 
 	async fn command_autoenv_list(&self, _args: ListArgs) -> Result<()> {
-		// Read the config.
-		let config = Self::read_config().await?.unwrap_or_default();
+		// Get the config.
+		let config = self.config().await?;
 
 		// List the autoenvs.
-		let autoenvs = config.autoenvs.unwrap_or_default();
+		let autoenvs = config
+			.and_then(|config| config.autoenvs.clone())
+			.unwrap_or_default();
 
 		if autoenvs.is_empty() {
 			eprintln!("There are no autoenvs.");
@@ -136,6 +138,9 @@ impl Cli {
 	}
 
 	async fn command_autoenv_remove(&self, args: RemoveArgs) -> Result<()> {
+		// Get the config.
+		let mut config = self.config().await?.unwrap_or_default();
+
 		// Get the path.
 		let mut path = std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 		if let Some(path_arg) = &args.path {
@@ -144,9 +149,6 @@ impl Cli {
 		let path = tokio::fs::canonicalize(&path)
 			.await
 			.wrap_err("Failed to canonicalize the path.")?;
-
-		// Read the config.
-		let mut config = Self::read_config().await?.unwrap_or_default();
 
 		// Remove the autoenv.
 		if let Some(mut autoenvs) = config.autoenvs {
@@ -157,7 +159,7 @@ impl Cli {
 		}
 
 		// Write the config.
-		Self::write_config(&config).await?;
+		self.save_config(config).await?;
 
 		Ok(())
 	}

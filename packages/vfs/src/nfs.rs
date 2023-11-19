@@ -1370,26 +1370,16 @@ pub const ALL_SUPPORTED_ATTRS: &[u32] = &[
 pub struct FileAttrData {
 	supported_attrs: bitmap4,
 	file_type: nfs_ftype4,
-	/// Defines how file expiry is supposed to be handled. A value of "0" is called FH4_PERSISTENT, which implies the file handle is persistent for the lifetime of the server.
 	expire_type: u32,
-	/// Defines how file changes happen. Since we don't have changes, we don't care.
 	change: u64,
 	size: u64,
-	/// TRUE if the file system this object is on supports hard links.
 	link_support: bool,
-	/// TRUE if the file system this object is on supports soft links.
 	symlink_support: bool,
-	/// Whether this file has any nammed attributes (xattrs). TODO: care about this.
 	named_attr: bool,
-	/// Identifies which file system the object is on (servers may overlay multiple file systems and report such to the client).
 	fsid: fsid4,
-	/// TRUE, if two distinct filehandles are guaranteed to refer to two different file system objects.
 	unique_handles: bool,
-	/// The amount of time this file is valid for, in seconds.
 	lease_time: u32,
-	/// An error, if we want to return one.
 	rdattr_error: i32,
-	/// The underlying file handle
 	file_handle: nfs_fh4,
 	acl: Vec<nfsace4>,
 	aclsupport: u32,

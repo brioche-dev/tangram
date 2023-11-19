@@ -63,6 +63,8 @@ struct TreeItemInner {
 
 enum TreeItemStatus {
 	Building,
+	Unknown,
+	Cancellation,
 	Failure,
 	Success,
 }
@@ -424,9 +426,11 @@ impl TreeItem {
 			let client = client.clone_box();
 			let build = build.clone();
 			async move {
-				let status = match build.result(client.as_ref()).await {
-					Err(_) | Ok(Err(_)) => TreeItemStatus::Failure,
-					Ok(Ok(_)) => TreeItemStatus::Success,
+				let status = match build.outcome(client.as_ref()).await {
+					Err(_) => TreeItemStatus::Unknown,
+					Ok(tg::build::Outcome::Cancellation) => TreeItemStatus::Cancellation,
+					Ok(tg::build::Outcome::Failure(_)) => TreeItemStatus::Failure,
+					Ok(tg::build::Outcome::Success(_)) => TreeItemStatus::Success,
 				};
 				status_sender.send(status).ok();
 			}
@@ -546,6 +550,8 @@ impl TreeItem {
 				let state = (state / SPINNER_FRAMES_PER_UPDATE) % SPINNER.len();
 				SPINNER[state].to_string().blue()
 			},
+			TreeItemStatus::Unknown => "?".yellow(),
+			TreeItemStatus::Cancellation => "⦻".yellow(),
 			TreeItemStatus::Failure => "✗".red(),
 			TreeItemStatus::Success => "✓".green(),
 		};

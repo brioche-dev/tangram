@@ -1,6 +1,6 @@
 use crate::{
 	artifact, id, lock, object, value, Artifact, Build, Checksum, Client, Directory, Error, Lock,
-	Result, System, Value, WrapErr,
+	Result, System, User, Value, WrapErr,
 };
 use bytes::Bytes;
 use derive_more::Display;
@@ -257,10 +257,10 @@ impl Target {
 		Ok(Some(directory))
 	}
 
-	pub async fn build(&self, client: &dyn Client, token: Option<String>) -> Result<Build> {
+	pub async fn build(&self, client: &dyn Client, user: Option<&User>) -> Result<Build> {
 		let target_id = self.id(client).await?;
 		let build_id = client
-			.get_or_create_build_for_target(target_id, token)
+			.get_or_create_build_for_target(user, target_id)
 			.await?;
 		let build = Build::with_id(build_id);
 		Ok(build)

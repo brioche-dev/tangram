@@ -1,15 +1,11 @@
-use crate::{
-	id, object, return_error, Artifact, Client, Dependency, Error, Result, WrapErr,
-};
+pub use self::data::Data;
+use crate::{id, object, return_error, Artifact, Client, Dependency, Error, Result, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use itertools::Itertools;
-use std::{
-	collections::BTreeMap,
-	sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(
 	Clone,
@@ -44,13 +40,14 @@ pub struct Entry {
 	pub lock: Lock,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct Data {
-	pub dependencies: BTreeMap<Dependency, data::Entry>,
-}
-
 pub mod data {
-	use crate::artifact;
+	use crate::{artifact, Dependency};
+	use std::collections::BTreeMap;
+
+	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+	pub struct Data {
+		pub dependencies: BTreeMap<Dependency, Entry>,
+	}
 
 	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 	pub struct Entry {

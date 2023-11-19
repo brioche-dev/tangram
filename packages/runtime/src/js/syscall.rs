@@ -81,10 +81,10 @@ async fn syscall_build(state: Rc<State>, args: (tg::Target,)) -> Result<tg::Valu
 	let build = target.build(state.client.as_ref(), None).await?;
 	state.build.add_child(state.client.as_ref(), &build).await?;
 	let output = build
-		.result(state.client.as_ref())
+		.outcome(state.client.as_ref())
 		.await
-		.wrap_err("Failed to get the build result.")?
-		.wrap_err("The build failed.")?;
+		.wrap_err("Failed to get the build outcome.")?
+		.into_result()?;
 	Ok(output)
 }
 

@@ -27,17 +27,17 @@ struct Inner {
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	sender: tokio::sync::RwLock<Option<hyper::client::conn::http2::SendRequest<Outgoing>>>,
 	tls: bool,
-	token: Option<String>,
+	user: Option<tg::User>,
 }
 
 pub struct Builder {
 	addr: Addr,
 	tls: Option<bool>,
-	token: Option<String>,
+	user: Option<tg::User>,
 }
 
 impl Client {
-	fn new(addr: Addr, tls: bool, token: Option<String>) -> Self {
+	fn new(addr: Addr, tls: bool, user: Option<tg::User>) -> Self {
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 		let sender = tokio::sync::RwLock::new(None);
 		let inner = Arc::new(Inner {
@@ -45,7 +45,7 @@ impl Client {
 			file_descriptor_semaphore,
 			sender,
 			tls,
-			token,
+			user,
 		});
 		Self { inner }
 	}
@@ -411,16 +411,17 @@ impl tg::Client for Client {
 
 	async fn get_or_create_build_for_target(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::target::Id,
-		token: Option<String>,
 	) -> Result<tg::build::Id> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
-		let request = http::request::Builder::default()
+		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/targets/{id}/build"))
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.uri(format!("/v1/targets/{id}/build"));
+		let user = user.or(self.inner.user.as_ref());
+		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+		}
+		let request = request
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -436,14 +437,15 @@ impl tg::Client for Client {
 		Ok(id)
 	}
 
-	async fn get_build_from_queue(&self, token: Option<String>) -> Result<tg::build::Id> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
-		let request = http::request::Builder::default()
+	async fn get_build_from_queue(&self, user: Option<&tg::User>) -> Result<tg::build::Id> {
+		let mut request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri("/v1/builds/queue")
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.uri("/v1/builds/queue");
+		let user = user.or(self.inner.user.as_ref());
+		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+		}
+		let request = request
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -518,18 +520,19 @@ impl tg::Client for Client {
 
 	async fn add_build_child(
 		&self,
+		user: Option<&tg::User>,
 		build_id: &tg::build::Id,
 		child_id: &tg::build::Id,
-		token: Option<String>,
 	) -> Result<()> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
-		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize the body.")?;
-		let request = http::request::Builder::default()
+		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/{build_id}/children"))
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.uri(format!("/v1/builds/{build_id}/children"));
+		let user = user.or(self.inner.user.as_ref());
+		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+		}
+		let body = serde_json::to_vec(&child_id).wrap_err("Failed to serialize the body.")?;
+		let request = request
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -576,18 +579,19 @@ impl tg::Client for Client {
 
 	async fn add_build_log(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::build::Id,
 		bytes: Bytes,
-		token: Option<String>,
 	) -> Result<()> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
-		let body = bytes;
-		let request = http::request::Builder::default()
+		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/{id}/log"))
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.uri(format!("/v1/builds/{id}/log"));
+		let user = user.or(self.inner.user.as_ref());
+		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+		}
+		let body = bytes;
+		let request = request
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -600,10 +604,13 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn try_get_build_result(&self, id: &tg::build::Id) -> Result<Option<Result<tg::Value>>> {
+	async fn try_get_build_outcome(
+		&self,
+		id: &tg::build::Id,
+	) -> Result<Option<tg::build::Outcome>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri(format!("/v1/builds/{id}/result"))
+			.uri(format!("/v1/builds/{id}/outcome"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -618,19 +625,20 @@ impl tg::Client for Client {
 			.await
 			.wrap_err("Failed to collect the response body.")?
 			.to_bytes();
-		let result =
+		let outcome =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-		Ok(Some(result))
+		Ok(Some(outcome))
 	}
 
-	async fn cancel_build(&self, id: &tg::build::Id, token: Option<String>) -> Result<()> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
-		let request = http::request::Builder::default()
+	async fn cancel_build(&self, user: Option<&tg::User>, id: &tg::build::Id) -> Result<()> {
+		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/{id}/cancel"))
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.uri(format!("/v1/builds/{id}/cancel"));
+		let user = user.or(self.inner.user.as_ref());
+		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+		}
+		let request = request
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -645,22 +653,20 @@ impl tg::Client for Client {
 
 	async fn finish_build(
 		&self,
+		user: Option<&tg::User>,
 		id: &tg::build::Id,
-		result: Result<tg::Value>,
-		token: Option<String>,
+		outcome: tg::build::Outcome,
 	) -> Result<()> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
-		let result = match result {
-			Ok(value) => Ok(value.data(self).await?),
-			Err(error) => Err(error),
-		};
-		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the body.")?;
-		let request = http::request::Builder::default()
+		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/builds/{id}/finish"))
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.uri(format!("/v1/builds/{id}/finish"));
+		let user = user.or(self.inner.user.as_ref());
+		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+		}
+		let outcome = outcome.data(self).await?;
+		let body = serde_json::to_vec(&outcome).wrap_err("Failed to serialize the body.")?;
+		let request = request
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -778,15 +784,16 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn publish_package(&self, id: &tg::artifact::Id, token: Option<String>) -> Result<()> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
-		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the body.")?;
-		let request = http::request::Builder::default()
+	async fn publish_package(&self, user: Option<&tg::User>, id: &tg::artifact::Id) -> Result<()> {
+		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri("/v1/registry/packages")
-			.header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+			.uri("/v1/registry/packages");
+		let user = user.or(self.inner.user.as_ref());
+		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
+			request = request.header(http::header::AUTHORIZATION, format!("Bearer {}", token));
+		}
+		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the body.")?;
+		let request = request
 			.body(full(body))
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -839,10 +846,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_current_user(&self, token: Option<String>) -> Result<Option<tg::user::User>> {
-		let token = token
-			.or_else(|| self.inner.token.clone())
-			.unwrap_or_default();
+	async fn get_user_for_token(&self, token: &str) -> Result<Option<tg::user::User>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri("/v1/user")
@@ -866,11 +870,11 @@ impl tg::Client for Client {
 
 impl Builder {
 	#[must_use]
-	pub fn new(addr: Addr, token: Option<String>) -> Self {
+	pub fn new(addr: Addr, user: Option<tg::User>) -> Self {
 		Self {
 			addr,
 			tls: None,
-			token,
+			user,
 		}
 	}
 
@@ -883,6 +887,6 @@ impl Builder {
 	#[must_use]
 	pub fn build(self) -> Client {
 		let tls = self.tls.unwrap_or(false);
-		Client::new(self.addr, tls, self.token)
+		Client::new(self.addr, tls, self.user)
 	}
 }

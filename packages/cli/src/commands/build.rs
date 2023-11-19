@@ -84,8 +84,8 @@ impl Cli {
 			None
 		};
 
-		// Wait for the build's result.
-		let result = build.result(client).await;
+		// Wait for the build's outcome.
+		let outcome = build.outcome(client).await;
 
 		// Stop the TUI.
 		if let Some(tui) = tui {
@@ -93,11 +93,11 @@ impl Cli {
 			tui.join().await?;
 		}
 
-		// Handle for an error that occurred while waiting for the build's result.
-		let result = result.wrap_err("Failed to get the build result.")?;
+		// Handle for an error that occurred while waiting for the build's outcome.
+		let outcome = outcome.wrap_err("Failed to get the build outcome.")?;
 
 		// Handle a failed build.
-		let output = result.wrap_err("The build failed.")?;
+		let output = outcome.into_result().wrap_err("The build failed.")?;
 
 		// Check out the output if requested.
 		if let Some(path) = args.output {

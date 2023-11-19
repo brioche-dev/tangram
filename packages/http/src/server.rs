@@ -140,6 +140,21 @@ impl Server {
 		}
 	}
 
+	async fn try_get_user_from_request(
+		&self,
+		request: &http::Request<Incoming>,
+	) -> Result<Option<tg::user::User>> {
+		// Get the token.
+		let Some(token) = get_token(request, None) else {
+			return Ok(None);
+		};
+
+		// Get the user.
+		let user = self.inner.client.get_user_for_token(&token).await?;
+
+		Ok(user)
+	}
+
 	async fn handle_request(&self, request: http::Request<Incoming>) -> http::Response<Outgoing> {
 		tracing::info!(method = ?request.method(), path = ?request.uri().path(), "Received request.");
 
@@ -189,8 +204,8 @@ impl Server {
 				.handle_post_build_log_request(request)
 				.map(Some)
 				.boxed(),
-			(http::Method::GET, ["v1", "builds", _, "result"]) => self
-				.handle_get_build_result_request(request)
+			(http::Method::GET, ["v1", "builds", _, "outcome"]) => self
+				.handle_get_build_outcome_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::POST, ["v1", "builds", _, "cancel"]) => self
@@ -254,7 +269,7 @@ impl Server {
 				self.handle_get_login_request(request).map(Some).boxed()
 			},
 			(http::Method::GET, ["v1", "user"]) => self
-				.handle_get_current_user_request(request)
+				.handle_get_user_for_token_request(request)
 				.map(Some)
 				.boxed(),
 
@@ -325,12 +340,14 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Get the token.
-		let Some(token) = get_token(&request, None) else {
-			return Ok(unauthorized());
-		};
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
 
-		let build_id = self.inner.client.get_build_from_queue(Some(token)).await?;
+		let build_id = self
+			.inner
+			.client
+			.get_build_from_queue(user.as_ref())
+			.await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&build_id).wrap_err("Failed to serialize the ID.")?;
@@ -364,9 +381,6 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Get the token.
-		let token = get_token(&request, None);
-
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "targets", id, "build"] = path_components.as_slice() else {
@@ -374,11 +388,14 @@ impl Server {
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
+
 		// Get or create the build for the target.
 		let build_id = self
 			.inner
 			.client
-			.get_or_create_build_for_target(&id, token)
+			.get_or_create_build_for_target(user.as_ref(), &id)
 			.await?;
 
 		// Create the response.
@@ -391,9 +408,6 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Get the token.
-		let token = get_token(&request, None);
-
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", build_id, "cancel"] = path_components.as_slice() else {
@@ -401,7 +415,13 @@ impl Server {
 		};
 		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
 
-		self.inner.client.cancel_build(&build_id, token).await?;
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
+
+		self.inner
+			.client
+			.cancel_build(user.as_ref(), &build_id)
+			.await?;
 
 		// Create the response.
 		let response = http::Response::builder()
@@ -471,15 +491,15 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Get the token.
-		let token = get_token(&request, None);
-
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "children"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let build_id: tg::build::Id = id.parse().wrap_err("Failed to parse the ID.")?;
+
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
 
 		// Read the body.
 		let bytes = request
@@ -493,7 +513,7 @@ impl Server {
 
 		self.inner
 			.client
-			.add_build_child(&build_id, &child_id, token)
+			.add_build_child(user.as_ref(), &build_id, &child_id)
 			.await?;
 
 		// Create the response.
@@ -535,15 +555,15 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Get the token.
-		let token = get_token(&request, None);
-
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "log"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let build_id = id.parse().wrap_err("Failed to parse the ID.")?;
+
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
 
 		// Read the body.
 		let bytes = request
@@ -555,7 +575,7 @@ impl Server {
 
 		self.inner
 			.client
-			.add_build_log(&build_id, bytes, token)
+			.add_build_log(user.as_ref(), &build_id, bytes)
 			.await?;
 
 		let response = http::Response::builder()
@@ -565,28 +585,25 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_get_build_result_request(
+	async fn handle_get_build_outcome_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "builds", id, "result"] = path_components.as_slice() else {
+		let [_, "builds", id, "outcome"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
-		// Attempt to get the result.
-		let Some(result) = self.inner.client.try_get_build_result(&id).await? else {
+		// Attempt to get the outcome.
+		let Some(outcome) = self.inner.client.try_get_build_outcome(&id).await? else {
 			return Ok(not_found());
 		};
 
 		// Create the response.
-		let result = match result {
-			Ok(value) => Ok(value.data(self.inner.client.as_ref()).await?),
-			Err(error) => Err(error),
-		};
-		let body = serde_json::to_vec(&result).wrap_err("Failed to serialize the response.")?;
+		let outcome = outcome.data(self.inner.client.as_ref()).await?;
+		let body = serde_json::to_vec(&outcome).wrap_err("Failed to serialize the response.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(full(body))
@@ -598,15 +615,15 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Get the token.
-		let token = get_token(&request, None);
-
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", build_id, "finish"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let build_id = build_id.parse().wrap_err("Failed to parse the ID.")?;
+
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
 
 		// Read the body.
 		let bytes = request
@@ -620,7 +637,7 @@ impl Server {
 		// Finish the build.
 		self.inner
 			.client
-			.finish_build(&build_id, result, token)
+			.finish_build(user.as_ref(), &build_id, result)
 			.await?;
 
 		// Create the response.
@@ -817,8 +834,8 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Get the token.
-		let token = get_token(&request, None);
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
 
 		// Read the body.
 		let bytes = request
@@ -832,7 +849,7 @@ impl Server {
 		// Create the package.
 		self.inner
 			.client
-			.publish_package(&package_id, token)
+			.publish_package(user.as_ref(), &package_id)
 			.await?;
 
 		Ok(ok())
@@ -1015,7 +1032,7 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_get_current_user_request(
+	async fn handle_get_user_for_token_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -1025,7 +1042,7 @@ impl Server {
 		};
 
 		// Authenticate the user.
-		let Some(user) = self.inner.client.get_current_user(Some(token)).await? else {
+		let Some(user) = self.inner.client.get_user_for_token(token.as_str()).await? else {
 			return Ok(unauthorized());
 		};
 

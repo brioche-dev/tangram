@@ -1,4 +1,4 @@
-use crate::{credentials::Credentials, Cli};
+use crate::Cli;
 use std::time::{Duration, Instant};
 use tangram_error::{return_error, Result, WrapErr};
 
@@ -42,21 +42,14 @@ impl Cli {
 			tokio::time::sleep(poll_interval).await;
 		};
 
-		// Set the token.
-		self.token.write().unwrap().replace(token.clone());
-
 		// Get the user.
 		let user = client
-			.get_current_user(Some(token.clone()))
+			.get_user_for_token(&token)
 			.await?
 			.wrap_err("Expected the user to exist.")?;
 
-		// Write the credentials.
-		let credentials = Credentials {
-			email: user.email,
-			token,
-		};
-		Self::write_credentials(&credentials).await?;
+		// Save the user.
+		self.save_user(user).await?;
 
 		eprintln!("You have successfully logged in.");
 
