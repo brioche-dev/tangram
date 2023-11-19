@@ -237,8 +237,8 @@ impl Server {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let queue_item = remote.get_build_from_queue(user).await?;
-			return Ok(queue_item);
+			let item = remote.get_build_from_queue(user).await?;
+			return Ok(item);
 		}
 
 		return_error!("Failed to get a build from the queue.");
