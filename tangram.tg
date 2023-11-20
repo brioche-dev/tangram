@@ -16,3 +16,20 @@ export let g = tg.target(async () => {
 	await tg.sleep(10);
 	return "g";
 });
+
+export let source = tg.target(() =>
+	tg.directory({
+		["Cargo.toml"]: tg.include("./Cargo.toml"),
+		["Cargo.lock"]: tg.include("./Cargo.lock"),
+		["packages"]: {
+			["cli"]: tg.include("./packages/cli"),
+			["client"]: tg.include("./packages/client"),
+			["error"]: tg.include("./packages/error"),
+			["http"]: tg.include("./packages/http"),
+			["lsp"]: tg.include("./packages/lsp"),
+			["runtime"]: tg.include("./packages/runtime"),
+			["server"]: tg.include("./packages/server"),
+			["vfs"]: tg.include("./packages/vfs"),
+		},
+	}),
+);
