@@ -1,3 +1,4 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob, download } from "./blob.ts";
@@ -10,7 +11,7 @@ import { include } from "./include.ts";
 import { Leaf, leaf } from "./leaf.ts";
 import { Lock } from "./lock.ts";
 import { log } from "./log.ts";
-import { Args, Mutation, apply, mutation } from "./mutation.ts";
+import { Mutation, mutation } from "./mutation.ts";
 import { resolve } from "./resolve.ts";
 import { sleep } from "./sleep.ts";
 import { start } from "./start.ts";
@@ -44,6 +45,7 @@ async function tg(
 }
 
 Object.assign(tg, {
+	Args,
 	Artifact,
 	Blob,
 	Branch,
@@ -58,7 +60,6 @@ Object.assign(tg, {
 	Target,
 	Template,
 	Value,
-	apply,
 	assert,
 	blob,
 	branch,

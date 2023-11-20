@@ -1,8 +1,9 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import * as encoding from "./encoding.ts";
-import { Args, apply, mutation } from "./mutation.ts";
+import { mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
 
@@ -29,27 +30,30 @@ export class Branch {
 		type Apply = {
 			children: Array<Branch.Child>;
 		};
-		let { children } = await apply<Branch.Arg, Apply>(args, async (arg) => {
-			if (arg === undefined) {
-				return {};
-			} else if (Branch.is(arg)) {
-				return {
-					children: await mutation({
-						kind: "array_append",
-						values: [{ blob: arg, size: await arg.size() }],
-					}),
-				};
-			} else if (typeof arg === "object") {
-				return {
-					children: await mutation({
-						kind: "array_append",
-						values: arg.children ?? [],
-					}),
-				};
-			} else {
-				return unreachable();
-			}
-		});
+		let { children } = await Args.apply<Branch.Arg, Apply>(
+			args,
+			async (arg) => {
+				if (arg === undefined) {
+					return {};
+				} else if (Branch.is(arg)) {
+					return {
+						children: await mutation({
+							kind: "array_append",
+							values: [{ blob: arg, size: await arg.size() }],
+						}),
+					};
+				} else if (typeof arg === "object") {
+					return {
+						children: await mutation({
+							kind: "array_append",
+							values: arg.children ?? [],
+						}),
+					};
+				} else {
+					return unreachable();
+				}
+			},
+		);
 		children ??= [];
 		return new Branch({ object: { children } });
 	}

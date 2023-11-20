@@ -1,8 +1,9 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import * as encoding from "./encoding.ts";
-import { Args, apply, mutation } from "./mutation.ts";
+import { mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
 
@@ -29,41 +30,44 @@ export class Leaf {
 		type Apply = {
 			bytes: Array<Uint8Array>;
 		};
-		let { bytes: bytes_ } = await apply<Leaf.Arg, Apply>(args, async (arg) => {
-			if (arg === undefined) {
-				return {};
-			} else if (typeof arg === "string") {
-				return {
-					bytes: await mutation({
-						kind: "array_append",
-						values: [encoding.utf8.encode(arg)],
-					}),
-				};
-			} else if (arg instanceof Uint8Array) {
-				return {
-					bytes: await mutation({
-						kind: "array_append",
-						values: [arg],
-					}),
-				};
-			} else if (Leaf.is(arg)) {
-				return {
-					bytes: await mutation({
-						kind: "array_append",
-						values: [await arg.bytes()],
-					}),
-				};
-			} else if (typeof arg === "object") {
-				return {
-					bytes: await mutation({
-						kind: "array_append",
-						values: [arg.bytes ?? new Uint8Array()],
-					}),
-				};
-			} else {
-				return unreachable();
-			}
-		});
+		let { bytes: bytes_ } = await Args.apply<Leaf.Arg, Apply>(
+			args,
+			async (arg) => {
+				if (arg === undefined) {
+					return {};
+				} else if (typeof arg === "string") {
+					return {
+						bytes: await mutation({
+							kind: "array_append",
+							values: [encoding.utf8.encode(arg)],
+						}),
+					};
+				} else if (arg instanceof Uint8Array) {
+					return {
+						bytes: await mutation({
+							kind: "array_append",
+							values: [arg],
+						}),
+					};
+				} else if (Leaf.is(arg)) {
+					return {
+						bytes: await mutation({
+							kind: "array_append",
+							values: [await arg.bytes()],
+						}),
+					};
+				} else if (typeof arg === "object") {
+					return {
+						bytes: await mutation({
+							kind: "array_append",
+							values: [arg.bytes ?? new Uint8Array()],
+						}),
+					};
+				} else {
+					return unreachable();
+				}
+			},
+		);
 		bytes_ ??= [];
 		let size = bytes_.reduce((size, bytes) => size + bytes.byteLength, 0);
 		let bytes = new Uint8Array(size);

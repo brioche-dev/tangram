@@ -8,6 +8,7 @@ import { Mutation } from "./mutation.ts";
 import { Symlink } from "./symlink.ts";
 import { Target } from "./target.ts";
 import { Template } from "./template.ts";
+import { MaybePromise } from "./util.ts";
 import { Value } from "./value.ts";
 
 export type Unresolved<T extends Value> = MaybePromise<
@@ -55,8 +56,6 @@ export type Resolved<T extends Unresolved<Value>> = T extends
 	    : T extends { [key: string]: Unresolved<Value> }
 	      ? { [K in keyof T]: Resolved<T[K]> }
 	      : never;
-
-export type MaybePromise<T> = T | Promise<T>;
 
 export let resolve = async <T extends Unresolved<Value>>(
 	value: T,

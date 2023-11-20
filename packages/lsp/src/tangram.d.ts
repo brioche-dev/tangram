@@ -10,20 +10,20 @@ declare function tg(
 
 declare namespace tg {
 	export type Args<T extends Value = Value> = Array<
-		Unresolved<MaybeNestedArray<Mutation.MaybeMutationMap<T>>>
+		Unresolved<MaybeNestedArray<MaybeMutationMap<T>>>
 	>;
 
-	export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
-
-	export let apply: <
-		A extends Value = Value,
-		R extends { [key: string]: Value } = { [key: string]: Value },
-	>(
-		args: Args<A>,
-		map: (
-			arg: Exclude<A, Array<Value>>,
-		) => Promise<MaybeNestedArray<Mutation.MutationMap<R>>>,
-	) => Promise<Partial<R>>;
+	export namespace Args {
+		export let apply: <
+			A extends Value = Value,
+			R extends { [key: string]: Value } = { [key: string]: Value },
+		>(
+			args: Args<A>,
+			map: (
+				arg: Exclude<A, Array<Value>>,
+			) => Promise<MaybeNestedArray<MutationMap<R>>>,
+		) => Promise<Partial<R>>;
+	}
 
 	/** An artifact. */
 	export type Artifact = Directory | File | Symlink;
@@ -43,12 +43,6 @@ declare namespace tg {
 
 		/** Assert that a value is an `Artifact`. */
 		export let assert: (value: unknown) => asserts value is Artifact;
-
-		/** Archive an artifact. */
-		export let archive: (
-			artifact: Artifact,
-			format: Blob.ArchiveFormat,
-		) => Promise<Blob>;
 	}
 
 	/** Assert that a condition is truthy. If not, throw an error with an optional message. */
@@ -80,6 +74,12 @@ declare namespace tg {
 		export type ArchiveFormat = ".tar" | ".zip";
 
 		export type CompressionFormat = ".bz2" | ".gz" | ".lz" | ".xz" | ".zst";
+
+		/** Archive an artifact. */
+		export let archive: (
+			artifact: Artifact,
+			format: Blob.ArchiveFormat,
+		) => Promise<Blob>;
 	}
 
 	/** Compute the checksum of the provided bytes with the specified algorithm. */
@@ -395,34 +395,6 @@ declare namespace tg {
 	}
 
 	export namespace Mutation {
-		export type MaybeMutationMap<T extends Value = Value> = T extends
-			| undefined
-			| boolean
-			| number
-			| string
-			| Uint8Array
-			| Blob
-			| Directory
-			| File
-			| Symlink
-			| Lock
-			| Target
-			| Mutation
-			| Template
-			| Array<infer _U extends Value>
-			? T
-			: T extends { [key: string]: Value }
-			  ? MutationMap<T>
-			  : never;
-
-		export type MutationMap<
-			T extends { [key: string]: Value } = { [key: string]: Value },
-		> = {
-			[K in keyof T]?: MaybeMutation<T[K]>;
-		};
-
-		export type MaybeMutation<T extends Value = Value> = T | Mutation<T>;
-
 		export type Arg<T extends Value = Value> =
 			| { kind: "unset" }
 			| { kind: "set"; value: T }
@@ -562,8 +534,6 @@ declare namespace tg {
 		    : T extends Promise<infer U extends Unresolved<Value>>
 		      ? Resolved<U>
 		      : never;
-
-	export type MaybePromise<T> = T | Promise<T>;
 
 	/** Sleep for the specified duration in seconds. */
 	export let sleep: (duration: number) => Promise<void>;
@@ -756,7 +726,7 @@ declare namespace tg {
 			name?: string | undefined;
 
 			/** The target's environment variables. */
-			env?: MaybeNestedArray<Mutation.MutationMap>;
+			env?: MaybeNestedArray<MutationMap>;
 
 			/** The target's command line arguments. */
 			args?: Array<Value>;
@@ -802,6 +772,38 @@ declare namespace tg {
 
 		export type Component = string | Artifact;
 	}
+
+	export type MaybeMutation<T extends Value = Value> = T | Mutation<T>;
+
+	export type MaybeMutationMap<T extends Value = Value> = T extends
+		| undefined
+		| boolean
+		| number
+		| string
+		| Uint8Array
+		| Blob
+		| Directory
+		| File
+		| Symlink
+		| Lock
+		| Target
+		| Mutation
+		| Template
+		| Array<infer _U extends Value>
+		? T
+		: T extends { [key: string]: Value }
+		  ? MutationMap<T>
+		  : never;
+
+	export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
+
+	export type MaybePromise<T> = T | Promise<T>;
+
+	export type MutationMap<
+		T extends { [key: string]: Value } = { [key: string]: Value },
+	> = {
+		[K in keyof T]?: MaybeMutation<T[K]>;
+	};
 
 	/** The union of all types that can be used as the input or output of Tangram targets. */
 	export type Value =

@@ -1,14 +1,16 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
 import { log } from "./log.ts";
-import { Args, MutationMap, apply, mutation } from "./mutation.ts";
+import { mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Path } from "./path.ts";
 import { Unresolved } from "./resolve.ts";
 import * as syscall from "./syscall.ts";
 import { Template } from "./template.ts";
+import { MutationMap } from "./util.ts";
 
 export let symlink = async (...args: Args<Symlink.Arg>): Promise<Symlink> => {
 	return await Symlink.new(...args);
@@ -34,7 +36,7 @@ export class Symlink {
 			artifact?: Artifact | undefined;
 			path?: Array<string>;
 		};
-		let { artifact, path: path_ } = await apply<Symlink.Arg, Apply>(
+		let { artifact, path: path_ } = await Args.apply<Symlink.Arg, Apply>(
 			args,
 			async (arg) => {
 				if (arg === undefined) {

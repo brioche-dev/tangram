@@ -1,3 +1,4 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Checksum } from "./checksum.ts";
@@ -5,20 +6,19 @@ import { Directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { Lock } from "./lock.ts";
 import { Module } from "./module.ts";
-import {
-	Args,
-	MaybeNestedArray,
-	MutationMap,
-	apply,
-	flatten,
-	mutation,
-} from "./mutation.ts";
+import { mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
-import { MaybePromise, Unresolved } from "./resolve.ts";
+import { Unresolved } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
 import * as syscall from "./syscall.ts";
 import { System } from "./system.ts";
 import { Template } from "./template.ts";
+import {
+	MaybeNestedArray,
+	MaybePromise,
+	MutationMap,
+	flatten,
+} from "./util.ts";
 import { Value } from "./value.ts";
 
 let current: Target;
@@ -175,7 +175,7 @@ export class Target<
 			env: env_,
 			args: args_,
 			checksum,
-		} = await apply<Target.Arg, Apply>(
+		} = await Args.apply<Target.Arg, Apply>(
 			[{ env: await getCurrent().env() }, ...args],
 			async (arg) => {
 				if (
@@ -225,7 +225,7 @@ export class Target<
 		if (!executable) {
 			throw new Error("Cannot create a target without an executable.");
 		}
-		let env = await apply(flatten(env_ ?? []), async (arg) => arg);
+		let env = await Args.apply(flatten(env_ ?? []), async (arg) => arg);
 		args_ ??= [];
 		return new Target({
 			object: {

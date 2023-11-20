@@ -1,77 +1,14 @@
-import { Artifact } from "./artifact.ts";
-import { assert, assert as assert_ } from "./assert.ts";
-import { Blob } from "./blob.ts";
-import { Directory } from "./directory.ts";
-import { File } from "./file.ts";
-import { Lock } from "./lock.ts";
+import { assert as assert_ } from "./assert.ts";
 import { Unresolved, resolve } from "./resolve.ts";
-import { Symlink } from "./symlink.ts";
-import { Target } from "./target.ts";
 import { Template, template } from "./template.ts";
+import { MaybeNestedArray, flatten } from "./util.ts";
 import { Value } from "./value.ts";
-
-export type Args<T extends Value = Value> = Array<
-	Unresolved<MaybeNestedArray<MaybeMutationMap<T>>>
->;
-
-export type MaybeMutationMap<T extends Value = Value> = T extends
-	| undefined
-	| boolean
-	| number
-	| string
-	| Uint8Array
-	| Blob
-	| Directory
-	| File
-	| Symlink
-	| Lock
-	| Target
-	| Mutation
-	| Template
-	| Array<infer _U extends Value>
-	? T
-	: T extends { [key: string]: Value }
-	  ? MutationMap<T>
-	  : never;
-
-export type MutationMap<
-	T extends { [key: string]: Value } = { [key: string]: Value },
-> = {
-	[K in keyof T]?: MaybeMutation<T[K]>;
-};
-
-export type MaybeMutation<T extends Value = Value> = T | Mutation<T>;
-
-export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
 
 export async function mutation<T extends Value = Value>(
 	arg: Unresolved<Mutation.Arg<T>>,
 ): Promise<Mutation<T>> {
 	return await Mutation.new(arg);
 }
-
-export let apply = async <
-	A extends Value = Value,
-	R extends { [key: string]: Value } = { [key: string]: Value },
->(
-	args: Args<A>,
-	map: (
-		arg: Exclude<A, Array<Value>>,
-	) => Promise<MaybeNestedArray<MutationMap<R>>>,
-): Promise<Partial<R>> => {
-	return flatten(
-		await Promise.all(
-			flatten(await Promise.all(args.map(resolve))).map((arg) =>
-				map(arg as unknown as Exclude<A, Array<Value>>),
-			),
-		),
-	).reduce(async (object, mutations) => {
-		for (let [key, mutation] of Object.entries(mutations)) {
-			await mutate(await object, key, mutation);
-		}
-		return object;
-	}, Promise.resolve({}));
-};
 
 export class Mutation<T extends Value = Value> {
 	#inner: Mutation.Inner;
@@ -170,72 +107,3 @@ export namespace Mutation {
 				separator: string | undefined;
 		  };
 }
-
-export let flatten = <T>(value: MaybeNestedArray<T>): Array<T> => {
-	// @ts-ignore
-	return value instanceof Array ? value.flat(Infinity) : [value];
-};
-
-let mutate = async (
-	object: { [key: string]: Value },
-	key: string,
-	mutation: MaybeMutation,
-) => {
-	if (!(mutation instanceof Mutation)) {
-		object[key] = mutation;
-	} else if (mutation.inner.kind === "unset") {
-		delete object[key];
-	} else if (mutation.inner.kind === "set") {
-		object[key] = mutation.inner.value;
-	} else if (mutation.inner.kind === "set_if_unset") {
-		if (!(key in object)) {
-			object[key] = mutation.inner.value;
-		}
-	} else if (mutation.inner.kind === "array_prepend") {
-		if (!(key in object)) {
-			object[key] = [];
-		}
-		let array = object[key];
-		assert(array instanceof Array);
-		object[key] = [...array, ...flatten(mutation.inner.values)];
-	} else if (mutation.inner.kind === "array_append") {
-		if (!(key in object)) {
-			object[key] = [];
-		}
-		let array = object[key];
-		assert(array instanceof Array);
-		object[key] = [...array, ...flatten(mutation.inner.values)];
-	} else if (mutation.inner.kind === "template_prepend") {
-		if (!(key in object)) {
-			object[key] = await template();
-		}
-		let value = object[key];
-		assert(
-			value === undefined ||
-				typeof value === "string" ||
-				Artifact.is(value) ||
-				value instanceof Template,
-		);
-		object[key] = await Template.join(
-			mutation.inner.separator,
-			mutation.inner.template,
-			value,
-		);
-	} else if (mutation.inner.kind === "template_append") {
-		if (!(key in object)) {
-			object[key] = await template();
-		}
-		let value = object[key];
-		assert(
-			value === undefined ||
-				typeof value === "string" ||
-				Artifact.is(value) ||
-				value instanceof Template,
-		);
-		object[key] = await Template.join(
-			mutation.inner.separator,
-			value,
-			mutation.inner.template,
-		);
-	}
-};

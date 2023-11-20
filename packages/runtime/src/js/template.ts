@@ -1,6 +1,7 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
-import { Args, apply, mutation } from "./mutation.ts";
+import { mutation } from "./mutation.ts";
 import { Unresolved } from "./resolve.ts";
 
 export let template = (...args: Args<Template.Arg>): Promise<Template> => {
@@ -18,27 +19,30 @@ export class Template {
 		type Apply = {
 			components: Array<Template.Component>;
 		};
-		let { components } = await apply<Template.Arg, Apply>(args, async (arg) => {
-			if (arg === undefined) {
-				return {};
-			} else if (typeof arg === "string" || Artifact.is(arg)) {
-				return {
-					components: await mutation({
-						kind: "array_append",
-						values: [arg],
-					}),
-				};
-			} else if (Template.is(arg)) {
-				return {
-					components: await mutation({
-						kind: "array_append",
-						values: arg.components,
-					}),
-				};
-			} else {
-				return unreachable();
-			}
-		});
+		let { components } = await Args.apply<Template.Arg, Apply>(
+			args,
+			async (arg) => {
+				if (arg === undefined) {
+					return {};
+				} else if (typeof arg === "string" || Artifact.is(arg)) {
+					return {
+						components: await mutation({
+							kind: "array_append",
+							values: [arg],
+						}),
+					};
+				} else if (Template.is(arg)) {
+					return {
+						components: await mutation({
+							kind: "array_append",
+							values: arg.components,
+						}),
+					};
+				} else {
+					return unreachable();
+				}
+			},
+		);
 
 		// Normalize the components.
 		components = (components ?? []).reduce<Array<Template.Component>>(

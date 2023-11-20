@@ -1,9 +1,11 @@
+import { Args } from "./args.ts";
+import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Branch } from "./branch.ts";
 import { Checksum } from "./checksum.ts";
 import * as encoding from "./encoding.ts";
 import { Leaf } from "./leaf.ts";
-import { Args, apply, mutation } from "./mutation.ts";
+import { mutation } from "./mutation.ts";
 import * as syscall from "./syscall.ts";
 
 export type Blob = Leaf | Branch;
@@ -43,7 +45,7 @@ export namespace Blob {
 
 	export let new_ = async (...args: Args<Blob.Arg>): Promise<Blob> => {
 		type Apply = { children: Array<Blob> };
-		let { children: children_ } = await apply<Blob.Arg, Apply>(
+		let { children: children_ } = await Args.apply<Blob.Arg, Apply>(
 			args,
 			async (arg) => {
 				if (arg === undefined) {
@@ -115,5 +117,12 @@ export namespace Blob {
 		checksum: Checksum,
 	): Promise<Blob> => {
 		return await syscall.download(url, checksum);
+	};
+
+	export let archive = async (
+		artifact: Artifact,
+		format: Blob.ArchiveFormat,
+	): Promise<Blob> => {
+		return await syscall.archive(artifact, format);
 	};
 }

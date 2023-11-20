@@ -1,9 +1,11 @@
+import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import { Args, MutationMap, apply, mutation } from "./mutation.ts";
+import { mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
+import { MutationMap } from "./util.ts";
 
 export let file = async (...args: Args<File.Arg>) => {
 	return await File.new(...args);
@@ -34,7 +36,7 @@ export class File {
 			contents: contents_,
 			executable: executable_,
 			references: references_,
-		} = await apply<File.Arg, Apply>(args, async (arg) => {
+		} = await Args.apply<File.Arg, Apply>(args, async (arg) => {
 			if (arg === undefined) {
 				return {};
 			} else if (
