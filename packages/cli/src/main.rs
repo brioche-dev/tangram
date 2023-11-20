@@ -28,6 +28,16 @@ pub struct Config {
 
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub remote: Option<Url>,
+
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub builder: Option<BuilderConfig>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct BuilderConfig {
+	enable: Option<bool>,
+	arch: Option<tg::system::Arch>,
+	os: Option<tg::system::Os>,
 }
 
 #[tokio::main]

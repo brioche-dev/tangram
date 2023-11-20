@@ -111,6 +111,13 @@ pub struct Options {
 	pub remote: Option<Box<dyn tg::Client>>,
 	pub path: PathBuf,
 	pub version: String,
+	pub builder: BuilderOptions,
+}
+
+pub struct BuilderOptions {
+	pub enable: bool,
+	pub arch: Option<tg::system::Arch>,
+	pub os: Option<tg::system::Os>,
 }
 
 impl Server {
@@ -120,6 +127,7 @@ impl Server {
 			remote,
 			path,
 			version,
+			builder,
 		} = options;
 
 		// Ensure the path exists.

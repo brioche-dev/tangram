@@ -42,13 +42,32 @@ pub struct RunArgs {
 	#[arg(long)]
 	pub path: Option<PathBuf>,
 
-	/// The URL of the remote server.
+	/// Run without a remote.
 	#[arg(long, default_value = "false")]
 	pub no_remote: bool,
 
 	/// The URL of the remote server.
 	#[arg(long)]
 	pub remote: Option<Url>,
+
+	/// The Builder settings.
+	#[command(flatten)]
+	pub builder: Option<BuilderArgs>,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct BuilderArgs {
+	/// Enable the builder.
+	#[arg(long, default_value = "false")]
+	enable: Option<bool>,
+
+	/// The arch the builder should run builds for.
+	#[arg(long)]
+	arch: Option<tg::system::Arch>,
+
+	/// The os the builder should run builds for.
+	#[arg(long)]
+	os: Option<tg::system::Os>,
 }
 
 impl Cli {
@@ -112,6 +131,41 @@ impl Cli {
 			Some(Box::new(client) as _)
 		};
 
+		// Create the builder options.
+		let enable = if let Some(enable) = args.builder.as_ref().and_then(|builder| builder.enable)
+		{
+			enable
+		} else if let Some(enable) = config
+			.as_ref()
+			.and_then(|config| config.builder.as_ref())
+			.and_then(|builder| builder.enable)
+		{
+			enable
+		} else {
+			false
+		};
+		let arch = args
+			.builder
+			.as_ref()
+			.and_then(|builder| builder.arch)
+			.or_else(|| {
+				config
+					.as_ref()
+					.and_then(|config| config.builder.as_ref())
+					.and_then(|builder| builder.arch)
+			});
+		let os = args
+			.builder
+			.as_ref()
+			.and_then(|builder| builder.os)
+			.or_else(|| {
+				config
+					.as_ref()
+					.and_then(|config| config.builder.as_ref())
+					.and_then(|builder| builder.os)
+			});
+		let builder = tangram_server::BuilderOptions { enable, arch, os };
+
 		let version = self.version.clone();
 
 		// Create the options.
@@ -120,6 +174,7 @@ impl Cli {
 			remote,
 			path,
 			version,
+			builder,
 		};
 
 		// Start the server.
