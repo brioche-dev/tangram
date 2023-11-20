@@ -355,8 +355,10 @@ impl tg::Client for Server {
 	async fn get_build_from_queue(
 		&self,
 		user: Option<&tg::User>,
+		arch: Option<tg::system::Arch>,
+		os: Option<tg::system::Os>,
 	) -> Result<tg::build::queue::Item> {
-		self.get_build_from_queue(user).await
+		self.get_build_from_queue(user, arch, os).await
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {

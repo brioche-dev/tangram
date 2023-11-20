@@ -337,13 +337,28 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
+		#[derive(serde::Deserialize)]
+		struct SearchParams {
+			#[serde(default)]
+			arch: Option<tg::system::Arch>,
+			os: Option<tg::system::Os>,
+		}
 		// Get the user.
 		let user = self.try_get_user_from_request(&request).await?;
+
+		// Get the search params.
+		let (arch, os) = if let Some(query) = request.uri().query() {
+			let search_params: SearchParams =
+				serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
+			(search_params.arch, search_params.os)
+		} else {
+			(None, None)
+		};
 
 		let build_id = self
 			.inner
 			.client
-			.get_build_from_queue(user.as_ref())
+			.get_build_from_queue(user.as_ref(), arch, os)
 			.await?;
 
 		// Create the response.
