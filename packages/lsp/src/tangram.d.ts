@@ -374,17 +374,58 @@ declare namespace tg {
 
 	export type Metadata = {
 		homepage?: string;
-		license: string;
-		name: string;
+		license?: string;
+		name?: string;
 		repository?: string;
-		version: string;
+		version?: string;
 	};
 
+	/** Create a mutation. */
 	export function mutation<T extends Value = Value>(
 		arg: Unresolved<Mutation.Arg<T>>,
 	): Promise<Mutation<T>>;
 
 	export class Mutation<T extends Value = Value> {
+		/** Create a mutation. */
+		static new<T extends Value = Value>(
+			arg: Unresolved<Mutation.Arg<T>>,
+		): Promise<Mutation<T>>;
+
+		/** Create a "set" mutation. */
+		static set<T extends Value = Value>(
+			value: Unresolved<T>,
+		): Promise<Mutation<T>>;
+
+		/** Create an "unset" mutation. */
+		static unset(): Mutation;
+
+		/** Create a "set_if_unset" mutation. */
+		static setIfUnset<T extends Value = Value>(
+			value: Unresolved<T>,
+		): Promise<Mutation<T>>;
+
+		/** Create an "array_prepend" mutation. */
+		static arrayPrepend<T extends Value = Value>(
+			values: Unresolved<MaybeNestedArray<T>>,
+		): Promise<Mutation<Array<T>>>;
+
+		/** Create an "array_append" mutation. */
+		static arrayAppend<T extends Value = Value>(
+			values: Unresolved<MaybeNestedArray<T>>,
+		): Promise<Mutation<Array<T>>>;
+
+		/** Create a "template_prepend" mutation. */
+		static templatePrepend(
+			template: Unresolved<Template.Arg>,
+			separator?: string | undefined,
+		): Promise<Mutation<Template>>;
+
+		/** Create a "template_append" mutation. */
+		static templateAppend(
+			template: Unresolved<Template.Arg>,
+			separator?: string | undefined,
+		): Promise<Mutation<Template>>;
+
 		static is(value: unknown): value is Mutation;
 
 		static expect(value: unknown): Mutation;

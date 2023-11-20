@@ -13,9 +13,8 @@ export let visit = (
 	let keys = visitorKeys[node.type];
 	if (keys) {
 		for (let key of keys) {
-			let child: TSESTree.Node | Array<TSESTree.Node> | undefined = (
-				node as any
-			)[key];
+			let n = node as any;
+			let child: TSESTree.Node | Array<TSESTree.Node> | undefined = n[key];
 			if (child instanceof Array) {
 				for (let item of child) {
 					visit(item, visitor);

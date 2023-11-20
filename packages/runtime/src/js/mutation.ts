@@ -39,6 +39,62 @@ export class Mutation<T extends Value = Value> {
 		}
 	}
 
+	static set<T extends Value = Value>(
+		value: Unresolved<T>,
+	): Promise<Mutation<T>> {
+		return Mutation.new({ kind: "set", value } as any);
+	}
+
+	static unset(): Mutation {
+		return new Mutation({ kind: "unset" });
+	}
+
+	static setIfUnset<T extends Value = Value>(
+		value: Unresolved<T>,
+	): Promise<Mutation<T>> {
+		return Mutation.new({ kind: "set_if_unset", value } as any);
+	}
+
+	static arrayPrepend<T extends Value = Value>(
+		values: Unresolved<MaybeNestedArray<T>>,
+	): Promise<Mutation<Array<T>>> {
+		return Mutation.new({
+			kind: "array_prepend",
+			values,
+		} as any);
+	}
+
+	static arrayAppend<T extends Value = Value>(
+		values: Unresolved<MaybeNestedArray<T>>,
+	): Promise<Mutation<Array<T>>> {
+		return Mutation.new({
+			kind: "array_append",
+			values,
+		} as any);
+	}
+
+	static templatePrepend(
+		template: Unresolved<Template.Arg>,
+		separator?: string | undefined,
+	): Promise<Mutation<Template>> {
+		return Mutation.new({
+			kind: "template_prepend",
+			template,
+			separator,
+		});
+	}
+
+	static templateAppend(
+		template: Unresolved<Template.Arg>,
+		separator?: string | undefined,
+	): Promise<Mutation<Template>> {
+		return Mutation.new({
+			kind: "template_append",
+			template,
+			separator,
+		});
+	}
+
 	/** Check if a value is a `tg.Mutation`. */
 	static is(value: unknown): value is Mutation {
 		return value instanceof Mutation;
