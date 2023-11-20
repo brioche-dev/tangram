@@ -190,6 +190,12 @@ pub async fn build(
 		output_guest_path.to_str().unwrap().to_owned(),
 	);
 
+	// Set `$TANGRAM_PATH`.
+	env.insert(
+		"TANGRAM_PATH".to_owned(),
+		server_directory_guest_path.to_str().unwrap().to_owned(),
+	);
+
 	// Create /etc.
 	tokio::fs::create_dir_all(root_directory_host_path.join("etc"))
 		.await
