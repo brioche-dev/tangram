@@ -3,7 +3,6 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Directory } from "./directory.ts";
 import { File } from "./file.ts";
-import { log } from "./log.ts";
 import { mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Path } from "./path.ts";
@@ -104,7 +103,6 @@ export class Symlink {
 			},
 		);
 		let path = path_ !== undefined ? Path.new(path_).toString() : undefined;
-		log(path);
 		return new Symlink({ object: { artifact, path } });
 	}
 
