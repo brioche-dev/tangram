@@ -1,5 +1,6 @@
 use crate::Server;
 use std::sync::Arc;
+use tangram_client as tg;
 use tangram_error::Result;
 
 #[derive(Clone)]
@@ -12,6 +13,7 @@ struct Inner {
 	stop_sender: tokio::sync::watch::Sender<bool>,
 	stop_receiver: tokio::sync::watch::Receiver<bool>,
 	task: Task,
+	systems: Option<Vec<tg::System>>,
 }
 
 type Task = (
@@ -19,8 +21,12 @@ type Task = (
 	std::sync::Mutex<Option<tokio::task::AbortHandle>>,
 );
 
+pub struct Options {
+	pub systems: Option<Vec<tg::System>>,
+}
+
 impl Builder {
-	pub fn start(server: &Server) -> Self {
+	pub fn start(server: &Server, options: Options) -> Self {
 		let (stop_sender, stop_receiver) = tokio::sync::watch::channel(false);
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let builder = Self {
@@ -29,6 +35,7 @@ impl Builder {
 				stop_receiver,
 				stop_sender,
 				task,
+				systems: options.systems,
 			}),
 		};
 		let task = tokio::spawn({
@@ -66,7 +73,7 @@ impl Builder {
 		loop {
 			let result = tokio::select! {
 				_ = stop_receiver.wait_for(|s| *s) => return Ok(()),
-				result = server.get_build_from_queue(None, None, None) => result,
+				result = server.get_build_from_queue(None, None) => result,
 			};
 			let queue_item = match result {
 				Ok(queue_item) => queue_item,

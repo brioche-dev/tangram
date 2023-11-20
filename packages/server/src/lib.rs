@@ -116,8 +116,7 @@ pub struct Options {
 
 pub struct BuilderOptions {
 	pub enable: bool,
-	pub arch: Option<tg::system::Arch>,
-	pub os: Option<tg::system::Os>,
+	pub systems: Option<Vec<tg::System>>,
 }
 
 impl Server {
@@ -127,7 +126,7 @@ impl Server {
 			remote,
 			path,
 			version,
-			builder,
+			builder: builder_options,
 		} = options;
 
 		// Ensure the path exists.
@@ -220,8 +219,11 @@ impl Server {
 		server.inner.http.lock().unwrap().replace(http);
 
 		// Start the builder.
-		if server.inner.remote.is_some() {
-			let builder = Builder::start(&server);
+		if builder_options.enable && server.inner.remote.is_some() {
+			let options = crate::builder::Options {
+				systems: builder_options.systems,
+			};
+			let builder = Builder::start(&server, options);
 			server.inner.builder.lock().unwrap().replace(builder);
 		}
 
@@ -363,10 +365,9 @@ impl tg::Client for Server {
 	async fn get_build_from_queue(
 		&self,
 		user: Option<&tg::User>,
-		arch: Option<tg::system::Arch>,
-		os: Option<tg::system::Os>,
+		systems: Option<Vec<tg::System>>,
 	) -> Result<tg::build::queue::Item> {
-		self.get_build_from_queue(user, arch, os).await
+		self.get_build_from_queue(user, systems).await
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {

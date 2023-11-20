@@ -340,25 +340,24 @@ impl Server {
 		#[derive(serde::Deserialize)]
 		struct SearchParams {
 			#[serde(default)]
-			arch: Option<tg::system::Arch>,
-			os: Option<tg::system::Os>,
+			systems: Option<Vec<tg::System>>,
 		}
 		// Get the user.
 		let user = self.try_get_user_from_request(&request).await?;
 
 		// Get the search params.
-		let (arch, os) = if let Some(query) = request.uri().query() {
+		let systems = if let Some(query) = request.uri().query() {
 			let search_params: SearchParams =
 				serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
-			(search_params.arch, search_params.os)
+			search_params.systems
 		} else {
-			(None, None)
+			None
 		};
 
 		let build_id = self
 			.inner
 			.client
-			.get_build_from_queue(user.as_ref(), arch, os)
+			.get_build_from_queue(user.as_ref(), systems)
 			.await?;
 
 		// Create the response.

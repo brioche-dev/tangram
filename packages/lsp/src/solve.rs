@@ -1720,10 +1720,9 @@ mod tests {
 		async fn get_build_from_queue(
 			&self,
 			user: Option<&tg::User>,
-			arch: Option<tg::system::Arch>,
-			os: Option<tg::system::Os>,
+			systems: Option<Vec<tg::System>>,
 		) -> tangram_error::Result<tg::build::queue::Item> {
-			self.client.get_build_from_queue(user, arch, os).await
+			self.client.get_build_from_queue(user, systems).await
 		}
 
 		async fn cancel_build(

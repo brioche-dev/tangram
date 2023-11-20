@@ -109,8 +109,7 @@ pub trait Client: Send + Sync + 'static {
 	async fn get_build_from_queue(
 		&self,
 		user: Option<&User>,
-		arch: Option<system::Arch>,
-		os: Option<system::Os>,
+		systems: Option<Vec<system::System>>,
 	) -> Result<build::queue::Item>;
 
 	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {

@@ -231,15 +231,14 @@ impl Server {
 	pub async fn get_build_from_queue(
 		&self,
 		user: Option<&tg::User>,
-		arch: Option<tg::system::Arch>,
-		os: Option<tg::system::Os>,
+		systems: Option<Vec<tg::System>>,
 	) -> Result<tg::build::queue::Item> {
 		// Attempt to get a build from the queue from the remote.
 		'a: {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let item = remote.get_build_from_queue(user, arch, os).await?;
+			let item = remote.get_build_from_queue(user, systems).await?;
 			return Ok(item);
 		}
 

@@ -59,15 +59,11 @@ pub struct RunArgs {
 pub struct BuilderArgs {
 	/// Enable the builder.
 	#[arg(long, default_value = "false")]
-	enable: Option<bool>,
+	enable_builder: Option<bool>,
 
-	/// The arch the builder should run builds for.
+	/// The systems the builder should run builds for.
 	#[arg(long)]
-	arch: Option<tg::system::Arch>,
-
-	/// The os the builder should run builds for.
-	#[arg(long)]
-	os: Option<tg::system::Os>,
+	systems: Option<Vec<tg::System>>,
 }
 
 impl Cli {
@@ -132,7 +128,10 @@ impl Cli {
 		};
 
 		// Create the builder options.
-		let enable = if let Some(enable) = args.builder.as_ref().and_then(|builder| builder.enable)
+		let enable = if let Some(enable) = args
+			.builder
+			.as_ref()
+			.and_then(|builder| builder.enable_builder)
 		{
 			enable
 		} else if let Some(enable) = config
@@ -144,27 +143,17 @@ impl Cli {
 		} else {
 			false
 		};
-		let arch = args
+		let systems = args
 			.builder
 			.as_ref()
-			.and_then(|builder| builder.arch)
+			.and_then(|builder| builder.systems.clone())
 			.or_else(|| {
 				config
 					.as_ref()
 					.and_then(|config| config.builder.as_ref())
-					.and_then(|builder| builder.arch)
+					.and_then(|builder| builder.systems.clone())
 			});
-		let os = args
-			.builder
-			.as_ref()
-			.and_then(|builder| builder.os)
-			.or_else(|| {
-				config
-					.as_ref()
-					.and_then(|config| config.builder.as_ref())
-					.and_then(|builder| builder.os)
-			});
-		let builder = tangram_server::BuilderOptions { enable, arch, os };
+		let builder = tangram_server::BuilderOptions { enable, systems };
 
 		let version = self.version.clone();
 

@@ -36,8 +36,7 @@ pub struct Config {
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct BuilderConfig {
 	enable: Option<bool>,
-	arch: Option<tg::system::Arch>,
-	os: Option<tg::system::Os>,
+	systems: Option<Vec<tg::System>>,
 }
 
 #[tokio::main]

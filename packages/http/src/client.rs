@@ -441,14 +441,17 @@ impl tg::Client for Client {
 	async fn get_build_from_queue(
 		&self,
 		user: Option<&tg::User>,
-		arch: Option<tg::system::Arch>,
-		os: Option<tg::system::Os>,
+		systems: Option<Vec<tg::System>>,
 	) -> Result<tg::build::queue::Item> {
-		let uri = match (arch, os) {
-			(Some(arch), Some(os)) => format!("/v1/builds/queue?arch={arch}&os={os}"),
-			(Some(arch), None) => format!("/v1/builds/queue?arch={arch}"),
-			(None, Some(os)) => format!("/v1/builds/queue?os={os}"),
-			(None, None) => "/v1/builds/queue".to_owned(),
+		let uri = if let Some(systems) = systems {
+			let systems = systems
+				.iter()
+				.map(|system| system.to_string())
+				.collect::<Vec<_>>()
+				.join(",");
+			format!("/v1/builds/queue?systems={systems}")
+		} else {
+			"/v1/builds/queue".to_owned()
 		};
 		let mut request = http::request::Builder::default()
 			.method(http::Method::GET)
