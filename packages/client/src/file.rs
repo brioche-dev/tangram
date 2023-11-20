@@ -52,7 +52,7 @@ pub struct Data {
 }
 
 /// Data represented as an xattr either on the local file system or VFS.
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Attributes {
 	pub references: Vec<artifact::Id>,
 }
