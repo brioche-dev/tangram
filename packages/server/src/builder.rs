@@ -73,7 +73,7 @@ impl Builder {
 		loop {
 			let result = tokio::select! {
 				_ = stop_receiver.wait_for(|s| *s) => return Ok(()),
-				result = server.get_build_from_queue(None, None) => result,
+				result = server.get_build_from_queue(None, self.inner.systems.clone()) => result,
 			};
 			let queue_item = match result {
 				Ok(queue_item) => queue_item,

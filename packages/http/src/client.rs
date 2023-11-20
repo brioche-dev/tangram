@@ -452,7 +452,7 @@ impl tg::Client for Client {
 		let uri = if let Some(systems) = systems {
 			let systems = systems
 				.iter()
-				.map(|system| system.to_string())
+				.map(ToString::to_string)
 				.collect::<Vec<_>>()
 				.join(",");
 			format!("/v1/builds/queue?systems={systems}")
