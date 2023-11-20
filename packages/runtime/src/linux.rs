@@ -110,7 +110,7 @@ pub async fn build(
 
 	// Create a tempdir for the output.
 	let output_tempdir = tempfile::TempDir::new_in(&server_directory_temp_path)
-		.wrap_err("Failed to crate the temporary directory.")?;
+		.wrap_err("Failed to create the temporary directory.")?;
 
 	// Create the host and guest paths for the output parent directory.
 	let output_parent_directory_host_path = output_tempdir.path().to_owned();
