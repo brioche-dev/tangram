@@ -5,13 +5,13 @@ use self::types::{
 	stateid4, verifier4, ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res,
 	COMPOUND4res, GETATTR4args, GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args,
 	LOCK4res, LOCK4resok, LOCKT4args, LOCKT4res, LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res,
-	OPEN4args, OPEN4res, OPEN4resok, OPEN_CONFIRM4args, OPEN_CONFIRM4res, OPEN_CONFIRM4resok,
-	PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok, READDIR4args, READDIR4res,
-	READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args, RELEASE_LOCKOWNER4res,
-	RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args, SECINFO4res, SETCLIENTID4args,
-	SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args, SETCLIENTID_CONFIRM4res,
-	ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID, FATTR4_ACL,
-	FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
+	OPEN4args, OPEN4res, OPEN4resok, OPENATTR4args, OPENATTR4res, OPEN_CONFIRM4args,
+	OPEN_CONFIRM4res, OPEN_CONFIRM4resok, PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok,
+	READDIR4args, READDIR4res, READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args,
+	RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args,
+	SECINFO4res, SETCLIENTID4args, SETCLIENTID4res, SETCLIENTID4resok, SETCLIENTID_CONFIRM4args,
+	SETCLIENTID_CONFIRM4res, ACCESS4_EXECUTE, ACCESS4_LOOKUP, ACCESS4_READ, ANONYMOUS_STATE_ID,
+	FATTR4_ACL, FATTR4_ACLSUPPORT, FATTR4_ARCHIVE, FATTR4_CANSETTIME, FATTR4_CASE_INSENSITIVE,
 	FATTR4_CASE_PRESERVING, FATTR4_CHANGE, FATTR4_CHOWN_RESTRICTED, FATTR4_FH_EXPIRE_TYPE,
 	FATTR4_FILEHANDLE, FATTR4_FILEID, FATTR4_FILES_AVAIL, FATTR4_FILES_FREE, FATTR4_FILES_TOTAL,
 	FATTR4_FSID, FATTR4_FS_LOCATIONS, FATTR4_HIDDEN, FATTR4_HOMOGENEOUS, FATTR4_LEASE_TIME,
@@ -27,6 +27,7 @@ use self::types::{
 	OPEN4_RESULT_LOCKTYPE_POSIX, OPEN4_SHARE_ACCESS_BOTH, OPEN4_SHARE_ACCESS_WRITE,
 	READ_BYPASS_STATE_ID, RPC_VERS,
 };
+use either::Either;
 use num::ToPrimitive;
 use std::{
 	collections::BTreeMap,
@@ -71,7 +72,7 @@ struct State {
 }
 
 struct LockState {
-	reader: tg::blob::Reader,
+	reader: Option<tg::blob::Reader>,
 	fh: nfs_fh4,
 	byterange_locks: Vec<(offset4, length4)>,
 }
@@ -96,9 +97,17 @@ enum NodeKind {
 	File {
 		file: tg::File,
 		size: u64,
+		named_attr_directory: tokio::sync::RwLock<Option<Arc<Node>>>,
 	},
 	Symlink {
 		symlink: tg::Symlink,
+	},
+	NamedAttribute {
+		attributes: tg::file::Attributes,
+	},
+	NamedAttributeDirectory {
+		file: tg::File,
+		children: tokio::sync::RwLock<BTreeMap<String, Arc<Node>>>,
 	},
 }
 
@@ -190,7 +199,7 @@ impl Server {
 
 		tokio::process::Command::new("mount_nfs")
 			.arg("-o")
-			.arg(format!("tcp,vers=4.0,port={port}"))
+			.arg(format!("tcp,vers=4.0,namedattr,port={port}"))
 			.arg("Tangram:/")
 			.arg(path)
 			.stdout(std::process::Stdio::null())
@@ -425,6 +434,9 @@ impl Server {
 				nfs_argop4::OP_OPEN(arg) => {
 					nfs_resop4::OP_OPEN(self.handle_open(&mut ctx, arg).await)
 				},
+				nfs_argop4::OP_OPENATTR(arg) => {
+					nfs_resop4::OP_OPENATTR(self.handle_openattr(&mut ctx, arg).await)
+				},
 				nfs_argop4::OP_OPEN_CONFIRM(arg) => {
 					nfs_resop4::OP_OPEN_CONFIRM(self.handle_open_confirm(&mut ctx, arg).await)
 				},
@@ -488,7 +500,7 @@ impl Server {
 }
 
 impl Server {
-	#[tracing::instrument(skip(self))]
+	#[tracing::instrument(skip(self),)]
 	async fn handle_access(&self, ctx: &Context, arg: ACCESS4args) -> ACCESS4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return ACCESS4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -500,10 +512,10 @@ impl Server {
 		};
 
 		let access = match &node.kind {
-			NodeKind::Root { .. } | NodeKind::Directory { .. } => {
-				ACCESS4_EXECUTE | ACCESS4_READ | ACCESS4_LOOKUP
-			},
-			NodeKind::Symlink { .. } => ACCESS4_READ,
+			NodeKind::Root { .. }
+			| NodeKind::Directory { .. }
+			| NodeKind::NamedAttributeDirectory { .. } => ACCESS4_EXECUTE | ACCESS4_READ | ACCESS4_LOOKUP,
+			NodeKind::Symlink { .. } | NodeKind::NamedAttribute { .. } => ACCESS4_READ,
 			NodeKind::File { file, .. } => {
 				let is_executable = match file.executable(self.inner.client.as_ref()).await {
 					Ok(b) => b,
@@ -606,7 +618,7 @@ impl Server {
 				let len = children.read().await.len();
 				FileAttrData::new(file_handle, nfs_ftype4::NF4DIR, len, O_RX)
 			},
-			NodeKind::File { file, size } => {
+			NodeKind::File { file, size, .. } => {
 				let is_executable = match file.executable(self.inner.client.as_ref()).await {
 					Ok(b) => b,
 					Err(e) => {
@@ -615,7 +627,6 @@ impl Server {
 					},
 				};
 				let mode = if is_executable { O_RX } else { O_RDONLY };
-
 				FileAttrData::new(
 					file_handle,
 					nfs_ftype4::NF4REG,
@@ -625,6 +636,18 @@ impl Server {
 			},
 			NodeKind::Symlink { .. } => {
 				FileAttrData::new(file_handle, nfs_ftype4::NF4LNK, 1, O_RDONLY)
+			},
+			NodeKind::NamedAttribute { attributes } => {
+				let Ok(attributes) = serde_json::to_vec(attributes) else {
+					tracing::error!("Failed to serialize attribute data.");
+					return None;
+				};
+				let len = attributes.len();
+				FileAttrData::new(file_handle, nfs_ftype4::NF4NAMEDATTR, len, O_RDONLY)
+			},
+			NodeKind::NamedAttributeDirectory { children, .. } => {
+				let len = children.read().await.len();
+				FileAttrData::new(file_handle, nfs_ftype4::NF4ATTRDIR, len, O_RX)
 			},
 		};
 		Some(data)
@@ -761,7 +784,9 @@ impl Server {
 		}
 
 		match &parent_node.kind {
-			NodeKind::Root { children } | NodeKind::Directory { children, .. } => {
+			NodeKind::Root { children }
+			| NodeKind::Directory { children, .. }
+			| NodeKind::NamedAttributeDirectory { children, .. } => {
 				if let Some(child) = children.read().await.get(name).cloned() {
 					return Ok(child);
 				}
@@ -772,13 +797,27 @@ impl Server {
 			},
 		}
 
-		let child_artifact = match &parent_node.kind {
+		let child_data = match &parent_node.kind {
 			NodeKind::Root { .. } => {
-				let id = name.parse().map_err(|e| {
-					tracing::error!(?e, ?name, "Failed to parse artifact ID.");
-					nfsstat4::NFS4ERR_NOENT
-				})?;
-				tg::Artifact::with_id(id)
+				// let id = if name.starts_with("._") {
+				// 	let name = name.chars().skip(2).collect::<String>();
+				// 	let id = name.parse().map_err(|e| {
+				// 		tracing::error!(?e, ?name, "Failed to parse artifact ID.");
+				// 		nfsstat4::NFS4ERR_NOENT
+				// 	})?;
+				// 	let artifact = tg::Artifact::with_id(id);
+				// 	if let Ok(file) = artifact.try_unwrap_file_ref() {
+						
+				// 	} else {
+				// 		return Err(nfsstat4::NFS4ERR_NOENT);
+				// 	}
+				// } else {
+					let id = name.parse().map_err(|e| {
+						tracing::error!(?e, ?name, "Failed to parse artifact ID.");
+						nfsstat4::NFS4ERR_NOENT
+					})?;
+					Either::Left(tg::Artifact::with_id(id))
+				// }
 			},
 
 			NodeKind::Directory { directory, .. } => {
@@ -789,22 +828,39 @@ impl Server {
 						tracing::error!(?e, ?name, "Failed to get directory entries.");
 						nfsstat4::NFS4ERR_IO
 					})?;
-				entries.get(name).ok_or(nfsstat4::NFS4ERR_NOENT)?.clone()
+				Either::Left(entries.get(name).ok_or(nfsstat4::NFS4ERR_NOENT)?.clone())
 			},
 
+			NodeKind::NamedAttributeDirectory { file, .. } => {
+				let file_references = file.references(self.inner.client.as_ref()).await
+					.map_err(|e| {
+						tracing::error!(?e, ?file, "Failed to get file references.");
+						nfsstat4::NFS4ERR_IO
+					})?;
+				let mut references = Vec::new();
+				for artifact in file_references {
+					let id = artifact.id(self.inner.client.as_ref()).await.map_err(|e| {
+						tracing::error!(?e, ?artifact, "Failed to get artifact ID.");
+						nfsstat4::NFS4ERR_IO
+					})?;
+					references.push(id);
+				}
+				let attributes = tg::file::Attributes { references };
+				Either::Right(attributes)
+			},
 			_ => unreachable!(),
 		};
 
-		let node_id = self.inner.state.read().await.nodes.len() as u64 + 1000;
-		let kind = match child_artifact {
-			tg::Artifact::Directory(directory) => {
+		let node_id = self.next_node_id().await;
+		let kind = match child_data {
+			Either::Left(tg::Artifact::Directory(directory)) => {
 				let children = tokio::sync::RwLock::new(BTreeMap::default());
 				NodeKind::Directory {
 					directory,
 					children,
 				}
 			},
-			tg::Artifact::File(file) => {
+			Either::Left(tg::Artifact::File(file)) => {
 				let contents = file
 					.contents(self.inner.client.as_ref())
 					.await
@@ -819,9 +875,17 @@ impl Server {
 						tracing::error!(?e, "Failed to get size of file's contents.");
 						nfsstat4::NFS4ERR_IO
 					})?;
-				NodeKind::File { file, size }
+				let named_attr_directory = tokio::sync::RwLock::new(None);
+				NodeKind::File {
+					file,
+					size,
+					named_attr_directory,
+				}
 			},
-			tg::Artifact::Symlink(symlink) => NodeKind::Symlink { symlink },
+			Either::Left(tg::Artifact::Symlink(symlink)) => NodeKind::Symlink { symlink },
+			Either::Right(attributes) => {
+				NodeKind::NamedAttribute { attributes }
+			}
 		};
 		let child_node = Node {
 			id: node_id,
@@ -832,7 +896,7 @@ impl Server {
 
 		// Add the child node to the parent node.
 		match &parent_node.kind {
-			NodeKind::Root { children } | NodeKind::Directory { children, .. } => {
+			NodeKind::Root { children } | NodeKind::Directory { children, .. } | NodeKind::NamedAttributeDirectory { children, .. }=> {
 				children
 					.write()
 					.await
@@ -849,7 +913,36 @@ impl Server {
 			.nodes
 			.insert(child_node.id, child_node.clone());
 
+		// If the child is a file, create a node for the named_attr directory.
+		if let NodeKind::File {
+			file,
+			named_attr_directory,
+			..
+		} = &child_node.kind
+		{
+			let node_id = self.next_node_id().await;
+			let file = file.clone();
+			let children = tokio::sync::RwLock::new(BTreeMap::new());
+			let node = Node {
+				id: node_id,
+				parent: Arc::downgrade(&child_node),
+				kind: NodeKind::NamedAttributeDirectory { file, children },
+			};
+			let node = Arc::new(node);
+			self.inner
+				.state
+				.write()
+				.await
+				.nodes
+				.insert(node.id, node.clone());
+			named_attr_directory.write().await.replace(node);
+		};
+
 		Ok(child_node)
+	}
+
+	async fn next_node_id(&self) -> u64 {
+		self.inner.state.read().await.nodes.len().to_u64().unwrap() + 1000
 	}
 
 	#[tracing::instrument(skip(self))]
@@ -908,7 +1001,7 @@ impl Server {
 			// Create a new lock state.
 			let byterange_locks = Vec::new();
 			let lock_state = LockState {
-				reader,
+				reader: Some(reader),
 				fh,
 				byterange_locks,
 			};
@@ -941,6 +1034,39 @@ impl Server {
 	}
 
 	#[tracing::instrument(skip(self))]
+	async fn handle_openattr(&self, ctx: &mut Context, arg: OPENATTR4args) -> OPENATTR4res {
+		if arg.createdir {
+			return OPENATTR4res {
+				status: nfsstat4::NFS4ERR_PERM,
+			};
+		}
+		let Some(fh) = ctx.current_file_handle else {
+			return OPENATTR4res {
+				status: nfsstat4::NFS4ERR_NOFILEHANDLE,
+			};
+		};
+		let Some(node) = self.get_node(fh).await else {
+			return OPENATTR4res {
+				status: nfsstat4::NFS4ERR_BADHANDLE,
+			};
+		};
+		let NodeKind::File {
+			named_attr_directory,
+			..
+		} = &node.kind
+		else {
+			return OPENATTR4res {
+				status: nfsstat4::NFS4ERR_NOTSUPP,
+			};
+		};
+		let node_id = named_attr_directory.read().await.as_ref().unwrap().id;
+		ctx.current_file_handle = Some(nfs_fh4(node_id));
+		OPENATTR4res {
+			status: nfsstat4::NFS4_OK,
+		}
+	}
+
+	#[tracing::instrument(skip(self))]
 	async fn handle_open_confirm(
 		&self,
 		ctx: &mut Context,
@@ -970,11 +1096,26 @@ impl Server {
 		// RFC 7530 16.23.4:
 		// "If the current file handle is not a regular file, an error will be returned to the client. In the case where the current filehandle represents a directory, NFS4ERR_ISDIR is returned; otherwise, NFS4ERR_INVAL is returned."
 		let (file, file_size) = match &node.kind {
+			NodeKind::File { file, size, .. } => (file, size),
 			NodeKind::Directory { .. } | NodeKind::Root { .. } => {
 				return READ4res::Error(nfsstat4::NFS4ERR_ISDIR)
 			},
-			NodeKind::Symlink { .. } => return READ4res::Error(nfsstat4::NFS4ERR_INVAL),
-			NodeKind::File { file, size, .. } => (file, size),
+			// Special case: named attributes (xattrs) are not stored in regular files in our NFS implementation, so we handle them specially here.
+			NodeKind::NamedAttribute { attributes } => {
+				// RFC 7530 5.3
+				// Once an OPEN is done, named attributes may be examined and changed by normal READ and WRITE operations using the filehandles and stateids returned by OPEN
+				let Ok(attributes) = serde_json::to_vec(attributes) else {
+					tracing::error!("Failed to serialize file attributes.");
+					return READ4res::Error(nfsstat4::NFS4ERR_IO);
+				};
+				let len = attributes.len().min(arg.count.to_usize().unwrap());
+				let offset = arg.offset.to_usize().unwrap().min(len);
+				let data = attributes[offset..len].to_vec();
+				let eof = (offset + len) == data.len();
+				let res = READ4resok { eof, data };
+				return READ4res::NFS4_OK(res);
+			},
+			_ => return READ4res::Error(nfsstat4::NFS4ERR_INVAL),
 		};
 
 		// It is allowed for clients to attempt to read past the end of a file, in which case the server returns an empty file.
@@ -1032,16 +1173,13 @@ impl Server {
 				tracing::error!(?fh, ?arg.stateid, "Reader registered for wrong file id. file: {file}.");
 				return READ4res::Error(nfsstat4::NFS4ERR_BAD_STATEID);
 			}
-			if let Err(e) = lock_state
-				.reader
-				.seek(std::io::SeekFrom::Start(arg.offset))
-				.await
-			{
+			let reader = lock_state.reader.as_mut().unwrap();
+			if let Err(e) = reader.seek(std::io::SeekFrom::Start(arg.offset)).await {
 				tracing::error!(?e, "Failed to seek.");
 				return READ4res::Error(e.into());
 			}
 			let mut data = vec![0u8; read_size];
-			if let Err(e) = lock_state.reader.read_exact(&mut data).await {
+			if let Err(e) = reader.read_exact(&mut data).await {
 				tracing::error!(?e, "Failed to read from file.");
 				return READ4res::Error(e.into());
 			}
@@ -1065,18 +1203,21 @@ impl Server {
 		let mut count = 0;
 
 		let entries = match &node.kind {
+			NodeKind::Root { .. } => Vec::default(),
 			NodeKind::Directory { directory, .. } => {
 				let Ok(entries) = directory.entries(self.inner.client.as_ref()).await else {
 					return READDIR4res::Error(nfsstat4::NFS4ERR_IO);
 				};
-				entries.clone()
+				entries.keys().cloned().collect::<Vec<_>>()
 			},
-			NodeKind::Root { .. } => BTreeMap::default(),
+			NodeKind::NamedAttributeDirectory { .. } => {
+				vec![tg::file::TANGRAM_FILE_XATTR_NAME.into()]
+			},
 			_ => return READDIR4res::Error(nfsstat4::NFS4ERR_NOTDIR),
 		};
 
 		let mut reply = Vec::with_capacity(entries.len());
-		let names = entries.keys().map(AsRef::as_ref);
+		let names = entries.iter().map(AsRef::as_ref);
 
 		let mut eof = true;
 		for (cookie, name) in [".", ".."]
@@ -1432,6 +1573,7 @@ impl FileAttrData {
 			supported_attrs.set(attr.to_usize().unwrap());
 		}
 		let change = nfstime4::now().seconds.to_u64().unwrap();
+
 		FileAttrData {
 			supported_attrs,
 			file_type,
@@ -1440,7 +1582,7 @@ impl FileAttrData {
 			size,
 			link_support: true,
 			symlink_support: true,
-			named_attr: false,
+			named_attr: true,
 			fsid: fsid4 { major: 0, minor: 1 },
 			unique_handles: true,
 			lease_time: 1000,

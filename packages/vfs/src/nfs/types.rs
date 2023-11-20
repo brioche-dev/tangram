@@ -905,6 +905,16 @@ pub enum OPEN4res {
 }
 
 #[derive(Copy, Clone, Debug)]
+pub struct OPENATTR4args {
+	pub createdir: bool,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct OPENATTR4res {
+	pub status: nfsstat4,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct OPEN_CONFIRM4args {
 	pub open_stateid: stateid4,
 	pub seqid: seqid4,
@@ -1179,6 +1189,7 @@ pub enum nfs_argop4 {
 	OP_LOCKU(LOCKU4args),
 	OP_LOOKUP(LOOKUP4args),
 	OP_OPEN(OPEN4args),
+	OP_OPENATTR(OPENATTR4args),
 	OP_OPEN_CONFIRM(OPEN_CONFIRM4args),
 	OP_PUTFH(PUTFH4args),
 	OP_PUTROOTFH,
@@ -1207,6 +1218,7 @@ pub enum nfs_resop4 {
 	OP_LOCKU(LOCKU4res),
 	OP_LOOKUP(LOOKUP4res),
 	OP_OPEN(OPEN4res),
+	OP_OPENATTR(OPENATTR4res),
 	OP_OPEN_CONFIRM(OPEN_CONFIRM4res),
 	OP_PUTFH(PUTFH4res),
 	OP_PUTROOTFH(PUTROOTFH4res),
@@ -2034,6 +2046,22 @@ impl xdr::ToXdr for OPEN4res {
 	}
 }
 
+impl xdr::FromXdr for OPENATTR4args {
+	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
+		let createdir = decoder.decode()?;
+		Ok(Self { createdir })
+	}
+}
+
+impl xdr::ToXdr for OPENATTR4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
 impl xdr::FromXdr for OPEN_CONFIRM4args {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
 		let open_stateid = decoder.decode()?;
@@ -2461,6 +2489,7 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_LOCKU => nfs_argop4::OP_LOCKU(decoder.decode()?),
 			nfs_opnum4::OP_LOOKUP => nfs_argop4::OP_LOOKUP(decoder.decode()?),
 			nfs_opnum4::OP_OPEN => nfs_argop4::OP_OPEN(decoder.decode()?),
+			nfs_opnum4::OP_OPENATTR => nfs_argop4::OP_OPENATTR(decoder.decode()?),
 			nfs_opnum4::OP_OPEN_CONFIRM => nfs_argop4::OP_OPEN_CONFIRM(decoder.decode()?),
 			nfs_opnum4::OP_PUTFH => nfs_argop4::OP_PUTFH(decoder.decode()?),
 			nfs_opnum4::OP_PUTROOTFH => nfs_argop4::OP_PUTROOTFH,
@@ -2485,7 +2514,6 @@ impl xdr::FromXdr for nfs_argop4 {
 			nfs_opnum4::OP_LINK => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_LOOKUPP => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_NVERIFY => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_OPENATTR => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_OPEN_DOWNGRADE => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_PUTPUBFH => nfs_argop4::Unimplemented(opnum),
 			nfs_opnum4::OP_SETATTR => nfs_argop4::Unimplemented(opnum),
@@ -2552,6 +2580,10 @@ impl xdr::ToXdr for nfs_resop4 {
 				encoder.encode(&nfs_opnum4::OP_OPEN)?;
 				encoder.encode(&res)?;
 			},
+			nfs_resop4::OP_OPENATTR(res) => {
+				encoder.encode(&nfs_opnum4::OP_OPENATTR)?;
+				encoder.encode(&res)?;
+			}
 			nfs_resop4::OP_OPEN_CONFIRM(res) => {
 				encoder.encode(&nfs_opnum4::OP_OPEN_CONFIRM)?;
 				encoder.encode(&res)?;
@@ -2739,6 +2771,7 @@ impl nfs_resop4 {
 			nfs_resop4::OP_LOOKUP(LOOKUP4res { status }) => *status,
 			nfs_resop4::OP_OPEN(OPEN4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_OPEN(OPEN4res::Error(e)) => *e,
+			nfs_resop4::OP_OPENATTR(res) => res.status,
 			nfs_resop4::OP_OPEN_CONFIRM(OPEN_CONFIRM4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_OPEN_CONFIRM(OPEN_CONFIRM4res::Error(e)) => *e,
 			nfs_resop4::OP_PUTFH(PUTFH4res { status }) => *status,
