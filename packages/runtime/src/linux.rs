@@ -65,7 +65,8 @@ pub async fn build(
 	let server_directory_guest_path = PathBuf::from(SERVER_DIRECTORY_GUEST_PATH);
 
 	// Create a tempdir for the root.
-	let root_directory_tempdir = tempfile::TempDir::new_in(server_directory_host_path.join("tmp"))
+	let server_directory_temp_path = server_directory_host_path.join("tmp");
+	let root_directory_tempdir = tempfile::TempDir::new_in(&server_directory_temp_path)
 		.wrap_err("Failed to create temporary directory.")?;
 	let root_directory_host_path = root_directory_tempdir.path().to_owned();
 	tokio::fs::create_dir_all(&root_directory_host_path)
@@ -108,8 +109,8 @@ pub async fn build(
 		.wrap_err("Failed to write the buffer.")?;
 
 	// Create a tempdir for the output.
-	let output_tempdir =
-		tempfile::TempDir::new().wrap_err("Failed to crate the temporary directory.")?;
+	let output_tempdir = tempfile::TempDir::new_in(&server_directory_temp_path)
+		.wrap_err("Failed to crate the temporary directory.")?;
 
 	// Create the host and guest paths for the output parent directory.
 	let output_parent_directory_host_path = output_tempdir.path().to_owned();

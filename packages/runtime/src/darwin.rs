@@ -28,13 +28,14 @@ pub async fn build(
 	let artifacts_directory_path = server_directory_path.join("artifacts");
 
 	// Create a tempdir for the root.
-	let root_directory_tempdir =
-		tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
+	let server_directory_tmp_path = server_directory_path.join("tmp");
+	let root_directory_tempdir = tempfile::TempDir::new_in(&server_directory_tmp_path)
+		.wrap_err("Failed to create the temporary directory.")?;
 	let root_directory_path = root_directory_tempdir.path().to_owned();
 
 	// Create a tempdir for the output.
-	let output_tempdir =
-		tempfile::TempDir::new().wrap_err("Failed to create the temporary directory.")?;
+	let output_tempdir = tempfile::TempDir::new_in(&server_directory_tmp_path)
+		.wrap_err("Failed to create the temporary directory.")?;
 
 	// Create the output parent directory.
 	let output_parent_directory_path = output_tempdir.path().to_owned();
@@ -104,6 +105,12 @@ pub async fn build(
 	env.insert(
 		"OUTPUT".to_owned(),
 		output_path.to_str().unwrap().to_owned(),
+	);
+
+	// Set `$TANGRAM_PATH`
+	env.insert(
+		"TANGRAM_PATH".to_owned(),
+		server_directory_path.to_str().unwrap().to_owned(),
 	);
 
 	// Create the sandbox profile.
