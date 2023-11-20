@@ -122,11 +122,17 @@ impl Client {
 			.wrap_err("Failed to create the TCP connection.")?;
 
 		// Create the connector.
-		let mut root_cert_store = rustls::RootCertStore::empty();
-		root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+		let mut root_store = rustls::RootCertStore::empty();
+		root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+			rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+				ta.subject,
+				ta.spki,
+				ta.name_constraints,
+			)
+		}));
 		let mut config = rustls::ClientConfig::builder()
 			.with_safe_defaults()
-			.with_root_certificates(root_cert_store)
+			.with_root_certificates(root_store)
 			.with_no_client_auth();
 		config.alpn_protocols = vec!["h2".into()];
 		let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
