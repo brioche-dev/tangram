@@ -81,17 +81,19 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 	resolveModuleNameLiterals: (imports, module) => {
 		return imports.map((import_) => {
 			let text = import_.text;
-			let importDeclaration = import_.parent;
-			assert(ts.isImportDeclaration(importDeclaration));
-			let attributes = Object.fromEntries(
-				(importDeclaration.attributes?.elements ?? []).map((attribute) => {
-					let key = attribute.name.text;
-					assert(ts.isStringLiteral(attribute.value));
-					let value = attribute.value.text;
-					return [key, value];
-				}),
+			let declaration = import_.parent;
+			assert(
+				ts.isImportDeclaration(declaration) ||
+					ts.isExportDeclaration(declaration),
 			);
-			log(module, text, attributes);
+			// let attributes = Object.fromEntries(
+			// 	(declaration.attributes?.elements ?? []).map((attribute) => {
+			// 		let key = attribute.name.text;
+			// 		assert(ts.isStringLiteral(attribute.value));
+			// 		let value = attribute.value.text;
+			// 		return [key, value];
+			// 	}),
+			// );
 			let resolvedFileName;
 			try {
 				resolvedFileName = fileNameFromModule(
