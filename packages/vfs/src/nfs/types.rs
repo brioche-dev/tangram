@@ -2,7 +2,6 @@
 
 use super::xdr;
 use num::ToPrimitive;
-use std::{os::unix::prelude::OsStrExt, path::Path};
 
 // RPC constants.
 pub const RPC_VERS: u32 = 2;
@@ -128,7 +127,7 @@ pub type sec_oid4 = Vec<u8>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct seqid4(uint32_t);
-pub type utf8string = Vec<u8>;
+pub type utf8string = String;
 pub type utf8str_cis = utf8string;
 pub type utf8str_cs = utf8string;
 pub type utf8str_mixed = utf8string;
@@ -2590,7 +2589,7 @@ impl xdr::FromXdr for nfs_argop4 {
 
 impl xdr::FromXdr for COMPOUND4args {
 	fn decode(decoder: &mut xdr::Decoder<'_>) -> Result<Self, xdr::Error> {
-		let tag = decoder.decode_opaque()?.to_owned();
+		let tag = decoder.decode_str()?.to_owned();
 		let minorversion = decoder.decode_uint()?;
 		let argarray = decoder.decode()?;
 		Ok(Self {
@@ -2774,7 +2773,7 @@ impl xdr::ToXdr for COMPOUND4res {
 		W: std::io::Write,
 	{
 		encoder.encode(&self.status)?;
-		encoder.encode_opaque(&self.tag)?;
+		encoder.encode_str(&self.tag)?;
 		encoder.encode(&self.resarray)?;
 		Ok(())
 	}
@@ -2822,20 +2821,6 @@ impl nfstime4 {
 			seconds: dur.as_secs().to_i64().unwrap(),
 			nseconds: dur.subsec_nanos(),
 		}
-	}
-}
-
-impl<P> From<P> for pathname4
-where
-	P: AsRef<Path>,
-{
-	fn from(value: P) -> Self {
-		let components = value
-			.as_ref()
-			.components()
-			.map(|component| component.as_os_str().as_bytes().into())
-			.collect();
-		Self(components)
 	}
 }
 
@@ -2951,7 +2936,8 @@ mod test {
 
 		let compound = COMPOUND4res {
 			status: nfsstat4::NFS4_OK,
-			tag: vec![115, 101, 116, 99, 108, 105, 100, 32, 32, 32, 32, 32],
+			tag: String::from_utf8(vec![115, 101, 116, 99, 108, 105, 100, 32, 32, 32, 32, 32])
+				.unwrap(),
 			resarray: vec![nfs_resop4::OP_SETCLIENTID(res)],
 		};
 
