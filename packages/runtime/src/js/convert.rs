@@ -1443,7 +1443,7 @@ impl ToV8 for tg::Mutation {
 				let value = "array_append".to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
 				let key =
-					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+					v8::String::new_external_onebyte_static(scope, "values".as_bytes()).unwrap();
 				let value = values.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
@@ -1453,7 +1453,7 @@ impl ToV8 for tg::Mutation {
 				let value = "array_prepend".to_v8(scope).unwrap();
 				object.set(scope, key.into(), value);
 				let key =
-					v8::String::new_external_onebyte_static(scope, "value".as_bytes()).unwrap();
+					v8::String::new_external_onebyte_static(scope, "values".as_bytes()).unwrap();
 				let value = values.to_v8(scope)?;
 				object.set(scope, key.into(), value);
 			},
@@ -1492,7 +1492,20 @@ impl ToV8 for tg::Mutation {
 				object.set(scope, key.into(), value);
 			},
 		}
-		Ok(object.into())
+
+		let context = scope.get_current_context();
+		let global = context.global(scope);
+		let tg = v8::String::new_external_onebyte_static(scope, "tg".as_bytes()).unwrap();
+		let tg = global.get(scope, tg.into()).unwrap();
+		let tg = v8::Local::<v8::Object>::try_from(tg).unwrap();
+
+		let mutation =
+			v8::String::new_external_onebyte_static(scope, "Mutation".as_bytes()).unwrap();
+		let mutation = tg.get(scope, mutation.into()).unwrap();
+		let mutation = v8::Local::<v8::Function>::try_from(mutation).unwrap();
+
+		let instance = mutation.new_instance(scope, &[object.into()]).unwrap();
+		Ok(instance.into())
 	}
 }
 
@@ -1559,7 +1572,7 @@ impl FromV8 for tg::Mutation {
 			},
 			"template_prepend" => {
 				let template =
-					v8::String::new_external_onebyte_static(scope, "values".as_bytes()).unwrap();
+					v8::String::new_external_onebyte_static(scope, "template".as_bytes()).unwrap();
 				let template = inner.get(scope, template.into()).unwrap();
 				let template = from_v8(scope, template)?;
 				let separator =
@@ -1573,7 +1586,7 @@ impl FromV8 for tg::Mutation {
 			},
 			"template_append" => {
 				let template =
-					v8::String::new_external_onebyte_static(scope, "values".as_bytes()).unwrap();
+					v8::String::new_external_onebyte_static(scope, "template".as_bytes()).unwrap();
 				let template = inner.get(scope, template.into()).unwrap();
 				let template = from_v8(scope, template)?;
 				let separator =
