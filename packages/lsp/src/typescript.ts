@@ -1,3 +1,5 @@
+import { assert } from "./assert.ts";
+import { log } from "./log.ts";
 import { Module } from "./module.ts";
 import * as syscall from "./syscall.ts";
 import ts from "typescript";
@@ -76,17 +78,31 @@ export let host: ts.LanguageServiceHost & ts.CompilerHost = {
 		throw new Error("Unimplemented.");
 	},
 
-	resolveModuleNames: (imports, module) => {
+	resolveModuleNameLiterals: (imports, module) => {
 		return imports.map((import_) => {
+			let text = import_.text;
+			let importDeclaration = import_.parent;
+			assert(ts.isImportDeclaration(importDeclaration));
+			let attributes = Object.fromEntries(
+				(importDeclaration.attributes?.elements ?? []).map((attribute) => {
+					let key = attribute.name.text;
+					assert(ts.isStringLiteral(attribute.value));
+					let value = attribute.value.text;
+					return [key, value];
+				}),
+			);
+			log(module, text, attributes);
 			let resolvedFileName;
 			try {
 				resolvedFileName = fileNameFromModule(
-					syscall.module_.resolve(moduleFromFileName(module), import_),
+					syscall.module_.resolve(moduleFromFileName(module), text),
 				);
 			} catch {
-				return undefined;
+				return { resolvedModule: undefined };
 			}
-			return { resolvedFileName, extension: ts.Extension.Ts };
+			return {
+				resolvedModule: { resolvedFileName, extension: ts.Extension.Ts },
+			};
 		});
 	},
 

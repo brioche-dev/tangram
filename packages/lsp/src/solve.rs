@@ -63,7 +63,7 @@ pub async fn solve(
 		context
 			.analysis(root)
 			.await
-			.wrap_err("Failed to analyze root package.")?;
+			.wrap_err("Failed to analyze the root package.")?;
 	}
 
 	// Create the initial set of dependants to solve, one for each direct registry dependency of each path dependency.
