@@ -711,6 +711,11 @@ pub struct LOOKUP4res {
 	pub status: nfsstat4,
 }
 
+#[derive(Clone, Debug)]
+pub struct LOOKUPP4res {
+	pub status: nfsstat4,
+}
+
 pub const OPEN4_SHARE_ACCESS_READ: u32 = 0x0000_0001;
 pub const OPEN4_SHARE_ACCESS_WRITE: u32 = 0x0000_0002;
 pub const OPEN4_SHARE_ACCESS_BOTH: u32 = 0x0000_0003;
@@ -938,7 +943,19 @@ pub struct PUTFH4args {
 
 #[derive(Debug, Clone, Copy)]
 pub struct PUTFH4res {
+	/* CURRENT_FH */
+	pub status: nfsstat4,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PUTPUBFH4res {
 	/* CURRENT_FH: */
+	pub status: nfsstat4,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PUTFPUBH4res {
+	/* CURRENT_FH: pub fh */
 	pub status: nfsstat4,
 }
 
@@ -1182,26 +1199,40 @@ pub enum nfs_opnum4 {
 pub enum nfs_argop4 {
 	OP_ACCESS(ACCESS4args),
 	OP_CLOSE(CLOSE4args),
+	OP_COMMIT,
+	OP_CREATE,
+	OP_DELEGPURGE,
+	OP_DELEGRETURN,
 	OP_GETATTR(GETATTR4args),
 	OP_GETFH,
+	OP_LINK,
 	OP_LOCK(LOCK4args),
 	OP_LOCKT(LOCKT4args),
 	OP_LOCKU(LOCKU4args),
 	OP_LOOKUP(LOOKUP4args),
+	OP_LOOKUPP,
 	OP_OPEN(OPEN4args),
+	OP_NVERIFY,
 	OP_OPENATTR(OPENATTR4args),
 	OP_OPEN_CONFIRM(OPEN_CONFIRM4args),
+	OP_OPEN_DOWNGRADE,
 	OP_PUTFH(PUTFH4args),
+	OP_PUTPUBFH,
 	OP_PUTROOTFH,
 	OP_READ(READ4args),
 	OP_READDIR(READDIR4args),
 	OP_READLINK,
+	OP_REMOVE,
+	OP_RENAME,
 	OP_RENEW(RENEW4args),
 	OP_RESTOREFH,
 	OP_SAVEFH,
 	OP_SECINFO(SECINFO4args),
+	OP_SETATTR,
 	OP_SETCLIENTID(SETCLIENTID4args),
 	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4args),
+	OP_VERIFY,
+	OP_WRITE,
 	OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4args),
 	OP_ILLEGAL,
 	Unimplemented(nfs_opnum4),
@@ -1211,26 +1242,40 @@ pub enum nfs_argop4 {
 pub enum nfs_resop4 {
 	OP_ACCESS(ACCESS4res),
 	OP_CLOSE(CLOSE4res),
+	OP_COMMIT,
+	OP_CREATE,
+	OP_DELEGPURGE,
+	OP_DELEGRETURN,
 	OP_GETATTR(GETATTR4res),
 	OP_GETFH(GETFH4res),
+	OP_LINK,
 	OP_LOCK(LOCK4res),
 	OP_LOCKT(LOCKT4res),
 	OP_LOCKU(LOCKU4res),
 	OP_LOOKUP(LOOKUP4res),
+	OP_LOOKUPP(LOOKUPP4res),
+	OP_NVERIFY,
 	OP_OPEN(OPEN4res),
 	OP_OPENATTR(OPENATTR4res),
 	OP_OPEN_CONFIRM(OPEN_CONFIRM4res),
+	OP_OPEN_DOWNGRADE,
 	OP_PUTFH(PUTFH4res),
+	OP_PUTPUBFH(PUTPUBFH4res),
 	OP_PUTROOTFH(PUTROOTFH4res),
 	OP_READ(READ4res),
 	OP_READDIR(READDIR4res),
 	OP_READLINK(READLINK4res),
+	OP_REMOVE,
 	OP_RENEW(RENEW4res),
+	OP_RENAME,
 	OP_RESTOREFH(RESTOREFH4res),
 	OP_SAVEFH(SAVEFH4res),
 	OP_SECINFO(SECINFO4res),
+	OP_SETATTR,
 	OP_SETCLIENTID(SETCLIENTID4res),
 	OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res),
+	OP_VERIFY,
+	OP_WRITE,
 	OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4res),
 	OP_ILLEGAL(ILLEGAL4res),
 	Unknown(nfs_opnum4),
@@ -1781,6 +1826,15 @@ impl xdr::ToXdr for PUTFH4res {
 	}
 }
 
+impl xdr::ToXdr for PUTPUBFH4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
 impl xdr::ToXdr for PUTROOTFH4res {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
@@ -1999,6 +2053,15 @@ impl xdr::FromXdr for LOOKUP4args {
 }
 
 impl xdr::ToXdr for LOOKUP4res {
+	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
+	where
+		W: std::io::Write,
+	{
+		encoder.encode(&self.status)
+	}
+}
+
+impl xdr::ToXdr for LOOKUPP4res {
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,
@@ -2505,20 +2568,20 @@ impl xdr::FromXdr for nfs_argop4 {
 				nfs_argop4::OP_SETCLIENTID_CONFIRM(decoder.decode()?)
 			},
 			nfs_opnum4::OP_RELEASE_LOCKOWNER => nfs_argop4::OP_RELEASE_LOCKOWNER(decoder.decode()?),
-			nfs_opnum4::OP_COMMIT => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_CREATE => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_DELEGPURGE => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_DELEGRETURN => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_REMOVE => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_RENAME => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_LINK => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_LOOKUPP => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_NVERIFY => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_OPEN_DOWNGRADE => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_PUTPUBFH => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_SETATTR => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_VERIFY => nfs_argop4::Unimplemented(opnum),
-			nfs_opnum4::OP_WRITE => nfs_argop4::Unimplemented(opnum),
+			nfs_opnum4::OP_COMMIT => nfs_argop4::OP_COMMIT,
+			nfs_opnum4::OP_CREATE => nfs_argop4::OP_CREATE,
+			nfs_opnum4::OP_DELEGPURGE => nfs_argop4::OP_DELEGPURGE,
+			nfs_opnum4::OP_DELEGRETURN => nfs_argop4::OP_DELEGRETURN,
+			nfs_opnum4::OP_REMOVE => nfs_argop4::OP_REMOVE,
+			nfs_opnum4::OP_RENAME => nfs_argop4::OP_RENAME,
+			nfs_opnum4::OP_LINK => nfs_argop4::OP_LINK,
+			nfs_opnum4::OP_LOOKUPP => nfs_argop4::OP_LOOKUPP,
+			nfs_opnum4::OP_NVERIFY => nfs_argop4::OP_NVERIFY,
+			nfs_opnum4::OP_OPEN_DOWNGRADE => nfs_argop4::OP_OPEN_DOWNGRADE,
+			nfs_opnum4::OP_PUTPUBFH => nfs_argop4::OP_PUTPUBFH,
+			nfs_opnum4::OP_SETATTR => nfs_argop4::OP_SETATTR,
+			nfs_opnum4::OP_VERIFY => nfs_argop4::OP_VERIFY,
+			nfs_opnum4::OP_WRITE => nfs_argop4::OP_WRITE,
 			nfs_opnum4::OP_ILLEGAL => nfs_argop4::OP_ILLEGAL,
 		};
 		Ok(arg)
@@ -2552,6 +2615,22 @@ impl xdr::ToXdr for nfs_resop4 {
 				encoder.encode(&nfs_opnum4::OP_CLOSE)?;
 				encoder.encode(&res)?;
 			},
+			nfs_resop4::OP_COMMIT => {
+				encoder.encode(&nfs_opnum4::OP_COMMIT)?;
+				encoder.encode(&nfsstat4::NFS4ERR_NOTSUPP)?;
+			},
+			nfs_resop4::OP_CREATE => {
+				encoder.encode(&nfs_opnum4::OP_CREATE)?;
+				encoder.encode(&nfsstat4::NFS4ERR_PERM)?;
+			},
+			nfs_resop4::OP_DELEGPURGE => {
+				encoder.encode(&nfs_opnum4::OP_DELEGPURGE)?;
+				encoder.encode(&nfsstat4::NFS4ERR_NOTSUPP)?;
+			},
+			nfs_resop4::OP_DELEGRETURN => {
+				encoder.encode(&nfs_opnum4::OP_DELEGRETURN)?;
+				encoder.encode(&nfsstat4::NFS4ERR_NOTSUPP)?;
+			},
 			nfs_resop4::OP_GETATTR(res) => {
 				encoder.encode(&nfs_opnum4::OP_GETATTR)?;
 				encoder.encode(&res)?;
@@ -2559,6 +2638,10 @@ impl xdr::ToXdr for nfs_resop4 {
 			nfs_resop4::OP_GETFH(res) => {
 				encoder.encode(&nfs_opnum4::OP_GETFH)?;
 				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_LINK => {
+				encoder.encode(&nfs_opnum4::OP_LINK)?;
+				encoder.encode(&nfsstat4::NFS4ERR_PERM)?;
 			},
 			nfs_resop4::OP_LOCK(res) => {
 				encoder.encode(&nfs_opnum4::OP_LOCK)?;
@@ -2576,6 +2659,14 @@ impl xdr::ToXdr for nfs_resop4 {
 				encoder.encode(&nfs_opnum4::OP_LOOKUP)?;
 				encoder.encode(&res)?;
 			},
+			nfs_resop4::OP_LOOKUPP(res) => {
+				encoder.encode(&nfs_opnum4::OP_LOOKUPP)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_NVERIFY => {
+				encoder.encode(&nfs_opnum4::OP_NVERIFY)?;
+				encoder.encode(&nfsstat4::NFS4ERR_NOTSUPP)?;
+			},
 			nfs_resop4::OP_OPEN(res) => {
 				encoder.encode(&nfs_opnum4::OP_OPEN)?;
 				encoder.encode(&res)?;
@@ -2583,13 +2674,21 @@ impl xdr::ToXdr for nfs_resop4 {
 			nfs_resop4::OP_OPENATTR(res) => {
 				encoder.encode(&nfs_opnum4::OP_OPENATTR)?;
 				encoder.encode(&res)?;
-			}
+			},
 			nfs_resop4::OP_OPEN_CONFIRM(res) => {
 				encoder.encode(&nfs_opnum4::OP_OPEN_CONFIRM)?;
 				encoder.encode(&res)?;
 			},
+			nfs_resop4::OP_OPEN_DOWNGRADE => {
+				encoder.encode(&nfs_opnum4::OP_OPEN_DOWNGRADE)?;
+				encoder.encode(&nfsstat4::NFS4ERR_NOTSUPP)?;
+			},
 			nfs_resop4::OP_PUTFH(res) => {
 				encoder.encode(&nfs_opnum4::OP_PUTFH)?;
+				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_PUTPUBFH(res) => {
+				encoder.encode(&nfs_opnum4::OP_PUTPUBFH)?;
 				encoder.encode(&res)?;
 			},
 			nfs_resop4::OP_PUTROOTFH(res) => {
@@ -2608,6 +2707,14 @@ impl xdr::ToXdr for nfs_resop4 {
 				encoder.encode(&nfs_opnum4::OP_READLINK)?;
 				encoder.encode(&res)?;
 			},
+			nfs_resop4::OP_REMOVE => {
+				encoder.encode(&nfs_opnum4::OP_REMOVE)?;
+				encoder.encode(&nfsstat4::NFS4ERR_PERM)?;
+			},
+			nfs_resop4::OP_RENAME => {
+				encoder.encode(&nfs_opnum4::OP_RENAME)?;
+				encoder.encode(&nfsstat4::NFS4ERR_PERM)?;
+			},
 			nfs_resop4::OP_RENEW(res) => {
 				encoder.encode(&nfs_opnum4::OP_RENEW)?;
 				encoder.encode(&res)?;
@@ -2624,6 +2731,10 @@ impl xdr::ToXdr for nfs_resop4 {
 				encoder.encode(&nfs_opnum4::OP_SECINFO)?;
 				encoder.encode(&res)?;
 			},
+			nfs_resop4::OP_SETATTR => {
+				encoder.encode(&nfs_opnum4::OP_SETATTR)?;
+				encoder.encode(&nfsstat4::NFS4ERR_PERM)?;
+			},
 			nfs_resop4::OP_SETCLIENTID(res) => {
 				encoder.encode(&nfs_opnum4::OP_SETCLIENTID)?;
 				encoder.encode(&res)?;
@@ -2631,6 +2742,14 @@ impl xdr::ToXdr for nfs_resop4 {
 			nfs_resop4::OP_SETCLIENTID_CONFIRM(res) => {
 				encoder.encode(&nfs_opnum4::OP_SETCLIENTID_CONFIRM)?;
 				encoder.encode(&res)?;
+			},
+			nfs_resop4::OP_VERIFY => {
+				encoder.encode(&nfs_opnum4::OP_VERIFY)?;
+				encoder.encode(&nfsstat4::NFS4ERR_NOTSUPP)?;
+			},
+			nfs_resop4::OP_WRITE => {
+				encoder.encode(&nfs_opnum4::OP_WRITE)?;
+				encoder.encode(&nfsstat4::NFS4ERR_PERM)?;
 			},
 			nfs_resop4::OP_RELEASE_LOCKOWNER(res) => {
 				encoder.encode(&nfs_opnum4::OP_RELEASE_LOCKOWNER)?;
@@ -2752,49 +2871,63 @@ impl From<std::io::Error> for nfsstat4 {
 impl nfs_resop4 {
 	pub fn status(&self) -> nfsstat4 {
 		match self {
-			nfs_resop4::OP_ACCESS(ACCESS4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_ACCESS(ACCESS4res::Error(e)) => *e,
-			nfs_resop4::OP_CLOSE(CLOSE4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_ACCESS(ACCESS4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_CLOSE(CLOSE4res::Error(e)) => *e,
-			nfs_resop4::OP_GETATTR(GETATTR4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_CLOSE(CLOSE4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_COMMIT => nfsstat4::NFS4ERR_NOTSUPP,
+			nfs_resop4::OP_CREATE => nfsstat4::NFS4ERR_PERM,
+			nfs_resop4::OP_DELEGPURGE => nfsstat4::NFS4ERR_NOTSUPP,
+			nfs_resop4::OP_DELEGRETURN => nfsstat4::NFS4ERR_NOTSUPP,
 			nfs_resop4::OP_GETATTR(GETATTR4res::Error(e)) => *e,
-			nfs_resop4::OP_GETFH(GETFH4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_GETATTR(GETATTR4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_GETFH(GETFH4res::Error(e)) => *e,
+			nfs_resop4::OP_GETFH(GETFH4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_ILLEGAL(_) => nfsstat4::NFS4ERR_OP_ILLEGAL,
+			nfs_resop4::OP_LINK => nfsstat4::NFS4ERR_PERM,
+			nfs_resop4::OP_LOCK(LOCK4res::Error(e)) => *e,
 			nfs_resop4::OP_LOCK(LOCK4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_LOCK(LOCK4res::NFS4ERR_DENIED(_)) => nfsstat4::NFS4ERR_DENIED,
-			nfs_resop4::OP_LOCK(LOCK4res::Error(e)) => *e,
+			nfs_resop4::OP_LOCKT(LOCKT4res::Error(e)) => *e,
 			nfs_resop4::OP_LOCKT(LOCKT4res::NFS4_OK) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_LOCKT(LOCKT4res::NFS4ERR_DENIED(_)) => nfsstat4::NFS4ERR_DENIED,
-			nfs_resop4::OP_LOCKT(LOCKT4res::Error(e)) => *e,
-			nfs_resop4::OP_LOCKU(LOCKU4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_LOCKU(LOCKU4res::Error(e)) => *e,
+			nfs_resop4::OP_LOCKU(LOCKU4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_LOOKUP(LOOKUP4res { status }) => *status,
-			nfs_resop4::OP_OPEN(OPEN4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
-			nfs_resop4::OP_OPEN(OPEN4res::Error(e)) => *e,
-			nfs_resop4::OP_OPENATTR(res) => res.status,
-			nfs_resop4::OP_OPEN_CONFIRM(OPEN_CONFIRM4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_LOOKUPP(res) => res.status,
+			nfs_resop4::OP_NVERIFY => nfsstat4::NFS4ERR_NOTSUPP,
 			nfs_resop4::OP_OPEN_CONFIRM(OPEN_CONFIRM4res::Error(e)) => *e,
+			nfs_resop4::OP_OPEN_CONFIRM(OPEN_CONFIRM4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_OPEN_DOWNGRADE => nfsstat4::NFS4ERR_NOTSUPP,
+			nfs_resop4::OP_OPEN(OPEN4res::Error(e)) => *e,
+			nfs_resop4::OP_OPEN(OPEN4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_OPENATTR(res) => res.status,
 			nfs_resop4::OP_PUTFH(PUTFH4res { status }) => *status,
+			nfs_resop4::OP_PUTPUBFH(res) => res.status,
 			nfs_resop4::OP_PUTROOTFH(PUTROOTFH4res { status }) => *status,
-			nfs_resop4::OP_READ(READ4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_READ(READ4res::Error(e)) => *e,
-			nfs_resop4::OP_READDIR(READDIR4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_READ(READ4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_READDIR(READDIR4res::Error(e)) => *e,
-			nfs_resop4::OP_READLINK(READLINK4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_READDIR(READDIR4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_READLINK(READLINK4res::Error(e)) => *e,
+			nfs_resop4::OP_READLINK(READLINK4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_REMOVE => nfsstat4::NFS4ERR_PERM,
+			nfs_resop4::OP_RENAME => nfsstat4::NFS4ERR_PERM,
 			nfs_resop4::OP_RENEW(RENEW4res { status }) => *status,
 			nfs_resop4::OP_RESTOREFH(RESTOREFH4res { status }) => *status,
 			nfs_resop4::OP_SAVEFH(SAVEFH4res { status }) => *status,
-			nfs_resop4::OP_SECINFO(SECINFO4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_SECINFO(SECINFO4res::Error(e)) => *e,
+			nfs_resop4::OP_SECINFO(SECINFO4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
+			nfs_resop4::OP_SETATTR => nfsstat4::NFS4ERR_PERM,
+			nfs_resop4::OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res { status }) => *status,
+			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::Error(e)) => *e,
 			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::NFS4_OK(_)) => nfsstat4::NFS4_OK,
 			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::NFS4ERR_CLID_INUSE(_)) => {
 				nfsstat4::NFS4ERR_CLID_INUSE
 			},
-			nfs_resop4::OP_SETCLIENTID(SETCLIENTID4res::Error(e)) => *e,
-			nfs_resop4::OP_SETCLIENTID_CONFIRM(SETCLIENTID_CONFIRM4res { status }) => *status,
+			nfs_resop4::OP_VERIFY => nfsstat4::NFS4ERR_NOTSUPP,
+			nfs_resop4::OP_WRITE => nfsstat4::NFS4ERR_PERM,
 			nfs_resop4::OP_RELEASE_LOCKOWNER(RELEASE_LOCKOWNER4res { status }) => *status,
-			nfs_resop4::OP_ILLEGAL(_) => nfsstat4::NFS4ERR_OP_ILLEGAL,
 			nfs_resop4::Unknown(_) => nfsstat4::NFS4ERR_NOTSUPP,
 		}
 	}

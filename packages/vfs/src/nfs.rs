@@ -5,7 +5,7 @@ use self::types::{
 	stateid4, verifier4, ACCESS4args, ACCESS4res, ACCESS4resok, CLOSE4args, CLOSE4res,
 	COMPOUND4res, GETATTR4args, GETATTR4res, GETATTR4resok, GETFH4res, GETFH4resok, LOCK4args,
 	LOCK4res, LOCK4resok, LOCKT4args, LOCKT4res, LOCKU4args, LOCKU4res, LOOKUP4args, LOOKUP4res,
-	OPEN4args, OPEN4res, OPEN4resok, OPENATTR4args, OPENATTR4res, OPEN_CONFIRM4args,
+	LOOKUPP4res, OPEN4args, OPEN4res, OPEN4resok, OPENATTR4args, OPENATTR4res, OPEN_CONFIRM4args,
 	OPEN_CONFIRM4res, OPEN_CONFIRM4resok, PUTFH4args, PUTFH4res, READ4args, READ4res, READ4resok,
 	READDIR4args, READDIR4res, READDIR4resok, READLINK4res, READLINK4resok, RELEASE_LOCKOWNER4args,
 	RELEASE_LOCKOWNER4res, RENEW4args, RENEW4res, RESTOREFH4res, SAVEFH4res, SECINFO4args,
@@ -415,10 +415,15 @@ impl Server {
 				nfs_argop4::OP_CLOSE(arg) => {
 					nfs_resop4::OP_CLOSE(self.handle_close(&ctx, arg).await)
 				},
+				nfs_argop4::OP_COMMIT => nfs_resop4::OP_COMMIT,
+				nfs_argop4::OP_CREATE => nfs_resop4::OP_CREATE,
+				nfs_argop4::OP_DELEGPURGE => nfs_resop4::OP_DELEGPURGE,
+				nfs_argop4::OP_DELEGRETURN => nfs_resop4::OP_DELEGRETURN,
 				nfs_argop4::OP_GETATTR(arg) => {
 					nfs_resop4::OP_GETATTR(self.handle_getattr(&ctx, arg).await)
 				},
 				nfs_argop4::OP_GETFH => nfs_resop4::OP_GETFH(Self::handle_get_file_handle(&ctx)),
+				nfs_argop4::OP_LINK => nfs_resop4::OP_LINK,
 				nfs_argop4::OP_LOCK(arg) => {
 					nfs_resop4::OP_LOCK(self.handle_lock(&mut ctx, arg).await)
 				},
@@ -431,6 +436,10 @@ impl Server {
 				nfs_argop4::OP_LOOKUP(arg) => {
 					nfs_resop4::OP_LOOKUP(self.handle_lookup(&mut ctx, arg).await)
 				},
+				nfs_argop4::OP_LOOKUPP => {
+					nfs_resop4::OP_LOOKUPP(self.handle_lookup_parent(&mut ctx).await)
+				},
+				nfs_argop4::OP_NVERIFY => nfs_resop4::OP_NVERIFY,
 				nfs_argop4::OP_OPEN(arg) => {
 					nfs_resop4::OP_OPEN(self.handle_open(&mut ctx, arg).await)
 				},
@@ -440,8 +449,15 @@ impl Server {
 				nfs_argop4::OP_OPEN_CONFIRM(arg) => {
 					nfs_resop4::OP_OPEN_CONFIRM(self.handle_open_confirm(&mut ctx, arg).await)
 				},
+				nfs_argop4::OP_OPEN_DOWNGRADE => nfs_resop4::OP_OPEN_DOWNGRADE,
 				nfs_argop4::OP_PUTFH(arg) => {
 					nfs_resop4::OP_PUTFH(Self::handle_put_file_handle(&mut ctx, &arg))
+				},
+				nfs_argop4::OP_PUTPUBFH => {
+					Self::handle_put_file_handle(&mut ctx, &PUTFH4args { object: ROOT });
+					nfs_resop4::OP_PUTPUBFH(types::PUTPUBFH4res {
+						status: nfsstat4::NFS4_OK,
+					})
 				},
 				nfs_argop4::OP_PUTROOTFH => {
 					Self::handle_put_file_handle(&mut ctx, &PUTFH4args { object: ROOT });
@@ -456,6 +472,8 @@ impl Server {
 				nfs_argop4::OP_READLINK => {
 					nfs_resop4::OP_READLINK(self.handle_readlink(&ctx).await)
 				},
+				nfs_argop4::OP_REMOVE => nfs_resop4::OP_REMOVE,
+				nfs_argop4::OP_RENAME => nfs_resop4::OP_RENAME,
 				nfs_argop4::OP_RENEW(arg) => nfs_resop4::OP_RENEW(self.handle_renew(arg)),
 				nfs_argop4::OP_RESTOREFH => {
 					nfs_resop4::OP_RESTOREFH(Self::handle_restore_file_handle(&mut ctx))
@@ -466,12 +484,15 @@ impl Server {
 				nfs_argop4::OP_SECINFO(arg) => {
 					nfs_resop4::OP_SECINFO(self.handle_sec_info(&ctx, arg).await)
 				},
+				nfs_argop4::OP_SETATTR => nfs_resop4::OP_SETATTR,
 				nfs_argop4::OP_SETCLIENTID(arg) => {
 					nfs_resop4::OP_SETCLIENTID(self.handle_set_client_id(arg).await)
 				},
 				nfs_argop4::OP_SETCLIENTID_CONFIRM(arg) => {
 					nfs_resop4::OP_SETCLIENTID_CONFIRM(self.handle_set_client_id_confirm(arg).await)
 				},
+				nfs_argop4::OP_VERIFY => nfs_resop4::OP_VERIFY,
+				nfs_argop4::OP_WRITE => nfs_resop4::OP_WRITE,
 				nfs_argop4::OP_RELEASE_LOCKOWNER(arg) => nfs_resop4::OP_RELEASE_LOCKOWNER(
 					self.handle_release_lockowner(&mut ctx, arg).await,
 				),
@@ -500,7 +521,7 @@ impl Server {
 }
 
 impl Server {
-	#[tracing::instrument(skip(self),)]
+	#[tracing::instrument(skip(self))]
 	async fn handle_access(&self, ctx: &Context, arg: ACCESS4args) -> ACCESS4res {
 		let Some(fh) = ctx.current_file_handle else {
 			return ACCESS4res::Error(nfsstat4::NFS4ERR_NOFILEHANDLE);
@@ -754,6 +775,29 @@ impl Server {
 		}
 	}
 
+	#[tracing::instrument(skip(self))]
+	async fn handle_lookup_parent(&self, ctx: &mut Context) -> LOOKUPP4res {
+		let Some(fh) = ctx.current_file_handle else {
+			return LOOKUPP4res {
+				status: nfsstat4::NFS4ERR_NOFILEHANDLE,
+			};
+		};
+		let Some(node) = self.get_node(fh).await else {
+			return LOOKUPP4res {
+				status: nfsstat4::NFS4ERR_BADHANDLE,
+			};
+		};
+		let Some(parent) = node.parent.upgrade() else {
+			return LOOKUPP4res {
+				status: nfsstat4::NFS4ERR_IO,
+			};
+		};
+		ctx.current_file_handle = Some(nfs_fh4(parent.id));
+		LOOKUPP4res {
+			status: nfsstat4::NFS4_OK,
+		}
+	}
+
 	async fn lookup(&self, parent: nfs_fh4, name: &str) -> Result<nfs_fh4, nfsstat4> {
 		let parent_node = self
 			.inner
@@ -807,16 +851,16 @@ impl Server {
 				// 	})?;
 				// 	let artifact = tg::Artifact::with_id(id);
 				// 	if let Ok(file) = artifact.try_unwrap_file_ref() {
-						
+
 				// 	} else {
 				// 		return Err(nfsstat4::NFS4ERR_NOENT);
 				// 	}
 				// } else {
-					let id = name.parse().map_err(|e| {
-						tracing::error!(?e, ?name, "Failed to parse artifact ID.");
-						nfsstat4::NFS4ERR_NOENT
-					})?;
-					Either::Left(tg::Artifact::with_id(id))
+				let id = name.parse().map_err(|e| {
+					tracing::error!(?e, ?name, "Failed to parse artifact ID.");
+					nfsstat4::NFS4ERR_NOENT
+				})?;
+				Either::Left(tg::Artifact::with_id(id))
 				// }
 			},
 
@@ -832,11 +876,13 @@ impl Server {
 			},
 
 			NodeKind::NamedAttributeDirectory { file, .. } => {
-				let file_references = file.references(self.inner.client.as_ref()).await
-					.map_err(|e| {
-						tracing::error!(?e, ?file, "Failed to get file references.");
-						nfsstat4::NFS4ERR_IO
-					})?;
+				let file_references =
+					file.references(self.inner.client.as_ref())
+						.await
+						.map_err(|e| {
+							tracing::error!(?e, ?file, "Failed to get file references.");
+							nfsstat4::NFS4ERR_IO
+						})?;
 				let mut references = Vec::new();
 				for artifact in file_references {
 					let id = artifact.id(self.inner.client.as_ref()).await.map_err(|e| {
@@ -883,9 +929,7 @@ impl Server {
 				}
 			},
 			Either::Left(tg::Artifact::Symlink(symlink)) => NodeKind::Symlink { symlink },
-			Either::Right(attributes) => {
-				NodeKind::NamedAttribute { attributes }
-			}
+			Either::Right(attributes) => NodeKind::NamedAttribute { attributes },
 		};
 		let child_node = Node {
 			id: node_id,
@@ -896,7 +940,9 @@ impl Server {
 
 		// Add the child node to the parent node.
 		match &parent_node.kind {
-			NodeKind::Root { children } | NodeKind::Directory { children, .. } | NodeKind::NamedAttributeDirectory { children, .. }=> {
+			NodeKind::Root { children }
+			| NodeKind::Directory { children, .. }
+			| NodeKind::NamedAttributeDirectory { children, .. } => {
 				children
 					.write()
 					.await
