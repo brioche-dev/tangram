@@ -2601,6 +2601,7 @@ impl xdr::FromXdr for COMPOUND4args {
 }
 
 impl xdr::ToXdr for nfs_resop4 {
+	#[allow(clippy::too_many_lines)]
 	fn encode<W>(&self, encoder: &mut xdr::Encoder<W>) -> Result<(), xdr::Error>
 	where
 		W: std::io::Write,

@@ -809,6 +809,7 @@ impl Server {
 		Ok(Some(fh))
 	}
 
+	#[allow(clippy::too_many_lines)]
 	async fn get_or_create_child_node(
 		&self,
 		parent_node: Arc<Node>,
@@ -1301,7 +1302,6 @@ impl Server {
 				break;
 			}
 
-			let name = name.into();
 			let entry = entry4 {
 				cookie,
 				name,
@@ -1620,11 +1620,8 @@ impl FileAttrData {
 			supported_attrs.set(attr.to_usize().unwrap());
 		}
 		let change = nfstime4::now().seconds.to_u64().unwrap();
-		let named_attr = match file_type {
-			nfs_ftype4::NF4REG | nfs_ftype4::NF4LNK => true,
-			_ => false,
-		};
-
+		// Note: The "named_attr" attribute represents whether the named attribute directory is non-empty, not whether or not it exists.
+		let named_attr = matches!(file_type, nfs_ftype4::NF4REG);
 		FileAttrData {
 			supported_attrs,
 			file_type,
