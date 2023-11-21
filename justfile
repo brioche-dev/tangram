@@ -18,7 +18,7 @@ runtime:
 	npm run -w @tangramdotdev/runtime build
 
 serve_dev:
-	TANGRAM_TRACING=tangram_http=info,tangram_vfs=error,tangram_vfs= cargo run -- server run --no-remote
+	TANGRAM_TRACING=tangram_http=info cargo run -- server run
 
 tg +ARGS:
 	cargo run -- {{ARGS}}
