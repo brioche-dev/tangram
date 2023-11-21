@@ -1,3 +1,4 @@
+#![allow(clippy::unused_async)]
 use num::ToPrimitive;
 use std::{
 	collections::BTreeMap,
@@ -11,7 +12,6 @@ use tangram_client as tg;
 use tangram_error::{Result, Wrap, WrapErr};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use zerocopy::{AsBytes, FromBytes};
-
 mod sys;
 
 /// A FUSE server.
@@ -98,7 +98,9 @@ enum RequestData {
 	Flush(sys::fuse_flush_in),
 	Forget(sys::fuse_forget_in),
 	GetAttr(sys::fuse_getattr_in),
+	GetXattr(sys::fuse_getxattr_in, CString),
 	Init(sys::fuse_init_in),
+	ListXattr(sys::fuse_getxattr_in),
 	Lookup(CString),
 	Open(sys::fuse_open_in),
 	OpenDir(sys::fuse_open_in),
@@ -116,7 +118,9 @@ enum RequestData {
 enum Response {
 	Flush,
 	GetAttr(sys::fuse_attr_out),
+	GetXattr(Vec<u8>),
 	Init(sys::fuse_init_out),
+	ListXattr(Vec<u8>),
 	Lookup(sys::fuse_entry_out),
 	None,
 	Open(sys::fuse_open_out),
@@ -198,6 +202,7 @@ impl Server {
 		Ok(())
 	}
 
+	#[allow(clippy::too_many_lines)]
 	async fn serve(&self, fuse_file: std::fs::File) -> Result<()> {
 		let mut fuse_file = tokio::fs::File::from_std(fuse_file);
 
@@ -257,6 +262,17 @@ impl Server {
 				sys::fuse_opcode::FUSE_RELEASEDIR => {
 					RequestData::ReleaseDir(read_data(request_data)?)
 				},
+				sys::fuse_opcode::FUSE_GETXATTR => {
+					let (fuse_getxattr_in, name) =
+						request_data.split_at(std::mem::size_of::<sys::fuse_getxattr_in>());
+					let fuse_getxattr_in = read_data(fuse_getxattr_in)?;
+					let name = CString::from_vec_with_nul(name.to_owned())
+						.wrap_err("Failed to deserialize the request.")?;
+					RequestData::GetXattr(fuse_getxattr_in, name)
+				},
+				sys::fuse_opcode::FUSE_LISTXATTR => {
+					RequestData::ListXattr(read_data(request_data)?)
+				},
 				_ => RequestData::Unsupported(request_header.opcode),
 			};
 			let request = Request {
@@ -298,7 +314,9 @@ impl Server {
 							Response::Open(data) | Response::OpenDir(data) => data.as_bytes(),
 							Response::Read(data)
 							| Response::ReadDir(data)
-							| Response::ReadDirPlus(data) => data.as_bytes(),
+							| Response::ReadDirPlus(data)
+							| Response::GetXattr(data)
+							| Response::ListXattr(data) => data.as_bytes(),
 							Response::ReadLink(data) => data.as_bytes(),
 						};
 						let len = std::mem::size_of::<sys::fuse_out_header>() + data_bytes.len();
@@ -315,7 +333,7 @@ impl Server {
 
 				// Write the response.
 				match fuse_file.write_all(&response_bytes).await {
-					Ok(_) => (),
+					Ok(()) => (),
 					Err(error) => {
 						tracing::error!(?error, "Failed to write the response.");
 					},
@@ -336,6 +354,13 @@ impl Server {
 			},
 			RequestData::Forget(data) => self.handle_forget_request(request.header, data).await,
 			RequestData::GetAttr(data) => self.handle_get_attr_request(request.header, data).await,
+			RequestData::GetXattr(data, name) => {
+				self.handle_get_xattr_request(request.header, data, name)
+					.await
+			},
+			RequestData::ListXattr(data) => {
+				self.handle_list_xattr_request(request.header, data).await
+			},
 			RequestData::Init(data) => self.handle_init_request(request.header, data).await,
 			RequestData::Lookup(data) => self.handle_lookup_request(request.header, data).await,
 			RequestData::Open(data) => self.handle_open_request(request.header, data).await,
@@ -375,7 +400,7 @@ impl Server {
 		_header: sys::fuse_in_header,
 		_data: sys::fuse_batch_forget_in,
 	) -> Result<Response, i32> {
-		return Ok(Response::None);
+		Ok(Response::None)
 	}
 
 	async fn handle_forget_request(
@@ -383,7 +408,7 @@ impl Server {
 		_header: sys::fuse_in_header,
 		_data: sys::fuse_forget_in,
 	) -> Result<Response, i32> {
-		return Ok(Response::None);
+		Ok(Response::None)
 	}
 
 	async fn handle_get_attr_request(
@@ -395,6 +420,96 @@ impl Server {
 		let node = self.get_node(node_id).await?;
 		let response = node.fuse_attr_out(self.inner.client.as_ref()).await?;
 		Ok(Response::GetAttr(response))
+	}
+
+	async fn handle_get_xattr_request(
+		&self,
+		header: sys::fuse_in_header,
+		data: sys::fuse_getxattr_in,
+		name: CString,
+	) -> Result<Response, i32> {
+		// Get the node and check that it's a file.
+		let node_id = NodeId(header.nodeid);
+		let node = self.get_node(node_id).await?;
+		let NodeKind::File { file, .. } = &node.kind else {
+			return Err(libc::ENOTSUP);
+		};
+		let attr_name = name.to_str().map_err(|e| {
+			tracing::error!(?e, "Failed to get string from xattr name.");
+			libc::EINVAL
+		})?;
+
+		// Compute the attribute data.
+		if attr_name != tg::file::TANGRAM_FILE_XATTR_NAME {
+			return Err(libc::ENODATA);
+		}
+		let file_references = file
+			.references(self.inner.client.as_ref())
+			.await
+			.map_err(|e| {
+				tracing::error!(?e, ?file, "Failed to get file references.");
+				libc::EIO
+			})?;
+		let mut references = Vec::new();
+		for artifact in file_references {
+			let id = artifact.id(self.inner.client.as_ref()).await.map_err(|e| {
+				tracing::error!(?e, ?artifact, "Failed to get ID of artifact.");
+				libc::EIO
+			})?;
+			references.push(id);
+		}
+
+		let attributes = tg::file::Attributes { references };
+		let Ok(attributes) = serde_json::to_vec(&attributes) else {
+			tracing::error!(?attributes, "Failed to serialize attributes.");
+			return Err(libc::EIO);
+		};
+
+		// If "0" is passed in as an argument, the caller is requesting the size of this xattr.
+		if data.size == 0 {
+			let response = sys::fuse_getxattr_out {
+				size: attributes.len().to_u32().unwrap(),
+				padding: 0,
+			};
+			let response = response.as_bytes().to_vec();
+			Ok(Response::GetXattr(response))
+		}
+		// If the size is too small, return ERANGE.
+		else if data.size.to_usize().unwrap() < attributes.len() {
+			Err(libc::ERANGE)
+		} else {
+			Ok(Response::GetXattr(attributes))
+		}
+	}
+
+	async fn handle_list_xattr_request(
+		&self,
+		header: sys::fuse_in_header,
+		data: sys::fuse_getxattr_in,
+	) -> Result<Response, i32> {
+		// Get the node and check that it's a file.
+		let node_id = NodeId(header.nodeid);
+		let node = self.get_node(node_id).await?;
+		let NodeKind::File { .. } = &node.kind else {
+			return Err(libc::ENOTSUP);
+		};
+		let names = CString::new(tg::file::TANGRAM_FILE_XATTR_NAME).map_err(|e| {
+			tracing::error!(?e, "Failed to create list of xattr names.");
+			libc::EIO
+		})?;
+		let names = names.as_bytes_with_nul().to_vec();
+		if data.size == 0 {
+			let response = sys::fuse_getxattr_out {
+				size: names.len().to_u32().unwrap(),
+				padding: 0,
+			};
+			let response = response.as_bytes().to_vec();
+			Ok(Response::ListXattr(response))
+		} else if data.size.to_usize().unwrap() < names.len() {
+			Err(libc::ERANGE)
+		} else {
+			Ok(Response::ListXattr(names))
+		}
 	}
 
 	#[allow(clippy::unused_async)]
@@ -580,7 +695,7 @@ impl Server {
 			.await
 			.map_err(|_| libc::EIO)?
 			.keys()
-			.map(|k| k.as_ref());
+			.map(AsRef::as_ref);
 
 		for (offset, name) in [".", ".."]
 			.into_iter()
@@ -643,9 +758,8 @@ impl Server {
 		let node = self.get_node(node_id).await?;
 
 		// Get the symlink.
-		let symlink = match &node.kind {
-			NodeKind::Symlink { symlink, .. } => symlink,
-			_ => return Err(libc::EIO),
+		let NodeKind::Symlink { symlink } = &node.kind else {
+			return Err(libc::EIO);
 		};
 
 		// Render the target.
@@ -815,6 +929,7 @@ impl Server {
 		Ok(child_node)
 	}
 
+	#[allow(clippy::similar_names)]
 	async fn mount(path: &Path) -> Result<std::fs::File> {
 		Self::unmount(path).await?;
 		unsafe {

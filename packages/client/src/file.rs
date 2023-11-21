@@ -51,6 +51,15 @@ pub struct Data {
 	pub references: Vec<artifact::Id>,
 }
 
+/// Data represented as an xattr either on the local file system or VFS.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct Attributes {
+	pub references: Vec<artifact::Id>,
+}
+
+/// The name of the [`Attributes`] xattr.
+pub const TANGRAM_FILE_XATTR_NAME: &str = "user.tangram";
+
 impl Id {
 	pub fn new(bytes: &Bytes) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::File, bytes))

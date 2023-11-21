@@ -1,6 +1,6 @@
 use crate::{
-	artifact, return_error, Artifact, Blob, Client, Directory, Error, File, Result, Symlink,
-	Template, WrapErr,
+	file, return_error, Artifact, Blob, Client, Directory, Error, File, Result, Symlink, Template,
+	WrapErr,
 };
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
@@ -9,11 +9,6 @@ use std::{
 	os::unix::prelude::PermissionsExt,
 	path::{Path, PathBuf},
 };
-
-#[derive(serde::Deserialize)]
-struct Attributes {
-	references: Vec<artifact::Id>,
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
@@ -142,7 +137,7 @@ impl Artifact {
 		let executable = (metadata.permissions().mode() & 0o111) != 0;
 
 		// Read the file's references from its xattrs.
-		let attributes: Option<Attributes> = xattr::get(path, "user.tangram")
+		let attributes: Option<file::Attributes> = xattr::get(path, file::TANGRAM_FILE_XATTR_NAME)
 			.ok()
 			.flatten()
 			.and_then(|attributes| serde_json::from_slice(&attributes).ok());
