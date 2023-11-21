@@ -765,11 +765,14 @@ impl Server {
 		};
 
 		match self.lookup(fh, name).await {
-			Ok(fh) => {
+			Ok(Some(fh)) => {
 				ctx.current_file_handle = Some(fh);
 				LOOKUP4res {
 					status: nfsstat4::NFS4_OK,
 				}
+			},
+			Ok(None) => LOOKUP4res {
+				status: nfsstat4::NFS4ERR_NOENT,
 			},
 			Err(status) => LOOKUP4res { status },
 		}
@@ -798,7 +801,7 @@ impl Server {
 		}
 	}
 
-	async fn lookup(&self, parent: nfs_fh4, name: &str) -> Result<nfs_fh4, nfsstat4> {
+	async fn lookup(&self, parent: nfs_fh4, name: &str) -> Result<Option<nfs_fh4>, nfsstat4> {
 		let parent_node = self
 			.inner
 			.state
@@ -808,23 +811,25 @@ impl Server {
 			.get(&parent.0)
 			.cloned()
 			.ok_or(nfsstat4::NFS4ERR_NOENT)?;
-		let node = self.get_or_create_child_node(parent_node, name).await?;
+		let Some(node) = self.get_or_create_child_node(parent_node, name).await? else {
+			return Ok(None);
+		};
 		let fh = nfs_fh4(node.id);
-		Ok(fh)
+		Ok(Some(fh))
 	}
 
 	async fn get_or_create_child_node(
 		&self,
 		parent_node: Arc<Node>,
 		name: &str,
-	) -> Result<Arc<Node>, nfsstat4> {
+	) -> Result<Option<Arc<Node>>, nfsstat4> {
 		if name == "." {
-			return Ok(parent_node);
+			return Ok(Some(parent_node));
 		}
 
 		if name == ".." {
 			let parent_parent_node = parent_node.parent.upgrade().ok_or(nfsstat4::NFS4ERR_IO)?;
-			return Ok(parent_parent_node);
+			return Ok(Some(parent_parent_node));
 		}
 
 		match &parent_node.kind {
@@ -832,7 +837,7 @@ impl Server {
 			| NodeKind::Directory { children, .. }
 			| NodeKind::NamedAttributeDirectory { children, .. } => {
 				if let Some(child) = children.read().await.get(name).cloned() {
-					return Ok(child);
+					return Ok(Some(child));
 				}
 			},
 			_ => {
@@ -843,25 +848,11 @@ impl Server {
 
 		let child_data = match &parent_node.kind {
 			NodeKind::Root { .. } => {
-				// let id = if name.starts_with("._") {
-				// 	let name = name.chars().skip(2).collect::<String>();
-				// 	let id = name.parse().map_err(|e| {
-				// 		tracing::error!(?e, ?name, "Failed to parse artifact ID.");
-				// 		nfsstat4::NFS4ERR_NOENT
-				// 	})?;
-				// 	let artifact = tg::Artifact::with_id(id);
-				// 	if let Ok(file) = artifact.try_unwrap_file_ref() {
-
-				// 	} else {
-				// 		return Err(nfsstat4::NFS4ERR_NOENT);
-				// 	}
-				// } else {
 				let id = name.parse().map_err(|e| {
 					tracing::error!(?e, ?name, "Failed to parse artifact ID.");
 					nfsstat4::NFS4ERR_NOENT
 				})?;
 				Either::Left(tg::Artifact::with_id(id))
-				// }
 			},
 
 			NodeKind::Directory { directory, .. } => {
@@ -872,7 +863,10 @@ impl Server {
 						tracing::error!(?e, ?name, "Failed to get directory entries.");
 						nfsstat4::NFS4ERR_IO
 					})?;
-				Either::Left(entries.get(name).ok_or(nfsstat4::NFS4ERR_NOENT)?.clone())
+				let Some(entry) = entries.get(name) else {
+					return Ok(None);
+				};
+				Either::Left(entry.clone())
 			},
 
 			NodeKind::NamedAttributeDirectory { file, .. } => {
@@ -984,7 +978,7 @@ impl Server {
 			named_attr_directory.write().await.replace(node);
 		};
 
-		Ok(child_node)
+		Ok(Some(child_node))
 	}
 
 	async fn next_node_id(&self) -> u64 {
@@ -1011,7 +1005,8 @@ impl Server {
 					return OPEN4res::Error(nfsstat4::NFS4ERR_NOENT);
 				};
 				match self.lookup(fh, name).await {
-					Ok(fh) => (fh, OPEN4_RESULT_CONFIRM),
+					Ok(Some(fh)) => (fh, OPEN4_RESULT_CONFIRM),
+					Ok(None) => return OPEN4res::Error(nfsstat4::NFS4ERR_NOENT),
 					Err(e) => return OPEN4res::Error(e),
 				}
 			},
@@ -1276,7 +1271,8 @@ impl Server {
 				"." => node.clone(),
 				".." => node.parent.upgrade().unwrap(),
 				_ => match self.get_or_create_child_node(node.clone(), name).await {
-					Ok(node) => node,
+					Ok(Some(node)) => node,
+					Ok(None) => return READDIR4res::Error(nfsstat4::NFS4ERR_NOENT),
 					Err(e) => return READDIR4res::Error(e),
 				},
 			};
