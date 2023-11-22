@@ -985,24 +985,26 @@ impl Server {
 			}
 			libc::close(fds[0]);
 
-			// Create the control message.
-			let mut control = [0u8; unsafe { libc::CMSG_SPACE(4) as usize }];
-			let mut msg = libc::msghdr {
+			// Create the control message. We make sure all pointers are on the heap to avoid being overwritten by the call to recvmsg(). This is safe because it occurs only in the original process after the call to fork(), and the Box<> will live until the function exits.
+			let mut control = vec![0u8; libc::CMSG_SPACE(4) as usize];
+			let mut buffer = vec![0u8; 8];
+			let mut msg = Box::new(libc::msghdr {
 				msg_name: std::ptr::null_mut(),
 				msg_namelen: 0,
 				msg_iov: [libc::iovec {
-					iov_base: [0u8; 8].as_mut_ptr().cast(),
-					iov_len: 8,
+					iov_base: buffer.as_mut_ptr().cast(),
+					iov_len: buffer.len(),
 				}]
 				.as_mut_ptr(),
 				msg_iovlen: 1,
 				msg_control: control.as_mut_ptr().cast(),
 				msg_controllen: std::mem::size_of_val(&control) as _,
 				msg_flags: 0,
-			};
+			});
+			let msg: *mut libc::msghdr = msg.as_mut() as _;
 
 			// Receive the control message.
-			let ret = libc::recvmsg(fds[1], std::ptr::addr_of_mut!(msg), 0);
+			let ret = libc::recvmsg(fds[1], msg, 0);
 			if ret == -1 {
 				return Err(std::io::Error::last_os_error().wrap("Failed to receive the message."));
 			}
@@ -1015,7 +1017,7 @@ impl Server {
 			}
 
 			// Read the file descriptor.
-			let cmsg = libc::CMSG_FIRSTHDR(std::ptr::addr_of_mut!(msg));
+			let cmsg = libc::CMSG_FIRSTHDR(msg);
 			if cmsg.is_null() {
 				return Err(std::io::Error::new(
 					std::io::ErrorKind::UnexpectedEof,
