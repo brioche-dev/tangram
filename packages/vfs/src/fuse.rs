@@ -35,7 +35,8 @@ type Task = (
 /// The server's state.
 struct State {
 	nodes: BTreeMap<NodeId, Arc<Node>>,
-	index: u64,
+	file_handle_index: u64,
+	node_index: u64,
 	handles: BTreeMap<FileHandle, Arc<tokio::sync::RwLock<FileHandleData>>>,
 }
 
@@ -80,7 +81,10 @@ struct FileHandle(u64);
 /// The data associated with a file handle.
 enum FileHandleData {
 	Directory,
-	File { reader: tg::blob::Reader },
+	File {
+		node: NodeId,
+		reader: tg::blob::Reader,
+	},
 	Symlink,
 }
 
@@ -146,11 +150,13 @@ impl Server {
 			},
 		});
 		let nodes = [(ROOT_NODE_ID, root)].into();
-		let index = 0;
+		let reader_index = 0;
+		let node_index = 1000;
 		let handles = BTreeMap::default();
 		let state = State {
 			nodes,
-			index,
+			file_handle_index: reader_index,
+			node_index,
 			handles,
 		};
 		let state = tokio::sync::RwLock::new(state);
@@ -289,7 +295,21 @@ impl Server {
 			tokio::spawn(async move {
 				// Handle the request and get the response.
 				let unique = request.header.unique;
+				// Edge case: Don't send a reply if the kernel sends a FUSE_FORGET/FUSE_BATCH_FORGET request. We don't support these requests anyway (we cannot forget inodes, and duplicate inodes pointing to the same artifact are OK).
+				if [
+					sys::fuse_opcode::FUSE_FORGET,
+					sys::fuse_opcode::FUSE_BATCH_FORGET,
+				]
+				.contains(&request.header.opcode)
+				{
+					tracing::warn!(?request, "Ignoring FORGET/FORGET_BATCH request.");
+					return;
+				}
+
 				let result = server.handle_request(request).await;
+				if let Err(e) = &result {
+					tracing::error!(?e, "Request failed.");
+				}
 
 				// Serialize the response.
 				let response_bytes = match result {
@@ -345,7 +365,7 @@ impl Server {
 	}
 
 	/// Handle a request.
-	#[tracing::instrument(skip(self), ret)]
+	#[tracing::instrument(skip(self))]
 	async fn handle_request(&self, request: Request) -> Result<Response, i32> {
 		match request.data {
 			RequestData::Flush(data) => self.handle_flush_request(request.header, data).await,
@@ -584,20 +604,23 @@ impl Server {
 					.reader(self.inner.client.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
-				FileHandleData::File { reader }
+				FileHandleData::File {
+					node: node_id,
+					reader,
+				}
 			},
 			NodeKind::Symlink { .. } => FileHandleData::Symlink,
 		};
 		let file_handle_data = Arc::new(tokio::sync::RwLock::new(file_handle_data));
 
 		// Add the file handle to the state.
-		let file_handle = {
-			let mut state = self.inner.state.write().await;
-			state.index += 1;
-			let file_handle = FileHandle(state.index);
-			state.handles.insert(file_handle, file_handle_data);
-			file_handle
-		};
+		let file_handle = self.next_file_handle().await;
+		self.inner
+			.state
+			.write()
+			.await
+			.handles
+			.insert(file_handle, file_handle_data);
 
 		// Create the response.
 		let response = sys::fuse_open_out {
@@ -624,9 +647,11 @@ impl Server {
 
 	async fn handle_read_request(
 		&self,
-		_header: sys::fuse_in_header,
+		header: sys::fuse_in_header,
 		data: sys::fuse_read_in,
 	) -> Result<Response, i32> {
+		let node_id = NodeId(header.nodeid);
+
 		// Get the reader.
 		let file_handle = FileHandle(data.fh);
 		let file_handle_data = self
@@ -638,13 +663,21 @@ impl Server {
 			.get(&file_handle)
 			.ok_or(libc::ENOENT)?
 			.clone();
+
+		// Get the reader, sanity checking that the file handle was not corrupted.
 		let mut file_handle_data = file_handle_data.write().await;
-		let FileHandleData::File { reader } = &mut *file_handle_data else {
-			return Err(libc::EIO);
+		let blob_reader = match &mut *file_handle_data {
+			FileHandleData::File { node, .. } if node.0 != node_id.0 => {
+				tracing::error!(?file_handle, ?node, "File handle corrupted.");
+				return Err(libc::EIO);
+			},
+			FileHandleData::File { reader, .. } => reader,
+			FileHandleData::Directory => return Err(libc::EISDIR),
+			FileHandleData::Symlink => return Err(libc::EINVAL),
 		};
 
 		// Seek to the offset.
-		reader
+		blob_reader
 			.seek(SeekFrom::Start(data.offset))
 			.await
 			.map_err(|_| libc::EIO)?;
@@ -653,7 +686,7 @@ impl Server {
 		let mut bytes = vec![0u8; data.size.to_usize().unwrap()];
 		let mut size = 0;
 		while size < data.size.to_usize().unwrap() {
-			let n = reader
+			let n = blob_reader
 				.read(&mut bytes[size..])
 				.await
 				.map_err(|_| libc::EIO)?;
@@ -877,7 +910,7 @@ impl Server {
 		};
 
 		// Create the child node.
-		let node_id = NodeId(self.inner.state.read().await.nodes.len() as u64 + 1000);
+		let node_id = self.next_node_id().await;
 		let kind = match child_artifact {
 			tg::Artifact::Directory(directory) => {
 				let children = tokio::sync::RwLock::new(BTreeMap::default());
@@ -927,6 +960,22 @@ impl Server {
 			.insert(child_node.id, child_node.clone());
 
 		Ok(child_node)
+	}
+
+	// Create a new NodeId.
+	async fn next_node_id(&self) -> NodeId {
+		let mut state = self.inner.state.write().await;
+		let node_id = state.node_index;
+		state.node_index += 1;
+		NodeId(node_id)
+	}
+
+	// Create a new reader id.
+	async fn next_file_handle(&self) -> FileHandle {
+		let mut state = self.inner.state.write().await;
+		let reader_id = state.file_handle_index;
+		state.file_handle_index += 1;
+		FileHandle(reader_id)
 	}
 
 	#[allow(clippy::similar_names)]
