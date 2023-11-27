@@ -128,16 +128,15 @@ impl Module {
 					None => dependency.clone(),
 				};
 
-				// Get the lock.
-				let lock = tg::Lock::with_id(module.lock.clone());
+				// Get this module's lock.
+				let parent_lock = tg::Lock::with_id(module.lock.clone());
 
-				// Get the specified package from the dependencies.
-				let dependencies = lock.dependencies(client).await?;
-				let package = dependencies
-					.get(&dependency)
-					.cloned()
-					.wrap_err("Expected the dependencies to contain the dependency.")?
-					.package;
+				// Get the specified package and lock from the dependencies.
+				let dependencies = parent_lock.dependencies(client).await?;
+				let tg::lock::Entry { package, lock } =
+					dependencies.get(&dependency).cloned().ok_or_else(|| {
+						error!("Could not find {dependency} in lock ({parent_lock}).")
+					})?;
 
 				// Get the root module.
 				let module = Module::Normal(Normal {
