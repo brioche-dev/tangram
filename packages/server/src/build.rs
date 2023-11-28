@@ -59,12 +59,12 @@ impl Server {
 		// Attempt to get the build for the target.
 		if let Some(build_id) = self.try_get_build_for_target(id).await? {
 			let build = tg::build::Build::with_id(build_id.clone());
-			let outcome = build
-				.outcome(self)
-				.await
-				.wrap_err("Failed to get the outcome of the build.")?;
-			let retry = retry >= outcome.retry();
-			if !retry {
+			if let Some(object) = build.try_get_object(self).await? {
+				let retry = retry >= object.outcome.retry();
+				if !retry {
+					return Ok(build_id);
+				}
+			} else {
 				return Ok(build_id);
 			}
 		}
