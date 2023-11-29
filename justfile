@@ -14,11 +14,26 @@ orb_clean:
 orb_serve_dev:
 	cargo build --target aarch64-unknown-linux-gnu && orb sh -c "./target/aarch64-unknown-linux-gnu/debug/tg server run"
 
+orb_serve_release:
+	cargo build --target aarch64-unknown-linux-gnu --release && orb sh -c "./target/aarch64-unknown-linux-gnu/release/tg server run"
+
+orb_tg +ARGS:
+	cargo build --target aarch64-unknown-linux-gnu && orb sh -c "./target/aarch64-unknown-linux-gnu/debug/tg {{ARGS}}"
+
+orb_tgr +ARGS:
+	cargo build --target aarch64-unknown-linux-gnu --release && orb sh -c "./target/aarch64-unknown-linux-gnu/release/tg {{ARGS}}"
+
 runtime:
 	npm run -w @tangramdotdev/runtime build
 
 serve_dev:
 	TANGRAM_TRACING=tangram_http=info cargo run -- server run
 
+serve_release:
+	cargo build --release && ./target/release/tg server run
+
 tg +ARGS:
 	cargo run -- {{ARGS}}
+
+tgr +ARGS:
+	cargo run --release -- {{ARGS}}
