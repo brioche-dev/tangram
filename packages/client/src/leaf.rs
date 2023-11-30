@@ -26,7 +26,7 @@ pub struct Leaf {
 
 type State = object::State<Id, Object>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Object {
 	pub bytes: Bytes,
 }
@@ -147,11 +147,6 @@ impl Leaf {
 		Self::with_object(Object { bytes })
 	}
 
-	#[must_use]
-	pub fn empty() -> Self {
-		Self::new(Bytes::new())
-	}
-
 	pub async fn bytes(&self, client: &dyn Client) -> Result<&Bytes> {
 		let object = self.object(client).await?;
 		Ok(&object.bytes)
@@ -180,6 +175,12 @@ impl TryFrom<Data> for Object {
 
 	fn try_from(data: Data) -> std::result::Result<Self, Self::Error> {
 		Ok(Self { bytes: data.bytes })
+	}
+}
+
+impl Default for Leaf {
+	fn default() -> Self {
+		Self::with_object(Object::default())
 	}
 }
 

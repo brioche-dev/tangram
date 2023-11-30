@@ -36,16 +36,15 @@ impl Module {
 			// Load a module from a package.
 			Self::Normal(module) => {
 				// Get the package.
-				let artifact = tg::Artifact::with_id(module.package.clone());
+				let package = tg::Directory::with_id(module.package.clone());
 
 				// Load the module.
-				let directory = artifact.try_unwrap_directory_ref().unwrap();
-				let entry = directory.get(client, &module.path).await?;
+				let entry = package.get(client, &module.path).await?;
 				let file = entry
 					.try_unwrap_file_ref()
 					.ok()
 					.wrap_err("Expected a file.")?;
-				let text = file.contents(client).await?.text(client).await?;
+				let text = file.text(client).await?;
 
 				Ok(text)
 			},

@@ -33,14 +33,12 @@ pub mod jsonrpc;
 pub mod load;
 pub mod location;
 pub mod module;
-pub mod package;
 pub mod parse;
 pub mod position;
 pub mod range;
 pub mod references;
 pub mod rename;
 pub mod resolve;
-pub mod solve;
 pub mod symbols;
 pub mod syscall;
 pub mod transpile;
@@ -79,8 +77,8 @@ struct Inner {
 	/// A handle to the main tokio runtime.
 	main_runtime_handle: tokio::runtime::Handle,
 
-	/// The workspace roots.
-	workspace_roots: Arc<tokio::sync::RwLock<BTreeSet<PathBuf>>>,
+	/// The workspaces.
+	workspaces: Arc<tokio::sync::RwLock<BTreeSet<PathBuf>>>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -131,8 +129,8 @@ impl Server {
 		let (request_sender, request_receiver) =
 			tokio::sync::mpsc::unbounded_channel::<(Request, ResponseSender)>();
 
-		// Create the workspace roots.
-		let workspace_roots = Arc::new(tokio::sync::RwLock::new(BTreeSet::new()));
+		// Create the workspaces.
+		let workspaces = Arc::new(tokio::sync::RwLock::new(BTreeSet::new()));
 
 		// Create the inner.
 		let inner = Arc::new(Inner {
@@ -141,7 +139,7 @@ impl Server {
 			document_store,
 			request_sender,
 			main_runtime_handle,
-			workspace_roots,
+			workspaces,
 		});
 
 		// Spawn a thread to handle requests.
@@ -250,27 +248,6 @@ impl Server {
 				format!("file://{path}").parse().unwrap()
 			},
 			_ => module.clone().into(),
-		}
-	}
-
-	pub async fn create_package(
-		&self,
-		specifier: &package::Specifier,
-	) -> Result<(tg::Artifact, tg::Lock)> {
-		let client = self.inner.client.as_ref();
-		match specifier {
-			package::Specifier::Path(package_path) => {
-				// Internally, get_or_create_package may work correctly if you pass it the package path. However, the contract is to provide a module_path, so we handle checking for the root module in this function body to uphold that contract.
-				let module_path = package_path.join(package::ROOT_MODULE_FILE_NAME);
-				if !module_path.exists() {
-					return_error!("Missing root module.");
-				}
-				package::get_or_create(client, &module_path).await
-			},
-			package::Specifier::Registry(_) => {
-				let (artifact, lock, _) = package::create(client, specifier).await?;
-				Ok((artifact, lock))
-			},
 		}
 	}
 }

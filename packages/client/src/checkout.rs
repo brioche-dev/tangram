@@ -174,7 +174,7 @@ impl Artifact {
 		// Copy the blob to the path.
 		let permit = client.file_descriptor_semaphore().acquire().await;
 		tokio::io::copy(
-			&mut file.contents(client).await?.reader(client).await?,
+			&mut file.reader(client).await?,
 			&mut tokio::fs::File::create(path)
 				.await
 				.wrap_err("Failed to create the file.")?,

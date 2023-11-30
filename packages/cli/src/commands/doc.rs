@@ -1,5 +1,6 @@
 use super::PackageArgs;
 use crate::Cli;
+use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
 use tangram_lsp::ROOT_MODULE_FILE_NAME;
 
@@ -8,7 +9,7 @@ use tangram_lsp::ROOT_MODULE_FILE_NAME;
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: tangram_lsp::package::Specifier,
+	pub package: tg::Dependency,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -34,15 +35,15 @@ impl Cli {
 			(module, "tangram.d.ts")
 		} else {
 			// Create the package.
-			let (package, lock) = server.create_package(&args.package)
-				.await
-				.wrap_err("Failed to create the package.")?;
+			let (package, lock) = tangram_package::new(client, &args.package).await?;
+
 			// Create the module.
 			let module = tangram_lsp::Module::Normal(tangram_lsp::module::Normal {
 				package: package.id(client).await?.clone(),
 				path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 				lock: lock.id(client).await?.clone(),
 			});
+
 			(module, ROOT_MODULE_FILE_NAME)
 		};
 

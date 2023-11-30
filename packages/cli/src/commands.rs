@@ -3,7 +3,6 @@ use futures::FutureExt;
 use tangram_client as tg;
 use tangram_error::Result;
 
-mod add;
 mod autoenv;
 mod build;
 mod check;
@@ -23,7 +22,6 @@ mod lsp;
 mod new;
 mod outdated;
 mod publish;
-mod remove;
 mod run;
 mod search;
 mod server;
@@ -49,7 +47,6 @@ pub struct Args {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
-	Add(self::add::Args),
 	Autoenv(self::autoenv::Args),
 	Build(self::build::Args),
 	Check(self::check::Args),
@@ -69,7 +66,6 @@ pub enum Command {
 	New(self::new::Args),
 	Outdated(self::outdated::Args),
 	Publish(self::publish::Args),
-	Remove(self::remove::Args),
 	Run(self::run::Args),
 	Search(self::search::Args),
 	Server(self::server::Args),
@@ -102,7 +98,6 @@ impl Cli {
 	pub async fn run(&self, args: Args) -> Result<()> {
 		// Run the subcommand.
 		match args.command {
-			Command::Add(args) => self.command_add(args).boxed(),
 			Command::Autoenv(args) => self.command_autoenv(args).boxed(),
 			Command::Build(args) => self.command_build(args).boxed(),
 			Command::Check(args) => self.command_check(args).boxed(),
@@ -122,7 +117,6 @@ impl Cli {
 			Command::New(args) => self.command_new(args).boxed(),
 			Command::Outdated(args) => self.command_outdated(args).boxed(),
 			Command::Publish(args) => self.command_publish(args).boxed(),
-			Command::Remove(args) => self.command_remove(args).boxed(),
 			Command::Run(args) => self.command_run(args).boxed(),
 			Command::Search(args) => self.command_search(args).boxed(),
 			Command::Server(args) => self.command_server(args).boxed(),

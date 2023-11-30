@@ -1,7 +1,6 @@
 use crate::Cli;
 use std::path::PathBuf;
 use tangram_error::{Result, WrapErr};
-use tangram_lsp::package::ROOT_MODULE_FILE_NAME;
 
 /// Format the files in a package.
 #[derive(Debug, clap::Args)]
@@ -20,7 +19,7 @@ impl Cli {
 		// Create the language server.
 		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
 
-		let path = args.path.join(ROOT_MODULE_FILE_NAME);
+		let path = args.path.join(tangram_package::ROOT_MODULE_FILE_NAME);
 		let text = tokio::fs::read_to_string(&path)
 			.await
 			.wrap_err("Failed to read the file.")?;

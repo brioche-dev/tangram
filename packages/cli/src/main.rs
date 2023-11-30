@@ -122,7 +122,7 @@ impl Cli {
 		// Attempt to connect to the server.
 		let addr = Addr::Unix(self.path.join("socket"));
 		let user = self.user().await?.clone();
-		let client = tangram_http::client::Builder::new(addr, user).build();
+		let client = tangram_http::client::Builder::new(addr).user(user).build();
 		let mut connected = client.connect().await.is_ok();
 
 		// If this is a debug build, then require that the client is connected and has the same version as the server.
@@ -200,7 +200,10 @@ impl Cli {
 			return Ok(Some(config.clone()));
 		}
 		let path = self.path.join("config.json");
-		let config = if path.exists() {
+		let exists = tokio::fs::try_exists(&path)
+			.await
+			.wrap_err("Failed to check if the config file exists.")?;
+		let config = if exists {
 			let config = tokio::fs::read_to_string(path)
 				.await
 				.wrap_err("Failed to read the config file.")?;
@@ -228,7 +231,10 @@ impl Cli {
 			return Ok(Some(user.clone()));
 		}
 		let path = self.path.join("user.json");
-		let user = if path.exists() {
+		let exists = tokio::fs::try_exists(&path)
+			.await
+			.wrap_err("Failed to check if the user file exists.")?;
+		let user = if exists {
 			let config = tokio::fs::read_to_string(path)
 				.await
 				.wrap_err("Failed to read the user file.")?;

@@ -1,5 +1,5 @@
 use crate::Cli;
-use std::path::PathBuf;
+use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
 
 /// Publish a package.
@@ -7,7 +7,7 @@ use tangram_error::{Result, WrapErr};
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(short, long, default_value = ".")]
-	pub package: PathBuf,
+	pub package: tg::Dependency,
 }
 
 impl Cli {
@@ -18,16 +18,14 @@ impl Cli {
 		let user = self.user().await?;
 
 		// Create the package.
-		let specifier = tangram_lsp::package::Specifier::Path(args.package);
-		let lsp = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
-		let (package, _) = lsp.create_package(&specifier).await?;
+		let (package, _) = tangram_package::new(client, &args.package).await?;
 
 		// Get the package ID.
 		let id = package.id(client).await?;
 
 		// Publish the package.
 		client
-			.publish_package(user.as_ref(), &id)
+			.publish_package(user.as_ref(), id)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

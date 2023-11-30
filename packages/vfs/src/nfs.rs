@@ -825,7 +825,7 @@ impl Server {
 		}
 
 		match &parent_node.kind {
-			NodeKind::Root { children , .. }
+			NodeKind::Root { children, .. }
 			| NodeKind::Directory { children, .. }
 			| NodeKind::NamedAttributeDirectory { children, .. } => {
 				if let Some(child) = children.read().await.get(name).cloned() {
@@ -880,7 +880,7 @@ impl Server {
 					Err(e) => {
 						tracing::error!(?e, "Failed to get file references.");
 						return Err(nfsstat4::NFS4ERR_IO);
-					}
+					},
 				};
 				let mut references = Vec::new();
 				for artifact in file_references {
@@ -912,27 +912,20 @@ impl Server {
 				}
 			},
 			Either::Left(tg::Artifact::File(file)) => {
-				let contents = file
-					.contents(self.inner.client.as_ref())
-					.await
-					.map_err(|e| {
-						tracing::error!(?e, "Failed to get file contents.");
-						nfsstat4::NFS4ERR_IO
-					})?;
-				let size = contents
-					.size(self.inner.client.as_ref())
-					.await
-					.map_err(|e| {
-						tracing::error!(?e, "Failed to get size of file's contents.");
-						nfsstat4::NFS4ERR_IO
-					})?;
+				let size = file.size(self.inner.client.as_ref()).await.map_err(|e| {
+					tracing::error!(?e, "Failed to get size of file's contents.");
+					nfsstat4::NFS4ERR_IO
+				})?;
 				NodeKind::File {
 					file,
 					size,
 					attributes,
 				}
 			},
-			Either::Left(tg::Artifact::Symlink(symlink)) => NodeKind::Symlink { symlink, attributes },
+			Either::Left(tg::Artifact::Symlink(symlink)) => NodeKind::Symlink {
+				symlink,
+				attributes,
+			},
 			Either::Right(data) => NodeKind::NamedAttribute { data },
 		};
 
@@ -968,12 +961,15 @@ impl Server {
 		Ok(Some(child_node))
 	}
 
-	async fn get_or_create_attributes_node(&self, parent_node: Arc<Node>) -> Result<Arc<Node>, nfsstat4> {
+	async fn get_or_create_attributes_node(
+		&self,
+		parent_node: Arc<Node>,
+	) -> Result<Arc<Node>, nfsstat4> {
 		match &parent_node.kind {
-			NodeKind::Root {  attributes , .. } |
-			NodeKind::Directory { attributes , ..} |
-			NodeKind::File { attributes, .. } |
-			NodeKind::Symlink {  attributes , .. } => {
+			NodeKind::Root { attributes, .. }
+			| NodeKind::Directory { attributes, .. }
+			| NodeKind::File { attributes, .. }
+			| NodeKind::Symlink { attributes, .. } => {
 				let mut attributes = attributes.write().await;
 				if let Some(attributes) = attributes.as_ref() {
 					return Ok(attributes.clone());
@@ -985,17 +981,22 @@ impl Server {
 				let node = Node {
 					id,
 					parent,
-					kind: NodeKind::NamedAttributeDirectory { children }
+					kind: NodeKind::NamedAttributeDirectory { children },
 				};
 
 				let node = Arc::new(node);
 				attributes.replace(node.clone());
-				self.inner.state.write().await.nodes.insert(id, node.clone());
+				self.inner
+					.state
+					.write()
+					.await
+					.nodes
+					.insert(id, node.clone());
 				Ok(node)
 			},
-			_ => Err(nfsstat4::NFS4ERR_NOTSUPP)
+			_ => Err(nfsstat4::NFS4ERR_NOTSUPP),
 		}
-	} 
+	}
 
 	async fn next_node_id(&self) -> u64 {
 		self.inner.state.read().await.nodes.len().to_u64().unwrap() + 1000
@@ -1046,12 +1047,8 @@ impl Server {
 		let stateid = stateid4::new(arg.seqid, index, false);
 
 		if let NodeKind::File { file, .. } = &self.get_node(fh).await.unwrap().kind {
-			let Ok(blob) = file.contents(self.inner.client.as_ref()).await else {
-				tracing::error!("Failed to get file's content.");
-				return OPEN4res::Error(nfsstat4::NFS4ERR_IO);
-			};
-			let Ok(reader) = blob.reader(self.inner.client.as_ref()).await else {
-				tracing::error!("Failed to create blob reader.");
+			let Ok(reader) = file.reader(self.inner.client.as_ref()).await else {
+				tracing::error!("Failed to create the file reader.");
 				return OPEN4res::Error(nfsstat4::NFS4ERR_IO);
 			};
 
@@ -1109,11 +1106,9 @@ impl Server {
 		};
 		let attributes_node = match self.get_or_create_attributes_node(node).await {
 			Ok(node) => node,
-			Err(status) => return OPENATTR4res {
-				status
-			}
+			Err(status) => return OPENATTR4res { status },
 		};
-		ctx.current_file_handle = Some(nfs_fh4( attributes_node.id));
+		ctx.current_file_handle = Some(nfs_fh4(attributes_node.id));
 		OPENATTR4res {
 			status: nfsstat4::NFS4_OK,
 		}
@@ -1193,12 +1188,8 @@ impl Server {
 			|| !lock_state_exists
 		{
 			// We need to create a reader just for this request.
-			let Ok(blob) = file.contents(self.inner.client.as_ref()).await else {
-				tracing::error!("Failed to get file's content.");
-				return READ4res::Error(nfsstat4::NFS4ERR_IO);
-			};
-			let Ok(mut reader) = blob.reader(self.inner.client.as_ref()).await else {
-				tracing::error!("Failed to create blob reader.");
+			let Ok(mut reader) = file.reader(self.inner.client.as_ref()).await else {
+				tracing::error!("Failed to create the file reader.");
 				return READ4res::Error(nfsstat4::NFS4ERR_IO);
 			};
 			if let Err(e) = reader.seek(std::io::SeekFrom::Start(arg.offset)).await {
@@ -1207,7 +1198,7 @@ impl Server {
 			}
 			let mut data = vec![0u8; read_size];
 			if let Err(e) = reader.read_exact(&mut data).await {
-				tracing::error!(?e, "Failed to read from file.");
+				tracing::error!(?e, "Failed to read from the file.");
 				return READ4res::Error(e.into());
 			}
 			let eof = (arg.offset + arg.count.to_u64().unwrap()) >= *file_size;

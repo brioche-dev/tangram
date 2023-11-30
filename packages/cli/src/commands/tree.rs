@@ -1,4 +1,5 @@
 use crate::Cli;
+use tangram_client as tg;
 use tangram_error::{return_error, Result};
 
 /// Print the dependency tree of a package.
@@ -6,7 +7,7 @@ use tangram_error::{return_error, Result};
 #[command(verbatim_doc_comment)]
 pub struct Args {
 	#[arg(default_value = ".")]
-	pub package: tangram_lsp::package::Specifier,
+	pub package: tg::Dependency,
 }
 
 impl Cli {

@@ -18,7 +18,7 @@ pub struct Args {
 
 	/// The package to build.
 	#[arg(short, long, default_value = ".")]
-	pub package: tangram_lsp::package::Specifier,
+	pub package: tg::Dependency,
 
 	#[command(flatten)]
 	pub package_args: PackageArgs,
@@ -44,8 +44,7 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the package.
-		let lsp = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
-		let (package, lock) = lsp.create_package(&args.package).await?;
+		let (package, lock) = tangram_package::new(client, &args.package).await?;
 
 		// Create the target.
 		let env = [(
@@ -55,11 +54,11 @@ impl Cli {
 		.into();
 		let args_ = Vec::new();
 		let host = tg::System::js();
-		let path = tangram_lsp::package::ROOT_MODULE_FILE_NAME
+		let path = tangram_package::ROOT_MODULE_FILE_NAME
 			.to_owned()
 			.try_into()
 			.unwrap();
-		let executable = tg::Symlink::new(Some(package), path).into();
+		let executable = tg::Symlink::new(Some(package.into()), path).into();
 		let target = tg::target::Builder::new(host, executable)
 			.lock(lock)
 			.name(args.target.clone())

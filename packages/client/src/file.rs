@@ -204,8 +204,20 @@ impl File {
 		Ok(self.object(client).await?.references.as_slice())
 	}
 
+	pub async fn reader(&self, client: &dyn Client) -> Result<blob::Reader> {
+		self.contents(client).await?.reader(client).await
+	}
+
 	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
 		self.contents(client).await?.size(client).await
+	}
+
+	pub async fn bytes(&self, client: &dyn Client) -> Result<Vec<u8>> {
+		self.contents(client).await?.bytes(client).await
+	}
+
+	pub async fn text(&self, client: &dyn Client) -> Result<String> {
+		self.contents(client).await?.text(client).await
 	}
 }
 

@@ -7,7 +7,7 @@ use tangram_error::WrapErr;
 static TANGRAM_ARTIFACTS_PATH: Lazy<crate::Path> =
 	Lazy::new(|| ".tangram/artifacts".parse().unwrap());
 
-static TANGRAM_RUN_SUBPATH: Lazy<crate::Path> = Lazy::new(|| ".tangram/run".parse().unwrap());
+static TANGRAM_RUN_PATH: Lazy<crate::Path> = Lazy::new(|| ".tangram/run".parse().unwrap());
 
 impl Artifact {
 	/// Bundle an artifact with all of its recursive references at `.tangram/artifacts`.
@@ -40,7 +40,7 @@ impl Artifact {
 
 			// If the artifact is an executable file, create a directory and place the executable at `.tangram/run`.
 			Artifact::File(file) if file.executable(client).await? => directory::Builder::default()
-				.add(client, &TANGRAM_RUN_SUBPATH, file.clone().into())
+				.add(client, &TANGRAM_RUN_PATH, file.clone().into())
 				.await?
 				.build()
 				.into(),

@@ -13,6 +13,6 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_update(&self, _args: Args) -> Result<()> {
-		return_error!("Not yet implemented.");
+		return_error!("This command is not yet implemented.");
 	}
 }

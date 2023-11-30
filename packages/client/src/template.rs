@@ -4,7 +4,7 @@ use futures::{stream::FuturesOrdered, Future, TryStreamExt};
 use itertools::Itertools;
 use std::{borrow::Cow, path::PathBuf};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Template {
 	pub components: Vec<Component>,
 }
@@ -15,13 +15,6 @@ pub struct Data {
 }
 
 impl Template {
-	#[must_use]
-	pub fn empty() -> Self {
-		Self {
-			components: Vec::new(),
-		}
-	}
-
 	#[must_use]
 	pub fn components(&self) -> &[Component] {
 		&self.components

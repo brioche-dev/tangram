@@ -700,10 +700,10 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
+	async fn search_packages(&self, query: &str) -> Result<Vec<String>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri(format!("/v1/registry/packages/search?query={query}"))
+			.uri(format!("/v1/packages/search?query={query}"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -720,35 +720,36 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_package(&self, name: &str) -> Result<Option<tg::Package>> {
-		let request = http::request::Builder::default()
-			.method(http::Method::GET)
-			.uri(format!("/v1/registry/packages/{name}"))
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		let bytes = response
-			.collect()
-			.await
-			.wrap_err("Failed to collect the response body.")?
-			.to_bytes();
-		let response =
-			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-		Ok(response)
-	}
-
-	async fn get_package_version(
+	async fn try_get_package(
 		&self,
-		name: &str,
-		version: &str,
-	) -> Result<Option<tg::artifact::Id>> {
-		tracing::debug!(?name, ?version, "Requesting package version from API.");
+		dependency: &tg::Dependency,
+	) -> Result<Option<tg::directory::Id>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri(format!("/v1/registry/packages/{name}/versions/{version}"))
+			.uri(format!("/v1/packages/{dependency}"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let response =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		Ok(response)
+	}
+
+	async fn try_get_package_versions(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<Option<Vec<String>>> {
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(format!("/v1/packages/{dependency}/versions"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -765,10 +766,13 @@ impl tg::Client for Client {
 		Ok(Some(id))
 	}
 
-	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {
+	async fn try_get_package_metadata(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<Option<tg::package::Metadata>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri(format!("/v1/packages/{id}/metadata"))
+			.uri(format!("/v1/packages/{dependency}/metadata"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -785,10 +789,13 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_package_dependencies(&self, id: &tg::Id) -> Result<Option<Vec<tg::Dependency>>> {
+	async fn try_get_package_dependencies(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<Option<Vec<tg::Dependency>>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri(format!("/v1/packages/{id}/dependencies"))
+			.uri(format!("/v1/packages/{dependency}/dependencies"))
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -805,10 +812,10 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn publish_package(&self, user: Option<&tg::User>, id: &tg::artifact::Id) -> Result<()> {
+	async fn publish_package(&self, user: Option<&tg::User>, id: &tg::directory::Id) -> Result<()> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri("/v1/registry/packages");
+			.uri("/v1/packages");
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
 			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
@@ -891,17 +898,23 @@ impl tg::Client for Client {
 
 impl Builder {
 	#[must_use]
-	pub fn new(addr: Addr, user: Option<tg::User>) -> Self {
+	pub fn new(addr: Addr) -> Self {
 		Self {
 			addr,
 			tls: None,
-			user,
+			user: None,
 		}
 	}
 
 	#[must_use]
 	pub fn tls(mut self, tls: bool) -> Self {
 		self.tls = Some(tls);
+		self
+	}
+
+	#[must_use]
+	pub fn user(mut self, user: Option<tg::User>) -> Self {
+		self.user = user;
 		self
 	}
 

@@ -596,11 +596,7 @@ impl Server {
 			},
 			NodeKind::Directory { .. } => FileHandleData::Directory,
 			NodeKind::File { file, .. } => {
-				let contents = file
-					.contents(self.inner.client.as_ref())
-					.await
-					.map_err(|_| libc::EIO)?;
-				let reader = contents
+				let reader = file
 					.reader(self.inner.client.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
@@ -920,11 +916,7 @@ impl Server {
 				}
 			},
 			tg::Artifact::File(file) => {
-				let contents = file
-					.contents(self.inner.client.as_ref())
-					.await
-					.map_err(|_| libc::EIO)?;
-				let size = contents
+				let size = file
 					.size(self.inner.client.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;

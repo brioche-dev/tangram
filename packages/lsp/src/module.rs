@@ -50,7 +50,7 @@ pub struct Normal {
 	pub lock: tg::lock::Id,
 
 	/// The module's package.
-	pub package: tg::artifact::Id,
+	pub package: tg::directory::Id,
 
 	/// The module's path.
 	pub path: tg::Path,
@@ -62,15 +62,15 @@ impl From<Module> for Url {
 		let data = hex::encode(serde_json::to_string(&value).unwrap());
 
 		let path = match value {
-			Module::Library(library) => format!("/{}", library.path),
+			Module::Library(library) => library.path.to_string(),
 			Module::Document(document) => {
-				format!("/{}/{}", document.package_path.display(), document.path)
+				format!("{}/{}", document.package_path.display(), document.path)
 			},
-			Module::Normal(normal) => format!("/{}", normal.path),
+			Module::Normal(normal) => normal.path.to_string(),
 		};
 
 		// Create the URL.
-		format!("tangram://{data}{path}").parse().unwrap()
+		format!("tangram://{data}/{path}").parse().unwrap()
 	}
 }
 
@@ -86,10 +86,10 @@ impl TryFrom<Url> for Module {
 		// Get the domain.
 		let data = value.domain().wrap_err("The URL must have a domain.")?;
 
-		// Decode the domain.
+		// Decode the data.
 		let data = hex::decode(data).wrap_err("Failed to deserialize the path as hex.")?;
 
-		// Deserialize the domain.
+		// Deserialize the data.
 		let module = serde_json::from_slice(&data).wrap_err("Failed to deserialize the module.")?;
 
 		Ok(module)

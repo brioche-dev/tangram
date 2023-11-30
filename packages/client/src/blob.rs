@@ -142,15 +142,10 @@ impl Blob {
 	#[must_use]
 	pub fn new(children: Vec<branch::Child>) -> Self {
 		match children.len() {
-			0 => Self::empty(),
+			0 => Self::default(),
 			1 => children.into_iter().next().unwrap().blob,
 			_ => Branch::new(children).into(),
 		}
-	}
-
-	#[must_use]
-	pub fn empty() -> Self {
-		Leaf::empty().into()
 	}
 
 	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
@@ -338,6 +333,12 @@ impl TryFrom<object::Id> for Id {
 			object::Id::Branch(value) => Ok(value.into()),
 			_ => return_error!("Expected a blob ID."),
 		}
+	}
+}
+
+impl Default for Blob {
+	fn default() -> Self {
+		Self::Leaf(Leaf::default())
 	}
 }
 

@@ -21,8 +21,7 @@ impl Cli {
 			println!("No packages matched your query.");
 		}
 		for package in packages {
-			let name = package.name;
-			println!("{name}");
+			println!("{package}");
 		}
 
 		Ok(())

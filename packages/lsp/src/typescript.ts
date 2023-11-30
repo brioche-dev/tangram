@@ -1,5 +1,4 @@
 import { assert } from "./assert.ts";
-import { log } from "./log.ts";
 import { Module } from "./module.ts";
 import * as syscall from "./syscall.ts";
 import ts from "typescript";

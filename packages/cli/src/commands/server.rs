@@ -75,14 +75,14 @@ impl Cli {
 			},
 			Command::Status => {
 				let addr = Addr::Unix(self.path.join("socket"));
-				let client = tangram_http::client::Builder::new(addr, None).build();
+				let client = tangram_http::client::Builder::new(addr).build();
 				let status = client.status().await?;
 				let status = serde_json::to_string_pretty(&status).unwrap();
 				println!("{status}");
 			},
 			Command::Stop => {
 				let addr = Addr::Unix(self.path.join("socket"));
-				let client = tangram_http::client::Builder::new(addr, None).build();
+				let client = tangram_http::client::Builder::new(addr).build();
 				client.stop().await?;
 			},
 			Command::Run(args) => {
@@ -118,8 +118,9 @@ impl Cli {
 			API_URL.parse().unwrap()
 		};
 		let tls = url.scheme() == "https";
-		let client = tangram_http::client::Builder::new(url.try_into()?, user)
+		let client = tangram_http::client::Builder::new(url.try_into()?)
 			.tls(tls)
+			.user(user)
 			.build();
 		let remote = if args.no_remote {
 			None

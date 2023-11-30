@@ -8,7 +8,7 @@ use sourcemap::SourceMap;
 use std::{cell::RefCell, future::poll_fn, num::NonZeroI32, rc::Rc, str::FromStr, task::Poll};
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_lsp::{package::Ext, Import};
+use tangram_package::Ext;
 
 mod convert;
 mod error;
@@ -36,7 +36,7 @@ type Futures = FuturesUnordered<
 struct Module {
 	module: tangram_lsp::Module,
 	source_map: Option<SourceMap>,
-	metadata: Option<tg::Metadata>,
+	metadata: Option<tg::package::Metadata>,
 	v8_identity_hash: NonZeroI32,
 	v8_module: v8::Global<v8::Module>,
 }
@@ -243,7 +243,7 @@ fn host_import_module_dynamically_callback<'s>(
 
 		// Get the import.
 		let import = specifier.to_rust_string_lossy(scope);
-		let import = match Import::from_str(&import) {
+		let import = match tangram_lsp::Import::from_str(&import) {
 			Ok(import) => import,
 			Err(error) => {
 				let exception = error::to_exception(scope, &error);
@@ -312,14 +312,15 @@ fn resolve_module_callback<'s>(
 
 	// Get the import.
 	let specifier = specifier.to_rust_string_lossy(scope);
-	let import = match Import::from_str(&specifier).wrap_err("Failed to parse the import.") {
-		Ok(import) => import,
-		Err(error) => {
-			let exception = error::to_exception(scope, &error);
-			scope.throw_exception(exception);
-			return None;
-		},
-	};
+	let import =
+		match tangram_lsp::Import::from_str(&specifier).wrap_err("Failed to parse the import.") {
+			Ok(import) => import,
+			Err(error) => {
+				let exception = error::to_exception(scope, &error);
+				scope.throw_exception(exception);
+				return None;
+			},
+		};
 
 	// Resolve the module.
 	let Some(module) = resolve_module(scope, &module, &import) else {
@@ -338,7 +339,7 @@ fn resolve_module_callback<'s>(
 fn resolve_module(
 	scope: &mut v8::HandleScope,
 	module: &tangram_lsp::Module,
-	import: &Import,
+	import: &tangram_lsp::Import,
 ) -> Option<tangram_lsp::Module> {
 	let context = scope.get_current_context();
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
@@ -474,7 +475,7 @@ fn load_module<'s>(
 		let module = module.clone();
 		async move {
 			let module = module.unwrap_normal_ref();
-			let package = tg::Directory::with_id(module.package.clone().try_into().unwrap());
+			let package = tg::Directory::with_id(module.package.clone());
 			let metadata = package.metadata(client.as_ref()).await.ok();
 			sender.send(metadata).unwrap();
 		}

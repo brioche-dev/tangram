@@ -183,7 +183,7 @@ impl Directory {
 		let mut artifact: Artifact = self.clone().into();
 
 		// Track the current path.
-		let mut current_path = crate::Path::empty();
+		let mut current_path = crate::Path::default();
 
 		// Handle each path component.
 		for component in path.components() {
@@ -192,7 +192,7 @@ impl Directory {
 				return Ok(None);
 			};
 
-			// Update the current subpath.
+			// Update the current path.
 			current_path = current_path.join(component.clone().into());
 
 			// Get the entry. If it doesn't exist, return `None`.

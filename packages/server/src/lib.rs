@@ -12,7 +12,7 @@ use std::{
 use tangram_client as tg;
 use tangram_error::{Result, Wrap, WrapErr};
 use tangram_http::net::Addr;
-use tangram_lsp::package::Ext;
+use tangram_package::Ext;
 use tg::util::rmrf;
 
 mod build;
@@ -426,7 +426,7 @@ impl tg::Client for Server {
 		self.finish_build(user, id, outcome).await
 	}
 
-	async fn search_packages(&self, query: &str) -> Result<Vec<tg::Package>> {
+	async fn search_packages(&self, query: &str) -> Result<Vec<String>> {
 		self.inner
 			.remote
 			.as_ref()
@@ -435,29 +435,49 @@ impl tg::Client for Server {
 			.await
 	}
 
-	async fn get_package(&self, name: &str) -> Result<Option<tg::Package>> {
-		self.inner
-			.remote
-			.as_ref()
-			.wrap_err("The server does not have a remote.")?
-			.get_package(name)
-			.await
-	}
-
-	async fn get_package_version(
+	async fn try_get_package(
 		&self,
-		name: &str,
-		version: &str,
-	) -> Result<Option<tg::artifact::Id>> {
+		dependency: &tg::Dependency,
+	) -> Result<Option<tg::directory::Id>> {
 		self.inner
 			.remote
 			.as_ref()
 			.wrap_err("The server does not have a remote.")?
-			.get_package_version(name, version)
+			.try_get_package(dependency)
 			.await
 	}
 
-	async fn publish_package(&self, user: Option<&tg::User>, id: &tg::artifact::Id) -> Result<()> {
+	async fn try_get_package_versions(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<Option<Vec<String>>> {
+		self.inner
+			.remote
+			.as_ref()
+			.wrap_err("The server does not have a remote.")?
+			.try_get_package_versions(dependency)
+			.await
+	}
+
+	async fn try_get_package_metadata(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<Option<tg::package::Metadata>> {
+		let package = tg::Directory::with_id(self.get_package(dependency).await?);
+		let metadata = package.metadata(self).await?;
+		Ok(Some(metadata))
+	}
+
+	async fn try_get_package_dependencies(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<Option<Vec<tg::Dependency>>> {
+		let package = tg::Directory::with_id(self.get_package(dependency).await?);
+		let dependencies = package.dependencies(self).await?;
+		Ok(Some(dependencies))
+	}
+
+	async fn publish_package(&self, user: Option<&tg::User>, id: &tg::directory::Id) -> Result<()> {
 		let remote = self
 			.inner
 			.remote
@@ -468,22 +488,6 @@ impl tg::Client for Server {
 			.await
 			.wrap_err("Failed to push the package.")?;
 		remote.publish_package(user, id).await
-	}
-
-	async fn get_package_metadata(&self, id: &tg::Id) -> Result<Option<tg::package::Metadata>> {
-		// Get the package.
-		let package =
-			tg::Directory::with_id(id.clone().try_into().wrap_err("Invalid Directory ID.")?);
-		let metadata = package.metadata(self).await?;
-		Ok(Some(metadata))
-	}
-
-	async fn get_package_dependencies(&self, id: &tg::Id) -> Result<Option<Vec<tg::Dependency>>> {
-		// Get the package.
-		let package =
-			tg::Directory::with_id(id.clone().try_into().wrap_err("Invalid Directory ID.")?);
-		let dependencies = package.dependencies(self).await?;
-		Ok(Some(dependencies))
 	}
 
 	async fn create_login(&self) -> Result<tg::user::Login> {

@@ -1,27 +1,8 @@
 pub use self::{
-	artifact::Artifact,
-	blob::Blob,
-	branch::Branch,
-	build::Build,
-	checksum::Checksum,
-	dependency::Dependency,
-	directory::Directory,
-	file::File,
-	id::Id,
-	leaf::Leaf,
-	lock::Lock,
-	lockfile::Lockfile,
-	mutation::Mutation,
-	object::Object,
-	package::{Metadata, Package},
-	path::Path,
-	symlink::Symlink,
-	system::System,
-	target::Target,
-	template::Template,
-	tracker::Tracker,
-	user::User,
-	value::Value,
+	artifact::Artifact, blob::Blob, branch::Branch, build::Build, checksum::Checksum,
+	dependency::Dependency, directory::Directory, file::File, id::Id, leaf::Leaf, lock::Lock,
+	mutation::Mutation, object::Object, path::Path, symlink::Symlink, system::System,
+	target::Target, template::Template, tracker::Tracker, user::User, value::Value,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -42,7 +23,6 @@ pub mod file;
 pub mod id;
 pub mod leaf;
 pub mod lock;
-pub mod lockfile;
 pub mod mutation;
 pub mod object;
 pub mod package;
@@ -175,20 +155,61 @@ pub trait Client: Send + Sync + 'static {
 		outcome: build::Outcome,
 	) -> Result<()>;
 
-	async fn search_packages(&self, query: &str) -> Result<Vec<package::Package>>;
-
-	async fn get_package(&self, name: &str) -> Result<Option<package::Package>>;
-
-	async fn get_package_version(&self, name: &str, version: &str) -> Result<Option<artifact::Id>>;
-
-	async fn get_package_metadata(&self, id: &Id) -> Result<Option<package::Metadata>>;
-
-	async fn get_package_dependencies(
+	async fn create_package_and_lock(
 		&self,
-		id: &Id,
-	) -> Result<Option<Vec<dependency::Dependency>>>;
+		_dependency: &Dependency,
+	) -> Result<(directory::Id, lock::Id)> {
+		todo!()
+	}
 
-	async fn publish_package(&self, user: Option<&User>, id: &artifact::Id) -> Result<()>;
+	async fn search_packages(&self, query: &str) -> Result<Vec<String>>;
+
+	async fn get_package(&self, dependency: &Dependency) -> Result<directory::Id> {
+		Ok(self
+			.try_get_package(dependency)
+			.await?
+			.wrap_err("Failed to get the package.")?)
+	}
+
+	async fn try_get_package(&self, dependency: &Dependency) -> Result<Option<directory::Id>>;
+
+	async fn get_package_versions(&self, dependency: &Dependency) -> Result<Vec<String>> {
+		Ok(self
+			.try_get_package_versions(dependency)
+			.await?
+			.wrap_err("Failed to get the package versions.")?)
+	}
+
+	async fn try_get_package_versions(
+		&self,
+		dependency: &Dependency,
+	) -> Result<Option<Vec<String>>>;
+
+	async fn get_package_metadata(&self, dependency: &Dependency) -> Result<package::Metadata> {
+		Ok(self
+			.try_get_package_metadata(dependency)
+			.await?
+			.wrap_err("Failed to get the package metadata.")?)
+	}
+
+	async fn try_get_package_metadata(
+		&self,
+		dependency: &Dependency,
+	) -> Result<Option<package::Metadata>>;
+
+	async fn get_package_dependencies(&self, dependency: &Dependency) -> Result<Vec<Dependency>> {
+		Ok(self
+			.try_get_package_dependencies(dependency)
+			.await?
+			.wrap_err("Failed to get the package dependencies.")?)
+	}
+
+	async fn try_get_package_dependencies(
+		&self,
+		dependency: &Dependency,
+	) -> Result<Option<Vec<Dependency>>>;
+
+	async fn publish_package(&self, user: Option<&User>, id: &directory::Id) -> Result<()>;
 
 	async fn create_login(&self) -> Result<user::Login>;
 

@@ -1,5 +1,7 @@
 use crate::{Error, Result};
 use derive_more::{TryUnwrap, Unwrap};
+use std::path::PathBuf;
+use tangram_error::WrapErr;
 
 /// Any path.
 #[derive(
@@ -30,11 +32,6 @@ pub enum Component {
 }
 
 impl Path {
-	#[must_use]
-	pub fn empty() -> Self {
-		Self { components: vec![] }
-	}
-
 	#[must_use]
 	pub fn is_empty(&self) -> bool {
 		self.components.is_empty()
@@ -75,7 +72,7 @@ impl Path {
 
 	#[must_use]
 	pub fn normalize(self) -> Self {
-		let mut path = Self::empty();
+		let mut path = Self::default();
 		for component in self.components {
 			if component == Component::Parent
 				&& matches!(path.components.last(), Some(Component::Normal(_)))
@@ -137,7 +134,7 @@ impl std::str::FromStr for Path {
 	type Err = Error;
 
 	fn from_str(mut s: &str) -> std::result::Result<Self, Self::Err> {
-		let mut path = Self::empty();
+		let mut path = Self::default();
 		if s.starts_with('/') {
 			path.components.push(Component::Root);
 			s = &s[1..];
@@ -185,5 +182,23 @@ impl FromIterator<Component> for Path {
 		Self {
 			components: iter.into_iter().collect(),
 		}
+	}
+}
+
+impl From<Path> for PathBuf {
+	fn from(value: Path) -> Self {
+		value.to_string().into()
+	}
+}
+
+impl TryFrom<PathBuf> for Path {
+	type Error = Error;
+
+	fn try_from(value: PathBuf) -> std::prelude::v1::Result<Self, Self::Error> {
+		value
+			.as_os_str()
+			.to_str()
+			.wrap_err("The path must be valid UTF-8.")?
+			.parse()
 	}
 }

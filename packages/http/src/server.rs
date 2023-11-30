@@ -226,19 +226,15 @@ impl Server {
 			},
 
 			// Packages
-			(http::Method::GET, ["v1", "registry", "packages", "search"]) => self
+			(http::Method::GET, ["v1", "packages", "search"]) => self
 				.handle_search_packages_request(request)
 				.map(Some)
 				.boxed(),
-			(http::Method::GET, ["v1", "registry", "packages", _]) => {
+			(http::Method::GET, ["v1", "packages", _]) => {
 				self.handle_get_package_request(request).map(Some).boxed()
 			},
-			(http::Method::GET, ["v1", "registry", "packages", _, "versions", _]) => self
+			(http::Method::GET, ["v1", "packages", _, "versions", _]) => self
 				.handle_get_package_version_request(request)
-				.map(Some)
-				.boxed(),
-			(http::Method::POST, ["v1", "registry", "packages"]) => self
-				.handle_publish_package_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::GET, ["v1", "packages", _, "metadata"]) => self
@@ -247,6 +243,10 @@ impl Server {
 				.boxed(),
 			(http::Method::GET, ["v1", "packages", _, "dependencies"]) => self
 				.handle_get_package_dependencies_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::POST, ["v1", "packages"]) => self
+				.handle_publish_package_request(request)
 				.map(Some)
 				.boxed(),
 
@@ -785,15 +785,14 @@ impl Server {
 			serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
 
 		// Perform the search.
-		let search_results = self
+		let packages = self
 			.inner
 			.client
 			.search_packages(&search_params.query)
 			.await?;
 
 		// Create the response.
-		let body =
-			serde_json::to_vec(&search_results).wrap_err("Failed to serialize the response.")?;
+		let body = serde_json::to_vec(&packages).wrap_err("Failed to serialize the response.")?;
 		let response = http::Response::builder().body(full(body)).unwrap();
 
 		Ok(response)
@@ -805,29 +804,25 @@ impl Server {
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, _, "packages", name] = path_components.as_slice() else {
+		let [_, _, "packages", dependency] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
+		let dependency = dependency
+			.parse()
+			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package.
-		let package = self.inner.client.get_package(name).await?;
+		let Some(id) = self.inner.client.try_get_package(&dependency).await? else {
+			return Ok(not_found());
+		};
 
-		match package {
-			Some(package) => {
-				// Create the body.
-				let body =
-					serde_json::to_vec(&package).wrap_err("Failed to serialize the package.")?;
+		// Create the body.
+		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the ID.")?;
 
-				// Create the response.
-				let response = http::Response::builder().body(full(body)).unwrap();
+		// Create the response.
+		let response = http::Response::builder().body(full(body)).unwrap();
 
-				Ok(response)
-			},
-			None => Ok(http::Response::builder()
-				.status(http::StatusCode::NOT_FOUND)
-				.body(empty())
-				.unwrap()),
-		}
+		Ok(response)
 	}
 
 	async fn handle_get_package_version_request(
@@ -836,12 +831,19 @@ impl Server {
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, _, "packages", name, "versions", version] = path_components.as_slice() else {
+		let [_, _, "packages", dependency, "versions"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
+		let dependency = dependency
+			.parse()
+			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package.
-		let source_artifact_hash = self.inner.client.get_package_version(name, version).await?;
+		let source_artifact_hash = self
+			.inner
+			.client
+			.try_get_package_versions(&dependency)
+			.await?;
 
 		// Create the response.
 		let response = if let Some(source_artifact_hash) = source_artifact_hash {
@@ -855,47 +857,25 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_publish_package_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		// Get the user.
-		let user = self.try_get_user_from_request(&request).await?;
-
-		// Read the body.
-		let bytes = request
-			.into_body()
-			.collect()
-			.await
-			.wrap_err("Failed to read the body.")?
-			.to_bytes();
-		let package_id = serde_json::from_slice(&bytes).wrap_err("Invalid request.")?;
-
-		// Create the package.
-		self.inner
-			.client
-			.publish_package(user.as_ref(), &package_id)
-			.await?;
-
-		Ok(ok())
-	}
-
 	async fn handle_get_package_metadata_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "packages", id, "metadata"] = path_components.as_slice() else {
+		let [_, "packages", dependency, "metadata"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
-
-		let Ok(package_id) = id.parse::<tg::Id>() else {
-			return Ok(bad_request());
-		};
+		let dependency = dependency
+			.parse()
+			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package metadata.
-		let metadata = self.inner.client.get_package_metadata(&package_id).await?;
+		let metadata = self
+			.inner
+			.client
+			.try_get_package_metadata(&dependency)
+			.await?;
 
 		match metadata {
 			Some(metadata) => {
@@ -921,19 +901,18 @@ impl Server {
 	) -> Result<http::Response<Outgoing>> {
 		// Read the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, "packages", id, "dependencies"] = path_components.as_slice() else {
+		let [_, "packages", dependency, "dependencies"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
-
-		let Ok(package_id) = id.parse::<tg::Id>() else {
-			return Ok(bad_request());
-		};
+		let dependency = dependency
+			.parse()
+			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package dependencies.
 		let dependencies = self
 			.inner
 			.client
-			.get_package_dependencies(&package_id)
+			.try_get_package_dependencies(&dependency)
 			.await?;
 
 		match dependencies {
@@ -952,6 +931,31 @@ impl Server {
 				.body(empty())
 				.unwrap()),
 		}
+	}
+
+	async fn handle_publish_package_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		// Get the user.
+		let user = self.try_get_user_from_request(&request).await?;
+
+		// Read the body.
+		let bytes = request
+			.into_body()
+			.collect()
+			.await
+			.wrap_err("Failed to read the body.")?
+			.to_bytes();
+		let package_id = serde_json::from_slice(&bytes).wrap_err("Invalid request.")?;
+
+		// Create the package.
+		self.inner
+			.client
+			.publish_package(user.as_ref(), &package_id)
+			.await?;
+
+		Ok(ok())
 	}
 
 	async fn handle_get_tracker_request(

@@ -1,64 +1,96 @@
-use crate::{Error, Result};
-use itertools::Itertools;
-use tangram_error::{error, return_error};
+use crate::{directory, Error, Result};
+use tangram_error::WrapErr;
 
 /// A dependency.
 #[derive(
-	Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+	Clone,
+	Debug,
+	Default,
+	Eq,
+	Hash,
+	Ord,
+	PartialEq,
+	PartialOrd,
+	serde::Deserialize,
+	serde::Serialize,
 )]
 #[serde(into = "String", try_from = "String")]
 pub struct Dependency {
+	/// The package's ID.
+	pub id: Option<directory::Id>,
+
 	/// The name of the package.
 	pub name: Option<String>,
-
-	/// The package's version.
-	pub version: Option<String>,
 
 	/// The package's path.
 	pub path: Option<crate::Path>,
 
-	/// Whether or not this dependency is an island.
-	pub island: Option<bool>,
+	/// The package's version.
+	pub version: Option<String>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Params {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub id: Option<directory::Id>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub name: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub path: Option<crate::Path>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub version: Option<String>,
 }
 
 impl Dependency {
 	#[must_use]
-	pub fn with_path(path: crate::Path) -> Self {
+	pub fn with_id(id: directory::Id) -> Self {
 		Self {
-			name: None,
-			version: None,
-			path: Some(path),
-			island: None,
+			id: Some(id),
+			..Default::default()
 		}
 	}
 
 	#[must_use]
-	pub fn with_name_and_version(name: String, version: Option<String>) -> Self {
+	pub fn with_name_and_version(name: String, version: String) -> Self {
 		Self {
 			name: Some(name),
-			version,
-			path: None,
-			island: None,
+			version: Some(version),
+			..Default::default()
+		}
+	}
+
+	#[must_use]
+	pub fn with_path(path: crate::Path) -> Self {
+		Self {
+			path: Some(path),
+			..Default::default()
 		}
 	}
 }
 
 impl std::fmt::Display for Dependency {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let name_and_version = [self.name.as_deref(), self.version.as_deref()]
-			.into_iter()
-			.flatten()
-			.join("@");
-		let parameters = [
-			self.path.as_ref().map(|s| format!("path=./{s}")),
-			self.island.as_ref().map(|s| format!("island={s}")),
-		]
-		.into_iter()
-		.flatten()
-		.join(",");
-		write!(f, "{name_and_version}")?;
-		if !parameters.is_empty() {
-			write!(f, "?{parameters}")?;
+		let mut dependency = self.clone();
+		if let Some(id) = dependency.id.take() {
+			write!(f, "{id}")?;
+		} else if let Some(name) = dependency.name.take() {
+			write!(f, "{name}")?;
+			if let Some(version) = dependency.version.take() {
+				write!(f, "@{version}")?;
+			}
+		} else if let Some(path) = dependency.path.take() {
+			if path
+				.components()
+				.first()
+				.map_or(false, |component| component.try_unwrap_normal_ref().is_ok())
+			{
+				write!(f, "./")?;
+			}
+			write!(f, "{path}")?;
+		}
+		let params = serde_urlencoded::to_string(Params::from(dependency)).unwrap();
+		if !params.is_empty() {
+			write!(f, "?{params}")?;
 		}
 		Ok(())
 	}
@@ -68,50 +100,57 @@ impl std::str::FromStr for Dependency {
 	type Err = Error;
 
 	fn from_str(value: &str) -> Result<Dependency> {
-		// Syntax: <name>@<version>?path=<path>,island=<boolean>
-		let mut components = value.split('?');
-		let mut name_and_version = components.next().unwrap().split('@');
-		let parameters = components.next().into_iter().flat_map(|s| {
-			let parameters = s.split(',').map(|s| -> Result<(&str, &str)> {
-				let mut components = s.split('=');
-				let name = components.next().unwrap();
-				let value = components.next().ok_or(error!("Expected a value."))?;
-				Ok((name, value))
-			});
-			parameters
-		});
+		let mut dependency = Dependency::default();
 
-		let name = match name_and_version.next() {
-			Some(name) if name.is_empty() => None,
-			Some(name) => Some(name.into()),
-			None => None,
+		// Split the string.
+		let split = value.split_once('?');
+		let path = match split {
+			Some((path, _)) if !path.is_empty() => Some(path),
+			Some(_) => None,
+			None => (!value.is_empty()).then_some(value),
+		};
+		let query = match split {
+			Some((_, query)) if !query.is_empty() => Some(query),
+			_ => None,
 		};
 
-		let version = name_and_version.next().map(String::from);
-		let mut path = None;
-		let mut island = None;
-
-		for parameter in parameters {
-			let (name, value) = parameter?;
-			match name {
-				"path" => {
-					path = Some(value.parse()?);
-				},
-				"island" => {
-					island = Some(value.parse().map_err(|_| error!("Expected a boolean."))?);
-				},
-				name => {
-					return_error!("Unknown parameter: {name}.");
-				},
+		// Parse the path.
+		if let Some(path) = path {
+			if let Ok(id) = path.parse() {
+				dependency.id = Some(id);
+			} else if path.starts_with('.') {
+				dependency.path = Some(path.parse()?);
+			} else {
+				let split = path.split_once('@');
+				let name = match split {
+					Some((name, _)) if !name.is_empty() => Some(name),
+					Some(_) => None,
+					None => (!path.is_empty()).then_some(path),
+				};
+				if let Some(name) = name {
+					dependency.name = Some(name.to_owned());
+				}
+				let version = match split {
+					Some((_, version)) if !version.is_empty() => Some(version),
+					_ => None,
+				};
+				if let Some(version) = version {
+					dependency.version = Some(version.to_owned());
+				}
 			}
 		}
 
-		Ok(Dependency {
-			name,
-			version,
-			path,
-			island,
-		})
+		// Parse the query.
+		if let Some(query) = query {
+			let params = serde_urlencoded::from_str::<Params>(query)
+				.wrap_err("Failed to deserialize the query.")?;
+			dependency.id = dependency.id.or(params.id);
+			dependency.name = dependency.name.or(params.name);
+			dependency.path = dependency.path.or(params.path);
+			dependency.version = dependency.version.or(params.version);
+		}
+
+		Ok(dependency)
 	}
 }
 
@@ -129,105 +168,116 @@ impl From<Dependency> for String {
 	}
 }
 
+impl From<Dependency> for Params {
+	fn from(value: Dependency) -> Self {
+		Self {
+			id: value.id,
+			name: value.name,
+			path: value.path,
+			version: value.version,
+		}
+	}
+}
+
+impl From<Params> for Dependency {
+	fn from(value: Params) -> Self {
+		Self {
+			id: value.id,
+			name: value.name,
+			path: value.path,
+			version: value.version,
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use crate::Dependency;
 
 	#[test]
 	fn display() {
-		let dependency = Dependency {
+		let left = Dependency {
+			id: None,
 			name: Some("foo".into()),
+			path: None,
 			version: None,
+		};
+		let right = "foo";
+		assert_eq!(left.to_string(), right);
+
+		let left = Dependency {
+			id: None,
+			name: Some("foo".into()),
 			path: None,
-			island: None,
-		};
-		assert_eq!(dependency.to_string(), "foo");
-		let dependency = Dependency {
-			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
-			path: None,
-			island: None,
 		};
-		assert_eq!(dependency.to_string(), "foo@1.2.3");
-		let dependency = Dependency {
+		let right = "foo@1.2.3";
+		assert_eq!(left.to_string(), right);
+
+		let left = Dependency {
+			id: None,
 			name: Some("foo".into()),
-			version: None,
-			path: None,
-			island: None,
-		};
-		assert_eq!(dependency.to_string(), "foo");
-		let dependency = Dependency {
-			name: Some("foo".into()),
+			path: Some("path/to/foo".parse().unwrap()),
 			version: Some("1.2.3".into()),
-			path: Some("./path/to/foo".parse().unwrap()),
-			island: None,
 		};
-		assert_eq!(dependency.to_string(), "foo@1.2.3?path=./path/to/foo");
-		let dependency = Dependency {
-			name: Some("foo".into()),
-			version: Some("1.2.3".into()),
-			path: Some("./path/to/foo".parse().unwrap()),
-			island: Some(true),
-		};
-		assert_eq!(
-			dependency.to_string(),
-			"foo@1.2.3?path=./path/to/foo,island=true"
-		);
-		let dependency = Dependency {
+		let right = "foo@1.2.3?path=path%2Fto%2Ffoo";
+		assert_eq!(left.to_string(), right);
+
+		let left = Dependency {
+			id: None,
 			name: None,
+			path: Some("path/to/foo".parse().unwrap()),
 			version: None,
-			path: Some("./path/to/foo".parse().unwrap()),
-			island: None,
 		};
-		assert_eq!(dependency.to_string(), "?path=./path/to/foo");
+		let right = "./path/to/foo";
+		assert_eq!(left.to_string(), right);
 	}
 
 	#[test]
 	fn parse() {
-		let dependency = Dependency {
+		let left: Dependency = "foo".parse().unwrap();
+		let right = Dependency {
+			id: None,
 			name: Some("foo".into()),
+			path: None,
 			version: None,
+		};
+		assert_eq!(left, right);
+
+		let left: Dependency = "foo@1.2.3".parse().unwrap();
+		let right = Dependency {
+			id: None,
+			name: Some("foo".into()),
 			path: None,
-			island: None,
-		};
-		assert_eq!(dependency, "foo".parse().unwrap());
-		let dependency = Dependency {
-			name: Some("foo".into()),
 			version: Some("1.2.3".into()),
-			path: None,
-			island: None,
 		};
-		assert_eq!(dependency, "foo@1.2.3".parse().unwrap());
-		let dependency = Dependency {
+		assert_eq!(left, right);
+
+		let left: Dependency = "foo@1.2.3?path=path%2Fto%2Ffoo".parse().unwrap();
+		let right = Dependency {
+			id: None,
 			name: Some("foo".into()),
-			version: None,
-			path: None,
-			island: None,
-		};
-		assert_eq!(dependency, "foo".parse().unwrap());
-		let dependency = Dependency {
-			name: Some("foo".into()),
+			path: Some("path/to/foo".parse().unwrap()),
 			version: Some("1.2.3".into()),
-			path: Some("./path/to/foo".parse().unwrap()),
-			island: None,
 		};
-		assert_eq!(dependency, "foo@1.2.3?path=./path/to/foo".parse().unwrap());
-		let dependency = Dependency {
-			name: Some("foo".into()),
-			version: Some("1.2.3".into()),
-			path: Some("./path/to/foo".parse().unwrap()),
-			island: Some(true),
-		};
-		assert_eq!(
-			dependency,
-			"foo@1.2.3?path=./path/to/foo,island=true".parse().unwrap()
-		);
-		let dependency = Dependency {
+		assert_eq!(left, right);
+
+		let left: Dependency = "./path/to/foo".parse().unwrap();
+		let right = Dependency {
+			id: None,
 			name: None,
+			path: Some("path/to/foo".parse().unwrap()),
 			version: None,
-			path: Some("./path/to/foo".parse().unwrap()),
-			island: None,
 		};
-		assert_eq!(dependency, "?path=./path/to/foo".parse().unwrap());
+		assert_eq!(left, right);
+
+		let left: Dependency = "?path=path%2Fto%2Ffoo".parse().unwrap();
+		let right = Dependency {
+			id: None,
+			name: None,
+			path: Some("path/to/foo".parse().unwrap()),
+			version: None,
+		};
+		assert_eq!(left, right);
 	}
 }

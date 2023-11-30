@@ -7,7 +7,7 @@ use tangram_client as tg;
 use tangram_error::{error, Result, WrapErr};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Output {
+pub struct Analysis {
 	pub metadata: Option<tg::package::Metadata>,
 	pub imports: HashSet<Import, fnv::FnvBuildHasher>,
 	pub includes: HashSet<tg::Path, fnv::FnvBuildHasher>,
@@ -21,7 +21,7 @@ pub struct Error {
 
 impl Module {
 	#[tracing::instrument(skip(text))]
-	pub fn analyze(text: String) -> Result<Output> {
+	pub fn analyze(text: String) -> Result<Analysis> {
 		// Parse the text.
 		let parse::Output {
 			program,
@@ -44,7 +44,7 @@ impl Module {
 		}
 
 		// Create the output.
-		let output = Output {
+		let output = Analysis {
 			metadata: visitor.metadata,
 			imports: visitor.imports,
 			includes: visitor.includes,
@@ -322,7 +322,7 @@ mod tests {
 			.into_iter()
 			.map(|include| include.parse().unwrap())
 			.collect();
-		let right = Output {
+		let right = Analysis {
 			metadata: Some(metadata),
 			imports,
 			includes,

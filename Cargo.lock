@@ -3065,6 +3065,7 @@ dependencies = [
  "tangram_error",
  "tangram_http",
  "tangram_lsp",
+ "tangram_package",
  "tangram_server",
  "tokio",
  "tokio-util",
@@ -3100,6 +3101,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sha2",
  "tangram_error",
  "tar",
@@ -3193,6 +3195,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "tangram_package"
+version = "0.0.0"
+dependencies = [
+ "async-recursion",
+ "async-trait",
+ "fnv",
+ "futures",
+ "im",
+ "itertools",
+ "semver 1.0.20",
+ "serde",
+ "serde_json",
+ "tangram_client",
+ "tangram_error",
+ "tangram_lsp",
+ "tangram_server",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "tangram_runtime"
 version = "0.0.0"
 dependencies = [
@@ -3215,6 +3238,7 @@ dependencies = [
  "tangram_client",
  "tangram_error",
  "tangram_lsp",
+ "tangram_package",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -3244,6 +3268,7 @@ dependencies = [
  "tangram_error",
  "tangram_http",
  "tangram_lsp",
+ "tangram_package",
  "tangram_runtime",
  "tangram_vfs",
  "tempfile",

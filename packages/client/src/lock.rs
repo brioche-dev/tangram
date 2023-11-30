@@ -1,5 +1,5 @@
 pub use self::data::Data;
-use crate::{id, object, return_error, Artifact, Client, Dependency, Error, Result, WrapErr};
+use crate::{id, object, return_error, Client, Dependency, Directory, Error, Result, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
@@ -29,19 +29,19 @@ pub struct Lock {
 
 type State = object::State<Id, Object>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Object {
 	pub dependencies: BTreeMap<Dependency, Entry>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Entry {
-	pub package: Artifact,
+	pub package: Directory,
 	pub lock: Lock,
 }
 
 pub mod data {
-	use crate::{artifact, Dependency};
+	use crate::{directory, Dependency};
 	use std::collections::BTreeMap;
 
 	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -51,7 +51,7 @@ pub mod data {
 
 	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 	pub struct Entry {
-		pub package: artifact::Id,
+		pub package: directory::Id,
 		pub lock: super::Id,
 	}
 }
@@ -222,9 +222,15 @@ impl TryFrom<data::Entry> for Entry {
 
 	fn try_from(value: data::Entry) -> std::result::Result<Self, Self::Error> {
 		Ok(Self {
-			package: Artifact::with_id(value.package),
+			package: Directory::with_id(value.package),
 			lock: Lock::with_id(value.lock),
 		})
+	}
+}
+
+impl Default for Lock {
+	fn default() -> Self {
+		Self::with_object(Object::default())
 	}
 }
 
