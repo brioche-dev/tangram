@@ -469,14 +469,11 @@ async fn create_lockfile(
 		return_error!("{report}");
 	}
 
-	for (package, path_dependencies) in context.path_dependencies {
-
-	}
-
-	// Create the set of locks for path dependencies.
+	// Create the set of locks for all dependencies.
 	let mut locks = Vec::new();
-	create_lockfile_inner(client, package_with_path_dependencies, &mut locks).await?;
-	let locks = locks.into_iter().collect();
+	for package in context.path_dependencies.keys().cloned() {
+		create_lockfile_inner(client, package, &context, &solution, &mut locks).await?;
+	}
 	Ok(Lockfile { locks })
 }
 
@@ -484,18 +481,44 @@ async fn create_lockfile(
 #[async_recursion]
 async fn create_lockfile_inner(
 	client: &dyn tg::Client,
-	package_with_path_dependencies: &PackageWithPathDependencies,
-	locks: &mut Vec<Lock>,
+	package: tg::directory::Id,
+	context: &Context,
+	solution: &Solution,
+	locks: &mut Vec<Lock>
 ) -> Result<usize> {
-	let mut dependencies = BTreeMap::default();
-	for (dependency, package_with_path_dependencies) in
-		&package_with_path_dependencies.path_dependencies
-	{
-		let dependency = dependency.clone();
-		let package = None;
-		let lock = create_lockfile_inner(client, package_with_path_dependencies, locks).await?;
-		let entry = Entry { package, lock };
-		dependencies.insert(dependency, entry);
+	let analysis = context.analysis.get(&package)
+		.wrap_err("Missing package in solution.")?;
+	let path_dependencies = context.path_dependencies.get(&package);
+	let mut dependencies = BTreeMap::new();
+	for dependency in &analysis.dependencies {
+		let entry = match (dependency.path.as_ref(), path_dependencies) {
+			(Some(path), Some(path_dependencies)) if path_dependencies.contains_key(path) => {
+				// Resolve by path.
+				let resolved = path_dependencies.get(path).unwrap();
+				let lock = create_lockfile_inner(client, resolved.clone(), context, solution, locks).await?;
+				Entry {
+					package: Some(resolved.clone()),
+					lock
+				}
+
+			}
+			_ => {
+				// Resolve by dependant.
+				let dependant = Dependant {
+					package: package.clone(),
+					dependency: dependency.clone()
+				};
+				let Some(Mark::Permanent(Ok(resolved))) = solution.partial.get(&dependant) else {
+					return_error!("Missing solution for {dependant:?}.");
+				};
+				let lock = create_lockfile_inner(client, resolved.clone(), context, solution, locks).await?;
+				Entry {
+					package: Some(resolved.clone()),
+					lock
+				}
+			}
+		};
+		dependencies.insert(dependency.clone(), entry);
 	}
 	let lock = Lock { dependencies };
 	let index = if let Some(index) = locks.iter().position(|l| l == &lock) {
@@ -504,7 +527,6 @@ async fn create_lockfile_inner(
 		locks.push(lock);
 		locks.len() - 1
 	};
-
 	Ok(index)
 }
 
