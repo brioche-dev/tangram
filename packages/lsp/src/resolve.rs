@@ -29,7 +29,7 @@ impl Module {
 			(Self::Document(document), Import::Module(path)) => {
 				// Resolve the module path.
 				let package_path = document.package_path.clone();
-				let module_subpath = document
+				let module_path = document
 					.path
 					.clone()
 					.parent()
@@ -37,18 +37,18 @@ impl Module {
 					.normalize();
 
 				// Ensure that the module exists.
-				let module_path = package_path.join(module_subpath.to_string());
-				let exists = tokio::fs::try_exists(&module_path)
+				let module_absolute_path = package_path.join(module_path.to_string());
+				let exists = tokio::fs::try_exists(&module_absolute_path)
 					.await
 					.wrap_err("Failed to determine if the path exists.")?;
 				if !exists {
-					let path = module_path.display();
+					let path = module_absolute_path.display();
 					return_error!(r#"Could not find a module at path "{path}"."#);
 				}
 
 				// Create the document.
 				let document =
-					Document::new(document_store.unwrap(), package_path, module_subpath).await?;
+					Document::new(document_store.unwrap(), package_path, module_path).await?;
 
 				// Create the module.
 				let module = Self::Document(document);
@@ -66,7 +66,6 @@ impl Module {
 					.parent()
 					.join(dependency.path.as_ref().unwrap().clone())
 					.normalize();
-
 				let package_path = document.package_path.join(dependency_path.to_string());
 				let package_path = tokio::fs::canonicalize(package_path)
 					.await
@@ -86,17 +85,16 @@ impl Module {
 			},
 
 			(Self::Document(document), Import::Dependency(dependency)) => {
-				// Convert the module dependency to a package dependency.
-				let module_subpath = document.path.clone();
-				let dependency = match &dependency.path {
-					Some(dependency_path) => tg::Dependency::with_path(
-						module_subpath
-							.parent()
-							.join(dependency_path.clone())
-							.normalize(),
-					),
-					None => dependency.clone(),
-				};
+				// Make the dependency path relative to the package.
+				let mut dependency = dependency.clone();
+				if let Some(path) = dependency.path.as_mut() {
+					*path = document
+						.path
+						.clone()
+						.parent()
+						.join(path.clone())
+						.normalize();
+				}
 
 				// Get the lock for the document's package.
 				let path = document.package_path.clone().try_into()?;
@@ -132,27 +130,21 @@ impl Module {
 			},
 
 			(Self::Normal(module), Import::Dependency(dependency)) => {
-				// Convert the module dependency to a package dependency.
-				let module_subpath = module.path.clone();
-				let dependency = match &dependency.path {
-					Some(dependency_path) => tg::Dependency::with_path(
-						module_subpath
-							.parent()
-							.join(dependency_path.clone())
-							.normalize(),
-					),
-					None => dependency.clone(),
-				};
+				// Make the dependency path relative to the package.
+				let mut dependency = dependency.clone();
+				if let Some(path) = dependency.path.as_mut() {
+					*path = module.path.clone().parent().join(path.clone()).normalize();
+				}
 
 				// Get this module's lock.
 				let parent_lock = tg::Lock::with_id(module.lock.clone());
 
 				// Get the specified package and lock from the dependencies.
 				let dependencies = parent_lock.dependencies(client).await?;
-				let tg::lock::Entry { package, lock } =
-					dependencies.get(&dependency).cloned().ok_or_else(|| {
-						error!("Could not find {dependency} in lock ({parent_lock}).")
-					})?;
+				let tg::lock::Entry { package, lock } = dependencies
+					.get(&dependency)
+					.cloned()
+					.wrap_err_with(|| format!(r#"Failed to resolve "{dependency}"."#))?;
 
 				// Create the module.
 				let module = Module::Normal(Normal {

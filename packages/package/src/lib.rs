@@ -1,5 +1,6 @@
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use futures::stream::{FuturesUnordered, TryStreamExt};
 use itertools::Itertools;
 use std::{
 	collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -7,6 +8,7 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
+use tg::Client;
 
 /// The file name of the root module in a package.
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
@@ -35,7 +37,7 @@ pub struct Entry {
 #[derive(Clone, Debug)]
 struct PackageWithPathDependencies {
 	pub package: tg::Directory,
-	pub path_dependencies: BTreeMap<tg::Path, PackageWithPathDependencies>,
+	pub path_dependencies: BTreeMap<tg::Dependency, PackageWithPathDependencies>,
 }
 
 #[async_trait]
@@ -174,8 +176,9 @@ pub async fn new(
 			let lockfile: Lockfile = serde_json::from_slice(&lockfile)
 				.wrap_err("Failed to deserialize the lockfile.")?;
 
-			// TODO: Verify that the lockfile's dependencies match the package with path dependencies.
-			let matches = false;
+			// Verify that the lockfile's dependencies match the package with path dependencies.
+			let matches =
+				lockfile_matches(client, &package_with_path_dependencies, &lockfile).await?;
 			if !matches {
 				break 'a None;
 			}
@@ -261,17 +264,20 @@ async fn package_with_path_dependencies_for_path_inner(
 	let mut path_dependencies = BTreeMap::default();
 
 	// Visit each module.
-	while let Some(module_subpath) = queue.pop_front() {
-		// Get the module's path.
-		let module_path = path.join(module_subpath.to_string());
+	while let Some(module_path) = queue.pop_front() {
+		// Get the module's absolute path.
+		let module_absolute_path = path.join(module_path.to_string());
+		let module_absolute_path = tokio::fs::canonicalize(&module_absolute_path)
+			.await
+			.wrap_err("Failed to canonicalize the module path.")?;
 
 		// Add the module to the package directory.
-		let artifact = tg::Artifact::check_in(client, &module_path).await?;
-		package = package.add(client, &module_subpath, artifact).await?;
+		let artifact = tg::Artifact::check_in(client, &module_absolute_path).await?;
+		package = package.add(client, &module_path, artifact).await?;
 
 		// Get the module's text.
 		let permit = client.file_descriptor_semaphore().acquire().await;
-		let text = tokio::fs::read_to_string(&module_path)
+		let text = tokio::fs::read_to_string(&module_absolute_path)
 			.await
 			.wrap_err("Failed to read the module.")?;
 		drop(permit);
@@ -283,64 +289,73 @@ async fn package_with_path_dependencies_for_path_inner(
 		// Handle the includes.
 		for include_path in analysis.includes {
 			// Get the included artifact's path in the package.
-			let included_artifact_subpath = module_subpath
+			let included_artifact_path = module_path
 				.clone()
 				.parent()
 				.join(include_path.clone())
 				.normalize();
 
 			// Get the included artifact's path.
-			let included_artifact_path = path.join(included_artifact_subpath.to_string());
+			let included_artifact_absolute_path = path.join(included_artifact_path.to_string());
 
 			// Check in the artifact at the included path.
-			let included_artifact = tg::Artifact::check_in(client, &included_artifact_path).await?;
+			let included_artifact =
+				tg::Artifact::check_in(client, &included_artifact_absolute_path).await?;
 
 			// Add the included artifact to the directory.
 			package = package
-				.add(client, &included_artifact_subpath, included_artifact)
+				.add(client, &included_artifact_path, included_artifact)
 				.await?;
 		}
 
-		// Handle the imports.
+		// Recurse into the path dependencies.
 		for import in &analysis.imports {
-			match import {
-				// Handle a path dependency.
-				tangram_lsp::Import::Dependency(dependency) if dependency.path.is_some() => {
-					let module_dependency_path = dependency.path.as_ref().unwrap();
-					let package_dependency_path = module_subpath
+			if let tangram_lsp::Import::Dependency(
+				dependency @ tg::Dependency { path: Some(_), .. },
+			) = import
+			{
+				// Make the dependency path relative to the package.
+				let mut dependency = dependency.clone();
+				dependency.path.replace(
+					module_path
 						.clone()
 						.parent()
-						.join(module_dependency_path.clone())
-						.normalize();
-					let dependency_path = path.join(package_dependency_path.to_string());
-					let dependency_path = tokio::fs::canonicalize(&dependency_path)
-						.await
-						.wrap_err("Failed to canonicalize the dependency path.")?;
-					let child = package_with_path_dependencies_for_path_inner(
-						client,
-						&dependency_path,
-						visited,
-					)
-					.await?;
-					path_dependencies.insert(package_dependency_path, child);
-				},
-				_ => (),
+						.join(dependency.path.as_ref().unwrap().clone())
+						.normalize(),
+				);
+
+				// Get the dependency's absolute path.
+				let dependency_path = path.join(dependency.path.as_ref().unwrap().to_string());
+				let dependency_absolute_path = tokio::fs::canonicalize(&dependency_path)
+					.await
+					.wrap_err("Failed to canonicalize the dependency path.")?;
+
+				// Recurse into the path dependency.
+				let child = package_with_path_dependencies_for_path_inner(
+					client,
+					&dependency_absolute_path,
+					visited,
+				)
+				.await?;
+
+				// Insert the path dependency.
+				path_dependencies.insert(dependency, child);
 			}
 		}
 
 		// Add the module path to the visited set.
-		visited_module_paths.insert(module_subpath.clone());
+		visited_module_paths.insert(module_path.clone());
 
 		// Add the unvisited path imports to the queue.
 		for import in &analysis.imports {
 			if let tangram_lsp::Import::Module(import) = import {
-				let imported_module_subpath = module_subpath
+				let imported_module_path = module_path
 					.clone()
 					.parent()
 					.join(import.clone())
 					.normalize();
-				if !visited_module_paths.contains(&imported_module_subpath) {
-					queue.push_back(imported_module_subpath);
+				if !visited_module_paths.contains(&imported_module_path) {
+					queue.push_back(imported_module_path);
 				}
 			}
 		}
@@ -364,6 +379,54 @@ async fn package_with_path_dependencies_for_path_inner(
 	Ok(package_with_path_dependencies)
 }
 
+async fn lockfile_matches(
+	client: &dyn Client,
+	package_with_path_dependencies: &PackageWithPathDependencies,
+	lockfile: &Lockfile,
+) -> Result<bool> {
+	lockfile_matches_inner(client, package_with_path_dependencies, lockfile, 0).await
+}
+
+#[async_recursion]
+async fn lockfile_matches_inner(
+	client: &dyn Client,
+	package_with_path_dependencies: &PackageWithPathDependencies,
+	lockfile: &Lockfile,
+	index: usize,
+) -> Result<bool> {
+	// Get the package's dependencies.
+	let dependencies = package_with_path_dependencies
+		.package
+		.dependencies(client)
+		.await?;
+
+	// Get the package's lock from the lockfile.
+	let lock = lockfile.locks.get(index).wrap_err("Invalid lockfile.")?;
+
+	// Verify that the dependencies match.
+	if !itertools::equal(lock.dependencies.keys(), dependencies.iter()) {
+		return Ok(false);
+	}
+
+	// Recurse into the path dependencies.
+	package_with_path_dependencies
+		.path_dependencies
+		.keys()
+		.map(|dependency| {
+			let dependencies = &dependencies;
+			async move {
+				let index = lock.dependencies.get(dependency).unwrap().lock;
+				lockfile_matches_inner(client, package_with_path_dependencies, lockfile, index)
+					.await
+			}
+		})
+		.collect::<FuturesUnordered<_>>()
+		.try_all(|matches| async move { matches })
+		.await?;
+
+	Ok(true)
+}
+
 async fn create_lockfile(
 	client: &dyn tg::Client,
 	package_with_path_dependencies: &PackageWithPathDependencies,
@@ -385,7 +448,7 @@ async fn create_lockfile_inner(
 	for (dependency, package_with_path_dependencies) in
 		&package_with_path_dependencies.path_dependencies
 	{
-		let dependency = tg::Dependency::with_path(dependency.clone());
+		let dependency = dependency.clone();
 		let package = None;
 		let lock = create_lockfile_inner(client, package_with_path_dependencies, locks).await?;
 		let entry = Entry { package, lock };
@@ -1188,12 +1251,9 @@ fn create_lock_inner(
 				let lock = create_lock_inner(package_with_path_dependencies, lockfile, entry.lock)?;
 				(package, lock)
 			} else {
-				let Some(path) = dependency.path.as_ref() else {
-					return_error!("Missing path dependency.");
-				};
 				let package_with_path_dependencies = package_with_path_dependencies
 					.path_dependencies
-					.get(path)
+					.get(dependency)
 					.wrap_err("Missing path dependency.")?;
 				let package = package_with_path_dependencies.package.clone();
 				let lock = create_lock_inner(package_with_path_dependencies, lockfile, entry.lock)?;
