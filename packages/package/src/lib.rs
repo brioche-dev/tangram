@@ -374,6 +374,7 @@ async fn create_lockfile(
 	Ok(Lockfile { locks })
 }
 
+#[allow(clippy::only_used_in_recursion)]
 #[async_recursion]
 async fn create_lockfile_inner(
 	client: &dyn tg::Client,
@@ -385,13 +386,7 @@ async fn create_lockfile_inner(
 		&package_with_path_dependencies.path_dependencies
 	{
 		let dependency = tg::Dependency::with_path(dependency.clone());
-		let package = Some(
-			package_with_path_dependencies
-				.package
-				.id(client)
-				.await?
-				.clone(),
-		);
+		let package = None;
 		let lock = create_lockfile_inner(client, package_with_path_dependencies, locks).await?;
 		let entry = Entry { package, lock };
 		dependencies.insert(dependency, entry);
