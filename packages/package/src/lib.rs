@@ -19,6 +19,7 @@ pub const LOCKFILE_FILE_NAME: &str = "tangram.lock";
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Lockfile {
+	pub root: usize,
 	pub locks: Vec<Lock>,
 }
 
@@ -457,6 +458,7 @@ async fn create_lockfile(
 	let mut analysis = BTreeMap::new();
 	let mut path_dependencies = BTreeMap::new();
 	let mut working_set = im::Vector::new();
+
 	scan_package_with_path_dependencies(
 		client,
 		package_with_path_dependencies,
@@ -497,37 +499,64 @@ async fn create_lockfile(
 
 	// Create the set of locks for all dependencies.
 	let mut locks = Vec::new();
-	for package in context.path_dependencies.keys().cloned() {
-		create_lockfile_inner(client, package, &context, &solution, &mut locks).await?;
-	}
-	Ok(Lockfile { locks })
+
+	let root = create_lockfile_inner(
+		client,
+		package_with_path_dependencies,
+		&context,
+		&solution,
+		&mut locks,
+	)
+	.await?;
+
+	Ok(Lockfile { root, locks })
 }
 
 #[allow(clippy::only_used_in_recursion)]
 #[async_recursion]
 async fn create_lockfile_inner(
 	client: &dyn tg::Client,
-	package: tg::directory::Id,
+	package_with_path_dependencies: &PackageWithPathDependencies,
 	context: &Context,
 	solution: &Solution,
 	locks: &mut Vec<Lock>,
 ) -> Result<usize> {
+	// Get the cached analysis.
+	let package = package_with_path_dependencies
+		.package
+		.id(client)
+		.await?
+		.clone();
 	let analysis = context
 		.analysis
 		.get(&package)
 		.wrap_err("Missing package in solution.")?;
 	let path_dependencies = context.path_dependencies.get(&package);
+
+	// Recursively create locks.
 	let mut dependencies = BTreeMap::new();
 	for dependency in &analysis.dependencies {
 		let entry = match (dependency.path.as_ref(), path_dependencies) {
+			// Use the path dependencies from the context to check if this is a resolved path dependency.
 			(Some(path), Some(path_dependencies)) if path_dependencies.contains_key(path) => {
 				// Resolve by path.
-				let resolved = path_dependencies.get(path).unwrap();
-				let lock =
-					create_lockfile_inner(client, resolved.clone(), context, solution, locks)
-						.await?;
+				let package_with_path_dependencies = package_with_path_dependencies
+					.path_dependencies
+					.iter()
+					.find_map(|(dependency, pwpd)| {
+						(dependency.path.as_ref().unwrap() == path).then_some(pwpd)
+					})
+					.unwrap();
+				let lock = create_lockfile_inner(
+					client,
+					package_with_path_dependencies,
+					context,
+					solution,
+					locks,
+				)
+				.await?;
 				Entry {
-					package: Some(resolved.clone()),
+					package: None,
 					lock,
 				}
 			},
@@ -540,9 +569,11 @@ async fn create_lockfile_inner(
 				let Some(Mark::Permanent(Ok(resolved))) = solution.partial.get(&dependant) else {
 					return_error!("Missing solution for {dependant:?}.");
 				};
-				let lock =
-					create_lockfile_inner(client, resolved.clone(), context, solution, locks)
-						.await?;
+				let pwpd = PackageWithPathDependencies {
+					package: tg::Directory::with_id(resolved.clone()),
+					path_dependencies: BTreeMap::new(),
+				};
+				let lock = create_lockfile_inner(client, &pwpd, context, solution, locks).await?;
 				Entry {
 					package: Some(resolved.clone()),
 					lock,
@@ -551,6 +582,8 @@ async fn create_lockfile_inner(
 		};
 		dependencies.insert(dependency.clone(), entry);
 	}
+
+	// Insert the lock if it doesn't exist.
 	let lock = Lock { dependencies };
 	let index = if let Some(index) = locks.iter().position(|l| l == &lock) {
 		index
@@ -579,6 +612,8 @@ async fn scan_package_with_path_dependencies(
 	if all_path_dependencies.contains_key(&package_id) {
 		return Ok(());
 	}
+	// Update the path dependencies.
+	all_path_dependencies.insert(package_id.clone(), BTreeMap::new());
 
 	// Get the metadata and dependenencies of this package.
 	let dependency = tg::Dependency::with_id(package_id.clone());
@@ -608,8 +643,8 @@ async fn scan_package_with_path_dependencies(
 			.await?
 			.clone();
 		all_path_dependencies
-			.entry(package_id.clone())
-			.or_default()
+			.get_mut(&package_id)
+			.unwrap()
 			.insert(path.clone(), dependency_package_id);
 
 		scan_package_with_path_dependencies(
@@ -660,10 +695,7 @@ async fn solve_inner(
 			(None, None) => 'a: {
 				// Note: this bit is tricky. The next frame will always have an empty set of remaining versions, because by construction it will never have been tried before. However we need to get a list of versions to attempt, which we will push onto the stack.
 				if current_frame.remaining_versions.is_none() {
-					let all_versions = match context
-						.get_all_versions(client, dependant.dependency.name.as_ref().unwrap())
-						.await
-					{
+					let all_versions = match context.get_all_versions(client, &dependant).await {
 						Ok(all_versions) => all_versions,
 						Err(e) => {
 							tracing::error!(?dependant, ?e, "Failed to get versions of package.");
@@ -743,7 +775,6 @@ async fn solve_inner(
 
 			// Case 1: There exists a global version for the package but we haven't solved this dependency constraint.
 			(Some(permanent), None) => {
-				tracing::debug!(?dependant, ?permanent, "Existing solution found.");
 				match permanent {
 					// Case 1.1: The happy path. Our version is solved and it matches this constraint.
 					Ok(package) => {
@@ -917,12 +948,12 @@ impl Context {
 		dependant: &Dependant,
 		remaining_versions: &mut im::Vector<String>,
 	) -> Result<tg::directory::Id, Error> {
-		let name = dependant.dependency.name.as_ref().unwrap();
-
 		// First attempt to resolve this as a path dependency.
 		if let Some(result) = self.resolve_path_dependency(dependant) {
 			return Ok(result);
 		}
+
+		let name = dependant.dependency.name.as_ref().unwrap();
 
 		// If the cache doesn't contain the package, we need to go out to the client to retrieve the ID. If this errors, we return immediately. If there is no package available for this version (which is extremely unlikely) we loop until we get the next version that's either in the cache, or available from the client.
 		loop {
@@ -937,26 +968,20 @@ impl Context {
 			if let Some(package) = self.published_packages.get(&metadata) {
 				return Ok(package.clone());
 			}
-			let dependency = tg::Dependency {
-				name: Some(name.into()),
-				version: Some(version.clone()),
-				id: None,
-				path: None,
-			};
-			match client.get_package(&dependency).await {
+			let dependency = tg::Dependency::with_name_and_version(name.into(), version);
+			match client.try_get_package(&dependency).await {
 				Err(error) => {
 					tracing::error!(
-						?error,
-						?name,
-						?version,
+						?dependency,
 						"Failed to get an artifact for the package."
 					);
 					return Err(Error::Other(error));
 				},
-				Ok(package) => {
+				Ok(Some(package)) => {
 					self.published_packages.insert(metadata, package.clone());
 					return Ok(package);
 				},
+				Ok(None) => continue,
 			}
 		}
 	}
@@ -1012,19 +1037,29 @@ impl Context {
 			.wrap_err("Missing version for package.")
 	}
 
-	// Lookup all the published versions of a package by name.
+	// Lookup all the versions we might use to solve this dependant.
 	async fn get_all_versions(
 		&mut self,
 		client: &dyn Client,
-		package_name: &str,
+		dependant: &Dependant,
 	) -> Result<Vec<tg::package::Metadata>> {
-		let dependency = tg::Dependency::with_name(package_name.into());
+		// If it is a path dependency, we don't care about the versions, which may not exist.
+		if self.is_path_dependency(dependant) {
+			return Ok(Vec::new());
+		};
+		let name = dependant
+			.dependency
+			.name
+			.as_ref()
+			.wrap_err("Missing name for dependency.")?
+			.clone();
+		let dependency = tg::Dependency::with_name(name.clone());
 		let metadata = client
 			.get_package_versions(&dependency)
 			.await?
 			.into_iter()
 			.map(|version| tg::package::Metadata {
-				name: Some(package_name.into()),
+				name: Some(name.clone()),
 				version: Some(version),
 				description: None,
 			})
@@ -1198,7 +1233,7 @@ fn create_lock(
 	package_with_path_dependencies: &PackageWithPathDependencies,
 	lockfile: &Lockfile,
 ) -> Result<tg::Lock> {
-	create_lock_inner(package_with_path_dependencies, lockfile, 0)
+	create_lock_inner(package_with_path_dependencies, lockfile, lockfile.root)
 }
 
 fn create_lock_inner(

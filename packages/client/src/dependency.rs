@@ -51,6 +51,14 @@ impl Dependency {
 	}
 
 	#[must_use]
+	pub fn with_name(name: String) -> Self {
+		Self {
+			name: Some(name),
+			..Default::default()
+		}
+	}
+
+	#[must_use]
 	pub fn with_name_and_version(name: String, version: String) -> Self {
 		Self {
 			name: Some(name),
