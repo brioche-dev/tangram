@@ -57,7 +57,7 @@ let mutate = async (
 			object[key] = mutation.inner.value;
 		}
 	} else if (mutation.inner.kind === "array_prepend") {
-		if (!(key in object)) {
+		if (!(key in object) || object[key] === undefined) {
 			object[key] = [];
 		}
 		let array = object[key];
