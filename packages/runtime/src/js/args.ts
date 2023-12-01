@@ -62,9 +62,9 @@ let mutate = async (
 		}
 		let array = object[key];
 		assert(array instanceof Array);
-		object[key] = [...array, ...flatten(mutation.inner.values)];
+		object[key] = [...flatten(mutation.inner.values), ...array];
 	} else if (mutation.inner.kind === "array_append") {
-		if (!(key in object)) {
+		if (!(key in object) || object[key] === undefined) {
 			object[key] = [];
 		}
 		let array = object[key];
