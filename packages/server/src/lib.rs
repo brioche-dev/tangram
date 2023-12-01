@@ -439,6 +439,11 @@ impl tg::Client for Server {
 		&self,
 		dependency: &tg::Dependency,
 	) -> Result<Option<tg::directory::Id>> {
+		// If the dependency has an ID already, we can't rely on the remote to find it for us.
+		if let Some(id) = dependency.id.as_ref() {
+			return Ok(Some(id.clone()));
+		}
+
 		self.inner
 			.remote
 			.as_ref()
