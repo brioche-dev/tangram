@@ -41,6 +41,26 @@ struct Module {
 	v8_module: v8::Global<v8::Module>,
 }
 
+std::thread_local! {
+	pub static THREAD_LOCAL_ISOLATE: Rc<RefCell<v8::OwnedIsolate>> = {
+		// Create the isolate params.
+		let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
+
+		// Create the isolate.
+		let mut isolate = v8::Isolate::new(params);
+
+		// Set the host import module dynamically callback.
+		isolate.set_host_import_module_dynamically_callback(host_import_module_dynamically_callback);
+
+		// Set the host initialize import meta object callback.
+		isolate.set_host_initialize_import_meta_object_callback(
+			host_initialize_import_meta_object_callback,
+		);
+
+		Rc::new(RefCell::new(isolate))
+	};
+}
+
 #[allow(clippy::too_many_lines)]
 pub async fn build(
 	client: &dyn tg::Client,
@@ -50,20 +70,6 @@ pub async fn build(
 ) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
-
-	// Create the isolate params.
-	let params = v8::CreateParams::default().snapshot_blob(SNAPSHOT);
-
-	// Create the isolate.
-	let mut isolate = v8::Isolate::new(params);
-
-	// Set the host import module dynamically callback.
-	isolate.set_host_import_module_dynamically_callback(host_import_module_dynamically_callback);
-
-	// Set the host initialize import meta object callback.
-	isolate.set_host_initialize_import_meta_object_callback(
-		host_initialize_import_meta_object_callback,
-	);
 
 	// Create the state.
 	let state = Rc::new(State {
@@ -79,7 +85,10 @@ pub async fn build(
 	// Create the context.
 	let context = {
 		// Create and enter the context.
-		let scope = &mut v8::HandleScope::new(&mut isolate);
+		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
+		let mut isolate = isolate.borrow_mut();
+		let isolate = isolate.as_mut();
+		let scope = &mut v8::HandleScope::new(isolate);
 		let context = v8::Context::new(scope);
 		let scope = &mut v8::ContextScope::new(scope, context);
 
@@ -100,7 +109,10 @@ pub async fn build(
 
 	let value = {
 		// Enter the context.
-		let scope = &mut v8::HandleScope::new(&mut isolate);
+		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
+		let mut isolate = isolate.borrow_mut();
+		let isolate = isolate.as_mut();
+		let scope = &mut v8::HandleScope::new(isolate);
 		let context = v8::Local::new(scope, context.clone());
 		let scope = &mut v8::ContextScope::new(scope, context);
 
@@ -139,7 +151,10 @@ pub async fn build(
 			};
 
 			// Enter the context.
-			let scope = &mut v8::HandleScope::new(&mut isolate);
+			let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
+			let mut isolate = isolate.borrow_mut();
+			let isolate = isolate.as_mut();
+			let scope = &mut v8::HandleScope::new(isolate);
 			let context = v8::Local::new(scope, context.clone());
 			let scope = &mut v8::ContextScope::new(scope, context);
 
@@ -159,7 +174,10 @@ pub async fn build(
 		}
 
 		// Get the result from the value.
-		let scope = &mut v8::HandleScope::new(&mut isolate);
+		let isolate = THREAD_LOCAL_ISOLATE.with(Rc::clone);
+		let mut isolate = isolate.borrow_mut();
+		let isolate = isolate.as_mut();
+		let scope = &mut v8::HandleScope::new(isolate);
 		let context = v8::Local::new(scope, context.clone());
 		let scope = &mut v8::ContextScope::new(scope, context);
 		let value = v8::Local::new(scope, value.clone());
