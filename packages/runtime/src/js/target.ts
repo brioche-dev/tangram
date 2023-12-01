@@ -192,23 +192,17 @@ export class Target<
 					return await arg.object();
 				} else if (typeof arg === "object") {
 					let object: MutationMap<Apply> = {};
-					if ("env" in arg) {
-						object.env =
-							arg.env !== undefined
-								? await mutation({
-										kind: "array_append",
-										values: flatten([arg.env]),
-								  })
-								: await mutation({ kind: "unset" });
+					if (arg.env !== undefined) {
+						object.env = await mutation({
+							kind: "array_append",
+							values: flatten([arg.env]),
+						});
 					}
-					if ("args" in arg) {
-						object.args =
-							arg.args !== undefined
-								? await mutation({
-										kind: "array_append",
-										values: [...arg.args],
-								  })
-								: await mutation({ kind: "unset" });
+					if (arg.args !== undefined) {
+						object.args = await mutation({
+							kind: "array_append",
+							values: [...arg.args],
+						});
 					}
 					return {
 						...arg,

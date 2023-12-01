@@ -90,10 +90,10 @@ export class Symlink {
 					};
 				} else if (typeof arg === "object") {
 					let object: MutationMap<Apply> = {};
-					if ("artifact" in arg) {
+					if (arg.artifact !== undefined) {
 						object.artifact = arg.artifact;
 					}
-					if ("path" in arg) {
+					if (arg.path !== undefined) {
 						object.path = await mutation({ kind: "set", value: [arg.path] });
 					}
 					return object;
