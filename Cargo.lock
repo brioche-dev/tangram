@@ -3071,6 +3071,8 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "unicode-segmentation",
+ "unicode-width",
  "url",
  "v8",
  "webbrowser",

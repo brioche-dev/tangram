@@ -15,6 +15,8 @@ use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
 use tangram_package::Ext;
 use tui::{style::Stylize, widgets::Widget};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 pub struct Tui {
 	#[allow(dead_code)]
@@ -72,6 +74,9 @@ enum TreeItemStatus {
 struct Log {
 	scroll: usize,
 	text: String,
+	max_width: u16,
+	height: u16,
+	lines: Vec<String>,
 	receiver: tokio::sync::mpsc::UnboundedReceiver<String>,
 }
 
@@ -610,21 +615,43 @@ impl Log {
 		});
 
 		let text = String::new();
+		let lines = Vec::new();
 		Self {
 			text,
+			lines,
 			receiver,
 			scroll: 0,
+			max_width: 0,
+			height: 0,
 		}
 	}
 
 	fn update(&mut self) {
 		if let Ok(recv) = self.receiver.try_recv() {
 			self.text.push_str(recv.as_str());
+			let incoming_lines = lines(recv.as_str(), self.max_width);
+			let incoming_lines_len = incoming_lines.len();
+			let current_lines_len = self.lines.len();
+			self.lines.extend(incoming_lines);
+			if self.scroll == current_lines_len.saturating_sub(self.height.to_usize().unwrap()) {
+				self.scroll_down_by(incoming_lines_len);
+			}
 		}
 	}
 
+	fn scroll_down_by(&mut self, delta: usize) {
+		let height = self.height.to_usize().unwrap();
+		if self.lines.len() < height {
+			return;
+		}
+		self.scroll = self
+			.scroll
+			.saturating_add(delta)
+			.min(self.lines.len() - height);
+	}
+
 	fn scroll_down(&mut self) {
-		self.scroll = self.scroll.saturating_add(1);
+		self.scroll_down_by(1);
 	}
 
 	fn scroll_up(&mut self) {
@@ -632,12 +659,48 @@ impl Log {
 	}
 
 	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
-		let text = tui::text::Text::from(self.text.as_str());
-		let wrap = tui::widgets::Wrap { trim: false };
-		let paragraph = tui::widgets::Paragraph::new(text)
-			.wrap(wrap)
-			.scroll((self.scroll.to_u16().unwrap(), 0));
-		paragraph.render(rect, buf);
+		// If the width has changed, need to recompute lines.
+		if self.max_width != rect.width {
+			self.lines = lines(self.text.as_str(), rect.width);
+		}
+		self.max_width = rect.width;
+		self.height = rect.height;
+
+		let log_text = LogText::new(self.lines.as_slice(), (self.scroll.to_u16().unwrap(), 0));
+		log_text.render(rect, buf);
+	}
+}
+
+#[derive(Debug, Clone)]
+struct LogText<'a> {
+	lines: &'a [String],
+	scroll: (u16, u16),
+}
+
+impl<'a> LogText<'a> {
+	fn new(lines: &'a [String], scroll: (u16, u16)) -> Self {
+		Self { lines, scroll }
+	}
+}
+
+impl<'a> tui::widgets::Widget for LogText<'a> {
+	fn render(self, area: tui::prelude::Rect, buf: &mut tui::prelude::Buffer) {
+		let mut y = 0;
+		for line in self.lines {
+			if y >= self.scroll.0 {
+				let mut x = 0;
+				for grapheme in line.graphemes(true) {
+					let width = grapheme.width();
+					buf.get_mut(area.left() + x, area.top() + y - self.scroll.0)
+						.set_symbol(grapheme);
+					x += u16::try_from(width).unwrap();
+				}
+			}
+			y += 1;
+			if y >= area.height + self.scroll.0 {
+				break;
+			}
+		}
 	}
 }
 
@@ -664,4 +727,74 @@ async fn title(client: &dyn tg::Client, build: &tg::Build) -> Result<Option<Stri
 	}
 
 	Ok(Some(title))
+}
+
+/// This function takes a text string and a maximum width as input and splits the text into multiple lines, ensuring that each line does not exceed the maximum width.
+fn lines(text: &str, max_width: u16) -> Vec<String> {
+	let max_width = max_width.to_usize().unwrap();
+	let mut lines = Vec::new();
+	let mut line = String::new();
+	for substr in text.split_word_bounds() {
+		let line_width = line.width();
+		let substr_width = substr.width();
+		// If the width of the substring is longer than the line, break it up.
+		if substr.width() > max_width {
+			let mut truncated_substr = String::new();
+			for grapheme in substr.graphemes(true) {
+				if grapheme.width() > max_width {
+					continue;
+				}
+				if truncated_substr.width() + grapheme.width() > max_width {
+					lines.push(truncated_substr);
+					truncated_substr = String::new();
+				}
+				truncated_substr += grapheme;
+			}
+			line = truncated_substr;
+			continue;
+		}
+		if substr == "\n" || line_width + substr_width > max_width {
+			for _ in 0..max_width.saturating_sub(line_width) {
+				line += " ";
+			}
+			lines.push(line);
+			if substr == "\n" || substr == " " {
+				line = String::new();
+			} else {
+				line = substr.to_string();
+			}
+		} else {
+			line += substr;
+		}
+	}
+	if !line.is_empty() && line.width() <= max_width {
+		for _ in 0..max_width.saturating_sub(line.width()) {
+			line += " ";
+		}
+		lines.push(line);
+	}
+	lines
+}
+
+#[cfg(test)]
+mod tests {
+	use super::lines;
+	#[test]
+	fn test_lines() {
+		assert_eq!(lines("hello world", 5), vec!["hello", "world"]);
+		assert_eq!(lines("hello\n world", 10), vec!["hello     ", " world    "]);
+		assert_eq!(lines("helloworld", 5), vec!["hello", "world"]);
+		assert_eq!(
+			lines("hello worldhello", 5),
+			vec!["hello", "world", "hello"]
+		);
+		assert_eq!(
+			lines("Supercalifragilisticexpialidocious", 10),
+			vec!["Supercalif", "ragilistic", "expialidoc", "ious      "]
+		);
+		assert_eq!(lines("", 5), Vec::<String>::new());
+		assert_eq!(lines("hello", 5), vec!["hello"]);
+		assert_eq!(lines("e\u{301}", 1), vec!["e\u{301}"]);
+		assert_eq!(lines("🇺🇸", 1), Vec::<String>::new());
+	}
 }
