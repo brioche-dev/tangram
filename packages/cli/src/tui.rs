@@ -37,7 +37,7 @@ struct App {
 }
 
 struct Tree {
-	rect: tui::layout::Rect,
+	rect: Option<tui::layout::Rect>,
 	root: TreeItem,
 	scroll: usize,
 	selected: TreeItem,
@@ -72,12 +72,11 @@ enum TreeItemStatus {
 }
 
 struct Log {
-	scroll: usize,
-	text: String,
-	max_width: u16,
-	height: u16,
 	lines: Vec<String>,
-	receiver: tokio::sync::mpsc::UnboundedReceiver<String>,
+	receiver: tokio::sync::mpsc::UnboundedReceiver<Result<String>>,
+	rect: Option<tui::layout::Rect>,
+	scroll: Option<usize>,
+	text: String,
 }
 
 static SPINNER_POSITION: AtomicUsize = AtomicUsize::new(0);
@@ -115,9 +114,6 @@ impl Tui {
 			ct::terminal::EnterAlternateScreen,
 		)
 		.wrap_err("Failed to setup the terminal.")?;
-		let rect = terminal
-			.size()
-			.wrap_err("Failed to get the terminal size.")?;
 
 		// Create the stop flag.
 		let stop = Arc::new(AtomicBool::new(false));
@@ -128,10 +124,16 @@ impl Tui {
 			let build = build.clone();
 			let stop = stop.clone();
 			move || {
-				let mut app = App::new(rect, client.as_ref(), &build);
+				let mut app = App::new(client.as_ref(), &build);
 				while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+					// Render.
+					terminal.draw(|frame| app.render(frame.size(), frame.buffer_mut()))?;
+
+					// Wait for and handle an event.
 					if ct::event::poll(std::time::Duration::from_millis(16))? {
 						let event = ct::event::read()?;
+
+						// Quit the TUI if requested.
 						if let ct::event::Event::Key(event) = event {
 							if options.exit
 								&& (event.code == ct::event::KeyCode::Char('q')
@@ -141,10 +143,10 @@ impl Tui {
 								break;
 							}
 						}
+
+						// Handle the event.
 						app.handle_event(&event);
 					}
-					app.update();
-					terminal.draw(|frame| app.render(frame.size(), frame.buffer_mut()))?;
 				}
 				Ok(terminal)
 			}
@@ -187,11 +189,11 @@ impl Tui {
 }
 
 impl App {
-	fn new(rect: tui::layout::Rect, client: &dyn tg::Client, build: &tg::Build) -> Self {
+	fn new(client: &dyn tg::Client, build: &tg::Build) -> Self {
 		let client = client.clone_box();
 		let direction = tui::layout::Direction::Horizontal;
 		let root = TreeItem::new(client.as_ref(), build, None, 0, true, true);
-		let tree = Tree::new(rect, root);
+		let tree = Tree::new(root);
 		let log = Log::new(client.as_ref(), build);
 		Self {
 			client,
@@ -253,12 +255,6 @@ impl App {
 		}
 	}
 
-	fn update(&mut self) {
-		SPINNER_POSITION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-		self.tree.update();
-		self.log.update();
-	}
-
 	fn down(&mut self) {
 		self.select(true);
 	}
@@ -278,7 +274,7 @@ impl App {
 		} else {
 			previous_selected_index.saturating_sub(1)
 		};
-		let height = self.tree.rect.height.to_usize().unwrap();
+		let height = self.tree.rect.unwrap().height.to_usize().unwrap();
 		if new_selected_index < self.tree.scroll {
 			self.tree.scroll -= 1;
 		} else if new_selected_index >= self.tree.scroll + height {
@@ -340,6 +336,8 @@ impl App {
 	}
 
 	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
+		SPINNER_POSITION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
 		let layout = tui::layout::Layout::default()
 			.direction(self.direction)
 			.margin(0)
@@ -364,9 +362,9 @@ impl App {
 }
 
 impl Tree {
-	fn new(rect: tui::layout::Rect, root: TreeItem) -> Self {
+	fn new(root: TreeItem) -> Self {
 		Self {
-			rect,
+			rect: None,
 			root: root.clone(),
 			scroll: 0,
 			selected: root,
@@ -387,12 +385,13 @@ impl Tree {
 		items
 	}
 
-	fn update(&mut self) {
+	fn update(&mut self, rect: tui::layout::Rect) {
+		self.rect = Some(rect);
 		self.root.update();
 	}
 
 	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
-		self.rect = rect;
+		self.update(rect);
 		let layout = tui::layout::Layout::default()
 			.direction(tui::layout::Direction::Vertical)
 			.constraints(
@@ -597,16 +596,14 @@ impl Log {
 				let mut log = match build.log(client.as_ref()).await {
 					Ok(log) => log,
 					Err(error) => {
-						sender.send(error.to_string()).ok();
+						sender.send(Err(error)).ok();
 						return;
 					},
 				};
 				while let Some(message) = log.next().await {
-					let message = match message.map(|bytes| String::from_utf8(bytes.to_vec())) {
-						Ok(Ok(string)) => string,
-						Ok(Err(error)) => error.to_string(),
-						Err(error) => error.to_string(),
-					};
+					let message = message.and_then(|bytes| {
+						String::from_utf8(bytes.to_vec()).wrap_err("Invalid UTF-8.")
+					});
 					if sender.send(message).is_err() {
 						break;
 					}
@@ -614,92 +611,95 @@ impl Log {
 			}
 		});
 
-		let text = String::new();
-		let lines = Vec::new();
 		Self {
-			text,
-			lines,
+			lines: Vec::new(),
 			receiver,
-			scroll: 0,
-			max_width: 0,
-			height: 0,
+			rect: None,
+			scroll: None,
+			text: String::new(),
 		}
-	}
-
-	fn update(&mut self) {
-		if let Ok(recv) = self.receiver.try_recv() {
-			self.text.push_str(recv.as_str());
-			let incoming_lines = lines(recv.as_str(), self.max_width);
-			let incoming_lines_len = incoming_lines.len();
-			let current_lines_len = self.lines.len();
-			self.lines.extend(incoming_lines);
-			if self.scroll == current_lines_len.saturating_sub(self.height.to_usize().unwrap()) {
-				self.scroll_down_by(incoming_lines_len);
-			}
-		}
-	}
-
-	fn scroll_down_by(&mut self, delta: usize) {
-		let height = self.height.to_usize().unwrap();
-		if self.lines.len() < height {
-			return;
-		}
-		self.scroll = self
-			.scroll
-			.saturating_add(delta)
-			.min(self.lines.len() - height);
 	}
 
 	fn scroll_down(&mut self) {
 		self.scroll_down_by(1);
 	}
 
+	fn scroll_down_by(&mut self, delta: usize) {
+		let height = self.rect.unwrap().height.to_usize().unwrap();
+		self.scroll = if let Some(scroll) = self.scroll {
+			if scroll + delta < self.lines.len().saturating_sub(height) {
+				Some(scroll + delta)
+			} else {
+				None
+			}
+		} else {
+			None
+		};
+	}
+
 	fn scroll_up(&mut self) {
-		self.scroll = self.scroll.saturating_sub(1);
+		let height = self.rect.unwrap().height.to_usize().unwrap();
+		self.scroll = Some(
+			self.scroll
+				.unwrap_or_else(|| self.lines.len().saturating_sub(height))
+				.saturating_sub(1),
+		);
+	}
+
+	fn update(&mut self, rect: tui::layout::Rect) {
+		// Update the rect.
+		if self.rect.is_none() {
+			self.rect = Some(rect);
+		} else if self.rect.unwrap() != rect {
+			// If the width has changed, then recompute the lines.
+			if self.rect.unwrap().width != rect.width {
+				self.lines = Vec::new();
+				lines(
+					&mut self.lines,
+					self.text.as_str(),
+					rect.width.to_usize().unwrap(),
+				);
+			}
+			self.rect = Some(rect);
+		}
+
+		// Receive the logs.
+		let width = self.rect.unwrap().width.to_usize().unwrap();
+		if let Ok(message) = self.receiver.try_recv() {
+			match message {
+				Ok(text) => {
+					self.text.push_str(text.as_str());
+					lines(&mut self.lines, text.as_str(), width);
+				},
+				Err(error) => {
+					self.text = error.to_string();
+					self.lines = Vec::new();
+					lines(&mut self.lines, &error.to_string(), width);
+				},
+			}
+		}
 	}
 
 	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
-		// If the width has changed, need to recompute lines.
-		if self.max_width != rect.width {
-			self.lines = lines(self.text.as_str(), rect.width);
-		}
-		self.max_width = rect.width;
-		self.height = rect.height;
+		self.update(rect);
 
-		let log_text = LogText::new(self.lines.as_slice(), (self.scroll.to_u16().unwrap(), 0));
-		log_text.render(rect, buf);
-	}
-}
-
-#[derive(Debug, Clone)]
-struct LogText<'a> {
-	lines: &'a [String],
-	scroll: (u16, u16),
-}
-
-impl<'a> LogText<'a> {
-	fn new(lines: &'a [String], scroll: (u16, u16)) -> Self {
-		Self { lines, scroll }
-	}
-}
-
-impl<'a> tui::widgets::Widget for LogText<'a> {
-	fn render(self, area: tui::prelude::Rect, buf: &mut tui::prelude::Buffer) {
-		let mut y = 0;
-		for line in self.lines {
-			if y >= self.scroll.0 {
-				let mut x = 0;
-				for grapheme in line.graphemes(true) {
-					let width = grapheme.width();
-					buf.get_mut(area.left() + x, area.top() + y - self.scroll.0)
-						.set_symbol(grapheme);
-					x += u16::try_from(width).unwrap();
-				}
-			}
-			y += 1;
-			if y >= area.height + self.scroll.0 {
-				break;
-			}
+		// Render the lines.
+		let lines = self
+			.lines
+			.iter()
+			.skip(self.scroll.unwrap_or_else(|| {
+				self.lines
+					.len()
+					.saturating_sub(self.rect.unwrap().height.to_usize().unwrap())
+			}))
+			.take(self.rect.unwrap().height.to_usize().unwrap());
+		for (y, line) in lines.enumerate() {
+			buf.set_line(
+				rect.x,
+				rect.y + y.to_u16().unwrap(),
+				&tui::text::Line::raw(line),
+				self.rect.unwrap().width,
+			);
 		}
 	}
 }
@@ -729,72 +729,26 @@ async fn title(client: &dyn tg::Client, build: &tg::Build) -> Result<Option<Stri
 	Ok(Some(title))
 }
 
-/// This function takes a text string and a maximum width as input and splits the text into multiple lines, ensuring that each line does not exceed the maximum width.
-fn lines(text: &str, max_width: u16) -> Vec<String> {
-	let max_width = max_width.to_usize().unwrap();
-	let mut lines = Vec::new();
-	let mut line = String::new();
-	for substr in text.split_word_bounds() {
-		let line_width = line.width();
-		let substr_width = substr.width();
-		// If the width of the substring is longer than the line, break it up.
-		if substr.width() > max_width {
-			let mut truncated_substr = String::new();
-			for grapheme in substr.graphemes(true) {
-				if grapheme.width() > max_width {
-					continue;
-				}
-				if truncated_substr.width() + grapheme.width() > max_width {
-					lines.push(truncated_substr);
-					truncated_substr = String::new();
-				}
-				truncated_substr += grapheme;
-			}
-			line = truncated_substr;
-			continue;
-		}
-		if substr == "\n" || line_width + substr_width > max_width {
-			for _ in 0..max_width.saturating_sub(line_width) {
-				line += " ";
-			}
-			lines.push(line);
-			if substr == "\n" || substr == " " {
-				line = String::new();
-			} else {
-				line = substr.to_string();
-			}
+fn lines(lines: &mut Vec<String>, text: &str, width: usize) {
+	if lines.is_empty() {
+		lines.push(String::new());
+	}
+	let mut current_line = lines.last_mut().unwrap();
+	let mut current_line_width = current_line.width();
+	for grapheme in text.graphemes(true) {
+		if grapheme == "\n" {
+			lines.push(String::new());
+			current_line = lines.last_mut().unwrap();
+			current_line_width = 0;
+		} else if current_line_width + grapheme.width() < width {
+			current_line.push_str(grapheme);
+			current_line_width += grapheme.width();
 		} else {
-			line += substr;
+			lines.push(String::new());
+			current_line = lines.last_mut().unwrap();
+			current_line_width = 0;
+			current_line.push_str(grapheme);
+			current_line_width += grapheme.width();
 		}
-	}
-	if !line.is_empty() && line.width() <= max_width {
-		for _ in 0..max_width.saturating_sub(line.width()) {
-			line += " ";
-		}
-		lines.push(line);
-	}
-	lines
-}
-
-#[cfg(test)]
-mod tests {
-	use super::lines;
-	#[test]
-	fn test_lines() {
-		assert_eq!(lines("hello world", 5), vec!["hello", "world"]);
-		assert_eq!(lines("hello\n world", 10), vec!["hello     ", " world    "]);
-		assert_eq!(lines("helloworld", 5), vec!["hello", "world"]);
-		assert_eq!(
-			lines("hello worldhello", 5),
-			vec!["hello", "world", "hello"]
-		);
-		assert_eq!(
-			lines("Supercalifragilisticexpialidocious", 10),
-			vec!["Supercalif", "ragilistic", "expialidoc", "ious      "]
-		);
-		assert_eq!(lines("", 5), Vec::<String>::new());
-		assert_eq!(lines("hello", 5), vec!["hello"]);
-		assert_eq!(lines("e\u{301}", 1), vec!["e\u{301}"]);
-		assert_eq!(lines("🇺🇸", 1), Vec::<String>::new());
 	}
 }

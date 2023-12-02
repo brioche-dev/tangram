@@ -43,8 +43,8 @@ impl Path {
 	}
 
 	pub fn push(&mut self, component: Component) {
-		// Ignore the component if it is a current directory component.
-		if component == Component::Current {
+		// Ignore the component if it is a current directory component and the path is not empty.
+		if component == Component::Current && !self.is_empty() {
 			return;
 		}
 
@@ -136,18 +136,20 @@ impl std::str::FromStr for Path {
 	fn from_str(mut s: &str) -> std::result::Result<Self, Self::Err> {
 		let mut path = Self::default();
 		if s.starts_with('/') {
-			path.components.push(Component::Root);
+			path.push(Component::Root);
 			s = &s[1..];
 		}
 		for component in s.split('/') {
 			match component {
-				"" | "." => (),
+				"" => (),
+				"." => {
+					path.push(Component::Current);
+				},
 				".." => {
-					path.components.push(Component::Parent);
+					path.push(Component::Parent);
 				},
 				_ => {
-					let component = Component::Normal(component.to_owned());
-					path.components.push(component);
+					path.push(Component::Normal(component.to_owned()));
 				},
 			}
 		}

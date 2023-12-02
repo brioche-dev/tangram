@@ -1,7 +1,6 @@
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::stream::{FuturesUnordered, TryStreamExt};
-use im::HashMap;
 use itertools::Itertools;
 use std::{
 	collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -181,8 +180,8 @@ pub async fn new(
 	let lockfile = 'a: {
 		if let Some(path) = dependency.path.as_ref() {
 			// Canonicalize the path.
-			let path = PathBuf::from(path.clone())
-				.canonicalize()
+			let path = tokio::fs::canonicalize(PathBuf::from(path.clone()))
+				.await
 				.wrap_err("Failed to canonicalize the path.")?;
 
 			// Attempt to read the lockfile.
@@ -223,8 +222,8 @@ pub async fn new(
 	// If this is a path dependency and the lockfile was just created, then write the lockfile.
 	if let Some(path) = dependency.path.as_ref() {
 		if created {
-			let package_path = PathBuf::from(path.clone())
-				.canonicalize()
+			let package_path = tokio::fs::canonicalize(PathBuf::from(path.clone()))
+				.await
 				.wrap_err("Failed to canonicalize the path.")?;
 			let lockfile_path = package_path.join(LOCKFILE_FILE_NAME);
 			let lockfile = serde_json::to_vec_pretty(&lockfile)
@@ -467,7 +466,7 @@ async fn create_lockfile(
 		&mut working_set,
 	)
 	.await?;
-	let published_packages = HashMap::new();
+	let published_packages = im::HashMap::new();
 	let mut context = Context {
 		analysis,
 		published_packages,
@@ -971,10 +970,7 @@ impl Context {
 			let dependency = tg::Dependency::with_name_and_version(name.into(), version);
 			match client.try_get_package(&dependency).await {
 				Err(error) => {
-					tracing::error!(
-						?dependency,
-						"Failed to get an artifact for the package."
-					);
+					tracing::error!(?dependency, "Failed to get an artifact for the package.");
 					return Err(Error::Other(error));
 				},
 				Ok(Some(package)) => {

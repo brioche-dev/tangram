@@ -13,8 +13,10 @@ export class Path {
 					arg = arg.slice(1);
 				}
 				for (let component of arg.split("/")) {
-					if (component === "" || component === ".") {
+					if (component === "") {
 						continue;
+					} else if (component === ".") {
+						path.push(".");
 					} else if (component === "..") {
 						path.push("..");
 					} else {
@@ -42,13 +44,17 @@ export class Path {
 		this.#components = components;
 	}
 
+	isEmpty(): boolean {
+		return this.#components.length === 0;
+	}
+
 	components(): Array<Path.Component> {
 		return this.#components;
 	}
 
 	push(component: Path.Component): void {
-		// Ignore the component if it is a current directory component.
-		if (component === ".") {
+		// Ignore the component if it is a current directory component and the path is not empty.
+		if (component === "." && !this.isEmpty()) {
 			return;
 		}
 

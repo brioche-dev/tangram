@@ -4,17 +4,11 @@ export let metadata = {
 };
 
 export default tg.target(async () => {
-	return [f(), g()];
-});
-
-export let f = tg.target(async () => {
-	await tg.sleep(5);
-	return "f";
-});
-
-export let g = tg.target(async () => {
-	await tg.sleep(10);
-	return "g";
+  for (let i = 0; i < 100; i++) {
+    console.log(i.toString() + " 😊 😛 😘 😛".repeat(5) + " done");
+    await tg.sleep(1);
+  }
+  return "Hello, World!";
 });
 
 export let source = tg.target(() =>

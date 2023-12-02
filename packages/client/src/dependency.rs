@@ -126,7 +126,7 @@ impl std::str::FromStr for Dependency {
 		if let Some(path) = path {
 			if let Ok(id) = path.parse() {
 				dependency.id = Some(id);
-			} else if path.starts_with('.') {
+			} else if path.starts_with('.') || path.starts_with('/') {
 				dependency.path = Some(path.parse()?);
 			} else {
 				let split = path.split_once('@');
