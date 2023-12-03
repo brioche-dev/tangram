@@ -34,7 +34,7 @@ export let source = tg.target(() =>
 			["client"]: tg.include("./packages/client"),
 			["error"]: tg.include("./packages/error"),
 			["http"]: tg.include("./packages/http"),
-			["lsp"]: tg.include("./packages/lsp"),
+			["language"]: tg.include("./packages/language"),
 			["runtime"]: tg.include("./packages/runtime"),
 			["server"]: tg.include("./packages/server"),
 			["vfs"]: tg.include("./packages/vfs"),

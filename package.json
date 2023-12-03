@@ -15,7 +15,7 @@
 	},
 	"workspaces": [
 		"packages/eslint",
-		"packages/lsp",
+		"packages/language",
 		"packages/runtime",
 		"packages/vscode"
 	]

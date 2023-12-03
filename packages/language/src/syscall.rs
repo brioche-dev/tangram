@@ -4,7 +4,7 @@ use crate::{error, Import, Inner, Module};
 use base64::Engine as _;
 use bytes::Bytes;
 use itertools::Itertools;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 use tangram_error::{Result, WrapErr};
 
 pub fn syscall<'s>(
@@ -216,13 +216,15 @@ fn syscall_module_load(
 fn syscall_module_resolve(
 	_scope: &mut v8::HandleScope,
 	state: &Inner,
-	args: (Module, Import),
+	args: (Module, String, Option<BTreeMap<String, String>>),
 ) -> Result<Module> {
-	let (module, specifier) = args;
+	let (module, specifier, attributes) = args;
+	let import = Import::with_specifier_and_attributes(&specifier, attributes.as_ref())
+		.wrap_err("Failed to create the import.")?;
 	state.main_runtime_handle.clone().block_on(async move {
 		let client = state.client.as_ref();
 		let module = module
-			.resolve(client, Some(&state.document_store), &specifier)
+			.resolve(client, Some(&state.document_store), &import)
 			.await
 			.wrap_err_with(|| {
 				format!(

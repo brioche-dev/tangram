@@ -1,5 +1,6 @@
+use std::collections::BTreeMap;
 use tangram_client as tg;
-use tangram_error::{return_error, Error, WrapErr};
+use tangram_error::{return_error, Error, Result, WrapErr};
 
 /// An import in a module.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -10,6 +11,37 @@ pub enum Import {
 
 	/// An import of a dependency, such as `import "tangram:std"`.
 	Dependency(tg::Dependency),
+}
+
+impl Import {
+	pub fn with_specifier_and_attributes(
+		specifier: &str,
+		attributes: Option<&BTreeMap<String, String>>,
+	) -> Result<Self> {
+		// Parse the specifier.
+		let import = specifier.parse()?;
+
+		// Apply the attributes.
+		let import = if let Some(attributes) = attributes {
+			match import {
+				Self::Module(module) => Self::Module(module),
+				Self::Dependency(mut dependency) => {
+					let attributes = attributes
+						.iter()
+						.map(|(key, value)| (key.clone(), value.clone()))
+						.collect();
+					let params = serde_json::from_value(attributes)
+						.wrap_err("Failed to parse the attributes.")?;
+					dependency.apply_params(params);
+					Self::Dependency(dependency)
+				},
+			}
+		} else {
+			import
+		};
+
+		Ok(import)
+	}
 }
 
 impl std::fmt::Display for Import {

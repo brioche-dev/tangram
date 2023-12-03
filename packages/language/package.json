@@ -8,7 +8,7 @@
 		"stream-browserify": "^3.0.0",
 		"url": "^0.11.1"
 	},
-	"name": "@tangramdotdev/lsp",
+	"name": "@tangramdotdev/language",
 	"private": true,
 	"scripts": {
 		"build": "node build.js",

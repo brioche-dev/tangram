@@ -1,6 +1,9 @@
 use crate::{parse, Import, Module};
 use itertools::Itertools;
-use std::{collections::HashSet, rc::Rc};
+use std::{
+	collections::{BTreeMap, HashSet},
+	rc::Rc,
+};
 use swc::ecma::{ast, visit::VisitWith};
 use swc_core as swc;
 use tangram_client as tg;
@@ -221,33 +224,57 @@ impl Visitor {
 	fn add_import(
 		&mut self,
 		specifier: &str,
-		import_attributes: Option<&ast::ObjectLit>,
+		attributes: Option<&ast::ObjectLit>,
 		span: swc::common::Span,
 	) {
-		// Parse the specifier.
-		let Ok(import) = specifier.parse() else {
+		// Get the attributes.
+		let attributes = if let Some(attributes) = attributes {
+			let mut map = BTreeMap::default();
+			let loc = self.source_map.lookup_char_pos(attributes.span.lo);
+			for prop in &attributes.props {
+				let Some(prop) = prop.as_prop() else {
+					self.errors
+						.push(Error::new("Spread properties are not allowed.", &loc));
+					continue;
+				};
+				let Some(key_value) = prop.as_key_value() else {
+					self.errors
+						.push(Error::new("Only key-value properties are allowed.", &loc));
+					continue;
+				};
+				let key = match &key_value.key {
+					ast::PropName::Ident(ident) => ident.sym.to_string(),
+					ast::PropName::Str(value) => value.value.to_string(),
+					_ => {
+						self.errors
+							.push(Error::new("All keys must be strings.", &loc));
+						continue;
+					},
+				};
+				let value = if let ast::Expr::Lit(ast::Lit::Str(value)) = key_value.value.as_ref() {
+					value.value.to_string()
+				} else {
+					self.errors
+						.push(Error::new("All values must be strings.", &loc));
+					continue;
+				};
+				map.insert(key, value);
+			}
+			Some(map)
+		} else {
+			None
+		};
+
+		// Parse the import.
+		let Ok(import) = Import::with_specifier_and_attributes(specifier, attributes.as_ref())
+		else {
 			let loc = self.source_map.lookup_char_pos(span.lo());
 			self.errors
 				.push(Error::new("Failed to parse the import.", &loc));
 			return;
 		};
 
-		// Apply the import attributes.
-		let import_attributes = import_attributes.map(|object| self.object_to_json(object));
-		let import = match import {
-			Import::Module(module) => Import::Module(module),
-			Import::Dependency(mut dependency) => {
-				let Ok(params) = serde_json::from_value(import_attributes.into()) else {
-					let loc = self.source_map.lookup_char_pos(span.lo());
-					self.errors
-						.push(Error::new("Failed to parse the import.", &loc));
-					return;
-				};
-				dependency.apply_params(params);
-				Import::Dependency(dependency)
-			},
-		};
-
+		// Add the import.
 		self.imports.insert(import);
 	}
 
@@ -256,17 +283,13 @@ impl Visitor {
 		let loc = self.source_map.lookup_char_pos(object.span.lo);
 		for prop in &object.props {
 			let Some(prop) = prop.as_prop() else {
-				self.errors.push(Error::new(
-					"Spread properties are not allowed in metadata.",
-					&loc,
-				));
+				self.errors
+					.push(Error::new("Spread properties are not allowed.", &loc));
 				continue;
 			};
 			let Some(key_value) = prop.as_key_value() else {
-				self.errors.push(Error::new(
-					"Only key-value properties are allowed in metadata.",
-					&loc,
-				));
+				self.errors
+					.push(Error::new("Only key-value properties are allowed.", &loc));
 				continue;
 			};
 			let key = match &key_value.key {

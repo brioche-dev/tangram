@@ -44,7 +44,8 @@ declare global {
 	function syscall(
 		name: "module_resolve",
 		module: Module,
-		import_: string,
+		specifier: string,
+		attributes: { [key: string]: string },
 	): Module;
 
 	/** Get the version of a module. */
@@ -186,9 +187,13 @@ export let module_ = {
 		}
 	},
 
-	resolve: (module: Module, import_: string): Module => {
+	resolve: (
+		module: Module,
+		specifier: string,
+		attributes: { [key: string]: string },
+	): Module => {
 		try {
-			return syscall("module_resolve", module, import_);
+			return syscall("module_resolve", module, specifier, attributes);
 		} catch (cause) {
 			throw new Error("The syscall failed.", { cause });
 		}
