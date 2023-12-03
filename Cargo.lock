@@ -3011,7 +3011,7 @@ dependencies = [
  "tangram_client",
  "tangram_error",
  "tangram_http",
- "tangram_lsp",
+ "tangram_language",
  "tangram_package",
  "tangram_server",
  "tokio",
@@ -3105,7 +3105,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tangram_lsp"
+name = "tangram_language"
 version = "0.0.0"
 dependencies = [
  "async-recursion",
@@ -3158,7 +3158,7 @@ dependencies = [
  "serde_json",
  "tangram_client",
  "tangram_error",
- "tangram_lsp",
+ "tangram_language",
  "tangram_server",
  "tokio",
  "tracing",
@@ -3186,7 +3186,7 @@ dependencies = [
  "sourcemap 7.0.1",
  "tangram_client",
  "tangram_error",
- "tangram_lsp",
+ "tangram_language",
  "tangram_package",
  "tempfile",
  "tokio",
@@ -3216,7 +3216,7 @@ dependencies = [
  "tangram_client",
  "tangram_error",
  "tangram_http",
- "tangram_lsp",
+ "tangram_language",
  "tangram_package",
  "tangram_runtime",
  "tangram_vfs",

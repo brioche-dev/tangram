@@ -35,12 +35,12 @@ pub(super) fn to_exception<'s>(
 ) -> v8::Local<'s, v8::Value> {
 	let context = scope.get_current_context();
 	let global = context.global(scope);
-	let lsp = v8::String::new_external_onebyte_static(scope, "lsp".as_bytes()).unwrap();
-	let lsp = global.get(scope, lsp.into()).unwrap();
-	let lsp = v8::Local::<v8::Object>::try_from(lsp).unwrap();
+	let language = v8::String::new_external_onebyte_static(scope, "language".as_bytes()).unwrap();
+	let language = global.get(scope, language.into()).unwrap();
+	let language = v8::Local::<v8::Object>::try_from(language).unwrap();
 
 	let error_ = v8::String::new_external_onebyte_static(scope, "Error".as_bytes()).unwrap();
-	let error_ = lsp.get(scope, error_.into()).unwrap();
+	let error_ = language.get(scope, error_.into()).unwrap();
 	let error_ = v8::Local::<v8::Function>::try_from(error_).unwrap();
 
 	let value = serde_v8::to_v8(scope, error).unwrap();
@@ -56,12 +56,12 @@ pub(super) fn from_exception<'s>(
 ) -> Error {
 	let context = scope.get_current_context();
 	let global = context.global(scope);
-	let lsp = v8::String::new_external_onebyte_static(scope, "lsp".as_bytes()).unwrap();
-	let lsp = global.get(scope, lsp.into()).unwrap();
-	let lsp = v8::Local::<v8::Object>::try_from(lsp).unwrap();
+	let language = v8::String::new_external_onebyte_static(scope, "language".as_bytes()).unwrap();
+	let language = global.get(scope, language.into()).unwrap();
+	let language = v8::Local::<v8::Object>::try_from(language).unwrap();
 
 	let error = v8::String::new_external_onebyte_static(scope, "Error".as_bytes()).unwrap();
-	let error = lsp.get(scope, error.into()).unwrap();
+	let error = language.get(scope, error.into()).unwrap();
 	let error = v8::Local::<v8::Function>::try_from(error).unwrap();
 
 	if exception.instance_of(scope, error.into()).unwrap() {

@@ -129,17 +129,17 @@ impl swc::ecma::visit::Visit for Visitor {
 	}
 
 	fn visit_import_decl(&mut self, n: &ast::ImportDecl) {
-		self.add_import(&n.src.value, n.span);
+		self.add_import(&n.src.value, n.with.as_deref(), n.span);
 	}
 
 	fn visit_named_export(&mut self, n: &ast::NamedExport) {
 		if let Some(src) = n.src.as_deref() {
-			self.add_import(&src.value, n.span);
+			self.add_import(&src.value, n.with.as_deref(), n.span);
 		}
 	}
 
 	fn visit_export_all(&mut self, n: &ast::ExportAll) {
-		self.add_import(&n.src.value, n.span);
+		self.add_import(&n.src.value, n.with.as_deref(), n.span);
 	}
 
 	fn visit_call_expr(&mut self, n: &ast::CallExpr) {
@@ -205,7 +205,8 @@ impl swc::ecma::visit::Visit for Visitor {
 					));
 					return;
 				};
-				self.add_import(&arg.value, n.span);
+				let with = n.args.get(1).and_then(|arg| arg.expr.as_object());
+				self.add_import(&arg.value, with, n.span);
 			},
 
 			// Ignore a call to super.
@@ -217,18 +218,39 @@ impl swc::ecma::visit::Visit for Visitor {
 }
 
 impl Visitor {
-	fn add_import(&mut self, import: &str, span: swc::common::Span) {
-		let Ok(import) = import.parse() else {
+	fn add_import(
+		&mut self,
+		specifier: &str,
+		import_attributes: Option<&ast::ObjectLit>,
+		span: swc::common::Span,
+	) {
+		// Parse the specifier.
+		let Ok(import) = specifier.parse() else {
 			let loc = self.source_map.lookup_char_pos(span.lo());
 			self.errors
 				.push(Error::new("Failed to parse the import.", &loc));
 			return;
 		};
+
+		// Apply the import attributes.
+		let import_attributes = import_attributes.map(|object| self.object_to_json(object));
+		let import = match import {
+			Import::Module(module) => Import::Module(module),
+			Import::Dependency(mut dependency) => {
+				let Ok(params) = serde_json::from_value(import_attributes.into()) else {
+					let loc = self.source_map.lookup_char_pos(span.lo());
+					self.errors
+						.push(Error::new("Failed to parse the import.", &loc));
+					return;
+				};
+				dependency.apply_params(params);
+				Import::Dependency(dependency)
+			},
+		};
+
 		self.imports.insert(import);
 	}
-}
 
-impl Visitor {
 	fn object_to_json(&mut self, object: &ast::ObjectLit) -> serde_json::Value {
 		let mut output = serde_json::Map::new();
 		let loc = self.source_map.lookup_char_pos(object.span.lo);

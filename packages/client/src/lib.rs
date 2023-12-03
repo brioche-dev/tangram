@@ -37,7 +37,6 @@ pub mod user;
 pub mod util;
 pub mod value;
 
-/// A client.
 #[async_trait]
 pub trait Client: Send + Sync + 'static {
 	fn clone_box(&self) -> Box<dyn Client>;

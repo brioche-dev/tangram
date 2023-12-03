@@ -20,15 +20,15 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the language server.
-		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_language::Server::new(client, tokio::runtime::Handle::current());
 
 		// Get the package.
 		let (package, lock) = tangram_package::new(client, &args.package).await?;
 
 		// Check the package for diagnostics.
 		let diagnostics = server
-			.check(vec![tangram_lsp::Module::Normal(
-				tangram_lsp::module::Normal {
+			.check(vec![tangram_language::Module::Normal(
+				tangram_language::module::Normal {
 					package: package.id(client).await?.clone(),
 					lock: lock.id(client).await?.clone(),
 					path: tangram_package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
@@ -39,7 +39,7 @@ impl Cli {
 		// Print the diagnostics.
 		for diagnostic in &diagnostics {
 			// Get the diagnostic location and message.
-			let tangram_lsp::Diagnostic {
+			let tangram_language::Diagnostic {
 				location, message, ..
 			} = diagnostic;
 

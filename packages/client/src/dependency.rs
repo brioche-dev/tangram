@@ -30,13 +30,16 @@ pub struct Dependency {
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
-struct Params {
+pub struct Params {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub id: Option<directory::Id>,
+
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub name: Option<String>,
+
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub path: Option<crate::Path>,
+
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub version: Option<String>,
 }
@@ -72,6 +75,21 @@ impl Dependency {
 		Self {
 			path: Some(path),
 			..Default::default()
+		}
+	}
+
+	pub fn apply_params(&mut self, params: Params) {
+		if let Some(id) = params.id {
+			self.id = Some(id);
+		}
+		if let Some(name) = params.name {
+			self.name = Some(name);
+		}
+		if let Some(path) = params.path {
+			self.path = Some(path);
+		}
+		if let Some(version) = params.version {
+			self.version = Some(version);
 		}
 	}
 }
@@ -148,14 +166,19 @@ impl std::str::FromStr for Dependency {
 			}
 		}
 
-		// Parse the query.
-		if let Some(query) = query {
-			let params = serde_urlencoded::from_str::<Params>(query)
-				.wrap_err("Failed to deserialize the query.")?;
-			dependency.id = dependency.id.or(params.id);
-			dependency.name = dependency.name.or(params.name);
-			dependency.path = dependency.path.or(params.path);
-			dependency.version = dependency.version.or(params.version);
+		// Parse the params from the query.
+		let params = if let Some(query) = query {
+			Some(
+				serde_urlencoded::from_str::<Params>(query)
+					.wrap_err("Failed to deserialize the query.")?,
+			)
+		} else {
+			None
+		};
+
+		// Apply the params.
+		if let Some(params) = params {
+			dependency.apply_params(params);
 		}
 
 		Ok(dependency)

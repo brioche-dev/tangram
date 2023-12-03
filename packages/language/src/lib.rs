@@ -48,7 +48,7 @@ pub mod workspace;
 
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 
-const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/lsp.heapsnapshot"));
+const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language.heapsnapshot"));
 
 pub const SOURCE_MAP: &[u8] =
 	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.js.map"));
@@ -554,11 +554,11 @@ fn run_request_handler(inner: Arc<Inner>, mut request_receiver: RequestReceiver)
 
 	// Get the handle function.
 	let global = context.global(scope);
-	let lsp = v8::String::new_external_onebyte_static(scope, "lsp".as_bytes()).unwrap();
-	let lsp = global.get(scope, lsp.into()).unwrap();
-	let lsp = v8::Local::<v8::Object>::try_from(lsp).unwrap();
+	let language = v8::String::new_external_onebyte_static(scope, "language".as_bytes()).unwrap();
+	let language = global.get(scope, language.into()).unwrap();
+	let language = v8::Local::<v8::Object>::try_from(language).unwrap();
 	let handle = v8::String::new_external_onebyte_static(scope, "handle".as_bytes()).unwrap();
-	let handle = lsp.get(scope, handle.into()).unwrap();
+	let handle = language.get(scope, handle.into()).unwrap();
 	let handle = v8::Local::<v8::Function>::try_from(handle).unwrap();
 
 	while let Some((request, response_sender)) = request_receiver.blocking_recv() {

@@ -1,5 +1,5 @@
 [package]
-name = "tangram_lsp"
+name = "tangram_language"
 
 description = { workspace = true }
 edition = { workspace = true }

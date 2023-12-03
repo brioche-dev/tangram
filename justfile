@@ -5,8 +5,8 @@ check:
 clean:
 	umount ~/.tangram/artifacts; rm -rf ~/.tangram
 
-lsp:
-	npm run -w @tangramdotdev/lsp build
+language:
+	npm run -w @tangramdotdev/language build
 
 orb_clean:
 	orb sh -c "umount /home/$USER/.tangram/artifacts; rm -rf /home/$USER/.tangram;"

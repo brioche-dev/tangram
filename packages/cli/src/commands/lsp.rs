@@ -12,7 +12,7 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the language server.
-		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_language::Server::new(client, tokio::runtime::Handle::current());
 
 		// Run the language server.
 		server.serve().await?;

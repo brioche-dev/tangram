@@ -2,7 +2,7 @@ use super::PackageArgs;
 use crate::Cli;
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_lsp::ROOT_MODULE_FILE_NAME;
+use tangram_language::ROOT_MODULE_FILE_NAME;
 
 /// Generate documentation.
 #[derive(Debug, clap::Args)]
@@ -25,11 +25,11 @@ impl Cli {
 		let client = client.as_ref();
 
 		// Create the language server.
-		let server = tangram_lsp::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_language::Server::new(client, tokio::runtime::Handle::current());
 
 		let (module, path) = if args.runtime {
 			// Create the module.
-			let module = tangram_lsp::Module::Library(tangram_lsp::module::Library {
+			let module = tangram_language::Module::Library(tangram_language::module::Library {
 				path: "tangram.d.ts".parse().unwrap(),
 			});
 			(module, "tangram.d.ts")
@@ -38,7 +38,7 @@ impl Cli {
 			let (package, lock) = tangram_package::new(client, &args.package).await?;
 
 			// Create the module.
-			let module = tangram_lsp::Module::Normal(tangram_lsp::module::Normal {
+			let module = tangram_language::Module::Normal(tangram_language::module::Normal {
 				package: package.id(client).await?.clone(),
 				path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
 				lock: lock.id(client).await?.clone(),

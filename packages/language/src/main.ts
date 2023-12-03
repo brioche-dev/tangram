@@ -88,11 +88,11 @@ let handle = async ({ kind, request }: Request): Promise<Response> => {
 	}
 };
 
-let lsp = {
+let language = {
 	Error: Error_,
 	handle,
 };
 
 Object.defineProperties(globalThis, {
-	lsp: { value: lsp },
+	language: { value: language },
 });

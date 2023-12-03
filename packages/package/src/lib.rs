@@ -298,15 +298,13 @@ async fn package_with_path_dependencies_for_path_inner(
 		package = package.add(client, &module_path, artifact).await?;
 
 		// Get the module's text.
-		let permit = client.file_descriptor_semaphore().acquire().await;
 		let text = tokio::fs::read_to_string(&module_absolute_path)
 			.await
 			.wrap_err("Failed to read the module.")?;
-		drop(permit);
 
 		// Analyze the module.
 		let analysis =
-			tangram_lsp::Module::analyze(text).wrap_err("Failed to analyze the module.")?;
+			tangram_language::Module::analyze(text).wrap_err("Failed to analyze the module.")?;
 
 		// Handle the includes.
 		for include_path in analysis.includes {
@@ -332,7 +330,7 @@ async fn package_with_path_dependencies_for_path_inner(
 
 		// Recurse into the path dependencies.
 		for import in &analysis.imports {
-			if let tangram_lsp::Import::Dependency(
+			if let tangram_language::Import::Dependency(
 				dependency @ tg::Dependency { path: Some(_), .. },
 			) = import
 			{
@@ -370,7 +368,7 @@ async fn package_with_path_dependencies_for_path_inner(
 
 		// Add the unvisited path imports to the queue.
 		for import in &analysis.imports {
-			if let tangram_lsp::Import::Module(import) = import {
+			if let tangram_language::Import::Module(import) = import {
 				let imported_module_path = module_path
 					.clone()
 					.parent()
@@ -1285,12 +1283,12 @@ impl Ext for tg::Directory {
 			let text = file.text(client).await?;
 
 			// Analyze the module.
-			let analysis =
-				tangram_lsp::Module::analyze(text).wrap_err("Failed to analyze the module.")?;
+			let analysis = tangram_language::Module::analyze(text)
+				.wrap_err("Failed to analyze the module.")?;
 
 			// Recurse into the dependencies.
 			for import in &analysis.imports {
-				if let tangram_lsp::Import::Dependency(dependency) = import {
+				if let tangram_language::Import::Dependency(dependency) = import {
 					let mut dependency = dependency.clone();
 
 					// Normalize the path dependency to be relative to the root.
@@ -1308,7 +1306,7 @@ impl Ext for tg::Directory {
 
 			// Add the unvisited module imports to the queue.
 			for import in &analysis.imports {
-				if let tangram_lsp::Import::Module(import) = import {
+				if let tangram_language::Import::Module(import) = import {
 					let imported_module_path = module_path
 						.clone()
 						.parent()
@@ -1333,7 +1331,7 @@ impl Ext for tg::Directory {
 			.ok()
 			.wrap_err("Expected the module to be a file.")?;
 		let text = file.text(client).await?;
-		let analysis = tangram_lsp::Module::analyze(text)?;
+		let analysis = tangram_language::Module::analyze(text)?;
 		if let Some(metadata) = analysis.metadata {
 			Ok(metadata)
 		} else {

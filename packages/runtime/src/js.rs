@@ -35,7 +35,7 @@ type Futures = FuturesUnordered<
 >;
 
 struct Module {
-	module: tangram_lsp::Module,
+	module: tangram_language::Module,
 	source_map: Option<SourceMap>,
 	metadata: Option<tg::package::Metadata>,
 	v8_identity_hash: NonZeroI32,
@@ -234,7 +234,7 @@ fn host_import_module_dynamically_callback<'s>(
 	_host_defined_options: v8::Local<'s, v8::Data>,
 	resource_name: v8::Local<'s, v8::Value>,
 	specifier: v8::Local<'s, v8::String>,
-	_import_assertions: v8::Local<'s, v8::FixedArray>,
+	import_attributes: v8::Local<'s, v8::FixedArray>,
 ) -> Option<v8::Local<'s, v8::Promise>> {
 	// Get the resource name.
 	let resource_name = resource_name.to_string(scope).unwrap();
@@ -243,7 +243,7 @@ fn host_import_module_dynamically_callback<'s>(
 	// Get the module.
 	let module = if resource_name == "[runtime]" {
 		let module = specifier.to_rust_string_lossy(scope);
-		match tangram_lsp::Module::from_str(&module) {
+		match tangram_language::Module::from_str(&module) {
 			Ok(module) => module,
 			Err(error) => {
 				let exception = error::to_exception(scope, &error);
@@ -253,7 +253,7 @@ fn host_import_module_dynamically_callback<'s>(
 		}
 	} else {
 		// Get the module.
-		let module = match tangram_lsp::Module::from_str(&resource_name) {
+		let module = match tangram_language::Module::from_str(&resource_name) {
 			Ok(module) => module,
 			Err(error) => {
 				let exception = error::to_exception(scope, &error);
@@ -262,15 +262,9 @@ fn host_import_module_dynamically_callback<'s>(
 			},
 		};
 
-		// Get the import.
-		let import = specifier.to_rust_string_lossy(scope);
-		let import = match tangram_lsp::Import::from_str(&import) {
-			Ok(import) => import,
-			Err(error) => {
-				let exception = error::to_exception(scope, &error);
-				scope.throw_exception(exception);
-				return None;
-			},
+		// Parse the import.
+		let Some(import) = parse_import(scope, specifier, import_attributes) else {
+			return None;
 		};
 
 		match resolve_module(scope, &module, &import) {
@@ -303,7 +297,7 @@ fn host_import_module_dynamically_callback<'s>(
 fn resolve_module_callback<'s>(
 	context: v8::Local<'s, v8::Context>,
 	specifier: v8::Local<'s, v8::String>,
-	_import_assertions: v8::Local<'s, v8::FixedArray>,
+	import_attributes: v8::Local<'s, v8::FixedArray>,
 	referrer: v8::Local<'s, v8::Module>,
 ) -> Option<v8::Local<'s, v8::Module>> {
 	// Get a scope for the callback.
@@ -331,17 +325,10 @@ fn resolve_module_callback<'s>(
 		},
 	};
 
-	// Get the import.
-	let specifier = specifier.to_rust_string_lossy(scope);
-	let import =
-		match tangram_lsp::Import::from_str(&specifier).wrap_err("Failed to parse the import.") {
-			Ok(import) => import,
-			Err(error) => {
-				let exception = error::to_exception(scope, &error);
-				scope.throw_exception(exception);
-				return None;
-			},
-		};
+	// Parse the import.
+	let Some(import) = parse_import(scope, specifier, import_attributes) else {
+		return None;
+	};
 
 	// Resolve the module.
 	let Some(module) = resolve_module(scope, &module, &import) else {
@@ -359,9 +346,9 @@ fn resolve_module_callback<'s>(
 /// Resolve a module.
 fn resolve_module(
 	scope: &mut v8::HandleScope,
-	module: &tangram_lsp::Module,
-	import: &tangram_lsp::Import,
-) -> Option<tangram_lsp::Module> {
+	module: &tangram_language::Module,
+	import: &tangram_language::Import,
+) -> Option<tangram_language::Module> {
 	let context = scope.get_current_context();
 	let state = context.get_slot::<Rc<State>>(scope).unwrap().clone();
 
@@ -392,9 +379,10 @@ fn resolve_module(
 }
 
 /// Load a module.
+#[allow(clippy::too_many_lines)]
 fn load_module<'s>(
 	scope: &mut v8::HandleScope<'s>,
-	module: &tangram_lsp::Module,
+	module: &tangram_language::Module,
 ) -> Option<v8::Local<'s, v8::Module>> {
 	// Get the context and state.
 	let context = scope.get_current_context();
@@ -458,17 +446,19 @@ fn load_module<'s>(
 	};
 
 	// Transpile the module.
-	let tangram_lsp::transpile::Output {
+	let tangram_language::transpile::Output {
 		transpiled_text,
 		source_map,
-	} = match tangram_lsp::Module::transpile(text).wrap_err("Failed to transpile the module.") {
-		Ok(output) => output,
-		Err(error) => {
-			let exception = error::to_exception(scope, &error);
-			scope.throw_exception(exception);
-			return None;
-		},
-	};
+	} =
+		match tangram_language::Module::transpile(text).wrap_err("Failed to transpile the module.")
+		{
+			Ok(output) => output,
+			Err(error) => {
+				let exception = error::to_exception(scope, &error);
+				scope.throw_exception(exception);
+				return None;
+			},
+		};
 
 	// Parse the source map.
 	let source_map = match SourceMap::from_slice(source_map.as_bytes())
@@ -542,4 +532,63 @@ extern "C" fn host_initialize_import_meta_object_callback(
 	let key = v8::String::new_external_onebyte_static(scope, "url".as_bytes()).unwrap();
 	let value = v8::String::new(scope, &module.to_string()).unwrap();
 	meta.set(scope, key.into(), value.into()).unwrap();
+}
+
+fn parse_import<'s>(
+	scope: &mut v8::HandleScope<'s>,
+	specifier: v8::Local<'s, v8::String>,
+	import_attributes: v8::Local<'s, v8::FixedArray>,
+) -> Option<tangram_language::Import> {
+	match parse_import_inner(scope, specifier, import_attributes) {
+		Ok(import) => Some(import),
+		Err(error) => {
+			let exception = error::to_exception(scope, &error);
+			scope.throw_exception(exception);
+			None
+		},
+	}
+}
+
+fn parse_import_inner<'s>(
+	scope: &mut v8::HandleScope<'s>,
+	specifier: v8::Local<'s, v8::String>,
+	import_attributes: v8::Local<'s, v8::FixedArray>,
+) -> Result<tangram_language::Import> {
+	// Parse the import specifier.
+	let specifier = specifier.to_rust_string_lossy(scope);
+	let import = tangram_language::Import::from_str(&specifier)?;
+
+	// Parse the import attributes.
+	let mut attributes = serde_json::Map::default();
+	let mut i = 0;
+	while i < import_attributes.length() {
+		let key = import_attributes
+			.get(scope, i)
+			.wrap_err("Failed to get the key.")?;
+		let key = v8::Local::<v8::String>::try_from(key).wrap_err("Failed to convert the key.")?;
+		i += 1;
+		let value = import_attributes
+			.get(scope, i)
+			.wrap_err("Failed to get the value.")?;
+		let value =
+			v8::Local::<v8::String>::try_from(value).wrap_err("Failed to convert the value.")?;
+		i += 1;
+		let key = key.to_rust_string_lossy(scope);
+		let value = value.to_rust_string_lossy(scope);
+		attributes.insert(key, value.into());
+	}
+	let import_attributes = attributes;
+
+	// Apply the import attributes.
+	let import = match import {
+		tangram_language::Import::Module(module) => tangram_language::Import::Module(module),
+		tangram_language::Import::Dependency(mut dependency) => {
+			let params = serde_json::from_value(import_attributes.into())
+				.wrap_err("Failed to parse the import attributes.")?;
+			dependency.apply_params(params);
+			tangram_language::Import::Dependency(dependency)
+		},
+	};
+
+	Ok(import)
 }

@@ -5,7 +5,7 @@ use super::{
 use num::ToPrimitive;
 use std::{str::FromStr, sync::Arc};
 use tangram_error::Error;
-use tangram_lsp::Module;
+use tangram_language::Module;
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

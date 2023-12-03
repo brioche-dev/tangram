@@ -5,7 +5,7 @@ members = [
   "packages/client",
   "packages/error",
   "packages/http",
-  "packages/lsp",
+  "packages/language",
   "packages/package",
   "packages/runtime",
   "packages/server",
@@ -105,7 +105,7 @@ tangram_cli = { path = "packages/cli" }
 tangram_client = { path = "packages/client" }
 tangram_error = { path = "packages/error" }
 tangram_http = { path = "packages/http" }
-tangram_lsp = { path = "packages/lsp" }
+tangram_language = { path = "packages/language" }
 tangram_package = { path = "packages/package" }
 tangram_runtime = { path = "packages/runtime" }
 tangram_server = { path = "packages/server" }
