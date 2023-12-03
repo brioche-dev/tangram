@@ -70,7 +70,7 @@ impl Cli {
 		eprintln!("{}", target.id(client).await?);
 
 		// Build the target.
-		let build = target.build(client, None, args.retry).await?;
+		let build = target.build(client, None, 0, args.retry).await?;
 
 		// Print the build ID.
 		eprintln!("{}", build.id());

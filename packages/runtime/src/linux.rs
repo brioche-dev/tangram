@@ -56,12 +56,13 @@ pub async fn build(
 	client: &dyn tg::Client,
 	build: &tg::Build,
 	_retry: tg::build::Retry,
+	server_directory_path: &Path,
 ) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
 
 	// Get the server directory path.
-	let server_directory_host_path = client.path().unwrap().to_owned();
+	let server_directory_host_path = server_directory_path;
 	let server_directory_guest_path = PathBuf::from(SERVER_DIRECTORY_GUEST_PATH);
 
 	// Create a tempdir for the root.
@@ -78,8 +79,8 @@ pub async fn build(
 	let sh_path = root_directory_host_path.join("bin/sh");
 	let (env_bytes, sh_bytes) = match target.host(client).await?.arch() {
 		tg::system::Arch::Aarch64 => (ENV_AARCH64_LINUX, SH_AARCH64_LINUX),
+		tg::system::Arch::Js => unreachable!(),
 		tg::system::Arch::X8664 => (ENV_X8664_LINUX, SH_X8664_LINUX),
-		_ => unreachable!(),
 	};
 	tokio::fs::create_dir_all(&env_path.parent().unwrap())
 		.await
@@ -133,14 +134,14 @@ pub async fn build(
 	let home_directory_guest_path = PathBuf::from(HOME_DIRECTORY_GUEST_PATH);
 	tokio::fs::create_dir_all(&home_directory_host_path)
 		.await
-		.wrap_err(r#"Failed to create the home directory."#)?;
+		.wrap_err("Failed to create the home directory.")?;
 
 	// Create the host and guest paths for the working directory.
 	let working_directory_host_path =
 		root_directory_host_path.join(WORKING_DIRECTORY_GUEST_PATH.strip_prefix('/').unwrap());
 	tokio::fs::create_dir_all(&working_directory_host_path)
 		.await
-		.wrap_err(r#"Failed to create the working directory."#)?;
+		.wrap_err("Failed to create the working directory.")?;
 
 	// Render the executable.
 	let executable = target.executable(client).await?;
@@ -329,7 +330,7 @@ pub async fn build(
 		root_directory_host_path.join(server_directory_guest_path.strip_prefix("/").unwrap());
 	tokio::fs::create_dir_all(&server_directory_target_path)
 		.await
-		.wrap_err(r#"Failed to create the mount point for the tangram directory."#)?;
+		.wrap_err("Failed to create the mount point for the tangram directory.")?;
 	let server_directory_source_path =
 		CString::new(server_directory_source_path.as_os_str().as_bytes()).unwrap();
 	let server_directory_target_path =
@@ -368,7 +369,7 @@ pub async fn build(
 	);
 	tokio::fs::create_dir_all(&output_parent_directory_target_path)
 		.await
-		.wrap_err(r#"Failed to create the mount point for the output parent directory."#)?;
+		.wrap_err("Failed to create the mount point for the output parent directory.")?;
 	let output_parent_directory_source_path =
 		CString::new(output_parent_directory_source_path.as_os_str().as_bytes()).unwrap();
 	let output_parent_directory_target_path =

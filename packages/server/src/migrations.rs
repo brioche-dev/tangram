@@ -79,7 +79,7 @@ async fn migration_0000(path: &Path) -> Result<()> {
 	env.create_db("assignments".into(), lmdb::DatabaseFlags::empty())
 		.wrap_err("Failed to create the assignments database.")?;
 
-	// Create the trackers database
+	// Create the trackers database.
 	env.create_db("trackers".into(), lmdb::DatabaseFlags::empty())
 		.wrap_err("Failed to create the trackers database.")?;
 

@@ -42,12 +42,6 @@ pub mod value;
 pub trait Client: Send + Sync + 'static {
 	fn clone_box(&self) -> Box<dyn Client>;
 
-	fn is_local(&self) -> bool {
-		false
-	}
-
-	fn path(&self) -> Option<&std::path::Path>;
-
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore;
 
 	async fn stop(&self) -> Result<()>;
@@ -83,6 +77,7 @@ pub trait Client: Send + Sync + 'static {
 		&self,
 		user: Option<&User>,
 		id: &target::Id,
+		depth: u64,
 		retry: build::Retry,
 	) -> Result<build::Id>;
 

@@ -20,10 +20,10 @@ impl Server {
 		}
 
 		// Clear the temporary path.
-		tokio::fs::remove_dir_all(self.temps_path())
+		tokio::fs::remove_dir_all(self.tmp_path())
 			.await
 			.wrap_err("Failed to remove the temporary directory.")?;
-		tokio::fs::create_dir_all(self.temps_path())
+		tokio::fs::create_dir_all(self.tmp_path())
 			.await
 			.wrap_err("Failed to recreate the temporary directory.")?;
 

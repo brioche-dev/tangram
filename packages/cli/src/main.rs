@@ -22,21 +22,46 @@ struct Cli {
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct Config {
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub autoenvs: Option<Vec<PathBuf>>,
+struct Config {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	autoenv: Option<AutoenvConfig>,
 
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub remote: Option<Url>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	build: Option<BuildConfig>,
 
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub builder: Option<BuilderConfig>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	remote: Option<RemoteConfig>,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct BuilderConfig {
-	enable: Option<bool>,
-	systems: Option<Vec<tg::System>>,
+struct AutoenvConfig {
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	paths: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct BuildConfig {
+	/// Configure remote builds.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	remote: Option<RemoteBuildConfig>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct RemoteBuildConfig {
+	/// Enable remote builds.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	enable: bool,
+
+	/// Limit remote builds to targets with the specified hosts.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	hosts: Option<Vec<tg::System>>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct RemoteConfig {
+	/// The remote URL.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	url: Option<Url>,
 }
 
 #[tokio::main]

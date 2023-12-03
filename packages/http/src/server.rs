@@ -370,7 +370,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "targets", id, "build"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -392,13 +392,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		#[derive(serde::Deserialize)]
-		struct SearchParams {
-			#[serde(default)]
-			retry: tg::build::Retry,
-		}
-
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "targets", id, "build"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -406,11 +400,19 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get the search params.
+		#[derive(serde::Deserialize)]
+		struct SearchParams {
+			#[serde(default)]
+			depth: u64,
+			#[serde(default)]
+			retry: tg::build::Retry,
+		}
 		let Some(query) = request.uri().query() else {
 			return Ok(bad_request());
 		};
 		let search_params: SearchParams =
 			serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
+		let depth = search_params.depth;
 		let retry = search_params.retry;
 
 		// Get the user.
@@ -420,7 +422,7 @@ impl Server {
 		let build_id = self
 			.inner
 			.client
-			.get_or_create_build_for_target(user.as_ref(), &id, retry)
+			.get_or_create_build_for_target(user.as_ref(), &id, depth, retry)
 			.await?;
 
 		// Create the response.
@@ -433,7 +435,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", build_id, "cancel"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -461,7 +463,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "target"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -483,7 +485,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "children"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -516,7 +518,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "children"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -553,7 +555,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "log"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -580,7 +582,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "log"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -614,7 +616,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", id, "outcome"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -640,7 +642,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "builds", build_id, "finish"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -677,7 +679,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "objects", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
@@ -707,7 +709,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "objects", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
@@ -734,7 +736,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "objects", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
@@ -802,7 +804,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, _, "packages", dependency] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -829,7 +831,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, _, "packages", dependency, "versions"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -861,7 +863,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "packages", dependency, "metadata"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -899,7 +901,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "packages", dependency, "dependencies"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
@@ -962,7 +964,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "trackers", path] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
@@ -994,7 +996,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "trackers", path] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
@@ -1039,7 +1041,7 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the path params.
+		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let ["v1", "logins", id] = path_components.as_slice() else {
 			return_error!("Unexpected path.");

@@ -7,6 +7,7 @@ use std::{
 	ffi::{CStr, CString},
 	fmt::Write,
 	os::unix::prelude::OsStrExt,
+	path::Path,
 };
 use tangram_client as tg;
 use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
@@ -17,12 +18,10 @@ pub async fn build(
 	client: &dyn tg::Client,
 	build: &tg::Build,
 	_retry: tg::build::Retry,
+	server_directory_path: &Path,
 ) -> Result<tg::Value> {
 	// Get the target.
 	let target = build.target(client).await?;
-
-	// Get the server path.
-	let server_directory_path = client.path().unwrap().to_owned();
 
 	// Get the artifacts path.
 	let artifacts_directory_path = server_directory_path.join("artifacts");

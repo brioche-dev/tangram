@@ -109,62 +109,43 @@ impl Cli {
 		// Get the user.
 		let user = self.user().await?;
 
-		// Create the remote.
-		let url = if let Some(url) = args.remote {
-			url
-		} else if let Some(url) = config.as_ref().and_then(|config| config.remote.as_ref()) {
-			url.clone()
-		} else {
-			API_URL.parse().unwrap()
-		};
+		// Create the build options.
+		let remote = config
+			.as_ref()
+			.and_then(|config| config.build.as_ref())
+			.and_then(|build| build.remote.clone())
+			.map(|build| tangram_server::RemoteBuildOptions {
+				enable: build.enable,
+				hosts: build.hosts,
+			});
+		let build = Some(tangram_server::BuildOptions { remote });
+
+		// Create the remote options.
+		let url = args
+			.remote
+			.or(config
+				.as_ref()
+				.and_then(|config| config.remote.as_ref())
+				.and_then(|remote| remote.url.clone()))
+			.unwrap_or_else(|| API_URL.parse().unwrap());
 		let tls = url.scheme() == "https";
 		let client = tangram_http::client::Builder::new(url.try_into()?)
 			.tls(tls)
 			.user(user)
 			.build();
-		let remote = if args.no_remote {
-			None
-		} else {
-			Some(Box::new(client) as _)
-		};
-
-		// Create the builder options.
-		let enable = if let Some(enable) = args
-			.builder
-			.as_ref()
-			.and_then(|builder| builder.enable_builder)
-		{
-			enable
-		} else if let Some(enable) = config
-			.as_ref()
-			.and_then(|config| config.builder.as_ref())
-			.and_then(|builder| builder.enable)
-		{
-			enable
-		} else {
-			false
-		};
-		let systems = args
-			.builder
-			.as_ref()
-			.and_then(|builder| builder.systems.clone())
-			.or_else(|| {
-				config
-					.as_ref()
-					.and_then(|config| config.builder.as_ref())
-					.and_then(|builder| builder.systems.clone())
-			});
-		let builder = tangram_server::BuilderOptions { enable, systems };
+		let client = Box::new(client) as _;
+		let remote = tangram_server::RemoteOptions { client };
+		let remote = if args.no_remote { None } else { Some(remote) };
 
 		let version = self.version.clone();
 
 		// Create the options.
 		let options = tangram_server::Options {
 			addr,
-			remote,
+			build,
 			path,
+			remote,
 			version,
-			builder,
 		};
 
 		// Start the server.

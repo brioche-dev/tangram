@@ -22,6 +22,7 @@ const SOURCE_MAP: &[u8] =
 struct State {
 	build: tg::Build,
 	client: Box<dyn tg::Client>,
+	depth: u64,
 	futures: RefCell<Futures>,
 	global_source_map: Option<SourceMap>,
 	modules: RefCell<Vec<Module>>,
@@ -65,6 +66,7 @@ std::thread_local! {
 pub async fn build(
 	client: &dyn tg::Client,
 	build: &tg::Build,
+	depth: u64,
 	retry: tg::build::Retry,
 	main_runtime_handle: tokio::runtime::Handle,
 ) -> Result<tg::Value> {
@@ -75,6 +77,7 @@ pub async fn build(
 	let state = Rc::new(State {
 		build: build.clone(),
 		client: client.clone_box(),
+		depth,
 		futures: RefCell::new(FuturesUnordered::new()),
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
 		modules: RefCell::new(Vec::new()),

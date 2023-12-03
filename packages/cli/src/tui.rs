@@ -64,11 +64,12 @@ struct TreeItemInner {
 }
 
 enum TreeItemStatus {
-	Building,
 	Unknown,
-	Cancellation,
-	Failure,
-	Success,
+	Building,
+	Terminated,
+	Canceled,
+	Failed,
+	Succeeded,
 }
 
 struct Log {
@@ -432,9 +433,10 @@ impl TreeItem {
 			async move {
 				let status = match build.outcome(client.as_ref()).await {
 					Err(_) => TreeItemStatus::Unknown,
-					Ok(tg::build::Outcome::Cancellation) => TreeItemStatus::Cancellation,
-					Ok(tg::build::Outcome::Failure(_)) => TreeItemStatus::Failure,
-					Ok(tg::build::Outcome::Success(_)) => TreeItemStatus::Success,
+					Ok(tg::build::Outcome::Terminated) => TreeItemStatus::Terminated,
+					Ok(tg::build::Outcome::Canceled) => TreeItemStatus::Canceled,
+					Ok(tg::build::Outcome::Failed(_)) => TreeItemStatus::Failed,
+					Ok(tg::build::Outcome::Succeeded(_)) => TreeItemStatus::Succeeded,
 				};
 				status_sender.send(status).ok();
 			}
@@ -549,15 +551,16 @@ impl TreeItem {
 			"▶"
 		};
 		let status = match self.inner.borrow().status {
+			TreeItemStatus::Unknown => "?".yellow(),
 			TreeItemStatus::Building => {
 				let state = SPINNER_POSITION.load(std::sync::atomic::Ordering::SeqCst);
 				let state = (state / SPINNER_FRAMES_PER_UPDATE) % SPINNER.len();
 				SPINNER[state].to_string().blue()
 			},
-			TreeItemStatus::Unknown => "?".yellow(),
-			TreeItemStatus::Cancellation => "⦻".yellow(),
-			TreeItemStatus::Failure => "✗".red(),
-			TreeItemStatus::Success => "✓".green(),
+			TreeItemStatus::Terminated => "⦻".red(),
+			TreeItemStatus::Canceled => "⦻".yellow(),
+			TreeItemStatus::Failed => "✗".red(),
+			TreeItemStatus::Succeeded => "✓".green(),
 		};
 		let title = self
 			.inner

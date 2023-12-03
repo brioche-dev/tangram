@@ -7,7 +7,7 @@ use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
 use futures::{stream::FuturesOrdered, TryStreamExt};
 
-/// An artifact kind.
+/// An object kind.
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
 	Leaf,
@@ -23,6 +23,7 @@ pub enum Kind {
 /// An object ID.
 #[derive(Clone, Debug, From, TryInto, TryUnwrap, serde::Deserialize, serde::Serialize)]
 #[serde(into = "crate::Id", try_from = "crate::Id")]
+#[try_unwrap(ref)]
 pub enum Id {
 	Leaf(leaf::Id),
 	Branch(branch::Id),

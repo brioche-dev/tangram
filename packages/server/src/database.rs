@@ -131,7 +131,7 @@ impl Database {
 		Ok(())
 	}
 
-	pub fn try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
+	pub fn _try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
 		let txn = self
 			.env
 			.begin_ro_txn()
@@ -146,7 +146,7 @@ impl Database {
 		Ok(Some(tracker))
 	}
 
-	pub fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
+	pub fn _set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
 		// Serialize the tracker.
 		let tracker = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the tracker.")?;
 

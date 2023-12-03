@@ -236,14 +236,6 @@ impl tg::Client for Client {
 		Box::new(self.clone())
 	}
 
-	fn is_local(&self) -> bool {
-		self.inner.addr.is_local()
-	}
-
-	fn path(&self) -> Option<&std::path::Path> {
-		None
-	}
-
 	fn file_descriptor_semaphore(&self) -> &tokio::sync::Semaphore {
 		&self.inner.file_descriptor_semaphore
 	}
@@ -419,11 +411,23 @@ impl tg::Client for Client {
 		&self,
 		user: Option<&tg::User>,
 		id: &tg::target::Id,
+		depth: u64,
 		retry: tg::build::Retry,
 	) -> Result<tg::build::Id> {
+		#[derive(serde::Serialize)]
+		struct SearchParams {
+			#[serde(default)]
+			depth: u64,
+			#[serde(default)]
+			retry: tg::build::Retry,
+		}
+		let search_params = SearchParams { depth, retry };
+		let search_params = serde_urlencoded::to_string(search_params)
+			.wrap_err("Failed to serialize the search params.")?;
+		let uri = format!("/v1/targets/{id}/build?{search_params}");
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
-			.uri(format!("/v1/targets/{id}/build?retry={retry}"));
+			.uri(uri);
 		let user = user.or(self.inner.user.as_ref());
 		if let Some(token) = user.and_then(|user| user.token.as_ref()) {
 			request = request.header(http::header::AUTHORIZATION, format!("Bearer {token}"));

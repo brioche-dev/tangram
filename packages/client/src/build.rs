@@ -44,9 +44,10 @@ pub struct Object {
 #[serde(try_from = "data::Outcome")]
 #[try_unwrap(ref)]
 pub enum Outcome {
-	Cancellation,
-	Failure(Error),
-	Success(Value),
+	Terminated,
+	Canceled,
+	Failed(Error),
+	Succeeded(Value),
 }
 
 #[derive(
@@ -64,9 +65,10 @@ pub enum Outcome {
 #[serde(into = "String", try_from = "String")]
 pub enum Retry {
 	#[default]
-	Cancellation,
-	Failure,
-	Success,
+	Terminated,
+	Canceled,
+	Failed,
+	Succeeded,
 }
 
 pub mod data {
@@ -87,9 +89,10 @@ pub mod data {
 	#[serde(rename_all = "camelCase", tag = "kind", content = "value")]
 	#[try_unwrap(ref)]
 	pub enum Outcome {
-		Cancellation,
-		Failure(Error),
-		Success(value::Data),
+		Terminated,
+		Canceled,
+		Failed(Error),
+		Succeeded(value::Data),
 	}
 }
 
@@ -140,6 +143,16 @@ impl Build {
 		unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) }
 	}
 
+	#[must_use]
+	pub fn try_get_loaded_object(&self) -> Option<&Object> {
+		self.state
+			.read()
+			.unwrap()
+			.object
+			.as_ref()
+			.map(|object| unsafe { &*(object as *const Object) })
+	}
+
 	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
 		self.load(client).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
@@ -188,42 +201,16 @@ impl Build {
 			.await?;
 		let log = object.log.id(client).await?;
 		let outcome = match &object.outcome {
-			Outcome::Cancellation => data::Outcome::Cancellation,
-			Outcome::Failure(error) => data::Outcome::Failure(error.clone()),
-			Outcome::Success(value) => data::Outcome::Success(value.data(client).await?),
+			Outcome::Terminated => data::Outcome::Terminated,
+			Outcome::Canceled => data::Outcome::Canceled,
+			Outcome::Failed(error) => data::Outcome::Failed(error.clone()),
+			Outcome::Succeeded(value) => data::Outcome::Succeeded(value.data(client).await?),
 		};
 		Ok(Data {
 			target,
 			children,
 			log,
 			outcome,
-		})
-	}
-}
-
-impl Outcome {
-	#[must_use]
-	pub fn retry(&self) -> Retry {
-		match self {
-			Self::Cancellation => Retry::Cancellation,
-			Self::Failure(_) => Retry::Failure,
-			Self::Success(_) => Retry::Success,
-		}
-	}
-
-	pub fn into_result(self) -> Result<Value> {
-		match self {
-			Self::Cancellation => return_error!("The build was cancelled."),
-			Self::Failure(error) => Err(error),
-			Self::Success(value) => Ok(value),
-		}
-	}
-
-	pub async fn data(&self, client: &dyn Client) -> Result<data::Outcome> {
-		Ok(match self {
-			Self::Cancellation => data::Outcome::Cancellation,
-			Self::Failure(error) => data::Outcome::Failure(error.clone()),
-			Self::Success(value) => data::Outcome::Success(value.data(client).await?),
 		})
 	}
 }
@@ -265,14 +252,13 @@ impl Build {
 	}
 
 	pub async fn try_get_target(&self, client: &dyn Client) -> Result<Option<Target>> {
-		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(object.target.clone()))
-		} else {
-			Ok(client
-				.try_get_build_target(self.id())
-				.await?
-				.map(Target::with_id))
+		if let Some(object) = self.try_get_loaded_object() {
+			return Ok(Some(object.target.clone()));
 		}
+		Ok(client
+			.try_get_build_target(self.id())
+			.await?
+			.map(Target::with_id))
 	}
 
 	pub async fn children(&self, client: &dyn Client) -> Result<BoxStream<'static, Result<Self>>> {
@@ -285,14 +271,13 @@ impl Build {
 		&self,
 		client: &dyn Client,
 	) -> Result<Option<BoxStream<'static, Result<Self>>>> {
-		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(stream::iter(object.children.clone()).map(Ok).boxed()))
-		} else {
-			Ok(client
-				.try_get_build_children(self.id())
-				.await?
-				.map(|children| children.map_ok(Build::with_id).boxed()))
+		if let Some(object) = self.try_get_loaded_object() {
+			return Ok(Some(stream::iter(object.children.clone()).map(Ok).boxed()));
 		}
+		Ok(client
+			.try_get_build_children(self.id())
+			.await?
+			.map(|children| children.map_ok(Build::with_id).boxed()))
 	}
 
 	pub async fn add_child(&self, client: &dyn Client, child: &Self) -> Result<()> {
@@ -312,13 +297,12 @@ impl Build {
 		&self,
 		client: &dyn Client,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
-		if let Some(object) = self.try_get_object(client).await? {
+		if let Some(object) = self.try_get_loaded_object() {
 			let log = object.log.clone();
 			let bytes = log.bytes(client).await?;
-			Ok(Some(stream::once(async move { Ok(bytes.into()) }).boxed()))
-		} else {
-			Ok(client.try_get_build_log(self.id()).await?)
+			return Ok(Some(stream::once(async move { Ok(bytes.into()) }).boxed()));
 		}
+		client.try_get_build_log(self.id()).await
 	}
 
 	pub async fn add_log(&self, client: &dyn Client, log: Bytes) -> Result<()> {
@@ -334,11 +318,10 @@ impl Build {
 	}
 
 	pub async fn try_get_outcome(&self, client: &dyn Client) -> Result<Option<Outcome>> {
-		if let Some(object) = self.try_get_object(client).await? {
-			Ok(Some(object.outcome.clone()))
-		} else {
-			Ok(client.try_get_build_outcome(self.id()).await?)
+		if let Some(object) = self.try_get_loaded_object() {
+			return Ok(Some(object.outcome.clone()));
 		}
+		client.try_get_build_outcome(self.id()).await
 	}
 
 	pub async fn cancel(&self, client: &dyn Client) -> Result<()> {
@@ -356,6 +339,36 @@ impl Build {
 		let id = self.id();
 		client.finish_build(user, id, outcome).await?;
 		Ok(())
+	}
+}
+
+impl Outcome {
+	#[must_use]
+	pub fn retry(&self) -> Retry {
+		match self {
+			Self::Terminated => Retry::Terminated,
+			Self::Canceled => Retry::Canceled,
+			Self::Failed(_) => Retry::Failed,
+			Self::Succeeded(_) => Retry::Succeeded,
+		}
+	}
+
+	pub fn into_result(self) -> Result<Value> {
+		match self {
+			Self::Terminated => return_error!("The build was terminated."),
+			Self::Canceled => return_error!("The build was canceled."),
+			Self::Failed(error) => Err(error),
+			Self::Succeeded(value) => Ok(value),
+		}
+	}
+
+	pub async fn data(&self, client: &dyn Client) -> Result<data::Outcome> {
+		Ok(match self {
+			Self::Terminated => data::Outcome::Terminated,
+			Self::Canceled => data::Outcome::Canceled,
+			Self::Failed(error) => data::Outcome::Failed(error.clone()),
+			Self::Succeeded(value) => data::Outcome::Succeeded(value.data(client).await?),
+		})
 	}
 }
 
@@ -377,7 +390,7 @@ impl Data {
 		let log = std::iter::once(self.log.clone().into());
 		let outcome = self
 			.outcome
-			.try_unwrap_success_ref()
+			.try_unwrap_succeeded_ref()
 			.ok()
 			.map(value::Data::children)
 			.into_iter()
@@ -413,9 +426,10 @@ impl TryFrom<data::Outcome> for Outcome {
 
 	fn try_from(data: data::Outcome) -> std::prelude::v1::Result<Self, Self::Error> {
 		match data {
-			data::Outcome::Cancellation => Ok(Outcome::Cancellation),
-			data::Outcome::Failure(error) => Ok(Outcome::Failure(error)),
-			data::Outcome::Success(value) => Ok(Outcome::Success(value.try_into()?)),
+			data::Outcome::Terminated => Ok(Outcome::Terminated),
+			data::Outcome::Canceled => Ok(Outcome::Canceled),
+			data::Outcome::Failed(error) => Ok(Outcome::Failed(error)),
+			data::Outcome::Succeeded(value) => Ok(Outcome::Succeeded(value.try_into()?)),
 		}
 	}
 }
@@ -464,9 +478,10 @@ impl TryFrom<&[u8]> for Id {
 impl std::fmt::Display for Retry {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Cancellation => write!(f, "cancellation"),
-			Self::Failure => write!(f, "failure"),
-			Self::Success => write!(f, "success"),
+			Self::Terminated => write!(f, "terminated"),
+			Self::Canceled => write!(f, "canceled"),
+			Self::Failed => write!(f, "failed"),
+			Self::Succeeded => write!(f, "succeeded"),
 		}
 	}
 }
@@ -476,9 +491,10 @@ impl std::str::FromStr for Retry {
 
 	fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
 		match s {
-			"cancellation" => Ok(Retry::Cancellation),
-			"failure" => Ok(Retry::Failure),
-			"success" => Ok(Retry::Success),
+			"terminated" => Ok(Retry::Terminated),
+			"canceled" => Ok(Retry::Canceled),
+			"failed" => Ok(Retry::Failed),
+			"succeeded" => Ok(Retry::Succeeded),
 			_ => return_error!("Invalid retry."),
 		}
 	}
@@ -504,6 +520,26 @@ pub mod queue {
 	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 	pub struct Item {
 		pub build: Id,
+		pub depth: u64,
 		pub retry: Retry,
 	}
+	impl PartialOrd for Item {
+		fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+			Some(self.depth.cmp(&other.depth))
+		}
+	}
+
+	impl Ord for Item {
+		fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+			self.depth.cmp(&other.depth)
+		}
+	}
+
+	impl PartialEq for Item {
+		fn eq(&self, other: &Self) -> bool {
+			self.depth == other.depth
+		}
+	}
+
+	impl Eq for Item {}
 }

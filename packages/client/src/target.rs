@@ -261,11 +261,12 @@ impl Target {
 		&self,
 		client: &dyn Client,
 		user: Option<&User>,
+		depth: u64,
 		retry: build::Retry,
 	) -> Result<Build> {
 		let target_id = self.id(client).await?;
 		let build_id = client
-			.get_or_create_build_for_target(user, target_id, retry)
+			.get_or_create_build_for_target(user, target_id, depth, retry)
 			.await?;
 		let build = Build::with_id(build_id);
 		Ok(build)

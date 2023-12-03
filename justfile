@@ -27,10 +27,10 @@ runtime:
 	npm run -w @tangramdotdev/runtime build
 
 serve_dev:
-	TANGRAM_TRACING=tangram_http=info cargo run -- server run
+	cargo run -- server run
 
 serve_release:
-	cargo build --release && ./target/release/tg server run
+	cargo run --release -- server run
 
 tg +ARGS:
 	cargo run -- {{ARGS}}

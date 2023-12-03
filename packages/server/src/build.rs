@@ -1,5 +1,8 @@
 use super::Server;
-use crate::{BuildState, BuildStateInner, ChildrenState, LogState, OutcomeState, StopState};
+use crate::{
+	BuildQueueTaskMessage, BuildState, BuildStateInner, BuildStatus, ChildrenState, LogState,
+	OutcomeState, StopState,
+};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use futures::{
@@ -13,6 +16,80 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::wrappers::BroadcastStream;
 
 impl Server {
+	pub(crate) async fn run_build_queue(
+		&self,
+		mut build_queue_task_receiver: tokio::sync::mpsc::UnboundedReceiver<BuildQueueTaskMessage>,
+	) -> Result<()> {
+		loop {
+			loop {
+				// Get the highest priority item from the queue.
+				let Some(item) = self.inner.build_queue.lock().unwrap().pop() else {
+					break;
+				};
+
+				// If the build is at a unique depth, then start it.
+				if self
+					.inner
+					.build_state
+					.read()
+					.unwrap()
+					.values()
+					.filter(|state| *state.inner.status.lock().unwrap() == BuildStatus::Building)
+					.all(|state| state.inner.depth != item.depth)
+				{
+					// Set the build's status to building.
+					{
+						let mut state = self.inner.build_state.write().unwrap();
+						let state = state.get_mut(&item.build).unwrap();
+						*state.inner.status.lock().unwrap() = BuildStatus::Building;
+					}
+
+					// Start the build.
+					self.start_build(None, &item.build, item.depth, item.retry, None);
+
+					continue;
+				}
+
+				// Otherwise, attempt to acquire a permit for it.
+				match self.inner.build_permits.clone().try_acquire_owned() {
+					Ok(permit) => {
+						// Set the build's status to building.
+						{
+							let mut state = self.inner.build_state.write().unwrap();
+							let state = state.get_mut(&item.build).unwrap();
+							*state.inner.status.lock().unwrap() = BuildStatus::Building;
+						}
+
+						// Start the build.
+						self.start_build(None, &item.build, item.depth, item.retry, Some(permit));
+
+						continue;
+					},
+					// If there are no permits available, then add the item back to the queue and break.
+					Err(tokio::sync::TryAcquireError::NoPermits) => {
+						self.inner.build_queue.lock().unwrap().push(item);
+						break;
+					},
+					Err(tokio::sync::TryAcquireError::Closed) => {
+						return_error!("The build queue task was closed.");
+					},
+				};
+			}
+
+			// Wait for a message on the channel.
+			let message = build_queue_task_receiver.recv().await.unwrap();
+			match message {
+				// If this is a build added or finished message, then attempt to start
+				BuildQueueTaskMessage::BuildAdded | BuildQueueTaskMessage::BuildFinished => {
+					continue;
+				},
+
+				// If this is a stop message, then break.
+				BuildQueueTaskMessage::Stop => return Ok(()),
+			}
+		}
+	}
+
 	/// Attempt to get the build for a target.
 	pub async fn try_get_build_for_target(
 		&self,
@@ -52,6 +129,7 @@ impl Server {
 		&self,
 		user: Option<&tg::User>,
 		id: &tg::target::Id,
+		depth: u64,
 		retry: tg::build::Retry,
 	) -> Result<tg::build::Id> {
 		let target = tg::Target::with_id(id.clone());
@@ -78,8 +156,9 @@ impl Server {
 				let object = tg::object::Handle::with_id(id.clone().into());
 				let result = object.push(self, remote.as_ref()).await;
 				if result.is_ok() {
-					if let Ok(build_id) =
-						remote.get_or_create_build_for_target(user, id, retry).await
+					if let Ok(build_id) = remote
+						.get_or_create_build_for_target(user, id, depth, retry)
+						.await
 					{
 						return Ok(build_id);
 					}
@@ -89,6 +168,9 @@ impl Server {
 
 		// Otherwise, create a new build.
 		let build_id = tg::build::Id::new();
+
+		// Create the status.
+		let status = std::sync::Mutex::new(BuildStatus::Queued);
 
 		// Create the stop state.
 		let (sender, receiver) = tokio::sync::watch::channel(false);
@@ -110,34 +192,51 @@ impl Server {
 
 		// Create the result state.
 		let (sender, receiver) = tokio::sync::watch::channel(None);
-		let result = OutcomeState {
-			sender,
-			result: receiver,
-		};
+		let outcome = OutcomeState { sender, receiver };
 
 		// Create the build state.
 		let state = BuildState {
 			inner: Arc::new(BuildStateInner {
+				status,
+				depth,
 				stop,
 				target,
 				children,
 				log,
-				outcome: result,
+				outcome,
 			}),
 		};
 
 		// Add the state to the server.
 		self.inner
-			.builds
+			.build_state
 			.write()
 			.unwrap()
 			.insert(build_id.clone(), state.clone());
 
-		// Add the assignment to the database.
-		self.inner.database.set_build_for_target(id, &build_id)?;
+		// Add the assignment.
+		self.inner
+			.build_assignments
+			.write()
+			.unwrap()
+			.insert(id.clone(), build_id.clone());
 
-		// Start the build.
-		self.start_build(user, &build_id, retry);
+		// Add the build to the queue.
+		self.inner
+			.build_queue
+			.lock()
+			.unwrap()
+			.push(tg::build::queue::Item {
+				build: build_id.clone(),
+				depth,
+				retry,
+			});
+
+		// Send a message to the build queue task that the build has been added.
+		self.inner
+			.build_queue_task_sender
+			.send(BuildQueueTaskMessage::BuildAdded)
+			.unwrap();
 
 		Ok(build_id)
 	}
@@ -146,14 +245,19 @@ impl Server {
 		&self,
 		user: Option<&tg::User>,
 		id: &tg::build::Id,
+		depth: u64,
 		retry: tg::build::Retry,
+		permit: Option<tokio::sync::OwnedSemaphorePermit>,
 	) {
 		tokio::spawn({
 			let server = self.clone();
 			let user = user.cloned();
 			let id = id.clone();
 			async move {
-				if let Err(error) = server.start_build_inner(user.as_ref(), &id, retry).await {
+				if let Err(error) = server
+					.start_build_inner(user.as_ref(), &id, depth, retry, permit)
+					.await
+				{
 					tracing::error!(?error, "The build failed.");
 				}
 			}
@@ -164,7 +268,9 @@ impl Server {
 		&self,
 		user: Option<&tg::User>,
 		id: &tg::build::Id,
+		depth: u64,
 		retry: tg::build::Retry,
+		permit: Option<tokio::sync::OwnedSemaphorePermit>,
 	) -> Result<()> {
 		let build = tg::Build::with_id(id.clone());
 		let target = build.target(self).await?;
@@ -180,8 +286,14 @@ impl Server {
 						let build = build.clone();
 						let main_runtime_handle = tokio::runtime::Handle::current();
 						move || async move {
-							tangram_runtime::js::build(&server, &build, retry, main_runtime_handle)
-								.await
+							tangram_runtime::js::build(
+								&server,
+								&build,
+								depth,
+								retry,
+								main_runtime_handle,
+							)
+							.await
 						}
 					})
 					.await
@@ -190,7 +302,7 @@ impl Server {
 			tg::system::Os::Darwin => {
 				#[cfg(target_os = "macos")]
 				{
-					tangram_runtime::darwin::build(self, &build, retry).await
+					tangram_runtime::darwin::build(self, &build, retry, self.path()).await
 				}
 				#[cfg(not(target_os = "macos"))]
 				{
@@ -200,7 +312,7 @@ impl Server {
 			tg::system::Os::Linux => {
 				#[cfg(target_os = "linux")]
 				{
-					tangram_runtime::linux::build(self, &build, retry).await
+					tangram_runtime::linux::build(self, &build, retry, self.path()).await
 				}
 				#[cfg(not(target_os = "linux"))]
 				{
@@ -218,12 +330,21 @@ impl Server {
 
 		// Create the outcome.
 		let outcome = match result {
-			Ok(value) => tg::build::Outcome::Success(value),
-			Err(error) => tg::build::Outcome::Failure(error),
+			Ok(value) => tg::build::Outcome::Succeeded(value),
+			Err(error) => tg::build::Outcome::Failed(error),
 		};
 
 		// Finish the build.
 		build.finish(self, user, outcome).await?;
+
+		// Drop the permit.
+		drop(permit);
+
+		// Send a message to the build queue task that the build has finished.
+		self.inner
+			.build_queue_task_sender
+			.send(BuildQueueTaskMessage::BuildFinished)
+			.unwrap();
 
 		Ok(())
 	}
@@ -247,7 +368,7 @@ impl Server {
 
 	pub async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
 		// Attempt to get the target from the state.
-		let state = self.inner.builds.read().unwrap().get(id).cloned();
+		let state = self.inner.build_state.read().unwrap().get(id).cloned();
 		if let Some(state) = state {
 			return Ok(Some(state.inner.target.id(self).await?.clone()));
 		}
@@ -282,7 +403,7 @@ impl Server {
 		// Attempt to get the children from the state.
 		'a: {
 			// Get the state.
-			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+			let Some(state) = self.inner.build_state.read().unwrap().get(id).cloned() else {
 				break 'a;
 			};
 
@@ -343,7 +464,14 @@ impl Server {
 		// Attempt to add the child to the state.
 		'a: {
 			// Get the state.
-			let Some(state) = self.inner.builds.read().unwrap().get(build_id).cloned() else {
+			let Some(state) = self
+				.inner
+				.build_state
+				.read()
+				.unwrap()
+				.get(build_id)
+				.cloned()
+			else {
 				break 'a;
 			};
 
@@ -382,7 +510,7 @@ impl Server {
 		// Attempt to get the log from the state.
 		'a: {
 			// Get the state.
-			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+			let Some(state) = self.inner.build_state.read().unwrap().get(id).cloned() else {
 				break 'a;
 			};
 
@@ -453,7 +581,7 @@ impl Server {
 		// Attempt to add the log to the state.
 		'a: {
 			// Get the state.
-			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+			let Some(state) = self.inner.build_state.read().unwrap().get(id).cloned() else {
 				break 'a;
 			};
 
@@ -506,14 +634,14 @@ impl Server {
 	) -> Result<Option<tg::build::Outcome>> {
 		// Attempt to await the result from the state.
 		'a: {
-			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+			let Some(state) = self.inner.build_state.read().unwrap().get(id).cloned() else {
 				break 'a;
 			};
 			return Ok(Some(
 				state
 					.inner
 					.outcome
-					.result
+					.receiver
 					.clone()
 					.wait_for(Option::is_some)
 					.await
@@ -555,7 +683,7 @@ impl Server {
 		// Attempt to finish the build on the state.
 		'a: {
 			// Get the state.
-			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+			let Some(state) = self.inner.build_state.read().unwrap().get(id).cloned() else {
 				break 'a;
 			};
 
@@ -571,8 +699,8 @@ impl Server {
 				.try_collect()
 				.await?;
 
-			// Finish the build with the cancellation outcome.
-			self.finish_build(user, id, tg::build::Outcome::Cancellation)
+			// Finish the build as canceled.
+			self.finish_build(user, id, tg::build::Outcome::Canceled)
 				.await?;
 
 			return Ok(());
@@ -599,12 +727,13 @@ impl Server {
 		// Attempt to finish the build on the state.
 		'a: {
 			// Get the state.
-			let Some(state) = self.inner.builds.read().unwrap().get(id).cloned() else {
+			let Some(state) = self.inner.build_state.read().unwrap().get(id).cloned() else {
 				break 'a;
 			};
 
 			// Get the target.
 			let target = state.inner.target.clone();
+			let target_id = target.id(self).await?.clone();
 
 			// Get the children.
 			let children = {
@@ -621,7 +750,7 @@ impl Server {
 				tg::Blob::with_reader(self, &mut state.file).await?
 			};
 
-			// Check if any of the children have been cancelled.
+			// Check if any of the children have been canceled.
 			let outcome = if children
 				.iter()
 				.map(|child| child.outcome(self))
@@ -629,15 +758,18 @@ impl Server {
 				.try_collect::<Vec<_>>()
 				.await?
 				.into_iter()
-				.any(|outcome| outcome.try_unwrap_cancellation_ref().is_ok())
+				.any(|outcome| outcome.try_unwrap_canceled_ref().is_ok())
 			{
-				tg::build::Outcome::Cancellation
+				tg::build::Outcome::Canceled
 			} else {
 				outcome
 			};
 
 			// Create the build.
 			tg::Build::new(self, id.clone(), target, children, log, outcome.clone()).await?;
+
+			// Add the assignment to the database.
+			self.inner.database.set_build_for_target(&target_id, id)?;
 
 			// Set the outcome.
 			state
@@ -648,7 +780,7 @@ impl Server {
 				.unwrap();
 
 			// Remove the build's state.
-			self.inner.builds.write().unwrap().remove(id);
+			self.inner.build_state.write().unwrap().remove(id);
 
 			return Ok(());
 		}

@@ -76,10 +76,10 @@ impl Cli {
 		// Get the config.
 		let mut config = self.config().await?.unwrap_or_default();
 
-		// Add the autoenv.
-		let mut autoenvs = config.autoenvs.unwrap_or_default();
-		autoenvs.push(path);
-		config.autoenvs = Some(autoenvs);
+		// Add the autoenv path.
+		let mut autoenv = config.autoenv.unwrap_or_default();
+		autoenv.paths.push(path);
+		config.autoenv = Some(autoenv);
 
 		// Save the config.
 		self.save_config(config).await?;
@@ -96,10 +96,11 @@ impl Cli {
 			std::env::current_dir().wrap_err("Failed to get the working directory.")?;
 
 		// Get the autoenv path for the working directory path.
-		let Some(autoenv_paths) = config.autoenvs.as_ref() else {
+		let Some(autoenv) = config.autoenv.as_ref() else {
 			return Ok(());
 		};
-		let mut autoenv_paths = autoenv_paths
+		let mut autoenv_paths = autoenv
+			.paths
 			.iter()
 			.filter(|path| working_directory_path.starts_with(path))
 			.collect_vec();
@@ -120,16 +121,20 @@ impl Cli {
 		// Get the config.
 		let config = self.config().await?;
 
-		// List the autoenvs.
-		let autoenvs = config
-			.and_then(|config| config.autoenvs.clone())
+		// Get the autoenv paths.
+		let autoenv_paths = config
+			.as_ref()
+			.and_then(|config| config.autoenv.as_ref())
+			.map(|autoenv| autoenv.paths.clone())
 			.unwrap_or_default();
 
-		if autoenvs.is_empty() {
+		// If there are no autoenv paths, then print a message.
+		if autoenv_paths.is_empty() {
 			eprintln!("There are no autoenvs.");
 		}
 
-		for path in autoenvs {
+		// Print the autoenv paths.
+		for path in autoenv_paths {
 			let path = path.display();
 			println!("{path}");
 		}
@@ -150,12 +155,11 @@ impl Cli {
 			.await
 			.wrap_err("Failed to canonicalize the path.")?;
 
-		// Remove the autoenv.
-		if let Some(mut autoenvs) = config.autoenvs {
-			if let Some(index) = autoenvs.iter().position(|p| *p == path) {
-				autoenvs.remove(index);
+		// Remove the autoenv path.
+		if let Some(autoenv) = config.autoenv.as_mut() {
+			if let Some(index) = autoenv.paths.iter().position(|p| *p == path) {
+				autoenv.paths.remove(index);
 			}
-			config.autoenvs = Some(autoenvs);
 		}
 
 		// Write the config.
