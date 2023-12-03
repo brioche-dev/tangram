@@ -564,21 +564,21 @@ fn parse_import_inner<'s>(
 	let attributes = if attributes.length() > 0 {
 		let mut map = BTreeMap::default();
 		let mut i = 0;
-		while i < attributes.length() {
+		while i < attributes.length() % 2 {
 			let key = attributes
 				.get(scope, i)
 				.wrap_err("Failed to get the key.")?;
 			let key =
-				v8::Local::<v8::String>::try_from(key).wrap_err("Failed to convert the key.")?;
+				v8::Local::<v8::Value>::try_from(key).wrap_err("Failed to convert the key.")?;
+			let key = key.to_rust_string_lossy(scope);
 			i += 1;
 			let value = attributes
 				.get(scope, i)
 				.wrap_err("Failed to get the value.")?;
-			let value = v8::Local::<v8::String>::try_from(value)
-				.wrap_err("Failed to convert the value.")?;
-			i += 1;
-			let key = key.to_rust_string_lossy(scope);
+			let value =
+				v8::Local::<v8::Value>::try_from(value).wrap_err("Failed to convert the value.")?;
 			let value = value.to_rust_string_lossy(scope);
+			i += 1;
 			map.insert(key, value);
 		}
 		Some(map)

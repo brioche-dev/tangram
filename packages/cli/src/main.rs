@@ -297,6 +297,9 @@ fn initialize_v8() {
 	let platform = v8::new_default_platform(0, true);
 	v8::V8::initialize_platform(platform.make_shared());
 
+	// Set flags.
+	v8::V8::set_flags_from_string("--harmony-import-attributes");
+
 	// Initialize V8.
 	v8::V8::initialize();
 }
