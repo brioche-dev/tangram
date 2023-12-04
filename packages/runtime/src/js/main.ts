@@ -3,6 +3,7 @@ import { Artifact } from "./artifact.ts";
 import { assert, unimplemented, unreachable } from "./assert.ts";
 import { Blob, blob, download } from "./blob.ts";
 import { Branch, branch } from "./branch.ts";
+import { Checksum, checksum } from "./checksum.ts";
 import { Directory, directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { Error as Error_, prepareStackTrace } from "./error.ts";
@@ -49,6 +50,7 @@ Object.assign(tg, {
 	Artifact,
 	Blob,
 	Branch,
+	Checksum,
 	Directory,
 	Error: Error_,
 	File,
@@ -64,6 +66,7 @@ Object.assign(tg, {
 	blob,
 	branch,
 	build,
+	checksum,
 	directory,
 	download,
 	encoding,
