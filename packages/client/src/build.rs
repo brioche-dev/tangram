@@ -64,8 +64,8 @@ pub enum Outcome {
 )]
 #[serde(into = "String", try_from = "String")]
 pub enum Retry {
-	#[default]
 	Terminated,
+	#[default]
 	Canceled,
 	Failed,
 	Succeeded,
