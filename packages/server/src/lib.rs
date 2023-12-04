@@ -474,6 +474,17 @@ impl tg::Client for Server {
 		self.finish_build(user, id, outcome).await
 	}
 
+	async fn create_package_and_lock(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<(tg::directory::Id, tg::lock::Id)> {
+		let (package, lock) = tangram_package::new(self, dependency).await?;
+		Ok((
+			package.id(self).await?.clone(),
+			lock.id(self).await?.clone(),
+		))
+	}
+
 	async fn search_packages(&self, query: &str) -> Result<Vec<String>> {
 		self.inner
 			.remote

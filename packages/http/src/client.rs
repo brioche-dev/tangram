@@ -704,6 +704,13 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
+	async fn create_package_and_lock(
+		&self,
+		_dependency: &tg::Dependency,
+	) -> Result<(tg::directory::Id, tg::lock::Id)> {
+		return_error!("Unsupported.");
+	}
+
 	async fn search_packages(&self, query: &str) -> Result<Vec<String>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)

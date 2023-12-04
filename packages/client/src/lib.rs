@@ -152,9 +152,7 @@ pub trait Client: Send + Sync + 'static {
 	async fn create_package_and_lock(
 		&self,
 		_dependency: &Dependency,
-	) -> Result<(directory::Id, lock::Id)> {
-		todo!()
-	}
+	) -> Result<(directory::Id, lock::Id)>;
 
 	async fn search_packages(&self, query: &str) -> Result<Vec<String>>;
 
