@@ -55,16 +55,6 @@ pub enum CompressionFormat {
 	Zstd,
 }
 
-impl Id {
-	#[must_use]
-	pub fn to_bytes(&self) -> Bytes {
-		match self {
-			Self::Leaf(id) => id.to_bytes(),
-			Self::Branch(id) => id.to_bytes(),
-		}
-	}
-}
-
 impl Blob {
 	#[must_use]
 	pub fn with_id(id: Id) -> Self {

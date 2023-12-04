@@ -45,7 +45,7 @@ impl Database {
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		let exists = match txn.get(self.objects, &id.to_bytes()) {
+		let exists = match txn.get(self.objects, &id.to_string()) {
 			Ok(_) => true,
 			Err(lmdb::Error::NotFound) => false,
 			Err(error) => return Err(error.wrap("Failed to get the object.")),
@@ -58,7 +58,7 @@ impl Database {
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		let bytes = match txn.get(self.objects, &id.to_bytes()) {
+		let bytes = match txn.get(self.objects, &id.to_string()) {
 			Ok(bytes) => Bytes::copy_from_slice(bytes),
 			Err(lmdb::Error::NotFound) => return Ok(None),
 			Err(error) => return Err(error.wrap("Failed to get the object.")),
@@ -76,7 +76,7 @@ impl Database {
 		// Add the object to the database.
 		txn.put(
 			self.objects,
-			&id.to_bytes(),
+			&id.to_string(),
 			&bytes,
 			lmdb::WriteFlags::empty(),
 		)
@@ -96,12 +96,13 @@ impl Database {
 			.env
 			.begin_ro_txn()
 			.wrap_err("Failed to create the transaction.")?;
-		let bytes = match txn.get(self.assignments, &target_id.to_bytes()) {
+		let bytes = match txn.get(self.assignments, &target_id.to_string()) {
 			Ok(bytes) => bytes,
 			Err(lmdb::Error::NotFound) => return Ok(None),
 			Err(error) => return Err(error.wrap("Failed to get the build.")),
 		};
-		let build_id = bytes.try_into().wrap_err("Invalid ID.")?;
+		let build_id = std::str::from_utf8(bytes).wrap_err("Invalid ID.")?;
+		let build_id = build_id.parse().wrap_err("Invalid ID.")?;
 		Ok(Some(build_id))
 	}
 
@@ -119,8 +120,8 @@ impl Database {
 		// Add the assignment to the database.
 		txn.put(
 			self.assignments,
-			&target_id.to_bytes(),
-			&build_id.to_bytes(),
+			&target_id.to_string(),
+			&build_id.to_string(),
 			lmdb::WriteFlags::empty(),
 		)
 		.wrap_err("Failed to put the assignment.")?;

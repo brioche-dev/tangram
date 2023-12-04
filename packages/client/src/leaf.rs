@@ -40,11 +40,6 @@ impl Id {
 	pub fn new(bytes: &Bytes) -> Self {
 		Self(crate::Id::new_hashed(id::Kind::Leaf, bytes))
 	}
-
-	#[must_use]
-	pub fn to_bytes(&self) -> Bytes {
-		self.0.to_bytes()
-	}
 }
 
 impl Leaf {

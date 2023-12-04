@@ -96,20 +96,6 @@ impl Id {
 			Self::Build(_) => Kind::Build,
 		}
 	}
-
-	#[must_use]
-	pub fn to_bytes(&self) -> Bytes {
-		match self {
-			Self::Leaf(id) => id.to_bytes(),
-			Self::Branch(id) => id.to_bytes(),
-			Self::Directory(id) => id.to_bytes(),
-			Self::File(id) => id.to_bytes(),
-			Self::Symlink(id) => id.to_bytes(),
-			Self::Lock(id) => id.to_bytes(),
-			Self::Target(id) => id.to_bytes(),
-			Self::Build(id) => id.to_bytes(),
-		}
-	}
 }
 
 impl Handle {

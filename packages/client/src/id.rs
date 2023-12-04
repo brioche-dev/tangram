@@ -1,7 +1,5 @@
 use crate::{return_error, Error, Result, WrapErr};
-use bytes::Bytes;
 use derive_more::{From, Into};
-use varint_rs::{VarintReader, VarintWriter};
 
 /// An ID.
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize)]
@@ -38,6 +36,10 @@ pub enum Hash {
 	Blake3([u8; 32]),
 }
 
+const ENCODING: data_encoding::Encoding = data_encoding_macro::new_encoding! {
+	symbols: "abcdefghijklmnopqrstuvwxyz234567",
+};
+
 impl Id {
 	#[must_use]
 	pub fn new_random(kind: Kind) -> Self {
@@ -52,72 +54,11 @@ impl Id {
 		Self::V0(V0 { kind, hash })
 	}
 
-	pub fn with_bytes(bytes: impl AsRef<[u8]>) -> Result<Self> {
-		let mut bytes = bytes.as_ref();
-		let version = bytes.read_u64_varint().wrap_err("Invalid version.")?;
-		if version != 0 {
-			return_error!("This version of the client does not support this ID version.");
-		}
-		let kind = bytes.read_u64_varint().wrap_err("Invalid kind.")?;
-		let kind = Kind::try_from(kind).wrap_err("Invalid kind.")?;
-		let hash = Hash::from_reader(&mut bytes).wrap_err("Invalid hash.")?;
-		Ok(Self::V0(V0 { kind, hash }))
-	}
-
-	#[must_use]
-	pub fn to_bytes(&self) -> Bytes {
-		match self {
-			Id::V0(v0) => {
-				let mut bytes = Vec::new();
-				bytes.write_u64_varint(0).unwrap();
-				bytes.write_u64_varint(u64::from(v0.kind)).unwrap();
-				v0.hash.to_writer(&mut bytes).unwrap();
-				bytes.into()
-			},
-		}
-	}
-
 	#[must_use]
 	pub fn kind(&self) -> Kind {
 		match self {
 			Id::V0(v0) => v0.kind,
 		}
-	}
-}
-
-impl Hash {
-	pub fn from_reader(reader: &mut impl std::io::Read) -> std::io::Result<Self> {
-		let kind = reader.read_u64_varint()?;
-		match kind {
-			0 => {
-				let mut bytes = [0u8; 32];
-				reader.read_exact(&mut bytes)?;
-				Ok(Self::Random32(bytes))
-			},
-			1 => {
-				let mut bytes = [0u8; 32];
-				reader.read_exact(&mut bytes)?;
-				Ok(Self::Blake3(bytes))
-			},
-			_ => Err(std::io::Error::new(
-				std::io::ErrorKind::Other,
-				"Invalid hash kind.",
-			)),
-		}
-	}
-
-	pub fn to_writer(&self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
-		match self {
-			Self::Random32(bytes) => {
-				writer.write_u64_varint(0)?;
-				writer.write_all(bytes)?;
-			},
-			Self::Blake3(bytes) => {
-				writer.write_u64_varint(1)?;
-				writer.write_all(bytes)?;
-			},
-		}
-		Ok(())
 	}
 }
 
@@ -129,7 +70,65 @@ impl std::fmt::Debug for Id {
 
 impl std::fmt::Display for Id {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let kind = match self.kind() {
+		let kind = self.kind();
+		let version = match self {
+			Self::V0(_) => "0",
+		};
+		let algorithm = match self {
+			Self::V0(v0) => match v0.hash {
+				Hash::Random32(_) => "0",
+				Hash::Blake3(_) => "1",
+			},
+		};
+		let hash = match self {
+			Self::V0(v0) => match v0.hash {
+				Hash::Random32(bytes) | Hash::Blake3(bytes) => {
+					data_encoding::BASE32_NOPAD.encode(&bytes).to_lowercase()
+				},
+			},
+		};
+		write!(f, "{kind}_{version}{algorithm}{hash}")?;
+		Ok(())
+	}
+}
+
+impl std::str::FromStr for Id {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		let kind = s.get(0..=2).wrap_err("Invalid ID.")?.parse()?;
+		let version = s.chars().nth(4).wrap_err("Invalid ID.")?;
+		if version != '0' {
+			return_error!("Invalid version.");
+		}
+		let algorithm = s.chars().nth(5).wrap_err("Invalid ID.")?;
+		let hash = s.get(6..).wrap_err("Invalid ID.")?;
+		let hash = match algorithm {
+			'0' => Hash::Random32(
+				ENCODING
+					.decode(hash.as_bytes())
+					.wrap_err("Invalid hash.")?
+					.try_into()
+					.ok()
+					.wrap_err("Invalid hash.")?,
+			),
+			'1' => Hash::Blake3(
+				ENCODING
+					.decode(hash.as_bytes())
+					.wrap_err("Invalid hash.")?
+					.try_into()
+					.ok()
+					.wrap_err("Invalid hash.")?,
+			),
+			_ => return_error!("Invalid ID."),
+		};
+		Ok(Self::V0(V0 { kind, hash }))
+	}
+}
+
+impl std::fmt::Display for Kind {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let kind = match self {
 			Kind::Leaf => "lef",
 			Kind::Branch => "bch",
 			Kind::Directory => "dir",
@@ -142,21 +141,29 @@ impl std::fmt::Display for Id {
 			Kind::Login => "lgn",
 			Kind::Token => "tok",
 		};
-		write!(f, "{kind}_")?;
-		let bytes = self.to_bytes();
-		write!(f, "{}", hex::encode(bytes))?;
+		write!(f, "{kind}")?;
 		Ok(())
 	}
 }
 
-impl std::str::FromStr for Id {
+impl std::str::FromStr for Kind {
 	type Err = Error;
 
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let string = s.get(4..).wrap_err("Invalid ID.")?;
-		let bytes = hex::decode(string).wrap_err("Invalid ID.")?;
-		let id = Self::with_bytes(bytes)?;
-		Ok(id)
+	fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+		Ok(match s {
+			"lef" => Kind::Leaf,
+			"bch" => Kind::Branch,
+			"dir" => Kind::Directory,
+			"fil" => Kind::File,
+			"sym" => Kind::Symlink,
+			"lok" => Kind::Lock,
+			"tgt" => Kind::Target,
+			"bld" => Kind::Build,
+			"usr" => Kind::User,
+			"lgn" => Kind::Login,
+			"tok" => Kind::Token,
+			_ => return_error!("Invalid kind."),
+		})
 	}
 }
 
@@ -171,66 +178,5 @@ impl TryFrom<String> for Id {
 
 	fn try_from(value: String) -> Result<Self, Self::Error> {
 		value.parse()
-	}
-}
-
-impl TryFrom<Vec<u8>> for Id {
-	type Error = Error;
-
-	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-		value.as_slice().try_into()
-	}
-}
-
-impl From<Id> for Vec<u8> {
-	fn from(value: Id) -> Self {
-		value.to_bytes().to_vec()
-	}
-}
-
-impl TryFrom<&[u8]> for Id {
-	type Error = Error;
-
-	fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-		Self::with_bytes(value)
-	}
-}
-
-impl From<Kind> for u64 {
-	fn from(value: Kind) -> Self {
-		match value {
-			Kind::Leaf => 0,
-			Kind::Branch => 1,
-			Kind::Directory => 2,
-			Kind::File => 3,
-			Kind::Symlink => 4,
-			Kind::Lock => 5,
-			Kind::Target => 6,
-			Kind::Build => 7,
-			Kind::User => 8,
-			Kind::Login => 9,
-			Kind::Token => 10,
-		}
-	}
-}
-
-impl TryFrom<u64> for Kind {
-	type Error = Error;
-
-	fn try_from(value: u64) -> Result<Self, Self::Error> {
-		match value {
-			0 => Ok(Kind::Leaf),
-			1 => Ok(Kind::Branch),
-			2 => Ok(Kind::Directory),
-			3 => Ok(Kind::File),
-			4 => Ok(Kind::Symlink),
-			5 => Ok(Kind::Lock),
-			6 => Ok(Kind::Target),
-			7 => Ok(Kind::Build),
-			8 => Ok(Kind::User),
-			9 => Ok(Kind::Login),
-			10 => Ok(Kind::Token),
-			_ => return_error!("Invalid kind."),
-		}
 	}
 }

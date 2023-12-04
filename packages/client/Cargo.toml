@@ -18,8 +18,11 @@ async-recursion = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 blake3 = { workspace = true }
+bs58 = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
+data-encoding = { workspace = true }
+data-encoding-macro = { workspace = true }
 derive_more = { workspace = true }
 fnv = { workspace = true }
 futures = { workspace = true }

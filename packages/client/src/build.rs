@@ -102,11 +102,6 @@ impl Id {
 	pub fn new() -> Self {
 		Self(crate::Id::new_random(id::Kind::Build))
 	}
-
-	#[must_use]
-	pub fn to_bytes(&self) -> Bytes {
-		self.0.to_bytes()
-	}
 }
 
 impl Build {
@@ -456,22 +451,6 @@ impl std::str::FromStr for Id {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		crate::Id::from_str(s)?.try_into()
-	}
-}
-
-impl TryFrom<Vec<u8>> for Id {
-	type Error = Error;
-
-	fn try_from(value: Vec<u8>) -> std::result::Result<Self, Self::Error> {
-		crate::Id::with_bytes(value)?.try_into()
-	}
-}
-
-impl TryFrom<&[u8]> for Id {
-	type Error = Error;
-
-	fn try_from(value: &[u8]) -> std::result::Result<Self, Self::Error> {
-		crate::Id::with_bytes(value)?.try_into()
 	}
 }
 
