@@ -1,6 +1,6 @@
 use crate::{
 	branch, build, directory, file, leaf, lock, return_error, symlink, target, Branch, Build,
-	Client, Directory, Error, File, Leaf, Lock, Result, Symlink, Target, WrapErr,
+	Directory, Error, File, Leaf, Lock, Result, Symlink, Target, WrapErr,
 };
 use async_recursion::async_recursion;
 use bytes::Bytes;
@@ -127,49 +127,49 @@ impl Handle {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
+	pub async fn id(&self, tg: &dyn crate::Handle) -> Result<Id> {
 		match self {
-			Self::Leaf(object) => object.id(client).await.cloned().map(Id::Leaf),
-			Self::Branch(object) => object.id(client).await.cloned().map(Id::Branch),
-			Self::Directory(object) => object.id(client).await.cloned().map(Id::Directory),
-			Self::File(object) => object.id(client).await.cloned().map(Id::File),
-			Self::Symlink(object) => object.id(client).await.cloned().map(Id::Symlink),
-			Self::Lock(object) => object.id(client).await.cloned().map(Id::Lock),
-			Self::Target(object) => object.id(client).await.cloned().map(Id::Target),
+			Self::Leaf(object) => object.id(tg).await.cloned().map(Id::Leaf),
+			Self::Branch(object) => object.id(tg).await.cloned().map(Id::Branch),
+			Self::Directory(object) => object.id(tg).await.cloned().map(Id::Directory),
+			Self::File(object) => object.id(tg).await.cloned().map(Id::File),
+			Self::Symlink(object) => object.id(tg).await.cloned().map(Id::Symlink),
+			Self::Lock(object) => object.id(tg).await.cloned().map(Id::Lock),
+			Self::Target(object) => object.id(tg).await.cloned().map(Id::Target),
 			Self::Build(object) => Ok(Id::Build(object.id().clone())),
 		}
 	}
 
-	pub async fn object(&self, client: &dyn Client) -> Result<Object> {
+	pub async fn object(&self, tg: &dyn crate::Handle) -> Result<Object> {
 		match self {
-			Self::Leaf(object) => object.object(client).await.cloned().map(Object::Leaf),
-			Self::Branch(object) => object.object(client).await.cloned().map(Object::Branch),
-			Self::Directory(object) => object.object(client).await.cloned().map(Object::Directory),
-			Self::File(object) => object.object(client).await.cloned().map(Object::File),
-			Self::Symlink(object) => object.object(client).await.cloned().map(Object::Symlink),
-			Self::Lock(object) => object.object(client).await.cloned().map(Object::Lock),
-			Self::Target(object) => object.object(client).await.cloned().map(Object::Target),
-			Self::Build(object) => object.object(client).await.cloned().map(Object::Build),
+			Self::Leaf(object) => object.object(tg).await.cloned().map(Object::Leaf),
+			Self::Branch(object) => object.object(tg).await.cloned().map(Object::Branch),
+			Self::Directory(object) => object.object(tg).await.cloned().map(Object::Directory),
+			Self::File(object) => object.object(tg).await.cloned().map(Object::File),
+			Self::Symlink(object) => object.object(tg).await.cloned().map(Object::Symlink),
+			Self::Lock(object) => object.object(tg).await.cloned().map(Object::Lock),
+			Self::Target(object) => object.object(tg).await.cloned().map(Object::Target),
+			Self::Build(object) => object.object(tg).await.cloned().map(Object::Build),
 		}
 	}
 
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+	pub async fn data(&self, tg: &dyn crate::Handle) -> Result<Data> {
 		match self {
-			Self::Leaf(object) => object.data(client).await.map(Data::Leaf),
-			Self::Branch(object) => object.data(client).await.map(Data::Branch),
-			Self::Directory(object) => object.data(client).await.map(Data::Directory),
-			Self::File(object) => object.data(client).await.map(Data::File),
-			Self::Symlink(object) => object.data(client).await.map(Data::Symlink),
-			Self::Lock(object) => object.data(client).await.map(Data::Lock),
-			Self::Target(object) => object.data(client).await.map(Data::Target),
-			Self::Build(object) => object.data(client).await.map(Data::Build),
+			Self::Leaf(object) => object.data(tg).await.map(Data::Leaf),
+			Self::Branch(object) => object.data(tg).await.map(Data::Branch),
+			Self::Directory(object) => object.data(tg).await.map(Data::Directory),
+			Self::File(object) => object.data(tg).await.map(Data::File),
+			Self::Symlink(object) => object.data(tg).await.map(Data::Symlink),
+			Self::Lock(object) => object.data(tg).await.map(Data::Lock),
+			Self::Target(object) => object.data(tg).await.map(Data::Target),
+			Self::Build(object) => object.data(tg).await.map(Data::Build),
 		}
 	}
 
 	#[async_recursion]
-	pub async fn push(&self, client: &dyn Client, remote: &dyn Client) -> Result<()> {
-		let id = self.id(client).await?;
-		let data = self.data(client).await?;
+	pub async fn push(&self, tg: &dyn crate::Handle, remote: &dyn crate::Handle) -> Result<()> {
+		let id = self.id(tg).await?;
+		let data = self.data(tg).await?;
 		let bytes = data.serialize()?;
 		if let Err(missing_children) = remote
 			.try_put_object(&id.clone(), &bytes)
@@ -179,7 +179,7 @@ impl Handle {
 			missing_children
 				.into_iter()
 				.map(Self::with_id)
-				.map(|object| async move { object.push(client, remote).await })
+				.map(|object| async move { object.push(tg, remote).await })
 				.collect::<FuturesOrdered<_>>()
 				.try_collect()
 				.await?;

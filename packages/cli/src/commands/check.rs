@@ -16,21 +16,21 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_check(&self, args: Args) -> Result<()> {
-		let client = self.client().await?;
-		let client = client.as_ref();
+		let tg = self.handle().await?;
+		let tg = tg.as_ref();
 
 		// Create the language server.
-		let server = tangram_language::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_language::Server::new(tg, tokio::runtime::Handle::current());
 
 		// Get the package.
-		let (package, lock) = tangram_package::new(client, &args.package).await?;
+		let (package, lock) = tangram_package::new(tg, &args.package).await?;
 
 		// Check the package for diagnostics.
 		let diagnostics = server
 			.check(vec![tangram_language::Module::Normal(
 				tangram_language::module::Normal {
-					package: package.id(client).await?.clone(),
-					lock: lock.id(client).await?.clone(),
+					package: package.id(tg).await?.clone(),
+					lock: lock.id(tg).await?.clone(),
 					path: tangram_package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
 				},
 			)])

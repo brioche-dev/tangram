@@ -41,11 +41,11 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_build(&self, args: Args) -> Result<()> {
-		let client = self.client().await?;
-		let client = client.as_ref();
+		let tg = self.handle().await?;
+		let tg = tg.as_ref();
 
 		// Create the package.
-		let (package, lock) = tangram_package::new(client, &args.package).await?;
+		let (package, lock) = tangram_package::new(tg, &args.package).await?;
 
 		// Create the target.
 		let env = [(
@@ -68,10 +68,10 @@ impl Cli {
 			.build();
 
 		// Print the target ID.
-		eprintln!("{}", target.id(client).await?);
+		eprintln!("{}", target.id(tg).await?);
 
 		// Build the target.
-		let build = target.build(client, None, 0, args.retry).await?;
+		let build = target.build(tg, None, 0, args.retry).await?;
 
 		// If the detach flag is set, then exit.
 		if args.detach {
@@ -85,15 +85,13 @@ impl Cli {
 		// Create the TUI.
 		let tui = !args.no_tui;
 		let tui = if tui {
-			Tui::start(client, &build, tui::Options::default())
-				.await
-				.ok()
+			Tui::start(tg, &build, tui::Options::default()).await.ok()
 		} else {
 			None
 		};
 
 		// Wait for the build's outcome.
-		let outcome = build.outcome(client).await;
+		let outcome = build.outcome(tg).await;
 
 		// Stop the TUI.
 		if let Some(tui) = tui {
@@ -112,7 +110,7 @@ impl Cli {
 			let artifact = tg::Artifact::try_from(output.clone())
 				.wrap_err("Expected the output to be an artifact.")?;
 			artifact
-				.check_out(client, &path)
+				.check_out(tg, &path)
 				.await
 				.wrap_err("Failed to check out the artifact.")?;
 		}

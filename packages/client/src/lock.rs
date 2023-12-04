@@ -1,5 +1,5 @@
 pub use self::data::Data;
-use crate::{id, object, return_error, Client, Dependency, Directory, Error, Result, WrapErr};
+use crate::{id, object, return_error, Dependency, Directory, Error, Handle, Result, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
@@ -91,18 +91,18 @@ impl Lock {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
-		self.store(client).await?;
+	pub async fn id(&self, tg: &dyn Handle) -> Result<&Id> {
+		self.store(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
-	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
-		self.load(client).await?;
+	pub async fn object(&self, tg: &dyn Handle) -> Result<&Object> {
+		self.load(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
 	}
 
-	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
-		if !self.try_load(client).await? {
+	pub async fn try_get_object(&self, tg: &dyn Handle) -> Result<Option<&Object>> {
+		if !self.try_load(tg).await? {
 			return Ok(None);
 		}
 		Ok(Some(unsafe {
@@ -110,19 +110,19 @@ impl Lock {
 		}))
 	}
 
-	pub async fn load(&self, client: &dyn Client) -> Result<()> {
-		self.try_load(client)
+	pub async fn load(&self, tg: &dyn Handle) -> Result<()> {
+		self.try_load(tg)
 			.await?
 			.then_some(())
 			.wrap_err("Failed to load the object.")
 	}
 
-	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
+	pub async fn try_load(&self, tg: &dyn Handle) -> Result<bool> {
 		if self.state.read().unwrap().object.is_some() {
 			return Ok(true);
 		}
 		let id = self.state.read().unwrap().id.clone().unwrap();
-		let Some(bytes) = client.try_get_object(&id.clone().into()).await? else {
+		let Some(bytes) = tg.try_get_object(&id.clone().into()).await? else {
 			return Ok(false);
 		};
 		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
@@ -131,15 +131,14 @@ impl Lock {
 		Ok(true)
 	}
 
-	pub async fn store(&self, client: &dyn Client) -> Result<()> {
+	pub async fn store(&self, tg: &dyn Handle) -> Result<()> {
 		if self.state.read().unwrap().id.is_some() {
 			return Ok(());
 		}
-		let data = self.data(client).await?;
+		let data = self.data(tg).await?;
 		let bytes = data.serialize()?;
 		let id = Id::new(&bytes);
-		client
-			.try_put_object(&id.clone().into(), &bytes)
+		tg.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()
@@ -149,13 +148,13 @@ impl Lock {
 	}
 
 	#[async_recursion]
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
-		let object = self.object(client).await?;
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
+		let object = self.object(tg).await?;
 		let dependencies = object
 			.dependencies
 			.iter()
 			.map(|(dependency, entry)| async move {
-				Ok::<_, Error>((dependency.clone(), entry.data(client).await?))
+				Ok::<_, Error>((dependency.clone(), entry.data(tg).await?))
 			})
 			.collect::<FuturesUnordered<_>>()
 			.try_collect()
@@ -165,16 +164,16 @@ impl Lock {
 }
 
 impl Lock {
-	pub async fn dependencies(&self, client: &dyn Client) -> Result<&BTreeMap<Dependency, Entry>> {
-		Ok(&self.object(client).await?.dependencies)
+	pub async fn dependencies(&self, tg: &dyn Handle) -> Result<&BTreeMap<Dependency, Entry>> {
+		Ok(&self.object(tg).await?.dependencies)
 	}
 }
 
 impl Entry {
-	pub async fn data(&self, client: &dyn Client) -> Result<data::Entry> {
+	pub async fn data(&self, tg: &dyn Handle) -> Result<data::Entry> {
 		Ok(data::Entry {
-			package: self.package.id(client).await?.clone(),
-			lock: self.lock.id(client).await?.clone(),
+			package: self.package.id(tg).await?.clone(),
+			lock: self.lock.id(tg).await?.clone(),
 		})
 	}
 }

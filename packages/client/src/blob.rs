@@ -1,5 +1,5 @@
 use crate::{
-	branch, id, leaf, object, return_error, Artifact, Branch, Client, Error, Leaf, Result, Value,
+	branch, id, leaf, object, return_error, Artifact, Branch, Error, Handle, Leaf, Result, Value,
 	WrapErr,
 };
 use bytes::Bytes;
@@ -64,17 +64,14 @@ impl Blob {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
+	pub async fn id(&self, tg: &dyn Handle) -> Result<Id> {
 		match self {
-			Self::Leaf(leaf) => Ok(leaf.id(client).await?.clone().into()),
-			Self::Branch(branch) => Ok(branch.id(client).await?.clone().into()),
+			Self::Leaf(leaf) => Ok(leaf.id(tg).await?.clone().into()),
+			Self::Branch(branch) => Ok(branch.id(tg).await?.clone().into()),
 		}
 	}
 
-	pub async fn with_reader(
-		client: &dyn Client,
-		mut reader: impl AsyncRead + Unpin,
-	) -> Result<Self> {
+	pub async fn with_reader(tg: &dyn Handle, mut reader: impl AsyncRead + Unpin) -> Result<Self> {
 		let mut leaves = Vec::new();
 		let mut bytes = vec![0u8; MAX_LEAF_SIZE];
 		loop {
@@ -98,7 +95,7 @@ impl Blob {
 			// Create, store, and add the leaf.
 			let bytes = Bytes::copy_from_slice(&bytes[..position]);
 			let leaf = Leaf::new(bytes);
-			leaf.store(client).await?;
+			leaf.store(tg).await?;
 			leaves.push(branch::Child {
 				blob: leaf.into(),
 				size,
@@ -113,7 +110,7 @@ impl Blob {
 					if chunk.len() == MAX_BRANCH_CHILDREN {
 						stream::once(async move {
 							let blob = Self::new(chunk);
-							let size = blob.size(client).await?;
+							let size = blob.size(tg).await?;
 							Ok::<_, Error>(branch::Child { blob, size })
 						})
 						.boxed()
@@ -138,11 +135,11 @@ impl Blob {
 		}
 	}
 
-	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
+	pub async fn size(&self, tg: &dyn Handle) -> Result<u64> {
 		match self {
-			Self::Leaf(leaf) => Ok(leaf.bytes(client).await?.len().to_u64().unwrap()),
+			Self::Leaf(leaf) => Ok(leaf.bytes(tg).await?.len().to_u64().unwrap()),
 			Self::Branch(branch) => Ok(branch
-				.children(client)
+				.children(tg)
 				.await?
 				.iter()
 				.map(|child| child.size)
@@ -150,12 +147,12 @@ impl Blob {
 		}
 	}
 
-	pub async fn reader(&self, client: &dyn Client) -> Result<Reader> {
-		Reader::new(client, self.clone()).await
+	pub async fn reader(&self, tg: &dyn Handle) -> Result<Reader> {
+		Reader::new(tg, self.clone()).await
 	}
 
-	pub async fn bytes(&self, client: &dyn Client) -> Result<Vec<u8>> {
-		let mut reader = self.reader(client).await?;
+	pub async fn bytes(&self, tg: &dyn Handle) -> Result<Vec<u8>> {
+		let mut reader = self.reader(tg).await?;
 		let mut bytes = Vec::new();
 		reader
 			.read_to_end(&mut bytes)
@@ -164,15 +161,15 @@ impl Blob {
 		Ok(bytes)
 	}
 
-	pub async fn text(&self, client: &dyn Client) -> Result<String> {
-		let bytes = self.bytes(client).await?;
+	pub async fn text(&self, tg: &dyn Handle) -> Result<String> {
+		let bytes = self.bytes(tg).await?;
 		let string =
 			String::from_utf8(bytes).wrap_err("Failed to decode the blob's bytes as UTF-8.")?;
 		Ok(string)
 	}
 
-	pub async fn compress(&self, client: &dyn Client, format: CompressionFormat) -> Result<Blob> {
-		let reader = self.reader(client).await?;
+	pub async fn compress(&self, tg: &dyn Handle, format: CompressionFormat) -> Result<Blob> {
+		let reader = self.reader(tg).await?;
 		let reader = tokio::io::BufReader::new(reader);
 		let reader: Box<dyn AsyncRead + Unpin> = match format {
 			CompressionFormat::Bz2 => {
@@ -188,12 +185,12 @@ impl Blob {
 				Box::new(async_compression::tokio::bufread::ZstdEncoder::new(reader))
 			},
 		};
-		let blob = Blob::with_reader(client, reader).await?;
+		let blob = Blob::with_reader(tg, reader).await?;
 		Ok(blob)
 	}
 
-	pub async fn decompress(&self, client: &dyn Client, format: CompressionFormat) -> Result<Blob> {
-		let reader = self.reader(client).await?;
+	pub async fn decompress(&self, tg: &dyn Handle, format: CompressionFormat) -> Result<Blob> {
+		let reader = self.reader(tg).await?;
 		let reader = tokio::io::BufReader::new(reader);
 		let reader: Box<dyn AsyncRead + Unpin> = match format {
 			CompressionFormat::Bz2 => {
@@ -209,22 +206,22 @@ impl Blob {
 				Box::new(async_compression::tokio::bufread::ZstdDecoder::new(reader))
 			},
 		};
-		let blob = Blob::with_reader(client, reader).await?;
+		let blob = Blob::with_reader(tg, reader).await?;
 		Ok(blob)
 	}
 
 	#[allow(clippy::unused_async)]
 	pub async fn archive(
-		_client: &dyn Client,
+		_tg: &dyn Handle,
 		_artifact: &Artifact,
 		_format: ArchiveFormat,
 	) -> Result<Self> {
 		unimplemented!()
 	}
 
-	pub async fn extract(&self, client: &dyn Client, format: ArchiveFormat) -> Result<Artifact> {
+	pub async fn extract(&self, tg: &dyn Handle, format: ArchiveFormat) -> Result<Artifact> {
 		// Create the reader.
-		let reader = self.reader(client).await?;
+		let reader = self.reader(tg).await?;
 
 		// Create a temp.
 		let tempdir = tempfile::TempDir::new().wrap_err("Failed to create the temporary leaf.")?;
@@ -259,7 +256,7 @@ impl Blob {
 		.unwrap()?;
 
 		// Check in the extracted artifact.
-		let artifact = Artifact::check_in(client, &path)
+		let artifact = Artifact::check_in(tg, &path)
 			.await
 			.wrap_err("Failed to check in the extracted archive.")?;
 
@@ -366,7 +363,7 @@ impl TryFrom<Value> for Blob {
 #[pin_project]
 pub struct Reader {
 	blob: Blob,
-	client: Box<dyn Client>,
+	tg: Box<dyn Handle>,
 	position: u64,
 	size: u64,
 	state: State,
@@ -381,11 +378,11 @@ pub enum State {
 unsafe impl Sync for State {}
 
 impl Reader {
-	pub async fn new(client: &dyn Client, blob: Blob) -> Result<Self> {
-		let size = blob.size(client).await?;
+	pub async fn new(tg: &dyn Handle, blob: Blob) -> Result<Self> {
+		let size = blob.size(tg).await?;
 		Ok(Self {
 			blob,
-			client: client.clone_box(),
+			tg: tg.clone_box(),
 			position: 0,
 			size,
 			state: State::Empty,
@@ -408,7 +405,7 @@ impl AsyncRead for Reader {
 					}
 					let future = {
 						let blob = this.blob.clone();
-						let client = this.client.clone_box();
+						let tg = this.tg.clone_box();
 						let position = *this.position;
 						async move {
 							let mut current_blob = blob.clone();
@@ -423,7 +420,7 @@ impl AsyncRead for Reader {
 										let bytes = if let Some(object) = object {
 											object.bytes.clone()
 										} else {
-											client.get_object(&id.unwrap().into()).await?.clone()
+											tg.get_object(&id.unwrap().into()).await?.clone()
 										};
 										if position
 											< current_blob_position + bytes.len().to_u64().unwrap()
@@ -435,7 +432,7 @@ impl AsyncRead for Reader {
 										return_error!("The position is out of bounds.");
 									},
 									Blob::Branch(branch) => {
-										for child in branch.children(client.as_ref()).await? {
+										for child in branch.children(tg.as_ref()).await? {
 											if position < current_blob_position + child.size {
 												current_blob = child.blob.clone();
 												continue 'outer;

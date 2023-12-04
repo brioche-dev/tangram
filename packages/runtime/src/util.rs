@@ -4,15 +4,15 @@ use tangram_error::Result;
 
 /// Render a value.
 pub async fn render(
+	tg: &dyn tg::Handle,
 	value: &tg::Value,
-	client: &dyn tg::Client,
 	artifacts_path: &Path,
 ) -> Result<String> {
 	if let Ok(string) = value.try_unwrap_string_ref() {
 		Ok(string.clone())
 	} else if let Ok(artifact) = tg::Artifact::try_from(value.clone()) {
 		Ok(artifacts_path
-			.join(artifact.id(client).await?.to_string())
+			.join(artifact.id(tg).await?.to_string())
 			.into_os_string()
 			.into_string()
 			.unwrap())
@@ -22,7 +22,7 @@ pub async fn render(
 				match component {
 					tg::template::Component::String(string) => Ok(string.clone()),
 					tg::template::Component::Artifact(artifact) => Ok(artifacts_path
-						.join(artifact.id(client).await?.to_string())
+						.join(artifact.id(tg).await?.to_string())
 						.into_os_string()
 						.into_string()
 						.unwrap()),

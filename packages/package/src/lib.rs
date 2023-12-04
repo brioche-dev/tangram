@@ -8,7 +8,7 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{error, return_error, Result, WrapErr};
-use tg::Client;
+use tg::Handle;
 
 /// The file name of the root module in a package.
 pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
@@ -43,8 +43,8 @@ struct PackageWithPathDependencies {
 
 #[async_trait]
 pub trait Ext {
-	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata>;
-	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>>;
+	async fn metadata(&self, tg: &dyn tg::Handle) -> Result<tg::package::Metadata>;
+	async fn dependencies(&self, tg: &dyn tg::Handle) -> Result<Vec<tg::Dependency>>;
 }
 
 // Mutable state used during the version solving algorithm to cache package metadata and published packages.
@@ -151,7 +151,7 @@ enum Error {
 
 #[allow(clippy::too_many_lines)]
 pub async fn new(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	dependency: &tg::Dependency,
 ) -> Result<(tg::Directory, tg::Lock)> {
 	// Get the package with its path dependencies.
@@ -160,10 +160,10 @@ pub async fn new(
 		let path = tokio::fs::canonicalize(PathBuf::from(path))
 			.await
 			.wrap_err("Failed to canonicalize the path.")?;
-		package_with_path_dependencies_for_path(client, &path).await?
+		package_with_path_dependencies_for_path(tg, &path).await?
 	} else {
 		// If the dependency is a registry dependency, then get the package from the registry and make the path dependencies be empty.
-		let id = client
+		let id = tg
 			.try_get_package(dependency)
 			.await?
 			.ok_or(tangram_error::error!(
@@ -199,8 +199,7 @@ pub async fn new(
 				.wrap_err("Failed to deserialize the lockfile.")?;
 
 			// Verify that the lockfile's dependencies match the package with path dependencies.
-			let matches =
-				lockfile_matches(client, &package_with_path_dependencies, &lockfile).await?;
+			let matches = lockfile_matches(tg, &package_with_path_dependencies, &lockfile).await?;
 			if !matches {
 				break 'a None;
 			}
@@ -216,7 +215,7 @@ pub async fn new(
 	let lockfile = if let Some(lockfile) = lockfile {
 		lockfile
 	} else {
-		create_lockfile(client, &package_with_path_dependencies).await?
+		create_lockfile(tg, &package_with_path_dependencies).await?
 	};
 
 	// If this is a path dependency and the lockfile was just created, then write the lockfile.
@@ -245,16 +244,16 @@ pub async fn new(
 }
 
 async fn package_with_path_dependencies_for_path(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	path: &Path,
 ) -> tangram_error::Result<PackageWithPathDependencies> {
 	let mut visited = BTreeMap::default();
-	package_with_path_dependencies_for_path_inner(client, path, &mut visited).await
+	package_with_path_dependencies_for_path_inner(tg, path, &mut visited).await
 }
 
 #[async_recursion]
 async fn package_with_path_dependencies_for_path_inner(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	path: &Path,
 	visited: &mut BTreeMap<PathBuf, Option<PackageWithPathDependencies>>,
 ) -> tangram_error::Result<PackageWithPathDependencies> {
@@ -294,8 +293,8 @@ async fn package_with_path_dependencies_for_path_inner(
 			.wrap_err("Failed to canonicalize the module path.")?;
 
 		// Add the module to the package directory.
-		let artifact = tg::Artifact::check_in(client, &module_absolute_path).await?;
-		package = package.add(client, &module_path, artifact).await?;
+		let artifact = tg::Artifact::check_in(tg, &module_absolute_path).await?;
+		package = package.add(tg, &module_path, artifact).await?;
 
 		// Get the module's text.
 		let text = tokio::fs::read_to_string(&module_absolute_path)
@@ -320,11 +319,11 @@ async fn package_with_path_dependencies_for_path_inner(
 
 			// Check in the artifact at the included path.
 			let included_artifact =
-				tg::Artifact::check_in(client, &included_artifact_absolute_path).await?;
+				tg::Artifact::check_in(tg, &included_artifact_absolute_path).await?;
 
 			// Add the included artifact to the directory.
 			package = package
-				.add(client, &included_artifact_path, included_artifact)
+				.add(tg, &included_artifact_path, included_artifact)
 				.await?;
 		}
 
@@ -352,7 +351,7 @@ async fn package_with_path_dependencies_for_path_inner(
 
 				// Recurse into the path dependency.
 				let child = package_with_path_dependencies_for_path_inner(
-					client,
+					tg,
 					&dependency_absolute_path,
 					visited,
 				)
@@ -400,16 +399,16 @@ async fn package_with_path_dependencies_for_path_inner(
 }
 
 async fn lockfile_matches(
-	client: &dyn Client,
+	tg: &dyn Handle,
 	package_with_path_dependencies: &PackageWithPathDependencies,
 	lockfile: &Lockfile,
 ) -> Result<bool> {
-	lockfile_matches_inner(client, package_with_path_dependencies, lockfile, 0).await
+	lockfile_matches_inner(tg, package_with_path_dependencies, lockfile, 0).await
 }
 
 #[async_recursion]
 async fn lockfile_matches_inner(
-	client: &dyn Client,
+	tg: &dyn Handle,
 	package_with_path_dependencies: &PackageWithPathDependencies,
 	lockfile: &Lockfile,
 	index: usize,
@@ -417,7 +416,7 @@ async fn lockfile_matches_inner(
 	// Get the package's dependencies.
 	let dependencies = package_with_path_dependencies
 		.package
-		.dependencies(client)
+		.dependencies(tg)
 		.await?;
 
 	// Get the package's lock from the lockfile.
@@ -436,8 +435,7 @@ async fn lockfile_matches_inner(
 			// let dependencies = &dependencies;
 			async move {
 				let index = lock.dependencies.get(dependency).unwrap().lock;
-				lockfile_matches_inner(client, package_with_path_dependencies, lockfile, index)
-					.await
+				lockfile_matches_inner(tg, package_with_path_dependencies, lockfile, index).await
 			}
 		})
 		.collect::<FuturesUnordered<_>>()
@@ -448,7 +446,7 @@ async fn lockfile_matches_inner(
 }
 
 async fn create_lockfile(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	package_with_path_dependencies: &PackageWithPathDependencies,
 ) -> Result<Lockfile> {
 	// Construct the version solving context and working set.
@@ -457,7 +455,7 @@ async fn create_lockfile(
 	let mut working_set = im::Vector::new();
 
 	scan_package_with_path_dependencies(
-		client,
+		tg,
 		package_with_path_dependencies,
 		&mut analysis,
 		&mut path_dependencies,
@@ -472,7 +470,7 @@ async fn create_lockfile(
 	};
 
 	// Solve.
-	let solution = solve_inner(client, &mut context, working_set).await?;
+	let solution = solve_inner(tg, &mut context, working_set).await?;
 
 	// Create the error report.
 	let errors = solution
@@ -498,7 +496,7 @@ async fn create_lockfile(
 	let mut locks = Vec::new();
 
 	let root = create_lockfile_inner(
-		client,
+		tg,
 		package_with_path_dependencies,
 		&context,
 		&solution,
@@ -512,18 +510,14 @@ async fn create_lockfile(
 #[allow(clippy::only_used_in_recursion)]
 #[async_recursion]
 async fn create_lockfile_inner(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	package_with_path_dependencies: &PackageWithPathDependencies,
 	context: &Context,
 	solution: &Solution,
 	locks: &mut Vec<Lock>,
 ) -> Result<usize> {
 	// Get the cached analysis.
-	let package = package_with_path_dependencies
-		.package
-		.id(client)
-		.await?
-		.clone();
+	let package = package_with_path_dependencies.package.id(tg).await?.clone();
 	let analysis = context
 		.analysis
 		.get(&package)
@@ -545,7 +539,7 @@ async fn create_lockfile_inner(
 					})
 					.unwrap();
 				let lock = create_lockfile_inner(
-					client,
+					tg,
 					package_with_path_dependencies,
 					context,
 					solution,
@@ -570,7 +564,7 @@ async fn create_lockfile_inner(
 					package: tg::Directory::with_id(resolved.clone()),
 					path_dependencies: BTreeMap::new(),
 				};
-				let lock = create_lockfile_inner(client, &pwpd, context, solution, locks).await?;
+				let lock = create_lockfile_inner(tg, &pwpd, context, solution, locks).await?;
 				Entry {
 					package: Some(resolved.clone()),
 					lock,
@@ -593,7 +587,7 @@ async fn create_lockfile_inner(
 
 #[async_recursion]
 async fn scan_package_with_path_dependencies(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	package_with_path_dependencies: &PackageWithPathDependencies,
 	all_analysis: &mut BTreeMap<tg::directory::Id, Analysis>,
 	all_path_dependencies: &mut BTreeMap<tg::directory::Id, BTreeMap<tg::Path, tg::directory::Id>>,
@@ -603,7 +597,7 @@ async fn scan_package_with_path_dependencies(
 		package,
 		path_dependencies,
 	} = package_with_path_dependencies;
-	let package_id = package.id(client).await?.clone();
+	let package_id = package.id(tg).await?.clone();
 
 	// Check if we've already visited this dependency.
 	if all_path_dependencies.contains_key(&package_id) {
@@ -614,8 +608,8 @@ async fn scan_package_with_path_dependencies(
 
 	// Get the metadata and dependenencies of this package.
 	let dependency = tg::Dependency::with_id(package_id.clone());
-	let metadata = client.get_package_metadata(&dependency).await?;
-	let dependencies = client.get_package_dependencies(&dependency).await?;
+	let metadata = tg.get_package_metadata(&dependency).await?;
+	let dependencies = tg.get_package_dependencies(&dependency).await?;
 
 	// Convert dependencies to dependants and update the working set.
 	let dependants = dependencies.iter().map(|dependency| Dependant {
@@ -634,18 +628,14 @@ async fn scan_package_with_path_dependencies(
 	// Recurse.
 	for (dependency, package_with_path_dependencies) in path_dependencies {
 		let path = dependency.path.as_ref().unwrap();
-		let dependency_package_id = package_with_path_dependencies
-			.package
-			.id(client)
-			.await?
-			.clone();
+		let dependency_package_id = package_with_path_dependencies.package.id(tg).await?.clone();
 		all_path_dependencies
 			.get_mut(&package_id)
 			.unwrap()
 			.insert(path.clone(), dependency_package_id);
 
 		scan_package_with_path_dependencies(
-			client,
+			tg,
 			package_with_path_dependencies,
 			all_analysis,
 			all_path_dependencies,
@@ -659,7 +649,7 @@ async fn scan_package_with_path_dependencies(
 
 #[allow(clippy::too_many_lines)]
 async fn solve_inner(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	context: &mut Context,
 	working_set: im::Vector<Dependant>,
 ) -> Result<Solution> {
@@ -692,7 +682,7 @@ async fn solve_inner(
 			(None, None) => 'a: {
 				// Note: this bit is tricky. The next frame will always have an empty set of remaining versions, because by construction it will never have been tried before. However we need to get a list of versions to attempt, which we will push onto the stack.
 				if current_frame.remaining_versions.is_none() {
-					let all_versions = match context.get_all_versions(client, &dependant).await {
+					let all_versions = match context.get_all_versions(tg, &dependant).await {
 						Ok(all_versions) => all_versions,
 						Err(e) => {
 							tracing::error!(?dependant, ?e, "Failed to get versions of package.");
@@ -725,7 +715,7 @@ async fn solve_inner(
 				// Try and pick a version.
 				let package = context
 					.try_resolve(
-						client,
+						tg,
 						&dependant,
 						current_frame.remaining_versions.as_mut().unwrap(),
 					)
@@ -742,9 +732,7 @@ async fn solve_inner(
 						next_frame.working_set.push_back(dependant.clone());
 
 						// Add all the dependencies to the stack.
-						for child_dependency in
-							context.dependencies(client, &package).await.unwrap()
-						{
+						for child_dependency in context.dependencies(tg, &package).await.unwrap() {
 							let dependant = Dependant {
 								package: package.clone(),
 								dependency: child_dependency.clone(),
@@ -776,7 +764,7 @@ async fn solve_inner(
 					// Case 1.1: The happy path. Our version is solved and it matches this constraint.
 					Ok(package) => {
 						// Successful caches of the version will be memoized, so it's safe to  unwrap here. Annoyingly, borrowck fails here because it doesn't know that the result holds a mutable reference to the context.
-						let version = context.version(client, package).await.unwrap().to_owned();
+						let version = context.version(tg, package).await.unwrap().to_owned();
 
 						// Case 1.1: The happy path. Our version is solved and it matches this constraint.
 						match Context::matches(&version, &dependant.dependency) {
@@ -830,7 +818,7 @@ async fn solve_inner(
 			// Case 2: We only have a partial solution for this dependency and need to make sure we didn't create a cycle.
 			(_, Some(Mark::Temporary(package))) => {
 				// Note: it is safe to unwrap here because a successful query to context.dependencies is memoized.
-				let dependencies = context.dependencies(client, package).await.unwrap();
+				let dependencies = context.dependencies(tg, package).await.unwrap();
 
 				let mut erroneous_children = vec![];
 				for child_dependency in dependencies {
@@ -870,7 +858,7 @@ async fn solve_inner(
 					);
 				} else {
 					// Successful lookups of the version are memoized, so it's safe to unwrap here.
-					let previous_version = context.version(client, package).await.unwrap().into();
+					let previous_version = context.version(tg, package).await.unwrap().into();
 					let error = Error::Backtrack {
 						package: package.clone(),
 						previous_version,
@@ -941,7 +929,7 @@ impl Context {
 	// Try and get the next version from a list of remaining ones. Returns an error if the list is empty.
 	async fn try_resolve(
 		&mut self,
-		client: &dyn tg::Client,
+		tg: &dyn tg::Handle,
 		dependant: &Dependant,
 		remaining_versions: &mut im::Vector<String>,
 	) -> Result<tg::directory::Id, Error> {
@@ -966,7 +954,7 @@ impl Context {
 				return Ok(package.clone());
 			}
 			let dependency = tg::Dependency::with_name_and_version(name.into(), version);
-			match client.try_get_package(&dependency).await {
+			match tg.try_get_package(&dependency).await {
 				Err(error) => {
 					tracing::error!(?dependency, "Failed to get an artifact for the package.");
 					return Err(Error::Other(error));
@@ -983,13 +971,13 @@ impl Context {
 	// Try to lookup the cached analysis for a package by its ID. If it is missing from the cache, we ask the client to analyze the package. If we cannot, we fail.
 	async fn try_get_analysis(
 		&mut self,
-		client: &dyn tg::Client,
+		tg: &dyn tg::Handle,
 		package: &tg::directory::Id,
 	) -> Result<&'_ Analysis> {
 		if !self.analysis.contains_key(package) {
 			let dependency = tg::Dependency::with_id(package.clone());
-			let metadata = client.get_package_metadata(&dependency).await?;
-			let dependencies = client
+			let metadata = tg.get_package_metadata(&dependency).await?;
+			let dependencies = tg
 				.get_package_dependencies(&dependency)
 				.await?
 				.into_iter()
@@ -1011,19 +999,15 @@ impl Context {
 	// Get a list of registry dependencies for a package given its metadata.
 	async fn dependencies(
 		&mut self,
-		client: &dyn tg::Client,
+		tg: &dyn tg::Handle,
 		package: &tg::directory::Id,
 	) -> Result<&'_ [tg::Dependency]> {
-		Ok(&self.try_get_analysis(client, package).await?.dependencies)
+		Ok(&self.try_get_analysis(tg, package).await?.dependencies)
 	}
 
 	// Get the version of a package given its ID.
-	async fn version(
-		&mut self,
-		client: &dyn tg::Client,
-		package: &tg::directory::Id,
-	) -> Result<&str> {
-		self.try_get_analysis(client, package)
+	async fn version(&mut self, tg: &dyn tg::Handle, package: &tg::directory::Id) -> Result<&str> {
+		self.try_get_analysis(tg, package)
 			.await?
 			.metadata
 			.version
@@ -1034,7 +1018,7 @@ impl Context {
 	// Lookup all the versions we might use to solve this dependant.
 	async fn get_all_versions(
 		&mut self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 		dependant: &Dependant,
 	) -> Result<Vec<tg::package::Metadata>> {
 		// If it is a path dependency, we don't care about the versions, which may not exist.
@@ -1048,7 +1032,7 @@ impl Context {
 			.wrap_err("Missing name for dependency.")?
 			.clone();
 		let dependency = tg::Dependency::with_name(name.clone());
-		let metadata = client
+		let metadata = tg
 			.get_package_versions(&dependency)
 			.await?
 			.into_iter()
@@ -1262,7 +1246,7 @@ fn create_lock_inner(
 
 #[async_trait]
 impl Ext for tg::Directory {
-	async fn dependencies(&self, client: &dyn tg::Client) -> Result<Vec<tg::Dependency>> {
+	async fn dependencies(&self, tg: &dyn tg::Handle) -> Result<Vec<tg::Dependency>> {
 		// Create the dependencies set.
 		let mut dependencies: BTreeSet<tg::Dependency> = BTreeSet::default();
 
@@ -1275,12 +1259,12 @@ impl Ext for tg::Directory {
 		while let Some(module_path) = queue.pop_front() {
 			// Get the file.
 			let file = self
-				.get(client, &module_path.clone())
+				.get(tg, &module_path.clone())
 				.await?
 				.try_unwrap_file()
 				.ok()
 				.wrap_err("Expected the module to be a file.")?;
-			let text = file.text(client).await?;
+			let text = file.text(tg).await?;
 
 			// Analyze the module.
 			let analysis = tangram_language::Module::analyze(text)
@@ -1322,15 +1306,15 @@ impl Ext for tg::Directory {
 		Ok(dependencies.into_iter().collect())
 	}
 
-	async fn metadata(&self, client: &dyn tg::Client) -> Result<tg::package::Metadata> {
+	async fn metadata(&self, tg: &dyn tg::Handle) -> Result<tg::package::Metadata> {
 		let path = ROOT_MODULE_FILE_NAME.parse().unwrap();
 		let file = self
-			.get(client, &path)
+			.get(tg, &path)
 			.await?
 			.try_unwrap_file()
 			.ok()
 			.wrap_err("Expected the module to be a file.")?;
-		let text = file.text(client).await?;
+		let text = file.text(tg).await?;
 		let analysis = tangram_language::Module::analyze(text)?;
 		if let Some(metadata) = analysis.metadata {
 			Ok(metadata)
@@ -1380,7 +1364,7 @@ impl Ext for tg::Directory {
 // 		.await
 // 		.unwrap();
 
-// 		create_package(client.as_ref(), "simple_diamond_D", "1.0.0", &[])
+// 		create_package(tg.as_ref(), "simple_diamond_D", "1.0.0", &[])
 // 			.await
 // 			.unwrap();
 // 	}
@@ -1410,11 +1394,11 @@ impl Ext for tg::Directory {
 // 		.await
 // 		.unwrap();
 
-// 		create_package(client.as_ref(), "simple_backtrack_C", "1.2.3", &[])
+// 		create_package(tg.as_ref(), "simple_backtrack_C", "1.2.3", &[])
 // 			.await
 // 			.unwrap();
 
-// 		create_package(client.as_ref(), "simple_backtrack_C", "1.2.2", &[])
+// 		create_package(tg.as_ref(), "simple_backtrack_C", "1.2.2", &[])
 // 			.await
 // 			.unwrap();
 // 	}
@@ -1453,23 +1437,23 @@ impl Ext for tg::Directory {
 // 		.await
 // 		.unwrap();
 
-// 		create_package(client.as_ref(), "diamond_backtrack_D", "1.1.0", &[])
+// 		create_package(tg.as_ref(), "diamond_backtrack_D", "1.1.0", &[])
 // 			.await
 // 			.unwrap();
 
-// 		create_package(client.as_ref(), "diamond_backtrack_D", "1.2.0", &[])
+// 		create_package(tg.as_ref(), "diamond_backtrack_D", "1.2.0", &[])
 // 			.await
 // 			.unwrap();
 
-// 		create_package(client.as_ref(), "diamond_backtrack_D", "1.3.0", &[])
+// 		create_package(tg.as_ref(), "diamond_backtrack_D", "1.3.0", &[])
 // 			.await
 // 			.unwrap();
 
-// 		create_package(client.as_ref(), "diamond_backtrack_D", "1.4.0", &[])
+// 		create_package(tg.as_ref(), "diamond_backtrack_D", "1.4.0", &[])
 // 			.await
 // 			.unwrap();
 
-// 		create_package(client.as_ref(), "diamond_backtrack_D", "1.5.0", &[])
+// 		create_package(tg.as_ref(), "diamond_backtrack_D", "1.5.0", &[])
 // 			.await
 // 			.unwrap();
 // 	}
@@ -1678,11 +1662,11 @@ impl Ext for tg::Directory {
 // 		.await
 // 		.unwrap();
 
-// 		create_package(client.as_ref(), "complex_diamond_E", "1.0.0", &[])
+// 		create_package(tg.as_ref(), "complex_diamond_E", "1.0.0", &[])
 // 			.await
 // 			.unwrap();
 
-// 		create_package(client.as_ref(), "complex_diamond_E", "1.1.0", &[])
+// 		create_package(tg.as_ref(), "complex_diamond_E", "1.1.0", &[])
 // 			.await
 // 			.unwrap();
 // 	}
@@ -1712,7 +1696,7 @@ impl Ext for tg::Directory {
 // 				export default tg.target(() => `Hello, from "{name}"!`);
 // 			"#
 // 		);
-// 		let contents = tg::blob::Blob::with_reader(client, contents.as_bytes())
+// 		let contents = tg::blob::Blob::with_reader(tg, contents.as_bytes())
 // 			.await
 // 			.unwrap();
 // 		let file = tg::File::builder(contents).build();
@@ -1721,7 +1705,7 @@ impl Ext for tg::Directory {
 // 				.into_iter()
 // 				.collect(),
 // 		});
-// 		let id = package.id(client).await?;
+// 		let id = package.id(tg).await?;
 // 		client.publish_package(None, &id.clone()).await?;
 // 		Ok(())
 // 	}

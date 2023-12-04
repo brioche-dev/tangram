@@ -72,18 +72,18 @@ async fn syscall_archive(
 	args: (tg::Artifact, tg::blob::ArchiveFormat),
 ) -> Result<tg::Blob> {
 	let (artifact, format) = args;
-	let blob = tg::Blob::archive(state.client.as_ref(), &artifact, format).await?;
+	let blob = tg::Blob::archive(state.tg.as_ref(), &artifact, format).await?;
 	Ok(blob)
 }
 
 async fn syscall_build(state: Rc<State>, args: (tg::Target,)) -> Result<tg::Value> {
 	let (target,) = args;
 	let build = target
-		.build(state.client.as_ref(), None, state.depth + 1, state.retry)
+		.build(state.tg.as_ref(), None, state.depth + 1, state.retry)
 		.await?;
-	state.build.add_child(state.client.as_ref(), &build).await?;
+	state.build.add_child(state.tg.as_ref(), &build).await?;
 	let output = build
-		.outcome(state.client.as_ref())
+		.outcome(state.tg.as_ref())
 		.await
 		.wrap_err("Failed to get the build outcome.")?
 		.into_result()?;
@@ -92,7 +92,7 @@ async fn syscall_build(state: Rc<State>, args: (tg::Target,)) -> Result<tg::Valu
 
 async fn syscall_bundle(state: Rc<State>, args: (tg::Artifact,)) -> Result<tg::Artifact> {
 	let (artifact,) = args;
-	let artifact = artifact.bundle(state.client.as_ref()).await?;
+	let artifact = artifact.bundle(state.tg.as_ref()).await?;
 	Ok(artifact)
 }
 
@@ -113,7 +113,7 @@ async fn syscall_compress(
 	args: (tg::Blob, tg::blob::CompressionFormat),
 ) -> Result<tg::Blob> {
 	let (blob, format) = args;
-	let blob = blob.compress(state.client.as_ref(), format).await?;
+	let blob = blob.compress(state.tg.as_ref(), format).await?;
 	Ok(blob)
 }
 
@@ -122,7 +122,7 @@ async fn syscall_decompress(
 	args: (tg::Blob, tg::blob::CompressionFormat),
 ) -> Result<tg::Blob> {
 	let (blob, format) = args;
-	let blob = blob.decompress(state.client.as_ref(), format).await?;
+	let blob = blob.decompress(state.tg.as_ref(), format).await?;
 	Ok(blob)
 }
 
@@ -138,7 +138,7 @@ async fn syscall_download(state: Rc<State>, args: (Url, tg::Checksum)) -> Result
 		.bytes_stream()
 		.map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
 		.inspect_ok(|chunk| checksum_writer.update(chunk));
-	let blob = tg::Blob::with_reader(state.client.as_ref(), StreamReader::new(stream)).await?;
+	let blob = tg::Blob::with_reader(state.tg.as_ref(), StreamReader::new(stream)).await?;
 	let actual = checksum_writer.finalize();
 	if actual != checksum {
 		return_error!(r#"The checksum did not match. Expected "{checksum}" but got "{actual}"."#);
@@ -274,14 +274,14 @@ async fn syscall_extract(
 	args: (tg::Blob, tg::blob::ArchiveFormat),
 ) -> Result<tg::Artifact> {
 	let (blob, format) = args;
-	let artifact = blob.extract(state.client.as_ref(), format).await?;
+	let artifact = blob.extract(state.tg.as_ref(), format).await?;
 	Ok(artifact)
 }
 
 async fn syscall_load(state: Rc<State>, args: (tg::object::Id,)) -> Result<tg::object::Object> {
 	let (id,) = args;
 	tg::object::Handle::with_id(id)
-		.object(state.client.as_ref())
+		.object(state.tg.as_ref())
 		.await
 }
 
@@ -290,9 +290,9 @@ fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) 
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
 		let build = state.build.clone();
-		let client = state.client.clone_box();
+		let tg = state.tg.clone_box();
 		async move {
-			let result = build.add_log(client.as_ref(), string.into()).await;
+			let result = build.add_log(tg.as_ref(), string.into()).await;
 			sender.send(result).unwrap();
 		}
 	});
@@ -305,7 +305,7 @@ fn syscall_log(_scope: &mut v8::HandleScope, state: Rc<State>, args: (String,)) 
 
 async fn syscall_read(state: Rc<State>, args: (tg::Blob,)) -> Result<Bytes> {
 	let (blob,) = args;
-	let bytes = blob.bytes(state.client.as_ref()).await?;
+	let bytes = blob.bytes(state.tg.as_ref()).await?;
 	Ok(bytes.into())
 }
 
@@ -319,7 +319,7 @@ async fn syscall_sleep(_state: Rc<State>, args: (f64,)) -> Result<()> {
 async fn syscall_store(state: Rc<State>, args: (tg::object::Object,)) -> Result<tg::object::Id> {
 	let (object,) = args;
 	let handle = tg::object::Handle::with_object(object);
-	let id = handle.id(state.client.as_ref()).await?;
+	let id = handle.id(state.tg.as_ref()).await?;
 	Ok(id.clone())
 }
 

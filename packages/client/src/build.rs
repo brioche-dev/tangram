@@ -1,5 +1,5 @@
 pub use self::data::Data;
-use crate::{id, object, value, Blob, Client, Error, Result, Target, User, Value, WrapErr};
+use crate::{id, object, value, Blob, Error, Handle, Result, Target, User, Value, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::{Display, TryUnwrap};
@@ -148,13 +148,13 @@ impl Build {
 			.map(|object| unsafe { &*(object as *const Object) })
 	}
 
-	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
-		self.load(client).await?;
+	pub async fn object(&self, tg: &dyn Handle) -> Result<&Object> {
+		self.load(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
 	}
 
-	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
-		if !self.try_load(client).await? {
+	pub async fn try_get_object(&self, tg: &dyn Handle) -> Result<Option<&Object>> {
+		if !self.try_load(tg).await? {
 			return Ok(None);
 		}
 		Ok(Some(unsafe {
@@ -162,19 +162,19 @@ impl Build {
 		}))
 	}
 
-	pub async fn load(&self, client: &dyn Client) -> Result<()> {
-		self.try_load(client)
+	pub async fn load(&self, tg: &dyn Handle) -> Result<()> {
+		self.try_load(tg)
 			.await?
 			.then_some(())
 			.wrap_err(format!("Failed to load the object with id {}.", self.id()))
 	}
 
-	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
+	pub async fn try_load(&self, tg: &dyn Handle) -> Result<bool> {
 		if self.state.read().unwrap().object.is_some() {
 			return Ok(true);
 		}
 		let id = self.state.read().unwrap().id.clone().unwrap();
-		let Some(bytes) = client.try_get_object(&id.clone().into()).await? else {
+		let Some(bytes) = tg.try_get_object(&id.clone().into()).await? else {
 			return Ok(false);
 		};
 		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
@@ -184,9 +184,9 @@ impl Build {
 	}
 
 	#[async_recursion]
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
-		let object = self.object(client).await?;
-		let target = object.target.id(client).await?.clone();
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
+		let object = self.object(tg).await?;
+		let target = object.target.id(tg).await?.clone();
 		let children = object
 			.children
 			.iter()
@@ -194,12 +194,12 @@ impl Build {
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
 			.await?;
-		let log = object.log.id(client).await?;
+		let log = object.log.id(tg).await?;
 		let outcome = match &object.outcome {
 			Outcome::Terminated => data::Outcome::Terminated,
 			Outcome::Canceled => data::Outcome::Canceled,
 			Outcome::Failed(error) => data::Outcome::Failed(error.clone()),
-			Outcome::Succeeded(value) => data::Outcome::Succeeded(value.data(client).await?),
+			Outcome::Succeeded(value) => data::Outcome::Succeeded(value.data(tg).await?),
 		};
 		Ok(Data {
 			target,
@@ -212,7 +212,7 @@ impl Build {
 
 impl Build {
 	pub async fn new(
-		client: &dyn Client,
+		tg: &dyn Handle,
 		id: Id,
 		target: Target,
 		children: Vec<Build>,
@@ -229,10 +229,9 @@ impl Build {
 			id: Some(id.clone()),
 			object: Some(object),
 		});
-		let data = build.data(client).await?;
+		let data = build.data(tg).await?;
 		let bytes = data.serialize()?;
-		client
-			.try_put_object(&id.clone().into(), &bytes)
+		tg.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()
@@ -240,99 +239,99 @@ impl Build {
 		Ok(build)
 	}
 
-	pub async fn target(&self, client: &dyn Client) -> Result<Target> {
-		self.try_get_target(client)
+	pub async fn target(&self, tg: &dyn Handle) -> Result<Target> {
+		self.try_get_target(tg)
 			.await?
 			.wrap_err("Failed to get the target.")
 	}
 
-	pub async fn try_get_target(&self, client: &dyn Client) -> Result<Option<Target>> {
+	pub async fn try_get_target(&self, tg: &dyn Handle) -> Result<Option<Target>> {
 		if let Some(object) = self.try_get_loaded_object() {
 			return Ok(Some(object.target.clone()));
 		}
-		Ok(client
+		Ok(tg
 			.try_get_build_target(self.id())
 			.await?
 			.map(Target::with_id))
 	}
 
-	pub async fn children(&self, client: &dyn Client) -> Result<BoxStream<'static, Result<Self>>> {
-		self.try_get_children(client)
+	pub async fn children(&self, tg: &dyn Handle) -> Result<BoxStream<'static, Result<Self>>> {
+		self.try_get_children(tg)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
 	pub async fn try_get_children(
 		&self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 	) -> Result<Option<BoxStream<'static, Result<Self>>>> {
 		if let Some(object) = self.try_get_loaded_object() {
 			return Ok(Some(stream::iter(object.children.clone()).map(Ok).boxed()));
 		}
-		Ok(client
+		Ok(tg
 			.try_get_build_children(self.id())
 			.await?
 			.map(|children| children.map_ok(Build::with_id).boxed()))
 	}
 
-	pub async fn add_child(&self, client: &dyn Client, child: &Self) -> Result<()> {
+	pub async fn add_child(&self, tg: &dyn Handle, child: &Self) -> Result<()> {
 		let id = self.id();
 		let child_id = child.id();
-		client.add_build_child(None, id, child_id).await?;
+		tg.add_build_child(None, id, child_id).await?;
 		Ok(())
 	}
 
-	pub async fn log(&self, client: &dyn Client) -> Result<BoxStream<'static, Result<Bytes>>> {
-		self.try_get_log(client)
+	pub async fn log(&self, tg: &dyn Handle) -> Result<BoxStream<'static, Result<Bytes>>> {
+		self.try_get_log(tg)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
 	pub async fn try_get_log(
 		&self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		if let Some(object) = self.try_get_loaded_object() {
 			let log = object.log.clone();
-			let bytes = log.bytes(client).await?;
+			let bytes = log.bytes(tg).await?;
 			return Ok(Some(stream::once(async move { Ok(bytes.into()) }).boxed()));
 		}
-		client.try_get_build_log(self.id()).await
+		tg.try_get_build_log(self.id()).await
 	}
 
-	pub async fn add_log(&self, client: &dyn Client, log: Bytes) -> Result<()> {
+	pub async fn add_log(&self, tg: &dyn Handle, log: Bytes) -> Result<()> {
 		let id = self.id();
-		client.add_build_log(None, id, log).await?;
+		tg.add_build_log(None, id, log).await?;
 		Ok(())
 	}
 
-	pub async fn outcome(&self, client: &dyn Client) -> Result<Outcome> {
-		self.try_get_outcome(client)
+	pub async fn outcome(&self, tg: &dyn Handle) -> Result<Outcome> {
+		self.try_get_outcome(tg)
 			.await?
 			.wrap_err("Failed to get the build.")
 	}
 
-	pub async fn try_get_outcome(&self, client: &dyn Client) -> Result<Option<Outcome>> {
+	pub async fn try_get_outcome(&self, tg: &dyn Handle) -> Result<Option<Outcome>> {
 		if let Some(object) = self.try_get_loaded_object() {
 			return Ok(Some(object.outcome.clone()));
 		}
-		client.try_get_build_outcome(self.id()).await
+		tg.try_get_build_outcome(self.id()).await
 	}
 
-	pub async fn cancel(&self, client: &dyn Client) -> Result<()> {
+	pub async fn cancel(&self, tg: &dyn Handle) -> Result<()> {
 		let id = self.id();
-		client.cancel_build(None, id).await?;
+		tg.cancel_build(None, id).await?;
 		Ok(())
 	}
 
 	pub async fn finish(
 		&self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 		user: Option<&User>,
 		outcome: Outcome,
 	) -> Result<()> {
 		let id = self.id();
-		client.finish_build(user, id, outcome).await?;
+		tg.finish_build(user, id, outcome).await?;
 		Ok(())
 	}
 }
@@ -357,12 +356,12 @@ impl Outcome {
 		}
 	}
 
-	pub async fn data(&self, client: &dyn Client) -> Result<data::Outcome> {
+	pub async fn data(&self, tg: &dyn Handle) -> Result<data::Outcome> {
 		Ok(match self {
 			Self::Terminated => data::Outcome::Terminated,
 			Self::Canceled => data::Outcome::Canceled,
 			Self::Failed(error) => data::Outcome::Failed(error.clone()),
-			Self::Succeeded(value) => data::Outcome::Succeeded(value.data(client).await?),
+			Self::Succeeded(value) => data::Outcome::Succeeded(value.data(tg).await?),
 		})
 	}
 }

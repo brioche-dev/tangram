@@ -13,19 +13,20 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_publish(&self, args: Args) -> Result<()> {
-		let client = self.client().await?;
-		let client = client.as_ref();
+		let tg = self.handle().await?;
+		let tg = tg.as_ref();
+
+		// Get the user.
 		let user = self.user().await?;
 
 		// Create the package.
-		let (package, _) = tangram_package::new(client, &args.package).await?;
+		let (package, _) = tangram_package::new(tg, &args.package).await?;
 
 		// Get the package ID.
-		let id = package.id(client).await?;
+		let id = package.id(tg).await?;
 
 		// Publish the package.
-		client
-			.publish_package(user.as_ref(), id)
+		tg.publish_package(user.as_ref(), id)
 			.await
 			.wrap_err("Failed to publish the package.")?;
 

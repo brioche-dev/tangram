@@ -24,13 +24,13 @@ const SOURCE_MAP: &[u8] =
 
 struct State {
 	build: tg::Build,
-	client: Box<dyn tg::Client>,
 	depth: u64,
 	futures: RefCell<Futures>,
 	global_source_map: Option<SourceMap>,
 	modules: RefCell<Vec<Module>>,
 	main_runtime_handle: tokio::runtime::Handle,
 	retry: tg::build::Retry,
+	tg: Box<dyn tg::Handle>,
 }
 
 type Futures = FuturesUnordered<
@@ -67,19 +67,19 @@ std::thread_local! {
 
 #[allow(clippy::too_many_lines)]
 pub async fn build(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	build: &tg::Build,
 	depth: u64,
 	retry: tg::build::Retry,
 	main_runtime_handle: tokio::runtime::Handle,
 ) -> Result<tg::Value> {
 	// Get the target.
-	let target = build.target(client).await?;
+	let target = build.target(tg).await?;
 
 	// Create the state.
 	let state = Rc::new(State {
 		build: build.clone(),
-		client: client.clone_box(),
+		tg: tg.clone_box(),
 		depth,
 		futures: RefCell::new(FuturesUnordered::new()),
 		global_source_map: Some(SourceMap::from_slice(SOURCE_MAP).unwrap()),
@@ -357,11 +357,11 @@ fn resolve_module(
 
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
-		let client = state.client.clone_box();
+		let tg = state.tg.clone_box();
 		let module = module.clone();
 		let import = import.clone();
 		async move {
-			let module = module.resolve(client.as_ref(), None, &import).await;
+			let module = module.resolve(tg.as_ref(), None, &import).await;
 			sender.send(module).unwrap();
 		}
 	});
@@ -428,10 +428,10 @@ fn load_module<'s>(
 	// Load the module.
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
-		let client = state.client.clone_box();
+		let tg = state.tg.clone_box();
 		let module = module.clone();
 		async move {
-			let result = module.load(client.as_ref(), None).await;
+			let result = module.load(tg.as_ref(), None).await;
 			sender.send(result).unwrap();
 		}
 	});
@@ -485,12 +485,12 @@ fn load_module<'s>(
 	// Get the metadata.
 	let (sender, receiver) = std::sync::mpsc::channel();
 	state.main_runtime_handle.spawn({
-		let client = state.client.clone_box();
+		let tg = state.tg.clone_box();
 		let module = module.clone();
 		async move {
 			let module = module.unwrap_normal_ref();
 			let package = tg::Directory::with_id(module.package.clone());
-			let metadata = package.metadata(client.as_ref()).await.ok();
+			let metadata = package.metadata(tg.as_ref()).await.ok();
 			sender.send(metadata).unwrap();
 		}
 	});

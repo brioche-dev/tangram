@@ -30,7 +30,7 @@ type Backend = tui::backend::CrosstermBackend<std::fs::File>;
 type Terminal = tui::Terminal<Backend>;
 
 struct App {
-	client: Box<dyn tg::Client>,
+	tg: Box<dyn tg::Handle>,
 	direction: tui::layout::Direction,
 	tree: Tree,
 	log: Log,
@@ -49,7 +49,7 @@ struct TreeItem {
 }
 
 struct TreeItemInner {
-	client: Box<dyn tg::Client>,
+	tg: Box<dyn tg::Handle>,
 	build: tg::Build,
 	parent: Option<Weak<RefCell<TreeItemInner>>>,
 	index: usize,
@@ -92,11 +92,7 @@ pub struct Options {
 }
 
 impl Tui {
-	pub async fn start(
-		client: &dyn tg::Client,
-		build: &tg::Build,
-		options: Options,
-	) -> Result<Self> {
+	pub async fn start(tg: &dyn tg::Handle, build: &tg::Build, options: Options) -> Result<Self> {
 		// Create the terminal.
 		let tty = tokio::fs::OpenOptions::new()
 			.read(true)
@@ -121,11 +117,11 @@ impl Tui {
 
 		// Spawn the task.
 		let task = tokio::task::spawn_blocking({
-			let client = client.clone_box();
+			let tg = tg.clone_box();
 			let build = build.clone();
 			let stop = stop.clone();
 			move || {
-				let mut app = App::new(client.as_ref(), &build);
+				let mut app = App::new(tg.as_ref(), &build);
 				while !stop.load(std::sync::atomic::Ordering::SeqCst) {
 					// Render.
 					terminal.draw(|frame| app.render(frame.size(), frame.buffer_mut()))?;
@@ -190,14 +186,14 @@ impl Tui {
 }
 
 impl App {
-	fn new(client: &dyn tg::Client, build: &tg::Build) -> Self {
-		let client = client.clone_box();
+	fn new(tg: &dyn tg::Handle, build: &tg::Build) -> Self {
+		let tg = tg.clone_box();
 		let direction = tui::layout::Direction::Horizontal;
-		let root = TreeItem::new(client.as_ref(), build, None, 0, true, true);
+		let root = TreeItem::new(tg.as_ref(), build, None, 0, true, true);
 		let tree = Tree::new(root);
-		let log = Log::new(client.as_ref(), build);
+		let log = Log::new(tg.as_ref(), build);
 		Self {
-			client,
+			tg,
 			direction,
 			tree,
 			log,
@@ -284,10 +280,7 @@ impl App {
 		let new_selected_item = expanded_items[new_selected_index].clone();
 		self.tree.selected.inner.borrow_mut().selected = false;
 		new_selected_item.inner.borrow_mut().selected = true;
-		self.log = Log::new(
-			self.client.as_ref(),
-			&new_selected_item.inner.borrow().build,
-		);
+		self.log = Log::new(self.tg.as_ref(), &new_selected_item.inner.borrow().build);
 		self.tree.selected = new_selected_item;
 	}
 
@@ -311,7 +304,7 @@ impl App {
 				});
 			if let Some(parent) = parent {
 				self.tree.selected.inner.borrow_mut().selected = false;
-				self.log = Log::new(self.client.as_ref(), &parent.inner.borrow().build);
+				self.log = Log::new(self.tg.as_ref(), &parent.inner.borrow().build);
 				self.tree.selected = parent;
 			}
 		}
@@ -326,14 +319,14 @@ impl App {
 
 	fn cancel(&mut self) {
 		let build = self.tree.selected.inner.borrow().build.clone();
-		let client = self.client.clone_box();
-		tokio::spawn(async move { build.cancel(client.as_ref()).await.ok() });
+		let tg = self.tg.clone_box();
+		tokio::spawn(async move { build.cancel(tg.as_ref()).await.ok() });
 	}
 
 	fn quit(&mut self) {
 		let build = self.tree.root.inner.borrow().build.clone();
-		let client = self.client.clone_box();
-		tokio::spawn(async move { build.cancel(client.as_ref()).await.ok() });
+		let tg = self.tg.clone_box();
+		tokio::spawn(async move { build.cancel(tg.as_ref()).await.ok() });
 	}
 
 	fn render(&mut self, rect: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
@@ -419,7 +412,7 @@ impl Tree {
 
 impl TreeItem {
 	fn new(
-		client: &dyn tg::Client,
+		tg: &dyn tg::Handle,
 		build: &tg::Build,
 		parent: Option<Weak<RefCell<TreeItemInner>>>,
 		index: usize,
@@ -428,10 +421,10 @@ impl TreeItem {
 	) -> Self {
 		let (status_sender, status_receiver) = tokio::sync::oneshot::channel();
 		tokio::task::spawn({
-			let client = client.clone_box();
+			let tg = tg.clone_box();
 			let build = build.clone();
 			async move {
-				let status = match build.outcome(client.as_ref()).await {
+				let status = match build.outcome(tg.as_ref()).await {
 					Err(_) => TreeItemStatus::Unknown,
 					Ok(tg::build::Outcome::Terminated) => TreeItemStatus::Terminated,
 					Ok(tg::build::Outcome::Canceled) => TreeItemStatus::Canceled,
@@ -444,20 +437,20 @@ impl TreeItem {
 
 		let (title_sender, title_receiver) = tokio::sync::oneshot::channel();
 		tokio::task::spawn({
-			let client = client.clone_box();
+			let tg = tg.clone_box();
 			let build = build.clone();
 			async move {
-				let title = title(client.as_ref(), &build).await.ok().flatten();
+				let title = title(tg.as_ref(), &build).await.ok().flatten();
 				title_sender.send(title).ok();
 			}
 		});
 
 		let (children_sender, children_receiver) = tokio::sync::mpsc::unbounded_channel();
 		tokio::task::spawn({
-			let client = client.clone_box();
+			let tg = tg.clone_box();
 			let build = build.clone();
 			async move {
-				let Ok(mut children) = build.children(client.as_ref()).await else {
+				let Ok(mut children) = build.children(tg.as_ref()).await else {
 					return;
 				};
 				while let Some(Ok(child)) = children.next().await {
@@ -470,7 +463,7 @@ impl TreeItem {
 		});
 
 		let inner = Rc::new(RefCell::new(TreeItemInner {
-			client: client.clone_box(),
+			tg: tg.clone_box(),
 			build: build.clone(),
 			parent,
 			index,
@@ -519,12 +512,12 @@ impl TreeItem {
 			let child = self.inner.borrow_mut().children_receiver.try_recv();
 			child
 		} {
-			let client = self.inner.borrow().client.clone_box();
+			let tg = self.inner.borrow().tg.clone_box();
 			let parent = Some(Rc::downgrade(&self.inner));
 			let index = self.inner.borrow().children.len();
 			let selected = false;
 			let expanded = false;
-			let child = TreeItem::new(client.as_ref(), &child, parent, index, selected, expanded);
+			let child = TreeItem::new(tg.as_ref(), &child, parent, index, selected, expanded);
 			self.inner.borrow_mut().children.push(child);
 		}
 		for child in &self.inner.borrow().children {
@@ -589,14 +582,14 @@ impl TreeItem {
 }
 
 impl Log {
-	fn new(client: &dyn tg::Client, build: &tg::Build) -> Self {
-		let client = client.clone_box();
+	fn new(tg: &dyn tg::Handle, build: &tg::Build) -> Self {
+		let tg = tg.clone_box();
 		let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
 		tokio::task::spawn({
 			let build = build.clone();
 			async move {
-				let mut log = match build.log(client.as_ref()).await {
+				let mut log = match build.log(tg.as_ref()).await {
 					Ok(log) => log,
 					Err(error) => {
 						sender.send(Err(error)).ok();
@@ -707,17 +700,17 @@ impl Log {
 	}
 }
 
-async fn title(client: &dyn tg::Client, build: &tg::Build) -> Result<Option<String>> {
+async fn title(tg: &dyn tg::Handle, build: &tg::Build) -> Result<Option<String>> {
 	// Get the target.
-	let target = build.target(client).await?;
+	let target = build.target(tg).await?;
 
 	// Get the package.
-	let Some(package) = target.package(client).await? else {
+	let Some(package) = target.package(tg).await? else {
 		return Ok(None);
 	};
 
 	// Get the metadata.
-	let metadata = package.metadata(client).await?;
+	let metadata = package.metadata(tg).await?;
 
 	// Construct the title.
 	let mut title = String::new();
@@ -725,7 +718,7 @@ async fn title(client: &dyn tg::Client, build: &tg::Build) -> Result<Option<Stri
 	if let Some(version) = &metadata.version {
 		title.push_str(&format!("@{version}"));
 	}
-	if let Some(name) = target.name(client).await? {
+	if let Some(name) = target.name(tg).await? {
 		title.push_str(&format!(":{name}"));
 	}
 

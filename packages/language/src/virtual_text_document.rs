@@ -21,15 +21,13 @@ impl Server {
 		&self,
 		params: Params,
 	) -> Result<Option<String>> {
-		let client = self.inner.client.as_ref();
+		let tg = self.inner.tg.as_ref();
 
 		// Get the module.
 		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		// Load the file.
-		let text = module
-			.load(client, Some(&self.inner.document_store))
-			.await?;
+		let text = module.load(tg, Some(&self.inner.document_store)).await?;
 
 		Ok(Some(text))
 	}

@@ -1,5 +1,5 @@
 use crate::{
-	file, return_error, Artifact, Blob, Client, Directory, Error, File, Result, Symlink, Template,
+	file, return_error, Artifact, Blob, Directory, Error, File, Handle, Result, Symlink, Template,
 	WrapErr,
 };
 use async_recursion::async_recursion;
@@ -16,22 +16,16 @@ pub struct Options {
 }
 
 impl Artifact {
-	pub async fn check_in(client: &dyn Client, path: &Path) -> Result<Self> {
-		Self::check_in_with_options(client, path, &Options::default()).await
+	pub async fn check_in(tg: &dyn Handle, path: &Path) -> Result<Self> {
+		Self::check_in_with_options(tg, path, &Options::default()).await
 	}
 
 	#[async_recursion]
 	pub async fn check_in_with_options(
-		client: &dyn Client,
+		tg: &dyn Handle,
 		path: &Path,
 		options: &Options,
 	) -> Result<Self> {
-		// if client.is_local() {
-		// 	if let Some(artifact) = client.try_get_artifact_for_path(path).await? {
-		// 		return Ok(artifact);
-		// 	}
-		// }
-
 		// Get the metadata for the file system object at the path.
 		let metadata = tokio::fs::symlink_metadata(path).await.wrap_err_with(|| {
 			let path = path.display();
@@ -40,21 +34,21 @@ impl Artifact {
 
 		// Call the appropriate function for the file system object at the path.
 		let artifact = if metadata.is_dir() {
-			Self::check_in_directory(client, path, &metadata, options)
+			Self::check_in_directory(tg, path, &metadata, options)
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to check in the directory at path "{path}"."#)
 				})?
 		} else if metadata.is_file() {
-			Self::check_in_file(client, path, &metadata, options)
+			Self::check_in_file(tg, path, &metadata, options)
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
 					format!(r#"Failed to check in the file at path "{path}"."#)
 				})?
 		} else if metadata.is_symlink() {
-			Self::check_in_symlink(client, path, &metadata, options)
+			Self::check_in_symlink(tg, path, &metadata, options)
 				.await
 				.wrap_err_with(|| {
 					let path = path.display();
@@ -64,22 +58,18 @@ impl Artifact {
 			return_error!("The path must point to a directory, file, or symlink.")
 		};
 
-		// if client.is_local() {
-		// 	client.set_artifact_for_path(path, artifact.clone()).await?;
-		// }
-
 		Ok(artifact)
 	}
 
 	async fn check_in_directory(
-		client: &dyn Client,
+		tg: &dyn Handle,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,
 	) -> Result<Self> {
 		// Read the contents of the directory.
 		let names = {
-			let _permit = client.file_descriptor_semaphore().acquire().await;
+			let _permit = tg.file_descriptor_semaphore().acquire().await;
 			let mut read_dir = tokio::fs::read_dir(path)
 				.await
 				.wrap_err("Failed to read the directory.")?;
@@ -104,7 +94,7 @@ impl Artifact {
 			.into_iter()
 			.map(|name| async {
 				let path = path.join(&name);
-				let artifact = Self::check_in_with_options(client, &path, options).await?;
+				let artifact = Self::check_in_with_options(tg, &path, options).await?;
 				Ok::<_, Error>((name, artifact))
 			})
 			.collect::<FuturesUnordered<_>>()
@@ -118,17 +108,17 @@ impl Artifact {
 	}
 
 	async fn check_in_file(
-		client: &dyn Client,
+		tg: &dyn Handle,
 		path: &Path,
 		metadata: &Metadata,
 		_options: &Options,
 	) -> Result<Self> {
 		// Create the blob.
-		let permit = client.file_descriptor_semaphore().acquire().await;
+		let permit = tg.file_descriptor_semaphore().acquire().await;
 		let file = tokio::fs::File::open(path)
 			.await
 			.wrap_err("Failed to open the file.")?;
-		let contents = Blob::with_reader(client, file)
+		let contents = Blob::with_reader(tg, file)
 			.await
 			.wrap_err("Failed to create the contents.")?;
 		drop(permit);
@@ -155,7 +145,7 @@ impl Artifact {
 	}
 
 	async fn check_in_symlink(
-		_client: &dyn Client,
+		_tg: &dyn Handle,
 		path: &Path,
 		_metadata: &Metadata,
 		options: &Options,

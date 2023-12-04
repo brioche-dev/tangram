@@ -16,14 +16,14 @@ pub enum Server {
 }
 
 impl Server {
-	pub async fn start(client: &dyn tg::Client, path: &Path) -> Result<Self> {
+	pub async fn start(tg: &dyn tg::Handle, path: &Path) -> Result<Self> {
 		#[cfg(target_os = "linux")]
 		{
-			Ok(Self::Fuse(fuse::Server::start(client, path).await?))
+			Ok(Self::Fuse(fuse::Server::start(tg, path).await?))
 		}
 		#[cfg(target_os = "macos")]
 		{
-			Ok(Self::Nfs(nfs::Server::start(client, path, 8437).await?))
+			Ok(Self::Nfs(nfs::Server::start(tg, path, 8437).await?))
 		}
 	}
 

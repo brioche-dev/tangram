@@ -19,6 +19,11 @@ bytes = { workspace = true }
 derive_more = { workspace = true }
 fnv = { workspace = true }
 futures = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 itertools = { workspace = true }
 libc = { workspace = true }
 lmdb-rkv = { workspace = true }
@@ -26,9 +31,9 @@ notify = { workspace = true }
 num = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
 tangram_client = { workspace = true }
 tangram_error = { workspace = true }
-tangram_http = { workspace = true }
 tangram_language = { workspace = true }
 tangram_package = { workspace = true }
 tangram_runtime = { workspace = true }

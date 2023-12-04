@@ -21,7 +21,7 @@ pub struct Server {
 }
 
 struct Inner {
-	client: Box<dyn tg::Client>,
+	tg: Box<dyn tg::Handle>,
 	path: std::path::PathBuf,
 	state: tokio::sync::RwLock<State>,
 	task: Task,
@@ -138,9 +138,9 @@ enum Response {
 }
 
 impl Server {
-	pub async fn start(client: &dyn tg::Client, path: &Path) -> Result<Self> {
+	pub async fn start(tg: &dyn tg::Handle, path: &Path) -> Result<Self> {
 		// Create the server.
-		let client = client.clone_box();
+		let tg = tg.clone_box();
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let root = Arc::new_cyclic(|root| Node {
 			id: ROOT_NODE_ID,
@@ -162,7 +162,7 @@ impl Server {
 		let state = tokio::sync::RwLock::new(state);
 		let server = Self {
 			inner: Arc::new(Inner {
-				client,
+				tg,
 				path: path.to_owned(),
 				state,
 				task,
@@ -438,7 +438,7 @@ impl Server {
 	) -> Result<Response, i32> {
 		let node_id = NodeId(header.nodeid);
 		let node = self.get_node(node_id).await?;
-		let response = node.fuse_attr_out(self.inner.client.as_ref()).await?;
+		let response = node.fuse_attr_out(self.inner.tg.as_ref()).await?;
 		Ok(Response::GetAttr(response))
 	}
 
@@ -463,16 +463,13 @@ impl Server {
 		if attr_name != tg::file::TANGRAM_FILE_XATTR_NAME {
 			return Err(libc::ENODATA);
 		}
-		let file_references = file
-			.references(self.inner.client.as_ref())
-			.await
-			.map_err(|e| {
-				tracing::error!(?e, ?file, "Failed to get file references.");
-				libc::EIO
-			})?;
+		let file_references = file.references(self.inner.tg.as_ref()).await.map_err(|e| {
+			tracing::error!(?e, ?file, "Failed to get file references.");
+			libc::EIO
+		})?;
 		let mut references = Vec::new();
 		for artifact in file_references {
-			let id = artifact.id(self.inner.client.as_ref()).await.map_err(|e| {
+			let id = artifact.id(self.inner.tg.as_ref()).await.map_err(|e| {
 				tracing::error!(?e, ?artifact, "Failed to get ID of artifact.");
 				libc::EIO
 			})?;
@@ -572,9 +569,7 @@ impl Server {
 		let child_node = self.get_or_create_child_node(parent_node, &name).await?;
 
 		// Create the response.
-		let response = child_node
-			.fuse_entry_out(self.inner.client.as_ref())
-			.await?;
+		let response = child_node.fuse_entry_out(self.inner.tg.as_ref()).await?;
 
 		Ok(Response::Lookup(response))
 	}
@@ -597,7 +592,7 @@ impl Server {
 			NodeKind::Directory { .. } => FileHandleData::Directory,
 			NodeKind::File { file, .. } => {
 				let reader = file
-					.reader(self.inner.client.as_ref())
+					.reader(self.inner.tg.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
 				FileHandleData::File {
@@ -720,7 +715,7 @@ impl Server {
 		// Create the response.
 		let mut response = Vec::new();
 		let names = directory
-			.entries(self.inner.client.as_ref())
+			.entries(self.inner.tg.as_ref())
 			.await
 			.map_err(|_| libc::EIO)?
 			.keys()
@@ -762,7 +757,7 @@ impl Server {
 			};
 			if plus {
 				let entry = sys::fuse_direntplus {
-					entry_out: node.fuse_entry_out(self.inner.client.as_ref()).await?,
+					entry_out: node.fuse_entry_out(self.inner.tg.as_ref()).await?,
 					dirent: entry,
 				};
 				response.extend_from_slice(entry.as_bytes());
@@ -793,14 +788,14 @@ impl Server {
 
 		// Render the target.
 		let mut target = String::new();
-		let Ok(artifact) = symlink.artifact(self.inner.client.as_ref()).await else {
+		let Ok(artifact) = symlink.artifact(self.inner.tg.as_ref()).await else {
 			return Err(libc::EIO);
 		};
-		let Ok(path) = symlink.path(self.inner.client.as_ref()).await else {
+		let Ok(path) = symlink.path(self.inner.tg.as_ref()).await else {
 			return Err(libc::EIO);
 		};
 		if let Some(artifact) = artifact {
-			let Ok(id) = artifact.id(self.inner.client.as_ref()).await else {
+			let Ok(id) = artifact.id(self.inner.tg.as_ref()).await else {
 				return Err(libc::EIO);
 			};
 			for _ in 0..node.depth() - 1 {
@@ -896,7 +891,7 @@ impl Server {
 
 			NodeKind::Directory { directory, .. } => {
 				let entries = directory
-					.entries(self.inner.client.as_ref())
+					.entries(self.inner.tg.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
 				entries.get(name).ok_or(libc::ENOENT)?.clone()
@@ -917,7 +912,7 @@ impl Server {
 			},
 			tg::Artifact::File(file) => {
 				let size = file
-					.size(self.inner.client.as_ref())
+					.size(self.inner.tg.as_ref())
 					.await
 					.map_err(|_| libc::EIO)?;
 				NodeKind::File { file, size }
@@ -1102,11 +1097,11 @@ impl Node {
 		}
 	}
 
-	async fn mode(&self, client: &dyn tg::Client) -> Result<u32, i32> {
+	async fn mode(&self, tg: &dyn tg::Handle) -> Result<u32, i32> {
 		let mode = match &self.kind {
 			NodeKind::Root { .. } | NodeKind::Directory { .. } => libc::S_IFDIR | 0o555,
 			NodeKind::File { file, .. } => {
-				let executable = file.executable(client).await.map_err(|_| libc::EIO)?;
+				let executable = file.executable(tg).await.map_err(|_| libc::EIO)?;
 				libc::S_IFREG | 0o444 | (if executable { 0o111 } else { 0o000 })
 			},
 			NodeKind::Symlink { .. } => libc::S_IFLNK | 0o444,
@@ -1129,9 +1124,9 @@ impl Node {
 		}
 	}
 
-	async fn fuse_entry_out(&self, client: &dyn tg::Client) -> Result<sys::fuse_entry_out, i32> {
+	async fn fuse_entry_out(&self, tg: &dyn tg::Handle) -> Result<sys::fuse_entry_out, i32> {
 		let nodeid = self.id.0;
-		let attr_out = self.fuse_attr_out(client).await?;
+		let attr_out = self.fuse_attr_out(tg).await?;
 		let entry_out = sys::fuse_entry_out {
 			nodeid,
 			generation: 0,
@@ -1144,14 +1139,14 @@ impl Node {
 		Ok(entry_out)
 	}
 
-	async fn fuse_attr_out(&self, client: &dyn tg::Client) -> Result<sys::fuse_attr_out, i32> {
+	async fn fuse_attr_out(&self, tg: &dyn tg::Handle) -> Result<sys::fuse_attr_out, i32> {
 		let nodeid = self.id.0;
 		let nlink: u32 = match &self.kind {
 			NodeKind::Root { .. } => 2,
 			_ => 1,
 		};
 		let size = self.size();
-		let mode = self.mode(client).await?;
+		let mode = self.mode(tg).await?;
 		let attr_out = sys::fuse_attr_out {
 			attr_valid: 1024,
 			attr_valid_nsec: 0,

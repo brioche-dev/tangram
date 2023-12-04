@@ -18,15 +18,13 @@ impl Server {
 		&self,
 		params: lsp::DocumentFormattingParams,
 	) -> Result<Option<Vec<lsp::TextEdit>>> {
-		let client = self.inner.client.as_ref();
+		let tg = self.inner.tg.as_ref();
 
 		// Get the module.
 		let module = self.module_for_url(&params.text_document.uri).await?;
 
 		// Load the module.
-		let text = module
-			.load(client, Some(&self.inner.document_store))
-			.await?;
+		let text = module.load(tg, Some(&self.inner.document_store)).await?;
 
 		// Get the text range.
 		let range = Range::from_byte_range_in_string(&text, 0..text.len());

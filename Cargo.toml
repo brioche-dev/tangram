@@ -4,7 +4,6 @@ members = [
   "packages/cli",
   "packages/client",
   "packages/error",
-  "packages/http",
   "packages/language",
   "packages/package",
   "packages/runtime",
@@ -107,7 +106,6 @@ syn = { version = "1", features = ["full"] }
 tangram_cli = { path = "packages/cli" }
 tangram_client = { path = "packages/client" }
 tangram_error = { path = "packages/error" }
-tangram_http = { path = "packages/http" }
 tangram_language = { path = "packages/language" }
 tangram_package = { path = "packages/package" }
 tangram_runtime = { path = "packages/runtime" }

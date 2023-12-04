@@ -1,10 +1,11 @@
 use crate::{
-	checksum, directory, file, id, object, return_error, symlink, Checksum, Client, Directory,
-	Error, File, Result, Symlink, Value,
+	checksum, directory, file, id, object, symlink, Checksum, Directory, File, Handle, Symlink,
+	Value,
 };
 use derive_more::{From, TryInto, TryUnwrap};
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use std::collections::{HashSet, VecDeque};
+use tangram_error::{return_error, Error, Result};
 
 /// An artifact kind.
 #[derive(Clone, Copy, Debug)]
@@ -77,19 +78,19 @@ impl Artifact {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<Id> {
+	pub async fn id(&self, tg: &dyn Handle) -> Result<Id> {
 		match self {
-			Self::Directory(directory) => Ok(directory.id(client).await?.clone().into()),
-			Self::File(file) => Ok(file.id(client).await?.clone().into()),
-			Self::Symlink(symlink) => Ok(symlink.id(client).await?.clone().into()),
+			Self::Directory(directory) => Ok(directory.id(tg).await?.clone().into()),
+			Self::File(file) => Ok(file.id(tg).await?.clone().into()),
+			Self::Symlink(symlink) => Ok(symlink.id(tg).await?.clone().into()),
 		}
 	}
 
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
 		match self {
-			Self::Directory(directory) => Ok(directory.data(client).await?.into()),
-			Self::File(file) => Ok(file.data(client).await?.into()),
-			Self::Symlink(symlink) => Ok(symlink.data(client).await?.into()),
+			Self::Directory(directory) => Ok(directory.data(tg).await?.into()),
+			Self::File(file) => Ok(file.data(tg).await?.into()),
+			Self::Symlink(symlink) => Ok(symlink.data(tg).await?.into()),
 		}
 	}
 }
@@ -99,7 +100,7 @@ impl Artifact {
 	#[allow(clippy::unused_async)]
 	pub async fn checksum(
 		&self,
-		_client: &dyn Client,
+		_tg: &dyn Handle,
 		algorithm: checksum::Algorithm,
 	) -> Result<Checksum> {
 		match algorithm {
@@ -111,7 +112,7 @@ impl Artifact {
 	/// Collect an artifact's recursive references.
 	pub async fn recursive_references(
 		&self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 	) -> Result<HashSet<Id, fnv::FnvBuildHasher>> {
 		// Create a queue of artifacts and a set of futures.
 		let mut references = HashSet::default();
@@ -124,15 +125,12 @@ impl Artifact {
 			futures.push(async move {
 				Ok::<Vec<Artifact>, Error>(match artifact {
 					Self::Directory(directory) => {
-						directory.entries(client).await?.values().cloned().collect()
+						directory.entries(tg).await?.values().cloned().collect()
 					},
-					Self::File(file) => file.references(client).await?.to_owned(),
-					Self::Symlink(symlink) => symlink
-						.artifact(client)
-						.await?
-						.clone()
-						.into_iter()
-						.collect(),
+					Self::File(file) => file.references(tg).await?.to_owned(),
+					Self::Symlink(symlink) => {
+						symlink.artifact(tg).await?.clone().into_iter().collect()
+					},
 				})
 			});
 
@@ -143,7 +141,7 @@ impl Artifact {
 					// Handle each artifact.
 					for artifact in artifacts {
 						// Insert the artifact into the set of references.
-						let inserted = references.insert(artifact.id(client).await?);
+						let inserted = references.insert(artifact.id(tg).await?);
 
 						// If the artifact was new, then add it to the queue.
 						if inserted {

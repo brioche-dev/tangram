@@ -1,95 +1,36 @@
-use crate::{
-	net::Addr,
-	util::{bad_request, empty, full, get_token, not_found, ok, unauthorized, Incoming, Outgoing},
-};
+use crate::Server;
 use bytes::Bytes;
 use futures::{
-	future::{self, BoxFuture},
+	future::{self},
 	FutureExt, TryStreamExt,
 };
 use http_body_util::{BodyExt, StreamBody};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use itertools::Itertools;
-use std::{convert::Infallible, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, convert::Infallible};
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
+use tg::Handle;
 use tokio::net::{TcpListener, UnixListener};
 use tokio_util::either::Either;
 
-#[derive(Clone)]
-pub struct Server {
-	inner: Arc<Inner>,
-}
+type Incoming = hyper::body::Incoming;
 
-struct Inner {
-	client: Box<dyn tg::Client>,
-	handler: Option<Handler>,
-	task: Task,
-}
-
-type Task = (
-	std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
-	std::sync::Mutex<Option<tokio::task::AbortHandle>>,
-);
-
-type Handler = Box<
-	dyn Fn(http::Request<Incoming>) -> BoxFuture<'static, Option<Result<http::Response<Outgoing>>>>
-		+ Send
-		+ Sync
-		+ 'static,
+type Outgoing = http_body_util::combinators::UnsyncBoxBody<
+	::bytes::Bytes,
+	Box<dyn std::error::Error + Send + Sync + 'static>,
 >;
 
 impl Server {
-	pub fn start(client: &dyn tg::Client, addr: Addr, handler: Option<Handler>) -> Self {
-		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
-		let inner = Inner {
-			client: client.clone_box(),
-			handler,
-			task,
-		};
-		let server = Self {
-			inner: Arc::new(inner),
-		};
-		let task = tokio::spawn({
-			let server = server.clone();
-			async move { server.serve(addr).await }
-		});
-		let abort = task.abort_handle();
-		server.inner.task.0.lock().unwrap().replace(task);
-		server.inner.task.1.lock().unwrap().replace(abort);
-		server
-	}
-
-	pub fn stop(&self) {
-		if let Some(handle) = self.inner.task.1.lock().unwrap().as_ref() {
-			handle.abort();
-		};
-	}
-
-	pub async fn join(&self) -> Result<()> {
-		// Join the task.
-		let task = self.inner.task.0.lock().unwrap().take();
-		if let Some(task) = task {
-			match task.await {
-				Ok(result) => Ok(result),
-				Err(error) if error.is_cancelled() => Ok(Ok(())),
-				Err(error) => Err(error),
-			}
-			.unwrap()?;
-		}
-
-		Ok(())
-	}
-
-	async fn serve(self, addr: Addr) -> Result<()> {
+	pub async fn serve(self, addr: tg::client::Addr) -> Result<()> {
 		// Create the listener.
 		let listener = match &addr {
-			Addr::Inet(inet) => Either::Left(
+			tg::client::Addr::Inet(inet) => Either::Left(
 				TcpListener::bind(inet.to_string())
 					.await
 					.wrap_err("Failed to create the TCP listener.")?,
 			),
-			Addr::Unix(path) => Either::Right(
+			tg::client::Addr::Unix(path) => Either::Right(
 				UnixListener::bind(path).wrap_err("Failed to create the UNIX listener.")?,
 			),
 		};
@@ -146,7 +87,7 @@ impl Server {
 		};
 
 		// Get the user.
-		let user = self.inner.client.get_user_for_token(&token).await?;
+		let user = self.get_user_for_token(&token).await?;
 
 		Ok(user)
 	}
@@ -250,14 +191,6 @@ impl Server {
 				.map(Some)
 				.boxed(),
 
-			// Trackers
-			(http::Method::GET, ["v1", "trackers", _]) => {
-				self.handle_get_tracker_request(request).map(Some).boxed()
-			},
-			(http::Method::PATCH, ["v1", "trackers", _]) => {
-				self.handle_patch_tracker_request(request).map(Some).boxed()
-			},
-
 			// Users
 			(http::Method::POST, ["v1", "logins"]) => {
 				self.handle_create_login_request(request).map(Some).boxed()
@@ -270,13 +203,7 @@ impl Server {
 				.map(Some)
 				.boxed(),
 
-			(_, _) => {
-				if let Some(handler) = self.inner.handler.as_ref() {
-					handler(request).boxed()
-				} else {
-					future::ready(None).boxed()
-				}
-			},
+			(_, _) => future::ready(None).boxed(),
 		}
 		.await;
 
@@ -305,7 +232,7 @@ impl Server {
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		let status = self.inner.client.status().await?;
+		let status = self.status().await?;
 		let body = serde_json::to_vec(&status).unwrap();
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
@@ -318,7 +245,7 @@ impl Server {
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		self.inner.client.stop().await?;
+		self.stop().await?;
 		Ok(ok())
 	}
 
@@ -326,7 +253,7 @@ impl Server {
 		&self,
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		self.inner.client.clean().await?;
+		self.clean().await?;
 		Ok(http::Response::builder()
 			.status(http::StatusCode::OK)
 			.body(empty())
@@ -354,11 +281,7 @@ impl Server {
 			None
 		};
 
-		let build_id = self
-			.inner
-			.client
-			.get_build_from_queue(user.as_ref(), systems)
-			.await?;
+		let build_id = self.get_build_from_queue(user.as_ref(), systems).await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&build_id).wrap_err("Failed to serialize the ID.")?;
@@ -378,7 +301,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the build for the target.
-		let Some(build_id) = self.inner.client.try_get_build_for_target(&id).await? else {
+		let Some(build_id) = self.try_get_build_for_target(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -420,8 +343,6 @@ impl Server {
 
 		// Get or create the build for the target.
 		let build_id = self
-			.inner
-			.client
 			.get_or_create_build_for_target(user.as_ref(), &id, depth, retry)
 			.await?;
 
@@ -445,10 +366,7 @@ impl Server {
 		// Get the user.
 		let user = self.try_get_user_from_request(&request).await?;
 
-		self.inner
-			.client
-			.cancel_build(user.as_ref(), &build_id)
-			.await?;
+		self.cancel_build(user.as_ref(), &build_id).await?;
 
 		// Create the response.
 		let response = http::Response::builder()
@@ -471,7 +389,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the build target.
-		let Some(build_id) = self.inner.client.try_get_build_target(&id).await? else {
+		let Some(build_id) = self.try_get_build_target(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -493,7 +411,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the children.
-		let Some(children) = self.inner.client.try_get_build_children(&id).await? else {
+		let Some(children) = self.try_get_build_children(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -538,9 +456,7 @@ impl Server {
 		let child_id =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
 
-		self.inner
-			.client
-			.add_build_child(user.as_ref(), &build_id, &child_id)
+		self.add_build_child(user.as_ref(), &build_id, &child_id)
 			.await?;
 
 		// Create the response.
@@ -563,7 +479,7 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get the log.
-		let Some(log) = self.inner.client.try_get_build_log(&id).await? else {
+		let Some(log) = self.try_get_build_log(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -600,10 +516,7 @@ impl Server {
 			.wrap_err("Failed to read the body.")?
 			.to_bytes();
 
-		self.inner
-			.client
-			.add_build_log(user.as_ref(), &build_id, bytes)
-			.await?;
+		self.add_build_log(user.as_ref(), &build_id, bytes).await?;
 
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
@@ -624,12 +537,12 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Attempt to get the outcome.
-		let Some(outcome) = self.inner.client.try_get_build_outcome(&id).await? else {
+		let Some(outcome) = self.try_get_build_outcome(&id).await? else {
 			return Ok(not_found());
 		};
 
 		// Create the response.
-		let outcome = outcome.data(self.inner.client.as_ref()).await?;
+		let outcome = outcome.data(self).await?;
 		let body = serde_json::to_vec(&outcome).wrap_err("Failed to serialize the response.")?;
 		let response = http::Response::builder()
 			.status(http::StatusCode::OK)
@@ -662,10 +575,7 @@ impl Server {
 		let result = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize.")?;
 
 		// Finish the build.
-		self.inner
-			.client
-			.finish_build(user.as_ref(), &build_id, result)
-			.await?;
+		self.finish_build(user.as_ref(), &build_id, result).await?;
 
 		// Create the response.
 		let response = http::Response::builder()
@@ -689,7 +599,7 @@ impl Server {
 		};
 
 		// Get whether the object exists.
-		let exists = self.inner.client.get_object_exists(&id).await?;
+		let exists = self.get_object_exists(&id).await?;
 
 		// Create the response.
 		let status = if exists {
@@ -719,7 +629,7 @@ impl Server {
 		};
 
 		// Get the object.
-		let Some(bytes) = self.inner.client.try_get_object(&id).await? else {
+		let Some(bytes) = self.try_get_object(&id).await? else {
 			return Ok(not_found());
 		};
 
@@ -754,7 +664,7 @@ impl Server {
 			.to_bytes();
 
 		// Put the object.
-		let result = self.inner.client.try_put_object(&id, &bytes).await?;
+		let result = self.try_put_object(&id, &bytes).await?;
 
 		// If there are missing children, then return a bad request response.
 		if let Err(missing_children) = result {
@@ -787,11 +697,7 @@ impl Server {
 			serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
 
 		// Perform the search.
-		let packages = self
-			.inner
-			.client
-			.search_packages(&search_params.query)
-			.await?;
+		let packages = self.search_packages(&search_params.query).await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&packages).wrap_err("Failed to serialize the response.")?;
@@ -814,7 +720,7 @@ impl Server {
 			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package.
-		let Some(id) = self.inner.client.try_get_package(&dependency).await? else {
+		let Some(id) = self.try_get_package(&dependency).await? else {
 			return Ok(not_found());
 		};
 
@@ -841,11 +747,7 @@ impl Server {
 			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package.
-		let source_artifact_hash = self
-			.inner
-			.client
-			.try_get_package_versions(&dependency)
-			.await?;
+		let source_artifact_hash = self.try_get_package_versions(&dependency).await?;
 
 		// Create the response.
 		let response = if let Some(source_artifact_hash) = source_artifact_hash {
@@ -873,11 +775,7 @@ impl Server {
 			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package metadata.
-		let metadata = self
-			.inner
-			.client
-			.try_get_package_metadata(&dependency)
-			.await?;
+		let metadata = self.try_get_package_metadata(&dependency).await?;
 
 		match metadata {
 			Some(metadata) => {
@@ -911,11 +809,7 @@ impl Server {
 			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package dependencies.
-		let dependencies = self
-			.inner
-			.client
-			.try_get_package_dependencies(&dependency)
-			.await?;
+		let dependencies = self.try_get_package_dependencies(&dependency).await?;
 
 		match dependencies {
 			Some(dependencies) => {
@@ -952,71 +846,7 @@ impl Server {
 		let package_id = serde_json::from_slice(&bytes).wrap_err("Invalid request.")?;
 
 		// Create the package.
-		self.inner
-			.client
-			.publish_package(user.as_ref(), &package_id)
-			.await?;
-
-		Ok(ok())
-	}
-
-	async fn handle_get_tracker_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		// Get the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "trackers", path] = path_components.as_slice() else {
-			return_error!("Unexpected path.")
-		};
-		let path = PathBuf::from(
-			urlencoding::decode(path)
-				.wrap_err("Failed to decode the path.")?
-				.as_ref(),
-		);
-
-		// Get the tracker.
-		let Some(tracker) = self.inner.client.try_get_tracker(&path).await? else {
-			return Ok(not_found());
-		};
-
-		// Create the body.
-		let body = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the body.")?;
-
-		// Create the response.
-		let response = http::Response::builder()
-			.status(http::StatusCode::OK)
-			.body(full(body))
-			.unwrap();
-
-		Ok(response)
-	}
-
-	async fn handle_patch_tracker_request(
-		&self,
-		request: http::Request<Incoming>,
-	) -> Result<http::Response<Outgoing>> {
-		// Get the path params.
-		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "trackers", path] = path_components.as_slice() else {
-			return_error!("Unexpected path.")
-		};
-		let path = PathBuf::from(
-			urlencoding::decode(path)
-				.wrap_err("Failed to decode the path.")?
-				.as_ref(),
-		);
-
-		// Read the body.
-		let bytes = request
-			.into_body()
-			.collect()
-			.await
-			.wrap_err("Failed to read the body.")?
-			.to_bytes();
-		let tracker = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
-
-		self.inner.client.set_tracker(&path, &tracker).await?;
+		self.publish_package(user.as_ref(), &package_id).await?;
 
 		Ok(ok())
 	}
@@ -1026,7 +856,7 @@ impl Server {
 		_request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
 		// Create the login.
-		let login = self.inner.client.create_login().await?;
+		let login = self.create_login().await?;
 
 		// Create the response.
 		let body = serde_json::to_string(&login).wrap_err("Failed to serialize the response.")?;
@@ -1051,7 +881,7 @@ impl Server {
 		};
 
 		// Get the login.
-		let login = self.inner.client.get_login(&id).await?;
+		let login = self.get_login(&id).await?;
 
 		// Create the response.
 		let response =
@@ -1073,7 +903,7 @@ impl Server {
 		};
 
 		// Authenticate the user.
-		let Some(user) = self.inner.client.get_user_for_token(token.as_str()).await? else {
+		let Some(user) = self.get_user_for_token(token.as_str()).await? else {
 			return Ok(unauthorized());
 		};
 
@@ -1085,4 +915,102 @@ impl Server {
 			.unwrap();
 		Ok(response)
 	}
+}
+
+#[must_use]
+pub fn empty() -> Outgoing {
+	http_body_util::Empty::new()
+		.map_err(Into::into)
+		.boxed_unsync()
+}
+
+#[must_use]
+pub fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
+	http_body_util::Full::new(chunk.into())
+		.map_err(Into::into)
+		.boxed_unsync()
+}
+
+/// Get a bearer token or cookie from an HTTP request.
+pub fn get_token(request: &http::Request<Incoming>, name: Option<&str>) -> Option<String> {
+	if let Some(authorization) = request.headers().get(http::header::AUTHORIZATION) {
+		let Ok(authorization) = authorization.to_str() else {
+			return None;
+		};
+		let mut components = authorization.split(' ');
+		let token = match (components.next(), components.next()) {
+			(Some("Bearer"), Some(token)) => token.to_owned(),
+			_ => return None,
+		};
+		Some(token)
+	} else if let Some(cookies) = request.headers().get(http::header::COOKIE) {
+		if let Some(name) = name {
+			let Ok(cookies) = cookies.to_str() else {
+				return None;
+			};
+			let cookies: BTreeMap<&str, &str> = match parse_cookies(cookies).collect() {
+				Ok(cookies) => cookies,
+				Err(_) => return None,
+			};
+			let token = match cookies.get(name) {
+				Some(&token) => token.to_owned(),
+				None => return None,
+			};
+			Some(token)
+		} else {
+			None
+		}
+	} else {
+		None
+	}
+}
+
+/// Parse an HTTP cookie string.
+pub fn parse_cookies(cookies: &str) -> impl Iterator<Item = Result<(&str, &str)>> {
+	cookies.split("; ").map(|cookie| {
+		let mut components = cookie.split('=');
+		let key = components
+			.next()
+			.wrap_err("Expected a key in the cookie string.")?;
+		let value = components
+			.next()
+			.wrap_err("Expected a value in the cookie string.")?;
+		Ok((key, value))
+	})
+}
+
+/// 200
+#[must_use]
+pub fn ok() -> http::Response<Outgoing> {
+	http::Response::builder()
+		.status(http::StatusCode::OK)
+		.body(empty())
+		.unwrap()
+}
+
+/// 400
+#[must_use]
+pub fn bad_request() -> http::Response<Outgoing> {
+	http::Response::builder()
+		.status(http::StatusCode::BAD_REQUEST)
+		.body(full("Bad request."))
+		.unwrap()
+}
+
+/// 401
+#[must_use]
+pub fn unauthorized() -> http::Response<Outgoing> {
+	http::Response::builder()
+		.status(http::StatusCode::UNAUTHORIZED)
+		.body(full("Unauthorized."))
+		.unwrap()
+}
+
+/// 404
+#[must_use]
+pub fn not_found() -> http::Response<Outgoing> {
+	http::Response::builder()
+		.status(http::StatusCode::NOT_FOUND)
+		.body(full("Not found."))
+		.unwrap()
 }

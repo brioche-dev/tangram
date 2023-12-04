@@ -40,11 +40,11 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_run(&self, args: Args) -> Result<()> {
-		let client = self.client().await?;
-		let client = client.as_ref();
+		let tg = self.handle().await?;
+		let tg = tg.as_ref();
 
 		// Create the package.
-		let (package, lock) = tangram_package::new(client, &args.package).await?;
+		let (package, lock) = tangram_package::new(tg, &args.package).await?;
 
 		// Create the target.
 		let env = [(
@@ -67,10 +67,10 @@ impl Cli {
 			.build();
 
 		// Print the target ID.
-		eprintln!("{}", target.id(client).await?);
+		eprintln!("{}", target.id(tg).await?);
 
 		// Build the target.
-		let build = target.build(client, None, 0, args.retry).await?;
+		let build = target.build(tg, None, 0, args.retry).await?;
 
 		// Print the build ID.
 		eprintln!("{}", build.id());
@@ -78,15 +78,13 @@ impl Cli {
 		// Create the TUI.
 		let tui = !args.no_tui;
 		let tui = if tui {
-			Tui::start(client, &build, tui::Options::default())
-				.await
-				.ok()
+			Tui::start(tg, &build, tui::Options::default()).await.ok()
 		} else {
 			None
 		};
 
 		// Wait for the build's outcome.
-		let outcome = build.outcome(client).await;
+		let outcome = build.outcome(tg).await;
 
 		// Stop the TUI.
 		if let Some(tui) = tui {
@@ -109,7 +107,7 @@ impl Cli {
 		let artifact_path: PathBuf = self
 			.path
 			.join("artifacts")
-			.join(artifact.id(client).await?.to_string());
+			.join(artifact.id(tg).await?.to_string());
 
 		// Get the executable path.
 		let executable_path = if let Some(executable_path) = args.run_args.executable_path {

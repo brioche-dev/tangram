@@ -1,20 +1,20 @@
 use crate::{
-	net::{Addr, Inet},
-	util::{empty, full, Incoming, Outgoing},
+	build, directory, lock, object, package, target, user, Dependency, Handle, Id, Status, System,
+	User,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use http_body_util::{BodyExt, BodyStream};
-use std::{os::unix::prelude::OsStrExt, path::Path, sync::Arc};
-use tangram_client as tg;
-use tangram_error::{return_error, Result, Wrap, WrapErr};
+use std::{path::PathBuf, sync::Arc};
+use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
 use tokio::{
 	io::AsyncBufReadExt,
 	net::{TcpStream, UnixStream},
 };
 use tokio_stream::wrappers::LinesStream;
 use tokio_util::io::StreamReader;
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -27,17 +27,43 @@ struct Inner {
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 	sender: tokio::sync::RwLock<Option<hyper::client::conn::http2::SendRequest<Outgoing>>>,
 	tls: bool,
-	user: Option<tg::User>,
+	user: Option<User>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+pub enum Addr {
+	Inet(Inet),
+	Unix(PathBuf),
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct Inet {
+	pub host: Host,
+	pub port: u16,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub enum Host {
+	Ip(std::net::IpAddr),
+	Domain(String),
 }
 
 pub struct Builder {
 	addr: Addr,
 	tls: Option<bool>,
-	user: Option<tg::User>,
+	user: Option<User>,
 }
 
+type Incoming = hyper::body::Incoming;
+
+type Outgoing = http_body_util::combinators::UnsyncBoxBody<
+	::bytes::Bytes,
+	Box<dyn std::error::Error + Send + Sync + 'static>,
+>;
+
 impl Client {
-	fn new(addr: Addr, tls: bool, user: Option<tg::User>) -> Self {
+	fn new(addr: Addr, tls: bool, user: Option<User>) -> Self {
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 		let sender = tokio::sync::RwLock::new(None);
 		let inner = Arc::new(Inner {
@@ -184,7 +210,7 @@ impl Client {
 		Ok(())
 	}
 
-	async fn connect_unix(&self, path: &Path) -> Result<()> {
+	async fn connect_unix(&self, path: &std::path::Path) -> Result<()> {
 		let mut sender_guard = self.inner.sender.write().await;
 
 		// Connect via UNIX.
@@ -231,8 +257,8 @@ impl Client {
 }
 
 #[async_trait]
-impl tg::Client for Client {
-	fn clone_box(&self) -> Box<dyn tg::Client> {
+impl Handle for Client {
+	fn clone_box(&self) -> Box<dyn Handle> {
 		Box::new(self.clone())
 	}
 
@@ -240,7 +266,7 @@ impl tg::Client for Client {
 		&self.inner.file_descriptor_semaphore
 	}
 
-	async fn status(&self) -> Result<tg::status::Status> {
+	async fn status(&self) -> Result<Status> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri("/v1/status")
@@ -282,7 +308,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn get_object_exists(&self, id: &tg::object::Id) -> Result<bool> {
+	async fn get_object_exists(&self, id: &object::Id) -> Result<bool> {
 		let request = http::request::Builder::default()
 			.method(http::Method::HEAD)
 			.uri(format!("/v1/objects/{id}"))
@@ -298,7 +324,7 @@ impl tg::Client for Client {
 		Ok(true)
 	}
 
-	async fn try_get_object(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
+	async fn try_get_object(&self, id: &object::Id) -> Result<Option<Bytes>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/objects/{id}"))
@@ -321,9 +347,9 @@ impl tg::Client for Client {
 
 	async fn try_put_object(
 		&self,
-		id: &tg::object::Id,
+		id: &object::Id,
 		bytes: &Bytes,
-	) -> Result<Result<(), Vec<tg::object::Id>>> {
+	) -> Result<Result<(), Vec<object::Id>>> {
 		let body = full(bytes.clone());
 		let request = http::request::Builder::default()
 			.method(http::Method::PUT)
@@ -347,45 +373,7 @@ impl tg::Client for Client {
 		Ok(Ok(()))
 	}
 
-	async fn try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
-		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
-		let request = http::request::Builder::default()
-			.method(http::Method::GET)
-			.uri(format!("/v1/trackers/{path}"))
-			.body(empty())
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if response.status() == http::StatusCode::NOT_FOUND {
-			return Ok(None);
-		}
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		let bytes = response
-			.collect()
-			.await
-			.wrap_err("Failed to collect the response body.")?
-			.to_bytes();
-		let tracker = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
-		Ok(Some(tracker))
-	}
-
-	async fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
-		let path = urlencoding::encode_binary(path.as_os_str().as_bytes());
-		let body = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the body.")?;
-		let request = http::request::Builder::default()
-			.method(http::Method::PATCH)
-			.uri(format!("/v1/trackers/{path}"))
-			.body(full(body))
-			.wrap_err("Failed to create the request.")?;
-		let response = self.send(request).await?;
-		if !response.status().is_success() {
-			return_error!("Expected the response's status to be success.");
-		}
-		Ok(())
-	}
-
-	async fn try_get_build_for_target(&self, id: &tg::target::Id) -> Result<Option<tg::build::Id>> {
+	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/targets/{id}/build"))
@@ -409,17 +397,17 @@ impl tg::Client for Client {
 
 	async fn get_or_create_build_for_target(
 		&self,
-		user: Option<&tg::User>,
-		id: &tg::target::Id,
+		user: Option<&User>,
+		id: &target::Id,
 		depth: u64,
-		retry: tg::build::Retry,
-	) -> Result<tg::build::Id> {
+		retry: build::Retry,
+	) -> Result<build::Id> {
 		#[derive(serde::Serialize)]
 		struct SearchParams {
 			#[serde(default)]
 			depth: u64,
 			#[serde(default)]
-			retry: tg::build::Retry,
+			retry: build::Retry,
 		}
 		let search_params = SearchParams { depth, retry };
 		let search_params = serde_urlencoded::to_string(search_params)
@@ -450,9 +438,9 @@ impl tg::Client for Client {
 
 	async fn get_build_from_queue(
 		&self,
-		user: Option<&tg::User>,
-		systems: Option<Vec<tg::System>>,
-	) -> Result<tg::build::queue::Item> {
+		user: Option<&User>,
+		systems: Option<Vec<System>>,
+	) -> Result<build::queue::Item> {
 		let uri = if let Some(systems) = systems {
 			let systems = systems
 				.iter()
@@ -487,7 +475,7 @@ impl tg::Client for Client {
 		Ok(item)
 	}
 
-	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {
+	async fn try_get_build_target(&self, id: &build::Id) -> Result<Option<target::Id>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/builds/{id}/target"))
@@ -508,8 +496,8 @@ impl tg::Client for Client {
 
 	async fn try_get_build_children(
 		&self,
-		id: &tg::build::Id,
-	) -> Result<Option<BoxStream<'static, Result<tg::build::Id>>>> {
+		id: &build::Id,
+	) -> Result<Option<BoxStream<'static, Result<build::Id>>>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/builds/{id}/children"))
@@ -545,9 +533,9 @@ impl tg::Client for Client {
 
 	async fn add_build_child(
 		&self,
-		user: Option<&tg::User>,
-		build_id: &tg::build::Id,
-		child_id: &tg::build::Id,
+		user: Option<&User>,
+		build_id: &build::Id,
+		child_id: &build::Id,
 	) -> Result<()> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
@@ -572,7 +560,7 @@ impl tg::Client for Client {
 
 	async fn try_get_build_log(
 		&self,
-		id: &tg::build::Id,
+		id: &build::Id,
 	) -> Result<Option<BoxStream<'static, Result<Bytes>>>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
@@ -602,12 +590,7 @@ impl tg::Client for Client {
 		Ok(Some(log))
 	}
 
-	async fn add_build_log(
-		&self,
-		user: Option<&tg::User>,
-		id: &tg::build::Id,
-		bytes: Bytes,
-	) -> Result<()> {
+	async fn add_build_log(&self, user: Option<&User>, id: &build::Id, bytes: Bytes) -> Result<()> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
 			.uri(format!("/v1/builds/{id}/log"));
@@ -629,10 +612,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn try_get_build_outcome(
-		&self,
-		id: &tg::build::Id,
-	) -> Result<Option<tg::build::Outcome>> {
+	async fn try_get_build_outcome(&self, id: &build::Id) -> Result<Option<build::Outcome>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/builds/{id}/outcome"))
@@ -655,7 +635,7 @@ impl tg::Client for Client {
 		Ok(Some(outcome))
 	}
 
-	async fn cancel_build(&self, user: Option<&tg::User>, id: &tg::build::Id) -> Result<()> {
+	async fn cancel_build(&self, user: Option<&User>, id: &build::Id) -> Result<()> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
 			.uri(format!("/v1/builds/{id}/cancel"));
@@ -678,9 +658,9 @@ impl tg::Client for Client {
 
 	async fn finish_build(
 		&self,
-		user: Option<&tg::User>,
-		id: &tg::build::Id,
-		outcome: tg::build::Outcome,
+		user: Option<&User>,
+		id: &build::Id,
+		outcome: build::Outcome,
 	) -> Result<()> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
@@ -706,8 +686,8 @@ impl tg::Client for Client {
 
 	async fn create_package_and_lock(
 		&self,
-		_dependency: &tg::Dependency,
-	) -> Result<(tg::directory::Id, tg::lock::Id)> {
+		_dependency: &Dependency,
+	) -> Result<(directory::Id, lock::Id)> {
 		return_error!("Unsupported.");
 	}
 
@@ -731,10 +711,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn try_get_package(
-		&self,
-		dependency: &tg::Dependency,
-	) -> Result<Option<tg::directory::Id>> {
+	async fn try_get_package(&self, dependency: &Dependency) -> Result<Option<directory::Id>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{dependency}"))
@@ -756,7 +733,7 @@ impl tg::Client for Client {
 
 	async fn try_get_package_versions(
 		&self,
-		dependency: &tg::Dependency,
+		dependency: &Dependency,
 	) -> Result<Option<Vec<String>>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
@@ -779,8 +756,8 @@ impl tg::Client for Client {
 
 	async fn try_get_package_metadata(
 		&self,
-		dependency: &tg::Dependency,
-	) -> Result<Option<tg::package::Metadata>> {
+		dependency: &Dependency,
+	) -> Result<Option<package::Metadata>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{dependency}/metadata"))
@@ -802,8 +779,8 @@ impl tg::Client for Client {
 
 	async fn try_get_package_dependencies(
 		&self,
-		dependency: &tg::Dependency,
-	) -> Result<Option<Vec<tg::Dependency>>> {
+		dependency: &Dependency,
+	) -> Result<Option<Vec<Dependency>>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{dependency}/dependencies"))
@@ -823,7 +800,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn publish_package(&self, user: Option<&tg::User>, id: &tg::directory::Id) -> Result<()> {
+	async fn publish_package(&self, user: Option<&User>, id: &directory::Id) -> Result<()> {
 		let mut request = http::request::Builder::default()
 			.method(http::Method::POST)
 			.uri("/v1/packages");
@@ -842,7 +819,7 @@ impl tg::Client for Client {
 		Ok(())
 	}
 
-	async fn create_login(&self) -> Result<tg::user::Login> {
+	async fn create_login(&self) -> Result<user::Login> {
 		let request = http::request::Builder::default()
 			.method(http::Method::POST)
 			.uri("/v1/logins")
@@ -862,7 +839,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_login(&self, id: &tg::Id) -> Result<Option<tg::user::Login>> {
+	async fn get_login(&self, id: &Id) -> Result<Option<user::Login>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/logins/{id}"))
@@ -885,7 +862,7 @@ impl tg::Client for Client {
 		Ok(response)
 	}
 
-	async fn get_user_for_token(&self, token: &str) -> Result<Option<tg::user::User>> {
+	async fn get_user_for_token(&self, token: &str) -> Result<Option<user::User>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri("/v1/user")
@@ -907,6 +884,92 @@ impl tg::Client for Client {
 	}
 }
 
+impl Addr {
+	#[must_use]
+	pub fn is_local(&self) -> bool {
+		match &self {
+			Addr::Inet(inet) => match &inet.host {
+				Host::Domain(domain) => domain == "localhost",
+				Host::Ip(ip) => ip.is_loopback(),
+			},
+			Addr::Unix(_) => true,
+		}
+	}
+}
+
+impl std::fmt::Display for Addr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Addr::Inet(inet) => write!(f, "{inet}"),
+			Addr::Unix(path) => write!(f, "unix:{}", path.display()),
+		}
+	}
+}
+
+impl std::fmt::Display for Inet {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}:{}", self.host, self.port)
+	}
+}
+
+impl std::fmt::Display for Host {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Host::Ip(ip) => write!(f, "{ip}"),
+			Host::Domain(domain) => write!(f, "{domain}"),
+		}
+	}
+}
+
+impl std::str::FromStr for Addr {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		let mut parts = s.splitn(2, ':');
+		let host = parts
+			.next()
+			.wrap_err("Expected a host.")?
+			.parse()
+			.wrap_err("Failed to parse the host.")?;
+		if matches!(&host, Host::Domain(hostname) if hostname == "unix") {
+			let path = parts.next().wrap_err("Expected a path.")?;
+			Ok(Addr::Unix(path.into()))
+		} else {
+			let port = parts
+				.next()
+				.wrap_err("Expected a port.")?
+				.parse()
+				.wrap_err("Failed to parse the port.")?;
+			Ok(Addr::Inet(Inet { host, port }))
+		}
+	}
+}
+
+impl std::str::FromStr for Host {
+	type Err = std::net::AddrParseError;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		if let Ok(ip) = s.parse() {
+			Ok(Host::Ip(ip))
+		} else {
+			Ok(Host::Domain(s.to_string()))
+		}
+	}
+}
+
+impl TryFrom<Url> for Addr {
+	type Error = Error;
+
+	fn try_from(value: Url) -> Result<Self, Self::Error> {
+		let host = value
+			.host_str()
+			.wrap_err("Invalid URL.")?
+			.parse()
+			.wrap_err("Invalid URL.")?;
+		let port = value.port_or_known_default().wrap_err("Invalid URL.")?;
+		Ok(Addr::Inet(Inet { host, port }))
+	}
+}
 impl Builder {
 	#[must_use]
 	pub fn new(addr: Addr) -> Self {
@@ -924,7 +987,7 @@ impl Builder {
 	}
 
 	#[must_use]
-	pub fn user(mut self, user: Option<tg::User>) -> Self {
+	pub fn user(mut self, user: Option<User>) -> Self {
 		self.user = user;
 		self
 	}
@@ -934,4 +997,18 @@ impl Builder {
 		let tls = self.tls.unwrap_or(false);
 		Client::new(self.addr, tls, self.user)
 	}
+}
+
+#[must_use]
+pub fn empty() -> Outgoing {
+	http_body_util::Empty::new()
+		.map_err(Into::into)
+		.boxed_unsync()
+}
+
+#[must_use]
+pub fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
+	http_body_util::Full::new(chunk.into())
+		.map_err(Into::into)
+		.boxed_unsync()
 }

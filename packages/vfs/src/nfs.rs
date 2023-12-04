@@ -53,7 +53,7 @@ pub struct Server {
 }
 
 struct Inner {
-	client: Box<dyn tg::Client>,
+	tg: Box<dyn tg::Handle>,
 	path: PathBuf,
 	state: tokio::sync::RwLock<State>,
 	task: Task,
@@ -131,9 +131,9 @@ pub struct Context {
 }
 
 impl Server {
-	pub async fn start(client: &dyn tg::Client, path: &Path, port: u16) -> Result<Self> {
+	pub async fn start(tg: &dyn tg::Handle, path: &Path, port: u16) -> Result<Self> {
 		// Create the server.
-		let client = client.clone_box();
+		let tg = tg.clone_box();
 		let root = Arc::new_cyclic(|root| Node {
 			id: 0,
 			parent: root.clone(),
@@ -152,7 +152,7 @@ impl Server {
 		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 		let server = Self {
 			inner: Arc::new(Inner {
-				client,
+				tg,
 				path: path.to_owned(),
 				state,
 				task,
@@ -539,7 +539,7 @@ impl Server {
 			| NodeKind::NamedAttributeDirectory { .. } => ACCESS4_EXECUTE | ACCESS4_READ | ACCESS4_LOOKUP,
 			NodeKind::Symlink { .. } | NodeKind::NamedAttribute { .. } => ACCESS4_READ,
 			NodeKind::File { file, .. } => {
-				let is_executable = match file.executable(self.inner.client.as_ref()).await {
+				let is_executable = match file.executable(self.inner.tg.as_ref()).await {
 					Ok(b) => b,
 					Err(e) => {
 						tracing::error!(?e, "Failed to lookup executable bit for file.");
@@ -641,7 +641,7 @@ impl Server {
 				FileAttrData::new(file_handle, nfs_ftype4::NF4DIR, len, O_RX)
 			},
 			NodeKind::File { file, size, .. } => {
-				let is_executable = match file.executable(self.inner.client.as_ref()).await {
+				let is_executable = match file.executable(self.inner.tg.as_ref()).await {
 					Ok(b) => b,
 					Err(e) => {
 						tracing::error!(?e, "Failed to lookup executable bit for file.");
@@ -850,7 +850,7 @@ impl Server {
 
 			NodeKind::Directory { directory, .. } => {
 				let entries = directory
-					.entries(self.inner.client.as_ref())
+					.entries(self.inner.tg.as_ref())
 					.await
 					.map_err(|e| {
 						tracing::error!(?e, ?name, "Failed to get directory entries.");
@@ -875,7 +875,7 @@ impl Server {
 				let NodeKind::File { file, .. } = &grandparent_node.kind else {
 					return Ok(None);
 				};
-				let file_references = match file.references(self.inner.client.as_ref()).await {
+				let file_references = match file.references(self.inner.tg.as_ref()).await {
 					Ok(references) => references,
 					Err(e) => {
 						tracing::error!(?e, "Failed to get file references.");
@@ -884,7 +884,7 @@ impl Server {
 				};
 				let mut references = Vec::new();
 				for artifact in file_references {
-					let id = artifact.id(self.inner.client.as_ref()).await.map_err(|e| {
+					let id = artifact.id(self.inner.tg.as_ref()).await.map_err(|e| {
 						tracing::error!(?e, ?artifact, "Failed to get artifact ID.");
 						nfsstat4::NFS4ERR_IO
 					})?;
@@ -912,7 +912,7 @@ impl Server {
 				}
 			},
 			Either::Left(tg::Artifact::File(file)) => {
-				let size = file.size(self.inner.client.as_ref()).await.map_err(|e| {
+				let size = file.size(self.inner.tg.as_ref()).await.map_err(|e| {
 					tracing::error!(?e, "Failed to get size of file's contents.");
 					nfsstat4::NFS4ERR_IO
 				})?;
@@ -1047,7 +1047,7 @@ impl Server {
 		let stateid = stateid4::new(arg.seqid, index, false);
 
 		if let NodeKind::File { file, .. } = &self.get_node(fh).await.unwrap().kind {
-			let Ok(reader) = file.reader(self.inner.client.as_ref()).await else {
+			let Ok(reader) = file.reader(self.inner.tg.as_ref()).await else {
 				tracing::error!("Failed to create the file reader.");
 				return OPEN4res::Error(nfsstat4::NFS4ERR_IO);
 			};
@@ -1188,7 +1188,7 @@ impl Server {
 			|| !lock_state_exists
 		{
 			// We need to create a reader just for this request.
-			let Ok(mut reader) = file.reader(self.inner.client.as_ref()).await else {
+			let Ok(mut reader) = file.reader(self.inner.tg.as_ref()).await else {
 				tracing::error!("Failed to create the file reader.");
 				return READ4res::Error(nfsstat4::NFS4ERR_IO);
 			};
@@ -1245,7 +1245,7 @@ impl Server {
 		let entries = match &node.kind {
 			NodeKind::Root { .. } => Vec::default(),
 			NodeKind::Directory { directory, .. } => {
-				let Ok(entries) = directory.entries(self.inner.client.as_ref()).await else {
+				let Ok(entries) = directory.entries(self.inner.tg.as_ref()).await else {
 					return READDIR4res::Error(nfsstat4::NFS4ERR_IO);
 				};
 				entries.keys().cloned().collect::<Vec<_>>()
@@ -1321,14 +1321,14 @@ impl Server {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_INVAL);
 		};
 		let mut target = String::new();
-		let Ok(artifact) = symlink.artifact(self.inner.client.as_ref()).await else {
+		let Ok(artifact) = symlink.artifact(self.inner.tg.as_ref()).await else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
 		};
-		let Ok(path) = symlink.path(self.inner.client.as_ref()).await else {
+		let Ok(path) = symlink.path(self.inner.tg.as_ref()).await else {
 			return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
 		};
 		if let Some(artifact) = artifact {
-			let Ok(id) = artifact.id(self.inner.client.as_ref()).await else {
+			let Ok(id) = artifact.id(self.inner.tg.as_ref()).await else {
 				return READLINK4res::Error(nfsstat4::NFS4ERR_IO);
 			};
 			for _ in 0..node.depth() - 1 {

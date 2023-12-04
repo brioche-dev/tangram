@@ -13,11 +13,11 @@ pub struct Args {
 impl Cli {
 	#[allow(clippy::unused_async)]
 	pub async fn command_fmt(&self, args: Args) -> Result<()> {
-		let client = self.client().await?;
-		let client = client.as_ref();
+		let tg = self.handle().await?;
+		let tg = tg.as_ref();
 
 		// Create the language server.
-		let server = tangram_language::Server::new(client, tokio::runtime::Handle::current());
+		let server = tangram_language::Server::new(tg, tokio::runtime::Handle::current());
 
 		let path = args.path.join(tangram_package::ROOT_MODULE_FILE_NAME);
 		let text = tokio::fs::read_to_string(&path)

@@ -1,4 +1,4 @@
-use crate::{object, template, value, Client, Error, Result, Template, Value};
+use crate::{object, template, value, Error, Handle, Result, Template, Value};
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use itertools::Itertools;
 
@@ -54,19 +54,19 @@ pub enum Data {
 }
 
 impl Mutation {
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
 		Ok(match self {
 			Self::Unset => Data::Unset,
 			Self::Set { value } => Data::Set {
-				value: Box::new(value.data(client).await?),
+				value: Box::new(value.data(tg).await?),
 			},
 			Self::SetIfUnset { value } => Data::SetIfUnset {
-				value: Box::new(value.data(client).await?),
+				value: Box::new(value.data(tg).await?),
 			},
 			Self::ArrayPrepend { values } => Data::ArrayPrepend {
 				values: values
 					.iter()
-					.map(|value| value.data(client))
+					.map(|value| value.data(tg))
 					.collect::<FuturesOrdered<_>>()
 					.try_collect()
 					.await?,
@@ -74,7 +74,7 @@ impl Mutation {
 			Self::ArrayAppend { values } => Data::ArrayAppend {
 				values: values
 					.iter()
-					.map(|value| value.data(client))
+					.map(|value| value.data(tg))
 					.collect::<FuturesOrdered<_>>()
 					.try_collect()
 					.await?,
@@ -83,14 +83,14 @@ impl Mutation {
 				template,
 				separator,
 			} => Data::TemplatePrepend {
-				template: template.data(client).await?,
+				template: template.data(tg).await?,
 				separator: separator.clone(),
 			},
 			Self::TemplateAppend {
 				template,
 				separator,
 			} => Data::TemplateAppend {
-				template: template.data(client).await?,
+				template: template.data(tg).await?,
 				separator: separator.clone(),
 			},
 		})

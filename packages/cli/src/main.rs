@@ -3,8 +3,7 @@ use clap::Parser;
 use std::{path::PathBuf, sync::Arc};
 use tangram_client as tg;
 use tangram_error::{return_error, Result, WrapErr};
-use tangram_http::net::Addr;
-use tg::Client;
+use tg::Handle;
 use tracing_subscriber::prelude::*;
 use url::Url;
 
@@ -14,7 +13,7 @@ mod tui;
 pub const API_URL: &str = "https://api.tangram.dev";
 
 struct Cli {
-	client: tokio::sync::Mutex<Option<Arc<dyn tg::Client>>>,
+	tg: tokio::sync::Mutex<Option<Arc<dyn tg::Handle>>>,
 	config: std::sync::RwLock<Option<Config>>,
 	path: PathBuf,
 	user: std::sync::RwLock<Option<tg::User>>,
@@ -91,7 +90,7 @@ async fn main_inner() -> Result<()> {
 	let args = Args::parse();
 
 	// Create the container for the client.
-	let client = tokio::sync::Mutex::new(None);
+	let tg = tokio::sync::Mutex::new(None);
 
 	// Get the path.
 	let home = std::env::var("HOME").wrap_err("Failed to get the home directory path.")?;
@@ -124,7 +123,7 @@ async fn main_inner() -> Result<()> {
 
 	// Create the CLI.
 	let cli = Cli {
-		client,
+		tg,
 		config,
 		path,
 		user,
@@ -138,16 +137,16 @@ async fn main_inner() -> Result<()> {
 }
 
 impl Cli {
-	async fn client(&self) -> Result<Arc<dyn tg::Client>> {
-		// If the client is already initialized, return it.
-		if let Some(client) = self.client.lock().await.as_ref().cloned() {
-			return Ok(client);
+	async fn handle(&self) -> Result<Arc<dyn tg::Handle>> {
+		// If the handle is already initialized, return it.
+		if let Some(tg) = self.tg.lock().await.as_ref().cloned() {
+			return Ok(tg);
 		}
 
 		// Attempt to connect to the server.
-		let addr = Addr::Unix(self.path.join("socket"));
+		let addr = tg::client::Addr::Unix(self.path.join("socket"));
 		let user = self.user().await?.clone();
-		let client = tangram_http::client::Builder::new(addr).user(user).build();
+		let client = tg::client::Builder::new(addr).user(user).build();
 		let mut connected = client.connect().await.is_ok();
 
 		// If this is a debug build, then require that the client is connected and has the same version as the server.
@@ -160,7 +159,7 @@ impl Cli {
 			}
 			// Store the client.
 			let client = Arc::new(client);
-			*self.client.lock().await = Some(client.clone());
+			*self.tg.lock().await = Some(client.clone());
 			return Ok(client);
 		}
 
@@ -191,7 +190,7 @@ impl Cli {
 
 		// Store the client.
 		let client = Arc::new(client);
-		*self.client.lock().await = Some(client.clone());
+		*self.tg.lock().await = Some(client.clone());
 
 		Ok(client)
 	}

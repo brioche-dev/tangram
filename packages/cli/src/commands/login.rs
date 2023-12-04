@@ -9,11 +9,11 @@ pub struct Args {}
 
 impl Cli {
 	pub async fn command_login(&self, _args: Args) -> Result<()> {
-		let client = self.client().await?;
-		let client = client.as_ref();
+		let tg = self.handle().await?;
+		let tg = tg.as_ref();
 
 		// Create a login.
-		let login = client
+		let login = tg
 			.create_login()
 			.await
 			.wrap_err("Failed to create the login.")?;
@@ -31,7 +31,7 @@ impl Cli {
 			if start_instant.elapsed() >= poll_duration {
 				return_error!("Login timed out. Please try again.");
 			}
-			let login = client
+			let login = tg
 				.get_login(&login.id)
 				.await
 				.wrap_err("Failed to get the login.")?
@@ -43,7 +43,7 @@ impl Cli {
 		};
 
 		// Get the user.
-		let user = client
+		let user = tg
 			.get_user_for_token(&token)
 			.await?
 			.wrap_err("Expected the user to exist.")?;

@@ -53,13 +53,13 @@ const SH_X8664_LINUX: &[u8] = include_bytes!(concat!(
 
 #[allow(clippy::too_many_lines, clippy::similar_names)]
 pub async fn build(
-	client: &dyn tg::Client,
+	tg: &dyn tg::Handle,
 	build: &tg::Build,
 	_retry: tg::build::Retry,
 	server_directory_path: &Path,
 ) -> Result<tg::Value> {
 	// Get the target.
-	let target = build.target(client).await?;
+	let target = build.target(tg).await?;
 
 	// Get the server directory path.
 	let server_directory_host_path = server_directory_path;
@@ -77,7 +77,7 @@ pub async fn build(
 	// Add `/usr/bin/env` and `/bin/sh` to the root.
 	let env_path = root_directory_host_path.join("usr/bin/env");
 	let sh_path = root_directory_host_path.join("bin/sh");
-	let (env_bytes, sh_bytes) = match target.host(client).await?.arch() {
+	let (env_bytes, sh_bytes) = match target.host(tg).await?.arch() {
 		tg::system::Arch::Aarch64 => (ENV_AARCH64_LINUX, SH_AARCH64_LINUX),
 		tg::system::Arch::Js => unreachable!(),
 		tg::system::Arch::X8664 => (ENV_X8664_LINUX, SH_X8664_LINUX),
@@ -144,21 +144,21 @@ pub async fn build(
 		.wrap_err("Failed to create the working directory.")?;
 
 	// Render the executable.
-	let executable = target.executable(client).await?;
+	let executable = target.executable(tg).await?;
 	let executable = render(
+		tg,
 		&executable.clone().into(),
-		client,
 		&artifacts_directory_guest_path,
 	)
 	.await?;
 
 	// Render the env.
-	let env = target.env(client).await?;
+	let env = target.env(tg).await?;
 	let mut env: BTreeMap<String, String> = env
 		.iter()
 		.map(|(key, value)| async {
 			let key = key.clone();
-			let value = render(value, client, &artifacts_directory_guest_path).await?;
+			let value = render(tg, value, &artifacts_directory_guest_path).await?;
 			Ok::<_, Error>((key, value))
 		})
 		.collect::<FuturesOrdered<_>>()
@@ -166,11 +166,11 @@ pub async fn build(
 		.await?;
 
 	// Render the args.
-	let args = target.args(client).await?;
+	let args = target.args(tg).await?;
 	let args: Vec<String> = args
 		.iter()
 		.map(|value| async {
-			let value = render(value, client, &artifacts_directory_guest_path).await?;
+			let value = render(tg, value, &artifacts_directory_guest_path).await?;
 			Ok::<_, Error>(value)
 		})
 		.collect::<FuturesOrdered<_>>()
@@ -178,7 +178,7 @@ pub async fn build(
 		.await?;
 
 	// Enable the network if a checksum was provided.
-	let network_enabled = target.checksum(client).await?.is_some();
+	let network_enabled = target.checksum(tg).await?.is_some();
 
 	// Set `$HOME`.
 	env.insert(
@@ -192,10 +192,15 @@ pub async fn build(
 		output_guest_path.to_str().unwrap().to_owned(),
 	);
 
-	// Set `$TANGRAM_PATH`.
+	// Set `$TANGRAM_RUNTIME`
+	let addr = tg::client::Addr::Unix(server_directory_path.join("socket"));
+	let runtime = tg::Runtime {
+		addr,
+		build: build.id().clone(),
+	};
 	env.insert(
-		"TANGRAM_PATH".to_owned(),
-		server_directory_guest_path.to_str().unwrap().to_owned(),
+		"TANGRAM_RUNTIME".to_owned(),
+		serde_json::to_string(&runtime).unwrap(),
 	);
 
 	// Create /etc.
@@ -474,7 +479,7 @@ pub async fn build(
 	// Spawn the log task.
 	let log_task = tokio::task::spawn({
 		let build = build.clone();
-		let client = client.clone_box();
+		let tg = tg.clone_box();
 		async move {
 			let mut buf = vec![0; 512];
 			loop {
@@ -483,7 +488,7 @@ pub async fn build(
 					Ok(0) => return Ok(()),
 					Ok(size) => {
 						let log = Bytes::copy_from_slice(&buf[0..size]);
-						build.add_log(client.as_ref(), log).await?;
+						build.add_log(tg.as_ref(), log).await?;
 					},
 				}
 			}
@@ -594,14 +599,14 @@ pub async fn build(
 		let options = tg::checkin::Options {
 			artifacts_paths: vec![artifacts_directory_guest_path],
 		};
-		let artifact = tg::Artifact::check_in_with_options(client, &output_host_path, &options)
+		let artifact = tg::Artifact::check_in_with_options(tg, &output_host_path, &options)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 
 		// Verify the checksum if one was provided.
-		if let Some(expected) = target.checksum(client).await?.clone() {
+		if let Some(expected) = target.checksum(tg).await?.clone() {
 			let actual = artifact
-				.checksum(client, expected.algorithm())
+				.checksum(tg, expected.algorithm())
 				.await
 				.wrap_err("Failed to compute the checksum.")?;
 			if expected != tg::Checksum::Unsafe && expected != actual {

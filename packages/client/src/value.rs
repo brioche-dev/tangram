@@ -1,6 +1,6 @@
 use crate::{
 	branch, directory, file, leaf, lock, mutation, object, symlink, target, template, Branch,
-	Client, Directory, Error, File, Leaf, Lock, Mutation, Result, Symlink, Target, Template,
+	Directory, Error, File, Handle, Leaf, Lock, Mutation, Result, Symlink, Target, Template,
 	WrapErr,
 };
 use async_recursion::async_recursion;
@@ -91,26 +91,26 @@ pub enum Data {
 
 impl Value {
 	#[async_recursion]
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
 		let data = match self {
 			Self::Null(()) => Data::Null(()),
 			Self::Bool(bool) => Data::Bool(*bool),
 			Self::Number(number) => Data::Number(*number),
 			Self::String(string) => Data::String(string.clone()),
 			Self::Bytes(bytes) => Data::Bytes(bytes.clone()),
-			Self::Leaf(leaf) => Data::Leaf(leaf.id(client).await?.clone()),
-			Self::Branch(branch) => Data::Branch(branch.id(client).await?.clone()),
-			Self::Directory(directory) => Data::Directory(directory.id(client).await?.clone()),
-			Self::File(file) => Data::File(file.id(client).await?.clone()),
-			Self::Symlink(symlink) => Data::Symlink(symlink.id(client).await?.clone()),
-			Self::Lock(lock) => Data::Lock(lock.id(client).await?.clone()),
-			Self::Target(target) => Data::Target(target.id(client).await?.clone()),
-			Self::Mutation(mutation) => Data::Mutation(mutation.data(client).await?.clone()),
-			Self::Template(template) => Data::Template(template.data(client).await?.clone()),
+			Self::Leaf(leaf) => Data::Leaf(leaf.id(tg).await?.clone()),
+			Self::Branch(branch) => Data::Branch(branch.id(tg).await?.clone()),
+			Self::Directory(directory) => Data::Directory(directory.id(tg).await?.clone()),
+			Self::File(file) => Data::File(file.id(tg).await?.clone()),
+			Self::Symlink(symlink) => Data::Symlink(symlink.id(tg).await?.clone()),
+			Self::Lock(lock) => Data::Lock(lock.id(tg).await?.clone()),
+			Self::Target(target) => Data::Target(target.id(tg).await?.clone()),
+			Self::Mutation(mutation) => Data::Mutation(mutation.data(tg).await?.clone()),
+			Self::Template(template) => Data::Template(template.data(tg).await?.clone()),
 			Self::Array(array) => Data::Array(
 				array
 					.iter()
-					.map(|value| value.data(client))
+					.map(|value| value.data(tg))
 					.collect::<FuturesOrdered<_>>()
 					.try_collect()
 					.await?,
@@ -118,7 +118,7 @@ impl Value {
 			Self::Map(map) => Data::Map(
 				map.iter()
 					.map(|(key, value)| async move {
-						Ok::<_, Error>((key.clone(), value.data(client).await?))
+						Ok::<_, Error>((key.clone(), value.data(tg).await?))
 					})
 					.collect::<FuturesUnordered<_>>()
 					.try_collect()

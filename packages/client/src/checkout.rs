@@ -1,13 +1,13 @@
-use crate::{return_error, Artifact, Client, Directory, Error, File, Result, Symlink, WrapErr};
+use crate::{return_error, Artifact, Directory, Error, File, Handle, Result, Symlink, WrapErr};
 use async_recursion::async_recursion;
 use futures::{stream::FuturesUnordered, TryStreamExt};
 use std::{os::unix::prelude::PermissionsExt, path::Path};
 
 impl Artifact {
-	pub async fn check_out(&self, client: &dyn Client, path: &Path) -> Result<()> {
+	pub async fn check_out(&self, tg: &dyn Handle, path: &Path) -> Result<()> {
 		// Bundle the artifact.
 		let artifact = self
-			.bundle(client)
+			.bundle(tg)
 			.await
 			.wrap_err("Failed to bundle the artifact.")?;
 
@@ -16,14 +16,14 @@ impl Artifact {
 			.await
 			.wrap_err("Failed to determine if the path exists.")?
 		{
-			Some(Self::check_in(client, path).await?)
+			Some(Self::check_in(tg, path).await?)
 		} else {
 			None
 		};
 
 		// Check out the artifact recursively.
 		artifact
-			.check_out_inner(client, existing_artifact.as_ref(), path)
+			.check_out_inner(tg, existing_artifact.as_ref(), path)
 			.await?;
 
 		Ok(())
@@ -31,16 +31,16 @@ impl Artifact {
 
 	async fn check_out_inner(
 		&self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 		existing_artifact: Option<&Artifact>,
 		path: &Path,
 	) -> Result<()> {
 		// If the artifact is the same as the existing artifact, then return.
-		let id = self.id(client).await?;
+		let id = self.id(tg).await?;
 		match existing_artifact {
 			None => (),
 			Some(existing_artifact) => {
-				if id == existing_artifact.id(client).await? {
+				if id == existing_artifact.id(tg).await? {
 					return Ok(());
 				}
 			},
@@ -49,7 +49,7 @@ impl Artifact {
 		// Call the appropriate function for the artifact's type.
 		match self {
 			Artifact::Directory(directory) => {
-				Self::check_out_directory(client, existing_artifact, directory, path)
+				Self::check_out_directory(tg, existing_artifact, directory, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -58,7 +58,7 @@ impl Artifact {
 			},
 
 			Artifact::File(file) => {
-				Self::check_out_file(client, existing_artifact, file, path)
+				Self::check_out_file(tg, existing_artifact, file, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -67,7 +67,7 @@ impl Artifact {
 			},
 
 			Artifact::Symlink(symlink) => {
-				Self::check_out_symlink(client, existing_artifact, symlink, path)
+				Self::check_out_symlink(tg, existing_artifact, symlink, path)
 					.await
 					.wrap_err_with(|| {
 						let path = path.display();
@@ -81,7 +81,7 @@ impl Artifact {
 
 	#[async_recursion]
 	async fn check_out_directory(
-		client: &dyn Client,
+		tg: &dyn Handle,
 		existing_artifact: Option<&'async_recursion Artifact>,
 		directory: &Directory,
 		path: &Path,
@@ -91,11 +91,11 @@ impl Artifact {
 			// If there is already a directory, then remove any extraneous entries.
 			Some(Artifact::Directory(existing_directory)) => {
 				existing_directory
-					.entries(client)
+					.entries(tg)
 					.await?
 					.iter()
 					.map(|(name, _)| async move {
-						if !directory.entries(client).await?.contains_key(name) {
+						if !directory.entries(tg).await?.contains_key(name) {
 							let entry_path = path.join(name);
 							crate::util::rmrf(&entry_path).await?;
 						}
@@ -123,7 +123,7 @@ impl Artifact {
 
 		// Recurse into the entries.
 		directory
-			.entries(client)
+			.entries(tg)
 			.await?
 			.iter()
 			.map(|(name, artifact)| {
@@ -133,7 +133,7 @@ impl Artifact {
 					let existing_artifact = match existing_artifact {
 						Some(Artifact::Directory(existing_directory)) => {
 							let name = name.parse().wrap_err("Invalid entry name.")?;
-							existing_directory.try_get(client, &name).await?
+							existing_directory.try_get(tg, &name).await?
 						},
 						_ => None,
 					};
@@ -141,7 +141,7 @@ impl Artifact {
 					// Recurse.
 					let entry_path = path.join(name);
 					artifact
-						.check_out_inner(client, existing_artifact.as_ref(), &entry_path)
+						.check_out_inner(tg, existing_artifact.as_ref(), &entry_path)
 						.await?;
 
 					Ok::<_, Error>(())
@@ -155,7 +155,7 @@ impl Artifact {
 	}
 
 	async fn check_out_file(
-		client: &dyn Client,
+		tg: &dyn Handle,
 		existing_artifact: Option<&Artifact>,
 		file: &File,
 		path: &Path,
@@ -172,9 +172,9 @@ impl Artifact {
 		};
 
 		// Copy the blob to the path.
-		let permit = client.file_descriptor_semaphore().acquire().await;
+		let permit = tg.file_descriptor_semaphore().acquire().await;
 		tokio::io::copy(
-			&mut file.reader(client).await?,
+			&mut file.reader(tg).await?,
 			&mut tokio::fs::File::create(path)
 				.await
 				.wrap_err("Failed to create the file.")?,
@@ -184,7 +184,7 @@ impl Artifact {
 		drop(permit);
 
 		// Make the file executable if necessary.
-		if file.executable(client).await? {
+		if file.executable(tg).await? {
 			let permissions = std::fs::Permissions::from_mode(0o755);
 			tokio::fs::set_permissions(path, permissions)
 				.await
@@ -192,7 +192,7 @@ impl Artifact {
 		}
 
 		// Check that the file has no references.
-		if !file.references(client).await?.is_empty() {
+		if !file.references(tg).await?.is_empty() {
 			return_error!(r#"Cannot check out a file with references."#);
 		}
 
@@ -200,7 +200,7 @@ impl Artifact {
 	}
 
 	async fn check_out_symlink(
-		client: &dyn Client,
+		tg: &dyn Handle,
 		existing_artifact: Option<&Artifact>,
 		symlink: &Symlink,
 		path: &Path,
@@ -217,11 +217,11 @@ impl Artifact {
 		};
 
 		// Render the target.
-		if symlink.artifact(client).await?.is_some() {
+		if symlink.artifact(tg).await?.is_some() {
 			return_error!(r#"Cannot check out a symlink which contains an artifact."#);
 		}
 		let target = symlink
-			.path(client)
+			.path(tg)
 			.await?
 			.as_ref()
 			.cloned()

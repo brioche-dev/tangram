@@ -204,9 +204,9 @@ fn syscall_module_load(
 ) -> Result<String> {
 	let (module,) = args;
 	state.main_runtime_handle.clone().block_on(async move {
-		let client = state.client.as_ref();
+		let tg = state.tg.as_ref();
 		let text = module
-			.load(client, Some(&state.document_store))
+			.load(tg, Some(&state.document_store))
 			.await
 			.wrap_err_with(|| format!(r#"Failed to load module "{module}"."#))?;
 		Ok(text)
@@ -222,9 +222,9 @@ fn syscall_module_resolve(
 	let import = Import::with_specifier_and_attributes(&specifier, attributes.as_ref())
 		.wrap_err("Failed to create the import.")?;
 	state.main_runtime_handle.clone().block_on(async move {
-		let client = state.client.as_ref();
+		let tg = state.tg.as_ref();
 		let module = module
-			.resolve(client, Some(&state.document_store), &import)
+			.resolve(tg, Some(&state.document_store), &import)
 			.await
 			.wrap_err_with(|| {
 				format!(

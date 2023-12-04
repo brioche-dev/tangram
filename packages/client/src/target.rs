@@ -1,5 +1,5 @@
 use crate::{
-	artifact, build, id, lock, object, value, Artifact, Build, Checksum, Client, Directory, Error,
+	artifact, build, id, lock, object, value, Artifact, Build, Checksum, Directory, Error, Handle,
 	Lock, Result, System, User, Value, WrapErr,
 };
 use bytes::Bytes;
@@ -111,18 +111,18 @@ impl Target {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
-		self.store(client).await?;
+	pub async fn id(&self, tg: &dyn Handle) -> Result<&Id> {
+		self.store(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
-	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
-		self.load(client).await?;
+	pub async fn object(&self, tg: &dyn Handle) -> Result<&Object> {
+		self.load(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
 	}
 
-	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
-		if !self.try_load(client).await? {
+	pub async fn try_get_object(&self, tg: &dyn Handle) -> Result<Option<&Object>> {
+		if !self.try_load(tg).await? {
 			return Ok(None);
 		}
 		Ok(Some(unsafe {
@@ -130,19 +130,19 @@ impl Target {
 		}))
 	}
 
-	pub async fn load(&self, client: &dyn Client) -> Result<()> {
-		self.try_load(client)
+	pub async fn load(&self, tg: &dyn Handle) -> Result<()> {
+		self.try_load(tg)
 			.await?
 			.then_some(())
 			.wrap_err("Failed to load the object.")
 	}
 
-	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
+	pub async fn try_load(&self, tg: &dyn Handle) -> Result<bool> {
 		if self.state.read().unwrap().object.is_some() {
 			return Ok(true);
 		}
 		let id = self.state.read().unwrap().id.clone().unwrap();
-		let Some(bytes) = client.try_get_object(&id.clone().into()).await? else {
+		let Some(bytes) = tg.try_get_object(&id.clone().into()).await? else {
 			return Ok(false);
 		};
 		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
@@ -151,15 +151,14 @@ impl Target {
 		Ok(true)
 	}
 
-	pub async fn store(&self, client: &dyn Client) -> Result<()> {
+	pub async fn store(&self, tg: &dyn Handle) -> Result<()> {
 		if self.state.read().unwrap().id.is_some() {
 			return Ok(());
 		}
-		let data = self.data(client).await?;
+		let data = self.data(tg).await?;
 		let bytes = data.serialize()?;
 		let id = Id::new(&bytes);
-		client
-			.try_put_object(&id.clone().into(), &bytes)
+		tg.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()
@@ -168,12 +167,12 @@ impl Target {
 		Ok(())
 	}
 
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
-		let object = self.object(client).await?;
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
+		let object = self.object(tg).await?;
 		let host = object.host.clone();
-		let executable = object.executable.id(client).await?;
+		let executable = object.executable.id(tg).await?;
 		let lock = if let Some(lock) = &object.lock {
-			Some(lock.id(client).await?.clone())
+			Some(lock.id(tg).await?.clone())
 		} else {
 			None
 		};
@@ -183,7 +182,7 @@ impl Target {
 			.iter()
 			.map(|(key, value)| async move {
 				let key = key.clone();
-				let value = value.data(client).await?;
+				let value = value.data(tg).await?;
 				Ok::<_, Error>((key, value))
 			})
 			.collect::<FuturesUnordered<_>>()
@@ -192,7 +191,7 @@ impl Target {
 		let args = object
 			.args
 			.iter()
-			.map(|value| value.data(client))
+			.map(|value| value.data(tg))
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
 			.await?;
@@ -210,40 +209,40 @@ impl Target {
 }
 
 impl Target {
-	pub async fn host(&self, client: &dyn Client) -> Result<&System> {
-		Ok(&self.object(client).await?.host)
+	pub async fn host(&self, tg: &dyn Handle) -> Result<&System> {
+		Ok(&self.object(tg).await?.host)
 	}
 
-	pub async fn executable(&self, client: &dyn Client) -> Result<&Artifact> {
-		Ok(&self.object(client).await?.executable)
+	pub async fn executable(&self, tg: &dyn Handle) -> Result<&Artifact> {
+		Ok(&self.object(tg).await?.executable)
 	}
 
-	pub async fn lock(&self, client: &dyn Client) -> Result<&Option<Lock>> {
-		Ok(&self.object(client).await?.lock)
+	pub async fn lock(&self, tg: &dyn Handle) -> Result<&Option<Lock>> {
+		Ok(&self.object(tg).await?.lock)
 	}
 
-	pub async fn name(&self, client: &dyn Client) -> Result<&Option<String>> {
-		Ok(&self.object(client).await?.name)
+	pub async fn name(&self, tg: &dyn Handle) -> Result<&Option<String>> {
+		Ok(&self.object(tg).await?.name)
 	}
 
-	pub async fn env(&self, client: &dyn Client) -> Result<&BTreeMap<String, Value>> {
-		Ok(&self.object(client).await?.env)
+	pub async fn env(&self, tg: &dyn Handle) -> Result<&BTreeMap<String, Value>> {
+		Ok(&self.object(tg).await?.env)
 	}
 
-	pub async fn args(&self, client: &dyn Client) -> Result<&Vec<Value>> {
-		Ok(&self.object(client).await?.args)
+	pub async fn args(&self, tg: &dyn Handle) -> Result<&Vec<Value>> {
+		Ok(&self.object(tg).await?.args)
 	}
 
-	pub async fn checksum(&self, client: &dyn Client) -> Result<&Option<Checksum>> {
-		Ok(&self.object(client).await?.checksum)
+	pub async fn checksum(&self, tg: &dyn Handle) -> Result<&Option<Checksum>> {
+		Ok(&self.object(tg).await?.checksum)
 	}
 
-	pub async fn package(&self, client: &dyn Client) -> Result<Option<&Directory>> {
-		let object = &self.object(client).await?;
+	pub async fn package(&self, tg: &dyn Handle) -> Result<Option<&Directory>> {
+		let object = &self.object(tg).await?;
 		let Artifact::Symlink(symlink) = &object.executable else {
 			return Ok(None);
 		};
-		let Some(artifact) = symlink.artifact(client).await? else {
+		let Some(artifact) = symlink.artifact(tg).await? else {
 			return Ok(None);
 		};
 		let Some(directory) = artifact.try_unwrap_directory_ref().ok() else {
@@ -254,13 +253,13 @@ impl Target {
 
 	pub async fn build(
 		&self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 		user: Option<&User>,
 		depth: u64,
 		retry: build::Retry,
 	) -> Result<Build> {
-		let target_id = self.id(client).await?;
-		let build_id = client
+		let target_id = self.id(tg).await?;
+		let build_id = tg
 			.get_or_create_build_for_target(user, target_id, depth, retry)
 			.await?;
 		let build = Build::with_id(build_id);

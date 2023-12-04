@@ -2,8 +2,8 @@ use crate::{Cli, API_URL};
 use std::path::PathBuf;
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_http::net::Addr;
-use tg::Client;
+use tg::client::Addr;
+use tg::Handle;
 use url::Url;
 
 /// Manage the server.
@@ -74,15 +74,15 @@ impl Cli {
 				self.start_server().await?;
 			},
 			Command::Status => {
-				let addr = Addr::Unix(self.path.join("socket"));
-				let client = tangram_http::client::Builder::new(addr).build();
+				let addr = tg::client::Addr::Unix(self.path.join("socket"));
+				let client = tg::client::Builder::new(addr).build();
 				let status = client.status().await?;
 				let status = serde_json::to_string_pretty(&status).unwrap();
 				println!("{status}");
 			},
 			Command::Stop => {
-				let addr = Addr::Unix(self.path.join("socket"));
-				let client = tangram_http::client::Builder::new(addr).build();
+				let addr = tg::client::Addr::Unix(self.path.join("socket"));
+				let client = tg::client::Builder::new(addr).build();
 				client.stop().await?;
 			},
 			Command::Run(args) => {
@@ -129,12 +129,13 @@ impl Cli {
 				.and_then(|remote| remote.url.clone()))
 			.unwrap_or_else(|| API_URL.parse().unwrap());
 		let tls = url.scheme() == "https";
-		let client = tangram_http::client::Builder::new(url.try_into()?)
+		let client = tg::client::Builder::new(url.try_into()?)
 			.tls(tls)
 			.user(user)
 			.build();
-		let client = Box::new(client) as _;
-		let remote = tangram_server::RemoteOptions { client };
+		let remote = tangram_server::RemoteOptions {
+			tg: Box::new(client),
+		};
 		let remote = if args.no_remote { None } else { Some(remote) };
 
 		let version = self.version.clone();
@@ -158,7 +159,7 @@ impl Cli {
 			let server = server.clone();
 			async move {
 				tokio::signal::ctrl_c().await.ok();
-				server.stop();
+				server.stop().await.ok();
 				tokio::signal::ctrl_c().await.ok();
 				std::process::exit(130);
 			}

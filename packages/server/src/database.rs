@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use lmdb::Transaction;
-use std::{os::unix::prelude::OsStrExt, path::Path};
+use std::path::Path;
 use tangram_client as tg;
 use tangram_error::{Result, Wrap, WrapErr};
 
@@ -122,46 +122,6 @@ impl Database {
 			self.assignments,
 			&target_id.to_string(),
 			&build_id.to_string(),
-			lmdb::WriteFlags::empty(),
-		)
-		.wrap_err("Failed to put the assignment.")?;
-
-		// Commit the transaction.
-		txn.commit().wrap_err("Failed to commit the transaction.")?;
-
-		Ok(())
-	}
-
-	pub fn _try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
-		let txn = self
-			.env
-			.begin_ro_txn()
-			.wrap_err("Failed to begin the transaction.")?;
-		let data = match txn.get(self.trackers, &path.as_os_str().as_bytes()) {
-			Ok(data) => data,
-			Err(lmdb::Error::NotFound) => return Ok(None),
-			Err(error) => return Err(error.wrap("Failed to get the tracker.")),
-		};
-		let tracker =
-			serde_json::from_slice(data).wrap_err("Failed to deserialize the tracker.")?;
-		Ok(Some(tracker))
-	}
-
-	pub fn _set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
-		// Serialize the tracker.
-		let tracker = serde_json::to_vec(&tracker).wrap_err("Failed to serialize the tracker.")?;
-
-		// Create a write transaction.
-		let mut txn = self
-			.env
-			.begin_rw_txn()
-			.wrap_err("Failed to create the transaction.")?;
-
-		// Add the tracker to the database.
-		txn.put(
-			self.trackers,
-			&path.as_os_str().as_bytes(),
-			&tracker,
 			lmdb::WriteFlags::empty(),
 		)
 		.wrap_err("Failed to put the assignment.")?;

@@ -10,7 +10,7 @@ impl Module {
 	/// Load the module.
 	pub async fn load(
 		&self,
-		client: &dyn tg::Client,
+		tg: &dyn tg::Handle,
 		document_store: Option<&document::Store>,
 	) -> Result<String> {
 		match self {
@@ -39,12 +39,12 @@ impl Module {
 				let package = tg::Directory::with_id(module.package.clone());
 
 				// Load the module.
-				let entry = package.get(client, &module.path).await?;
+				let entry = package.get(tg, &module.path).await?;
 				let file = entry
 					.try_unwrap_file_ref()
 					.ok()
 					.wrap_err("Expected a file.")?;
-				let text = file.text(client).await?;
+				let text = file.text(tg).await?;
 
 				Ok(text)
 			},

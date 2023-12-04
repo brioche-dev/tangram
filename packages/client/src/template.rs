@@ -1,5 +1,5 @@
 pub use self::component::Component;
-use crate::{object, Artifact, Client, Error, Result};
+use crate::{object, Artifact, Error, Handle, Result};
 use futures::{stream::FuturesOrdered, Future, TryStreamExt};
 use itertools::Itertools;
 use std::{borrow::Cow, path::PathBuf};
@@ -93,11 +93,11 @@ impl Template {
 		Ok(Self { components })
 	}
 
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
 		let components = self
 			.components
 			.iter()
-			.map(|component| component.data(client))
+			.map(|component| component.data(tg))
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
 			.await?;
@@ -181,7 +181,7 @@ impl From<&str> for Template {
 }
 
 pub mod component {
-	use crate::{artifact, Artifact, Client, Error, Result};
+	use crate::{artifact, Artifact, Error, Handle, Result};
 	use derive_more::{From, TryUnwrap};
 
 	#[derive(Clone, Debug, From, TryUnwrap)]
@@ -199,10 +199,10 @@ pub mod component {
 	}
 
 	impl Component {
-		pub async fn data(&self, client: &dyn Client) -> Result<Data> {
+		pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
 			match self {
 				Self::String(string) => Ok(Data::String(string.clone())),
-				Self::Artifact(artifact) => Ok(Data::Artifact(artifact.id(client).await?)),
+				Self::Artifact(artifact) => Ok(Data::Artifact(artifact.id(tg).await?)),
 			}
 		}
 	}

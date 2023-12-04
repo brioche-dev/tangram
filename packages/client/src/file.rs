@@ -1,4 +1,4 @@
-use crate::{artifact, blob, id, object, Artifact, Blob, Client, Error, Result, WrapErr};
+use crate::{artifact, blob, id, object, Artifact, Blob, Error, Handle, Result, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
@@ -95,18 +95,18 @@ impl File {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
-		self.store(client).await?;
+	pub async fn id(&self, tg: &dyn Handle) -> Result<&Id> {
+		self.store(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
-	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
-		self.load(client).await?;
+	pub async fn object(&self, tg: &dyn Handle) -> Result<&Object> {
+		self.load(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
 	}
 
-	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
-		if !self.try_load(client).await? {
+	pub async fn try_get_object(&self, tg: &dyn Handle) -> Result<Option<&Object>> {
+		if !self.try_load(tg).await? {
 			return Ok(None);
 		}
 		Ok(Some(unsafe {
@@ -114,19 +114,19 @@ impl File {
 		}))
 	}
 
-	pub async fn load(&self, client: &dyn Client) -> Result<()> {
-		self.try_load(client)
+	pub async fn load(&self, tg: &dyn Handle) -> Result<()> {
+		self.try_load(tg)
 			.await?
 			.then_some(())
 			.wrap_err("Failed to load the object.")
 	}
 
-	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
+	pub async fn try_load(&self, tg: &dyn Handle) -> Result<bool> {
 		if self.state.read().unwrap().object.is_some() {
 			return Ok(true);
 		}
 		let id = self.state.read().unwrap().id.clone().unwrap();
-		let Some(bytes) = client.try_get_object(&id.clone().into()).await? else {
+		let Some(bytes) = tg.try_get_object(&id.clone().into()).await? else {
 			return Ok(false);
 		};
 		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
@@ -135,15 +135,14 @@ impl File {
 		Ok(true)
 	}
 
-	pub async fn store(&self, client: &dyn Client) -> Result<()> {
+	pub async fn store(&self, tg: &dyn Handle) -> Result<()> {
 		if self.state.read().unwrap().id.is_some() {
 			return Ok(());
 		}
-		let data = self.data(client).await?;
+		let data = self.data(tg).await?;
 		let bytes = data.serialize()?;
 		let id = Id::new(&bytes);
-		client
-			.try_put_object(&id.clone().into(), &bytes)
+		tg.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()
@@ -153,14 +152,14 @@ impl File {
 	}
 
 	#[async_recursion]
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
-		let object = self.object(client).await?;
-		let contents = object.contents.id(client).await?.clone();
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
+		let object = self.object(tg).await?;
+		let contents = object.contents.id(tg).await?.clone();
 		let executable = object.executable;
 		let references = object
 			.references
 			.iter()
-			.map(|artifact| artifact.id(client))
+			.map(|artifact| artifact.id(tg))
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
 			.await?;
@@ -187,32 +186,32 @@ impl File {
 		Builder::new(contents)
 	}
 
-	pub async fn contents(&self, client: &dyn Client) -> Result<&Blob> {
-		Ok(&self.object(client).await?.contents)
+	pub async fn contents(&self, tg: &dyn Handle) -> Result<&Blob> {
+		Ok(&self.object(tg).await?.contents)
 	}
 
-	pub async fn executable(&self, client: &dyn Client) -> Result<bool> {
-		Ok(self.object(client).await?.executable)
+	pub async fn executable(&self, tg: &dyn Handle) -> Result<bool> {
+		Ok(self.object(tg).await?.executable)
 	}
 
-	pub async fn references(&self, client: &dyn Client) -> Result<&[Artifact]> {
-		Ok(self.object(client).await?.references.as_slice())
+	pub async fn references(&self, tg: &dyn Handle) -> Result<&[Artifact]> {
+		Ok(self.object(tg).await?.references.as_slice())
 	}
 
-	pub async fn reader(&self, client: &dyn Client) -> Result<blob::Reader> {
-		self.contents(client).await?.reader(client).await
+	pub async fn reader(&self, tg: &dyn Handle) -> Result<blob::Reader> {
+		self.contents(tg).await?.reader(tg).await
 	}
 
-	pub async fn size(&self, client: &dyn Client) -> Result<u64> {
-		self.contents(client).await?.size(client).await
+	pub async fn size(&self, tg: &dyn Handle) -> Result<u64> {
+		self.contents(tg).await?.size(tg).await
 	}
 
-	pub async fn bytes(&self, client: &dyn Client) -> Result<Vec<u8>> {
-		self.contents(client).await?.bytes(client).await
+	pub async fn bytes(&self, tg: &dyn Handle) -> Result<Vec<u8>> {
+		self.contents(tg).await?.bytes(tg).await
 	}
 
-	pub async fn text(&self, client: &dyn Client) -> Result<String> {
-		self.contents(client).await?.text(client).await
+	pub async fn text(&self, tg: &dyn Handle) -> Result<String> {
+		self.contents(tg).await?.text(tg).await
 	}
 }
 

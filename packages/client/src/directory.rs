@@ -1,9 +1,10 @@
-use crate::{artifact, error, id, object, return_error, Artifact, Client, Error, Result, WrapErr};
+use crate::{artifact, id, object, return_error, Artifact, Error, Handle, Result, WrapErr};
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::Display;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use std::{collections::BTreeMap, sync::Arc};
+use tangram_error::error;
 
 #[derive(
 	Clone,
@@ -74,18 +75,18 @@ impl Directory {
 		}
 	}
 
-	pub async fn id(&self, client: &dyn Client) -> Result<&Id> {
-		self.store(client).await?;
+	pub async fn id(&self, tg: &dyn Handle) -> Result<&Id> {
+		self.store(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().id.as_ref().unwrap() as *const Id) })
 	}
 
-	pub async fn object(&self, client: &dyn Client) -> Result<&Object> {
-		self.load(client).await?;
+	pub async fn object(&self, tg: &dyn Handle) -> Result<&Object> {
+		self.load(tg).await?;
 		Ok(unsafe { &*(self.state.read().unwrap().object.as_ref().unwrap() as *const Object) })
 	}
 
-	pub async fn try_get_object(&self, client: &dyn Client) -> Result<Option<&Object>> {
-		if !self.try_load(client).await? {
+	pub async fn try_get_object(&self, tg: &dyn Handle) -> Result<Option<&Object>> {
+		if !self.try_load(tg).await? {
 			return Ok(None);
 		}
 		Ok(Some(unsafe {
@@ -93,19 +94,19 @@ impl Directory {
 		}))
 	}
 
-	pub async fn load(&self, client: &dyn Client) -> Result<()> {
-		self.try_load(client)
+	pub async fn load(&self, tg: &dyn Handle) -> Result<()> {
+		self.try_load(tg)
 			.await?
 			.then_some(())
 			.wrap_err("Failed to load the object.")
 	}
 
-	pub async fn try_load(&self, client: &dyn Client) -> Result<bool> {
+	pub async fn try_load(&self, tg: &dyn Handle) -> Result<bool> {
 		if self.state.read().unwrap().object.is_some() {
 			return Ok(true);
 		}
 		let id = self.state.read().unwrap().id.clone().unwrap();
-		let Some(bytes) = client.try_get_object(&id.clone().into()).await? else {
+		let Some(bytes) = tg.try_get_object(&id.clone().into()).await? else {
 			return Ok(false);
 		};
 		let data = Data::deserialize(&bytes).wrap_err("Failed to deserialize the data.")?;
@@ -114,15 +115,14 @@ impl Directory {
 		Ok(true)
 	}
 
-	pub async fn store(&self, client: &dyn Client) -> Result<()> {
+	pub async fn store(&self, tg: &dyn Handle) -> Result<()> {
 		if self.state.read().unwrap().id.is_some() {
 			return Ok(());
 		}
-		let data = self.data(client).await?;
+		let data = self.data(tg).await?;
 		let bytes = data.serialize()?;
 		let id = Id::new(&bytes);
-		client
-			.try_put_object(&id.clone().into(), &bytes)
+		tg.try_put_object(&id.clone().into(), &bytes)
 			.await
 			.wrap_err("Failed to put the object.")?
 			.ok()
@@ -132,13 +132,13 @@ impl Directory {
 	}
 
 	#[async_recursion]
-	pub async fn data(&self, client: &dyn Client) -> Result<Data> {
-		let object = self.object(client).await?;
+	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
+		let object = self.object(tg).await?;
 		let entries = object
 			.entries
 			.iter()
 			.map(|(name, artifact)| async move {
-				Ok::<_, Error>((name.clone(), artifact.id(client).await?))
+				Ok::<_, Error>((name.clone(), artifact.id(tg).await?))
 			})
 			.collect::<FuturesOrdered<_>>()
 			.try_collect()
@@ -153,27 +153,23 @@ impl Directory {
 		Self::with_object(Object { entries })
 	}
 
-	pub async fn builder(&self, client: &dyn Client) -> Result<Builder> {
-		Ok(Builder::new(self.object(client).await?.entries.clone()))
+	pub async fn builder(&self, tg: &dyn Handle) -> Result<Builder> {
+		Ok(Builder::new(self.object(tg).await?.entries.clone()))
 	}
 
-	pub async fn entries(&self, client: &dyn Client) -> Result<&BTreeMap<String, Artifact>> {
-		Ok(&self.object(client).await?.entries)
+	pub async fn entries(&self, tg: &dyn Handle) -> Result<&BTreeMap<String, Artifact>> {
+		Ok(&self.object(tg).await?.entries)
 	}
 
-	pub async fn get(&self, client: &dyn Client, path: &crate::Path) -> Result<Artifact> {
+	pub async fn get(&self, tg: &dyn Handle, path: &crate::Path) -> Result<Artifact> {
 		let artifact = self
-			.try_get(client, path)
+			.try_get(tg, path)
 			.await?
 			.wrap_err("Failed to get the artifact.")?;
 		Ok(artifact)
 	}
 
-	pub async fn try_get(
-		&self,
-		client: &dyn Client,
-		path: &crate::Path,
-	) -> Result<Option<Artifact>> {
+	pub async fn try_get(&self, tg: &dyn Handle, path: &crate::Path) -> Result<Option<Artifact>> {
 		// Track the current artifact.
 		let mut artifact: Artifact = self.clone().into();
 
@@ -195,7 +191,7 @@ impl Directory {
 				.try_unwrap_normal_ref()
 				.ok()
 				.wrap_err("The path must contain only normal components.")?;
-			let Some(entry) = directory.entries(client).await?.get(name).cloned() else {
+			let Some(entry) = directory.entries(tg).await?.get(name).cloned() else {
 				return Ok(None);
 			};
 
@@ -205,7 +201,7 @@ impl Directory {
 			// If the artifact is a symlink, then resolve it.
 			if let Artifact::Symlink(symlink) = &artifact {
 				match symlink
-					.resolve_from(client, Some(symlink.clone()))
+					.resolve_from(tg, Some(symlink.clone()))
 					.await
 					.wrap_err("Failed to resolve the symlink.")?
 				{
@@ -295,7 +291,7 @@ impl Builder {
 	#[async_recursion]
 	pub async fn add(
 		mut self,
-		client: &dyn Client,
+		tg: &dyn Handle,
 		path: &crate::Path,
 		artifact: Artifact,
 	) -> Result<Self> {
@@ -321,7 +317,7 @@ impl Builder {
 					.try_unwrap_directory_ref()
 					.ok()
 					.wrap_err("Expected the artifact to be a directory.")?
-					.builder(client)
+					.builder(tg)
 					.await?
 			} else {
 				Self::default()
@@ -329,7 +325,7 @@ impl Builder {
 
 			// Recurse.
 			builder
-				.add(client, &trailing_path, artifact)
+				.add(tg, &trailing_path, artifact)
 				.await?
 				.build()
 				.into()
@@ -342,7 +338,7 @@ impl Builder {
 	}
 
 	#[async_recursion]
-	pub async fn remove(mut self, client: &dyn Client, path: &crate::Path) -> Result<Self> {
+	pub async fn remove(mut self, tg: &dyn Handle, path: &crate::Path) -> Result<Self> {
 		// Get the first component.
 		let name = path
 			.components()
@@ -366,14 +362,14 @@ impl Builder {
 					.try_unwrap_directory_ref()
 					.ok()
 					.wrap_err("Expected the artifact to be a directory.")?
-					.builder(client)
+					.builder(tg)
 					.await?
 			} else {
 				return Err(error!("The path does not exist."));
 			};
 
 			// Recurse.
-			let artifact = builder.remove(client, &trailing_path).await?.build().into();
+			let artifact = builder.remove(tg, &trailing_path).await?.build().into();
 
 			// Add the new artifact.
 			self.entries.insert(name.clone(), artifact);

@@ -12,7 +12,7 @@ impl Module {
 	#[allow(clippy::too_many_lines)]
 	pub async fn resolve(
 		&self,
-		client: &dyn tg::Client,
+		tg: &dyn tg::Handle,
 		document_store: Option<&document::Store>,
 		import: &Import,
 	) -> Result<Self> {
@@ -99,17 +99,17 @@ impl Module {
 				// Get the lock for the document's package.
 				let path = document.package_path.clone().try_into()?;
 				let dependency_ = tg::Dependency::with_path(path);
-				let (_, lock) = client.create_package_and_lock(&dependency_).await?;
+				let (_, lock) = tg.create_package_and_lock(&dependency_).await?;
 				let lock = tg::Lock::with_id(lock);
 
 				// Get the lock entry for the dependency.
-				let Some(entry) = lock.dependencies(client).await?.get(&dependency) else {
+				let Some(entry) = lock.dependencies(tg).await?.get(&dependency) else {
 					return_error!("Could not find the dependency.");
 				};
 
 				// Create the module.
-				let lock = lock.id(client).await?.clone();
-				let package = entry.package.id(client).await?.clone();
+				let lock = lock.id(tg).await?.clone();
+				let package = entry.package.id(tg).await?.clone();
 				let path = ROOT_MODULE_FILE_NAME.parse().unwrap();
 				let module = Self::Normal(Normal {
 					lock,
@@ -140,7 +140,7 @@ impl Module {
 				let parent_lock = tg::Lock::with_id(module.lock.clone());
 
 				// Get the specified package and lock from the dependencies.
-				let dependencies = parent_lock.dependencies(client).await?;
+				let dependencies = parent_lock.dependencies(tg).await?;
 				let tg::lock::Entry { package, lock } = dependencies
 					.get(&dependency)
 					.cloned()
@@ -148,9 +148,9 @@ impl Module {
 
 				// Create the module.
 				let module = Module::Normal(Normal {
-					package: package.id(client).await?.clone(),
+					package: package.id(tg).await?.clone(),
 					path: ROOT_MODULE_FILE_NAME.parse().unwrap(),
-					lock: lock.id(client).await?.clone(),
+					lock: lock.id(tg).await?.clone(),
 				});
 
 				Ok(module)

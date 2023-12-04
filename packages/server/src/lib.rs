@@ -10,7 +10,6 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{Result, Wrap, WrapErr};
-use tangram_http::net::Addr;
 use tangram_package::Ext;
 use tg::util::rmrf;
 
@@ -20,6 +19,7 @@ mod database;
 mod migrations;
 mod object;
 mod pool;
+mod serve;
 
 /// A server.
 #[derive(Clone)]
@@ -53,8 +53,8 @@ struct Inner {
 	/// A semaphore that prevents opening too many file descriptors.
 	file_descriptor_semaphore: tokio::sync::Semaphore,
 
-	/// The HTTP server.
-	http: std::sync::Mutex<Option<tangram_http::Server>>,
+	/// The HTTP server task.
+	task: Task,
 
 	/// A local pool for build JS targets.
 	local_pool: tokio_util::task::LocalPoolHandle,
@@ -67,7 +67,7 @@ struct Inner {
 	path: PathBuf,
 
 	/// A client for communicating with the remote server.
-	remote: Option<Box<dyn tg::Client>>,
+	remote: Option<Box<dyn tg::Handle>>,
 
 	/// The server's version.
 	version: String,
@@ -128,8 +128,13 @@ enum BuildQueueTaskMessage {
 	Stop,
 }
 
+type Task = (
+	std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+	std::sync::Mutex<Option<tokio::task::AbortHandle>>,
+);
+
 pub struct Options {
-	pub addr: Addr,
+	pub addr: tg::client::Addr,
 	pub build: Option<BuildOptions>,
 	pub path: PathBuf,
 	pub remote: Option<RemoteOptions>,
@@ -146,7 +151,7 @@ pub struct RemoteBuildOptions {
 }
 
 pub struct RemoteOptions {
-	pub client: Box<dyn tg::Client>,
+	pub tg: Box<dyn tg::Handle>,
 }
 
 impl Server {
@@ -215,8 +220,8 @@ impl Server {
 		// Create the file system semaphore.
 		let file_descriptor_semaphore = tokio::sync::Semaphore::new(16);
 
-		// Create the HTTP server.
-		let http = std::sync::Mutex::new(None);
+		// Create the HTTP server task.
+		let task = (std::sync::Mutex::new(None), std::sync::Mutex::new(None));
 
 		// Create the local pool.
 		let local_pool = tokio_util::task::LocalPoolHandle::new(
@@ -225,7 +230,7 @@ impl Server {
 
 		// Get the remote.
 		let remote = if let Some(remote) = options.remote {
-			Some(remote.client)
+			Some(remote.tg)
 		} else {
 			None
 		};
@@ -246,7 +251,7 @@ impl Server {
 			build_state,
 			database,
 			file_descriptor_semaphore,
-			http,
+			task,
 			local_pool,
 			lock_file,
 			path,
@@ -275,31 +280,44 @@ impl Server {
 				async move { server.run_build_queue(build_queue_task_receiver).await }
 			}));
 
-		// Start the HTTP server.
-		let http = tangram_http::Server::start(&server, addr, None);
-		server.inner.http.lock().unwrap().replace(http);
+		// Start the HTTP server task.
+		let task = tokio::spawn({
+			let server = server.clone();
+			async move { server.serve(addr).await }
+		});
+		let abort = task.abort_handle();
+		server.inner.task.0.lock().unwrap().replace(task);
+		server.inner.task.1.lock().unwrap().replace(abort);
 
 		Ok(server)
 	}
 
-	pub fn stop(&self) {
+	#[allow(clippy::unused_async, clippy::unnecessary_wraps)]
+	pub async fn stop(&self) -> Result<()> {
+		// Stop the http server task.
+		if let Some(handle) = self.inner.task.1.lock().unwrap().as_ref() {
+			handle.abort();
+		};
+
 		// Stop the build queue task.
 		self.inner
 			.build_queue_task_sender
 			.send(BuildQueueTaskMessage::Stop)
 			.unwrap();
 
-		// Stop the HTTP server.
-		if let Some(http) = self.inner.http.lock().unwrap().as_ref() {
-			http.stop();
-		}
+		Ok(())
 	}
 
 	pub async fn join(&self) -> Result<()> {
-		// Join the HTTP server.
-		let http = self.inner.http.lock().unwrap().clone();
-		if let Some(http) = http {
-			http.join().await?;
+		// Join the HTTP server task.
+		let task = self.inner.task.0.lock().unwrap().take();
+		if let Some(task) = task {
+			match task.await {
+				Ok(result) => Ok(result),
+				Err(error) if error.is_cancelled() => Ok(Ok(())),
+				Err(error) => Err(error),
+			}
+			.unwrap()?;
 		}
 
 		// Join the build queue task.
@@ -345,8 +363,8 @@ impl Server {
 }
 
 #[async_trait]
-impl tg::Client for Server {
-	fn clone_box(&self) -> Box<dyn tg::Client> {
+impl tg::Handle for Server {
+	fn clone_box(&self) -> Box<dyn tg::Handle> {
 		Box::new(self.clone())
 	}
 
@@ -359,8 +377,7 @@ impl tg::Client for Server {
 	}
 
 	async fn stop(&self) -> Result<()> {
-		self.stop();
-		self.join().await?;
+		self.stop().await?;
 		Ok(())
 	}
 
@@ -386,14 +403,6 @@ impl tg::Client for Server {
 		bytes: &Bytes,
 	) -> Result<Result<(), Vec<tg::object::Id>>> {
 		self.try_put_object(id, bytes).await
-	}
-
-	async fn try_get_tracker(&self, path: &Path) -> Result<Option<tg::Tracker>> {
-		self.try_get_tracker(path).await
-	}
-
-	async fn set_tracker(&self, path: &Path, tracker: &tg::Tracker) -> Result<()> {
-		self.set_tracker(path, tracker).await
 	}
 
 	async fn try_get_build_for_target(&self, id: &tg::target::Id) -> Result<Option<tg::build::Id>> {

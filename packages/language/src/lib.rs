@@ -62,8 +62,8 @@ pub struct Server {
 }
 
 struct Inner {
-	/// The Tangram client.
-	client: Box<dyn tg::Client>,
+	/// The Tangram handle.
+	tg: Box<dyn tg::Handle>,
 
 	/// The published diagnostics.
 	diagnostics: Arc<tokio::sync::RwLock<Vec<Diagnostic>>>,
@@ -118,7 +118,7 @@ pub type _ResponseReceiver = tokio::sync::oneshot::Receiver<Result<Response>>;
 
 impl Server {
 	#[must_use]
-	pub fn new(client: &dyn tg::Client, main_runtime_handle: tokio::runtime::Handle) -> Self {
+	pub fn new(tg: &dyn tg::Handle, main_runtime_handle: tokio::runtime::Handle) -> Self {
 		// Create the published diagnostics.
 		let diagnostics = Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
@@ -134,7 +134,7 @@ impl Server {
 
 		// Create the inner.
 		let inner = Arc::new(Inner {
-			client: client.clone_box(),
+			tg: tg.clone_box(),
 			diagnostics,
 			document_store,
 			request_sender,
