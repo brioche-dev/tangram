@@ -19,6 +19,7 @@ mod clean;
 mod database;
 mod migrations;
 mod object;
+mod pool;
 
 /// A server.
 #[derive(Clone)]
