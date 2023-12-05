@@ -14,7 +14,7 @@ resolver = "2"
 
 [workspace.package]
 authors = ["Tangram <root@tangram.dev"]
-description = "Tangram is a programmable build system and package manager that makes your builds simple, reproducible, cacheable, and distributable."
+description = "Tangram is a build system and package manager that makes your builds programmable, reproducible, cacheable, and distributable."
 edition = "2021"
 homepage = "https://www.tangram.dev"
 license = "MIT"
