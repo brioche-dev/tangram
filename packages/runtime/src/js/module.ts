@@ -28,11 +28,11 @@ export namespace Module {
 		let data = encoding.hex.encode(
 			encoding.utf8.encode(encoding.json.encode(module)),
 		);
-		return `tangram://${data}/${module.value.path}`;
+		return `tg://${data}/${module.value.path}`;
 	};
 
 	export let fromUrl = (url: string): Module => {
-		let match = url.match(/^tangram:\/\/([0-9a-f]+)/);
+		let match = url.match(/^tg:\/\/([0-9a-f]+)/);
 		assert(match);
 		let [_, data] = match;
 		assert(data !== undefined);

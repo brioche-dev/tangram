@@ -82,9 +82,7 @@ impl std::fmt::Display for Id {
 		};
 		let hash = match self {
 			Self::V0(v0) => match v0.hash {
-				Hash::Random32(bytes) | Hash::Blake3(bytes) => {
-					data_encoding::BASE32_NOPAD.encode(&bytes).to_lowercase()
-				},
+				Hash::Random32(bytes) | Hash::Blake3(bytes) => ENCODING.encode(&bytes),
 			},
 		};
 		write!(f, "{kind}_{version}{algorithm}{hash}")?;

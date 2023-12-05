@@ -70,7 +70,7 @@ impl From<Module> for Url {
 		};
 
 		// Create the URL.
-		format!("tangram://{data}/{path}").parse().unwrap()
+		format!("tg://{data}/{path}").parse().unwrap()
 	}
 }
 
@@ -78,8 +78,8 @@ impl TryFrom<Url> for Module {
 	type Error = Error;
 
 	fn try_from(value: Url) -> Result<Self, Self::Error> {
-		// Ensure the scheme is "tangram".
-		if value.scheme() != "tangram" {
+		// Ensure the scheme is "tg".
+		if value.scheme() != "tg" {
 			return_error!("The URL has an invalid scheme.");
 		}
 

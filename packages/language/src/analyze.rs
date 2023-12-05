@@ -333,16 +333,16 @@ mod tests {
 	fn test_analyze() {
 		let text = r#"
 			export let metadata = { name: "name", version: "version" };
-			import defaultImport from "tangram:default_import";
+			import defaultImport from "tg:default_import";
 			import { namedImport } from "./named_import.tg";
-			import * as namespaceImport from "tangram:namespace_import";
+			import * as namespaceImport from "tg:namespace_import";
 			let dynamicImport = import("./dynamic_import.tg");
 			let include = tg.include("./include.txt");
 			export let nested = tg.target(() => {
-				let nestedDynamicImport = import("tangram:nested_dynamic_import");
+				let nestedDynamicImport = import("tg:nested_dynamic_import");
 				let nestedInclude = tg.include("./nested_include.txt");
 			});
-			export { namedExport } from "tangram:named_export";
+			export { namedExport } from "tg:named_export";
 			export * as namespaceExport from "./namespace_export.tg";
 		"#;
 		let left = Module::analyze(text.to_owned()).unwrap();
@@ -352,12 +352,12 @@ mod tests {
 			..Default::default()
 		};
 		let imports = [
-			"tangram:default_import",
+			"tg:default_import",
 			"./named_import.tg",
-			"tangram:namespace_import",
+			"tg:namespace_import",
 			"./dynamic_import.tg",
-			"tangram:nested_dynamic_import",
-			"tangram:named_export",
+			"tg:nested_dynamic_import",
+			"tg:named_export",
 			"./namespace_export.tg",
 		]
 		.into_iter()

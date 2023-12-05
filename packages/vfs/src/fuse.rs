@@ -1015,7 +1015,6 @@ impl Server {
 					1,
 				);
 				libc::execv(argv[0], argv.as_ptr());
-				libc::perror(b"tangram: failed to mount fuse\0".as_ptr().cast());
 				libc::close(fds[0]);
 				libc::exit(1);
 			}

@@ -9,7 +9,7 @@ pub enum Import {
 	/// An import of a module, such as `import "./module.tg"`.
 	Module(tg::Path),
 
-	/// An import of a dependency, such as `import "tangram:std"`.
+	/// An import of a dependency, such as `import "tg:std"`.
 	Dependency(tg::Dependency),
 }
 
@@ -52,7 +52,7 @@ impl std::fmt::Display for Import {
 			},
 
 			Import::Dependency(dependency) => {
-				write!(f, "tangram:{dependency}")?;
+				write!(f, "tg:{dependency}")?;
 			},
 		}
 		Ok(())
@@ -69,7 +69,7 @@ impl std::str::FromStr for Import {
 				return_error!(r#"The path "{path}" does not have a ".tg" extension."#);
 			}
 			Ok(Import::Module(path))
-		} else if let Some(value) = value.strip_prefix("tangram:") {
+		} else if let Some(value) = value.strip_prefix("tg:") {
 			let dependency = value
 				.parse()
 				.wrap_err_with(|| format!(r#"Failed to parse "{value}" as a dependency."#))?;

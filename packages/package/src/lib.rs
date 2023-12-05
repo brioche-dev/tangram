@@ -1580,8 +1580,8 @@ impl Ext for tg::Directory {
 // 				version: "1.0.0",
 // 			};
 
-// 			import bar from "tangram:?path=./path/to/bar";
-// 			import baz from "tangram:baz@^1";
+// 			import bar from "tg:?path=./path/to/bar";
+// 			import baz from "tg:baz@^1";
 // 			export default tg.target(() => tg`foo ${bar} {baz}`);
 // 		"#;
 
@@ -1591,7 +1591,7 @@ impl Ext for tg::Directory {
 // 				version: "1.0.0",
 // 			};
 
-// 			import * as baz from "tangram:baz@=1.2.3";
+// 			import * as baz from "tg:baz@=1.2.3";
 // 			export default tg.target(() => tg`bar ${baz}`);
 // 		"#;
 
@@ -1682,7 +1682,7 @@ impl Ext for tg::Directory {
 // 			.map(|dep| {
 // 				let name = dep.name.as_ref().unwrap();
 // 				let version = dep.version.as_ref().unwrap();
-// 				format!(r#"import * as {name} from "tangram:{name}@{version}";"#)
+// 				format!(r#"import * as {name} from "tg:{name}@{version}";"#)
 // 			})
 // 			.collect::<Vec<_>>()
 // 			.join("\n");
