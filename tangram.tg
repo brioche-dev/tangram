@@ -4,25 +4,25 @@ export let metadata = {
 };
 
 export default tg.target(async () => {
-  return [f(), g(), h()];
+	return [f(), g(), h()];
 });
 
 export let f = tg.target(async () => {
 	console.log("starting");
 	await tg.sleep(5);
-  return "Hello, World!";
+	return "Hello, World!";
 });
 
 export let g = tg.target(async () => {
 	console.log("starting");
 	await tg.sleep(5);
-  return "Hello, World!";
+	return "Hello, World!";
 });
 
 export let h = tg.target(async () => {
 	console.log("starting");
 	await tg.sleep(5);
-  return "Hello, World!";
+	return "Hello, World!";
 });
 
 export let source = tg.target(() =>
@@ -33,8 +33,8 @@ export let source = tg.target(() =>
 			["cli"]: tg.include("./packages/cli"),
 			["client"]: tg.include("./packages/client"),
 			["error"]: tg.include("./packages/error"),
-			["http"]: tg.include("./packages/http"),
 			["language"]: tg.include("./packages/language"),
+			["package"]: tg.include("./packages/package"),
 			["runtime"]: tg.include("./packages/runtime"),
 			["server"]: tg.include("./packages/server"),
 			["vfs"]: tg.include("./packages/vfs"),
