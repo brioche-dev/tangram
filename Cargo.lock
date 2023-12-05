@@ -3085,6 +3085,7 @@ dependencies = [
  "rand",
  "regex",
  "rustls",
+ "semver 1.0.20",
  "serde",
  "serde_json",
  "serde_urlencoded",
