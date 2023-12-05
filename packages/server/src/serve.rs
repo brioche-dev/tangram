@@ -174,7 +174,7 @@ impl Server {
 			(http::Method::GET, ["v1", "packages", _]) => {
 				self.handle_get_package_request(request).map(Some).boxed()
 			},
-			(http::Method::GET, ["v1", "packages", _, "versions", _]) => self
+			(http::Method::GET, ["v1", "packages", _, "versions"]) => self
 				.handle_get_package_version_request(request)
 				.map(Some)
 				.boxed(),
@@ -712,7 +712,7 @@ impl Server {
 	) -> Result<http::Response<Outgoing>> {
 		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, _, "packages", dependency] = path_components.as_slice() else {
+		let [_, "packages", dependency] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let dependency = dependency
