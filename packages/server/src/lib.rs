@@ -10,8 +10,7 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{Result, Wrap, WrapErr};
-use tangram_package::Ext;
-use tg::{dependency, util::rmrf, Handle};
+use tg::util::rmrf;
 
 mod build;
 mod clean;
@@ -19,7 +18,6 @@ mod database;
 mod migrations;
 mod object;
 mod package;
-mod pool;
 mod serve;
 
 /// A server.

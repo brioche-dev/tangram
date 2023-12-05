@@ -9,7 +9,6 @@ pub struct Database {
 	pub env: lmdb::Environment,
 	pub objects: lmdb::Database,
 	pub assignments: lmdb::Database,
-	pub trackers: lmdb::Database,
 }
 
 impl Database {
@@ -28,14 +27,10 @@ impl Database {
 		let assignments = env
 			.open_db(Some("assignments"))
 			.wrap_err("Failed to open the assignments database.")?;
-		let trackers = env
-			.open_db(Some("trackers"))
-			.wrap_err("Failed to open the trackers datatabse.")?;
 		let database = Database {
 			env,
 			objects,
 			assignments,
-			trackers,
 		};
 		Ok(database)
 	}

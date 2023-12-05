@@ -80,8 +80,9 @@ reqwest = { version = "0.11", default-features = false, features = [
   "stream",
   "rustls-tls",
 ] }
-rustls = "0.21"
-rustls-pemfile = "1"
+rustls = "0.22"
+rustls-pemfile = "2"
+rustls-pki-types = "1"
 semver = "1"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1"
@@ -115,7 +116,7 @@ tar = { version = "0.4" }
 tempfile = "3"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
-tokio-rustls = "0.24"
+tokio-rustls = "0.25"
 tokio-stream = { version = "0.1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 toml = { version = "0.8" }
@@ -128,7 +129,7 @@ urlencoding = "2"
 v8 = { version = "0.82" }
 varint-rs = "2"
 webbrowser = "0.8"
-webpki-roots = "0.25"
+webpki-roots = "0.26"
 xattr = { version = "1" }
 zerocopy = { version = "0.7", features = ["derive"] }
 zip = { version = "0.6", default-features = false, features = [

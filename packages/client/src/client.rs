@@ -149,23 +149,17 @@ impl Client {
 
 		// Create the connector.
 		let mut root_store = rustls::RootCertStore::empty();
-		root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-			rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-				ta.subject,
-				ta.spki,
-				ta.name_constraints,
-			)
-		}));
+		root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 		let mut config = rustls::ClientConfig::builder()
-			.with_safe_defaults()
 			.with_root_certificates(root_store)
 			.with_no_client_auth();
 		config.alpn_protocols = vec!["h2".into()];
 		let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
 
 		// Create the server name.
-		let server_name = rustls::ServerName::try_from(inet.host.to_string().as_str())
-			.wrap_err("Failed to create the server name.")?;
+		let server_name = rustls_pki_types::ServerName::try_from(inet.host.to_string().as_str())
+			.wrap_err("Failed to create the server name.")?
+			.to_owned();
 
 		// Connect via TLS.
 		let stream = connector
