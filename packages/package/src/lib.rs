@@ -688,7 +688,7 @@ async fn solve_inner(
 							tracing::error!(?dependant, ?e, "Failed to get versions of package.");
 
 							// We cannot solve this dependency.
-							current_frame.solution.mark_permanently(
+							next_frame.solution = current_frame.solution.mark_permanently(
 								context,
 								dependant,
 								Err(Error::Other(e)),
