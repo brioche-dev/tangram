@@ -43,6 +43,12 @@ struct Inner {
 	/// The build queue task sender.
 	build_queue_task_sender: tokio::sync::mpsc::UnboundedSender<BuildQueueTaskMessage>,
 
+	/// The build queue remote task.
+	build_queue_remote_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<()>>>>,
+
+	/// The build queue remote task sender.
+	build_queue_remote_task_sender: tokio::sync::mpsc::UnboundedSender<()>,
+
 	/// The build state.
 	build_state: std::sync::RwLock<HashMap<tg::build::Id, BuildState, fnv::FnvBuildHasher>>,
 
@@ -154,6 +160,7 @@ pub struct RemoteOptions {
 }
 
 impl Server {
+	#[allow(clippy::too_many_lines)]
 	pub async fn start(options: Options) -> Result<Server> {
 		// Get the addr.
 		let addr = options.addr;
@@ -210,6 +217,13 @@ impl Server {
 		let (build_queue_task_sender, build_queue_task_receiver) =
 			tokio::sync::mpsc::unbounded_channel();
 
+		// Create the build queue remote task.
+		let build_queue_remote_task = std::sync::Mutex::new(None);
+
+		// Create the build queue remote task channel.
+		let (build_queue_remote_task_sender, build_queue_remote_task_receiver) =
+			tokio::sync::mpsc::unbounded_channel();
+
 		// Create the build state.
 		let build_state = std::sync::RwLock::new(HashMap::default());
 
@@ -247,6 +261,8 @@ impl Server {
 			build_queue,
 			build_queue_task,
 			build_queue_task_sender,
+			build_queue_remote_task,
+			build_queue_remote_task_sender,
 			build_state,
 			database,
 			file_descriptor_semaphore,
@@ -279,6 +295,21 @@ impl Server {
 				async move { server.run_build_queue(build_queue_task_receiver).await }
 			}));
 
+		// Start the build queue remote task.
+		server
+			.inner
+			.build_queue_remote_task
+			.lock()
+			.unwrap()
+			.replace(tokio::spawn({
+				let server = server.clone();
+				async move {
+					server
+						.run_build_queue_remote(build_queue_remote_task_receiver)
+						.await
+				}
+			}));
+
 		// Start the HTTP server task.
 		let task = tokio::spawn({
 			let server = server.clone();
@@ -297,6 +328,9 @@ impl Server {
 		if let Some(handle) = self.inner.task.1.lock().unwrap().as_ref() {
 			handle.abort();
 		};
+
+		// Stop the build queue remote task.
+		self.inner.build_queue_remote_task_sender.send(()).unwrap();
 
 		// Stop the build queue task.
 		self.inner
@@ -318,6 +352,16 @@ impl Server {
 			}
 			.unwrap()?;
 		}
+
+		// Join the build queue remote task.
+		let build_queue_remote_task = self
+			.inner
+			.build_queue_remote_task
+			.lock()
+			.unwrap()
+			.take()
+			.unwrap();
+		build_queue_remote_task.await.unwrap()?;
 
 		// Join the build queue task.
 		let build_queue_task = self.inner.build_queue_task.lock().unwrap().take().unwrap();
@@ -422,9 +466,9 @@ impl tg::Handle for Server {
 	async fn get_build_from_queue(
 		&self,
 		user: Option<&tg::User>,
-		systems: Option<Vec<tg::System>>,
-	) -> Result<tg::build::queue::Item> {
-		self.get_build_from_queue(user, systems).await
+		hosts: Option<Vec<tg::System>>,
+	) -> Result<Option<tg::build::queue::Item>> {
+		self.get_build_from_queue(user, hosts).await
 	}
 
 	async fn try_get_build_target(&self, id: &tg::build::Id) -> Result<Option<tg::target::Id>> {

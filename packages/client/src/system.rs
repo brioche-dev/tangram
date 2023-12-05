@@ -36,7 +36,7 @@ impl System {
 	#[must_use]
 	pub fn js() -> System {
 		System {
-			arch: Arch::Aarch64,
+			arch: Arch::Js,
 			os: Os::Js,
 		}
 	}

@@ -494,13 +494,16 @@ impl TryFrom<String> for Retry {
 
 pub mod queue {
 	use super::{Id, Retry};
+	use crate::System;
 
 	#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 	pub struct Item {
 		pub build: Id,
+		pub host: System,
 		pub depth: u64,
 		pub retry: Retry,
 	}
+
 	impl PartialOrd for Item {
 		fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
 			Some(self.depth.cmp(&other.depth))

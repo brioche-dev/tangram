@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use http_body_util::{BodyExt, BodyStream};
+use itertools::Itertools;
 use std::{path::PathBuf, sync::Arc};
 use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
 use tokio::{
@@ -433,18 +434,18 @@ impl Handle for Client {
 	async fn get_build_from_queue(
 		&self,
 		user: Option<&User>,
-		systems: Option<Vec<System>>,
-	) -> Result<build::queue::Item> {
-		let uri = if let Some(systems) = systems {
-			let systems = systems
-				.iter()
-				.map(ToString::to_string)
-				.collect::<Vec<_>>()
-				.join(",");
-			format!("/v1/builds/queue?systems={systems}")
-		} else {
-			"/v1/builds/queue".to_owned()
-		};
+		hosts: Option<Vec<System>>,
+	) -> Result<Option<build::queue::Item>> {
+		#[derive(serde::Serialize)]
+		struct SearchParams {
+			#[serde(default)]
+			hosts: Option<String>,
+		}
+		let mut uri = "/v1/builds/queue".to_owned();
+		let hosts = hosts.map(|hosts| hosts.iter().map(ToString::to_string).join(","));
+		let search_params = SearchParams { hosts };
+		let search_params = serde_urlencoded::to_string(&search_params).unwrap();
+		uri.push_str(&format!("?{search_params}"));
 		let mut request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(uri);

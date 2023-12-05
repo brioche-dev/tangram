@@ -61,9 +61,9 @@ pub struct BuilderArgs {
 	#[arg(long, default_value = "false")]
 	enable_builder: Option<bool>,
 
-	/// The systems the builder should run builds for.
+	/// The host the builder should run builds for.
 	#[arg(long)]
-	systems: Option<Vec<tg::System>>,
+	hosts: Option<Vec<tg::System>>,
 }
 
 impl Cli {

@@ -267,21 +267,22 @@ impl Server {
 		#[derive(serde::Deserialize)]
 		struct SearchParams {
 			#[serde(default)]
-			systems: Option<Vec<tg::System>>,
+			hosts: Option<Vec<tg::System>>,
 		}
+
 		// Get the user.
 		let user = self.try_get_user_from_request(&request).await?;
 
 		// Get the search params.
-		let systems = if let Some(query) = request.uri().query() {
+		let hosts = if let Some(query) = request.uri().query() {
 			let search_params: SearchParams =
 				serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
-			search_params.systems
+			search_params.hosts
 		} else {
 			None
 		};
 
-		let build_id = self.get_build_from_queue(user.as_ref(), systems).await?;
+		let build_id = self.get_build_from_queue(user.as_ref(), hosts).await?;
 
 		// Create the response.
 		let body = serde_json::to_vec(&build_id).wrap_err("Failed to serialize the ID.")?;
@@ -315,6 +316,14 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
+		#[derive(serde::Deserialize)]
+		struct SearchParams {
+			#[serde(default)]
+			depth: u64,
+			#[serde(default)]
+			retry: tg::build::Retry,
+		}
+
 		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "targets", id, "build"] = path_components.as_slice() else {
@@ -323,13 +332,6 @@ impl Server {
 		let id = id.parse().wrap_err("Failed to parse the ID.")?;
 
 		// Get the search params.
-		#[derive(serde::Deserialize)]
-		struct SearchParams {
-			#[serde(default)]
-			depth: u64,
-			#[serde(default)]
-			retry: tg::build::Retry,
-		}
 		let Some(query) = request.uri().query() else {
 			return Ok(bad_request());
 		};
@@ -685,11 +687,12 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		// Read the search params.
 		#[derive(serde::Deserialize, Default)]
 		struct SearchParams {
 			query: String,
 		}
+
+		// Read the search params.
 		let Some(query) = request.uri().query() else {
 			return Ok(bad_request());
 		};

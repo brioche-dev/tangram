@@ -18,7 +18,7 @@ use tokio_stream::wrappers::BroadcastStream;
 impl Server {
 	pub(crate) async fn run_build_queue(
 		&self,
-		mut build_queue_task_receiver: tokio::sync::mpsc::UnboundedReceiver<BuildQueueTaskMessage>,
+		mut receiver: tokio::sync::mpsc::UnboundedReceiver<BuildQueueTaskMessage>,
 	) -> Result<()> {
 		loop {
 			loop {
@@ -40,8 +40,9 @@ impl Server {
 					// Set the build's status to building.
 					{
 						let mut state = self.inner.build_state.write().unwrap();
-						let state = state.get_mut(&item.build).unwrap();
-						*state.inner.status.lock().unwrap() = BuildStatus::Building;
+						if let Some(state) = state.get_mut(&item.build) {
+							*state.inner.status.lock().unwrap() = BuildStatus::Building;
+						};
 					}
 
 					// Start the build.
@@ -77,7 +78,7 @@ impl Server {
 			}
 
 			// Wait for a message on the channel.
-			let message = build_queue_task_receiver.recv().await.unwrap();
+			let message = receiver.recv().await.unwrap();
 			match message {
 				// If this is a build added or finished message, then attempt to start
 				BuildQueueTaskMessage::BuildAdded | BuildQueueTaskMessage::BuildFinished => {
@@ -90,11 +91,63 @@ impl Server {
 		}
 	}
 
+	pub async fn run_build_queue_remote(
+		&self,
+		mut receiver: tokio::sync::mpsc::UnboundedReceiver<()>,
+	) -> Result<()> {
+		// Get the remote.
+		let Some(remote) = self.inner.remote.as_ref() else {
+			return Ok(());
+		};
+
+		// Loop until a message is received.
+		while receiver.try_recv().is_err() {
+			// If the queue is full, then sleep and continue.
+			let len = self.inner.build_queue.lock().unwrap().len();
+			if len >= 10 {
+				tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+				continue;
+			}
+
+			// Attempt to get an item from the remote. If none is available, then sleep and continue.
+			let Some(item) = remote.get_build_from_queue(None, None).await.ok().flatten() else {
+				tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+				continue;
+			};
+
+			// Add the item to the queue.
+			self.inner.build_queue.lock().unwrap().push(item);
+
+			// Send a message to the build queue task that the item has been added.
+			self.inner
+				.build_queue_task_sender
+				.send(BuildQueueTaskMessage::BuildAdded)
+				.unwrap();
+		}
+
+		Ok(())
+	}
+
 	/// Attempt to get the build for a target.
 	pub async fn try_get_build_for_target(
 		&self,
 		id: &tg::target::Id,
 	) -> Result<Option<tg::build::Id>> {
+		// Attempt to get the build for the target from the build assignments.
+		'a: {
+			let Some(build_id) = self
+				.inner
+				.build_assignments
+				.read()
+				.unwrap()
+				.get(id)
+				.cloned()
+			else {
+				break 'a;
+			};
+			return Ok(Some(build_id));
+		}
+
 		// Attempt to get the build for the target from the database.
 		'a: {
 			let Some(build_id) = self.inner.database.try_get_build_for_target(id)? else {
@@ -133,6 +186,7 @@ impl Server {
 		retry: tg::build::Retry,
 	) -> Result<tg::build::Id> {
 		let target = tg::Target::with_id(id.clone());
+		let host = target.host(self).await?.clone();
 
 		// Attempt to get the build for the target.
 		if let Some(build_id) = self.try_get_build_for_target(id).await? {
@@ -228,11 +282,12 @@ impl Server {
 			.unwrap()
 			.push(tg::build::queue::Item {
 				build: build_id.clone(),
+				host,
 				depth,
 				retry,
 			});
 
-		// Send a message to the build queue task that the build has been added.
+		// Send a message to the build queue task that the item has been added.
 		self.inner
 			.build_queue_task_sender
 			.send(BuildQueueTaskMessage::BuildAdded)
@@ -352,15 +407,17 @@ impl Server {
 	pub async fn get_build_from_queue(
 		&self,
 		user: Option<&tg::User>,
-		systems: Option<Vec<tg::System>>,
-	) -> Result<tg::build::queue::Item> {
+		hosts: Option<Vec<tg::System>>,
+	) -> Result<Option<tg::build::queue::Item>> {
 		// Attempt to get a build from the queue from the remote.
 		'a: {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
-			let item = remote.get_build_from_queue(user, systems).await?;
-			return Ok(item);
+			let Some(item) = remote.get_build_from_queue(user, hosts).await? else {
+				break 'a;
+			};
+			return Ok(Some(item));
 		}
 
 		return_error!("Failed to get a build from the queue.");

@@ -48,8 +48,8 @@ pub trait Handle: Send + Sync + 'static {
 	async fn get_build_from_queue(
 		&self,
 		user: Option<&User>,
-		systems: Option<Vec<system::System>>,
-	) -> Result<build::queue::Item>;
+		hosts: Option<Vec<system::System>>,
+	) -> Result<Option<build::queue::Item>>;
 
 	async fn get_build_target(&self, id: &build::Id) -> Result<target::Id> {
 		Ok(self
