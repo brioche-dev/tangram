@@ -1,6 +1,9 @@
 import * as esbuild from "esbuild";
 import alias from "esbuild-plugin-alias";
 import * as path from "path";
+import assert from "node:assert";
+
+assert(process.env["OUT_DIR"]);
 
 await esbuild.build({
 	bundle: true,

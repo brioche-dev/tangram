@@ -1,4 +1,7 @@
 import * as esbuild from "esbuild";
+import assert from "node:assert";
+
+assert(process.env["OUT_DIR"]);
 
 await esbuild.build({
 	bundle: true,

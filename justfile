@@ -5,9 +5,6 @@ check:
 clean:
 	umount ~/.tangram/artifacts; rm -rf ~/.tangram
 
-language:
-	npm run -w @tangramdotdev/language build
-
 orb_clean:
 	orb sh -c "umount /home/$USER/.tangram/artifacts; rm -rf /home/$USER/.tangram;"
 
@@ -22,9 +19,6 @@ orb_tg +ARGS:
 
 orb_tgr +ARGS:
 	cargo build --target aarch64-unknown-linux-gnu --release && orb sh -c "./target/aarch64-unknown-linux-gnu/release/tg {{ARGS}}"
-
-runtime:
-	npm run -w @tangramdotdev/runtime build
 
 serve_dev:
 	cargo run -- server run
