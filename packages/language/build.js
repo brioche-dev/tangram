@@ -7,7 +7,7 @@ await esbuild.build({
 	entryPoints: ["./src/main.ts"],
 	inject: ["./src/node.js"],
 	minify: true,
-	outfile: "./src/main.js",
+	outfile: process.env["OUT_DIR"] + "/main.js",
 	plugins: [
 		alias({
 			assert: path.resolve("./src/node/assert.cjs"),

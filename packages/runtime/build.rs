@@ -2,14 +2,22 @@ fn main() {
 	println!("cargo:rerun-if-changed=build.rs");
 	let out_dir_path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
 
+	// Build the JS.
+	println!("cargo:rerun-if-changed=../../node_modules");
+	println!("cargo:rerun-if-changed=src");
+	std::process::Command::new("npm")
+		.args(["run", "build"])
+		.output()
+		.unwrap();
+
 	// Initialize V8.
 	let platform = v8::new_default_platform(0, false).make_shared();
 	v8::V8::initialize_platform(platform);
 	v8::V8::initialize();
 
-	println!("cargo:rerun-if-changed=src/js/main.js");
+	// Create the snapshot.
 	let path = out_dir_path.join("runtime.heapsnapshot");
-	let snapshot = create_snapshot("src/js/main.js");
+	let snapshot = create_snapshot(out_dir_path.join("main.js"));
 	std::fs::write(path, snapshot).unwrap();
 }
 

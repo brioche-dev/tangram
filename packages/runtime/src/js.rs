@@ -19,8 +19,7 @@ mod syscall;
 
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runtime.heapsnapshot"));
 
-const SOURCE_MAP: &[u8] =
-	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/js/main.js.map"));
+const SOURCE_MAP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/main.js.map"));
 
 struct State {
 	build: tg::Build,

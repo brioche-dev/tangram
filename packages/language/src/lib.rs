@@ -50,8 +50,7 @@ pub const ROOT_MODULE_FILE_NAME: &str = "tangram.tg";
 
 const SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/language.heapsnapshot"));
 
-pub const SOURCE_MAP: &[u8] =
-	include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.js.map"));
+pub const SOURCE_MAP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/main.js.map"));
 
 type _Receiver = tokio::sync::mpsc::UnboundedReceiver<jsonrpc::Message>;
 type Sender = tokio::sync::mpsc::UnboundedSender<jsonrpc::Message>;
