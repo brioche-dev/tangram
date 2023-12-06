@@ -2,8 +2,9 @@ use crate::{
 	checksum, directory, file, id, object, symlink, Checksum, Directory, File, Handle, Symlink,
 	Value,
 };
+use async_recursion::async_recursion;
 use derive_more::{From, TryInto, TryUnwrap};
-use futures::stream::{FuturesUnordered, TryStreamExt};
+use futures::stream::{FuturesOrdered, FuturesUnordered, TryStreamExt};
 use std::collections::{HashSet, VecDeque};
 use tangram_error::{return_error, Error, Result};
 
@@ -109,6 +110,26 @@ impl Artifact {
 		}
 	}
 
+	/// Collect an artifact's references.
+	#[async_recursion]
+	pub async fn references(&self, tg: &dyn Handle) -> Result<Vec<Self>> {
+		match self {
+			Self::Directory(directory) => Ok(directory
+				.entries(tg)
+				.await?
+				.values()
+				.map(|artifact| artifact.references(tg))
+				.collect::<FuturesOrdered<_>>()
+				.try_collect::<Vec<_>>()
+				.await?
+				.into_iter()
+				.flatten()
+				.collect()),
+			Self::File(file) => Ok(file.references(tg).await?.to_owned()),
+			Self::Symlink(symlink) => Ok(symlink.artifact(tg).await?.clone().into_iter().collect()),
+		}
+	}
+
 	/// Collect an artifact's recursive references.
 	pub async fn recursive_references(
 		&self,
@@ -122,17 +143,7 @@ impl Artifact {
 
 		while let Some(artifact) = queue.pop_front() {
 			// Add a request for the artifact's references to the futures.
-			futures.push(async move {
-				Ok::<Vec<Artifact>, Error>(match artifact {
-					Self::Directory(directory) => {
-						directory.entries(tg).await?.values().cloned().collect()
-					},
-					Self::File(file) => file.references(tg).await?.to_owned(),
-					Self::Symlink(symlink) => {
-						symlink.artifact(tg).await?.clone().into_iter().collect()
-					},
-				})
-			});
+			futures.push(async move { artifact.references(tg).await });
 
 			// If the queue is empty, then get more artifacts from the futures.
 			if queue.is_empty() {
