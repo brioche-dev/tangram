@@ -59,9 +59,10 @@ impl Template {
 		// Create the regex.
 		let artifacts_paths = artifacts_paths
 			.iter()
-			.map(|artifacts_path| artifacts_path.to_str().unwrap())
+			.map(|artifacts_path| artifacts_path.to_str().unwrap().replace('.', r"\."))
 			.join("|");
-		let regex = format!(r"(?:{artifacts_paths})/([0-9a-f]{{64}})");
+		let regex =
+			format!(r"(?:{artifacts_paths})/((fil_|dir_|sym_)([0-9a-z]{{2}}[2-7a-z]{{52}}))");
 		let regex = regex::Regex::new(&regex).unwrap();
 
 		let mut i = 0;
