@@ -330,7 +330,7 @@ impl Server {
 		};
 
 		// Stop the build queue remote task.
-		self.inner.build_queue_remote_task_sender.send(()).unwrap();
+		self.inner.build_queue_remote_task_sender.send(()).ok();
 
 		// Stop the build queue task.
 		self.inner
