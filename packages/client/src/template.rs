@@ -61,8 +61,7 @@ impl Template {
 			.iter()
 			.map(|artifacts_path| artifacts_path.to_str().unwrap().replace('.', r"\."))
 			.join("|");
-		let regex =
-			format!(r"(?:{artifacts_paths})/((fil_|dir_|sym_)([0-9a-z]{{2}}[2-7a-z]{{52}}))");
+		let regex = format!(r"(?:{artifacts_paths})/((fil_|dir_|sym_)01[a-z2-7]{{52}}))");
 		let regex = regex::Regex::new(&regex).unwrap();
 
 		let mut i = 0;
