@@ -63,8 +63,12 @@ export class Path {
 			this.#components.length = 0;
 		}
 
-		// Add the component to the path.
+		// Add the component.
 		this.#components.push(component);
+	}
+
+	pop() {
+		this.#components.pop();
 	}
 
 	parent(): Path {
@@ -81,14 +85,14 @@ export class Path {
 
 	normalize(): Path {
 		let path = new Path([]);
-		for (let component of this.#components) {
-			let lastComponent = path.#components.at(-1);
+		for (let component of this.components()) {
+			let lastComponent = path.components().at(-1);
 			if (
 				component === ".." &&
 				lastComponent !== undefined &&
 				Path.Component.isNormal(lastComponent)
 			) {
-				path.#components.pop();
+				path.pop();
 			} else {
 				path.push(component);
 			}
@@ -98,8 +102,8 @@ export class Path {
 
 	toString(): string {
 		let string = "";
-		for (let i = 0; i < this.#components.length; i++) {
-			let component = this.#components[i]!;
+		for (let i = 0; i < this.components().length; i++) {
+			let component = this.components()[i]!;
 			if (Path.Component.isRoot(component)) {
 				string += "/";
 			} else if (component === ".") {
@@ -123,7 +127,7 @@ export class Path {
 	}
 
 	isAbsolute(): boolean {
-		let firstComponent = this.#components.at(0);
+		let firstComponent = this.components().at(0);
 		if (firstComponent === undefined) {
 			return false;
 		}
@@ -131,7 +135,7 @@ export class Path {
 	}
 
 	extension(): string | undefined {
-		let lastComponent = this.#components.at(-1);
+		let lastComponent = this.components().at(-1);
 		if (lastComponent === undefined) {
 			return undefined;
 		}

@@ -2,7 +2,7 @@ pub use self::component::Component;
 use crate::{object, Artifact, Error, Handle, Result};
 use futures::{stream::FuturesOrdered, Future, TryStreamExt};
 use itertools::Itertools;
-use std::{borrow::Cow, path::PathBuf};
+use std::borrow::Cow;
 
 #[derive(Clone, Debug, Default)]
 pub struct Template {
@@ -55,14 +55,10 @@ impl Template {
 			.join(""))
 	}
 
-	pub fn unrender(artifacts_paths: &[PathBuf], string: &str) -> Result<Self> {
+	pub fn unrender(string: &str) -> Result<Self> {
 		// Create the regex.
-		let artifacts_paths = artifacts_paths
-			.iter()
-			.map(|artifacts_path| artifacts_path.to_str().unwrap().replace('.', r"\."))
-			.join("|");
-		let regex = format!(r"(?:{artifacts_paths})/((?:fil_|dir_|sym_)01[a-z2-7]{{52}})");
-		let regex = regex::Regex::new(&regex).unwrap();
+		let regex = r"/\.tangram/artifacts/((?:fil_|dir_|sym_)01[a-z2-7]{52})";
+		let regex = regex::Regex::new(regex).unwrap();
 
 		let mut i = 0;
 		let mut components = Vec::new();

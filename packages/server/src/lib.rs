@@ -12,6 +12,7 @@ use tangram_client as tg;
 use tangram_error::{Result, Wrap, WrapErr};
 use tg::util::rmrf;
 
+mod artifact;
 mod build;
 mod clean;
 mod database;
@@ -432,10 +433,6 @@ impl tg::Handle for Server {
 		self.get_object_exists(id).await
 	}
 
-	async fn get_object(&self, id: &tg::object::Id) -> Result<Bytes> {
-		self.get_object(id).await
-	}
-
 	async fn try_get_object(&self, id: &tg::object::Id) -> Result<Option<Bytes>> {
 		self.try_get_object(id).await
 	}
@@ -446,6 +443,22 @@ impl tg::Handle for Server {
 		bytes: &Bytes,
 	) -> Result<Result<(), Vec<tg::object::Id>>> {
 		self.try_put_object(id, bytes).await
+	}
+
+	async fn push_object(&self, id: &tg::object::Id) -> Result<()> {
+		self.push_object(id).await
+	}
+
+	async fn pull_object(&self, id: &tg::object::Id) -> Result<()> {
+		self.pull_object(id).await
+	}
+
+	async fn check_in_artifact(&self, path: &tg::Path) -> Result<tg::artifact::Id> {
+		self.check_in_artifact(path).await
+	}
+
+	async fn check_out_artifact(&self, id: &tg::artifact::Id, path: &tg::Path) -> Result<()> {
+		self.check_out_artifact(id, path).await
 	}
 
 	async fn try_get_build_for_target(&self, id: &tg::target::Id) -> Result<Option<tg::build::Id>> {
@@ -527,13 +540,6 @@ impl tg::Handle for Server {
 		self.finish_build(user, id, outcome).await
 	}
 
-	async fn create_package_and_lock(
-		&self,
-		dependency: &tg::Dependency,
-	) -> Result<(tg::directory::Id, tg::lock::Id)> {
-		self.create_package_and_lock(dependency).await
-	}
-
 	async fn search_packages(&self, query: &str) -> Result<Vec<String>> {
 		self.search_packages(query).await
 	}
@@ -543,6 +549,13 @@ impl tg::Handle for Server {
 		dependency: &tg::Dependency,
 	) -> Result<Option<tg::directory::Id>> {
 		self.try_get_package(dependency).await
+	}
+
+	async fn try_get_package_and_lock(
+		&self,
+		dependency: &tg::Dependency,
+	) -> Result<Option<(tg::directory::Id, tg::lock::Id)>> {
+		self.try_get_package_and_lock(dependency).await
 	}
 
 	async fn try_get_package_versions(

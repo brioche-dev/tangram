@@ -1,5 +1,6 @@
 use crate::{
-	build, directory, lock, object, package, status, system, target, user, Dependency, Id, User,
+	artifact, build, directory, lock, object, package, status, system, target, user, Dependency,
+	Id, User,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -34,6 +35,14 @@ pub trait Handle: Send + Sync + 'static {
 		id: &object::Id,
 		bytes: &Bytes,
 	) -> Result<Result<(), Vec<object::Id>>>;
+
+	async fn push_object(&self, id: &object::Id) -> Result<()>;
+
+	async fn pull_object(&self, id: &object::Id) -> Result<()>;
+
+	async fn check_in_artifact(&self, path: &crate::Path) -> Result<artifact::Id>;
+
+	async fn check_out_artifact(&self, id: &artifact::Id, path: &crate::Path) -> Result<()>;
 
 	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>>;
 
@@ -114,11 +123,6 @@ pub trait Handle: Send + Sync + 'static {
 		outcome: build::Outcome,
 	) -> Result<()>;
 
-	async fn create_package_and_lock(
-		&self,
-		_dependency: &Dependency,
-	) -> Result<(directory::Id, lock::Id)>;
-
 	async fn search_packages(&self, query: &str) -> Result<Vec<String>>;
 
 	async fn get_package(&self, dependency: &Dependency) -> Result<directory::Id> {
@@ -129,6 +133,21 @@ pub trait Handle: Send + Sync + 'static {
 	}
 
 	async fn try_get_package(&self, dependency: &Dependency) -> Result<Option<directory::Id>>;
+
+	async fn get_package_and_lock(
+		&self,
+		dependency: &Dependency,
+	) -> Result<(directory::Id, lock::Id)> {
+		Ok(self
+			.try_get_package_and_lock(dependency)
+			.await?
+			.wrap_err("Failed to get the package and lock.")?)
+	}
+
+	async fn try_get_package_and_lock(
+		&self,
+		dependency: &Dependency,
+	) -> Result<Option<(directory::Id, lock::Id)>>;
 
 	async fn get_package_versions(&self, dependency: &Dependency) -> Result<Vec<String>> {
 		Ok(self

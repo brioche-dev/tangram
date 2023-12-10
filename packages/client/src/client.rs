@@ -1,9 +1,10 @@
 use crate::{
-	build, directory, lock, object, package, target, user, Dependency, Handle, Id, Status, System,
-	User,
+	artifact, build, directory, lock, object, package, target, user, Dependency, Handle, Id,
+	Status, System, User,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
+use derive_more::TryUnwrap;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use http_body_util::{BodyExt, BodyStream};
 use itertools::Itertools;
@@ -54,6 +55,49 @@ pub struct Builder {
 	addr: Addr,
 	tls: Option<bool>,
 	user: Option<User>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct CheckinArtifactBody {
+	pub path: crate::Path,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct CheckoutArtifactBody {
+	pub artifact: artifact::Id,
+	pub path: crate::Path,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct SearchPackagesSearchParams {
+	pub query: String,
+}
+
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+pub struct GetPackageSearchParams {
+	pub lock: bool,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, TryUnwrap)]
+#[serde(untagged)]
+#[try_unwrap(ref)]
+pub enum GetPackageBody {
+	Package(directory::Id),
+	PackageAndLock((directory::Id, lock::Id)),
+}
+
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+pub struct GetBuildQueueItemSearchParams {
+	#[serde(default)]
+	pub hosts: Option<String>,
+}
+
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+pub struct GetOrCreateBuildForTargetSearchParams {
+	#[serde(default)]
+	pub depth: u64,
+	#[serde(default)]
+	pub retry: build::Retry,
 }
 
 type Incoming = hyper::body::Incoming;
@@ -368,6 +412,71 @@ impl Handle for Client {
 		Ok(Ok(()))
 	}
 
+	async fn push_object(&self, id: &object::Id) -> Result<()> {
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/objects/{id}/push"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
+	}
+
+	async fn pull_object(&self, id: &object::Id) -> Result<()> {
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri(format!("/v1/objects/{id}/pull"))
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
+	}
+
+	async fn check_in_artifact(&self, path: &crate::Path) -> Result<artifact::Id> {
+		let body = CheckinArtifactBody { path: path.clone() };
+		let body = serde_json::to_string(&body).wrap_err("Failed to serialize the body.")?;
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri("/v1/artifacts/checkin")
+			.body(full(body))
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let id = serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+		Ok(id)
+	}
+
+	async fn check_out_artifact(&self, id: &artifact::Id, path: &crate::Path) -> Result<()> {
+		let body = CheckoutArtifactBody {
+			artifact: id.clone(),
+			path: path.clone(),
+		};
+		let body = serde_json::to_string(&body).wrap_err("Failed to serialize the body.")?;
+		let request = http::request::Builder::default()
+			.method(http::Method::POST)
+			.uri("/v1/artifacts/checkout")
+			.body(full(body))
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		Ok(())
+	}
+
 	async fn try_get_build_for_target(&self, id: &target::Id) -> Result<Option<build::Id>> {
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
@@ -397,14 +506,7 @@ impl Handle for Client {
 		depth: u64,
 		retry: build::Retry,
 	) -> Result<build::Id> {
-		#[derive(serde::Serialize)]
-		struct SearchParams {
-			#[serde(default)]
-			depth: u64,
-			#[serde(default)]
-			retry: build::Retry,
-		}
-		let search_params = SearchParams { depth, retry };
+		let search_params = GetOrCreateBuildForTargetSearchParams { depth, retry };
 		let search_params = serde_urlencoded::to_string(search_params)
 			.wrap_err("Failed to serialize the search params.")?;
 		let uri = format!("/v1/targets/{id}/build?{search_params}");
@@ -436,15 +538,11 @@ impl Handle for Client {
 		user: Option<&User>,
 		hosts: Option<Vec<System>>,
 	) -> Result<Option<build::queue::Item>> {
-		#[derive(serde::Serialize)]
-		struct SearchParams {
-			#[serde(default)]
-			hosts: Option<String>,
-		}
 		let mut uri = "/v1/builds/queue".to_owned();
 		let hosts = hosts.map(|hosts| hosts.iter().map(ToString::to_string).join(","));
-		let search_params = SearchParams { hosts };
-		let search_params = serde_urlencoded::to_string(&search_params).unwrap();
+		let search_params = GetBuildQueueItemSearchParams { hosts };
+		let search_params = serde_urlencoded::to_string(&search_params)
+			.wrap_err("Failed to serialize the search params.")?;
 		uri.push_str(&format!("?{search_params}"));
 		let mut request = http::request::Builder::default()
 			.method(http::Method::GET)
@@ -679,17 +777,17 @@ impl Handle for Client {
 		Ok(())
 	}
 
-	async fn create_package_and_lock(
-		&self,
-		_dependency: &Dependency,
-	) -> Result<(directory::Id, lock::Id)> {
-		return_error!("Unsupported.");
-	}
-
 	async fn search_packages(&self, query: &str) -> Result<Vec<String>> {
+		let mut uri = "/v1/packages/search".to_owned();
+		let search_params = SearchPackagesSearchParams {
+			query: query.to_owned(),
+		};
+		let search_params = serde_urlencoded::to_string(search_params)
+			.wrap_err("Failed to serialize the search params.")?;
+		uri.push_str(&format!("?{search_params}"));
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
-			.uri(format!("/v1/packages/search?query={query}"))
+			.uri(uri)
 			.body(empty())
 			.wrap_err("Failed to create the request.")?;
 		let response = self.send(request).await?;
@@ -707,6 +805,8 @@ impl Handle for Client {
 	}
 
 	async fn try_get_package(&self, dependency: &Dependency) -> Result<Option<directory::Id>> {
+		let dependency = dependency.to_string();
+		let dependency = urlencoding::encode(&dependency);
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{dependency}"))
@@ -721,15 +821,62 @@ impl Handle for Client {
 			.await
 			.wrap_err("Failed to collect the response body.")?
 			.to_bytes();
-		let response =
+		let body: Option<GetPackageBody> =
 			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
-		Ok(response)
+		let Some(body) = body else {
+			return Ok(None);
+		};
+		let GetPackageBody::Package(package) = body else {
+			return_error!("Unexpected body.");
+		};
+		Ok(Some(package))
+	}
+
+	async fn try_get_package_and_lock(
+		&self,
+		dependency: &Dependency,
+	) -> Result<Option<(directory::Id, lock::Id)>> {
+		let dependency = dependency.to_string();
+		let dependency = urlencoding::encode(&dependency);
+		let mut uri = format!("/v1/packages/{dependency}");
+		let search_params = GetPackageSearchParams { lock: true };
+		let search_params = serde_urlencoded::to_string(&search_params)
+			.wrap_err("Failed to serialize the search params.")?;
+		uri.push_str(&format!("?{search_params}"));
+		let request = http::request::Builder::default()
+			.method(http::Method::GET)
+			.uri(uri)
+			.body(empty())
+			.wrap_err("Failed to create the request.")?;
+		let response = self.send(request).await?;
+		if response.status() == http::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		if !response.status().is_success() {
+			return_error!("Expected the response's status to be success.");
+		}
+		let bytes = response
+			.collect()
+			.await
+			.wrap_err("Failed to collect the response body.")?
+			.to_bytes();
+		let body: Option<GetPackageBody> =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the response body.")?;
+		let Some(body) = body else {
+			return Ok(None);
+		};
+		let GetPackageBody::PackageAndLock((package, lock)) = body else {
+			return_error!("Unexpected body.");
+		};
+		Ok(Some((package, lock)))
 	}
 
 	async fn try_get_package_versions(
 		&self,
 		dependency: &Dependency,
 	) -> Result<Option<Vec<String>>> {
+		let dependency = dependency.to_string();
+		let dependency = urlencoding::encode(&dependency);
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{dependency}/versions"))
@@ -753,6 +900,8 @@ impl Handle for Client {
 		&self,
 		dependency: &Dependency,
 	) -> Result<Option<package::Metadata>> {
+		let dependency = dependency.to_string();
+		let dependency = urlencoding::encode(&dependency);
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{dependency}/metadata"))
@@ -776,6 +925,8 @@ impl Handle for Client {
 		&self,
 		dependency: &Dependency,
 	) -> Result<Option<Vec<Dependency>>> {
+		let dependency = dependency.to_string();
+		let dependency = urlencoding::encode(&dependency);
 		let request = http::request::Builder::default()
 			.method(http::Method::GET)
 			.uri(format!("/v1/packages/{dependency}/dependencies"))

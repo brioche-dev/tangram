@@ -45,7 +45,7 @@ impl Cli {
 		let tg = tg.as_ref();
 
 		// Create the package.
-		let (package, lock) = tangram_package::new(tg, &args.package).await?;
+		let (package, lock) = tg::package::get_with_lock(tg, &args.package).await?;
 
 		// Create the target.
 		let env = [(
@@ -55,7 +55,7 @@ impl Cli {
 		.into();
 		let args_ = Vec::new();
 		let host = tg::System::js();
-		let path = tangram_package::ROOT_MODULE_FILE_NAME
+		let path = tg::package::ROOT_MODULE_FILE_NAME
 			.to_owned()
 			.try_into()
 			.unwrap();
@@ -110,7 +110,7 @@ impl Cli {
 			let artifact = tg::Artifact::try_from(output.clone())
 				.wrap_err("Expected the output to be an artifact.")?;
 			artifact
-				.check_out(tg, &path)
+				.check_out(tg, &path.try_into()?)
 				.await
 				.wrap_err("Failed to check out the artifact.")?;
 		}

@@ -7,7 +7,9 @@ pub fn errno() -> i32 {
 	std::io::Error::last_os_error().raw_os_error().unwrap()
 }
 
-pub async fn rmrf(path: &Path) -> Result<()> {
+pub async fn rmrf(path: impl AsRef<Path>) -> Result<()> {
+	let path = path.as_ref();
+
 	// Get the metadata for the path.
 	let metadata = match tokio::fs::metadata(path).await {
 		Ok(metadata) => metadata,

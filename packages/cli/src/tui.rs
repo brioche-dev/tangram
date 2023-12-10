@@ -13,7 +13,7 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_package::Ext;
+use tg::package::Ext;
 use tui::{style::Stylize, widgets::Widget};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;

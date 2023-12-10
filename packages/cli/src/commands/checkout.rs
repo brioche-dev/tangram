@@ -29,7 +29,7 @@ impl Cli {
 
 		// Check out the artifact.
 		tg::Artifact::with_id(args.id)
-			.check_out(tg, &path)
+			.check_out(tg, &path.try_into()?)
 			.await
 			.wrap_err("Failed to check out the artifact.")?;
 

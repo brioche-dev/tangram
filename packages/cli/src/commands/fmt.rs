@@ -1,5 +1,6 @@
 use crate::Cli;
 use std::path::PathBuf;
+use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
 
 /// Format the files in a package.
@@ -19,7 +20,7 @@ impl Cli {
 		// Create the language server.
 		let server = tangram_language::Server::new(tg, tokio::runtime::Handle::current());
 
-		let path = args.path.join(tangram_package::ROOT_MODULE_FILE_NAME);
+		let path = args.path.join(tg::package::ROOT_MODULE_FILE_NAME);
 		let text = tokio::fs::read_to_string(&path)
 			.await
 			.wrap_err("Failed to read the file.")?;

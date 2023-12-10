@@ -2,7 +2,7 @@ use super::Server;
 use bytes::Bytes;
 use futures::{stream, StreamExt, TryStreamExt};
 use tangram_client as tg;
-use tangram_error::{Error, Result, WrapErr};
+use tangram_error::{return_error, Error, Result, WrapErr};
 use tg::object;
 
 impl Server {
@@ -25,12 +25,6 @@ impl Server {
 		}
 
 		Ok(false)
-	}
-
-	pub async fn get_object(&self, id: &object::Id) -> Result<Bytes> {
-		self.try_get_object(id)
-			.await?
-			.wrap_err("Failed to get the object.")
 	}
 
 	pub async fn try_get_object(&self, id: &object::Id) -> Result<Option<Bytes>> {
@@ -87,5 +81,23 @@ impl Server {
 		self.inner.database.put_object(id, bytes)?;
 
 		Ok(Ok(()))
+	}
+
+	pub async fn push_object(&self, id: &tg::object::Id) -> Result<()> {
+		let remote = self
+			.inner
+			.remote
+			.as_ref()
+			.wrap_err("The server does not have a remote.")?;
+		tg::object::Handle::with_id(id.clone())
+			.push(self, remote.as_ref())
+			.await
+			.wrap_err("Failed to push the package.")?;
+		Ok(())
+	}
+
+	#[allow(clippy::unused_async)]
+	pub async fn pull_object(&self, _id: &tg::object::Id) -> Result<()> {
+		return_error!("Not yet implemented.");
 	}
 }

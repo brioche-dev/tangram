@@ -23,7 +23,7 @@ impl Cli {
 		let server = tangram_language::Server::new(tg, tokio::runtime::Handle::current());
 
 		// Get the package.
-		let (package, lock) = tangram_package::new(tg, &args.package).await?;
+		let (package, lock) = tg::package::get_with_lock(tg, &args.package).await?;
 
 		// Check the package for diagnostics.
 		let diagnostics = server
@@ -31,7 +31,7 @@ impl Cli {
 				tangram_language::module::Normal {
 					package: package.id(tg).await?.clone(),
 					lock: lock.id(tg).await?.clone(),
-					path: tangram_package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
+					path: tg::package::ROOT_MODULE_FILE_NAME.parse().unwrap(),
 				},
 			)])
 			.await?;

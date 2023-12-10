@@ -99,8 +99,7 @@ impl Module {
 				// Get the lock for the document's package.
 				let path = document.package_path.clone().try_into()?;
 				let dependency_ = tg::Dependency::with_path(path);
-				let (_, lock) = tg.create_package_and_lock(&dependency_).await?;
-				let lock = tg::Lock::with_id(lock);
+				let (_, lock) = tg::package::get_with_lock(tg, &dependency_).await?;
 
 				// Get the lock entry for the dependency.
 				let Some(entry) = lock.dependencies(tg).await?.get(&dependency) else {

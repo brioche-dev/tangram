@@ -97,6 +97,18 @@ impl Artifact {
 }
 
 impl Artifact {
+	pub async fn check_in(tg: &dyn Handle, path: &crate::Path) -> Result<Self> {
+		let id = tg.check_in_artifact(path).await?;
+		let artifact = Self::with_id(id);
+		Ok(artifact)
+	}
+
+	pub async fn check_out(&self, tg: &dyn Handle, path: &crate::Path) -> Result<()> {
+		let id = self.id(tg).await?;
+		tg.check_out_artifact(&id, path).await?;
+		Ok(())
+	}
+
 	/// Compute an artifact's checksum.
 	#[allow(clippy::unused_async)]
 	pub async fn checksum(

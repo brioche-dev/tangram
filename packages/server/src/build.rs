@@ -844,10 +844,21 @@ impl Server {
 
 		// Attempt to finish the build on the remote.
 		'a: {
+			// Get the remote.
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
 			};
+
+			// Push the outcome.
+			if let tg::build::Outcome::Succeeded(value) = &outcome {
+				if let Some(object) = value.object() {
+					object.push(self, remote.as_ref()).await?;
+				}
+			}
+
+			// Finish the build.
 			remote.finish_build(user, id, outcome).await?;
+
 			return Ok(());
 		}
 

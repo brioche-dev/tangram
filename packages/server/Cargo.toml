@@ -44,4 +44,5 @@ tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+urlencoding = { workspace = true }
 xattr = { workspace = true }

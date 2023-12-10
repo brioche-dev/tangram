@@ -256,6 +256,7 @@ impl Blob {
 		.unwrap()?;
 
 		// Check in the extracted artifact.
+		let path = path.try_into()?;
 		let artifact = Artifact::check_in(tg, &path)
 			.await
 			.wrap_err("Failed to check in the extracted archive.")?;

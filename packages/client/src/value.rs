@@ -90,6 +90,19 @@ pub enum Data {
 }
 
 impl Value {
+	pub fn object(&self) -> Option<object::Handle> {
+		match self {
+			Value::Leaf(leaf) => Some(object::Handle::Leaf(leaf.clone())),
+			Value::Branch(branch) => Some(object::Handle::Branch(branch.clone())),
+			Value::Directory(directory) => Some(object::Handle::Directory(directory.clone())),
+			Value::File(file) => Some(object::Handle::File(file.clone())),
+			Value::Symlink(symlink) => Some(object::Handle::Symlink(symlink.clone())),
+			Value::Lock(lock) => Some(object::Handle::Lock(lock.clone())),
+			Value::Target(target) => Some(object::Handle::Target(target.clone())),
+			_ => None,
+		}
+	}
+
 	#[async_recursion]
 	pub async fn data(&self, tg: &dyn Handle) -> Result<Data> {
 		let data = match self {

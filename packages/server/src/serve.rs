@@ -165,6 +165,22 @@ impl Server {
 			(http::Method::PUT, ["v1", "objects", _]) => {
 				self.handle_put_object_request(request).map(Some).boxed()
 			},
+			(http::Method::POST, ["v1", "objects", _, "push"]) => {
+				self.handle_push_object_request(request).map(Some).boxed()
+			},
+			(http::Method::POST, ["v1", "objects", _, "pull"]) => {
+				self.handle_pull_object_request(request).map(Some).boxed()
+			},
+
+			// Artifacts
+			(http::Method::POST, ["v1", "artifacts", "checkin"]) => self
+				.handle_check_in_artifact_request(request)
+				.map(Some)
+				.boxed(),
+			(http::Method::POST, ["v1", "artifacts", "checkout"]) => self
+				.handle_check_out_artifact_request(request)
+				.map(Some)
+				.boxed(),
 
 			// Packages
 			(http::Method::GET, ["v1", "packages", "search"]) => self
@@ -175,7 +191,7 @@ impl Server {
 				self.handle_get_package_request(request).map(Some).boxed()
 			},
 			(http::Method::GET, ["v1", "packages", _, "versions"]) => self
-				.handle_get_package_version_request(request)
+				.handle_get_package_versions_request(request)
 				.map(Some)
 				.boxed(),
 			(http::Method::GET, ["v1", "packages", _, "metadata"]) => self
@@ -264,20 +280,17 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<hyper::Response<Outgoing>> {
-		#[derive(serde::Deserialize)]
-		struct SearchParams {
-			#[serde(default)]
-			hosts: Option<Vec<tg::System>>,
-		}
-
 		// Get the user.
 		let user = self.try_get_user_from_request(&request).await?;
 
 		// Get the search params.
 		let hosts = if let Some(query) = request.uri().query() {
-			let search_params: SearchParams =
+			let search_params: tg::client::GetBuildQueueItemSearchParams =
 				serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
-			search_params.hosts
+			search_params
+				.hosts
+				.map(|hosts| hosts.split(',').map(str::parse).try_collect())
+				.transpose()?
 		} else {
 			None
 		};
@@ -316,14 +329,6 @@ impl Server {
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		#[derive(serde::Deserialize)]
-		struct SearchParams {
-			#[serde(default)]
-			depth: u64,
-			#[serde(default)]
-			retry: tg::build::Retry,
-		}
-
 		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
 		let [_, "targets", id, "build"] = path_components.as_slice() else {
@@ -335,7 +340,7 @@ impl Server {
 		let Some(query) = request.uri().query() else {
 			return Ok(bad_request());
 		};
-		let search_params: SearchParams =
+		let search_params: tg::client::GetOrCreateBuildForTargetSearchParams =
 			serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
 		let depth = search_params.depth;
 		let retry = search_params.retry;
@@ -683,20 +688,97 @@ impl Server {
 		Ok(ok())
 	}
 
+	async fn handle_check_in_artifact_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		// Read the body.
+		let bytes = request
+			.into_body()
+			.collect()
+			.await
+			.wrap_err("Failed to read the body.")?
+			.to_bytes();
+		let body: tg::client::CheckinArtifactBody =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+
+		// Check in the artifact.
+		let id = self.check_in_artifact(&body.path).await?;
+
+		// Create the response.
+		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the response.")?;
+		let response = http::Response::builder().body(full(body)).unwrap();
+
+		Ok(response)
+	}
+
+	async fn handle_check_out_artifact_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		// Read the body.
+		let bytes = request
+			.into_body()
+			.collect()
+			.await
+			.wrap_err("Failed to read the body.")?
+			.to_bytes();
+		let body: tg::client::CheckoutArtifactBody =
+			serde_json::from_slice(&bytes).wrap_err("Failed to deserialize the body.")?;
+
+		// Check out the artifact.
+		self.check_out_artifact(&body.artifact, &body.path).await?;
+
+		Ok(ok())
+	}
+
+	async fn handle_push_object_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		// Get the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let ["v1", "objects", id, "pull"] = path_components.as_slice() else {
+			return_error!("Unexpected path.")
+		};
+		let Ok(id) = id.parse() else {
+			return Ok(bad_request());
+		};
+
+		// Push the object.
+		self.push_object(&id).await?;
+
+		Ok(ok())
+	}
+
+	async fn handle_pull_object_request(
+		&self,
+		request: http::Request<Incoming>,
+	) -> Result<http::Response<Outgoing>> {
+		// Get the path params.
+		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
+		let ["v1", "objects", id, "pull"] = path_components.as_slice() else {
+			return_error!("Unexpected path.")
+		};
+		let Ok(id) = id.parse() else {
+			return Ok(bad_request());
+		};
+
+		// Pull the object.
+		self.pull_object(&id).await?;
+
+		Ok(ok())
+	}
+
 	async fn handle_search_packages_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
-		#[derive(serde::Deserialize, Default)]
-		struct SearchParams {
-			query: String,
-		}
-
 		// Read the search params.
 		let Some(query) = request.uri().query() else {
 			return Ok(bad_request());
 		};
-		let search_params: SearchParams =
+		let search_params: tg::client::SearchPackagesSearchParams =
 			serde_urlencoded::from_str(query).wrap_err("Failed to parse the search params.")?;
 
 		// Perform the search.
@@ -718,17 +800,40 @@ impl Server {
 		let [_, "packages", dependency] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
+		let dependency =
+			urlencoding::decode(dependency).wrap_err("Failed to decode the dependency.")?;
 		let dependency = dependency
 			.parse()
 			.wrap_err("Failed to parse the dependency.")?;
 
+		// Get the search params.
+		let search_params: tg::client::GetPackageSearchParams = request
+			.uri()
+			.query()
+			.map(|query| {
+				serde_urlencoded::from_str(query)
+					.wrap_err("Failed to deserialize the search params.")
+			})
+			.transpose()?
+			.unwrap_or_default();
+
 		// Get the package.
-		let Some(id) = self.try_get_package(&dependency).await? else {
+		let body = if search_params.lock {
+			self.try_get_package_and_lock(&dependency)
+				.await?
+				.map(tg::client::GetPackageBody::PackageAndLock)
+		} else {
+			self.try_get_package(&dependency)
+				.await?
+				.map(tg::client::GetPackageBody::Package)
+		};
+
+		let Some(body) = body else {
 			return Ok(not_found());
 		};
 
 		// Create the body.
-		let body = serde_json::to_vec(&id).wrap_err("Failed to serialize the ID.")?;
+		let body = serde_json::to_vec(&body).wrap_err("Failed to serialize the ID.")?;
 
 		// Create the response.
 		let response = http::Response::builder().body(full(body)).unwrap();
@@ -736,7 +841,7 @@ impl Server {
 		Ok(response)
 	}
 
-	async fn handle_get_package_version_request(
+	async fn handle_get_package_versions_request(
 		&self,
 		request: http::Request<Incoming>,
 	) -> Result<http::Response<Outgoing>> {
@@ -745,6 +850,8 @@ impl Server {
 		let [_, _, "packages", dependency, "versions"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
+		let dependency =
+			urlencoding::decode(dependency).wrap_err("Failed to decode the dependency.")?;
 		let dependency = dependency
 			.parse()
 			.wrap_err("Failed to parse the dependency.")?;
@@ -773,29 +880,24 @@ impl Server {
 		let [_, "packages", dependency, "metadata"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
+		let dependency =
+			urlencoding::decode(dependency).wrap_err("Failed to decode the dependency.")?;
 		let dependency = dependency
 			.parse()
 			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package metadata.
-		let metadata = self.try_get_package_metadata(&dependency).await?;
+		let Some(metadata) = self.try_get_package_metadata(&dependency).await? else {
+			return Ok(not_found());
+		};
 
-		match metadata {
-			Some(metadata) => {
-				// Create the body.
-				let body =
-					serde_json::to_vec(&metadata).wrap_err("Failed to serialize the metadata.")?;
+		// Create the body.
+		let body = serde_json::to_vec(&metadata).wrap_err("Failed to serialize the metadata.")?;
 
-				// Create the response.
-				let response = http::Response::builder().body(full(body)).unwrap();
+		// Create the response.
+		let response = http::Response::builder().body(full(body)).unwrap();
 
-				Ok(response)
-			},
-			None => Ok(http::Response::builder()
-				.status(http::StatusCode::NOT_FOUND)
-				.body(empty())
-				.unwrap()),
-		}
+		Ok(response)
 	}
 
 	async fn handle_get_package_dependencies_request(
@@ -807,29 +909,25 @@ impl Server {
 		let [_, "packages", dependency, "dependencies"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
+		let dependency =
+			urlencoding::decode(dependency).wrap_err("Failed to decode the dependency.")?;
 		let dependency = dependency
 			.parse()
 			.wrap_err("Failed to parse the dependency.")?;
 
 		// Get the package dependencies.
-		let dependencies = self.try_get_package_dependencies(&dependency).await?;
+		let Some(dependencies) = self.try_get_package_dependencies(&dependency).await? else {
+			return Ok(not_found());
+		};
 
-		match dependencies {
-			Some(dependencies) => {
-				// Create the body.
-				let body = serde_json::to_vec(&dependencies)
-					.wrap_err("Failed to serialize the package.")?;
+		// Create the body.
+		let body =
+			serde_json::to_vec(&dependencies).wrap_err("Failed to serialize the package.")?;
 
-				// Create the response.
-				let response = http::Response::builder().body(full(body)).unwrap();
+		// Create the response.
+		let response = http::Response::builder().body(full(body)).unwrap();
 
-				Ok(response)
-			},
-			None => Ok(http::Response::builder()
-				.status(http::StatusCode::NOT_FOUND)
-				.body(empty())
-				.unwrap()),
-		}
+		Ok(response)
 	}
 
 	async fn handle_publish_package_request(

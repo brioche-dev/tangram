@@ -22,6 +22,8 @@ mod lsp;
 mod new;
 mod outdated;
 mod publish;
+mod pull;
+mod push;
 mod run;
 mod search;
 mod server;
@@ -66,6 +68,8 @@ pub enum Command {
 	New(self::new::Args),
 	Outdated(self::outdated::Args),
 	Publish(self::publish::Args),
+	Pull(self::pull::Args),
+	Push(self::push::Args),
 	Run(self::run::Args),
 	Search(self::search::Args),
 	Server(self::server::Args),
@@ -117,6 +121,8 @@ impl Cli {
 			Command::New(args) => self.command_new(args).boxed(),
 			Command::Outdated(args) => self.command_outdated(args).boxed(),
 			Command::Publish(args) => self.command_publish(args).boxed(),
+			Command::Pull(args) => self.command_pull(args).boxed(),
+			Command::Push(args) => self.command_push(args).boxed(),
 			Command::Run(args) => self.command_run(args).boxed(),
 			Command::Search(args) => self.command_search(args).boxed(),
 			Command::Server(args) => self.command_server(args).boxed(),

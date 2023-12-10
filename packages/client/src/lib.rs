@@ -1,8 +1,8 @@
 pub use self::{
 	artifact::Artifact, blob::Blob, branch::Branch, build::Build, checksum::Checksum,
 	client::Client, dependency::Dependency, directory::Directory, file::File, handle::Handle,
-	id::Id, leaf::Leaf, lock::Lock, mutation::Mutation, object::Object, path::Path,
-	runtime::Runtime, status::Status, symlink::Symlink, system::System, target::Target,
+	id::Id, leaf::Leaf, lock::Lock, lockfile::Lockfile, mutation::Mutation, object::Object,
+	path::Path, runtime::Runtime, status::Status, symlink::Symlink, system::System, target::Target,
 	template::Template, user::User, value::Value,
 };
 use tangram_error::{return_error, Error, Result, Wrap, WrapErr};
@@ -12,8 +12,6 @@ pub mod blob;
 pub mod branch;
 pub mod build;
 pub mod bundle;
-pub mod checkin;
-pub mod checkout;
 pub mod checksum;
 pub mod client;
 pub mod dependency;
@@ -23,6 +21,7 @@ pub mod handle;
 pub mod id;
 pub mod leaf;
 pub mod lock;
+pub mod lockfile;
 pub mod mutation;
 pub mod object;
 pub mod package;

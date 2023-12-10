@@ -18,6 +18,7 @@ use tangram_error::WrapErr;
 )]
 #[serde(into = "String", try_from = "String")]
 pub struct Path {
+	string: String,
 	components: Vec<Component>,
 }
 
@@ -32,14 +33,27 @@ pub enum Component {
 }
 
 impl Path {
-	#[must_use]
-	pub fn is_empty(&self) -> bool {
-		self.components.is_empty()
+	pub fn with_components(components: impl IntoIterator<Item = Component>) -> Self {
+		let mut path = Self::default();
+		for component in components {
+			path.push(component);
+		}
+		path
 	}
 
 	#[must_use]
 	pub fn components(&self) -> &[Component] {
 		&self.components
+	}
+
+	#[must_use]
+	pub fn into_components(self) -> Vec<Component> {
+		self.components
+	}
+
+	#[must_use]
+	pub fn is_empty(&self) -> bool {
+		self.components.is_empty()
 	}
 
 	pub fn push(&mut self, component: Component) {
@@ -50,11 +64,35 @@ impl Path {
 
 		// If the component is a root component, then clear the path.
 		if component == Component::Root {
+			self.string = String::new();
 			self.components.clear();
 		}
 
-		// Add the component to the path.
+		// Add the component.
+		if !self.components.is_empty() {
+			self.string.push('/');
+		}
+		match &component {
+			Component::Root => self.string.push('/'),
+			Component::Current => self.string.push('.'),
+			Component::Parent => self.string.push_str(".."),
+			Component::Normal(name) => self.string.push_str(name),
+		}
 		self.components.push(component);
+	}
+
+	pub fn pop(&mut self) {
+		let component = self.components.pop();
+		let n = match component {
+			Some(Component::Root | Component::Current) => 1,
+			Some(Component::Parent) => 2,
+			Some(Component::Normal(name)) => name.len(),
+			None => 0,
+		};
+		self.string.truncate(self.string.len() - n);
+		if !self.components.is_empty() {
+			self.string.truncate(self.string.len() - 1);
+		}
 	}
 
 	#[must_use]
@@ -64,7 +102,7 @@ impl Path {
 
 	#[must_use]
 	pub fn join(mut self, other: Self) -> Self {
-		for component in other.components {
+		for component in other.into_components() {
 			self.push(component);
 		}
 		self
@@ -73,13 +111,13 @@ impl Path {
 	#[must_use]
 	pub fn normalize(self) -> Self {
 		let mut path = Self::default();
-		for component in self.components {
+		for component in self.into_components() {
 			if component == Component::Parent
-				&& matches!(path.components.last(), Some(Component::Normal(_)))
+				&& matches!(path.components().last(), Some(Component::Normal(_)))
 			{
-				path.components.pop();
+				path.pop();
 			} else {
-				path.components.push(component);
+				path.push(component);
 			}
 		}
 		path
@@ -87,12 +125,12 @@ impl Path {
 
 	#[must_use]
 	pub fn is_absolute(&self) -> bool {
-		matches!(self.components.first(), Some(Component::Root))
+		matches!(self.components().first(), Some(Component::Root))
 	}
 
 	#[must_use]
 	pub fn extension(&self) -> Option<&str> {
-		self.components
+		self.components()
 			.last()
 			.and_then(|component| component.try_unwrap_normal_ref().ok())
 			.and_then(|name| name.split('.').last())
@@ -101,31 +139,7 @@ impl Path {
 
 impl std::fmt::Display for Path {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		for (i, component) in self.components.iter().enumerate() {
-			match component {
-				Component::Root => {
-					write!(f, "/")?;
-				},
-				Component::Current => {
-					if i != 0 {
-						write!(f, "/")?;
-					}
-					write!(f, ".")?;
-				},
-				Component::Parent => {
-					if i != 0 {
-						write!(f, "/")?;
-					}
-					write!(f, "..")?;
-				},
-				Component::Normal(name) => {
-					if i != 0 {
-						write!(f, "/")?;
-					}
-					write!(f, "{name}")?;
-				},
-			}
-		}
+		write!(f, "{}", self.string)?;
 		Ok(())
 	}
 }
@@ -173,17 +187,13 @@ impl TryFrom<String> for Path {
 
 impl From<Component> for Path {
 	fn from(value: Component) -> Self {
-		Self {
-			components: vec![value],
-		}
+		Self::with_components(vec![value])
 	}
 }
 
 impl FromIterator<Component> for Path {
 	fn from_iter<T: IntoIterator<Item = Component>>(iter: T) -> Self {
-		Self {
-			components: iter.into_iter().collect(),
-		}
+		Self::with_components(iter)
 	}
 }
 
@@ -202,5 +212,11 @@ impl TryFrom<PathBuf> for Path {
 			.to_str()
 			.wrap_err("The path must be valid UTF-8.")?
 			.parse()
+	}
+}
+
+impl AsRef<std::path::Path> for Path {
+	fn as_ref(&self) -> &std::path::Path {
+		std::path::Path::new(self.string.as_str())
 	}
 }

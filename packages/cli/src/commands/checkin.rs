@@ -23,7 +23,7 @@ impl Cli {
 		}
 
 		// Perform the checkin.
-		let artifact = tg::Artifact::check_in(tg, &path).await?;
+		let artifact = tg::Artifact::check_in(tg, &path.try_into()?).await?;
 
 		// Print the ID.
 		let id = artifact.id(tg).await?;

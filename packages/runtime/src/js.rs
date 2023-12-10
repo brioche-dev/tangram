@@ -11,7 +11,6 @@ use std::{
 };
 use tangram_client as tg;
 use tangram_error::{Result, WrapErr};
-use tangram_package::Ext;
 
 mod convert;
 mod error;
@@ -489,7 +488,7 @@ fn load_module<'s>(
 		async move {
 			let module = module.unwrap_normal_ref();
 			let package = tg::Directory::with_id(module.package.clone());
-			let metadata = package.metadata(tg.as_ref()).await.ok();
+			let metadata = tangram_package::metadata(tg.as_ref(), &package).await.ok();
 			sender.send(metadata).unwrap();
 		}
 	});

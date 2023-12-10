@@ -356,10 +356,7 @@ pub async fn build(
 		.wrap_err("Failed to determine if the path exists.")?
 	{
 		// Check in the output.
-		let options = tg::checkin::Options {
-			artifacts_paths: vec![artifacts_directory_path],
-		};
-		let artifact = tg::Artifact::check_in_with_options(tg, &output_path, &options)
+		let artifact = tg::Artifact::check_in(tg, &output_path.clone().try_into()?)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 

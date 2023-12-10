@@ -20,7 +20,7 @@ impl Cli {
 		let user = self.user().await?;
 
 		// Create the package.
-		let (package, _) = tangram_package::new(tg, &args.package).await?;
+		let (package, _) = tg::package::get_with_lock(tg, &args.package).await?;
 
 		// Get the package ID.
 		let id = package.id(tg).await?;

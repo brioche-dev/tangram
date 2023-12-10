@@ -35,7 +35,7 @@ impl Cli {
 			(module, "tangram.d.ts")
 		} else {
 			// Create the package.
-			let (package, lock) = tangram_package::new(tg, &args.package).await?;
+			let (package, lock) = tg::package::get_with_lock(tg, &args.package).await?;
 
 			// Create the module.
 			let module = tangram_language::Module::Normal(tangram_language::module::Normal {
