@@ -596,7 +596,7 @@ pub async fn build(
 		.wrap_err("Failed to determine in the path exists.")?
 	{
 		// Check in the output.
-		let artifact = tg::Artifact::check_in(tg, &output_host_path)
+		let artifact = tg::Artifact::check_in(tg, &output_host_path.clone().try_into()?)
 			.await
 			.wrap_err("Failed to check in the output.")?;
 
