@@ -59,7 +59,7 @@ indoc = "2"
 itertools = "0.12"
 libc = "0.2"
 lmdb-rkv = { version = "0.14" }
-lsp-types = { version = "0.94" }
+lsp-types = { version = "0.95" }
 ndarray = { version = "0.15", features = ["rayon"] }
 notify = "6"
 num = "0.4"
@@ -89,7 +89,7 @@ serde_v8 = { version = "0.146.0" }
 serde_yaml = { version = "0.9" }
 sha2 = "0.10"
 sourcemap = "7"
-swc_core = { version = "0.86.101", features = [
+swc_core = { version = "0.87", features = [
   "common",
   "common_sourcemap",
   "ecma_ast",

@@ -847,7 +847,7 @@ impl Server {
 	) -> Result<http::Response<Outgoing>> {
 		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let [_, _, "packages", dependency, "versions"] = path_components.as_slice() else {
+		let [_, "packages", dependency, "versions"] = path_components.as_slice() else {
 			return_error!("Unexpected path.");
 		};
 		let dependency =
@@ -1019,21 +1019,21 @@ impl Server {
 }
 
 #[must_use]
-pub fn empty() -> Outgoing {
+fn empty() -> Outgoing {
 	http_body_util::Empty::new()
 		.map_err(Into::into)
 		.boxed_unsync()
 }
 
 #[must_use]
-pub fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
+fn full(chunk: impl Into<::bytes::Bytes>) -> Outgoing {
 	http_body_util::Full::new(chunk.into())
 		.map_err(Into::into)
 		.boxed_unsync()
 }
 
 /// Get a bearer token or cookie from an HTTP request.
-pub fn get_token(request: &http::Request<Incoming>, name: Option<&str>) -> Option<String> {
+fn get_token(request: &http::Request<Incoming>, name: Option<&str>) -> Option<String> {
 	if let Some(authorization) = request.headers().get(http::header::AUTHORIZATION) {
 		let Ok(authorization) = authorization.to_str() else {
 			return None;
@@ -1067,7 +1067,7 @@ pub fn get_token(request: &http::Request<Incoming>, name: Option<&str>) -> Optio
 }
 
 /// Parse an HTTP cookie string.
-pub fn parse_cookies(cookies: &str) -> impl Iterator<Item = Result<(&str, &str)>> {
+fn parse_cookies(cookies: &str) -> impl Iterator<Item = Result<(&str, &str)>> {
 	cookies.split("; ").map(|cookie| {
 		let mut components = cookie.split('=');
 		let key = components
@@ -1082,7 +1082,7 @@ pub fn parse_cookies(cookies: &str) -> impl Iterator<Item = Result<(&str, &str)>
 
 /// 200
 #[must_use]
-pub fn ok() -> http::Response<Outgoing> {
+fn ok() -> http::Response<Outgoing> {
 	http::Response::builder()
 		.status(http::StatusCode::OK)
 		.body(empty())
@@ -1091,7 +1091,7 @@ pub fn ok() -> http::Response<Outgoing> {
 
 /// 400
 #[must_use]
-pub fn bad_request() -> http::Response<Outgoing> {
+fn bad_request() -> http::Response<Outgoing> {
 	http::Response::builder()
 		.status(http::StatusCode::BAD_REQUEST)
 		.body(full("Bad request."))
@@ -1100,7 +1100,7 @@ pub fn bad_request() -> http::Response<Outgoing> {
 
 /// 401
 #[must_use]
-pub fn unauthorized() -> http::Response<Outgoing> {
+fn unauthorized() -> http::Response<Outgoing> {
 	http::Response::builder()
 		.status(http::StatusCode::UNAUTHORIZED)
 		.body(full("Unauthorized."))
@@ -1109,7 +1109,7 @@ pub fn unauthorized() -> http::Response<Outgoing> {
 
 /// 404
 #[must_use]
-pub fn not_found() -> http::Response<Outgoing> {
+fn not_found() -> http::Response<Outgoing> {
 	http::Response::builder()
 		.status(http::StatusCode::NOT_FOUND)
 		.body(full("Not found."))

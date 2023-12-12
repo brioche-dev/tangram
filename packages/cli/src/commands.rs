@@ -27,7 +27,6 @@ mod push;
 mod run;
 mod search;
 mod server;
-mod shell;
 mod test;
 mod tree;
 mod update;
@@ -73,7 +72,6 @@ pub enum Command {
 	Run(self::run::Args),
 	Search(self::search::Args),
 	Server(self::server::Args),
-	Shell(self::shell::Args),
 	Test(self::test::Args),
 	Tree(self::tree::Args),
 	Update(self::update::Args),
@@ -126,7 +124,6 @@ impl Cli {
 			Command::Run(args) => self.command_run(args).boxed(),
 			Command::Search(args) => self.command_search(args).boxed(),
 			Command::Server(args) => self.command_server(args).boxed(),
-			Command::Shell(args) => self.command_shell(args).boxed(),
 			Command::Test(args) => self.command_test(args).boxed(),
 			Command::Tree(args) => self.command_tree(args).boxed(),
 			Command::Update(args) => self.command_update(args).boxed(),
