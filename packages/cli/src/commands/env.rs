@@ -28,11 +28,11 @@ pub struct Args {
 
 impl Cli {
 	pub async fn command_env(&self, mut args: Args) -> Result<()> {
-		// Set the executable path to `.tangram/env` if it is not set.
+		// Set the executable path to `.tangram/run` if it is not set.
 		args.run_args.executable_path = Some(
 			args.run_args
 				.executable_path
-				.unwrap_or_else(|| ".tangram/env".parse().unwrap()),
+				.unwrap_or_else(|| ".tangram/run".parse().unwrap()),
 		);
 
 		// Create the run args.
