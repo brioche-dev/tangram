@@ -164,9 +164,10 @@ pub async fn build(
 				(literal "/dev/autofs_nowait")
 				(literal "/dev/random")
 				(literal "/dev/urandom")
+				(literal "/private/etc/localtime")
 				(literal "/private/etc/protocols")
 				(literal "/private/etc/services")
-				(literal "/private/etc/localtime")
+				(subpath "/private/etc/ssl")
 			)
 
 			;; Allow executing /usr/bin/env and /bin/sh.
