@@ -1,6 +1,6 @@
 use crate::{
 	artifact, build, directory, lock, object, package, target, user, Dependency, Handle, Id,
-	Status, System, User,
+	Runtime, Status, System, User,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -1124,6 +1124,17 @@ impl Builder {
 			tls: None,
 			user: None,
 		}
+	}
+
+	#[must_use]
+	pub fn with_runtime(runtime: Runtime) -> Self {
+		Self::new(runtime.addr)
+	}
+
+	pub fn with_runtime_json(runtime_json: &impl AsRef<str>) -> Result<Self> {
+		let runtime: Runtime = serde_json::from_str(runtime_json.as_ref())
+			.wrap_err("Malformed TANGRAM_RUNTIME json string")?;
+		Ok(Self::with_runtime(runtime))
 	}
 
 	#[must_use]
