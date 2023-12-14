@@ -5,7 +5,10 @@ use crate::{
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
-use futures::{stream::FuturesOrdered, TryStreamExt};
+use futures::{
+	stream::{FuturesOrdered, FuturesUnordered},
+	TryStreamExt,
+};
 
 /// An object kind.
 #[derive(Clone, Copy, Debug)]
@@ -180,7 +183,7 @@ impl Handle {
 				.into_iter()
 				.map(Self::with_id)
 				.map(|object| async move { object.push(tg, remote).await })
-				.collect::<FuturesOrdered<_>>()
+				.collect::<FuturesUnordered<_>>()
 				.try_collect()
 				.await?;
 			remote

@@ -738,7 +738,7 @@ impl Server {
 	) -> Result<http::Response<Outgoing>> {
 		// Get the path params.
 		let path_components: Vec<&str> = request.uri().path().split('/').skip(1).collect();
-		let ["v1", "objects", id, "pull"] = path_components.as_slice() else {
+		let ["v1", "objects", id, "push"] = path_components.as_slice() else {
 			return_error!("Unexpected path.")
 		};
 		let Ok(id) = id.parse() else {
