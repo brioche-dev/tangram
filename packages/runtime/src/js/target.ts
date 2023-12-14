@@ -6,7 +6,7 @@ import { Directory } from "./directory.ts";
 import * as encoding from "./encoding.ts";
 import { Lock } from "./lock.ts";
 import { Module } from "./module.ts";
-import { mutation } from "./mutation.ts";
+import { Mutation, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import { Unresolved } from "./resolve.ts";
 import { Symlink, symlink } from "./symlink.ts";
@@ -193,16 +193,20 @@ export class Target<
 				} else if (typeof arg === "object") {
 					let object: MutationMap<Apply> = {};
 					if (arg.env !== undefined) {
-						object.env = await mutation({
-							kind: "array_append",
-							values: flatten([arg.env]),
-						});
+						object.env = Mutation.is(arg.env)
+							? arg.env
+							: await mutation({
+									kind: "array_append",
+									values: flatten([arg.env]),
+								});
 					}
 					if (arg.args !== undefined) {
-						object.args = await mutation({
-							kind: "array_append",
-							values: [...arg.args],
-						});
+						object.args = Mutation.is(arg.args)
+							? arg.args
+							: (object.args = await mutation({
+									kind: "array_append",
+									values: [...arg.args],
+								}));
 					}
 					return {
 						...arg,

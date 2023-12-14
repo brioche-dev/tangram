@@ -32,8 +32,8 @@ export type MaybeMutationMap<T extends Value = Value> = T extends
 	| Array<infer _U extends Value>
 	? T
 	: T extends { [key: string]: Value }
-	  ? MutationMap<T>
-	  : never;
+		? MutationMap<T>
+		: never;
 
 export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
 

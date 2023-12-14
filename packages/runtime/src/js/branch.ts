@@ -3,9 +3,10 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import * as encoding from "./encoding.ts";
-import { mutation } from "./mutation.ts";
+import { Mutation, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
+import { MutationMap } from "./util.ts";
 
 export let branch = async (...args: Args<Branch.Arg>): Promise<Branch> => {
 	return await Branch.new(...args);
@@ -43,12 +44,16 @@ export class Branch {
 						}),
 					};
 				} else if (typeof arg === "object") {
-					return {
-						children: await mutation({
-							kind: "array_append",
-							values: arg.children ?? [],
-						}),
-					};
+					let object: MutationMap<Apply> = {};
+					if (arg.children !== undefined) {
+						object.children = Mutation.is(arg.children)
+							? arg.children
+							: await mutation({
+									kind: "array_append",
+									values: arg.children ?? [],
+								});
+					}
+					return object;
 				} else {
 					return unreachable();
 				}

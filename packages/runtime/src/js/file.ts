@@ -2,7 +2,7 @@ import { Args } from "./args.ts";
 import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob, blob } from "./blob.ts";
-import { mutation } from "./mutation.ts";
+import { Mutation, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
 import { MutationMap } from "./util.ts";
@@ -63,26 +63,32 @@ export class File {
 					}),
 				};
 			} else if (typeof arg === "object") {
-				let ret: Partial<MutationMap<Apply>> = {};
+				let object: Partial<MutationMap<Apply>> = {};
 				if (arg.contents !== undefined) {
-					ret.contents = await mutation({
-						kind: "array_append",
-						values: [arg.contents],
-					});
+					object.contents = Mutation.is(arg.contents)
+						? arg.contents
+						: await mutation({
+								kind: "array_append",
+								values: [arg.contents],
+							});
 				}
 				if (arg.executable !== undefined) {
-					ret.executable = await mutation({
-						kind: "array_append",
-						values: [arg.executable],
-					});
+					object.executable = Mutation.is(arg.executable)
+						? arg.executable
+						: await mutation({
+								kind: "array_append",
+								values: [arg.executable],
+							});
 				}
 				if (arg.references !== undefined) {
-					ret.references = await mutation({
-						kind: "array_append",
-						values: [arg.references],
-					});
+					object.references = Mutation.is(arg.references)
+						? arg.references
+						: await mutation({
+								kind: "array_append",
+								values: [arg.references],
+							});
 				}
-				return ret;
+				return object;
 			} else {
 				return unreachable();
 			}

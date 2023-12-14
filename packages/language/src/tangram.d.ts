@@ -20,7 +20,7 @@ declare namespace tg {
 		>(
 			args: Args<A>,
 			map: (
-				arg: Exclude<A, Array<Value>>,
+				arg: MaybeMutationMap<Exclude<A, Array<Value>>>,
 			) => Promise<MaybeNestedArray<MutationMap<R>>>,
 		) => Promise<Partial<R>>;
 	}
@@ -536,10 +536,10 @@ declare namespace tg {
 			| Template
 			? T
 			: T extends Array<infer U extends Value>
-			  ? Array<Unresolved<U>>
-			  : T extends { [key: string]: Value }
-			    ? { [K in keyof T]: Unresolved<T[K]> }
-			    : never
+				? Array<Unresolved<U>>
+				: T extends { [key: string]: Value }
+					? { [K in keyof T]: Unresolved<T[K]> }
+					: never
 	>;
 
 	/**
@@ -569,12 +569,12 @@ declare namespace tg {
 		| Target
 		? T
 		: T extends Array<infer U extends Unresolved<Value>>
-		  ? Array<Resolved<U>>
-		  : T extends { [key: string]: Unresolved<Value> }
-		    ? { [K in keyof T]: Resolved<T[K]> }
-		    : T extends Promise<infer U extends Unresolved<Value>>
-		      ? Resolved<U>
-		      : never;
+			? Array<Resolved<U>>
+			: T extends { [key: string]: Unresolved<Value> }
+				? { [K in keyof T]: Resolved<T[K]> }
+				: T extends Promise<infer U extends Unresolved<Value>>
+					? Resolved<U>
+					: never;
 
 	/** Sleep for the specified duration in seconds. */
 	export let sleep: (duration: number) => Promise<void>;
@@ -833,8 +833,8 @@ declare namespace tg {
 		| Array<infer _U extends Value>
 		? T
 		: T extends { [key: string]: Value }
-		  ? MutationMap<T>
-		  : never;
+			? MutationMap<T>
+			: never;
 
 	export type MaybeNestedArray<T> = T | Array<MaybeNestedArray<T>>;
 

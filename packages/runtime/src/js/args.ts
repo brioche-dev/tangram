@@ -23,13 +23,13 @@ export namespace Args {
 	>(
 		args: Args<A>,
 		map: (
-			arg: Exclude<A, Array<Value>>,
+			arg: MaybeMutationMap<Exclude<A, Array<Value>>>,
 		) => Promise<MaybeNestedArray<MutationMap<R>>>,
 	): Promise<Partial<R>> => {
 		return flatten(
 			await Promise.all(
 				flatten(await Promise.all(args.map(resolve))).map((arg) =>
-					map(arg as unknown as Exclude<A, Array<Value>>),
+					map(arg as unknown as MaybeMutationMap<Exclude<A, Array<Value>>>),
 				),
 			),
 		).reduce(async (object, mutations) => {

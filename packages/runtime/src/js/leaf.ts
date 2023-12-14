@@ -3,9 +3,10 @@ import { Artifact } from "./artifact.ts";
 import { assert as assert_, unreachable } from "./assert.ts";
 import { Blob } from "./blob.ts";
 import * as encoding from "./encoding.ts";
-import { mutation } from "./mutation.ts";
+import { Mutation, mutation } from "./mutation.ts";
 import { Object_ } from "./object.ts";
 import * as syscall from "./syscall.ts";
+import { MutationMap } from "./util.ts";
 
 export let leaf = async (...args: Args<Leaf.Arg>): Promise<Leaf> => {
 	return await Leaf.new(...args);
@@ -57,12 +58,16 @@ export class Leaf {
 						}),
 					};
 				} else if (typeof arg === "object") {
-					return {
-						bytes: await mutation({
-							kind: "array_append",
-							values: [arg.bytes ?? new Uint8Array()],
-						}),
-					};
+					let object: MutationMap<Apply> = {};
+					if (arg.bytes !== undefined) {
+						object.bytes = Mutation.is(arg.bytes)
+							? arg.bytes
+							: await mutation({
+									kind: "array_append",
+									values: [arg.bytes],
+								});
+					}
+					return object;
 				} else {
 					return unreachable();
 				}
