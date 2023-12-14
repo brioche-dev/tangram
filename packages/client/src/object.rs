@@ -5,10 +5,7 @@ use crate::{
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use derive_more::{From, TryInto, TryUnwrap};
-use futures::{
-	stream::{FuturesOrdered, FuturesUnordered},
-	TryStreamExt,
-};
+use futures::{stream::FuturesUnordered, TryStreamExt};
 
 /// An object kind.
 #[derive(Clone, Copy, Debug)]
