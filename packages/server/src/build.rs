@@ -689,7 +689,7 @@ impl Server {
 		&self,
 		id: &tg::build::Id,
 	) -> Result<Option<tg::build::Outcome>> {
-		// Attempt to await the result from the state.
+		// Attempt to await the outcome from the state.
 		'a: {
 			let Some(state) = self.inner.build_state.read().unwrap().get(id).cloned() else {
 				break 'a;
@@ -708,7 +708,7 @@ impl Server {
 			));
 		}
 
-		// Attempt to get the result from the object.
+		// Attempt to get the outcome from the object.
 		'a: {
 			let build = tg::Build::with_id(id.clone());
 			let Some(object) = build.try_get_object(self).await? else {
@@ -717,7 +717,7 @@ impl Server {
 			return Ok(Some(object.outcome.clone()));
 		}
 
-		// Attempt to await the result from the remote.
+		// Attempt to await the outcome from the remote.
 		'a: {
 			let Some(remote) = self.inner.remote.as_ref() else {
 				break 'a;
