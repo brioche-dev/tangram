@@ -37,6 +37,7 @@ type ClassDeclaration = {
 	location: Location;
 	constructSignature: ConstructSignature;
 	properties: Array<ClassProperty>;
+	comment: Comment;
 };
 
 type ConstructSignature = {
@@ -49,11 +50,13 @@ type ClassProperty = {
 	type: Type;
 	static?: boolean;
 	private?: boolean;
+	comment: Comment;
 };
 
 type EnumDeclaration = {
 	location: Location;
 	members: { [key: string]: EnumMemberValue };
+	comment: Comment;
 };
 
 type EnumMemberValue = {
@@ -68,6 +71,7 @@ type EnumMemberConstantValue =
 type FunctionDeclaration = {
 	location: Location;
 	signature: FunctionSignature;
+	comment: Comment;
 };
 
 type FunctionSignature = {
@@ -82,6 +86,7 @@ type InterfaceDeclaration = {
 	indexSignature: IndexSignature | undefined;
 	properties: { [key: string]: InterfaceProperty };
 	constructSignatures: Array<ConstructSignature>;
+	comment: Comment;
 };
 
 type InterfaceProperty = {
@@ -92,22 +97,26 @@ type InterfaceProperty = {
 type NamespaceDeclaration = {
 	location: Location;
 	exports: { [key: string]: Symbol };
+	comment: Comment;
 };
 
 type TypeDeclaration = {
 	location: Location;
 	typeParameters: { [key: string]: TypeParameter };
 	type: Type;
+	comment: Comment;
 };
 
 type VariableDeclaration = {
 	location: Location;
 	type: Type;
+	comment: Comment;
 };
 
 type DefaultExportDeclaration = {
 	location: Location;
 	type: Type;
+	comment: Comment;
 };
 
 type Type =
@@ -222,6 +231,7 @@ type PredicateType = {
 type ReferenceType = {
 	location: Location;
 	name: string;
+	fullyQualifiedName: string;
 	typeArguments: Array<Type>;
 	isTypeParameter: boolean;
 };
@@ -256,6 +266,11 @@ type UnionType = {
 type Location = {
 	module: Module;
 	range: Range;
+};
+
+type Comment = {
+	text: string;
+	tags: Array<{ name: string; comment: string }>;
 };
 
 export let handle = (request: Request): Response => {
@@ -424,7 +439,9 @@ let convertModuleSymbol = (
 	}
 
 	// Convert the declaration locations.
-	let declaration = symbol.declarations?.[0]!;
+	let declaration = symbol.declarations?.filter((declaration) => {
+		return declaration.kind === ts.SyntaxKind.ModuleDeclaration;
+	})?.[0];
 	if (!declaration) {
 		throw new Error();
 	}
@@ -432,6 +449,7 @@ let convertModuleSymbol = (
 	return {
 		location: convertLocation(declaration),
 		exports,
+		comment: convertComment(typeChecker, declaration, symbol),
 	};
 };
 
@@ -482,6 +500,7 @@ let convertClassSymbol = (
 		location: convertLocation(declaration),
 		properties,
 		constructSignature,
+		comment: convertComment(typeChecker, declaration, symbol),
 	};
 };
 
@@ -509,6 +528,7 @@ let convertVariableSymbol = (
 	return {
 		location: convertLocation(declaration),
 		type,
+		comment: convertComment(typeChecker, declaration, symbol),
 	};
 };
 
@@ -527,6 +547,7 @@ let convertDefaultExportSymbol = (
 	return {
 		location: convertLocation(declaration),
 		type,
+		comment: convertComment(typeChecker, declaration, symbol),
 	};
 };
 
@@ -612,6 +633,9 @@ let convertFunctionDeclaration = (
 		returnType = convertType(typeChecker, signature.getReturnType());
 	}
 
+	// Get the symbol.
+	let symbol = typeChecker.getSymbolAtLocation(declaration);
+
 	return {
 		location: convertLocation(declaration),
 		signature: {
@@ -620,6 +644,7 @@ let convertFunctionDeclaration = (
 			typeParameters,
 			return: returnType,
 		},
+		comment: convertComment(typeChecker, declaration, symbol),
 	};
 };
 
@@ -647,6 +672,7 @@ let convertTypeAliasSymbol = (
 		location: convertLocation(declaration),
 		type,
 		typeParameters: Object.fromEntries(typeParameters ?? []),
+		comment: convertComment(typeChecker, declaration, symbol),
 	};
 };
 
@@ -679,6 +705,7 @@ let convertEnumSymbol = (
 		return {
 			location: convertLocation(declaration),
 			members,
+			comment: convertComment(typeChecker, declaration, symbol),
 		};
 	});
 };
@@ -730,6 +757,7 @@ let convertInterfaceSymbol = (
 			indexSignature,
 			constructSignatures,
 			properties,
+			comment: convertComment(typeChecker, declaration, symbol),
 		};
 	});
 };
@@ -890,6 +918,7 @@ let convertClassPropertySymbol = (
 	let type = convertType(typeChecker, typeChecker.getTypeOfSymbol(property));
 	return {
 		name: property.getName(),
+		comment: convertComment(typeChecker, property.valueDeclaration!, property),
 		type,
 		static: (flags & ts.ModifierFlags.Static) !== 0,
 		private: (flags & ts.ModifierFlags.Private) !== 0,
@@ -1195,8 +1224,10 @@ let convertTypeReferenceType = (
 			convertType(typeChecker, typeArgument),
 		);
 		let declaration = aliasSymbol.declarations![0]!;
+		let fullyQualifiedName = typeChecker.getFullyQualifiedName(aliasSymbol);
 		return {
 			name: aliasSymbol.getName(),
+			fullyQualifiedName,
 			location: convertLocation(declaration),
 			typeArguments: typeArguments ?? [],
 			isTypeParameter,
@@ -1209,8 +1240,11 @@ let convertTypeReferenceType = (
 			});
 		let symbol = type.symbol;
 		let declaration = symbol.declarations![0]!;
+		let name = getAliasedSymbolIfAliased(typeChecker, symbol).getName();
+		let fullyQualifiedName = typeChecker.getFullyQualifiedName(symbol);
 		return {
-			name: symbol.getName(),
+			name,
+			fullyQualifiedName,
 			location: convertLocation(declaration),
 			typeArguments: typeArguments ?? [],
 			isTypeParameter,
@@ -1565,9 +1599,12 @@ let convertTypeReferenceTypeNode = (
 	);
 	let declaration = resolved.declarations![0]!;
 	let isTypeParameter = ts.isTypeParameterDeclaration(declaration);
+	let name = resolved.getName();
+	let fullyQualifiedName = typeChecker.getFullyQualifiedName(symbol);
 	return {
 		location: convertLocation(declaration),
-		name: node.typeName.getText(),
+		name,
+		fullyQualifiedName,
 		typeArguments: typeArguments ?? [],
 		isTypeParameter,
 	};
@@ -1621,3 +1658,22 @@ function getAliasedSymbolIfAliased(
 	}
 	return symbol;
 }
+
+let convertComment = (
+	_typeChecker: ts.TypeChecker,
+	declaration: ts.Node,
+	_symbol?: ts.Symbol,
+): Comment => {
+	let jsDocCommentsAndTags = ts.getJSDocCommentsAndTags(declaration)?.[0];
+	if (jsDocCommentsAndTags == undefined) {
+		return {
+			text: "",
+			tags: [],
+		};
+	}
+	let text = ts.getTextOfJSDocComment(jsDocCommentsAndTags.comment);
+	return {
+		text: text ?? "",
+		tags: [],
+	};
+};
